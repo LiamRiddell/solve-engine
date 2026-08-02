@@ -1,0 +1,32 @@
+# Intellij
+*.iml
+.idea
+
+# npm
+node_modules
+
+# Exclude sourcemaps
+*.map
+
+# Exclude macOS Finder (System Explorer) View States
+.DS_Store
+
+# webapp (React + shadcn/ui production app)
+webapp/node_modules
+webapp/dist
+webapp/.vite
+webapp/*.local
+webapp/*.env
+
+# @solve/core package build output (tsup)
+packages/core/dist
+
+# Testing
+coverage/
+
+# V8 profiling logs
+isolate-*.log
+
+# Standalone profiler (not part of the project)
+benchmarks/preload-globals.cjs
+benchmarks/profile-vm.ts
