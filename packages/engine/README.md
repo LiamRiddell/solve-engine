@@ -1,13 +1,30 @@
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/LiamRiddell/Solve-Engine/main/playground/public/solve-logo.svg" alt="Solve" width="96" />
+
 # solve-engine
 
-The expression evaluation engine behind [Solve](https://github.com/LiamRiddell/obsidian-solve): a
-lexer, Pratt parser, bytecode VM, and an extensible package system for evaluating
-natural-language-flavoured math expressions (`2 + 2 * 10`, `50% of 200`, `3 days + 4 hours`,
-`10 USD to GBP`, `roll(1, 6)`, ...).
+**A calculator that reads like a sentence.**
 
-It ships as the framework-agnostic core of the Obsidian plugin, structured so it can be
-embedded in any host application (editor plugin, CLI, desktop app, server) and extended with
-domain-specific packages.
+[![npm](https://img.shields.io/npm/v/solve-engine?color=%230b7285&label=npm)](https://www.npmjs.com/package/solve-engine)
+[![CI](https://github.com/LiamRiddell/Solve-Engine/actions/workflows/ci.yml/badge.svg)](https://github.com/LiamRiddell/Solve-Engine/actions/workflows/ci.yml)
+[![Node](https://img.shields.io/node/v/solve-engine)](https://nodejs.org)
+[![License](https://img.shields.io/badge/license-MIT-blue)](https://github.com/LiamRiddell/Solve-Engine/blob/main/packages/engine/LICENSE)
+
+[Documentation](https://liamriddell.github.io/Solve-Engine/) &nbsp;&#8226;&nbsp;
+[Playground](https://liamriddell.github.io/Solve-Engine/playground/) &nbsp;&#8226;&nbsp;
+[Syntax reference](https://liamriddell.github.io/Solve-Engine/syntax/cheatsheet/)
+
+</div>
+
+A lexer, Pratt parser, bytecode VM, and an extensible package system for
+evaluating natural-language-flavoured expressions: `2 + 2 * 10`, `50% of 200`,
+`3 days + 4 hours`, `10 USD to GBP`, `100 cm + 2 m`.
+
+Originally the engine inside
+[Solve for Obsidian](https://github.com/LiamRiddell/obsidian-solve), extracted
+so it can be embedded in any host: an editor plugin, a CLI, a desktop app, a
+server. No dependency on a UI framework, a DOM, or an editor.
 
 See [ARCHITECTURE.md](https://github.com/LiamRiddell/Solve-Engine/blob/main/packages/engine/ARCHITECTURE.md) for how the pipeline, package system, async
 evaluation model, and caching layers fit together, plus a candid list of known

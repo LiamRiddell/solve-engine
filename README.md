@@ -10,6 +10,11 @@ Type what you mean. Units, currencies, percentages, dates, matrices and
 plain-English phrasing all work in the same expression, and the answer appears
 as you type.
 
+[![npm](https://img.shields.io/npm/v/solve-engine?color=%230b7285&label=npm)](https://www.npmjs.com/package/solve-engine)
+[![CI](https://github.com/LiamRiddell/Solve-Engine/actions/workflows/ci.yml/badge.svg)](https://github.com/LiamRiddell/Solve-Engine/actions/workflows/ci.yml)
+[![Node](https://img.shields.io/node/v/solve-engine)](https://nodejs.org)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 [Documentation](https://liamriddell.github.io/Solve-Engine/) &nbsp;•&nbsp;
 [Playground](https://liamriddell.github.io/Solve-Engine/playground/) &nbsp;•&nbsp;
 [Syntax reference](https://liamriddell.github.io/Solve-Engine/syntax/cheatsheet/) &nbsp;•&nbsp;
