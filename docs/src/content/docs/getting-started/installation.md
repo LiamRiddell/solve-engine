@@ -12,7 +12,7 @@ each, so it works whether your project uses `import` or `require`.
 
 ## Requirements
 
-Node 20 or newer, or any browser from the last few years. The engine has no DOM
+Node 22 or newer, or any browser from the last few years. The engine has no DOM
 dependency and no Node-specific dependency, so the same build runs in a browser
 tab, a web worker, a Node process, or a serverless function.
 

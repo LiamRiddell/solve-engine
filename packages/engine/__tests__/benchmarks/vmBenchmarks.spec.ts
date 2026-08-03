@@ -85,7 +85,7 @@ describe("VM Benchmarks", () => {
   });
 
   for (const { name, bytecode } of programs) {
-    test(`executes "${name}" efficiently`, () => {
+    test(`executes "${name}" efficiently`, async () => {
       // Reuse a single VM across all iterations — matches production pattern
       // where ExpressionEngine keeps a persistent VM. Eliminates allocation
       // and GC noise from the measurement.
@@ -106,7 +106,7 @@ describe("VM Benchmarks", () => {
       // worth comparing. The recorded value is per batch, not per operation, so
       // it is only ever compared against another run of the same batch size.
       const perBatch = 2000;
-      const stats = benchmarkFn(() => {
+      const stats = await benchmarkFn(() => {
         for (let i = 0; i < perBatch; i++) {
           vm.reset();
           executeBytecode(bytecode, vm);

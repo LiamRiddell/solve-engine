@@ -22,6 +22,7 @@ import { Value, ValueType } from "@solve-js/vm/Value";
 import { TokenNormalizer } from "@solve-js/normalizer";
 import { largeNumberSuffixNormalizerRule } from "@solve-js/packages/arithmetic/normalizer/LargeNumberSuffixNormalizerRule";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 const normalizer = new TokenNormalizer();
 normalizer.register(largeNumberSuffixNormalizerRule());
@@ -175,20 +176,20 @@ describe("large-number suffixes — negative controls (must NOT be affected)", (
 
 describe("ARITHMETIC_PACKAGE — real engine wiring", () => {
   test("2.5k works via the real, default-constructed ExpressionEngine", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("2.5k");
     expect(value.type).toBe(ValueType.Number);
     expect(value.toNumber()).toBe(2500);
   });
 
   test("2.5k + 1000 -> 3500 via the real engine", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("2.5k + 1000");
     expect(value.toNumber()).toBe(3500);
   });
 
   test("5M / 10G / 10B / 20T via the real engine", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     expect(engine.evaluateExpression("5M")[0].toNumber()).toBe(5000000);
     expect(engine.evaluateExpression("10G")[0].toNumber()).toBe(10000000000);
     expect(engine.evaluateExpression("10B")[0].toNumber()).toBe(10000000000);
@@ -196,7 +197,7 @@ describe("ARITHMETIC_PACKAGE — real engine wiring", () => {
   });
 
   test("negative control: 5 km still resolves as a real unit via the real engine", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("5 km");
     expect(value.type).toBe(ValueType.Uom);
     expect(value.unit).toBe("km");

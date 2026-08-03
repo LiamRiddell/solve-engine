@@ -26,7 +26,7 @@ if (!referenceDir || !currentDir) {
 }
 
 const thresholds = JSON.parse(
-	fs.readFileSync(new URL("../benchmarks/thresholds.json", import.meta.url), "utf8"),
+	fs.readFileSync(new URL("../packages/engine/benchmarks/thresholds.json", import.meta.url), "utf8"),
 );
 
 /** Load every suite file in a directory, keyed by suite name. */
@@ -44,6 +44,20 @@ function loadSuites(dir) {
 		}
 	}
 	return out;
+}
+
+/**
+ * Which harness produced a set of results, or null for runs from before the
+ * field existed.
+ */
+function harnessOf(dir) {
+	if (!fs.existsSync(dir)) return null;
+	for (const entry of fs.readdirSync(dir)) {
+		if (!entry.endsWith(".json")) continue;
+		const parsed = JSON.parse(fs.readFileSync(path.join(dir, entry), "utf8"));
+		if (parsed && typeof parsed === "object" && parsed.harness) return parsed.harness;
+	}
+	return null;
 }
 
 /**
@@ -66,6 +80,37 @@ function comparisonValue(sample) {
 
 const reference = loadSuites(referenceDir);
 const current = loadSuites(currentDir);
+
+// Refuse to compare two runs that measured differently. A ratio across a change
+// of harness describes the change of harness, not the code: replacing the old
+// `performance.now()` loop with mitata made identical code read up to 2.6x
+// slower, because that loop's per-iteration deltas were mostly zero for
+// anything faster than the clock, so its mean understated the real cost.
+//
+// This is a pass rather than a failure. The run still publishes both sets of
+// numbers; there is simply no honest ratio to draw between them, and the next
+// run has both sides on the same harness.
+const referenceHarness = harnessOf(referenceDir);
+const currentHarness = harnessOf(currentDir);
+
+if (referenceHarness !== currentHarness) {
+	const describe = (h) => h ?? "an earlier harness that did not record one";
+	const message =
+		`Benchmark harness changed: the reference was measured with ${describe(referenceHarness)} ` +
+		`and this run with ${describe(currentHarness)}. Ratios between them would describe the ` +
+		`change of measurement rather than any change in the code, so the comparison is skipped ` +
+		`for this run. The next run has both sides on the same harness.`;
+
+	console.log(message);
+	if (process.env.GITHUB_STEP_SUMMARY) {
+		fs.appendFileSync(
+			process.env.GITHUB_STEP_SUMMARY,
+			`## Benchmarks\n\n${message}\n`,
+			"utf8",
+		);
+	}
+	process.exit(0);
+}
 
 const rows = [];
 const failures = [];

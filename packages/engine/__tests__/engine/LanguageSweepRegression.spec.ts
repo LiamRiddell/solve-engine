@@ -21,6 +21,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
 import { Value } from "@solve-js/vm/Value";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 /** Structural equality good enough to catch a silently-different answer. */
 function sameValue(a: Value, b: Value): boolean {
@@ -28,7 +29,7 @@ function sameValue(a: Value, b: Value): boolean {
 }
 
 function evalOnce(expr: string): Value {
-	const engine = new ExpressionEngine();
+	const engine = newTrackedEngine();
 	const [v] = engine.evaluateExpression(expr);
 	return v;
 }
@@ -85,19 +86,19 @@ describe("language sweep — trailing '=' and labeled prefix leave every package
 describe("colon-consuming packages remain unaffected (the exact collision class both features exist to avoid)", () => {
 	test("Cross-line range syntax ('sum(line 1 : line 4)') inside a real document", () => {
 		const build = () => {
-			const engine = new ExpressionEngine();
+			const engine = newTrackedEngine();
 			const doc = new DocumentModel();
 			return { engine, doc };
 		};
 
 		const { doc: plainDoc } = build();
 		plainDoc.setDocument(["1", "2", "3", "4", "sum(line 1 : line 4)"].join("\n"));
-		new ThreeTierEvaluator(plainDoc, new ExpressionEngine()).evaluate({ startLine: 1, endLine: 5 });
+		new ThreeTierEvaluator(plainDoc, newTrackedEngine()).evaluate({ startLine: 1, endLine: 5 });
 		const plainResult = plainDoc.getLineAt(5)!.result!;
 
 		const { doc: labeledDoc } = build();
 		labeledDoc.setDocument(["1", "2", "3", "4", "total: sum(line 1 : line 4)"].join("\n"));
-		new ThreeTierEvaluator(labeledDoc, new ExpressionEngine()).evaluate({ startLine: 1, endLine: 5 });
+		new ThreeTierEvaluator(labeledDoc, newTrackedEngine()).evaluate({ startLine: 1, endLine: 5 });
 		const labeledResult = labeledDoc.getLineAt(5)!.result!;
 
 		expect(sameValue(labeledResult, plainResult)).toBe(true);
@@ -109,7 +110,7 @@ describe("colon-consuming packages remain unaffected (the exact collision class 
 	});
 
 	test("A label before a ':name = value' definition keeps the definition intact (the colon-priority regression this file exists to lock in)", () => {
-		const engine = new ExpressionEngine();
+		const engine = newTrackedEngine();
 		const [defResult] = engine.evaluateExpression("input value: :x = 5");
 		expect(defResult.toNumber()).toBe(5);
 		const [readResult] = engine.evaluateExpression(":x + 1");
@@ -117,20 +118,20 @@ describe("colon-consuming packages remain unaffected (the exact collision class 
 	});
 
 	test("A label before a definition also tolerates a trailing '='", () => {
-		const engine = new ExpressionEngine();
+		const engine = newTrackedEngine();
 		const [value] = engine.evaluateExpression("note: :y = 10=");
 		expect(value.toNumber()).toBe(10);
 	});
 
 	test("A user-defined function definition and call are both unaffected", () => {
-		const engine = new ExpressionEngine();
+		const engine = newTrackedEngine();
 		engine.evaluateExpression("f(x) = 2*x");
 		const [value] = engine.evaluateExpression("f(5)");
 		expect(value.toNumber()).toBe(10);
 	});
 
 	test("A labeled user-defined function call still works", () => {
-		const engine = new ExpressionEngine();
+		const engine = newTrackedEngine();
 		engine.evaluateExpression("f(x) = 2*x");
 		const [value] = engine.evaluateExpression("result: f(5)");
 		expect(value.toNumber()).toBe(10);
@@ -145,7 +146,7 @@ describe("errors still surface — neither feature silently swallows a genuine m
 		["a doubled trailing '=='", "5 + 3=="],
 		["an undefined variable reference (a runtime error, not a parse one — should still throw)", "note: :undefinedVar123 + 1"],
 	])("%s: %s", (_desc, expr) => {
-		const engine = new ExpressionEngine();
+		const engine = newTrackedEngine();
 		expect(() => engine.evaluateExpression(expr)).toThrow();
 	});
 });

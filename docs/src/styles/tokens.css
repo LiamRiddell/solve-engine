@@ -1,0 +1,163 @@
+/*
+ * Design tokens, ported verbatim from the sibling product's `theme/tokens.css`
+ * so the documentation, the playground and the app are visibly the same
+ * product. Brand anchors: ink #03080a · cloud #fcfcfe · grape #7624f4 (light
+ * primary) · volt #c8ff00 (dark primary).
+ *
+ * Starlight is dark-first: `:root` IS dark mode and light mode is opted into
+ * with `[data-theme='light']`. That is the opposite nesting from the app (which
+ * is light-first with a `.dark` class), so the two blocks below are swapped
+ * relative to the source file. The values themselves are unchanged.
+ *
+ * Nothing here touches Starlight directly. `theme.css` maps these onto the
+ * `--sl-*` variables; component CSS reads these tokens and never raw hex.
+ */
+
+/* ── Dark (default) ─────────────────────────────────────────────────────── */
+:root {
+  --radius: 0.5rem;
+
+  /* Brand anchors */
+  --brand-ink: #03080a;
+  --brand-cloud: #fcfcfe;
+  --brand-grape: #7624f4;
+  --brand-volt: #c8ff00;
+  --brand-coral: #ff6849;
+  --brand-royal: #035ade;
+
+  /* Surfaces + text */
+  --background: #03080a;
+  --foreground: #fcfcfe;
+  --card: rgb(252 252 254 / 0.02);
+  --card-foreground: #fcfcfe;
+  --card-hover: rgb(252 252 254 / 0.031);
+  --popover: rgb(8 13 15);
+  --popover-foreground: #fcfcfe;
+  --surface: rgb(252 252 254 / 0.012);
+  --muted: rgb(252 252 254 / 0.031);
+  --muted-foreground: rgb(252 252 254 / 0.627);
+  --faint: rgb(252 252 254 / 0.44);
+  --selected: rgb(252 252 254 / 0.039);
+
+  /* Primary + accent (brand) */
+  --primary: #c8ff00;
+  --primary-foreground: #03080a;
+  --secondary: rgb(200 255 0 / 0.078);
+  --secondary-foreground: #c8ff00;
+  --accent: rgb(200 255 0 / 0.078);
+  --accent-foreground: #c8ff00;
+  --accent-subtle: rgb(200 255 0 / 0.031);
+  --accent-border: rgb(200 255 0 / 0.125);
+  --accent-hover: rgb(200 255 0 / 0.878);
+  --link: #c8ff00;
+  --link-hover: #a3cc00;
+
+  /* Borders + inputs + focus */
+  --border: rgb(252 252 254 / 0.078);
+  --border-strong: rgb(252 252 254 / 0.14);
+  --input: rgb(252 252 254 / 0.078);
+  --input-bg: rgb(252 252 254 / 0.039);
+  --ring: #c8ff00;
+  --shadow-color: rgb(0 0 0 / 0.35);
+
+  /* Status. Each one: solid, tint bg, readable text. */
+  --destructive: #e11d48;
+  --destructive-foreground: #fcfcfe;
+  --success: #34dfaa;
+  --success-foreground: #03080a;
+  --success-text: #34dfaa;
+  --success-bg: rgb(0 191 111 / 0.078);
+  --warning: #e5a000;
+  --warning-foreground: #03080a;
+  --warning-text: #ffab00;
+  --warning-bg: rgb(229 160 0 / 0.078);
+  --info: #035ade;
+  --info-foreground: #fcfcfe;
+  --info-text: #4d8dff;
+  --info-bg: rgb(3 90 222 / 0.078);
+  --highlight: #c9a227;
+
+  /* Charts. Fixed order, never cycled:
+     violet · orange · teal · gold · pink · green · blue · coral. Re-stepped
+     into the dark lightness band so each hue stays vivid on near-black. */
+  --chart-1: #9a7cf0;
+  --chart-2: #e06a2b;
+  --chart-3: #16a88f;
+  --chart-4: #c08800;
+  --chart-5: #db63a0;
+  --chart-6: #1aa653;
+  --chart-7: #4f88ef;
+  --chart-8: #e85c49;
+
+  /* The header floats over scrolling content, so it stays translucent and
+     blurred. Nothing else on the page needs glass, because the page is flat ink. */
+  --glass-nav: rgb(3 8 10 / 0.78);
+}
+
+/* ── Light ──────────────────────────────────────────────────────────────── */
+:root[data-theme="light"] {
+  /* Surfaces + text */
+  --background: #fcfcfe;
+  --foreground: #03080a;
+  --card: #ffffff;
+  --card-foreground: #03080a;
+  --card-hover: rgb(3 8 10 / 0.02);
+  --popover: #ffffff;
+  --popover-foreground: #03080a;
+  --surface: #ffffff;
+  --muted: rgb(3 8 10 / 0.031);
+  --muted-foreground: rgb(3 8 10 / 0.69);
+  --faint: rgb(3 8 10 / 0.44);
+  --selected: rgb(3 8 10 / 0.031);
+
+  /* Primary + accent (brand) */
+  --primary: #7624f4;
+  --primary-foreground: #fcfcfe;
+  --secondary: rgb(118 36 244 / 0.078);
+  --secondary-foreground: #7624f4;
+  --accent: rgb(118 36 244 / 0.078);
+  --accent-foreground: #7624f4;
+  --accent-subtle: rgb(118 36 244 / 0.031);
+  --accent-border: rgb(118 36 244 / 0.125);
+  --accent-hover: rgb(118 36 244 / 0.878);
+  --link: #7624f4;
+  --link-hover: #5f13d6;
+
+  /* Borders + inputs + focus */
+  --border: rgb(3 8 10 / 0.078);
+  --border-strong: rgb(3 8 10 / 0.14);
+  --input: rgb(3 8 10 / 0.078);
+  --input-bg: #ffffff;
+  --ring: #7624f4;
+  /* Light mode is flat: borders draw every edge, no drop shadows. */
+  --shadow-color: transparent;
+
+  /* Status */
+  --destructive: #e11d48;
+  --destructive-foreground: #fcfcfe;
+  --success: #00bf6f;
+  --success-foreground: #fcfcfe;
+  --success-text: #007544;
+  --success-bg: rgb(0 191 111 / 0.078);
+  --warning: #e5a000;
+  --warning-foreground: #03080a;
+  --warning-text: #8a6000;
+  --warning-bg: rgb(229 160 0 / 0.078);
+  --info: #035ade;
+  --info-foreground: #fcfcfe;
+  --info-text: #0352c9;
+  --info-bg: rgb(3 90 222 / 0.078);
+  --highlight: #ffd426;
+
+  /* Charts, same hue identities, stepped for a white surface. */
+  --chart-1: #7c3aed;
+  --chart-2: #e37019;
+  --chart-3: #0e9f8a;
+  --chart-4: #c99700;
+  --chart-5: #dd6faa;
+  --chart-6: #0b8a3c;
+  --chart-7: #2f6ef0;
+  --chart-8: #e2483f;
+
+  --glass-nav: rgb(252 252 254 / 0.82);
+}

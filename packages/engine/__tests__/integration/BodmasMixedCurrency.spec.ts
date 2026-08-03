@@ -12,6 +12,7 @@
 
 import { describe, expect, test, beforeAll, jest } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 // Pre-populate currency rates before tests
 beforeAll(async () => {
@@ -34,7 +35,7 @@ beforeAll(async () => {
   (global as any).fetch = mockFetch;
 
   // Trigger rate pre-population
-  const e = new ExpressionEngine("en", false);
+  const e = newTrackedEngine("en", false);
   try {
     e.evaluateExpression("convert 1 USD to GBP");
   } catch { /* ignore */ }
@@ -42,12 +43,12 @@ beforeAll(async () => {
 });
 
 function evalNum(expression: string): number {
-  const engine = new ExpressionEngine("en", false);
+  const engine = newTrackedEngine("en", false);
   return engine.evaluateNumber(expression);
 }
 
 function evalExpr(expression: string): { value: number; unit?: string; type: string } {
-  const engine = new ExpressionEngine("en", false);
+  const engine = newTrackedEngine("en", false);
   const [result] = engine.evaluateExpression(expression);
   return {
     value: result.toNumber(),

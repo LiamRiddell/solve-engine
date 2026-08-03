@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from "@jest/globals";
+import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 
 describe("Phase 5: evaluateNumber fast path", () => {
@@ -31,6 +31,13 @@ describe("Phase 5: evaluateNumber fast path", () => {
 
     beforeEach(() => {
       engine = new ExpressionEngine();
+    });
+
+    // Releases the engine's query client and async batcher. Without it the
+    // engine outlives the test file and its pending work lands in whatever
+    // runs next, which under --runInBand is the same process.
+    afterEach(() => {
+    	engine.clear();
     });
 
     test("bare undefined identifier returns NaN", () => {

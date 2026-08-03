@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, jest, test } from "@jest/globals";
+import { beforeEach, describe, expect, jest, test, afterEach } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { LanguageService } from "@solve-js/language/LanguageService";
 import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage";
@@ -10,6 +10,13 @@ describe("LanguageService", () => {
   beforeEach(() => {
     engine = new ExpressionEngine("en", false);
     service = new LanguageService(engine);
+  });
+
+  // Releases the engine's query client and async batcher. Without it the
+  // engine outlives the test file and its pending work lands in whatever
+  // runs next, which under --runInBand is the same process.
+  afterEach(() => {
+  	engine.clear();
   });
 
   test("simple expression 1 + 2 produces 3 tokens: number, operator, number", () => {

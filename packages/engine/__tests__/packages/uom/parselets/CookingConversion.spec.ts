@@ -17,9 +17,10 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
 import { getIngredientDensity } from "@solve-js/packages/uom/data/IngredientDensities";
 import { convertUnit } from "@solve-js/uom/UomConverter";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 function evalReal(expr: string) {
-  const engine = new ExpressionEngine("en");
+  const engine = newTrackedEngine("en");
   const [value] = engine.evaluateExpression(expr);
   return value;
 }
@@ -87,7 +88,7 @@ describe("errors and edge cases", () => {
 
 describe("UOM_PACKAGE cooking conversion — regression guards (bare variable names must still work)", () => {
   test("':butter', ':sugar', ':flour', ':milk' all still work as variable names -- the ingredient-name fusion only fires immediately after a real UNIT token AND immediately before \"in <unit>\", so a bare colon-prefixed variable definition is never intercepted", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     engine.evaluateExpression(":butter = 1");
     engine.evaluateExpression(":sugar = 2");
     engine.evaluateExpression(":flour = 3");

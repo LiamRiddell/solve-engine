@@ -29,78 +29,78 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
 
   // === PRODUCTION MODE BENCHMARKS ===
 
-  test("[PROD] single eval cold in < 2ms", () => {
-    const r = benchmarkFn(() => {
+  test("[PROD] single eval cold in < 2ms", async () => {
+    const r = await benchmarkFn(() => {
       const e = new ExpressionEngine("en", false);
       e.evaluateLine(1, "1 + 2 * 3");
     }, 5000, 100);
     recordSample(results, "PROD_single_eval_cold", r);
-    expect(r.meanMs).toBeLessThan(2);
+    expect(r.medianMs).toBeLessThan(2);
   });
 
-  test("[PROD] single eval warm (cached) in < 0.5ms", () => {
+  test("[PROD] single eval warm (cached) in < 0.5ms", async () => {
     const engine = new ExpressionEngine("en", false);
     engine.evaluateLine(1, "10 + 20");
-    const r = benchmarkFn(() => {
+    const r = await benchmarkFn(() => {
       engine.evaluateLine(1, "10 + 20");
     }, 50000, 500);
     recordSample(results, "PROD_single_eval_warm", r);
-    expect(r.meanMs).toBeLessThan(1);
+    expect(r.medianMs).toBeLessThan(1);
   });
 
-  test("[PROD] parses 50-line doc in < 20ms", () => {
+  test("[PROD] parses 50-line doc in < 20ms", async () => {
     const input = generateDoc(50);
-    const r = benchmarkFn(() => {
+    const r = await benchmarkFn(() => {
       const e = new ExpressionEngine("en", false);
       e.parseDocument(input);
     }, 200, 10);
     recordSample(results, "PROD_50_line_doc", r);
-    expect(r.meanMs).toBeLessThan(50);
+    expect(r.medianMs).toBeLessThan(50);
   });
 
-  test("[PROD] variable chain in < 1ms", () => {
-    const r = benchmarkFn(() => {
+  test("[PROD] variable chain in < 1ms", async () => {
+    const r = await benchmarkFn(() => {
       const e = new ExpressionEngine("en", false);
       e.parseDocument(":x = 1\n:x + 1\n:x + 2\n:x + 3\n:x + 4");
     }, 5000, 100);
     recordSample(results, "PROD_variable_chain", r);
-    expect(r.meanMs).toBeLessThan(2);
+    expect(r.medianMs).toBeLessThan(2);
   });
 
-  test("[PROD] full pipeline sqrt(144) + 5 in < 1ms", () => {
-    const r = benchmarkFn(() => {
+  test("[PROD] full pipeline sqrt(144) + 5 in < 1ms", async () => {
+    const r = await benchmarkFn(() => {
       const e = new ExpressionEngine("en", false);
       e.evaluateLine(1, "sqrt(144) + 5");
     }, 20000, 500);
     recordSample(results, "PROD_function_plus_literal", r);
-    expect(r.meanMs).toBeLessThan(2);
+    expect(r.medianMs).toBeLessThan(2);
   });
 
-  test("[PROD] 10k warm evaluations in < 100ms", () => {
+  test("[PROD] 10k warm evaluations in < 100ms", async () => {
     const engine = new ExpressionEngine("en", false);
     engine.evaluateLine(1, "42"); // warmup
-    const r = benchmarkFn(() => {
+    const r = await benchmarkFn(() => {
       engine.evaluateLine(1, "1 + 2 * 3 - 4 / 5");
     }, 10000, 500);
     recordSample(results, "PROD_10k_warm", r);
-    expect(r.meanMs).toBeLessThan(100);
+    expect(r.medianMs).toBeLessThan(100);
   });
 
   // === DIAGNOSTIC MODE BENCHMARKS ===
 
-  test("[DIAG] single eval cold in < 5ms", () => {
-    const r = benchmarkFn(() => {
+  test("[DIAG] single eval cold in < 5ms", async () => {
+    const r = await benchmarkFn(() => {
       const e = new ExpressionEngine("en", true);
       e.evaluateLine(1, "1 + 2 * 3");
     }, 5000, 100);
     recordSample(results, "DIAG_single_eval_cold", r);
-    expect(r.meanMs).toBeLessThan(5);
+    expect(r.medianMs).toBeLessThan(5);
   });
 
-  test("[DIAG] single eval warm (cached) in < 1ms", () => {
+  test("[DIAG] single eval warm (cached) in < 1ms", async () => {
     const engine = new ExpressionEngine("en", true);
     engine.evaluateLine(1, "10 + 20");
-    const r = benchmarkFn(() => {
+    const r = await benchmarkFn(() => {
       engine.evaluateLine(1, "10 + 20");
     }, 10000, 500);
     recordSample(results, "DIAG_single_eval_warm", r);
@@ -108,36 +108,36 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
     // O(n²) bug (TimelineDiagnosticCollector.getReport() rescanning its
     // entire event history on every call). Now that it's fixed (~0.01ms,
     // was ~0.72ms), tighten the assertion to match what the title always claimed.
-    expect(r.meanMs).toBeLessThan(1);
+    expect(r.medianMs).toBeLessThan(1);
   });
 
-  test("[DIAG] parses 50-line doc in < 50ms", () => {
+  test("[DIAG] parses 50-line doc in < 50ms", async () => {
     const input = generateDoc(50);
-    const r = benchmarkFn(() => {
+    const r = await benchmarkFn(() => {
       const e = new ExpressionEngine("en", true);
       e.parseDocument(input);
     }, 200, 10);
     recordSample(results, "DIAG_50_line_doc", r);
-    expect(r.meanMs).toBeLessThan(100);
+    expect(r.medianMs).toBeLessThan(100);
   });
 
-  test("[DIAG] variable chain in < 2ms", () => {
-    const r = benchmarkFn(() => {
+  test("[DIAG] variable chain in < 2ms", async () => {
+    const r = await benchmarkFn(() => {
       const e = new ExpressionEngine("en", true);
       e.parseDocument(":x = 1\n:x + 1\n:x + 2\n:x + 3\n:x + 4");
     }, 5000, 100);
     recordSample(results, "DIAG_variable_chain", r);
-    expect(r.meanMs).toBeLessThan(5);
+    expect(r.medianMs).toBeLessThan(5);
   });
 
-  test("[DIAG] 10k warm evaluations in < 200ms", () => {
+  test("[DIAG] 10k warm evaluations in < 200ms", async () => {
     const engine = new ExpressionEngine("en", true);
     engine.evaluateLine(1, "42"); // warmup
-    const r = benchmarkFn(() => {
+    const r = await benchmarkFn(() => {
       engine.evaluateLine(1, "1 + 2 * 3 - 4 / 5");
     }, 10000, 500);
     recordSample(results, "DIAG_10k_warm", r);
-    expect(r.meanMs).toBeLessThan(200);
+    expect(r.medianMs).toBeLessThan(200);
   });
 
   // === DIAGNOSTIC REPORT VALIDATION ===
@@ -215,22 +215,22 @@ test("vm trace mode emits per-opcode events", () => {
      expect(stepEvents![0].stackDepth).toBeDefined();
    });
 
-  test("null collector has zero overhead vs direct call", () => {
+  test("null collector has zero overhead vs direct call", async () => {
     // Production engine
     const prodEngine = new ExpressionEngine("en", false);
     // Engine with null collector explicitly
     const nullEngine = new ExpressionEngine("en", false);
 
-    const prodTime = benchmarkFn(() => {
+    const prodTime = await benchmarkFn(() => {
       prodEngine.evaluateLine(1, "1 + 2 * 3");
     }, 10000, 500);
 
-    const nullTime = benchmarkFn(() => {
+    const nullTime = await benchmarkFn(() => {
       nullEngine.evaluateLine(1, "1 + 2 * 3");
     }, 10000, 500);
 
     // Allow 50% tolerance for measurement noise
-    const ratio = nullTime.meanMs / prodTime.meanMs;
+    const ratio = nullTime.medianMs / prodTime.medianMs;
     expect(ratio).toBeLessThan(2); // null collector should not double execution time
 
     // Deliberately not persisted. This is a dimensionless ratio between two

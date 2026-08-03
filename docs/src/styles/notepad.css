@@ -1,0 +1,245 @@
+/*
+ * The live notepad: an editable column of expressions, an answer column beside
+ * it. The layout contract the component depends on lives here, so it is worth
+ * being explicit about which of these rules are decoration and which are load
+ * bearing.
+ *
+ * LOAD BEARING (breaking these breaks alignment, not just looks):
+ *   1. every line is exactly `--np-row` tall, in BOTH columns
+ *   2. lines never wrap (`white-space: pre`); a long line scrolls sideways
+ * Together those guarantee row N of the editor sits on row N of the answers
+ * without measuring anything.
+ */
+
+.notepad-host {
+  --np-row: 1.75rem;
+  /* Wide enough for a fully spelled out date ("Wednesday, September 23, 2026"),
+     which is the longest thing the formatter emits. */
+  --np-answer-width: 17rem;
+  margin-block: 1.5rem;
+}
+
+/* The static copy exists for Pagefind and for readers without JavaScript. Once
+   the island has mounted next to it, it is redundant. */
+.notepad-host:has(.notepad) .notepad-static {
+  display: none;
+}
+
+/* Nothing here has a fill. The page is one flat near-black and the notepad is
+   drawn entirely with hairlines, so it reads as a region of the page rather
+   than as a panel sitting on top of it. */
+.notepad-static {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  background: none;
+  color: var(--muted-foreground);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-sm);
+  line-height: var(--np-row);
+  overflow-x: auto;
+  padding: 0.75rem 1rem;
+}
+
+.notepad {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--np-answer-width);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  background: none;
+  overflow: hidden;
+  transition: border-color 140ms ease;
+}
+
+.notepad:focus-within {
+  border-color: var(--accent-border);
+}
+
+.notepad__lines {
+  overflow-x: auto;
+  padding: 0.875rem 0;
+}
+
+.notepad__content {
+  outline: none;
+  caret-color: var(--foreground);
+  color: var(--foreground);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-sm);
+  min-width: max-content;
+}
+
+/* Every Slate block is one row. `pre` keeps a long expression on its own line
+   rather than reflowing it into two and pushing the answer column out of step.
+   The notepad scrolls instead. */
+.notepad__content > * {
+  margin: 0;
+  height: var(--np-row);
+  line-height: var(--np-row);
+  padding-inline: 1.125rem;
+  white-space: pre;
+}
+
+/* Headings and comments, the parts of a notepad that are prose. Dimming them is
+   what makes the expressions read as the foreground. Wins over the token
+   colours below because prose is never code. */
+.notepad__prose,
+.notepad__prose[class*="cm-solve-"] {
+  color: var(--faint);
+}
+
+.notepad__answers {
+  border-inline-start: 1px solid var(--border);
+  background: none;
+  padding-block: 0.875rem;
+}
+
+.notepad__answer {
+  height: var(--np-row);
+  line-height: var(--np-row);
+  padding-inline: 1rem;
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-sm);
+  text-align: end;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The answer is the product's signature moment, so it gets the brand colour.
+   With the surfaces flat, this is what separates the column from the
+   expressions beside it. */
+.notepad__answer[data-kind="value"] {
+  color: var(--primary);
+}
+
+@media (max-width: 48rem) {
+  .notepad-host {
+    --np-answer-width: 9rem;
+  }
+}
+
+/*
+ * ── Documentation embeds ─────────────────────────────────────────────────
+ *
+ * A `solve` code block on a reference page, upgraded in place. Both renderings
+ * exist in the DOM: the Expressive Code block is the verified, highlighted,
+ * indexable one, and the notepad is the editable one. Only the second is shown
+ * once it has mounted.
+ */
+.solve-embed[data-solve-embed="live"] > .frame {
+  display: none;
+}
+
+.solve-embed__live {
+  --np-row: 1.625rem;
+  --np-answer-width: min(14rem, 45%);
+  display: grid;
+  gap: 0.75rem;
+}
+
+.solve-embed__notepad .notepad {
+  border-radius: calc(var(--radius) + 4px);
+}
+
+.solve-embed__notepad .notepad__content,
+.solve-embed__notepad .notepad__answer {
+  font-size: 0.8125rem;
+}
+
+.solve-embed__notepad .notepad__lines,
+.solve-embed__notepad .notepad__answers {
+  padding-block: 0.625rem;
+}
+
+.solve-embed__notepad .notepad__content > * {
+  padding-inline: 0.875rem;
+}
+
+.solve-embed__notepad .notepad__answer {
+  padding-inline: 0.875rem;
+}
+
+/*
+ * ── Syntax highlighting ──────────────────────────────────────────────────
+ *
+ * The class names are produced by the engine's own `categoryClassName()`
+ * adapter, so this block is the CSS half of the contract any editor
+ * integration implements. The adapter's rule is that the category name IS the
+ * class-name key, which means a package that registers a new token category
+ * gets a predictable class here for free; only a colour has to be added.
+ *
+ * These are the One Dark hues the Solve playground's editor uses, so an
+ * expression looks the same in the docs, in the playground and in a host that
+ * follows the same convention.
+ */
+:root {
+  --solve-hl-number: #61afef;
+  --solve-hl-string: #98c379;
+  --solve-hl-keyword: #c678dd;
+  --solve-hl-operator: #abb2bf;
+  --solve-hl-comparison: #56b6c2;
+  --solve-hl-bitwise: #56b6c2;
+  --solve-hl-function: #e5c07b;
+  --solve-hl-variable: #e06c75;
+  --solve-hl-unit: #56b6c2;
+  --solve-hl-datetime: #d19a66;
+  --solve-hl-vector: #d19a66;
+  --solve-hl-punctuation: #5c6370;
+  --solve-hl-error: #e06c75;
+}
+
+/* Re-stepped for a white surface, same hue identities. */
+:root[data-theme="light"] {
+  --solve-hl-number: #0550ae;
+  --solve-hl-string: #0a7d33;
+  --solve-hl-keyword: #8250df;
+  --solve-hl-operator: #57606a;
+  --solve-hl-comparison: #0e7490;
+  --solve-hl-bitwise: #0e7490;
+  --solve-hl-function: #9a6700;
+  --solve-hl-variable: #b3261e;
+  --solve-hl-unit: #0e7490;
+  --solve-hl-datetime: #a54800;
+  --solve-hl-vector: #a54800;
+  --solve-hl-punctuation: #8c959f;
+  --solve-hl-error: #b3261e;
+}
+
+.cm-solve-number { color: var(--solve-hl-number); }
+.cm-solve-string { color: var(--solve-hl-string); }
+.cm-solve-keyword { color: var(--solve-hl-keyword); }
+.cm-solve-operator { color: var(--solve-hl-operator); }
+.cm-solve-comparison { color: var(--solve-hl-comparison); }
+.cm-solve-bitwise { color: var(--solve-hl-bitwise); }
+.cm-solve-function { color: var(--solve-hl-function); }
+.cm-solve-variable { color: var(--solve-hl-variable); }
+.cm-solve-unit { color: var(--solve-hl-unit); }
+.cm-solve-datetime { color: var(--solve-hl-datetime); }
+.cm-solve-vector { color: var(--solve-hl-vector); }
+.cm-solve-punctuation { color: var(--solve-hl-punctuation); }
+.cm-solve-error {
+  color: var(--solve-hl-error);
+  text-decoration: underline wavy;
+}
+
+/* A swatch list for the highlighting section of the landing page: the same
+   classes, shown as themselves. */
+.hl-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-xs);
+}
+
+.hl-legend li {
+  color: var(--faint);
+}
+
+.hl-legend b {
+  font-weight: 400;
+}

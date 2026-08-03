@@ -4,6 +4,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { isEmptyLine } from "@solve-js/engine/ExpressionEngineSafety";
 import { TokenTypes } from "@solve-js/lexer/Token";
 import { getTokenCategory, UNCATEGORIZED_TOKEN_TYPES } from "@solve-js/language/TokenCategoryMap";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Headings & comments — SoulverCore-style regression coverage.
@@ -138,28 +139,28 @@ describe("Headings & comments — isEmptyLine() (engine safety layer)", () => {
 
 describe("Headings & comments — end-to-end via a real ExpressionEngine", () => {
   test("a trailing `//` comment does not change the evaluated result", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     expect(engine.evaluateNumber("5 + 3 // subtotal")).toBe(8);
   });
 
   test("a trailing `#` comment does not change the evaluated result", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     expect(engine.evaluateNumber("5 + 3 # subtotal")).toBe(8);
   });
 
   test("a bare trailing `//` with no note text still evaluates normally", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     expect(engine.evaluateNumber("5 + 3 //")).toBe(8);
   });
 
   test("division is unaffected by comment support (single `/` still divides)", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     expect(engine.evaluateNumber("10 / 2")).toBe(5);
     expect(engine.evaluateNumber("10 / 2 // half")).toBe(5);
   });
 
   test("a whole-line `//` comment produces no result via parseDocument()", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const doc = engine.parseDocument("// ignored entirely\n5 + 3", { inputType: "markdown" });
 
     expect(doc.lines).toHaveLength(2);
@@ -175,7 +176,7 @@ describe("Headings & comments — end-to-end via a real ExpressionEngine", () =>
   });
 
   test("mixed document: heading + whole-line comment + inline comment + calculation — only the calculation produces a result", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const document = [
       "# Monthly Budget",
       "// Figures below are estimates, not final",
@@ -208,7 +209,7 @@ describe("Headings & comments — end-to-end via a real ExpressionEngine", () =>
   });
 
   test("a heading containing an inline solve marker still produces no line-level result", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const doc = engine.parseDocument("# Total: s`1 + 2`", { inputType: "markdown" });
     expect(doc.lines[0].isEmpty).toBe(true);
     expect(doc.lines[0].result).toBeNull();

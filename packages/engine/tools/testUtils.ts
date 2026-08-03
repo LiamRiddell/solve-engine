@@ -104,39 +104,98 @@ export function generateInlineDoc(solveCount: number): string {
   return expressions.join(" some text between ");
 }
 
-/**
- * Test harness for benchmarking — provides consistent timing.
- */
-export function benchmarkFn(fn: () => void, iterations = 10000, warmup = 100): {
+/** What a benchmark case reports. Milliseconds throughout, as the name says. */
+export interface BenchmarkResult {
   meanMs: number;
   medianMs: number;
   minMs: number;
   maxMs: number;
+  p99Ms: number;
+  /** How many timed samples the statistics were computed from. */
+  samples: number;
+  /** Kept for callers that reported total wall time. Mean times sample count. */
   totalMs: number;
-} {
-  // Warmup
-  for (let i = 0; i < warmup; i++) {
-    fn();
-  }
+}
 
-  // Measure
-  const times: number[] = [];
-  for (let i = 0; i < iterations; i++) {
-    const start = performance.now();
-    fn();
-    const end = performance.now();
-    times.push(end - start);
-  }
+const NS_PER_MS = 1e6;
 
-  const sorted = [...times].sort((a, b) => a - b);
-  const sum = times.reduce((a, b) => a + b, 0);
+interface MitataStats {
+  avg: number;
+  min: number;
+  max: number;
+  p50: number;
+  p99: number;
+  samples?: number[];
+}
+
+/**
+ * Loads mitata through the real ESM loader rather than Jest's module registry.
+ *
+ * mitata is ESM only, and this file is imported by more than thirty ordinary
+ * spec files. A static import would therefore fail every one of them under
+ * ts-jest's CommonJS output, not just the benchmarks. Deferring it means the
+ * package is touched only when a benchmark actually runs.
+ *
+ * The indirection through `Function` is what keeps the call out of TypeScript's
+ * and Jest's hands: both rewrite a literal `import()` in a CommonJS module into
+ * a `require`, which is exactly what cannot load this package. Built once and
+ * cached, since resolving it per case would dominate the short ones.
+ */
+let mitataMeasure: ((fn: () => void, opts: object) => Promise<MitataStats>) | null = null;
+
+async function loadMeasure(): Promise<(fn: () => void, opts: object) => Promise<MitataStats>> {
+  if (mitataMeasure) return mitataMeasure;
+  const importESM = new Function("specifier", "return import(specifier)") as (
+    specifier: string,
+  ) => Promise<{ measure: (fn: () => void, opts: object) => Promise<MitataStats> }>;
+  mitataMeasure = (await importESM("mitata")).measure;
+  return mitataMeasure;
+}
+
+/**
+ * Time a function, using mitata for the measurement.
+ *
+ * The previous implementation called `performance.now()` on either side of
+ * every iteration and took the arithmetic mean of the deltas. That cannot
+ * measure most of what this suite measures: `performance.now()` resolves to
+ * roughly a microsecond, and half these cases are operations costing a few
+ * nanoseconds, so each sample was mostly clock resolution. Worse for CI, the
+ * arithmetic mean of a noisy sample is dominated by its outliers, which on a
+ * shared runner means whatever else the host was doing. That is what produced
+ * a `cancellation-overhead` suite reading 1.17x slower than its own merge base
+ * with no change to the code being measured.
+ *
+ * mitata batches iterations to get below clock resolution, calibrates the
+ * batch size per case, and reports a distribution rather than one number.
+ * Callers should record `medianMs`, which is what makes a comparison across
+ * two CI runs mean something.
+ *
+ * `iterations` and `warmup` are retained so the call sites did not all have to
+ * change, but mitata decides both for itself from the measured cost of the
+ * function. `iterations` is used only as a hint for how long to sample.
+ */
+export async function benchmarkFn(
+  fn: () => void,
+  iterations = 10000,
+  _warmup = 100,
+): Promise<BenchmarkResult> {
+  // Sample for longer when the caller asked for many iterations, which is how
+  // the existing cases signal "this one is small and needs more evidence".
+  // Bounded at both ends so no single case can dominate the run.
+  const minCpuTimeNs = Math.min(Math.max(iterations * 4, 100e6), 600e6);
+
+  const measure = await loadMeasure();
+  const stats = await measure(fn, { min_cpu_time: minCpuTimeNs });
+  const sampleCount = stats.samples?.length ?? 0;
 
   return {
-    meanMs: sum / iterations,
-    medianMs: sorted[Math.floor(iterations / 2)],
-    minMs: sorted[0],
-    maxMs: sorted[sorted.length - 1],
-    totalMs: sum,
+    meanMs: stats.avg / NS_PER_MS,
+    medianMs: stats.p50 / NS_PER_MS,
+    minMs: stats.min / NS_PER_MS,
+    maxMs: stats.max / NS_PER_MS,
+    p99Ms: stats.p99 / NS_PER_MS,
+    samples: sampleCount,
+    totalMs: (stats.avg * sampleCount) / NS_PER_MS,
   };
 }
 

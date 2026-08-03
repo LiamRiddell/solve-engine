@@ -22,6 +22,7 @@ import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { Value, ValueType } from "@solve-js/vm/Value";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 function tokenize(lexer: Lexer, input: string) {
   lexer.reset(input);
@@ -162,20 +163,20 @@ describe("if/then/else", () => {
 
 describe("CONDITIONALS_PACKAGE — real engine wiring", () => {
   test("comparisons work via the real, default-constructed ExpressionEngine", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("5 > 3");
     expect(value.type).toBe(ValueType.Boolean);
     expect(value.value).toBe(true);
   });
 
   test("if/then/else works via the real engine", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("if 10 > 5 then 1 else 0");
     expect(value.toNumber()).toBe(1);
   });
 
   test("&& works via the real engine", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("1 < 2 && 3 < 4");
     expect(value.value).toBe(true);
   });

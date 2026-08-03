@@ -52,6 +52,35 @@ For line-oriented input (e.g. a document made of multiple expressions, some refe
 variables defined on earlier lines), use `evaluateLine`/`parseDocument` instead, see the
 `engine` subpath below.
 
+## Engine lifecycle
+
+Call `clear()` when you are finished with an engine that has parsed a document.
+Dropping your last reference is not enough on its own: the async batcher is
+reachable from the module-level data query service, so a parsed engine stays
+retained until `clear()` releases it.
+
+```typescript
+const engine = new ExpressionEngine();
+engine.parseDocument(text);
+// ... read results ...
+engine.clear();
+```
+
+Measured per engine after a forced collection:
+
+| Lifecycle | Retained |
+| --- | --- |
+| constructed, never parsed | 8.2KB |
+| constructed and parsed | 128KB |
+| constructed, parsed, cleared | 10KB |
+
+This matters most for hosts that create one engine per document or per tab. Over
+10,000 create-and-drop cycles the uncleared path reaches roughly 1.2GB.
+
+Reusing one engine across documents is also fine. `clear()` resets an engine for
+the next document rather than consuming it, so there is no separate teardown
+call to remember.
+
 ## Formatting a result for display
 
 ```typescript

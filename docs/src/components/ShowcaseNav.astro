@@ -1,0 +1,75 @@
+---
+interface Item {
+  /** Id of the row this entry points at. */
+  id: string;
+  label: string;
+}
+
+interface Props {
+  items: Item[];
+}
+
+const { items } = Astro.props;
+---
+
+<nav class="rail" aria-label="Examples">
+  <ol class="rail__list">
+    {
+      items.map((item, i) => (
+        <li>
+          <a href={`#${item.id}`} data-rail-link={item.id}>
+            <span class="rail__num">{String(i + 1).padStart(2, "0")}</span>
+            <span class="rail__label">{item.label}</span>
+          </a>
+        </li>
+      ))
+    }
+  </ol>
+</nav>
+
+<script>
+  // Marks the rail entry for whichever example is currently in view. Anchor
+  // links already work without this; the observer only adds the highlight, so
+  // nothing here is load bearing and a failure costs a visual cue rather than
+  // navigation.
+  const links = new Map<string, HTMLAnchorElement>();
+  for (const link of document.querySelectorAll<HTMLAnchorElement>("[data-rail-link]")) {
+    links.set(link.dataset.railLink!, link);
+  }
+
+  const rows = document.querySelectorAll<HTMLElement>(".showcase__row");
+  if (links.size > 0 && rows.length > 0 && typeof IntersectionObserver === "function") {
+    const visible = new Set<string>();
+
+    const paint = () => {
+      // Rows are in document order, so the first visible one wins. That keeps
+      // the highlight from jumping to the row below while most of the row
+      // above is still on screen.
+      let current: string | null = null;
+      for (const row of rows) {
+        if (visible.has(row.id)) {
+          current = row.id;
+          break;
+        }
+      }
+      for (const [id, link] of links) {
+        if (id === current) link.setAttribute("aria-current", "true");
+        else link.removeAttribute("aria-current");
+      }
+    };
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) visible.add(entry.target.id);
+          else visible.delete(entry.target.id);
+        }
+        paint();
+      },
+      // Ignore the top slice of the viewport, which the fixed header covers.
+      { rootMargin: "-25% 0px -45% 0px" },
+    );
+
+    for (const row of rows) observer.observe(row);
+  }
+</script>

@@ -1,0 +1,32 @@
+---
+import oyren from "../assets/oyren-wordmark.svg";
+
+// Rendered here rather than through Starlight's `hero.actions` frontmatter,
+// which can only take an icon from Starlight's own set. The Oyren button needs
+// Oyren's wordmark in it, and that is worth owning the markup for.
+const docsHref = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/getting-started/introduction/`;
+---
+
+<div class="hero-actions not-content">
+  <a class="sl-link-button primary" href={docsHref}>
+    Read the docs
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  </a>
+
+  {/* Keeps Oyren's own colourway in both themes. The wordmark is drawn in
+      white and volt, so a light-mode variant of this button would need a
+      different logo, not a different background. */}
+  <a class="sl-link-button btn-oyren" href="https://oyren.ai">
+    <span>Try it in</span>
+    <img src={oyren.src} alt="Oyren" width="596" height="67" />
+  </a>
+
+  <a class="sl-link-button minimal" href="https://github.com/LiamRiddell/solve-engine">
+    GitHub
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+    </svg>
+  </a>
+</div>

@@ -2,10 +2,11 @@ import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { BASIC_PACKAGE } from "@solve-js-examples/basic/BasicPackage";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 /** BASIC_PACKAGE is example code, not a built-in — register it explicitly alongside the built-ins. */
 function createEngineWithBasicExample(): ExpressionEngine {
-  return new ExpressionEngine("en", false, undefined, undefined, [...BUILTIN_PACKAGES, BASIC_PACKAGE]);
+  return newTrackedEngine("en", false, undefined, undefined, [...BUILTIN_PACKAGES, BASIC_PACKAGE]);
 }
 
 describe("BASIC_PACKAGE — minimal IEnginePackage example", () => {

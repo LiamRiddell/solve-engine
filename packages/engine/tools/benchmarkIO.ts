@@ -16,6 +16,21 @@ import * as fs from "fs";
 import * as path from "path";
 
 /**
+ * Which measurement method produced these numbers.
+ *
+ * Recorded in every suite file so the comparator can refuse to compare two runs
+ * that measured differently. Changing how time is measured changes what the
+ * numbers mean, and a ratio across that boundary describes the change of method
+ * rather than any change in the code. That is not hypothetical: moving from a
+ * `performance.now()` loop to mitata made identical code read up to 2.6x
+ * "slower", because the old loop's per-iteration deltas were mostly zero for
+ * anything faster than the clock and its mean therefore understated the truth.
+ *
+ * Bump this whenever the measurement changes in a way that shifts the numbers.
+ */
+export const HARNESS = "mitata-1";
+
+/**
  * One case's timing, as persisted.
  *
  * `medianMs` and `minMs` are optional because a few cases derive a mean from a
@@ -70,9 +85,12 @@ export function recordScalar(results: BenchmarkResults, name: string, meanMs: nu
  *
  * For suites that keep a plain `Record<string, number>` because they read their
  * own numbers back mid-run for assertions, or because the figure is derived
- * rather than measured by `benchmarkFn`. No median is recorded, since there is
- * no distribution behind the number, and the comparator falls back to the mean
- * accordingly.
+ * rather than measured by `benchmarkFn`.
+ *
+ * Recorded under both keys. The figure these suites collect is `benchmarkFn`'s
+ * median, so writing it only as `meanMs` would name it wrongly, and the
+ * comparator reads `medianMs` first. Writing both keeps a baseline captured by
+ * an older revision readable while the naming settles.
  *
  * @param scalars - Case name to timing, in `unit`.
  * @param unit - Unit those numbers are in. Everything is persisted in
@@ -87,7 +105,8 @@ export function fromScalarMap(
 	const divisor = unit === "us" ? 1000 : 1;
 	const out: BenchmarkResults = {};
 	for (const [name, value] of Object.entries(scalars)) {
-		out[name] = { meanMs: value / divisor };
+		const ms = value / divisor;
+		out[name] = { meanMs: ms, medianMs: ms };
 	}
 	return out;
 }
@@ -170,7 +189,7 @@ export function writeBenchmarkResults(
 	// when no measurement changed.
 	fs.writeFileSync(
 		file,
-		`${JSON.stringify({ suite, results }, null, 2)}\n`,
+		`${JSON.stringify({ suite, harness: HARNESS, results }, null, 2)}\n`,
 		"utf8",
 	);
 

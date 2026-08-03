@@ -9,9 +9,10 @@ import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType, type MatrixData } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 function engine() {
-  return new ExpressionEngine("en");
+  return newTrackedEngine("en");
 }
 
 function evalOne(expr: string) {

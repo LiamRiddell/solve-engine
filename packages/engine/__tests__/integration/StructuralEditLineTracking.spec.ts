@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from "@jest/globals";
+import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
 import { DocumentModel, ViewportRange } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator, EvalTier } from "@solve-js/engine/ThreeTierEvaluator";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
@@ -43,6 +43,13 @@ describe("Structural edits — result tracking follows the shifted line", () => 
 
 	beforeEach(() => {
 		engine = createEngine();
+	});
+
+	// Releases the engine's query client and async batcher. Without it the
+	// engine outlives the test file and its pending work lands in whatever
+	// runs next, which under --runInBand is the same process.
+	afterEach(() => {
+		engine.clear();
 	});
 
 	test("inserting blank lines ABOVE an expression moves its result to the new line — exact shape of the reported bug", () => {

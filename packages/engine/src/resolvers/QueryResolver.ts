@@ -109,12 +109,25 @@ export function createQueryResolver(opts: QueryResolverOptions): QueryResolverPa
 			// staleTimeMs (which is tuned for successful results), without
 			// this, a transient failure would either be retried on every
 			// keystroke or persist as "the answer" for the full staleTime.
-			setTimeout(() => {
+			const cooldownTimer = setTimeout(() => {
 				const current = queryClient.getQueryData(queryKeyFor(query));
 				if (current === failedValue) {
 					queryClient.removeQueries({ queryKey: queryKeyFor(query), exact: true });
 				}
 			}, failureCooldownMs);
+
+			// Node keeps its event loop alive for any pending timer, so without
+			// this each failed query holds the process open for the length of
+			// the cooldown. That is wrong on its own terms: evicting a cache
+			// entry is not a reason to keep a program running, and if nothing
+			// else is alive there is no cache left to evict from. It showed up
+			// as a test run that passed every assertion and then hung.
+			//
+			// `unref` is Node-only; browsers return a number from setTimeout
+			// and need no equivalent, since a pending timer there does not keep
+			// anything alive.
+			(cooldownTimer as unknown as { unref?: () => void }).unref?.();
+
 			return failedValue;
 		} finally {
 			cleanup();

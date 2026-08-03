@@ -22,8 +22,13 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
+      # Node 20 is gone because the project's own tooling cannot install on it:
+      # size-limit pulls nanoid 6, which requires ^22 || ^24 || >=26, and
+      # `.npmrc` sets engine-strict. Testing a version the repository cannot
+      # even `npm ci` on was never going to work, and claiming support for one
+      # nothing exercises is worse than dropping it honestly.
       matrix:
-        node: [20, 22, 24]
+        node: [22, 24]
 
     steps:
       - uses: actions/checkout@v7
@@ -35,9 +40,57 @@ jobs:
 
       - run: npm ci
 
+      # Correctness-category rules fail the build; no-explicit-any and unused
+      # vars are warnings, because a backlog exists and a permanently red check
+      # is one people learn to ignore.
+      - run: npm run lint
+
       # Type check, full test suite, and the package build. Kept as one script
       # so that what CI runs and what a contributor runs locally cannot drift.
       - run: npm run verify
+
+  test-full:
+    name: Every unit test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # `npm run verify` excludes the heavy, fuzz and long-document suites so
+      # the normal dev cycle stays fast. That leaves sixteen spec files that
+      # nothing runs, and a suite nothing runs is a suite that quietly rots:
+      # when this job was first written, two of those files had decayed to 49
+      # and 13 failures against behaviour the engine had changed under them.
+      #
+      # One Node version rather than the verify matrix. These suites are slow
+      # and their failures are logic failures, not version-specific ones, so a
+      # three-way matrix would triple the runtime to re-prove the same thing.
+      #
+      # Runs single-threaded with a raised heap: the fuzz and long-document
+      # suites allocate enough that parallel workers on a two-core runner start
+      # failing on allocation rather than on anything real. --expose-gc is
+      # load-bearing for the memory specs, which measure retention after a
+      # forced collection and report noise without it.
+      #
+      # It also runs --forceExit, which needs justifying. Every test passes and
+      # then Jest cannot exit, so the job used to sit until the runner killed it
+      # ten minutes later. Three real causes were found and fixed rather than
+      # papered over: QueryResolver armed an unref'd cache-eviction timer per
+      # failed query, ExpressionEngine.clear() never emptied the query cache
+      # whose gc timers keep a process alive, and seventy-four specs constructed
+      # engines they never cleared. Something still holds the loop open after
+      # all three, and --detectOpenHandles reports nothing, so there is no
+      # handle left for it to name. The parallel run (test:ci) has always had
+      # this masked, since Jest force-kills its workers; this makes the
+      # single-process run behave the same way rather than pretending the
+      # difference is a test failure.
+      - run: npm run test:full
 
   package:
     name: Package publishes correctly
@@ -62,6 +115,17 @@ jobs:
       # entirely, and this package requires a Node version that understands them.
       - run: npx --yes publint packages/engine
       - run: npx --yes @arethetypeswrong/cli --pack packages/engine --ignore-rules no-resolution
+
+      # Budget is roughly ten percent over the current 83kB, which is tight
+      # enough to catch a dependency arriving by accident and loose enough not
+      # to fail on ordinary growth. A budget set far above the real figure
+      # cannot fail, and so measures nothing.
+      #
+      # Both entries land within 20 bytes of each other: importing only
+      # ExpressionEngine costs the same as importing everything, because it
+      # reaches the whole engine. Tree-shaking buys nothing here today, and the
+      # second entry exists so that stops being invisible if it changes.
+      - run: npm run size
 
   playground:
     name: Playground builds
@@ -90,6 +154,14 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      # The site imports the engine as a `file:` dependency, and that package
+      # publishes only `dist`, so it has to exist before the docs install can
+      # link anything usable. Without this the build fails at the point Vite
+      # tries to resolve `solve-engine`, which reads as a documentation problem
+      # rather than a missing build step. `pages.yml` orders it the same way.
+      - run: npm run build
+
       - run: npm ci --prefix docs
       - run: npm run build --prefix docs
 

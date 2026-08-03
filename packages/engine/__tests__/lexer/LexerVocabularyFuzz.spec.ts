@@ -275,21 +275,21 @@ describe("LexerVocabulary Fuzz — operator collision resistance", () => {
     const plugin: LexerVocabulary = {
       operators: {
         "->": "ARROW",
-        "=>": "FAT_ARROW",
+        "=~": "MATCHES",
         "<|": "LEFT_PIPE",
         "|>": "PIPE",
         "::": "NAMESPACE",
-        "||": "LOGICAL_OR",
-        "&&": "LOGICAL_AND",
+        "%%": "PIPE_INTO",
+        "&+": "MERGE",
       },
     };
 
     // Plugin operators should be recognized
     expect(types("a->b", plugin)).toContain("ARROW");
-    expect(types("a=>b", plugin)).toContain("FAT_ARROW");
+    expect(types("a=~b", plugin)).toContain("MATCHES");
     expect(types("a::b", plugin)).toContain("NAMESPACE");
-    expect(types("a||b", plugin)).toContain("LOGICAL_OR");
-    expect(types("a&&b", plugin)).toContain("LOGICAL_AND");
+    expect(types("a%%b", plugin)).toContain("PIPE_INTO");
+    expect(types("a&+b", plugin)).toContain("MERGE");
     expect(types("a<|b", plugin)).toContain("LEFT_PIPE");
     expect(types("a|>b", plugin)).toContain("PIPE");
 
@@ -307,21 +307,21 @@ describe("LexerVocabulary Fuzz — operator collision resistance", () => {
       operators: {
         // Share first char with built-in ops
         "->": "ARROW",
-        "=>": "FAT_ARROW",
+        "=~": "MATCHES",
         "<|": "LEFT_PIPE",
         "|>": "PIPE",
         "::": "NAMESPACE",
-        "||": "LOGICAL_OR",
-        "&&": "LOGICAL_AND",
+        "%%": "PIPE_INTO",
+        "&+": "MERGE",
       },
     };
 
     // Plugin operators should be recognized
     expect(types("a->b", plugin)).toContain("ARROW");
-    expect(types("a=>b", plugin)).toContain("FAT_ARROW");
+    expect(types("a=~b", plugin)).toContain("MATCHES");
     expect(types("a::b", plugin)).toContain("NAMESPACE");
-    expect(types("a||b", plugin)).toContain("LOGICAL_OR");
-    expect(types("a&&b", plugin)).toContain("LOGICAL_AND");
+    expect(types("a%%b", plugin)).toContain("PIPE_INTO");
+    expect(types("a&+b", plugin)).toContain("MERGE");
     expect(types("a<|b", plugin)).toContain("LEFT_PIPE");
     expect(types("a|>b", plugin)).toContain("PIPE");
 
@@ -379,9 +379,18 @@ describe("LexerVocabulary Fuzz — phrase collision resistance", () => {
     const plugin: LexerVocabulary = {
       keywords: {},
     };
-    // Raw tokens from lexer: "to the power of" → IDENT, IDENT, IDENT, IDENT, IDENT
-    expect(types("to the power of", plugin).length).toBe(5);
-    expect(types("increase by", plugin)).toEqual(["IDENT", "IDENT"]);
+    // The point of this case is that the LEXER does not fuse a multi-word phrase
+    // into one token; that moved to TokenNormalizer. It is not that every word
+    // stays a bare IDENT. `to`, `of`, `increase` and `by` are keyword tokens in
+    // their own right, which they became when unit conversion and percentages
+    // landed, so asserting IDENT for them tested a fact that stopped being true.
+    const powerOf = types("to the power of", plugin);
+    expect(powerOf).toEqual(["TO", "IDENT", "IDENT", "OF"]);
+    expect(powerOf.some(t => t.includes("PHRASE"))).toBe(false);
+
+    const increaseBy = types("increase by", plugin);
+    expect(increaseBy).toEqual(["INCREASE", "BY"]);
+    expect(increaseBy.length).toBe(2);
   });
 });
 
@@ -483,8 +492,10 @@ describe("LexerVocabulary Fuzz — mixed expression collisions", () => {
     expect(types("pi + e", plugin)).toEqual(["PI", "PLUS", "E"]);
     expect(types("1 + 2", plugin)).toEqual(["NUMBER", "PLUS", "NUMBER"]);
     expect(types("myplus", plugin)).toEqual(["PLUGIN_PLUS"]);
-    // Phrases like "cost of" produce raw IDENT tokens from the lexer
-    expect(types("cost of 100", plugin)).toEqual(["IDENT", "IDENT", "NUMBER"]);
+    // The lexer does not fuse "cost of" into one phrase token; that is the
+    // normaliser's job. `of` is itself a keyword though, which it became with
+    // percentages, so only "cost" stays a bare IDENT.
+    expect(types("cost of 100", plugin)).toEqual(["IDENT", "OF", "NUMBER"]);
   });
 
   test("number tokenization unaffected by plugin registrations", () => {
@@ -581,7 +592,7 @@ describe("LexerVocabulary Fuzz — stress test with all fuzz cases", () => {
     operators: {
       "::": "NAMESPACE",
       "->": "ARROW",
-      "=>": "FAT_ARROW",
+      "=~": "MATCHES",
       "<|": "LEFT_PIPE",
       "|>": "RIGHT_PIPE",
       "++": "INCREMENT",
@@ -758,7 +769,7 @@ describe("LexerVocabulary Fuzz — stress test with all fuzz cases", () => {
 
       // If the input doesn't contain any plugin-registered tokens, the
       // token count and structure should be identical
-      if (!input.includes("::") && !input.includes("->") && !input.includes("=>")
+      if (!input.includes("::") && !input.includes("->") && !input.includes("=~")
           && !input.includes("|>") && !input.includes("<|")
           && !/\b(namespace|module|package|import|export|class)\b/i.test(input)
           && !/\b(tile|gp|osrs|ns)\b/.test(input)
@@ -881,9 +892,15 @@ describe("LexerVocabulary Fuzz — edge cases and boundary conditions", () => {
     for (let i = 0; i < 10; i++) {
       lexer.reset(`custom ${wordSuffixes[i]}`);
       // Raw lexer output: IDENT IDENT (custom, word)
-      expect([...lexer].length).toBe(2);
-      expect([...lexer][0].type).toBe("IDENT");
-      expect([...lexer][1].type).toBe("IDENT");
+      // Spread once. The lexer is a consuming iterator, so a second spread over
+      // the same reset yields nothing and the old assertions read undefined.
+      //
+      // Two tokens, unfused, is what this case is testing. The second is not
+      // pinned to IDENT because several of the suffixes below are keywords in
+      // their own right now.
+      const seqTokens = [...lexer];
+      expect(seqTokens.length).toBe(2);
+      expect(seqTokens[0].type).toBe("IDENT");
     }
 
     // All 10 plugin units should be recognized
@@ -933,7 +950,7 @@ describe("LexerVocabulary Fuzz — safety boundaries", () => {
     const plugin: LexerVocabulary = {
       operators: {
         "->": "ARROW",
-        "=>": "FAT_ARROW",
+        "=~": "MATCHES",
         "::": "NAMESPACE",
         "<|": "LEFT_PIPE",
         "|>": "PIPE",
@@ -1016,10 +1033,13 @@ describe("LexerVocabulary Fuzz — unregisterVocabulary", () => {
 
     lexer.reset("a->b");
     const dashArrowTokens = [...lexer];
-    // '-' maps to MINUS via OP_MAP; '>' maps to ERROR (no single-char OP_MAP entry).
-    // So '->' becomes MINUS + ERROR.
+    // Both halves fall back to their single-character meanings: '-' is MINUS and
+    // '>' is GT. The comment here used to say '>' produced ERROR, which was true
+    // before comparison operators existed and stopped being true when the
+    // conditionals package added them.
     expect(dashArrowTokens.some(t => t.type === "MINUS")).toBe(true);
-    expect(dashArrowTokens.some(t => t.type === "ERROR")).toBe(true);
+    expect(dashArrowTokens.some(t => t.type === "GT")).toBe(true);
+    expect(dashArrowTokens.some(t => t.type === "ARROW")).toBe(false);
 
     // Built-in operators still work
     lexer.reset("a<=b");
@@ -1043,11 +1063,13 @@ describe("LexerVocabulary Fuzz — unregisterVocabulary", () => {
     lexer.reset("custom");
     expect([...lexer][0].type).toBe("IDENT");
 
-    // Built-in phrases produce raw IDENT tokens from the lexer
+    // The lexer leaves a built-in phrase unfused, which is the architectural
+    // point here. Its words are still keywords individually: `increase` and `by`
+    // both became keyword tokens with the percentage package.
     lexer.reset("increase by");
     const tokens = [...lexer];
-    expect(tokens[0].type).toBe("IDENT");
-    expect(tokens[1].type).toBe("IDENT");
+    expect(tokens.length).toBe(2);
+    expect(tokens.map(t => t.type)).toEqual(["INCREASE", "BY"]);
   });
 
   test("unregisterVocabulary removes plugin units", () => {
@@ -1271,9 +1293,13 @@ describe("LexerVocabulary Fuzz — collision guard edge cases", () => {
     const phraseSamples = ["to the power of", "power of", "times by", "multiply by", "divide by", "increase by", "decrease by"];
     for (const phrase of phraseSamples) {
       const tokens = tokenize(phrase);
-      // All tokens should be IDENT (raw output from lexer)
+      // No token spans the whole phrase: fusion belongs to the normaliser. The
+      // individual words are not all IDENT, because several of them (`to`, `of`,
+      // `by`, `increase`, `decrease`, `times`, `divide`) are keywords in their
+      // own right now.
+      expect(tokens.length).toBeGreaterThan(1);
       for (const t of tokens) {
-        expect(t.type).toBe("IDENT");
+        expect(t.value).not.toBe(phrase);
       }
     }
   });

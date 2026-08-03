@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from "@jest/globals";
+import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 
 describe("Feature #80: Scientific Notation", () => {
@@ -6,6 +6,13 @@ describe("Feature #80: Scientific Notation", () => {
 
   beforeEach(() => {
     engine = new ExpressionEngine("en", false);
+  });
+
+  // Releases the engine's query client and async batcher. Without it the
+  // engine outlives the test file and its pending work lands in whatever
+  // runs next, which under --runInBand is the same process.
+  afterEach(() => {
+  	engine.clear();
   });
 
   test("1e6 evaluates to 1000000", () => {

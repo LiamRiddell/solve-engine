@@ -1,6 +1,7 @@
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 /**
  * The natural-question date grammar: `what day is it in 30 days`, the
@@ -16,7 +17,7 @@ import { ValueType } from "@solve-js/vm/Value";
  * DateLiteralNormalizerRule); those two anchor most of the cases below.
  */
 function evaluate(expression: string) {
-	return new ExpressionEngine("en", false).evaluateExpression(expression)[0];
+	return newTrackedEngine("en", false).evaluateExpression(expression)[0];
 }
 
 describe("date field questions", () => {
@@ -136,7 +137,7 @@ describe("date field questions", () => {
 		});
 
 		test("day/week/month are still usable as variable names", () => {
-			const engine = new ExpressionEngine("en", false);
+			const engine = newTrackedEngine("en", false);
 			expect(engine.evaluateExpression(":day = 5")[0].toNumber()).toBe(5);
 			expect(engine.evaluateExpression(":week = 3")[0].toNumber()).toBe(3);
 			expect(engine.evaluateExpression(":day + :week")[0].toNumber()).toBe(8);

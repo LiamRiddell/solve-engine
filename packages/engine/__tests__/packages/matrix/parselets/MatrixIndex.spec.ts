@@ -8,9 +8,10 @@
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 function engine() {
-  return new ExpressionEngine("en");
+  return newTrackedEngine("en");
 }
 
 function evalOne(expr: string) {
