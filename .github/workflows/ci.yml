@@ -103,7 +103,8 @@ jobs:
           node-version: 22
 
       # Node rather than grep. The previous version of this check ran
-      # `grep -P 'â'`, which exits 2 on a locale it cannot handle,
+      # `grep -P` matching the em-dash byte sequence, which exits 2 on a
+      # locale it cannot handle,
       # and `if grep ...` reads exit 2 the same as "no match". So it passed on
       # every file, including the 192 carrying 1,752 violations between them. A
       # gate that cannot fail produces confidence rather than information.
