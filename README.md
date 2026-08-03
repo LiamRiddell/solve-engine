@@ -1,8 +1,6 @@
 <div align="center">
 
-<img src="playground/public/solve-logo.svg" alt="Solve" width="96" />
-
-# Solve Engine
+<img src="static/solve-engine-banner-github.png" alt="Solve, a natural language expression engine" width="100%" />
 
 **A calculator that reads like a sentence.**
 

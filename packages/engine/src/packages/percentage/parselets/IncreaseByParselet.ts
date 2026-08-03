@@ -5,6 +5,12 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 
+/**
+ * `increase X by N%` and its decrease counterpart, sharing one implementation.
+ *
+ * The multiplier passed to the constructor is the only difference between them:
+ * +1 grows, -1 shrinks.
+ */
 export class IncreaseByParselet implements InfixParselet {
 	readonly category = "Percentage";
 	readonly bindingPower = BindingPower.Conditional;

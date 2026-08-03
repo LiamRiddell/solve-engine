@@ -48,6 +48,12 @@ export const CPI_TABLE: Readonly<Record<number, number>> = {
 
 /** Earliest/latest year this table has data for, used for range-check error messages. */
 export const CPI_MIN_YEAR = 1970;
+/**
+ * Most recent year in {@link CPI_TABLE}.
+ *
+ * A request beyond this is rejected rather than extrapolated, since inflation
+ * past the last published figure is a forecast and not a conversion.
+ */
 export const CPI_MAX_YEAR = 2026;
 
 /** Look up the CPI-U annual average for `year`, or `undefined` if out of range. */

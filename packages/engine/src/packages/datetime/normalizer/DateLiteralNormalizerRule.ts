@@ -3,6 +3,12 @@ import { tokenTypeId } from "@solve-js/lexer/Token";
 import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 
+/**
+ * Token type a fused date literal is rewritten to.
+ *
+ * One type covers every supported ordering, so the parselet handles the shape
+ * rather than the locale.
+ */
 export const DATETIME_LITERAL_TYPE = "DATETIME_LITERAL";
 const DATETIME_LITERAL_TYPE_ID = tokenTypeId(DATETIME_LITERAL_TYPE);
 

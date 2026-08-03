@@ -36,6 +36,12 @@ const FORECAST_API_URL = "https://api.open-meteo.com/v1/forecast";
 /** Hard timeout for each Open-Meteo HTTP call (geocoding or forecast). */
 const FETCH_TIMEOUT_MS = 10_000;
 
+/**
+ * Current conditions for one place, as returned by Open-Meteo.
+ *
+ * Temperatures are Celsius at this layer; conversion to the display unit
+ * happens later, so the shape stays independent of formatting settings.
+ */
 export interface CityWeather {
 	/** The resolved place name Open-Meteo matched, e.g. "London" for input "london". */
 	resolvedName: string;

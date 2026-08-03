@@ -18,6 +18,13 @@ function resolveUnitAlias(rawUnit: string): string {
   return resolveCurrencyAlias(rawUnit) ?? rawUnit;
 }
 
+/**
+ * A unit directly following a value, as in `5 km` or `100 cm`.
+ *
+ * Postfix binding power so the unit attaches to the number beside it rather
+ * than to a surrounding expression: `2 * 3 km` is `2 * (3 km)`. Aliases resolve
+ * through the shared table, so currency symbols and unit words agree.
+ */
 export class UomLiteralParselet implements InfixParselet {
 	readonly category = "UoM";
 	readonly bindingPower = BindingPower.Postfix;

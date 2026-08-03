@@ -6,6 +6,13 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { isKnownUnit } from "@solve-js/lexer/units";
 
+/**
+ * `100 to 150`, the percentage change between two numbers.
+ *
+ * Shares the `to` token with unit conversion, so it checks whether the left
+ * operand is a UNIT first and yields to the conversion parselet if so. Without
+ * that check `5 km to miles` would be read as a percentage change.
+ */
 export class PercentageChangeParselet implements InfixParselet {
 	readonly category = "Percentage";
 	readonly bindingPower = BindingPower.Conditional;

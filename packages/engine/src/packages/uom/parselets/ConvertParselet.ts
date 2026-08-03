@@ -11,6 +11,13 @@ function resolveUnitAlias(rawUnit: string): string {
   return resolveCurrencyAlias(rawUnit) ?? rawUnit;
 }
 
+/**
+ * The explicit `convert` keyword, as in `convert 5 km to miles`.
+ *
+ * Handles both an explicit unit after the value and a value that already
+ * carries one. The bare `5 km to miles` form does not come through here; it is
+ * an infix conversion on `to`.
+ */
 export class ConvertParselet implements PrefixParselet {
 	readonly category = "UoM";
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {

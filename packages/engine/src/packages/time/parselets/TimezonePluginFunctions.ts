@@ -17,8 +17,11 @@ import {
  */
 
 export const ZONE_CONVERT_FN_IDX = allocatePluginFunctionIndex();
+/** Plugin index for `time in <zone>`, the current wall clock there. */
 export const TIME_IN_ZONE_FN_IDX = allocatePluginFunctionIndex();
+/** Plugin index for `date in <zone>`, which can differ from the local date. */
 export const DATE_IN_ZONE_FN_IDX = allocatePluginFunctionIndex();
+/** Plugin index for the offset between two zones, as a duration. */
 export const TIME_DIFFERENCE_FN_IDX = allocatePluginFunctionIndex();
 
 /**
