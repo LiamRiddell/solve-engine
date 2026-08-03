@@ -42,3 +42,14 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+    ignore:
+      # Every `uses:` in this repository points at a floating major tag, which
+      # already picks up patches and minors without anyone opening a pull
+      # request. Accepting those updates here would replace the tag with an
+      # exact pin such as `@v4.37.4` and then bill a pull request for every
+      # subsequent patch, which is strictly worse than the tag it replaced.
+      # Majors still come through, because moving to a new major tag is a real
+      # upgrade decision rather than a bump.
+      - dependency-name: "*"
+        update-types:
+          ["version-update:semver-patch", "version-update:semver-minor"]
