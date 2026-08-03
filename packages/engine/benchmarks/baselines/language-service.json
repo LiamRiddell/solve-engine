@@ -1,0 +1,75 @@
+{
+  "suite": "language-service",
+  "results": {
+    "highlight_simple_arithmetic": {
+      "meanMs": 0.00677062999999971,
+      "medianMs": 0.005300000000033833,
+      "minMs": 0.004400000000032378
+    },
+    "highlight_mixed_expression": {
+      "meanMs": 0.009157649999999557,
+      "medianMs": 0.007799999999861029,
+      "minMs": 0.006799999999884676
+    },
+    "highlight_long_expression": {
+      "meanMs": 0.21618409999999982,
+      "medianMs": 0.1977999999999156,
+      "minMs": 0.18650000000002365
+    },
+    "highlight_inline_solve_in_text": {
+      "meanMs": 0.006251579999999922,
+      "medianMs": 0.005300000000033833,
+      "minMs": 0.004500000000007276
+    },
+    "highlight_unrecognized_prose": {
+      "meanMs": 0.043573900000001074,
+      "medianMs": 0.033699999999953434,
+      "minMs": 0.027399999999943248
+    },
+    "highlight_warm_cache_hit": {
+      "meanMs": 0.00012149000000066736,
+      "medianMs": 0.00010000000020227162,
+      "minMs": 0.00009999999974752427
+    },
+    "completions_cold_first_call": {
+      "meanMs": 2.511775799999992,
+      "medianMs": 2.3989000000001397,
+      "minMs": 2.041400000000067
+    },
+    "completions_warm_short_prefix": {
+      "meanMs": 0.0071334899999982325,
+      "medianMs": 0.006300000000010186,
+      "minMs": 0.006099999999605643
+    },
+    "completions_warm_specific_prefix": {
+      "meanMs": 0.0042051249999992026,
+      "medianMs": 0.0037000000002080924,
+      "minMs": 0.003499999999803549
+    },
+    "completions_warm_no_match": {
+      "meanMs": 0.003904805000002057,
+      "medianMs": 0.003499999999803549,
+      "minMs": 0.0032999999998537533
+    },
+    "completions_warm_500_variables": {
+      "meanMs": 0.06295029999999534,
+      "medianMs": 0.055899999999383,
+      "minMs": 0.053699999999935244
+    },
+    "highlight_viewport_50_lines_cold": {
+      "meanMs": 0.2950849999999946,
+      "medianMs": 0.2710000000006403,
+      "minMs": 0.23000000000047294
+    },
+    "highlight_viewport_100_lines_cold": {
+      "meanMs": 0.5754465000000027,
+      "medianMs": 0.5423999999993612,
+      "minMs": 0.45420000000012806
+    },
+    "highlight_viewport_200_lines_cold": {
+      "meanMs": 1.1892069999999284,
+      "medianMs": 1.114699999999175,
+      "minMs": 0.9501000000000204
+    }
+  }
+}

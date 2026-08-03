@@ -13,6 +13,7 @@ import { describe, expect, test, afterAll } from "@jest/globals";
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
+import { recordScalar, writeBenchmarkResults, BenchmarkResults } from "@tools/benchmarkIO";
 
 interface BytecodeProgram {
   opcodes: Uint8Array;
@@ -76,24 +77,10 @@ const programs: Array<{ name: string; bytecode: BytecodeProgram }> = [
 ];
 
 describe("VM Benchmarks", () => {
-  const results: Record<string, number> = {};
+  const results: BenchmarkResults = {};
 
   afterAll(() => {
-    console.log("\n📊 VM BENCHMARK RESULTS (mean µs, isolated VM execution):");
-    console.log(`${"Benchmark".padEnd(26)} ${"Mean (µs)".padStart(12)} ${"Ops/sec".padStart(12)}`);
-    console.log(`${"─".repeat(52)}`);
-    const fs = require("fs");
-    const path = require("path");
-    const dir = path.join(__dirname, "..", "..", "benchmarks", "results");
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    for (const [name, mean] of Object.entries(results)) {
-      const ops = 1_000_000 / mean;
-      console.log(`${name.padEnd(26)} ${mean.toFixed(2).padStart(12)} ${ops.toFixed(0).padStart(12)}`);
-    }
-    fs.writeFileSync(
-      path.join(dir, "vm-baseline.json"),
-      JSON.stringify({ timestamp: new Date().toISOString(), results }, null, 2)
-    );
+    writeBenchmarkResults("vm", results, "us");
   });
 
   for (const { name, bytecode } of programs) {
@@ -117,7 +104,7 @@ describe("VM Benchmarks", () => {
 
       const meanMs = totalMs / (batches * perBatch);
       const meanUs = meanMs * 1000;
-      results[name] = meanUs;
+      recordScalar(results, name, meanMs);
 
       // Simple VM ops should be well under 1ms (1000µs)
       expect(meanUs).toBeLessThan(500);

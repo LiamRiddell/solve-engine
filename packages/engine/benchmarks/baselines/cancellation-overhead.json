@@ -1,0 +1,50 @@
+{
+  "suite": "cancellation-overhead",
+  "results": {
+    "addEventListener + removeEventListener": {
+      "meanMs": 0.0005306599999999526
+    },
+    "addEventListener only": {
+      "meanMs": 0.00040750600000022586
+    },
+    "new AbortController()": {
+      "meanMs": 0.00024062499999992495
+    },
+    "full create+link+unlink cycle": {
+      "meanMs": 0.0005213755000001186
+    },
+    "keystroke abort → 50 local aborts": {
+      "meanMs": 0.7848955699999935
+    },
+    "executeCached (no signal)": {
+      "meanMs": 0.0005969329999991715
+    },
+    "executeCached (with signal, raw)": {
+      "meanMs": 0.0016230454999993345
+    },
+    "keystroke wrapper overhead": {
+      "meanMs": 0.0009517590000001474
+    },
+    "overhead delta (with - without - wrapper)": {
+      "meanMs": 0.00007435350000001562
+    },
+    "engine.evaluateLine (no signal)": {
+      "meanMs": 0.0043496840000046355
+    },
+    "engine.evaluateLine (with signal, raw)": {
+      "meanMs": 0.0058620759999954315
+    },
+    "50 keystroke cycles (total)": {
+      "meanMs": 0.28406339999997365
+    },
+    "per keystroke cycle": {
+      "meanMs": 0.005681267999999472
+    },
+    "addEventListener on aborted signal": {
+      "meanMs": 0.2574016699999945
+    },
+    "signal.aborted property access": {
+      "meanMs": 0.00010764499999837426
+    }
+  }
+}

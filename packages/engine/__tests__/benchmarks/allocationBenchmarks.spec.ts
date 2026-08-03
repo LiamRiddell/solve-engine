@@ -1,21 +1,42 @@
 /**
  * Allocation Tracking Benchmarks
  *
- * Measures per-stage heap allocation using process.memoryUsage().heapUsed.
- * These are conservative Phase 0 baselines — thresholds tighten in Phase 2+.
+ * Measures heap allocation with process.memoryUsage().heapUsed, which includes
+ * V8 internals and engine bootstrap as well as the work being measured.
  *
- * NOTE: heapUsed includes V8 internals and engine bootstrap (workers, services).
- * Fresh engine creation dominates single-expression measurements.
- * Real per-stage allocation budgets will be measured after pooling and zero-copy
- * changes in Phase 2.
+ * Every "fresh engine" case below measures bootstrap plus the operation and
+ * attributes the whole delta to the operation. That is why the budgets are so
+ * much larger than the work being measured would suggest.
  *
- * Phase 0 Budgets (measured in heap bytes here; spec §9 targets object counts in Phase 2+):
- * - Lexer: < 50KB amortized
- * - Parser cold: < 200KB (first 3 expressions)
- * - Parser warm: < 128KB (bytecode cached, but V8 noise dominates)
- * - VM fresh: < 256KB (engine bootstrap)
- * - VM warm total: < 1MB for 200 evals (~5KB amortized per eval)
- * - Document 50-line: < 1MB
+ * The fresh-engine budgets moved from 256KB to 2MB. The first move followed
+ * measuring bootstrap alone at roughly 442KB, which put 256KB out of reach no
+ * matter how cheap the operation was. The cause is growth rather than a leak:
+ * the built-in package set is now 19 packages, each registering vocabulary,
+ * parselets and normaliser rules at construction. Per-evaluation cost on an
+ * already-warm engine was measured at 9KB for one, then 5.4KB and 1.8KB
+ * amortised over 100 and 1000, so it falls as caches fill rather than growing.
+ *
+ * The second move was for a different reason, and it is the one worth reading.
+ * Across four consecutive runs of identical code, the same case measured
+ * anywhere from 665KB to 1.38MB. These assertions do not control for when
+ * garbage collection lands inside the measured span, so run-to-run variation of
+ * roughly two times is normal. A bound tight enough to be interesting is
+ * therefore a bound that fails at random.
+ *
+ * Read them accordingly. They catch an order-of-magnitude change, nothing
+ * finer. The per-case ratio against the merge base in scripts/compare-benchmarks.mjs
+ * is what actually guards allocation cost, because it compares two runs on one
+ * machine minutes apart and cancels most of this noise.
+ *
+ * The real fix is a measurement that separates bootstrap from the operation and
+ * counts objects rather than sampling a heap total. That is worth more than any
+ * further adjustment to the numbers below.
+ *
+ * Current budgets (heap bytes):
+ * - Fresh engine plus one operation: < 2MB (bootstrap dominates, and it is noisy)
+ * - Parser warm: < 768KB (bytecode cached, V8 noise dominates)
+ * - VM warm total: < 4MB for 200 evals
+ * - Document 50-line: < 2MB
  * - Document 200-line: < 4MB
  */
 
@@ -54,29 +75,27 @@ describe("Allocation Benchmarks", () => {
   // Lexer allocation budgets
   // ═══════════════════════════════════════════════════════════════════════
 
-  test("lexer: simple arithmetic (fresh engine) allocates < 256KB", () => {
+  test("lexer: simple arithmetic (fresh engine) allocates < 2MB", () => {
     const { deltaBytes } = trackHeapDelta(() => {
       const e = createEngine();
       e.evaluateLine(1, "1 + 2");
     });
-    // Fresh engine bootstrap dominates (~133KB observed)
-    expect(deltaBytes).toBeLessThan(256 * 1024);
+    expect(deltaBytes).toBeLessThan(2 * 1024 * 1024);
   });
 
-  test("lexer: mixed expression (fresh engine) allocates < 512KB", () => {
+  test("lexer: mixed expression (fresh engine) allocates < 2MB", () => {
     const { deltaBytes } = trackHeapDelta(() => {
       const e = createEngine();
       e.evaluateLine(1, "$10 + 50% of 200 - 3 kg");
     });
-    // ~276KB observed
-    expect(deltaBytes).toBeLessThan(512 * 1024);
+    expect(deltaBytes).toBeLessThan(2 * 1024 * 1024);
   });
 
   // ═══════════════════════════════════════════════════════════════════════
   // Parser allocation budgets
   // ═══════════════════════════════════════════════════════════════════════
 
-  test("parser: cold compile (3 expressions) allocates < 384KB", () => {
+  test("parser: cold compile (3 expressions) allocates < 2MB", () => {
     if (gc) gc();
     const start = process.memoryUsage().heapUsed;
     const e = createEngine();
@@ -84,11 +103,10 @@ describe("Allocation Benchmarks", () => {
     e.evaluateLine(2, "sqrt(144) + 5");
     e.evaluateLine(3, "10% of 200");
     const end = process.memoryUsage().heapUsed;
-    // ~184KB observed
-    expect(end - start).toBeLessThan(384 * 1024);
+    expect(end - start).toBeLessThan(2 * 1024 * 1024);
   });
 
-  test("parser: warm compile allocates < 128KB (bytecode cached)", () => {
+  test("parser: warm compile allocates < 768KB (bytecode cached)", () => {
     // Warm the cache first
     engine.evaluateLine(100, "1 + 2 * 3");
     engine.evaluateLine(101, "sqrt(144) + 5");
@@ -101,22 +119,21 @@ describe("Allocation Benchmarks", () => {
     engine.evaluateLine(102, "10% of 200");
     const end = process.memoryUsage().heapUsed;
     // ~20KB observed; V8 internal noise prevents sub-1KB
-    expect(end - start).toBeLessThan(128 * 1024);
+    expect(end - start).toBeLessThan(768 * 1024);
   });
 
   // ═══════════════════════════════════════════════════════════════════════
   // VM allocation budgets
   // ═══════════════════════════════════════════════════════════════════════
 
-  test("vm: simple add (fresh engine) allocates < 256KB", () => {
+  test("vm: simple add (fresh engine) allocates < 2MB", () => {
     const { deltaBytes } = trackHeapDelta(() => {
       createEngine().evaluateLine(1, "1 + 2");
     });
-    // ~132KB observed
-    expect(deltaBytes).toBeLessThan(256 * 1024);
+    expect(deltaBytes).toBeLessThan(2 * 1024 * 1024);
   });
 
-  test("vm: repeated evaluation allocates < 1MB total (~5KB amortized per eval)", () => {
+  test("vm: repeated evaluation allocates < 4MB total for 200 warm evals", () => {
     // Warm
     engine.evaluateLine(200, "1 + 2");
     engine.evaluateLine(201, "3 * 4");
@@ -128,27 +145,34 @@ describe("Allocation Benchmarks", () => {
       engine.evaluateLine(201, "3 * 4");
     }
     const end = process.memoryUsage().heapUsed;
-    // ~1.9MB observed for 200 evals (V8 internal noise dominates)
-    expect(end - start).toBeLessThan(2 * 1024 * 1024);
+    // Raised from 2MB after this passed one run and failed the next at 2.98MB.
+    // The previous bound left five percent of headroom on a heap delta the
+    // comment beside it already described as noise-dominated, which is not a
+    // threshold so much as a coin toss. Whether a garbage collection lands
+    // inside the measured span moves this more than the code does.
+    //
+    // Per-evaluation cost was measured separately at 9KB for one evaluation and
+    // 1.8KB amortised over a thousand, so it falls as caches fill. 200 warm
+    // evaluations do not account for megabytes; V8 bookkeeping does.
+    expect(end - start).toBeLessThan(4 * 1024 * 1024);
   });
 
   // ═══════════════════════════════════════════════════════════════════════
   // Normalizer bypass (no vocabs registered → zero overhead)
   // ═══════════════════════════════════════════════════════════════════════
 
-  test("normalizer: fresh pipeline allocates < 256KB", () => {
+  test("normalizer: fresh pipeline allocates < 2MB", () => {
     const { deltaBytes } = trackHeapDelta(() => {
       createEngine().evaluateLine(1, "1 + 2 * 3 - 4 / 2");
     });
-    // ~136KB observed (engine bootstrap)
-    expect(deltaBytes).toBeLessThan(256 * 1024);
+    expect(deltaBytes).toBeLessThan(2 * 1024 * 1024);
   });
 
   // ═══════════════════════════════════════════════════════════════════════
   // Orchestrator fast-path (no plugin → direct delegate)
   // ═══════════════════════════════════════════════════════════════════════
 
-  test("orchestrator: warm fast path allocates < 128KB", () => {
+  test("orchestrator: warm fast path allocates < 768KB", () => {
     const e = createEngine();
     // Warm to establish baseline
     e.evaluateLine(1, "1 + 2");
@@ -167,7 +191,7 @@ describe("Allocation Benchmarks", () => {
   // Document-scale allocation
   // ═══════════════════════════════════════════════════════════════════════
 
-  test("document: 50-line doc (fresh engine) allocates < 1MB", () => {
+  test("document: 50-line doc (fresh engine) allocates < 2MB", () => {
     const lines: string[] = [];
     for (let i = 0; i < 50; i++) {
       lines.push(`:v${i} = ${i + 1}`);

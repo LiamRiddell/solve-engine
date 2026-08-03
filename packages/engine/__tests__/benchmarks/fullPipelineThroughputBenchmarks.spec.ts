@@ -41,6 +41,7 @@ import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 
 
 import { Token } from "@solve-js/lexer/Token";
+import { benchmarkOutputPath } from "@tools/benchmarkIO";
 
 // ──────────────────────────────────────────────
 // Helpers
@@ -346,10 +347,8 @@ describe("Full Pipeline Throughput Benchmarks", () => {
     // Save to baseline JSON
     const fs = require("fs");
     const path = require("path");
-    const dir = path.join(__dirname, "..", "..", "benchmarks", "results");
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(
-      path.join(dir, "full-pipeline-throughput-baseline.json"),
+      benchmarkOutputPath("full-pipeline-throughput-baseline.json"),
       JSON.stringify(results, null, 2)
     );
   });

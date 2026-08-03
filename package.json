@@ -17,6 +17,9 @@
 		"typecheck": "npm run typecheck --workspace=packages/engine",
 		"verify": "npm run typecheck && npm run test:ci && npm run build && npm run smoke",
 		"smoke": "node scripts/smoke-package.mjs",
+		"bench": "node --expose-gc node_modules/jest/bin/jest.js --config jest.bench.config.cjs --runInBand",
+		"bench:baseline": "node scripts/bench-baseline.mjs",
+		"bench:compare": "node scripts/compare-benchmarks.mjs",
 		"verify:all": "npm run verify && npm run build --prefix playground"
 	},
 	"keywords": [],

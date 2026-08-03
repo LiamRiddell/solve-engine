@@ -6,27 +6,13 @@
 import { describe, expect, test, afterAll } from "@jest/globals";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import { benchmarkFn } from "@tools/testUtils";
+import { recordSample, writeBenchmarkResults, BenchmarkResults } from "@tools/benchmarkIO";
 
 describe("Lexer Benchmarks", () => {
-  const results: Record<string, number> = {};
+  const results: BenchmarkResults = {};
 
   afterAll(() => {
-    console.log("\n📊 LEXER BENCHMARK RESULTS (mean ms, higher iterations = more accurate):");
-    console.log(`${"Benchmark".padEnd(30)} ${"Mean (ms)".padStart(12)} ${"Ops/sec".padStart(12)}`);
-    console.log(`${"─".repeat(56)}`);
-    for (const [name, mean] of Object.entries(results)) {
-      const ops = 1000 / mean;
-      console.log(`${name.padEnd(30)} ${mean.toFixed(6).padStart(12)} ${ops.toFixed(0).padStart(12)}`);
-    }
-    // Save to file for comparison
-    const fs = require("fs");
-    const path = require("path");
-    const dir = path.join(__dirname, "..", "..", "benchmarks", "results");
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(
-      path.join(dir, "lexer-baseline.json"),
-      JSON.stringify({ timestamp: new Date().toISOString(), results }, null, 2)
-    );
+    writeBenchmarkResults("lexer", results, "ms");
   });
 
   const cases = [
@@ -54,7 +40,7 @@ describe("Lexer Benchmarks", () => {
         lexer.reset(c.input);
         for (const _ of lexer) { /* consume all tokens */ }
       }, c.iters, Math.min(100, Math.floor(c.iters / 10)));
-      results[c.name] = r.meanMs;
+      recordSample(results, c.name, r);
       // Performance assertion: each lex should be under 1ms for these inputs
       expect(r.meanMs).toBeLessThan(2);
     });

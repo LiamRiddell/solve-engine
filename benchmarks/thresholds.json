@@ -1,0 +1,15 @@
+{
+  "_comment": "Regression rules for scripts/compare-benchmarks.mjs. Ratios are current divided by reference, so above 1 is slower.",
+
+  "warnRatio": 1.25,
+  "failRatio": 1.5,
+
+  "_suiteComment": "A broad uniform slowdown can leave every individual case under its own limit while still costing real throughput. Injecting a context object into the VM dispatch path is exactly that shape, which is why the geometric mean across a suite has its own tighter bound.",
+  "suiteGeomeanFailRatio": 1.15,
+
+  "_improvementComment": "A report that only ever delivers bad news stops being read. Improvements past this are called out.",
+  "improvementRatio": 0.8,
+
+  "_noiseComment": "Below this the number is timer resolution plus loop overhead rather than the work being measured, so a ratio computed from it is meaningless. Several existing cases sit here. Milliseconds, so this is 5 microseconds.",
+  "noiseFloorMs": 0.005
+}

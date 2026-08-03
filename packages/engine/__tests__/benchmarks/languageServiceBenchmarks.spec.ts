@@ -16,26 +16,13 @@ import { describe, expect, test, afterAll } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { LanguageService } from "@solve-js/language/LanguageService";
 import { benchmarkFn } from "@tools/testUtils";
+import { recordSample, writeBenchmarkResults, BenchmarkResults } from "@tools/benchmarkIO";
 
 describe("LanguageService Benchmarks", () => {
-  const results: Record<string, number> = {};
+  const results: BenchmarkResults = {};
 
   afterAll(() => {
-    console.log("\n📊 LANGUAGE SERVICE BENCHMARK RESULTS (mean ms, higher iterations = more accurate):");
-    console.log(`${"Benchmark".padEnd(38)} ${"Mean (ms)".padStart(12)} ${"Ops/sec".padStart(12)}`);
-    console.log(`${"─".repeat(64)}`);
-    for (const [name, mean] of Object.entries(results)) {
-      const ops = 1000 / mean;
-      console.log(`${name.padEnd(38)} ${mean.toFixed(6).padStart(12)} ${ops.toFixed(0).padStart(12)}`);
-    }
-    const fs = require("fs");
-    const path = require("path");
-    const dir = path.join(__dirname, "..", "..", "benchmarks", "results");
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(
-      path.join(dir, "language-service-baseline.json"),
-      JSON.stringify({ timestamp: new Date().toISOString(), results }, null, 2)
-    );
+    writeBenchmarkResults("language-service", results, "ms");
   });
 
   // ─── getSemanticTokens: cold (cache miss every call) ───
@@ -58,7 +45,7 @@ describe("LanguageService Benchmarks", () => {
         // the true per-keystroke cost (every edit invalidates its line).
         service.getSemanticTokens(c.input, line++);
       }, c.iters, Math.min(100, Math.floor(c.iters / 10)));
-      results[c.name] = r.meanMs;
+      recordSample(results, c.name, r);
       expect(r.meanMs).toBeLessThan(2);
     });
   }
@@ -71,7 +58,7 @@ describe("LanguageService Benchmarks", () => {
     const r = benchmarkFn(() => {
       service.getSemanticTokens(input, 1);
     }, 50000, 500);
-    results["highlight_warm_cache_hit"] = r.meanMs;
+    recordSample(results, "highlight_warm_cache_hit", r);
     expect(r.meanMs).toBeLessThan(0.01);
   });
 
@@ -83,7 +70,7 @@ describe("LanguageService Benchmarks", () => {
       const service = new LanguageService(engine);
       service.getCompletions("sq", 2);
     }, 500, 20);
-    results["completions_cold_first_call"] = r.meanMs;
+    recordSample(results, "completions_cold_first_call", r);
   });
 
   // ─── getCompletions: warm (static candidates cached, only prefix-filter cost remains) ───
@@ -102,7 +89,7 @@ describe("LanguageService Benchmarks", () => {
       const r = benchmarkFn(() => {
         service.getCompletions(c.prefix, c.prefix.length);
       }, c.iters, Math.min(200, Math.floor(c.iters / 10)));
-      results[c.name] = r.meanMs;
+      recordSample(results, c.name, r);
       expect(r.meanMs).toBeLessThan(1);
     });
   }
@@ -115,7 +102,7 @@ describe("LanguageService Benchmarks", () => {
     const r = benchmarkFn(() => {
       service.getCompletions("var", 3);
     }, 5000, 100);
-    results["completions_warm_500_variables"] = r.meanMs;
+    recordSample(results, "completions_warm_500_variables", r);
     expect(r.meanMs).toBeLessThan(2);
   });
 
@@ -142,7 +129,7 @@ describe("LanguageService Benchmarks", () => {
           service.getSemanticTokens(lines[i], i + 1 + generation * size);
         }
       }, 200, 10);
-      results[`highlight_viewport_${size}_lines_cold`] = r.meanMs;
+      recordSample(results, `highlight_viewport_${size}_lines_cold`, r);
     });
   }
 });

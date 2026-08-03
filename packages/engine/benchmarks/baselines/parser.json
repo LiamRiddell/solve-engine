@@ -1,0 +1,35 @@
+{
+  "suite": "parser",
+  "results": {
+    "simple_arithmetic": {
+      "meanMs": 0.0060298960000000805
+    },
+    "complex_expression": {
+      "meanMs": 0.006486467999999877
+    },
+    "function_call": {
+      "meanMs": 0.0054959080000001265
+    },
+    "percentage": {
+      "meanMs": 0.0057506400000001305
+    },
+    "unit_conversion": {
+      "meanMs": 0.00558488400000002
+    },
+    "datetime": {
+      "meanMs": 0.005461407999999938
+    },
+    "dice": {
+      "meanMs": 0.005834955999999948
+    },
+    "vector": {
+      "meanMs": 0.005825456000000195
+    },
+    "variable": {
+      "meanMs": 0.005392632000000013
+    },
+    "mixed": {
+      "meanMs": 0.006562500000000606
+    }
+  }
+}

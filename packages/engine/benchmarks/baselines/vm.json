@@ -1,0 +1,23 @@
+{
+  "suite": "vm",
+  "results": {
+    "simple_add": {
+      "meanMs": 0.000320344000000041
+    },
+    "variable_access": {
+      "meanMs": 0.0003113680000000022
+    },
+    "vector_creation": {
+      "meanMs": 0.000751684000000023
+    },
+    "unit_conversion": {
+      "meanMs": 0.0007261759999999777
+    },
+    "dice_roll": {
+      "meanMs": 0.0007932360000000335
+    },
+    "percentage": {
+      "meanMs": 0.0007969560000000638
+    }
+  }
+}

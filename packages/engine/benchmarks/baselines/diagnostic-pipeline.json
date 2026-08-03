@@ -1,0 +1,60 @@
+{
+  "suite": "diagnostic-pipeline",
+  "results": {
+    "PROD_single_eval_cold": {
+      "meanMs": 0.31575638000000156,
+      "medianMs": 0.24569999999994252,
+      "minMs": 0.20080000000007203
+    },
+    "PROD_single_eval_warm": {
+      "meanMs": 0.004424299999999721,
+      "medianMs": 0.0037999999999556167,
+      "minMs": 0.003499999999803549
+    },
+    "PROD_50_line_doc": {
+      "meanMs": 0.7151199999999835,
+      "medianMs": 0.6012999999998101,
+      "minMs": 0.4996000000001004
+    },
+    "PROD_variable_chain": {
+      "meanMs": 0.326933339999991,
+      "medianMs": 0.25919999999996435,
+      "minMs": 0.21849999999994907
+    },
+    "PROD_function_plus_literal": {
+      "meanMs": 0.30179668500000506,
+      "medianMs": 0.23480000000017753,
+      "minMs": 0.19759999999951106
+    },
+    "PROD_10k_warm": {
+      "meanMs": 0.007974260000006325,
+      "medianMs": 0.006600000000617001,
+      "minMs": 0.006299999999100692
+    },
+    "DIAG_single_eval_cold": {
+      "meanMs": 0.3699534000000174,
+      "medianMs": 0.29800000000068394,
+      "minMs": 0.24510000000009313
+    },
+    "DIAG_single_eval_warm": {
+      "meanMs": 0.03528746000000774,
+      "medianMs": 0.0286999999989348,
+      "minMs": 0.026399999998830026
+    },
+    "DIAG_50_line_doc": {
+      "meanMs": 0.6615515000000869,
+      "medianMs": 0.5675000000010186,
+      "minMs": 0.5087000000003172
+    },
+    "DIAG_variable_chain": {
+      "meanMs": 0.31613281999998616,
+      "medianMs": 0.2518000000000029,
+      "minMs": 0.21739999999954307
+    },
+    "DIAG_10k_warm": {
+      "meanMs": 0.042542160000001966,
+      "medianMs": 0.03499999999985448,
+      "minMs": 0.033099999998739804
+    }
+  }
+}

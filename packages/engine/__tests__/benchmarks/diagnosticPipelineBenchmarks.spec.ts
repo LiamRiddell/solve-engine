@@ -10,6 +10,7 @@ import { describe, expect, test, afterAll } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { benchmarkFn } from "@tools/testUtils";
 import { TimelineDiagnosticCollector } from "@solve-js/diagnostics";
+import { recordSample, writeBenchmarkResults, BenchmarkResults } from "@tools/benchmarkIO";
 
 function generateDoc(lineCount: number): string {
   const lines: string[] = [];
@@ -20,16 +21,10 @@ function generateDoc(lineCount: number): string {
 }
 
 describe("Diagnostic Pipeline Overhead Benchmark", () => {
-  const results: Record<string, number> = {};
+  const results: BenchmarkResults = {};
 
   afterAll(() => {
-    console.log("\n📊 DIAGNOSTIC PIPELINE BENCHMARK RESULTS:");
-    console.log(`${"Benchmark".padEnd(42)} ${"Mean (ms)".padStart(12)} ${"Ops/sec".padStart(10)}`);
-    console.log(`${"─".repeat(66)}`);
-    for (const [name, mean] of Object.entries(results)) {
-      const ops = 1000 / mean;
-      console.log(`${name.padEnd(42)} ${mean.toFixed(4).padStart(12)} ${ops.toFixed(1).padStart(10)}`);
-    }
+    writeBenchmarkResults("diagnostic-pipeline", results, "ms");
   });
 
   // === PRODUCTION MODE BENCHMARKS ===
@@ -39,7 +34,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
       const e = new ExpressionEngine("en", false);
       e.evaluateLine(1, "1 + 2 * 3");
     }, 5000, 100);
-    results["PROD_single_eval_cold"] = r.meanMs;
+    recordSample(results, "PROD_single_eval_cold", r);
     expect(r.meanMs).toBeLessThan(2);
   });
 
@@ -49,7 +44,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
     const r = benchmarkFn(() => {
       engine.evaluateLine(1, "10 + 20");
     }, 50000, 500);
-    results["PROD_single_eval_warm"] = r.meanMs;
+    recordSample(results, "PROD_single_eval_warm", r);
     expect(r.meanMs).toBeLessThan(1);
   });
 
@@ -59,7 +54,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
       const e = new ExpressionEngine("en", false);
       e.parseDocument(input);
     }, 200, 10);
-    results["PROD_50_line_doc"] = r.meanMs;
+    recordSample(results, "PROD_50_line_doc", r);
     expect(r.meanMs).toBeLessThan(50);
   });
 
@@ -68,7 +63,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
       const e = new ExpressionEngine("en", false);
       e.parseDocument(":x = 1\n:x + 1\n:x + 2\n:x + 3\n:x + 4");
     }, 5000, 100);
-    results["PROD_variable_chain"] = r.meanMs;
+    recordSample(results, "PROD_variable_chain", r);
     expect(r.meanMs).toBeLessThan(2);
   });
 
@@ -77,7 +72,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
       const e = new ExpressionEngine("en", false);
       e.evaluateLine(1, "sqrt(144) + 5");
     }, 20000, 500);
-    results["PROD_function_plus_literal"] = r.meanMs;
+    recordSample(results, "PROD_function_plus_literal", r);
     expect(r.meanMs).toBeLessThan(2);
   });
 
@@ -87,7 +82,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
     const r = benchmarkFn(() => {
       engine.evaluateLine(1, "1 + 2 * 3 - 4 / 5");
     }, 10000, 500);
-    results["PROD_10k_warm"] = r.meanMs;
+    recordSample(results, "PROD_10k_warm", r);
     expect(r.meanMs).toBeLessThan(100);
   });
 
@@ -98,7 +93,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
       const e = new ExpressionEngine("en", true);
       e.evaluateLine(1, "1 + 2 * 3");
     }, 5000, 100);
-    results["DIAG_single_eval_cold"] = r.meanMs;
+    recordSample(results, "DIAG_single_eval_cold", r);
     expect(r.meanMs).toBeLessThan(5);
   });
 
@@ -108,7 +103,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
     const r = benchmarkFn(() => {
       engine.evaluateLine(1, "10 + 20");
     }, 10000, 500);
-    results["DIAG_single_eval_warm"] = r.meanMs;
+    recordSample(results, "DIAG_single_eval_warm", r);
     // Was toBeLessThan(2) — a title/assertion mismatch that masked a real
     // O(n²) bug (TimelineDiagnosticCollector.getReport() rescanning its
     // entire event history on every call). Now that it's fixed (~0.01ms,
@@ -122,7 +117,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
       const e = new ExpressionEngine("en", true);
       e.parseDocument(input);
     }, 200, 10);
-    results["DIAG_50_line_doc"] = r.meanMs;
+    recordSample(results, "DIAG_50_line_doc", r);
     expect(r.meanMs).toBeLessThan(100);
   });
 
@@ -131,7 +126,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
       const e = new ExpressionEngine("en", true);
       e.parseDocument(":x = 1\n:x + 1\n:x + 2\n:x + 3\n:x + 4");
     }, 5000, 100);
-    results["DIAG_variable_chain"] = r.meanMs;
+    recordSample(results, "DIAG_variable_chain", r);
     expect(r.meanMs).toBeLessThan(5);
   });
 
@@ -141,7 +136,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
     const r = benchmarkFn(() => {
       engine.evaluateLine(1, "1 + 2 * 3 - 4 / 5");
     }, 10000, 500);
-    results["DIAG_10k_warm"] = r.meanMs;
+    recordSample(results, "DIAG_10k_warm", r);
     expect(r.meanMs).toBeLessThan(200);
   });
 
@@ -238,6 +233,10 @@ test("vm trace mode emits per-opcode events", () => {
     const ratio = nullTime.meanMs / prodTime.meanMs;
     expect(ratio).toBeLessThan(2); // null collector should not double execution time
 
-    results["PROD_null_collector_overhead_ratio"] = ratio;
+    // Deliberately not persisted. This is a dimensionless ratio between two
+    // measurements in the same run, not a timing, so comparing it against a
+    // ratio from a different run says nothing and it has no place in a suite
+    // geometric mean. The assertion above is the guard.
+    console.log(`  null collector overhead ratio: ${ratio.toFixed(3)}x`);
   });
 });

@@ -12,6 +12,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
+import { recordScalar, writeBenchmarkResults, BenchmarkResults } from "@tools/benchmarkIO";
 
 // Import all provider registration functions
 
@@ -49,24 +50,10 @@ function tokenize(input: string) {
 }
 
 describe("Parser Benchmarks", () => {
-  const results: Record<string, number> = {};
+  const results: BenchmarkResults = {};
 
   afterAll(() => {
-    console.log("\n📊 PARSER BENCHMARK RESULTS (mean ms):");
-    console.log(`${"Benchmark".padEnd(30)} ${"Mean (ms)".padStart(12)} ${"Ops/sec".padStart(12)}`);
-    console.log(`${"─".repeat(56)}`);
-    const fs = require("fs");
-    const path = require("path");
-    const dir = path.join(__dirname, "..", "..", "benchmarks", "results");
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    for (const [name, mean] of Object.entries(results)) {
-      const ops = 1000 / mean;
-      console.log(`${name.padEnd(30)} ${mean.toFixed(6).padStart(12)} ${ops.toFixed(0).padStart(12)}`);
-    }
-    fs.writeFileSync(
-      path.join(dir, "parser-baseline.json"),
-      JSON.stringify({ timestamp: new Date().toISOString(), results }, null, 2)
-    );
+    writeBenchmarkResults("parser", results, "ms");
   });
 
   const cases = [
@@ -103,7 +90,7 @@ describe("Parser Benchmarks", () => {
       }
 
       const meanMs = totalMs / (c.batches * c.perBatch);
-      results[c.name] = meanMs;
+      recordScalar(results, c.name, meanMs);
       expect(meanMs).toBeLessThan(5);
     });
   }

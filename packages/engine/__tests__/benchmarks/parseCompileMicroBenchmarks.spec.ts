@@ -28,6 +28,7 @@ import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import type { Token } from "@solve-js/lexer/Token";
+import { benchmarkOutputPath } from "@tools/benchmarkIO";
 
 // Import all provider registration functions
 
@@ -279,10 +280,8 @@ describe("Parse+Compile Micro-Benchmarks", () => {
     // ── Save to baseline JSON ──
     const fs = require("fs");
     const path = require("path");
-    const dir = path.join(__dirname, "..", "..", "benchmarks", "results");
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(
-      path.join(dir, "parse-compile-baseline.json"),
+      benchmarkOutputPath("parse-compile-baseline.json"),
       JSON.stringify(results, null, 2)
     );
   });

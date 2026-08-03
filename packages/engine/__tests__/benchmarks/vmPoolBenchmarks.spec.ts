@@ -18,6 +18,7 @@ import { describe, expect, test, afterAll } from "@jest/globals";
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { sharedOpRegistry, type VM } from "@solve-js/vm/OpRegistry";
+import { benchmarkOutputPath } from "@tools/benchmarkIO";
 
 // ──────────────────────────────────────────────
 // Pre-built bytecode programs
@@ -318,10 +319,8 @@ describe("VM Instance Pooling Benchmarks", () => {
     // ── Save to baseline JSON ──
     const fs = require("fs");
     const path = require("path");
-    const dir = path.join(__dirname, "..", "..", "benchmarks", "results");
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(
-      path.join(dir, "vm-pool-baseline.json"),
+      benchmarkOutputPath("vm-pool-baseline.json"),
       JSON.stringify(results, null, 2)
     );
   });

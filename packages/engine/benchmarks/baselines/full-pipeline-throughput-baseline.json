@@ -1,0 +1,75 @@
+{
+  "timestamp": "2026-08-03T13:09:27.329Z",
+  "tiers": {
+    "small": {
+      "cold": {
+        "meanMs": 3.653679999999997,
+        "opsPerSec": 273.6966565216442,
+        "linesPerSec": 27.369665652164414,
+        "exprsPerSec": 27.369665652164414
+      },
+      "warm": {
+        "meanMs": 2.6850204000000004,
+        "opsPerSec": 372.43664889845894,
+        "linesPerSec": 37.243664889845896,
+        "exprsPerSec": 37.243664889845896
+      }
+    },
+    "medium": {
+      "cold": {
+        "meanMs": 28.85159000000001,
+        "opsPerSec": 34.66013484872063,
+        "linesPerSec": 34.66013484872063,
+        "exprsPerSec": 17.330067424360315
+      },
+      "warm": {
+        "meanMs": 25.70952,
+        "opsPerSec": 38.896097632316746,
+        "linesPerSec": 38.896097632316746,
+        "exprsPerSec": 19.448048816158373
+      }
+    },
+    "large": {
+      "cold": {
+        "meanMs": 338.57182,
+        "opsPerSec": 2.953583083199305,
+        "linesPerSec": 29.535830831993046,
+        "exprsPerSec": 5.90716616639861
+      },
+      "warm": {
+        "meanMs": 341.17099999999994,
+        "opsPerSec": 2.9310814811340946,
+        "linesPerSec": 29.310814811340947,
+        "exprsPerSec": 5.862162962268189
+      }
+    },
+    "massive": {
+      "cold": {
+        "meanMs": 3016.9325,
+        "opsPerSec": 0.331462503718595,
+        "linesPerSec": 16.573125185929747,
+        "exprsPerSec": 1.657312518592975
+      },
+      "warm": {
+        "meanMs": 3020.1224199999997,
+        "opsPerSec": 0.331112405701753,
+        "linesPerSec": 16.55562028508765,
+        "exprsPerSec": 1.655562028508765
+      }
+    }
+  },
+  "stageBreakdown": {
+    "lexNs": 2344.6200000001063,
+    "parseCompileNs": 4726.879999999731,
+    "executeNs": 822.1999999986461,
+    "totalNs": 7893.699999998484,
+    "lexPercent": 29.702420917954274,
+    "parseCompilePercent": 59.881677793691665,
+    "executePercent": 10.415901288354055
+  },
+  "metadata": {
+    "nodeVersion": "v24.16.0",
+    "platform": "win32",
+    "totalLinesAcrossTiers": 0
+  }
+}

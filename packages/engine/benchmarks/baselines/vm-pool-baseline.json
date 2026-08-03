@@ -1,0 +1,112 @@
+{
+  "timestamp": "2026-08-03T13:10:49.786Z",
+  "summary": {
+    "meanDeltaNs": 1230.861666666667,
+    "meanPercentImprovement": 66.10288821910338,
+    "estimatedAllocCostNs": 1230.861666666667
+  },
+  "details": [
+    {
+      "name": "simple_add",
+      "withoutPool": {
+        "meanNs": 1633.376,
+        "p95Ns": 1800,
+        "medianNs": 1200
+      },
+      "withPool": {
+        "meanNs": 400.71,
+        "p95Ns": 400,
+        "medianNs": 300
+      },
+      "deltaNs": 1232.666,
+      "speedupRatio": 0.24532624453891816,
+      "percentImprovement": 75.46737554610819
+    },
+    {
+      "name": "variable_access",
+      "withoutPool": {
+        "meanNs": 1701.932,
+        "p95Ns": 1800,
+        "medianNs": 1300
+      },
+      "withPool": {
+        "meanNs": 482.178,
+        "p95Ns": 600,
+        "medianNs": 400
+      },
+      "deltaNs": 1219.754,
+      "speedupRatio": 0.2833121417306919,
+      "percentImprovement": 71.6687858269308
+    },
+    {
+      "name": "vector_creation",
+      "withoutPool": {
+        "meanNs": 1974.694,
+        "p95Ns": 2300,
+        "medianNs": 1500
+      },
+      "withPool": {
+        "meanNs": 728.818,
+        "p95Ns": 800,
+        "medianNs": 600
+      },
+      "deltaNs": 1245.876,
+      "speedupRatio": 0.3690789560306559,
+      "percentImprovement": 63.09210439693441
+    },
+    {
+      "name": "unit_conversion",
+      "withoutPool": {
+        "meanNs": 2042.73,
+        "p95Ns": 2300,
+        "medianNs": 1600
+      },
+      "withPool": {
+        "meanNs": 789.926,
+        "p95Ns": 800,
+        "medianNs": 700
+      },
+      "deltaNs": 1252.804,
+      "speedupRatio": 0.38670113035007075,
+      "percentImprovement": 61.32988696499293
+    },
+    {
+      "name": "dice_roll",
+      "withoutPool": {
+        "meanNs": 2018.016,
+        "p95Ns": 2200,
+        "medianNs": 1500
+      },
+      "withPool": {
+        "meanNs": 771.742,
+        "p95Ns": 900,
+        "medianNs": 600
+      },
+      "deltaNs": 1246.2740000000001,
+      "speedupRatio": 0.3824261056403913,
+      "percentImprovement": 61.75738943596086
+    },
+    {
+      "name": "percentage",
+      "withoutPool": {
+        "meanNs": 1876.402,
+        "p95Ns": 2300,
+        "medianNs": 1500
+      },
+      "withPool": {
+        "meanNs": 688.606,
+        "p95Ns": 700,
+        "medianNs": 600
+      },
+      "deltaNs": 1187.796,
+      "speedupRatio": 0.3669821285630691,
+      "percentImprovement": 63.30178714369309
+    }
+  ],
+  "metadata": {
+    "nodeVersion": "v24.16.0",
+    "platform": "win32",
+    "poolSize": 4,
+    "description": "Measures VM execution phase comparing 'createVM()' (before) vs pooled VM reuse with reset() (after). Eliminates 2 heap allocations per expression: stack[] and variables Map. Note: ExpressionEngine already uses a single persistent VM — this benchmark quantifies the savings for multi-engine or worker-thread scenarios."
+  }
+}
