@@ -136,6 +136,14 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      # The site imports the engine as a `file:` dependency, and that package
+      # publishes only `dist`, so it has to exist before the docs install can
+      # link anything usable. Without this the build fails at the point Vite
+      # tries to resolve `solve-engine`, which reads as a documentation problem
+      # rather than a missing build step. `pages.yml` orders it the same way.
+      - run: npm run build
+
       - run: npm ci --prefix docs
       - run: npm run build --prefix docs
 
