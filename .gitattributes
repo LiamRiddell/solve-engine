@@ -1,0 +1,34 @@
+# Normalize line endings to LF in the repository. Without this, files
+# committed from Windows carry CRLF and files committed from macOS or Linux
+# carry LF, which produces diffs that contain no actual change. It is also
+# why LICENSE.md and packages/core/LICENSE currently differ by 21 bytes
+# while being character-for-character identical.
+#
+# Working copies are still checked out with the platform's native endings.
+# Only what git stores is normalized.
+* text=auto eol=lf
+
+# Files that must keep CRLF regardless of platform.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary. Never normalize, never diff as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+
+# Generated. Collapsed in pull request diffs and excluded from language
+# statistics, so the repository is not reported as mostly JSON.
+package-lock.json linguist-generated=true -diff
+packages/*/benchmarks/results/*.json linguist-generated=true
+
+# Documentation and vendored content should not skew language statistics.
+docs-internal/** linguist-documentation=true
