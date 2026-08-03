@@ -399,24 +399,45 @@ If a future review wants to bound memory more tightly for very large or very
 long-lived documents, `LineCache`/DAG unbounded growth — not the bytecode cache, which is
 now the one properly configurable cache — is the place to look.
 
-## 10. Cross-instance isolation (the L1 gap)
+## 10. Cross-instance isolation (EngineContext)
 
-This is the single largest known architectural gap, already tracked in
-`plans/ARCHITECTURE_IMPROVEMENTS.md` under "L1 — EngineContext." Several registries are
-module-level singletons rather than per-`ExpressionEngine` state: `sharedLexer`
-(`lexer/Lexer.ts`), `sharedOpRegistry` (`vm/OpRegistry.ts`), `sharedVariableResolver`
-(`variables/VariableResolver.ts`), `pluginFunctionRegistry` (`vm/VMBuiltins.ts`),
-`sharedCurrencyExchange` (`uom/CurrencyExchange.ts`), and an active-QueryClient hand-off
-(`services/DataQueryService.ts`).
+`EngineContext` (`engine/EngineContext.ts`) is created by the `ExpressionEngine`
+constructor and owned by that engine. It holds the plugin-function registry, the opcode
+registry, the variable resolver, and the map recording which package owns each plugin
+index. Anything needing one receives the context rather than importing a module global.
 
-In practice this is safe today because package registration is idempotent and every
-engine instance the reference host (the Obsidian plugin) creates registers the same
-built-in packages. It would **not** be safe to assume isolation between two engines
-configured with genuinely different package sets in the same process. The fix shape
-(`EngineContext` object owning instances of all of the above, injected rather than
-imported as a module global) is already spec'd in `plans/ARCHITECTURE_IMPROVEMENTS.md` —
-this is a hard prerequisite for a 1.0.0 release but not for shipping 0.x versions, as long
-as this gap stays disclosed (see the README's "Known limitations" section).
+Before this, those were module-level singletons shared by every engine in the process, so
+registering a package on one engine changed what another computed. It was safe in practice
+only because package registration happened to be idempotent and the reference host
+registered the same built-in set into every instance, which is a property of those
+packages rather than a guarantee. `EngineContextIsolation.spec.ts` now pins the behaviour:
+two engines registering the same plugin index each see their own handler, unregistering on
+one leaves the other working, and registering on an engine does not write into the shared
+default context.
+
+The `shared*` exports remain as deprecated aliases bound to a default context so
+unmigrated callers keep working. `PackageRegistry`, the global singleton registration
+path, is deprecated outright: it writes into state no engine reads, so a package
+registered through it is invisible to every engine.
+
+Two singletons were deliberately left shared, which is a departure from the original spec
+and is recorded in the code at each site.
+
+**The lexer.** `ExpressionEngineSafety`, `PageManager` and `ThreeTierEvaluator` call
+`classifyLine` and `findInlineSolves` on the shared instance. Those are character-level
+scans for headings, comment markers, code fences and backtick spans; they never consult
+the keyword, unit or operator tables, so every lexer returns the same answer.
+`LineClassificationIsVocabularyIndependent.spec.ts` checks that against a lexer carrying
+extra vocabulary. Two of the three call sites are free functions with no engine to ask, so
+making them engine-aware would change their signatures and every caller for no
+behavioural difference.
+
+**Currency exchange.** `CurrencyExchangeService` is a cache of live market rates with a
+fifteen minute freshness window and no per-engine configuration. Per-engine copies would
+make two engines fetch the same public endpoint independently and let them disagree about
+one currency pair at one moment. The rationale for isolating registries, that one engine's
+registration should not be visible to another, does not apply to state that is global in
+the real world.
 
 ## 11. Testing & verification
 

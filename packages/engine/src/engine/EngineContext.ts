@@ -88,6 +88,17 @@ export interface EngineContext {
 	 * every engine in the process, including ones that never registered it.
 	 */
 	readonly variableResolver: VariableResolver;
+
+	/**
+	 * Which package registered each plugin function index.
+	 *
+	 * The VM emits a pending result when a plugin function returns a promise,
+	 * and that result carries the owning package so diagnostics and the error
+	 * surface can name it. Without this the VM had nothing to report and sent an
+	 * empty string, so every async failure looked as though it came from
+	 * nowhere.
+	 */
+	readonly pluginFunctionOwners: Record<number, string>;
 }
 
 /**
@@ -100,6 +111,7 @@ export function createEngineContext(): EngineContext {
 		pluginFunctions: {},
 		opRegistry: new OpRegistry(),
 		variableResolver: new VariableResolver(),
+		pluginFunctionOwners: {},
 	};
 }
 

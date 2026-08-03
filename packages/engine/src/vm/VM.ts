@@ -1009,7 +1009,11 @@ export function executeBytecode(
               // If it's not (bug), we use a new signal that will never abort —
               // this is a safety net, not the expected path.
               const signal = vm.activeSignal!;
-              return { type: 'pending', queryKey: cacheKey, resolver: result, packageId: '', signal };
+              // The owning package, so a failed or slow async call can be attributed.
+              // Falls back to the empty string only for a handler installed
+              // directly into a context rather than through registerPackage.
+              const packageId = vm.context.pluginFunctionOwners[fnIdx] ?? '';
+              return { type: 'pending', queryKey: cacheKey, resolver: result, packageId, signal };
             }
             stack.push(result);
           }

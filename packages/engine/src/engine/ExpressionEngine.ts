@@ -536,6 +536,7 @@ export class ExpressionEngine {
         if (pkg.pluginFunctions) {
             for (const pf of pkg.pluginFunctions) {
                 this.context.pluginFunctions[pf.index] = pf.handler;
+                this.context.pluginFunctionOwners[pf.index] = pkg.name;
                 contribution.pluginFunctionIndices.push(pf.index);
             }
         }
@@ -615,6 +616,7 @@ export class ExpressionEngine {
 
         for (const index of contribution.pluginFunctionIndices) {
             delete this.context.pluginFunctions[index];
+            delete this.context.pluginFunctionOwners[index];
         }
         for (const vs of contribution.variableSources) {
             this.context.variableResolver.unregisterSource(vs);
