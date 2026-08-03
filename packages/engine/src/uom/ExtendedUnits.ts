@@ -37,6 +37,7 @@ export interface ExtendedUnitDef {
   toBase: number;
 }
 
+/** Units beyond the base set, added to whatever the locale already recognises. */
 export const EXTENDED_UNITS: Record<string, ExtendedUnitDef> = {
   // ── Speed (base: mps, meters per second) ──────────────────────────────
   mps: { measure: "speed", toBase: 1 },

@@ -485,6 +485,7 @@ export interface BytecodeCacheEntry {
 }
 
 /** Line cache entry info for diagnostic rendering. */
+/** One line's cached bytecode and the variables it reads and writes. */
 export interface LineCacheEntryInfo {
   key: string;
   lineNumber: number;

@@ -42,6 +42,7 @@ export enum ErrorCategory {
   CONFIG = "CONFIG",
 }
 
+/** Fields accepted when constructing an {@link EngineError}. */
 export interface EngineErrorInit {
   /** Catalog code. See `errors/ErrorCode.ts`. Not a free string: every code used by a BUILT-IN package should be registered there so `ErrorCodeCatalog.spec.ts` can catch collisions/typos. Third-party packages may still use any string here, `EngineError.code`'s runtime type is `string`. */
   code: ErrorCode | (string & {});

@@ -32,10 +32,22 @@ export function err<E>(error: E): Result<never, E> {
   return { ok: false, error };
 }
 
+/**
+ * Narrow a {@link Result} to its success arm.
+ *
+ * @param r - The result to test.
+ * @returns True when it succeeded, narrowing `r` so `r.value` is reachable.
+ */
 export function isOk<T, E>(r: Result<T, E>): r is { ok: true; value: T } {
   return r.ok;
 }
 
+/**
+ * Narrow a {@link Result} to its failure arm.
+ *
+ * @param r - The result to test.
+ * @returns True when it failed, narrowing `r` so `r.error` is reachable.
+ */
 export function isErr<T, E>(r: Result<T, E>): r is { ok: false; error: E } {
   return !r.ok;
 }

@@ -67,6 +67,14 @@ const COLD_EVICT_BUFFER = HOT_PAGE_RADIUS;
 
 // ── PageManager ──────────────────────────────────────────────────────────
 
+/**
+ * Splits a long document into pages so only what is near the viewport is held
+ * in full.
+ *
+ * A document is edited constantly and most of it is off screen. Paging keeps
+ * the cost of a keystroke proportional to what is visible rather than to the
+ * length of the document.
+ */
 export class PageManager {
 	/** Previous viewport for scroll direction detection. null = no previous viewport. */
 	private lastViewportStart: number | null = null;

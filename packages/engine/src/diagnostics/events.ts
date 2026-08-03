@@ -21,6 +21,7 @@ export const DiagnosticEventType = {
   PipelineEnd: "pipeline_end",
 } as const;
 
+/** Discriminator naming which pipeline event a diagnostic record describes. */
 export type EventType = (typeof DiagnosticEventType)[keyof typeof DiagnosticEventType];
 
 /** Base event, all events include a timestamp relative to pipeline start */

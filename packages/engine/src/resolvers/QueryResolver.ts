@@ -65,6 +65,7 @@ export interface QueryResolverOptions {
 	onError?: (query: string, error: unknown) => Value;
 }
 
+/** A resolver paired with the plugin function that reads its results. */
 export interface QueryResolverPackage {
 	/** Register via `IEnginePackage.asyncResolvers`. */
 	resolver: IAsyncResolver;
@@ -80,6 +81,15 @@ function defaultOnError(namespace: string): (query: string, error: unknown) => V
 		);
 }
 
+/**
+ * Build an async resolver and its plugin function together.
+ *
+ * The two halves have to agree on a cache key, and writing them separately is
+ * how they drift. This returns a matched pair.
+ *
+ * @param config - Namespace, fetch function, and cache lifetime.
+ * @returns The resolver and the plugin function to register alongside it.
+ */
 export function createQueryResolver(opts: QueryResolverOptions): QueryResolverPackage {
 	const staleTimeMs = opts.staleTimeMs ?? 5 * 60 * 1000;
 	const timeoutMs = opts.timeoutMs ?? 10_000;

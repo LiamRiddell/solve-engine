@@ -204,4 +204,16 @@ export class Lexer {
   }
 }
 
+/**
+ * A lexer for operations that do not depend on registered vocabulary.
+ *
+ * Line classification and inline-solve detection read characters looking for
+ * headings, comment markers, fences and backtick spans, and never consult the
+ * keyword, unit or operator tables. Every lexer therefore returns the same
+ * answer, so the callers that have no engine to ask can use this one. Checked
+ * by `__tests__/lexer/LineClassificationIsVocabularyIndependent.spec.ts`.
+ *
+ * Do not tokenize with this. An engine's own lexer carries the vocabulary its
+ * packages registered; this one carries none.
+ */
 export const sharedLexer = new Lexer("en", undefined);

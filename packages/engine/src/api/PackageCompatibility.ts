@@ -54,6 +54,7 @@ export type CompatibilityConflictKind =
   | "asyncResolverNamespace"
   | "tokenCategory";
 
+/** One way two packages collide, for example claiming the same keyword. */
 export interface CompatibilityConflict {
   kind: CompatibilityConflictKind;
   severity: CompatibilitySeverity;
@@ -63,6 +64,7 @@ export interface CompatibilityConflict {
   packages: [string, string];
 }
 
+/** Every conflict found between a candidate package and those already registered. */
 export interface CompatibilityReport {
   /** `false` iff at least one "error"-severity conflict was found. */
   compatible: boolean;

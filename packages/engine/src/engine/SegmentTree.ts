@@ -36,6 +36,13 @@ interface Node {
 
 // ── SegmentTree ────────────────────────────────────────────────────────────
 
+/**
+ * Maps document offsets to line numbers in logarithmic time.
+ *
+ * A document is edited constantly, and every edit shifts the offsets of every
+ * line after it. Recomputing them linearly on each keystroke is what this
+ * avoids.
+ */
 export class SegmentTree {
 	private root: Node | null = null;
 

@@ -32,6 +32,7 @@ export interface AsyncErrorEvent {
 	error: Error;
 }
 
+/** Something an async resolution produced: updated lines, or a failure. */
 export type AsyncResolutionEvent = LinesUpdatedEvent | AsyncErrorEvent;
 
 // ── Internal batch entry ───────────────────────────────────────────────

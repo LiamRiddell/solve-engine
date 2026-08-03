@@ -85,6 +85,7 @@ export interface PerformanceConfig {
  * Protects against runaway expressions that could cause excessive memory use
  * or stack overflow. These limits are checked during lexing and parsing.
  */
+/** Bounds on untrusted input: expression length and nesting depth. */
 export interface ValidationConfig {
   /** Maximum expression length in characters. Prevents excessively long strings from entering the pipeline. */
   readonly maxExpressionLength: number;

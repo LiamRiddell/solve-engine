@@ -9,6 +9,7 @@ registerAllTokenTypes();
 
 // ── Markdown line classification (Phase B) ──────────────────────────────
 
+/** What a line is, structurally, before anything tries to evaluate it. */
 export type MarkdownLineType =
   | 'expression'
   | 'prose'
@@ -24,6 +25,13 @@ export type MarkdownLineType =
   | 'comment'
   | 'empty';
 
+/**
+ * What a line is and whether it holds anything to evaluate.
+ *
+ * Produced by a character-level scan that never consults the keyword, unit or
+ * operator tables, so any lexer gives the same answer for the same line. See
+ * `__tests__/lexer/LineClassificationIsVocabularyIndependent.spec.ts`.
+ */
 export interface LineClassification {
   /** The type of this markdown line */
   type: MarkdownLineType;
@@ -157,6 +165,13 @@ function buildCharClassTable(): Uint8Array {
 // This enables fast property access (inline cache hits) and allows
 // allocation in V8's nursery (cheap GC).
 // All 9 fields are always set, no optional fields, no different shapes.
+/**
+ * A token, as the lexer produces it.
+ *
+ * A class rather than an object literal because tokens are created on every
+ * keystroke and a shared hidden class keeps that path predictable for the
+ * engine running it.
+ */
 export class LexerToken implements Token {
   constructor(
     public type: string,

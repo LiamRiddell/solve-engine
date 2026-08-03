@@ -1,3 +1,4 @@
+/** What a locale supplies: keywords, units, and number formatting conventions. */
 export interface ILocale {
   code: string;
   label: string;
@@ -12,6 +13,7 @@ export interface ILocale {
   };
 }
 
+/** English keywords, units and number formatting. The default and the fallback. */
 export const enLocale: ILocale = {
   code: "en",
   label: "English",

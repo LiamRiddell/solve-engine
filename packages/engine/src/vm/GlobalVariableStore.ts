@@ -132,6 +132,7 @@ function sameValue(a: Value, b: Value): boolean {
 	return Object.is(av, bv);
 }
 
+/** Called when a cross-document global changes, so dependents can re-evaluate. */
 export type GlobalVariableListener = (name: string, value: Value) => void;
 
 /** Process-wide singleton. Same sharing pattern as sharedVariableResolver. */

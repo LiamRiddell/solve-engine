@@ -93,6 +93,7 @@ export interface LineState {
 
 // ── ViewportRange ──────────────────────────────────────────────────────────
 
+/** The visible line range, used to decide which lines are evaluated eagerly. */
 export interface ViewportRange {
 	startLine: number; // 1-based, inclusive
 	endLine: number; // 1-based, inclusive

@@ -55,6 +55,7 @@ interface CacheEntry {
 	bareWordCandidate?: string;
 }
 
+/** Options for the editor-facing language service: completions and highlighting. */
 export interface LanguageServiceOptions {
 	/**
 	 * Overrides how the service discovers "variable names known in this

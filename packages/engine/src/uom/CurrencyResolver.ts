@@ -18,6 +18,12 @@ import type { IAsyncResolver, AsyncCheckResult } from "@solve-js/resolvers/Resol
 
 const CURRENCY_NS = "currency";
 
+/**
+ * Fetches exchange rates before the VM runs, so a conversion has real numbers.
+ *
+ * Until rates arrive the line evaluates to a pending value rather than a
+ * guessed one, and re-evaluates when they land.
+ */
 export class CurrencyAsyncResolver implements IAsyncResolver {
 	readonly namespace = CURRENCY_NS;
 

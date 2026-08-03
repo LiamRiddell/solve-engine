@@ -241,10 +241,21 @@ export const UNCATEGORIZED_TOKEN_TYPES: ReadonlySet<string> = new Set([
  */
 const pluginCategories = new Map<string, TokenCategory>();
 
+/**
+ * Map a token type to a highlighting category.
+ *
+ * @param tokenType - Token type a package registered.
+ * @param category - Category deciding how an editor colours it.
+ */
 export function registerTokenCategory(tokenType: string, category: TokenCategory): void {
 	pluginCategories.set(tokenType, category);
 }
 
+/**
+ * Remove a token type's highlighting category.
+ *
+ * @param tokenType - Token type to forget. Unknown types are ignored.
+ */
 export function unregisterTokenCategory(tokenType: string): void {
 	pluginCategories.delete(tokenType);
 }

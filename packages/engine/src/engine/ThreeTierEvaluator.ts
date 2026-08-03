@@ -30,6 +30,13 @@ import { sharedGlobalVariableStore, globalDagKey } from "@solve-js/vm/GlobalVari
 
 // ── EvalTier (diagnostic enum) ──────────────────────────────────────────
 
+/**
+ * How much work a line's evaluation required.
+ *
+ * The tiers exist because most lines in a document have not changed. A line
+ * that is clean and cached costs far less than one being compiled fresh, and
+ * knowing which happened is how a slow document gets diagnosed.
+ */
 export enum EvalTier {
 	/** Full pipeline: Lex → Parse → Compile → Execute (visible + dirty). */
 	Tier1 = 1,
@@ -43,6 +50,7 @@ export enum EvalTier {
 
 // ── EvalLineResult ──────────────────────────────────────────────────────
 
+/** Outcome for one line, including which tier handled it. */
 export interface EvalLineResult {
 	/** The line's persistent ID from DocumentModel. */
 	lineId: number;
@@ -60,6 +68,7 @@ export interface EvalLineResult {
 
 // ── EvalResult ──────────────────────────────────────────────────────────
 
+/** Outcome for a whole evaluation pass, with per-tier counts. */
 export interface EvalResult {
 	/** Per-line evaluation results. */
 	lines: EvalLineResult[];

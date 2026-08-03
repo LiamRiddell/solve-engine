@@ -28,6 +28,12 @@
  */
 const isDebugEnabled = typeof process !== "undefined" && process.env.DEBUG_ABORTCTRL === "true";
 
+/**
+ * Records abort-signal lifecycle for debugging cancellation.
+ *
+ * Keystroke cancellation is hard to reason about after the fact, because the
+ * evidence is gone by the time anything looks wrong. This keeps it.
+ */
 export const abortLogger = {
 	/** Whether debug logging is currently active. */
 	get enabled(): boolean {

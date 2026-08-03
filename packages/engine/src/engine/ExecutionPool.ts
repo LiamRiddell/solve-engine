@@ -77,6 +77,14 @@ export const WORKER_OFFLOAD_THRESHOLD = 50;
 
 // ── Pool ──────────────────────────────────────────────────────────────────
 
+/**
+ * Runs bytecode on background workers instead of the main thread.
+ *
+ * Used for scroll-driven batches, where evaluating a screenful of lines on the
+ * main thread would drop frames. Degrades to the main thread when workers are
+ * unavailable, which is the normal case in Node and in any bundle not built
+ * with esbuild-plugin-inline-worker. See {@link ExecutionPool.isAvailable}.
+ */
 export class ExecutionPool {
 	private workers: Worker[] = [];
 	private nextWorker = 0;

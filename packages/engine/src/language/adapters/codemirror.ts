@@ -48,6 +48,14 @@ const CATEGORY_TO_COMPLETION_TYPE: Partial<Record<TokenCategory, string>> = {
 	vector: "type",
 };
 
+/**
+ * Convert a completion into CodeMirror's option shape.
+ *
+ * Kept in an adapter so the language service itself stays editor-agnostic.
+ *
+ * @param item - Completion produced by the language service.
+ * @returns The equivalent CodeMirror option.
+ */
 export function completionItemToOption(item: CompletionItem): { label: string; type: string; detail?: string } {
 	return { label: item.label, type: CATEGORY_TO_COMPLETION_TYPE[item.category] ?? "text", detail: item.detail };
 }

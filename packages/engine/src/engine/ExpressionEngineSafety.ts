@@ -20,6 +20,7 @@ import { globalDagKey } from "@solve-js/vm/GlobalVariableStore";
 
 // ── Validation config ────────────────────────────────────────────────────
 
+/** Bounds applied to input before parsing: length and nesting depth. */
 export interface ValidationConfig {
     maxExpressionLength: number;
     maxComplexity: number;
@@ -27,6 +28,7 @@ export interface ValidationConfig {
 
 // ── Safety result ─────────────────────────────────────────────────────────
 
+/** Whether input passed the safety bounds, and which one it failed. */
 export interface SafetyCheckResult {
     passed: boolean;
     /**

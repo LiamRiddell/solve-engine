@@ -24,10 +24,24 @@ export function inBounds(m: MatrixData, row: number, col: number): boolean {
 	return row >= 0 && row < m.rows && col >= 0 && col < m.cols;
 }
 
+/**
+ * Whether two matrices have identical dimensions.
+ *
+ * @param a - First matrix.
+ * @param b - Second matrix.
+ * @returns True when rows and columns both match, which is the precondition
+ * for every element-wise operation.
+ */
 export function sameShape(a: MatrixData, b: MatrixData): boolean {
 	return a.rows === b.rows && a.cols === b.cols;
 }
 
+/**
+ * Whether a matrix has as many rows as columns.
+ *
+ * @param m - The matrix.
+ * @returns True when square. Determinant and inverse are defined only here.
+ */
 export function isSquare(m: MatrixData): boolean {
 	return m.rows === m.cols;
 }

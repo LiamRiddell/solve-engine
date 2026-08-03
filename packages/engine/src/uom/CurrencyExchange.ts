@@ -26,6 +26,14 @@ export const CurrencyErrorCodes = {
 // CURRENCY EXCHANGE SERVICE
 // ============================================================================
 
+/**
+ * Caches exchange rates fetched from an external source.
+ *
+ * Rates are global market data rather than per-engine configuration, which is
+ * why one instance is shared. Two engines with private copies would fetch the
+ * same endpoint twice and could disagree about one pair at one moment. See
+ * `engine/EngineContext.ts`.
+ */
 export class CurrencyExchangeService {
   /**
    * Live rate tables cached from successful getRate() fetches, keyed by
@@ -334,9 +342,11 @@ export class CurrencyExchangeService {
 // SINGLETON INSTANCE
 // ============================================================================
 
+/** The shared rate cache. See {@link CurrencyExchangeService} for why it is shared. */
 export const currencyExchangeService = new CurrencyExchangeService();
 
 // Export for backward compatibility
+/** Alias for {@link currencyExchangeService}, kept for older imports. */
 export const sharedCurrencyExchange = currencyExchangeService;
 
 // Default export

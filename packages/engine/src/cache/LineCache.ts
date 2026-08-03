@@ -1,6 +1,12 @@
 import { Value } from "@solve-js/vm/Value";
 import { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 
+/**
+ * One line's compiled bytecode, plus the variables it reads and writes.
+ *
+ * The reads and writes are what let the dependency graph re-evaluate only the
+ * lines an edit actually affected.
+ */
 export class LineCacheEntry {
   constructor(
     public result: Value,

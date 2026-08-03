@@ -23,6 +23,7 @@ export interface FormattingSettings {
   };
 }
 
+/** Formatting used when a host supplies none. */
 export const DEFAULT_FORMATTING_SETTINGS: FormattingSettings = {
   floatResult: {
     decimalPlaces: 2,

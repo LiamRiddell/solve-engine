@@ -19,6 +19,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
+/** The pipeline stages allocation is attributed to. */
 export type PipelineStage =
     | 'lexer'
     | 'normalizer'
@@ -27,6 +28,7 @@ export type PipelineStage =
     | 'vm'
     | 'orchestrator';
 
+/** What one stage allocated during one measured span. */
 export interface StageAllocation {
     /** Pipeline stage name. */
     stage: PipelineStage;
@@ -44,6 +46,7 @@ export interface StageAllocation {
     cacheHit?: boolean;
 }
 
+/** Per-stage allocation for a single expression, in pipeline order. */
 export interface PipelineTelemetry {
     /** The expression text that was evaluated. */
     expression: string;
@@ -72,6 +75,14 @@ export interface StageAggregate {
 
 // ── AllocationTracker ─────────────────────────────────────────────────────
 
+/**
+ * Measures heap allocation per pipeline stage.
+ *
+ * A development tool: it reads `process.memoryUsage().heapUsed` around each
+ * stage, which is only meaningful over the exact span it wraps. Widening a
+ * measured span to cover more work does not measure more, it measures garbage
+ * collection, and produces negative readings when a collection lands inside.
+ */
 export class AllocationTracker {
     /** Master kill-switch. Disabled in production, zero allocation overhead. */
     private static enabled: boolean = false;

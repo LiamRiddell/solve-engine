@@ -329,6 +329,12 @@ export const TokenTypes = {
   AVERAGE_ABOVE: "AVERAGE_ABOVE",
 } as const;
 
+/**
+ * A token's kind, as a string.
+ *
+ * Deliberately open rather than an enum: a package registers its own token
+ * types at runtime, and a closed set would make that impossible.
+ */
 export type TokenType = (typeof TokenTypes)[keyof typeof TokenTypes];
 
 // ── Integer Token Type ID System ──────────────────────────────────────────────

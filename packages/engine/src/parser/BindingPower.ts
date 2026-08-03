@@ -24,10 +24,29 @@ export const BindingPower = {
   Call: 80,
 } as const;
 
+/**
+ * Set the binding power of a named operator.
+ *
+ * Binding power is what decides precedence in the Pratt parser: a higher number
+ * binds tighter, so `*` outranks `+`. Changing one changes how every existing
+ * expression using that operator parses, which is why packages should allocate
+ * a new name rather than adjust a built-in.
+ *
+ * @param name - Operator name.
+ * @param power - Higher binds tighter.
+ */
 export function setBindingPower(name: string, power: number): void {
   (BindingPower as Record<string, number>)[name] = power;
 }
 
+/**
+ * Read the binding power of a named operator.
+ *
+ * @param name - Operator name.
+ * @returns Its binding power, or 0 when the name is unknown, which makes an
+ * unregistered operator terminate an expression rather than swallow the rest
+ * of it.
+ */
 export function getBindingPower(name: string): number {
   return (BindingPower as Record<string, number>)[name] ?? 0;
 }

@@ -35,10 +35,23 @@ export type SymbolicNode =
   | { kind: "div"; left: SymbolicNode; right: SymbolicNode }
   | { kind: "neg"; operand: SymbolicNode };
 
+/**
+ * A literal number in a symbolic expression.
+ *
+ * @param value - The number.
+ * @returns A constant node the simplifier can fold.
+ */
 export function constNode(value: number): SymbolicNode {
   return { kind: "const", value };
 }
 
+/**
+ * An unresolved name in a symbolic expression.
+ *
+ * @param name - The variable name.
+ * @returns A variable node, which the simplifier carries through rather than
+ * evaluating.
+ */
 export function varNode(name: string): SymbolicNode {
   return { kind: "var", name };
 }

@@ -22,12 +22,14 @@ import createCompilationWorker from "@solve-js/workers/engine.worker";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
+/** One line sent to a worker for compilation. */
 export interface CompileRequestItem {
 	lineId: number;
 	expression: string;
 	textHash: number;
 }
 
+/** Compiled bytecode returned from a worker, or the error that stopped it. */
 export interface CompileResponseItem {
 	lineId: number;
 	/** Hash of the expression text when the compile was dispatched (for safety validation). */
@@ -56,6 +58,14 @@ interface WorkerCompileResult {
 
 // ── CompilationWorkerManager ──────────────────────────────────────────────
 
+/**
+ * Compiles lines on a background worker.
+ *
+ * A response is discarded when the line changed between dispatch and return,
+ * because bytecode compiled against stale text would produce a result for an
+ * expression the user has already edited. The next evaluation recompiles it
+ * synchronously.
+ */
 export class CompilationWorkerManager {
 	private worker: Worker | null = null;
 	private nextId = 1;

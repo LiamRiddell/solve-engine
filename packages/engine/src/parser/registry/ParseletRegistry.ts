@@ -141,4 +141,11 @@ export class ParseletRegistry {
 	}
 }
 
+/**
+ * A process-wide parselet registry.
+ *
+ * @deprecated An engine builds its own registry and does not read this one, so
+ * registering here reaches nothing that evaluates. It survives for the
+ * deprecated {@link PackageRegistry} path only.
+ */
 export const sharedParseletRegistry = new ParseletRegistry();

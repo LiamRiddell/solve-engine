@@ -111,3 +111,8 @@ jobs:
       # Now that the backlog is cleared this runs over the whole tree rather
       # than only changed files, so a regression anywhere fails the build.
       - run: node scripts/check-comment-style.mjs --all
+
+      # Every exported symbol outside src/packages carries a doc block, which
+      # is what shows on hover and in generated documentation. The language
+      # packages under src/packages are not covered yet; 55 gaps remain there.
+      - run: node scripts/check-doc-coverage.mjs

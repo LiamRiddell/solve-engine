@@ -1,5 +1,6 @@
 import { ILocale } from "./en";
 
+/** German keywords, units and number formatting. */
 export const deLocale: ILocale = {
   code: "de",
   label: "Deutsch",

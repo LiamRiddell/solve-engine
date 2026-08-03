@@ -115,6 +115,7 @@ export const CoreErrorCodes = {
   UNKNOWN_ERROR: "UNKNOWN_ERROR",
 } as const;
 
+/** Every error code the engine's own layers can produce, from {@link CoreErrorCodes}. */
 export type CoreErrorCode = (typeof CoreErrorCodes)[keyof typeof CoreErrorCodes];
 
 /**
