@@ -1,0 +1,48 @@
+name: Expression evaluates incorrectly
+description: An expression gives the wrong answer, or is not recognised at all
+title: "[syntax] "
+labels: ["syntax"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the right form for anything about what an expression *means*,
+        whether that is a wrong answer, a parse failure, or a phrasing you
+        expected to work.
+  - type: textarea
+    id: expression
+    attributes:
+      label: The expression
+      description: Exactly as typed, one per line if there are several.
+      render: text
+      placeholder: 100cm + 2m
+    validations:
+      required: true
+  - type: input
+    id: expected
+    attributes:
+      label: What you expected
+      placeholder: 300.00 cm
+    validations:
+      required: true
+  - type: input
+    id: actual
+    attributes:
+      label: What you got
+      description: The result, or the error message. Write "not recognised" if nothing happened.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Why you expected that result, other tools that handle it, or surrounding lines that matter.
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: 1.0.0-beta.0
+    validations:
+      required: false

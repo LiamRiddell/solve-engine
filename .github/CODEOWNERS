@@ -1,0 +1,17 @@
+# Default owner for everything in the repository.
+* @LiamRiddell
+
+# Areas where a change carries more than local consequence, listed explicitly so
+# they are visible in review rather than buried in a large diff.
+
+# The published API surface. A change here is a change to the package contract.
+/packages/engine/src/api/ @LiamRiddell
+
+# The evaluation hot path, where a correctness fix can quietly cost throughput.
+/packages/engine/src/vm/ @LiamRiddell
+/packages/engine/src/parser/ @LiamRiddell
+/packages/engine/src/lexer/ @LiamRiddell
+
+# Release and deployment machinery.
+/.github/workflows/ @LiamRiddell
+/packages/engine/package.json @LiamRiddell

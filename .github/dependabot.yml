@@ -1,0 +1,35 @@
+version: 2
+updates:
+  # Four separate ecosystems because the playground and the documentation site
+  # each keep their own lockfile, deliberately, so an upgrade in one cannot
+  # disturb the engine's dependency tree.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: development
+
+  - package-ecosystem: npm
+    directory: "/playground"
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 3
+    groups:
+      all:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: "/docs"
+    schedule: { interval: weekly }
+    open-pull-requests-limit: 3
+    groups:
+      all:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: monthly }
+    groups:
+      actions:
+        patterns: ["*"]

@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "1.0.0-beta"]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same branch makes the in-flight run redundant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify on Node ${{ matrix.node }}
+    # Pinned rather than ubuntu-latest, so a runner image rollover cannot
+    # present as a change in the project.
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      # Type check, full test suite, and the package build. Kept as one script
+      # so that what CI runs and what a contributor runs locally cannot drift.
+      - run: npm run verify
+
+  playground:
+    name: Playground builds
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      # The playground type-checks engine source through path aliases, so this
+      # catches breakage the engine's own build would not.
+      - run: npm ci --prefix playground
+      - run: npm run build --prefix playground
+
+  docs:
+    name: Documentation builds
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm ci --prefix docs
+      - run: npm run build --prefix docs
+
+  comment-style:
+    name: Comment style
+    runs-on: ubuntu-24.04
+    # Only meaningful on a pull request, where there is a base to diff against.
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The house style bans em-dashes in source comments, which is mechanical
+      # enough to check rather than leave to review.
+      #
+      # Scoped to files the pull request actually touches. The existing source
+      # predates the standard and still contains well over a thousand of them,
+      # so checking the whole tree would fail every run until the comment pass
+      # lands, and a permanently red check is one people learn to ignore.
+      # Enforcing on changed files means new and edited code complies from now
+      # on, and the backlog shrinks as files are touched.
+      - name: No em-dashes in changed source files
+        run: |
+          base="origin/${{ github.base_ref }}"
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          changed=$(git diff --name-only --diff-filter=ACM "$base"...HEAD -- 'packages/*/src/**/*.ts' || true)
+          if [ -z "$changed" ]; then
+            echo "No source files changed."
+            exit 0
+          fi
+          found=0
+          for f in $changed; do
+            [ -f "$f" ] || continue
+            if grep -nP '\xe2\x80\x94' "$f"; then
+              echo "::error file=$f::Em-dash found. Use a comma, a colon, parentheses, or a second sentence."
+              found=1
+            fi
+          done
+          exit $found

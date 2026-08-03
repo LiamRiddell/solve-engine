@@ -82,7 +82,7 @@ export function createKnowledgePackage(config: KnowledgePackageConfig = {}): IEn
 			if (!config.answerQuery) {
 				return errorValue(
 					"KNOWLEDGE_NOT_CONFIGURED",
-					`Knowledge answer provider not configured — see packages/core/src/packages/knowledge/KnowledgePackage.ts's JSDoc for how to supply answerQuery via createKnowledgePackage({ ... }).`,
+					`Knowledge answer provider not configured. Supply answerQuery via createKnowledgePackage({ ... }); see the KnowledgePackage doc comment.`,
 				);
 			}
 			const answer = await config.answerQuery(query, signal);

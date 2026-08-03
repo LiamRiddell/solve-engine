@@ -1,0 +1,4 @@
+# Matches the funding configuration used by the Obsidian plugin this engine
+# was extracted from.
+github: [LiamRiddell]
+custom: ["https://www.buymeacoffee.com/liamriddell"]

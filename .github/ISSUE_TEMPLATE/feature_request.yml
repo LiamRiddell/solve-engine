@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest a capability the engine does not have
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that you cannot do today? Describe the situation rather than the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+      description: If it involves new syntax, show what you would type and what it should produce.
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
+      description: Existing syntax you attempted, or how you work around it now.
+    validations:
+      required: false

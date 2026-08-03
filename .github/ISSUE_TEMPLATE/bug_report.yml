@@ -1,0 +1,43 @@
+name: Bug report
+description: Something behaves incorrectly, other than an expression result
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If an *expression* gives the wrong answer, the syntax form is a better
+        fit and will get a faster response.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      description: Smallest sequence of steps, or a short code sample.
+      render: ts
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: Node 22 on Linux, or Chrome 140 on Windows
+    validations:
+      required: true

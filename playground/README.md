@@ -1,32 +1,54 @@
-# React + TypeScript + Vite
+# Solve Playground
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+An interactive environment for evaluating Solve expressions and inspecting how
+the engine arrives at each result.
 
-Currently, two official plugins are available:
+It is a development tool as much as a demonstration. Alongside the editor and
+its results, it exposes every stage of the pipeline: the token stream, what the
+normaliser fused, which parselets matched, the compiled bytecode, the virtual
+machine trace, cache state, the dependency graph, and per-stage timings.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Running it
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+The development server listens on port 5174.
+
+Dependencies are installed separately from the workspace root, because this app
+is not a workspace member. It keeps its own lockfile so that a React or Vite
+upgrade here cannot disturb the engine's dependency tree.
+
+## How it reaches the engine
+
+Vite aliases resolve directly to engine **source** rather than to the built
+package:
+
+| Alias | Resolves to |
+| --- | --- |
+| `@solve-js/*` | `../packages/engine/src/*` |
+| `@solve-js-examples/*` | `../packages/engine/examples/*` |
+| `@bridge/*` | `../packages/playground-bridge/src/*` |
+
+Editing the engine is reflected immediately without a rebuild, which is the
+point of the arrangement. The trade-off is that this app type-checks engine
+source under its own, newer TypeScript, so it occasionally surfaces errors the
+engine's own build does not. Those are usually real imprecision and worth fixing
+rather than suppressing.
+
+## Deployment
+
+Built as a static site and published alongside the documentation at
+`/<repository>/playground/`.
+
+The base path is supplied at build time through `BASE_PATH`, because GitHub
+Pages serves a project site from a subdirectory. Building without it produces a
+page that loads its HTML and then fails to find any of its assets. The deploy
+workflow sets it and then asserts it was actually applied, because that failure
+is silent at build time and obvious only once deployed.
+
+```bash
+BASE_PATH=/Solve-Engine/playground/ npm run build
+```

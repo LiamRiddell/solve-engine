@@ -58,7 +58,7 @@ export function createStocksPackage(config: StocksPackageConfig = {}): IEnginePa
 	function notConfigured(what: string): Value {
 		return errorValue(
 			"STOCKS_NOT_CONFIGURED",
-			`Stock data provider not configured — see packages/core/src/packages/stocks/StocksPackage.ts's JSDoc for how to supply ${what} via createStocksPackage({ ... }).`,
+			`Stock data provider not configured. Supply ${what} via createStocksPackage({ ... }); see the StocksPackage doc comment.`,
 		);
 	}
 

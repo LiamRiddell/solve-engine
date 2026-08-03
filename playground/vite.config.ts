@@ -6,8 +6,19 @@ import tailwindcss from '@tailwindcss/vite'
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// GitHub Pages serves a project site from a subdirectory, and the playground is
+// nested one level below the documentation, so every asset URL needs that
+// prefix. The deploy workflow supplies it. The default suits `vite dev` and any
+// deployment at a domain root, where there is no prefix.
+//
+// Getting this wrong produces a page that loads its HTML and then 404s every
+// script, stylesheet and font, which is why the workflow asserts the prefix
+// actually appears in the built output rather than trusting it.
+const base = process.env.BASE_PATH ?? "/";
+
 // https://vite.dev/config/
 export default defineConfig({
+  base,
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: [

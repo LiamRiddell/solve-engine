@@ -1,0 +1,91 @@
+name: Deploy site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a deploy midway. A half-published site is worse than a slightly
+# stale one, so queued runs wait rather than replacing each other.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # GitHub Pages serves a project site from a path named after the
+      # repository, so both builds need that prefix baked in. Deriving it here
+      # rather than hardcoding means renaming the repository does not silently
+      # produce a site that loads its HTML and none of its assets.
+      - name: Resolve the site base path
+        run: |
+          repo="${GITHUB_REPOSITORY#*/}"
+          echo "SITE_BASE=/${repo}/" >> "$GITHUB_ENV"
+          echo "PLAYGROUND_BASE=/${repo}/playground/" >> "$GITHUB_ENV"
+          echo "SITE_URL=https://${GITHUB_REPOSITORY_OWNER}.github.io" >> "$GITHUB_ENV"
+          echo "Base resolved to /${repo}/"
+
+      - run: npm ci
+
+      # The playground consumes engine source directly, but the docs island
+      # consumes the built package, so the engine is built first.
+      - run: npm run build
+
+      - name: Build the playground
+        run: |
+          npm ci --prefix playground
+          npm run build --prefix playground
+        env:
+          BASE_PATH: ${{ env.PLAYGROUND_BASE }}
+
+      - name: Build the documentation
+        run: |
+          npm ci --prefix docs
+          npm run build --prefix docs
+
+      - name: Combine into one artifact
+        run: |
+          cp -r playground/dist docs/dist/playground
+          # GitHub Pages runs Jekyll by default, which strips paths beginning
+          # with an underscore. Astro emits its assets into _astro, so without
+          # this file the site loads its HTML and none of its CSS or JavaScript.
+          touch docs/dist/.nojekyll
+
+      - name: Check the base path was actually applied
+        run: |
+          # Catches the failure mode where a build silently ignores the base and
+          # every asset 404s once deployed. Cheaper to fail here than to debug a
+          # blank page later.
+          if ! grep -rq "${SITE_BASE}_astro" docs/dist/index.html; then
+            echo "::error::Documentation assets are not prefixed with ${SITE_BASE}. The base path was not applied."
+            exit 1
+          fi
+          echo "Base path applied correctly."
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

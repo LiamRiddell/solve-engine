@@ -5,7 +5,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
  * Self-contained date-phrase parser for the Stocks package's `on <date>`
  * suffix (`stock(AAPL) on April 12, 2005`, `AAPL close on 2005-04-12`, ...).
  *
- * This does NOT reuse `packages/core`'s general-purpose `DATETIME_LITERAL`
+ * This does NOT reuse the engine's general-purpose `DATETIME_LITERAL`
  * work (date-only numeric literals in DD/MM/YYYY, MM-DD-YYYY, YYYY-MM-DD,
  * DD.MM.YYYY — `packages/datetime/normalizer/DateLiteralNormalizerRule.ts`,
  * ported from the former `feat/safety-limits-datetime-literals` branch) —
@@ -20,7 +20,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
  *   realistically always names a 4-digit year, and skipping the pivot
  *   removes a whole class of ambiguity to test.
  * - **SLASH is MM/DD/YYYY (US), not DD/MM/YYYY (European).** The
- *   general-purpose rule picked European for `packages/core`'s date
+ *   general-purpose rule picked European for the engine's date
  *   literal; this package is scoped to US-listed tickers (NASDAQ/NYSE), so
  *   US-style slash dates match user expectation better here. Documented
  *   explicitly because it's the OPPOSITE convention from the other rule —
