@@ -12,7 +12,6 @@
 		"resolveJsonModule": true,
 		"isolatedModules": true,
 		"noEmit": true,
-		"baseUrl": ".",
 		"paths": {
 			"@solve-js/*": ["../engine/src/*"],
 			"@solve-js-examples/*": ["../engine/examples/*"]

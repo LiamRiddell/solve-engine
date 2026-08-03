@@ -10,6 +10,15 @@ updates:
     groups:
       dev-dependencies:
         dependency-type: development
+    ignore:
+      # A compiler major is a migration, not a bump, and grouping it with
+      # ordinary dev-dependency updates makes every one of those pull requests
+      # unmergeable. Trying TypeScript 6 here surfaced a deprecated `baseUrl`
+      # (fixed separately, since it was worth doing anyway), then missing Node
+      # globals across the telemetry and error modules. Worth doing on purpose,
+      # on its own branch, not as a side effect of a weekly bump.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: "/playground"
