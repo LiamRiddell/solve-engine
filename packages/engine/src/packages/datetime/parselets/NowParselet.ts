@@ -7,7 +7,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 /**
  * `now` / `today` (dayOffset 0), `tomorrow` (+1 day), `yesterday` (-1 day).
  *
- * Previously all four keywords shared one zero-offset implementation —
+ * Previously all four keywords shared one zero-offset implementation
  * "tomorrow"/"yesterday" silently evaluated to the exact same instant as
  * "now" (a real bug: `evaluate("tomorrow") - evaluate("now")` was 0, not
  * ~86400000ms). Existing tests never caught this because they only

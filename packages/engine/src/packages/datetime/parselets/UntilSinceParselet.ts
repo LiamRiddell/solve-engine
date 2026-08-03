@@ -6,14 +6,14 @@ import { OpCode } from "@solve-js/parser/OpCode";
 
 /**
  * `<TimeUnit> until <Datetime>` / `<TimeUnit> since <Datetime>` (wiki:
- * Datetime — "days until 25/12/23", "1 year since 1/1/22") — the signed
+ * Datetime, "days until 25/12/23", "1 year since 1/1/22"), the signed
  * elapsed span between now and a target datetime, expressed in the given
  * unit. "until" is positive for a future target ("count down to");
  * "since" is positive for a past target ("count up from").
  *
  * The fused token this parselet handles is produced by
  * {@link untilSinceNormalizerRule}, which merges a `UNIT` token followed by
- * `UNTIL`/`SINCE` into a single prefix token — this sidesteps the fact
+ * `UNTIL`/`SINCE` into a single prefix token. This sidesteps the fact
  * that a bare `UNIT` token in prefix position is already claimed by
  * VariablesPackage's IdentifierParselet (`:days = 5`-style variable
  * lookups); fusing at the normalizer stage means that prefix dispatch
@@ -21,7 +21,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
  * collision between the two packages.
  *
  * Reuses the VM's existing Datetime-Datetime SUB semantics (which already
- * produce a `Uom("ms")` duration — see VM.ts's SUB case) plus
+ * produce a `Uom("ms")` duration. See VM.ts's SUB case) plus
  * UOM_CONVERT_IN to convert that duration into the requested unit, instead
  * of introducing new opcodes.
  */

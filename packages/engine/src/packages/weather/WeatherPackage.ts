@@ -7,13 +7,13 @@ import { weatherQueryParselet } from "./parselets/WeatherQueryParselet";
 import { fetchCityWeather, WeatherErrorCodes } from "./OpenMeteoClient";
 
 /**
- * Live weather data — `weather in <city>`, `temperature in <city>`,
+ * Live weather data, `weather in <city>`, `temperature in <city>`
  * `feels like in <city>`, `high in <city>`, `low in <city>`.
  *
- * Provider: **Open-Meteo** (https://open-meteo.com) — free, keyless, no
+ * Provider: **Open-Meteo** (https://open-meteo.com), free, keyless, no
  * signup, a real production-grade forecast API (used by this exact
  * geocoding + forecast shape, confirmed against the live API rather than
- * guessed field names — see `OpenMeteoClient.ts`). This is the reason
+ * guessed field names. See `OpenMeteoClient.ts`). This is the reason
  * Weather ships as a default `BUILTIN_PACKAGES` member while the sibling
  * `stocks`/`knowledge` packages do not: those domains have no equivalent
  * free/keyless provider, so they're opt-in-only and require a host to
@@ -23,14 +23,14 @@ import { fetchCityWeather, WeatherErrorCodes } from "./OpenMeteoClient";
  * of the `packages` array passed to `ExpressionEngine`.
  *
  * All 5 forms share ONE `CALL_PLUGIN` index and ONE `createQueryResolver`
- * instance/namespace — the "kind" (current/temperature/feelslike/high/low)
+ * instance/namespace, the "kind" (current/temperature/feelslike/high/low)
  * is folded into the cached query STRING (`"<kind>:<city>"`, see
  * `parselets/WeatherQueryParselet.ts`), not encoded as a separate plugin
  * function. This keeps the async-resolver plumbing to exactly the shape
  * `createQueryResolver` was built for (one query string in, one `Value`
  * out) while still letting "weather in london" and "temperature in
  * london" cache independently (each is its own query string, so a
- * TanStack Query cache hit for one doesn't answer the other) — the actual
+ * TanStack Query cache hit for one doesn't answer the other), the actual
  * underlying HTTP round-trip is separately coalesced/short-cached across
  * kinds in `OpenMeteoClient.ts`'s `fetchCityWeather()` (see its module
  * doc), so typing several weather queries for the same city doesn't
@@ -70,7 +70,7 @@ const { resolver: weatherResolver, pluginFunction: weatherPluginFunction } = cre
 				return uomValue(data.low, "C");
 			default:
 				// Unreachable via this package's own parselets (kind is always
-				// one of the 5 above) — an honest error rather than a guessed
+				// one of the 5 above), an honest error rather than a guessed
 				// value if some other bytecode ever pushes a malformed query.
 				throw ErrorFactory.internal(
 					WeatherErrorCodes.UNKNOWN_QUERY_KIND,

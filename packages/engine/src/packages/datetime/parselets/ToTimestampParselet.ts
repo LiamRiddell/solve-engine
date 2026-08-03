@@ -11,7 +11,7 @@ import { TO_TIMESTAMP_FN_IDX } from "./DatetimeTimestampPluginFunctions";
  * Number.
  *
  * Handles the fused `TO_TIMESTAMP` token (`"to timestamp": "TO_TIMESTAMP"`
- * in the package's `phrases` field) — see `ToDateParselet.ts`'s doc
+ * in the package's `phrases` field). See `ToDateParselet.ts`'s doc
  * comment for why fusing the full phrase (rather than claiming bare `TO`)
  * is required to avoid colliding with `PercentageChangeParselet.ts`'s
  * existing ownership of the bare `TO` token.

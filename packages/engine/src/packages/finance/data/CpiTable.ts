@@ -11,11 +11,11 @@
  *   - Years up to ~2024 are close to BLS-published annual averages but may
  *     be off by a small amount (rounding/recall, not a live re-derivation).
  *   - 2025 and 2026 are forward-leaning ESTIMATES (2025 not fully finalized,
- *     2026 projected from recent trend) — expect these to be the least
+ *     2026 projected from recent trend), expect these to be the least
  *     accurate entries and the first that need replacing with real BLS
  *     data as it's published.
  *   - This table is NOT authoritative for financial, legal, tax, contract
- *     escalation (COLA), or any decision with real money on the line —
+ *     escalation (COLA), or any decision with real money on the line
  *     consult bls.gov/cpi directly for that. It exists so `inflationAdjust`
  *     and the "what is/was ... worth" phrase grammar (see
  *     `packages/finance/parselets/InflationQueryParselet.ts`) have a real,
@@ -24,7 +24,7 @@
  *     approximate data (see `SalesTaxParselet.ts`'s doc comment on never
  *     silently faking a rate).
  *
- * Coverage: 1970-2026 inclusive (57 years) — additive; extend this table in
+ * Coverage: 1970-2026 inclusive (57 years), additive; extend this table in
  * future years by appending new entries, no other code needs to change.
  * A year outside this range (e.g. "what was $500 worth in 1920") produces a
  * clear `INFLATION_YEAR_OUT_OF_RANGE` error rather than a silently wrong
@@ -42,11 +42,11 @@ export const CPI_TABLE: Readonly<Record<number, number>> = {
   2010: 218.1, 2011: 224.9, 2012: 229.6, 2013: 233.0, 2014: 236.7,
   2015: 237.0, 2016: 240.0, 2017: 245.1, 2018: 251.1, 2019: 255.7,
   2020: 258.8, 2021: 271.0, 2022: 292.7, 2023: 304.7, 2024: 313.7,
-  // 2025-2026: preliminary/projected estimates — see doc comment above.
+  // 2025-2026: preliminary/projected estimates. See doc comment above.
   2025: 320.6, 2026: 327.4,
 } as const;
 
-/** Earliest/latest year this table has data for — used for range-check error messages. */
+/** Earliest/latest year this table has data for, used for range-check error messages. */
 export const CPI_MIN_YEAR = 1970;
 export const CPI_MAX_YEAR = 2026;
 

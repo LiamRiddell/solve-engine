@@ -3,7 +3,7 @@
  *
  * Scoped to ~80 major cities, common standard-time abbreviations, and a
  * handful of countries (mapped to their capital's zone, per SoulverCore's
- * own documented convention for countries spanning multiple zones) —
+ * own documented convention for countries spanning multiple zones)
  * deliberately not exhaustive. Additive: extend this table as gaps are
  * found, no other code needs to change.
  *
@@ -14,9 +14,9 @@
  *
  * Abbreviations are inherently ambiguous (PST/CST/EST/etc. don't
  * self-describe standard vs. daylight time, and some collide with other
- * meanings — e.g. IST is also used for Irish/Israel Standard Time). This
+ * meanings, e.g. IST is also used for Irish/Israel Standard Time). This
  * table picks the single most common convention for each, matching how
- * every comparable calculator tool resolves the same ambiguity — not
+ * every comparable calculator tool resolves the same ambiguity, not
  * claimed as the only valid reading.
  */
 export const CITY_TO_IANA_ZONE: Record<string, string> = {
@@ -117,7 +117,7 @@ export const CITY_TO_IANA_ZONE: Record<string, string> = {
   tunis: "Africa/Tunis",
   addisababa: "Africa/Addis_Ababa",
 
-  // ── Countries (capital's zone — see doc comment) ──
+  // ── Countries (capital's zone. See doc comment) ──
   france: "Europe/Paris",
   germany: "Europe/Berlin",
   spain: "Europe/Madrid",
@@ -140,12 +140,12 @@ export const CITY_TO_IANA_ZONE: Record<string, string> = {
   turkey: "Europe/Istanbul",
   egypt: "Africa/Cairo",
   nigeria: "Africa/Lagos",
-  // "singapore" (the city entry above) already covers the country too —
+  // "singapore" (the city entry above) already covers the country too
   // Singapore is a city-state, one zone either way, no separate entry needed.
 };
 
 /**
- * Multi-word city/country names — fused into a single `CITY_NAME` token
+ * Multi-word city/country names, fused into a single `CITY_NAME` token
  * by {@link TimePackage}'s `phrases` field before parsing, since
  * {@link CITY_TO_IANA_ZONE} lookups only ever see one already-tokenized
  * word. Keys here double as the phrase text registered with the fuser;
@@ -170,7 +170,7 @@ export const MULTI_WORD_CITY_ZONES: Record<string, string> = {
   "south africa": "Africa/Johannesburg",
 };
 
-/** Standard-time-zone abbreviations — see the doc comment above on ambiguity. */
+/** Standard-time-zone abbreviations. See the doc comment above on ambiguity. */
 export const ZONE_ABBREVIATION_TO_IANA: Record<string, string> = {
   pst: "America/Los_Angeles",
   pdt: "America/Los_Angeles",

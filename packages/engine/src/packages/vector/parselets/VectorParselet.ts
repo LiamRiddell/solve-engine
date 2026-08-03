@@ -27,7 +27,7 @@ export class VectorParselet implements PrefixParselet {
     // Legacy vector-constructor sugar, kept working as a 1xN row-vector
     // Matrix (Calca has no equivalent syntax; this codebase's own existing
     // tests exercise vec2/vec3/vec4, so it stays as sugar rather than being
-    // removed — see MatrixOps.ts/the bracket-literal matrix syntax for the
+    // removed. See MatrixOps.ts/the bracket-literal matrix syntax for the
     // primary construction path going forward).
     builder.emitOpcode(OpCode.MAT_NEW);
     builder.emitIndex(1);

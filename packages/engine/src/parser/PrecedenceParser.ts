@@ -10,7 +10,7 @@ import { getLocale } from "@solve-js/constants/locales";
 /**
  * Matches a CHAINED thousands-grouped integer using "." as the group
  * separator (e.g. "1.234.567"), independent of locale. Kept in sync with
- * the identical constant in NumberParselet.ts (not imported from there —
+ * the identical constant in NumberParselet.ts (not imported from there
  * that file transitively re-imports PrecedenceParser via Parser.ts's
  * `export { PrecedenceParser as Parser }`, so importing the other
  * direction would create a circular dependency for the sake of one
@@ -33,7 +33,7 @@ const CHAINED_DOT_THOUSANDS_GROUPS = /^\d{1,3}(\.\d{3}){2,}$/;
  *     - Infix:  Map.get(tokenTypeId) for InfixParselet
  *     - Full flexibility for custom syntax
  *
- * The parser emits directly to a BytecodeBuilder — no AST intermediate.
+ * The parser emits directly to a BytecodeBuilder, no AST intermediate.
  * Implements the same public API as the legacy Parser class so existing
  * parselets continue to work without modification.
  */
@@ -43,10 +43,10 @@ export class PrecedenceParser {
   private depth = 0;
   private maxDepth: number;
 
-  /** Cached registry reference — avoids property chain in hot loop */
+  /** Cached registry reference, avoids property chain in hot loop */
   private registry: ParseletRegistry;
 
-  /** BytecodeBuilder — set before each parseExpression call */
+  /** BytecodeBuilder, set before each parseExpression call */
   private builder!: BytecodeBuilder;
 
   /** Diagnostic pipeline for parselet-matched events */
@@ -55,7 +55,7 @@ export class PrecedenceParser {
   private localeCode: string;
 
   /**
-   * Static binding power table — built once at module load, shared across all instances.
+   * Static binding power table, built once at module load, shared across all instances.
    * Index = tokenTypeId, value = binding power (0 = not a built-in infix).
    */
   static readonly BP_TABLE: Uint8Array = buildBindingPowerTable();
@@ -72,7 +72,7 @@ export class PrecedenceParser {
   private static readonly PLUS_ID     = tokenTypeId(TokenTypes.PLUS);
   private static readonly KEYWORD_ID  = tokenTypeId(TokenTypes.KEYWORD);
 
-  // Infix built-ins (Tier 1 — full inline emission)
+  // Infix built-ins (Tier 1, full inline emission)
   private static readonly STAR_ID     = tokenTypeId(TokenTypes.STAR);
   private static readonly SLASH_ID    = tokenTypeId(TokenTypes.SLASH);
   private static readonly MOD_ID      = tokenTypeId(TokenTypes.MOD);
@@ -239,12 +239,12 @@ export class PrecedenceParser {
 
       const bp = bpTable[lookahead.typeId];
       if (bp > 0) {
-        // ⚡ Tier 1: Built-in infix — full inline emission, zero parselet delegation
+        // Tier 1: Built-in infix, full inline emission, zero parselet delegation
         if (bp <= minBp) break;
 
         if (this.diagnosticPipeline) {
           // Fast path skips the registry, but built-ins are still registered
-          // there (for introspection/tests) — look them up only in this
+          // there (for introspection/tests), look them up only in this
           // diagnostics-only branch so the playground's "matched parselets"
           // view isn't permanently blind to every arithmetic operator.
           const infixParselet = registry.getInfix(lookahead.typeId);
@@ -262,7 +262,7 @@ export class PrecedenceParser {
           builder.emitNumber(100);
           builder.emitOpcode(OpCode.DIV);
         } else if (typeId === PrecedenceParser.CARET_ID && this.tryEmitMatrixCaretOp(builder)) {
-          // `^T` (transpose) or `^-1` (inverse) — already fully handled,
+          // `^T` (transpose) or `^-1` (inverse), already fully handled
           // including consuming their own trailing tokens.
         } else {
           // Infix: parse right operand, then emit opcode.
@@ -272,7 +272,7 @@ export class PrecedenceParser {
           builder.emitOpcode(PrecedenceParser.INFIX_OPCODE[typeId]);
         }
       } else {
-        // Tier 2: Plugin parselet fallback — full flexibility for custom syntax
+        // Tier 2: Plugin parselet fallback, full flexibility for custom syntax
         const infixParselet = registry.getInfix(lookahead.typeId);
         if (!infixParselet) break;
         if (infixParselet.bindingPower <= minBp) break;
@@ -308,7 +308,7 @@ export class PrecedenceParser {
 
     if (this.diagnosticPipeline) {
       // Fast path below skips the registry for built-ins, but they're still
-      // registered there (for introspection/tests) — look up here so the
+      // registered there (for introspection/tests), look up here so the
       // playground's "matched parselets" view isn't permanently blind to
       // every number, identifier, paren, and unary operator.
       const parselet = this.registry.getPrefix(typeId);
@@ -326,7 +326,7 @@ export class PrecedenceParser {
         if (raw.startsWith("0x") || raw.startsWith("0X")) {
           v = parseInt(raw, 16);
           // A prefix with no digits after it ("0x" alone) makes parseInt
-          // return NaN — this used to push straight through as a silent
+          // return NaN. This used to push straight through as a silent
           // NaN Number value instead of a visible error.
           if (Number.isNaN(v)) {
             throw ErrorFactory.parsing("INVALID_NUMBER_LITERAL", `Invalid hex literal: "${raw}"`, { raw });
@@ -346,12 +346,12 @@ export class PrecedenceParser {
           // independent of locale (ExpressionLexer's number-scanning
           // "Thousands separators" block), but the locale-based
           // normalization below only strips the ACTIVE locale's own
-          // configured thousandsSeparator character — for "en" that's
+          // configured thousandsSeparator character, for "en" that's
           // ",", not ".", so a chained dot-grouped literal like
           // "1.234.567" fell through to parseFloat() untouched, which
           // stops at the second "." and silently truncated it to 1.234
           // (over 99% of the digits dropped, with no error). This is the
-          // REAL number-parsing path for actual evaluation — Tier 1 of
+          // REAL number-parsing path for actual evaluation, Tier 1 of
           // the two-tier dispatch above always returns for NUMBER_ID, so
           // NumberParselet.parse() (which has the identical fix) never
           // actually runs except via direct unit tests / the "matched
@@ -395,7 +395,7 @@ export class PrecedenceParser {
       // ── Identifiers (variables) ────────────────────────────────────────────
       case PrecedenceParser.IDENT_ID: {
         // An identifier immediately followed by "(" may be a user-defined
-        // function DEFINITION (`f(x) = ...`) or CALL (`f(5)`) — see
+        // function DEFINITION (`f(x) = ...`) or CALL (`f(5)`). See
         // parseUserFunctionDefOrCall's doc comment for the full
         // disambiguation. Only the (cheap) LPAREN check runs for the
         // overwhelmingly common case of a bare identifier with nothing
@@ -405,9 +405,9 @@ export class PrecedenceParser {
           return;
         }
         // IDENT tokens map to LOAD_VAR by default. The IdentifierParselet
-        // and VariableParselet add STORE_VAR for assignments — those are
+        // and VariableParselet add STORE_VAR for assignments, those are
         // handled via the parselet registry below. Note this is also how a
-        // user-defined function's own PARAMETER references compile — see
+        // user-defined function's own PARAMETER references compile. See
         // UserFunctionDef's doc comment in BytecodeBuilder.ts for why there
         // is no separate parameter-load opcode: `LOAD_VAR` resolution
         // dynamically checks the VM's innermost call frame first.
@@ -420,7 +420,7 @@ export class PrecedenceParser {
       // `(expr)` groups for precedence; `(x, y[, z[, w]])` is the bare-tuple
       // vector literal documented as an alternative to vec2/vec3/vec4(...)
       // (wiki: Arithmetic/Vector). This Tier-1 case is what actually runs for
-      // every LPAREN in production parsing — GroupParselet.ts mirrors this
+      // every LPAREN in production parsing, GroupParselet.ts mirrors this
       // logic for registry-introspection/diagnostic-listing purposes, but a
       // package can never override LPAREN's dispatch here (Tier 1 always
       // wins over the ParseletRegistry fallback below), so both must be kept
@@ -434,7 +434,7 @@ export class PrecedenceParser {
         }
         this.consume(TokenTypes.RPAREN);
         if (count > 1) {
-          // Legacy bare-tuple vector sugar — a 1xN row-vector Matrix (see
+          // Legacy bare-tuple vector sugar, a 1xN row-vector Matrix (see
           // packages/vector/parselets/VectorParselet.ts's comment).
           builder.emitOpcode(OpCode.MAT_NEW);
           builder.emitIndex(1);
@@ -480,7 +480,7 @@ export class PrecedenceParser {
   // The "Tier-1 shape-exception" pattern
   // ═══════════════════════════════════════════════════════════════════════════════
   //
-  // Tier 1 exists purely for performance — avoid a Map lookup + parselet call
+  // Tier 1 exists purely for performance, avoid a Map lookup + parselet call
   // on ~95% of tokens (see this file's own module doc comment above). A
   // recurring consequence: any grammar shape tied to a Tier-1 token type can
   // ONLY be implemented by hand-editing this switch, since a package-
@@ -488,18 +488,18 @@ export class PrecedenceParser {
   // simply never run in production (Tier 1 always wins over the registry
   // fallback). Five confirmed instances of this tension exist in this file
   // (plus one that had to move OUTSIDE it entirely):
-  //   1. NUMBER_ID — the full locale-aware number-literal parsing (hex/
+  //   1. NUMBER_ID, the full locale-aware number-literal parsing (hex/
   //      binary/octal, chained-dot thousands grouping, decimal-separator
   //      normalization) is inlined in parsePrefix() above; NumberParselet.ts's
   //      own copy is dead code for real evaluation, kept registered only for
   //      the "matched parselets" diagnostic view.
-  //   2. IDENT_ID — parseUserFunctionDefOrCall's lookahead (below) disambig-
+  //   2. IDENT_ID, parseUserFunctionDefOrCall's lookahead (below) disambig-
   //      uates a function DEFINITION from a CALL from a plain variable load.
-  //   3. LPAREN_ID — the bare-tuple vector-literal sugar ("(x,y[,z[,w]])" ->
+  //   3. LPAREN_ID, the bare-tuple vector-literal sugar ("(x,y[,z[,w]])" ->
   //      MAT_NEW) is inlined in parsePrefix() above; GroupParselet.ts mirrors
   //      it for introspection only and must be kept in sync by hand.
-  //   4. CARET_ID — the transpose/inverse suffix table just below.
-  //   5. PLUS_ID — the locale word "and" lexes as PLUS (Tier-1, fixed Sum
+  //   4. CARET_ID, the transpose/inverse suffix table just below.
+  //   5. PLUS_ID, the locale word "and" lexes as PLUS (Tier-1, fixed Sum
   //      binding power), so a registry parselet can never intercept it the
   //      way LogicalParselet.ts intercepts "or"/&&/||; unlike the other four,
   //      there's no SHAPE to special-case on here (the token itself IS the
@@ -511,7 +511,7 @@ export class PrecedenceParser {
   // extension point (unlike prefixParselets/infixParselets). Letting
   // third-party packages register their own Tier-1 shape-matchers would put
   // per-package matcher iteration on a genuinely hot path (every CARET/
-  // NUMBER/IDENT/LPAREN/PLUS token, matched or not) — a materially bigger,
+  // NUMBER/IDENT/LPAREN/PLUS token, matched or not), a materially bigger
   // separate product decision than "make this one table more concise," and
   // not one this pattern write-up makes.
 
@@ -562,7 +562,7 @@ export class PrecedenceParser {
    * After a `^` token (already consumed by the Tier-1 infix loop above),
    * checks {@link CARET_SUFFIX_RULES} in order for a shape that means
    * something other than ordinary exponentiation: `^T` (transpose) and `^-1`
-   * (matrix inverse — LITERALLY the integer exponent `-1`; `^-2`, `^-1.5`,
+   * (matrix inverse, LITERALLY the integer exponent `-1`; `^-2`, `^-1.5`
    * etc. still mean ordinary exponentiation). On a match, the rule's `emit`
    * consumes that shape's own tokens and this returns `true`. On no match,
    * consumes NOTHING, returning `false` so the caller falls through to
@@ -570,13 +570,13 @@ export class PrecedenceParser {
    *
    * Every rule dispatches purely on SHAPE, never on operand type (unknowable
    * at parse time): `inv()`'s own handler (`VMBuiltins.ts` index 65) returns
-   * `1/x` for a plain Number — byte-identical to what `Math.pow(x, -1)`
-   * already computed for `x^-1` before this feature existed — and a real
+   * `1/x` for a plain Number, byte-identical to what `Math.pow(x, -1)`
+   * already computed for `x^-1` before this feature existed, and a real
    * matrix inverse for a Matrix, so `5^-1` still means exactly what it always
    * has; only a Matrix operand actually inverts.
    *
    * Adding a future `^`-suffix shape is a new table entry here, not a new
-   * if-block — see the "Tier-1 shape-exception" pattern write-up above for
+   * if-block. See the "Tier-1 shape-exception" pattern write-up above for
    * why this table can't instead be a package-registered parselet.
    */
   private tryEmitMatrixCaretOp(builder: BytecodeBuilder): boolean {
@@ -597,7 +597,7 @@ export class PrecedenceParser {
    * From an LPAREN token index, scan forward tracking paren depth and
    * return the index of the matching RPAREN, or `null` if the parens never
    * balance before the token stream ends. No emission, no position
-   * advance — same class of technique as {@link balanceParens}'s own
+   * advance. Same class of technique as {@link balanceParens}'s own
    * pre-scan, just exposed mid-parse instead of only at `load()` time.
    * `openIdx` must point AT the LPAREN itself.
    */
@@ -616,18 +616,18 @@ export class PrecedenceParser {
 
   /**
    * Disambiguates a bare `IDENT` immediately followed by `(` between three
-   * things, using ONLY a bracket-depth scan (no backtracking — nothing is
+   * things, using ONLY a bracket-depth scan (no backtracking, nothing is
    * consumed until the shape is known):
-   * - `f(x) = expr` — a DEFINITION: the matching `)` is followed by `=`.
-   * - `f(5)` — a CALL to a (possibly not-yet-defined) function: anything
+   * - `f(x) = expr`, a DEFINITION: the matching `)` is followed by `=`.
+   * - `f(5)`, a CALL to a (possibly not-yet-defined) function: anything
    *   else. This was never valid syntax before this feature (a bare
    *   `IDENT` immediately before `(` has no pre-existing "plain variable
-   *   read + separately grouped `(...)`" meaning to preserve — confirmed
+   *   read + separately grouped `(...)`" meaning to preserve, confirmed
    *   via `BuiltinNormalizerRules.ts`'s `implicitMultiplyRule()`, which
    *   only inserts an implicit `*` for `NUMBER/RPAREN` immediately before
    *   `IDENT/LPAREN`, never for a bare `IDENT` immediately before
    *   `LPAREN`). Always commits to a CALL; an unregistered name produces a
-   *   clear `UNDEFINED_FUNCTION` error at VM-execution time — the same
+   *   clear `UNDEFINED_FUNCTION` error at VM-execution time, the same
    *   forward-reference philosophy `LOAD_VAR`/`UNDEFINED_VARIABLE` already
    *   uses, rather than any parse-time registry lookup.
    * If the parens never balance, this falls through to the ordinary
@@ -650,7 +650,7 @@ export class PrecedenceParser {
   }
 
   /**
-   * A parameter name, accepted as either `IDENT` or `UNIT` — matches this
+   * A parameter name, accepted as either `IDENT` or `UNIT`, matches this
    * codebase's established `:name = value` variable-name policy
    * (`VariableParselet.ts` explicitly accepts `UNIT`-typed tokens too, e.g.
    * `:b = 5` for the "b" bits unit) since common short parameter names
@@ -694,12 +694,12 @@ export class PrecedenceParser {
     // Compile the body into its OWN independent BytecodeBuilder, reusing
     // the SAME parser/token stream but directing emission elsewhere.
     // `parseExpression(minBp, _builder)` sets `this.builder = _builder`
-    // with NO automatic restore — explicitly restoring via `setBuilder()`
+    // with NO automatic restore, explicitly restoring via `setBuilder()`
     // afterward (not a `finally`, since a thrown parse error here should
     // propagate as-is; there's no further use of `this.builder` on that
     // path before the whole parse aborts) avoids silently emitting
-    // whatever parses next (in this same expression, or — via
-    // ExpressionEngine's builder pool — a LATER, unrelated line) into a
+    // whatever parses next (in this same expression, or, via
+    // ExpressionEngine's builder pool, a LATER, unrelated line) into a
     // stale, already-.build()'d body builder.
     const bodyBuilder = new BytecodeBuilder();
     this.parseExpression(BindingPower.Lowest, bodyBuilder);
@@ -708,7 +708,7 @@ export class PrecedenceParser {
     const bodyProgram = bodyBuilder.build();
     if (bodyProgram.hasAsync) {
       // v1 scope decision: a function body calling an async plugin
-      // (weather, stocks, currency, ...) isn't supported yet — propagating
+      // (weather, stocks, currency, ...) isn't supported yet, propagating
       // a 'pending' result up through a reentrant executeBytecode() call
       // would need the OUTER expression's own bytecode position/stack
       // state to also be resumable later, which this first pass doesn't
@@ -728,7 +728,7 @@ export class PrecedenceParser {
     builder.emitIndex(bodyIdx);
 
     // A definition line has no single input value to echo back the way an
-    // assignment does — push a plain confirmation string, matching this
+    // assignment does, push a plain confirmation string, matching this
     // codebase's "never silently produce a misleading numeric 0" principle.
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(`${nameToken.value}(${params.join(", ")}) defined`);
@@ -793,7 +793,7 @@ export class PrecedenceParser {
 
   /**
    * Read-only lookahead `offset` tokens past the current position, without
-   * consuming anything — `peekAt(0)` is equivalent to {@link peek}.
+   * consuming anything, `peekAt(0)` is equivalent to {@link peek}.
    * `this.tokens` is a plain in-memory array (not a stream), so this is a
    * simple, safe index read; no rewind/checkpoint mechanism is needed since
    * nothing is consumed.
@@ -811,7 +811,7 @@ export class PrecedenceParser {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════════
-  // Builder access — set before parse, read by inline prefix handlers
+  // Builder access, set before parse, read by inline prefix handlers
   // ═══════════════════════════════════════════════════════════════════════════════
 
   /** Set the builder to use for the current parse. Called by ExpressionEngine. */

@@ -1,4 +1,4 @@
-// Public entry point — the "start here" surface for consuming the engine.
+// Public entry point, the "start here" surface for consuming the engine.
 // Deeper/specific needs are covered by each module's own barrel:
 // @solve-js/vm, @solve-js/parser, @solve-js/language, @solve-js/format,
 // @solve-js/packages, @solve-js/constants (all public), plus the

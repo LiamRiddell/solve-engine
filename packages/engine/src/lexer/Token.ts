@@ -76,13 +76,13 @@ export const TokenTypes = {
   OF: "OF",
   INCREASE_BY: "INCREASE_BY",
   DECREASE_BY: "DECREASE_BY",
-  // Percentage solve-for-unknown (packages/percentage/) — "N% of what is
+  // Percentage solve-for-unknown (packages/percentage/), "N% of what is
   // X" solves N% * base = X for base. Fused as a full 3-word phrase (see
   // PercentagePackage.ts's `phrases` field) rather than a bare "what"
-  // keyword — "what" is common enough as a variable name to be worth the
+  // keyword, "what" is common enough as a variable name to be worth the
   // same phrase-fusion treatment this codebase gives "total"/"average"/etc.
   OF_WHAT_IS: "OF_WHAT_IS",
-  // Sibling solve-for-unknown forms accounting for a +/-1 offset — "N% on
+  // Sibling solve-for-unknown forms accounting for a +/-1 offset, "N% on
   // what is X" (increase) / "N% off what is X" (decrease). Same
   // phrase-fusion reasoning as OF_WHAT_IS above.
   ON_WHAT_IS: "ON_WHAT_IS",
@@ -133,7 +133,7 @@ export const TokenTypes = {
   AS: "AS",
   CONVERTER_NAME: "CONVERTER_NAME",
   // Fused two-word phrase tokens (see MathPhrasesPackage.ts's `phrases`
-  // field) — deliberately NOT bare single-word keywords: "average",
+  // field), deliberately NOT bare single-word keywords: "average"
   // "total", "count", etc. are common variable names, and this codebase
   // has a tested policy that colon-prefixed variable names can't be
   // keyword-shaped words (see VariableParselet.ts's doc comment). Fusing
@@ -155,35 +155,35 @@ export const TokenTypes = {
   // phrase-fused like the others above (same structural reason
   // ClampParselet.ts is hand-written instead of PhrasePattern-based).
   // Matches this codebase's existing accepted risk for "between"/"from"/
-  // "next"/"last"/"best" — also bare, also can't be used as `:name`.
+  // "next"/"last"/"best", also bare, also can't be used as `:name`.
   CLAMP: "CLAMP",
-  // map/reduce/sum/prod (packages/mapreduce/) — bare single-word keywords,
+  // map/reduce/sum/prod (packages/mapreduce/), bare single-word keywords
   // each with its own dedicated parselet (custom argument grammar: a bare
   // builtin/user-function name, an inline transform expression, or
-  // `name=collection` zipped pairs — none of which fit the ordinary
+  // `name=collection` zipped pairs, none of which fit the ordinary
   // FunctionCallParselet path, so these can't just reuse the generic FUNC
   // token type the way sqrt/abs/... do).
   MAP: "MAP",
   REDUCE: "REDUCE",
   SUM_FN: "SUM_FN",
   PROD_FN: "PROD_FN",
-  // `=>` — "therefore"/solve operator (symbolic algebra, packages/symbolic/).
+  // `=>`, "therefore"/solve operator (symbolic algebra, packages/symbolic/).
   // A genuine 2-char lexer token (ExpressionLexer.ts's TWO_CHAR_OPS table),
-  // same mechanism as ==/!=/>=/<=, not a normalizer-level fusion — "=" then
+  // same mechanism as ==/!=/>=/<=, not a normalizer-level fusion, "=" then
   // ">" is the opposite char order from GTE's ">=", so there's no collision.
   THEREFORE: "THEREFORE",
-  // Timezone query phrases (see TimePackage.ts's `phrases` field) — same
+  // Timezone query phrases (see TimePackage.ts's `phrases` field). Same
   // phrase-fusion reasoning as above: "time"/"date"/"difference" are
   // common variable names, so the fused trigger is the full phrase.
   // CITY_NAME is the fused-token type for multi-word city/country names
-  // (e.g. "new york") — see timezones/CityZones.ts's MULTI_WORD_CITY_ZONES.
+  // (e.g. "new york"). See timezones/CityZones.ts's MULTI_WORD_CITY_ZONES.
   TIME_IN: "TIME_IN",
   DATE_IN: "DATE_IN",
   TIME_DIFFERENCE_BETWEEN: "TIME_DIFFERENCE_BETWEEN",
   CITY_NAME: "CITY_NAME",
   BACKTICK_OPEN: "BACKTICK_OPEN",
   INLINE_SOLVE_START: "INLINE_SOLVE_START",
-  // Comment marker — `#` or `//` to end of line. Emitted by
+  // Comment marker, `#` or `//` to end of line. Emitted by
   // ExpressionLexer.tokenizeComment()/tokenizeOperator() but never reaches
   // a parselet: ExpressionEngine.prepareExpression() filters COMMENT
   // tokens out of the stream before normalization/parsing (see
@@ -203,15 +203,15 @@ export const TokenTypes = {
   // writes ":over = 5" or ":at = 3"), the same accepted-risk category as
   // this codebase's existing bare "between"/"from"/"next"/"last"/"best"
   // keywords (see VariableParselet.ts's doc comment). RATE_AT is deliberately
-  // NOT named "AT" — that name is already reserved (dormant) for a future
+  // NOT named "AT", that name is already reserved (dormant) for a future
   // "@" symbol token in TokenNormalizer.NON_WORD_NAMES; reusing it here would
   // create an unintended coupling if "@" is ever wired up.
   OVER: "OVER",
   RATE_AT: "RATE_AT",
-  // Fused phrase tokens (see FinancePackage.ts's `phrases` field) —
+  // Fused phrase tokens (see FinancePackage.ts's `phrases` field)
   // deliberately NOT bare single-word keywords: "interest", "tax", "vat",
   // "repayment", "principal" etc. are all common, plausible variable names
-  // (a shipped playground example uses ":total = :subtotal + :tax" — see
+  // (a shipped playground example uses ":total = :subtotal + :tax". See
   // MathPhrasesPackage.ts's doc comment for the regression this caused
   // once already). Fusing the full "<word> on"/"<word> off" phrase means
   // the bare leading word itself never becomes its own token type, so
@@ -258,8 +258,8 @@ export const TokenTypes = {
   // why this is a context-sensitive NormalizerRule instead (so a bare
   // `:butter = 5` variable definition is completely unaffected).
   INGREDIENT_NAME: "INGREDIENT_NAME",
-  // ── Datetime — workdays/weekdays/timestamps (packages/datetime/) ──
-  // Fused phrase tokens (see DatetimePackage.ts's `phrases` field) —
+  // ── Datetime, workdays/weekdays/timestamps (packages/datetime/) ──
+  // Fused phrase tokens (see DatetimePackage.ts's `phrases` field)
   // deliberately NOT bare single-word keywords: "workdays"/"weekday"/
   // "timestamp"/"date" are all plausible variable names, same
   // reasoning/regression risk as MathPhrasesPackage.ts's "total" note and
@@ -271,7 +271,7 @@ export const TokenTypes = {
   CURRENT_TIMESTAMP: "CURRENT_TIMESTAMP",
   TO_DATE: "TO_DATE",
   TO_TIMESTAMP: "TO_TIMESTAMP",
-  // Natural-question forms over the same date fields — "what day is it in
+  // Natural-question forms over the same date fields, "what day is it in
   // 30 days", "what month is it on 25/12/2026", "what week is it". Each is
   // a fully-fused phrase for the same reason as WEEKDAY_ON above: claiming
   // bare "day"/"month"/"week" as keywords would break ":day = 5" and
@@ -281,27 +281,27 @@ export const TokenTypes = {
   MONTH_IN: "MONTH_IN",
   WEEK_ON: "WEEK_ON",
   WEEK_IN: "WEEK_IN",
-  // `<unit> between <date> and <date>` — fused UNIT+BETWEEN, exactly like
+  // `<unit> between <date> and <date>`, fused UNIT+BETWEEN, exactly like
   // UNTIL_UNIT/SINCE_UNIT above.
   BETWEEN_UNIT: "BETWEEN_UNIT",
-  // Postfix day-type predicates — "<date> is a weekend" / "is a workday".
+  // Postfix day-type predicates, "<date> is a weekend" / "is a workday".
   IS_WEEKEND: "IS_WEEKEND",
   IS_WORKDAY: "IS_WORKDAY",
-  // ── Time — video timecode (packages/time/) ──
+  // ── Time, video timecode (packages/time/) ──
   // Fused from a raw `HH:MM:SS:FF` token sequence (see
   // packages/time/normalizer/VideoTimecodeNormalizerRule.ts) and from
-  // `NUMBER frames` (see FrameCountNormalizerRule.ts) — not a bare-keyword
+  // `NUMBER frames` (see FrameCountNormalizerRule.ts), not a bare-keyword
   // collision risk the way the datetime tokens above are, since neither
   // fusion claims a plain English word as its own token type.
   VIDEO_TIMECODE: "VIDEO_TIMECODE",
   FRAME_COUNT: "FRAME_COUNT",
-  // "@" — see ExpressionLexer.ts's OP_MAP entry for why this was
+  // "@". See ExpressionLexer.ts's OP_MAP entry for why this was
   // previously dormant/unproduced despite being anticipated by name here
   // and in TokenNormalizer.ts's NON_WORD_NAMES.
   AT: "AT",
   // Generic token for every currency symbol added AFTER the original
   // DOLLAR/POUND/EURO/YEN/RUBLE/WON set (each of which kept its own
-  // specific token type for backward compatibility) — see
+  // specific token type for backward compatibility). See
   // uom/CurrencyAliases.ts's CURRENCY_SYMBOL_ALIASES and
   // ExpressionLexer.ts's dispatch for the full symbol list. One shared
   // type avoids needing a new TokenTypes entry + TokenCategoryMap entry +
@@ -345,7 +345,7 @@ const _tokenTypeIdToName = new Map<number, string>();
 
 /**
  * Register a token type name and get back its integer ID.
- * Idempotent — returns existing ID if already registered.
+ * Idempotent, returns existing ID if already registered.
  * Call once per token type at module initialization time.
  */
 export function registerTokenType(name: string): number {
@@ -359,7 +359,7 @@ export function registerTokenType(name: string): number {
 
 /**
  * Get the integer ID for a token type name.
- * Lazily registers unknown token types on first access — enabling plugin providers
+ * Lazily registers unknown token types on first access, enabling plugin providers
  * to define custom token types (VEC2, VEC3, etc.) without pre-registration.
  * All built-in TokenTypes are pre-registered via registerAllTokenTypes().
  */

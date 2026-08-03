@@ -11,12 +11,12 @@ import { PercentageChangeParselet } from "./parselets/PercentageChangeParselet";
  * Percentage syntax: `50%`, `50% of 200`, `100 to 150` (percentage change),
  * `increase 100 by 10%`/`decrease 100 by 10%` (prefix form), the
  * `100 increase by 10%`/`100 decrease by 10%` infix form (fused from the
- * "increase by"/"decrease by" phrases by the built-in normalizer — see
+ * "increase by"/"decrease by" phrases by the built-in normalizer. See
  * BuiltinNormalizerRules.BUILTIN_PHRASES), and `5% of what is 6` (solve
- * for the base value — see OfWhatIsParselet.ts's doc comment). "of what
+ * for the base value. See OfWhatIsParselet.ts's doc comment). "of what
  * is" is phrase-fused (not a bare "what" keyword) for the same
  * variable-name-collision reason "total"/"average"/etc. are fused
- * elsewhere in this codebase — "what" is common enough to be worth
+ * elsewhere in this codebase, "what" is common enough to be worth
  * protecting as a `:variableName`.
  */
 export const PERCENTAGE_PACKAGE: IEnginePackage = {

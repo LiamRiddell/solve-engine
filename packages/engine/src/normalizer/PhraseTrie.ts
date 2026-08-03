@@ -1,7 +1,7 @@
 //#region ─── Module Overview ───────────────────────────────────────────────────
 
 /**
- * PhraseTrie — optimized word-level trie for multi-word phrase fusion.
+ * PhraseTrie, optimized word-level trie for multi-word phrase fusion.
  *
  * ## Problem
  * The normalizer previously applied N separate `phraseFusionRule` instances,
@@ -15,15 +15,15 @@
  * without priority sorting.
  *
  * ## Optimizations
- * 1. **Set<string> quick-reject** — the `startWords` set contains the first
+ * 1. **Set<string> quick-reject**, the `startWords` set contains the first
  *    word of every registered phrase. At each position, if the token's
  *    lowercase value isn't in the set, we bail in O(1) without touching
  *    the trie. ~80% of tokens (numbers, operators) hit this fast path.
- * 2. **Longest-match-wins** — the `matchAt()` walk continues past terminal
+ * 2. **Longest-match-wins**, the `matchAt()` walk continues past terminal
  *    nodes, tracking the deepest one. Shorter overlapping phrases (e.g.,
- *    "power of") don't need lower priority — the trie naturally prefers
+ *    "power of") don't need lower priority, the trie naturally prefers
  *    the longer match.
- * 3. **Map-based children** — `Map<string, TrieNode>` gives O(1) amortized
+ * 3. **Map-based children**, `Map<string, TrieNode>` gives O(1) amortized
  *    child lookup per word, faster than array scanning for sparse branches.
  *
  * ## Package integration
@@ -55,7 +55,7 @@ interface TrieNode {
 	children: Map<string, TrieNode>;
 	/**
 	 * If this node completes a phrase, the terminal metadata.
-	 * A node can be both terminal AND have children — this handles
+	 * A node can be both terminal AND have children. This handles
 	 * overlapping phrases like "power of" and "to the power of".
 	 */
 	terminal: TrieTerminal | null;
@@ -191,7 +191,7 @@ export class PhraseTrie {
 			depth++;
 
 			if (node.terminal) {
-				// Deferred fused-token creation — only on deepest match found
+				// Deferred fused-token creation, only on deepest match found
 				const sourceTokens = tokens.slice(pos, pos + depth);
 				best = {
 					consumed: depth,

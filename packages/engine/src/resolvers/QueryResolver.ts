@@ -9,14 +9,14 @@ import { createTimeoutSignal } from "@solve-js/utilities/TimeoutSignal";
 
 /**
  * Generic async resolver for the common "single query string in, single
- * `Value` out" shape — one `CALL_PLUGIN` opcode with exactly one preceding
+ * `Value` out" shape, one `CALL_PLUGIN` opcode with exactly one preceding
  * `PUSH_STRING` argument, resolved via a live fetch and cached through
  * TanStack Query. {@link IAsyncResolver}'s own JSDoc names this exact
  * target ("currency rates, weather, stock prices, etc."); this factory is
  * the generalization of the pattern two existing implementations already
- * prove out by hand — `uom/CurrencyResolver.ts` (a currency-specific
+ * prove out by hand, `uom/CurrencyResolver.ts` (a currency-specific
  * dual-operand variant) and `examples/osrs/OsrsAsyncResolver.ts`
- * (`examples/osrs/OsrsVmHandler.ts` for the synchronous read-back half) —
+ * (`examples/osrs/OsrsVmHandler.ts` for the synchronous read-back half)
  * so a new query-based package (weather, stocks, a knowledge lookup) only
  * needs to supply the fetch call and the response-to-`Value` mapping,
  * not reimplement bytecode scanning, cache-key management, or
@@ -26,14 +26,14 @@ import { createTimeoutSignal } from "@solve-js/utilities/TimeoutSignal";
  * returned `resolver` via `IEnginePackage.asyncResolvers`, and register the
  * returned `pluginFunction` at `pluginFunctionIndex` via
  * `IEnginePackage.pluginFunctions` (the same `CALL_PLUGIN` dispatch every
- * other package function uses — see `allocatePluginFunctionIndex()` in
+ * other package function uses. See `allocatePluginFunctionIndex()` in
  * `vm/VMBuiltins.ts`).
  */
 export interface QueryResolverOptions {
 	/** Unique namespace for cache-key scoping and diagnostics (e.g. "weather"). */
 	namespace: string;
 	/**
-	 * The `CALL_PLUGIN` index this resolver watches for — must be the same
+	 * The `CALL_PLUGIN` index this resolver watches for, must be the same
 	 * index the package's parselet emits and registers `pluginFunction`
 	 * under (via `allocatePluginFunctionIndex()`).
 	 */
@@ -41,12 +41,12 @@ export interface QueryResolverOptions {
 	/**
 	 * Perform the live fetch for `query` and return the resolved `Value`.
 	 * Receives an `AbortSignal` that fires on caller cancellation OR the
-	 * `timeoutMs` deadline, whichever comes first — pass it to `fetch()`.
+	 * `timeoutMs` deadline, whichever comes first, pass it to `fetch()`.
 	 */
 	fetchQuery: (query: string, signal: AbortSignal) => Promise<Value>;
-	/** TanStack Query staleTime in ms — how long a resolved value stays cached before a re-evaluation refetches it. Default 5 minutes. */
+	/** TanStack Query staleTime in ms, how long a resolved value stays cached before a re-evaluation refetches it. Default 5 minutes. */
 	staleTimeMs?: number;
-	/** Hard timeout for `fetchQuery` — an unresponsive API must not block re-evaluation indefinitely. Default 10s. */
+	/** Hard timeout for `fetchQuery`, an unresponsive API must not block re-evaluation indefinitely. Default 10s. */
 	timeoutMs?: number;
 	/**
 	 * How long a FAILED fetch's error result stays cached before the next
@@ -58,7 +58,7 @@ export interface QueryResolverOptions {
 	/**
 	 * Build the `Value` a failed fetch resolves to. Defaults to an honest
 	 * `errorValue()` (matching `UOM_CONVERT_TO`'s `CURRENCY_RATE_UNAVAILABLE`
-	 * pattern in `vm/VM.ts` — never silently substitute a stale/wrong value
+	 * pattern in `vm/VM.ts`, never silently substitute a stale/wrong value
 	 * for a real failure). Override for a package that prefers a graceful
 	 * fallback value instead (e.g. OSRS's `0 gp` with a `timedOut` flag).
 	 */
@@ -95,7 +95,7 @@ export function createQueryResolver(opts: QueryResolverOptions): QueryResolverPa
 		} catch (error) {
 			const failedValue = onError(query, error);
 			// Bound the failure's lifetime in the cache separately from
-			// staleTimeMs (which is tuned for successful results) — without
+			// staleTimeMs (which is tuned for successful results), without
 			// this, a transient failure would either be retried on every
 			// keystroke or persist as "the answer" for the full staleTime.
 			setTimeout(() => {
@@ -183,7 +183,7 @@ export function createQueryResolver(opts: QueryResolverOptions): QueryResolverPa
 		const cached = getActiveQueryClient()?.getQueryData(queryKeyFor(query));
 		if (cached !== undefined) return cached as Value;
 		// preflight() guarantees this is cached before the VM ever runs the
-		// CALL_PLUGIN that reaches here — this is an honest "shouldn't
+		// CALL_PLUGIN that reaches here. This is an honest "shouldn't
 		// happen" fallback, not a real code path.
 		return errorValue(`${opts.namespace.toUpperCase()}_NOT_PREFLIGHTED`, `No cached result for "${query}"`);
 	};

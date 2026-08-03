@@ -17,10 +17,10 @@ interface DateSuffix {
 /**
  * Optional `on <date>` / `close on <date>` / `volume on <date>` suffix,
  * shared by both the `stock(TICKER)` function-call form and the bare-
- * ticker stretch-goal form — see StocksPackage.ts's module doc for why
+ * ticker stretch-goal form. See StocksPackage.ts's module doc for why
  * only the FIRST is always reachable.
  *
- * Returns `null` (consuming nothing) if no suffix is present at all —
+ * Returns `null` (consuming nothing) if no suffix is present at all
  * `stock(AAPL)` alone is a complete, valid expression. Once "close",
  * "volume", or "on" IS seen, the rest of the suffix is required; a
  * malformed continuation is a parse error, not a silent fallback to the
@@ -64,7 +64,7 @@ function tryParseDateSuffix(parser: Parser): DateSuffix | null {
 /**
  * Emit either the current-price query (`CALL_PLUGIN currentFnIdx`, query =
  * just the ticker) or the historical query (`CALL_PLUGIN historicalFnIdx`,
- * query = `"<field>:<ticker>:<isoDate>"`) — see StocksPackage.ts for why
+ * query = `"<field>:<ticker>:<isoDate>"`). See StocksPackage.ts for why
  * these are two separate `createQueryResolver` instances (different
  * staleTimes: live quotes vs. immutable historical closes).
  */
@@ -92,14 +92,14 @@ function emitStockQuery(
 /**
  * Finish compiling a stock expression once the ticker itself has been
  * resolved (from either `stock(TICKER)` or a fused bare `STOCK_TICKER`
- * token) — checks for the `on <date>` / `close on <date>` / `volume on
+ * token), checks for the `on <date>` / `close on <date>` / `volume on
  * <date>` suffix and emits the right query, sharing this tail between
  * both parselets below.
  *
  * **The phantom-STAR problem**: `normalizer/BuiltinNormalizerRules.ts`'s
  * generic `implicitMultiplyRule` inserts a `STAR` between any `RPAREN`
  * (or, for the bare-ticker form, any word-shaped token) and a following
- * bare word — it has no way to know "on"/"close"/"volume" are reserved by
+ * bare word, it has no way to know "on"/"close"/"volume" are reserved by
  * THIS package's grammar rather than an implicit multiplicand (the same
  * ambiguity its own `canStart`-phrase guard exists for, just not
  * reachable from here without registering "on"/"close"/"volume" as
@@ -108,7 +108,7 @@ function emitStockQuery(
  * elsewhere). So: peek for a STAR first. If one is NOT immediately
  * followed by our suffix, it's a real multiplication (either the
  * implicit-multiply artifact against some OTHER right-hand expression, or
- * the user genuinely typed `stock(AAPL) * 2`) — since the STAR has
+ * the user genuinely typed `stock(AAPL) * 2`), since the STAR has
  * already been consumed here, the outer Pratt loop can no longer dispatch
  * it as an infix operator, so this finishes compiling the multiplication
  * itself rather than silently dropping the operator.
@@ -129,7 +129,7 @@ function finishStockExpression(
 	const suffix = tryParseDateSuffix(parser);
 
 	if (sawStar && !suffix) {
-		// Real multiplication, not our suffix — finish it here since the
+		// Real multiplication, not our suffix, finish it here since the
 		// STAR is already consumed and can't go back to the outer loop.
 		emitStockQuery(builder, ticker, null, currentFnIdx, historicalFnIdx);
 		parser.parseExpression(BindingPower.Product, builder);
@@ -141,14 +141,14 @@ function finishStockExpression(
 }
 
 /**
- * `stock(TICKER)` / `stock("TICKER")` — the PRIMARY, always-reachable
+ * `stock(TICKER)` / `stock("TICKER")`, the PRIMARY, always-reachable
  * stocks syntax (see StocksPackage.ts's module doc: bare tickers are
  * ambiguous with variable names, so this function-call form is the one
  * form that works regardless of `enableBareTickerRecognition`). Triggered
  * on the `STOCK_FN` keyword token (see StocksPackage.ts's `lexerVocabulary`).
  *
  * Accepts either a quoted ticker (`stock("AAPL")`) or a bare identifier
- * inside the parens (`stock(AAPL)`) — unambiguous either way, since the
+ * inside the parens (`stock(AAPL)`), unambiguous either way, since the
  * parens make this unmistakably a function call, not a variable read
  * (mirrors `examples/osrs/OsrsParselet.ts`'s `ge("Iron Axe")` /
  * `osrs.ge(Iron Axe)` dual acceptance for the same reason).
@@ -178,10 +178,10 @@ export function stockFnParselet(currentFnIdx: number, historicalFnIdx: number): 
 }
 
 /**
- * Bare-ticker stretch-goal form (`AAPL` alone, no `stock(...)` wrapper) —
+ * Bare-ticker stretch-goal form (`AAPL` alone, no `stock(...)` wrapper)
  * only reachable when `StocksPackageConfig.enableBareTickerRecognition`
  * is true, which registers `StockTickerNormalizerRule` to fuse a KNOWN
- * ticker (from the bundled `MAJOR_TICKERS` allow-list — never a blanket
+ * ticker (from the bundled `MAJOR_TICKERS` allow-list, never a blanket
  * "any uppercase word" rule) into a `STOCK_TICKER` token; this parselet
  * handles that fused token.
  */

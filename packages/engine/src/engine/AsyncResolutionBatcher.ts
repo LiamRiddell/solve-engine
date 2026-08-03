@@ -80,7 +80,7 @@ interface BatchEntry {
 export class AsyncResolutionBatcher {
 	private pending: BatchEntry[] = [];
 	private scheduled = false;
-	/** Set to true by clearPending() — flush() checks this to abort stale work. */
+	/** Set to true by clearPending(), flush() checks this to abort stale work. */
 	private cleared = false;
 
 	private dag: DependencyGraph;
@@ -194,7 +194,7 @@ export class AsyncResolutionBatcher {
 	/**
 	 * Create a fresh internal event stream and wire its controller.
 	 * Called from the constructor and again from clearAll() so the batcher
-	 * keeps emitting events after an engine clear — the engine instance
+	 * keeps emitting events after an engine clear, the engine instance
 	 * (and this batcher) live on across clear() calls.
 	 */
 	private createEventStream(): ReadableStream<AsyncResolutionEvent> {
@@ -236,11 +236,11 @@ export class AsyncResolutionBatcher {
 			// Hard backstop, deliberately redundant with reExecuteMainThread()'s
 			// own per-line try/catch: this runs inside a bare queueMicrotask
 			// callback, which has no caller able to catch anything that escapes
-			// it — an uncaught throw here becomes an uncaughtException that can
+			// it, an uncaught throw here becomes an uncaughtException that can
 			// crash the host process. flush() is expected to never throw past
 			// its own internal per-line containment, but "expected to never" is
 			// exactly the assumption that was silently wrong before this pass
-			// (see reExecuteMainThread()'s doc comment) — this exists so a
+			// (see reExecuteMainThread()'s doc comment). This exists so a
 			// FUTURE regression in flush()'s own control flow (topologicalSort(),
 			// the DAG walk, an error-listener notification) degrades to a
 			// logged, contained failure instead of a repeat of that bug.
@@ -302,7 +302,7 @@ export class AsyncResolutionBatcher {
 		this.scheduled = false;
 		this.cleared = true;
 
-		// Clear test capture to match stream-close semantics — after
+		// Clear test capture to match stream-close semantics, after
 		// clearAll(), no further events reach old subscribers.
 		this._testCaptures = null;
 		this.onLineResult = null;
@@ -343,14 +343,14 @@ export class AsyncResolutionBatcher {
 		const batch = this.pending;
 		this.pending = [];
 
-		// Deduplicate by (packageId, queryKey) — keep last entry per key.
+		// Deduplicate by (packageId, queryKey), keep last entry per key.
 		const deduped = new Map<string, BatchEntry>();
 		for (const entry of batch) {
 			const compositeKey = `${entry.packageId}:${entry.queryKey}`;
 			deduped.set(compositeKey, entry);
 		}
 
-		// Step 1: Separate errors from successes — but re-evaluate for BOTH.
+		// Step 1: Separate errors from successes, but re-evaluate for BOTH.
 		// Error entries must also trigger DAG re-evaluation so downstream
 		// lines can pick up the Error Value from AsyncResultCache.
 		const errorEntries: BatchEntry[] = [];
@@ -374,7 +374,7 @@ export class AsyncResolutionBatcher {
 			});
 		}
 
-		// Step 2: Single DAG walk — collect ALL affected lines from ALL resolved
+		// Step 2: Single DAG walk, collect ALL affected lines from ALL resolved
 		// queryKeys (both success AND error). Errors also need re-evaluation so
 		// downstream lines can receive errorValue() results.
 		const allAffected = new Set<number>();
@@ -395,7 +395,7 @@ export class AsyncResolutionBatcher {
 		}
 
 		if (allAffected.size === 0) {
-			// No lines affected — still notify listeners so UI can update
+			// No lines affected, still notify listeners so UI can update
 			// (e.g., clear loading indicators).
 			this.notifyListeners({
 				type: "lines-updated",
@@ -422,7 +422,7 @@ export class AsyncResolutionBatcher {
 				entryMap.set(lineNumber, this.lineCache.getEntryForLine(lineNumber));
 			}
 			// .catch() is required, not optional: reExecuteViaWorkerPool() is an
-			// async method dispatched with `void` (fire-and-forget) — without a
+			// async method dispatched with `void` (fire-and-forget), without a
 			// handler here, a rejection (a worker crash, `executionPool.executeBatch`
 			// throwing) becomes an unhandled promise rejection, the async
 			// equivalent of the uncaught-exception risk `add()`'s queueMicrotask
@@ -525,10 +525,10 @@ export class AsyncResolutionBatcher {
 	 * patches results back into LineCache before notifying listeners.
 	 *
 	 * Handles pending results: lines that return { type: 'pending' } from the
-	 * worker are NOT marked as updated — the engine's resolveAsync will handle
+	 * worker are NOT marked as updated, the engine's resolveAsync will handle
 	 * them when the async resolver completes.
 	 *
-	 * Safety: checks this.cleared before applying results — if the engine was
+	 * Safety: checks this.cleared before applying results, if the engine was
 	 * cleared while the worker batch was in-flight, results are discarded.
 	 */
 	private async reExecuteViaWorkerPool(
@@ -557,7 +557,7 @@ export class AsyncResolutionBatcher {
 		const workerResults = await results;
 
 		// Guard: if engine was cleared while the worker batch was in-flight,
-		// discard results — the LineCache/DAG are stale.
+		// discard results, the LineCache/DAG are stale.
 		if (this.cleared) return;
 
 		// Patch results back into LineCache.
@@ -567,7 +567,7 @@ export class AsyncResolutionBatcher {
 			if (!entry) continue;
 
 			if (wr.isPending) {
-				// Don't mark as updated — will be resolved in a future batch.
+				// Don't mark as updated, will be resolved in a future batch.
 				continue;
 			}
 
@@ -602,23 +602,23 @@ export class AsyncResolutionBatcher {
 	 * **Per-line containment (fatal-bug fix)**: `executeBytecode()` used to
 	 * run here with NO try/catch anywhere in this method's call chain, and
 	 * this whole batch runs inside a bare `queueMicrotask` (see `add()`) with
-	 * no surrounding try/catch at any caller either — so if any ONE line's
+	 * no surrounding try/catch at any caller either, so if any ONE line's
 	 * cached bytecode threw (a stack/instruction-limit error, an undefined
 	 * variable, a corrupted-bytecode `TypeError`), the `for` loop aborted
 	 * immediately: every line scheduled AFTER the failure in this batch was
 	 * silently never re-executed or notified even though nothing was wrong
 	 * with them, every line BEFORE it had already had its `entry.result`
 	 * mutated in-place but `notifyListeners()` was never reached (a silent
-	 * `LineCache`/host desync), and — because a bare `queueMicrotask`
-	 * callback has no caller to catch it — the exception was uncatchable:
+	 * `LineCache`/host desync), and, because a bare `queueMicrotask`
+	 * callback has no caller to catch it, the exception was uncatchable:
 	 * an `uncaughtException` that could crash the host process outright.
 	 * (`__tests__/async/AsyncResolutionBatcher.spec.ts`'s topological-sort
 	 * describe block used to have a test skipped specifically because of
-	 * this — see that file, now un-skipped and rewritten.) Each line's
+	 * this. See that file, now un-skipped and rewritten.) Each line's
 	 * execution is now its own try/catch: a failure is recorded as an
 	 * `Error` `Value` for THAT line (still counted as "updated" so the host
 	 * learns about it and stops showing a stale Pending state) and the loop
-	 * continues — one line's failure can no longer take out its neighbors.
+	 * continues, one line's failure can no longer take out its neighbors.
 	 */
 	private reExecuteMainThread(
 		ordered: number[],
@@ -653,13 +653,13 @@ export class AsyncResolutionBatcher {
 				} else if (result.type === "error") {
 					// executeBytecode() reports controlled failures (undefined
 					// variable, stack/instruction limits, a plugin throw) as this
-					// {type:'error'} return value now, not a thrown exception — the
+					// {type:'error'} return value now, not a thrown exception, the
 					// catch block below only remains as a backstop for whatever
 					// still throws outside that contract (e.g. a bug in the
 					// stack-cleanup loop itself). Without this branch, a VM-level
 					// error here fell through both the "value" and "pending" cases
 					// silently: no entry.result update, no onLineResult, not counted
-					// in updatedLineNumbers — the same class of silent-drop bug this
+					// in updatedLineNumbers, the same class of silent-drop bug this
 					// method's containment fix exists to prevent, just moved one
 					// level up from "uncaught exception" to "unhandled Result arm".
 					const value = errorValue(result.error.code, result.error.message);
@@ -669,10 +669,10 @@ export class AsyncResolutionBatcher {
 				this.onLineResult?.(lineNumber, value);
 					updatedLineNumbers.push(lineNumber);
 				}
-				// If still pending, don't mark as updated — will be handled by the
+				// If still pending, don't mark as updated, will be handled by the
 				// next resolution batch.
 			} catch (e) {
-				// Restore the stack to its pre-execution depth even on failure —
+				// Restore the stack to its pre-execution depth even on failure
 				// a partially-executed opcode sequence may have pushed values it
 				// never got to pop, and leaving them would corrupt every
 				// subsequent line's execution in this same shared VM.
@@ -708,7 +708,7 @@ export class AsyncResolutionBatcher {
 	 * the enqueue silently fails (caught by try/catch).
 	 */
 	private notifyListeners(event: AsyncResolutionEvent): void {
-		// Test capture — synchronous, no timing issues (enabled only in tests).
+		// Test capture, synchronous, no timing issues (enabled only in tests).
 		if (this._testCaptures) {
 			this._testCaptures.push(event);
 		}
@@ -717,7 +717,7 @@ export class AsyncResolutionBatcher {
 			try {
 				this._streamController.enqueue(event);
 			} catch {
-				// Stream closed or errored — consumer may have cancelled.
+				// Stream closed or errored, consumer may have cancelled.
 			}
 		}
 	}

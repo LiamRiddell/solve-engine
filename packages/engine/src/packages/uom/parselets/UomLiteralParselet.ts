@@ -11,7 +11,7 @@ import { resolveCurrencyAlias } from "@solve-js/uom/CurrencyAliases";
  * Resolve `rawUnit` to its canonical ISO 4217 code if it's a recognized
  * currency WORD alias (e.g. "euros" -> "EUR"); otherwise return it
  * unchanged. Every other unit (km, grams, workdays, ...) passes straight
- * through untouched — this only ever fires for the specific word list in
+ * through untouched. This only ever fires for the specific word list in
  * `uom/CurrencyAliases.ts`'s `CURRENCY_WORD_ALIASES`.
  */
 function resolveUnitAlias(rawUnit: string): string {
@@ -40,8 +40,8 @@ export class UomLiteralParselet implements InfixParselet {
         builder.emitOpcode(OpCode.UOM_CONVERT_TO);
         return;
       }
-      // "sourceUnit to ?" — conversion-possibilities query (wiki:
-      // Units-Of-Measurement — "Explore what units a particular unit can
+      // "sourceUnit to ?", conversion-possibilities query (wiki:
+      // Units-Of-Measurement, "Explore what units a particular unit can
       // be converted into"). The source unit name is already on the
       // stack from the PUSH_STRING above.
       if (targetToken?.type === "QUESTION") {

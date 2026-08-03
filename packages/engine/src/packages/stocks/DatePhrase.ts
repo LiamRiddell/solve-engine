@@ -7,8 +7,8 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
  *
  * This does NOT reuse the engine's general-purpose `DATETIME_LITERAL`
  * work (date-only numeric literals in DD/MM/YYYY, MM-DD-YYYY, YYYY-MM-DD,
- * DD.MM.YYYY — `packages/datetime/normalizer/DateLiteralNormalizerRule.ts`,
- * ported from the former `feat/safety-limits-datetime-literals` branch) —
+ * DD.MM.YYYY, `packages/datetime/normalizer/DateLiteralNormalizerRule.ts`
+ * ported from the former `feat/safety-limits-datetime-literals` branch)
  * this is a smaller, independent grammar scoped to exactly what a
  * stock-history query needs: month-name dates (the task's own worked
  * example, "April 12, 2005") plus SLASH/MINUS-separated numeric dates. Two
@@ -16,20 +16,20 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
  * narrowing scope rather than risking a subtle bug:
  *
  * - **4-digit years only.** No 2-digit-year pivot logic (the general rule's
- *   `strptime("%y")`-style 00-68/69-99 split) — a stock historical lookup
+ *   `strptime("%y")`-style 00-68/69-99 split), a stock historical lookup
  *   realistically always names a 4-digit year, and skipping the pivot
  *   removes a whole class of ambiguity to test.
  * - **SLASH is MM/DD/YYYY (US), not DD/MM/YYYY (European).** The
  *   general-purpose rule picked European for the engine's date
  *   literal; this package is scoped to US-listed tickers (NASDAQ/NYSE), so
  *   US-style slash dates match user expectation better here. Documented
- *   explicitly because it's the OPPOSITE convention from the other rule —
+ *   explicitly because it's the OPPOSITE convention from the other rule
  *   do not assume they agree if this is ever unified with that work.
  *
  * MINUS follows the same "4-digit first group -> ISO, else US" rule the
  * general-purpose rule uses, and every candidate is validated by
  * constructing a real `Date` and checking the components didn't roll over
- * (e.g. a claimed "Feb 30") — same lesson as that rule's own doc comment:
+ * (e.g. a claimed "Feb 30"). Same lesson as that rule's own doc comment:
  * this is what makes the parse safe against malformed input, not a
  * decoration.
  */
@@ -86,7 +86,7 @@ function requireYear(text: string, raw: string): number {
  * Attempt to consume a date phrase from the parser at the current
  * position. Returns `null` (consuming NOTHING) if the next token doesn't
  * look like the start of any supported date shape, so callers can decide
- * how to react (this helper is speculative only up to that first check —
+ * how to react (this helper is speculative only up to that first check
  * once it commits past the first token, a malformed continuation is a
  * hard parse error, not a silent `null`, matching
  * `time/parselets/shared/ZoneReference.ts`'s same "commit once confident"
@@ -97,11 +97,11 @@ export function tryParseDatePhrase(parser: Parser): ParsedDatePhrase | null {
 	if (!first) return null;
 
 	// ── Numeric SLASH/MINUS form: NUMBER SEP NUMBER SEP NUMBER ──
-	// or "12 April 2005" (NUMBER IDENT [COMMA] NUMBER) — both start with a
+	// or "12 April 2005" (NUMBER IDENT [COMMA] NUMBER), both start with a
 	// NUMBER, disambiguated below by what follows it. Consume-then-check is
 	// safe here (rather than needing 2-token lookahead, which `Parser`
 	// doesn't expose): every branch below either completes a valid date or
-	// throws — there's no alternative parse to back out to once a NUMBER is
+	// throws, there's no alternative parse to back out to once a NUMBER is
 	// found in this position.
 	if (first.type === "NUMBER") {
 		const g1 = parser.consume();
@@ -115,7 +115,7 @@ export function tryParseDatePhrase(parser: Parser): ParsedDatePhrase | null {
 			const raw = `${g1.value}${sepType === "SLASH" ? "/" : "-"}${g2.value}${sepType === "SLASH" ? "/" : "-"}${g3.value}`;
 
 			if (sepType === "SLASH") {
-				// US convention: MM/DD/YYYY — see module doc.
+				// US convention: MM/DD/YYYY. See module doc.
 				const month = parseInt(g1.value, 10);
 				const day = parseInt(g2.value, 10);
 				const year = requireYear(g3.value, raw);
@@ -135,7 +135,7 @@ export function tryParseDatePhrase(parser: Parser): ParsedDatePhrase | null {
 			}
 		}
 
-		// ── "12 April 2005" — NUMBER IDENT [COMMA] NUMBER ──
+		// ── "12 April 2005", NUMBER IDENT [COMMA] NUMBER ──
 		const monthTok = parser.peek();
 		if (monthTok && monthTok.type === "IDENT" && MONTH_NAMES[monthTok.value.toLowerCase()] !== undefined) {
 			const monthIndex = MONTH_NAMES[monthTok.value.toLowerCase()];
@@ -153,7 +153,7 @@ export function tryParseDatePhrase(parser: Parser): ParsedDatePhrase | null {
 		);
 	}
 
-	// ── "April 12, 2005" / "April 12 2005" — IDENT NUMBER [COMMA] NUMBER ──
+	// ── "April 12, 2005" / "April 12 2005", IDENT NUMBER [COMMA] NUMBER ──
 	if (first.type === "IDENT" && MONTH_NAMES[first.value.toLowerCase()] !== undefined) {
 		const monthIndex = MONTH_NAMES[first.value.toLowerCase()];
 		parser.consume(); // month name

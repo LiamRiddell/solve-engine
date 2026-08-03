@@ -8,7 +8,7 @@ export const STOCK_TICKER_TYPE = "STOCK_TICKER";
 export const STOCK_TICKER_TYPE_ID = tokenTypeId(STOCK_TICKER_TYPE);
 
 /**
- * Bare-ticker recognition (stretch goal) — fuses an IDENT token into a
+ * Bare-ticker recognition (stretch goal), fuses an IDENT token into a
  * `STOCK_TICKER` token ONLY when its raw text is an EXACT (case-sensitive)
  * match against the small bundled `MAJOR_TICKERS` allow-list, mirroring
  * `time/timezones/CityZones.ts`'s "known table, not a blanket character-
@@ -16,19 +16,19 @@ export const STOCK_TICKER_TYPE_ID = tokenTypeId(STOCK_TICKER_TYPE);
  * that's also a plausible variable name).
  *
  * Only registered when `StocksPackageConfig.enableBareTickerRecognition`
- * is true — see StocksPackage.ts. Two safeguards beyond the allow-list
+ * is true. See StocksPackage.ts. Two safeguards beyond the allow-list
  * itself:
  *
- * - **Case-sensitive.** "AAPL" fuses; "aapl"/"Aapl" do not — lowercase or
+ * - **Case-sensitive.** "AAPL" fuses; "aapl"/"Aapl" do not, lowercase or
  *   mixed-case spellings stay ordinary identifiers/variable reads.
  * - **Colon-prefix guard.** `:AAPL = 5` is left alone (not fused) so a
  *   host that also uses a ticker-shaped word as a variable name can still
- *   declare it — same reasoning as `VariableParselet.ts`'s keyword-shaped-
+ *   declare it. Same reasoning as `VariableParselet.ts`'s keyword-shaped-
  *   name policy, applied here even though tickers aren't lexer keywords.
  *
  * This does NOT eliminate the ambiguity (a bare, no-colon `AAPL` read as a
  * previously-declared variable is genuinely indistinguishable from a
- * ticker query without deeper context) — it narrows the blast radius from
+ * ticker query without deeper context), it narrows the blast radius from
  * "every uppercase word" to "~50 specific, well-known symbols," which is
  * the documented trade-off `enableBareTickerRecognition` asks a host to
  * accept explicitly, opt-in on top of an already-opt-in package.

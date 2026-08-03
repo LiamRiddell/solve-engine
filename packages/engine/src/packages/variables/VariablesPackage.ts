@@ -8,7 +8,7 @@ import { GlobalVariableAsyncResolver } from "@solve-js/vm/GlobalVariableAsyncRes
 export const VARIABLES_PACKAGE: IEnginePackage = {
   name: "solve-variables",
   // Resolves `global :name` reads that aren't yet known to any currently-
-  // loaded document — shows Pending and re-resolves automatically the
+  // loaded document, shows Pending and re-resolves automatically the
   // instant some document declares it, via the same async pipeline
   // the currency package uses for currency rates.
   asyncResolvers: [new GlobalVariableAsyncResolver()],
@@ -20,7 +20,7 @@ export const VARIABLES_PACKAGE: IEnginePackage = {
     // This handles cases like `a + b` where "b" is classified as UNIT
     // because it collides with a known unit (e.g., "b" = bits).
     { tokenType: "UNIT", parselet: new IdentifierParselet() },
-    // `global :name` (read) / `global :name = expr` (write) — a document-
+    // `global :name` (read) / `global :name = expr` (write), a document-
     // spanning variable backed by GlobalVariableStore instead of this VM's
     // own local scope.
     { tokenType: "GLOBAL", parselet: new GlobalVariableParselet() },

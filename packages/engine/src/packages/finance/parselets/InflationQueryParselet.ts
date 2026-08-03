@@ -7,12 +7,12 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { INFLATION_FROM_YEAR_TO_PRESENT_IDX, INFLATION_TO_YEAR_FROM_PRESENT_IDX } from "./InflationPluginFunctions";
 
-// CALL_BUILTIN index — see VMBuiltins.ts for the inflationAdjust(amount,
+// CALL_BUILTIN index. See VMBuiltins.ts for the inflationAdjust(amount
 // fromYear, toYear) handler. Also reachable via the function-call form
 // inflationAdjust(...) (FunctionCallParselet's builtinNameToIndex map).
 const INFLATION_ADJUST_BUILTIN_IDX = 60;
 
-/** Which leading phrase triggered this parselet — see FinancePackage.ts's `phrases` field. */
+/** Which leading phrase triggered this parselet. See FinancePackage.ts's `phrases` field. */
 type InflationQueryVariant = "what-is" | "what-was";
 
 /**
@@ -22,13 +22,13 @@ type InflationQueryVariant = "what-is" | "what-was";
  * in <year>` -> X (given as present-day dollars) expressed in that year's
  * dollars.
  *
- * Fused on WHAT_IS/WHAT_WAS (see FinancePackage.ts's `phrases` field) —
+ * Fused on WHAT_IS/WHAT_WAS (see FinancePackage.ts's `phrases` field)
  * "is"/"was"/"what" are ordinary English words, not fused as bare
  * keywords, so a `:what = 5` style variable name is unaffected; only the
  * exact two-word phrases are claimed.
  *
  * NOT `definePhrasePattern`-based: the amount comes right after the fused
- * trigger, before any keyword to peek at — same structural reason
+ * trigger, before any keyword to peek at. Same structural reason
  * `ClampParselet`/`CompoundInterestParselet` are hand-written.
  *
  * BINDING-POWER GUARD (why the amount parses at `BindingPower.Product`,
@@ -36,14 +36,14 @@ type InflationQueryVariant = "what-is" | "what-was";
  * a bare `IN` token directly after the amount. The currency package's
  * `InParselet` is a generic infix parselet registered on `IN`
  * (bindingPower 35) that fires unconditionally as soon as it's the next
- * lookahead token inside ANY sub-expression parse — including one this
- * parselet kicks off for the amount — even when the token after `IN`
+ * lookahead token inside ANY sub-expression parse, including one this
+ * parselet kicks off for the amount, even when the token after `IN`
  * isn't a valid conversion target, it still consumes `IN` and silently
  * no-ops, stranding the rest of the grammar. Parsing the amount at
  * `BindingPower.Product` (40) makes the Pratt loop's `bp <= minBp` check
  * block `IN` (35 <= 40) from ever being consumed there, leaving it for
  * this parselet to consume explicitly. Trade-off: the amount can't
- * contain a top-level Sum-tier `+`/`-` in this form — parenthesize if
+ * contain a top-level Sum-tier `+`/`-` in this form, parenthesize if
  * needed, e.g. "what is ($300 + $50) from 2003". The "what was ... worth
  * in" branch has no such collision (the next token is the fused
  * WORTH_IN, which has no infix parselet registered at all), but uses the

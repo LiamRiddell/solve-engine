@@ -31,7 +31,7 @@ export const enLocale: ILocale = {
     log: "FUNC", ceil: "FUNC", floor: "FUNC", round: "FUNC", min: "FUNC", max: "FUNC",
     asin: "FUNC", acos: "FUNC", atan: "FUNC", atan2: "FUNC",
     // Long-form aliases for asin/acos/atan (Numi/older-calculator naming
-    // convention) — same FunctionCallParselet indices, not new behavior.
+    // convention). Same FunctionCallParselet indices, not new behavior.
     arcsin: "FUNC", arccos: "FUNC", arctan: "FUNC",
     sinh: "FUNC", cosh: "FUNC", tanh: "FUNC",
     asinh: "FUNC", acosh: "FUNC", atanh: "FUNC",
@@ -46,7 +46,7 @@ export const enLocale: ILocale = {
     degtorad: "FUNC", radtodeg: "FUNC",
     gcd: "FUNC", lcm: "FUNC", permutation: "FUNC", combination: "FUNC",
     // hex/bin double as CONVERTER_NAME below ("255 as hex") AND as FUNC
-    // call-syntax ("hex(255)") — a word can only have one lexer token
+    // call-syntax ("hex(255)"), a word can only have one lexer token
     // type, so these win FUNC (removed from the CONVERTER_NAME list
     // below) and AsConverterParselet.ts's "as <name>" check was widened
     // to also accept a FUNC-typed token, preserving "as hex"/"as bin"
@@ -54,7 +54,7 @@ export const enLocale: ILocale = {
     // reasoning.
     hex: "FUNC", bin: "FUNC", int: "FUNC",
     // Finance (packages/finance/) function-call forms. Bare keywords, not
-    // phrase-fused — these are camelCase call-only names (e.g.
+    // phrase-fused, these are camelCase call-only names (e.g.
     // "compoundInterest(...)"), not natural-language words a user would
     // plausibly choose as a variable name, so the bare-keyword collision
     // risk that blocks "interest"/"tax"/"principal" etc. doesn't apply here
@@ -70,7 +70,7 @@ export const enLocale: ILocale = {
     // builtinNameToIndex comment for indices 63-66).
     transpose: "FUNC", det: "FUNC", inv: "FUNC", dot: "FUNC",
     // map/reduce/sum/prod (packages/mapreduce/) are NOT bare keywordMap
-    // entries — see packages/mapreduce/normalizer/MapReduceCallNormalizerRule.ts,
+    // entries. See packages/mapreduce/normalizer/MapReduceCallNormalizerRule.ts
     // which fuses them ONLY when immediately followed by "(" (same
     // "conditional-on-LPAREN" pattern as packages/lines/'s own
     // sum(/total(/average( fusion), so `:map = [...]`/`:sum = 100`/etc.
@@ -83,7 +83,7 @@ export const enLocale: ILocale = {
     between: "BETWEEN", from: "FROM",
     increase: "INCREASE", decrease: "DECREASE",
     // Finance (packages/finance/) phrase-grammar connectors. Bare
-    // prepositions, same accepted-risk category as "between"/"from" above —
+    // prepositions, same accepted-risk category as "between"/"from" above
     // see Token.ts's OVER/RATE_AT doc comment.
     over: "OVER", at: "RATE_AT",
     by: "BY",
@@ -99,7 +99,7 @@ export const enLocale: ILocale = {
     fraction: "CONVERTER_NAME",
     multiplier: "CONVERTER_NAME",
     sci: "CONVERTER_NAME", scientific: "CONVERTER_NAME",
-    // hex/bin are FUNC (see above), not CONVERTER_NAME — "as hex"/"as bin"
+    // hex/bin are FUNC (see above), not CONVERTER_NAME, "as hex"/"as bin"
     // still work via AsConverterParselet.ts's widened token-type check.
     binary: "CONVERTER_NAME",
     octal: "CONVERTER_NAME", oct: "CONVERTER_NAME",

@@ -7,11 +7,11 @@ import { parseIso8601, unixTimestampToEpochMs } from "../Iso8601";
  * `CALL_PLUGIN` handlers backing the datetime package's workdays/weekday/
  * timestamp features (see `DatetimePackage.ts`). Grouped in one file since
  * they're all small, single-purpose Value -> Value functions with no
- * shared state — mirrors `time/parselets/TimezonePluginFunctions.ts`'s
+ * shared state, mirrors `time/parselets/TimezonePluginFunctions.ts`'s
  * organization for the same kind of grouping.
  *
  * Each index is allocated via {@link allocatePluginFunctionIndex} (never
- * hardcoded) — see that function's doc comment for why: two packages
+ * hardcoded). See that function's doc comment for why: two packages
  * independently picking the same arbitrary CALL_BUILTIN-style number would
  * silently collide. The actual numeric values are whatever the allocator
  * hands out at module-load time (order-dependent across the whole engine);
@@ -33,17 +33,17 @@ export const SPAN_BETWEEN_FN_IDX = allocatePluginFunctionIndex();
  * as a plain Number.
  *
  * SCOPE DECISION (documented here and in `WorkdaysInParselet.ts`): no
- * anchor date is specified by this phrase's grammar at all — "workdays in
- * 3 weeks" doesn't say "starting when" — so this is computed via a pure,
+ * anchor date is specified by this phrase's grammar at all, "workdays in
+ * 3 weeks" doesn't say "starting when", so this is computed via a pure
  * deterministic ratio (5 workdays per full 7-day week, plus the remainder
  * capped at 5) rather than walking an actual calendar from "now". That
  * would make the result depend on which day of the week "now" happens to
- * be when evaluated — a non-deterministic, hard-to-test result for the
+ * be when evaluated, a non-deterministic, hard-to-test result for the
  * exact same input expression. This IS anchor-independent and exact for
  * any whole-week span (3 weeks = 21 days = exactly 15 workdays, regardless
  * of start day); for a partial-week remainder it's a reasonable capped
  * approximation, not a real calendar walk. Also does NOT exclude public
- * holidays — see `vm/VM.ts`'s `addBusinessDays()` doc comment for the
+ * holidays. See `vm/VM.ts`'s `addBusinessDays()` doc comment for the
  * same holiday-scoping decision applied consistently across this feature.
  */
 function workdaysInDurationHandler(args: Value[]): Value {
@@ -111,7 +111,7 @@ const MONTH_NAMES = [
  * `what month is it on <date>` / `<date> as month` -> the month name
  * (e.g. "December") as a String value.
  *
- * English-only, exactly like {@link WEEKDAY_NAMES} directly above — the
+ * English-only, exactly like {@link WEEKDAY_NAMES} directly above, the
  * locale-aware path is `format/FormatEngine.ts`, which is what renders a
  * whole Datetime; this returns a bare String field extracted from one, and
  * matching the established weekday behaviour beats having the two
@@ -128,7 +128,7 @@ function monthOnDateHandler(args: Value[]): Value {
  * number (1-53) as a plain Number.
  *
  * ISO weeks start on Monday and week 1 is the one containing the first
- * Thursday of the year — which is why this shifts to the Thursday of the
+ * Thursday of the year, which is why this shifts to the Thursday of the
  * target's week before counting. A naive "day-of-year / 7" would disagree
  * with every calendar app for the first and last days of a year.
  */
@@ -162,7 +162,7 @@ function isWeekendOnDateHandler(args: Value[]): Value {
 /**
  * `<date> is a workday` / `is a weekday` -> Boolean.
  *
- * Mon-Fri only, with NO public-holiday exclusion — the same scope decision
+ * Mon-Fri only, with NO public-holiday exclusion, the same scope decision
  * `vm/VM.ts`'s `addBusinessDays()` and `workdaysInDurationHandler` above
  * already make, kept consistent so "is a workday" can never disagree with
  * the workday arithmetic in the line above it.
@@ -183,7 +183,7 @@ function isWorkdayOnDateHandler(args: Value[]): Value {
  * English, so `days between A and B` must equal `days between B and A`,
  * and there is no ABS opcode to apply after a signed subtraction.
  * Arguments arrive in push order, so `args[0]` is the first endpoint as
- * written — though by construction the result doesn't depend on that.
+ * written, though by construction the result doesn't depend on that.
  */
 function spanBetweenDatesHandler(args: Value[]): Value {
   return uomValue(Math.abs(args[0].toNumber() - args[1].toNumber()), "ms");
@@ -198,7 +198,7 @@ function spanBetweenDatesHandler(args: Value[]): Value {
  * or an arbitrary variable/expression of either type.
  *
  * Real ambiguity resolved here: a bare Number could be a SECONDS or a
- * MILLISECONDS Unix timestamp for the same real-world date — see
+ * MILLISECONDS Unix timestamp for the same real-world date. See
  * `Iso8601.ts`'s `unixTimestampToEpochMs()`/`MS_TIMESTAMP_THRESHOLD` doc
  * comment for the exact magnitude threshold and reasoning.
  */

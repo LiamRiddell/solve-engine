@@ -10,21 +10,21 @@ import { WORKDAYS_IN_FN_IDX } from "./DatetimeTimestampPluginFunctions";
  * Mon-Fri workdays in that span, as a plain Number.
  *
  * Handles the fused `WORKDAYS_IN` token produced by the package's
- * `phrases` field (`"workdays in": "WORKDAYS_IN"`) — fused as the FULL
+ * `phrases` field (`"workdays in": "WORKDAYS_IN"`), fused as the FULL
  * two-word phrase rather than claiming bare "workdays" as its own keyword,
  * since "workdays" is a plausible variable name (same reasoning as
- * MathPhrasesPackage.ts's "average"/"total" note — see that file's doc
+ * MathPhrasesPackage.ts's "average"/"total" note. See that file's doc
  * comment for the full regression story this avoids). The bare word
  * "workdays" itself only ever reaches this grammar as a UNIT token (added
  * to lexer/units.ts, for `N workdays` duration literals and `<date> + N
- * workdays` arithmetic — see vm/VM.ts's ADD/SUB special-casing), which
+ * workdays` arithmetic. See vm/VM.ts's ADD/SUB special-casing), which
  * VariableParselet.ts already accepts for `:name = expr` syntax, so
  * ":workdays = 5" is unaffected either way.
  *
  * SCOPE DECISION (see `DatetimeTimestampPluginFunctions.ts`'s
  * `workdaysInDurationHandler` doc comment for the full reasoning): the
  * count is a deterministic ratio (5 workdays per full week, remainder
- * capped at 5), NOT a real calendar walk anchored to "now" — and does NOT
+ * capped at 5), NOT a real calendar walk anchored to "now", and does NOT
  * exclude public holidays, matching this session's established
  * holiday-scoping decision (see `vm/VM.ts`'s `addBusinessDays()`).
  */

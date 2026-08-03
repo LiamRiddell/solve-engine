@@ -6,11 +6,11 @@ import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
  * token carrying the frame rate as its value.
  *
  * "fps" is matched as a plain `IDENT` token (case-insensitive), the same
- * approach {@link clockTimeNormalizerRule} uses for "am"/"pm" — NOT
+ * approach {@link clockTimeNormalizerRule} uses for "am"/"pm", NOT
  * added to the locale keywordMap or `lexerVocabulary.units`, so it
  * doesn't change lexing for "fps" used elsewhere, and doesn't collide
  * with the shared `UomLiteralParselet` that owns generic `UNIT` tokens
- * (which has no concept of a rate — "30 fps" would otherwise become a
+ * (which has no concept of a rate, "30 fps" would otherwise become a
  * plain `Uom(30, "fps")`, not the `Rate(30, "frames", "s")` this domain
  * actually needs for `30 fps × 3 minutes` -> `5,400 frames`).
  */

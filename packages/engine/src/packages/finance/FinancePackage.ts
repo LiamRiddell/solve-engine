@@ -11,14 +11,14 @@ import {
 } from "./parselets/InflationPluginFunctions";
 import { inYearDollarsNormalizerRule } from "./normalizer/InYearDollarsNormalizerRule";
 
-// CALL_BUILTIN indices — see VMBuiltins.ts for the handler implementations.
+// CALL_BUILTIN indices. See VMBuiltins.ts for the handler implementations.
 const COMPOUND_FV = 51, COMPOUND_INTEREST = 52;
 const LOAN_REPAYMENT = 55, LOAN_INTEREST = 56;
 const TAX_ADD = 58, TAX_REMOVE = 59;
-// 60 = inflationAdjust(amount, fromYear, toYear) — see InflationQueryParselet.ts
+// 60 = inflationAdjust(amount, fromYear, toYear). See InflationQueryParselet.ts
 // and VMBuiltins.ts. The other three inflation calculations (present-year
 // forms + the flat-rate future-value projection) are collision-safe
-// pluginFunctions instead — see InflationPluginFunctions.ts.
+// pluginFunctions instead. See InflationPluginFunctions.ts.
 
 /**
  * Money & finance phrase grammar: compound interest / investment growth,
@@ -35,7 +35,7 @@ const TAX_ADD = 58, TAX_REMOVE = 59;
  * TRIGGER-WORD COLLISION DESIGN NOTE (same regression class documented in
  * MathPhrasesPackage.ts, and explicitly called out for this package
  * up-front): "interest", "tax", "principal", "payment", "rate", "balance",
- * "what", "worth", "value" are all common, plausible variable names — a
+ * "what", "worth", "value" are all common, plausible variable names, a
  * shipped playground example already uses `:tax` (`:total = :subtotal +
  * :tax`, see MathPhrasesPackage.ts's doc comment). None of those words are
  * bare keywords anywhere in this package. Every trigger is either:
@@ -44,7 +44,7 @@ const TAX_ADD = 58, TAX_REMOVE = 59;
  *    in", ...), so the leading word alone never becomes its own token
  *    type and stays usable as `:interest`/`:tax`/`:what`/`:value`/etc., or
  *  - a genuine preposition ("over", "at") with near-zero plausibility as a
- *    variable name — the same accepted-risk category as this codebase's
+ *    variable name, the same accepted-risk category as this codebase's
  *    existing bare "between"/"from"/"next"/"last"/"best" keywords (see
  *    Token.ts's OVER/RATE_AT doc comment).
  *
@@ -53,7 +53,7 @@ const TAX_ADD = 58, TAX_REMOVE = 59;
  * `InYearDollarsParselet.ts` and `data/CpiTable.ts` for the bundled,
  * clearly-labeled-approximate CPI-U table and its doc comment on
  * vintage/accuracy) was the one topic explicitly deferred from this
- * package's original scope — now implemented.
+ * package's original scope, now implemented.
  */
 export const FINANCE_PACKAGE: IEnginePackage = {
   name: "solve-finance",

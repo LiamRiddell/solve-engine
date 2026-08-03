@@ -8,7 +8,7 @@ import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
  * Why fuse instead of a plain prefix parselet on UNIT: a bare `UNIT`
  * token in prefix position (the "cm" in "cm to ?", with no preceding
  * magnitude) is already claimed by VariablesPackage's IdentifierParselet,
- * which treats it as a variable reference — same collision reasoning as
+ * which treats it as a variable reference. Same collision reasoning as
  * datetime's `UntilSinceNormalizerRule`. Fusing at the normalizer stage
  * means prefix dispatch never sees a bare UNIT in this position.
  */

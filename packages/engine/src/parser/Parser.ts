@@ -1,5 +1,5 @@
 /**
- * Parser type — re-exports PrecedenceParser for convenience.
+ * Parser type, re-exports PrecedenceParser for convenience.
  *
  * The legacy Parser class has been removed in favor of the optimized
  * PrecedenceParser (two-tier dispatch: inline switch for built-ins,

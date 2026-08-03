@@ -5,14 +5,14 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
 /**
- * `7:30 to 20:45` / `4pm to 3am` — the duration between two clock times,
+ * `7:30 to 20:45` / `4pm to 3am`, the duration between two clock times
  * rolling over midnight when the end is earlier than the start (`4pm to
  * 3am` -> 11 hours, not a negative duration). Handles the fused
  * `CLOCK_TIME_INTERVAL` token produced by
  * {@link clockTimeIntervalNormalizerRule} (value = `"<startMin>:<endMin>"`).
  *
  * The rollover-aware subtraction happens here at parse time (both
- * endpoints are already known integers baked into the fused token) —
+ * endpoints are already known integers baked into the fused token)
  * no VM opcode needed, just plain arithmetic producing a duration `Uom`.
  */
 export class ClockTimeIntervalParselet implements PrefixParselet {

@@ -6,29 +6,29 @@ import { describeWeatherCode } from "./WmoWeatherCodes";
  * Error codes for this package. Co-located with the package rather than
  * unioned into `errors/ErrorCode.ts`'s core catalog (that catalog is scoped
  * to the parser/VM/engine/errors/config/lexer layers, not yet the ~17
- * domain packages — see that file's module doc for the intended per-package
+ * domain packages. See that file's module doc for the intended per-package
  * pattern this follows).
  */
 export const WeatherErrorCodes = {
 	/** Open-Meteo's geocoding endpoint returned a non-OK HTTP status. */
 	GEOCODING_API_ERROR: "WEATHER_GEOCODING_API_ERROR",
-	/** Geocoding succeeded (200 OK) but matched no place for the given name — most likely a typo in the city, not an API failure. */
+	/** Geocoding succeeded (200 OK) but matched no place for the given name, most likely a typo in the city, not an API failure. */
 	CITY_NOT_FOUND: "WEATHER_CITY_NOT_FOUND",
 	/** Open-Meteo's forecast endpoint returned a non-OK HTTP status. */
 	FORECAST_API_ERROR: "WEATHER_FORECAST_API_ERROR",
-	/** Forecast endpoint returned 200 OK but the response body is missing the expected current/daily blocks — an API contract violation, not a local bug. */
+	/** Forecast endpoint returned 200 OK but the response body is missing the expected current/daily blocks, an API contract violation, not a local bug. */
 	FORECAST_RESPONSE_MALFORMED: "WEATHER_FORECAST_RESPONSE_MALFORMED",
-	/** WeatherPackage.ts's fetchQuery switch fell through to its default case — unreachable via this package's own parselets, an internal invariant violation if it ever happens. */
+	/** WeatherPackage.ts's fetchQuery switch fell through to its default case, unreachable via this package's own parselets, an internal invariant violation if it ever happens. */
 	UNKNOWN_QUERY_KIND: "WEATHER_UNKNOWN_QUERY_KIND",
 } as const;
 
 /**
- * Open-Meteo (https://open-meteo.com) — chosen because it's genuinely free
+ * Open-Meteo (https://open-meteo.com), chosen because it's genuinely free
  * and keyless (no signup, no API key, no rate-limit tier to configure) for
  * both geocoding and forecast data, unlike every stock-quote / knowledge-
  * answer API surveyed for the sibling `stocks`/`knowledge` packages. This
  * is why Weather can be a default `BUILTIN_PACKAGES` member while those two
- * are opt-in-only — see `WeatherPackage.ts`'s module doc.
+ * are opt-in-only. See `WeatherPackage.ts`'s module doc.
  */
 const GEOCODING_API_URL = "https://geocoding-api.open-meteo.com/v1/search";
 const FORECAST_API_URL = "https://api.open-meteo.com/v1/forecast";
@@ -39,7 +39,7 @@ const FETCH_TIMEOUT_MS = 10_000;
 export interface CityWeather {
 	/** The resolved place name Open-Meteo matched, e.g. "London" for input "london". */
 	resolvedName: string;
-	/** WMO weather code — see WmoWeatherCodes.ts. */
+	/** WMO weather code. See WmoWeatherCodes.ts. */
 	weatherCode: number;
 	/** Human-readable description derived from weatherCode, e.g. "overcast". */
 	description: string;
@@ -127,15 +127,15 @@ async function fetchForecast(lat: number, lon: number, signal: AbortSignal): Pro
  *
  * `createQueryResolver` (see `WeatherPackage.ts`) caches per EXACT query
  * string, and this package's query strings are `"<kind>:<city>"` (kind is
- * one of current/temperature/feelslike/high/low) — so "weather in london"
+ * one of current/temperature/feelslike/high/low), so "weather in london"
  * and "temperature in london" are DIFFERENT cache entries under TanStack
  * Query, even though both need the exact same underlying Open-Meteo
  * response. Without this module-level cache, a note with several weather
  * queries for the same city would trigger one real HTTP round-trip
- * (geocode + forecast) PER kind, PER city — five real fetches for what is
+ * (geocode + forecast) PER kind, PER city, five real fetches for what is
  * conceptually one answer.
  *
- * This cache is intentionally short-lived (60s) — it exists purely to
+ * This cache is intentionally short-lived (60s), it exists purely to
  * coalesce near-simultaneous multi-kind lookups for the same city, not to
  * replace `createQueryResolver`'s own `staleTimeMs` (which governs how
  * long a RESOLVED value is considered fresh, tuned per WeatherPackage.ts's
@@ -181,7 +181,7 @@ export function fetchCityWeather(city: string, signal: AbortSignal): Promise<Cit
 	})();
 
 	cityWeatherCache.set(key, { promise, expiresAt: now + CACHE_TTL_MS });
-	// A failed lookup shouldn't poison the cache for the full TTL — evict
+	// A failed lookup shouldn't poison the cache for the full TTL, evict
 	// immediately on rejection so the next query (of any kind) gets a
 	// fresh attempt instead of replaying the same failure for 60s.
 	promise.catch(() => {

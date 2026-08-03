@@ -1,5 +1,5 @@
 /**
- * SegmentTree — an order-statistic Treap (randomized BST).
+ * SegmentTree, an order-statistic Treap (randomized BST).
  *
  * Replaces the flat `lineOrder: number[]` array in DocumentModel with a
  * balanced tree that supports O(log N) insert, delete, and get-at-index
@@ -7,11 +7,11 @@
  * order-statistic queries (find the k-th element by position).
  *
  * Key operations:
- *   getAt(index)      — O(log N) expected
- *   insertAt(index)   — O(log N) expected
- *   deleteAt(index)   — O(log N) expected
- *   spliceAt(index, deleteCount, newIds) — O(log N + deleteCount + insertCount)
- *   indexOf(lineId)   — O(N) without reverse map; cached lazily in DocumentModel
+ *   getAt(index), O(log N) expected
+ *   insertAt(index), O(log N) expected
+ *   deleteAt(index), O(log N) expected
+ *   spliceAt(index, deleteCount, newIds), O(log N + deleteCount + insertCount)
+ *   indexOf(lineId), O(N) without reverse map; cached lazily in DocumentModel
  *
  * Implementation: Treap (Tree + Heap) with implicit keys.
  * Nodes are ordered by position (in-order traversal), not by lineId value.
@@ -120,7 +120,7 @@ export class SegmentTree {
 
 	/**
 	 * Replace the entire tree with a new set of lineIds.
-	 * O(N) — builds a balanced treap from a flat array.
+	 * O(N), builds a balanced treap from a flat array.
 	 */
 	replaceAll(lineIds: number[]): void {
 		this.root = buildTreap(lineIds, 0, lineIds.length);
@@ -128,7 +128,7 @@ export class SegmentTree {
 
 	/**
 	 * Get a contiguous range of lineIds by index.
-	 * O(rangeSize + log N) — single in-order walk instead of N × O(log N).
+	 * O(rangeSize + log N), single in-order walk instead of N × O(log N).
 	 *
 	 * This is the hot path for viewport rendering in DocumentModel.getVisibleLines().
 	 */
@@ -183,7 +183,7 @@ export class SegmentTree {
 	/**
 	 * Collect all node values in the range [targetStart, targetEnd] into result.
 	 * `offset` is the 0-based start of the current subtree within the full tree.
-	 * O(rangeSize + log N) — skips entire subtrees outside the target range.
+	 * O(rangeSize + log N), skips entire subtrees outside the target range.
 	 */
 	private collectRange(
 		node: Node | null,

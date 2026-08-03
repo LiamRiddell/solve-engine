@@ -2,7 +2,7 @@ import { PrefixParselet, InfixParselet } from "@solve-js/parser/Parselet";
 import { tokenTypeId } from "@solve-js/lexer/Token";
 
 /**
- * Dual-keyed ParseletRegistry — accepts both string token types and
+ * Dual-keyed ParseletRegistry, accepts both string token types and
  * integer token type IDs for fast dispatch in the Parser hot path.
  *
  * Providers call registerPrefix("NUMBER", ...) with string token types.
@@ -10,7 +10,7 @@ import { tokenTypeId } from "@solve-js/lexer/Token";
  * Parser.parseExpression() can use token.typeId (integer) for lookup
  * while diagnostics and error messages use token.type (string).
  *
- * Performance: Integer Map.get() avoids string hashing — saving ~2-5ns
+ * Performance: Integer Map.get() avoids string hashing, saving ~2-5ns
  * per dispatch. With ~10-15 dispatches per expression, that's ~20-75ns.
  */
 export class ParseletRegistry {
@@ -26,7 +26,7 @@ export class ParseletRegistry {
 	 * Register a prefix parselet for `tokenType`.
 	 *
 	 * If another parselet is already registered for this token type, it is
-	 * silently overwritten by default (`Map.set()` semantics) — the old
+	 * silently overwritten by default (`Map.set()` semantics), the old
 	 * parselet is simply unreachable from then on, with no error. This is
 	 * a real footgun for third-party packages: two packages independently
 	 * choosing the same custom token type will collide with zero signal
@@ -38,7 +38,7 @@ export class ParseletRegistry {
 	 * Note: this warns about registry-level collisions only. It does NOT
 	 * detect the separate case where `tokenType` is one of PrecedenceParser's
 	 * Tier-1 fast-path token types (NUMBER, STRING, IDENT, LPAREN, MINUS,
-	 * PLUS, and the Tier-1 infix operators) — those are deliberately kept
+	 * PLUS, and the Tier-1 infix operators), those are deliberately kept
 	 * registered here for introspection/diagnostics even though Tier-1
 	 * always intercepts them before this registry is consulted (see
 	 * PrecedenceParser.parsePrefix()'s docs), so warning there would

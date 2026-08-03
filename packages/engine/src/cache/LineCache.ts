@@ -14,7 +14,7 @@ export class LineCacheEntry {
  * Per-line result + bytecode cache.
  *
  * Entries are stored in a two-level map (line number → expression → entry)
- * so per-line operations — getEntryForLine, removeAllForLine — are O(1)
+ * so per-line operations, getEntryForLine, removeAllForLine, are O(1)
  * lookups instead of scans over every cached key. Entries with no
  * expression are stored under the empty-string key.
  *
@@ -23,13 +23,13 @@ export class LineCacheEntry {
  *
  * INVARIANT: at most one entry per line number at a time. `set()` stores
  * the expression alongside the entry ONLY as a same-key staleness check for
- * `get(line, expression)` — a line's previous text is never meaningfully
+ * `get(line, expression)`, a line's previous text is never meaningfully
  * cacheable once the line has moved on, since `get()`/`getEntryForLine()`
  * are only ever called with the line's CURRENT text (see
  * `ExpressionEngine.reEvaluateLine()`). Before this invariant was enforced,
  * every distinct keystroke state of a line accumulated its own entry here
  * forever (nothing ever called `remove()`/`removeAllForLine()` per-edit,
- * only a full `clear()` on document switch) — an unbounded, session-long
+ * only a full `clear()` on document switch), an unbounded, session-long
  * memory leak reachable via ordinary typing, and a latent correctness bug
  * in `getEntryForLine()`, which picks "first in insertion order" and could
  * silently return a STALE entry from an old edit of the line instead of
@@ -56,7 +56,7 @@ export class LineCache {
   getEntryForLine(line: number): LineCacheEntry | undefined {
     const entries = this.byLine.get(line);
     if (!entries) return undefined;
-    // First entry in insertion order — matches the historical scan behavior.
+    // First entry in insertion order, matches the historical scan behavior.
     for (const entry of entries.values()) {
       return entry;
     }
@@ -72,7 +72,7 @@ export class LineCache {
     const key = LineCache.exprKey(expression);
     // Enforce the one-entry-per-line invariant (see class doc comment):
     // any entry under a DIFFERENT expression key for this same line is for
-    // text this line no longer has — drop it rather than let it pile up.
+    // text this line no longer has, drop it rather than let it pile up.
     if (entries.size > 0 && !entries.has(key)) {
       this.count -= entries.size;
       entries.clear();

@@ -8,15 +8,15 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { parseCollectionExpr, emitInvoke } from "../MapReduceShared";
 
 /**
- * `sum(elementExpr, collection)` — parse-time sugar for
+ * `sum(elementExpr, collection)`, parse-time sugar for
  * `reduce(acc+elementExpr, collection)`, no separate runtime
  * implementation. `elementExpr` may reference the reserved name `x` (the
- * current element) — `sum(x, c)` is the trivial "sum of the raw
+ * current element), `sum(x, c)` is the trivial "sum of the raw
  * elements" case; `sum(x^2, c)` would be "sum of squares", etc.
  *
  * Built by emitting `LOAD_VAR acc` directly into a fresh builder, then
  * letting the parser continue writing `elementExpr`'s own bytecode onto
- * that SAME builder, then appending `ADD` — no bytecode-splicing API is
+ * that SAME builder, then appending `ADD`, no bytecode-splicing API is
  * needed since `parseExpression(minBp, builder)` just keeps emitting
  * whatever comes next onto whichever builder is currently active.
  */

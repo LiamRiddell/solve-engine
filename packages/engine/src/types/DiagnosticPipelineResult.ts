@@ -1,12 +1,12 @@
 //#region ─── Module Overview ───────────────────────────────────────────────────
 
 /**
- * DiagnosticPipelineResult — structured pipeline data contract.
+ * DiagnosticPipelineResult, structured pipeline data contract.
  *
  * ## Purpose
  * When `diagnosticMode = true`, the {@link ExpressionEngine} populates this
  * structured result alongside the existing event-based diagnostic system.
- * The playground consumes the `stages[]` array directly — no event
+ * The playground consumes the `stages[]` array directly, no event
  * reconstruction or timeline parsing needed.
  *
  * ## Dual-mode design
@@ -47,7 +47,7 @@ import type { Value } from "@solve-js/vm/Value";
 import type { DagSnapshot } from "@solve-js/vm/DependencyGraph";
 
 //#endregion
-//#region ─── PipelineStageResult — Individual Stage Container ──────────────────
+//#region ─── PipelineStageResult, Individual Stage Container ──────────────────
 
 /**
  * A single pipeline stage result displayed in the playground's Pipeline tab.
@@ -95,7 +95,7 @@ export interface PipelineStageResult {
 }
 
 //#endregion
-//#region ─── StageOutput — Discriminated Union ────────────────────────────────
+//#region ─── StageOutput, Discriminated Union ────────────────────────────────
 
 /**
  * Discriminated union of all pipeline stage output types.
@@ -424,7 +424,7 @@ export interface PipelineEndOutput {
 }
 
 //#endregion
-//#region ─── DiagnosticPipelineResult — Complete Diagnostic Output ─────────────
+//#region ─── DiagnosticPipelineResult, Complete Diagnostic Output ─────────────
 
 /**
  * Complete diagnostic pipeline result produced by

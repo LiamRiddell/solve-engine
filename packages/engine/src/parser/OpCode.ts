@@ -4,11 +4,11 @@
  * Emitted by parselets (via {@link BytecodeBuilder}) during parsing and
  * consumed by the VM's dispatch loop during execution. Values are grouped
  * into numeric bands by category (0-9 stack ops, 10-19 push-literal, 20-29
- * arithmetic, ...) purely for readability — the VM dispatches on the exact
+ * arithmetic, ...) purely for readability, the VM dispatches on the exact
  * numeric value, not the band.
  *
  * Third-party packages emit `CALL_PLUGIN` (with a plugin-function index
- * from {@link allocatePluginFunctionIndex}) to invoke their own logic —
+ * from {@link allocatePluginFunctionIndex}) to invoke their own logic
  * see `IEnginePackage.pluginFunctions`. The other opcodes are used
  * internally by the built-in packages' parselets.
  */
@@ -86,18 +86,18 @@ export enum OpCode {
 	DATE_LAST_WEEKDAY = 94,  // "last <Weekday>" — the previous occurrence strictly before now
 	DATE_LITERAL = 95,       // Push a datetime literal whose epoch-ms was already resolved at parse time (see DateLiteralParselet)
 
-	// Rate — "quantity per unit of something" ($99/week, 30 fps). See
+	// Rate, "quantity per unit of something" ($99/week, 30 fps). See
 	// vm/Value.ts's rateValue()/isRateUnit()/splitRateUnit() for the
 	// representation these opcodes operate on.
 	RATE_DIV = 110,      // Uom ÷ Uom (different measures) -> Rate — the construction op
 	RATE_MUL = 111,      // Rate × Uom (same measure as denominator) -> plain Uom (denominator cancels)
 	RATE_CONVERT = 112,  // Rate -> Rate with a rescaled denominator unit (keeps the same real-world rate)
 
-	// Time — clock-time-of-day, lap times, video timecode (distinct from
+	// Time, clock-time-of-day, lap times, video timecode (distinct from
 	// the Datetime band's calendar-date arithmetic).
 	CLOCK_TIME_TODAY = 120,  // minutes-since-midnight -> Datetime anchored to today's calendar date
 
-	// Conditionals — boolean logic and eager-evaluated ternary selection.
+	// Conditionals, boolean logic and eager-evaluated ternary selection.
 	// EQ/NEQ/LT/LTE/GT/GTE (40-45, above) already existed as dead opcodes
 	// before this band was wired up; see vm/VM.ts for their handlers.
 	LOGICAL_AND = 130,  // Boolean && Boolean -> Boolean
@@ -107,10 +107,10 @@ export enum OpCode {
 	                    // a deliberate simplification for a side-effect-free expression language, see
 	                    // packages/conditionals/parselets/IfThenElseParselet.ts)
 
-	// Converters — the general "as <type>" mechanism. TO_NUMBER/TO_HEX/
+	// Converters, the general "as <type>" mechanism. TO_NUMBER/TO_HEX/
 	// TO_PERCENTAGE (70/71/74, above) cover the simplest cases; these cover
 	// the ones with no existing opcode. CALL_AS_CONVERTER is the SDK
-	// extension point — see IEnginePackage.asConverters and
+	// extension point. See IEnginePackage.asConverters and
 	// vm/VMBuiltins.ts's asConverterRegistry.
 	TO_FRACTION = 140,       // Number -> String, simplified fraction ("0.5" -> "1/2")
 	TO_MULTIPLIER = 141,     // Number -> String, "1 + n" growth multiplier ("0.5" -> "1.5x")
@@ -120,17 +120,17 @@ export enum OpCode {
 	CALL_AS_CONVERTER = 145, // (value, name) -> runtime asConverterRegistry lookup + call
 
 	// User-defined, parameterized, reusable functions (f(x) = expr, then
-	// f(5) — see parser/PrecedenceParser.ts's IDENT_ID case,
+	// f(5). See parser/PrecedenceParser.ts's IDENT_ID case
 	// parser/BytecodeBuilder.ts's UserFunctionDef/emitUserFunctionBody, and
 	// vm/VM.ts's VM.userFunctions/callFrames). Parameter references inside a
 	// function body are ORDINARY LOAD_VAR opcodes, not a dedicated
-	// parameter-load opcode — CALL_USER_FUNCTION binds arguments into a
+	// parameter-load opcode, CALL_USER_FUNCTION binds arguments into a
 	// name-keyed call frame at runtime, and LOAD_VAR checks the innermost
 	// call frame before the flat variable store (see VM.getVar()).
 	DEFINE_USER_FUNCTION = 150, // (operand = index into bytecode.userFunctionBodies) -> register name/params/program into vm.userFunctions. Registration happens at VM-EXECUTION time, not parse time, so a diagnostic/lookahead parse that compiles but never executes a definition line has no side effect on the shared registry.
 	CALL_USER_FUNCTION = 151,   // (N arg values already on stack) -> pop N args, bind by NAME into a new call frame, execute the named function's stored body (reentrant executeBytecode), push its result
 
-	// Matrix (Calca-parity — replaces the old ARR_* vector-only opcodes,
+	// Matrix (Calca-parity, replaces the old ARR_* vector-only opcodes
 	// which were never emitted by any registered parselet; see
 	// vm/MatrixOps.ts for the shared column-major storage helpers this band
 	// operates on, and vm/Value.ts's MatrixData for the representation).
@@ -146,13 +146,13 @@ export enum OpCode {
 
 }
 
-// Reverse lookup built once at module load — getOpCodeName() is called once
+// Reverse lookup built once at module load, getOpCodeName() is called once
 // per VM instruction whenever a diagnostic collector is attached (VM.ts's
 // trace path), so a per-call linear scan of every enum entry (TS numeric
 // enums are bidirectional at runtime, so Object.entries(OpCode) yields both
 // "NOP" -> 0 and "0" -> "NOP" style entries) would otherwise redo the same
 // scan every single traced instruction. Only the numeric-valued entries are
-// kept — the string-valued reverse entries TS also generates aren't needed
+// kept, the string-valued reverse entries TS also generates aren't needed
 // here.
 const OP_CODE_NAMES: ReadonlyMap<number, string> = (() => {
 	const map = new Map<number, string>();

@@ -7,7 +7,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { framesToTimecodeString } from "../timecode/TimecodeMath";
 
 /**
- * `<N> frames` — a plain frame-count duration, `Uom(N, "frames")`. Also
+ * `<N> frames`, a plain frame-count duration, `Uom(N, "frames")`. Also
  * the reverse of {@link VideoTimecodeParselet}: `<N> frames @ <fps>` (or
  * `... at <fps>`) converts the frame count back into `HH:MM:SS:FF`
  * display notation, producing a formatted STRING value (matches
@@ -18,7 +18,7 @@ import { framesToTimecodeString } from "../timecode/TimecodeMath";
  * {@link frameCountNormalizerRule}. Both `N` and the fps are always
  * parse-time-literal numbers by construction of that fusion rule (mirrors
  * `FpsRateParselet.ts`'s "NUMBER fps" fusion, which has the same
- * restriction) — so the `HH:MM:SS:FF` string is computed directly at
+ * restriction), so the `HH:MM:SS:FF` string is computed directly at
  * parse time rather than needing a runtime `CALL_PLUGIN` handler.
  */
 export class FrameCountParselet implements PrefixParselet {

@@ -7,7 +7,7 @@ import { CurrencyAsyncResolver } from "@solve-js/uom/CurrencyResolver";
  * Currency: `$10`, `£10`, `€10`, `¥10`, `₽10`, `₩10`, `₹10`, `₺10`, `₴10`,
  * `₪10`, `₫10`, `₦10`, `₱10`, `10 USD in GBP`, and word forms like
  * `10 euros`/`10 dollars` (see `uom/CurrencyAliases.ts` for the full
- * symbol/word alias tables and the ambiguity decisions behind them) —
+ * symbol/word alias tables and the ambiguity decisions behind them)
  * rates are fetched asynchronously (via {@link CurrencyAsyncResolver}) and
  * the expression shows Pending until they resolve.
  */
@@ -22,7 +22,7 @@ export const CURRENCY_PACKAGE: IEnginePackage = {
     { tokenType: "RUBLE", parselet: new CurrencySymbolParselet() },
     { tokenType: "WON", parselet: new CurrencySymbolParselet() },
     // Every currency symbol added after the original six above shares this
-    // one generic token type — see Token.ts's CURRENCY_SYMBOL doc comment.
+    // one generic token type. See Token.ts's CURRENCY_SYMBOL doc comment.
     { tokenType: "CURRENCY_SYMBOL", parselet: new CurrencySymbolParselet() },
   ],
   infixParselets: [

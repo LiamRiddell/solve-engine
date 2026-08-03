@@ -9,11 +9,11 @@ import { ingredientNameNormalizerRule } from "./normalizer/IngredientNameNormali
 
 /**
  * Units of measurement: `10 km`, `10 km to miles`, `convert 10 km to miles`,
- * `cm to ?` (conversion-possibilities query) — see {@link CURRENCY_PACKAGE}
+ * `cm to ?` (conversion-possibilities query). See {@link CURRENCY_PACKAGE}
  * for money, which is a separate package.
  *
  * Also cooking/baking mass<->volume conversion (e.g. "300g butter in
- * cups", "10 cups olive oil in grams") — see
+ * cups", "10 cups olive oil in grams"). See
  * `parselets/CookingConversionParselet.ts`,
  * `normalizer/IngredientNameNormalizerRule.ts`, and
  * `data/IngredientDensities.ts` (the bundled, clearly-labeled-approximate

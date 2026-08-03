@@ -6,7 +6,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { resolveCurrencyAlias } from "@solve-js/uom/CurrencyAliases";
 
 /**
- * InParselet — handles the standalone `IN` keyword as a postfix conversion.
+ * InParselet, handles the standalone `IN` keyword as a postfix conversion.
  *
  * Enables expressions like `125 USD in GBP`, `(a + b) in minutes`, or
  * `price in EUR` where the left side can be any expression (not just a

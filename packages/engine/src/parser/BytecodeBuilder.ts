@@ -2,11 +2,11 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
- * `BytecodeProgram.opcodes` is a `Uint8Array` — every operand written into
+ * `BytecodeProgram.opcodes` is a `Uint8Array`, every operand written into
  * it (including constant-pool indices from {@link BytecodeBuilder.emitNumber}/
  * {@link BytecodeBuilder.emitString}) is truncated to a single byte on
  * `build()`. Exceeding this silently wraps the index (e.g. entry 300 reads
- * back as entry 44), producing a wrong result with no error — see
+ * back as entry 44), producing a wrong result with no error. See
  * {@link BytecodeBuilder.emitNumber} for the guard that turns this into a
  * thrown error instead.
  */
@@ -30,7 +30,7 @@ export interface BytecodeProgram {
 	hasAsync: boolean;
 	/**
 	 * User-defined-function bodies compiled alongside this program (one
-	 * entry per `name(params) = body` definition on this line) — see
+	 * entry per `name(params) = body` definition on this line). See
 	 * {@link BytecodeBuilder.emitUserFunctionBody}. `OpCode.DEFINE_USER_FUNCTION`'s
 	 * operand is an index into this array, resolved at VM-execution time
 	 * (not parse time) so a diagnostic/lookahead parse that never actually
@@ -38,9 +38,9 @@ export interface BytecodeProgram {
 	 */
 	userFunctionBodies?: UserFunctionDef[];
 	/**
-	 * Anonymous function bodies compiled alongside this program — one entry
+	 * Anonymous function bodies compiled alongside this program, one entry
 	 * per `map`/`reduce` inline transform expression (e.g. the `10*x` in
-	 * `map(10*x, [0,1,500])`) — see {@link BytecodeBuilder.emitAnonymousBody}.
+	 * `map(10*x, [0,1,500])`). See {@link BytecodeBuilder.emitAnonymousBody}.
 	 * Deliberately a SEPARATE side-table from `userFunctionBodies`, not
 	 * routed through `vm.userFunctions` at all: an inline body has no name
 	 * and must never leak into the persistent name-keyed registry the way
@@ -53,7 +53,7 @@ export interface BytecodeProgram {
  * An anonymous transform body for `map`/`reduce`'s inline-expression form
  * (e.g. `10*x` in `map(10*x, [0,1,500])`, or `acc+x` in `reduce(acc+x,
  * [1,2,3])`). Structurally identical to {@link UserFunctionDef} minus the
- * `name` — see `OpCode.MAP_INVOKE`/`REDUCE_INVOKE` and
+ * `name`. See `OpCode.MAP_INVOKE`/`REDUCE_INVOKE` and
  * `vm/VM.ts`'s handlers, which build a call frame from `params`/`args`
  * exactly like `CALL_USER_FUNCTION` does, just without ever registering
  * the body in `vm.userFunctions`.
@@ -65,19 +65,19 @@ export interface AnonymousBodyDef {
 
 /**
  * A user-defined, parameterized, reusable function's compiled form
- * (`f(x) = 2*x + 1`) — see `OpCode.DEFINE_USER_FUNCTION`/`CALL_USER_FUNCTION`
+ * (`f(x) = 2*x + 1`). See `OpCode.DEFINE_USER_FUNCTION`/`CALL_USER_FUNCTION`
  * and `vm/VM.ts`'s `VM.defineUserFunction`/`getUserFunction`.
  *
  * `program` is the body compiled to its OWN independent `BytecodeProgram`,
  * not a fragment of the definition line's own bytecode. Parameter names
- * inside the body compile to ORDINARY `LOAD_VAR <name>` opcodes — no
- * parse-time rewriting — because parameter resolution happens dynamically
+ * inside the body compile to ORDINARY `LOAD_VAR <name>` opcodes, no
+ * parse-time rewriting, because parameter resolution happens dynamically
  * at the VM level: `CALL_USER_FUNCTION` pushes a name-keyed call frame
  * (`Map<string, Value>`) before re-executing `program`, and `VM.getVar()`
  * checks the innermost call frame before falling back to the flat
  * document-variable store. This is why a `UNIT`-collision parameter name
  * (e.g. `h` in `area(w, h) = w * h`, which lexes as the "hour" unit) needs
- * no special handling anywhere — it's just another `LOAD_VAR "h"`, resolved
+ * no special handling anywhere, it's just another `LOAD_VAR "h"`, resolved
  * the same way as any other name.
  */
 export interface UserFunctionDef {
@@ -117,7 +117,7 @@ export class BytecodeBuilder {
 	 * writes its index into the opcode stream (read back by the VM as e.g.
 	 * `PUSH_NUMBER <idx>`).
 	 *
-	 * Numeric constants are NOT deduplicated (unlike {@link emitString}) —
+	 * Numeric constants are NOT deduplicated (unlike {@link emitString})
 	 * every call appends a new entry, so an expression with more than
 	 * {@link MAX_CONSTANT_POOL_INDEX}+1 distinct numeric-literal occurrences
 	 * throws rather than silently wrapping the index (see
@@ -165,7 +165,7 @@ export class BytecodeBuilder {
 	}
 
 	/**
-	 * Emit a raw numeric operand (0-255) following an opcode — e.g. a
+	 * Emit a raw numeric operand (0-255) following an opcode, e.g. a
 	 * plugin-function index for `CALL_PLUGIN`, or an argument count. Unlike
 	 * {@link emitOpcode}, this does not go through the `OpCode` enum, so
 	 * package authors use this (not an unsafe cast to `OpCode`) to push
@@ -175,23 +175,23 @@ export class BytecodeBuilder {
 		this.opcodes.push(idx);
 	}
 
-	/** Emit a raw byte (0-255) — used for fixed small operands like argument counts. */
+	/** Emit a raw byte (0-255), used for fixed small operands like argument counts. */
 	emitByte(b: number): void {
 		this.opcodes.push(b);
 	}
 
-	/** Number of opcodes/operands emitted so far — used to compute jump targets before {@link patchJump}. */
+	/** Number of opcodes/operands emitted so far, used to compute jump targets before {@link patchJump}. */
 	get currentLength(): number {
 		return this.opcodes.length;
 	}
 
 	/**
 	 * Register a compiled user-defined-function body, returning its index
-	 * into this program's `userFunctionBodies` side-table — the caller emits
+	 * into this program's `userFunctionBodies` side-table, the caller emits
 	 * that index as `DEFINE_USER_FUNCTION`'s operand via {@link emitIndex}.
 	 * Subject to the same {@link MAX_CONSTANT_POOL_INDEX} bound as
 	 * {@link emitNumber}/{@link emitString} (the index itself is a single
-	 * opcode-stream byte) — in practice a single line defines at most a
+	 * opcode-stream byte), in practice a single line defines at most a
 	 * handful of functions, so this limit is never realistically reached.
 	 *
 	 * @throws If more than 256 function bodies are registered on one program.
@@ -211,7 +211,7 @@ export class BytecodeBuilder {
 
 	/**
 	 * Register a compiled `map`/`reduce` anonymous transform body, returning
-	 * its index into this program's `anonymousBodies` side-table — the
+	 * its index into this program's `anonymousBodies` side-table, the
 	 * caller emits that index as `MAP_INVOKE`/`REDUCE_INVOKE`'s operand via
 	 * {@link emitIndex}. Same {@link MAX_CONSTANT_POOL_INDEX} bound as
 	 * {@link emitUserFunctionBody}.
@@ -238,7 +238,7 @@ export class BytecodeBuilder {
 
 	/**
 	 * Build the accumulated opcodes/numbers/strings into a BytecodeProgram.
-	 * Creates new TypedArrays — the builder can be reused after this call.
+	 * Creates new TypedArrays, the builder can be reused after this call.
 	 */
 	build(): BytecodeProgram {
 		return {
@@ -259,7 +259,7 @@ export class BytecodeBuilder {
 	 * Build directly into a pre-allocated buffer for zero-copy VM consumption.
 	 *
 	 * When `buf` is provided and large enough, writes into it and returns
-	 * subarray **views** (not copies) — the returned TypedArrays share the
+	 * subarray **views** (not copies), the returned TypedArrays share the
 	 * buffer's underlying ArrayBuffer. The caller MUST NOT mutate the buffer
 	 * until the returned BytecodeProgram is no longer needed.
 	 *

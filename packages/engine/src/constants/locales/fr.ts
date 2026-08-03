@@ -1,19 +1,19 @@
 import { ILocale } from "./en";
 
 /**
- * French locale — see GitHub issue #77 ("Please allow for localized day
+ * French locale. See GitHub issue #77 ("Please allow for localized day
  * of the week"). Matches `de.ts`'s scope, not `en.ts`'s full coverage: a
  * confident, reviewed core set (arithmetic words, date keywords, weekday
  * names, a handful of common functions), not a guess at every FUNC/phrase
  * keyword across every package. Widening this is a good first issue for
- * a native French speaker — PRs welcome, same as this project's existing
+ * a native French speaker, PRs welcome, same as this project's existing
  * convention for locale gaps.
  *
  * "aujourd'hui" (today) is deliberately spelled without its apostrophe
- * here (`aujourdhui`) — `ExpressionLexer`'s identifier reader only
+ * here (`aujourdhui`), `ExpressionLexer`'s identifier reader only
  * accepts `[a-zA-Z_][a-zA-Z0-9_]*` plus Unicode, so the standard spelling
  * can't lex as a single IDENT token at all. This is a real, disclosed
- * limitation, not a translation choice — anyone typing the standard
+ * limitation, not a translation choice, anyone typing the standard
  * apostrophed spelling won't get a match today.
  */
 export const frLocale: ILocale = {
@@ -29,7 +29,7 @@ export const frLocale: ILocale = {
     exposant: "CARET", puissance: "CARET",
     xor: "BIT_XOR",
     maintenant: "NOW",
-    // "aujourd'hui" — see this file's own doc comment for why the
+    // "aujourd'hui". See this file's own doc comment for why the
     // apostrophe is dropped here.
     aujourdhui: "TODAY",
     demain: "TOMORROW", hier: "YESTERDAY",
@@ -37,12 +37,12 @@ export const frLocale: ILocale = {
     // Same spellings as English on purpose, not a translation gap: the
     // FUNC token's NAME is looked up in a separate, locale-independent
     // dispatch table (FunctionCallParselet.ts's builtinNameToIndex) that
-    // only knows English names — "racine" (root) would lex fine as a
+    // only knows English names, "racine" (root) would lex fine as a
     // FUNC token via this keywordMap but then fail at call time with
     // "Unknown function", so it's deliberately left out rather than
     // shipped half-working. Widening that dispatch table to be
     // locale-aware is a separate, larger change (it would need the same
-    // fix for German too — "wurzel" has this identical problem today).
+    // fix for German too, "wurzel" has this identical problem today).
     abs: "FUNC", sin: "FUNC", cos: "FUNC", tan: "FUNC",
     log: "FUNC", min: "FUNC", max: "FUNC",
     convertir: "CONVERT",

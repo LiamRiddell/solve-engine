@@ -1,5 +1,5 @@
 /**
- * tokenRegistration.ts — Bootstrap for building TokenLookup from locale, units, and phrases.
+ * tokenRegistration.ts, Bootstrap for building TokenLookup from locale, units, and phrases.
  *
  * This module centralizes the assembly of the TokenLookup consumed by ExpressionLexer.
  * It merges:
@@ -32,7 +32,7 @@ const BUILTIN_PHRASES: Record<string, string> = {
  * Build a TokenLookup from locale keywords, known units, and built-in phrases.
  *
  * Merge order (later overrides earlier):
- *   1. Locale keywords (priority 0 — lowest, can be overridden by providers)
+ *   1. Locale keywords (priority 0, lowest, can be overridden by providers)
  *   2. Built-in phrases (via locale phraseMap)
  *   3. Known units (checked AFTER keyword lookup fails, via unitNames set)
  *
@@ -47,7 +47,7 @@ export function buildTokenLookup(localeCode = 'en'): TokenLookup {
   const locale: ILocale = getLocale(localeCode);
   const registry = new TokenClassRegistry();
 
-  // Layer 1: Locale keywords (priority 0 — lowest)
+  // Layer 1: Locale keywords (priority 0, lowest)
   registry.setLocale(locale.keywordMap, BUILTIN_PHRASES);
 
   // Layer 2: Known units (checked after keyword lookup)

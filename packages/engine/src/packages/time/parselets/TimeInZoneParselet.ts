@@ -10,7 +10,7 @@ import { tryConsumeZoneReference } from "./shared/ZoneReference";
  * `time in <city>` -> that zone's current wall-clock time. `date in
  * <city>` -> that zone's current calendar date. One parameterized
  * parselet for both, triggered on the fused `TIME_IN`/`DATE_IN` token
- * (see `TimePackage.ts`'s `phrases` field) — "time"/"date" are common
+ * (see `TimePackage.ts`'s `phrases` field), "time"/"date" are common
  * variable names, so the trigger is the full two-word phrase, not the
  * bare word (same reasoning as `MathPhrasesPackage.ts`'s "average of"
  * pattern: fusing the phrase means the bare word stays a plain,

@@ -2,7 +2,7 @@
  * UoM Converter using the `convert` package (v7.0.0)
  * 
  * Units are strictly case-sensitive and passed through to the convert package
- * without aliasing. No unit remapping — what you type is what you get.
+ * without aliasing. No unit remapping, what you type is what you get.
  * e.g. 'C' = Celsius, 'c' = centiliter; 'MB' = megabytes, 'mb' = millibar.
  */
 
@@ -14,12 +14,12 @@ import { EXTENDED_UNITS } from "@solve-js/uom/ExtendedUnits";
 // Cache for valid units to avoid repeated conversion attempts
 const validUnitsCache = new LFUCache<string>(1000);
 
-// ── "workday" — a synthetic, non-`convert`-package unit ────────────────────
+// ── "workday", a synthetic, non-`convert`-package unit ────────────────────
 //
 // A business day (Mon-Fri) backing the datetime package's `<date> + N
 // workdays` arithmetic and `$X/workday` Rate literals
-// (packages/datetime/). NOT a real physical unit — a business day has no
-// fixed duration, since it depends on which calendar dates are weekends —
+// (packages/datetime/). NOT a real physical unit, a business day has no
+// fixed duration, since it depends on which calendar dates are weekends
 // so the third-party `convert` package has no concept of it and can't be
 // taught one without monkey-patching its internal unit table.
 //
@@ -29,7 +29,7 @@ const validUnitsCache = new LFUCache<string>(1000);
 // so this ratio is exact for whole-week spans and a reasonable linear
 // approximation otherwise. This is deliberately NOT the same
 // calendar-aware, weekend-skipping logic real "<date> + N workdays" date
-// arithmetic needs (see vm/VM.ts's addBusinessDays()) — that can't be
+// arithmetic needs (see vm/VM.ts's addBusinessDays()), that can't be
 // reduced to a fixed ratio, since the exact skip pattern depends on which
 // day of the week the calculation actually starts from.
 //
@@ -50,7 +50,7 @@ export function isWorkdayUnit(unit: string | undefined): unit is string {
 // Since unit conversion is linear (value × factor), caching the factor
 // avoids calling the `convert` package on every UOM operation. For
 // temperature conversions (which use offset-based formulas like C→F),
-// the cache is bypassed — factor-based multiplication doesn't apply.
+// the cache is bypassed, factor-based multiplication doesn't apply.
 // Size 500 covers typical Obsidian vault usage (a few dozen unique
 // unit pairs across all notes).
 const conversionRateCache = new LFUCache<number>(500);
@@ -58,11 +58,11 @@ const conversionRateCache = new LFUCache<number>(500);
 /**
  * Validate `unit` against the `convert` package's known unit table.
  *
- * @returns `unit` unchanged in all cases — this does NOT normalize casing
+ * @returns `unit` unchanged in all cases. This does NOT normalize casing
  *   or aliasing (units are strictly case-sensitive, see the module note
  *   above). A unit the `convert` package doesn't recognize is still
  *   returned as-is (not thrown), so callers must not assume a returned
- *   string is actually convertible — check with {@link isConvertibleUnit}
+ *   string is actually convertible, check with {@link isConvertibleUnit}
  *   or {@link canConvert} first if that matters.
  */
 export function resolveUnit(unit: string): string {
@@ -83,7 +83,7 @@ export function resolveUnit(unit: string): string {
   }
 }
 
-// Built once at module load rather than inside getMeasure() — this is a pure
+// Built once at module load rather than inside getMeasure(). This is a pure
 // lookup table with no per-call state, but it was previously reallocated
 // (16 computed-key entries) on every single call. getMeasure() runs at least
 // twice per unit conversion (VM.ts's UOM_CONVERT_TO checks it for both the
@@ -110,18 +110,18 @@ const MEASURE_KIND_NAMES: Record<number, string> = {
 
 /**
  * Get the measure/dimension kind for `unit` (e.g. `"length"`, `"mass"`,
- * `"temperature"`) — used to check whether two units are even in the same
+ * `"temperature"`), used to check whether two units are even in the same
  * dimension before attempting a conversion.
  *
  * @returns `undefined` if `unit` isn't recognized, rather than throwing.
  */
 export function getMeasure(unit: string): string | undefined {
   // Workday is a Time-measure unit by convention (see isWorkdayUnit's doc
-  // comment) — the `convert` package has never heard of it, so resolve its
+  // comment), the `convert` package has never heard of it, so resolve its
   // measure via "day" instead of attempting the real lookup below.
   if (isWorkdayUnit(unit)) return getMeasure("day");
 
-  // Extended (custom) categories the `convert` package doesn't know about —
+  // Extended (custom) categories the `convert` package doesn't know about
   // see ExtendedUnits.ts. Checked before the try block since it's a plain
   // object lookup, cheaper than round-tripping through convert()'s try/catch.
   const extended = EXTENDED_UNITS[unit];
@@ -139,7 +139,7 @@ export function getMeasure(unit: string): string | undefined {
 }
 
 /**
- * Check whether `from` can be converted to `to` — same unit, or same
+ * Check whether `from` can be converted to `to`. Same unit, or same
  * measure kind (length, mass, ...) and the underlying `convert` package
  * accepts the pair. Never throws; returns `false` on any failure.
  */
@@ -162,7 +162,7 @@ export function canConvert(from: string, to: string): boolean {
     }
 
     // Extended (custom) categories aren't known to the `convert` package at
-    // all — calling convert() below would throw. The measure check above
+    // all, calling convert() below would throw. The measure check above
     // already proves f and t both resolve to this same extended category
     // (that measure name can only have come from EXTENDED_UNITS), so no
     // further validation is needed.
@@ -181,12 +181,12 @@ export function canConvert(from: string, to: string): boolean {
  * Convert `value` from unit `from` to unit `to`.
  *
  * Most conversions are multiplicative and served from a per-unit-pair
- * factor cache after the first call. Temperature is the one exception —
+ * factor cache after the first call. Temperature is the one exception
  * offset-based formulas (e.g. °F = °C × 9/5 + 32) can't be reduced to a
  * factor, so temperature pairs always go through the `convert` package
  * directly and are never cached.
  *
- * Does not validate that the conversion is possible — callers should check
+ * Does not validate that the conversion is possible, callers should check
  * with {@link canConvert} first if `from`/`to` aren't already known-good.
  */
 export function convertUnit(value: number, from: string, to: string): number {
@@ -211,7 +211,7 @@ export function convertUnit(value: number, from: string, to: string): number {
   if (f === t) return value;
 
   // Check the conversion-rate cache for this unit pair.
-  // On cache hit: result = value × factor — one multiplication instead of a
+  // On cache hit: result = value × factor, one multiplication instead of a
   // full convert() call. Temperature pairs never enter the cache (see below),
   // so a cache hit is always safe for multiplicative conversion.
   const cacheKey = `${f}|${t}`;
@@ -221,7 +221,7 @@ export function convertUnit(value: number, from: string, to: string): number {
   }
 
   // Extended (custom) categories the `convert` package doesn't know about
-  // (see ExtendedUnits.ts) — compute the ratio directly from each unit's
+  // (see ExtendedUnits.ts), compute the ratio directly from each unit's
   // factor-to-base value instead of calling convert(), which would throw on
   // an unrecognized unit string. Every extended category is a pure linear
   // ratio scale (no Temperature-style offset), so this is always safe.
@@ -235,7 +235,7 @@ export function convertUnit(value: number, from: string, to: string): number {
 
   // Temperature conversions use offset-based formulas (e.g. C→F: °F = °C × 9/5 + 32)
   // and cannot be reduced to a simple multiplicative factor. Bypass the cache.
-  // Only checked on cache miss — the hot path skips this getMeasure() call.
+  // Only checked on cache miss, the hot path skips this getMeasure() call.
   if (getMeasure(f) === 'temperature') {
     return convert(value, f as any).to(t as any) as unknown as number;
   }
@@ -249,13 +249,13 @@ export function convertUnit(value: number, from: string, to: string): number {
 
 /**
  * List every unit symbol in the same measure/dimension as `unit` (wiki:
- * Units-Of-Measurement — "Conversion Possibilities", `sourceUnit to ?`,
+ * Units-Of-Measurement, "Conversion Possibilities", `sourceUnit to ?`
  * e.g. `cm to ?"` → every Length unit). Excludes `unit` itself.
  *
  * The `convert` package has no dedicated "possibilities" method, but its
  * `convert/conversions` subpath (a real, package.json-declared public
  * export, not a deep dist/ reach-around) exposes the full conversion table
- * keyed by measure kind — reading that directly enumerates every symbol
+ * keyed by measure kind, reading that directly enumerates every symbol
  * for a measure without hardcoding a duplicate unit list here.
  *
  * @returns `[]` if `unit` isn't recognized, rather than throwing.
@@ -293,7 +293,7 @@ export function isConvertibleUnit(unit: string): boolean {
 /**
  * Convert `value` (in `unit`) to whichever unit of the same measure gives
  * the most human-readable magnitude (the `convert` package's `"best"`
- * target) — e.g. 1500 metres becomes 1.5 km. Falls back to returning
+ * target), e.g. 1500 metres becomes 1.5 km. Falls back to returning
  * `value`/`unit` unchanged if `unit` isn't recognized.
  */
 export function getBestUnit(value: number, unit: string): { value: number; unit: string } {

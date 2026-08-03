@@ -1,5 +1,5 @@
 /**
- * CompilationWorkerManager — main-thread bridge to the compilation worker.
+ * CompilationWorkerManager, main-thread bridge to the compilation worker.
  *
  * Manages the worker lifecycle and provides a batch compilation API.
  * Receives transferred ArrayBuffers from the worker and reconstructs
@@ -13,7 +13,7 @@
  *   Each result includes `compiledAgainstHash`. Before storing bytecode
  *   in the DocumentModel, we validate via `docModel.isBytecodeValid()`.
  *   If the line was edited between dispatch and response, the bytecode
- *   is discarded — the next evaluate() will recompile it synchronously.
+ *   is discarded, the next evaluate() will recompile it synchronously.
  */
 
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
@@ -141,7 +141,7 @@ export class CompilationWorkerManager {
 	 * validation. Only stores bytecode for lines whose text has not changed
 	 * since the compilation request was dispatched.
 	 *
-	 * Results for the same lineId are batched — all bytecodes from
+	 * Results for the same lineId are batched, all bytecodes from
 	 * successful compilations are passed to updateLineCompiled in a single
 	 * call. This supports multi-expression lines (inline solves).
 	 *
@@ -244,7 +244,7 @@ export class CompilationWorkerManager {
 	/**
 	 * Reconstruct a BytecodeProgram from transferred ArrayBuffers.
 	 *
-	 * The transferred ArrayBuffers are zero-copy — we create TypedArray
+	 * The transferred ArrayBuffers are zero-copy, we create TypedArray
 	 * views directly over them. No data is copied or serialized.
 	 */
 	private reconstructResult(raw: WorkerCompileResult): CompileResponseItem {
@@ -261,7 +261,7 @@ export class CompilationWorkerManager {
 		}
 
 		// Reconstruct TypedArrays from transferred ArrayBuffers.
-		// These are views over the same memory — zero-copy from worker.
+		// These are views over the same memory, zero-copy from worker.
 		const opcodes =
 			raw.opcodesLength > 0
 				? new Uint8Array(raw.opcodesBuffer, 0, raw.opcodesLength)

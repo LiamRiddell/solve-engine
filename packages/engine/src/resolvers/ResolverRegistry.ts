@@ -5,7 +5,7 @@ import type { Value } from "@solve-js/vm/Value";
 
 /**
  * Result from a resolver's preflight() check.
- * Returned when async data is needed — the orchestrator uses this
+ * Returned when async data is needed, the orchestrator uses this
  * to subscribe to the resolver and return a Pending value immediately.
  */
 export interface AsyncCheckResult {
@@ -40,7 +40,7 @@ export interface IAsyncResolver {
 	 * Returns null if all data for this expression is cached and ready.
 	 * Returns an AsyncCheckResult if async work is needed.
 	 *
-	 * This method is synchronous — it only checks caches, never fetches.
+	 * This method is synchronous, it only checks caches, never fetches.
 	 * If data is missing, it creates a Promise and returns immediately.
 	 *
 	 * @param tokens - The lexed tokens for the expression
@@ -65,9 +65,9 @@ export interface IAsyncResolver {
  * VM execution to short-circuit async expressions.
  *
  * Lifecycle:
- * - register() — when a package is loaded
- * - unregister() — when a package is unloaded (clears cache entries)
- * - clear() — on document switch (clears all resolvers)
+ * - register(), when a package is loaded
+ * - unregister(), when a package is unloaded (clears cache entries)
+ * - clear(), on document switch (clears all resolvers)
  */
 export class ResolverRegistry {
 	private resolvers = new Map<string, IAsyncResolver>();
@@ -116,7 +116,7 @@ export class ResolverRegistry {
 	 * Run all registered resolvers' preflight checks against compiled bytecode.
 	 *
 	 * Returns the first AsyncCheckResult found, or null if all data is ready.
-	 * Short-circuits on first pending — subsequent pending ops will be
+	 * Short-circuits on first pending, subsequent pending ops will be
 	 * discovered on re-evaluation when the first resolves.
 	 */
 	preflightAll(tokens: Token[], bytecode: BytecodeProgram, packageId: string, signal: AbortSignal, queryClient: QueryClient): AsyncCheckResult | null {

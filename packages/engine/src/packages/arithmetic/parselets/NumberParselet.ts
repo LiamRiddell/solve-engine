@@ -8,11 +8,11 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
  * Matches a CHAINED thousands-grouped integer using "." as the group
- * separator — e.g. "1.234.567" — regardless of the active locale. Two or
+ * separator, e.g. "1.234.567", regardless of the active locale. Two or
  * more repetitions is the key: a genuine decimal literal can never
  * contain more than one ".", so this shape is unambiguous, unlike a
  * single group ("1.234") which is deliberately left alone below (could
- * mean 1234 grouped, or 1.234 as a three-decimal-place fraction — far
+ * mean 1234 grouped, or 1.234 as a three-decimal-place fraction, far
  * more commonly the latter in this project's "en"-default locale, so
  * changing that interpretation is out of scope here).
  */
@@ -25,7 +25,7 @@ const CHAINED_DOT_THOUSANDS_GROUPS = /^\d{1,3}(\.\d{3}){2,}$/;
  * ever falling through to the Tier-2 parselet-registry lookup that would
  * invoke this. This class stays registered so the "matched parselets"
  * diagnostic view isn't blind to NUMBER tokens, and so direct unit tests
- * of parselet behavior keep working — but any fix here must be mirrored
+ * of parselet behavior keep working, but any fix here must be mirrored
  * in PrecedenceParser.ts's NUMBER_ID case to actually take effect.
  */
 export class NumberParselet implements PrefixParselet {
@@ -39,7 +39,7 @@ export class NumberParselet implements PrefixParselet {
 			if (Number.isNaN(v)) {
 				// Matches PrecedenceParser.ts's NUMBER_ID fast path (the
 				// actual production code path this dead-code parselet
-				// mirrors) — a raw Error here would skip
+				// mirrors), a raw Error here would skip
 				// ThreeTierEvaluator's DAG-preservation enrichment on parse
 				// failure, which specifically checks for EngineError.
 				throw ErrorFactory.parsing("INVALID_NUMBER_LITERAL", `Invalid hex literal: "${raw}"`, { raw });
@@ -59,7 +59,7 @@ export class NumberParselet implements PrefixParselet {
 			// independent of locale (see ExpressionLexer's number-scanning
 			// "Thousands separators" block), but the locale-based
 			// normalization below only strips the ACTIVE locale's own
-			// designated thousandsSeparator character — for "en" that's
+			// designated thousandsSeparator character, for "en" that's
 			// ",", not ".", so a chained dot-grouped number like
 			// "1.234.567" fell through to parseFloat() untouched, which
 			// stops at the second "." and silently truncated it to 1.234

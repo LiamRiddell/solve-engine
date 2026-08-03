@@ -1,35 +1,35 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 
 /**
- * Package load-time compatibility checking — the "detect overlapping
+ * Package load-time compatibility checking, the "detect overlapping
  * logic between packages" SDK surface.
  *
  * This engine's package system (`IEnginePackage`) has always had SOME
  * collision visibility, but it's inconsistent and scattered: `ParseletRegistry`
  * warns on a token-type overwrite, `asConverterRegistry` warns on a converter
- * name overwrite, and `PhraseTrie` warns on... nothing at all — a second
+ * name overwrite, and `PhraseTrie` warns on... nothing at all, a second
  * package fusing the exact same multi-word phrase to a different token type
  * silently wins with zero signal, the same class of gap
  * `ParseletRegistry.registerPrefix()`'s collision-visibility fix closed for
  * parselets specifically (see `ARCHITECTURE.md`'s punch list). And none of
- * these existing checks can be run BEFORE registration — they only fire at
+ * these existing checks can be run BEFORE registration, they only fire at
  * the moment a collision actually happens, deep inside a live engine.
  *
  * `checkPackageCompatibility()` is a single, pure, side-effect-free function
  * that statically compares one candidate package's declared descriptor
  * against a list of already-registered packages' descriptors, across every
- * collision-capable field `IEnginePackage` has — callable standalone (a host
+ * collision-capable field `IEnginePackage` has, callable standalone (a host
  * building a plugin marketplace could run it before ever constructing an
  * engine) or wired into registration itself (see
  * `ExpressionEngine.registerPackage()`, which calls this automatically and
- * logs every conflict found — the "load-up resiliency" half of this
+ * logs every conflict found, the "load-up resiliency" half of this
  * mechanism).
  *
  * A real, concrete motivating bug (found the same session this module was
  * built): the currency package's real `IEnginePackage` descriptor
  * (`CurrencyPackage.ts`) and its parallel test-harness registration helper
  * (`parselets/index.ts`'s `registerCurrencyParselets()`) drifted out of sync
- * — new currency-symbol token types were wired into one but not the other,
+ *, new currency-symbol token types were wired into one but not the other
  * caught only by a test happening to exercise the stale path. This module
  * doesn't catch THAT specific class of bug (two hand-written registration
  * functions for the same logical package diverging is a source-consistency
@@ -59,7 +59,7 @@ export interface CompatibilityConflict {
   severity: CompatibilitySeverity;
   /** Human-readable description, safe to log directly. */
   detail: string;
-  /** The two package names involved — [existing, candidate]. */
+  /** The two package names involved, [existing, candidate]. */
   packages: [string, string];
 }
 
@@ -87,7 +87,7 @@ function collectParseletConflicts(
         // A different parselet INSTANCE silently wins at registration time
         // (matches ParseletRegistry.registerPrefix/registerInfix's own
         // "warn on a genuinely different instance, stay quiet on idempotent
-        // re-registration" behavior) — flagged as a warning, not an error,
+        // re-registration" behavior), flagged as a warning, not an error
         // since deliberate override is sometimes the intended use (a
         // package explicitly built to replace a built-in's grammar).
         severity: "warning",
@@ -104,7 +104,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
   collectParseletConflicts("prefixParseletTokenType", "prefixParselets", existingPkg, candidate, conflicts);
   collectParseletConflicts("infixParseletTokenType", "infixParselets", existingPkg, candidate, conflicts);
 
-  // Phrases — the ONE category with zero pre-existing runtime warning
+  // Phrases, the ONE category with zero pre-existing runtime warning
   // anywhere (PhraseTrie silently overwrites on an exact-key collision).
   if (existingPkg.phrases && candidate.phrases) {
     for (const [phrase, tokenType] of Object.entries(candidate.phrases)) {
@@ -120,7 +120,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
     }
   }
 
-  // asConverters — mirrors registerAsConverter()'s own runtime warning, but
+  // asConverters, mirrors registerAsConverter()'s own runtime warning, but
   // callable before either package is ever registered.
   if (existingPkg.asConverters && candidate.asConverters) {
     for (const name of Object.keys(candidate.asConverters)) {
@@ -136,7 +136,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
     }
   }
 
-  // pluginFunctions — index collisions are ALWAYS a real bug (unlike
+  // pluginFunctions, index collisions are ALWAYS a real bug (unlike
   // parselet/converter overrides, there's no legitimate "intentional
   // replacement" use case for two packages sharing a CALL_PLUGIN index;
   // allocatePluginFunctionIndex() exists specifically to make this
@@ -158,7 +158,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
     }
   }
 
-  // Lexer keywords/operators — a word/symbol can only mean ONE token type.
+  // Lexer keywords/operators, a word/symbol can only mean ONE token type.
   // `units` is deliberately NOT checked here: units live in a Set, and two
   // packages both recognizing the same unit WORD is harmless/idempotent
   // (there's no "which token type wins" ambiguity the way there is for a
@@ -192,7 +192,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
     }
   }
 
-  // Async resolver namespaces — ResolverRegistry is keyed by namespace;
+  // Async resolver namespaces, ResolverRegistry is keyed by namespace;
   // the JSDoc on IEnginePackage.asyncResolvers already states "each
   // resolver must have a unique namespace" as a hard requirement.
   if (existingPkg.asyncResolvers && candidate.asyncResolvers) {
@@ -209,9 +209,9 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
     }
   }
 
-  // Token categories — same token type, different highlight category.
+  // Token categories. Same token type, different highlight category.
   // Cosmetic only (doesn't break parsing/evaluation), so "info" not
-  // "warning"/"error" — but still worth surfacing, since a silently-wrong
+  // "warning"/"error", but still worth surfacing, since a silently-wrong
   // highlight color is exactly the kind of thing that's invisible until a
   // user notices their editor coloring looks off.
   if (existingPkg.tokenCategories && candidate.tokenCategories) {
@@ -234,7 +234,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
 /**
  * Statically check `candidate` against every package in `existing` for
  * overlapping/conflicting declarations, across every collision-capable
- * field `IEnginePackage` has. Pure and side-effect-free — does not touch
+ * field `IEnginePackage` has. Pure and side-effect-free, does not touch
  * any shared registry, does not require a live `ExpressionEngine`.
  *
  * @example

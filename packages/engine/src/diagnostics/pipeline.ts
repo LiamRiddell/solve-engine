@@ -8,7 +8,7 @@ import { DiagnosticReport } from "./events";
  * Performance guarantee: when no collectors are registered (production mode),
  * every dispatch method is a branch on `this.collectors.length === 0` which
  * modern JS engines will predict and eliminate. The overhead is a single
- * comparison per call — effectively zero.
+ * comparison per call, effectively zero.
  */
 export class DiagnosticPipeline {
   private collectors: DiagnosticCollector[] = [];
@@ -34,7 +34,7 @@ export class DiagnosticPipeline {
     return this.collectors.length;
   }
 
-  // Inline-optimized dispatchers — each checks length once then loops.
+  // Inline-optimized dispatchers, each checks length once then loops.
   // When collectors.length === 0, the JIT eliminates the entire method body.
 
   firePipelineStart(event: DiagnosticEvent & { type: "pipeline_start" }): void {

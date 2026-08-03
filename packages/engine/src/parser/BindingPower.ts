@@ -5,7 +5,7 @@
  * consume the next operator (higher power binds tighter, e.g. `*` over `+`).
  *
  * Package authors reference these when registering an infix parselet via
- * `IPackageRegistry.registerInfixParselet` — see the built-in packages for
+ * `IPackageRegistry.registerInfixParselet`. See the built-in packages for
  * examples of picking an appropriate level (e.g. arithmetic `+`/`-` use
  * `Sum`, `*`/`/` use `Product`).
  */
@@ -35,12 +35,12 @@ export function getBindingPower(name: string): number {
 // ── Built-in Infix Operator Binding Power Table ──────────────────────────────
 // Pre-computed Uint8Array lookup indexed by token typeId.
 // value > 0  → built-in infix operator with that binding power
-// value = 0  → not a built-in infix — fall through to Tier 2 parselet registry
+// value = 0  → not a built-in infix, fall through to Tier 2 parselet registry
 //
-// Built at module load via buildBindingPowerTable(). The table is sparse —
+// Built at module load via buildBindingPowerTable(). The table is sparse
 // most entries are 0 since only ~15 of 80+ token types are infix operators.
 //
-// Performance: Uint8Array[typeId] is a single typed array load — no Map.get(),
+// Performance: Uint8Array[typeId] is a single typed array load, no Map.get()
 // no string hashing, no property chain. V8 eliminates bounds checks when typeId
 // is known to be within array length.
 
@@ -60,7 +60,7 @@ const BUILTIN_INFIX_BP: Record<string, number> = {
   [TokenTypes.SLASH]:    BindingPower.Product,
   [TokenTypes.MOD]:      BindingPower.Product,
 
-  // Arithmetic (infix, RIGHT-associative — PrecedenceParser handles this specially)
+  // Arithmetic (infix, RIGHT-associative, PrecedenceParser handles this specially)
   [TokenTypes.CARET]:    BindingPower.Exponent,
 
   // Bitwise (infix, left-associative)
@@ -70,27 +70,27 @@ const BUILTIN_INFIX_BP: Record<string, number> = {
   [TokenTypes.BIT_OR]:   BindingPower.BitwiseXor,
   [TokenTypes.BIT_XOR]:  BindingPower.BitwiseXor,
 
-  // Postfix (no right operand — PrecedenceParser handles this specially)
+  // Postfix (no right operand, PrecedenceParser handles this specially)
   [TokenTypes.PERCENT]:  BindingPower.Postfix,
 
   // Percentage keyword (infix, left-associative: "50% of 200" → MUL)
   [TokenTypes.OF]:       BindingPower.Product,
 };
 
-// Note: These token types are intentionally NOT in the BP_TABLE — they stay in
+// Note: These token types are intentionally NOT in the BP_TABLE, they stay in
 // the Tier 2 parselet registry because they require complex handling:
 //   IN, TO    → UoM conversion parselets (peek at target unit token, complex logic)
 //   DOT       → Property access (chained OBJ_GET, needs left-token tracking)
 //   EQUALS    → Assignment (VariableParselet handles :var = expr pattern)
-//   EQUALITY, NEQ, GTE, LTE → Comparison ops (need dedicated VM opcodes — task 2.15a)
+//   EQUALITY, NEQ, GTE, LTE → Comparison ops (need dedicated VM opcodes, task 2.15a)
 //   COMMA     → Argument separator (function calls, array/object literals)
 
-/** Cached BP_TABLE — built once at module load, immutable thereafter. */
+/** Cached BP_TABLE, built once at module load, immutable thereafter. */
 let _bpTable: Uint8Array | null = null;
 
 /**
  * Build the Uint8Array binding power table indexed by token typeId.
- * Idempotent — returns cached table on subsequent calls.
+ * Idempotent, returns cached table on subsequent calls.
  *
  * Must be called after all token types are registered (via registerAllTokenTypes())
  * and after plugin providers have registered their token types.
@@ -121,7 +121,7 @@ export function buildBindingPowerTable(): Uint8Array {
 }
 
 /**
- * Invalidate the cached BP table — call when plugins register new token types
+ * Invalidate the cached BP table, call when plugins register new token types
  * that should participate in the built-in fast path.
  */
 export function invalidateBindingPowerTable(): void {

@@ -1,5 +1,5 @@
 /**
- * Currency async resolver — bridges CurrencyExchangeService to the
+ * Currency async resolver, bridges CurrencyExchangeService to the
  * IAsyncResolver interface for the Suspense architecture.
  *
  * Uses TanStack Query (injected via queryClient) as the single cache layer.
@@ -45,7 +45,7 @@ export class CurrencyAsyncResolver implements IAsyncResolver {
 
 			// Explicit "X to Y"/"X in Y" conversions (UOM_CONVERT_IN/_TO) are
 			// the obvious case, but arithmetic directly on two differently-
-			// denominated currency literals — "0.01 BTC + 1 ETH" — needs the
+			// denominated currency literals, "0.01 BTC + 1 ETH", needs the
 			// exact same preflight fetch and previously never got it: this
 			// scanner only looked for the CONVERT opcodes, so ADD/SUB/MUL/DIV
 			// between two currency UOMs skipped preflight entirely, ran with

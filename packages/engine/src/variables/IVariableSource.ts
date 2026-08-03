@@ -2,7 +2,7 @@
  * Interface for variable value providers.
  *
  * Implementations provide named variables to the {@link VariableResolver}.
- * Each source has a priority — lower numbers are queried first.
+ * Each source has a priority, lower numbers are queried first.
  *
  * Sources can be backed by document variables, Obsidian frontmatter,
  * plugin data, or any external data store.

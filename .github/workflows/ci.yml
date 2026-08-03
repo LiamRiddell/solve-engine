@@ -96,37 +96,18 @@ jobs:
   comment-style:
     name: Comment style
     runs-on: ubuntu-24.04
-    # Only meaningful on a pull request, where there is a base to diff against.
-    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          fetch-depth: 0
+          node-version: 22
 
-      # The house style bans em-dashes in source comments, which is mechanical
-      # enough to check rather than leave to review.
+      # Node rather than grep. The previous version of this check ran
+      # `grep -P 'â'`, which exits 2 on a locale it cannot handle,
+      # and `if grep ...` reads exit 2 the same as "no match". So it passed on
+      # every file, including the 192 carrying 1,752 violations between them. A
+      # gate that cannot fail produces confidence rather than information.
       #
-      # Scoped to files the pull request actually touches. The existing source
-      # predates the standard and still contains well over a thousand of them,
-      # so checking the whole tree would fail every run until the comment pass
-      # lands, and a permanently red check is one people learn to ignore.
-      # Enforcing on changed files means new and edited code complies from now
-      # on, and the backlog shrinks as files are touched.
-      - name: No em-dashes in changed source files
-        run: |
-          base="origin/${{ github.base_ref }}"
-          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
-          changed=$(git diff --name-only --diff-filter=ACM "$base"...HEAD -- 'packages/*/src/**/*.ts' || true)
-          if [ -z "$changed" ]; then
-            echo "No source files changed."
-            exit 0
-          fi
-          found=0
-          for f in $changed; do
-            [ -f "$f" ] || continue
-            if grep -nP '\xe2\x80\x94' "$f"; then
-              echo "::error file=$f::Em-dash found. Use a comma, a colon, parentheses, or a second sentence."
-              found=1
-            fi
-          done
-          exit $found
+      # Now that the backlog is cleared this runs over the whole tree rather
+      # than only changed files, so a regression anywhere fails the build.
+      - run: node scripts/check-comment-style.mjs --all

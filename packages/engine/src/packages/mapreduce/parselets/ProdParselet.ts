@@ -8,7 +8,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { parseCollectionExpr, emitInvoke } from "../MapReduceShared";
 
 /**
- * `prod(elementExpr, collection)` — parse-time sugar for
+ * `prod(elementExpr, collection)`, parse-time sugar for
  * `reduce(acc*elementExpr, collection)`. See `SumParselet.ts`'s doc
  * comment for the full construction technique (identical, just `MUL`
  * instead of `ADD`).

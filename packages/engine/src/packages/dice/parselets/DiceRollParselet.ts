@@ -16,7 +16,7 @@ function emitDiceRollCall(builder: BytecodeBuilder): void {
 }
 
 /**
- * `roll between X and Y` / `roll from X to Y` / `roll(X, Y)` — the three
+ * `roll between X and Y` / `roll from X to Y` / `roll(X, Y)`, the three
  * forms whose first token unambiguously picks the alternative, so this is
  * the {@link definePhrasePattern} proof-of-concept: same behavior as the
  * original hand-written branches (including the `BindingPower.Product`
@@ -30,7 +30,7 @@ const keywordLedRollPattern = definePhrasePattern({
       slots: [
         { kind: "keyword", tokenTypes: ["BETWEEN"] },
         { kind: "expr", bindingPower: BindingPower.Product },
-        // The word "and" lexes as PLUS, not a dedicated AND token — en.ts's
+        // The word "and" lexes as PLUS, not a dedicated AND token, en.ts's
         // keywordMap maps `and: "PLUS"` (a synonym for arithmetic "+").
         // The original hand-written parselet never actually checked the
         // separator's token type (a bare `parser.consume()`), so it never
@@ -68,14 +68,14 @@ export class DiceRollParselet implements PrefixParselet {
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     const next = parser.peek();
     if (next && next.type === "NUMBER") {
-      // Bare hyphen range: "roll 4-8" (wiki: Dice — no keyword, no
+      // Bare hyphen range: "roll 4-8" (wiki: Dice, no keyword, no
       // parens). Both bounds must be consumed as plain NUMBER literals,
-      // NOT via parseExpression() — that would let the infix MINUS
+      // NOT via parseExpression(), that would let the infix MINUS
       // continue an arithmetic expression ("4 - 8" = -4) instead of
       // terminating the range's first operand. This means negative
       // bounds aren't supported through this shorthand (`roll -5-5` is
       // genuinely ambiguous to tokenize); use `roll between -5 and 5` /
-      // `roll from -5 to 5` for negative ranges — those go through
+      // `roll from -5 to 5` for negative ranges, those go through
       // parseExpression() and handle unary minus correctly. Not
       // expressible via definePhrasePattern (its alternatives must be
       // disambiguated by a single leading keyword; this form starts with

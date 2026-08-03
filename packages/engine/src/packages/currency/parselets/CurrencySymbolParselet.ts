@@ -6,7 +6,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { CURRENCY_SYMBOL_ALIASES, resolveCurrencyAlias } from "@solve-js/uom/CurrencyAliases";
 
-/** @deprecated kept as a named re-export for backward compatibility — the canonical table now lives in uom/CurrencyAliases.ts alongside the word-form aliases and the display-formatting table, so all three stay in sync. */
+/** @deprecated kept as a named re-export for backward compatibility, the canonical table now lives in uom/CurrencyAliases.ts alongside the word-form aliases and the display-formatting table, so all three stay in sync. */
 export const symbolToCurrency = CURRENCY_SYMBOL_ALIASES;
 
 export class CurrencySymbolParselet implements PrefixParselet {

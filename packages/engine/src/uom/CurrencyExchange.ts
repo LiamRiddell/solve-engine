@@ -10,13 +10,13 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
  * Error codes for this service. Co-located rather than unioned into
  * `errors/ErrorCode.ts`'s core catalog (that catalog is scoped to the
  * parser/VM/engine/errors/config/lexer layers, not yet the ~17 domain
- * packages — see that file's module doc for the intended per-package
+ * packages. See that file's module doc for the intended per-package
  * pattern this follows).
  */
 export const CurrencyErrorCodes = {
   /** Frankfurter's rates endpoint returned a non-OK HTTP status. */
   API_ERROR: "CURRENCY_API_ERROR",
-  /** A requested currency/crypto code isn't in the fetched rate table — an unrecognized code, not an API failure. */
+  /** A requested currency/crypto code isn't in the fetched rate table, an unrecognized code, not an API failure. */
   UNKNOWN_CODE: "UNKNOWN_CURRENCY_CODE",
   /** CoinGecko's simple-price endpoint returned a non-OK HTTP status. */
   CRYPTO_API_ERROR: "CRYPTO_PRICE_API_ERROR",
@@ -31,7 +31,7 @@ export class CurrencyExchangeService {
    * Live rate tables cached from successful getRate() fetches, keyed by
    * uppercase base currency. Each table holds every rate the API returned
    * for that base (plus the base itself at 1), so any pair whose two codes
-   * appear in one fresh table can be served synchronously — including
+   * appear in one fresh table can be served synchronously, including
    * cross pairs via triangulation (EUR→GBP through a USD-base table).
    * Stale tables are ignored, not evicted; the next successful fetch for
    * the same base overwrites them.
@@ -48,7 +48,7 @@ export class CurrencyExchangeService {
   /**
    * Ticker → CoinGecko coin id, for the cryptocurrencies `isCurrency()`
    * recognizes. Frankfurter (the fiat rate source below) is ECB reference
-   * rates only and has no concept of BTC/ETH/etc — routing a crypto code
+   * rates only and has no concept of BTC/ETH/etc, routing a crypto code
    * through it as `base=BTC` fails outright, which is why crypto pairs
    * previously never resolved (see CurrencyAsyncResolver/VM.ts's ADD
    * handling for the two bugs that let that failure pass silently instead
@@ -73,7 +73,7 @@ export class CurrencyExchangeService {
    * Timeout (ms) for currency exchange rate fetches.
    *
    * If the frankfurter API doesn't respond within this window, the fetch
-   * is aborted — preventing indefinite "Pending" states in the playground
+   * is aborted, preventing indefinite "Pending" states in the playground
    * and Obsidian plugin when the exchange rate API is unreachable.
    */
   private static readonly FETCH_TIMEOUT_MS = 10_000;
@@ -84,7 +84,7 @@ export class CurrencyExchangeService {
    * Routes cryptocurrency codes (see {@link CRYPTO_IDS}) to CoinGecko and
    * everything else to Frankfurter (ECB reference rates, fiat-only). On
    * success, caches the whole returned rate table for `from` so subsequent
-   * lookups — including cross-pairs via triangulation — can be served
+   * lookups, including cross-pairs via triangulation, can be served
    * synchronously by {@link getRateSync} within the freshness window.
    *
    * @throws If the currency code is unrecognized or the fetch fails/times out.
@@ -126,7 +126,7 @@ export class CurrencyExchangeService {
         : (data.rates ?? {});
       if (rates[toUpper] === undefined) throw ErrorFactory.validation(CurrencyErrorCodes.UNKNOWN_CODE, `Unknown currency: ${toUpper}`, { code: toUpper });
 
-      // The API returns ALL rates for the base currency — cache the whole
+      // The API returns ALL rates for the base currency, cache the whole
       // table so subsequent conversions (including cross pairs via
       // triangulation) resolve synchronously within the freshness window
       // instead of going Pending again.
@@ -144,8 +144,8 @@ export class CurrencyExchangeService {
   /**
    * Crypto rate fetch, routed through CoinGecko's no-auth simple-price
    * endpoint instead of Frankfurter (fiat-only, has no BTC/ETH concept).
-   * Handles all three combinations — crypto→crypto, crypto→fiat,
-   * fiat→crypto — via prices denominated in USD (or the target fiat
+   * Handles all three combinations, crypto→crypto, crypto→fiat
+   * fiat→crypto, via prices denominated in USD (or the target fiat
    * directly, which CoinGecko's `vs_currencies` also accepts), then
    * caches the result as a same-shaped base table so getRateSync /
    * convertSync keep working unchanged for crypto pairs too.
@@ -211,7 +211,7 @@ export class CurrencyExchangeService {
   /**
    * Seed a base rate table without a network fetch.
    *
-   * Intended for tests and for future user-provided offline rates —
+   * Intended for tests and for future user-provided offline rates
    * production live data always comes from {@link getRate}. Seeded rates
    * obey the same freshness window as fetched ones.
    *
@@ -241,7 +241,7 @@ export class CurrencyExchangeService {
   /**
    * Synchronous rate lookup: `1` for same-currency pairs, a cached LIVE
    * rate if one was fetched within {@link RATE_FRESHNESS_MS}, otherwise
-   * `null` — callers fall through to the async fetch path and the
+   * `null`, callers fall through to the async fetch path and the
    * expression shows Pending until real data arrives.
    *
    * There is deliberately no hardcoded fallback table: a stale made-up
@@ -312,7 +312,7 @@ export class CurrencyExchangeService {
 
   /**
    * Check whether `code` is a recognized currency code (fiat or the
-   * cryptocurrencies in {@link CRYPTO_IDS}) — a fixed allowlist, not a
+   * cryptocurrencies in {@link CRYPTO_IDS}), a fixed allowlist, not a
    * live lookup against any API.
    */
   isCurrency(code: string): boolean {

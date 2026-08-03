@@ -52,7 +52,7 @@ export interface InlineSolveSpan {
 /**
  * Result from a single line processed by scanDocument().
  * Combines line classification, tokenized tokens, and inline solve spans
- * into a single structure — eliminating the need for separate classifyLine(),
+ * into a single structure, eliminating the need for separate classifyLine()
  * findInlineSolves(), and per-line Lexer.reset() calls.
  */
 export interface ScanLineResult {
@@ -140,7 +140,7 @@ function buildCharClassTable(): Uint8Array {
   table[125] = CharClass.OPERATOR; // }
   table[126] = CharClass.OPERATOR; // ~
   // "@" was previously unclassified (defaulted to CharClass.SKIP, silently
-  // dropped before ever reaching OP_MAP) — see OP_MAP's own "@" entry doc
+  // dropped before ever reaching OP_MAP). See OP_MAP's own "@" entry doc
   // comment for why this is being activated now.
   table[64] = CharClass.OPERATOR;  // @
 
@@ -156,7 +156,7 @@ function buildCharClassTable(): Uint8Array {
 // initialized in the constructor and never added/removed afterwards.
 // This enables fast property access (inline cache hits) and allows
 // allocation in V8's nursery (cheap GC).
-// All 9 fields are always set — no optional fields, no different shapes.
+// All 9 fields are always set, no optional fields, no different shapes.
 export class LexerToken implements Token {
   constructor(
     public type: string,
@@ -183,9 +183,9 @@ const TWO_CHAR_OPS: TwoCharOpMap = {
   60: { 61: 'LTE' },       // <=
   38: { 38: 'LOGICAL_AND' }, // &&
   124: { 124: 'LOGICAL_OR' }, // ||
-  // Note: ** is NOT a single token — the existing moo lexer emits two
+  // Note: ** is NOT a single token, the existing moo lexer emits two
   // separate STAR tokens, and the parser consumes them that way.
-  // 42: { 42: 'EXPONENT' },  // ** — disabled for moo compatibility
+  // 42: { 42: 'EXPONENT' },  // **, disabled for moo compatibility
 };
 // Note: LSHIFT (<<) and RSHIFT (>>) are handled separately because
 // 60 is also used for LTE, so we check LTE first then LSHIFT.
@@ -215,12 +215,12 @@ const OP_MAP: Record<number, string> = {
   60: 'LT',       // <
   62: 'GT',       // >
   126: 'BIT_NOT', // ~
-  // "@" — activates the token type name already dormant-reserved for this
+  // "@", activates the token type name already dormant-reserved for this
   // exact purpose (see Token.ts's OVER/RATE_AT doc comment and
   // normalizer/TokenNormalizer.ts's NON_WORD_NAMES, both of which already
   // anticipated "AT" as a future "@" symbol token before this addition).
   // Backs the time package's video-timecode literal's alternate fps
-  // separator (`01:02:03:04 @ 30fps`, equivalent to `... at 30fps`) — see
+  // separator (`01:02:03:04 @ 30fps`, equivalent to `... at 30fps`). See
   // packages/time/parselets/VideoTimecodeParselet.ts.
   64: 'AT',       // @
 };
@@ -236,7 +236,7 @@ const OP_MAP: Record<number, string> = {
  * Multi-word phrase matching has been moved to the TokenNormalizer post-lexer
  * stage. To register phrase patterns, use `IEnginePackage.normalizerRules` instead.
  *
- * All registrations are additive — built-in patterns still work.
+ * All registrations are additive, built-in patterns still work.
  */
 export interface LexerVocabulary {
   /**
@@ -299,7 +299,7 @@ export interface LexerVocabulary {
 // be present. Used by hasExpressionIndicators() to gate prose lines
 // before full tokenization.
 //
-// NOTE: Currently unused — L1 prose gating was removed from classifyFromPositions()
+// NOTE: Currently unused, L1 prose gating was removed from classifyFromPositions()
 // because it incorrectly skipped keyword-only lines ("pi"), single identifiers
 // ("hello"), and short alpha lines. Retained for future re-implementation with
 // keyword-awareness and proper test coverage.
@@ -308,7 +308,7 @@ const EXPRESSION_INDICATOR_CODES = (() => {
   // Digits 0-9
   for (let i = 48; i <= 57; i++) set.add(i);
   // Operators / punctuation
-  // Note: colon (58) is intentionally excluded — it's common in prose
+  // Note: colon (58) is intentionally excluded, it's common in prose
   // (e.g., "Subject: Hello world") and would cause false-positive
   // expression classification. Variable assignment lines like
   // ":myVar = 5" are still caught by '=' and digit indicators.
@@ -325,7 +325,7 @@ const EXPRESSION_INDICATOR_CODES = (() => {
   set.add(96);   // `
   // Dot (could be decimal)
   set.add(46);   // .
-  // Hash (comment — still an expression indicator)
+  // Hash (comment, still an expression indicator)
   set.add(35);   // #
   return set;
 })();
@@ -338,7 +338,7 @@ const EXPRESSION_INDICATOR_CODES = (() => {
  * (numbers, identifiers, operators, units, keywords, ...), handling
  * markdown-line classification (`classifyLine`), inline `` s`...` `` solve
  * spans, and package-contributed vocabulary (registered via
- * {@link registerVocabulary}/{@link unregisterVocabulary} — keywords,
+ * {@link registerVocabulary}/{@link unregisterVocabulary}, keywords
  * operators, and units a package wants recognized as their own token
  * types rather than falling through to generic identifiers).
  *
@@ -355,7 +355,7 @@ export class ExpressionLexer {
    *
    * Set at construction time via the constructor parameter. Plugin-registered
    * keywords/units (via registerVocabulary()) are checked alongside
-   * the configuredLookup — neither source is bypassed.
+   * the configuredLookup, neither source is bypassed.
    */	private configuredLookup: TokenLookup | null = null;
 
 	// Instance state
@@ -394,7 +394,7 @@ export class ExpressionLexer {
    */
   _inlineSolveSpans: InlineSolveSpan[] = [];
 
-  // Plugin-extensible raw-line patterns — see LexerVocabulary.rawLinePatterns.
+  // Plugin-extensible raw-line patterns. See LexerVocabulary.rawLinePatterns.
   private pluginRawLinePatterns: Array<{ pattern: RegExp; tokenType: string }> = [];
 
   /**
@@ -403,7 +403,7 @@ export class ExpressionLexer {
    * {@link tokenizeAll} should return instead of running the
    * character-by-character scanner. Cleared (re-evaluated) on every
    * {@link reset} call. `null` when no plugin registered any raw-line
-   * patterns, or none matched — the overwhelmingly common case, checked
+   * patterns, or none matched, the overwhelmingly common case, checked
    * with a `length === 0` guard before ever touching this field so a
    * plugin-free lexer pays zero cost for the feature.
    */
@@ -450,7 +450,7 @@ export class ExpressionLexer {
   /**
    * Register a plugin to extend the lexer with custom tokens.
    *
-   * All registrations are additive — built-in patterns still work.
+   * All registrations are additive, built-in patterns still work.
    * Keywords, operators, and units from the plugin are merged
    * with existing ones. Calling multiple times adds more entries.
    *
@@ -564,7 +564,7 @@ export class ExpressionLexer {
    * (e.g., keywords become IDENT, operators become ERROR).
    *
    * Calling unregisterVocabulary with a plugin that was never registered
-   * is safe — it simply has no effect.
+   * is safe, it simply has no effect.
    */
   unregisterVocabulary(plugin: LexerVocabulary): void {
     if (plugin.keywords) {
@@ -665,7 +665,7 @@ export class ExpressionLexer {
       const lineNumber = this.line;
 
       // ── Classify the line ─────────────────────────────────────────
-      // Uses classifyFromPositions() to read from this.input directly —
+      // Uses classifyFromPositions() to read from this.input directly
       // avoids allocating a substring and keeps classification reads
       // within the same memory region as tokenization.
       const classification = this.classifyFromPositions(lineStart, lineEnd);
@@ -673,7 +673,7 @@ export class ExpressionLexer {
       // ── Slice line text for ScanLineResult.text ────────────────
       // Hoisted above tokenization (rather than after, as originally) so the
       // raw-line-pattern check below can test the exact substring a plugin
-      // registered via `LexerVocabulary.rawLinePatterns` — see reset()/
+      // registered via `LexerVocabulary.rawLinePatterns`. See reset()/
       // tokenizeAll() for the single-expression-string equivalent of this
       // same check.
       const lineText = input.slice(lineStart, lineEnd);
@@ -694,17 +694,17 @@ export class ExpressionLexer {
           this.len = lineEnd;
           tokens = Array.from(this);
           this.len = savedLen;
-          // this.pos is now at lineEnd — advance past newline below
+          // this.pos is now at lineEnd, advance past newline below
         }
       }
 
       // ── Detect inline solves ──────────────────────────────────────
       // Two data sources are merged:
-      //   1. _inlineSolveSpans — token indices collected inline during
+      //   1. _inlineSolveSpans, token indices collected inline during
       //      [Symbol.iterator](). Provides correct startTokenIndex /
       //      endTokenIndex. Also handles \` escape (skips the pair
       //      instead of closing the span early).
-      //   2. findInlineSolves() — character-level string scan for
+      //   2. findInlineSolves(), character-level string scan for
       //      expression text. Still needed because token-based
       //      reconstruction loses whitespace (the lexer skips spaces),
       //      which breaks multi-word expressions like
@@ -722,7 +722,7 @@ export class ExpressionLexer {
             endTokenIndex: span.endTokenIndex,
           }));
         } else {
-          // Skipped lines weren't tokenized — fall back to string scan
+          // Skipped lines weren't tokenized, fall back to string scan
           inlineSolves = this.findInlineSolves(lineText);
         }
       }
@@ -803,7 +803,7 @@ export class ExpressionLexer {
     // ── 0-char fast path ────────────────────────────────────────────────
     if (len === 0) { this._inlineSolveSpans = []; return; }
 
-    // Inline solve tracking state — collected inline during tokenization
+    // Inline solve tracking state, collected inline during tokenization
     let tokenIndex = 0;
     let openSpan: { startTokenIndex: number; startColumn: number } | null = null;
     const collectedSpans: InlineSolveSpan[] = [];
@@ -823,7 +823,7 @@ export class ExpressionLexer {
         case CharClass.ALPHA: {
           const input = this.input;
           const identLower = input.toLowerCase();
-          // Use pre-merged collections (built-in + plugin) — single lookup each
+          // Use pre-merged collections (built-in + plugin), single lookup each
           if (this.mergedUnits.has(input)) {
             yield new LexerToken('UNIT', tokenTypeId('UNIT'), input, input, 0, 0, 1, 1);
           } else {
@@ -867,13 +867,13 @@ export class ExpressionLexer {
           break;
 
         case CharClass.BACKTICK:
-          // s` is 2 chars — openSpan can never be set in the 1-char fast path
+          // s` is 2 chars, openSpan can never be set in the 1-char fast path
           yield new LexerToken('BACKTICK_OPEN', tokenTypeId('BACKTICK_OPEN'), '`', '`', 0, 0, 1, 1);
           tokenIndex++;
           break;
 
         default: {
-          // CharClass.SKIP — includes non-ASCII characters (code >= 128)
+          // CharClass.SKIP, includes non-ASCII characters (code >= 128)
           if (c0 === 0x00D7) {  // × → STAR
             yield new LexerToken('STAR', tokenTypeId('STAR'), '\u00D7', '\u00D7', 0, 0, 1, 1);
             tokenIndex++;
@@ -920,7 +920,7 @@ export class ExpressionLexer {
             yield new LexerToken('CURRENCY_SYMBOL', tokenTypeId('CURRENCY_SYMBOL'), '₱', '₱', 0, 0, 1, 1);
             tokenIndex++;
           } else if (c0 >= 128) {
-            // Unknown unicode — treat as IDENT for forward compatibility
+            // Unknown unicode, treat as IDENT for forward compatibility
             yield new LexerToken('IDENT', tokenTypeId('IDENT'), this.input, this.input, 0, 0, 1, 1);
             tokenIndex++;
           }
@@ -939,7 +939,7 @@ export class ExpressionLexer {
       const cc = ExpressionLexer.CHAR_CLASS[c0] ?? CharClass.SKIP;
 
       // ── Escaped backtick inside inline solve ────────────────────────
-      // \` is treated as an escaped backtick — skip both characters
+      // \` is treated as an escaped backtick, skip both characters
       // without closing the inline solve span. Without this, the
       // backtick would close the span early, producing wrong expression
       // text for expressions like s`hello \` world`.
@@ -949,7 +949,7 @@ export class ExpressionLexer {
       }
 
       switch (cc) {
-        // ── Whitespace — skip entirely, track newlines ────────────────
+        // ── Whitespace, skip entirely, track newlines ────────────────
         case CharClass.WHITESPACE:
           this.pos++;
           if (c0 === 10) {  // \n
@@ -964,13 +964,13 @@ export class ExpressionLexer {
           }
           break;
 
-        // ── Digit — inline number tokenizer ───────────────────────────
+        // ── Digit, inline number tokenizer ───────────────────────────
         case CharClass.DIGIT:
           yield this.tokenizeNumber();
           tokenIndex++;
           break;
 
-        // ── Alpha / underscore — identifier or keyword ────────────────
+        // ── Alpha / underscore, identifier or keyword ────────────────
         case CharClass.ALPHA: {
           const token = this.tokenizeIdentifier();
           if (token.type === 'INLINE_SOLVE_START') {
@@ -981,7 +981,7 @@ export class ExpressionLexer {
           break;
         }
 
-        // ── Dot — could be decimal (.5) or DOT token ─────────────────
+        // ── Dot, could be decimal (.5) or DOT token ─────────────────
         case CharClass.DOT:
           if (this.pos + 1 < len) {
             const nextCc = ExpressionLexer.CHAR_CLASS[input.charCodeAt(this.pos + 1)] ?? CharClass.SKIP;
@@ -1110,13 +1110,13 @@ export class ExpressionLexer {
             this.pos++;
             tokenIndex++;
           } else if (c0 >= 128) {
-            // Unknown unicode — treat as IDENT for forward compatibility.
+            // Unknown unicode, treat as IDENT for forward compatibility.
             // tokenizeIdentifier() now includes cc >= 128 in its reading loop,
             // so this properly advances past all consecutive Unicode chars.
             yield this.tokenizeIdentifier();
             tokenIndex++;
           } else {
-            // Unknown ASCII — silently skip
+            // Unknown ASCII, silently skip
             this.pos++;
           }
           break;
@@ -1190,7 +1190,7 @@ export class ExpressionLexer {
       pos++;
     }
 
-    // ── Thousands separators — coalesce with digits ────────────────────
+    // ── Thousands separators, coalesce with digits ────────────────────
     while (hasIntPart && pos < len && (input.charCodeAt(pos) === 44 || input.charCodeAt(pos) === 46)) {
       if (pos + 4 <= len) {
         const d1 = input.charCodeAt(pos + 1);
@@ -1198,14 +1198,14 @@ export class ExpressionLexer {
         const d3 = input.charCodeAt(pos + 3);
         // A genuine thousands group is always exactly 3 digits, followed
         // by either another separator, or a non-digit (end of number,
-        // operator, unit, EOF) — never a 4th consecutive digit. Without
+        // operator, unit, EOF), never a 4th consecutive digit. Without
         // this check, a plain decimal fraction with 4+ digits after the
-        // point — e.g. "0.0001" — had its first 3 fractional digits
+        // point, e.g. "0.0001", had its first 3 fractional digits
         // misread as a "." thousands-group, silently truncating the
         // number to "0.000" and leaving the remaining digit(s) as a
         // separate, unrelated NUMBER token right after it (so
         // "0.0001 BTC to USD" tokenized as "0.000", "1", "BTC", "to",
-        // "USD" — two number literals instead of one — and evaluated to
+        // "USD", two number literals instead of one, and evaluated to
         // a bare 0 instead of a real BTC quantity).
         const d4 = pos + 4 < len ? input.charCodeAt(pos + 4) : -1;
         const isGroupOfExactlyThree = !(d4 >= 48 && d4 <= 57);
@@ -1490,7 +1490,7 @@ export class ExpressionLexer {
       if (indicatorCodes.has(cc)) return true;
       // Unicode math/currency symbols (≥ 128, not in the 128-byte table)
       if (cc >= 128) {
-        // ×, ÷, ≠, £, €, ¥, ₽, ₩ — common expression symbols
+        // ×, ÷, ≠, £, €, ¥, ₽, ₩, common expression symbols
         if (cc === 0x00D7 || cc === 0x00F7 || cc === 0x2260 ||
             cc === 0x00A3 || cc === 0x20AC ||
             cc === 0x00A5 || cc === 0x20BD || cc === 0x20A9) {
@@ -1504,7 +1504,7 @@ export class ExpressionLexer {
   /**
    * Classify a line by its character positions within this.input.
    * Reads directly from this.input using start/end boundaries.
-   * DOES NOT modify this.pos — purely a read-only classifier.
+   * DOES NOT modify this.pos, purely a read-only classifier.
    */
   private classifyFromPositions(start: number, end: number): LineClassification {
     const len = end;
@@ -1664,7 +1664,7 @@ export class ExpressionLexer {
       hasInline = idx !== -1 && idx < len;
     }
 
-    // Return expression — all non-markdown-structure lines are tokenized.
+    // Return expression, all non-markdown-structure lines are tokenized.
     // (L1 prose gating removed: it incorrectly skipped keyword-only lines
     // like "pi", single identifiers like "hello", and any line without
     // digits/operators/currency. Can be re-added with keyword-awareness
@@ -1690,10 +1690,10 @@ export class ExpressionLexer {
   }
 
   /**
-   * Every keyword this lexer currently recognizes — locale keywords
+   * Every keyword this lexer currently recognizes, locale keywords
    * (`pi`, `sqrt`, `convert`, ...) merged with any plugin-contributed ones
    * from `registerVocabulary()` (e.g. a package's custom keywords), mapped to
-   * the token type they lex to. A snapshot copy, not a live reference —
+   * the token type they lex to. A snapshot copy, not a live reference
    * mutating the return value has no effect on the lexer.
    */
   getKeywords(): Record<string, string> {

@@ -3,7 +3,7 @@
  *
  * Each domain is a self-contained package (its own directory, its own
  * `{Domain}Package.ts` defining an IEnginePackage, its own `index.ts`
- * barrel) — the same shape as third-party packages such as the OSRS
+ * barrel), the same shape as third-party packages such as the OSRS
  * example in `src/solve-js/examples/osrs/`. This file's only job is to
  * assemble them into BUILTIN_PACKAGES; it re-exports each named package
  * too, since existing call sites import them directly from here.
@@ -61,7 +61,7 @@ export {
 };
 
 // ── All built-in packages (registration order matters: arithmetic first) ──
-// Note: OSRS is NOT a built-in package — it's a full worked example of
+// Note: OSRS is NOT a built-in package, it's a full worked example of
 // writing a package with the framework (lexer plugin, async resolver, VM
 // handler), kept in src/solve-js/examples/osrs/ rather than shipped as
 // part of the engine. See ExpressionEngine's `packages` constructor
@@ -69,12 +69,12 @@ export {
 //
 // Of the three "Live Data" packages (weather/stocks/knowledge), only
 // WEATHER_PACKAGE is included below. Open-Meteo (weather's provider) is
-// genuinely free and keyless — no configuration burden on a host who
+// genuinely free and keyless, no configuration burden on a host who
 // doesn't want its network calls, who can filter it out of their own
 // `packages` array. Stocks and Knowledge have no equivalent free provider
-// (see their own module docs) — unconfigured, `createStocksPackage()`/
+// (see their own module docs), unconfigured, `createStocksPackage()`/
 // `createKnowledgePackage()` do nothing useful beyond returning an honest
-// "not configured" error, so — matching OSRS's own precedent — they are
+// "not configured" error, so, matching OSRS's own precedent, they are
 // exported but deliberately left OUT of BUILTIN_PACKAGES. A host that
 // wants them calls the factory with their own fetch function/API key and
 // adds the result to their ExpressionEngine's `packages` array directly.

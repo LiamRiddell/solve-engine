@@ -1,7 +1,7 @@
 //#region ─── Module Overview ───────────────────────────────────────────────────
 
 /**
- * TokenNormalizer — post-lexer token normalization pass.
+ * TokenNormalizer, post-lexer token normalization pass.
  *
  * ## Purpose
  * Applies domain-specific {@link NormalizerRule | NormalizerRules} to the raw
@@ -36,7 +36,7 @@ import { PhraseTrie } from "./PhraseTrie";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 //#endregion
-//#region ─── NormalizerOptions — Configuration ────────────────────────────────
+//#region ─── NormalizerOptions, Configuration ────────────────────────────────
 
 /**
  * Configuration options for the normalization pass.
@@ -80,7 +80,7 @@ const DEFAULT_OPTIONS: Required<NormalizerOptions> = {
 };
 
 //#endregion
-//#region ─── createFusedToken — Token Factory ──────────────────────────────────
+//#region ─── createFusedToken, Token Factory ──────────────────────────────────
 
 /**
  * Creates a new normalized token from fused source tokens.
@@ -113,7 +113,7 @@ export function createFusedToken(
 }
 
 //#endregion
-//#region ─── NON_WORD_TOKEN_TYPES — Type-guard skip set ────────────────────────
+//#region ─── NON_WORD_TOKEN_TYPES, Type-guard skip set ────────────────────────
 
 /**
  * Token types that can NEVER start a multi-word phrase.
@@ -126,7 +126,7 @@ export function createFusedToken(
  * types registered by packages) still pass through to the trie for
  * a full match attempt.
  */
-// ── Non-word type ID lookup table (flat Uint8Array — true O(1) array index) ──
+// ── Non-word type ID lookup table (flat Uint8Array, true O(1) array index) ──
 //
 // Index = token typeId, value = 1 if non-word (skip trie), 0 otherwise.
 // Array indexing avoids ALL hashing: no Set.has(), no Map.get(), no string ops.
@@ -140,7 +140,7 @@ export function createFusedToken(
 /**
  * Token type names that can NEVER start a multi-word phrase.
  *
- * Exported for testing only — consumers should use the type-guard behavior
+ * Exported for testing only, consumers should use the type-guard behavior
  * of {@link TokenNormalizer.normalize} rather than this list directly.
  */
 export const NON_WORD_NAMES = [
@@ -155,7 +155,7 @@ export const NON_WORD_NAMES = [
 /**
  * Flat Uint8Array lookup table: index = token typeId, value = 1 if non-word.
  *
- * Exported for testing only — consumers should not depend on the internal
+ * Exported for testing only, consumers should not depend on the internal
  * table layout, as the set of non-word types may change.
  */
 export const NON_WORD_TABLE: Uint8Array = (() => {
@@ -197,14 +197,14 @@ export const NON_WORD_TABLE: Uint8Array = (() => {
  * ```
  */
 export class TokenNormalizer {
-  /** Registered rules, unsorted — the source of truth. */
+  /** Registered rules, unsorted, the source of truth. */
   private rules: NormalizerRule[] = [];
 
   /**
    * Priority-sorted copy of {@link rules}, rebuilt lazily on the next
    * {@link normalize} call after a mutation. Rules are registered once at
    * engine/package-registration time and essentially never change during a
-   * session, but normalize() runs on every keystroke-driven evaluation — an
+   * session, but normalize() runs on every keystroke-driven evaluation, an
    * earlier version re-sorted a fresh copy of `rules` on every single call,
    * which meant every keystroke paid for an allocation + sort of a list that
    * had usually not changed since the last one. `null` means "stale, rebuild
@@ -215,7 +215,7 @@ export class TokenNormalizer {
 
   /**
    * Phrase trie for single-pass multi-word phrase fusion.
-   * Tried at each token position BEFORE other rules — the trie walk
+   * Tried at each token position BEFORE other rules, the trie walk
    * is O(depth) vs O(R × W) for separate rule matching.
    */
   private phraseTrie = new PhraseTrie();
@@ -238,7 +238,7 @@ export class TokenNormalizer {
    * Register a normalization rule.
    *
    * Rules are sorted by priority (descending) on each {@link normalize} call.
-   * Multiple rules can share the same priority — they are tried in registration
+   * Multiple rules can share the same priority, they are tried in registration
    * order when priorities are equal.
    *
    * @param rule - The rule to register
@@ -252,7 +252,7 @@ export class TokenNormalizer {
    * Unregister a normalization rule by its {@link NormalizerRule.name | name}.
    *
    * If multiple rules share the same name, all are removed. This is safe to
-   * call with a name that doesn't match any rule — it simply has no effect.
+   * call with a name that doesn't match any rule, it simply has no effect.
    *
    * @param ruleName - The name of the rule to remove
    */
@@ -274,7 +274,7 @@ export class TokenNormalizer {
   /**
    * Priority-sorted view of {@link rules} (descending priority; registration
    * order preserved for ties, since {@link Array.prototype.sort} is stable).
-   * Cached until the next mutation — see {@link sortedRulesCache}.
+   * Cached until the next mutation. See {@link sortedRulesCache}.
    */
   private getSortedRules(): NormalizerRule[] {
     if (this.sortedRulesCache === null) {
@@ -297,7 +297,7 @@ export class TokenNormalizer {
    *
    * This is the preferred way to add phrase patterns. It inserts into the
    * internal {@link PhraseTrie}, which collapses all phrase rules into a
-   * single O(depth) trie walk per position — no separate rule scanning.
+   * single O(depth) trie walk per position, no separate rule scanning.
    *
    * @param phrase    - Multi-word phrase (e.g., "to the power of", "abyssal whip")
    * @param tokenType - Target token type after fusion (e.g., "CARET", "ITEM")
@@ -360,7 +360,7 @@ export class TokenNormalizer {
     // ── Early exit: nothing to normalize ──
     if (tokens.length === 0) return tokens;
 
-    // ── Priority-sorted rules — cached across calls, see getSortedRules() ──
+    // ── Priority-sorted rules, cached across calls, see getSortedRules() ──
     const sorted = this.getSortedRules();
     const fusionHandler = onFusion ?? this.options.onFusion;
     const maxPasses = this.options.maxPasses;
@@ -384,7 +384,7 @@ export class TokenNormalizer {
 
         // ── Fast path: phrase trie (O(depth) single walk vs O(R × W) per rule) ──
         // O(1) type-guard: skip trie entirely for tokens that can't start phrases.
-        // Flat Uint8Array indexed by typeId — no hashing, no Set lookup, true O(1).
+        // Flat Uint8Array indexed by typeId, no hashing, no Set lookup, true O(1).
         const tid = current[pos].typeId;
         if (tid >= NON_WORD_TABLE.length || NON_WORD_TABLE[tid] === 0) {
           const trieMatch = this.phraseTrie.matchAt(current, pos);
@@ -446,7 +446,7 @@ export class TokenNormalizer {
         }
 
         if (!matched) {
-          // No rule matched at this position — pass token through unchanged
+          // No rule matched at this position, pass token through unchanged
           result.push(current[pos]);
           pos++;
         }
@@ -456,7 +456,7 @@ export class TokenNormalizer {
       if (result.length > maxTokens) {
         // A raw Error here would bypass ThreeTierEvaluator's DAG-preservation
         // enrichment on compile failure (it specifically checks for
-        // EngineError) — same reasoning as ExpressionEngineSafety.ts's
+        // EngineError). Same reasoning as ExpressionEngineSafety.ts's
         // complexity/length checks, which this mirrors.
         throw ErrorFactory.validation(
           "NORMALIZED_TOKEN_LIMIT_EXCEEDED",

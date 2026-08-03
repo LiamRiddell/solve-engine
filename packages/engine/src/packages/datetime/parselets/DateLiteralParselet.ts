@@ -7,7 +7,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 /**
  * Pushes a datetime literal (25/12/2023, 12-25-2023, 2023-12-25, 25.12.2023)
  * whose epoch-ms was already computed by {@link dateLiteralNormalizerRule}
- * during token fusion — this parselet just emits the constant.
+ * during token fusion. This parselet just emits the constant.
  */
 export class DateLiteralParselet implements PrefixParselet {
 	readonly category = "Date/Time";

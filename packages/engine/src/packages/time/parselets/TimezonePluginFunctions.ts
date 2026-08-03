@@ -6,7 +6,7 @@ import {
 } from "../timezones/ZoneMath";
 
 /**
- * Timezone plugin functions — registered via `pluginFunctions` (not
+ * Timezone plugin functions, registered via `pluginFunctions` (not
  * `VMBuiltins.ts`'s shared `builtinFunctions` registry), since this logic
  * is genuinely Time-package-specific (city/IANA-zone lookups), unlike the
  * generic math functions (`gcd`, `sqrt`, ...) that belong in the shared
@@ -62,14 +62,14 @@ export function dateInZoneHandler(args: Value[]): Value {
 /**
  * `time difference between <city1> and <city2>` -> a directional,
  * human-readable offset delta, e.g. "Moscow is 8 hours ahead of Seattle".
- * Computed at the current instant — a zone's offset can shift across a
+ * Computed at the current instant, a zone's offset can shift across a
  * DST transition, so this is a live "right now" answer, not a fixed
  * constant.
  *
  * Takes 4 args: [zoneRef1, zoneRef2, displayName1, displayName2]. The
  * display names are the user's OWN typed text (see
  * `ZoneReference.ts`'s `displayName`), not derived from the resolved
- * zone — "Seattle" and "Los Angeles" both resolve to the same IANA zone
+ * zone, "Seattle" and "Los Angeles" both resolve to the same IANA zone
  * (`America/Los_Angeles`), and deriving the label from the zone id alone
  * would silently rename whichever one the user didn't type.
  */

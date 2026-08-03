@@ -4,7 +4,7 @@
  *
  * Enabled when `process.env.DEBUG_ABORTCTRL === "true"`.
  *
- * This is **opt-in only** — even in development mode you must explicitly
+ * This is **opt-in only**, even in development mode you must explicitly
  * set the flag to avoid log noise from large documents.
  *
  * Logs controller creation, abortion, signal linking, keystroke signal

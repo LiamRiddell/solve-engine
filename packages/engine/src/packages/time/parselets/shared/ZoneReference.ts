@@ -4,13 +4,13 @@ import { encodeFixedOffset, zoneLabel } from "../../timezones/ZoneMath";
 
 /** A resolved zone reference plus the display text the user actually typed. */
 export interface ZoneReference {
-  /** IANA zone identifier, or a fixed-offset encoding — see `ZoneMath.ts`. */
+  /** IANA zone identifier, or a fixed-offset encoding. See `ZoneMath.ts`. */
   zoneRef: string;
   /**
    * What to show the user for this zone, e.g. in "time difference"
    * output. The user's OWN raw text, title-cased, when they named a
-   * city/abbreviation/country (so "Seattle" and "Los Angeles" — both
-   * `America/Los_Angeles` — each keep their own label instead of
+   * city/abbreviation/country (so "Seattle" and "Los Angeles", both
+   * `America/Los_Angeles`, each keep their own label instead of
    * collapsing to whichever one the IANA identifier happens to be named
    * after). Falls back to `zoneLabel(zoneRef)`'s derived label
    * (e.g. "UTC+8") for the numeric GMT/UTC-offset form, where there's no
@@ -20,21 +20,21 @@ export interface ZoneReference {
 }
 
 /**
- * Consume a "zone reference" from the parser if one is present — a city,
+ * Consume a "zone reference" from the parser if one is present, a city
  * country, or standard-abbreviation name (`ZONE_LOOKUP`, matched by raw
  * token text regardless of whether it's a bare `IDENT` or a phrase-fused
- * `CITY_NAME` token — see `TimePackage.ts`'s `phrases` field for the
+ * `CITY_NAME` token. See `TimePackage.ts`'s `phrases` field for the
  * multi-word cities), or a numeric `GMT+N`/`UTC-N[:MM]` offset (a
  * multi-token form: an IDENT "gmt"/"utc", then an optional sign +
  * number + optional `:MM`).
  *
  * Returns `null` and consumes NOTHING if the next token doesn't match
- * either shape — callers must check for `null` before assuming a zone
+ * either shape, callers must check for `null` before assuming a zone
  * reference was found, since (unlike most of this codebase's phrase
  * parsing) this helper is deliberately speculative: it only commits
  * (consumes tokens) once it's confident, so a caller can safely use it to
  * decide "is a zone-conversion suffix present at all" without needing
- * backtracking (this parser has none — `BytecodeBuilder` is append-only).
+ * backtracking (this parser has none, `BytecodeBuilder` is append-only).
  */
 export function tryConsumeZoneReference(parser: Parser): ZoneReference | null {
   const token = parser.peek();
@@ -53,7 +53,7 @@ export function tryConsumeZoneReference(parser: Parser): ZoneReference | null {
       // "8:30" between the sign and a following word (e.g. "in Paris") has
       // already been fused into a single CLOCK_TIME token by the lexer's
       // clock-time normalizer (see ClockTimeNormalizerRule.ts) before this
-      // parselet ever runs, so a bare NUMBER never appears in that case —
+      // parselet ever runs, so a bare NUMBER never appears in that case
       // the fused token's value IS already hour*60+minute, matching
       // `totalMinutes` below exactly, so it can be used as-is.
       const offsetToken = parser.peek();

@@ -7,16 +7,16 @@ import { INFLATION_TO_YEAR_FROM_PRESENT_IDX } from "./InflationPluginFunctions";
 
 /**
  * Infix parselet for the fused `IN_YEAR_DOLLARS` token (see
- * `normalizer/InYearDollarsNormalizerRule.ts` — fuses "in <year> dollars"
+ * `normalizer/InYearDollarsNormalizerRule.ts`, fuses "in <year> dollars"
  * into one token carrying the year as its value). Backs `$X in <year>
- * dollars` — express a present-day amount in a specific historical year's
+ * dollars`, express a present-day amount in a specific historical year's
  * dollars. Mathematically identical to `what was $X worth in <year>`
- * (`InflationQueryParselet`'s "what-was" variant) — both reuse the same
+ * (`InflationQueryParselet`'s "what-was" variant), both reuse the same
  * `inflationToYearFromPresent` plugin function, just reached via a
  * different surface phrasing.
  *
  * Binding power 35, matching the currency/UoM package's `InParselet` tier
- * — this parselet only ever fires on the ALREADY-FUSED `IN_YEAR_DOLLARS`
+ *. This parselet only ever fires on the ALREADY-FUSED `IN_YEAR_DOLLARS`
  * token (the bare `IN` token from the original "in <year> dollars" text
  * no longer exists in the stream by the time the parser runs), so there
  * is no runtime collision with `InParselet` to guard against here.

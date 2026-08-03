@@ -28,7 +28,7 @@ import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-
  * @param maxStackDepth - Maximum stack slots (default 200)
  * @param maxInstructions - Maximum opcodes per expression (default 50000)
  * @param maxFunctionRecursionDepth - Maximum nested user-defined-function
- *   calls (default 50) — see the VM interface's `pushCallFrame` doc for why
+ *   calls (default 50). See the VM interface's `pushCallFrame` doc for why
  *   this exists as its own dedicated guard, separate from `maxInstructions`.
  */
 export function createVM(
@@ -48,23 +48,23 @@ export function createVM(
     let activeSignal: AbortSignal | undefined;
     let abortCurrent: (() => void) | undefined;
 
-    // User-defined-function call frames — a real stack of name-keyed Maps,
+    // User-defined-function call frames, a real stack of name-keyed Maps
     // not a flat map, so nested/recursive calls (double(double(5))) each
     // get their own bound-argument scope instead of clobbering a shared
     // one. `getVar` below only ever consults the INNERMOST frame (no
-    // lexical capture across nested calls) — see OpRegistry.ts's VM
+    // lexical capture across nested calls). See OpRegistry.ts's VM
     // interface doc for the full reasoning.
     const callFrames: Map<string, Value>[] = [];
-    // VM-INSTANCE-scoped (not module-global) — an intentional improvement
+    // VM-INSTANCE-scoped (not module-global), an intentional improvement
     // over a shared-across-engines registry: two ExpressionEngine
     // instances with different documents no longer risk one's `f(x)`
     // clobbering the other's same-named function, which a module-level
     // Map would allow (the same class of gap ARCHITECTURE.md §10's L1
     // cross-instance-isolation item already tracks for pluginFunctionRegistry
-    // et al. — this VM-scoped design simply doesn't inherit it).
+    // et al.. This VM-scoped design simply doesn't inherit it).
     const userFunctions = new Map<string, UserFunctionDef>();
     // Bare (colon-less) equations (`a*x = rhs`), keyed by their free
-    // variable — see OpRegistry.ts's EquationDef doc comment. Same
+    // variable. See OpRegistry.ts's EquationDef doc comment. Same
     // VM-instance scoping reasoning as userFunctions above.
     const equations = new Map<string, EquationDef>();
 
@@ -154,9 +154,9 @@ export interface Bytecode {
     opcodes: Uint8Array;
     numbers: Float64Array;
     strings: string[];
-    /** User-defined-function bodies compiled alongside this program — see `parser/BytecodeBuilder.ts`'s `BytecodeProgram.userFunctionBodies`. */
+    /** User-defined-function bodies compiled alongside this program. See `parser/BytecodeBuilder.ts`'s `BytecodeProgram.userFunctionBodies`. */
     userFunctionBodies?: UserFunctionDef[];
-    /** map/reduce anonymous transform bodies — see `parser/BytecodeBuilder.ts`'s `BytecodeProgram.anonymousBodies`. */
+    /** map/reduce anonymous transform bodies. See `parser/BytecodeBuilder.ts`'s `BytecodeProgram.anonymousBodies`. */
     anonymousBodies?: AnonymousBodyDef[];
 }
 
@@ -166,23 +166,23 @@ export interface Bytecode {
  * (see `vm/VMBuiltins.ts`'s `pluginFunctionRegistry`).
  *
  * Exists so a package can implement cross-line features (`prev`, `line<N>`,
- * range/above aggregation — see `packages/lines/`) without every other
+ * range/above aggregation. See `packages/lines/`) without every other
  * plugin function having to care: it's optional, and every existing
  * handler ignores it unchanged. Before this, a plugin function's only
- * input was its own call-site arguments — no line number, no access to
+ * input was its own call-site arguments, no line number, no access to
  * any other line's cached result. `getLineResult`/`isLineBoundary` are
  * both `undefined` when there's no real document (e.g.
  * `ExpressionEngine.evaluateExpression()`'s single-expression path, which
- * uses `lineIndex = -1` as its existing "no document" sentinel) — a
+ * uses `lineIndex = -1` as its existing "no document" sentinel), a
  * plugin function needing document access must check for that itself
  * and return a clear error, never silently treat it as line 0.
  */
 export interface LineExecutionContext {
     /** 1-based current line number, or -1 when there is no real document (see class doc above). */
     lineIndex: number;
-    /** Look up another line's cached result by 1-based line number. `undefined` = not evaluated yet (or out of range) — distinct from a line that evaluated to an actual `undefined`-like Value, which can't happen (every Value type has a concrete representation). */
+    /** Look up another line's cached result by 1-based line number. `undefined` = not evaluated yet (or out of range), distinct from a line that evaluated to an actual `undefined`-like Value, which can't happen (every Value type has a concrete representation). */
     getLineResult?: (lineNumber: number) => Value | undefined;
-    /** Whether line `lineNumber` is a blank line or a `#` heading — the stopping condition for "total above"/"sum above"/"average above" aggregation. */
+    /** Whether line `lineNumber` is a blank line or a `#` heading, the stopping condition for "total above"/"sum above"/"average above" aggregation. */
     isLineBoundary?: (lineNumber: number) => boolean;
 }
 
@@ -191,7 +191,7 @@ export interface LineExecutionContext {
  *
  * Two variants:
  * - `value`: execution completed synchronously with a concrete Value
- * - `pending`: an async plugin call was encountered — the orchestrator
+ * - `pending`: an async plugin call was encountered, the orchestrator
  *   must await the resolver Promise, then re-execute
  *
  * Replaces the old throw-AsyncSuspenseError pattern, eliminating the need
@@ -201,7 +201,7 @@ export type EvalResult =
     | { type: 'value'; value: Value }
     | { type: 'pending'; queryKey: string; resolver: Promise<Value>; packageId: string; signal: AbortSignal }
     /**
-     * NEW third arm — an internal invariant violation (stack underflow via
+     * NEW third arm, an internal invariant violation (stack underflow via
      * `safePop()`, an unresolved global variable bypassing preflight, a
      * safety limit exceeded) surfaced as a controlled, structured
      * `EngineError` instead of letting a raw exception escape
@@ -214,7 +214,7 @@ export type EvalResult =
  * Extract the Value from an EvalResult. Throws if the result is
  * `'pending'` (should not happen at call sites that have already resolved
  * async dependencies) or `'error'` (re-throws the original `EngineError`
- * as-is, preserving its structure — this used to be a raw `new Error(...)`).
+ * as-is, preserving its structure. This used to be a raw `new Error(...)`).
  */
 export function unwrapEvalResult(result: EvalResult): Value {
     if (result.type === 'value') return result.value;
@@ -229,12 +229,12 @@ export function unwrapEvalResult(result: EvalResult): Value {
 /**
  * Fatal-bug fix: pop the stack, throwing a controlled `EngineError` instead
  * of silently returning `undefined` on an empty stack. Every one of this
- * dispatch loop's ~90 opcode cases used to call the raw `stack.pop()!` —
+ * dispatch loop's ~90 opcode cases used to call the raw `stack.pop()!`
  * the `!` is compile-time-only, so if bytecode's push/pop counts ever
  * didn't match what an opcode expected (corrupted bytecode, a buggy
  * third-party package's parselet, an internal compiler bug), `pop()`
  * silently returned `undefined` and the NEXT property access on it threw
- * a raw, uncontrolled `TypeError` — this file's own comments already
+ * a raw, uncontrolled `TypeError`. This file's own comments already
  * flagged the general risk class (see `maxStackDepth`'s doc comment above)
  * but only ever built a backstop against stack GROWTH; underflow had none.
  * Caught for free by `executeBytecode()`'s new outer try/catch.
@@ -253,24 +253,24 @@ function safePop(stack: Value[]): Value {
 }
 
 /**
- * Reentrantly executes a `map`/`reduce` transform body — either an
+ * Reentrantly executes a `map`/`reduce` transform body, either an
  * anonymous inline expression (`10*x` in `map(10*x, [...])`) or a real
- * user-defined function's own body (`map(f, ...)`) — with a fresh call
+ * user-defined function's own body (`map(f, ...)`), with a fresh call
  * frame binding `params[i] -> args[i]`. Mirrors `CALL_USER_FUNCTION`'s own
  * reentrant-`executeBytecode()` pattern exactly (see its case below for
  * the full reasoning on why this is safe); factored out here so
  * `MAP_INVOKE`/`REDUCE_INVOKE` don't each duplicate it twice (once per
- * transform kind that needs a call frame — the builtin-function kind
+ * transform kind that needs a call frame, the builtin-function kind
  * needs no frame at all, so it's handled inline at each call site
  * instead).
  *
  * `symbolicTolerant` (H.3) is threaded straight through from the
  * ENCLOSING `executeBytecode()` call's own flag (see MAP_INVOKE/
- * REDUCE_INVOKE below) — not hardcoded true — so a map/reduce transform
+ * REDUCE_INVOKE below), not hardcoded true, so a map/reduce transform
  * body only tolerates an undefined variable (e.g. the free `b` in
  * `reduce(acc+x+b,[1,2,3])=>2b+6`) when the OUTER expression is itself
  * running in a `=>` solve/simplify context; ordinary (non-`=>`)
- * map/reduce usage keeps today's exact behavior — a genuinely undefined
+ * map/reduce usage keeps today's exact behavior, a genuinely undefined
  * variable inside the transform body still hard-throws.
  */
 function invokeFrameBody(
@@ -294,7 +294,7 @@ function invokeFrameBody(
     }
     if (bodyResult.type === "pending") {
         // Same v1 scope decision as CALL_USER_FUNCTION's own async body
-        // rejection — propagating a 'pending' result up through a
+        // rejection, propagating a 'pending' result up through a
         // reentrant executeBytecode() call would need the OUTER
         // expression's own bytecode position/stack state to also be
         // resumable later, which isn't implemented.
@@ -324,23 +324,23 @@ function extractDurationMs(value: Value): number {
 
 /**
  * Advance (or, for negative `n`, retreat) a Datetime by `n` business days,
- * skipping Saturdays/Sundays — e.g. Friday + 1 workday lands on Monday, not
+ * skipping Saturdays/Sundays, e.g. Friday + 1 workday lands on Monday, not
  * Saturday. Backs the datetime package's `<date> + N workdays` / `<date> -
  * N workdays` arithmetic (see this function's ADD/SUB call sites below).
  *
- * SCOPE DECISION: does NOT exclude public holidays — plain Mon-Fri
+ * SCOPE DECISION: does NOT exclude public holidays, plain Mon-Fri
  * business-day math only. SoulverCore's own workday calculations
  * auto-exclude public holidays via a live-updating, region-configurable
  * holiday database; picking which holidays/region and keeping such a
  * database current is a real, separate piece of scope this pass
  * deliberately does not take on (matches this codebase's established
  * pattern of documenting a scoped-down simplification rather than silently
- * pretending to support something it doesn't — e.g. Finance's "no
+ * pretending to support something it doesn't, e.g. Finance's "no
  * hardcoded tax rate" decision in vm/VMBuiltins.ts).
  *
  * Walks one calendar day at a time (matching this file's existing
  * DATE_NEXT_WEEKDAY/DATE_LAST_WEEKDAY local-time convention below) rather
- * than a closed-form calculation — the exact skip pattern depends on which
+ * than a closed-form calculation, the exact skip pattern depends on which
  * day of the week the anchor date falls on, so there's no fixed ratio like
  * uom/UomConverter.ts's workday<->day RATE conversion (that's a linear
  * approximation acceptable for Rate math; actual date arithmetic needs the
@@ -359,7 +359,7 @@ function addBusinessDays(epochMs: number, n: number): number {
 }
 
 /**
- * Combine a video-timecode Value (`Uom(totalFrames, "timecode@fps")` — see
+ * Combine a video-timecode Value (`Uom(totalFrames, "timecode@fps")`. See
  * `vm/Value.ts`'s timecode section) with a right-hand operand for ADD/SUB.
  * `sign` is +1 for ADD, -1 for SUB.
  *
@@ -367,7 +367,7 @@ function addBusinessDays(epochMs: number, n: number): number {
  * - Another timecode at the SAME fps -> combine frame counts directly.
  *   ADD ("timecode + timecode") keeps the timecode tag (SoulverCore treats
  *   a timecode primarily as a duration-since-zero, so summing two is
- *   meaningful — concatenating clip lengths — unlike summing two absolute
+ *   meaningful, concatenating clip lengths, unlike summing two absolute
  *   Datetimes, which this file already rejects above). SUB ("timecode -
  *   timecode") produces a plain `Uom(diff, "frames")` instead, mirroring
  *   this file's Datetime-Datetime SUB convention just above (an absolute-
@@ -380,7 +380,7 @@ function addBusinessDays(epochMs: number, n: number): number {
  *   get a frame count.
  * - A bare Number -> treated as a raw frame count, for convenience.
  *
- * Deliberately NOT commutative (only handles `left` being the timecode) —
+ * Deliberately NOT commutative (only handles `left` being the timecode)
  * the task grammar this backs always writes the timecode first
  * ("timecode + N frames", not "N frames + timecode"); see this file's
  * ADD/SUB call sites for where that asymmetry is accepted.
@@ -410,14 +410,14 @@ function combineTimecode(tc: Value, r: Value, sign: 1 | -1): Value {
         return uomValue(tc.toNumber() + sign * seconds * fps, tc.unit!);
     }
 
-    // Bare Number (or any other Uom) — treated as a raw frame count.
+    // Bare Number (or any other Uom), treated as a raw frame count.
     return uomValue(tc.toNumber() + sign * r.toNumber(), tc.unit!);
 }
 
 /**
  * Truthiness for a conditional/logical operand. `Boolean` values use
  * their own value directly; anything else falls back to a JS-like
- * "nonzero is truthy" reading of `toNumber()` — lets a plain numeric
+ * "nonzero is truthy" reading of `toNumber()`, lets a plain numeric
  * expression work as a condition (`if x then ...`) without requiring an
  * explicit comparison, without adding a whole coercion framework.
  */
@@ -456,7 +456,7 @@ function multiplyRateByMatchingUom(rate: Value, multiplier: Value): Value {
 
 /**
  * Simplify a decimal to the smallest fraction that reproduces it within a
- * tight tolerance, via continued-fraction expansion — so a float like
+ * tight tolerance, via continued-fraction expansion, so a float like
  * 0.3333333333333333 (not exactly 1/3) still resolves to "1/3" instead of
  * an unreadably large denominator.
  */
@@ -526,7 +526,7 @@ function toOctalString(n: number): string {
  *   (>90% of arithmetic ops).
  * - Tracing uses a boolean guard (`shouldTrace`) that the JIT eliminates
  *   entirely when diagnostics are disabled. No function call overhead.
- * - `Value.toNumber()` caches its result — computed once, read thereafter.
+ * - `Value.toNumber()` caches its result, computed once, read thereafter.
  */
 export function executeBytecode(
     bytecode: Bytecode,
@@ -534,12 +534,12 @@ export function executeBytecode(
     pipeline?: DiagnosticPipeline | undefined,
     expression?: string,
     context?: LineExecutionContext,
-    // Symbolic-tolerant mode (default false — every existing evaluation
+    // Symbolic-tolerant mode (default false, every existing evaluation
     // path is completely unchanged): when true, LOAD_VAR pushes a
     // Symbolic placeholder (vm/Symbolic.ts) for an undefined variable
     // instead of throwing UNDEFINED_VARIABLE. Set only by the `=>`
     // solve/simplify path (H.2) and map/reduce's own reentrant calls when
-    // folding a symbolic accumulator (H.3) — never by top-level
+    // folding a symbolic accumulator (H.3), never by top-level
     // evaluation, so the hard UNDEFINED_VARIABLE throw stays exactly as-is
     // for ordinary expressions.
     symbolicTolerant?: boolean
@@ -551,13 +551,13 @@ export function executeBytecode(
     const maxStackDepth = vm.getMaxStackDepth();
 
     // Direct stack array reference. Bypasses VM.push/pop's own bounds check
-    // (vm.push() silently no-ops past maxStackDepth — fine for the rare
+    // (vm.push() silently no-ops past maxStackDepth, fine for the rare
     // direct caller, wrong for the hot loop, which instead gets a single
     // cheap depth check per instruction below, same cost class as the
     // instruction-count check). Built-in packages' bytecode naturally stays
     // well under maxStackDepth (nesting depth is already bounded by
-    // maxNestingDepth), but a third-party package's buggy parselet — or a
-    // host that raises maxComplexity/maxNestingDepth — has no other
+    // maxNestingDepth), but a third-party package's buggy parselet, or a
+    // host that raises maxComplexity/maxNestingDepth, has no other
     // backstop against unbounded stack growth without this check.
     const stack = vm.getStack();
 
@@ -565,7 +565,7 @@ export function executeBytecode(
     // No function call, no argument evaluation, zero overhead.
     const shouldTrace = pipeline?.hasCollectors ?? false;
 
-    // Hoist arena check to a local constant — avoids a function call at
+    // Hoist arena check to a local constant, avoids a function call at
     // every HALT/STORE_VAR/fallback-return in the dispatch loop.
     // The arena is only active during scroll execution (ThreeTierEvaluator
     // Tier 2); in all other paths this is always false and the JIT can
@@ -575,17 +575,17 @@ export function executeBytecode(
     if (opcodes.length === 0) return { type: 'value', value: numberValue(0) };
 
     // Fatal-bug fix: this whole dispatch loop used to have NO surrounding
-    // try/catch at all — a safety-limit throw (INSTRUCTION_LIMIT_EXCEEDED/
+    // try/catch at all, a safety-limit throw (INSTRUCTION_LIMIT_EXCEEDED/
     // STACK_LIMIT_EXCEEDED, both just below), an UNDEFINED_VARIABLE throw,
     // or a raw TypeError from a stack-underflow bug (see safePop() below)
     // escaped this function entirely and was only ever caught because every
     // production call site happened to sit inside SOMEONE ELSE's generic
-    // catch — confirmed NOT true for AsyncResolutionBatcher.reExecuteMainThread(),
+    // catch, confirmed NOT true for AsyncResolutionBatcher.reExecuteMainThread()
     // which had none (now fixed separately, see that file). EvalResult's
     // new {type:'error'} arm makes this function's contract match what it
     // always should have been: three possible outcomes, all returned, none
     // silently relying on an external catch. Deliberately NOT re-indented
-    // (a ~900-line body) to keep this diff reviewable — a future full pass
+    // (a ~900-line body) to keep this diff reviewable, a future full pass
     // could re-indent, this fix does not depend on it.
     try {
     while (ip < opcodes.length) {
@@ -597,7 +597,7 @@ export function executeBytecode(
       if (++localInstructionCount > maxInstructions) {
         throw ErrorFactory.execution("INSTRUCTION_LIMIT_EXCEEDED", `Execution exceeded maximum of ${maxInstructions} instructions`);
       }
-      // Same cost class as the check above — one comparison, statically
+      // Same cost class as the check above, one comparison, statically
       // predicted not-taken. Catches stack growth left over from the
       // previous instruction's push(es); a bounded one-instruction delay
       // is fine for a safety limit (see the comment on `stack` above).
@@ -678,11 +678,11 @@ export function executeBytecode(
             stack.push(numberValue((l.value as number) + (r.value as number)));
           } else if (l.type === ValueType.Boolean && r.type === ValueType.Boolean) {
             // The word "and" lexes as PLUS (en.ts: `and: "PLUS"`, a
-            // long-standing synonym for arithmetic "+" — "5 and 3" = 8).
+            // long-standing synonym for arithmetic "+", "5 and 3" = 8).
             // PLUS is a Tier-1 hardcoded infix operator (see
             // parser/BindingPower.ts's BUILTIN_INFIX_BP), so a registered
             // parselet can never intercept the word "and" the way it can
-            // for genuinely new tokens like "or"/"&&" — this opcode-level
+            // for genuinely new tokens like "or"/"&&". This opcode-level
             // type check is the only way "true and false" reads as logical
             // AND rather than falling through to NaN-producing numeric
             // addition. Mirrors the Datetime/Rate special-casing already
@@ -694,7 +694,7 @@ export function executeBytecode(
               // (unlike subtracting them, which yields a duration).
               stack.push(errorValue("INVALID_DATETIME_OP", "Cannot add two datetimes together"));
             } else if (r.type === ValueType.Uom && isWorkdayUnit(r.unit)) {
-              // "<date> + N workdays" — business-day-skip arithmetic, NOT
+              // "<date> + N workdays", business-day-skip arithmetic, NOT
               // the generic linear-ms duration path below (a workday's
               // real-world length depends on which specific calendar days
               // it actually spans, unlike a fixed-length unit like "day").
@@ -705,7 +705,7 @@ export function executeBytecode(
             }
           } else if (l.type === ValueType.Uom && isTimecodeUnit(l.unit)) {
             // "timecode + N frames" / "timecode + duration" / "timecode +
-            // timecode" — see combineTimecode()'s doc comment above.
+            // timecode". See combineTimecode()'s doc comment above.
             stack.push(combineTimecode(l, r, 1));
           } else {
             stack.push(binaryOp(l, r, (a, b) => a + b, (a, b) => a + b, "add"));
@@ -719,21 +719,21 @@ export function executeBytecode(
           } else if (l.type === ValueType.Datetime) {
             if (r.type === ValueType.Datetime) {
               // "now - now" used to unconditionally re-wrap the result as
-              // ANOTHER Datetime — e.g. subtracting two timestamps close
+              // ANOTHER Datetime, e.g. subtracting two timestamps close
               // together produced a near-Unix-epoch date ("01/01/1970,
               // 01:00:00") instead of the near-zero duration a user would
               // expect. Two datetimes subtract to a duration, not a point
-              // in time — represented as a Uom in milliseconds, consistent
+              // in time, represented as a Uom in milliseconds, consistent
               // with how extractDurationMs() reads durations elsewhere.
               stack.push(uomValue(l.toNumber() - r.toNumber(), "ms"));
             } else if (r.type === ValueType.Uom && isWorkdayUnit(r.unit)) {
-              // "<date> - N workdays" — see the matching ADD case above.
+              // "<date> - N workdays". See the matching ADD case above.
               stack.push(datetimeValue(addBusinessDays(l.toNumber(), -r.toNumber())));
             } else {
               stack.push(datetimeValue(l.toNumber() - extractDurationMs(r)));
             }
           } else if (l.type === ValueType.Uom && isTimecodeUnit(l.unit)) {
-            // "timecode - timecode" (difference) / "timecode - duration" —
+            // "timecode - timecode" (difference) / "timecode - duration"
             // see combineTimecode()'s doc comment above.
             stack.push(combineTimecode(l, r, -1));
           } else {
@@ -747,12 +747,12 @@ export function executeBytecode(
             stack.push(numberValue((l.value as number) * (r.value as number)));
           } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
             // Genuinely different from +/-/comparisons (which stay
-            // element-wise, via binaryOp() below) — scalar broadcast vs.
+            // element-wise, via binaryOp() below), scalar broadcast vs.
             // real matrix product, disambiguated by shape. Must run BEFORE
             // binaryOp(), which only ever does element-wise Matrix math.
             stack.push(matrixMultiply(l.value as MatrixData, r.value as MatrixData));
           } else if (l.type === ValueType.Uom && isRateUnit(l.unit) && r.type === ValueType.Uom && r.unit) {
-            // "30 fps × 3 minutes" -> "5,400 frames" via plain "×"/"*" —
+            // "30 fps × 3 minutes" -> "5,400 frames" via plain "×"/"*"
             // no package needs to route through RATE_MUL explicitly.
             stack.push(multiplyRateByMatchingUom(l, r));
           } else if (r.type === ValueType.Uom && isRateUnit(r.unit) && l.type === ValueType.Uom && l.unit) {
@@ -771,16 +771,16 @@ export function executeBytecode(
               stack.push(numberValue(lv / rv));
             } else if (sharedCurrencyExchange.isCurrency(l.unit!) && sharedCurrencyExchange.isCurrency(r.unit!)) {
               // Both currencies, but unifyUom couldn't reconcile them (no
-              // live rate cached yet) — an honest failure, not a rate:
+              // live rate cached yet), an honest failure, not a rate:
               // "$X per €Y" isn't a meaningful derived unit the way
               // "km/day" is, so this stays INCOMPATIBLE_UNITS rather than
               // silently becoming a nonsensical currency-pair rate.
               stack.push(errorValue("INCOMPATIBLE_UNITS", `Cannot combine incompatible units: ${l.unit} and ${r.unit}`));
             } else {
-              // Genuinely different measures (e.g. "90 km / 3 day") —
+              // Genuinely different measures (e.g. "90 km / 3 day")
               // construct a Rate rather than erroring, now that this
               // codebase has a compound/derived-unit representation (see
-              // vm/Value.ts's rateValue()) — matches RATE_DIV's explicit
+              // vm/Value.ts's rateValue()), matches RATE_DIV's explicit
               // construction opcode, but reachable via plain "/" too.
               stack.push(rateValue(lv / rv, l.unit!, r.unit!));
             }
@@ -797,7 +797,7 @@ export function executeBytecode(
         case OpCode.EXP: {
           const r = safePop(stack), l = safePop(stack);
           // Unlike ADD/SUB/MUL/DIV/MOD, EXP never routed through
-          // binaryOp() (VMConversion.ts) — it called Math.pow() on raw
+          // binaryOp() (VMConversion.ts), it called Math.pow() on raw
           // toNumber() output unconditionally, so it needs its own
           // Error/Pending short-circuit for the same reason binaryOp()
           // now has one: toNumber() returns 0 for both, so
@@ -972,7 +972,7 @@ export function executeBytecode(
         case OpCode.SELECT: {
           // Eager ternary: both branches are ALREADY evaluated and on the
           // stack by the time this opcode runs (this VM has no jump/branch
-          // opcodes — see OpCode.ts's comment on SELECT for why that's an
+          // opcodes. See OpCode.ts's comment on SELECT for why that's an
           // intentional simplification, not an oversight). Stack order
           // (bottom to top) matches the natural parse order of "if
           // condition then thenVal else elseVal": [condition, thenVal, elseVal].
@@ -998,7 +998,7 @@ export function executeBytecode(
           } else {
             const result = fn(args, context);
             if (result instanceof Promise) {
-              // Return pending result — no throw. The orchestrator checks
+              // Return pending result, no throw. The orchestrator checks
               // result.type and handles async resolution outside the VM.
               // The pluginId + domain are embedded in the cache key format:
               //   {pluginId}:{domain}:{fnIdx}:{hash(args)}
@@ -1006,7 +1006,7 @@ export function executeBytecode(
               // the engine scopes it by pluginId before storing.
               const cacheKey = `plugin:${fnIdx}:${args.map(a => String(a.value ?? '')).join('|')}`;
               // activeSignal must be set by the engine before calling executeBytecode.
-              // If it's not (bug), we use a new signal that will never abort —
+              // If it's not (bug), we use a new signal that will never abort
               // this is a safety net, not the expected path.
               const signal = vm.activeSignal!;
               // The owning package, so a failed or slow async call can be attributed.
@@ -1029,15 +1029,15 @@ export function executeBytecode(
           break;
         }
         case OpCode.DEFINE_USER_FUNCTION: {
-          // Registration happens HERE, at execution time — not at parse
-          // time — so a diagnostic/lookahead parse of a definition line
+          // Registration happens HERE, at execution time, not at parse
+          // time, so a diagnostic/lookahead parse of a definition line
           // that never actually executes (syntax highlighting, autocomplete
           // preview, ...) has no side effect on vm.userFunctions. See
           // BytecodeBuilder.ts's UserFunctionDef doc comment.
           const bodyIdx = opcodes[ip++];
           const def = userFunctionBodies?.[bodyIdx];
           if (!def) {
-            // A compiler/VM invariant violation, not user-input — a
+            // A compiler/VM invariant violation, not user-input, a
             // mismatched bodyIdx means the bytecode compiler and this
             // dispatch loop disagree about userFunctionBodies' contents,
             // never something reachable by writing a normal `f(x) = ...`
@@ -1054,11 +1054,11 @@ export function executeBytecode(
         case OpCode.CALL_USER_FUNCTION: {
           // User-defined, parameterized, reusable functions. `name`'s body
           // was compiled to its OWN independent BytecodeProgram at
-          // definition time — parameter references inside it are ORDINARY
+          // definition time, parameter references inside it are ORDINARY
           // LOAD_VAR opcodes (see BytecodeBuilder.ts's UserFunctionDef doc
           // comment for why), resolved dynamically via the call frame
           // pushed below. Re-executing the body here is a genuinely
-          // reentrant executeBytecode() call sharing this same `vm`/stack —
+          // reentrant executeBytecode() call sharing this same `vm`/stack
           // safe because any valid bytecode program, run to completion,
           // leaves exactly one net value on the stack, the same invariant
           // every other expression already relies on.
@@ -1083,7 +1083,7 @@ export function executeBytecode(
           for (let i = 0; i < fn.params.length; i++) frame.set(fn.params[i], args[i]);
           // pushCallFrame() throws FUNCTION_RECURSION_LIMIT_EXCEEDED before
           // ever reaching the reentrant executeBytecode() call below if
-          // this would exceed maxFunctionRecursionDepth — the backstop for
+          // this would exceed maxFunctionRecursionDepth, the backstop for
           // f(x) = f(x), which would otherwise recurse via nested
           // executeBytecode() calls (each with its OWN fresh
           // localInstructionCount, so maxInstructions cannot catch this)
@@ -1093,20 +1093,20 @@ export function executeBytecode(
           try {
             bodyResult = executeBytecode(fn.program, vm, pipeline, expression, context);
           } finally {
-            // Always pop, even if the body throws — an uncaught error inside
+            // Always pop, even if the body throws, an uncaught error inside
             // one call must not leave a stale frame poisoning whatever
             // (unrelated) expression runs next.
             vm.popCallFrame();
           }
           if (bodyResult.type === "pending") {
             // v1 scope decision: a user function's body calling an async
-            // plugin function (weather, stocks, ...) isn't supported yet —
+            // plugin function (weather, stocks, ...) isn't supported yet
             // propagating a 'pending' result up through a reentrant
             // executeBytecode() call would need the OUTER expression's own
             // bytecode position/stack state to also be resumable later,
             // which this first pass doesn't implement. Also rejected at
             // DEFINITION time (see PrecedenceParser.ts's
-            // parseUserFunctionDefinition) — this is a defense-in-depth
+            // parseUserFunctionDefinition). This is a defense-in-depth
             // backstop, not the primary guard.
             throw ErrorFactory.execution(
               "USER_FUNCTION_ASYNC_UNSUPPORTED",
@@ -1115,7 +1115,7 @@ export function executeBytecode(
             );
           }
           if (bodyResult.type === "error") {
-            // A controlled internal-invariant error inside the body — surface
+            // A controlled internal-invariant error inside the body, surface
             // it as-is rather than swallowing/rewrapping (same convention as
             // unwrapEvalResult()).
             throw bodyResult.error;
@@ -1155,12 +1155,12 @@ export function executeBytecode(
           // reaches this opcode and is SUPPOSED to intercept the "not yet
           // declared by any loaded document" case (returning a Pending value
           // up front, mirroring how currency conversion's preflight
-          // intercepts before UOM_CONVERT_TO runs) — but that invariant is
+          // intercepts before UOM_CONVERT_TO runs), but that invariant is
           // confirmed violable: ThreeTierEvaluator's Tier 2 (executeCached())
           // can mark a line "clean" and skip straight to VM execution without
-          // ever running preflightAll() (see ARCHITECTURE.md §7's P0 item —
+          // ever running preflightAll() (see ARCHITECTURE.md §7's P0 item
           // still open, gated on the larger L1 migration). This used to be a
-          // bare `!` non-null assertion — a raw, uncontrolled TypeError the
+          // bare `!` non-null assertion, a raw, uncontrolled TypeError the
           // instant that invariant was violated, rather than a controlled
           // error. Explicit check instead: the read is still expected to
           // always succeed in the common case, but "expected to always
@@ -1171,7 +1171,7 @@ export function executeBytecode(
           if (globalValue === undefined) {
             // .internal(), not .execution(): this is the Tier-2/preflight-
             // bypass invariant violation described above, not something an
-            // ordinary user expression can trigger by itself — the
+            // ordinary user expression can trigger by itself, the
             // precondition ("preflight already ran") is the CALLER's
             // (ThreeTierEvaluator's) responsibility, not the user's.
             throw ErrorFactory.internal({
@@ -1277,7 +1277,7 @@ export function executeBytecode(
             } else {
               // No live rate cached yet (or the fetch failed). Pushing the
               // unconverted value under its original unit would silently
-              // masquerade as a correct conversion — e.g. "450 EUR to USD"
+              // masquerade as a correct conversion, e.g. "450 EUR to USD"
               // displaying as "450.00 EUR", which reads as a successful
               // no-op rather than the missing-data case it actually is.
               // An Error value makes the failure visible instead.
@@ -1289,7 +1289,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.UOM_POSSIBILITIES: {
-          // "sourceUnit to ?" — pops the source unit name string, pushes a
+          // "sourceUnit to ?", pops the source unit name string, pushes a
           // human-readable list of every other unit in the same measure.
           const unit = (safePop(stack).value as string);
           const possibilities = getConvertiblePossibilities(unit);
@@ -1318,7 +1318,7 @@ export function executeBytecode(
               if (converted !== null) {
                 stack.push(uomValue(converted, toUnit));
               } else {
-                // See the matching comment in UOM_CONVERT_TO — pushing the
+                // See the matching comment in UOM_CONVERT_TO, pushing the
                 // original value here would silently pass off a missing
                 // exchange rate as a successful (non-)conversion.
                 stack.push(errorValue("CURRENCY_RATE_UNAVAILABLE", `No exchange rate available for ${fromUnit} to ${toUnit}`));
@@ -1338,7 +1338,7 @@ export function executeBytecode(
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // §8.5  Rate — "quantity per unit of something" (OpCode 110–112)
+        // §8.5  Rate, "quantity per unit of something" (OpCode 110–112)
         //       See vm/Value.ts's rateValue()/isRateUnit()/splitRateUnit().
         // ═══════════════════════════════════════════════════════════════
         case OpCode.RATE_DIV: {
@@ -1357,7 +1357,7 @@ export function executeBytecode(
         case OpCode.RATE_MUL: {
           // Explicit form of the same rate-multiplication OpCode.MUL now
           // applies automatically to any Uom×Uom pair where one side is
-          // rate-shaped — see multiplyRateByMatchingUom(). Kept as its own
+          // rate-shaped. See multiplyRateByMatchingUom(). Kept as its own
           // opcode for packages that want to emit it deliberately rather
           // than relying on operand-type auto-detection.
           const multiplier = safePop(stack);
@@ -1393,19 +1393,19 @@ export function executeBytecode(
             break;
           }
           // How many `denominator` units are in one `newDenominatorUnit`
-          // (e.g. how many weeks in 1 month) — the rate scales by that factor.
+          // (e.g. how many weeks in 1 month), the rate scales by that factor.
           const factor = convertUnit(1, newDenominatorUnit, denominator);
           stack.push(rateValue(rate.toNumber() * factor, numerator, newDenominatorUnit));
           break;
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // §8.7  Time — clock-time-of-day (OpCode 120)
+        // §8.7  Time, clock-time-of-day (OpCode 120)
         // ═══════════════════════════════════════════════════════════════
         case OpCode.CLOCK_TIME_TODAY: {
-          // "9:00am"/"16:00" — anchored to TODAY's calendar date, not a
+          // "9:00am"/"16:00", anchored to TODAY's calendar date, not a
           // relative offset from `now` (so it stays correct regardless of
-          // what time it currently is — "9:00am" always means 9am today).
+          // what time it currently is, "9:00am" always means 9am today).
           const totalMinutes = safePop(stack).toNumber();
           const now = new Date();
           const anchored = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
@@ -1435,9 +1435,9 @@ export function executeBytecode(
         }
         case OpCode.DATE_NEXT_WEEKDAY:
         case OpCode.DATE_LAST_WEEKDAY: {
-          // Stack: [now, targetDayIndex] — targetDayIndex on top (0=Sunday..6=Saturday).
+          // Stack: [now, targetDayIndex], targetDayIndex on top (0=Sunday..6=Saturday).
           // Computes the actual next/previous occurrence of that weekday,
-          // NOT a blind ±7-day offset — "next Monday" from a Monday lands
+          // NOT a blind ±7-day offset, "next Monday" from a Monday lands
           // 7 days ahead (next week's Monday), not today; "last Monday"
           // from a Monday lands 7 days back, not today. Time-of-day is
           // preserved from `now` (matches "today"/"now" both resolving to
@@ -1458,7 +1458,7 @@ export function executeBytecode(
         // ═══════════════════════════════════════════════════════════════
         // §10 Matrix  (OpCode 152+, see parser/OpCode.ts's Matrix band)
         //     Replaces the old ARR_* vector-only opcodes (100-107), which
-        //     were never emitted by any registered parselet in production —
+        //     were never emitted by any registered parselet in production
         //     confirmed dead code, deleted outright rather than repurposed.
         //     See vm/Value.ts's MatrixData and vm/MatrixOps.ts's shared
         //     column-major storage helpers.
@@ -1468,7 +1468,7 @@ export function executeBytecode(
           const cols = opcodes[ip++];
           const count = rows * cols;
           // Cells were pushed in ROW-MAJOR reading order (matching how a
-          // literal like `[1,2;3,4]` is textually written) — pop in
+          // literal like `[1,2;3,4]` is textually written), pop in
           // reverse to restore that order, then transpose once into the
           // column-major storage MatrixData actually uses.
           const rowMajor = new Array<MatrixEntry>(count);
@@ -1601,7 +1601,7 @@ export function executeBytecode(
           const ref = opcodes[ip++];
           const collectionCount = opcodes[ip++];
 
-          // Collections were pushed in declared param order — pop in
+          // Collections were pushed in declared param order, pop in
           // reverse to restore that order (same convention as MAT_NEW's
           // row-major restore).
           const rawCollections: Value[] = new Array(collectionCount);
@@ -1639,7 +1639,7 @@ export function executeBytecode(
           }
 
           // Resolve every collection into a flat array of per-cell Values
-          // (a Matrix's own cells, or a materialized Range) — all must
+          // (a Matrix's own cells, or a materialized Range), all must
           // agree on length (this is a ZIP, not a cartesian product).
           let collectionLength = -1;
           const cellArrays: Value[][] = new Array(collectionCount);
@@ -1686,7 +1686,7 @@ export function executeBytecode(
           const ref = opcodes[ip++];
           const hasInitial = opcodes[ip++];
 
-          // Pushed in textual order (collection, then optional initial) —
+          // Pushed in textual order (collection, then optional initial)
           // pop in reverse.
           const initialVal = hasInitial ? safePop(stack) : undefined;
           const collectionVal = safePop(stack);
@@ -1759,7 +1759,7 @@ export function executeBytecode(
       }
     }
 
-    // Fallback return (reached if while loop exits without HALT — shouldn't happen on valid bytecode)
+    // Fallback return (reached if while loop exits without HALT, shouldn't happen on valid bytecode)
     const fallback = safePop(stack);
     return { type: 'value', value: hasArena ? persistentValue(fallback) : fallback };
     } catch (e) {

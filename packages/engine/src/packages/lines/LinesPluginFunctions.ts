@@ -3,7 +3,7 @@ import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 
 /**
- * Cross-line data access — `prev`, `line<N>`, `sum(line X : line Y)`,
+ * Cross-line data access, `prev`, `line<N>`, `sum(line X : line Y)`
  * `total(line X : line Y)`, `average(line X : line Y)`, and `total above`/
  * `sum above`/`average above`.
  *
@@ -13,10 +13,10 @@ import type { LineExecutionContext } from "@solve-js/vm/VM";
  * returns `0` for BOTH `Pending` and `Error` types (confirmed in
  * `vm/Value.ts`), so any handler that skipped this check would silently
  * compute a wrong number instead of surfacing a clear error the moment it
- * touched an unresolved-async or already-errored line — exactly the
+ * touched an unresolved-async or already-errored line, exactly the
  * failure class `ARCHITECTURE.md` §12 P0 item 1 (still open) describes,
  * and exactly the class of bug this codebase treats as its worst. See
- * `checkLineValue()` below — every handler routes through it.
+ * `checkLineValue()` below, every handler routes through it.
  */
 
 function checkLineValue(v: Value | undefined, lineNumber: number): Value | null {
@@ -39,7 +39,7 @@ function requireContext(context: LineExecutionContext | undefined): Value | null
   return null;
 }
 
-/** `prev` — the immediately-preceding line's cached result. */
+/** `prev`, the immediately-preceding line's cached result. */
 export const PREV_FN_IDX = allocatePluginFunctionIndex();
 export function prevHandler(_args: Value[], context?: LineExecutionContext): Value {
   const ctxError = requireContext(context);
@@ -50,7 +50,7 @@ export function prevHandler(_args: Value[], context?: LineExecutionContext): Val
   return err ?? v!;
 }
 
-/** `line<N>` / `line N` — an arbitrary line's cached result by 1-based number. */
+/** `line<N>` / `line N`, an arbitrary line's cached result by 1-based number. */
 export const LINE_REF_FN_IDX = allocatePluginFunctionIndex();
 export function lineRefHandler(args: Value[], context?: LineExecutionContext): Value {
   const ctxError = requireContext(context);
@@ -64,7 +64,7 @@ export function lineRefHandler(args: Value[], context?: LineExecutionContext): V
 /**
  * Shared range-walk for `sum(line X : line Y)` / `total(...)` /
  * `average(...)`. Restricted to plain `Number`/`Uom` values of the SAME
- * measure — errors on `String`/`Boolean`/`Datetime` rather than silently
+ * measure, errors on `String`/`Boolean`/`Datetime` rather than silently
  * coercing via `.toNumber()` (which would, e.g., turn a Datetime into an
  * epoch-ms number and silently "sum" timestamps together).
  */
@@ -112,7 +112,7 @@ export function averageRangeHandler(args: Value[], context?: LineExecutionContex
 }
 
 /**
- * `total above` / `sum above` / `average above` — aggregate every line's
+ * `total above` / `sum above` / `average above`, aggregate every line's
  * result from the current line's immediate predecessor backward, stopping
  * at (not including) the nearest blank line or `#` heading.
  */

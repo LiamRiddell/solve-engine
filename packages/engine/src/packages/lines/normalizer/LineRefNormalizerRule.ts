@@ -8,14 +8,14 @@ const SUM_RANGE_CALL_TYPE_ID = tokenTypeId("SUM_RANGE_CALL");
 const AVERAGE_RANGE_CALL_TYPE_ID = tokenTypeId("AVERAGE_RANGE_CALL");
 
 /**
- * Fuses `line1` (glued — `ExpressionLexer.tokenizeIdentifier()` already
+ * Fuses `line1` (glued, `ExpressionLexer.tokenizeIdentifier()` already
  * consumes trailing digits into one IDENT token, so "line1" lexes as a
- * SINGLE token, not two) and `line 1` (spaced — two tokens, IDENT "line"
+ * SINGLE token, not two) and `line 1` (spaced, two tokens, IDENT "line"
  * + NUMBER) into one `LINE_REF` token carrying the parsed line number as
  * its `.value`.
  *
  * Deliberately does NOT implement the `l1`/`l 1` short alias documented
- * by some competitor apps (Notes Calculator, NumPad) — `l` is one of the
+ * by some competitor apps (Notes Calculator, NumPad), `l` is one of the
  * most common short variable names in this category of app (length,
  * etc.); shipping `line<N>` alone first and adding a narrower `l<N>`
  * form later, once real usage confirms it's wanted, is the documented
@@ -23,17 +23,17 @@ const AVERAGE_RANGE_CALL_TYPE_ID = tokenTypeId("AVERAGE_RANGE_CALL");
  *
  * Colon-prefix guard: never fires immediately after a variable-definition
  * `COLON`, so `:line1 = 5` / `:line = 5` (a variable named "line1"/"line")
- * stay completely untouched — matches every other trigger-word guard
+ * stay completely untouched, matches every other trigger-word guard
  * already established this session (e.g. `StockTickerNormalizerRule.ts`).
  *
  * That guard can't be the blanket "any preceding COLON" check the stocks
  * precedent uses, though: `rangeCallNormalizerRule()`'s OWN grammar,
  * `sum(line 1 : line 4)`, ALSO puts a bare COLON directly before the
- * second `line 4` — as a range separator, not a variable sigil. A blanket
+ * second `line 4`, as a range separator, not a variable sigil. A blanket
  * guard blocks that second fusion, leaving `line 4` as raw
  * `IDENT NUMBER` tokens and breaking `RangeAggregateParselet`, which
  * expects `LINE_REF COLON LINE_REF`. The fix: only suppress fusion when
- * the COLON is genuinely in a variable-definition position — which,
+ * the COLON is genuinely in a variable-definition position, which
  * since nothing else in this codebase's grammar ever puts a COLON
  * directly after a LINE_REF, is precisely and only NOT the case when the
  * COLON itself is immediately preceded by an already-fused `LINE_REF`
@@ -97,16 +97,16 @@ function makeLineRefToken(lineNumberText: string, sourceToken: Token): Token {
 }
 
 /**
- * Fuses `sum(`/`total(`/`average(` — but ONLY when the bare word is
- * IMMEDIATELY followed by `LPAREN` — into a single `SUM_RANGE_CALL`/
+ * Fuses `sum(`/`total(`/`average(`, but ONLY when the bare word is
+ * IMMEDIATELY followed by `LPAREN`, into a single `SUM_RANGE_CALL`/
  * `AVERAGE_RANGE_CALL` token (sum and total share one token type/parselet,
- * since `sum(...)`/`total(...)` are documented as synonyms — see Numbr's
+ * since `sum(...)`/`total(...)` are documented as synonyms. See Numbr's
  * and NumPad's own docs).
  *
  * The lookahead-on-LPAREN guard is what keeps this safe: `:sum = 100`
  * (no following paren) is untouched, and MathPhrasesPackage's existing
  * `"total of X, Y, Z"` phrase (no paren after "of") is a structurally
- * different, non-conflicting shape — confirmed by reading
+ * different, non-conflicting shape, confirmed by reading
  * `MathPhrasesPackage.ts` before adding this rule.
  */
 export function rangeCallNormalizerRule(): NormalizerRule {

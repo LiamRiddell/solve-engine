@@ -23,13 +23,13 @@ export class PercentageChangeParselet implements InfixParselet {
     // "TO" serves two grammars: percentage change (`800 to 1000`) and unit
     // conversion (`<uom-expr> to <unit>`). The `left.type === "UNIT"` guard
     // above only catches the literal-number-then-unit case (handled inline
-    // by UomLiteralParselet before the Pratt loop ever reaches here) — it
+    // by UomLiteralParselet before the Pratt loop ever reaches here), it
     // misses a bare variable/expression on the left (`:total to USD`,
     // `:heightCm to m`), because a variable's runtime type (Uom or plain
     // Number) isn't knowable from its token type at parse time.
     //
     // What IS knowable at parse time is whether the RIGHT-hand token names
-    // a real unit or ISO 4217 currency code — a percentage-change target is
+    // a real unit or ISO 4217 currency code, a percentage-change target is
     // always numeric, so if the word after "to" is a recognized unit name,
     // this must be a conversion, not a percentage change. Mirrors InParselet
     // (same UOM_CONVERT_IN opcode), which has no such ambiguity to resolve
@@ -37,7 +37,7 @@ export class PercentageChangeParselet implements InfixParselet {
     //
     // Target token type is usually UNIT or IDENT and gets verified against
     // isKnownUnit. "in" (inches) is a valid unit name that collides with
-    // the IN keyword — it lexes as type IN, never UNIT/IDENT, and is
+    // the IN keyword, it lexes as type IN, never UNIT/IDENT, and is
     // deliberately absent from knownUnits (see units.ts) because adding it
     // there confuses the lexer's keyword-vs-unit priority for the "in"
     // OPERATOR itself. UomLiteralParselet/ConvertParselet already special-

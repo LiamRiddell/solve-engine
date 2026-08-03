@@ -41,7 +41,7 @@ export interface VMCheckpoint {
 	variables: Record<string, Value>;
 	/**
 	 * User-defined-function name → definition at this checkpoint. SEPARATE
-	 * from `variables` above (not prototypally chained the same way —
+	 * from `variables` above (not prototypally chained the same way
 	 * `restoreTo()` replays every checkpoint in the chain in order, so a
 	 * later redefinition of the same function name naturally overwrites an
 	 * earlier one during replay, without needing its own prototype walk).
@@ -49,7 +49,7 @@ export interface VMCheckpoint {
 	 * Without this field, a function definition's checkpoint entry would be
 	 * SILENTLY LOST: `snapshot()` used to call `vm.getVar(name)` for every
 	 * written name, which returns `undefined` for a function name (function
-	 * defs live in `vm.userFunctions`, not the flat variable store) — and a
+	 * defs live in `vm.userFunctions`, not the flat variable store), and a
 	 * `val !== undefined` guard silently skipped it. A scroll-triggered
 	 * `restoreTo()` would then reset the VM and replay only `variables`,
 	 * making a function defined above the new viewport vanish (calling it
@@ -130,7 +130,7 @@ export class VMCheckpointer {
 			parent?.functions ?? null
 		) as Record<string, UserFunctionDef>;
 
-		// Record current VM values for the written names — routing each into
+		// Record current VM values for the written names, routing each into
 		// the right bag (a name is either a variable or a user-defined
 		// function, never both; see VMCheckpoint.functions's doc comment for
 		// why this dispatch is required, not optional).
@@ -196,14 +196,14 @@ export class VMCheckpointer {
 
 		this.vm.reset();
 		for (const cp of chain) {
-			// Object.keys() returns only OWN enumerable properties —
+			// Object.keys() returns only OWN enumerable properties
 			// it does NOT include inherited properties from the prototype chain.
 			// This means we only set variables that were defined/updated at this
 			// specific checkpoint, not all variables from parent checkpoints.
 			for (const key of Object.keys(cp.variables)) {
 				this.vm.setVar(key, cp.variables[key]);
 			}
-			// Replay function definitions the same way — a later checkpoint's
+			// Replay function definitions the same way, a later checkpoint's
 			// redefinition of the same name naturally overwrites an earlier
 			// one since the chain replays in root-to-target order.
 			for (const key of Object.keys(cp.functions)) {
@@ -219,7 +219,7 @@ export class VMCheckpointer {
 	 * Find the nearest checkpoint at or before the given line number.
 	 *
 	 * Uses linear scan (checkpoints are sorted by lineNumber and the list
-	 * is short — typically < 20 for Obsidian documents). Can be upgraded
+	 * is short, typically < 20 for Obsidian documents). Can be upgraded
 	 * to binary search if needed for documents with 1000+ variable defs.
 	 *
 	 * @returns The nearest checkpoint, or null if none exists before the line.
@@ -283,7 +283,7 @@ export class VMCheckpointer {
 	// ── Lifecycle ────────────────────────────────────────────────────
 
 	/**
-	 * Clear all checkpoints. The underlying VM is NOT reset — call
+	 * Clear all checkpoints. The underlying VM is NOT reset, call
 	 * `vm.reset()` separately if needed.
 	 */
 	clear(): void {

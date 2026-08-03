@@ -9,13 +9,13 @@
 export const knownUnits = new Set([
   // Length
   // NOTE: "in" (inches) is deliberately NOT listed here even though the
-  // underlying `convert` package accepts it — the lexer prioritizes the
+  // underlying `convert` package accepts it, the lexer prioritizes the
   // reserved "IN" keyword (conversion operator) over unit recognition for
   // that exact word, and registering "in" as a known unit interferes with
   // that priority (regressed "3 ft in in" to silently drop the conversion
   // when tried). ConvertParselet/UomLiteralParselet/PercentageChangeParselet
   // all special-case token TYPE "IN" directly instead, trusting its literal
-  // text as the unit name without consulting this set — see each of their
+  // text as the unit name without consulting this set. See each of their
   // "in in" collision comments.
   "mm", "cm", "m", "km", "ft", "yd", "mi",
   "inch", "inches", "foot", "feet", "yard", "yards", "mile", "miles",
@@ -37,17 +37,17 @@ export const knownUnits = new Set([
   "s", "min", "h", "d",
   "day", "days", "week", "weeks", "month", "months", "year", "years",
   "hour", "hours", "minute", "minutes", "second", "seconds",
-  // "workday"/"workdays" — a business day (Mon-Fri), backing the datetime
+  // "workday"/"workdays", a business day (Mon-Fri), backing the datetime
   // package's `<date> + N workdays` arithmetic and `$X/workday` Rate
   // literals (packages/datetime/). NOT a real unit the `convert` package
-  // knows about (a business day has no fixed physical duration — it
-  // depends on which calendar dates are weekends) — see
+  // knows about (a business day has no fixed physical duration, it
+  // depends on which calendar dates are weekends). See
   // uom/UomConverter.ts's isWorkdayUnit()/workday shim, which handles
   // conversion to/from other Time-measure units via a fixed 7/5 ratio
   // (5 workdays per 7-day week) for RATE-MATH purposes only. Registering
   // it here (rather than a bespoke IDENT-matching normalizer rule, the
   // "fps"/"am"/"pm" approach used elsewhere in this codebase) is safe re:
-  // the ":name = expr" variable-name collision policy — VariableParselet.ts
+  // the ":name = expr" variable-name collision policy, VariableParselet.ts
   // explicitly accepts UNIT-typed tokens as variable names (e.g. ":b = 5"
   // already works for the "b" bits unit), so ":workday = 5" keeps working.
   "workday", "workdays",
@@ -66,39 +66,39 @@ export const knownUnits = new Set([
   // Data storage (uppercase = bytes, lowercase = bits)
   "b", "bit", "kb", "mb", // bits (lowercase)
   "B", "KB", "MB", "GB", "TB", // bytes (uppercase, decimal/SI: 1000^n)
-  // Binary-prefix (IEC) byte units — 1024^n, distinct from the decimal
+  // Binary-prefix (IEC) byte units, 1024^n, distinct from the decimal
   // KB/MB/GB/TB above (e.g. 1 GiB = 1073741824 B, 1 GB = 1000000000 B).
   // The `convert` npm package already recognizes these exact casings
-  // natively (confirmed via its generated type union) — this was purely a
+  // natively (confirmed via its generated type union). This was purely a
   // lexer allowlist gap, not a conversion-logic one.
   "KiB", "MiB", "GiB", "TiB", "PiB",
   // Area
   "m2", "ft2",
-  // Speed — custom measure, `convert` package has no MeasureKind for this
-  // (see ExtendedUnits.ts). "fps" (feet/s) is deliberately NOT registered —
+  // Speed, custom measure, `convert` package has no MeasureKind for this
+  // (see ExtendedUnits.ts). "fps" (feet/s) is deliberately NOT registered
   // collides with the Time package's "fps" (frames/s), which requires an
   // IDENT token; "ft_s" is used instead.
   "mps", "kph", "mph", "kn", "ft_s",
-  // Pace — custom measure (time/distance, the reciprocal of speed).
+  // Pace, custom measure (time/distance, the reciprocal of speed).
   // Underscore stands in for "/" since the lexer only tokenizes
-  // [a-zA-Z0-9_] as a single UNIT token — "min/km" isn't representable.
+  // [a-zA-Z0-9_] as a single UNIT token, "min/km" isn't representable.
   "min_km", "min_mi",
-  // Voltage / Current — custom measures. Bare "V" is deliberately NOT
-  // registered — collides with the stocks package's "V" (Visa) ticker,
+  // Voltage / Current, custom measures. Bare "V" is deliberately NOT
+  // registered, collides with the stocks package's "V" (Visa) ticker
   // which also requires an IDENT token (see ExtendedUnits.ts).
   "mV", "kV", "mA", "A", "kA",
-  // Apparent Power / Reactive Power / Reactive Energy — custom measures.
+  // Apparent Power / Reactive Power / Reactive Energy, custom measures.
   // `convert`'s Power/Energy kinds cover real power (W) and real energy
   // (Wh) only, not these. The bare IEC symbol "var" is deliberately NOT
-  // registered — see the comment in ExtendedUnits.ts (collides with "var"
+  // registered. See the comment in ExtendedUnits.ts (collides with "var"
   // as a variable name).
   "VA", "kVA", "MVA", "kvar", "Mvar", "varh", "kvarh", "Mvarh",
-  // Volume Flow Rate — custom measure.
+  // Volume Flow Rate, custom measure.
   "m3s", "m3h", "lps", "lpm", "gpm", "cfs",
-  // Parts-Per — custom measure (dimensionless ratio). "%" is intentionally
-  // excluded — owned by the dedicated Percentage provider, not UoM.
+  // Parts-Per, custom measure (dimensionless ratio). "%" is intentionally
+  // excluded, owned by the dedicated Percentage provider, not UoM.
   "ppm", "ppb", "ppt", "permille",
-  // Currencies — ISO 4217 uppercase by convention
+  // Currencies, ISO 4217 uppercase by convention
   "USD", "EUR", "GBP", "JPY",
   "AUD", "CAD", "CHF", "CNY", "SEK", "NOK", "DKK", "NZD",
   "KRW", "SGD", "HKD", "TWD", "INR", "BRL", "ZAR", "MXN",
@@ -117,16 +117,16 @@ export const knownUnits = new Set([
   "SVC", "SYP", "SZL", "TJS", "TMT", "TND", "TOP", "TTD",
   "TZS", "UGX", "UYU", "VEB", "VUV", "WST", "XCD", "XDR",
   "XPF", "YER", "ZMW", "ZWL",
-  // Cryptocurrencies — not ISO 4217, but recognized the same way as fiat
+  // Cryptocurrencies, not ISO 4217, but recognized the same way as fiat
   // currency codes: routed through CurrencyExchangeService, not the
   // `convert` package. Must stay in sync with CurrencyExchangeService's
-  // isCurrency() list, which already recognized these — without a matching
+  // isCurrency() list, which already recognized these, without a matching
   // lexer entry, a code never becomes a UNIT token in the first place, so
   // e.g. `1 BTC to USD` failed at tokenization with "Undefined variable: BTC"
   // before ever reaching the currency service that could have handled it.
   "BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "DOT",
-  // Currency WORD forms (singular/plural, lowercase only — no aliasing
-  // policy applies here too) — resolved to their canonical ISO code by
+  // Currency WORD forms (singular/plural, lowercase only, no aliasing
+  // policy applies here too), resolved to their canonical ISO code by
   // UomLiteralParselet.ts via uom/CurrencyAliases.ts's
   // CURRENCY_WORD_ALIASES, same table that doc-comments every ambiguous
   // choice (peso->MXN, franc->CHF, krona->SEK, etc.) and explains why

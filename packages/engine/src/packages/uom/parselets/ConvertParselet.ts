@@ -17,7 +17,7 @@ export class ConvertParselet implements PrefixParselet {
     parser.parseExpression(BindingPower.Postfix, builder);
     const nextToken = parser.peek();
 
-    // Case 1: convert <number> <unit> [to <target>] — explicit unit after value
+    // Case 1: convert <number> <unit> [to <target>], explicit unit after value
     if (nextToken && nextToken.type === "UNIT") {
       parser.consume();
       builder.emitOpcode(OpCode.PUSH_STRING);
@@ -39,7 +39,7 @@ export class ConvertParselet implements PrefixParselet {
       return;
     }
 
-    // Case 2: convert (<expression>) to <target> — parenthesized or complex
+    // Case 2: convert (<expression>) to <target>, parenthesized or complex
     // expression where the expression result already has units on the stack.
     if (nextToken && (nextToken.type === "TO" || nextToken.type === "IN")) {
       parser.consume(); // consume TO or IN
@@ -60,7 +60,7 @@ export class ConvertParselet implements PrefixParselet {
       return;
     }
 
-    // Case 3: convert <expression> (no target) — value is already on the stack
+    // Case 3: convert <expression> (no target), value is already on the stack
     // as a UOM value. Nothing more to emit.
   }
 }

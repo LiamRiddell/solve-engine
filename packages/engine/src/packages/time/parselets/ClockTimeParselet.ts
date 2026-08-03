@@ -8,20 +8,20 @@ import { tryConsumeZoneReference } from "./shared/ZoneReference";
 import { ZONE_CONVERT_FN_IDX } from "./TimezonePluginFunctions";
 
 /**
- * `9:00am` / `16:00` / `4pm` — a clock-time-of-day literal, anchored to
+ * `9:00am` / `16:00` / `4pm`, a clock-time-of-day literal, anchored to
  * today's calendar date (see `OpCode.CLOCK_TIME_TODAY` in `vm/VM.ts`).
  * Handles the fused `CLOCK_TIME` token produced by
  * {@link clockTimeNormalizerRule} (token value = total minutes since
  * midnight, as a decimal string).
  *
  * Also handles the optional timezone-conversion suffix, `<clock-time>
- * <sourceZone> in <targetZone>` (e.g. "6pm Sydney in Chicago") — see
+ * <sourceZone> in <targetZone>` (e.g. "6pm Sydney in Chicago"). See
  * {@link tryConsumeZoneReference}. The suffix is entirely optional and
  * only consumes tokens once a recognized zone name is actually found
  * immediately after the clock-time literal, so the plain
  * `CLOCK_TIME_TODAY` path below is completely unchanged when no suffix is
  * present. A recognized source zone with no following "in <target>" is a
- * parse error (not silently ignored) — once a zone name is consumed,
+ * parse error (not silently ignored), once a zone name is consumed
  * there's no going back given this parser has no backtracking.
  */
 export class ClockTimeParselet implements PrefixParselet {

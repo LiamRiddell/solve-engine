@@ -1,4 +1,4 @@
-//#region 📦 Imports
+//#region Imports
 
 import { VM, type EquationDef } from "@solve-js/vm/OpRegistry";
 import { matrixMultiply, inverse } from "@solve-js/vm/MatrixOps";
@@ -79,7 +79,7 @@ export type { DagSnapshot } from "@solve-js/vm/DependencyGraph";
 /**
  * Return type of {@link evaluateLine} and {@link evaluateExpression}.
  *
- * A single-element `Value[]` — kept as an array (rather than a bare
+ * A single-element `Value[]`, kept as an array (rather than a bare
  * `Value`) for API stability.
  */
 export interface EvalResults extends Array<Value> {}
@@ -93,7 +93,7 @@ export interface LineEvaluation {
 //#endregion
 
 /**
- * Core expression evaluation engine — the top-level orchestrator.
+ * Core expression evaluation engine, the top-level orchestrator.
  *
  * Owns the full evaluation pipeline: lexing, parsing, bytecode compilation,
  * VM execution, DAG-based dependency tracking, and async resolution.
@@ -146,7 +146,7 @@ export class ExpressionEngine {
      * `parseletMatchCount` as a "before" baseline without paying for a full
      * `getReport()` build (which copies the whole cumulative parselets
      * array). See that method's use of it for why a baseline is needed at
-     * all — `TimelineDiagnosticCollector`'s state is deliberately cumulative
+     * all, `TimelineDiagnosticCollector`'s state is deliberately cumulative
      * across an entire document pass, not reset per line.
      */
     private timelineCollector?: TimelineDiagnosticCollector;
@@ -169,22 +169,22 @@ export class ExpressionEngine {
 
     /**
      * The actual `IEnginePackage` descriptor of every package currently
-     * registered on this engine instance, keyed by name — separate from
+     * registered on this engine instance, keyed by name, separate from
      * {@link packageContributions} (which tracks what was WRITTEN into
      * shared registries, not the original descriptor). Used by
      * {@link registerPackage}'s automatic `checkPackageCompatibility()` call
-     * — see `api/PackageCompatibility.ts`'s module doc for why this exists.
+     *. See `api/PackageCompatibility.ts`'s module doc for why this exists.
      */
     private registeredPackages = new Map<string, IEnginePackage>();
 
     /**
-     * The `DocumentModel` this engine is currently evaluating, if any —
+     * The `DocumentModel` this engine is currently evaluating, if any
      * `null` for a bare engine with no document (e.g. anything only ever
      * calling `evaluateExpression()`). `ExpressionEngine` doesn't own its
      * `DocumentModel` (`ThreeTierEvaluator` constructs and owns both as
-     * siblings) — this is set once, via {@link setDocumentModel}, purely so
+     * siblings). This is set once, via {@link setDocumentModel}, purely so
      * {@link makeLineContext} can answer "what's line N's cached result"
-     * for cross-line features (`prev`/`line<N>`/aggregation — see
+     * for cross-line features (`prev`/`line<N>`/aggregation. See
      * `packages/lines/`) without the engine needing to own document
      * lifecycle itself.
      */
@@ -192,7 +192,7 @@ export class ExpressionEngine {
 
     /**
      * Called once by `ThreeTierEvaluator`'s constructor. Not part of the
-     * public evaluate-a-document contract — purely internal wiring so
+     * public evaluate-a-document contract, purely internal wiring so
      * {@link makeLineContext} has something to read from.
      */
     setDocumentModel(doc: DocumentModel | null): void {
@@ -204,7 +204,7 @@ export class ExpressionEngine {
      * for a given line. `lineNumber = -1` (the existing sentinel
      * `evaluateExpression()`/`evaluateLine(-1, ...)` already use for "no
      * real document") naturally produces a context with both closures
-     * `undefined` — a cross-line plugin function must check for that itself
+     * `undefined`, a cross-line plugin function must check for that itself
      * and return a clear error, never assume line 0 exists.
      */
     private makeLineContext(lineNumber: number): LineExecutionContext {
@@ -224,7 +224,7 @@ export class ExpressionEngine {
 
     /**
      * Package-contributed completion candidates (`IEnginePackage.completionItems`),
-     * keyed by package name — engine-instance-local, not a shared registry
+     * keyed by package name, engine-instance-local, not a shared registry
      * (unlike tokenCategories), so no separate register/unregister module is
      * needed: registerPackage()/unregisterPackage() just set/delete the
      * package's own entry. {@link getPackageCompletionItems} flattens it.
@@ -232,7 +232,7 @@ export class ExpressionEngine {
     private packageCompletionItems = new Map<string, CompletionItem[]>();
 
     /**
-     * Keystroke-level AbortSignal — set by the UI layer (MarkdownEditorViewPlugin)
+     * Keystroke-level AbortSignal, set by the UI layer (MarkdownEditorViewPlugin)
      * before each evaluation. When the user types a new keystroke, the old signal
      * is aborted, causing all in-flight async work (fetches, preflight checks,
      * batcher flushes) to be canceled atomically.
@@ -250,9 +250,9 @@ export class ExpressionEngine {
     private batcher: AsyncResolutionBatcher;
     /** Post-lexer token normalizer for phrase fusion, implicit multiply, etc. */
     private normalizer: TokenNormalizer;
-    /** TanStack Query client — injected into resolvers for cache reads/writes. */
+    /** TanStack Query client, injected into resolvers for cache reads/writes. */
     readonly queryClient: QueryClient;
-    // Bytecode cache — avoids re-parsing identical expressions.
+    // Bytecode cache, avoids re-parsing identical expressions.
     // Bounded by config.performance.defaultCacheSize: when full, the oldest
     // entry (Map insertion order) is evicted so unique expressions across a
     // long session can't grow memory unboundedly.
@@ -263,7 +263,7 @@ export class ExpressionEngine {
      *
      * Bug fix (found during release hardening): this used to check against
      * a hardcoded `BYTECODE_CACHE_MAX_ENTRIES = 2000` constant that never
-     * read `config.performance.defaultCacheSize` — despite that field being
+     * read `config.performance.defaultCacheSize`, despite that field being
      * documented (see `EngineConfig`'s JSDoc example) as exactly this knob.
      * A host raising `defaultCacheSize` for large documents had zero effect;
      * every document beyond ~2000 unique expressions per line silently lost
@@ -286,9 +286,9 @@ export class ExpressionEngine {
         new BytecodeBuilder(),
         new BytecodeBuilder(),
     ];
-    // Index into the builder pool — incremented modulo pool size.
+    // Index into the builder pool, incremented modulo pool size.
     private builderPoolIndex = 0;
-    // Most recent pipeline telemetry — populated when AllocationTracker.isEnabled().
+    // Most recent pipeline telemetry, populated when AllocationTracker.isEnabled().
     private lastTelemetry: PipelineTelemetry | null = null;
 
     //#endregion
@@ -302,7 +302,7 @@ export class ExpressionEngine {
         packages?: IEnginePackage[]
     ) {
         this.localeCode = localeCode;
-        // Per-section merge, not a top-level shallow spread — overriding one
+        // Per-section merge, not a top-level shallow spread, overriding one
         // field of a section (e.g. `{ performance: { defaultCacheSize: 500 } }`)
         // used to silently replace the WHOLE section, dropping every other
         // field in it back to `undefined` instead of keeping its default.
@@ -321,7 +321,7 @@ export class ExpressionEngine {
              this.diagnosticPipeline.register(this.timelineCollector);
          } else {
              this.diagnosticPipeline = new DiagnosticPipeline();
-             // Production: no collectors — pipeline length-check exits immediately with zero overhead
+             // Production: no collectors, pipeline length-check exits immediately with zero overhead
          }
 
         // Register providers via IEnginePackage data.
@@ -338,7 +338,7 @@ export class ExpressionEngine {
         // must exist before registerPackage() is called.
         this.normalizer = new TokenNormalizer();
 
-        // Register built-in phrases into the PhraseTrie — single-pass
+        // Register built-in phrases into the PhraseTrie, single-pass
         // O(depth) matching per position instead of separate rule scans.
         for (const [phrase, tokenType] of Object.entries(BUILTIN_PHRASES)) {
             this.normalizer.addPhrase(phrase, tokenType);
@@ -356,7 +356,7 @@ export class ExpressionEngine {
         for (const pkg of pkgList) {
             // Per-package containment: registerPackage() can throw (a
             // lexerVocabulary keyword/operator/unit colliding with a
-            // built-in one — ExpressionLexer.registerVocabulary()'s hard
+            // built-in one, ExpressionLexer.registerVocabulary()'s hard
             // guard, the one sub-registration in registerPackage() that
             // isn't already "warn and proceed"). Unguarded, that throw used
             // to escape the constructor itself: every package after the
@@ -397,7 +397,7 @@ export class ExpressionEngine {
 
     //#endregion
 
-    //#region Public API — Event stream
+    //#region Public API, Event stream
 
     /**
      * Get the native event stream from the batcher for stream-based consumers.
@@ -431,7 +431,7 @@ export class ExpressionEngine {
 
     //#endregion
 
-    //#region Public API — Package registration
+    //#region Public API, Package registration
 
     /**
      * Register a package with the engine's isolated registries.
@@ -449,13 +449,13 @@ export class ExpressionEngine {
      * @param pkg - The package to register.
      */
     registerPackage(pkg: IEnginePackage): void {
-        // Engine-vs-package version gating — checked FIRST, before the
+        // Engine-vs-package version gating, checked FIRST, before the
         // duplicate-name guard below. Unlike checkPackageCompatibility()
-        // further down (package-vs-package, always advisory, never blocks —
+        // further down (package-vs-package, always advisory, never blocks
         // ARCHITECTURE.md §5.2), an unsatisfied or malformed engineVersion is
         // a hard rejection: throwing here means re-registering an
         // incompatible REPLACEMENT for an already-working package never
-        // unregisters the old one first — the engine is never left with
+        // unregisters the old one first, the engine is never left with
         // neither version registered. See ARCHITECTURE.md §5.3 and
         // api/EngineVersionCompatibility.ts.
         assertEngineVersionCompatible(pkg);
@@ -465,7 +465,7 @@ export class ExpressionEngine {
         // overwrite packageContributions' tracked record for the FIRST
         // registration, permanently orphaning its shared-registry
         // contributions (pluginFunctionRegistry entries, variable sources,
-        // resolver namespaces, token categories) — unreachable and
+        // resolver namespaces, token categories), unreachable and
         // unreversible for the engine's lifetime, since those are shared
         // module-level registries. Mirrors ResolverRegistry.register()'s
         // existing "destroy old, warn, replace" pattern for the same class
@@ -480,10 +480,10 @@ export class ExpressionEngine {
 
         // Load-up resiliency: statically compare this package's declared
         // fields against every OTHER package already on this engine, before
-        // touching any shared registry — see api/PackageCompatibility.ts's
+        // touching any shared registry. See api/PackageCompatibility.ts's
         // module doc for the full reasoning and the real bug that motivated
         // it. Non-fatal (matches this codebase's established "warn and
-        // proceed" convention for collisions elsewhere — ParseletRegistry,
+        // proceed" convention for collisions elsewhere, ParseletRegistry
         // asConverterRegistry) even for "error"-severity conflicts, since a
         // host may have a deliberate reason to accept a collision; the
         // point is making it IMPOSSIBLE to miss, not blocking registration.
@@ -497,7 +497,7 @@ export class ExpressionEngine {
         // reverse them. Isolated per-engine registrations (parselets,
         // phrases) die with the engine and don't need tracking. lexerVocabulary
         // IS tracked (unlike before) so its custom keyword/operator token
-        // types can be reverted via ExpressionLexer.unregisterVocabulary() —
+        // types can be reverted via ExpressionLexer.unregisterVocabulary()
         // previously that method existed and worked correctly but was never
         // called from here, leaving a package's lexer contribution live
         // after "unregistering" it. tokenCategories is tracked the same way.
@@ -511,11 +511,11 @@ export class ExpressionEngine {
         };
 
         // Only lexerVocabulary can throw here (built-in keyword/operator/unit
-        // collision, ExpressionLexer.registerVocabulary()'s hard guard) —
+        // collision, ExpressionLexer.registerVocabulary()'s hard guard)
         // every other sub-registration below is already "warn and proceed".
         // Deliberately done BEFORE registeredPackages/packageContributions
         // are recorded (see below) so a throw here leaves no phantom
-        // entry — the caller's try/catch (registerPackage() itself still
+        // entry, the caller's try/catch (registerPackage() itself still
         // throws for a single bad package; ExpressionEngine's constructor
         // catches per-package so one bad package can't take down engine
         // construction, see that loop's own comment) sees a package that
@@ -579,7 +579,7 @@ export class ExpressionEngine {
         }
 
         this.packageContributions.set(pkg.name, contribution);
-        // Recorded LAST — only once every sub-registration above actually
+        // Recorded LAST, only once every sub-registration above actually
         // succeeded. If this ran up front (as it used to), a mid-function
         // throw from lexerVocabulary would leave a phantom entry: callers
         // checking registeredPackages.has(pkg.name) would see "registered"
@@ -590,21 +590,21 @@ export class ExpressionEngine {
     /**
      * Unregister a package previously registered via {@link registerPackage}.
      *
-     * Reverses the package's contributions to the SHARED registries — plugin
+     * Reverses the package's contributions to the SHARED registries, plugin
      * functions (pluginFunctionRegistry), variable sources
      * (this engine's variable resolver), async resolvers, and now
-     * token highlight categories (TokenCategoryMap) — which registerPackage
+     * token highlight categories (TokenCategoryMap), which registerPackage
      * wrote into process-wide state. Also reverts
      * the package's lexer plugin (custom keyword/operator token types
      * revert to generic IDENT/ERROR, matching ExpressionLexer.unregisterVocabulary()'s
-     * own contract) — this engine-instance-local registration is reversed
+     * own contract). This engine-instance-local registration is reversed
      * here too, even though it isn't a "shared" registry, so a package's
      * lexer and highlighting contributions clean up together rather than
      * only half-reversing on unregister. Per-engine parselets/phrases are
      * still left in place: they live in this engine's isolated registries
      * and are discarded with the engine instance.
      *
-     * Clears the bytecode cache — removing handlers changes what compiled
+     * Clears the bytecode cache, removing handlers changes what compiled
      * bytecode is valid.
      *
      * @param packageName - The `name` the package was registered under.
@@ -643,12 +643,12 @@ export class ExpressionEngine {
 
     //#endregion
 
-    //#region Public API — Configuration & accessors
+    //#region Public API, Configuration & accessors
 
     /**
      * Get the effective engine configuration currently in use.
      * Includes all defaults merged with any constructor overrides.
-     * Useful for introspection — lets consumers see what values are actually
+     * Useful for introspection, lets consumers see what values are actually
      * in effect after merging with DEFAULT_CONFIG.
      */
     getConfig(): EngineConfig {
@@ -664,7 +664,7 @@ export class ExpressionEngine {
 
     //#endregion
 
-    //#region Internal — Execution helpers
+    //#region Internal, Execution helpers
 
     /**
      * Store a result in the line cache (with DAG registration).
@@ -699,7 +699,7 @@ export class ExpressionEngine {
      *
      * `tracePipeline`/`traceExpression`, when given, are passed straight
      * through to `executeBytecode()`'s own optional VM-step-tracing
-     * parameters — used ONLY by {@link evaluateExpressionWithDiagnostic}
+     * parameters, used ONLY by {@link evaluateExpressionWithDiagnostic}
      * when `vmTraceEnabled` is on. Omitted by every other caller, with zero
      * behavior change (identical to today's hardcoded `undefined, undefined`).
      */
@@ -769,7 +769,7 @@ export class ExpressionEngine {
             throw result.error;
         }
 
-        // Success path — execution finished synchronously, so unhook the
+        // Success path, execution finished synchronously, so unhook the
         // keystroke listener now. Without this, one listener per evaluated
         // line accumulates on the keystroke signal for large documents.
         this.keystrokeSignal?.removeEventListener('abort', abortLocal);
@@ -785,7 +785,7 @@ export class ExpressionEngine {
      * manage their own cache state differently.
      *
      * @param lineNumber - 1-based line this bytecode belongs to, for
-     * cross-line features (`prev`/`line<N>`/aggregation — see
+     * cross-line features (`prev`/`line<N>`/aggregation. See
      * `makeLineContext()`). Defaults to -1 (the existing "no real
      * document" sentinel) for any caller that doesn't have a real line
      * number to pass.
@@ -818,7 +818,7 @@ export class ExpressionEngine {
             this.vm.pop();
         }
 
-        // Sync completion — unhook the keystroke listener to prevent
+        // Sync completion, unhook the keystroke listener to prevent
         // per-evaluation listener accumulation. Pending results keep the
         // listener so in-flight async work stays cancellable.
         if (result.type !== 'pending') {
@@ -832,7 +832,7 @@ export class ExpressionEngine {
      * Fire-and-forget async resolution using async/await.
      *
      * On resolution or error:
-     * 1. Checks AbortSignal — if aborted, stale data is discarded.
+     * 1. Checks AbortSignal, if aborted, stale data is discarded.
      * 2. Stores result/error in AsyncResultCache (per-package scoped).
      * 3. Defers re-evaluation to AsyncResolutionBatcher which collapses
      *    multiple resolutions into a single DAG walk + re-execution pass
@@ -876,14 +876,14 @@ export class ExpressionEngine {
 
     //#endregion
 
-    //#region Public API — Document parsing
+    //#region Public API, Document parsing
 
     /**
      * Unified parsing method that handles different input types and returns comprehensive results
      * with precise coordinate mapping for inline solves.
      */
     parseDocument(input: string, options: UnifiedParsingOptions = { inputType: 'markdown' }): ParsingResult {
-        // Scan the entire document in a single pass — bypasses the old
+        // Scan the entire document in a single pass, bypasses the old
         // split('\n') → evaluateLines() → join('\n') → scanDocument()
         // roundtrip. scanDocument() classifies and tokenizes all lines
         // character-by-character with a single Lexer.reset().
@@ -938,7 +938,7 @@ export class ExpressionEngine {
      * bypassing the split→join roundtrip that this method performs.
      */
     evaluateLines(lines: string[]): ParsedLine[] {
-        // Rejoin lines and scan in a single pass — scanDocument() handles
+        // Rejoin lines and scan in a single pass, scanDocument() handles
         // classification + tokenization for all lines in one character walk.
         const documentText = lines.join('\n');
         const scanResults = this.lexer.scanDocument(documentText);
@@ -1026,7 +1026,7 @@ export class ExpressionEngine {
     /**
      * Evaluate a line using pre-tokenized tokens from scanDocument().
      *
-     * Skips the lexing step entirely — the tokens are already available
+     * Skips the lexing step entirely, the tokens are already available
      * from the document-level scan. Only parsing, compilation, and
      * execution are performed.
      *
@@ -1049,13 +1049,13 @@ export class ExpressionEngine {
             tokens.push(t);
         }
 
-        // Directly invoke evaluateWithTokens — no lexing needed
+        // Directly invoke evaluateWithTokens, no lexing needed
         return [this.evaluateWithTokens(lineNumber, expression, tokens, hasParens)];
     }
 
     //#endregion
 
-    //#region Internal — Parsing & compilation
+    //#region Internal, Parsing & compilation
 
     /**
      * Route parse+compile to the active parser (PrecedenceParser or Recursive Descent).
@@ -1068,13 +1068,13 @@ export class ExpressionEngine {
     private parseExpression(builder: BytecodeBuilder, tokens: Token[], hasParens?: boolean): void {
         this.parser.setBuilder(builder);
         // When autoBalanceParens is disabled, skip the O(n) paren-count scan
-        // by always passing false — the parser will fail naturally on unmatched
+        // by always passing false, the parser will fail naturally on unmatched
         // parens instead of silently inserting missing closing/opening tokens.
         this.parser.load(tokens, this.config.validation.autoBalanceParens ? hasParens : false);
         this.parser.parseExpression(0);
 
         // parseExpression() stops as soon as it has one complete top-level
-        // expression — it never checked whether that consumed the WHOLE
+        // expression, it never checked whether that consumed the WHOLE
         // token list. Any leftover tokens (a stray trailing number, an
         // unconsumed comma-and-digits from a malformed "thousands"-looking
         // literal, a typo'd second operand with a missing operator, ...)
@@ -1087,7 +1087,7 @@ export class ExpressionEngine {
             // A single trailing bare "=" with nothing after it (e.g.
             // "355/113=") is tolerated rather than treated as an error.
             // EQUALS is never registered as an infix operator anywhere in
-            // this grammar (confirmed — nothing consumes it after a
+            // this grammar (confirmed, nothing consumes it after a
             // complete expression), so it can't be a legitimate second
             // operand or a typo'd continuation the way a stray number or
             // identifier could be; it's an unambiguous "show the result"
@@ -1108,8 +1108,8 @@ export class ExpressionEngine {
             // worked. Clock times ("9:30"), lap times ("03:04:05"), and
             // ":name = value" variable definitions all consume their
             // colon(s) internally during lexing and never produce a real
-            // COLON token — confirmed directly against the token stream,
-            // not assumed — so this can't misfire on any of them. Only a
+            // COLON token, confirmed directly against the token stream
+            // not assumed, so this can't misfire on any of them. Only a
             // genuine COLON token past position 0 counts (position 0 is
             // reserved for the existing leading-colon variable syntax).
             //
@@ -1117,7 +1117,7 @@ export class ExpressionEngine {
             // just the last one: a label can itself precede a
             // ":name = value" definition ("input value: :x = 5"), whose
             // OWN leading colon would otherwise be the rightmost colon in
-            // the line — slicing right after it strips the colon
+            // the line, slicing right after it strips the colon
             // VariableParselet needs to recognize a definition at all,
             // leaving a bare "x = 5" that fails to parse. Falling back to
             // the next colon to the left ("value:") keeps ":x = 5" intact.
@@ -1129,7 +1129,7 @@ export class ExpressionEngine {
                     this.parseExpression(builder, tokens.slice(i + 1), hasParens);
                     return;
                 } catch {
-                    // This colon's fragment didn't parse cleanly either —
+                    // This colon's fragment didn't parse cleanly either
                     // try the next one to the left before giving up.
                 }
             }
@@ -1142,16 +1142,16 @@ export class ExpressionEngine {
         }
     }
 
-    //#region Symbolic algebra — `=>` and bare equation-statement grammar
+    //#region Symbolic algebra, `=>` and bare equation-statement grammar
 
     /**
      * Compiles a standalone token list into a fresh, independent
-     * `BytecodeProgram` — used for a `=>`-triggered expression and for a
+     * `BytecodeProgram`, used for a `=>`-triggered expression and for a
      * bare equation's own right-hand side. Reuses {@link parseExpression}
      * (the SAME "compile a token list into a builder, then check for
      * leftover trailing tokens" logic every ordinary line already goes
      * through), just with a throwaway builder instead of the pooled one
-     * (this grammar is rare — a per-call allocation here is a non-issue).
+     * (this grammar is rare, a per-call allocation here is a non-issue).
      */
     private compileAdHoc(tokens: Token[]): BytecodeProgram {
         const builder = new BytecodeBuilder();
@@ -1162,11 +1162,11 @@ export class ExpressionEngine {
     /**
      * Executes an already-compiled program in symbolic-tolerant mode (an
      * undefined variable becomes a `Symbolic` placeholder instead of
-     * throwing `UNDEFINED_VARIABLE` — see `vm/VM.ts`'s `executeBytecode()`
+     * throwing `UNDEFINED_VARIABLE`. See `vm/VM.ts`'s `executeBytecode()`
      * doc comment on its own `symbolicTolerant` parameter). Used by both
      * the "just simplify this" `=>` mode and bare equation evaluation
      * (a bare assignment's RHS, and an equation's own RHS at solve time)
-     * — every one of these needs forward-tolerant reads of not-yet-defined
+     *, every one of these needs forward-tolerant reads of not-yet-defined
      * names, which ordinary evaluation deliberately never allows.
      */
     private executeSymbolicTolerant(program: BytecodeProgram): Value {
@@ -1181,18 +1181,18 @@ export class ExpressionEngine {
         return result.value;
     }
 
-    /** Compiles and executes `tokens` in symbolic-tolerant mode — the "just simplify this" `=>` fallback when there's no stored equation to solve. */
+    /** Compiles and executes `tokens` in symbolic-tolerant mode, the "just simplify this" `=>` fallback when there's no stored equation to solve. */
     private simplifySymbolically(tokens: Token[]): Value {
         return this.executeSymbolicTolerant(this.compileAdHoc(tokens));
     }
 
     /**
-     * Parses a bare (colon-less) equation's left-hand side — `factor1 *
-     * factor2 * ... * variable` — into an ordered list of bare names, or
+     * Parses a bare (colon-less) equation's left-hand side, `factor1 *
+     * factor2 * ... * variable`, into an ordered list of bare names, or
      * `null` if `tokens` isn't EXACTLY that shape (an alternating
      * `IDENT/UNIT`, `STAR`, `IDENT/UNIT`, `STAR`, ... sequence with no
      * other token types). Returning `null` means "don't intercept this
-     * line at all" — it falls through to whatever the ordinary expression
+     * line at all", it falls through to whatever the ordinary expression
      * grammar already does with a bare `=` in it (today: a clear parse
      * error), so this pattern-match can only ever ADD a new capability,
      * never take one away.
@@ -1201,7 +1201,7 @@ export class ExpressionEngine {
      * safe from the reserved-keyword collision risk `VariableParselet.ts`
      * guards against for the colon-prefixed form: a genuinely reserved
      * word (`clamp`, `global`, ...) always lexes as ITS OWN token type,
-     * never `IDENT`/`UNIT`, so it can never satisfy this pattern — the
+     * never `IDENT`/`UNIT`, so it can never satisfy this pattern, the
      * same protection, for free, without a duplicated keyword list.
      */
     private parseFactorChain(tokens: Token[]): string[] | null {
@@ -1219,14 +1219,14 @@ export class ExpressionEngine {
     }
 
     /**
-     * Solves a stored equation — `variable = inv(factor1*factor2*...) *
+     * Solves a stored equation, `variable = inv(factor1*factor2*...) *
      * rhs`. Every step is symbolic-aware (`vm/MatrixOps.ts`'s
      * `matrixMultiply()`/`inverse()`), so a factor whose OWN cells are
      * still-unassigned free variables (`s = [sx,0,0;...]`) solves
      * correctly, producing a Matrix whose cells are algebraic formulas
      * rather than plain numbers. Errors (a missing factor, a non-Matrix
      * factor/RHS, a singular combined matrix) are returned as `Error`-typed
-     * Values, not thrown — matching this engine's established "matrix
+     * Values, not thrown, matching this engine's established "matrix
      * errors propagate as values" convention (DIMENSION_MISMATCH,
      * SINGULAR_MATRIX, ...).
      */
@@ -1274,22 +1274,22 @@ export class ExpressionEngine {
      * Detects and handles this session's two new symbolic-algebra grammar
      * shapes on `normalizedTokens`, returning the computed result directly
      * (bypassing ordinary bytecode compilation/caching entirely, since
-     * BOTH shapes have effects — a stored equation, a direct variable
-     * assignment — that a cached bytecode program can't represent) or
+     * BOTH shapes have effects, a stored equation, a direct variable
+     * assignment, that a cached bytecode program can't represent) or
      * `null` if neither shape matches (meaning ordinary processing should
      * proceed exactly as it did before this feature existed):
      *
-     * 1. `<bareIdent> =>` or `<expr> =>` — trailing `THEREFORE`. A bare
+     * 1. `<bareIdent> =>` or `<expr> =>`, trailing `THEREFORE`. A bare
      *    identifier with a STORED equation solves it (see
      *    {@link solveEquation}); anything else (including a bare
      *    identifier with NO stored equation) runs in symbolic-tolerant
-     *    mode and simplifies (see {@link simplifySymbolically}) — a
+     *    mode and simplifies (see {@link simplifySymbolically}), a
      *    near-free "just simplify this" mode.
-     * 2. `factor1*factor2*...*variable = rhs` — a bare (colon-less), NOT
+     * 2. `factor1*factor2*...*variable = rhs`, a bare (colon-less), NOT
      *    already colon/global-prefixed, top-level `EQUALS` whose LHS
      *    matches {@link parseFactorChain}'s narrow pattern. A single bare
      *    name (`s = [sx,0,0;...]`) is an ORDINARY (colon-less) assignment
-     *    — its RHS is ALWAYS evaluated symbolic-tolerantly (so a matrix
+     *, its RHS is ALWAYS evaluated symbolic-tolerantly (so a matrix
      *    literal with still-unassigned entries assigns successfully,
      *    carrying those free variables as real symbolic cells) and stored
      *    via `vm.setVar()`. Two or more names (`s*t*v = rhs`) stores a
@@ -1297,7 +1297,7 @@ export class ExpressionEngine {
      *    shape 1 above.
      *
      * This is a deliberately narrow pattern match, not a general equation
-     * solver — see `OpRegistry.ts`'s `EquationDef` doc comment and this
+     * solver. See `OpRegistry.ts`'s `EquationDef` doc comment and this
      * session's own Phase H.2 scope decision (full symbolic MATRICES, not
      * a general CAS).
      */
@@ -1320,7 +1320,7 @@ export class ExpressionEngine {
         }
 
         // Already the colon-prefixed (`:name = value`) or `global :name`
-        // grammar — completely untouched, don't even attempt to match.
+        // grammar, completely untouched, don't even attempt to match.
         if (normalizedTokens[0].type === 'COLON' || normalizedTokens[0].type === 'GLOBAL') return null;
 
         const eqIdx = normalizedTokens.findIndex(t => t.type === 'EQUALS');
@@ -1346,13 +1346,13 @@ export class ExpressionEngine {
     //#endregion
 
     /**
-     * Lex an expression via `resetExpression` (skips `classifyLine` —
+     * Lex an expression via `resetExpression` (skips `classifyLine`
      * callers already know this is an expression), filtering out COMMENT
      * tokens (they have no parselet) and tracking whether any paren was
      * seen. Shared by every lex-then-{@link prepareExpression} call site:
      * {@link compileExpression}, {@link tryCompileExpression}, and
      * {@link evaluateExpressionWithDiagnostic}. `onToken`, when given, is
-     * called once per emitted (already-filtered) token — used ONLY by the
+     * called once per emitted (already-filtered) token, used ONLY by the
      * diagnostic path to fire its per-token `TokenEmitted` events; every
      * other caller omits it.
      */
@@ -1381,11 +1381,11 @@ export class ExpressionEngine {
      * caller decides whether/how to re-throw.
      *
      * The `'error'` variant carries the actual `EngineError` each safety
-     * check or `parseExpression()` itself already constructed — not just
+     * check or `parseExpression()` itself already constructed, not just
      * its flattened `.message` (the previous shape). A parse failure in
      * particular can be any of dozens of specific codes (UNDEFINED_VARIABLE,
      * NO_PREFIX_PARSELET, FUNCTION_ARITY_MISMATCH, ...), each with its own
-     * `expected`/`found`/`suggestion` detail — callers used to discard all
+     * `expected`/`found`/`suggestion` detail, callers used to discard all
      * of that and reconstruct a generic EVALUATION_ERROR/PARSE_ERROR wrapper
      * around just the message, which directly worked against this session's
      * "errors are verbose and easy to understand" goal. Callers should
@@ -1393,7 +1393,7 @@ export class ExpressionEngine {
      * {@link compileExpression}) rather than wrapping it again.
      *
      * `onFusion`, when given, is passed straight through to the normalizer's
-     * own optional per-fusion callback — used ONLY by
+     * own optional per-fusion callback, used ONLY by
      * {@link evaluateExpressionWithDiagnostic} to observe individual token
      * fusions for its `normalizer` diagnostic stage. Omitted by every other
      * caller, with zero behavior change (identical to not passing a 2nd
@@ -1402,7 +1402,7 @@ export class ExpressionEngine {
      * The `'error'` variant's `normalizedTokens` is populated whenever
      * normalization already ran before the failure (`'complexity'`/`'parse'`
      * stages), `undefined` when it failed before tokens were even considered
-     * (`'length'` stage) — lets {@link evaluateExpressionWithDiagnostic}
+     * (`'length'` stage), lets {@link evaluateExpressionWithDiagnostic}
      * reconstruct its own diagnostic-stage payloads (which need the
      * normalized tokens to recompute a display-only complexity score) without
      * re-deriving them by hand.
@@ -1410,10 +1410,10 @@ export class ExpressionEngine {
      * The `'ready'` (uncached) variant's `parserAlloc` is the
      * `AllocationTracker.track('parser', ...)` result for JUST the actual
      * parse+build call (`null` whenever `AllocationTracker.isEnabled()` is
-     * false, or on a cache hit — no parsing happened). This has to be
+     * false, or on a cache hit, no parsing happened). This has to be
      * measured HERE, not reconstructed by a caller after the fact: unlike
      * every other diagnostic field, a heap-delta measurement only means
-     * anything over the EXACT span it's wrapped around — wrapping the
+     * anything over the EXACT span it's wrapped around, wrapping the
      * whole `prepareExpression()` call from the outside (as
      * {@link evaluateExpressionWithDiagnostic} briefly did) widens that span
      * to also cover normalize/complexity-check/cache-lookup, which measurably
@@ -1436,7 +1436,7 @@ export class ExpressionEngine {
             return { kind: 'error', stage: 'length', error: lengthCheck.error!.engineError! };
         }
 
-        // Filter COMMENT tokens — they have no parselet.
+        // Filter COMMENT tokens, they have no parselet.
         const exprTokens = tokens.filter(t => t.type !== 'COMMENT');
         if (exprTokens.length === 0) {
             return { kind: 'empty' };
@@ -1453,7 +1453,7 @@ export class ExpressionEngine {
         }
 
         // ══ SYMBOLIC ALGEBRA: `=>` / bare equation-statement grammar ══
-        // Bypasses bytecode caching entirely — both shapes have effects
+        // Bypasses bytecode caching entirely, both shapes have effects
         // (a stored equation, a direct vm.setVar()) a cached program can't
         // represent. See trySymbolicGrammar()'s own doc comment.
         const symbolicResult = this.trySymbolicGrammar(normalizedTokens);
@@ -1469,13 +1469,13 @@ export class ExpressionEngine {
             return { kind: 'ready', normalizedTokens, reads, writes, program: cachedProgram, cached: true };
         }
 
-        // Get a pooled builder — avoids 4 heap allocations per expression
+        // Get a pooled builder, avoids 4 heap allocations per expression
         const builder = this.builderPool[this.builderPoolIndex++ % this.builderPool.length];
         builder.reset();
         let program: BytecodeProgram;
         let parserAlloc: StageAllocation | null = null;
         try {
-            // build() allocates TypedArrays directly from builder arrays —
+            // build() allocates TypedArrays directly from builder arrays
             // a single copy (builder → TypedArray). Wrapped together with
             // parseExpression() under one 'parser' allocation measurement,
             // matching the exact span this file's diagnostic path has always
@@ -1488,7 +1488,7 @@ export class ExpressionEngine {
             parserAlloc = parseResult.alloc;
         } catch (e) {
             // reads/writes were already extracted above from the full token
-            // list (independent of whether parsing succeeds) — returned
+            // list (independent of whether parsing succeeds), returned
             // alongside the error (not merged into its context here, since
             // EngineError.context is readonly) so callers that track
             // dependencies (ThreeTierEvaluator's compile-fallback DAG
@@ -1515,13 +1515,13 @@ export class ExpressionEngine {
      *
      * If any registered resolver says "data not ready", registers a DAG
      * data-source dependency, stores a Pending result, and fires async
-     * resolution (fire-and-forget — resolves later, re-evaluates on
-     * completion) — the caller should skip VM execution entirely and return
+     * resolution (fire-and-forget, resolves later, re-evaluates on
+     * completion), the caller should skip VM execution entirely and return
      * the pending Value as-is. Otherwise the caller should proceed to
      * {@link executeAndStore}.
      *
      * Used by both {@link evaluateWithTokens} and
-     * {@link evaluateExpressionWithDiagnostic} — previously each carried its
+     * {@link evaluateExpressionWithDiagnostic}, previously each carried its
      * own copy of this exact sequence (differing only in a cosmetic
      * abortLogger label), which is how the `=>` grammar shipped silently
      * dead on the diagnostic path earlier this session: a future top-level
@@ -1557,7 +1557,7 @@ export class ExpressionEngine {
             normalizedTokens, program, '_engine', preflightSignal, this.queryClient
         );
         if (asyncCheck) {
-            // Fire-and-forget — resolves asynchronously, re-evaluates on completion
+            // Fire-and-forget, resolves asynchronously, re-evaluates on completion
             void this.resolveAsync({
                 type: 'pending',
                 queryKey: asyncCheck.queryKey,
@@ -1577,7 +1577,7 @@ export class ExpressionEngine {
             this.storeLineResult(lineNumber, pending, program, reads, writes, expression);
             return { kind: 'pending', value: pending };
         }
-        // Sync path — no async resolution started, so the preflight
+        // Sync path, no async resolution started, so the preflight
         // controller is inert. Unhook its keystroke listener.
         this.keystrokeSignal?.removeEventListener('abort', abortPreflight);
         return { kind: 'proceed' };
@@ -1586,11 +1586,11 @@ export class ExpressionEngine {
     /**
      * Evaluate an expression using already-lexed tokens.
      *
-     * The lean, non-diagnostic-instrumented path — used by
+     * The lean, non-diagnostic-instrumented path, used by
      * {@link evaluateLineWithPreTokenized} (tokens from `scanDocument()`)
      * and, via {@link compileExpression}/{@link tryCompileExpression},
      * compile-only callers. NOT used by `evaluateLine()`/
-     * `evaluateExpression()` — those route through
+     * `evaluateExpression()`, those route through
      * {@link evaluateExpressionWithDiagnostic} instead (evaluateLine ->
      * evaluateLineDetailed -> evaluateLineWithDebug ->
      * evaluateExpressionWithDiagnostic), which does its own lexing and its
@@ -1613,7 +1613,7 @@ export class ExpressionEngine {
             return v;
         }
         if (prep.kind === 'error') {
-            // Re-throw the original error as-is — its own code/category
+            // Re-throw the original error as-is, its own code/category
             // (EXPRESSION_TOO_LONG/EXPRESSION_TOO_COMPLEX/whatever the
             // parser actually threw) and expected/found/suggestion detail
             // are more specific and useful than the generic EVALUATION_ERROR
@@ -1621,7 +1621,7 @@ export class ExpressionEngine {
             throw prep.error;
         }
         if (prep.kind === 'symbolic-solve') {
-            // No DAG registration — a stored equation/bare-assignment's
+            // No DAG registration, a stored equation/bare-assignment's
             // effect (vm.equations, vm.setVar) isn't reads/writes-trackable
             // the same way ordinary bytecode is, so this line won't
             // auto-re-evaluate if some unrelated line later changes one of
@@ -1640,14 +1640,14 @@ export class ExpressionEngine {
             return preflight.value;
         }
 
-        // Execute and handle result — no try/catch needed.
+        // Execute and handle result, no try/catch needed.
         // executeBytecode now returns EvalResult (discriminated union).
         return this.executeAndStore(program, lineNumber, expression, reads, writes, '_engine');
     }
 
     //#endregion
 
-    //#region Public API — Line-level evaluation
+    //#region Public API, Line-level evaluation
 
 	/**
 	 * Evaluate a single expression line with full DAG and LineCache integration.
@@ -1677,7 +1677,7 @@ export class ExpressionEngine {
             // expected/found/suggestion, e.g. CLAMP_EXPECTED_BETWEEN_OR_FROM
             // or UNDEFINED_VARIABLE) rather than the generic EVALUATION_ERROR
             // wrapper this used to always construct around just the message
-            // — engineError is only absent if some future failure path in
+            //, engineError is only absent if some future failure path in
             // the diagnostic pipeline sets `error` without it, which the
             // fallback below still handles.
             if (result.engineError) {
@@ -1732,7 +1732,7 @@ export class ExpressionEngine {
 
     //#endregion
 
-    //#region Diagnostic Pipeline — Structured stage recording
+    //#region Diagnostic Pipeline, Structured stage recording
 
     /**
      * Build a single pipeline stage result for the structured diagnostic output.
@@ -1741,14 +1741,14 @@ export class ExpressionEngine {
      * metadata. This runs in parallel with the existing event-based diagnostic system
      * (via `DiagnosticPipeline.fire*` methods). Both paths are enabled by the same
      * `hasCollectors` guard so there is no performance impact when `diagnosticMode`
-     * is `false` — the stages array stays empty because this method is never called.
+     * is `false`, the stages array stays empty because this method is never called.
      *
      * Each stage captures:
      * - **Identity**: `stage` name (e.g., `"lexer"`), display `label`, `icon`, `colorClass`
      * - **Position**: `stepNumber` in the pipeline (0-15)
      * - **Timing**: `elapsedNs` wall-time (overridden by TimelineDiagnosticCollector)
      * - **State**: `skipped` flag for stages bypassed by cache hits or guard conditions
-     * - **Payload**: `output` — a discriminated union typed per stage
+     * - **Payload**: `output`, a discriminated union typed per stage
      *
      * @param stages - Mutable array being accumulated for the final DiagnosticPipelineResult.
      * @param stage - Canonical stage identifier (kebab-case, e.g. `"async_preflight"`).
@@ -1780,30 +1780,30 @@ export class ExpressionEngine {
      * Executes the full 15-stage evaluation pipeline while simultaneously
      * populating two diagnostic data structures:
      *
-     * 1. **Event-based** — fires typed events to registered `DiagnosticCollector`
+     * 1. **Event-based**, fires typed events to registered `DiagnosticCollector`
      *    instances via `DiagnosticPipeline.fire*()` methods. Supports streaming
      *    diagnostics via `TimelineDiagnosticCollector`.
-     * 2. **Structured stages** — accumulates a `PipelineStageResult[]` array
+     * 2. **Structured stages**, accumulates a `PipelineStageResult[]` array
      *    with per-stage typed payloads (see `DiagnosticPipelineResult.ts`).
      *    This is returned as the `diagnostic` field for declarative rendering.
      *
      * The 15 stages, in order:
      * ```
-     *  1  pipeline_start      — Pipeline initialization + metadata
-     *  2  safety_length       — Expression length validation
-     *  3  lexer               — Tokenization via ExpressionLexer
-     *  4  normalizer          — Token fusion (phrase, implicit multiply)
-     *  5  safety_complexity   — Token-count & nesting-depth check
-     *  6  readwrite           — Variable read/write extraction for DAG
-     *  7  cache_check         — Bytecode cache hit/miss
-     *  8  parser              — AST construction via PrecedenceParser
-     *  9  compiler            — Bytecode generation + constant table
-     * 10  async_preflight     — Async resolver pre-flight check
-     * 11  vm_execute          — Bytecode execution on the VM
-     * 12  dag_registration    — DAG node registration for incremental eval
-     * 13  linecache           — Result stored in LineCache
-     * 14  result              — Final value + formatting
-     * 15  pipeline_end        — Completion summary + statistics
+     *  1  pipeline_start, Pipeline initialization + metadata
+     *  2  safety_length, Expression length validation
+     *  3  lexer, Tokenization via ExpressionLexer
+     *  4  normalizer, Token fusion (phrase, implicit multiply)
+     *  5  safety_complexity, Token-count & nesting-depth check
+     *  6  readwrite, Variable read/write extraction for DAG
+     *  7  cache_check, Bytecode cache hit/miss
+     *  8  parser, AST construction via PrecedenceParser
+     *  9  compiler, Bytecode generation + constant table
+     * 10  async_preflight, Async resolver pre-flight check
+     * 11  vm_execute, Bytecode execution on the VM
+     * 12  dag_registration, DAG node registration for incremental eval
+     * 13  linecache, Result stored in LineCache
+     * 14  result, Final value + formatting
+     * 15  pipeline_end, Completion summary + statistics
      * ```
      *
      * Early-exit paths are taken for safety violations, empty expressions,
@@ -1820,13 +1820,13 @@ export class ExpressionEngine {
      * readwrite/cache-lookup/parse/compile are delegated to
      * {@link prepareExpression} (the SAME method the lean
      * {@link evaluateWithTokens} path calls), async preflight to
-     * {@link preflightAsync}, and VM execution to {@link executeAndStore} —
+     * {@link preflightAsync}, and VM execution to {@link executeAndStore}
      * every stage/event below is reconstructed from what those shared
      * methods return, not fired from inside a second hand-duplicated copy
      * of their logic. This matters: a new top-level grammar shape wired
      * into `prepareExpression()` is automatically reachable from BOTH
      * `evaluateLine()`/`evaluateExpression()` (this method) and the lean
-     * path — previously they were two independent implementations that had
+     * path, previously they were two independent implementations that had
      * already drifted once (the `=>`/equation-statement grammar shipped
      * dead on this, the real path, until a dedicated test caught it).
      *
@@ -1843,7 +1843,7 @@ export class ExpressionEngine {
         const hasCollectors = pipeline.hasCollectors;
         // Baseline for slicing THIS line's own parselet_matched events out of
         // the timeline collector's cumulative-across-the-document array below
-        // — see debug.parselets' construction at the end of this method.
+        //. See debug.parselets' construction at the end of this method.
         const parseletsBefore = this.timelineCollector?.parseletMatchCount ?? 0;
         const trackEnabled = AllocationTracker.isEnabled();
         const stageAllocs: StageAllocation[] = [];
@@ -1885,7 +1885,7 @@ export class ExpressionEngine {
         }
 
         // ══ LEXER STAGE ══
-        // Lexing with token emission events — this file's shared
+        // Lexing with token emission events. This file's shared
         // lexToTokens() (also used by compileExpression/
         // tryCompileExpression) skips redundant classifyLine (caller
         // already knows this is an expression) and filters COMMENT tokens
@@ -1926,7 +1926,7 @@ export class ExpressionEngine {
                 tokens: [...tokens],
             });
 
-            // Structured: line classification — detect inline solve spans from token stream
+            // Structured: line classification, detect inline solve spans from token stream
             const inlineSolveSpans: InlineSolveSpanInfo[] = [];
             for (let i = 0; i < tokens.length; i++) {
                 const t = tokens[i];
@@ -1990,9 +1990,9 @@ export class ExpressionEngine {
         // prepareExpression() now automatically covers both paths, since
         // there is only one implementation left of "what does this line
         // mean." Every stage below is reconstructed from
-        // prepareExpression()'s return value — plus a couple of cheap,
+        // prepareExpression()'s return value, plus a couple of cheap
         // pure, side-effect-free recomputations for display-only fields it
-        // doesn't itself carry (the complexity score) — instead of being
+        // doesn't itself carry (the complexity score), instead of being
         // fired from inside a second, hand-duplicated copy of its logic.
         let fusionCount = 0;
         const normalizerFusions: TokenFusion[] = [];
@@ -2024,7 +2024,7 @@ export class ExpressionEngine {
         // Peeked BEFORE calling prepareExpression() so hit/miss is already
         // known for the stage/event construction below, and so the
         // parser's diagnostic-pipeline reference is only linked when a real
-        // parse attempt is actually about to happen — a cache hit never
+        // parse attempt is actually about to happen, a cache hit never
         // reaches parseExpression() at all, matching the original's own
         // cache-miss-only gating of this same call.
         const cachedBefore = this.bytecodeCache.get(expression);
@@ -2032,7 +2032,7 @@ export class ExpressionEngine {
             this.parser.setDiagnosticPipeline(pipeline, expression);
         }
 
-        // NOT wrapped in AllocationTracker.track('parser', ...) here —
+        // NOT wrapped in AllocationTracker.track('parser', ...) here
         // prepareExpression() already measures its OWN internal parse+build
         // call under that exact label internally (see its own doc comment
         // on `parserAlloc`) and reports the result back on its 'ready'
@@ -2049,7 +2049,7 @@ export class ExpressionEngine {
             this.parser.setDiagnosticPipeline(undefined, "");
         }
 
-        // From here on, `prep.normalizedTokens` is always defined — the two
+        // From here on, `prep.normalizedTokens` is always defined, the two
         // variants that lack it ('empty', and 'error' at the 'length'
         // stage) are provably unreachable from this call site: the
         // safety-length check and the raw-tokens-empty check above already
@@ -2088,7 +2088,7 @@ export class ExpressionEngine {
         }
 
         // ══ 'empty' / 'error'-at-'length' outcomes ══
-        // Provably unreachable from this call site (see comment above) —
+        // Provably unreachable from this call site (see comment above)
         // handled only so the discriminated union stays exhaustively
         // covered.
         if (prep.kind === 'empty' || (prep.kind === 'error' && prep.stage === 'length')) {
@@ -2118,7 +2118,7 @@ export class ExpressionEngine {
             };
         }
 
-        // Recompute the complexity score for display — cheap, pure,
+        // Recompute the complexity score for display, cheap, pure
         // side-effect-free; prepareExpression() already made the actual
         // pass/fail DECISION, this is purely for the diagnostic stage's own
         // display fields it doesn't itself return.
@@ -2194,7 +2194,7 @@ export class ExpressionEngine {
             };
         }
 
-        // From here, prep.kind is 'ready' or 'error' at the 'parse' stage —
+        // From here, prep.kind is 'ready' or 'error' at the 'parse' stage
         // both carry `reads`/`writes` (extracted before the cache lookup/
         // parse attempt).
         const reads = prep.reads ?? [];
@@ -2221,7 +2221,7 @@ export class ExpressionEngine {
         }
 
         if (prep.kind === 'error' && prep.stage === 'parse') {
-            // No 'parser'/'compiler' stage — the parse attempt itself is
+            // No 'parser'/'compiler' stage, the parse attempt itself is
             // where this failed, matching the original's exact shape (it
             // only ever got as far as the cache_check stage above before
             // the parse threw).
@@ -2337,8 +2337,8 @@ export class ExpressionEngine {
         }
 
         // ══ VM STAGE ══
-        // Delegates to executeAndStore() — the SAME method the lean path
-        // calls — which already handles the AbortController/keystroke-
+        // Delegates to executeAndStore(), the SAME method the lean path
+        // calls, which already handles the AbortController/keystroke-
         // signal linking, stack cleanup, and resolveAsync/DAG-registration/
         // storeLineResult side effects internally. executeAndStore()
         // throws on a VM runtime error (matching the lean path's own
@@ -2473,17 +2473,17 @@ export class ExpressionEngine {
             });
         }
 
-        // Build debug info — structured diagnostic report
+        // Build debug info, structured diagnostic report
         if (hasCollectors) {
             const reports = pipeline.collectReports();
             const rawDebug = reports[0]?.toJSON();
             // `rawDebug.parselets` as returned by TimelineDiagnosticCollector
-            // is cumulative across the WHOLE document pass (deliberately —
+            // is cumulative across the WHOLE document pass (deliberately
             // see onPipelineStart's doc comment), not scoped to this one
             // line. Without this slice, every line after the first reports
             // whichever parselet fired FIRST in the entire session
             // (typically NumberParselet, from the document's very first
-            // token) as if it were this line's own — a real, confusing
+            // token) as if it were this line's own, a real, confusing
             // display bug, not evidence that NumberParselet does all the
             // parsing work. Slicing from the pre-parse baseline gives just
             // the events this line's own parse actually fired.
@@ -2491,7 +2491,7 @@ export class ExpressionEngine {
             if (rawDebug) {
                 const lineParselets = rawDebug.parselets.slice(parseletsBefore);
                 // summary.totalParselets/parseCategories are recomputed from
-                // the SAME per-line slice above, for the same reason —
+                // the SAME per-line slice above, for the same reason
                 // TimelineDiagnosticCollector's parseCategories Map is
                 // cumulative across the whole document pass, so reusing it
                 // as-is would report "distinct categories seen all session"
@@ -2502,7 +2502,7 @@ export class ExpressionEngine {
                 // regardless of what that specific line actually parsed).
                 // summary.totalTokens/totalOpcodes/cacheHit/elapsedNs are
                 // deliberately left as the collector's session-cumulative
-                // values — none of them currently has a UI consumer to
+                // values, none of them currently has a UI consumer to
                 // validate a per-line reinterpretation against, and
                 // equivalent, already-correct per-line values exist
                 // elsewhere for tokens/opcodes/cache-hit (see LineResult's
@@ -2540,7 +2540,7 @@ export class ExpressionEngine {
 
     //#endregion
 
-    //#region Diagnostic Result — Snapshot population
+    //#region Diagnostic Result, Snapshot population
 
     /**
      * Build a complete DiagnosticPipelineResult with engine-wide snapshot data.
@@ -2571,13 +2571,13 @@ export class ExpressionEngine {
 
     //#endregion
 
-    //#region Incremental Evaluation — DAG-driven re-execution
+    //#region Incremental Evaluation, DAG-driven re-execution
 
     /**
      * Re-evaluate a cached line without reparsing.
      *
      * Used when a variable referenced by this line has changed. Skips
-     * lexing, parsing, and compilation — performs only a pre-flight async
+     * lexing, parsing, and compilation, performs only a pre-flight async
      * check and VM execution against the cached bytecode.
      *
      * Returns `undefined` if the line is not in cache.
@@ -2597,7 +2597,7 @@ export class ExpressionEngine {
         // O(1) guard: skip the O(n) resolver scan when the bytecode has no
         // async opcodes AND no resolvers are registered.
         if (entry.bytecode.hasAsync || this.resolverRegistry.size > 0) {
-        // Pre-flight async check — run before VM even for cached bytecode
+        // Pre-flight async check, run before VM even for cached bytecode
         // ── Link to keystroke signal ──
         const preflightController = new AbortController();
         const abortPreflight = () => preflightController.abort();
@@ -2622,7 +2622,7 @@ export class ExpressionEngine {
             });
             return pendingValue(asyncCheck.queryKey);
         }
-        // Sync path — unhook the inert preflight controller's keystroke listener.
+        // Sync path, unhook the inert preflight controller's keystroke listener.
         this.keystrokeSignal?.removeEventListener('abort', abortPreflight);
         } // end hasAsync guard
 
@@ -2712,25 +2712,25 @@ export class ExpressionEngine {
 
     /**
      * Lex + normalize (phrase fusion, implicit multiply, domain token
-     * merging) `text` WITHOUT parsing or executing it — a cheap way for a
+     * merging) `text` WITHOUT parsing or executing it, a cheap way for a
      * host to inspect what token stream a line would actually produce,
      * without paying for a full parse/compile/VM pass.
      *
      * Built for line-classification heuristics like "does this look like a
-     * real expression, or is it prose I shouldn't bother evaluating" — a
+     * real expression, or is it prose I shouldn't bother evaluating", a
      * host that only checks for digits/operators/symbols before deciding
      * whether to evaluate a line will incorrectly skip genuine all-word
      * expressions (`weather in Tokyo`, `time in Paris`, `average of X, Y,
      * Z`), since none of those contain a digit or symbol. Checking whether
      * `tokenizeForClassification(text)[0]?.type` is anything OTHER than the
      * generic `IDENT` fallback is a reliable signal that the lexer/normalizer
-     * actually recognized a specific keyword or fused multi-word phrase —
+     * actually recognized a specific keyword or fused multi-word phrase
      * i.e., this is real, registered vocabulary, not an arbitrary word that
      * merely happens to be lexable (every word lexes as IDENT if nothing
      * more specific claims it, so IDENT alone proves nothing about intent).
      *
      * Assumes the caller has already ruled out markdown-structural lines
-     * (headings, code fences, etc.) via `getLexer().classifyLine()` — this
+     * (headings, code fences, etc.) via `getLexer().classifyLine()`. This
      * always tokenizes as a plain expression line, mirroring
      * `Lexer.resetExpression()`'s own "caller already knows this is
      * evaluable" contract.
@@ -2753,7 +2753,7 @@ export class ExpressionEngine {
 
     //#endregion
 
-    //#region Public API — Keystroke signal
+    //#region Public API, Keystroke signal
 
     /**
      * Set the keystroke-level AbortSignal for the current evaluation cycle.
@@ -2778,7 +2778,7 @@ export class ExpressionEngine {
      * Get a serializable cache snapshot for diagnostic rendering.
      *
      * Returns bytecode cache entries, line cache entries, and async cache
-     * packages — all as plain objects with no internal references. Previously
+     * packages, all as plain objects with no internal references. Previously
      * the playground accessed this via `(engine as any).getCacheSnapshot?.()`.
      */
     getCacheSnapshot(): CacheSnapshot {
@@ -2795,7 +2795,7 @@ export class ExpressionEngine {
 
         const lineCacheEntries: LineCacheEntryInfo[] = [];
         for (const key of this.lineCache.keys()) {
-            // Keys are "lineNumber" or "lineNumber:expression" — parse out both parts.
+            // Keys are "lineNumber" or "lineNumber:expression", parse out both parts.
             const colonIdx = key.indexOf(':');
             const lineNumber = colonIdx > 0
                 ? (parseInt(key.slice(0, colonIdx), 10) || 0)
@@ -2861,7 +2861,7 @@ export class ExpressionEngine {
      */
     getCheckpoints(): CheckpointSnapshot[] {
         // The checkpointer is set on the VM by ThreeTierEvaluator.
-        // Access it via the VM — same pattern the playground used via (vm as any).checkpointer.
+        // Access it via the VM. Same pattern the playground used via (vm as any).checkpointer.
         const checkpointer = (this.vm as any).checkpointer as
             | { getAllCheckpoints(): readonly { lineNumber: number; variables: Record<string, unknown> }[] }
             | undefined;
@@ -2878,7 +2878,7 @@ export class ExpressionEngine {
     /**
      * Get the most recent pipeline telemetry from AllocationTracker.
      *
-     * Returns null when AllocationTracker.isEnabled() is false (production —
+     * Returns null when AllocationTracker.isEnabled() is false (production
      * zero overhead), or when no expression has been evaluated via
      * evaluateExpressionWithDiagnostic() since the last clear().
      *
@@ -2891,7 +2891,7 @@ export class ExpressionEngine {
 
     //#endregion
 
-    //#region Public API — Evaluation
+    //#region Public API, Evaluation
 
     /**
      * Evaluate a raw expression string without line-number context.
@@ -2903,7 +2903,7 @@ export class ExpressionEngine {
 
 //#endregion
 
-//#region Compilation — Bytecode-only path
+//#region Compilation, Bytecode-only path
 
     /**
      * Compile-only path: lex → parse → bytecode, without execution.
@@ -2911,7 +2911,7 @@ export class ExpressionEngine {
      * Used by Tier 3 (background) evaluation to discover reads/writes
      * for the dependency graph without running display-only expressions.
      *
-     * Uses the bytecode cache — repeated compilations of the same expression
+     * Uses the bytecode cache, repeated compilations of the same expression
      * return the cached program with zero allocation.
      *
      * @param expression - The raw expression string to compile.
@@ -2940,7 +2940,7 @@ export class ExpressionEngine {
 		if (prep.kind === 'error') {
 			if (prep.stage === 'parse' && (prep.reads?.length || prep.writes?.length)) {
 				// Preserve the original error's own code/category/expected/
-				// found/suggestion (whatever the parser actually threw —
+				// found/suggestion (whatever the parser actually threw
 				// UNDEFINED_VARIABLE, FUNCTION_ARITY_MISMATCH, ...) rather
 				// than the generic PARSE_ERROR wrapper this used to
 				// construct, but still attach the already-extracted
@@ -2966,8 +2966,8 @@ export class ExpressionEngine {
 		}
 		if (prep.kind === 'symbolic-solve') {
 			// No real bytecode representation for a `=>`/bare-equation line
-			// (its effect — a stored equation, a direct vm.setVar() — was
-			// already fully computed inside prepareExpression() itself) —
+			// (its effect, a stored equation, a direct vm.setVar(), was
+			// already fully computed inside prepareExpression() itself)
 			// same "nothing to compile" shape as the 'empty' case above.
 			// External tooling asking for the compiled program of a `=>`
 			// line gets an empty one; a disclosed limitation of this
@@ -2984,28 +2984,28 @@ export class ExpressionEngine {
 	}
 
 	/**
-	 * Non-throwing "does this compile" check — same lex → prepare pipeline as
+	 * Non-throwing "does this compile" check. Same lex → prepare pipeline as
 	 * {@link compileExpression}, but returns a boolean instead of throwing on
 	 * failure.
 	 *
 	 * compileExpression()'s failure path constructs a EngineError via
-	 * ErrorFactory, which calls Error.captureStackTrace() — one of V8's more
+	 * ErrorFactory, which calls Error.captureStackTrace(), one of V8's more
 	 * expensive operations. That's fine for genuine execution/compile errors
 	 * (rare, and the caller needs the message), but LanguageService's
 	 * syntax-highlighting gate calls compileExpression() purely to ask "does
-	 * this parse", on every visible line, every keystroke — and the common
+	 * this parse", on every visible line, every keystroke, and the common
 	 * case for a real markdown document is prose lines that DON'T parse, not
 	 * the rare case. Benchmarked: constructing-and-throwing that exception on
 	 * every non-matching line was responsible for highlighting an
 	 * unrecognized-prose line costing roughly an order of magnitude more than
-	 * a recognized expression. This skips that construction entirely — still
+	 * a recognized expression. This skips that construction entirely, still
 	 * reuses the bytecode cache and prepareExpression()'s normal work, just
 	 * never builds an Error object for the "no" answer.
 	 *
 	 * Note: this only avoids the outer exception compileExpression() itself
 	 * would construct. A genuinely deep parse failure (an unmatched token
 	 * mid-expression, not just "stopped early with leftover tokens") still
-	 * goes through the parser's own throw/catch inside prepareExpression() —
+	 * goes through the parser's own throw/catch inside prepareExpression()
 	 * unavoidable without restructuring the parser's failure signaling, which
 	 * is out of scope here.
 	 */
@@ -3020,7 +3020,7 @@ export class ExpressionEngine {
 	 * Used by Tier 2 (scroll into view) to re-execute cached bytecode
 	 * without re-lexing, re-parsing, or re-compiling.
 	 *
-	 * Preserves the VM stack — pops any leftover items after execution.
+	 * Preserves the VM stack, pops any leftover items after execution.
 	 * Does NOT update DAG or LineCache (caller is responsible for state
 	 * management via DocumentModel).
 	 *
@@ -3040,7 +3040,7 @@ export class ExpressionEngine {
 		}
 		if (evalResult.type === 'error') {
 			// This is exactly the Tier-2/LOAD_GLOBAL_VAR bypass path
-			// ARCHITECTURE.md's P0 item describes — executeCached() never
+			// ARCHITECTURE.md's P0 item describes, executeCached() never
 			// calls preflightAll(), so a global-variable read that should
 			// have been guaranteed-resolved by preflight can now surface
 			// here as a controlled GLOBAL_VARIABLE_NOT_RESOLVED error
@@ -3062,7 +3062,7 @@ export class ExpressionEngine {
      *
      * Performs a pre-check for bare identifiers (single-token variable
      * references). If the identifier is not a known variable, returns NaN
-     * immediately without attempting evaluation — avoids the ambiguity of
+     * immediately without attempting evaluation, avoids the ambiguity of
      * "result === 0" when a variable might legitimately store the value 0.
      *
      * @param expression - The raw expression string to evaluate.
@@ -3090,12 +3090,12 @@ export class ExpressionEngine {
 
     //#endregion
 
-    //#region State management — Clear / reset
+    //#region State management, Clear / reset
 
     clear(): void {
         // Cancel pending batcher flushes and clear listeners to prevent
         // stale re-evaluations from in-flight promises that resolve after clear.
-		// NOTE: _dqsUnsubscribe is NOT called here — the bridge must survive
+		// NOTE: _dqsUnsubscribe is NOT called here, the bridge must survive
 		// engine clear() so DataQueryService cache updates continue to flow
 		// into the batcher after document switches / engine resets.
 		this.batcher.clearAll();
@@ -3109,12 +3109,12 @@ export class ExpressionEngine {
 
     //#endregion
 
-    //#region Public API — Incremental evaluation
+    //#region Public API, Incremental evaluation
 
     /**
      * Incrementally re-evaluate lines affected by a variable change.
      * Walks the DAG from the changed variable to find exactly which lines
-     * need re-execution — no dirty-set indirection, no sorting guesswork.
+     * need re-execution, no dirty-set indirection, no sorting guesswork.
      * Uses Kahn's algorithm for topological ordering: producers always
      * execute before consumers, regardless of document line order.
      */
@@ -3138,7 +3138,7 @@ export class ExpressionEngine {
 
             if (evalResult.type === 'pending') {
                 void this.resolveAsync(evalResult);
-                // Don't block — continue processing other affected lines.
+                // Don't block, continue processing other affected lines.
                 // The pending result will trigger re-evaluation when resolved.
                 continue;
             }
@@ -3146,7 +3146,7 @@ export class ExpressionEngine {
                 // Same per-line-containment shape as
                 // AsyncResolutionBatcher.reExecuteMainThread()'s fatal-bug
                 // fix: this loop re-executes potentially many DAG-affected
-                // lines in one pass — a throw here would abort every
+                // lines in one pass, a throw here would abort every
                 // remaining affected line even though nothing was wrong
                 // with them. Record this one line's failure as an Error
                 // Value and continue, rather than letting one bad line take

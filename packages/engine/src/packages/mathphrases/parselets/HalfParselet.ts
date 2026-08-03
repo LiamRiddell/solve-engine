@@ -7,7 +7,7 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
 
 /**
  * `half of X` -> X / 2. Triggered on the fused `HALF_OF` token (see
- * MathPhrasesPackage.ts's `phrases` field) — once "of" is fused into the
+ * MathPhrasesPackage.ts's `phrases` field), once "of" is fused into the
  * trigger, nothing but X remains, so this is a plain PUSH_NUMBER + DIV,
  * no PhrasePattern/keyword-slot machinery needed at all.
  */

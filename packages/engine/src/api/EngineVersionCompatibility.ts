@@ -4,19 +4,19 @@ import { ENGINE_VERSION } from "@solve-js/constants/version";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
- * Engine-version package compatibility gating — the "reject a package built
+ * Engine-version package compatibility gating, the "reject a package built
  * for a different engine version" SDK surface.
  *
  * This is a DIFFERENT kind of check from `api/PackageCompatibility.ts`'s
  * `checkPackageCompatibility()`, and deliberately kept in its own module
  * rather than folded into that one. `checkPackageCompatibility()` answers
  * "do these two SIMULTANEOUSLY-registered packages' declared fields
- * collide" and its contract — pure, package-vs-package, every conflict
+ * collide" and its contract, pure, package-vs-package, every conflict
  * including "error" severity is advisory, the caller always just logs and
- * proceeds — is locked in by its own regression suite and stated explicitly
+ * proceeds, is locked in by its own regression suite and stated explicitly
  * in `ExpressionEngine.registerPackage()`'s comments. This module answers a
- * different question — "can THIS package's declared engine-version range
- * run against the engine that's actually running RIGHT NOW" — and, unlike
+ * different question, "can THIS package's declared engine-version range
+ * run against the engine that's actually running RIGHT NOW", and, unlike
  * every other compatibility signal in this codebase, a mismatch here is a
  * hard REJECTION, not a warning. Mixing that blocking behavior into
  * `checkPackageCompatibility()`'s report type would be a footgun for any
@@ -39,11 +39,11 @@ export type EngineVersionCheckResult =
 
 /**
  * Pure, side-effect-free. Returns `{ compatible: true }` when `pkg` declares
- * no `engineVersion` at all (no constraint = always allowed — preserves
+ * no `engineVersion` at all (no constraint = always allowed, preserves
  * every package that predates this field), when the declared range is
  * satisfied by `engineVersion`, or a `{ compatible: false, reason, ... }`
  * result otherwise. A malformed/unparseable range string (a typo in the
- * package's own descriptor) is its own distinct `"invalid-range"` reason —
+ * package's own descriptor) is its own distinct `"invalid-range"` reason
  * never conflated with a genuine `"range-not-satisfied"` mismatch, so a
  * package author gets feedback about the actual problem they have.
  */
@@ -81,7 +81,7 @@ export function checkEngineVersionCompatibility(
 /**
  * Throws an `EngineError` (`ErrorCategory.CONFIG`, matching the existing
  * precedent for `PLUGIN_KEYWORD_COLLISION`/`PLUGIN_OPERATOR_COLLISION`/
- * `PLUGIN_UNIT_COLLISION` in `lexer/ExpressionLexer.ts` — the only other
+ * `PLUGIN_UNIT_COLLISION` in `lexer/ExpressionLexer.ts`, the only other
  * place in this codebase that hard-rejects a package at registration time)
  * when `pkg` is not engine-version compatible. Does nothing when compatible.
  */

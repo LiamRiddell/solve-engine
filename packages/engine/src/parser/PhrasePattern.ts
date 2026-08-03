@@ -9,7 +9,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
  *
  * - `keyword`: consumes exactly one token whose type is in `tokenTypes`. Its
  *   matched token is recorded in the `captures` array passed to `emit()`
- *   (in slot order) — this is how an alternative distinguishes "between X
+ *   (in slot order). This is how an alternative distinguishes "between X
  *   and Y" from "from X to Y" if it needs to.
  * - `expr`: parses a full sub-expression via `parser.parseExpression()`.
  *   Its bytecode is emitted inline, in slot order, exactly like a
@@ -28,11 +28,11 @@ export interface PhraseCapture {
 
 /**
  * One alternative phrasing of a pattern. The FIRST slot must be a
- * `keyword` slot — this is what lets {@link definePhrasePattern} choose
+ * `keyword` slot. This is what lets {@link definePhrasePattern} choose
  * which alternative applies via a single `parser.peek()`, before
  * consuming or emitting anything. Bytecode is append-only
  * ({@link BytecodeBuilder} has no rollback), so an alternative can only be
- * committed to, never speculatively tried and abandoned — every phrase
+ * committed to, never speculatively tried and abandoned, every phrase
  * grammar in this codebase is naturally leading-keyword-disambiguated
  * (that's what makes it parseable as a phrase at all), so this is not a
  * real limitation in practice.
@@ -42,7 +42,7 @@ export interface PhraseAlternative {
   /**
    * Called once every slot has been consumed (and every `expr` slot's
    * bytecode already emitted, in slot order). Emit whatever final
-   * opcode(s) turn the already-pushed operands into a result here —
+   * opcode(s) turn the already-pushed operands into a result here
    * e.g. `builder.emitOpcode(OpCode.CALL_BUILTIN); builder.emitIndex(...)`.
    */
   emit(builder: BytecodeBuilder, captures: PhraseCapture[]): void;
@@ -57,7 +57,7 @@ export interface PhraseAlternative {
  * this codebase's phrase-grammar parselets (`roll between X and Y`,
  * `clamp X between Y and Z`, `average of X, Y, Z`'s single-item case,
  * etc.) with one well-tested consumption/error-handling core, rather than
- * each parselet re-deriving its own — the class of bug this is meant to
+ * each parselet re-deriving its own, the class of bug this is meant to
  * prevent (a hand-rolled parselet mishandling an alternative-phrasing or
  * precedence edge case) is exactly what produced real, shipped bugs this
  * session (Dice's bare-hyphen range, Vector's tuple-vs-group ambiguity).

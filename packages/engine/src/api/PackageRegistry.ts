@@ -15,7 +15,7 @@ import { assertEngineVersionCompatible } from "./EngineVersionCompatibility";
 /**
  * Public API for registering plugins with the solve-js engine.
  *
- * All registration goes through this interface — parselets, variable
+ * All registration goes through this interface, parselets, variable
  * sources, and full packages. The default implementation is
  * {@link PackageRegistry} (singleton via {@link packageRegistry}).
  *
@@ -69,13 +69,13 @@ export interface IEnginePackage {
    * via `checkEngineVersionCompatibility()`/`assertEngineVersionCompatible()`
    * (`@solve-js/api/EngineVersionCompatibility`) at registration time.
    *
-   * Optional — omitted means "no declared constraint," so every package
+   * Optional, omitted means "no declared constraint," so every package
    * that predates this field (all built-ins, `examples/osrs`) keeps
    * registering exactly as before.
    *
    * Unlike every other compatibility signal in this codebase (e.g.
    * `checkPackageCompatibility()`'s sibling-package collision warnings,
-   * which always log and proceed — see `api/PackageCompatibility.ts`), a
+   * which always log and proceed. See `api/PackageCompatibility.ts`), a
    * declared `engineVersion` range the running engine does NOT satisfy is
    * a deliberate, hard REJECTION: `registerPackage()` throws rather than
    * warning. See `ARCHITECTURE.md` §5.3.
@@ -92,14 +92,14 @@ export interface IEnginePackage {
    * parselets with `builder.emitIndex(index)`).
    *
    * Each entry's `index` MUST come from {@link allocatePluginFunctionIndex}
-   * (`@solve-js/vm/VMBuiltins`) — never hardcode a number. Two packages
+   * (`@solve-js/vm/VMBuiltins`), never hardcode a number. Two packages
    * independently picking the same index would silently overwrite each
    * other's handler in the shared registry.
    *
    * The handler's optional second parameter, `context`, carries the
-   * current line's {@link LineExecutionContext} (line number, and — only
+   * current line's {@link LineExecutionContext} (line number, and, only
    * inside a real document, never `evaluateExpression()`'s single-shot
-   * path — closures for reading another line's cached result). Every
+   * path, closures for reading another line's cached result). Every
    * handler that doesn't need cross-line data can ignore it entirely.
    *
    * @example
@@ -133,7 +133,7 @@ export interface IEnginePackage {
    * for each resolver. If async data is needed, a Pending result is
    * returned immediately and the line re-evaluates when the data resolves.
    *
-   * Each resolver must have a unique `namespace` — the ResolverRegistry
+   * Each resolver must have a unique `namespace`, the ResolverRegistry
    * is keyed by namespace. Multiple resolvers let a package handle
    * distinct async operations (e.g., `fetch`, `wait`, `poll`) in
    * separate, focused classes rather than one monolithic preflight().
@@ -145,7 +145,7 @@ export interface IEnginePackage {
    * each value is the target token type after fusion (e.g., "CARET").
    *
    * Registered into the engine's {@link PhraseTrie} for single-pass
-   * O(depth) matching — no separate rule scanning per phrase.
+   * O(depth) matching, no separate rule scanning per phrase.
    *
    * @example
    * ```ts
@@ -166,7 +166,7 @@ export interface IEnginePackage {
   normalizerRules?: NormalizerRule[];
   /**
    * Semantic highlight categories for this package's custom token types
-   * (introduced via {@link lexerVocabulary} or {@link normalizerRules}) — the
+   * (introduced via {@link lexerVocabulary} or {@link normalizerRules}), the
    * plugin-facing half of solve-js's editor-agnostic language service (see
    * `language/TokenCategoryMap.ts`). Without an entry here, a package's
    * custom tokens (e.g. a game-item name fused from several identifiers)
@@ -180,13 +180,13 @@ export interface IEnginePackage {
    */
   tokenCategories?: Record<string, TokenCategory>;
   /**
-   * Completion candidates for this package — the plugin-facing half of
+   * Completion candidates for this package, the plugin-facing half of
    * solve-js's editor-agnostic completions API
    * (`LanguageService.getCompletions()`). A package's single-word
    * keywords (via {@link lexerVocabulary}) already flow into completions
    * automatically; this field is for candidates that AREN'T lexer
    * keywords, such as a vocabulary of item/entity names. A plain,
-   * pre-built list, not a callback — completion candidate lists are
+   * pre-built list, not a callback, completion candidate lists are
    * meant to be cheap and static within one engine configuration.
    *
    * @example
@@ -196,18 +196,18 @@ export interface IEnginePackage {
    */
   completionItems?: CompletionItem[];
   /**
-   * Custom `as <name>` converters — the extension point for the
+   * Custom `as <name>` converters, the extension point for the
    * Converters package's general `<expr> as <type>` grammar (e.g.
    * `50% as decimal`, `255 as hex`). The built-in converter names
    * (`percent`, `decimal`, `hex`, `fraction`, `multiplier`, `sci`,
    * `binary`, `octal`, ...) dispatch to dedicated fast opcodes; anything
-   * else — including any name a third-party package registers here —
+   * else, including any name a third-party package registers here
    * resolves through `OpCode.CALL_AS_CONVERTER` against
    * `vm/VMBuiltins.ts`'s `asConverterRegistry` at runtime. No lexer
    * keyword registration is needed for a custom name: the AS parselet
    * accepts any bare-word token after "as" and reads its raw text.
    *
-   * Each handler is a pure, synchronous `(value: Value) => Value` — for
+   * Each handler is a pure, synchronous `(value: Value) => Value`, for
    * async conversions (e.g. a live currency-style lookup), use
    * {@link asyncResolvers} instead.
    *
@@ -220,7 +220,7 @@ export interface IEnginePackage {
 }
 
 /**
- * Default implementation of {@link IPackageRegistry} — the plugin registration API.
+ * Default implementation of {@link IPackageRegistry}, the plugin registration API.
  *
  * All registrations delegate to shared singletons (parselet registry,
  * variable resolver, lexer). This ensures that packages registered through
@@ -270,7 +270,7 @@ export class PackageRegistry implements IPackageRegistry {
 
   registerPackage(pkg: IEnginePackage): void {
     // Same hard engine-version gate ExpressionEngine.registerPackage() uses
-    // (see its own comment and ARCHITECTURE.md §5.3) — this weaker,
+    // (see its own comment and ARCHITECTURE.md §5.3). This weaker
     // shared-singleton path had no compatibility checking of any kind
     // before this, so without this call the version gate would be
     // trivially bypassable through this entry point.
@@ -294,14 +294,14 @@ export class PackageRegistry implements IPackageRegistry {
         this.registerVariableSource(vs);
       }
     }
-    // Note: asyncResolvers are NOT registered here — the shared PackageRegistry singleton
+    // Note: asyncResolvers are NOT registered here, the shared PackageRegistry singleton
     // doesn't have a ResolverRegistry (that lives inside ExpressionEngine).
     // Use ExpressionEngine.registerPackage() directly if you need async resolvers.
   }
 }
 
 /**
- * Singleton PackageRegistry instance — the default plugin registration API.
+ * Singleton PackageRegistry instance, the default plugin registration API.
  *
  * All packages should register through this instance. The underlying registries
  * are shared singletons, so multiple PackageRegistry instances would be redundant.

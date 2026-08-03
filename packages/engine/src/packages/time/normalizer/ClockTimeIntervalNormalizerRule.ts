@@ -8,17 +8,17 @@ import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
  *
  * Why fuse instead of an infix parselet on `TO`: `TO` is already claimed
  * by `PercentageChangeParselet` (`800 to 1000` percentage change) and
- * UOM's unit-conversion handling (`10 cm to m`) — an infix parselet
+ * UOM's unit-conversion handling (`10 cm to m`), an infix parselet
  * registered here would silently collide with one of those (last
  * registration wins). Fusing at the normalizer stage, keyed on the
  * specific `CLOCK_TIME TO CLOCK_TIME` token shape, means `TO`'s existing
  * infix dispatch never even sees this case. This relies on
  * {@link clockTimeNormalizerRule} having already run in an earlier
  * normalizer pass to produce the `CLOCK_TIME` tokens this rule looks
- * for — the engine's `TokenNormalizer.normalize()` is multi-pass
+ * for, the engine's `TokenNormalizer.normalize()` is multi-pass
  * specifically to support this kind of cascading fusion.
  *
- * Only the unambiguous `to` form is handled — SoulverCore's own docs flag
+ * Only the unambiguous `to` form is handled, SoulverCore's own docs flag
  * a bare `-` between two clock times as genuinely ambiguous (`5pm - 7pm`
  * read as a range vs. `5pm - 2pm` read as subtraction) and recommend
  * `to`; this package does the same rather than guessing.

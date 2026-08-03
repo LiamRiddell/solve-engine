@@ -16,7 +16,7 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
   private startNs: number = 0;
   private parseletEntries: Map<string, { category: string; count: number }> = new Map();
 
-  // Incrementally-maintained summary state — see getReport()'s doc comment
+  // Incrementally-maintained summary state. See getReport()'s doc comment
   // for why these exist. Each mirrors exactly what getReport() used to
   // recompute by rescanning the full `events` array on every call.
   private totalTokens = 0;
@@ -30,7 +30,7 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
 
   /**
    * Current cumulative count of `parselet_matched` events seen since
-   * construction (or the last `reset()`) — a cheap peek that doesn't build
+   * construction (or the last `reset()`), a cheap peek that doesn't build
    * the full report (`getReport()` copies the whole `parseletMatches`
    * array). Used by `ExpressionEngine.evaluateExpressionWithDiagnostic()`
    * to capture a "before" baseline per line, since `parseletMatches` itself
@@ -65,20 +65,20 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
 
   onPipelineStart(event: DiagnosticEvent & { type: "pipeline_start" }): void {
     // Set once per collector lifetime (until an explicit reset()), not on
-    // every pipeline — a multi-line evaluation pass fires pipeline_start
+    // every pipeline, a multi-line evaluation pass fires pipeline_start
     // once per line, all appending to the SAME `events` array (see
     // buildLineStats() in the playground, which relies on that shared,
     // ever-growing array to slice out each line's own events via
     // cumulative-length diffing). Resetting the origin on every line meant
     // every individual line's own timestamps were self-consistent, but
-    // nothing tied one line's clock to another's — any code trying to
+    // nothing tied one line's clock to another's, any code trying to
     // compare or span timestamps ACROSS lines (e.g. "how far into this
     // pass are we") had no stable reference point to do it with.
     if (this.startNs === 0) {
       this.startNs = performance.now() * 1e6;
     }
     // Tracked incrementally (most-recent wins) so getReport()'s `metadata`
-    // describes the line THIS report is actually about — reading
+    // describes the line THIS report is actually about, reading
     // `events[0]` instead (the old code) froze `expression`/`inputType` on
     // the very first line ever evaluated in the session, forever, which is
     // wrong regardless of whether a field is meant to be cumulative or
@@ -133,7 +133,7 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
   onBytecodeBuilt(event: DiagnosticEvent & { type: "bytecode_built" }): void {
     this.events.push(this.stamp(event));
     // Matches getReport()'s original behavior: the FIRST bytecode_built
-    // event ever seen (not the most recent) wins — preserved as-is here,
+    // event ever seen (not the most recent) wins, preserved as-is here
     // this rewrite only changes HOW that value is computed, not what it is.
     if (!this.hasBytecodeBuilt) {
       this.hasBytecodeBuilt = true;
@@ -168,9 +168,9 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
  * running state.
  *
  * These fields used to be recomputed by rescanning the FULL `events`
- * array on every single call (`.some()`/`.filter()`/a manual scan) — since
+ * array on every single call (`.some()`/`.filter()`/a manual scan), since
  * `events` is never cleared except by an explicit `reset()` (which nothing
- * in `ExpressionEngine` currently calls — the cumulative-across-the-whole-
+ * in `ExpressionEngine` currently calls, the cumulative-across-the-whole-
  * document design is deliberate, see `onPipelineStart`'s comment and the
  * playground's `buildLineStats()`, which slices per-line events out of
  * this ever-growing array via cumulative-length diffing), that meant
@@ -178,8 +178,8 @@ export class TimelineDiagnosticCollector extends DiagnosticCollector {
  * evaluation over a document's lifetime. Fixed by maintaining each of these
  * incrementally as events arrive (see the `on*` handlers above), the same
  * pattern already used for `parseletEntries`. Every value produced here is
- * identical to what the old rescanning code produced — including its
- * existing "first bytecode_built event wins" quirk — this is a performance
+ * identical to what the old rescanning code produced, including its
+ * existing "first bytecode_built event wins" quirk. This is a performance
  * fix, not a behavior change.
  */
 getReport(): DiagnosticReport | undefined {

@@ -5,7 +5,7 @@
  *
  * These rules handle common expression patterns that span multiple tokens.
  * Phrase fusion (e.g., "to the power of" → CARET) is handled by the
- * internal {@link PhraseTrie} — see {@link TokenNormalizer.addPhrase}.
+ * internal {@link PhraseTrie}. See {@link TokenNormalizer.addPhrase}.
  * This module only exports non-phrase rules like {@link implicitMultiplyRule}.
  *
  * @module BuiltinNormalizerRules
@@ -20,10 +20,10 @@ import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
 import type { NormalizerRule, NormalizerMatch } from "./NormalizerRule";
 
 //#endregion
-//#region ─── PHRASE_START_WORDS — Implicit Multiply Guard ─────────────────────
+//#region ─── PHRASE_START_WORDS, Implicit Multiply Guard ─────────────────────
 
 /**
- * Words that can start multi-word phrases — hardcoded fallback.
+ * Words that can start multi-word phrases, hardcoded fallback.
  *
  * This is ONLY used as the default fallback in {@link implicitMultiplyRule}
  * when no `canStart` predicate is provided. In the recommended pattern,
@@ -37,7 +37,7 @@ const PHRASE_START_WORDS = new Set([
 ]);
 
 //#endregion
-//#region ─── implicitMultiplyRule — Implicit Operator Insertion ────────────────
+//#region ─── implicitMultiplyRule, Implicit Operator Insertion ────────────────
 
 /**
  * Creates a normalization rule that inserts an implicit multiplication operator
@@ -56,7 +56,7 @@ const PHRASE_START_WORDS = new Set([
  * - When the following token is not an identifier or parenthesized expression
  *
  * ## Priority
- * Default priority is 50 — below phrase fusion so phrases match first.
+ * Default priority is 50, below phrase fusion so phrases match first.
  *
  * @param priority - Rule priority (default 50)
  * @returns A {@link NormalizerRule} that inserts implicit multiply operators
@@ -97,32 +97,32 @@ export function implicitMultiplyRule(
       );
 
       // consumed = 1: only the current token is replaced with [current, STAR]
-      // The next token is NOT consumed — it stays for the next iteration
+      // The next token is NOT consumed, it stays for the next iteration
       return { consumed: 1, replacement: [t, starToken] };
     },
   };
 }
 
 //#endregion
-//#region ─── isInsideRangeContext — Bracket/Call-Paren Context Guard ───────────
+//#region ─── isInsideRangeContext, Bracket/Call-Paren Context Guard ───────────
 
 /**
  * Whether token `pos` sits inside a context where a bare `NUMBER:NUMBER`
  * sequence means a Range, not a clock-time/laptime/video-timecode literal:
  * a matrix literal/index/slice (`[1,2,3]`, `a[0:3]`), OR a `map`/`reduce`/
- * `sum`/`prod` call's own argument-list parens (`map(f, 0:3)` — these
+ * `sum`/`prod` call's own argument-list parens (`map(f, 0:3)`, these
  * accept a bare Range argument directly, per the Calca spec's own
  * example). Scans backward from `pos` over the CURRENT pass's token array,
- * tracking `[`/`(` nesting depth — the same "positional guard via
+ * tracking `[`/`(` nesting depth, the same "positional guard via
  * backward scan" idiom already used elsewhere in this normalizer layer
  * (e.g. `LineRefNormalizerRule`'s previous-token check), generalized to
  * depth-tracking. An `LBRACKET` is unconditionally a range-safe opener; an
  * `LPAREN` is range-safe ONLY when immediately preceded by MAP/REDUCE/
- * SUM_FN/PROD_FN — an ordinary grouping/function-call paren is NOT, so
+ * SUM_FN/PROD_FN, an ordinary grouping/function-call paren is NOT, so
  * `(9:00) + 5` still means a clock time, not a range.
  *
  * Needed because the clock-time/laptime/video-timecode rules each match a
- * bare `NUMBER COLON NUMBER...` shape with ZERO context-awareness — a real
+ * bare `NUMBER COLON NUMBER...` shape with ZERO context-awareness, a real
  * collision discovered when adding Range support, since e.g. "0:3" is
  * valid input to BOTH features. These contexts have no legitimate use for
  * a clock-time/laptime/timecode literal, so the carve-out costs the time
@@ -132,16 +132,16 @@ export function implicitMultiplyRule(
  * not a hypothetical): the `LPAREN`-opener check deliberately tests the
  * RAW word text (`prev.value.toLowerCase()`), not `prev.type ===
  * "MAP"/"REDUCE"/...`. The normalizer's multi-pass loop hands every rule
- * the SAME frozen `tokens` snapshot for an entire pass — a rule scanning
+ * the SAME frozen `tokens` snapshot for an entire pass, a rule scanning
  * a LATER position in that pass cannot see a fusion `mapReduceCallNormalizerRule`
  * performs at an EARLIER position in that SAME pass (fusion results only
  * become visible to other rules starting the NEXT pass). Checking the
- * fused token type here would miss exactly the case that matters most —
- * `map(f, 0:3)` on its very first normalization pass — silently letting
+ * fused token type here would miss exactly the case that matters most
+ * `map(f, 0:3)` on its very first normalization pass, silently letting
  * `0:3` fuse into a clock time before `map(`'s own fusion ever lands.
  * Testing the raw word is immune to this: it's true from the very first
  * pass, regardless of whether `mapReduceCallNormalizerRule` has run yet.
- * (`LBRACKET` above has no equivalent issue — it's a genuine lexer token
+ * (`LBRACKET` above has no equivalent issue, it's a genuine lexer token
  * from the start, never itself the product of a fusion.)
  */
 export function isInsideRangeContext(tokens: Token[], pos: number): boolean {
@@ -165,7 +165,7 @@ export function isInsideRangeContext(tokens: Token[], pos: number): boolean {
 }
 
 //#endregion
-//#region ─── createBuiltinNormalizerRules — All Built-in Rules ─────────────────
+//#region ─── createBuiltinNormalizerRules, All Built-in Rules ─────────────────
 
 /**
  * Creates built-in non-phrase normalization rules.

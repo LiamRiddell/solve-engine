@@ -5,17 +5,17 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
 /**
- * `if <condition> then <value> else <value>` — an eager ternary (see
+ * `if <condition> then <value> else <value>`, an eager ternary (see
  * `OpCode.SELECT` in `vm/VM.ts` for why this VM has no real branching).
  *
  * NOT built on {@link definePhrasePattern}: that builder's alternatives
- * are disambiguated by peeking the NEXT token's leading keyword — a
+ * are disambiguated by peeking the NEXT token's leading keyword, a
  * mechanism for one registered trigger fanning out into multiple
  * grammars (e.g. `DiceRollParselet`'s `between`/`from`/`(` forms, all
  * reached via the single "roll" registration). `IF` is registered
  * directly as this parselet's own trigger, so by the time `parse()`
  * runs, "if" is already consumed and there is exactly one grammar to
- * match — a plain, hand-written sequence is simpler and more honest here
+ * match, a plain, hand-written sequence is simpler and more honest here
  * than forcing a single-alternative pattern through machinery built for
  * disambiguation it doesn't need.
  */

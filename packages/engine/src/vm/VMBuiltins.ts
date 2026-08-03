@@ -2,7 +2,7 @@ import { Value, ValueType, numberValue, stringValue, uomValue, errorValue, type 
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom } from "@solve-js/vm/VMConversion";
 import { transpose, determinant, inverse, matrixMultiply } from "@solve-js/vm/MatrixOps";
-// Type-only — VM.ts imports pluginFunctionRegistry FROM this file, so a
+// Type-only, VM.ts imports pluginFunctionRegistry FROM this file, so a
 // runtime import the other direction would be circular; `import type` is
 // erased before compilation and doesn't create that problem.
 import type { LineExecutionContext } from "@solve-js/vm/VM";
@@ -13,14 +13,14 @@ import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/f
 // ── Local formatting helpers for hex()/bin() (indices 48/49 below) ─────────
 //
 // Deliberately NOT imported from vm/VM.ts (which has its own private
-// toBinaryString()/toOctalString() used by OpCode.TO_BINARY/TO_OCTAL) —
+// toBinaryString()/toOctalString() used by OpCode.TO_BINARY/TO_OCTAL)
 // VM.ts imports builtinFunctions FROM this file, so importing the other
 // direction would create a circular module dependency. These are tiny,
 // self-contained duplicates matching the same sign-handling convention
 // (see VM.ts's toBinaryString/toOctalString) and the same uppercase-digit
 // convention as FormatEngine.ts's formatHex() (its "= 0x{PADDED}" display
-// string isn't reusable as-is — it's tied to FormattingSettings padding
-// config that a plain builtin function call has no access to — so this
+// string isn't reusable as-is, it's tied to FormattingSettings padding
+// config that a plain builtin function call has no access to, so this
 // matches its digit-formatting convention rather than importing it).
 
 /** "255" -> "0xFF", "-255" -> "-0xFF". Truncates toward zero first. */
@@ -43,7 +43,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // ── Populated below ──
     0: (args) => numberValue(Math.sqrt(args[0].toNumber())),
     // abs(a): for a Matrix, "|a|" (Calca's determinant-pipe notation) is a
-    // valid alias for det(a) (index 64) — reusing the SAME implementation,
+    // valid alias for det(a) (index 64), reusing the SAME implementation
     // not a separate one. Plain-number abs is unaffected.
     1: (args) => args[0].type === ValueType.Matrix ? determinant(args[0].value as MatrixData) : numberValue(Math.abs(args[0].toNumber())),
     2: (args) => numberValue(Math.sin(args[0].toNumber())),
@@ -91,7 +91,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     23: (args) => numberValue(Math.expm1(args[0].toNumber())),
     24: (args) => numberValue(Math.exp(args[0].toNumber())),
     25: (args) => numberValue(Math.fround(args[0].toNumber())),
-    // hypot: left as .map()+spread (unlike min/max above) — Math.hypot uses
+    // hypot: left as .map()+spread (unlike min/max above), Math.hypot uses
     // a numerically-stable scaling algorithm internally to avoid overflow
     // for very large/small inputs; a naive manual reimplementation risks
     // silently changing results at the extremes, so the tiny array
@@ -107,7 +107,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     34: (args) => numberValue(Math.trunc(args[0].toNumber())),
     35: (args) => numberValue(args[0].toNumber() * Math.PI / 180),
     36: (args) => numberValue(args[0].toNumber() * 180 / Math.PI),
-    // 37: diceRoll(from, to) — random integer in range [from, to] inclusive.
+    // 37: diceRoll(from, to), random integer in range [from, to] inclusive.
     // A reversed range (from > to) used to silently produce values outside
     // [to, from] via a negative-length Math.random() spread (e.g.
     // "roll(6, 1)" returning values like 2-5, never 1 or 6) instead of
@@ -120,7 +120,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         }
         return numberValue(Math.floor(Math.random() * (to - from + 1)) + from);
     },
-    // gcd(a, b) — Euclidean algorithm. Negative inputs are treated by
+    // gcd(a, b), Euclidean algorithm. Negative inputs are treated by
     // magnitude (gcd is conventionally defined over non-negative integers).
     38: (args) => {
         let a = Math.trunc(Math.abs(args[0].toNumber()));
@@ -133,7 +133,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         return numberValue(a);
     },
     // lcm(a, b) = |a*b| / gcd(a, b), via the same Euclidean gcd inline
-    // (a standalone gcd() call site — no shared helper needed for two uses).
+    // (a standalone gcd() call site, no shared helper needed for two uses).
     39: (args) => {
         const a = Math.trunc(Math.abs(args[0].toNumber()));
         const b = Math.trunc(Math.abs(args[1].toNumber()));
@@ -146,7 +146,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         }
         return numberValue((a / x) * b);
     },
-    // permutation(n, r) = n! / (n-r)! — computed as a running product
+    // permutation(n, r) = n! / (n-r)!, computed as a running product
     // rather than two full factorials, so it stays exact for n well
     // beyond where n! itself would exceed Number.MAX_SAFE_INTEGER.
     40: (args) => {
@@ -159,7 +159,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         for (let i = 0; i < r; i++) result *= (n - i);
         return numberValue(result);
     },
-    // combination(n, r) = n! / (r! * (n-r)!) — multiply-then-divide one
+    // combination(n, r) = n! / (r! * (n-r)!), multiply-then-divide one
     // step at a time (standard technique) keeps every intermediate result
     // an integer, avoiding the overflow a naive factorial-ratio would hit.
     41: (args) => {
@@ -173,14 +173,14 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         for (let i = 0; i < k; i++) result = (result * (n - i)) / (i + 1);
         return numberValue(Math.round(result));
     },
-    // average(...) — arithmetic mean of any number of arguments. Backs the
+    // average(...), arithmetic mean of any number of arguments. Backs the
     // MathPhrases package's "average of X, Y, Z" (packages/mathphrases/).
     42: (args) => {
         if (args.length === 0) return numberValue(0);
         const sum = args.reduce((acc, a) => acc + a.toNumber(), 0);
         return numberValue(sum / args.length);
     },
-    // median(...) — middle value; average of the two middle values for an
+    // median(...), middle value; average of the two middle values for an
     // even argument count.
     43: (args) => {
         if (args.length === 0) return numberValue(0);
@@ -190,11 +190,11 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
             sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
         );
     },
-    // total(...) — sum of any number of arguments.
+    // total(...), sum of any number of arguments.
     44: (args) => numberValue(args.reduce((acc, a) => acc + a.toNumber(), 0)),
-    // count(...) — number of arguments passed.
+    // count(...), number of arguments passed.
     45: (args) => numberValue(args.length),
-    // proportion(a, b, c) -> d such that a:b = c:d, i.e. d = c * (b/a) —
+    // proportion(a, b, c) -> d such that a:b = c:d, i.e. d = c * (b/a)
     // "A is to B as C is to what". Unit-aware via unifyUom: "5 km is to
     // 500m as 5 cm is to what" unifies 5km/500m to a 10:1 ratio (500m ==
     // 0.5km), so 5cm at the same ratio -> 0.5cm. Falls back to plain
@@ -209,7 +209,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         const result = c.toNumber() * (bNum / aNum);
         return c.type === ValueType.Uom ? uomValue(result, c.unit!) : numberValue(result);
     },
-    // clamp(value, lo, hi) — restrict value to [lo, hi]. Backs
+    // clamp(value, lo, hi), restrict value to [lo, hi]. Backs
     // "clamp X between Y and Z" / "clamp X from Y to Z".
     47: (args) => {
         const value = args[0].toNumber();
@@ -220,37 +220,37 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         }
         return numberValue(Math.min(Math.max(value, lo), hi));
     },
-    // hex(n) — Python/JS-style call-syntax hex formatting, e.g. hex(255) ->
+    // hex(n), Python/JS-style call-syntax hex formatting, e.g. hex(255) ->
     // "0xFF". Distinct from the Converters package's `255 as hex` (see
     // packages/converters/parselets/AsConverterParselet.ts): "as hex"
     // produces a ValueType.Hex (a typed NUMBER that still participates in
     // arithmetic, formatted specially on display), while hex() is a plain
-    // function call that returns an ordinary String value — matching
+    // function call that returns an ordinary String value, matching
     // Python's hex()/JS convention of a function returning display text,
     // not a numeric type.
     48: (args) => stringValue(toHexPrefixedString(args[0].toNumber())),
-    // bin(n) — same call-syntax shape as hex() above, e.g. bin(10) -> "0b1010".
+    // bin(n). Same call-syntax shape as hex() above, e.g. bin(10) -> "0b1010".
     49: (args) => stringValue(toBinPrefixedString(args[0].toNumber())),
-    // int(x) — coerce ANY value (Number, Percentage, Uom, String, Hex, ...)
+    // int(x), coerce ANY value (Number, Percentage, Uom, String, Hex, ...)
     // to a plain integer Number, truncating any fractional part toward
     // zero (Math.trunc semantics: int(5.7) -> 5, int(-5.7) -> -5). Distinct
     // from the Converters package's `x as number` (TO_NUMBER opcode),
     // which only strips a unit/percentage wrapper and keeps any decimal
-    // part (e.g. "5.7 as number" -> 5.7) — int() additionally truncates.
+    // part (e.g. "5.7 as number" -> 5.7), int() additionally truncates.
     50: (args) => numberValue(Math.trunc(args[0].toNumber())),
 
     // ── Finance (packages/finance/) ──────────────────────────────────────
     // All finance builtins preserve the principal/amount argument's Uom
     // unit (e.g. a currency like "$") onto the result, matching
-    // ProportionParselet's convention (index 46, above) — a plain-number
+    // ProportionParselet's convention (index 46, above), a plain-number
     // input produces a plain-number result.
     //
-    // `rate` arguments are always a decimal fraction (e.g. 0.07 for 7%) —
+    // `rate` arguments are always a decimal fraction (e.g. 0.07 for 7%)
     // this is how "%" already normalizes everywhere else in this codebase
     // (see packages/percentage/parselets/PercentParselet.ts: "7%" divides
     // by 100 at parse time, producing a plain Number 0.07, not a distinct
     // percentage type). Writing "at 7" instead of "at 7%" in a phrase form
-    // passes 7 as-is (not 0.07) — the "%" is not implicit.
+    // passes 7 as-is (not 0.07), the "%" is not implicit.
 
     // compoundFutureValue(principal, rate, years) -> FV = P*(1+r)^years.
     // Backs "compound interest on $P over Y years at R%" and the
@@ -280,7 +280,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     },
     // compoundInterestRate(principal, futureValue, years) -> the rate (as a
     // decimal fraction) needed to grow principal to futureValue over years.
-    // Function-call only — no clean phrase form for a reverse calculation
+    // Function-call only, no clean phrase form for a reverse calculation
     // like this without inventing awkward new keywords, so it's scoped to
     // compoundInterestRate(...) rather than a natural-language phrase.
     53: (args) => {
@@ -310,12 +310,12 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         }
         return numberValue(Math.log(futureValue / principal) / Math.log(1 + rate));
     },
-    // loanRepayment(principal, rate, years, periodsPerYear) — standard
+    // loanRepayment(principal, rate, years, periodsPerYear), standard
     // amortizing-loan repayment (mortgage formula), redistributed evenly
     // across `periodsPerYear` periods/year: 365=daily, 12=monthly, 1=annual,
     // 0=total over the life of the loan. The loan is ALWAYS amortized
     // monthly internally (the standard mortgage convention) regardless of
-    // periodsPerYear — "daily"/"annual"/"total" are the same total
+    // periodsPerYear, "daily"/"annual"/"total" are the same total
     // repayment redistributed, not separately-amortized loans. Verified
     // against real worked numbers (principal=$10,000, rate=6%, years=6):
     // monthly $165.73, annual $1,988.75 (== total/years exactly), daily
@@ -334,7 +334,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         const result = periodsPerYear === 0 ? totalRepayment : totalRepayment / (years * periodsPerYear);
         return args[0].type === ValueType.Uom ? uomValue(result, args[0].unit!) : numberValue(result);
     },
-    // loanInterest(principal, rate, years, periodsPerYear) — the interest
+    // loanInterest(principal, rate, years, periodsPerYear), the interest
     // portion of index 55's repayment, same periodsPerYear convention.
     // Backs "daily/monthly/annual/total interest on $P over Y years at R%".
     56: (args) => {
@@ -350,7 +350,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         const result = periodsPerYear === 0 ? totalInterest : totalInterest / (years * periodsPerYear);
         return args[0].type === ValueType.Uom ? uomValue(result, args[0].unit!) : numberValue(result);
     },
-    // monthlyPayment(principal, rate, years) — convenience 3-arg wrapper
+    // monthlyPayment(principal, rate, years), convenience 3-arg wrapper
     // around index 55's monthly case, for direct function-call use without
     // the periodsPerYear parameter (the task's minimum-ask function form).
     57: (args) => {
@@ -364,7 +364,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         return args[0].type === ValueType.Uom ? uomValue(monthlyPayment, args[0].unit!) : numberValue(monthlyPayment);
     },
     // taxAdd(amount, rate) -> amount * (1 + rate). Backs "tax on $X at R%" /
-    // "VAT on $X at R%". No default rate is baked in anywhere — the caller
+    // "VAT on $X at R%". No default rate is baked in anywhere, the caller
     // always supplies one explicitly, since tax rates vary by region and
     // change over time; this package makes no assumption about which rate
     // applies.
@@ -374,7 +374,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         const result = amount * (1 + rate);
         return args[0].type === ValueType.Uom ? uomValue(result, args[0].unit!) : numberValue(result);
     },
-    // taxRemove(amount, rate) -> amount / (1 + rate) — extracts the
+    // taxRemove(amount, rate) -> amount / (1 + rate), extracts the
     // pre-tax amount from a tax-INCLUSIVE total. Backs "tax off $X at R%" /
     // "VAT off $X at R%".
     59: (args) => {
@@ -447,30 +447,30 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     },
 
     // ── Matrix (packages/matrix/) ────────────────────────────────────────
-    // transpose(a)/det(a)/inv(a)/dot(a,b) — reachable both via ordinary
+    // transpose(a)/det(a)/inv(a)/dot(a,b), reachable both via ordinary
     // function-call syntax (this map) and via operator syntax (`^T`, `^-1`
-    // — see PrecedenceParser.ts's CARET special-casing, which emits these
+    //. See PrecedenceParser.ts's CARET special-casing, which emits these
     // SAME indices) and `|a|` (abs()'s Matrix branch, index 1 above).
     // Real linear-algebra work lives in vm/MatrixOps.ts, shared by both
     // entry points rather than duplicated.
 
-    // transpose(a) — for a Matrix, swaps rows/cols. A plain Number is its
-    // own transpose (a 1x1 "matrix" transposed is itself) — matches this
+    // transpose(a), for a Matrix, swaps rows/cols. A plain Number is its
+    // own transpose (a 1x1 "matrix" transposed is itself), matches this
     // engine's existing convention of treating a scalar as a trivial 1x1
     // matrix (see Value.ts's toNumber()/isNaN() 1x1 special case).
     63: (args) => args[0].type === ValueType.Matrix ? transpose(args[0].value as MatrixData) : args[0],
-    // det(a) — determinant. A plain Number's "determinant" is itself (the
+    // det(a), determinant. A plain Number's "determinant" is itself (the
     // determinant of a 1x1 matrix [x] is x).
     64: (args) => args[0].type === ValueType.Matrix ? determinant(args[0].value as MatrixData) : numberValue(args[0].toNumber()),
-    // inv(a) — matrix inverse for a Matrix; for a plain Number, `1/x`
+    // inv(a), matrix inverse for a Matrix; for a plain Number, `1/x`
     // (byte-identical to `Math.pow(x, -1)`, which is what `x^-1` computed
-    // before this feature existed — see PrecedenceParser.ts's `^-1`
+    // before this feature existed. See PrecedenceParser.ts's `^-1`
     // special-case doc comment for why this must stay exact).
     65: (args) => {
         if (args[0].type === ValueType.Matrix) return inverse(args[0].value as MatrixData);
         return numberValue(1 / args[0].toNumber());
     },
-    // dot(a, b) — matrix product / scalar-broadcast, the SAME dispatch as
+    // dot(a, b), matrix product / scalar-broadcast, the SAME dispatch as
     // the `*` operator between two matrices (vm/VM.ts's MUL case). Plain
     // Number operands multiply directly; a Number mixed with a Matrix
     // promotes the Number to a 1x1 Matrix first, so it broadcasts exactly
@@ -489,7 +489,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
 /**
  * Standard amortizing-loan math shared by the loanRepayment/loanInterest/
  * monthlyPayment builtins (indices 55-57, above). Always amortizes monthly
- * (the standard mortgage convention) — `annualRate` is the nominal annual
+ * (the standard mortgage convention), `annualRate` is the nominal annual
  * rate as a decimal fraction (e.g. 0.06 for 6%).
  *
  * A zero rate is handled as a special case (plain principal/periods split)
@@ -537,8 +537,8 @@ let nextPluginFunctionIndex = 0;
  * Allocate a unique index into {@link pluginFunctionRegistry} for a package's
  * plugin function.
  *
- * Call once per function — typically at module scope, right where the
- * function is defined — and store the result in a constant. Don't hardcode
+ * Call once per function, typically at module scope, right where the
+ * function is defined, and store the result in a constant. Don't hardcode
  * an index: two packages independently picking the same arbitrary number
  * would silently overwrite each other's handler in the shared registry.
  *
@@ -555,12 +555,12 @@ export function allocatePluginFunctionIndex(): number {
 }
 
 /**
- * Registry of package-registered `as <name>` converters — the SDK extension
+ * Registry of package-registered `as <name>` converters, the SDK extension
  * point for `IEnginePackage.asConverters` (see ExpressionEngine.registerPackage()).
  *
  * String-keyed rather than index-allocated like {@link pluginFunctionRegistry}:
  * converter names ARE the natural key (there's no bytecode-stream byte-width
- * constraint to economize for — the name is only read at parse time to
+ * constraint to economize for, the name is only read at parse time to
  * decide whether it's one of the fixed built-ins with a dedicated fast
  * opcode; anything else falls through to `OpCode.CALL_AS_CONVERTER`, which
  * embeds the name as a string constant and looks it up here at runtime).
@@ -570,22 +570,22 @@ export const asConverterRegistry = new Map<string, (value: Value) => Value>();
 /**
  * Register a custom `as <name>` converter. Called by
  * ExpressionEngine.registerPackage() for each entry in a package's
- * `asConverters`. Warns (does not throw) on a name collision — mirrors
- * ParseletRegistry's collision warning — since two independently-authored
+ * `asConverters`. Warns (does not throw) on a name collision, mirrors
+ * ParseletRegistry's collision warning, since two independently-authored
  * packages picking the same converter name is a real possibility with a
  * shared string-keyed registry, and silently overwriting is worse than a
  * visible warning.
  *
  * Skips the warning when `handler` is REFERENCE-IDENTICAL to what's
  * already registered (mirrors `ParseletRegistry.registerPrefix()`'s own
- * `existing !== parselet` guard) — a package's `asConverters` object is a
+ * `existing !== parselet` guard), a package's `asConverters` object is a
  * module-level constant, so re-constructing an `ExpressionEngine` (which
  * re-registers every built-in package's converters from scratch each
- * time — this is not a per-instance cache) passes the exact same function
+ * time. This is not a per-instance cache) passes the exact same function
  * reference every time, not a genuine second package claiming the name.
  * Without this, every `iso8601` converter registration warned on every
- * single `new ExpressionEngine()` call after the first in a process —
- * pure noise, not a real collision signal — surfaced by
+ * single `new ExpressionEngine()` call after the first in a process
+ * pure noise, not a real collision signal, surfaced by
  * `DatetimePackage.ts` becoming this registry's first real consumer.
  */
 export function registerAsConverter(name: string, handler: (value: Value) => Value): void {
@@ -597,7 +597,7 @@ export function registerAsConverter(name: string, handler: (value: Value) => Val
     asConverterRegistry.set(key, handler);
 }
 
-/** Reverse a {@link registerAsConverter} call — used by unregisterPackage(). */
+/** Reverse a {@link registerAsConverter} call, used by unregisterPackage(). */
 export function unregisterAsConverter(name: string): void {
     asConverterRegistry.delete(name.toLowerCase());
 }

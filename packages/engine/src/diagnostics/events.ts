@@ -4,7 +4,7 @@ import type { MatrixData, RangeData } from "@solve-js/vm/Value";
 import type { SymbolicNode } from "@solve-js/vm/Symbolic";
 
 /**
- * Diagnostic event types as string constants (not const enum — for cross-module compatibility with isolatedModules)
+ * Diagnostic event types as string constants (not const enum, for cross-module compatibility with isolatedModules)
  */
 export const DiagnosticEventType = {
   TokenEmitted: "token_emitted",
@@ -23,7 +23,7 @@ export const DiagnosticEventType = {
 
 export type EventType = (typeof DiagnosticEventType)[keyof typeof DiagnosticEventType];
 
-/** Base event — all events include a timestamp relative to pipeline start */
+/** Base event, all events include a timestamp relative to pipeline start */
 export interface BaseEvent {
   readonly type: string;
   readonly elapsedNs: number;

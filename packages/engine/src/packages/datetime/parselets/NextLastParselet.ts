@@ -11,11 +11,11 @@ const WEEKDAY_TOKEN_INDEX: Record<string, number> = {
 };
 
 /**
- * `next <Weekday>` / `last <Weekday>` (wiki: Datetime — "next Saturday",
- * "last Monday") — the actual next/previous occurrence of the named day
+ * `next <Weekday>` / `last <Weekday>` (wiki: Datetime, "next Saturday"
+ * "last Monday"), the actual next/previous occurrence of the named day
  * of the week, computed at evaluation time by {@link OpCode.DATE_NEXT_WEEKDAY}/
  * {@link OpCode.DATE_LAST_WEEKDAY} (must stay a VM opcode, not parse-time
- * arithmetic — "now" can only be read when the bytecode actually runs).
+ * arithmetic, "now" can only be read when the bytecode actually runs).
  */
 export class NextLastParselet implements PrefixParselet {
 	readonly category = "Date/Time";

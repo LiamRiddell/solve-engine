@@ -13,8 +13,8 @@ import {
 
 /**
  * `map(transform, collection)` or `map(transform, name1=collection1,
- * name2=collection2, ...)` — applies `transform` to every (zipped)
- * element of one or more collections (a Matrix or a bare Range —
+ * name2=collection2, ...)`, applies `transform` to every (zipped)
+ * element of one or more collections (a Matrix or a bare Range
  * `map(f, 0:3)`), producing a new 1xN row-vector Matrix.
  *
  * The simple single-collection form implicitly binds the reserved name

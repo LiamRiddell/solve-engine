@@ -1,5 +1,5 @@
 /**
- * PageManager — page-based LRU eviction + directional preloading.
+ * PageManager, page-based LRU eviction + directional preloading.
  *
  * Groups document lines into fixed-size pages (128 lines each) and manages
  * three temperature tiers:
@@ -41,7 +41,7 @@ import { sharedLexer } from "@solve-js/lexer/Lexer";
 
 // ── Constants ────────────────────────────────────────────────────────────
 
-/** Number of lines per page. Tunable — 128 balances granularity with overhead. */
+/** Number of lines per page. Tunable, 128 balances granularity with overhead. */
 export const PAGE_SIZE = 128;
 
 /** Number of pages on each side of the viewport considered "hot." */
@@ -54,7 +54,7 @@ const WARM_PAGE_RADIUS = 6;
 const PRELOAD_PAGE_COUNT = 2;
 
 /**
- * Pages just beyond the warm range that are "newly cold" — they were warm
+ * Pages just beyond the warm range that are "newly cold", they were warm
  * on the previous scroll and now need bytecode eviction. Once evicted, they
  * stay cold and don't need re-eviction on subsequent frames (the inner
  * `evictPageBytecode` checks for non-null bytecode and short-circuits).
@@ -236,7 +236,7 @@ export class PageManager {
 						});
 					}
 				} else {
-					// Expressions not yet extracted — use lexer to find inline solves
+					// Expressions not yet extracted, use lexer to find inline solves
 					const inlineSpans = sharedLexer.findInlineSolves(state.text);
 					if (inlineSpans.length > 0) {
 						for (const span of inlineSpans) {
@@ -303,7 +303,7 @@ export class PageManager {
 
 	/**
 	 * Evict bytecode + results from all non-variable-def lines in a page.
-	 * Variable definition bytecode is **never** evicted — it forms the
+	 * Variable definition bytecode is **never** evicted, it forms the
 	 * backbone of the DAG and VM checkpoints.
 	 *
 	 * Evicted lines are marked dirty so they get Tier 1 re-evaluation

@@ -7,7 +7,7 @@
  */
 
 /**
- * djb2 string hash — fast, simple, good distribution.
+ * djb2 string hash, fast, simple, good distribution.
  * Used for O(1) line text change detection in DocumentModel.
  */
 export function djb2Hash(str: string): number {

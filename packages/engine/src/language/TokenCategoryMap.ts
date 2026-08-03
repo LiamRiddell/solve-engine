@@ -6,12 +6,12 @@ import type { TokenCategory } from "@solve-js/language/TokenCategory";
  * Covers the full `TokenTypes` surface (see Token.ts) so nothing recognized
  * by the lexer's grammar goes uncategorized by omission. Structural/internal
  * token types (WS, NEWLINE, EOF, BACKTICK_OPEN, INLINE_SOLVE_START, COMMENT)
- * are intentionally absent — they're either filtered out before reaching
+ * are intentionally absent, they're either filtered out before reaching
  * this lookup (see Lexer.getHighlightTokens) or simply have nothing
  * meaningful to highlight. COMMENT specifically: it reaches
  * Lexer.getHighlightTokens() (unlike WS/NEWLINE, filtered earlier), so a
  * future "give comments their own color" pass would add a real category
- * here — this is a rendering-scope decision, not a correctness
+ * here. This is a rendering-scope decision, not a correctness
  * requirement, since COMMENT tokens are already filtered out of the
  * parser's input regardless of how they're highlighted.
  */
@@ -94,7 +94,7 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	IN_YEAR_DOLLARS: "keyword",
 	INGREDIENT_NAME: "keyword",
 	ASSUMING: "keyword",
-	// Datetime — workdays/weekdays/timestamps (packages/datetime/); Time —
+	// Datetime, workdays/weekdays/timestamps (packages/datetime/); Time
 	// video timecode (packages/time/). See Token.ts's TokenTypes doc
 	// comments for why each is a fused phrase/sequence token rather than a
 	// bare keyword.
@@ -162,7 +162,7 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	// Functions
 	FUNC: "function",
 
-	// Variable references/definitions — DOLLAR/COLON are the sigils, IDENT is
+	// Variable references/definitions, DOLLAR/COLON are the sigils, IDENT is
 	// a bare identifier reference. All three are recognized-by-the-grammar
 	// variable syntax at LEX time, independent of whether the variable turns
 	// out to be defined at eval time (that's a separate, later concern).
@@ -199,7 +199,7 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	VEC3: "vector",
 	VEC4: "vector",
 
-	// Punctuation — grouping/separators, deliberately neutral/muted rather
+	// Punctuation, grouping/separators, deliberately neutral/muted rather
 	// than left uncategorized: they're still recognized grammar, just not
 	// semantically interesting enough to earn a "loud" color.
 	LPAREN: "punctuation",
@@ -217,7 +217,7 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 };
 
 /**
- * Token types intentionally left uncategorized — either purely structural
+ * Token types intentionally left uncategorized, either purely structural
  * (never meant to be visibly styled) or already filtered out upstream
  * before reaching a category lookup. Used only by the completeness test to
  * distinguish "deliberately unstyled" from "forgotten."
@@ -233,10 +233,10 @@ export const UNCATEGORIZED_TOKEN_TYPES: ReadonlySet<string> = new Set([
 
 /**
  * Runtime registry for package-contributed categories (e.g. a plugin's
- * custom token types). Overrides/extends the static table above — never
+ * custom token types). Overrides/extends the static table above, never
  * replaces it, so a package can't accidentally break core highlighting.
  * Register/unregister symmetry mirrors this codebase's other pluggable
- * registries (e.g. sharedOpRegistry) — see ExpressionEngine.registerPackage
+ * registries (e.g. sharedOpRegistry). See ExpressionEngine.registerPackage
  * / unregisterPackage, which call these on behalf of IEnginePackage.tokenCategories.
  */
 const pluginCategories = new Map<string, TokenCategory>();
@@ -255,7 +255,7 @@ export function unregisterTokenCategory(tokenType: string): void {
  * token type, though in practice plugins only ever add categories for their
  * own new types).
  *
- * @returns The category, or `undefined` if the token type has no category —
+ * @returns The category, or `undefined` if the token type has no category
  *   the signal to a UI adapter that this token should render unstyled.
  */
 export function getTokenCategory(tokenType: string): TokenCategory | undefined {

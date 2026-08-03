@@ -13,8 +13,8 @@ import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
  *
  * Also swallows a preceding `how many` (`how many days between ...`,
  * `how many days until ...`). That reads as one phrase to a human but is
- * two ordinary identifier tokens to the lexer, and fusing them here — only
- * ever directly in front of a unit-plus-connector — keeps "how" and "many"
+ * two ordinary identifier tokens to the lexer, and fusing them here, only
+ * ever directly in front of a unit-plus-connector, keeps "how" and "many"
  * from becoming keywords that would shadow variables named either.
  */
 export function betweenUnitNormalizerRule(priority = 60): NormalizerRule {
@@ -39,7 +39,7 @@ export function betweenUnitNormalizerRule(priority = 60): NormalizerRule {
       if (unitToken.type !== "UNIT") return null;
 
       // "how many days until X" reuses the existing UNTIL_UNIT/SINCE_UNIT
-      // tokens — this rule only has to drop the "how many" for those, since
+      // tokens. This rule only has to drop the "how many" for those, since
       // untilSinceNormalizerRule then sees a plain `UNIT UNTIL` pair.
       const isBetween = keywordToken.type === "BETWEEN";
       const isUntilSince = keywordToken.type === "UNTIL" || keywordToken.type === "SINCE";

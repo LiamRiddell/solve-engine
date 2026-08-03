@@ -20,19 +20,19 @@ import { SegmentTree } from "@solve-js/engine/SegmentTree";
  *   full-line expressions, N entries for N inline solves).
  * - `bytecodes[]` holds compiled bytecode in corresponding order.
  * - `results[]` holds evaluation **result groups** in corresponding order.
- *   Each element is a `Value[]` — a group of Values produced by that expression.
+ *   Each element is a `Value[]`, a group of Values produced by that expression.
  *   For variable definitions, the group always has exactly 1 element.
  *   For multi-output expressions (e.g., currency conversion), the group
  *   may have multiple Values (one per target unit).
  * - `reads[]` and `writes[]` are aggregated across ALL expressions on
- *   the line — the DAG treats the line as a single dependency node.
+ *   the line, the DAG treats the line as a single dependency node.
  * - `inlineSolveCount` is 0 for full-line expressions, >0 for inline solves.
  */
 export interface LineState {
-	/** Immutable unique identifier — survives all structural edits. */
+	/** Immutable unique identifier, survives all structural edits. */
 	readonly lineId: number;
 
-	/** djb2 hash of the line text — used for O(1) change detection. */
+	/** djb2 hash of the line text, used for O(1) change detection. */
 	textHash: number;
 
 	/** The full line text (may include markdown). */
@@ -154,12 +154,12 @@ export class DocumentModel {
 	private _positionCache: Map<number, number> | null = null;
 
 	/**
-	 * Line IDs currently marked dirty — maintained alongside every
+	 * Line IDs currently marked dirty, maintained alongside every
 	 * `state.dirty` mutation (in this class and in every other module that
 	 * holds a direct `LineState` reference: ThreeTierEvaluator, PageManager).
 	 * Lets {@link hasAnyDirtyLineBefore} answer "is anything before position
-	 * X dirty" in O(d log N) — d = current dirty count, typically tiny once
-	 * a document has settled after its initial evaluation — instead of
+	 * X dirty" in O(d log N), d = current dirty count, typically tiny once
+	 * a document has settled after its initial evaluation, instead of
 	 * O(N log N), which used to mean every scroll event re-walked the WHOLE
 	 * document via `getLineAt()` regardless of how little of it was actually
 	 * dirty. Benchmarked: ~10.6ms per setViewport() call scrolled near the
@@ -206,7 +206,7 @@ export class DocumentModel {
 		// O(N) balanced treap build from flat array
 		this.orderTree.replaceAll(lineIds);
 
-		// Every line starts dirty (see the object literal above) — seed the
+		// Every line starts dirty (see the object literal above), seed the
 		// tracking set to match. This is the one place the set is legitimately
 		// O(N): a fresh document needs full evaluation anyway.
 		for (const id of lineIds) this.dirtyLineIds.add(id);
@@ -263,7 +263,7 @@ export class DocumentModel {
 				});
 			}
 
-			// New lines start dirty (see the object literal above) — track them.
+			// New lines start dirty (see the object literal above), track them.
 			for (const id of newIds) this.dirtyLineIds.add(id);
 
 			// O(log N) splice: delete old IDs, insert new IDs
@@ -279,7 +279,7 @@ export class DocumentModel {
 			}
 		}
 
-		// Invalidate position cache — positions shifted for all lines
+		// Invalidate position cache, positions shifted for all lines
 		this._positionCache = null;
 
 		return { inserted, removed };
@@ -422,7 +422,7 @@ export class DocumentModel {
 	 * needed instead of the cheap viewport-only path.
 	 *
 	 * O(d log N) where d = current dirty line count via {@link dirtyLineIds},
-	 * not O(N log N) — a document that's mostly clean (the steady state after
+	 * not O(N log N), a document that's mostly clean (the steady state after
 	 * initial load) answers this in the cost of resolving a handful of
 	 * lineIds to positions, not walking every line up to `position`.
 	 */
@@ -441,7 +441,7 @@ export class DocumentModel {
 	 * Narrower than {@link hasAnyDirtyLineBefore}: `VMCheckpointer.snapshot()`
 	 * only ever records state for lines with `writes.length > 0` (see
 	 * VMCheckpoints.ts), so a dirty plain-expression line before the viewport
-	 * cannot have invalidated any checkpoint — there's no checkpoint entry
+	 * cannot have invalidated any checkpoint, there's no checkpoint entry
 	 * for it to invalidate. Only a dirty variable-def line can mean the VM
 	 * state a checkpoint would restore is stale.
 	 *
@@ -451,7 +451,7 @@ export class DocumentModel {
 	 * `dirty` for non-variable-def lines by design. Using the broader
 	 * `hasAnyDirtyLineBefore` here meant scrolling far into a large,
 	 * variable-def-free document would trip `setViewport()`'s fallback to
-	 * `evaluate()` on every single call — evaluate() reprocesses the evicted
+	 * `evaluate()` on every single call, evaluate() reprocesses the evicted
 	 * lines via Tier 3, which recompiles their bytecode without clearing
 	 * dirty, so the very next `maintainAfterEval()` re-evicts and re-dirties
 	 * the same lines, forever re-triggering the fallback on an otherwise
@@ -578,7 +578,7 @@ export class DocumentModel {
 	 * Update a line's compile-only state (Tier 3: background compilation).
 	 *
 	 * Stores expressions, bytecodes, reads, and writes. Does NOT set results
-	 * and does NOT mark the line clean — it still needs execution (Tier 1 or
+	 * and does NOT mark the line clean, it still needs execution (Tier 1 or
 	 * Tier 2) to produce results. This distinction allows the three-tier
 	 * evaluation strategy: compile invisible lines in the background without
 	 * executing them, then execute from cached bytecode when scrolled into view.
@@ -608,7 +608,7 @@ export class DocumentModel {
 		state.writes = writes;
 		state.isVariableDef = isVariableDef;
 		state.inlineSolveCount = inlineSolveCount;
-		// NOTE: dirty remains unchanged — line still needs execution
+		// NOTE: dirty remains unchanged, line still needs execution
 	}
 
 	// ── Properties ──────────────────────────────────────────────────────

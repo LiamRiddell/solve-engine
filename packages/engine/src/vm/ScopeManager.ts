@@ -27,7 +27,7 @@ export class ScopeManager {
   /**
    * Record a variable definition at `lineNumber`. A variable may have
    * multiple definitions across different lines (e.g. redefined further
-   * down a document) — each call adds one, keeping the internal stack
+   * down a document), each call adds one, keeping the internal stack
    * sorted by line so {@link read} can binary-scan for "most recent
    * definition at or before" a given line.
    */
@@ -43,7 +43,7 @@ export class ScopeManager {
   /**
    * Look up a variable's value as seen from `readLine`: returns the result
    * of the closest definition at or before `readLine`, not simply the most
-   * recently-written one — so a read on line 5 of a variable redefined on
+   * recently-written one, so a read on line 5 of a variable redefined on
    * lines 2 and 10 sees line 2's value, not line 10's. Returns `undefined`
    * if the variable has no definition at or before `readLine`.
    */
@@ -70,7 +70,7 @@ export class ScopeManager {
     stack.splice(idx + 1);
   }
 
-  /** Remove every tracked variable definition — used when an engine/document is reset. */
+  /** Remove every tracked variable definition, used when an engine/document is reset. */
   clear(): void {
     this.definitions.clear();
   }

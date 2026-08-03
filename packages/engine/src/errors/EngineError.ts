@@ -1,12 +1,12 @@
 /**
- * The engine's structured error type — the "Rust/Go-style, verbose, easy to
+ * The engine's structured error type, the "Rust/Go-style, verbose, easy to
  * tell the issue" half of the error-handling redesign (the other half is
  * `Result.ts`).
  *
  * Historical note: an earlier version of this class (`UnifiedErrorFramework.ts`,
- * still the import path most of the codebase uses — see that file, now a
+ * still the import path most of the codebase uses. See that file, now a
  * pure re-export barrel) had a much larger field set (`severity`,
- * `recovery` — a 5-value enum, `ErrorRecoveryManager`) that was almost
+ * `recovery`, a 5-value enum, `ErrorRecoveryManager`) that was almost
  * entirely dead: nothing downstream ever read `.severity`/`.recovery`,
  * only `.message` reliably survived to a caller. This version is smaller
  * and deliberately keeps only fields something actually consumes.
@@ -14,7 +14,7 @@
 
 import type { ErrorCode } from "@solve-js/errors/ErrorCode";
 
-/** A character-offset (and optional line/col) span into the original expression text — for a future "underline the offending token" UI, not yet wired to one. */
+/** A character-offset (and optional line/col) span into the original expression text, for a future "underline the offending token" UI, not yet wired to one. */
 export interface SourceSpan {
   start: number;
   end: number;
@@ -23,7 +23,7 @@ export interface SourceSpan {
 }
 
 /**
- * Error classification — kept from the original framework, now actually
+ * Error classification, kept from the original framework, now actually
  * consulted: it's the `format()` header and lets host code group errors
  * by pipeline stage without string-matching `.code`.
  */
@@ -36,45 +36,45 @@ export enum ErrorCategory {
   VALIDATION = "VALIDATION",
   /** Errors from external services/APIs (currency rates, weather, stocks). */
   EXTERNAL = "EXTERNAL",
-  /** Internal engine invariant violations — see `recoverable`'s doc comment. */
+  /** Internal engine invariant violations. See `recoverable`'s doc comment. */
   INTERNAL = "INTERNAL",
   /** Configuration errors. */
   CONFIG = "CONFIG",
 }
 
 export interface EngineErrorInit {
-  /** Catalog code — see `errors/ErrorCode.ts`. Not a free string: every code used by a BUILT-IN package should be registered there so `ErrorCodeCatalog.spec.ts` can catch collisions/typos. Third-party packages may still use any string here — `EngineError.code`'s runtime type is `string`. */
+  /** Catalog code. See `errors/ErrorCode.ts`. Not a free string: every code used by a BUILT-IN package should be registered there so `ErrorCodeCatalog.spec.ts` can catch collisions/typos. Third-party packages may still use any string here, `EngineError.code`'s runtime type is `string`. */
   code: ErrorCode | (string & {});
-  /** Short, single-line, `Error.message`-compatible. Existing `.toThrow(/pattern/)`/`.message` assertions keep working against this field — richer detail goes in `expected`/`found`/`suggestion`, not crammed into this string. */
+  /** Short, single-line, `Error.message`-compatible. Existing `.toThrow(/pattern/)`/`.message` assertions keep working against this field, richer detail goes in `expected`/`found`/`suggestion`, not crammed into this string. */
   message: string;
-  /** What the parser/validator/VM expected to see, in plain words — e.g. "a city name", "a 4-digit year", "end of expression". */
+  /** What the parser/validator/VM expected to see, in plain words, e.g. "a city name", "a 4-digit year", "end of expression". */
   expected?: string;
-  /** What was actually found instead — e.g. "end of expression", `NUMBER "5"`, the offending token's literal text. */
+  /** What was actually found instead, e.g. "end of expression", `NUMBER "5"`, the offending token's literal text. */
   found?: string;
-  /** An actionable, worked-example fix — e.g. `e.g. "weather in London"`. Mirrors this codebase's best existing messages (`WEATHER_EXPECTED_CITY`, `AS_CONVERTER_EXPECTED_NAME`). */
+  /** An actionable, worked-example fix, e.g. `e.g. "weather in London"`. Mirrors this codebase's best existing messages (`WEATHER_EXPECTED_CITY`, `AS_CONVERTER_EXPECTED_NAME`). */
   suggestion?: string;
   /**
    * `true` (the default) for every EXPECTED failure mode of user input or
-   * environment — bad syntax, an unknown variable/function, a safety limit
+   * environment, bad syntax, an unknown variable/function, a safety limit
    * exceeded, an external API being down. `false` is reserved for genuine
    * ENGINE-INTERNAL invariant violations (corrupted bytecode, a stack
-   * underflow from a buggy plugin, an "impossible" state) —
+   * underflow from a buggy plugin, an "impossible" state)
    * `ErrorFactory.internal()`/`.config()` default to `false`, every other
    * factory method defaults to `true`.
    *
    * This does NOT gate "does evaluation of the rest of the document
-   * continue" — with this engine's per-line containment, it always does,
+   * continue", with this engine's per-line containment, it always does
    * even for a `recoverable: false` error (see `ARCHITECTURE.md`'s
    * async-batcher/Tier-2 hardening notes). It gates MESSAGE FRAMING and
    * telemetry: "fix your syntax" vs. "this is an engine bug, worth
-   * reporting" — see `EngineError.isFatal()`.
+   * reporting". See `EngineError.isFatal()`.
    */
   recoverable?: boolean;
-  /** Character-offset span into the source expression, when available. Not yet threaded through every call site — populate opportunistically, don't block on retrofitting every existing throw site. */
+  /** Character-offset span into the source expression, when available. Not yet threaded through every call site, populate opportunistically, don't block on retrofitting every existing throw site. */
   span?: SourceSpan;
-  /** Free-form structured context. The one field the pre-existing framework's real consumer (`ThreeTierEvaluator.ts`'s DAG-preservation-on-compile-error path) actually reads — kept name- and shape-compatible on purpose. */
+  /** Free-form structured context. The one field the pre-existing framework's real consumer (`ThreeTierEvaluator.ts`'s DAG-preservation-on-compile-error path) actually reads, kept name- and shape-compatible on purpose. */
   context?: Record<string, unknown>;
-  /** The underlying error this one wraps, if any — passed straight through to native `Error.cause` (ES2022), so Node's default printer, most loggers, and `instanceof Error` tooling understand the chain for free. */
+  /** The underlying error this one wraps, if any, passed straight through to native `Error.cause` (ES2022), so Node's default printer, most loggers, and `instanceof Error` tooling understand the chain for free. */
   cause?: unknown;
 }
 
@@ -95,13 +95,13 @@ export class EngineError extends Error {
   readonly context?: Record<string, unknown>;
   readonly timestamp: Date;
   /**
-   * Set explicitly (not via `super(message, {cause})`) — this repo's
+   * Set explicitly (not via `super(message, {cause})`). This repo's
    * `tsconfig.json` targets ES6/ES5-ES7 lib, which predates TypeScript's
    * ES2022 `Error` constructor `cause`-option overload. `Error.prototype.cause`
    * is still a real runtime feature in every target this engine actually
    * runs in (Node 16.9+, all evergreen browsers, Electron/Obsidian's
    * bundled Chromium) regardless of the TS lib target used to type-check
-   * against it — assigning it directly gets the same Node-printer/logger
+   * against it, assigning it directly gets the same Node-printer/logger
    * interop with no build-config change needed.
    */
   readonly cause?: unknown;
@@ -124,7 +124,7 @@ export class EngineError extends Error {
     }
   }
 
-  /** `!recoverable` — see `EngineErrorInit.recoverable`'s doc comment for what this actually gates (message framing/telemetry, not whether evaluation continues). */
+  /** `!recoverable`. See `EngineErrorInit.recoverable`'s doc comment for what this actually gates (message framing/telemetry, not whether evaluation continues). */
   isFatal(): boolean {
     return !this.recoverable;
   }
@@ -141,7 +141,7 @@ export class EngineError extends Error {
   }
 
   /**
-   * Rust/Go-style multi-line renderer — the NEW thing a host/CLI/test
+   * Rust/Go-style multi-line renderer, the NEW thing a host/CLI/test
    * reaches for when it wants the full, verbose picture, as distinct from
    * `.message` (kept short and stable for existing assertions). Example:
    *
@@ -179,10 +179,10 @@ export class EngineError extends Error {
 
 /**
  * Factory for creating classified `EngineError`s. Every method accepts
- * EITHER the original, minimal 3-arg shape (`code, message, context?` —
+ * EITHER the original, minimal 3-arg shape (`code, message, context?`
  * every existing call site across the codebase keeps compiling unchanged)
  * OR the richer `EngineErrorInit` object (for `expected`/`found`/
- * `suggestion`/`recoverable`/`span`/`cause`) — upgrade a call site to the
+ * `suggestion`/`recoverable`/`span`/`cause`), upgrade a call site to the
  * richer form only when you're already touching it, no separate churn
  * pass required.
  */
@@ -225,14 +225,14 @@ export class ErrorFactory {
     return ErrorFactory.build(ErrorCategory.EXTERNAL, true, codeOrInit, message, context);
   }
 
-  /** Defaults `recoverable: false` — reserve for genuine engine-internal invariant violations, not user-input errors. */
+  /** Defaults `recoverable: false`, reserve for genuine engine-internal invariant violations, not user-input errors. */
   static internal(code: string, message: string, context?: Record<string, unknown>): EngineError;
   static internal(init: EngineErrorInit): EngineError;
   static internal(codeOrInit: string | EngineErrorInit, message?: string, context?: Record<string, unknown>): EngineError {
     return ErrorFactory.build(ErrorCategory.INTERNAL, false, codeOrInit, message, context);
   }
 
-  /** Defaults `recoverable: false` — a bad config is an environment-setup problem, not a per-line user-input error. */
+  /** Defaults `recoverable: false`, a bad config is an environment-setup problem, not a per-line user-input error. */
   static config(code: string, message: string, context?: Record<string, unknown>): EngineError;
   static config(init: EngineErrorInit): EngineError;
   static config(codeOrInit: string | EngineErrorInit, message?: string, context?: Record<string, unknown>): EngineError {
@@ -241,7 +241,7 @@ export class ErrorFactory {
 }
 
 /**
- * Normalize any thrown value into an `EngineError` — an `EngineError`
+ * Normalize any thrown value into an `EngineError`, an `EngineError`
  * passes through as-is; a plain `Error` gets wrapped (message preserved,
  * original attached via `cause`); anything else becomes a generic
  * "unknown error" wrapping the stringified value. Used at every

@@ -7,7 +7,7 @@ import { randomNumberParselet } from "./parselets/RandomNumberParselet";
 import { ClampParselet } from "./parselets/ClampParselet";
 import { ProportionParselet } from "./parselets/ProportionParselet";
 
-// CALL_BUILTIN indices — see VMBuiltins.ts for the handler implementations.
+// CALL_BUILTIN indices. See VMBuiltins.ts for the handler implementations.
 const AVERAGE = 42, MEDIAN = 43, TOTAL = 44, COUNT = 45;
 const MIN = 9, MAX = 10;
 
@@ -23,7 +23,7 @@ const MIN = 9, MAX = 10;
  * shipped playground example uses `:total = :afterDiscount + :tax`).
  * This codebase has a tested, intentional policy that a colon-prefixed
  * variable name can't be a keyword-shaped word (see VariableParselet.ts's
- * doc comment and its "reserved-keyword regression" test) — so claiming
+ * doc comment and its "reserved-keyword regression" test), so claiming
  * any of those as a BARE global keyword would have permanently broken
  * `:total = ...`-style usage, which is exactly what happened on the first
  * pass of this package.
@@ -31,18 +31,18 @@ const MIN = 9, MAX = 10;
  * The fix: fuse the full two-word phrase ("average of", "total of",
  * "half of", "midpoint between", ...) into its own token via the
  * `phrases` field below, instead of claiming the leading word alone. The
- * bare word then never becomes its own token type — it stays a plain
+ * bare word then never becomes its own token type, it stays a plain
  * IDENT (usable as a variable) unless immediately followed by its
  * qualifying keyword. `clamp` is the one exception, kept as a bare
  * keyword: "clamp X between Y and Z" has the value X sitting between the
  * trigger and "between"/"from", so the two words aren't adjacent and
- * can't be phrase-fused — same accepted risk profile as this codebase's
+ * can't be phrase-fused. Same accepted risk profile as this codebase's
  * existing bare "between"/"from"/"next"/"last"/"best" keywords.
  *
  * Most of the fused-trigger parselets are hand-written rather than built
  * on `PhrasePattern`, for a related reason: once the leading keyword is
  * fused away into the trigger token itself, the next thing in each
- * grammar is an `expr` (the value), not a keyword — `definePhrasePattern`
+ * grammar is an `expr` (the value), not a keyword, `definePhrasePattern`
  * requires every alternative to start with a keyword slot. See
  * `ClampParselet.ts`'s doc comment for the same structural point.
  * `random number between X and Y` and `A is to B as C is to what` are the

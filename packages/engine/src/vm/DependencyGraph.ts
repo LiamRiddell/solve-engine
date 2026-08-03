@@ -96,7 +96,7 @@ export class DependencyGraph {
    * Find all lines affected by a changed variable via BFS through the consumer graph.
    *
    * When a variable is modified (e.g., `:x = 5` changes to `:x = 10`), this returns
-   * all lines that transitively depend on it — lines that read `x`, lines that read
+   * all lines that transitively depend on it, lines that read `x`, lines that read
    * variables written by those lines, and so on.
    *
    * @param changedVariable - The variable name that changed
@@ -238,7 +238,7 @@ export class DependencyGraph {
    * @param lineNumber - The line number being removed
    */
   removeLine(lineNumber: number): void {
-     // Remove from consumers of variables this line read — O(k) not O(V)
+     // Remove from consumers of variables this line read, O(k) not O(V)
      const reads = this.lineReads.get(lineNumber);
      if (reads) {
        for (const readVar of reads) {
@@ -251,7 +251,7 @@ export class DependencyGraph {
      this.dependencies.delete(lineNumber);
      this.writes.delete(lineNumber);
 
-     // Remove from consumers of the data-source keys THIS line depends on —
+     // Remove from consumers of the data-source keys THIS line depends on
      // O(k) via the line's own dependency set, not O(total unique keys in
      // the document). Must read dataSourceDependencies before deleting it.
      const dataSourceKeys = this.dataSourceDependencies.get(lineNumber);

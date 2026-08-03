@@ -1,18 +1,18 @@
 /**
- * Engine worker — offloads both compilation and VM execution to a
+ * Engine worker, offloads both compilation and VM execution to a
  * background thread (plan L6: worker consolidation).
  *
  * Previously two separate worker files (compilation.worker.ts,
  * execution.worker.ts) duplicated the Transferable ArrayBuffer protocol,
  * postMessage/onmessage boilerplate, and lazy-init pattern. This file
- * merges them behind a single `self.onmessage` dispatching on `msg.type` —
+ * merges them behind a single `self.onmessage` dispatching on `msg.type`
  * the message shapes are UNCHANGED from the two original files, so
  * CompilationWorkerManager and ExecutionPool (the main-thread consumers)
  * require no changes beyond importing this file's factory.
  *
  * Each Worker instance created from this file is used exclusively by ONE
  * consumer (a CompilationWorkerManager sends only COMPILE_BATCH; an
- * ExecutionPool sends only EXECUTE_BATCH) — the module-level `engine` and
+ * ExecutionPool sends only EXECUTE_BATCH), the module-level `engine` and
  * `vm` singletons below are independent lazy state, so there is no
  * cross-contamination between the two roles even though they share code.
  *
@@ -118,7 +118,7 @@ export default (() => {
 	throw new Error("engine.worker.ts was not processed by esbuild-plugin-inline-worker, so worker offload is unavailable");
 }) as unknown as () => Worker;
 
-// ── Lazy per-role state — independent, only the used one is created ────
+// ── Lazy per-role state, independent, only the used one is created ────
 
 let compileEngine: ExpressionEngine | null = null;
 function getCompileEngine(): ExpressionEngine {
@@ -141,7 +141,7 @@ function getExecuteVm(): ReturnType<typeof createVM> {
 /**
  * Compile a single expression and produce a transfer-ready CompileResult.
  * Extracts ArrayBuffers from the compiled TypedArrays so they can be
- * transferred via postMessage — after this call, the original TypedArrays
+ * transferred via postMessage, after this call, the original TypedArrays
  * are detached on the worker side.
  */
 function compileOne(item: CompileItem): CompileResult {
@@ -228,7 +228,7 @@ function handleCompileBatch(msg: CompileBatchMsg): void {
 /**
  * Execute a single bytecode program and produce a serialized ExecuteResult.
  * Reconstructs TypedArrays from the transferred ArrayBuffers (zero-copy).
- * Resets the worker VM before each execution — no state carries over
+ * Resets the worker VM before each execution, no state carries over
  * between lines in a batch.
  */
 function executeOne(item: ExecuteItem): ExecuteResult {
@@ -275,7 +275,7 @@ function executeOne(item: ExecuteItem): ExecuteResult {
 			isPending: false,
 		};
 	} catch {
-		// Execution error — return error-type value so main thread can
+		// Execution error, return error-type value so main thread can
 		// propagate through DAG as errorValue.
 		return {
 			lineNumber: item.lineNumber,
@@ -292,7 +292,7 @@ function handleExecuteBatch(msg: ExecuteBatchMsg): void {
 	for (const item of msg.items) {
 		results.push(executeOne(item));
 	}
-	// No transferables needed for the response — results are plain
+	// No transferables needed for the response, results are plain
 	// objects with numbers and strings (structured-cloned).
 	(self as unknown as Worker).postMessage({
 		id: msg.id,
@@ -332,7 +332,7 @@ const handleMessage = (event: MessageEvent) => {
 			break;
 
 		case "TERMINATE": {
-			// Not sent by either production manager today — both call the
+			// Not sent by either production manager today, both call the
 			// native Worker.terminate() directly instead. Kept for protocol
 			// completeness and future consumers. Clears whichever per-role
 			// state this instance happened to create.

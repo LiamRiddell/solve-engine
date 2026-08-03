@@ -3,19 +3,19 @@ import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/Norma
 import { DATETIME_LITERAL_TYPE } from "./DateLiteralNormalizerRule";
 
 /**
- * Unwraps `[[<date>]]` — Obsidian's own wikilink syntax, as produced by
+ * Unwraps `[[<date>]]`, Obsidian's own wikilink syntax, as produced by
  * plugins like Natural Language Dates when inserting a link to a daily
- * note (e.g. `[[2024-01-15]]`) — into the bare date literal inside, so
+ * note (e.g. `[[2024-01-15]]`), into the bare date literal inside, so
  * `[[2024-01-15]] + 5 days` works exactly like `2024-01-15 + 5 days`.
  * See GitHub issue #67.
  *
  * Deliberately narrow: only fires when the bracket-wrapped content is
  * ALREADY a fused `DATETIME_LITERAL` token (see
- * `DateLiteralNormalizerRule.ts` — DD/MM/YYYY, ISO, US, and dotted
+ * `DateLiteralNormalizerRule.ts`, DD/MM/YYYY, ISO, US, and dotted
  * formats all fuse to this one token type before this rule ever runs,
  * priority 80 running after that rule's own priority-80 pass converges
  * across the normalizer's multi-pass loop). `[...]`/`[[...]]` have no
- * other meaning ANYWHERE in this grammar today (confirmed — no parselet
+ * other meaning ANYWHERE in this grammar today (confirmed, no parselet
  * is registered for `LBRACKET` at all), so this claims no existing
  * behavior; it does NOT unwrap arbitrary bracketed content (a page title,
  * a non-date word, ...), only a bracket pair immediately around a real

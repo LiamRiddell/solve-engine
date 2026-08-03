@@ -33,7 +33,7 @@ export interface SafetyCheckResult {
      * `error.error` (a plain string) exists purely because it's spread
      * directly into `evaluateExpressionWithDiagnostic()`'s own return shape
      * (`{value, tokens, program, error?: string, ...}`), which deliberately
-     * keeps errors as display strings for the debug/diagnostic pipeline —
+     * keeps errors as display strings for the debug/diagnostic pipeline
      * see that method's own doc comment. `error.engineError` is additive
      * (doesn't replace the string field, so existing consumers of this
      * exported type are unaffected): it carries the real EngineError this
@@ -106,7 +106,7 @@ export function checkExpressionComplexity(
 
 /**
  * Guard: true if the token is a valid variable name type.
- * Accepts both IDENT and UNIT tokens — UNIT occurs when the variable name
+ * Accepts both IDENT and UNIT tokens, UNIT occurs when the variable name
  * collides with a known unit (e.g., "b" for bits, "s" for seconds).
  */
 function isVarName(t: Token): boolean {
@@ -115,13 +115,13 @@ function isVarName(t: Token): boolean {
 
 /**
  * True if a UNIT token at this position is being consumed as a
- * unit-of-measure literal rather than a variable reference — i.e. it's
+ * unit-of-measure literal rather than a variable reference, i.e. it's
  * immediately preceded by a value (NUMBER, a closing paren) or a
  * conversion keyword (TO, IN). This mirrors exactly where
  * UomLiteralParselet/ConvertParselet/PercentageChangeParselet accept a
  * UNIT token themselves: `500 EUR`, `(x + y) km`, `to JPY`, `in m`.
  * In all of these the compiler emits PUSH_STRING for the unit name, not
- * LOAD_VAR, so treating them as a DAG read is a false positive — the
+ * LOAD_VAR, so treating them as a DAG read is a false positive, the
  * classic case being any bare currency/unit conversion like
  * "500 EUR to JPY", which falsely reported "EUR" and "JPY" as variable
  * dependencies even though the compiled bytecode never loads a variable.
@@ -133,7 +133,7 @@ function isUnitLiteralContext(prev: Token): boolean {
 /**
  * From an LPAREN token index, scan forward tracking paren depth and return
  * the index of the matching RPAREN, or `null` if unbalanced. Mirrors
- * `PrecedenceParser.ts`'s `findMatchingRParen` — necessarily duplicated
+ * `PrecedenceParser.ts`'s `findMatchingRParen`, necessarily duplicated
  * here since this file is a standalone, parser-instance-free static token
  * scan (same "dead-code-but-must-stay-synced mirror" pattern as
  * `NumberParselet.ts`).
@@ -155,12 +155,12 @@ function findMatchingRParenIdx(tokens: Token[], openIdx: number): number | null 
  * body`) to collect the set of PARAMETER names that must be excluded from
  * `reads`/`writes` in {@link extractReadsAndWrites} below. Without this, a
  * parameter name colliding with an unrelated document-level `:variable` of
- * the same name would register a spurious DAG dependency — `f(x) = 2*x+1`
+ * the same name would register a spurious DAG dependency, `f(x) = 2*x+1`
  * must not depend on some unrelated `:x` defined elsewhere in the document,
  * and `x` itself must never be reported as a document-level WRITE (the
  * parameter isn't being assigned to at document scope at all). Scoped to a
  * single line's own token stream, matching how `extractReadsAndWrites` is
- * already called per-line — no cross-line interference with an unrelated
+ * already called per-line, no cross-line interference with an unrelated
  * `:x` on a different line.
  */
 function collectFunctionParamNames(tokens: Token[]): Set<string> {
@@ -187,17 +187,17 @@ function collectFunctionParamNames(tokens: Token[]): Set<string> {
  * (e.g., "b" for bits, "s" for seconds). The colon prefix unambiguously
  * signals a variable definition context (handled by VariableParselet).
  * A standalone UNIT token is only a real variable reference when it
- * isn't in unit-literal position (see {@link isUnitLiteralContext}) —
+ * isn't in unit-literal position (see {@link isUnitLiteralContext})
  * otherwise it's a quantity/conversion unit name, never LOAD_VAR'd.
  *
  * Also detects user-defined-function DEFINITIONS (`name(params) = body`)
- * as a read+write of the function's own name — mirroring `:name = value`'s
- * existing convention of registering the defined name as both — and
+ * as a read+write of the function's own name, mirroring `:name = value`'s
+ * existing convention of registering the defined name as both, and
  * excludes the definition's own PARAMETER names from reads/writes
  * entirely (see {@link collectFunctionParamNames}). A function CALL
  * (`name(args)`, no trailing `=`) needs no special detection: the call's
  * own name falls through to the ordinary bare-identifier read-tracking
- * below, the same as any other `LOAD_VAR`-producing identifier — this is
+ * below, the same as any other `LOAD_VAR`-producing identifier. This is
  * already correct once calls compile successfully, no change needed.
  */
 export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; writes: string[] } {
@@ -208,11 +208,11 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
     for (let i = 0; i < tokens.length; i++) {
         const t = tokens[i];
         if (t.type === "GLOBAL") {
-            // global :name [= expr] — GLOBAL, COLON, IDENT/UNIT are three
+            // global :name [= expr], GLOBAL, COLON, IDENT/UNIT are three
             // separate tokens (matching GlobalVariableParselet). Emit a
             // "global:"-prefixed synthetic name into THIS document's own
             // DAG (via globalDagKey) so a local :hello and global :hello
-            // never collide in this document's own reads/writes tracking —
+            // never collide in this document's own reads/writes tracking
             // the bare-COLON branch below explicitly skips the colon that
             // follows GLOBAL, since it's handled here instead.
             if (i + 2 < tokens.length && tokens[i + 1].type === "COLON" && isVarName(tokens[i + 2])) {
@@ -225,7 +225,7 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
             continue;
         }
         if (t.type === "COLON") {
-            // Skip — this colon belongs to a `global :name` sequence,
+            // Skip. This colon belongs to a `global :name` sequence
             // already handled by the GLOBAL branch above.
             if (i > 0 && tokens[i - 1].type === "GLOBAL") continue;
             // The moo lexer produces COLON as a bare ":" token. The variable
@@ -246,7 +246,7 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
             // Skip UNIT tokens acting as a quantity/conversion unit name
             // rather than a variable (see isUnitLiteralContext above).
             if (t.type === "UNIT" && i > 0 && isUnitLiteralContext(tokens[i - 1])) continue;
-            // A user-defined-function's own PARAMETER name — never a
+            // A user-defined-function's own PARAMETER name, never a
             // document-level read or write (see collectFunctionParamNames).
             if (functionParamNames.has(t.value)) continue;
             // A user-defined-function DEFINITION's own name: `name(params) =
@@ -259,7 +259,7 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
                     writes.push(t.value);
                     continue;
                 }
-                // else: a CALL (or malformed) — falls through below, same as
+                // else: a CALL (or malformed), falls through below, same as
                 // any other bare identifier read.
             }
             reads.push(t.value);
@@ -293,7 +293,7 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
  * Lines containing inline solves (s\`...\`) are never considered empty.
  *
  * Note: a trailing `#`/`//` comment in the MIDDLE of an otherwise-evaluable
- * line does NOT make isEmptyLine() return true — that line is still an
+ * line does NOT make isEmptyLine() return true, that line is still an
  * "expression" line (skip: false). The comment is instead stripped at
  * tokenization time (ExpressionLexer's HASH/`//` handling emits a COMMENT
  * token for the rest of the line) and then filtered out of the token

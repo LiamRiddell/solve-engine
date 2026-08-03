@@ -1,10 +1,10 @@
 /**
  * WMO ("World Meteorological Organization") weather interpretation codes,
  * as returned by Open-Meteo's `weather_code` field
- * (https://open-meteo.com/en/docs — "WMO Weather interpretation codes").
+ * (https://open-meteo.com/en/docs, "WMO Weather interpretation codes").
  *
  * This is a standard, documented, provider-agnostic code scheme (Open-Meteo
- * didn't invent it, it just surfaces it) — the same codes appear in METAR/
+ * didn't invent it, it just surfaces it), the same codes appear in METAR/
  * SYNOP reporting more broadly. Not every possible WMO code has a distinct
  * Open-Meteo meaning; this table only covers the subset Open-Meteo actually
  * emits, confirmed against its docs rather than the full WMO 4677 table.
@@ -43,7 +43,7 @@ export const WMO_WEATHER_DESCRIPTIONS: Record<number, string> = {
 /**
  * Map a WMO weather code to a short human-readable description.
  * Falls back to a generic label (rather than throwing) for any code
- * Open-Meteo might add in the future that isn't in the table yet —
+ * Open-Meteo might add in the future that isn't in the table yet
  * an unrecognized code shouldn't break the whole weather query.
  */
 export function describeWeatherCode(code: number): string {

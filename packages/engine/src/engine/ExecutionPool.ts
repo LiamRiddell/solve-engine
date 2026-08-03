@@ -1,10 +1,10 @@
 /**
- * ExecutionPool — manages a pool of execution workers for offloading
+ * ExecutionPool, manages a pool of execution workers for offloading
  * VM bytecode re-execution when AsyncResolutionBatcher.flush() has >50
  * affected lines.
  *
  * Workers are created lazily (on first dispatch). Each worker runs
- * executeBytecode() with its own isolated VM — no shared state between
+ * executeBytecode() with its own isolated VM, no shared state between
  * worker and main thread, no scope leakage.
  *
  * Design decisions:
@@ -132,7 +132,7 @@ export class ExecutionPool {
 	 * ArrayBuffers for transfer, dispatches to workers round-robin, and
 	 * returns the serialized results (with 30s timeout fallback).
 	 *
-	 * Falls back to undefined when workers are unavailable — caller should
+	 * Falls back to undefined when workers are unavailable, caller should
 	 * use the main-thread path.
 	 *
 	 * @returns ExecuteResult[] on success, undefined if workers unavailable.
@@ -158,7 +158,7 @@ export class ExecutionPool {
 			const numbers = entry.bytecode.numbers;
 
 			// Clone the exact used slice of each ArrayBuffer for transfer.
-			// After transfer, the clone is detached on the main thread —
+			// After transfer, the clone is detached on the main thread
 			// the original LineCache entry's buffers are untouched.
 			const opcodesClone = opcodes.buffer.slice(
 				opcodes.byteOffset,
@@ -312,7 +312,7 @@ export function reconstructValue(result: ExecuteResult): Value {
 			// type: the worker-pool's {valueType, value, unit} serialization
 			// has no slot for MatrixData's rows/cols/data shape, so a Matrix
 			// result degrades to a plain number here rather than round-
-			// tripping intact. Not fixed as part of Matrix support — this
+			// tripping intact. Not fixed as part of Matrix support. This
 			// gap already existed for vectors before this rename.
 			return numberValue(result.value);
 		case ValueType.Boolean:

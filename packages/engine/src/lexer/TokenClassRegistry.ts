@@ -1,5 +1,5 @@
 /**
- * TokenClass — Plugin-extensible keyword registration for the Lexer.
+ * TokenClass, Plugin-extensible keyword registration for the Lexer.
  *
  * Providers call `registry.register(tokenClass)` to teach the lexer about
  * their keywords. The registry merges locale keywords, provider keywords,
@@ -49,7 +49,7 @@ export interface PhraseNode {
   children: Map<string, PhraseNode>;
 }
 
-// ── TokenLookup — Optimized lookup structure for the Lexer ──────────────────
+// ── TokenLookup, Optimized lookup structure for the Lexer ──────────────────
 
 /**
  * The optimized lookup structure built by TokenClassRegistry.build().
@@ -91,7 +91,7 @@ export interface TokenLookup {
  *
  * Merge order (later overrides earlier):
  *   1. Locale keywords (priority 0)
- *   2. Provider keywords (sorted by priority ascending — higher priority wins)
+ *   2. Provider keywords (sorted by priority ascending, higher priority wins)
  *
  * Unit names are stored separately (checked AFTER keyword lookup fails).
  * Phrases are stored in a trie for O(phrase-length) matching.
@@ -106,7 +106,7 @@ export class TokenClassRegistry {
    * Register a provider's TokenClass. Must be called BEFORE build().
    * Can be called multiple times to add more entries.
    *
-   * Built-in token types CANNOT be overridden — throws a EngineError
+   * Built-in token types CANNOT be overridden, throws a EngineError
    * if the TokenClass attempts to register a keyword that conflicts
    * with an already-registered token type.
    */
@@ -152,14 +152,14 @@ export class TokenClassRegistry {
   build(): TokenLookup {
     const keywordToType = new Map<string, string>();
 
-    // Layer 1: Locale keywords (priority 0 — lowest)
+    // Layer 1: Locale keywords (priority 0, lowest)
     if (this.localeKeywordMap) {
       for (const [keyword, tokenType] of Object.entries(this.localeKeywordMap)) {
         keywordToType.set(keyword.toLowerCase(), tokenType);
       }
     }
 
-    // Layer 2: Provider keywords (sorted by priority ascending — higher wins)
+    // Layer 2: Provider keywords (sorted by priority ascending, higher wins)
     const sorted = [...this.classes].sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0));
     for (const tc of sorted) {
       for (const keyword of Object.keys(tc.keywords)) {
@@ -213,7 +213,7 @@ export class TokenClassRegistry {
       }
       node = node.children.get(word)!;
     }
-    // Only set type if not already set — first-registered (locale) wins
+    // Only set type if not already set, first-registered (locale) wins
     if (!node.type) {
       node.type = tokenType;
     }

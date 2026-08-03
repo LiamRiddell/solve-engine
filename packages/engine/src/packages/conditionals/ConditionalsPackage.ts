@@ -14,15 +14,15 @@ import { IfThenElseParselet } from "./parselets/IfThenElseParselet";
  * The `and`/`or` split is deliberate, not an oversight: "and" already
  * lexes as `PLUS` (a pre-existing arithmetic word-synonym, `en.ts`:
  * `and: "PLUS"`), a Tier-1 hardcoded infix operator no registry-based
- * parselet can intercept — `OpCode.ADD`'s own VM handler special-cases
+ * parselet can intercept, `OpCode.ADD`'s own VM handler special-cases
  * `Boolean && Boolean` instead (see `vm/VM.ts`). "or"/"&&"/"||" have no
  * such collision and are handled normally here via `LogicalParselet`.
  *
  * KNOWN LIMITATION: because "and" is pinned to `PLUS`'s Tier-1 binding
  * power (`Sum`, tighter than comparisons), an unparenthesized `X >= Y and
- * Z < W` does NOT parse as `(X >= Y) and (Z < W)` — "and"'s fixed
+ * Z < W` does NOT parse as `(X >= Y) and (Z < W)`, "and"'s fixed
  * precedence grabs a comparison operand instead. Use `&&` (correct,
- * dedicated `LogicalAnd` precedence — looser than comparisons) for that
+ * dedicated `LogicalAnd` precedence, looser than comparisons) for that
  * pattern, or wrap each side in parens if "and" is preferred:
  * `(X >= Y) and (Z < W)`. "and" alone (no comparisons in the same
  * unparenthesized expression) works fine, e.g. `discount and hasCoupon`.
@@ -31,7 +31,7 @@ import { IfThenElseParselet } from "./parselets/IfThenElseParselet";
  * ternary with no explicit else-branch) is deliberately NOT implemented.
  * This VM's `Value` has no "empty"/"void" representation for the
  * false-branch case (every expression must produce a concrete typed
- * result) — building it properly would mean adding a new sentinel
+ * result), building it properly would mean adding a new sentinel
  * `ValueType` and deciding how every consumer (formatting, DAG
  * propagation, UOM/arithmetic ops) treats it, which is a bigger call than
  * this package should make implicitly. `if X then Y else Z` (both

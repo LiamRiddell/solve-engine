@@ -32,11 +32,11 @@ function isAmPmToken(token: { type: string; value: string } | undefined): token 
  * decimal string, e.g. "540" for 9:00am).
  *
  * Two source shapes:
- * - `NUMBER COLON NUMBER [am|pm]` — `9:00am`, `9:00 am`, `16:00` (24h,
+ * - `NUMBER COLON NUMBER [am|pm]`, `9:00am`, `9:00 am`, `16:00` (24h
  *   no am/pm).
- * - `NUMBER am|pm` — the bare-hour form, `4pm`.
+ * - `NUMBER am|pm`, the bare-hour form, `4pm`.
  *
- * "am"/"pm" are matched as plain `IDENT` tokens (case-insensitively) —
+ * "am"/"pm" are matched as plain `IDENT` tokens (case-insensitively)
  * deliberately NOT added to the locale keywordMap, so this doesn't change
  * lexing for "am"/"pm" used as ordinary identifiers/variable names
  * anywhere else; the pattern only fires when one immediately follows a
@@ -50,7 +50,7 @@ export function clockTimeNormalizerRule(priority = 65): NormalizerRule {
     priority,
     match(tokens, pos): NormalizerMatch | null {
       // A clock time inside `[...]` (matrix literal/index/slice) has no
-      // legitimate meaning — reserve bare `NUMBER:NUMBER` there for a
+      // legitimate meaning, reserve bare `NUMBER:NUMBER` there for a
       // matrix range instead (see isInsideRangeContext's own doc comment).
       if (isInsideRangeContext(tokens, pos)) return null;
       const hourToken = tokens[pos];

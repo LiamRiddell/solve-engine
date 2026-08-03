@@ -12,7 +12,7 @@ const WORD_TO_TOKEN_TYPE: Record<string, string> = {
 
 /**
  * Whether the token at this position looks like it's about to become (or
- * already is) a `LINE_REF` — i.e. this "sum(" is actually
+ * already is) a `LINE_REF`, i.e. this "sum(" is actually
  * `packages/lines/`'s own cross-line `sum(line 1 : line 4)` aggregate
  * call, not this package's `sum(elementExpr, collection)`. Mirrors
  * `packages/lines/normalizer/LineRefNormalizerRule.ts`'s own glued/spaced
@@ -30,8 +30,8 @@ function looksLikeLineRef(token: Token | undefined, next: Token | undefined): bo
 }
 
 /**
- * Fuses `map(`/`reduce(`/`sum(`/`prod(` — but ONLY when the bare word is
- * IMMEDIATELY followed by `LPAREN` — into their own dedicated token
+ * Fuses `map(`/`reduce(`/`sum(`/`prod(`, but ONLY when the bare word is
+ * IMMEDIATELY followed by `LPAREN`, into their own dedicated token
  * types. Mirrors `packages/lines/normalizer/LineRefNormalizerRule.ts`'s
  * `rangeCallNormalizerRule()` (same "conditional-on-LPAREN" pattern), so
  * `:map = [...]` / `:reduce = ...` / `:sum = 100` / `:prod = 1` all keep
@@ -39,11 +39,11 @@ function looksLikeLineRef(token: Token | undefined, next: Token | undefined): bo
  *
  * `sum(` specifically declines to match (the {@link looksLikeLineRef}
  * guard) when its own arguments look like the lines package's
- * `sum(line 1 : line 4)` cross-line aggregate — a genuine trigger-shape
+ * `sum(line 1 : line 4)` cross-line aggregate, a genuine trigger-shape
  * collision between two independently-shipped features (both packages
  * pick "sum(" as their trigger). Declining here (returning `null`) lets
  * the normalizer try `rangeCallNormalizerRule` at the same position next
- * — that composition works regardless of the two rules' relative
+ *, that composition works regardless of the two rules' relative
  * priority, since the normalizer tries every registered rule at a
  * position, in priority order, until one matches.
  */

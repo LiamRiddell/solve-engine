@@ -5,21 +5,21 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
  * A stored bare (colon-less) equation of the shape `factor1*factor2*...*
- * variable = rhs` (e.g. `a*x = [60;70]`, or `s*t*v = [vx;vy;1]`) —
+ * variable = rhs` (e.g. `a*x = [60;70]`, or `s*t*v = [vx;vy;1]`)
  * registered when that line is EXECUTED (mirroring `UserFunctionDef`'s own
  * execution-time registration, not parse-time), and consulted when
  * `<variable> =>` is later evaluated. Solving is `variable =
  * inv(factor1*factor2*...) * rhs` (`vm/VM.ts`'s THEREFORE-handling code,
- * `vm/MatrixOps.ts`'s `matrixMultiply()`/`inverse()` — both symbolic-aware,
+ * `vm/MatrixOps.ts`'s `matrixMultiply()`/`inverse()`, both symbolic-aware
  * so a factor whose OWN cells are still-unassigned free variables, e.g.
  * `s = [sx,0,0;...]`, solves correctly too).
  *
  * `factorNames` are looked up via `vm.getVar()` at solve time (ordinary,
- * ALREADY-evaluated Matrix values — ordinary ("bare") assignment always
+ * ALREADY-evaluated Matrix values, ordinary ("bare") assignment always
  * evaluates its RHS eagerly, even when that RHS itself contains
  * unassigned names, via symbolic-tolerant evaluation, so by solve time
  * each factor is already a genuine, possibly-partially-symbolic Matrix
- * Value sitting in the variable store) — NOT re-compiled bytecode, since
+ * Value sitting in the variable store), NOT re-compiled bytecode, since
  * this pattern only ever allows bare identifiers as factors (see
  * `ExpressionEngine.ts`'s own equation-detection doc comment for why this
  * stays a narrow, disclosed pattern rather than a general expression).
@@ -35,7 +35,7 @@ export interface EquationDef {
 
 /**
  * Handler function for plugin-registered opcodes via CALL_PLUGIN (opcode 50).
- * No longer dispatched directly from the VM switch — plugins register
+ * No longer dispatched directly from the VM switch, plugins register
  * functions in pluginFunctionRegistry instead.
  *
  * @deprecated Use CALL_PLUGIN + pluginFunctionRegistry for plugin functionality.
@@ -57,7 +57,7 @@ const MAX_OPCODE = 254;
 const DYNAMIC_OPCODE_START = 200;
 
 /**
- * Legacy opcode registry — retained for the VM interface contract.
+ * Legacy opcode registry, retained for the VM interface contract.
  *
  * Previously dispatched custom opcodes (>= 200) from the VM switch-default
  * branch. Now plugins should use CALL_PLUGIN (opcode 50) via
@@ -124,7 +124,7 @@ export interface VM {
 	getStack(): Value[];
 	registry: OpRegistry;
 	/**
-	 * Read a variable by name — checks the INNERMOST active user-defined-
+	 * Read a variable by name, checks the INNERMOST active user-defined-
 	 * function call frame first (see `pushCallFrame`), then falls back to
 	 * the flat, session-scoped variable store. This is why a function
 	 * parameter needs no dedicated load opcode: an ordinary `LOAD_VAR
@@ -135,19 +135,19 @@ export interface VM {
 	getVar(key: string): Value | undefined;
 	setVar(key: string, value: Value): void;
 	/**
-	 * User-defined-function call frame — a name-keyed `Map` of this call's
+	 * User-defined-function call frame, a name-keyed `Map` of this call's
 	 * bound arguments, PUSHED before `CALL_USER_FUNCTION` executes the
 	 * callee's body and POPPED immediately after (even if the body throws),
 	 * so nested/recursive calls (`double(double(5))`) each get their own
-	 * frame instead of clobbering a shared flat map — see `vm/VM.ts`'s
+	 * frame instead of clobbering a shared flat map. See `vm/VM.ts`'s
 	 * `CALL_USER_FUNCTION` case. Deliberately NOT the same store as
-	 * `setVar`'s flat `:name` variables — a call frame is call-scoped and
+	 * `setVar`'s flat `:name` variables, a call frame is call-scoped and
 	 * stacked (only the INNERMOST frame is ever consulted by `getVar`, see
-	 * its own doc comment — no lexical capture of an outer call's
+	 * its own doc comment, no lexical capture of an outer call's
 	 * parameters), a variable is session-scoped and flat.
 	 *
 	 * @throws `FUNCTION_RECURSION_LIMIT_EXCEEDED` if pushing would exceed
-	 *   the VM's configured `maxFunctionRecursionDepth` — the backstop for
+	 *   the VM's configured `maxFunctionRecursionDepth`, the backstop for
 	 *   `f(x) = f(x)`, which would otherwise recurse via nested
 	 *   `executeBytecode()` calls until the native V8 stack overflows
 	 *   uncatchably (each reentrant call gets its OWN fresh
@@ -155,11 +155,11 @@ export interface VM {
 	 */
 	pushCallFrame(frame: Map<string, Value>): void;
 	popCallFrame(): void;
-	/** Register (or redefine — overwrites any previous definition, matching `:name = value`'s own reassignment semantics) a user-defined function. */
+	/** Register (or redefine, overwrites any previous definition, matching `:name = value`'s own reassignment semantics) a user-defined function. */
 	defineUserFunction(name: string, params: string[], program: BytecodeProgram): void;
 	getUserFunction(name: string): UserFunctionDef | undefined;
 	hasUserFunction(name: string): boolean;
-	/** Register (or redefine) a bare equation (`a*x = rhs`), keyed by its free variable — see {@link EquationDef}. */
+	/** Register (or redefine) a bare equation (`a*x = rhs`), keyed by its free variable. See {@link EquationDef}. */
 	defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram): void;
 	getEquation(variable: string): EquationDef | undefined;
 	hasEquation(variable: string): boolean;
@@ -183,5 +183,5 @@ export interface VM {
 	context: EngineContext;
 }
 
-/** Shared singleton OpRegistry — used when no custom opcodes are needed. */
+/** Shared singleton OpRegistry, used when no custom opcodes are needed. */
 export const sharedOpRegistry = new OpRegistry();

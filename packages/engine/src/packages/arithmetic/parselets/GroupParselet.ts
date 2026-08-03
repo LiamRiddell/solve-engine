@@ -27,9 +27,9 @@ export class GroupParselet implements PrefixParselet {
     }
     parser.consume("RPAREN");
     if (count > 1) {
-      // Legacy bare-tuple vector sugar — a 1xN row-vector Matrix. Mirrors
+      // Legacy bare-tuple vector sugar, a 1xN row-vector Matrix. Mirrors
       // PrecedenceParser.ts's Tier-1 LPAREN_ID case, which is what actually
-      // runs in production — keep both in sync (see this file's own class
+      // runs in production, keep both in sync (see this file's own class
       // doc comment).
       builder.emitOpcode(OpCode.MAT_NEW);
       builder.emitIndex(1);

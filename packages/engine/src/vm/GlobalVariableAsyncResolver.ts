@@ -7,19 +7,19 @@ import type { IAsyncResolver, AsyncCheckResult } from "@solve-js/resolvers/Resol
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 
 /**
- * Async resolver for `global :name` reads that aren't yet known — i.e. no
+ * Async resolver for `global :name` reads that aren't yet known, i.e. no
  * currently-loaded document has run `global :name = value` for this name.
  *
  * Plugs into the engine's EXISTING async-resolution pipeline (the same one
  * CurrencyAsyncResolver/OsrsAsyncResolver use for currency rates and OSRS
  * prices): `preflight()` runs BEFORE the VM, and if a referenced global is
- * missing, returns an `AsyncCheckResult` — the engine immediately shows a
+ * missing, returns an `AsyncCheckResult`, the engine immediately shows a
  * Pending value and, when the returned promise resolves, re-executes the
  * line via the same batching/DAG/event-stream machinery already built and
  * tested for currency. No new UI wiring is needed: `ExpressionResultWidget`
  * already renders Pending as a spinner.
  *
- * Unlike currency/OSRS, there is no network fetch here and no timeout —
+ * Unlike currency/OSRS, there is no network fetch here and no timeout
  * the promise for a missing name resolves the moment ANY loaded document
  * calls `global :name = value` (via GlobalVariableStore.subscribe()), and
  * simply stays pending forever if nothing ever does. This mirrors how an
@@ -35,7 +35,7 @@ export class GlobalVariableAsyncResolver implements IAsyncResolver {
 	 *
 	 * Without this, every re-evaluation of a still-pending line (every
 	 * keystroke elsewhere in the document, every scroll, every unrelated
-	 * evaluate() call) would call preflight() again and — without dedup —
+	 * evaluate() call) would call preflight() again and, without dedup
 	 * create a BRAND NEW GlobalVariableStore subscription each time. Since
 	 * "never declared" is an explicitly supported, indefinitely-pending
 	 * outcome (no timeout), those listeners would never naturally clean
@@ -65,7 +65,7 @@ export class GlobalVariableAsyncResolver implements IAsyncResolver {
 			}
 
 			// Every opcode's operand width, needed to correctly skip operand
-			// bytes while scanning — mirrors the identical table already
+			// bytes while scanning, mirrors the identical table already
 			// duplicated in CurrencyAsyncResolver/OsrsAsyncResolver (this
 			// codebase has no shared bytecode-walking utility yet). Keep
 			// this in sync with those two files' switch blocks: an opcode
@@ -119,7 +119,7 @@ export class GlobalVariableAsyncResolver implements IAsyncResolver {
 
 	destroy(): void {
 		// The underlying GlobalVariableStore subscriptions self-remove on
-		// resolve; nothing here needs to force-unsubscribe in-flight ones —
+		// resolve; nothing here needs to force-unsubscribe in-flight ones
 		// letting an already-pending global keep waiting even after this
 		// particular resolver instance is torn down (e.g. package
 		// unregister/re-register elsewhere) is harmless, since the

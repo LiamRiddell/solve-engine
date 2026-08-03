@@ -13,16 +13,16 @@ import { TIME_DIFFERENCE_FN_IDX } from "./TimezonePluginFunctions";
  * `TimezonePluginFunctions.ts`).
  *
  * Triggered on the fused `TIME_DIFFERENCE_BETWEEN` token (the full
- * three-word phrase, fused by `TimePackage.ts`'s `phrases` field) —
+ * three-word phrase, fused by `TimePackage.ts`'s `phrases` field)
  * "difference" alone is a plausible variable name, so (matching this
  * package's other zone-query grammars) the trigger is the complete
  * phrase, not the bare word.
  *
- * "and" lexes as `PLUS`, not a literal "AND" token — see
+ * "and" lexes as `PLUS`, not a literal "AND" token. See
  * `ConditionalsPackage.ts`'s doc comment. The first zone reference is
  * read via `tryConsumeZoneReference`, which only ever consumes a single
- * token (or a short, self-contained `GMT+N` sequence) — never an
- * open-ended `expr` — so there's no risk of it swallowing the "and", the
+ * token (or a short, self-contained `GMT+N` sequence), never an
+ * open-ended `expr`, so there's no risk of it swallowing the "and", the
  * bindingPower guard other packages need for this collision doesn't
  * apply here.
  */

@@ -7,14 +7,14 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
 import { parseTransform, parseCollectionExpr, emitInvoke } from "../MapReduceShared";
 
 /**
- * `reduce(transform, collection[, initial])` — folds `collection` (a
+ * `reduce(transform, collection[, initial])`, folds `collection` (a
  * Matrix or a bare Range) into a single value using `transform`, an
  * inline expression using the reserved names `acc`/`x`
  * (`reduce(acc+x, [1,2,3])`) or a bare 2-argument function reference
- * (builtin or user-defined — `reduce(f, [1,2,3])` is `f(f(1,2),3)`).
+ * (builtin or user-defined, `reduce(f, [1,2,3])` is `f(f(1,2),3)`).
  *
  * Without `initial`, the collection's own first element seeds the
- * accumulator and folding starts from the second element — an empty
+ * accumulator and folding starts from the second element, an empty
  * collection is then a clear error (there's nothing to seed from). With
  * `initial`, folding starts from `initial` over EVERY element
  * (`reduce(f,[1,2,3],1000)` is `f(f(f(1000,1),2),3)`).
@@ -32,7 +32,7 @@ export class ReduceParselet implements PrefixParselet {
 
     let hasInitial = 0;
     if (parser.match("COMMA")) {
-      // A plain expression — an initial accumulator is just a value, no
+      // A plain expression, an initial accumulator is just a value, no
       // colon-range handling needed here (only the COLLECTION argument
       // accepts a bare Range).
       parser.parseExpression(BindingPower.Lowest, builder);

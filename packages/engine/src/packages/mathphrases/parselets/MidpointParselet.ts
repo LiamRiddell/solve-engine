@@ -8,12 +8,12 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
 /**
  * `midpoint between X and Y` -> (X + Y) / 2. Triggered on the fused
  * `MIDPOINT_BETWEEN` token (see MathPhrasesPackage.ts's `phrases` field).
- * Hand-written for the same reason as `LargerSmallerParselet` — once
+ * Hand-written for the same reason as `LargerSmallerParselet`, once
  * "between" is fused into the trigger, X (an `expr`) comes next, not a
  * keyword, which `definePhrasePattern` can't start an alternative with.
  *
  * X is parsed at `BindingPower.Product` to guard against the "and"-lexes-
- * as-PLUS collision (see ConditionalsPackage.ts's doc comment) —
+ * as-PLUS collision (see ConditionalsPackage.ts's doc comment)
  * otherwise X's own parse would greedily swallow "and Y" as addition
  * before this parselet's own "and" check ever runs.
  */

@@ -12,7 +12,7 @@ import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
  * treats it as a variable reference. By the time an infix parselet for
  * UNTIL/SINCE would run, the parser has already emitted (wrong) bytecode
  * for that bare UNIT as a variable lookup. Fusing at the normalizer stage
- * — before parsing starts — means prefix dispatch never sees a bare UNIT
+ *, before parsing starts, means prefix dispatch never sees a bare UNIT
  * in this position at all, avoiding any collision between the two
  * packages' UNIT handling.
  */

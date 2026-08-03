@@ -12,7 +12,7 @@
 //   - Object counts (reserved for Phase 2+ with --expose-gc heap snapshots)
 //
 // Design principle: Zero overhead when disabled. The enabled flag is a static
-// boolean — a single branch that V8's JIT eliminates when allocation tracking
+// boolean, a single branch that V8's JIT eliminates when allocation tracking
 // is disabled in production.
 
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
@@ -30,11 +30,11 @@ export type PipelineStage =
 export interface StageAllocation {
     /** Pipeline stage name. */
     stage: PipelineStage;
-    /** Number of objects allocated (reserved — requires --expose-gc snapshots). */
+    /** Number of objects allocated (reserved, requires --expose-gc snapshots). */
     allocCount: number;
     /** Heap bytes allocated (delta of process.memoryUsage().heapUsed). */
     allocBytes: number;
-    /** Breakdown of object types allocated (reserved — requires heap snapshots). */
+    /** Breakdown of object types allocated (reserved, requires heap snapshots). */
     objectCounts: Record<string, number>;
     /** Wall-clock duration in nanoseconds. */
     wallTimeNs: number;
@@ -73,7 +73,7 @@ export interface StageAggregate {
 // ── AllocationTracker ─────────────────────────────────────────────────────
 
 export class AllocationTracker {
-    /** Master kill-switch. Disabled in production — zero allocation overhead. */
+    /** Master kill-switch. Disabled in production, zero allocation overhead. */
     private static enabled: boolean = false;
 
     // ══ Lifecycle ═══════════════════════════════════════════════════════════
@@ -126,7 +126,7 @@ export class AllocationTracker {
             : performance.now();
 
         // ══ Execute the pipeline stage ══
-        // Errors propagate naturally — track() must not swallow.
+        // Errors propagate naturally, track() must not swallow.
         const result = fn();
 
         // ══ Capture post-execution state ══

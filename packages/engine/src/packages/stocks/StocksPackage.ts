@@ -7,18 +7,18 @@ import { stockTickerNormalizerRule, STOCK_TICKER_TYPE } from "./normalizer/Stock
 import type { StocksPackageConfig } from "./types";
 
 /**
- * Live stock prices — `stock(TICKER)`, `stock(TICKER) on <date>`,
+ * Live stock prices, `stock(TICKER)`, `stock(TICKER) on <date>`
  * `stock(TICKER) close on <date>`, `stock(TICKER) volume on <date>`, plus
  * an opt-in bare-ticker form (`AAPL`, `AAPL on April 12, 2005`, ...).
  *
  * **Why a factory, not a constant `STOCKS_PACKAGE` export**: unlike
- * Weather's Open-Meteo, there is no free/keyless stock-quote API — every
+ * Weather's Open-Meteo, there is no free/keyless stock-quote API, every
  * option surveyed (Alpha Vantage, Finnhub, Twelve Data, IEX Cloud, ...)
  * requires the HOST application to sign up for its own API key. Baking in
  * a specific paid provider (or worse, a hardcoded key) would either not
  * work out of the box for most hosts or silently commit them to a vendor
- * choice they didn't make. Instead this package is an extension point —
- * "packages are our approach, we're providing an SDK" — a host supplies
+ * choice they didn't make. Instead this package is an extension point
+ * "packages are our approach, we're providing an SDK", a host supplies
  * `fetchQuote`/`fetchHistoricalQuote` (backed by whichever provider and
  * key THEY have) via {@link createStocksPackage}'s `config` argument. No
  * config -> every stock expression resolves to a clearly-worded
@@ -27,25 +27,25 @@ import type { StocksPackageConfig } from "./types";
  * same "never guess a number the caller didn't provide" principle applied
  * to a different package).
  *
- * **Not a member of `BUILTIN_PACKAGES`** (see `packages/builtins.ts`) —
+ * **Not a member of `BUILTIN_PACKAGES`** (see `packages/builtins.ts`)
  * unconfigured, this package does nothing useful, exactly like
  * `examples/osrs` is deliberately excluded from the built-in set. A host
  * that wants it calls `createStocksPackage({ fetchQuote, ... })` and adds
  * the result to their `ExpressionEngine`'s `packages` array themselves.
  *
  * **Ticker recognition**: the function-call form `stock(TICKER)` is the
- * PRIMARY, always-reachable syntax — a bare all-caps word ("AAPL") is
+ * PRIMARY, always-reachable syntax, a bare all-caps word ("AAPL") is
  * genuinely ambiguous with a variable name (`:AAPL = 5` is a reasonable
  * thing to write), so it is never claimed unconditionally. The bare form
  * is available only via `config.enableBareTickerRecognition`, gated to a
- * small bundled allow-list of major tickers (`MajorTickers.ts`) — see
+ * small bundled allow-list of major tickers (`MajorTickers.ts`). See
  * `normalizer/StockTickerNormalizerRule.ts`'s doc comment for the full
  * reasoning, mirroring `time/timezones/CityZones.ts`'s known-table
  * mitigation for the same class of ambiguity.
  *
  * **Two separate async resolvers** (`stocks-current`/`stocks-historical`,
  * two distinct `CALL_PLUGIN` indices) rather than one shared one, unlike
- * Weather's single shared resolver — current-price and historical-close
+ * Weather's single shared resolver, current-price and historical-close
  * lookups warrant genuinely different `staleTimeMs` (a live quote goes
  * stale in seconds; a historical close for a fixed past date never goes
  * stale at all), and `createQueryResolver` bakes `staleTimeMs` into the
@@ -91,7 +91,7 @@ export function createStocksPackage(config: StocksPackageConfig = {}): IEnginePa
 
 		lexerVocabulary: {
 			// "stock" is claimed as a bare keyword (unlike Weather's phrase-
-			// fused triggers) — same trade-off `examples/osrs/OsrsLexerVocabulary.ts`
+			// fused triggers). Same trade-off `examples/osrs/OsrsLexerVocabulary.ts`
 			// accepts for "ge"/"osrs"/"price": acceptable ONLY because this
 			// whole package is opt-in (never in BUILTIN_PACKAGES), so the risk
 			// (":stock = 5" would collide if a host both uses that variable

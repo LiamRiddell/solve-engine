@@ -7,12 +7,12 @@
  * no global singleton is needed.
  *
  * Removed in this refactor:
- * - DataQueryWorker (worker thread) — doesn't solve anything in Obsidian's single-threaded env
- * - localCache (raw Map) — replaced by TanStack Query's built-in cache
- * - pendingQueries (manual promise plumbing) — TanStack Query handles dedup
- * - DataSourceHandle, registerDataSource, unregisterDataSource — no longer needed
- * - cleanupCache timer — TanStack Query's gc does this automatically
- * - cacheUpdateListeners / errorListeners — TanStack Query has its own observer API
+ * - DataQueryWorker (worker thread), doesn't solve anything in Obsidian's single-threaded env
+ * - localCache (raw Map), replaced by TanStack Query's built-in cache
+ * - pendingQueries (manual promise plumbing), TanStack Query handles dedup
+ * - DataSourceHandle, registerDataSource, unregisterDataSource, no longer needed
+ * - cleanupCache timer, TanStack Query's gc does this automatically
+ * - cacheUpdateListeners / errorListeners, TanStack Query has its own observer API
  */
 
 import { QueryClient } from "@tanstack/query-core";
@@ -21,7 +21,7 @@ import { QueryClient } from "@tanstack/query-core";
 // Synchronous VM plugin functions (dispatched via CALL_PLUGIN) can't receive
 // the engine's QueryClient through their (args) => Value ABI, so the engine
 // publishes the client here before each execution and package handlers read
-// it back. This module is the package-agnostic home for that hand-off —
+// it back. This module is the package-agnostic home for that hand-off
 // the engine must not import from a specific package (e.g. packages/osrs)
 // to wire it.
 

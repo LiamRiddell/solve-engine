@@ -7,16 +7,16 @@ import { OpCode } from "@solve-js/parser/OpCode";
 /**
  * The natural-question forms over a single date field:
  *
- * - `"on"` mode  — `what day is it on <date>` / `what month is it on <date>`
+ * - `"on"` mode, `what day is it on <date>` / `what month is it on <date>`
  *   / `weekday on <date>`, plus the BARE form (`what day is it`) which
  *   answers for right now.
- * - `"in"` mode  — `what day is it in <duration>`, i.e. the field of
+ * - `"in"` mode, `what day is it in <duration>`, i.e. the field of
  *   `now + <duration>`. `what day was it <duration> ago` is NOT this
  *   parselet: "ago" is a trailing word with no token of its own, so the
  *   backwards direction is spelled `what day is it in -30 days`, or
  *   `weekday on now - 30 days`.
  *
- * One parameterized class rather than six near-identical ones — the field
+ * One parameterized class rather than six near-identical ones, the field
  * differs only by which plugin function receives the epoch-ms, mirroring
  * how `NowParselet(offset)` and `NextLastParselet(direction)` already
  * parameterize instead of subclassing.

@@ -13,7 +13,7 @@ const CLAMP_BUILTIN_INDEX = 47;
  *
  * NOT built on {@link definePhrasePattern}: that builder requires every
  * alternative's first slot to be a `keyword`, but here the value X comes
- * immediately after the "clamp" trigger — there's no keyword to peek at
+ * immediately after the "clamp" trigger, there's no keyword to peek at
  * until AFTER X is already parsed. Same structural mismatch as
  * `IfThenElseParselet` (see its doc comment); hand-written for the same
  * reason.

@@ -23,39 +23,39 @@ import { MULTI_WORD_CITY_ZONES } from "./timezones/CityZones";
  * Clock-time-of-day arithmetic: `9:00am`, `16:00`, `4pm` (anchored to
  * today's calendar date), `7:30 to 20:45` / `4pm to 3am` interval
  * durations (midnight-rollover aware), `30 fps` frame-rate literals (a
- * `Rate` value — see `vm/Value.ts`), and `03:04:05` / `00:00:01.5`
+ * `Rate` value. See `vm/Value.ts`), and `03:04:05` / `00:00:01.5`
  * lap-time/stopwatch-split durations (two colons, vs clock-time's one).
- * Distinct from the Datetime package's calendar-date arithmetic — see
+ * Distinct from the Datetime package's calendar-date arithmetic. See
  * `packages/time/` vs `packages/datetime/`.
  *
  * Full HH:MM:SS:FF video-timecode literal parsing + fps-aware carry
  * arithmetic: `01:02:03:04 at 30 fps` / `... @ 30 fps` (a `Uom(totalFrames,
- * "timecode@<fps>")` value — see `vm/Value.ts`'s timecode section),
+ * "timecode@<fps>")` value. See `vm/Value.ts`'s timecode section)
  * `timecode + N frames` / `+ <duration>` / `+ timecode` (sum) / `-
- * timecode` (difference) — all special-cased in `vm/VM.ts`'s ADD/SUB
- * dispatch (`combineTimecode()`) — plus `timecode in frames` and the
+ * timecode` (difference), all special-cased in `vm/VM.ts`'s ADD/SUB
+ * dispatch (`combineTimecode()`), plus `timecode in frames` and the
  * reverse `<N> frames @ <fps>` -> `HH:MM:SS:FF` string conversion (see
  * `parselets/VideoTimecodeParselet.ts`/`FrameCountParselet.ts` and
  * `timecode/TimecodeMath.ts`). `30 fps × <duration>` frame-count math
- * (below) composes with this unchanged — the fps literal itself is
+ * (below) composes with this unchanged, the fps literal itself is
  * unaffected by any of the above. Likewise, pretty-printing a duration
  * back as `"3 hours 15 min"` (`as timespan`) or `"03:04:05"` (`as
- * laptime`) is a `converters` package (Phase 1c) concern — this package
+ * laptime`) is a `converters` package (Phase 1c) concern. This package
  * only produces the underlying `Uom` values.
  *
  * Also: timezone conversion (`6pm Sydney in Chicago`), current
  * time/date-in-a-zone queries (`time in Paris`, `date in Vancouver`), and
- * zone-offset deltas (`time difference between Seattle and Moscow`) — see
+ * zone-offset deltas (`time difference between Seattle and Moscow`). See
  * `timezones/CityZones.ts`/`ZoneMath.ts`. Built entirely on native
  * `Intl.DateTimeFormat`/IANA data, no external dependency. Results are
- * `String` values (formatted, human-readable), not `Datetime` — this
+ * `String` values (formatted, human-readable), not `Datetime`. This
  * engine's `Datetime` representation is a bare epoch-ms number with no
  * zone tag, so there's no way to represent "this instant, but interpreted
  * through zone X" as anything other than a pre-formatted string; see
  * `ZoneMath.ts`'s doc comment.
  *
  * SCOPE DECISION: the alternate phrasing `<City> time` (e.g. "Tokyo
- * time", city first) is deliberately NOT implemented — it would need
+ * time", city first) is deliberately NOT implemented, it would need
  * "time" registered as a keyword reachable from a BARE city identifier's
  * infix position, and "time" is exactly the kind of common noun this
  * session found real trouble with (see MathPhrasesPackage.ts's "total"

@@ -14,7 +14,7 @@ import type { TokenLookup } from "@solve-js/lexer/TokenClassRegistry";
  * callers can iterate a line's tokens without re-scanning on each peek.
  *
  * Each `ExpressionEngine` instance owns its own `Lexer`, and packages
- * extend it via {@link registerVocabulary} (keywords, operators, units) —
+ * extend it via {@link registerVocabulary} (keywords, operators, units)
  * see `IEnginePackage.lexerVocabulary`.
  */
 export class Lexer {
@@ -36,7 +36,7 @@ export class Lexer {
    *   keyword/unit/phrase lookups instead of internal instance maps.
    */
   constructor(localeCode = "en", tokenLookup?: TokenLookup) {
-    // Pass the lookup directly to ExpressionLexer's constructor — it's an
+    // Pass the lookup directly to ExpressionLexer's constructor, it's an
     // instance field now, not a static. Each Lexer instance gets its own
     // isolated lookup, preventing cross-instance corruption.
     this.expressionLexer = new ExpressionLexer(localeCode, tokenLookup);
@@ -58,12 +58,12 @@ export class Lexer {
         this.tokenIdx = 0;
         return;
       }
-      // Expression line or markdown line with inline solves — tokenize.
+      // Expression line or markdown line with inline solves, tokenize.
       this.expressionLexer.reset(input);
       this.tokens = this.expressionLexer.tokenizeAll();
       this.tokenIdx = 0;
     } else {
-      // Non-main states (Inline, String) — expression tokenization.
+      // Non-main states (Inline, String), expression tokenization.
       this.expressionLexer.reset(input);
       this.tokens = this.expressionLexer.tokenizeAll();
       this.tokenIdx = 0;
@@ -136,7 +136,7 @@ export class Lexer {
   }
 
   /**
-   * Reset the lexer for expression-only text — skips the classifyLine()
+   * Reset the lexer for expression-only text, skips the classifyLine()
    * overhead in reset() for callers that already know the input is an
    * evaluable expression (e.g., after isEmptyLine() confirmed non-skip).
    */
@@ -153,7 +153,7 @@ export class Lexer {
    * Scan a full document in one pass, classifying each line and
    * tokenizing non-skipped lines. Delegates to ExpressionLexer.
    *
-   * @returns ScanLineResult[] — one per line, with classification + tokens.
+   * @returns ScanLineResult[], one per line, with classification + tokens.
    */
   scanDocument(text: string): ScanLineResult[] {
     return this.expressionLexer.scanDocument(text);

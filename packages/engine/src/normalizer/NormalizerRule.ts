@@ -1,7 +1,7 @@
 //#region ─── Module Overview ───────────────────────────────────────────────────
 
 /**
- * NormalizerRule — pluggable token normalization rule for the
+ * NormalizerRule, pluggable token normalization rule for the
  * TokenNormalizer post-lexer pass.
  *
  * ## Purpose
@@ -27,7 +27,7 @@
  * ## Why a separate file?
  * This is a duplicate-free copy of the interface defined in
  * TokenNormalizer.ts. Storing it in a separate file avoids circular
- * imports — TokenNormalizer imports NormalizerRule, and rule factories
+ * imports, TokenNormalizer imports NormalizerRule, and rule factories
  * import TokenNormalizer's `createFusedToken`.
  *
  * @module NormalizerRule
@@ -39,7 +39,7 @@
 import type { Token } from "@solve-js/lexer/Token";
 
 //#endregion
-//#region ─── NormalizerMatch — Rule Match Result ──────────────────────────────
+//#region ─── NormalizerMatch, Rule Match Result ──────────────────────────────
 
 /**
  * Result of a successful rule match attempt against the token stream.
@@ -60,7 +60,7 @@ import type { Token } from "@solve-js/lexer/Token";
 export interface NormalizerMatch {
   /**
    * Number of tokens consumed from the stream at the match position.
-   * Must be ≥ 1 — a match always advances the cursor.
+   * Must be ≥ 1, a match always advances the cursor.
    */
   consumed: number;
 
@@ -81,7 +81,7 @@ export interface NormalizerMatch {
 }
 
 //#endregion
-//#region ─── NormalizerRule — Pluggable Rule Interface ────────────────────────
+//#region ─── NormalizerRule, Pluggable Rule Interface ────────────────────────
 
 /**
  * A pluggable normalization rule registered with the TokenNormalizer.
@@ -150,7 +150,7 @@ export interface NormalizerRule {
 }
 
 //#endregion
-//#region ─── TokenFusion — Fusion Event Record ────────────────────────────────
+//#region ─── TokenFusion, Fusion Event Record ────────────────────────────────
 
 /**
  * Record of a token fusion event performed by the normalizer.
@@ -175,7 +175,7 @@ export interface TokenFusion {
   /** The name of the rule that triggered this fusion (e.g., "phrase:to the power of") */
   rule: string;
 
-  /** The original tokens before fusion — always ≥ 2 tokens */
+  /** The original tokens before fusion, always ≥ 2 tokens */
   sourceTokens: Token[];
 
   /** The resulting fused token with its new type and combined value */

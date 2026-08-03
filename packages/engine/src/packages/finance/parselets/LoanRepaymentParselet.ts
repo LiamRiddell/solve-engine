@@ -7,17 +7,17 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
 
 /**
  * `[daily|monthly|annual|total] repayment on <principal> over <years> at
- * <rate>%` and the `interest` variants — the standard mortgage/loan
+ * <rate>%` and the `interest` variants, the standard mortgage/loan
  * amortization formula (see VMBuiltins.ts indices 52/53's `amortizeLoan()`
  * for the math, verified against real worked numbers).
  *
  * Triggered on 8 distinct fused tokens (`DAILY_REPAYMENT_ON`,
  * `MONTHLY_REPAYMENT_ON`, `ANNUAL_REPAYMENT_ON`, `TOTAL_REPAYMENT_ON`,
  * `DAILY_LOAN_INTEREST_ON`, `MONTHLY_LOAN_INTEREST_ON`,
- * `ANNUAL_LOAN_INTEREST_ON`, `TOTAL_LOAN_INTEREST_ON` — see
+ * `ANNUAL_LOAN_INTEREST_ON`, `TOTAL_LOAN_INTEREST_ON`. See
  * FinancePackage.ts's `phrases` field), one instance of this class per
  * token, each parameterized by which builtin to call and which
- * `periodsPerYear` divisor to push (365/12/1/0) — same
+ * `periodsPerYear` divisor to push (365/12/1/0). Same
  * one-class-many-registrations shape as MathPhrases'
  * `VariadicAggregateParselet`/`ClampParselet`.
  *
@@ -27,7 +27,7 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
  *
  * Emits `[principal, years, rate]` in parse order, `SWAP`s to
  * `[principal, rate, years]` (matching the shared builtins'
- * `(principal, rate, years, periodsPerYear)` signature — see
+ * `(principal, rate, years, periodsPerYear)` signature. See
  * CompoundInterestParselet.ts's doc comment for why), then pushes the
  * literal `periodsPerYear` constant before the CALL_BUILTIN.
  */

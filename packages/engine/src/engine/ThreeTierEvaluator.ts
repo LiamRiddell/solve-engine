@@ -37,7 +37,7 @@ export enum EvalTier {
 	Tier2 = 2,
 	/** Compile-only for dependency tracking (invisible). Executes only variable assignments. */
 	Tier3 = 3,
-	/** Skipped — already clean or non-evaluable. */
+	/** Skipped, already clean or non-evaluable. */
 	Skipped = 0,
 }
 
@@ -105,7 +105,7 @@ export class ThreeTierEvaluator {
 	private pageManager: PageManager;
 
 	/**
-	 * Unsubscribe from sharedGlobalVariableStore — set in the constructor,
+	 * Unsubscribe from sharedGlobalVariableStore, set in the constructor
 	 * called from terminateWorker(). See the subscription itself below for
 	 * why this only marks lines dirty and never re-evaluates synchronously.
 	 */
@@ -131,7 +131,7 @@ export class ThreeTierEvaluator {
 
 		// Lets the engine answer "what's line N's cached result" for
 		// cross-line features (prev/line<N>/aggregation) without owning
-		// document lifecycle itself — see ExpressionEngine.makeLineContext().
+		// document lifecycle itself. See ExpressionEngine.makeLineContext().
 		this.engine.setDocumentModel(this.doc);
 
 		// ── Cross-document global-variable propagation ──────────────────
@@ -140,10 +140,10 @@ export class ThreeTierEvaluator {
 		// the ONGOING case: a line that already has a real (non-pending)
 		// value for `global :x` needs to go dirty again when some OTHER
 		// document writes a NEW value to x, so this document's next
-		// evaluate() picks up the change — "dealing with the DAG across
+		// evaluate() picks up the change, "dealing with the DAG across
 		// pages", not just first-resolution.
 		this.globalUnsubscribe = sharedGlobalVariableStore.subscribe((name) => {
-			// Mark-dirty ONLY — never synchronously re-evaluate here.
+			// Mark-dirty ONLY, never synchronously re-evaluate here.
 			// enableValueArena/disableValueArena (Value.ts) is a single
 			// non-reentrant module-level flag; evaluate()/setViewport() both
 			// wrap their body in it, so a re-entrant evaluate() call from
@@ -221,7 +221,7 @@ export class ThreeTierEvaluator {
 			// from being used by subsequent evaluations from other code paths.
 			this.engine.setKeystrokeSignal(null);
 
-			// Phase 5.3: Always disable arena — even on exception.
+			// Phase 5.3: Always disable arena, even on exception.
 			// Prevents arena Values from leaking into subsequent evaluations or tests.
 			disableValueArena();
 		}
@@ -250,10 +250,10 @@ export class ThreeTierEvaluator {
 			const state = this.doc.getLineAt(pos);
 			if (!state) continue;
 
-			// Skip clean lines — already compiled + executed
+			// Skip clean lines, already compiled + executed
 			if (!state.dirty) continue;
 
-			// Skip already-compiled Tier 3 lines — they have bytecode
+			// Skip already-compiled Tier 3 lines, they have bytecode
 			// but were compiled without execution (non-variable-def).
 			// Recompiling is wasteful since the text hasn't changed
 			// (text change clears bytecodes via editLine).
@@ -278,7 +278,7 @@ export class ThreeTierEvaluator {
 	 * so bytecode appears on the main thread without serialization overhead.
 	 *
 	 * Lines that already have cached bytecode (from a previous worker pass or
-	 * synchronous compile) are skipped — only truly uncompiled dirty lines are
+	 * synchronous compile) are skipped, only truly uncompiled dirty lines are
 	 * sent to the worker.
 	 *
 	 * **Usage:** Call after `evaluate()` so visible lines render first, then
@@ -301,7 +301,7 @@ export class ThreeTierEvaluator {
 		this.compilationWorker.compileBatch(items).then((results) => {
 			this.compilationWorker!.storeResults(results, this.doc);
 		}).catch((_err) => {
-			// Worker failure is non-fatal — next evaluate() will compile
+			// Worker failure is non-fatal, next evaluate() will compile
 			// these expressions synchronously.
 		});
 	}
@@ -309,7 +309,7 @@ export class ThreeTierEvaluator {
 	/**
 	 * Terminate the compilation worker if active, and unsubscribe from
 	 * sharedGlobalVariableStore. Call this when the evaluator is no longer
-	 * needed to clean up resources — every call site that retires a
+	 * needed to clean up resources, every call site that retires a
 	 * ThreeTierEvaluator (document switch, pane destroy()) already calls
 	 * this unconditionally, so folding the global-store unsubscribe in here
 	 * needs no new call sites anywhere.
@@ -344,14 +344,14 @@ export class ThreeTierEvaluator {
 	}
 
 	/**
-	 * Zero-allocation viewport evaluation — the Phase 5.2e "holy grail."
+	 * Zero-allocation viewport evaluation, the Phase 5.2e "holy grail."
 	 *
 	 * **Key insight:** When the user scrolls (viewport-only change, no edits),
 	 * we don't need to re-evaluate from line 1. Instead:
 	 *
 	 * 1. Restore the VM to just before the viewport via the nearest checkpoint.
 	 * 2. Evaluate ONLY the visible lines (Tier 2 for clean cached, Tier 1 for dirty).
-	 * 3. Lines before the viewport are completely skipped — their state lives in
+	 * 3. Lines before the viewport are completely skipped, their state lives in
 	 *    the VM checkpointer's prototypal chain.
 	 *
 	 * **Correctness guard:** If any variable-definition line before the viewport
@@ -359,7 +359,7 @@ export class ThreeTierEvaluator {
 	 * re-evaluated yet), we clear stale checkpoints and fall back to `evaluate()`
 	 * which processes from line 1 and rebuilds fresh checkpoints. This
 	 * guarantees that stale checkpoints are never used as restoration targets.
-	 * Only variable-def lines matter here — `VMCheckpointer.snapshot()` only
+	 * Only variable-def lines matter here, `VMCheckpointer.snapshot()` only
 	 * records state for lines that write a variable, so a dirty plain-expression
 	 * line before the viewport has no checkpoint to invalidate (see
 	 * `DocumentModel.hasAnyDirtyVariableDefLineBefore()`).
@@ -378,7 +378,7 @@ export class ThreeTierEvaluator {
 
 		// ── Correctness guard: dirty lines before viewport invalidate checkpoints ──
 		if (viewport.startLine > 1 && this.hasDirtyLinesBefore(viewport.startLine)) {
-			// Clear stale checkpoints — evaluate() will rebuild them from line 1.
+			// Clear stale checkpoints, evaluate() will rebuild them from line 1.
 			// evaluate() handles its own arena enable/disable and signal cleanup.
 			this.checkpointer?.clear();
 			return this.evaluate(viewport, signal);
@@ -406,7 +406,7 @@ export class ThreeTierEvaluator {
 			// Clear keystroke signal to prevent stale signal references.
 			this.engine.setKeystrokeSignal(null);
 
-			// Phase 5.3: Always disable arena — even on exception.
+			// Phase 5.3: Always disable arena, even on exception.
 			// Prevents cross-test contamination from arena leaks.
 			disableValueArena();
 		}
@@ -458,7 +458,7 @@ export class ThreeTierEvaluator {
 
 		// Resolve downstream consumers to persistent lineIds BEFORE the
 		// structural change shifts line numbers. After applyChanges(),
-		// we mark these lineIds dirty — their positions don't matter.
+		// we mark these lineIds dirty, their positions don't matter.
 		const downstreamLineIds = new Set<number>();
 		for (const writeVar of allWrites) {
 			const affected = this.dag.getAffectedLines(writeVar);
@@ -503,7 +503,7 @@ export class ThreeTierEvaluator {
 	 * Collect evaluation results for a contiguous range of lines.
 	 *
 	 * Used by both `evaluate()` (startLine=1) and `setViewport()` (any start).
-	 * All lines in the range are treated as in-viewport (visible) — callers that
+	 * All lines in the range are treated as in-viewport (visible), callers that
 	 * need the invisible/dirty → Tier 3 handling should use `evaluate()` instead.
 	 *
 	 * @param startLine First line to evaluate (1-based, inclusive).
@@ -556,19 +556,19 @@ export class ThreeTierEvaluator {
 	 * Deliberately narrower than `DocumentModel.hasAnyDirtyLineBefore()`:
 	 * checkpoints only snapshot variable-def lines (see VMCheckpointer), so a
 	 * dirty plain-expression line before the viewport can't have invalidated
-	 * one — there's nothing checkpointed for it to invalidate. Using the
+	 * one, there's nothing checkpointed for it to invalidate. Using the
 	 * broader check here previously caused a real perf bug: `PageManager`'s
 	 * cold-page eviction marks evicted non-variable-def lines dirty, so
 	 * scrolling far into a large, variable-def-free document would trip this
 	 * guard, fall back to `evaluate()`, which recompiles those lines via
 	 * Tier 3 (never clearing their dirty flag by design), causing the very
-	 * next `maintainAfterEval()` to re-evict and re-dirty them — a
+	 * next `maintainAfterEval()` to re-evict and re-dirty them, a
 	 * self-sustaining loop that pinned every subsequent `setViewport()` call
 	 * to the cost of a full re-evaluation instead of O(visible lines).
 	 *
 	 * Delegates to DocumentModel.hasAnyDirtyVariableDefLineBefore(), which
 	 * tracks dirty lineIds incrementally instead of scanning every line up to
-	 * `position` on every call — this used to be a real per-scroll cost
+	 * `position` on every call. This used to be a real per-scroll cost
 	 * (benchmarked at ~10ms scrolled near the bottom of a 20k-line document)
 	 * since it fired on every viewport change, not just edits.
 	 */
@@ -641,7 +641,7 @@ export class ThreeTierEvaluator {
 	}
 
 	/**
-	 * Tier 1: Full pipeline — lex, parse, compile, execute.
+	 * Tier 1: Full pipeline, lex, parse, compile, execute.
 	 * Uses the engine's existing evaluateLine() which handles all pipeline
 	 * stages including DAG updates and LineCache population.
 	 *
@@ -668,7 +668,7 @@ export class ThreeTierEvaluator {
 		/** Set when any expression returned a value still waiting on a resolver. */
 		let anyPending = false;
 
-		// Evaluate each expression independently — a failure in one expression
+		// Evaluate each expression independently, a failure in one expression
 		// (e.g., parse error in s`bad syntax`) must not prevent other expressions
 		// on the same line from being evaluated and having their results stored.
 		// Without per-expression error handling, same-line cross-reference inline
@@ -708,7 +708,7 @@ export class ThreeTierEvaluator {
 			if (value) {
 				allResults.push(value);
 			} else {
-				// Expression failed — push an ErrorValue sentinel so results[] stays
+				// Expression failed, push an ErrorValue sentinel so results[] stays
 				// aligned with expressions[] and bytecodes[] indices. Downstream code
 				// checking result.type === Error will find it, vs a raw null that NPEs.
 				allResults.push([errorValue("eval_failed", firstError ?? "unknown error")]);
@@ -722,7 +722,7 @@ export class ThreeTierEvaluator {
 					hasVariableDef = true;
 				}
 			} else {
-				// Fallback: LineCache missed — compile expression ourselves
+				// Fallback: LineCache missed, compile expression ourselves
 				try {
 					const { program, reads, writes } = this.engine.compileExpression(expression);
 					allBytecodes.push(program);
@@ -730,9 +730,9 @@ export class ThreeTierEvaluator {
 					for (const w of writes) allWrites.add(w);
 					if (writes.length > 0) hasVariableDef = true;
 				} catch (compileErr) {
-					// Push empty bytecode — expression will recompile on next pass.
+					// Push empty bytecode, expression will recompile on next pass.
 					// The expression still failed to compile, but reads/writes were
-					// already extracted from its tokens before the parse attempt —
+					// already extracted from its tokens before the parse attempt
 					// compileExpression() surfaces them via the thrown error's
 					// context. Register them anyway so the DAG knows this line
 					// depends on those variables and re-evaluates it once they
@@ -751,7 +751,7 @@ export class ThreeTierEvaluator {
 		const reads = [...allReads];
 		const writes = [...allWrites];
 
-		// Always store results — even partial ones. If any expression failed,
+		// Always store results, even partial ones. If any expression failed
 		// the line stays dirty so the failed expression(s) get retried on the
 		// next evaluation pass. But successfully-evaluated expressions' results
 		// are preserved so the DAG, UI decorations, and downstream consumers
@@ -775,7 +775,7 @@ export class ThreeTierEvaluator {
 			state.inlineSolveCount = inlineSolveCount;
 			state.expressions = expressions;
 		} else {
-			// All expressions succeeded — store full results and mark clean
+			// All expressions succeeded, store full results and mark clean
 			this.doc.updateLineResult(
 				state.lineId,
 				allResults,
@@ -789,7 +789,7 @@ export class ThreeTierEvaluator {
 		}
 
 		// Register reads/writes in DAG (aggregated across all expressions).
-		// Always register — even lines with no reads/writes (pure expressions
+		// Always register, even lines with no reads/writes (pure expressions
 		// like "2+2") need DAG entries so downstream queries for line presence work.
 		this.dag.registerLine(lineNumber, reads, writes);
 
@@ -811,9 +811,9 @@ export class ThreeTierEvaluator {
 
 	/**
 	 * Tier 2: Execute from cached bytecode only.
-	 * Skips lexing, parsing, and compiling — runs the pre-compiled bytecode
+	 * Skips lexing, parsing, and compiling, runs the pre-compiled bytecode
 	 * against the engine's shared VM. Supports multiple bytecodes per line
-	 * (inline solves) — each is executed left-to-right so variable definitions
+	 * (inline solves), each is executed left-to-right so variable definitions
 	 * in earlier bytecodes update the VM before later ones run.
 	 * Assumes the VM already has correct variable state from preceding
 	 * Tier-1 evaluations.
@@ -832,7 +832,7 @@ export class ThreeTierEvaluator {
 		let firstError: string | null = null;
 		let anyFailed = false;
 
-		// Execute each bytecode independently — a failure in one should not
+		// Execute each bytecode independently, a failure in one should not
 		// prevent other bytecodes on the same line from executing. Same-line
 		// inline solves with variable definitions (s`:a = 5` s`a + 3`) rely
 		// on earlier bytecodes updating the VM before later ones execute.
@@ -852,7 +852,7 @@ export class ThreeTierEvaluator {
 		}
 
 		// Update DAG: re-register reads/writes from the cached metadata.
-		// Always register — even empty reads/writes so DAG line-presence queries work.
+		// Always register, even empty reads/writes so DAG line-presence queries work.
 		this.dag.registerLine(lineNumber, state.reads, state.writes);
 
 		state.results = results;
@@ -871,7 +871,7 @@ export class ThreeTierEvaluator {
 	 * Executes the bytecode ONLY if the line defines a variable (isVariableDef
 	 * or writes.length > 0), because variable assignments affect VM state
 	 * that other lines depend on. Pure expression lines are compiled but NOT
-	 * executed — saving CPU for large documents.
+	 * executed, saving CPU for large documents.
 	 *
 	 * Supports multiple expressions per line (inline solves). Each is compiled
 	 * separately; variable-def expressions are also executed.
@@ -893,7 +893,7 @@ export class ThreeTierEvaluator {
 		/** Set when a result is still waiting on a resolver. */
 		let anyPending = false;
 
-		// Compile each expression independently — a parse error in one
+		// Compile each expression independently, a parse error in one
 		// should not prevent other expressions from being compiled and
 		// having their reads/writes registered in the DAG.
 		for (const expression of expressions) {
@@ -927,7 +927,7 @@ export class ThreeTierEvaluator {
 		const reads = [...allReads];
 		const writes = [...allWrites];
 
-		// Store compile-only state in DocumentModel — even partial results
+		// Store compile-only state in DocumentModel, even partial results
 		// preserve successful expressions' bytecodes and DAG data.
 		this.doc.updateLineCompiled(
 			state.lineId,
@@ -939,8 +939,8 @@ export class ThreeTierEvaluator {
 			inlineSolveCount,
 		);
 
-		// Register reads/writes in DAG regardless — partial data is valid.
-		// Always register — even empty reads/writes for DAG line-presence queries.
+		// Register reads/writes in DAG regardless, partial data is valid.
+		// Always register, even empty reads/writes for DAG line-presence queries.
 		this.dag.registerLine(lineNumber, reads, writes);
 
 		if (hasVariableDef && lastResult && !anyFailed && !anyPending) {
@@ -1018,7 +1018,7 @@ export class ThreeTierEvaluator {
 		this.compilationWorker.compileBatch(targets).then((results) => {
 			this.compilationWorker!.storeResults(results, this.doc);
 		}).catch((_err) => {
-			// Non-fatal — next evaluate() will compile synchronously
+			// Non-fatal, next evaluate() will compile synchronously
 		});
 	}
 

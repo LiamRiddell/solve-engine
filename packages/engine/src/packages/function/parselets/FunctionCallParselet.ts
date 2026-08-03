@@ -9,11 +9,11 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 /**
  * Exported so `packages/mapreduce/`'s parselets can resolve a bare
  * function-name argument (`map(cos, ...)`) to its builtin index AT PARSE
- * TIME — the same map this file's own `FunctionCallParselet` uses for
+ * TIME, the same map this file's own `FunctionCallParselet` uses for
  * ordinary `sqrt(x)`-style calls. A name NOT found here is deferred to
  * runtime as a possible user-defined-function reference instead (resolved
  * dynamically via `vm.getUserFunction()`, mirroring `CALL_USER_FUNCTION`'s
- * own forward-reference philosophy) — see `MapParselet`/`ReduceParselet`.
+ * own forward-reference philosophy). See `MapParselet`/`ReduceParselet`.
  */
 export const builtinNameToIndex: Record<string, number> = {
   sqrt: 0, abs: 1, sin: 2, cos: 3, tan: 4, log: 5,
@@ -38,11 +38,11 @@ export const builtinNameToIndex: Record<string, number> = {
   // this name map either.
   // 47 (clamp) is emitted via the CLAMP keyword's dedicated parselet.
   hex: 48, bin: 49, int: 50,
-  // Finance (packages/finance/) function-call forms — see VMBuiltins.ts
+  // Finance (packages/finance/) function-call forms. See VMBuiltins.ts
   // indices 51-59 for the implementations. The phrase-grammar forms
   // ("compound interest on ...", "monthly repayment on ...", "tax on ...")
   // are hand-written parselets in packages/finance/parselets/, not routed
-  // through this name map — see FinancePackage.ts.
+  // through this name map. See FinancePackage.ts.
   compoundinterest: 51, interestearned: 52,
   compoundinterestrate: 53, compoundinterestyears: 54,
   loanrepayment: 55, loaninterest: 56, monthlypayment: 57,

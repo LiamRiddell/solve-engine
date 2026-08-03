@@ -6,9 +6,9 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
- * Matrix literal — `[1, 2; 3, 4]` (comma-separated values within a row,
+ * Matrix literal, `[1, 2; 3, 4]` (comma-separated values within a row
  * semicolon-separated rows). A single row with no semicolons, `[1, 2, 3]`,
- * is a 1xN row-vector Matrix — Calca's own convention, and this engine's
+ * is a 1xN row-vector Matrix, Calca's own convention, and this engine's
  * primary construction syntax going forward (see
  * `packages/vector/parselets/VectorParselet.ts`'s doc comment for the
  * legacy `vec2(...)`/bare-tuple sugar this supersedes).
@@ -18,7 +18,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
  * descent, exactly like a function-call argument list.
  *
  * Confirmed zero grammar collision: `LBRACKET`/`RBRACKET` have no other
- * prefix/infix parselet registered anywhere in this engine — the only
+ * prefix/infix parselet registered anywhere in this engine, the only
  * other consumer is `datetime/normalizer/DailyNoteLinkNormalizerRule.ts`'s
  * narrow DOUBLE-bracket `[[2024-01-15]]` daily-note-link unwrap, which
  * only ever matches that exact 5-token shape and never single brackets.
@@ -30,7 +30,7 @@ export class MatrixLiteralParselet implements PrefixParselet {
     let rows = 0;
     let cols = -1; // -1 = not yet known (set by the first row)
 
-    // Empty matrix literal `[]` — reject rather than silently emit a 0x0
+    // Empty matrix literal `[]`, reject rather than silently emit a 0x0
     // Matrix, which every downstream consumer (arithmetic, indexing,
     // display) would have to special-case for no real benefit.
     if (parser.peek()?.type === "RBRACKET") {
@@ -67,7 +67,7 @@ export class MatrixLiteralParselet implements PrefixParselet {
     parser.consume("RBRACKET");
 
     // Cells were parsed/pushed in row-major reading order (matching how
-    // `[1,2;3,4]` is textually written) — MAT_NEW's own VM handler
+    // `[1,2;3,4]` is textually written), MAT_NEW's own VM handler
     // transposes this into the column-major storage MatrixData actually
     // uses (see vm/MatrixOps.ts's rowMajorToColumnMajor()).
     builder.emitOpcode(OpCode.MAT_NEW);

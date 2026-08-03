@@ -3,12 +3,12 @@ import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { isInsideRangeContext } from "@solve-js/normalizer/BuiltinNormalizerRules";
 
 /**
- * Fuses a lap-time / stopwatch-split literal — `HH:MM:SS[.f]`, always
- * TWO colons — into a single `LAPTIME` prefix token carrying total
+ * Fuses a lap-time / stopwatch-split literal, `HH:MM:SS[.f]`, always
+ * TWO colons, into a single `LAPTIME` prefix token carrying total
  * seconds (fractional-precision) as its value.
  *
  * A laptime is a DURATION, not a point in time (unlike clock-time's one
- * colon) — SoulverCore's own docs note "a laptime must include two
+ * colon), SoulverCore's own docs note "a laptime must include two
  * colons so Soulver can distinguish it from a clock time," which this
  * rule mirrors: it must run at HIGHER priority than
  * {@link clockTimeNormalizerRule} so `03:04:05` gets a chance to match
@@ -20,7 +20,7 @@ export function laptimeNormalizerRule(priority = 70): NormalizerRule {
     name: "time:laptime",
     priority,
     match(tokens, pos): NormalizerMatch | null {
-      // See ClockTimeNormalizerRule's identical guard — a laptime inside
+      // See ClockTimeNormalizerRule's identical guard, a laptime inside
       // `[...]` has no legitimate meaning; reserved for matrix ranges.
       if (isInsideRangeContext(tokens, pos)) return null;
       const h = tokens[pos];

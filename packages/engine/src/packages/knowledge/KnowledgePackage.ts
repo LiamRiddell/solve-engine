@@ -6,67 +6,67 @@ import { knowledgeQueryParselet } from "./parselets/KnowledgeQueryParselet";
 import type { KnowledgePackageConfig } from "./types";
 
 /**
- * Knowledge-assistant queries — open-ended questions answered by a
+ * Knowledge-assistant queries, open-ended questions answered by a
  * host-supplied provider. Two supported surface forms, both producing the
  * exact same `KNOWLEDGE_QUERY` token/behavior (see the two
  * `rawLinePatterns` entries below):
  *
  * - **`search: <query>` / `ask: <query>` / `google: <query>`** (preferred,
- *   added this iteration) — a clear, self-documenting leading verb, e.g.
+ *   added this iteration), a clear, self-documenting leading verb, e.g.
  *   `search: distance to the moon`. Reads like an instruction, not a
  *   cryptic punctuation puzzle.
  * - **`<query> = ?`** (the original form, kept for Calca-style
- *   compatibility — see `OTHER_APPS_FEATURE_AUDIT.md`'s Calca section),
+ *   compatibility. See `OTHER_APPS_FEATURE_AUDIT.md`'s Calca section)
  *   e.g. `distance to the moon = ?`. Less discoverable (a bare trailing
  *   `= ?` doesn't read as "ask a question" the way a leading verb does),
- *   but harmless to keep alongside the clearer form — this package has no
+ *   but harmless to keep alongside the clearer form. This package has no
  *   opinion about which one a host's users end up preferring.
  *
  * SoulverCore's own version of this feature calls out to Wolfram|Alpha;
- * there is no free equivalent of comparable quality, so — same
- * pluggable-provider approach as `packages/stocks` — a host supplies
+ * there is no free equivalent of comparable quality, so. Same
+ * pluggable-provider approach as `packages/stocks`, a host supplies
  * `answerQuery` via {@link createKnowledgePackage}'s `config` argument. No
  * config -> every query resolves to a clearly-worded
  * `KNOWLEDGE_NOT_CONFIGURED` error `Value`, never a hallucinated/guessed
  * answer.
  *
- * **Not a member of `BUILTIN_PACKAGES`** — unconfigured, this package does
+ * **Not a member of `BUILTIN_PACKAGES`**, unconfigured, this package does
  * nothing useful, exactly like `packages/stocks` and `examples/osrs`.
  *
  * ## Why this package is architecturally different from every other one
  *
  * Every other package in this codebase (including its sibling
- * `weather`/`stocks`) is "structured syntax evaluates to a value" — the
+ * `weather`/`stocks`) is "structured syntax evaluates to a value", the
  * grammar is known in advance, and the lexer/parser tokenize it like any
  * other expression. This package's grammar is "arbitrary free text,
  * terminated (or introduced) by a fixed marker, gets shipped to an
- * external function verbatim" — `distance to the moon` is not valid Solve
+ * external function verbatim", `distance to the moon` is not valid Solve
  * syntax (it would never parse as arithmetic), so it can't be
  * tokenized-then-parsed the normal way at all.
  *
  * The fix lives one layer below the parser: `ExpressionLexer.ts` gained a
  * new, generic extension point, `LexerVocabulary.rawLinePatterns` (see
  * its doc comment there for the full design). A `rawLinePatterns` rule
- * tests the RAW line text — before any per-character tokenization — and
+ * tests the RAW line text, before any per-character tokenization, and
  * if it matches, the whole line becomes ONE synthetic token whose value
  * is the matched capture group, verbatim. This package is that
  * mechanism's reference/motivating use.
  *
  * **Why `search:`/`ask:`/`google:` require a literal trailing colon, not
  * just a following space**: without it, `search 5` (a line reading the
- * plain variable `search` — legitimately assignable via `:search = 5`,
- * since these are ordinary lowercase words, not reserved — followed by
+ * plain variable `search`, legitimately assignable via `:search = 5`
+ * since these are ordinary lowercase words, not reserved, followed by
  * what would otherwise be implicit-multiply-adjacent text) would be
  * silently hijacked into a knowledge query for `"5"` instead of failing
  * or reading the variable. Requiring `:` immediately after the keyword
  * (`search:`, not `search `) is not valid syntax ANYWHERE else in this
  * grammar, so it introduces zero ambiguity with a real `:name = value`
- * variable of the same name — see the regression test guarding this
+ * variable of the same name. See the regression test guarding this
  * exact scenario.
  *
  * No existing Solve syntax uses a bare `= ?` marker either (the
  * codebase's other "possibilities" feature, `cm to ?`, is a different
- * token shape — `TO QUESTION`, not `EQUALS QUESTION` — see
+ * token shape, `TO QUESTION`, not `EQUALS QUESTION`. See
  * `packages/uom/normalizer/PossibilitiesNormalizerRule.ts`), so neither
  * form claims any ambiguity with existing grammar; both only activate for
  * lines a host has opted into via this package in the first place.
