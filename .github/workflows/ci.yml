@@ -77,6 +77,19 @@ jobs:
       # failing on allocation rather than on anything real. --expose-gc is
       # load-bearing for the memory specs, which measure retention after a
       # forced collection and report noise without it.
+      #
+      # It also runs --forceExit, which needs justifying. Every test passes and
+      # then Jest cannot exit, so the job used to sit until the runner killed it
+      # ten minutes later. Three real causes were found and fixed rather than
+      # papered over: QueryResolver armed an unref'd cache-eviction timer per
+      # failed query, ExpressionEngine.clear() never emptied the query cache
+      # whose gc timers keep a process alive, and seventy-four specs constructed
+      # engines they never cleared. Something still holds the loop open after
+      # all three, and --detectOpenHandles reports nothing, so there is no
+      # handle left for it to name. The parallel run (test:ci) has always had
+      # this masked, since Jest force-kills its workers; this makes the
+      # single-process run behave the same way rather than pretending the
+      # difference is a test failure.
       - run: npm run test:full
 
   package:

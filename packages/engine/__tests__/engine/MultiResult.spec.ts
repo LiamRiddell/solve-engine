@@ -23,6 +23,7 @@ import { ThreeTierEvaluator, EvalTier } from "@solve-js/engine/ThreeTierEvaluato
 import { DocumentModel, ViewportRange } from "@solve-js/engine/DocumentModel";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import type { ParsedLine, InlineSolvePosition } from "@solve-js/types/ParsingResult";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Helpers
@@ -41,7 +42,7 @@ beforeAll(() => {
 });
 
 function createEngine(locale = "en", diagnosticMode = false): ExpressionEngine {
-  return new ExpressionEngine(locale, diagnosticMode);
+  return newTrackedEngine(locale, diagnosticMode);
 }
 
 function createDoc(lines: string[]): DocumentModel {

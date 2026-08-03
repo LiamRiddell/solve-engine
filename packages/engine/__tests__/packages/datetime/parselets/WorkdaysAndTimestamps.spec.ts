@@ -26,9 +26,10 @@
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 function evalReal(expr: string) {
-  const engine = new ExpressionEngine("en");
+  const engine = newTrackedEngine("en");
   const [value] = engine.evaluateExpression(expr);
   return value;
 }

@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from "@jest/globals";
+import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
@@ -32,6 +32,13 @@ describe("Bug: unit/currency conversion of a variable via 'to'", () => {
 
   beforeEach(() => {
     engine = new ExpressionEngine("en", false);
+  });
+
+  // Releases the engine's query client and async batcher. Without it the
+  // engine outlives the test file and its pending work lands in whatever
+  // runs next, which under --runInBand is the same process.
+  afterEach(() => {
+  	engine.clear();
   });
 
   test(":x = 100cm then :x to m converts (not 'Undefined variable: m')", () => {

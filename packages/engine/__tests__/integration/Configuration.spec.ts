@@ -2,6 +2,7 @@ import { describe, expect, test } from "@jest/globals";
 import { ConfigManager, DEFAULT_CONFIG, mergeEngineConfig } from "@solve-js/constants/Configuration";
 import { EngineError, ErrorCategory } from "@solve-js/errors/UnifiedErrorFramework";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 describe("ConfigManager", () => {
   test("get throws EngineError with CONFIG category for missing path", () => {
@@ -78,7 +79,7 @@ describe("mergeEngineConfig — per-section merge (not a shallow top-level sprea
 
 describe("ExpressionEngine constructor — per-section config merge", () => {
   test("overriding one performance field doesn't drop the rest of that section", () => {
-    const engine = new ExpressionEngine("en", false, { performance: { defaultCacheSize: 42 } as any });
+    const engine = newTrackedEngine("en", false, { performance: { defaultCacheSize: 42 } as any });
     const effective = engine.getConfig();
     expect(effective.performance.defaultCacheSize).toBe(42);
     expect(effective.performance.maxDocumentLines).toBe(DEFAULT_CONFIG.performance.maxDocumentLines);
@@ -86,7 +87,7 @@ describe("ExpressionEngine constructor — per-section config merge", () => {
   });
 
   test("overriding one validation field doesn't drop the rest of that section", () => {
-    const engine = new ExpressionEngine("en", false, { validation: { maxExpressionLength: 100 } as any });
+    const engine = newTrackedEngine("en", false, { validation: { maxExpressionLength: 100 } as any });
     const effective = engine.getConfig();
     expect(effective.validation.maxExpressionLength).toBe(100);
     expect(effective.validation.maxNestingDepth).toBe(DEFAULT_CONFIG.validation.maxNestingDepth);
@@ -94,7 +95,7 @@ describe("ExpressionEngine constructor — per-section config merge", () => {
   });
 
   test("no config override falls back entirely to defaults", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     expect(engine.getConfig()).toEqual(DEFAULT_CONFIG);
   });
 });

@@ -34,15 +34,15 @@ describe("Lexer Benchmarks", () => {
   ];
 
   for (const c of cases) {
-    test(`lexes "${c.name}" (${c.iters.toLocaleString()} iter)`, () => {
+    test(`lexes "${c.name}" (${c.iters.toLocaleString()} iter)`, async () => {
       const lexer = new Lexer("en");
-      const r = benchmarkFn(() => {
+      const r = await benchmarkFn(() => {
         lexer.reset(c.input);
         for (const _ of lexer) { /* consume all tokens */ }
       }, c.iters, Math.min(100, Math.floor(c.iters / 10)));
       recordSample(results, c.name, r);
       // Performance assertion: each lex should be under 1ms for these inputs
-      expect(r.meanMs).toBeLessThan(2);
+      expect(r.medianMs).toBeLessThan(2);
     });
   }
 });

@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from "@jest/globals";
+import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
 
@@ -18,6 +18,13 @@ describe("Bug: cryptocurrency codes not recognized as units", () => {
 
   beforeEach(() => {
     engine = new ExpressionEngine("en", false);
+  });
+
+  // Releases the engine's query client and async batcher. Without it the
+  // engine outlives the test file and its pending work lands in whatever
+  // runs next, which under --runInBand is the same process.
+  afterEach(() => {
+  	engine.clear();
   });
 
   test.each(["BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "DOT"])(

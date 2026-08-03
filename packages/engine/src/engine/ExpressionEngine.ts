@@ -24,7 +24,7 @@ import { registerTokenCategory, unregisterTokenCategory } from "@solve-js/langua
 import type { CompletionItem } from "@solve-js/language/LanguageService";
 import type { LexerVocabulary } from "@solve-js/lexer/ExpressionLexer";
 import { QueryClient } from "@tanstack/query-core";
-import { createQueryClient, setActiveQueryClient } from "@solve-js/services/DataQueryService";
+import { createQueryClient, setActiveQueryClient, getActiveQueryClient } from "@solve-js/services/DataQueryService";
 import { ErrorFactory, EngineError, normalizeUnknownError } from "@solve-js/errors/UnifiedErrorFramework";
 import {
 	ResolverRegistry,
@@ -3118,6 +3118,25 @@ export class ExpressionEngine {
 		// goes out of scope without clear() stays retained: measured at 46.9KB
 		// per engine against 8.2KB for one that never parsed. See the class doc.
 		this.batcher.clearAll();
+
+		// The query cache holds a garbage-collection timer per cached query,
+		// armed for `gcTime` (ten minutes). Those timers keep a Node process
+		// alive on their own, so an engine cleared but not emptied here leaves
+		// the host unable to exit for up to ten minutes after its last live
+		// lookup. That is what it was doing to the test suite: every spec
+		// passed, then Jest sat waiting on timers belonging to engines whose
+		// documents were long gone.
+		//
+		// It also belongs here on its own terms. This method is documented as
+		// the call that releases per-document state, and cached query results
+		// are per-document state.
+		this.queryClient.clear();
+
+		// The active client is a module-level hand-off for synchronous VM
+		// plugin functions. Leaving ours published after clear() would let a
+		// later execution read a cache this engine no longer owns.
+		if (getActiveQueryClient() === this.queryClient) setActiveQueryClient(null);
+
          this.dag.clear();
          this.lineCache.clear();
          this.scopeManager.clear();

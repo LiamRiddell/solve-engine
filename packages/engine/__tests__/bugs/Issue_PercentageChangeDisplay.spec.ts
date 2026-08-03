@@ -1,6 +1,7 @@
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { formatValue } from "@solve-js/format/FormatEngine";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 /**
  * Bug: percentage-change results ("800 to 1000") displayed as "0.25%"
@@ -17,7 +18,7 @@ import { formatValue } from "@solve-js/format/FormatEngine";
  */
 describe("Bug: percentage-change value displayed as fraction instead of percent", () => {
   test("800 to 1000 displays as 25.00%, not 0.25%", () => {
-    const engine = new ExpressionEngine("en", false);
+    const engine = newTrackedEngine("en", false);
     const [result] = engine.evaluateLine(1, "800 to 1000");
     const formatted = formatValue(result);
     expect(formatted).toContain("25");
@@ -25,7 +26,7 @@ describe("Bug: percentage-change value displayed as fraction instead of percent"
   });
 
   test("1000 to 800 (a decrease) displays as -20.00%, not -0.20%", () => {
-    const engine = new ExpressionEngine("en", false);
+    const engine = newTrackedEngine("en", false);
     const [result] = engine.evaluateLine(1, "1000 to 800");
     const formatted = formatValue(result);
     expect(formatted).toContain("-20");

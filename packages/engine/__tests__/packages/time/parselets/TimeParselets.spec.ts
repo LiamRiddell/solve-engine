@@ -24,6 +24,7 @@ import { fpsRateNormalizerRule } from "@solve-js/packages/time/normalizer/FpsRat
 import { laptimeNormalizerRule } from "@solve-js/packages/time/normalizer/LaptimeNormalizerRule";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { isRateUnit } from "@solve-js/vm/Value";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 const normalizer = new TokenNormalizer();
 // Laptime MUST be registered (or at least tried) before clock-time can
@@ -225,7 +226,7 @@ describe("laptimes", () => {
 
 describe("TIME_PACKAGE — real engine wiring", () => {
   test("9:00am works via the real, default-constructed ExpressionEngine", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("9:00am");
     expect(value.type).toBe(ValueType.Datetime);
     const d = new Date(value.value as number);
@@ -233,14 +234,14 @@ describe("TIME_PACKAGE — real engine wiring", () => {
   });
 
   test("7:30 to 20:45 works via the real engine", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("7:30 to 20:45");
     expect(value.type).toBe(ValueType.Uom);
     expect(value.toNumber()).toBe(13 * 60 + 15);
   });
 
   test("30 fps × 3 minutes works via the real engine", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("30 fps * 3 minutes");
     expect(value.unit).toBe("frames");
     expect(value.toNumber()).toBeCloseTo(5400);
@@ -249,7 +250,7 @@ describe("TIME_PACKAGE — real engine wiring", () => {
 
 describe("timezone conversion", () => {
   test("6pm Sydney in Chicago -> a formatted Chicago wall-clock time (real engine, since Sydney/Chicago are plain single-word IDENTs — no phrase fusion needed)", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("6pm Sydney in Chicago");
     expect(value.type).toBe(ValueType.String);
     // Sydney (UTC+10/11) is always many hours ahead of Chicago (UTC-5/-6) —
@@ -259,14 +260,14 @@ describe("timezone conversion", () => {
   });
 
   test("2am PST in GMT converts via a standard-time abbreviation", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("2am PST in GMT");
     expect(value.type).toBe(ValueType.String);
     expect(value.value as string).toMatch(/^\d{1,2}:\d{2} (AM|PM)/);
   });
 
   test("3pm GMT+8 in Paris converts via a numeric UTC offset", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("3pm GMT+8 in Paris");
     expect(value.type).toBe(ValueType.String);
     expect(value.value as string).toMatch(/^\d{1,2}:\d{2} (AM|PM)/);
@@ -279,47 +280,47 @@ describe("timezone conversion", () => {
   // UTC (also a fixed offset, no DST) makes the expected wall-clock time
   // exact and date-independent, unlike the Paris-target tests above.
   test("3pm GMT+5:30 in UTC converts a numeric UTC offset with a non-zero minutes component", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("3pm GMT+5:30 in UTC");
     expect(value.type).toBe(ValueType.String);
     expect(value.value as string).toBe("9:30 AM");
   });
 
   test("3pm GMT+8:45 in UTC converts a numeric UTC offset with a non-zero minutes component", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("3pm GMT+8:45 in UTC");
     expect(value.type).toBe(ValueType.String);
     expect(value.value as string).toBe("6:15 AM");
   });
 
   test("3pm GMT+8 in UTC still converts a whole-hour numeric UTC offset (no COLON token at all)", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("3pm GMT+8 in UTC");
     expect(value.type).toBe(ValueType.String);
     expect(value.value as string).toBe("7:00 AM");
   });
 
   test("3pm GMT in UTC still converts a bare zero-offset zone (no sign token at all)", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("3pm GMT in UTC");
     expect(value.type).toBe(ValueType.String);
     expect(value.value as string).toBe("3:00 PM");
   });
 
   test("a recognized zone name with no following 'in <target>' is a parse error, not silently ignored", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     expect(() => engine.evaluateExpression("6pm Sydney")).toThrow();
   });
 
   test("time in Paris -> Paris's current wall-clock time (phrase-fused, real engine)", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("time in Paris");
     expect(value.type).toBe(ValueType.String);
     expect(value.value as string).toMatch(/^\d{1,2}:\d{2} (AM|PM)$/);
   });
 
   test("date in Vancouver -> Vancouver's current calendar date (phrase-fused, real engine)", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("date in Vancouver");
     expect(value.type).toBe(ValueType.String);
     // e.g. "July 31, 2026"
@@ -327,27 +328,27 @@ describe("timezone conversion", () => {
   });
 
   test("time in New York works via a fused multi-word city name", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("time in New York");
     expect(value.type).toBe(ValueType.String);
     expect(value.value as string).toMatch(/^\d{1,2}:\d{2} (AM|PM)$/);
   });
 
   test("time difference between Seattle and Moscow -> a directional, human-readable offset (phrase-fused, real engine)", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("time difference between Seattle and Moscow");
     expect(value.type).toBe(ValueType.String);
     expect(value.value as string).toMatch(/^Moscow is \d+ hours?( \d+ minutes?)? ahead of Seattle$/);
   });
 
   test("time difference between two zones with the same current offset reports 'share the same UTC offset'", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("time difference between Paris and Berlin");
     expect(value.value).toBe("Berlin and Paris currently share the same UTC offset");
   });
 
   test("an unrecognized city name is not treated as a zone reference — falls through to an undefined-variable error, same as before this feature existed", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     expect(() => engine.evaluateExpression("time in Atlantis")).toThrow();
   });
 });

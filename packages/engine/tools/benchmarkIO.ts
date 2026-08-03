@@ -70,9 +70,12 @@ export function recordScalar(results: BenchmarkResults, name: string, meanMs: nu
  *
  * For suites that keep a plain `Record<string, number>` because they read their
  * own numbers back mid-run for assertions, or because the figure is derived
- * rather than measured by `benchmarkFn`. No median is recorded, since there is
- * no distribution behind the number, and the comparator falls back to the mean
- * accordingly.
+ * rather than measured by `benchmarkFn`.
+ *
+ * Recorded under both keys. The figure these suites collect is `benchmarkFn`'s
+ * median, so writing it only as `meanMs` would name it wrongly, and the
+ * comparator reads `medianMs` first. Writing both keeps a baseline captured by
+ * an older revision readable while the naming settles.
  *
  * @param scalars - Case name to timing, in `unit`.
  * @param unit - Unit those numbers are in. Everything is persisted in
@@ -87,7 +90,8 @@ export function fromScalarMap(
 	const divisor = unit === "us" ? 1000 : 1;
 	const out: BenchmarkResults = {};
 	for (const [name, value] of Object.entries(scalars)) {
-		out[name] = { meanMs: value / divisor };
+		const ms = value / divisor;
+		out[name] = { meanMs: ms, medianMs: ms };
 	}
 	return out;
 }

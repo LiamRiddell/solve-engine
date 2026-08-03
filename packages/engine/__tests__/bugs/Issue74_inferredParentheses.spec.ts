@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from "@jest/globals";
+import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 
 describe("Feature #74: Inferred Parentheses", () => {
@@ -8,6 +8,13 @@ describe("Feature #74: Inferred Parentheses", () => {
     engine = new ExpressionEngine("en", false, {
       validation: { maxExpressionLength: 2000, maxComplexity: 500, maxNestingDepth: 50, autoBalanceParens: true },
     });
+  });
+
+  // Releases the engine's query client and async batcher. Without it the
+  // engine outlives the test file and its pending work lands in whatever
+  // runs next, which under --runInBand is the same process.
+  afterEach(() => {
+  	engine.clear();
   });
 
   test("(1 + 2 (unmatched open) evaluates as (1 + 2)", () => {

@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from "@jest/globals";
+import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 
 describe("Phase 6: Incremental Evaluation", () => {
@@ -38,6 +38,13 @@ describe("Phase 6: Incremental Evaluation", () => {
 
     beforeEach(() => {
       engine = new ExpressionEngine();
+    });
+
+    // Releases the engine's query client and async batcher. Without it the
+    // engine outlives the test file and its pending work lands in whatever
+    // runs next, which under --runInBand is the same process.
+    afterEach(() => {
+    	engine.clear();
     });
 
     test("returns updated values for dirty lines using cached bytecode", () => {

@@ -30,6 +30,7 @@ import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { Value, ValueType, numberValue } from "@solve-js/vm/Value";
 import { builtinFunctions } from "@solve-js/vm/VMBuiltins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 function tokenize(lexer: Lexer, input: string) {
   lexer.reset(input);
@@ -145,28 +146,28 @@ describe("hex()/bin()/int() — lightweight parselet-registry harness (call synt
   });
 });
 
-describe("hex()/bin()/int() — real engine wiring (new ExpressionEngine(\"en\"))", () => {
+describe("hex()/bin()/int() — real engine wiring (newTrackedEngine(\"en\"))", () => {
   test("hex(255) -> \"0xFF\" via the real, default-constructed ExpressionEngine", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("hex(255)");
     expect(value.type).toBe(ValueType.String);
     expect(value.value).toBe("0xFF");
   });
 
   test("bin(10) -> \"0b1010\" via the real engine", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("bin(10)");
     expect(value.value).toBe("0b1010");
   });
 
   test("int(5.7) -> 5 via the real engine", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("int(5.7)");
     expect(value.toNumber()).toBe(5);
   });
 
   test("int(-5.7) -> -5 via the real engine", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("int(-5.7)");
     expect(value.toNumber()).toBe(-5);
   });
@@ -185,7 +186,7 @@ describe("regression guard: 'as hex' / 'as bin' still work after hex/bin became 
   });
 
   test("255 as hex via the real engine, end to end", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("255 as hex");
     expect(value.type).toBe(ValueType.Hex);
     expect(value.value).toBe(255);

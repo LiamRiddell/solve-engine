@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from "@jest/globals";
+import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
 
 import { ExpressionLexer } from "@solve-js/lexer/ExpressionLexer";
 import { Lexer } from "@solve-js/lexer/Lexer";
@@ -237,6 +237,13 @@ describe("Markdown Elements and Multi-line Documents", () => {
     beforeEach(() => {
       engine = new ExpressionEngine("en", false);
       service = new LanguageService(engine);
+    });
+
+    // Releases the engine's query client and async batcher. Without it the
+    // engine outlives the test file and its pending work lands in whatever
+    // runs next, which under --runInBand is the same process.
+    afterEach(() => {
+    	engine.clear();
     });
 
     test("highlights expression in list item", () => {

@@ -11,6 +11,7 @@ import { uomValue } from "@solve-js/vm/Value";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 describe("FormatEngine — ms-unit duration formatting", () => {
 	test("whole hours format as H:MM", () => {
@@ -40,13 +41,13 @@ describe("FormatEngine — ms-unit duration formatting", () => {
 
 describe("real engine — clock-time subtraction now displays as a duration, not raw ms", () => {
 	test("9:30 - 8:30 displays as '= 1:00'", () => {
-		const engine = new ExpressionEngine();
+		const engine = newTrackedEngine();
 		const [value] = engine.evaluateExpression("9:30 - 8:30");
 		expect(formatValue(value)).toBe("= 1:00");
 	});
 
 	test("a timesheet: subtract each clock-in/out pair, then sum with 'total above'", () => {
-		const engine = new ExpressionEngine();
+		const engine = newTrackedEngine();
 		const doc = new DocumentModel();
 		const lines = ["9:30 - 8:30", "12:00 - 11:00", "18:00 - 12:55", "total above"];
 		doc.setDocument(lines.join("\n"));

@@ -35,6 +35,7 @@ import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { Value, ValueType } from "@solve-js/vm/Value";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 function tokenize(lexer: Lexer, input: string) {
   lexer.reset(input);
@@ -69,7 +70,7 @@ function parseAndExecute(input: string): Value {
 }
 
 function evalReal(expr: string): Value {
-  const engine = new ExpressionEngine("en");
+  const engine = newTrackedEngine("en");
   const [value] = engine.evaluateExpression(expr);
   return value;
 }
@@ -274,7 +275,7 @@ describe("FINANCE_PACKAGE — real engine wiring", () => {
   });
 
   test("regression guard: ':tax = ...' still works as a variable — phrase fusion for Finance must not claim bare 'tax' as a keyword (same regression class as MathPhrasesPackage.ts's ':total' guard)", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     engine.evaluateExpression(":subtotal = 100");
     engine.evaluateExpression(":tax = 8");
     const [value] = engine.evaluateExpression(":total = :subtotal + :tax");
@@ -282,7 +283,7 @@ describe("FINANCE_PACKAGE — real engine wiring", () => {
   });
 
   test("regression guard: ':interest', ':principal', ':rate', ':payment', ':vat' all still work as variable names too", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     engine.evaluateExpression(":principal = 1000");
     engine.evaluateExpression(":rate = 0.07");
     engine.evaluateExpression(":interest = 50");

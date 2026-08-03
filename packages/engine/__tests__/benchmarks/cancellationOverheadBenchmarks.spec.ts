@@ -35,14 +35,14 @@ describe("Cancellation Overhead Benchmarks", () => {
 	// GROUP 1: Raw addEventListener / removeEventListener atoms
 	// ═══════════════════════════════════════════════════════════════
 
-	test("addEventListener + removeEventListener pair on AbortSignal", () => {
+	test("addEventListener + removeEventListener pair on AbortSignal", async () => {
 		// Measures the atomic cost of attaching + detaching an abort
 		// listener — the fundamental operation performed per evaluation.
 		// Each iteration creates a fresh controller so the signal is
 		// discarded (no listener accumulation).
 		let listener: () => void;
 
-		const r = benchmarkFn(
+		const r = await benchmarkFn(
 			() => {
 				const controller = new AbortController();
 				listener = () => {};
@@ -58,16 +58,16 @@ describe("Cancellation Overhead Benchmarks", () => {
 			2_000,
 		);
 		results["addEventListener + removeEventListener"] =
-			r.meanMs * 1000;
-		expect(r.meanMs * 1000).toBeLessThan(5); // < 5µs
+			r.medianMs * 1000;
+		expect(r.medianMs * 1000).toBeLessThan(5); // < 5µs
 	});
 
-	test("addEventListener only (no remove, fresh signal per iter)", () => {
+	test("addEventListener only (no remove, fresh signal per iter)", async () => {
 		// Measures just the addEventListener cost — the fast path
 		// (listener auto-removes via { once: true } on abort).
 		// Each iteration creates a fresh controller so listeners
 		// don't accumulate on a reused signal.
-		const r = benchmarkFn(
+		const r = await benchmarkFn(
 			() => {
 				const c = new AbortController();
 				c.signal.addEventListener("abort", () => {}, {
@@ -77,14 +77,14 @@ describe("Cancellation Overhead Benchmarks", () => {
 			200_000,
 			2_000,
 		);
-		results["addEventListener only"] = r.meanMs * 1000;
-		expect(r.meanMs * 1000).toBeLessThan(5); // < 5µs
+		results["addEventListener only"] = r.medianMs * 1000;
+		expect(r.medianMs * 1000).toBeLessThan(5); // < 5µs
 	});
 
-	test("new AbortController() creation", () => {
+	test("new AbortController() creation", async () => {
 		// Measures the cost of creating a fresh AbortController —
 		// done once per evaluation in executeAndStore/executeRaw.
-		const r = benchmarkFn(
+		const r = await benchmarkFn(
 			() => {
 				const c = new AbortController();
 				void c.signal; // prevent dead-code elimination
@@ -92,21 +92,21 @@ describe("Cancellation Overhead Benchmarks", () => {
 			200_000,
 			2_000,
 		);
-		results["new AbortController()"] = r.meanMs * 1000;
-		expect(r.meanMs * 1000).toBeLessThan(10); // < 10µs
+		results["new AbortController()"] = r.medianMs * 1000;
+		expect(r.medianMs * 1000).toBeLessThan(10); // < 10µs
 	});
 
 	// ═══════════════════════════════════════════════════════════════
 	// GROUP 2: Full keystroke-linking pattern (atoms combined)
 	// ═══════════════════════════════════════════════════════════════
 
-	test("full local-controller create + link + unlink cycle", () => {
+	test("full local-controller create + link + unlink cycle", async () => {
 		// Simulates the exact pattern used in executeAndStore and
 		// executeRaw: create AbortController, addEventListener on
 		// keystroke signal, then removeEventListener in abortCurrent.
 		// Fresh keystroke controller per iteration to avoid
 		// listener accumulation.
-		const r = benchmarkFn(
+		const r = await benchmarkFn(
 			() => {
 				const keystrokeController = new AbortController();
 				const keystrokeSignal = keystrokeController.signal;
@@ -125,11 +125,11 @@ describe("Cancellation Overhead Benchmarks", () => {
 			200_000,
 			2_000,
 		);
-		results["full create+link+unlink cycle"] = r.meanMs * 1000;
-		expect(r.meanMs * 1000).toBeLessThan(10); // < 10µs
+		results["full create+link+unlink cycle"] = r.medianMs * 1000;
+		expect(r.medianMs * 1000).toBeLessThan(10); // < 10µs
 	});
 
-	test("keystroke abort cascading to 50 local controllers", () => {
+	test("keystroke abort cascading to 50 local controllers", async () => {
 		// Simulates the real keystroke pattern: one keystroke abort
 		// triggers abortLocal on N local controllers (one per line
 		// being evaluated). Measures create+link+abort for N=50
@@ -138,7 +138,7 @@ describe("Cancellation Overhead Benchmarks", () => {
 		// fire and clean up automatically on abort.
 		const N = 50;
 
-		const r = benchmarkFn(
+		const r = await benchmarkFn(
 			() => {
 				const kc = new AbortController();
 				const ks = kc.signal;
@@ -157,17 +157,17 @@ describe("Cancellation Overhead Benchmarks", () => {
 			100,
 		);
 		results[`keystroke abort → ${N} local aborts`] =
-			r.meanMs * 1000;
+			r.medianMs * 1000;
 		// 50 controllers: create + link + abort. ~15µs each = 750µs.
 		// Threshold of 1000µs (1ms) leaves headroom for CI variance.
-		expect(r.meanMs * 1000).toBeLessThan(1000);
+		expect(r.medianMs * 1000).toBeLessThan(1000);
 	});
 
 	// ═══════════════════════════════════════════════════════════════
 	// GROUP 3: Real ExpressionEngine evaluation overhead
 	// ═══════════════════════════════════════════════════════════════
 
-	test("executeCached overhead: with keystroke signal vs without", () => {
+	test("executeCached overhead: with keystroke signal vs without", async () => {
 		// The cleanest overhead measurement. Uses executeCached()
 		// which runs ONLY bytecode execution (already compiled) —
 		// bypassing lex/parse/compile variance to isolate the
@@ -180,7 +180,7 @@ describe("Cancellation Overhead Benchmarks", () => {
 		const program = compiled.program;
 
 		// ── Without keystroke signal (baseline) ─────────────────
-		const rNoSignal = benchmarkFn(
+		const rNoSignal = await benchmarkFn(
 			() => {
 				engine.executeCached(program);
 			},
@@ -189,7 +189,7 @@ describe("Cancellation Overhead Benchmarks", () => {
 		);
 
 		// ── With keystroke signal (fresh signal per iteration) ──
-		const rWithSignal = benchmarkFn(
+		const rWithSignal = await benchmarkFn(
 			() => {
 				const kc = new AbortController();
 				engine.setKeystrokeSignal(kc.signal);
@@ -202,7 +202,7 @@ describe("Cancellation Overhead Benchmarks", () => {
 		);
 
 		// ── Keystroke wrapper overhead (create+set+clear+abort, no exec) ──
-		const rWrapper = benchmarkFn(
+		const rWrapper = await benchmarkFn(
 			() => {
 				const kc = new AbortController();
 				engine.setKeystrokeSignal(kc.signal);
@@ -214,9 +214,9 @@ describe("Cancellation Overhead Benchmarks", () => {
 		);
 
 		// ── Compute results ─────────────────────────────────────
-		const noSignalUs = rNoSignal.meanMs * 1000;
-		const withSignalRawUs = rWithSignal.meanMs * 1000;
-		const wrapperUs = rWrapper.meanMs * 1000;
+		const noSignalUs = rNoSignal.medianMs * 1000;
+		const withSignalRawUs = rWithSignal.medianMs * 1000;
+		const wrapperUs = rWrapper.medianMs * 1000;
 
 		// True overhead = (with signal including wrapper) - (no signal) - (wrapper)
 		const overheaddUs = withSignalRawUs - noSignalUs - wrapperUs;
@@ -253,7 +253,7 @@ describe("Cancellation Overhead Benchmarks", () => {
 		expect(overheaddUs).toBeLessThan(25);
 	});
 
-	test("evaluateLine overhead: with keystroke signal vs without", () => {
+	test("evaluateLine overhead: with keystroke signal vs without", async () => {
 		// Real-world overhead measurement using the full evaluateLine
 		// pipeline (lex → parse → compile → execute). Less precise
 		// than executeCached due to pipeline variance, but confirms
@@ -264,7 +264,7 @@ describe("Cancellation Overhead Benchmarks", () => {
 		engine.evaluateLine(1, "1 + 2");
 
 		// ── Without keystroke signal (baseline) ─────────────────
-		const rNoSignal = benchmarkFn(
+		const rNoSignal = await benchmarkFn(
 			() => {
 				engine.evaluateLine(1, "1 + 2");
 			},
@@ -273,7 +273,7 @@ describe("Cancellation Overhead Benchmarks", () => {
 		);
 
 		// ── With keystroke signal (fresh signal per iteration) ──
-		const rWithSignal = benchmarkFn(
+		const rWithSignal = await benchmarkFn(
 			() => {
 				const kc = new AbortController();
 				engine.setKeystrokeSignal(kc.signal);
@@ -286,8 +286,8 @@ describe("Cancellation Overhead Benchmarks", () => {
 		);
 
 		// ── Compute results ─────────────────────────────────────
-		const noSignalUs = rNoSignal.meanMs * 1000;
-		const withSignalRawUs = rWithSignal.meanMs * 1000;
+		const noSignalUs = rNoSignal.medianMs * 1000;
+		const withSignalRawUs = rWithSignal.medianMs * 1000;
 		const overheaddUs = withSignalRawUs - noSignalUs;
 
 		results["engine.evaluateLine (no signal)"] = noSignalUs;
@@ -311,7 +311,7 @@ describe("Cancellation Overhead Benchmarks", () => {
 		expect(overheaddUs).toBeLessThan(100);
 	});
 
-	test("50 rapid keystroke cycles (real-world pattern)", () => {
+	test("50 rapid keystroke cycles (real-world pattern)", async () => {
 		// Simulates 50 rapid keystrokes. Each cycle: create fresh
 		// keystroke controller, set signal on engine, evaluate,
 		// clear signal, abort (which cleans up { once: true }
@@ -323,7 +323,7 @@ describe("Cancellation Overhead Benchmarks", () => {
 
 		const CYCLES = 50;
 
-		const r = benchmarkFn(
+		const r = await benchmarkFn(
 			() => {
 				for (let i = 0; i < CYCLES; i++) {
 					const kc = new AbortController();
@@ -337,7 +337,7 @@ describe("Cancellation Overhead Benchmarks", () => {
 			10,
 		);
 
-		const totalUs = r.meanMs * 1000;
+		const totalUs = r.medianMs * 1000;
 		const perCycleUs = totalUs / CYCLES;
 
 		results["50 keystroke cycles (total)"] = totalUs;
@@ -355,7 +355,7 @@ describe("Cancellation Overhead Benchmarks", () => {
 		expect(perCycleUs).toBeLessThan(500);
 	});
 
-	test("addEventListener cost on ALREADY-ABORTED signal", () => {
+	test("addEventListener cost on ALREADY-ABORTED signal", async () => {
 		// Edge case: when a keystroke signal is aborted before the
 		// next evaluation starts (e.g., rapid typing), addEventListener
 		// on an already-aborted signal triggers internal machinery
@@ -364,7 +364,7 @@ describe("Cancellation Overhead Benchmarks", () => {
 		const abortedController = new AbortController();
 		abortedController.abort("already aborted");
 
-		const r = benchmarkFn(
+		const r = await benchmarkFn(
 			() => {
 				abortedController.signal.addEventListener(
 					"abort",
@@ -376,7 +376,7 @@ describe("Cancellation Overhead Benchmarks", () => {
 			1_000,
 		);
 		results["addEventListener on aborted signal"] =
-			r.meanMs * 1000;
+			r.medianMs * 1000;
 
 		// Node queues a microtask when addEventListener is called on an
 		// already-aborted signal, which costs more than the normal path. Measured
@@ -390,24 +390,24 @@ describe("Cancellation Overhead Benchmarks", () => {
 		// the code, so a tighter bound buys false failures rather than signal.
 		// This assertion catches only a catastrophic change in kind; the per-case
 		// ratio against the merge base is what actually guards the cost here.
-		expect(r.meanMs * 1000).toBeLessThan(1000);
+		expect(r.medianMs * 1000).toBeLessThan(1000);
 	});
 
-	test("signal.aborted property access (resolveAsync guard)", () => {
+	test("signal.aborted property access (resolveAsync guard)", async () => {
 		// Measures the cost of the `signal.aborted` check used in
 		// resolveAsync()'s stale-data guards. This is a simple
 		// boolean property access — should be sub-nanosecond.
 		const controller = new AbortController();
 		const signal = controller.signal;
 
-		const r = benchmarkFn(
+		const r = await benchmarkFn(
 			() => {
 				void signal.aborted;
 			},
 			500_000,
 			5_000,
 		);
-		results["signal.aborted property access"] = r.meanMs * 1000;
-		expect(r.meanMs * 1000).toBeLessThan(1); // < 1µs
+		results["signal.aborted property access"] = r.medianMs * 1000;
+		expect(r.medianMs * 1000).toBeLessThan(1); // < 1µs
 	});
 });

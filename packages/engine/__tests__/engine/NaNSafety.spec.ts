@@ -1,6 +1,7 @@
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { stringValue, numberValue } from "@solve-js/vm/Value";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 describe("Phase 4: NaN Safety and Edge Cases", () => {
   test("stringValue.toNumber() returns 0 for non-numeric string", () => {
@@ -29,13 +30,13 @@ describe("Phase 4: NaN Safety and Edge Cases", () => {
   });
 
   test("division by zero returns Infinity", () => {
-    const engine = new ExpressionEngine();
+    const engine = newTrackedEngine();
     const [r] = engine.evaluateLine(1, "10 / 0");
     expect(Math.abs(r.toNumber())).toBe(Infinity);
   });
 
   test("sqrt of negative returns guarded result", () => {
-    const engine = new ExpressionEngine();
+    const engine = newTrackedEngine();
     const [r] = engine.evaluateLine(1, "sqrt(-1)");
     expect(typeof r.toNumber()).toBe("number");
   });

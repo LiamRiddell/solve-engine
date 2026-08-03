@@ -1,12 +1,13 @@
 import { describe, expect, test, beforeEach } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 describe("Issue #75: Numbers with millions separator commas (locale-aware)", () => {
   describe("US/EN locale (1,000.00 format)", () => {
     let engine: ExpressionEngine;
 
     beforeEach(() => {
-      engine = new ExpressionEngine("en", false);
+      engine = newTrackedEngine("en", false);
     });
 
     test("comma-separated number parses as full number: 1,000 = 1000", () => {
@@ -48,7 +49,7 @@ describe("Issue #75: Numbers with millions separator commas (locale-aware)", () 
     let engine: ExpressionEngine;
 
     beforeEach(() => {
-      engine = new ExpressionEngine("de", false);
+      engine = newTrackedEngine("de", false);
     });
 
     test("dot-separated number parses: 1.000 = 1000", () => {

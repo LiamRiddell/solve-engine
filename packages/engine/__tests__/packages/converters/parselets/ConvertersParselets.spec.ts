@@ -18,6 +18,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { registerAsConverter, unregisterAsConverter } from "@solve-js/vm/VMBuiltins";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 function tokenize(lexer: Lexer, input: string) {
   lexer.reset(input);
@@ -165,7 +166,7 @@ describe("custom asConverters (SDK extension point)", () => {
 
 describe("CONVERTERS_PACKAGE — real engine wiring", () => {
   test("as hex works via the real, default-constructed ExpressionEngine", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("255 as hex");
     expect(value.type).toBe(ValueType.Hex);
     expect(value.value).toBe(255);
@@ -178,7 +179,7 @@ describe("CONVERTERS_PACKAGE — real engine wiring", () => {
         triple: (v: Value) => numberValue(v.toNumber() * 3),
       },
     };
-    const engine = new ExpressionEngine("en", false, undefined, undefined, [
+    const engine = newTrackedEngine("en", false, undefined, undefined, [
       ...BUILTIN_PACKAGES,
       customPackage,
     ]);

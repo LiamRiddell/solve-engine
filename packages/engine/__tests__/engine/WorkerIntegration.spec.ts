@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from "@jest/globals";
+import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
 import { CompilationWorkerManager, CompileRequestItem } from "@solve-js/engine/CompilationWorkerManager";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
@@ -60,6 +60,13 @@ describe("Worker Integration", () => {
 			engine = new ExpressionEngine();
 			// Evaluate to populate initial state (get lineIds and textHashes)
 			engine.parseDocument(":x = 42\n:x + 8\n99");
+		});
+
+		// Releases the engine's query client and async batcher. Without it the
+		// engine outlives the test file and its pending work lands in whatever
+		// runs next, which under --runInBand is the same process.
+		afterEach(() => {
+			engine.clear();
 		});
 
 		test("storeResults accepts results with matching textHash", () => {

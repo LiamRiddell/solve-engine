@@ -22,6 +22,7 @@ import { TokenNormalizer } from "@solve-js/normalizer";
 import { uomPossibilitiesNormalizerRule } from "@solve-js/packages/uom/normalizer/PossibilitiesNormalizerRule";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { getConvertiblePossibilities } from "@solve-js/uom/UomConverter";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 const normalizer = new TokenNormalizer();
 normalizer.register(uomPossibilitiesNormalizerRule());
@@ -94,14 +95,14 @@ describe("getConvertiblePossibilities — unrecognized unit", () => {
 
 describe("UOM_PACKAGE — real engine wiring", () => {
   test("cm to ? works via the real, default-constructed ExpressionEngine", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("cm to ?");
     expect(value.type).toBe(ValueType.String);
     expect(value.value as string).toContain("mm");
   });
 
   test("10 cm to m still converts normally (no regression from the ? handling)", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = newTrackedEngine("en");
     const [value] = engine.evaluateExpression("10 cm to m");
     expect(value.type).toBe(ValueType.Uom);
     expect(value.toNumber()).toBeCloseTo(0.1);

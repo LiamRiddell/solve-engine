@@ -3,6 +3,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 /**
  * Bug: typing the bare word "osrs" (or "osrs" followed by anything that
@@ -25,7 +26,7 @@ import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage";
  * explicitly register it alongside the built-ins.
  */
 function createEngineWithOsrs(): ExpressionEngine {
-  return new ExpressionEngine("en", false, undefined, undefined, [...BUILTIN_PACKAGES, OSRS_PACKAGE]);
+  return newTrackedEngine("en", false, undefined, undefined, [...BUILTIN_PACKAGES, OSRS_PACKAGE]);
 }
 
 describe("Bug: bare 'osrs' keyword silently evaluated to 0 instead of erroring", () => {

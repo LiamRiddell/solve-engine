@@ -10,6 +10,6 @@
   "_improvementComment": "A report that only ever delivers bad news stops being read. Improvements past this are called out.",
   "improvementRatio": 0.8,
 
-  "_noiseComment": "Below this the number is timer resolution plus loop overhead rather than the work being measured, so a ratio computed from it is meaningless. Several existing cases sit here. Milliseconds, so this is 5 microseconds.",
-  "noiseFloorMs": 0.005
+  "_noiseComment": "Below this a ratio is not worth acting on. This used to be 5 microseconds because the harness timed each iteration with performance.now(), whose resolution swallowed anything faster. mitata batches and calibrates instead, and resolves single-nanosecond work, so the floor is now set by how small a real regression is worth failing a build over rather than by what the clock could see. Milliseconds, so this is 50 nanoseconds.",
+  "noiseFloorMs": 0.00005
 }

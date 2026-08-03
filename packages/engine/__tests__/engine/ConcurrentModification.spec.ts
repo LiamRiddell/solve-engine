@@ -2,6 +2,7 @@ import { describe, expect, test, beforeEach } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 /**
  * Concurrent Modification Tests — Phase 6.2
@@ -14,7 +15,7 @@ describe("Concurrent Modification", () => {
 
 	describe("rapid applyTransaction sequences", () => {
 		test("10 rapid applyTransaction calls in sequence preserve document integrity", () => {
-			const engine = new ExpressionEngine();
+			const engine = newTrackedEngine();
 			const doc = new DocumentModel();
 			doc.setDocument("line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10");
 			const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -66,7 +67,7 @@ describe("Concurrent Modification", () => {
 		});
 
 		test("100 sequential single-line edits do not corrupt state", () => {
-			const engine = new ExpressionEngine();
+			const engine = newTrackedEngine();
 			const doc = new DocumentModel();
 			doc.setDocument("initial content line");
 			const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -91,7 +92,7 @@ describe("Concurrent Modification", () => {
 
 	describe("overlapping and adjacent edits", () => {
 		test("adjacent edits (no overlap) are processed correctly in reverse order", () => {
-			const engine = new ExpressionEngine();
+			const engine = newTrackedEngine();
 			const doc = new DocumentModel();
 			doc.setDocument("A\nB\nC\nD\nE");
 			const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -118,7 +119,7 @@ describe("Concurrent Modification", () => {
 		});
 
 		test("edit same line, then delete it, then insert at its position", () => {
-			const engine = new ExpressionEngine();
+			const engine = newTrackedEngine();
 			const doc = new DocumentModel();
 			doc.setDocument("keep me\nchange me\nalso keep");
 			const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -143,7 +144,7 @@ describe("Concurrent Modification", () => {
 		});
 
 		test("insert at start, middle, and end in one batch (reverse-order application)", () => {
-			const engine = new ExpressionEngine();
+			const engine = newTrackedEngine();
 			const doc = new DocumentModel();
 			doc.setDocument("A\nB\nC");
 			const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -176,7 +177,7 @@ describe("Concurrent Modification", () => {
 
 	describe("interleaved evaluate and edit operations", () => {
 		test("evaluate after variable value edit produces correct downstream results", () => {
-			const engine = new ExpressionEngine();
+			const engine = newTrackedEngine();
 			const doc = new DocumentModel();
 			doc.setDocument(":x = 5\n:x + 3\n42");
 			const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -202,7 +203,7 @@ describe("Concurrent Modification", () => {
 		});
 
 		test("applyTransaction + evaluate preserves correct line content after insertion", () => {
-			const engine = new ExpressionEngine();
+			const engine = newTrackedEngine();
 			const doc = new DocumentModel();
 			doc.setDocument(":a = 1\n:a + 5\n42");
 			const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -225,7 +226,7 @@ describe("Concurrent Modification", () => {
 		});
 
 		test("full evaluate after applyTransaction rebuilds correct state", () => {
-			const engine = new ExpressionEngine();
+			const engine = newTrackedEngine();
 			const doc = new DocumentModel();
 			doc.setDocument(":x = 2\n:y = :x * 3\n:z = :y + 1");
 			const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -255,7 +256,7 @@ describe("Concurrent Modification", () => {
 
 	describe("large batch edits", () => {
 		test("deleting the entire document in one change", () => {
-			const engine = new ExpressionEngine();
+			const engine = newTrackedEngine();
 			const doc = new DocumentModel();
 			doc.setDocument(Array(100).fill("42").join("\n"));
 			const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -273,7 +274,7 @@ describe("Concurrent Modification", () => {
 		});
 
 		test("replacing the entire document in one change", () => {
-			const engine = new ExpressionEngine();
+			const engine = newTrackedEngine();
 			const doc = new DocumentModel();
 			doc.setDocument(Array(50).fill("old").join("\n"));
 			const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -292,7 +293,7 @@ describe("Concurrent Modification", () => {
 		});
 
 		test("50 simultaneous non-overlapping single-line edits", () => {
-			const engine = new ExpressionEngine();
+			const engine = newTrackedEngine();
 			const doc = new DocumentModel();
 			const lines: string[] = [];
 			for (let i = 0; i < 50; i++) {
@@ -324,7 +325,7 @@ describe("Concurrent Modification", () => {
 
 	describe("concurrent modification edge cases", () => {
 		test("insert at position beyond document end appends to end", () => {
-			const engine = new ExpressionEngine();
+			const engine = newTrackedEngine();
 			const doc = new DocumentModel();
 			doc.setDocument("only line");
 			const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -344,7 +345,7 @@ describe("Concurrent Modification", () => {
 		});
 
 		test("delete more lines than exist clips to document bounds", () => {
-			const engine = new ExpressionEngine();
+			const engine = newTrackedEngine();
 			const doc = new DocumentModel();
 			doc.setDocument("A\nB\nC");
 			const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -362,7 +363,7 @@ describe("Concurrent Modification", () => {
 		});
 
 		test("empty insertLines array is a pure delete", () => {
-			const engine = new ExpressionEngine();
+			const engine = newTrackedEngine();
 			const doc = new DocumentModel();
 			doc.setDocument("A\nB\nC\nD\nE");
 			const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -380,7 +381,7 @@ describe("Concurrent Modification", () => {
 		});
 
 		test("zero deleteCount with insertLines is a pure insert", () => {
-			const engine = new ExpressionEngine();
+			const engine = newTrackedEngine();
 			const doc = new DocumentModel();
 			doc.setDocument("A\nB\nC");
 			const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -400,7 +401,7 @@ describe("Concurrent Modification", () => {
 		});
 
 		test("empty change list is a no-op", () => {
-			const engine = new ExpressionEngine();
+			const engine = newTrackedEngine();
 			const doc = new DocumentModel();
 			doc.setDocument("A\nB\nC");
 			const evaluator = new ThreeTierEvaluator(doc, engine);

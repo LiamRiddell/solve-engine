@@ -19,6 +19,7 @@
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { formatValue } from "@solve-js/format/FormatEngine";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 /**
  * Evaluates `lines` on two independent engines — one via the real
@@ -27,14 +28,14 @@ import { formatValue } from "@solve-js/format/FormatEngine";
  * LAST line from each, for comparison.
  */
 function compareLastLine(lines: string[]): { diagnostic: string; lean: string } {
-  const diagEngine = new ExpressionEngine("en");
+  const diagEngine = newTrackedEngine("en");
   let diagResult = "";
   lines.forEach((line, i) => {
     const [v] = diagEngine.evaluateLine(i + 1, line);
     diagResult = formatValue(v);
   });
 
-  const leanEngine = new ExpressionEngine("en");
+  const leanEngine = newTrackedEngine("en");
   const parsed = leanEngine.evaluateLines(lines);
   const lastResult = parsed[parsed.length - 1].result;
   const leanResult = lastResult ? formatValue(lastResult) : "";

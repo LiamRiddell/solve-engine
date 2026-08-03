@@ -12,6 +12,7 @@ import { describe, expect, test } from "@jest/globals";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 describe("Engine Breakage Tests", () => {
   describe("Obsidian Markdown Superset", () => {
@@ -50,14 +51,14 @@ describe("Engine Breakage Tests", () => {
 
   describe("Unicode Math Operators", () => {
     test("unicode multiplication × works", () => {
-      const engine = new ExpressionEngine();
+      const engine = newTrackedEngine();
       const [result] = engine.evaluateLine(1, "2 × 3");
       expect(result.type).toBe(ValueType.Number);
       expect(result.value).toBe(6);
     });
 
     test("unicode division ÷ works", () => {
-      const engine = new ExpressionEngine();
+      const engine = newTrackedEngine();
       const [result] = engine.evaluateLine(1, "6 ÷ 3");
       expect(result.type).toBe(ValueType.Number);
       expect(result.value).toBe(2);
@@ -169,7 +170,7 @@ Expression: 3 * 4
     });
 
     test("unmatched brackets are auto-balanced by inferred parentheses", () => {
-      const engine = new ExpressionEngine("en", false, {
+      const engine = newTrackedEngine("en", false, {
         validation: { maxExpressionLength: 2000, maxComplexity: 500, maxNestingDepth: 50, autoBalanceParens: true },
       });
       const [result] = engine.evaluateLine(1, "(1 + 2");
@@ -177,13 +178,13 @@ Expression: 3 * 4
     });
 
     test("division by zero returns Infinity", () => {
-      const engine = new ExpressionEngine();
+      const engine = newTrackedEngine();
       const [result] = engine.evaluateLine(1, "1 / 0");
       expect(result.type).toBe(ValueType.Number);
     });
 
     test("invalid expression throws", () => {
-      const engine = new ExpressionEngine();
+      const engine = newTrackedEngine();
       expect(() => engine.evaluateLine(1, "++--")).toThrow();
     });
   });

@@ -9,17 +9,18 @@
 
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 
 describe("ExpressionEngine", () => {
   test("evaluateLine returns correct value for simple arithmetic", () => {
-    const engine = new ExpressionEngine();
+    const engine = newTrackedEngine();
     const [result] = engine.evaluateLine(1, "1 + 2");
     expect(result.toNumber()).toBe(3);
   });
 
   test("evaluateLine caches bytecode and result", () => {
-    const engine = new ExpressionEngine();
+    const engine = newTrackedEngine();
     const [result] = engine.evaluateLine(1, "42");
     expect(result.toNumber()).toBe(42);
 
@@ -29,14 +30,14 @@ describe("ExpressionEngine", () => {
   });
 
   test("reEvaluateLine re-executes cached bytecode", () => {
-    const engine = new ExpressionEngine();
+    const engine = newTrackedEngine();
     engine.evaluateLine(1, "5 + 5");
     const result = engine.reEvaluateLine(1, "5 + 5");
     expect(result!.toNumber()).toBe(10);
   });
 
   test("DAG tracks variable assignments in expression engine", () => {
-    const engine = new ExpressionEngine();
+    const engine = newTrackedEngine();
     const [v] = engine.evaluateLine(10, ":myVar = 5 + 3");
     expect(v.toNumber()).toBe(8);
   });
@@ -51,7 +52,7 @@ describe("ExpressionEngine", () => {
   // original error is re-thrown as-is.
 
   test("a parse-time error surfaces its original specific code, not a generic EVALUATION_ERROR wrapper", () => {
-    const engine = new ExpressionEngine();
+    const engine = newTrackedEngine();
     // ClampParselet.ts throws CLAMP_EXPECTED_BETWEEN_OR_FROM when neither
     // "between" nor "from" follows "clamp <value>".
     expect.assertions(2);
@@ -64,7 +65,7 @@ describe("ExpressionEngine", () => {
   });
 
   test("compileExpression() surfaces the same original specific code as evaluateLine()", () => {
-    const engine = new ExpressionEngine();
+    const engine = newTrackedEngine();
     expect.assertions(2);
     try {
       engine.compileExpression("clamp 5 10");
@@ -75,7 +76,7 @@ describe("ExpressionEngine", () => {
   });
 
   test("compileExpression() still attaches reads/writes context on a parse failure that has them", () => {
-    const engine = new ExpressionEngine();
+    const engine = newTrackedEngine();
     expect.assertions(2);
     try {
       // ":x = clamp 5 10" — a variable-write line whose RHS fails to parse.

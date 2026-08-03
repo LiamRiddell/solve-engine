@@ -6,13 +6,14 @@ import { Value, ValueType } from "@solve-js/vm/Value";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { createVM } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 /**
  * Helper: create an ExpressionEngine for testing.
  * Use diagnosticMode=false for production-like behavior.
  */
 function createEngine(): ExpressionEngine {
-	return new ExpressionEngine("en", false);
+	return newTrackedEngine("en", false);
 }
 
 /**

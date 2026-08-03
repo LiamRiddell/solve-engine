@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeEach } from "@jest/globals";
+import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 
 describe("ExpressionEngine - Long Documents and Robustness Tests", () => {
@@ -6,6 +6,13 @@ describe("ExpressionEngine - Long Documents and Robustness Tests", () => {
 
   beforeEach(() => {
     engine = new ExpressionEngine("en");
+  });
+
+  // Releases the engine's query client and async batcher. Without it the
+  // engine outlives the test file and its pending work lands in whatever
+  // runs next, which under --runInBand is the same process.
+  afterEach(() => {
+  	engine.clear();
   });
 
   describe("Long document tests", () => {

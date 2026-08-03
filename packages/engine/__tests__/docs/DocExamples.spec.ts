@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { formatValue } from "@solve-js/format/FormatEngine";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 /**
  * Evaluates every example in the published documentation and asserts it still
@@ -184,7 +185,7 @@ describe("documented examples evaluate as documented", () => {
       .join(" | ");
 
     test(`[${gi}] ${label.slice(0, 110)}`, () => {
-      const engine = new ExpressionEngine("en");
+      const engine = newTrackedEngine("en");
       group.forEach((ex, i) => {
         const [value] = engine.evaluateLine(i + 1, ex.expression);
         if (ex.expected === null) return;

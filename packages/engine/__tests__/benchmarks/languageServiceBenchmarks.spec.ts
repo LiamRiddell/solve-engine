@@ -36,36 +36,36 @@ describe("LanguageService Benchmarks", () => {
   ];
 
   for (const c of highlightCases) {
-    test(`getSemanticTokens cold: "${c.name}" (${c.iters.toLocaleString()} iter)`, () => {
+    test(`getSemanticTokens cold: "${c.name}" (${c.iters.toLocaleString()} iter)`, async () => {
       const engine = new ExpressionEngine("en", false);
       const service = new LanguageService(engine);
       let line = 1;
-      const r = benchmarkFn(() => {
+      const r = await benchmarkFn(() => {
         // A fresh line number on every call defeats the cache — this is
         // the true per-keystroke cost (every edit invalidates its line).
         service.getSemanticTokens(c.input, line++);
       }, c.iters, Math.min(100, Math.floor(c.iters / 10)));
       recordSample(results, c.name, r);
-      expect(r.meanMs).toBeLessThan(2);
+      expect(r.medianMs).toBeLessThan(2);
     });
   }
 
-  test("getSemanticTokens warm (cache hit — same line, same text, repeated)", () => {
+  test("getSemanticTokens warm (cache hit — same line, same text, repeated)", async () => {
     const engine = new ExpressionEngine("en", false);
     const service = new LanguageService(engine);
     const input = "$10 + 50% of 200 - 3 kg";
     service.getSemanticTokens(input, 1); // prime the cache
-    const r = benchmarkFn(() => {
+    const r = await benchmarkFn(() => {
       service.getSemanticTokens(input, 1);
     }, 50000, 500);
     recordSample(results, "highlight_warm_cache_hit", r);
-    expect(r.meanMs).toBeLessThan(0.01);
+    expect(r.medianMs).toBeLessThan(0.01);
   });
 
   // ─── getCompletions: cold (first call — builds the static candidate cache) ───
 
-  test("getCompletions cold (first call — builds keyword/unit/package candidate list)", () => {
-    const r = benchmarkFn(() => {
+  test("getCompletions cold (first call — builds keyword/unit/package candidate list)", async () => {
+    const r = await benchmarkFn(() => {
       const engine = new ExpressionEngine("en", false);
       const service = new LanguageService(engine);
       service.getCompletions("sq", 2);
@@ -82,28 +82,28 @@ describe("LanguageService Benchmarks", () => {
   ];
 
   for (const c of completionCases) {
-    test(`getCompletions warm: "${c.name}" (${c.iters.toLocaleString()} iter)`, () => {
+    test(`getCompletions warm: "${c.name}" (${c.iters.toLocaleString()} iter)`, async () => {
       const engine = new ExpressionEngine("en", false);
       const service = new LanguageService(engine);
       service.getCompletions(c.prefix, c.prefix.length); // prime the static cache
-      const r = benchmarkFn(() => {
+      const r = await benchmarkFn(() => {
         service.getCompletions(c.prefix, c.prefix.length);
       }, c.iters, Math.min(200, Math.floor(c.iters / 10)));
       recordSample(results, c.name, r);
-      expect(r.meanMs).toBeLessThan(1);
+      expect(r.medianMs).toBeLessThan(1);
     });
   }
 
-  test("getCompletions warm with a large document-variable pool (500 variables)", () => {
+  test("getCompletions warm with a large document-variable pool (500 variables)", async () => {
     const engine = new ExpressionEngine("en", false);
     const varNames = Array.from({ length: 500 }, (_, i) => `variable${i}`);
     const service = new LanguageService(engine, { variableNameSource: () => varNames });
     service.getCompletions("var", 3);
-    const r = benchmarkFn(() => {
+    const r = await benchmarkFn(() => {
       service.getCompletions("var", 3);
     }, 5000, 100);
     recordSample(results, "completions_warm_500_variables", r);
-    expect(r.meanMs).toBeLessThan(2);
+    expect(r.medianMs).toBeLessThan(2);
   });
 
   // ─── Realistic per-keystroke simulation: viewport-sized document rebuild ───
@@ -116,12 +116,12 @@ describe("LanguageService Benchmarks", () => {
 
   const viewportSizes = [50, 100, 200];
   for (const size of viewportSizes) {
-    test(`highlighting a ${size}-line viewport (cold, one getSemanticTokens call per line)`, () => {
+    test(`highlighting a ${size}-line viewport (cold, one getSemanticTokens call per line)`, async () => {
       const engine = new ExpressionEngine("en", false);
       const service = new LanguageService(engine);
       const lines = Array.from({ length: size }, (_, i) => `${i} + ${i + 1} * 2`);
       let generation = 0;
-      const r = benchmarkFn(() => {
+      const r = await benchmarkFn(() => {
         generation++;
         for (let i = 0; i < lines.length; i++) {
           // Vary line number per generation so every pass is a cache miss —

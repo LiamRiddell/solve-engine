@@ -1,5 +1,6 @@
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { newTrackedEngine } from "@tools/trackedEngine";
 
 /**
  * Bug (found via adversarial QA probing): parseExpression() stopped as soon
@@ -38,26 +39,26 @@ describe("Bug: trailing tokens after a complete expression were silently dropped
     ["5, 3", ","],
     ["5 5 5", "5"],
   ])("%s throws UNEXPECTED_TRAILING_TOKEN instead of silently evaluating a partial result", (expression, leftoverToken) => {
-    const engine = new ExpressionEngine("en", false);
+    const engine = newTrackedEngine("en", false);
     expect(() => engine.evaluateLine(1, expression)).toThrow(
       `Unexpected token after expression: "${leftoverToken}"`
     );
   });
 
   test("well-formed expressions are unaffected", () => {
-    const engine = new ExpressionEngine("en", false);
+    const engine = newTrackedEngine("en", false);
     const [result] = engine.evaluateLine(1, "5 + 3");
     expect(result.toNumber()).toBe(8);
   });
 
   test("genuine thousands-grouped numbers are unaffected", () => {
-    const engine = new ExpressionEngine("en", false);
+    const engine = newTrackedEngine("en", false);
     const [result] = engine.evaluateLine(1, "1,234");
     expect(result.toNumber()).toBe(1234);
   });
 
   test("multi-target comma syntax ('X in Y, Z') is not special-cased — it's a trailing-token error like any other", () => {
-    const engine = new ExpressionEngine("en", false);
+    const engine = newTrackedEngine("en", false);
     expect(() => engine.evaluateLine(1, "10 USD in EUR, GBP")).toThrow(
       'Unexpected token after expression: ","'
     );
