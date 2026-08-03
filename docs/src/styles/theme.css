@@ -17,7 +17,7 @@
 @import "@fontsource-variable/roboto-mono";
 @import "@fontsource/instrument-serif";
 
-/* Brand wordmark face — self-hosted, single weight (Regular/400 only). */
+/* Brand wordmark face, self-hosted, single weight (Regular/400 only). */
 @font-face {
   font-family: "BBH Bartle";
   src: url("/fonts/BBHBartle-Regular.ttf") format("truetype");
@@ -38,7 +38,7 @@
   --sl-color-gray-6: #14191c;
   --sl-color-black: #03080a;
 
-  /* Accent — volt. `accent-high` is the text-on-dark tint, `accent-low` the
+  /* Accent: volt. `accent-high` is the text-on-dark tint, `accent-low` the
      ink used for text sitting ON the accent, so the pair has to invert
      cleanly. */
   --sl-color-accent-low: #232d00;
@@ -49,11 +49,11 @@
   --sl-color-text-accent: var(--primary);
   --sl-color-text-invert: var(--primary-foreground);
 
-  /* The page background is painted by the ambient layer (background.css), so
-     the base surface is transparent and the chrome is glass over it. */
-  --sl-color-bg: transparent;
+  /* Flat brand ink, nothing behind it. The sidebar shares the page surface so
+     only the hairline separates them. */
+  --sl-color-bg: var(--background);
   --sl-color-bg-nav: var(--glass-nav);
-  --sl-color-bg-sidebar: transparent;
+  --sl-color-bg-sidebar: var(--background);
   --sl-color-bg-inline-code: var(--muted);
   --sl-color-bg-accent: var(--primary);
 
@@ -108,7 +108,7 @@
   --sl-color-gray-7: #f4f4f7;
   --sl-color-black: #ffffff;
 
-  /* Accent — grape. */
+  /* Accent: grape. */
   --sl-color-accent-low: #ede4fe;
   --sl-color-accent: #7624f4;
   --sl-color-accent-high: #4a12a8;
@@ -116,10 +116,16 @@
   --sl-color-text-accent: var(--primary);
   --sl-color-text-invert: var(--primary-foreground);
   --sl-color-bg-nav: var(--glass-nav);
-  --sl-color-bg-sidebar: transparent;
+  --sl-color-bg-sidebar: var(--background);
   --sl-color-bg-inline-code: var(--muted);
   --sl-color-bg-accent: var(--primary);
   --sl-color-backdrop-overlay: rgb(3 8 10 / 0.44);
+}
+
+/* Belt and braces: `--sl-color-bg` is the only thing painting the page, and it
+   is now opaque, but overscroll on iOS reveals the root element behind it. */
+html {
+  background-color: var(--background);
 }
 
 /* ── Base typography ────────────────────────────────────────────────────── */
@@ -130,7 +136,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Headings read as headings because of weight and tracking, not size alone —
+/* Headings read as headings because of weight and tracking, not size alone,
    the app sets display type tight and semibold rather than bold. */
 .sl-markdown-content :is(h1, h2, h3, h4, h5, h6) {
   color: var(--foreground);
@@ -148,7 +154,8 @@ body {
    autolinked heading `display: inline` so the anchor icon can sit beside it,
    which would clip the rule to the width of the words. */
 .sl-markdown-content .sl-heading-wrapper.level-h2,
-.sl-markdown-content h2:not(:where(.sl-heading-wrapper *)) {
+.sl-markdown-content
+  h2:not(:where(.sl-heading-wrapper *)):not(:where(.not-content *)) {
   display: block;
   padding-bottom: 0.4em;
   border-bottom: 1px solid var(--border);
@@ -189,7 +196,7 @@ body {
   color: var(--foreground);
 }
 
-/* Scrollbars — neutral alpha only, never the brand accent (same rule the
+/* Scrollbars: neutral alpha only, never the brand accent (same rule the
    playground follows). */
 * {
   scrollbar-width: thin;

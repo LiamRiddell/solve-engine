@@ -1,5 +1,6 @@
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+import react from "@astrojs/react";
 import { solveGrammar } from "./src/solve-grammar.js";
 
 // GitHub Pages serves a project site from a subdirectory named after the
@@ -34,20 +35,23 @@ export default defineConfig({
         baseUrl:
           "https://github.com/LiamRiddell/solve-engine/edit/main/docs/",
       },
-      logo: {
-        light: "./src/assets/solve-mark-light.svg",
-        dark: "./src/assets/solve-mark-dark.svg",
-        alt: "",
-      },
       favicon: "/favicon.svg",
+      components: {
+        // Only to add one script. Every `solve` block on a reference page is
+        // upgraded to an editable notepad in the browser, which keeps the
+        // Expressive Code block as the fallback and keeps the markdown as the
+        // single source the doc-example test reads.
+        Head: "./src/components/Head.astro",
+      },
       // Order matters and is a dependency chain, not a preference: tokens
       // define the palette, theme maps it onto Starlight's own variables, and
-      // background and components both read the result.
+      // components reads the result.
       customCss: [
         "./src/styles/tokens.css",
         "./src/styles/theme.css",
-        "./src/styles/background.css",
         "./src/styles/components.css",
+        "./src/styles/notepad.css",
+        "./src/styles/landing.css",
       ],
       expressiveCode: {
         // Registers the ```solve language. Without it every example in the
@@ -115,5 +119,9 @@ export default defineConfig({
         },
       ],
     }),
+    // The landing page runs the real engine in a Plate editor. Those islands
+    // are `client:only`, so React never renders on the server and the engine
+    // is never imported into Node during the build.
+    react(),
   ],
 });

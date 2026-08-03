@@ -1,0 +1,34 @@
+---
+import SolveNotepad from "./SolveNotepad.tsx";
+
+interface Props {
+  /** Seed content, newline-separated. Each line becomes one editable row. */
+  initial: string;
+  /** Pad out to at least this many rows, so there is visible room to type. */
+  minRows?: number;
+  /** Accessible name for the editable region. */
+  label?: string;
+}
+
+const { initial, minRows, label } = Astro.props;
+
+// The interactive notepad is `client:only`, so nothing of it exists in the
+// built HTML. That would leave every example on this site invisible to Pagefind
+// (which indexes the built HTML) and to a reader without JavaScript, on a page
+// whose entire content IS the examples.
+//
+// So the lines are also emitted as static text, and CSS hides that copy once
+// the island has mounted beside it. Same content, two renderings, one of which
+// happens to be editable.
+const lines = initial.replace(/\s+$/, "").split("\n");
+---
+
+<div class="notepad-host not-content">
+  <pre class="notepad-static">{lines.join("\n")}</pre>
+  <SolveNotepad
+    client:only="react"
+    initial={initial}
+    minRows={minRows}
+    label={label}
+  />
+</div>

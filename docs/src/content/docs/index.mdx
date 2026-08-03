@@ -1,113 +1,508 @@
 ---
 title: Solve
-description: An expression evaluation engine for natural, human-readable calculations. Lexer, Pratt parser, bytecode VM, and an extensible package system.
+description: A TypeScript library for evaluating natural language expressions. Units, currencies, percentages, dates, matrices and plain English, from one call.
 template: splash
 hero:
-  title: A calculator that reads like a&nbsp;<span class="hero-accent">sentence</span>.
-  tagline: Write calculations the way you would say them. Solve reads the line, works out what you meant, and gives you the answer.
-  image:
-    dark: ../../assets/solve-mark-dark.svg
-    light: ../../assets/solve-mark-light.svg
-    alt: ""
-  actions:
-    - text: Get started
-      link: /getting-started/introduction/
-      icon: right-arrow
-      variant: primary
-    - text: Open the playground
-      link: /playground/
-      icon: rocket
-      variant: secondary
-    - text: GitHub
-      link: https://github.com/LiamRiddell/solve-engine
-      icon: external
-      variant: minimal
+  title: <span class="hero-eyebrow">Natural language expression engine</span>A calculation engine you embed.
+  tagline: Give it a line of text and it hands back a value, with units, currencies, dates and plain English already worked out. No UI, no DOM, no framework.
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import Notepad from '../../components/Notepad.astro';
+import HeroActions from '../../components/HeroActions.astro';
+import ShowcaseNav from '../../components/ShowcaseNav.astro';
+import OyrenCta from '../../components/OyrenCta.astro';
 
-<div class="landing-strip not-content">
-  <div>
-    <span class="landing-strip__value">Zero</span>
-    <span class="landing-strip__label">runtime dependencies</span>
-  </div>
-  <div>
-    <span class="landing-strip__value">Every keystroke</span>
-    <span class="landing-strip__label">incremental, cached, instant</span>
-  </div>
-  <div>
-    <span class="landing-strip__value">Node · browser · worker</span>
-    <span class="landing-strip__label">no DOM, no framework</span>
+<div class="band band--tight not-content">
+  <HeroActions />
+
+  <div class="install">
+    <div class="install__cmd">
+      <span class="install__prompt" aria-hidden="true">$</span>
+      <code>npm install solve-engine</code>
+    </div>
+    <ul class="install__specs">
+      <li>MIT</li>
+      <li>No runtime dependencies</li>
+      <li>Sixteen subpath exports</li>
+      <li>Node, browser and worker</li>
+      <li>TypeScript types included</li>
+    </ul>
   </div>
 </div>
 
-## What it looks like
+<div class="band">
+  <div class="band__inner">
+    <div class="band__head">
+      <span class="band__eyebrow">Live</span>
+      <h2 class="band__title">This is the engine, not a video of it.</h2>
+      <p class="band__lede">
+        Every block on this page is a real instance running in your browser.
+        Click into one and change a number. The answers follow, and so does
+        everything downstream of them.
+      </p>
+    </div>
 
-Every line below is a complete expression. There is no function to call, no
-syntax to learn first, and no configuration to write.
+    <Notepad
+      label="Studio job quote"
+      minRows={14}
+      initial={`# Studio job, quote
+rate = 65 USD
+hours = 18.5
+labour = rate * hours
+materials = 240 USD
+travel = 12 miles in km
+subtotal = labour + materials
+vat = 20% of subtotal
+total = subtotal + vat
+deposit = 30% of total
+balance = total - deposit`}
+    />
+  </div>
+</div>
 
-| You write | You get |
-| --- | --- |
-| `10 + 20 / 200 * 4` | `10.40` |
-| `50% of 200` | `100` |
-| `100cm + 2m` | `300.00 cm` |
-| `5 km to miles` | `3.11 miles` |
-| `average of 10, 20, 30` | `20` |
-| `next friday` | the date of the coming Friday |
-| `10 USD to GBP` | the converted amount at the current rate |
-| `[1, 2; 3, 4] * [1; 2]` | `[5; 11]` |
-| `sum(x, [10, 20, 30])` | `60` |
-| `if 5 > 3 then 100 else 200` | `100` |
-| `1+2+b+3+b =>` | `2b+6`, keeping the unknown symbolic |
+<div class="band">
+  <div class="band__inner">
+    <div class="band__head">
+      <span class="band__eyebrow">The API</span>
+      <h2 class="band__title">One call. Every line.</h2>
+      <p class="band__lede">
+        Hand the engine a document and it returns a value per line, along with
+        where each one came from. That is the whole integration.
+      </p>
+    </div>
 
-Every example on this site is executed by the test suite. If one of them stops
-being true, the build goes red.
+    <div class="split">
+      <div>
 
-## Why it exists
+Results are plain values, not strings. Ask one what type it is, what unit it
+carries, or what number sits underneath, and format it however your product
+needs to.
 
-Most calculators make you translate your problem into their syntax. Solve tries
-to go the other way. It recognises the way people already write quantities,
-dates, percentages and currencies in notes, and evaluates them in place.
+The engine keeps a dependency graph across lines, so an edit re-evaluates the
+lines that actually depended on it and nothing else. That is what makes it
+safe to call on every keystroke.
 
-The engine is designed to run on every keystroke in a live editor, so the whole
-pipeline is built around being fast enough to feel instant and incremental
-enough not to redo work it has already done.
+      </div>
+      <div>
 
-<CardGrid>
-  <Card title="Fast by construction" icon="rocket">
-    Expressions compile to bytecode and run on a purpose-built virtual machine.
-    Results are cached per line, and a dependency graph re-evaluates only the
-    lines actually affected by an edit.
-  </Card>
-  <Card title="Extensible" icon="puzzle">
-    Every feature, including arithmetic itself, is a package. You can add your
-    own syntax, functions, units and live data sources without forking the
-    engine.
-  </Card>
-  <Card title="Honest about the unknown" icon="approve-check">
-    A value that depends on data still loading is a distinct value type, not a
-    zero. Errors propagate rather than silently becoming numbers.
-  </Card>
-  <Card title="Framework agnostic" icon="setting">
-    No DOM assumptions and no editor coupling. It runs in a browser, in Node, in
-    a worker, or on a server.
-  </Card>
-</CardGrid>
+```ts
+import { ExpressionEngine } from "solve-engine";
+import { formatValue } from "solve-engine/format";
 
-## Install
+const engine = new ExpressionEngine("en");
 
-```bash
-npm install solve-engine
+const { lines } = engine.parseDocument(document, {
+  inputType: "markdown",
+});
+
+for (const line of lines) {
+  if (!line.result) continue;
+  render(line.lineNumber, formatValue(line.result));
+}
+```
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="band band--wide">
+  <div class="band__inner">
+    <div class="showcase__head">
+      <span class="chip">What it does</span>
+      <h2>Your users write sentences.<br />You get values.</h2>
+    </div>
+
+    <div class="showcase__body">
+      <ShowcaseNav
+        items={[
+          { id: "ex-arithmetic", label: "Arithmetic" },
+          { id: "ex-units", label: "Units" },
+          { id: "ex-documents", label: "Documents" },
+          { id: "ex-calendar", label: "Calendar" },
+          { id: "ex-beyond", label: "Beyond arithmetic" },
+        ]}
+      />
+
+      <div class="showcase__rows">
+        <article class="showcase__row" id="ex-arithmetic">
+          <div class="showcase__demo">
+            <Notepad
+              label="Arithmetic and percentages"
+              initial={`1024 * 8
+(2 + 3) * 4
+2^10
+17 mod 5
+2.5k
+15% of 2400
+increase 100 by 10%
+100 to 150
+5% of what is 6`}
+            />
+          </div>
+          <div class="showcase__copy">
+            <span class="showcase__index">01</span>
+            <h3>Where you run the numbers</h3>
+            <p>
+              No function to call and no syntax to learn first. A line that
+              looks like a sum is a sum, and everything else is left alone.
+            </p>
+            <ul class="points">
+              <li>Percentages in the several senses people mean them by</li>
+              <li>Magnitude suffixes, so 2.5k reads as 2,500</li>
+              <li>Powers, remainders and parentheses, typed as written</li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="showcase__row" id="ex-units">
+          <div class="showcase__demo">
+            <Notepad
+              label="Units and conversions"
+              initial={`100 cm + 2 m
+5 miles in km
+72F to C
+2 cups to ml
+250 kg to pounds
+1 GB in MB
+30 fps * 3 minutes
+2 hours + 45 minutes`}
+            />
+          </div>
+          <div class="showcase__copy">
+            <span class="showcase__index">02</span>
+            <h3>Units that survive the arithmetic</h3>
+            <p>
+              Not string matching on a suffix. Units take part in the
+              calculation, and the result keeps the right one.
+            </p>
+            <ul class="points">
+              <li>Length, mass, volume, data, temperature and time</li>
+              <li>Mixed units in one expression, converted on the way</li>
+              <li>Incompatible units refused rather than quietly added</li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="showcase__row" id="ex-documents">
+          <div class="showcase__demo">
+            <Notepad
+              label="Named values across lines"
+              initial={`# Weekly shop
+veg = 18.40
+meat = 24.10
+cupboard = 31.75
+weekly = veg + meat + cupboard
+monthly = weekly * 4.33
+yearly = weekly * 52
+split(n) = weekly / n
+split(4)`}
+            />
+          </div>
+          <div class="showcase__copy">
+            <span class="showcase__index">03</span>
+            <h3>A document is one calculation</h3>
+            <p>
+              Name a value on one line and use it on the next. Change a number
+              near the top and everything below it moves.
+            </p>
+            <ul class="points">
+              <li>Names defined by assignment, no declaration step</li>
+              <li>Edits re-evaluate only the lines that depended on them</li>
+              <li>Functions are defined the same way values are</li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="showcase__row" id="ex-calendar">
+          <div class="showcase__demo">
+            <Notepad
+              label="Dates and durations"
+              initial={`# Trip planning
+depart = 12/09/2026
+depart + 11 days
+depart + 5 workdays
+days until 25/12/2026
+days since 01/01/2026
+next friday
+14:00 to 17:30`}
+            />
+          </div>
+          <div class="showcase__copy">
+            <span class="showcase__index">04</span>
+            <h3>Dates, times and working days</h3>
+            <p>
+              Calendar questions phrased the way you would ask them out loud,
+              and answered in the unit you asked in.
+            </p>
+            <ul class="points">
+              <li>Relative dates such as next friday or today plus three weeks</li>
+              <li>Differences in days, weeks or working days</li>
+              <li>Clock times and durations in the same arithmetic</li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="showcase__row" id="ex-beyond">
+          <div class="showcase__demo">
+            <Notepad
+              label="Statistics, matrices and symbolic algebra"
+              initial={`average of 12, 19, 7, 24
+sum(x, [10, 20, 30])
+[1, 2; 3, 4] * [5, 6; 7, 8]
+if 5 > 3 then 100 else 200
+1 + 2 + b + 3 + b =>`}
+            />
+          </div>
+          <div class="showcase__copy">
+            <span class="showcase__index">05</span>
+            <h3>Statistics, matrices, algebra</h3>
+            <p>
+              Same syntax, same line. Live figures such as currencies and stock
+              prices resolve asynchronously, and a value that is still loading
+              stays a distinct kind of value rather than becoming a zero.
+            </p>
+            <ul class="points">
+              <li>Aggregates over a list, written the way you would say it</li>
+              <li>Vectors and matrices with real matrix multiplication</li>
+              <li>Symbolic results when a term stays unknown</li>
+            </ul>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="band">
+  <div class="band__inner">
+    <div class="band__head">
+      <span class="band__eyebrow">Highlighting</span>
+      <h2 class="band__title">The colours ship with the engine.</h2>
+      <p class="band__lede">
+        Solve classifies a line into semantic categories and leaves the
+        rendering to you. The notepads above use exactly this, which is why the
+        expressions in them are coloured at all.
+      </p>
+    </div>
+
+    <div class="split">
+      <div>
+
+`getSemanticTokens` returns a category per span. `categoryClassName` turns a
+category into a stable class name, so a package that registers a brand new
+token type gets a class without anyone editing an adapter.
+
+Colours are ordinary CSS. The same categories drive completions through
+`getCompletions`, so one integration covers both.
+
+<ul class="hl-legend">
+  <li><b class="cm-solve-number">number</b></li>
+  <li><b class="cm-solve-string">string</b></li>
+  <li><b class="cm-solve-keyword">keyword</b></li>
+  <li><b class="cm-solve-operator">operator</b></li>
+  <li><b class="cm-solve-comparison">comparison</b></li>
+  <li><b class="cm-solve-function">function</b></li>
+  <li><b class="cm-solve-variable">variable</b></li>
+  <li><b class="cm-solve-unit">unit</b></li>
+  <li><b class="cm-solve-datetime">datetime</b></li>
+  <li><b class="cm-solve-vector">vector</b></li>
+  <li><b class="cm-solve-punctuation">punctuation</b></li>
+</ul>
+
+      </div>
+      <div>
+
+```ts
+import { LanguageService, categoryClassName } from "solve-engine/language";
+
+const language = new LanguageService(engine);
+
+for (const token of language.getSemanticTokens(lineText, lineNumber)) {
+  paint(token.from, token.to, categoryClassName(token.category));
+  // "number" becomes "cm-solve-number"
+}
+```
+
+```css
+.cm-solve-number { color: var(--solve-hl-number); }
+.cm-solve-unit   { color: var(--solve-hl-unit); }
+```
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="band">
+  <div class="band__inner">
+    <div class="band__head">
+      <span class="band__eyebrow">Packages</span>
+      <h2 class="band__title">Add your own syntax.</h2>
+      <p class="band__lede">
+        Every feature in the engine is a package, arithmetic included. A package
+        is a plain object, and every field on it is optional, so you declare
+        only the part of the language you are adding.
+      </p>
+    </div>
+
+    <div class="split">
+      <div>
+
+A package can contribute vocabulary to the lexer, parsing rules, functions the
+virtual machine can call, token rewrites, conversion targets, variable sources,
+async resolvers, highlighting categories and completions.
+
+`engineVersion` is checked when you register, so a package built against an
+incompatible engine is refused with a clear message instead of failing
+somewhere strange later.
+
+The hard part is not the code, it is choosing syntax that does not collide with
+ordinary prose. [Trigger words](/syntax/trigger-words/) covers that, and
+[writing a package](/packages/authoring-a-package/) covers the rest.
+
+      </div>
+      <div>
+
+```ts
+import type { IEnginePackage } from "solve-engine";
+
+export const gamePackage: IEnginePackage = {
+  name: "osrs",
+  engineVersion: "^1.0.0",
+
+  lexerVocabulary: osrsVocabulary,
+  normalizerRules: [osrsItemNormalizerRule()],
+
+  prefixParselets: [
+    { tokenType: "GAME_ITEM", parselet: new GameItemParselet() },
+  ],
+
+  pluginFunctions: [
+    { index: OSRS_PLUGIN_FN_IDX, handler: resolveGameItem },
+  ],
+
+  asyncResolvers: [new OsrsAsyncResolver()],
+
+  // A category nobody has seen before. It gets a matching
+  // "cm-solve-osrs-item" class with no adapter changes.
+  tokenCategories: { GAME_ITEM: "osrs-item" },
+};
 ```
 
 ```ts
 import { ExpressionEngine } from "solve-engine";
 
-const engine = new ExpressionEngine("en");
-const [result] = engine.evaluateExpression("50% of 200");
-// result.toNumber() === 100
+const engine = new ExpressionEngine("en", false, undefined, undefined, [
+  ...BUILTIN_PACKAGES,
+  gamePackage,
+]);
 ```
 
-Continue to the [introduction](/getting-started/introduction/) for the full
-picture, or jump straight to the [syntax reference](/syntax/cheatsheet/) if you
-would rather see everything the engine understands.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="band">
+  <div class="band__inner">
+    <div class="band__head">
+      <span class="band__eyebrow">Presentation</span>
+      <h2 class="band__title">Evaluation and display are separate.</h2>
+      <p class="band__lede">
+        The engine produces a value. Turning it into text is a second step you
+        control, and one you can skip entirely if your product renders values
+        its own way.
+      </p>
+    </div>
+
+    <div class="split">
+      <div>
+
+`formatValue` covers the common case, with settings for decimal places,
+thousands separators, currency display and date format, all defaulting from the
+engine's locale.
+
+The leading `=` marker suits an editor gutter. Strip it anywhere else, which is
+what the notepads on this page do.
+
+      </div>
+      <div>
+
+```ts
+import { formatValue } from "solve-engine/format";
+
+formatValue(value);
+// "= 300.00 cm"
+
+formatValue(value, {
+  numberResult: { decimalPlaces: 4, useThousandsSeparator: false },
+});
+// "= 300.0000 cm"
+
+value.type;       // the kind of thing it is
+value.toNumber(); // the number underneath
+```
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="band">
+  <div class="band__inner">
+    <div class="band__head">
+      <span class="band__eyebrow">Built for editors</span>
+      <h2 class="band__title">Fast enough to run on every keystroke.</h2>
+    </div>
+
+    <div class="specs">
+      <div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="6" y="6" width="12" height="12" rx="1.5" />
+          <rect x="9.75" y="9.75" width="4.5" height="4.5" rx="0.5" />
+          <path d="M9.5 3v3M14.5 3v3M9.5 18v3M14.5 18v3M3 9.5h3M3 14.5h3M18 9.5h3M18 14.5h3" />
+        </svg>
+        <h3>Bytecode, not a tree walk</h3>
+        <p>Expressions compile to bytecode and run on a purpose-built virtual machine, with the compiled program cached per line.</p>
+      </div>
+      <div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="5" cy="6" r="2.2" />
+          <circle cx="19" cy="6" r="2.2" />
+          <circle cx="12" cy="18" r="2.2" />
+          <path d="M7.2 6h9.6M6.4 7.8l4.2 8.4M17.6 7.8l-4.2 8.4" />
+        </svg>
+        <h3>Incremental by dependency</h3>
+        <p>A graph tracks which lines read which names, so an edit re-evaluates only the lines that actually depended on it.</p>
+      </div>
+      <div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="8.5" stroke-dasharray="2.5 3.5" />
+          <path d="M12 3.5a8.5 8.5 0 0 1 8.5 8.5" />
+          <circle cx="12" cy="12" r="1.5" />
+        </svg>
+        <h3>Honest about the unknown</h3>
+        <p>A value waiting on live data is its own type. Errors propagate as errors rather than quietly becoming numbers.</p>
+      </div>
+      <div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 3 20.5 7.5v9L12 21l-8.5-4.5v-9Z" />
+          <path d="M3.5 7.5 12 12l8.5-4.5M12 12v9" />
+        </svg>
+        <h3>No runtime dependencies</h3>
+        <p>No DOM, no editor coupling, no framework. It runs in Node, in a browser, in a worker or on a server.</p>
+      </div>
+    </div>
+
+    <p class="band__note">
+      Every example in this documentation is executed by the test suite, so if
+      one stops being true the build goes red. Start with
+      <a href="/guide/embedding/">embedding the engine</a>, or
+      <a href="/guide/editor-integration/">editor integration</a> if you are
+      wiring it to a live document like the ones above.
+    </p>
+  </div>
+</div>
+
+<OyrenCta />

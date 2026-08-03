@@ -1,0 +1,39 @@
+---
+import wordmark from "../assets/oyren-wordmark.svg";
+
+// Imported rather than referenced from `public/`, so Astro fingerprints the
+// file and prefixes it with the site base path. A hardcoded `/oyren.svg` would
+// 404 the moment the site is served from a subdirectory, which on GitHub Pages
+// it always is.
+//
+// Raw anchors in a component are not rewritten the way Starlight rewrites
+// markdown links, so the internal one is built from BASE_URL by hand.
+const docsHref = `${import.meta.env.BASE_URL.replace(/\/$/, "")}/getting-started/introduction/`;
+---
+
+<section class="oyren not-content" aria-labelledby="oyren-cta">
+  <div class="oyren__inner">
+    <img class="oyren__mark" src={wordmark.src} alt="Oyren" width="596" height="67" />
+
+    <h2 class="oyren__title" id="oyren-cta">Many apps. One workspace.</h2>
+
+    <p class="oyren__body">
+      Open a document and the tool it needs is already open with it. No second
+      app to buy, no import step, no second copy quietly going out of date.
+      Windows, macOS, Linux and the browser, all the same workspace.
+    </p>
+
+    <div class="oyren__actions">
+      <a class="oyren__button oyren__button--primary" href="https://oyren.ai">
+        Try Solve in Oyren
+      </a>
+      <a class="oyren__button oyren__button--ghost" href={docsHref}>
+        Read the docs
+      </a>
+    </div>
+
+    <p class="oyren__platforms">
+      Solve is the calculation engine inside it.
+    </p>
+  </div>
+</section>

@@ -1,5 +1,5 @@
 /*
- * Component overrides — Starlight's chrome redrawn in the app's shadcn idiom.
+ * Component overrides: Starlight's chrome redrawn in the app's shadcn idiom.
  *
  * Starlight puts its own rules in the `starlight.*` cascade layers and custom
  * CSS is injected unlayered, so everything here already outclasses the default
@@ -7,22 +7,29 @@
  *
  * House style, inherited from the app:
  *   · radius comes from `--radius` (0.5rem) and its derived steps
- *   · light mode is FLAT — borders draw every edge, `--shadow-color` is
+ *   · light mode is FLAT. Borders draw every edge, `--shadow-color` is
  *     transparent, so `box-shadow` declarations quietly vanish there
- *   · surfaces above the ambient backdrop are glass: translucent + blurred
+ *   · the page is a flat brand-ink surface, so panels are drawn with a border
+ *     and a barely-there tint rather than with blur or shadow
  *   · the accent is used sparingly, for state and emphasis, never as decoration
  */
 
 /* ── Header ─────────────────────────────────────────────────────────────── */
 
-.header {
+/* Deliberately `header.header`, not `.header`. Starlight nests a
+   `div.header` (the row of controls) inside the `header.header` element, and
+   a bare class selector matches both, which draws the hairline twice: once
+   under the controls and again under the bar. Expressive Code also names its
+   code-frame title bar `.header`, so the tag qualifier keeps this off that
+   too. */
+header.header {
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
 }
 
-/* The wordmark is the brand font at full size; the title text next to the mark
-   is what carries the brand signal, so no gradient or letter-spacing tricks. */
+/* The wordmark is the whole brand mark. There is no icon beside it. BBH Bartle
+   alone carries the signal, so no gradient, tracking or transform tricks. */
 .site-title {
   font-family: var(--font-brand);
   font-weight: 400;
@@ -31,29 +38,27 @@
   color: var(--foreground);
 }
 
-.site-title img {
-  height: 1.5rem;
-  width: auto;
-  color: var(--primary);
-}
-
 /* ── Search ─────────────────────────────────────────────────────────────── */
 
-/* shadcn Input: hairline border, input surface, muted placeholder text. */
-button[data-open-modal] {
-  border: 1px solid var(--input);
-  border-radius: var(--radius);
-  background-color: var(--input-bg);
-  color: var(--faint);
-  transition:
-    border-color 120ms ease,
-    background-color 120ms ease;
-}
+/* shadcn Input: hairline border, input surface, muted placeholder text.
+   Scoped to the width at which Starlight actually draws a search FIELD,
+   below it the control is a bare icon button and a border would box it in. */
+@media (min-width: 50rem) {
+  button[data-open-modal] {
+    border: 1px solid var(--input);
+    border-radius: var(--radius);
+    background-color: var(--input-bg);
+    color: var(--faint);
+    transition:
+      border-color 120ms ease,
+      background-color 120ms ease;
+  }
 
-button[data-open-modal]:hover {
-  border-color: var(--border-strong);
-  background-color: var(--card-hover);
-  color: var(--muted-foreground);
+  button[data-open-modal]:hover {
+    border-color: var(--border-strong);
+    background-color: var(--card-hover);
+    color: var(--muted-foreground);
+  }
 }
 
 /* shadcn Kbd. */
@@ -65,6 +70,34 @@ button[data-open-modal] > kbd {
   font-family: var(--sl-font-mono);
   font-size: var(--sl-text-2xs);
   padding: 0.0625rem 0.3125rem;
+}
+
+/* Starlight's mobile menu toggle is a solid high-contrast disc, a white blob
+   in dark mode. Redrawn as shadcn's `variant="ghost" size="icon"` button so it
+   sits in the header instead of floating on top of it. */
+starlight-menu-button button {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background-color: var(--input-bg);
+  color: var(--foreground);
+  box-shadow: none;
+}
+
+/* Starlight inverts the disc in light mode; the ghost button needs no such
+   special case, so the light-mode rule is neutralised rather than inherited. */
+:root[data-theme="light"] starlight-menu-button button {
+  background-color: var(--input-bg);
+  color: var(--foreground);
+}
+
+/* The open state is the toggle's "pressed" state: accent tint, not a
+   different neutral. `aria-expanded` lives on the custom element, not the
+   button, which is why this is a descendant selector. */
+starlight-menu-button[aria-expanded="true"] button,
+:root[data-theme="light"] starlight-menu-button[aria-expanded="true"] button {
+  background-color: var(--accent);
+  border-color: var(--accent-border);
+  color: var(--accent-foreground);
 }
 
 .dialog-frame {
@@ -80,7 +113,7 @@ button[data-open-modal] > kbd {
   border-inline-end: 1px solid var(--border);
 }
 
-/* Section headings — the uppercase micro-label the app uses above grouped
+/* Section headings: the uppercase micro-label the app uses above grouped
    navigation, rather than Starlight's plain bold run-in. */
 .sidebar-content .top-level > li > details > summary .group-label > .large,
 .sidebar-content .top-level > li > .group-label > .large {
@@ -91,7 +124,7 @@ button[data-open-modal] > kbd {
   color: var(--faint);
 }
 
-/* Nav items — shadcn sidebar rows: full-width hit area, rounded, tinted on
+/* Nav items: shadcn sidebar rows, full-width hit area, rounded, tinted on
    hover, accent-tinted when current. */
 .sidebar-content a {
   display: block;
@@ -140,49 +173,84 @@ button[data-open-modal] > kbd {
 
 /* ── Hero + link buttons ────────────────────────────────────────────────── */
 
+/* Centred, single column. There is no hero image any more, so Starlight's
+   two-column split would leave a hole where the mark used to be. */
+.hero {
+  grid-template-columns: 100%;
+}
+
+.hero .stack,
+.hero .copy {
+  text-align: center;
+  align-items: center;
+}
+
+.hero .actions {
+  justify-content: center;
+}
+
 .hero h1 {
   font-weight: 600;
   letter-spacing: -0.035em;
   color: var(--foreground);
 }
 
+.hero .copy > * {
+  max-width: 34ch;
+}
+
 .hero .tagline {
   color: var(--muted-foreground);
   font-size: clamp(var(--sl-text-base), calc(0.0625rem + 1.6vw), var(--sl-text-lg));
   line-height: 1.6;
-}
-
-/* Starlight sizes the hero image at up to 25rem, which at this heading size
-   makes the mark compete with the sentence rather than sit beside it. */
-.hero > img,
-.hero > .hero-html {
-  filter: drop-shadow(0 0 4rem color-mix(in srgb, var(--primary) 16%, transparent));
+  max-width: 52ch;
 }
 
 @media (min-width: 50rem) {
   .hero {
-    grid-template-columns: 8fr 3fr;
-    padding-block: clamp(2rem, calc(1rem + 6vmin), 5.5rem) 2rem;
+    grid-template-columns: 100%;
+    padding-block: clamp(2.5rem, calc(1rem + 7vmin), 6rem) 2rem;
   }
 
-  .hero > img,
-  .hero > .hero-html {
-    width: min(100%, 13rem);
-    justify-self: center;
+  .hero .stack,
+  .hero .copy {
+    text-align: center;
+    align-items: center;
+  }
+
+  .hero .actions {
+    justify-content: center;
   }
 }
 
 /* shadcn Button. Starlight's link buttons are pill-shaped and oversized; the
-   app's are `rounded-md h-10 px-8 text-sm font-medium`. */
+   app's are `rounded-md h-10 px-8 text-sm font-medium`.
+
+   The layout properties here are not overrides. Starlight ships `.sl-link-button`
+   from its LinkButton component's scoped styles, which are only bundled on
+   pages that actually render that component. The landing page builds its own
+   buttons so it can put a partner's wordmark inside one, so this class has to
+   stand on its own rather than assume that base exists. */
 .sl-link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5em;
+  border: 1px solid transparent;
   border-radius: var(--radius);
   font-size: var(--sl-text-sm);
   font-weight: 500;
+  line-height: 1.1875;
   padding: 0.625rem 1.25rem;
+  text-decoration: none;
   transition:
     background-color 120ms ease,
     border-color 120ms ease,
     color 120ms ease;
+}
+
+.sl-link-button svg {
+  flex-shrink: 0;
 }
 
 @media (min-width: 50rem) {
@@ -244,8 +312,6 @@ button[data-open-modal] > kbd {
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) + 4px);
   background-color: var(--card);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   padding: clamp(1.25rem, calc(0.5rem + 1.5vw), 1.75rem);
   gap: 0.75rem;
   transition:
@@ -294,7 +360,7 @@ button[data-open-modal] > kbd {
 
 /* ── Code ───────────────────────────────────────────────────────────────── */
 
-/* Inline code — shadcn's tinted chip rather than Starlight's grey block. */
+/* Inline code: shadcn's tinted chip rather than Starlight's grey block. */
 .sl-markdown-content code:not(:where(.expressive-code *)) {
   border: 1px solid var(--border);
   border-radius: calc(var(--radius) - 3px);
@@ -313,8 +379,6 @@ button[data-open-modal] > kbd {
   border-radius: calc(var(--radius) + 4px);
   border: 1px solid var(--border);
   background-color: var(--card);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   overflow: hidden;
 }
 
@@ -389,7 +453,7 @@ button[data-open-modal] > kbd {
   background-color: var(--card-hover);
 }
 
-/* Expressions must not wrap mid-token — a broken expression is unreadable. */
+/* Expressions must not wrap mid-token, because a broken expression is unreadable. */
 .sl-markdown-content table code {
   white-space: nowrap;
   border: none;
@@ -516,7 +580,7 @@ footer :is(.meta, .sl-flex) a {
   border-top: 1px solid var(--border);
 }
 
-/* shadcn Select — used by the theme and language switchers. */
+/* shadcn Select, used by the theme and language switchers. */
 .sl-select-wrapper select {
   border: 1px solid var(--input);
   border-radius: var(--radius);
@@ -556,44 +620,62 @@ hr {
   color: var(--primary);
 }
 
-/* Three facts under the hero, drawn as one glass strip that splits into a
-   column on narrow screens. Values are set in the display serif — the same
-   pairing the app uses when a number is the point of the row. */
-.landing-strip {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1px;
-  margin-block: 1rem 3rem;
-  border: 1px solid var(--border);
-  border-radius: calc(var(--radius) + 4px);
-  background-color: var(--border);
-  overflow: hidden;
-}
-
-.landing-strip > div {
+/* The install line. This is a library before it is anything else, so the very
+   first thing under the hero is how you get it. Centred and quiet, because it is a
+   fact, not a call to action; the buttons above already did that job. */
+.install-bar {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  padding: 1.125rem 1.5rem;
-  background-color: var(--card);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  align-items: center;
+  gap: 0.625rem;
+  margin-block: 0 2.5rem;
+  text-align: center;
 }
 
-.landing-strip__value {
-  font-family: var(--font-display);
-  font-size: var(--sl-text-xl);
-  line-height: 1.1;
+.install-bar__cmd {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background-color: var(--muted);
+  padding: 0.5rem 1rem;
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-sm);
+}
+
+.install-bar__prompt {
+  color: var(--primary);
+  user-select: none;
+}
+
+.install-bar__cmd code {
   color: var(--foreground);
+  /* The chip IS the code block; the inline-code treatment would draw a second
+     border inside this one. */
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: inherit;
 }
 
-.landing-strip__label {
-  font-size: var(--sl-text-xs);
+.install-bar__meta {
+  margin: 0;
   color: var(--faint);
+  font-size: var(--sl-text-xs);
 }
 
-@media (min-width: 50rem) {
-  .landing-strip {
-    grid-template-columns: repeat(3, 1fr);
-  }
+/* The one line that introduces the interactive part of the page. */
+.lede {
+  margin-block: 0 0.75rem;
+  color: var(--muted-foreground);
+  font-size: var(--sl-text-sm);
+  text-align: center;
+}
+
+/* Soulver's rhythm: a heading, one line explaining it, then a live block. The
+   sections need real air between them or the notepads read as one long table. */
+.sl-markdown-content > h2,
+.sl-markdown-content > .sl-heading-wrapper.level-h2 {
+  margin-top: 4rem;
 }
