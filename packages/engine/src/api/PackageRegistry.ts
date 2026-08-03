@@ -213,7 +213,7 @@ export interface IEnginePackage {
  *
  * @example
  * ```typescript
- * import { packageRegistry } from "@solve/core";
+ * import { packageRegistry } from "solve-engine";
  *
  * // Register a complete provider package
  * packageRegistry.registerPackage({
@@ -221,6 +221,22 @@ export interface IEnginePackage {
  *   prefixParselets: [{ tokenType: "MY_FUNC", parselet: new MyParselet() }],
  * });
  * ```
+ *
+ * @deprecated Register on an engine instead:
+ * `engine.registerPackage(pkg)`.
+ *
+ * This class writes into process-wide singletons, which is incompatible with an
+ * engine owning its own registries. Since the introduction of
+ * {@link EngineContext}, an engine reads plugin functions, opcode handlers and
+ * variable sources from its own context, so a package registered here is not
+ * visible to any engine. Parselets and lexer vocabulary registered here reach
+ * the shared registries, which an engine also does not read: it builds its own
+ * `ParseletRegistry` and its own `Lexer`.
+ *
+ * In other words this path registers into state nothing evaluates against. It
+ * remains exported because removing it is a breaking change, and it is where
+ * the singletons that survive are still written from, but it should not be used
+ * in new code and will be removed before 1.0 proper.
  */
 export class PackageRegistry implements IPackageRegistry {
   Value = Value;
