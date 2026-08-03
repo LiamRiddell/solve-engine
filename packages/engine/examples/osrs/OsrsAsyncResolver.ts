@@ -69,8 +69,12 @@ export class OsrsAsyncResolver implements IAsyncResolver {
           i += 2; break;
         case OpCode.CALL_PLUGIN: case OpCode.CALL_BUILTIN:
           i += 3; break;
-        case OpCode.ARR_NEW:
-          i += 2; break;
+        // MAT_NEW carries two operands (rows, cols). Its predecessor ARR_NEW
+        // carried one (count), so this arm advanced by 2. Renaming without
+        // widening the step would leave the scanner one byte behind for the
+        // rest of the program and silently misread every opcode after it.
+        case OpCode.MAT_NEW:
+          i += 3; break;
         default:
           i++; break;
       }

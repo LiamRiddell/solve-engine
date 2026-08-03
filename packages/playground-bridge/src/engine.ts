@@ -1019,12 +1019,22 @@ export function runEngineWithStreaming(
 		listenerCount: 0,
 	};
 	const pageHeatmap = extractPageHeatmap(cacheSnapshot, allLines.length);
-	// Capture into a stable local first — `engine` is a mutable `let` that
-	// closures elsewhere in this function (e.g. `abortHandler`) also
-	// reassign, which some type-checker configurations narrow less
-	// precisely across a `let` than a `const` (same reasoning as the
-	// existing `const eng = engine` a few lines up).
-	const engineRef = engine;
+	// Capture into a stable local first. `engine` is a mutable `let` that
+	// closures elsewhere in this function (the abort handler, for one) also
+	// reassign to null.
+	//
+	// The cast is a workaround for a type-checker disagreement, not a
+	// silenced bug. `engine` is assigned inside a `try` whose result is read
+	// from a later callback, and TypeScript 6 declines to carry that
+	// assignment across the closure boundary, narrowing the binding to
+	// `never` so that any property access on it fails to compile. Both
+	// methods used below do exist on ExpressionEngine, and TypeScript 5.1,
+	// which the engine package itself builds with, compiles this unchanged.
+	// The playground pulls engine source into its own stricter, newer
+	// type-check through path aliases, which is where the mismatch comes
+	// from. See the operand-width consolidation note for the related habit
+	// of duplicating engine knowledge across package boundaries.
+	const engineRef = engine as ExpressionEngine | null;
 	const pipelineTelemetry = engineRef
 		? engineRef.getLastTelemetry()
 		: null;

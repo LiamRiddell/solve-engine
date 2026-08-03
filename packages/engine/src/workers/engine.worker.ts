@@ -154,11 +154,19 @@ function compileOne(item: CompileItem): CompileResult {
 
 		// Transfer only the exact used slice of the ArrayBuffer. The engine's
 		// buffer pool is write-only, so detaching the source view is fine.
-		const opcodesBuffer = opcodes.buffer.slice(
+		//
+		// The casts narrow ArrayBufferLike to ArrayBuffer. A TypedArray's
+		// `buffer` is typed as the union including SharedArrayBuffer, which
+		// TypeScript 6 enforces where 5.1 did not, and the postMessage
+		// transfer list below accepts only ArrayBuffer. The narrowing is
+		// sound here because these buffers come from the engine's own pool,
+		// which allocates plain ArrayBuffers; a SharedArrayBuffer could not
+		// reach this point, and would not be transferable if it did.
+		const opcodesBuffer = (opcodes.buffer as ArrayBuffer).slice(
 			opcodes.byteOffset,
 			opcodes.byteOffset + opcodes.byteLength
 		);
-		const numbersBuffer = numbers.buffer.slice(
+		const numbersBuffer = (numbers.buffer as ArrayBuffer).slice(
 			numbers.byteOffset,
 			numbers.byteOffset + numbers.byteLength
 		);

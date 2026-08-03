@@ -18,7 +18,7 @@
     /* Path aliases (shadcn/ui + shared engine packages) — no baseUrl needed,
        paths resolve relative to this file (deprecated in TS 6.0). The
        @bridge/@solve-js aliases pull packages/playground-bridge and
-       packages/core source into this project's type-check transitively —
+       packages/engine source into this project's type-check transitively —
        those packages have their own, more lenient tsconfigs and were never
        written to satisfy Vite's react-ts template defaults
        (verbatimModuleSyntax/erasableSyntaxOnly/noUnusedLocals), so those
@@ -27,8 +27,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@bridge/*": ["../packages/playground-bridge/src/*"],
-      "@solve-js/*": ["../packages/core/src/*"],
-      "@solve-js-examples/*": ["../packages/core/examples/*"]
+      "@solve-js/*": ["../packages/engine/src/*"],
+      "@solve-js-examples/*": ["../packages/engine/examples/*"]
     },
 
     "noFallthroughCasesInSwitch": true

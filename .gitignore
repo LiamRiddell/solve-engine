@@ -18,15 +18,15 @@ node_modules
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store
 
-# webapp (React + shadcn/ui production app)
-webapp/node_modules
-webapp/dist
-webapp/.vite
-webapp/*.local
-webapp/*.env
+# playground (React + shadcn/ui interactive demo)
+playground/node_modules
+playground/dist
+playground/.vite
+playground/*.local
+playground/*.env
 
-# @solve/core package build output (tsup)
-packages/core/dist
+# solve-engine package build output (tsup)
+packages/engine/dist
 
 # Testing
 coverage/

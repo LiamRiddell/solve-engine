@@ -18,7 +18,7 @@ const config = {
 	moduleDirectories: ["node_modules"],
 
 	moduleNameMapper: {
-		// packages/playground-bridge (and webapp) source uses ESM-style
+		// packages/playground-bridge (and playground) source uses ESM-style
 		// ".js"-suffixed relative imports (e.g. `from "./engineShared.js"`,
 		// resolved by Vite's bundler moduleResolution) — ts-jest's
 		// CommonJS resolution doesn't strip that suffix on its own, so a
@@ -26,24 +26,24 @@ const config = {
 		// jest. Strip it generically so any such file can be imported by a
 		// test without needing its own per-file mapping entry.
 		"^(\\.{1,2}/.*)\\.js$": "$1",
-		"@solve-js/workers/(.*)\\.worker$": "<rootDir>/packages/core/__tests__/__mocks__/worker-mock.ts",
-		"@solve-js-examples/(.*)": "<rootDir>/packages/core/examples/$1",
-		"@solve-js/(.*)": "<rootDir>/packages/core/src/$1",
+		"@solve-js/workers/(.*)\\.worker$": "<rootDir>/packages/engine/__tests__/__mocks__/worker-mock.ts",
+		"@solve-js-examples/(.*)": "<rootDir>/packages/engine/examples/$1",
+		"@solve-js/(.*)": "<rootDir>/packages/engine/src/$1",
 		"@bridge/(.*)": "<rootDir>/packages/playground-bridge/src/$1",
-		"@tools/(.*)": "<rootDir>/packages/core/tools/$1",
-		"test/(.*)": "<rootDir>/packages/core/__tests__/$1",
-		"^@codemirror/language$": "<rootDir>/packages/core/__tests__/__mocks__/codemirror-language.ts",
-		"^@lezer/common$": "<rootDir>/packages/core/__tests__/__mocks__/lezer-common.ts",
-		"^obsidian$": "<rootDir>/packages/core/__tests__/__mocks__/obsidian.ts",
+		"@tools/(.*)": "<rootDir>/packages/engine/tools/$1",
+		"test/(.*)": "<rootDir>/packages/engine/__tests__/$1",
+		"^@codemirror/language$": "<rootDir>/packages/engine/__tests__/__mocks__/codemirror-language.ts",
+		"^@lezer/common$": "<rootDir>/packages/engine/__tests__/__mocks__/lezer-common.ts",
+		"^obsidian$": "<rootDir>/packages/engine/__tests__/__mocks__/obsidian.ts",
 	},
 
 	preset: "ts-jest",
 
 	rootDir: ".",
 
-	roots: ["packages/core/__tests__", "packages/playground-bridge/__tests__"],
+	roots: ["packages/engine/__tests__", "packages/playground-bridge/__tests__"],
 
-	setupFiles: ["<rootDir>/packages/core/__tests__/__mocks__/jest-setup.ts"],
+	setupFiles: ["<rootDir>/packages/engine/__tests__/__mocks__/jest-setup.ts"],
 
 	testEnvironment: "jest-environment-node",
 
@@ -63,7 +63,7 @@ const config = {
 		"^.+\\.tsx?$": [
 			"ts-jest",
 			{
-				tsconfig: "./packages/core/__tests__/tsconfig.test.json",
+				tsconfig: "./packages/engine/__tests__/tsconfig.test.json",
 				skipLibCheck: true,
 				isolatedModules: true
 			},

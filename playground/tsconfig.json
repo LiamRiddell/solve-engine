@@ -8,8 +8,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@bridge/*": ["../packages/playground-bridge/src/*"],
-      "@solve-js/*": ["../packages/core/src/*"],
-      "@solve-js-examples/*": ["../packages/core/examples/*"]
+      "@solve-js/*": ["../packages/engine/src/*"],
+      "@solve-js-examples/*": ["../packages/engine/examples/*"]
     }
   }
 }

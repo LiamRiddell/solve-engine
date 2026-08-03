@@ -12,8 +12,8 @@ export default defineConfig({
   resolve: {
     alias: [
       // Specific aliases MUST come before catch-all prefixes so they match first
-      { find: "@solve-js-examples", replacement: path.resolve(dirname, "../packages/core/examples") },
-      { find: "@solve-js", replacement: path.resolve(dirname, "../packages/core/src") },
+      { find: "@solve-js-examples", replacement: path.resolve(dirname, "../packages/engine/examples") },
+      { find: "@solve-js", replacement: path.resolve(dirname, "../packages/engine/src") },
       { find: "@bridge", replacement: path.resolve(dirname, "../packages/playground-bridge/src") },
       { find: "@", replacement: path.resolve(dirname, "./src") },
     ],

@@ -17,5 +17,5 @@
 		"lib": ["DOM", "ES5", "ES6", "ES7"]
 	},
 	"include": [],
-	"exclude": ["webapp/**/*", "packages/**/*", "node_modules"]
+	"exclude": ["playground/**/*", "packages/**/*", "node_modules"]
 }

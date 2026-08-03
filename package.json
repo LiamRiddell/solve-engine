@@ -1,5 +1,5 @@
 {
-	"name": "solve-engine",
+	"name": "solve-workspace",
 	"version": "0.1.0",
 	"private": true,
 	"description": "Workspace root for the Solve expression-evaluation engine, its playground bridge, and the interactive playground.",
@@ -7,16 +7,16 @@
 		"packages/*"
 	],
 	"scripts": {
-		"build": "npm run build --workspace=packages/core",
+		"build": "npm run build --workspace=packages/engine",
 		"test": "node --expose-gc node_modules/jest/bin/jest.js --logHeapUsage",
 		"test:ci": "node --expose-gc node_modules/jest/bin/jest.js --no-coverage --logHeapUsage",
-		"test:engine": "node --expose-gc node_modules/jest/bin/jest.js --testPathPattern=\"packages/core/__tests__/engine\" --no-coverage --logHeapUsage",
+		"test:engine": "node --expose-gc node_modules/jest/bin/jest.js --testPathPattern=\"packages/engine/__tests__/engine\" --no-coverage --logHeapUsage",
 		"test:light": "node --expose-gc node_modules/jest/bin/jest.js --no-coverage --logHeapUsage --testPathIgnorePatterns=\"LexerVocabularyFuzz|Fuzz|BreakageTests|LongDocumentRobustness\"",
 		"test:oom": "node --expose-gc --max-old-space-size=4096 node_modules/jest/bin/jest.js --no-coverage --logHeapUsage --testPathPattern=\"BreakageTests\\.|LexerFuzz\\.|LongDocumentRobustness\\.\" --runInBand",
 		"test:watch": "jest --watch",
-		"typecheck": "npm run typecheck --workspace=packages/core",
+		"typecheck": "npm run typecheck --workspace=packages/engine",
 		"verify": "npm run typecheck && npm run test:ci && npm run build",
-		"verify:all": "npm run verify && npm run build --prefix webapp"
+		"verify:all": "npm run verify && npm run build --prefix playground"
 	},
 	"keywords": [],
 	"author": "Liam Riddell",

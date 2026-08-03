@@ -1,18 +1,18 @@
 {
-	"name": "@solve/core",
+	"name": "solve-engine",
 	"version": "0.1.0",
 	"description": "The expression evaluation engine behind Solve — lexer, parser, bytecode VM, and an extensible package system.",
 	"keywords": ["expression-evaluator", "calculator", "bytecode-vm", "parser", "lexer", "dsl", "markdown", "obsidian"],
 	"license": "MIT",
 	"author": "Liam Riddell",
-	"homepage": "https://github.com/LiamRiddell/solve/tree/main/packages/core#readme",
+	"homepage": "https://github.com/LiamRiddell/solve-engine/tree/main/packages/engine#readme",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/LiamRiddell/solve.git",
-		"directory": "packages/core"
+		"url": "https://github.com/LiamRiddell/solve-engine.git",
+		"directory": "packages/engine"
 	},
 	"bugs": {
-		"url": "https://github.com/LiamRiddell/solve/issues"
+		"url": "https://github.com/LiamRiddell/solve-engine/issues"
 	},
 	"publishConfig": {
 		"access": "public"

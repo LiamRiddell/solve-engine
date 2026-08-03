@@ -1,5 +1,5 @@
 {
-  "name": "webapp",
+  "name": "solve-playground",
   "description": "Solve — production web app (React + shadcn/ui) for editing and showcasing the @solve/core engine.",
   "private": true,
   "version": "0.0.0",

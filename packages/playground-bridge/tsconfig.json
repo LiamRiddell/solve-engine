@@ -14,8 +14,8 @@
 		"noEmit": true,
 		"baseUrl": ".",
 		"paths": {
-			"@solve-js/*": ["../core/src/*"],
-			"@solve-js-examples/*": ["../core/examples/*"]
+			"@solve-js/*": ["../engine/src/*"],
+			"@solve-js-examples/*": ["../engine/examples/*"]
 		}
 	},
 	"include": ["src/**/*.ts"]
