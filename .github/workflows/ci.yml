@@ -22,8 +22,13 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
+      # Node 20 is gone because the project's own tooling cannot install on it:
+      # size-limit pulls nanoid 6, which requires ^22 || ^24 || >=26, and
+      # `.npmrc` sets engine-strict. Testing a version the repository cannot
+      # even `npm ci` on was never going to work, and claiming support for one
+      # nothing exercises is worse than dropping it honestly.
       matrix:
-        node: [20, 22, 24]
+        node: [22, 24]
 
     steps:
       - uses: actions/checkout@v7
