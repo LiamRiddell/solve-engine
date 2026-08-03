@@ -7,7 +7,9 @@ import { convertUnit, getMeasure, getBestUnit, getConvertiblePossibilities, isWo
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
-import { builtinFunctions, pluginFunctionRegistry, asConverterRegistry } from "@solve-js/vm/VMBuiltins";
+import { builtinFunctions, asConverterRegistry } from "@solve-js/vm/VMBuiltins";
+import { defaultEngineContext } from "@solve-js/engine/EngineContext";
+import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { unifyUom, binaryOp } from "@solve-js/vm/VMConversion";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
@@ -29,7 +31,16 @@ import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-
  *   calls (default 50) — see the VM interface's `pushCallFrame` doc for why
  *   this exists as its own dedicated guard, separate from `maxInstructions`.
  */
-export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructions = 50000, maxFunctionRecursionDepth = 50): VM {
+export function createVM(
+    registry: OpRegistry,
+    maxStackDepth = 200,
+    maxInstructions = 50000,
+    maxFunctionRecursionDepth = 50,
+    // Defaults to the shared context so the many call sites that predate
+    // per-engine contexts keep working unchanged. An ExpressionEngine always
+    // passes its own.
+    context: EngineContext = defaultEngineContext,
+): VM {
     const stack: Value[] = [];
     const variables = new Map<string, Value>();
     let instructionCount = 0;
@@ -119,6 +130,7 @@ export function createVM(registry: OpRegistry, maxStackDepth = 200, maxInstructi
       set activeSignal(s: AbortSignal | undefined) { activeSignal = s; },
       get abortCurrent() { return abortCurrent; },
       set abortCurrent(f: (() => void) | undefined) { abortCurrent = f; },
+      context,
       getMaxInstructions() { return maxInstructions; },
       getInstructionCount() { return instructionCount; },
       incrementInstructions(n: number) {
@@ -980,7 +992,7 @@ export function executeBytecode(
           const args: Value[] = [];
           for (let i = 0; i < argCount; i++) args.push(safePop(stack));
           args.reverse();
-          const fn = pluginFunctionRegistry[fnIdx];
+          const fn = vm.context.pluginFunctions[fnIdx];
           if (!fn) {
             stack.push(numberValue(0));
           } else {

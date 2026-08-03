@@ -17,6 +17,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import type { VM } from "@solve-js/vm/OpRegistry";
+import { registerTestPluginFunction } from "@tools/testUtils";
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -262,7 +263,6 @@ describe("VM CALL_PLUGIN → EvalResult", () => {
         delete pluginFunctionRegistry[102];
     });
 	test("should not execute beyond instruction limit even with async plugins", () => {
-        const { pluginFunctionRegistry } = require("@solve-js/vm/VMBuiltins");
         // Create an infinite loop by jumping back — this verifies the guard still works
         const builder = new BytecodeBuilder();
         builder.reset();
@@ -298,9 +298,8 @@ describe("ExpressionEngine EvalResult handling", () => {
     });
 	test("should return Pending value when executeBytecode returns { type:'pending' }", () => {
         // Register an async plugin function
-        const { pluginFunctionRegistry } = require("@solve-js/vm/VMBuiltins");
         const testPromise = Promise.resolve(numberValue(77));
-        pluginFunctionRegistry[200] = () => testPromise;
+        const disposePlugin200 = registerTestPluginFunction(engine, 200, () => testPromise);
 
         const vm = engine.getVM();
         const bytecode = buildCallPluginBytecode(200, 2);
@@ -331,11 +330,10 @@ describe("ExpressionEngine EvalResult handling", () => {
         }
 
         // Clean up
-        delete pluginFunctionRegistry[200];
+        disposePlugin200();
     });
 	test("should clean up VM stack after execution (pending or not)", () => {
-        const { pluginFunctionRegistry } = require("@solve-js/vm/VMBuiltins");
-        pluginFunctionRegistry[201] = () => Promise.resolve(numberValue(1));
+        const disposePlugin201 = registerTestPluginFunction(engine, 201, () => Promise.resolve(numberValue(1)));
 
         const vm = engine.getVM();
         const stackBefore = vm.getStack().length;
@@ -353,12 +351,11 @@ describe("ExpressionEngine EvalResult handling", () => {
         // Stack should be clean
         expect(vm.getStack().length).toBe(stackBefore);
 
-        delete pluginFunctionRegistry[201];
+        disposePlugin201();
     });
 	test("should propagate exceptions from plugin functions", () => {
-        const { pluginFunctionRegistry } = require("@solve-js/vm/VMBuiltins");
         // Register a plugin function that throws a regular error
-        pluginFunctionRegistry[202] = () => { throw new Error("regular failure"); };
+        const disposePlugin202 = registerTestPluginFunction(engine, 202, () => { throw new Error("regular failure"); });
 
         const vm = engine.getVM();
         const bytecode = buildCallPluginBytecode(202, 1);
@@ -374,11 +371,10 @@ describe("ExpressionEngine EvalResult handling", () => {
         }
         expect(vm.getStack().length).toBe(stackBefore);
 
-        delete pluginFunctionRegistry[202];
+        disposePlugin202();
     });
 	test("executeCached should return pendingValue for pending results", () => {
-        const { pluginFunctionRegistry } = require("@solve-js/vm/VMBuiltins");
-        pluginFunctionRegistry[203] = () => Promise.resolve(numberValue(55));
+        const disposePlugin203 = registerTestPluginFunction(engine, 203, () => Promise.resolve(numberValue(55)));
 
         const vm = engine.getVM();
         const bytecode = buildCallPluginBytecode(203, 1);
@@ -390,7 +386,7 @@ describe("ExpressionEngine EvalResult handling", () => {
         expect(result.type).toBe(ValueType.Pending);
         expect(result.value).toContain("plugin:203:");
 
-        delete pluginFunctionRegistry[203];
+        disposePlugin203();
     });
 
     // Regression for the second fatal bug fixed this pass, per
@@ -425,8 +421,7 @@ describe("ExpressionEngine EvalResult handling", () => {
     // try/catch (ExpressionEngine.ts) surfaces it as a batcher "error" event
     // rather than an unhandled rejection or a hang.
     test("plugin function returning a REJECTED promise surfaces as an async error event, not an unhandled rejection", async () => {
-        const { pluginFunctionRegistry } = require("@solve-js/vm/VMBuiltins");
-        pluginFunctionRegistry[204] = () => Promise.reject(new Error("simulated fetch failure"));
+        const disposePlugin204 = registerTestPluginFunction(engine, 204, () => Promise.reject(new Error("simulated fetch failure")));
 
         const events: import("@solve-js/engine/AsyncResolutionBatcher").AsyncResolutionEvent[] = [];
         const batcher = engine.getBatcher();
@@ -449,7 +444,7 @@ describe("ExpressionEngine EvalResult handling", () => {
         expect(errorEvent && "error" in errorEvent ? errorEvent.error.message : undefined).toBe("simulated fetch failure");
 
         batcher._testCaptures = null;
-        delete pluginFunctionRegistry[204];
+        disposePlugin204();
     });
 });
 
@@ -468,9 +463,8 @@ describe("ExpressionEngine evaluateExpression with async plugin", () => {
         engine.clear();
     });
 	test("should return Pending value from executeCached when plugin returns Promise", () => {
-        const { pluginFunctionRegistry } = require("@solve-js/vm/VMBuiltins");
         const testPromise = Promise.resolve(numberValue(55));
-        pluginFunctionRegistry[210] = () => testPromise;
+        const disposePlugin210 = registerTestPluginFunction(engine, 210, () => testPromise);
 
         const vm = engine.getVM();
         const bytecode = buildCallPluginBytecode(210, 1);
@@ -483,11 +477,10 @@ describe("ExpressionEngine evaluateExpression with async plugin", () => {
         expect(result.type).toBe(ValueType.Pending);
         expect(result.value).toContain("plugin:210:");
 
-        delete pluginFunctionRegistry[210];
+        disposePlugin210();
     });
 	test("should return Value result from executeCached for sync plugin", () => {
-        const { pluginFunctionRegistry } = require("@solve-js/vm/VMBuiltins");
-        pluginFunctionRegistry[211] = (args: Value[]) => numberValue(args[0].toNumber() * 3);
+        const disposePlugin211 = registerTestPluginFunction(engine, 211, (args: Value[]) => numberValue(args[0].toNumber() * 3));
 
         const vm = engine.getVM();
         const bytecode = buildCallPluginBytecode(211, 1);
@@ -498,11 +491,10 @@ describe("ExpressionEngine evaluateExpression with async plugin", () => {
         expect(result.type).toBe(ValueType.Number);
         expect(result.toNumber()).toBe(3); // 1 * 3
 
-        delete pluginFunctionRegistry[211];
+        disposePlugin211();
     });
 	test("should handle AbortController cleanup on engine.clear()", () => {
-        const { pluginFunctionRegistry } = require("@solve-js/vm/VMBuiltins");
-        pluginFunctionRegistry[212] = () => Promise.resolve(numberValue(42));
+        const disposePlugin212 = registerTestPluginFunction(engine, 212, () => Promise.resolve(numberValue(42)));
 
         const vm = engine.getVM();
         const bytecode = buildCallPluginBytecode(212, 1);
@@ -517,6 +509,6 @@ describe("ExpressionEngine evaluateExpression with async plugin", () => {
 
         // After clear, batcher listeners should be cleaned up
 
-        delete pluginFunctionRegistry[212];
+        disposePlugin212();
     });
 });

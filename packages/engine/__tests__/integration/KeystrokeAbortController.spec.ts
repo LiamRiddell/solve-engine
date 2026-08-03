@@ -3,9 +3,9 @@ import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { numberValue, ValueType } from "@solve-js/vm/Value";
-import { pluginFunctionRegistry } from "@solve-js/vm/VMBuiltins";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { registerTestPluginFunction } from "@tools/testUtils";
 
 /**
  * Helper: create a fresh engine (no diagnostic mode).
@@ -312,8 +312,11 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 			resolvePromise = resolve;
 		});
 
-		const original = pluginFunctionRegistry[250];
-		pluginFunctionRegistry[250] = () => asyncPromise as Promise<import("@solve-js/vm/Value").Value>;
+		const disposePlugin = registerTestPluginFunction(
+			engine,
+			250,
+			() => asyncPromise as Promise<import("@solve-js/vm/Value").Value>,
+		);
 
 		const builder = new BytecodeBuilder();
 		builder.reset();
@@ -349,7 +352,7 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 			// Signal remains aborted — confirm stale result was discarded
 			expect(vm.activeSignal!.aborted).toBe(true);
 		} finally {
-			pluginFunctionRegistry[250] = original;
+			disposePlugin();
 		}
 	});
 
@@ -370,8 +373,11 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 			resolvePromise = resolve;
 		});
 
-		const original = pluginFunctionRegistry[250];
-		pluginFunctionRegistry[250] = () => asyncPromise as Promise<import("@solve-js/vm/Value").Value>;
+		const disposePlugin = registerTestPluginFunction(
+			engine,
+			250,
+			() => asyncPromise as Promise<import("@solve-js/vm/Value").Value>,
+		);
 
 		const builder = new BytecodeBuilder();
 		builder.reset();
@@ -421,7 +427,7 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 			// (it's cleaned up when the engine is cleared).
 			// We don't assert this — it's a known quirk, not a bug.
 		} finally {
-			pluginFunctionRegistry[250] = original;
+			disposePlugin();
 		}
 	});
 

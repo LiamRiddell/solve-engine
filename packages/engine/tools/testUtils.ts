@@ -199,3 +199,28 @@ export function expectNumberValue(value: Value, expected: number, epsilon = 0.00
   }
   expectApproximately(value.toNumber(), expected, epsilon);
 }
+/**
+ * Register a plugin function on one specific engine, for tests.
+ *
+ * Tests used to assign into the module-level `pluginFunctionRegistry` and rely
+ * on an engine picking it up. That worked only because every engine shared one
+ * registry, which is the coupling {@link EngineContext} exists to remove, so it
+ * silently stops working once an engine owns its own. This goes through
+ * `registerPackage`, the same path a real package uses.
+ *
+ * @param engine - The engine to register on.
+ * @param index - Plugin function index the test's bytecode calls.
+ * @param handler - The function to install.
+ * @returns A disposer that unregisters it again.
+ */
+export function registerTestPluginFunction(
+	engine: { registerPackage: (pkg: never) => unknown; unregisterPackage: (name: string) => boolean },
+	index: number,
+	handler: unknown,
+): () => void {
+	const name = `test-plugin-fn-${index}`;
+	engine.registerPackage({ name, pluginFunctions: [{ index, handler }] } as never);
+	return () => {
+		engine.unregisterPackage(name);
+	};
+}

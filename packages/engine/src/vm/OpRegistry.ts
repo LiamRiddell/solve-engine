@@ -1,5 +1,6 @@
 import type { Value } from "@solve-js/vm/Value";
 import type { BytecodeProgram, UserFunctionDef } from "@solve-js/parser/BytecodeBuilder";
+import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
@@ -171,6 +172,15 @@ export interface VM {
 	activeSignal?: AbortSignal;
 	/** Abort the current evaluation (called when expression changes before resolution). */
 	abortCurrent?: () => void;
+	/**
+	 * Registries belonging to the engine that created this VM.
+	 *
+	 * `CALL_PLUGIN` resolves handlers through here rather than through a
+	 * module-level registry, so two engines in one process no longer share the
+	 * plugin functions their packages registered. This follows what
+	 * `userFunctions` and `equations` already do by being VM-instance scoped.
+	 */
+	context: EngineContext;
 }
 
 /** Shared singleton OpRegistry — used when no custom opcodes are needed. */

@@ -13,7 +13,9 @@ import { createVM, executeBytecode } from "@solve-js/vm/VM";
 import type { EvalResult, LineExecutionContext } from "@solve-js/vm/VM";
 import type { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
-import { pluginFunctionRegistry, registerAsConverter, unregisterAsConverter } from "@solve-js/vm/VMBuiltins";
+import { registerAsConverter, unregisterAsConverter } from "@solve-js/vm/VMBuiltins";
+import { createEngineContext } from "@solve-js/engine/EngineContext";
+import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { Value, ValueType, numberValue, stringValue, pendingValue, freezeIfDev, errorValue, type MatrixData } from "@solve-js/vm/Value";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
@@ -132,6 +134,11 @@ export class ExpressionEngine {
     private parser: PrecedenceParser;
     private localeCode: string;
     private vm: VM;
+    /**
+     * Registries this engine owns, rather than shares with every other
+     * instance in the process. See {@link EngineContext}.
+     */
+    private readonly context: EngineContext;
     private config: typeof DEFAULT_CONFIG;
     private diagnosticPipeline: DiagnosticPipeline;
     /**
@@ -304,6 +311,8 @@ export class ExpressionEngine {
         this.config = mergeEngineConfig(DEFAULT_CONFIG, config ?? {});
         this.lexer = new Lexer(localeCode, buildTokenLookup(localeCode));
         this.registry = new ParseletRegistry();
+        // Before the package loop below, which registers plugin functions into it.
+        this.context = createEngineContext();
 
 // Wire diagnostic pipeline: use provided, create timeline if enabled, or leave empty for production
          if (diagnosticPipeline) {
@@ -377,7 +386,13 @@ export class ExpressionEngine {
         }
 
         this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, localeCode);
-        this.vm = createVM(sharedOpRegistry, this.config.vm.maxStackDepth, this.config.vm.maxInstructions);
+        this.vm = createVM(
+            sharedOpRegistry,
+            this.config.vm.maxStackDepth,
+            this.config.vm.maxInstructions,
+            undefined,
+            this.context,
+        );
         this.queryClient = createQueryClient();
         this.batcher = new AsyncResolutionBatcher(this.dag, this.lineCache, this.vm);
 	}
@@ -522,7 +537,7 @@ export class ExpressionEngine {
         }
         if (pkg.pluginFunctions) {
             for (const pf of pkg.pluginFunctions) {
-                pluginFunctionRegistry[pf.index] = pf.handler;
+                this.context.pluginFunctions[pf.index] = pf.handler;
                 contribution.pluginFunctionIndices.push(pf.index);
             }
         }
@@ -601,7 +616,7 @@ export class ExpressionEngine {
         if (!contribution) return false;
 
         for (const index of contribution.pluginFunctionIndices) {
-            delete pluginFunctionRegistry[index];
+            delete this.context.pluginFunctions[index];
         }
         for (const vs of contribution.variableSources) {
             sharedVariableResolver.unregisterSource(vs);

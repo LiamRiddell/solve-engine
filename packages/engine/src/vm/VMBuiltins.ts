@@ -6,6 +6,8 @@ import { transpose, determinant, inverse, matrixMultiply } from "@solve-js/vm/Ma
 // runtime import the other direction would be circular; `import type` is
 // erased before compilation and doesn't create that problem.
 import type { LineExecutionContext } from "@solve-js/vm/VM";
+import { defaultEngineContext } from "@solve-js/engine/EngineContext";
+import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/finance/data/CpiTable";
 
 // ── Local formatting helpers for hex()/bin() (indices 48/49 below) ─────────
@@ -510,21 +512,22 @@ function amortizeLoan(
 }
 
 /**
- * Registry of package-registered functions.
- * Indexed by the number pushed as an operand of OpCode.CALL_PLUGIN.
+ * Registry of package-registered functions, indexed by the number pushed as an
+ * operand of `OpCode.CALL_PLUGIN`.
  *
- * Functions may return a Promise — the orchestrator pre-resolves them
- * before VM execution. If a Promise reaches the VM, the CALL_PLUGIN
- * handler throws ASYNC_PLUGIN_CALL.
+ * Functions may return a promise. The orchestrator resolves it and re-executes
+ * rather than blocking the VM.
  *
  * Populated declaratively via {@link IEnginePackage.pluginFunctions} at
- * package-registration time (see ExpressionEngine.registerPackage()).
- * Entries are cleared on package unregister.
+ * package-registration time. Entries are cleared on unregister.
+ *
+ * @deprecated This is the {@link defaultEngineContext}'s map, kept as a
+ * module-level alias so existing callers keep working during the context
+ * migration. An engine registers into its own context, so writing here affects
+ * only code that has not been migrated. Take an {@link EngineContext} instead.
  */
-export const pluginFunctionRegistry: Record<
-    number,
-    (args: Value[], context?: LineExecutionContext) => Value | Promise<Value>
-> = {};
+export const pluginFunctionRegistry: Record<number, PluginFunctionHandler> =
+    defaultEngineContext.pluginFunctions;
 
 /** Highest index that fits in a single Uint8Array opcode-stream byte. */
 const MAX_PLUGIN_FUNCTION_INDEX = 255;
