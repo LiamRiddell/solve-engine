@@ -52,23 +52,23 @@ export default defineConfig({
         },
         {
           label: "Syntax reference",
-          autogenerate: { directory: "syntax" },
+          items: [{ autogenerate: { directory: "syntax" } }],
         },
         {
           label: "Embedding guide",
-          autogenerate: { directory: "guide" },
+          items: [{ autogenerate: { directory: "guide" } }],
         },
         {
           label: "Writing packages",
-          autogenerate: { directory: "packages" },
+          items: [{ autogenerate: { directory: "packages" } }],
         },
         {
           label: "Architecture",
-          autogenerate: { directory: "architecture" },
+          items: [{ autogenerate: { directory: "architecture" } }],
         },
         {
           label: "Contributing",
-          autogenerate: { directory: "contributing" },
+          items: [{ autogenerate: { directory: "contributing" } }],
         },
         {
           label: "Playground",
