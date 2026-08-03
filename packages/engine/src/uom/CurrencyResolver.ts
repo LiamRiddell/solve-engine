@@ -15,6 +15,7 @@ import {
 	CurrencyExchangeService,
 } from "@solve-js/uom/CurrencyExchange";
 import type { IAsyncResolver, AsyncCheckResult } from "@solve-js/resolvers/ResolverRegistry";
+import { nextInstruction } from "@solve-js/parser/OperandWidth";
 
 const CURRENCY_NS = "currency";
 
@@ -97,22 +98,9 @@ export class CurrencyAsyncResolver implements IAsyncResolver {
 				}
 			}
 
-			switch (op) {
-				case OpCode.PUSH_NUMBER: case OpCode.PUSH_BIGINT: case OpCode.PUSH_HEX:
-				case OpCode.PUSH_STRING: case OpCode.PUSH_BOOLEAN:
-				case OpCode.LOAD_VAR: case OpCode.STORE_VAR:
-				case OpCode.LOAD_GLOBAL_VAR: case OpCode.STORE_GLOBAL_VAR:
-				case OpCode.DEFINE_USER_FUNCTION:
-					i += 2; break;
-				case OpCode.CALL_PLUGIN: case OpCode.CALL_BUILTIN: case OpCode.CALL_USER_FUNCTION:
-					i += 3; break;
-				case OpCode.MAT_NEW:
-					i += 3; break;
-				case OpCode.MAP_INVOKE: case OpCode.REDUCE_INVOKE:
-					i += 4; break;
-				default:
-					i++; break;
-			}
+			// Step over this instruction and its operands. Shared table, because
+			// three hand-copied versions of this had already drifted.
+			i = nextInstruction(opcodes, i);
 		}
 
 		return null;

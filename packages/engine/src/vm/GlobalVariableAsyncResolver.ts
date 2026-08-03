@@ -5,6 +5,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import type { Value } from "@solve-js/vm/Value";
 import type { IAsyncResolver, AsyncCheckResult } from "@solve-js/resolvers/ResolverRegistry";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
+import { nextInstruction } from "@solve-js/parser/OperandWidth";
 
 /**
  * Async resolver for `global :name` reads that aren't yet known, i.e. no
@@ -73,22 +74,9 @@ export class GlobalVariableAsyncResolver implements IAsyncResolver {
 			// opcode's operand byte as if it were itself an opcode, silently
 			// corrupting the rest of that resolver's scan for ANY bytecode
 			// that happens to also contain this opcode.
-			switch (op) {
-				case OpCode.PUSH_NUMBER: case OpCode.PUSH_BIGINT: case OpCode.PUSH_HEX:
-				case OpCode.PUSH_STRING: case OpCode.PUSH_BOOLEAN:
-				case OpCode.LOAD_VAR: case OpCode.STORE_VAR:
-				case OpCode.LOAD_GLOBAL_VAR: case OpCode.STORE_GLOBAL_VAR:
-				case OpCode.DEFINE_USER_FUNCTION:
-					i += 2; break;
-				case OpCode.CALL_PLUGIN: case OpCode.CALL_BUILTIN: case OpCode.CALL_USER_FUNCTION:
-					i += 3; break;
-				case OpCode.MAT_NEW:
-					i += 3; break;
-				case OpCode.MAP_INVOKE: case OpCode.REDUCE_INVOKE:
-					i += 4; break;
-				default:
-					i++; break;
-			}
+			// Step over this instruction and its operands. Shared table, because
+			// three hand-copied versions of this had already drifted.
+			i = nextInstruction(opcodes, i);
 		}
 
 		return null;

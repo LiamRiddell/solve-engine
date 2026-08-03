@@ -68,7 +68,4 @@ Named openly rather than left to be discovered.
 - `LineCache` and the dependency graph are unbounded. A very long-lived
   document keeps growing them. Not a problem at the sizes anything is used at
   today, but it is not defended against either.
-- Six copies of the bytecode operand-width table are maintained by hand, in the
-  builder, the VM, the disassembler and the diagnostic scanners. Adding an
-  opcode means updating all of them, and nothing checks that you did.
 - The API surface may still move before 1.0 proper.
