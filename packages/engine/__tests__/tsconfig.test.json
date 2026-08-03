@@ -2,14 +2,11 @@
   "compilerOptions": {
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "baseUrl": "../../..",
 "paths": {
-       "@/*": ["src/*"],
-       "@app/*": ["src/app/*"],
-       "@solve-js/*": ["packages/engine/src/*"],
-       "@solve-js-examples/*": ["packages/engine/examples/*"],
-       "@tools/*": ["packages/engine/tools/*"],
-       "test/*": ["packages/engine/__tests__/*"]
+                     "@solve-js/*": ["../src/*"],
+       "@solve-js-examples/*": ["../examples/*"],
+       "@tools/*": ["../tools/*"],
+       "test/*": ["./*"]
      },
     "target": "ES6",
     "module": "ESNext",
