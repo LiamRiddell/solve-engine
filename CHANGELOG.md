@@ -65,6 +65,4 @@ Named openly rather than left to be discovered.
   the document and the batcher has no reference to one. Leaving it unset now
   logs a warning the first time a value resolves with nowhere to go, rather
   than failing silently.
-- The VM benchmark cases are all below the comparison harness's noise floor, so
-  that suite contributes no regression signal yet.
 - The API surface may still move before 1.0 proper.
