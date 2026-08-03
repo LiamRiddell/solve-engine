@@ -18,14 +18,23 @@ import { parseIso8601, unixTimestampToEpochMs } from "../Iso8601";
  * do not depend on specific numbers anywhere outside this module.
  */
 
+/** Plugin index for `workdays in <duration>`. */
 export const WORKDAYS_IN_FN_IDX = allocatePluginFunctionIndex();
+/** Plugin index for `weekday on <date>`, the day-of-week name. */
 export const WEEKDAY_ON_FN_IDX = allocatePluginFunctionIndex();
+/** Plugin index for `<value> to date`, coercing a timestamp or string to a Datetime. */
 export const TO_DATE_FN_IDX = allocatePluginFunctionIndex();
+/** Plugin index for `<value> to timestamp`, the inverse of `to date`. */
 export const TO_TIMESTAMP_FN_IDX = allocatePluginFunctionIndex();
+/** Plugin index for `month on <date>`, the month name. */
 export const MONTH_ON_FN_IDX = allocatePluginFunctionIndex();
+/** Plugin index for `week on <date>`, the ISO week number. */
 export const WEEK_ON_FN_IDX = allocatePluginFunctionIndex();
+/** Plugin index for `is weekend on <date>`. */
 export const IS_WEEKEND_FN_IDX = allocatePluginFunctionIndex();
+/** Plugin index for `is workday on <date>`, the complement of the weekend check. */
 export const IS_WORKDAY_FN_IDX = allocatePluginFunctionIndex();
+/** Plugin index for `span between <date> and <date>`, as a duration. */
 export const SPAN_BETWEEN_FN_IDX = allocatePluginFunctionIndex();
 
 /**
@@ -251,12 +260,45 @@ function toTimestampFromAnyHandler(args: Value[]): Value {
   return numberValue(Math.floor(v.toNumber() / 1000));
 }
 
+/**
+ * Count the Mon-Fri workdays in a duration.
+ *
+ * Uses a deterministic ratio rather than walking a calendar, because the
+ * phrase carries no anchor date. See the handler for the full reasoning.
+ */
 export const workdaysInDuration = workdaysInDurationHandler;
+/**
+ * Day-of-week name for a date, as a String value.
+ */
 export const weekdayOnDate = weekdayOnDateHandler;
+/**
+ * Month name for a date, as a String value.
+ */
 export const monthOnDate = monthOnDateHandler;
+/**
+ * ISO week number for a date, as a Number value.
+ */
 export const weekOnDate = weekOnDateHandler;
+/**
+ * Whether a date falls on a Saturday or Sunday.
+ */
 export const isWeekendOnDate = isWeekendOnDateHandler;
+/**
+ * Whether a date falls Monday to Friday. The complement of
+ * {@link isWeekendOnDate}, with no holiday calendar involved.
+ */
 export const isWorkdayOnDate = isWorkdayOnDateHandler;
+/**
+ * Elapsed time between two dates, as a duration value.
+ */
 export const spanBetweenDates = spanBetweenDatesHandler;
+/**
+ * Coerce a Unix timestamp, ISO 8601 string or epoch number to a
+ * Datetime.
+ */
 export const toDateFromAny = toDateFromAnyHandler;
+/**
+ * Coerce a date to whole Unix seconds. The inverse of
+ * {@link toDateFromAny}.
+ */
 export const toTimestampFromAny = toTimestampFromAnyHandler;

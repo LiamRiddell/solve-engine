@@ -78,6 +78,16 @@ export {
 // exported but deliberately left OUT of BUILTIN_PACKAGES. A host that
 // wants them calls the factory with their own fetch function/API key and
 // adds the result to their ExpressionEngine's `packages` array directly.
+/**
+ * The packages an engine registers when the caller names none.
+ *
+ * Nineteen of the twenty-one. Stocks and knowledge are excluded because both
+ * need a host-supplied data source and do nothing useful without one, so
+ * registering them by default would only produce NOT_CONFIGURED results.
+ *
+ * Pass a filtered copy to the {@link ExpressionEngine} constructor to opt out
+ * of a feature, or add to it to register your own alongside the built-ins.
+ */
 export const BUILTIN_PACKAGES: IEnginePackage[] = [
   ARITHMETIC_PACKAGE,
   PERCENTAGE_PACKAGE,

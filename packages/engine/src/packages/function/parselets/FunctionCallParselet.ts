@@ -64,6 +64,13 @@ export const builtinNameToIndex: Record<string, number> = {
   transpose: 63, det: 64, inv: 65, dot: 66,
 };
 
+/**
+ * A named function call with parenthesised arguments.
+ *
+ * Resolves the name to a builtin index at parse time rather than dispatching on
+ * a string at run time, which is also why the name-to-index map is exported:
+ * map and reduce need the same resolution for a bare function argument.
+ */
 export class FunctionCallParselet implements PrefixParselet {
 	readonly category = "Function";
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {

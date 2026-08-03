@@ -4,6 +4,12 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
+/**
+ * A floating-point component inside a vector literal.
+ *
+ * Separate from the ordinary number parselet because vector components parse
+ * in a context where a bare comma separates elements rather than arguments.
+ */
 export class FloatParselet implements PrefixParselet {
 	readonly category = "Float";
 	parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {

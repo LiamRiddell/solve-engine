@@ -9,6 +9,13 @@ import { CURRENCY_SYMBOL_ALIASES, resolveCurrencyAlias } from "@solve-js/uom/Cur
 /** @deprecated kept as a named re-export for backward compatibility, the canonical table now lives in uom/CurrencyAliases.ts alongside the word-form aliases and the display-formatting table, so all three stay in sync. */
 export const symbolToCurrency = CURRENCY_SYMBOL_ALIASES;
 
+/**
+ * Currency symbol before an amount, as in `$100` or `£25`.
+ *
+ * Resolves the symbol through the shared alias table so that the symbol, word
+ * and code forms all produce the same currency, and falls back to the raw text
+ * uppercased when the symbol is unknown rather than rejecting the line.
+ */
 export class CurrencySymbolParselet implements PrefixParselet {
 	readonly category = "UoM";
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {

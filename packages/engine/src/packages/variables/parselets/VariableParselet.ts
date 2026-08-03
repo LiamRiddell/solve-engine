@@ -5,6 +5,13 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
+/**
+ * The `:name` assignment form.
+ *
+ * Accepts a UNIT token as the name as well as an IDENT, because a variable
+ * name may collide with a known unit, as in `:b = 5` where `b` is bits. The
+ * leading colon makes the context unambiguous, so the override is safe.
+ */
 export class VariableParselet implements PrefixParselet {
 	readonly category = "Variable";
 	parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {

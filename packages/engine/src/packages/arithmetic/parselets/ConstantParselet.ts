@@ -4,6 +4,12 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
+/**
+ * Mathematical constants, currently `pi` and `e`.
+ *
+ * Emits the literal value at parse time rather than a lookup, since neither can
+ * be reassigned.
+ */
 export class ConstantParselet implements PrefixParselet {
 	readonly category = "Arithmetic";
 

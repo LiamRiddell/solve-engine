@@ -81,6 +81,14 @@ const { resolver: weatherResolver, pluginFunction: weatherPluginFunction } = cre
 	},
 });
 
+/**
+ * Weather lookups through Open-Meteo, a keyless public endpoint.
+ *
+ * The one built-in package that reaches the network. It needs no configuration,
+ * which is why it can be a default where stocks and knowledge cannot, but a
+ * host wanting no outbound traffic should assemble its own package list rather
+ * than using {@link BUILTIN_PACKAGES}.
+ */
 export const WEATHER_PACKAGE: IEnginePackage = {
 	name: "solve-weather",
 

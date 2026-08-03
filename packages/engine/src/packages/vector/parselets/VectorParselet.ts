@@ -4,6 +4,13 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
+/**
+ * Vector literals, both bracketed and the bare tuple form.
+ *
+ * The dimension passed to the constructor pins the expected component count so
+ * a two-dimensional literal cannot silently parse as three; zero means accept
+ * whatever the literal contains.
+ */
 export class VectorParselet implements PrefixParselet {
 	readonly category = "Vector";
 	private dimension: number;

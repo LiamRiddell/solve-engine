@@ -17,7 +17,9 @@ import { adjustForInflation, CPI_MIN_YEAR, CPI_MAX_YEAR } from "../data/CpiTable
  */
 
 export const INFLATION_FROM_YEAR_TO_PRESENT_IDX = allocatePluginFunctionIndex();
+/** Plugin index for `<amount> in <year>`, today's money valued in a past year. */
 export const INFLATION_TO_YEAR_FROM_PRESENT_IDX = allocatePluginFunctionIndex();
+/** Plugin index for projecting an amount forward at an assumed rate. */
 export const INFLATION_FUTURE_VALUE_IDX = allocatePluginFunctionIndex();
 
 function yearRangeError(code: string, badYear: number): Value {

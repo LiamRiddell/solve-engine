@@ -63,6 +63,13 @@ const keywordLedRollPattern = definePhrasePattern({
   ],
 });
 
+/**
+ * Dice notation and its spelled-out ranges.
+ *
+ * Covers `roll between X and Y`, `roll from X to Y` and `roll(X, Y)`. Each
+ * alternative is picked by its first token, which is what makes the declarative
+ * phrase-pattern form usable here rather than hand-written lookahead.
+ */
 export class DiceRollParselet implements PrefixParselet {
 	readonly category = "Dice";
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {

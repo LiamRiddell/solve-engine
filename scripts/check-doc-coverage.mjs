@@ -32,7 +32,6 @@ function walk(dir, out = []) {
 
 const gaps = {};
 let pub = 0;
-let priv = 0;
 
 for (const file of walk("packages/engine/src")) {
 	const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
@@ -54,10 +53,6 @@ for (const file of walk("packages/engine/src")) {
 		if (j >= 0 && lines[j].trim().endsWith("*/")) return;
 
 		const rel = file.split(path.sep).join("/");
-		if (rel.includes("/src/packages/")) {
-			priv++;
-			return;
-		}
 		pub++;
 		(gaps[rel] = gaps[rel] || []).push(m[1]);
 	});
@@ -70,9 +65,12 @@ for (const [f, syms] of Object.entries(gaps).sort((a, b) => b[1].length - a[1].l
 }
 
 console.log(`${pub} undocumented export(s) on the public surface.`);
-console.log(`${priv} inside src/packages, which this gate does not cover yet.`);
+// src/packages used to be exempt while it carried a backlog. That backlog is
+// cleared, so the exemption is gone: a language package is the surface a
+// third-party author copies from, and an undocumented export there teaches the
+// wrong habit.
 
 if (pub > 0 && !countOnly) {
-	console.error("Every exported symbol outside src/packages needs a doc block.");
+	console.error("Every exported symbol needs a doc block.");
 	process.exit(1);
 }

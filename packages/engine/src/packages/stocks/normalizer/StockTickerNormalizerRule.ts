@@ -4,7 +4,14 @@ import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { MAJOR_TICKERS } from "../MajorTickers";
 
+/**
+ * Token type a recognised ticker symbol is rewritten to.
+ *
+ * Exported because the parselet that consumes it registers against this exact
+ * string, and a typo would silently produce a rule nothing matches.
+ */
 export const STOCK_TICKER_TYPE = "STOCK_TICKER";
+/** Interned numeric id for {@link STOCK_TICKER_TYPE}, for hot-path comparison. */
 export const STOCK_TICKER_TYPE_ID = tokenTypeId(STOCK_TICKER_TYPE);
 
 /**
