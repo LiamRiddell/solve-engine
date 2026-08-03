@@ -50,7 +50,7 @@ against the merge base on the same runner, which cancels most machine variance,
 but the false-positive rate is unknown until it has run against real pull
 requests. A performance gate that flaps gets disabled within two weeks, and a
 disabled gate protects nothing. Watch it, calibrate the thresholds in
-`benchmarks/thresholds.json`, then promote it.
+`packages/engine/benchmarks/thresholds.json`, then promote it.
 
 ## npm
 

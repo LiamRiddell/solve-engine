@@ -16,7 +16,11 @@
 | `(error: unknown)` with no type guard | `normalizeUnknownError(error)` (see AGENT.md) or an `instanceof EngineError` narrow |
 | `containerEl: any` leaking into core engine | Inject via typed interface |
 
-**Current debt**: 0 `any` instances remain in solve-js production code. Zero is the target — any new `any` is a regression.
+**Current debt**: 47 `any` positions remain in `packages/*/src`, almost all `as any`
+escape hatches around the parselet interfaces and one VM checkpointer reach-through.
+This document previously claimed zero, which was wrong. `npm run lint` reports them
+as warnings so the count is visible rather than asserted, and the number here should
+move only downwards.
 
 ---
 

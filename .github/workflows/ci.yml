@@ -35,6 +35,11 @@ jobs:
 
       - run: npm ci
 
+      # Correctness-category rules fail the build; no-explicit-any and unused
+      # vars are warnings, because a backlog exists and a permanently red check
+      # is one people learn to ignore.
+      - run: npm run lint
+
       # Type check, full test suite, and the package build. Kept as one script
       # so that what CI runs and what a contributor runs locally cannot drift.
       - run: npm run verify

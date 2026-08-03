@@ -22,7 +22,8 @@
 		"bench": "node --expose-gc node_modules/jest/bin/jest.js --config jest.bench.config.cjs --runInBand",
 		"bench:baseline": "node scripts/bench-baseline.mjs",
 		"bench:compare": "node scripts/compare-benchmarks.mjs",
-		"verify:all": "npm run verify && npm run build --prefix playground"
+		"verify:all": "npm run verify && npm run build --prefix playground",
+		"lint": "oxlint packages/engine/src packages/playground-bridge/src scripts"
 	},
 	"keywords": [],
 	"author": "Liam Riddell",
@@ -31,6 +32,7 @@
 		"@jest/globals": "^30.4.1",
 		"@types/node": "^26.1.2",
 		"jest": "^30.4.2",
+		"oxlint": "1.76.0",
 		"ts-jest": "^29.1.1",
 		"tsup": "8.5.1",
 		"typescript": "5.9.3"
