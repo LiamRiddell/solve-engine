@@ -34,6 +34,11 @@ also the honest reading: a beta of 1.0.0 presents the 1.0.0 API surface.
 
 ### Changed
 
+**A deleted line no longer keeps its cached bytecode.** The dependency graph
+was pruned when a line was deleted; the LineCache was not, so entries for line
+numbers that no longer existed accumulated until the whole cache was dropped on
+a document switch.
+
 **A line awaiting external data no longer goes clean.** The tier evaluators
 treated "no exception thrown" as success, but a pending value does not throw. A
 line waiting on a resolver was marked clean, and nothing re-runs the preflight
@@ -65,7 +70,4 @@ Named openly rather than left to be discovered.
   the document and the batcher has no reference to one. Leaving it unset now
   logs a warning the first time a value resolves with nowhere to go, rather
   than failing silently.
-- `LineCache` and the dependency graph are unbounded. A very long-lived
-  document keeps growing them. Not a problem at the sizes anything is used at
-  today, but it is not defended against either.
 - The API surface may still move before 1.0 proper.

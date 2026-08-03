@@ -462,6 +462,12 @@ export class ThreeTierEvaluator {
 				}
 				// Clean up DAG references for this line
 				this.dag.removeLine(lineNum);
+				// And its cached bytecode. The dependency graph was already
+				// pruned here; the LineCache was not, so a deleted line kept its
+				// entry until the whole cache was dropped on a document switch.
+				// Editing a long document over a session accumulated entries for
+				// line numbers that no longer existed.
+				this.engine.getLineCache().removeAllForLine(lineNum);
 			}
 		}
 
