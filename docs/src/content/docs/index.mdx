@@ -1,0 +1,90 @@
+---
+title: Solve
+description: An expression evaluation engine for natural, human-readable calculations. Lexer, Pratt parser, bytecode VM, and an extensible package system.
+template: splash
+hero:
+  tagline: Write calculations the way you would say them. Solve reads the line, works out what you meant, and gives you the answer.
+  actions:
+    - text: Get started
+      link: /getting-started/introduction/
+      icon: right-arrow
+      variant: primary
+    - text: Try it in the playground
+      link: /playground/
+      icon: rocket
+      variant: secondary
+    - text: View on GitHub
+      link: https://github.com/LiamRiddell/solve-engine
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## What it looks like
+
+Every line below is a complete expression. There is no function to call, no
+syntax to learn first, and no configuration to write.
+
+| You write | You get |
+| --- | --- |
+| `10 + 20 / 200 * 4` | `10.40` |
+| `50% of 200` | `100` |
+| `100cm + 2m` | `300.00 cm` |
+| `5 km to miles` | `3.11 miles` |
+| `average of 10, 20, 30` | `20` |
+| `next friday` | the date of the coming Friday |
+| `10 USD to GBP` | the converted amount at the current rate |
+| `[1, 2; 3, 4] * [1; 2]` | `[5; 11]` |
+| `sum(x, [10, 20, 30])` | `60` |
+| `if 5 > 3 then 100 else 200` | `100` |
+| `1+2+b+3+b =>` | `2b+6`, keeping the unknown symbolic |
+
+## Why it exists
+
+Most calculators make you translate your problem into their syntax. Solve tries
+to go the other way. It recognises the way people already write quantities,
+dates, percentages and currencies in notes, and evaluates them in place.
+
+The engine is designed to run on every keystroke in a live editor, so the whole
+pipeline is built around being fast enough to feel instant and incremental
+enough not to redo work it has already done.
+
+<CardGrid stagger>
+  <Card title="Fast by construction" icon="rocket">
+    Expressions compile to bytecode and run on a purpose-built virtual machine.
+    Results are cached per line, and a dependency graph re-evaluates only the
+    lines actually affected by an edit.
+  </Card>
+  <Card title="Extensible" icon="puzzle">
+    Every feature, including arithmetic itself, is a package. You can add your
+    own syntax, functions, units and live data sources without forking the
+    engine.
+  </Card>
+  <Card title="Honest about the unknown" icon="approve-check">
+    A value that depends on data still loading is a distinct value type, not a
+    zero. Errors propagate rather than silently becoming numbers.
+  </Card>
+  <Card title="Framework agnostic" icon="setting">
+    No DOM assumptions and no editor coupling. It runs in a browser, in Node, in
+    a worker, or on a server.
+  </Card>
+</CardGrid>
+
+## Install
+
+```bash
+npm install solve-engine
+```
+
+```ts
+import { ExpressionEngine } from "solve-engine";
+
+const engine = new ExpressionEngine("en");
+const [result] = engine.evaluateExpression("50% of 200");
+// result.toNumber() === 100
+```
+
+Continue to the [introduction](/getting-started/introduction/) for the full
+picture, or jump straight to the [syntax reference](/syntax/cheatsheet/) if you
+would rather see everything the engine understands.

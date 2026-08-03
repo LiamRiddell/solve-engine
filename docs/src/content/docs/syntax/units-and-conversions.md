@@ -1,0 +1,36 @@
+---
+title: Units and conversions
+description: Units of measurement, arithmetic across units, and the general as-type conversion.
+---
+
+Units are case-sensitive and have no aliases, which is deliberate. `m` is metres
+and `M` is the millions suffix, and guessing between them would produce
+confidently wrong answers.
+
+## Arithmetic across units
+
+The left operand decides the result unit.
+
+```solve
+100cm + 2m // 300.00 cm
+1 km + 500 m // 1.50 km
+```
+
+## Explicit conversion
+
+```solve
+5 km to miles // 3.11 miles
+1 hour to minutes // 60 minutes
+72F to C // 22.22 C
+20C in F // 68.00 F
+```
+
+## Converting to another representation
+
+The `as` form is a general mechanism rather than a fixed list, and packages can
+add their own targets.
+
+```solve
+0.5 as % // 50.00%
+0.75 as fraction // 3/4
+```

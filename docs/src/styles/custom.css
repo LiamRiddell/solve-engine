@@ -1,0 +1,27 @@
+/* Brand accent. Starlight derives its full palette from these, so setting the
+   scale here is enough to theme both light and dark without overriding
+   component styles individually. */
+:root {
+  --sl-color-accent-low: #12242f;
+  --sl-color-accent: #2b7fa8;
+  --sl-color-accent-high: #b3dcef;
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #c5e3f1;
+  --sl-color-accent: #1d6a8f;
+  --sl-color-accent-high: #10323f;
+}
+
+/* Expressions read better slightly larger than prose, since the whole point of
+   a syntax reference is that the reader is scanning the code, not the sentence
+   around it. */
+.sl-markdown-content code {
+  font-size: 0.95em;
+}
+
+/* Result tables. Two columns, expression on the left and what it evaluates to
+   on the right, used throughout the syntax reference. */
+.sl-markdown-content table code {
+  white-space: nowrap;
+}

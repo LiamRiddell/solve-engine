@@ -1,0 +1,31 @@
+---
+title: Performance
+description: What makes it fast, and what to avoid.
+---
+
+The engine is built to run on every keystroke, which sets the performance bar.
+
+## Bytecode, not tree walking
+
+Expressions compile to a compact bytecode and run on a stack machine. Compiling
+once and executing many times is much faster than re-walking a syntax tree, and
+it makes the execution step easy to bound.
+
+## Caching, in layers
+
+Compiled bytecode is cached by expression text, so an unchanged line skips
+lexing, normalising, parsing and compiling entirely. Line results are cached
+separately, so an unchanged line skips execution too.
+
+## Incremental re-evaluation
+
+A dependency graph records which lines read which variables, so editing a line
+recomputes only what transitively depends on it.
+
+## What to avoid
+
+Constructing a new engine per evaluation throws away every cache and re-registers
+every package. Create one engine and call `clear()` between documents.
+
+Enabling diagnostics collects a large amount of per-stage detail. It is intended
+for a devtool and should be off in production.

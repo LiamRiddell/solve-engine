@@ -37,3 +37,8 @@ isolate-*.log
 # Standalone profiler (not part of the project)
 benchmarks/preload-globals.cjs
 benchmarks/profile-vm.ts
+
+# Docs site (Astro)
+docs/node_modules
+docs/dist
+docs/.astro
