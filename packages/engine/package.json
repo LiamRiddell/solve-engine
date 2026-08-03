@@ -207,13 +207,13 @@
   },
   "dependencies": {
     "@tanstack/query-core": "^5.100.10",
-    "convert": "^7.0.0",
     "semver": "^7.6.0",
     "tslib": "^2.6.1"
   },
   "devDependencies": {
     "@jest/globals": "^30.4.1",
     "@types/semver": "^7.5.0",
+    "convert": "^7.0.0",
     "jest": "^30.4.2",
     "ts-jest": "^29.1.1",
     "tsup": "8.5.1",

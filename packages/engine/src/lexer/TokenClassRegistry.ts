@@ -77,7 +77,7 @@ export interface TokenLookup {
   phraseStartWords: Set<string>;
 
   /** Case-sensitive unit names for UNIT fallback after keyword lookup fails. */
-  unitNames: Set<string>;
+  unitNames: ReadonlySet<string>;
 }
 
 // ── TokenClassRegistry ───────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ export class TokenClassRegistry {
   private classes: TokenClass[] = [];
   private localeKeywordMap: Record<string, string> | null = null;
   private localePhraseMap: Record<string, string> | null = null;
-  private unitNames: Set<string> | null = null;
+  private unitNames: ReadonlySet<string> | null = null;
 
   /**
    * Register a provider's TokenClass. Must be called BEFORE build().
@@ -134,8 +134,11 @@ export class TokenClassRegistry {
   /**
    * Set the unit name set. Called when unit list changes.
    * Units are stored separately (checked AFTER keyword lookup fails).
+   *
+   * Takes a ReadonlySet because the caller's set is derived from the
+   * conversion tables and must not be mutated; this class only ever reads it.
    */
-  setUnits(unitNames: Set<string>): void {
+  setUnits(unitNames: ReadonlySet<string>): void {
     this.unitNames = unitNames;
   }
 

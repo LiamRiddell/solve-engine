@@ -314,7 +314,15 @@ function invokeFrameBody(
 function extractDurationMs(value: Value): number {
     if (value.type === ValueType.Uom) {
         const unit = value.unit;
-        if (unit) {
+        // Only a time-measure unit can be a duration. Checking the measure
+        // BEFORE converting, rather than relying on convertUnit() to throw for
+        // everything else, is deliberate: it makes `<date> + 5 kg` contribute
+        // zero because kilograms are not a duration, not because a conversion
+        // happened to fail. The two are the same today, but a single lenient
+        // conversion is all it takes for them to diverge, and when they do the
+        // symptom is a silently wrong date rather than an error. That is
+        // exactly how `today + 5 m` came to mean five minutes.
+        if (unit && getMeasure(unit) === "time") {
             try { return convertUnit(value.toNumber(), unit, "ms"); } catch { /* Ignore */ }
         }
         return 0;
