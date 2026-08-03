@@ -21,7 +21,7 @@ import { assertEngineVersionCompatible } from "./EngineVersionCompatibility";
  *
  * @example
  * ```typescript
- * import { packageRegistry } from "@solve/core";
+ * import { packageRegistry } from "solve-engine";
  * packageRegistry.registerPackage(myCustomPackage);
  * ```
  */
@@ -30,7 +30,7 @@ export interface IPackageRegistry {
   registerPrefixParselet(tokenType: string, parselet: PrefixParselet): void;
   /** Register an infix parselet (e.g., `+`, `in`, `to`). */
   registerInfixParselet(tokenType: string, parselet: InfixParselet): void;
-  /** Register a variable source (provides variable values at runtime). */
+  /** @deprecated Has no effect. See {@link IEnginePackage.variableSources}. */
   registerVariableSource(source: IVariableSource): void;
   /** Register a complete package (parselets + variable sources). */
   registerPackage(pkg: IEnginePackage): void;
@@ -63,7 +63,7 @@ export interface IEnginePackage {
   /** Human-readable name for debugging and error attribution. */
   name: string;
   /**
-   * Semver range of `@solve/core` versions this package is compatible with
+   * Semver range of `solve-engine` versions this package is compatible with
    * (e.g. `"^0.1.0"`, `">=0.1.0 <0.3.0"`), checked against the engine's own
    * running version ({@link ENGINE_VERSION}, `@solve-js/constants/version`)
    * via `checkEngineVersionCompatibility()`/`assertEngineVersionCompatible()`
@@ -110,7 +110,22 @@ export interface IEnginePackage {
    * ```
    */
   pluginFunctions?: Array<{ index: number; handler: (args: Value[], context?: LineExecutionContext) => Value | Promise<Value> }>;
-  /** Variable sources that provide values at runtime. */
+  /**
+   * Named-variable sources.
+   *
+   * @deprecated Currently has no effect. Sources declared here are registered
+   * into the engine's {@link EngineContext} and unregistered again on package
+   * removal, but no evaluation path ever calls `VariableResolver.resolve()`, so
+   * a variable a source provides is never found. Verified by searching every
+   * use of `IVariableSource` outside its own declaration: they are all
+   * registration bookkeeping.
+   *
+   * Declared here rather than deleted because removing a public field is a
+   * breaking change and the intended behaviour is worth keeping. Documented as
+   * dead so a package author does not spend an afternoon working out why their
+   * variables resolve to nothing. To expose a value today, contribute a plugin
+   * function through {@link IEnginePackage.pluginFunctions}.
+   */
   variableSources?: IVariableSource[];
   /**
    * Async resolvers for this package's domain.
