@@ -16,6 +16,21 @@ import * as fs from "fs";
 import * as path from "path";
 
 /**
+ * Which measurement method produced these numbers.
+ *
+ * Recorded in every suite file so the comparator can refuse to compare two runs
+ * that measured differently. Changing how time is measured changes what the
+ * numbers mean, and a ratio across that boundary describes the change of method
+ * rather than any change in the code. That is not hypothetical: moving from a
+ * `performance.now()` loop to mitata made identical code read up to 2.6x
+ * "slower", because the old loop's per-iteration deltas were mostly zero for
+ * anything faster than the clock and its mean therefore understated the truth.
+ *
+ * Bump this whenever the measurement changes in a way that shifts the numbers.
+ */
+export const HARNESS = "mitata-1";
+
+/**
  * One case's timing, as persisted.
  *
  * `medianMs` and `minMs` are optional because a few cases derive a mean from a
@@ -174,7 +189,7 @@ export function writeBenchmarkResults(
 	// when no measurement changed.
 	fs.writeFileSync(
 		file,
-		`${JSON.stringify({ suite, results }, null, 2)}\n`,
+		`${JSON.stringify({ suite, harness: HARNESS, results }, null, 2)}\n`,
 		"utf8",
 	);
 
