@@ -108,7 +108,8 @@
 	"scripts": {
 		"build": "tsup",
 		"dev": "tsup --watch",
-		"test": "jest --config jest.config.cjs --no-coverage"
+		"test": "jest --config jest.config.cjs --no-coverage",
+		"typecheck": "tsc --noEmit --skipLibCheck"
 	},
 	"dependencies": {
 		"@tanstack/query-core": "^5.100.10",

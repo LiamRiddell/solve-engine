@@ -5,6 +5,13 @@
 # npm
 node_modules
 
+# Environment files. Repo-wide, not just under one subdirectory, so a stray
+# root or package-level .env can never be committed. .env.example is the one
+# intentional exception and is meant to be tracked.
+.env
+.env.*
+!.env.example
+
 # Exclude sourcemaps
 *.map
 

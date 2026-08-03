@@ -2,19 +2,21 @@
 	"name": "solve-engine",
 	"version": "0.1.0",
 	"private": true,
-	"description": "The @solve/core expression-evaluation engine, its playground-bridge tooling, and the React demo webapp — extracted from the obsidian-solve monorepo.",
+	"description": "Workspace root for the Solve expression-evaluation engine, its playground bridge, and the interactive playground.",
 	"workspaces": [
 		"packages/*"
 	],
 	"scripts": {
 		"build": "npm run build --workspace=packages/core",
-		"test": "node --expose-gc ./node_modules/.bin/jest --logHeapUsage",
-		"test:ci": "node --expose-gc ./node_modules/.bin/jest --no-coverage --logHeapUsage",
-		"test:engine": "node --expose-gc ./node_modules/.bin/jest --testPathPattern=\"packages/core/__tests__/engine\" --no-coverage --logHeapUsage",
-		"test:light": "node --expose-gc ./node_modules/.bin/jest --no-coverage --logHeapUsage --testPathIgnorePatterns=\"LexerVocabularyFuzz|Fuzz|BreakageTests|LongDocumentRobustness\"",
-		"test:oom": "node --expose-gc --max-old-space-size=4096 ./node_modules/.bin/jest --no-coverage --logHeapUsage --testPathPattern=\"BreakageTests\\.|LexerFuzz\\.|LongDocumentRobustness\\.\" --runInBand",
+		"test": "node --expose-gc node_modules/jest/bin/jest.js --logHeapUsage",
+		"test:ci": "node --expose-gc node_modules/jest/bin/jest.js --no-coverage --logHeapUsage",
+		"test:engine": "node --expose-gc node_modules/jest/bin/jest.js --testPathPattern=\"packages/core/__tests__/engine\" --no-coverage --logHeapUsage",
+		"test:light": "node --expose-gc node_modules/jest/bin/jest.js --no-coverage --logHeapUsage --testPathIgnorePatterns=\"LexerVocabularyFuzz|Fuzz|BreakageTests|LongDocumentRobustness\"",
+		"test:oom": "node --expose-gc --max-old-space-size=4096 node_modules/jest/bin/jest.js --no-coverage --logHeapUsage --testPathPattern=\"BreakageTests\\.|LexerFuzz\\.|LongDocumentRobustness\\.\" --runInBand",
 		"test:watch": "jest --watch",
-		"typecheck": "tsc --noEmit --skipLibCheck"
+		"typecheck": "npm run typecheck --workspace=packages/core",
+		"verify": "npm run typecheck && npm run test:ci && npm run build",
+		"verify:all": "npm run verify && npm run build --prefix webapp"
 	},
 	"keywords": [],
 	"author": "Liam Riddell",
