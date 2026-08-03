@@ -1,128 +1,223 @@
 {
-	"name": "solve-engine",
-	"version": "0.1.0",
-	"description": "The expression evaluation engine behind Solve — lexer, parser, bytecode VM, and an extensible package system.",
-	"keywords": ["expression-evaluator", "calculator", "bytecode-vm", "parser", "lexer", "dsl", "markdown", "obsidian"],
-	"license": "MIT",
-	"author": "Liam Riddell",
-	"homepage": "https://github.com/LiamRiddell/solve-engine/tree/main/packages/engine#readme",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/LiamRiddell/solve-engine.git",
-		"directory": "packages/engine"
-	},
-	"bugs": {
-		"url": "https://github.com/LiamRiddell/solve-engine/issues"
-	},
-	"publishConfig": {
-		"access": "public"
-	},
-	"type": "module",
-	"engines": { "node": ">=18" },
-	"files": ["dist", "LICENSE"],
-	"main": "./dist/index.cjs",
-	"module": "./dist/index.js",
-	"types": "./dist/index.d.ts",
-	"exports": {
-		".": {
-			"types": "./dist/index.d.ts",
-			"import": "./dist/index.js",
-			"require": "./dist/index.cjs"
-		},
-		"./engine": {
-			"types": "./dist/engine.d.ts",
-			"import": "./dist/engine.js",
-			"require": "./dist/engine.cjs"
-		},
-		"./vm": {
-			"types": "./dist/vm.d.ts",
-			"import": "./dist/vm.js",
-			"require": "./dist/vm.cjs"
-		},
-		"./format": {
-			"types": "./dist/format.d.ts",
-			"import": "./dist/format.js",
-			"require": "./dist/format.cjs"
-		},
-		"./language": {
-			"types": "./dist/language.d.ts",
-			"import": "./dist/language.js",
-			"require": "./dist/language.cjs"
-		},
-		"./packages": {
-			"types": "./dist/packages.d.ts",
-			"import": "./dist/packages.js",
-			"require": "./dist/packages.cjs"
-		},
-		"./constants": {
-			"types": "./dist/constants.d.ts",
-			"import": "./dist/constants.js",
-			"require": "./dist/constants.cjs"
-		},
-		"./lexer": {
-			"types": "./dist/lexer.d.ts",
-			"import": "./dist/lexer.js",
-			"require": "./dist/lexer.cjs"
-		},
-		"./parser": {
-			"types": "./dist/parser.d.ts",
-			"import": "./dist/parser.js",
-			"require": "./dist/parser.cjs"
-		},
-		"./normalizer": {
-			"types": "./dist/normalizer.d.ts",
-			"import": "./dist/normalizer.js",
-			"require": "./dist/normalizer.cjs"
-		},
-		"./variables": {
-			"types": "./dist/variables.d.ts",
-			"import": "./dist/variables.js",
-			"require": "./dist/variables.cjs"
-		},
-		"./resolvers": {
-			"types": "./dist/resolvers.d.ts",
-			"import": "./dist/resolvers.js",
-			"require": "./dist/resolvers.cjs"
-		},
-		"./errors": {
-			"types": "./dist/errors.d.ts",
-			"import": "./dist/errors.js",
-			"require": "./dist/errors.cjs"
-		},
-		"./utilities": {
-			"types": "./dist/utilities.d.ts",
-			"import": "./dist/utilities.js",
-			"require": "./dist/utilities.cjs"
-		},
-		"./uom": {
-			"types": "./dist/uom.d.ts",
-			"import": "./dist/uom.js",
-			"require": "./dist/uom.cjs"
-		},
-		"./services": {
-			"types": "./dist/services.d.ts",
-			"import": "./dist/services.js",
-			"require": "./dist/services.cjs"
-		}
-	},
-	"scripts": {
-		"build": "tsup",
-		"dev": "tsup --watch",
-		"test": "jest --config jest.config.cjs --no-coverage",
-		"typecheck": "tsc --noEmit --skipLibCheck"
-	},
-	"dependencies": {
-		"@tanstack/query-core": "^5.100.10",
-		"convert": "^7.0.0",
-		"semver": "^7.6.0",
-		"tslib": "^2.6.1"
-	},
-	"devDependencies": {
-		"@jest/globals": "^29.6.2",
-		"@types/semver": "^7.5.0",
-		"jest": "^29.6.2",
-		"ts-jest": "^29.1.1",
-		"tsup": "8.5.1",
-		"typescript": "5.1.6"
-	}
+  "name": "solve-engine",
+  "version": "0.1.0",
+  "description": "The expression evaluation engine behind Solve \u2014 lexer, parser, bytecode VM, and an extensible package system.",
+  "keywords": [
+    "expression-evaluator",
+    "calculator",
+    "bytecode-vm",
+    "parser",
+    "lexer",
+    "dsl",
+    "markdown",
+    "obsidian"
+  ],
+  "license": "MIT",
+  "author": "Liam Riddell",
+  "homepage": "https://liamriddell.github.io/Solve-Engine/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LiamRiddell/Solve-Engine.git",
+    "directory": "packages/engine"
+  },
+  "bugs": {
+    "url": "https://github.com/LiamRiddell/Solve-Engine/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./engine": {
+      "import": {
+        "types": "./dist/engine.d.ts",
+        "default": "./dist/engine.js"
+      },
+      "require": {
+        "types": "./dist/engine.d.cts",
+        "default": "./dist/engine.cjs"
+      }
+    },
+    "./vm": {
+      "import": {
+        "types": "./dist/vm.d.ts",
+        "default": "./dist/vm.js"
+      },
+      "require": {
+        "types": "./dist/vm.d.cts",
+        "default": "./dist/vm.cjs"
+      }
+    },
+    "./format": {
+      "import": {
+        "types": "./dist/format.d.ts",
+        "default": "./dist/format.js"
+      },
+      "require": {
+        "types": "./dist/format.d.cts",
+        "default": "./dist/format.cjs"
+      }
+    },
+    "./language": {
+      "import": {
+        "types": "./dist/language.d.ts",
+        "default": "./dist/language.js"
+      },
+      "require": {
+        "types": "./dist/language.d.cts",
+        "default": "./dist/language.cjs"
+      }
+    },
+    "./packages": {
+      "import": {
+        "types": "./dist/packages.d.ts",
+        "default": "./dist/packages.js"
+      },
+      "require": {
+        "types": "./dist/packages.d.cts",
+        "default": "./dist/packages.cjs"
+      }
+    },
+    "./constants": {
+      "import": {
+        "types": "./dist/constants.d.ts",
+        "default": "./dist/constants.js"
+      },
+      "require": {
+        "types": "./dist/constants.d.cts",
+        "default": "./dist/constants.cjs"
+      }
+    },
+    "./lexer": {
+      "import": {
+        "types": "./dist/lexer.d.ts",
+        "default": "./dist/lexer.js"
+      },
+      "require": {
+        "types": "./dist/lexer.d.cts",
+        "default": "./dist/lexer.cjs"
+      }
+    },
+    "./parser": {
+      "import": {
+        "types": "./dist/parser.d.ts",
+        "default": "./dist/parser.js"
+      },
+      "require": {
+        "types": "./dist/parser.d.cts",
+        "default": "./dist/parser.cjs"
+      }
+    },
+    "./normalizer": {
+      "import": {
+        "types": "./dist/normalizer.d.ts",
+        "default": "./dist/normalizer.js"
+      },
+      "require": {
+        "types": "./dist/normalizer.d.cts",
+        "default": "./dist/normalizer.cjs"
+      }
+    },
+    "./variables": {
+      "import": {
+        "types": "./dist/variables.d.ts",
+        "default": "./dist/variables.js"
+      },
+      "require": {
+        "types": "./dist/variables.d.cts",
+        "default": "./dist/variables.cjs"
+      }
+    },
+    "./resolvers": {
+      "import": {
+        "types": "./dist/resolvers.d.ts",
+        "default": "./dist/resolvers.js"
+      },
+      "require": {
+        "types": "./dist/resolvers.d.cts",
+        "default": "./dist/resolvers.cjs"
+      }
+    },
+    "./errors": {
+      "import": {
+        "types": "./dist/errors.d.ts",
+        "default": "./dist/errors.js"
+      },
+      "require": {
+        "types": "./dist/errors.d.cts",
+        "default": "./dist/errors.cjs"
+      }
+    },
+    "./utilities": {
+      "import": {
+        "types": "./dist/utilities.d.ts",
+        "default": "./dist/utilities.js"
+      },
+      "require": {
+        "types": "./dist/utilities.d.cts",
+        "default": "./dist/utilities.cjs"
+      }
+    },
+    "./uom": {
+      "import": {
+        "types": "./dist/uom.d.ts",
+        "default": "./dist/uom.js"
+      },
+      "require": {
+        "types": "./dist/uom.d.cts",
+        "default": "./dist/uom.cjs"
+      }
+    },
+    "./services": {
+      "import": {
+        "types": "./dist/services.d.ts",
+        "default": "./dist/services.js"
+      },
+      "require": {
+        "types": "./dist/services.d.cts",
+        "default": "./dist/services.cjs"
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "jest --config jest.config.cjs --no-coverage",
+    "typecheck": "tsc --noEmit --skipLibCheck"
+  },
+  "dependencies": {
+    "@tanstack/query-core": "^5.100.10",
+    "convert": "^7.0.0",
+    "semver": "^7.6.0",
+    "tslib": "^2.6.1"
+  },
+  "devDependencies": {
+    "@jest/globals": "^29.6.2",
+    "@types/semver": "^7.5.0",
+    "jest": "^29.6.2",
+    "ts-jest": "^29.1.1",
+    "tsup": "8.5.1",
+    "typescript": "5.1.6"
+  },
+  "sideEffects": false
 }

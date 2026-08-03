@@ -39,6 +39,30 @@ jobs:
       # so that what CI runs and what a contributor runs locally cannot drift.
       - run: npm run verify
 
+  package:
+    name: Package publishes correctly
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      # publint catches packaging mistakes; attw catches declarations that
+      # resolve to the wrong module system. The exports map previously declared
+      # one flat "types" per subpath pointing at the ESM .d.ts, which left every
+      # .d.cts on disk unreachable and made a require() consumer resolve
+      # ESM-flavoured declarations from an ESM package.
+      #
+      # node10 resolution is expected to fail: it predates subpath exports
+      # entirely, and this package requires a Node version that understands them.
+      - run: npx --yes publint packages/engine
+      - run: npx --yes @arethetypeswrong/cli --pack packages/engine --ignore-rules no-resolution
+
   playground:
     name: Playground builds
     runs-on: ubuntu-24.04

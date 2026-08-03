@@ -1,4 +1,4 @@
-import { satisfies, validRange } from "semver";
+import { satisfies, validRange, coerce } from "semver";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { ENGINE_VERSION } from "@solve-js/constants/version";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
@@ -57,7 +57,21 @@ export function checkEngineVersionCompatibility(
     return { compatible: false, reason: "invalid-range", declaredRange: pkg.engineVersion, engineVersion };
   }
 
-  if (!satisfies(engineVersion, pkg.engineVersion)) {
+  // Compare against the release the prerelease is a prerelease OF, not the
+  // prerelease string itself.
+  //
+  // Semver sorts 1.0.0-beta.0 BELOW 1.0.0, so it falls outside `^1.0.0` and a
+  // package declaring that range would be rejected by the very beta meant to
+  // ship its API. `includePrerelease` does not help: the ordering is what
+  // excludes it, not a prerelease filter. Verified empirically against the
+  // installed semver, including that `^0.1.0` still correctly rejects a 1.0.0
+  // engine and that 1.2.3 and 2.0.0 behave unchanged against `^1.0.0`.
+  //
+  // Coercing is also the semantically right answer: 1.0.0-beta.N presents the
+  // 1.0.0 API surface, which is the thing a package declares a range against.
+  const comparableVersion = coerce(engineVersion)?.version ?? engineVersion;
+
+  if (!satisfies(comparableVersion, pkg.engineVersion)) {
     return { compatible: false, reason: "range-not-satisfied", declaredRange: pkg.engineVersion, engineVersion };
   }
 
