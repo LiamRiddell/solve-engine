@@ -114,7 +114,7 @@ export interface LineEvaluation {
  *
  * @example
  * ```typescript
- * import { ExpressionEngine } from "@solve/core";
+ * import { ExpressionEngine } from "solve-engine";
  * const engine = new ExpressionEngine("en");
  * const [value] = engine.evaluateExpression("2 + 2 * 10");
  * console.log(value.toNumber()); // 22

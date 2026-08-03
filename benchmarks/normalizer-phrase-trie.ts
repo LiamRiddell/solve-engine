@@ -8,12 +8,12 @@
  * Run: npx tsx benchmarks/normalizer-bench.ts
  */
 
-import { Token, LexerToken, tokenTypeId } from "@solve/core/lexer";
+import { Token, LexerToken, tokenTypeId } from "solve-engine/lexer";
 
 // ── Shared imports ─────────────────────────────────────────────────────
 
-import { TokenNormalizer, PhraseTrie } from "@solve/core/normalizer";
-import type { NormalizerRule, NormalizerMatch } from "@solve/core/normalizer";
+import { TokenNormalizer, PhraseTrie } from "solve-engine/normalizer";
+import type { NormalizerRule, NormalizerMatch } from "solve-engine/normalizer";
 
 // ── Helper: create a simple token ──────────────────────────────────────
 

@@ -16,7 +16,7 @@ import {
  * inside an expression. Confirmed by FOUR independent competitor apps
  * wanting the exact same underlying capability (Numi's `prev`, Notes
  * Calculator's `line<N>`, Numbr's `sum`/`total`-to-header, NumPad's
- * `line<N>` plus range aggregation). See `OTHER_APPS_FEATURE_AUDIT.md`'s
+ * `line<N>` plus range aggregation). See the internal parity notes'
  * "Confirmed engine limitations" item 1, now closed.
  *
  * Built entirely on `vm/VM.ts`'s `LineExecutionContext`, threaded

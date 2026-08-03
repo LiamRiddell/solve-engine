@@ -16,7 +16,7 @@ import type { KnowledgePackageConfig } from "./types";
  *   `search: distance to the moon`. Reads like an instruction, not a
  *   cryptic punctuation puzzle.
  * - **`<query> = ?`** (the original form, kept for Calca-style
- *   compatibility. See `OTHER_APPS_FEATURE_AUDIT.md`'s Calca section)
+ *   compatibility. see the internal parity notes)
  *   e.g. `distance to the moon = ?`. Less discoverable (a bare trailing
  *   `= ?` doesn't read as "ask a question" the way a leading verb does),
  *   but harmless to keep alongside the clearer form. This package has no

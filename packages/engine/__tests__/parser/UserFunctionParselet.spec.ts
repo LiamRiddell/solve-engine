@@ -1,6 +1,6 @@
 /**
  * User-defined, parameterized, reusable functions (`f(x) = 2*x + 1`, then
- * `f(5)` -> `11`). See `packages/core/OTHER_APPS_FEATURE_AUDIT.md`'s Calca
+ * `f(5)` -> `11`). See the internal parity notes' Calca
  * section, `parser/BytecodeBuilder.ts`'s `UserFunctionDef` doc comment, and
  * `parser/PrecedenceParser.ts`'s `parseUserFunctionDefOrCall` for the full
  * design.

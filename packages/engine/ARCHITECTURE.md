@@ -1,4 +1,4 @@
-# @solve/core — Architecture
+# solve-engine architecture
 
 This document describes how the engine is put together: the evaluation pipeline, the
 module map, the extension (package) system, the async/incremental evaluation model, and
@@ -13,7 +13,7 @@ called out as one.
 
 ## 1. What this engine does
 
-`@solve/core` evaluates expressions like `2 + 2 * 10`, `50% of 200`, `3 days + 4 hours`,
+`solve-engine` evaluates expressions like `2 + 2 * 10`, `50% of 200`, `3 days + 4 hours`,
 `10 USD to GBP`, and `roll(1, 6)` — a small, extensible expression language aimed at
 natural, calculator-like input rather than a general-purpose programming language. It
 started as the evaluation core of an Obsidian plugin and is being extracted into a
@@ -61,7 +61,7 @@ Two entry points sit on top of "evaluate one expression":
 ## 3. Module map
 
 Every top-level directory under `src/` corresponds to one npm subpath export
-(`@solve/core/<dir>`), tiered by stability — see the [README](./README.md) for the full
+(`solve-engine/<dir>`), tiered by stability — see the [README](./README.md) for the full
 tier table and what "advanced-public" vs. "internal" means for semver purposes. Summary:
 
 | Directory | Owns |
@@ -292,7 +292,7 @@ can never drift from what's actually published.
 `package.json`'s `version` gets bumped in step with actual breaking changes to the
 `IEnginePackage` contract or the advanced-public tier (§3's "for semver purposes" framing) —
 a discipline this repo does not yet rigorously practice (dated engineering-log entries here
-and in `ENGINE_ITERATIONS.md` don't currently correspond to version bumps). This pass adds the
+and in the internal iteration log do not currently correspond to version bumps). This pass adds the
 mechanism; it does not retroactively fix that process gap.
 
 ## 6. Async evaluation
@@ -521,7 +521,7 @@ resiliency fix — see "Done since the last pass" below for both.
    wiring dead dispatch machinery, since `CALL_PLUGIN`/`pluginFunctions` already provides
    working custom dispatch and no shipped package used `opcodeHandlers`: removed the field
    from `IEnginePackage`, its handling in `registerPackage()`/`unregisterPackage()`, and
-   the `OpcodeHandler`/`IOpcodeHandlerRegistration` types from the public `@solve/core/vm`
+   the `OpcodeHandler`/`IOpcodeHandlerRegistration` types from the public `solve-engine/vm`
    barrel (they're still exported from `vm/OpRegistry.ts` directly as internal
    implementation detail — `OpRegistry`/`sharedOpRegistry` themselves are untouched, still
    needed for `VM`'s interface shape). Updated the one test
@@ -706,7 +706,7 @@ resiliency fix — see "Done since the last pass" below for both.
   the guard doesn't misfire anywhere across the full test suite.
 - **SoulverCore feature-parity completion (2026-08-01)** — three parallel background
   agents (`isolation: "worktree"`) landed the remaining gaps identified by a full
-  documentation-site audit (see `SOULVERCORE_FEATURE_AUDIT.md`): Datetime/Time
+  documentation-site audit (maintainer notes, not published): Datetime/Time
   completions (workdays/weekdays, timestamps/ISO8601, video timecode & frame rates),
   Live Data (`weather`/`stocks`/`knowledge` — see section 5.1's `rawLinePatterns` note),
   and Finance inflation + UOM cooking/volume conversions. Every new grammar followed the

@@ -192,7 +192,8 @@ npm run lint:comments
 npm run lint:docs
 ```
 
-`docs-internal/CODING_STANDARDS.md` has the full standard and the reasoning.
+`docs-internal/COMMENT_STANDARD.md` has the full standard and the reasoning.
+`docs-internal/CODING_STANDARDS.md` covers general code style.
 
 No escape hatches from the type system. A type that is hard to express usually
 means the design needs adjusting rather than the checker needing silencing.

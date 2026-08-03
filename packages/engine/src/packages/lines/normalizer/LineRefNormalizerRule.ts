@@ -19,7 +19,7 @@ const AVERAGE_RANGE_CALL_TYPE_ID = tokenTypeId("AVERAGE_RANGE_CALL");
  * most common short variable names in this category of app (length,
  * etc.); shipping `line<N>` alone first and adding a narrower `l<N>`
  * form later, once real usage confirms it's wanted, is the documented
- * v1 scope decision (see the implementation plan / OTHER_APPS_FEATURE_AUDIT.md).
+ * v1 scope decision (see the internal parity notes).
  *
  * Colon-prefix guard: never fires immediately after a variable-definition
  * `COLON`, so `:line1 = 5` / `:line = 5` (a variable named "line1"/"line")

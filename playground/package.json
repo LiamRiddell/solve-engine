@@ -1,6 +1,6 @@
 {
   "name": "solve-playground",
-  "description": "Solve — production web app (React + shadcn/ui) for editing and showcasing the @solve/core engine.",
+  "description": "Solve playground (React + shadcn/ui) for editing and showcasing the solve-engine engine.",
   "private": true,
   "version": "0.0.0",
   "type": "module",

@@ -1,5 +1,5 @@
 /**
- * Standalone Jest config for @solve/core — lets this package run its own
+ * Standalone Jest config for solve-engine — lets this package run its own
  * test suite (`npm test` from packages/core) independent of the monorepo
  * root config, which is what the eventual standalone repo (Phase 3/4 of
  * the extraction plan) will need.

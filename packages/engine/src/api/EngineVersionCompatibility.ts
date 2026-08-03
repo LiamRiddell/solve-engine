@@ -108,7 +108,7 @@ export function assertEngineVersionCompatible(
     message: `Package "${pkg.name}" declares engineVersion "${result.declaredRange}", which is not satisfied by the running engine version "${result.engineVersion}".`,
     expected: `an engine version satisfying "${result.declaredRange}"`,
     found: `engine version "${result.engineVersion}"`,
-    suggestion: `Update "${pkg.name}" to a version built against @solve/core ${result.engineVersion}, or pin @solve/core to a version satisfying "${result.declaredRange}".`,
+    suggestion: `Update "${pkg.name}" to a version built against solve-engine ${result.engineVersion}, or pin solve-engine to a version satisfying "${result.declaredRange}".`,
     context: { packageName: pkg.name, declaredRange: result.declaredRange, engineVersion: result.engineVersion },
   });
 }
