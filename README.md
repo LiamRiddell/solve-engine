@@ -132,7 +132,7 @@ keywords and you break every line of prose that happens to contain one, and you
 make those words unusable as variable names. So bare common words are almost
 never keywords here. Multi-word phrases get fused by the normaliser only in
 positions where nothing else is plausible.
-[Trigger words and fusion](https://liamriddell.github.io/Solve-Engine/syntax/trigger-words-and-fusion/)
+[Trigger words and fusion](https://liamriddell.github.io/Solve-Engine/syntax/trigger-words/)
 explains where the lines are drawn and why.
 
 **An error, never a guess.** When a resolver has not returned yet the result is

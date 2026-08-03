@@ -100,10 +100,22 @@ type EngineWorkerMessage = CompileBatchMsg | ExecuteBatchMsg | TerminateMsg;
 
 // ── Worker body ───────────────────────────────────────────────────────
 
-// This file is transformed by esbuild-plugin-inline-worker into a factory
-// that returns Worker. If you see this error, the plugin isn't configured.
+// A host that builds with esbuild-plugin-inline-worker gets this replaced by a
+// real factory returning a Worker. Nothing else does, the published tsup bundle
+// included, so this stub is a live runtime path rather than a dead sentinel.
+//
+// Throwing is the contract, not a failure to handle the case. Both consumers
+// probe availability by calling this inside a try/catch
+// ({@link ExecutionPool.isAvailable}, and the equivalent in
+// CompilationWorkerManager), so the throw is how they learn workers are
+// unavailable and fall back to the main thread. The message is for a developer
+// reading a stack trace, and is otherwise swallowed by design.
+//
+// The one raw `throw new Error` in the codebase. It stays raw because it is a
+// build-configuration signal rather than an engine error, and routing it
+// through ErrorFactory would imply a caller should inspect its code.
 export default (() => {
-	throw new Error("engine.worker.ts must be processed by esbuild-plugin-inline-worker");
+	throw new Error("engine.worker.ts was not processed by esbuild-plugin-inline-worker, so worker offload is unavailable");
 }) as unknown as () => Worker;
 
 // ── Lazy per-role state — independent, only the used one is created ────
