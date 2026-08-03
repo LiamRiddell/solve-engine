@@ -14,14 +14,14 @@
   ],
   "license": "MIT",
   "author": "Liam Riddell",
-  "homepage": "https://liamriddell.github.io/Solve-Engine/",
+  "homepage": "https://liamriddell.github.io/solve-engine/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LiamRiddell/Solve-Engine.git",
+    "url": "git+https://github.com/LiamRiddell/solve-engine.git",
     "directory": "packages/engine"
   },
   "bugs": {
-    "url": "https://github.com/LiamRiddell/Solve-Engine/issues"
+    "url": "https://github.com/LiamRiddell/solve-engine/issues"
   },
   "publishConfig": {
     "access": "public"

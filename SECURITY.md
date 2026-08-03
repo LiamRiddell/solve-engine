@@ -5,7 +5,7 @@
 Report privately through GitHub's advisory form rather than opening a public
 issue:
 
-**https://github.com/LiamRiddell/Solve-Engine/security/advisories/new**
+**https://github.com/LiamRiddell/solve-engine/security/advisories/new**
 
 That keeps the report private until a fix exists, and gives you a place to
 discuss it with a maintainer. Please do not open a public issue for a

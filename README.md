@@ -11,13 +11,13 @@ plain-English phrasing all work in the same expression, and the answer appears
 as you type.
 
 [![npm](https://img.shields.io/npm/v/solve-engine?color=%230b7285&label=npm)](https://www.npmjs.com/package/solve-engine)
-[![CI](https://github.com/LiamRiddell/Solve-Engine/actions/workflows/ci.yml/badge.svg)](https://github.com/LiamRiddell/Solve-Engine/actions/workflows/ci.yml)
+[![CI](https://github.com/LiamRiddell/solve-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/LiamRiddell/solve-engine/actions/workflows/ci.yml)
 [![Node](https://img.shields.io/node/v/solve-engine)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-[Documentation](https://liamriddell.github.io/Solve-Engine/) &nbsp;•&nbsp;
-[Playground](https://liamriddell.github.io/Solve-Engine/playground/) &nbsp;•&nbsp;
-[Syntax reference](https://liamriddell.github.io/Solve-Engine/syntax/cheatsheet/) &nbsp;•&nbsp;
+[Documentation](https://liamriddell.github.io/solve-engine/) &nbsp;•&nbsp;
+[Playground](https://liamriddell.github.io/solve-engine/playground/) &nbsp;•&nbsp;
+[Syntax reference](https://liamriddell.github.io/solve-engine/syntax/cheatsheet/) &nbsp;•&nbsp;
 [Contributing](CONTRIBUTING.md)
 
 </div>
@@ -104,7 +104,7 @@ if 5 > 3 then 100 else 200    // 100
 $100 + $250                   // $350.00
 ```
 
-The [syntax reference](https://liamriddell.github.io/Solve-Engine/syntax/cheatsheet/)
+The [syntax reference](https://liamriddell.github.io/solve-engine/syntax/cheatsheet/)
 is the complete list. There is rather more of it than fits here.
 
 ## How it works
@@ -126,7 +126,7 @@ tier, which means an extension can do anything the built-ins can. Nineteen
 register by default; stocks and knowledge stay out until a host supplies a data
 source.
 
-[Architecture](https://liamriddell.github.io/Solve-Engine/architecture/overview/)
+[Architecture](https://liamriddell.github.io/solve-engine/architecture/overview/)
 covers this properly, including a candid list of what is not finished.
 
 ## Design
@@ -137,7 +137,7 @@ keywords and you break every line of prose that happens to contain one, and you
 make those words unusable as variable names. So bare common words are almost
 never keywords here. Multi-word phrases get fused by the normaliser only in
 positions where nothing else is plausible.
-[Trigger words and fusion](https://liamriddell.github.io/Solve-Engine/syntax/trigger-words/)
+[Trigger words and fusion](https://liamriddell.github.io/solve-engine/syntax/trigger-words/)
 explains where the lines are drawn and why.
 
 **An error, never a guess.** When a resolver has not returned yet the result is

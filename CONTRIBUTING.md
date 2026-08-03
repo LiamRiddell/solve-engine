@@ -6,8 +6,8 @@ the project, what is expected of a change, and where things live.
 ## Getting set up
 
 ```bash
-git clone https://github.com/LiamRiddell/Solve-Engine.git
-cd Solve-Engine
+git clone https://github.com/LiamRiddell/solve-engine.git
+cd solve-engine
 npm install
 npm run verify
 ```

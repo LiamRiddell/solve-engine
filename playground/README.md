@@ -50,5 +50,5 @@ workflow sets it and then asserts it was actually applied, because that failure
 is silent at build time and obvious only once deployed.
 
 ```bash
-BASE_PATH=/Solve-Engine/playground/ npm run build
+BASE_PATH=/solve-engine/playground/ npm run build
 ```

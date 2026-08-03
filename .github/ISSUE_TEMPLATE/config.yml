@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Question or idea
-    url: https://github.com/LiamRiddell/Solve-Engine/discussions
+    url: https://github.com/LiamRiddell/solve-engine/discussions
     about: For anything open-ended. Issues are for specific, actionable work.
   - name: Try an expression first
-    url: https://liamriddell.github.io/Solve-Engine/playground/
+    url: https://liamriddell.github.io/solve-engine/playground/
     about: The playground shows every pipeline stage, which often answers the question directly.

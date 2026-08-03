@@ -1,19 +1,19 @@
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/LiamRiddell/Solve-Engine/main/playground/public/solve-logo.svg" alt="Solve" width="96" />
+<img src="https://raw.githubusercontent.com/LiamRiddell/solve-engine/main/playground/public/solve-logo.svg" alt="Solve" width="96" />
 
 # solve-engine
 
 **A calculator that reads like a sentence.**
 
 [![npm](https://img.shields.io/npm/v/solve-engine?color=%230b7285&label=npm)](https://www.npmjs.com/package/solve-engine)
-[![CI](https://github.com/LiamRiddell/Solve-Engine/actions/workflows/ci.yml/badge.svg)](https://github.com/LiamRiddell/Solve-Engine/actions/workflows/ci.yml)
+[![CI](https://github.com/LiamRiddell/solve-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/LiamRiddell/solve-engine/actions/workflows/ci.yml)
 [![Node](https://img.shields.io/node/v/solve-engine)](https://nodejs.org)
-[![License](https://img.shields.io/badge/license-MIT-blue)](https://github.com/LiamRiddell/Solve-Engine/blob/main/packages/engine/LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue)](https://github.com/LiamRiddell/solve-engine/blob/main/packages/engine/LICENSE)
 
-[Documentation](https://liamriddell.github.io/Solve-Engine/) &nbsp;&#8226;&nbsp;
-[Playground](https://liamriddell.github.io/Solve-Engine/playground/) &nbsp;&#8226;&nbsp;
-[Syntax reference](https://liamriddell.github.io/Solve-Engine/syntax/cheatsheet/)
+[Documentation](https://liamriddell.github.io/solve-engine/) &nbsp;&#8226;&nbsp;
+[Playground](https://liamriddell.github.io/solve-engine/playground/) &nbsp;&#8226;&nbsp;
+[Syntax reference](https://liamriddell.github.io/solve-engine/syntax/cheatsheet/)
 
 </div>
 
@@ -26,7 +26,7 @@ Originally the engine inside
 so it can be embedded in any host: an editor plugin, a CLI, a desktop app, a
 server. No dependency on a UI framework, a DOM, or an editor.
 
-See [ARCHITECTURE.md](https://github.com/LiamRiddell/Solve-Engine/blob/main/packages/engine/ARCHITECTURE.md) for how the pipeline, package system, async
+See [ARCHITECTURE.md](https://github.com/LiamRiddell/solve-engine/blob/main/packages/engine/ARCHITECTURE.md) for how the pipeline, package system, async
 evaluation model, and caching layers fit together, plus a candid list of known
 architectural debt.
 
@@ -80,7 +80,7 @@ they are:
 
 The following subpaths are **advanced-public**, everything a third-party package author
 needs to extend the engine, but with a looser stability contract than the tier above (these
-are the pieces the built-in packages and the [OSRS example](https://github.com/LiamRiddell/Solve-Engine/tree/main/packages/engine/examples/osrs) themselves
+are the pieces the built-in packages and the [OSRS example](https://github.com/LiamRiddell/solve-engine/tree/main/packages/engine/examples/osrs) themselves
 depend on):
 
 | Subpath | Purpose |
@@ -104,7 +104,7 @@ minor versions without notice.
 A **package** (`IEnginePackage`) is a plain data descriptor bundling everything needed to
 extend the engine with a new domain: custom tokens, parselets, VM opcode handlers, variable
 sources, and optional async resolvers. See
-[`solve-engine/api`'s `IEnginePackage`](https://github.com/LiamRiddell/Solve-Engine/blob/main/packages/engine/src/api/PackageRegistry.ts) for the full field list
+[`solve-engine/api`'s `IEnginePackage`](https://github.com/LiamRiddell/solve-engine/blob/main/packages/engine/src/api/PackageRegistry.ts) for the full field list
 with inline documentation and examples for each field.
 
 Minimal shape:
@@ -163,14 +163,14 @@ package: a colon-prefixed variable name (`:name = expr`) can never be a keyword-
 word in this engine, so a common-noun trigger word (like "total") should be phrase-fused
 with its qualifying keyword rather than claimed bare.
 
-Two runnable examples, both under [`examples/`](https://github.com/LiamRiddell/Solve-Engine/tree/main/packages/engine/examples) (example code, not part of the
+Two runnable examples, both under [`examples/`](https://github.com/LiamRiddell/solve-engine/tree/main/packages/engine/examples) (example code, not part of the
 published package, see `files` in `package.json`, only `dist/` ships):
 
-- [`examples/basic`](https://github.com/LiamRiddell/Solve-Engine/tree/main/packages/engine/examples/basic), the smallest complete package: one custom keyword
+- [`examples/basic`](https://github.com/LiamRiddell/solve-engine/tree/main/packages/engine/examples/basic), the smallest complete package: one custom keyword
   (`reverse("text")`) dispatched through a plugin function, nothing else. Start here. Its
-  test, [`__tests__/examples/basic/BasicPackage.spec.ts`](https://github.com/LiamRiddell/Solve-Engine/blob/main/packages/engine/__tests__/examples/basic/BasicPackage.spec.ts),
+  test, [`__tests__/examples/basic/BasicPackage.spec.ts`](https://github.com/LiamRiddell/solve-engine/blob/main/packages/engine/__tests__/examples/basic/BasicPackage.spec.ts),
   shows the full register-and-evaluate loop end to end.
-- [`examples/osrs`](https://github.com/LiamRiddell/Solve-Engine/tree/main/packages/engine/examples/osrs), a fuller example covering everything `basic` leaves
+- [`examples/osrs`](https://github.com/LiamRiddell/solve-engine/tree/main/packages/engine/examples/osrs), a fuller example covering everything `basic` leaves
   out: a phrase-fused multi-word item name, an async resolver backed by a real HTTP API, a
   custom highlight category, and completion items. Prices Old School RuneScape Grand Exchange
   items (e.g. `ge("Abyssal whip")`).
@@ -195,7 +195,7 @@ resolve, with no error to explain why.
 
 ## Development
 
-Developed in the [Solve-Engine](https://github.com/LiamRiddell/Solve-Engine) repository as
+Developed in the [solve-engine](https://github.com/LiamRiddell/solve-engine) repository as
 an npm workspace (`packages/engine`).
 
 ```bash
@@ -206,4 +206,4 @@ npm test        # standalone jest run, scoped to this package
 
 ## License
 
-MIT, see [LICENSE](https://github.com/LiamRiddell/Solve-Engine/blob/main/packages/engine/LICENSE).
+MIT, see [LICENSE](https://github.com/LiamRiddell/solve-engine/blob/main/packages/engine/LICENSE).

@@ -4,7 +4,7 @@ Settings that live in the GitHub web interface rather than in a file, which is
 exactly why they get forgotten. Work through this before the repository goes
 public, and again after.
 
-The repository is currently named `Solve-Engine`. That casing is load-bearing:
+The repository is currently named `solve-engine`. That casing is load-bearing:
 the Pages URL derives from it, and `pages.yml` resolves the base path from
 `GITHUB_REPOSITORY` rather than hardcoding it, so a rename changes the published
 URL but does not break the build. Any hand-written URL in the documentation does
