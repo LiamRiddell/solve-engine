@@ -137,6 +137,34 @@ describe("documented examples evaluate as documented", () => {
     expect(fromReadme.length).toBeGreaterThan(0);
   });
 
+  test("every syntax page either proves its examples or says why it cannot", () => {
+    // Pages whose output is not a fixed string, so an asserted example would
+    // either be a lie or a flake. Each needs a reason, not just an entry.
+    const unprovable = new Map([
+      ["dice.md", "rolls are random, so no output is reproducible"],
+      ["live-data.md", "results come from live network queries"],
+      ["dates.md", "relative dates resolve against the current date"],
+      ["line-references.md", "examples are whole documents, not single lines"],
+    ]);
+
+    const syntaxDir = path.join(DOCS_ROOT, "syntax");
+    const pages = fs.readdirSync(syntaxDir).filter((f) => f.endsWith(".md"));
+
+    // A page listed as unprovable that has since gained real examples means the
+    // list is stale. Failing on that keeps the exclusions honest, which is the
+    // whole point of writing them down rather than just skipping the files.
+    const covered = new Set(
+      examples
+        .filter((ex) => ex.expected !== null)
+        .map((ex) => path.basename(ex.file)),
+    );
+
+    const untested = pages.filter((p) => !covered.has(p) && !unprovable.has(p));
+    const staleExclusions = [...unprovable.keys()].filter((p) => covered.has(p));
+
+    expect({ untested, staleExclusions }).toEqual({ untested: [], staleExclusions: [] });
+  });
+
   // Group consecutive non-blank lines so a multi-line example shares one engine.
   const groups: Example[][] = [];
   let current: Example[] = [];
