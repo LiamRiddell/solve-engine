@@ -34,6 +34,12 @@ also the honest reading: a beta of 1.0.0 presents the 1.0.0 API surface.
 
 ### Changed
 
+**A line awaiting external data no longer goes clean.** The tier evaluators
+treated "no exception thrown" as success, but a pending value does not throw. A
+line waiting on a resolver was marked clean, and nothing re-runs the preflight
+for a clean line, so the value stayed pending forever with no error to explain
+why.
+
 **Engines own their registries.** Plugin functions, the opcode registry and
 variable sources moved from module-level singletons onto a per-engine
 `EngineContext`. Two engines in one process no longer interfere: registering a
@@ -48,8 +54,10 @@ engine. Use `engine.registerPackage(pkg)`.
 
 Named openly rather than left to be discovered.
 
-- Two of the five singleton migrations are outstanding: the lexer and currency
-  exchange still have shared instances.
+- The lexer and currency exchange remain shared instances, deliberately. Line
+  classification does not depend on registered vocabulary, and exchange rates
+  are global market data where sharing a cache is the correct behaviour. Both
+  decisions are recorded in the code with the reasoning.
 - `variableSources` is registered and tracked but never consulted during
   evaluation. It does nothing today.
 - `AsyncResolutionBatcher.onLineResult` is the only mechanism that patches a

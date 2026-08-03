@@ -5,7 +5,7 @@ import {
 	LineState,
 	ViewportRange,
 } from "@solve-js/engine/DocumentModel";
-import { Value, enableValueArena, disableValueArena, errorValue } from "@solve-js/vm/Value";
+import { Value, ValueType, enableValueArena, disableValueArena, errorValue } from "@solve-js/vm/Value";
 import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { isEmptyLine } from "@solve-js/engine/ExpressionEngineSafety";
@@ -665,6 +665,8 @@ export class ThreeTierEvaluator {
 		let lastValue: Value | null = null;
 		let firstError: string | null = null;
 		let anyFailed = false;
+		/** Set when any expression returned a value still waiting on a resolver. */
+		let anyPending = false;
 
 		// Evaluate each expression independently — a failure in one expression
 		// (e.g., parse error in s`bad syntax`) must not prevent other expressions
@@ -693,6 +695,14 @@ export class ThreeTierEvaluator {
 				if (!firstError) firstError = errorMessage;
 				anyFailed = true;
 				value = null;
+			}
+
+			// An unresolved async value does not throw, so `anyFailed` alone would
+			// let this line be marked clean while its data has not arrived. Once
+			// clean, nothing re-runs the resolver preflight and the value stays
+			// pending for good. Treat it as not-yet-complete instead.
+			if (value && value.some((v) => v.type === ValueType.Pending)) {
+				anyPending = true;
 			}
 
 			if (value) {
@@ -746,7 +756,7 @@ export class ThreeTierEvaluator {
 		// next evaluation pass. But successfully-evaluated expressions' results
 		// are preserved so the DAG, UI decorations, and downstream consumers
 		// can use them immediately.
-		if (anyFailed) {
+		if (anyFailed || anyPending) {
 			// Store partial results via updateLineCompiled (doesn't clear dirty).
 			// The successful expressions' bytecodes are cached so Tier 2 works
 			// for them on the next scroll pass.
@@ -784,7 +794,9 @@ export class ThreeTierEvaluator {
 		this.dag.registerLine(lineNumber, reads, writes);
 
 		// ── Checkpoint after variable definition ──
-		if (this.checkpointer && writes.length > 0 && !anyFailed) {
+		// A pending value is not a value worth checkpointing: restoring it would
+		// reinstate the unresolved placeholder rather than the eventual result.
+		if (this.checkpointer && writes.length > 0 && !anyFailed && !anyPending) {
 			this.checkpointer.snapshot(lineNumber, state.lineId, writes);
 		}
 
@@ -878,6 +890,8 @@ export class ThreeTierEvaluator {
 		let lastResult: Value | null = null;
 		let firstError: string | null = null;
 		let anyFailed = false;
+		/** Set when a result is still waiting on a resolver. */
+		let anyPending = false;
 
 		// Compile each expression independently — a parse error in one
 		// should not prevent other expressions from being compiled and
@@ -895,6 +909,11 @@ export class ThreeTierEvaluator {
 				if (writes.length > 0 && program.opcodes.length > 0) {
 					// Variable definitions MUST execute to maintain VM state
 					lastResult = this.engine.executeCached(program, lineNumber);
+					// Same reasoning as Tier 1: a pending result does not throw,
+					// and marking the line clean would strand it unresolved.
+					if (lastResult && lastResult.type === ValueType.Pending) {
+						anyPending = true;
+					}
 				}
 			} catch (e) {
 				const errorMessage = e instanceof Error ? e.message : String(e);
@@ -924,7 +943,7 @@ export class ThreeTierEvaluator {
 		// Always register — even empty reads/writes for DAG line-presence queries.
 		this.dag.registerLine(lineNumber, reads, writes);
 
-		if (hasVariableDef && lastResult && !anyFailed) {
+		if (hasVariableDef && lastResult && !anyFailed && !anyPending) {
 			state.results = [[lastResult]];
 			state.result = lastResult;
 			this.doc.markClean(state.lineId);
@@ -935,7 +954,7 @@ export class ThreeTierEvaluator {
 			}
 		}
 
-		return { ...baseResult, tier: EvalTier.Tier3, result: lastResult, results: hasVariableDef && lastResult && !anyFailed ? [[lastResult]] : undefined, error: firstError };
+		return { ...baseResult, tier: EvalTier.Tier3, result: lastResult, results: hasVariableDef && lastResult && !anyFailed && !anyPending ? [[lastResult]] : undefined, error: firstError };
 	}
 
 	// ── Public checkpoint API (used by Phase 5.2e setViewport) ──────
