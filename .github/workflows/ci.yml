@@ -44,6 +44,36 @@ jobs:
       # so that what CI runs and what a contributor runs locally cannot drift.
       - run: npm run verify
 
+  test-full:
+    name: Every unit test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # `npm run verify` excludes the heavy, fuzz and long-document suites so
+      # the normal dev cycle stays fast. That leaves sixteen spec files that
+      # nothing runs, and a suite nothing runs is a suite that quietly rots:
+      # when this job was first written, two of those files had decayed to 49
+      # and 13 failures against behaviour the engine had changed under them.
+      #
+      # One Node version rather than the verify matrix. These suites are slow
+      # and their failures are logic failures, not version-specific ones, so a
+      # three-way matrix would triple the runtime to re-prove the same thing.
+      #
+      # Runs single-threaded with a raised heap: the fuzz and long-document
+      # suites allocate enough that parallel workers on a two-core runner start
+      # failing on allocation rather than on anything real. --expose-gc is
+      # load-bearing for the memory specs, which measure retention after a
+      # forced collection and report noise without it.
+      - run: npm run test:full
+
   package:
     name: Package publishes correctly
     runs-on: ubuntu-24.04
