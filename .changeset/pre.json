@@ -1,0 +1,9 @@
+{
+  "mode": "pre",
+  "tag": "beta",
+  "initialVersions": {
+    "solve-engine": "1.0.0-beta.0",
+    "solve-playground-bridge": "0.0.0"
+  },
+  "changesets": []
+}

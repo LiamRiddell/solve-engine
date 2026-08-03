@@ -23,16 +23,33 @@
 		"bench:baseline": "node scripts/bench-baseline.mjs",
 		"bench:compare": "node scripts/compare-benchmarks.mjs",
 		"verify:all": "npm run verify && npm run build --prefix playground",
-		"lint": "oxlint packages/engine/src packages/playground-bridge/src scripts"
+		"lint": "oxlint packages/engine/src packages/playground-bridge/src scripts",
+		"size": "size-limit"
 	},
+	"size-limit": [
+		{
+			"name": "import { ExpressionEngine }",
+			"path": "packages/engine/dist/index.js",
+			"import": "{ ExpressionEngine }",
+			"limit": "92 kB"
+		},
+		{
+			"name": "the whole root entry",
+			"path": "packages/engine/dist/index.js",
+			"limit": "92 kB"
+		}
+	],
 	"keywords": [],
 	"author": "Liam Riddell",
 	"license": "MIT",
 	"devDependencies": {
+		"@changesets/cli": "2.31.1",
 		"@jest/globals": "^30.4.1",
+		"@size-limit/preset-small-lib": "13.0.3",
 		"@types/node": "^26.1.2",
 		"jest": "^30.4.2",
 		"oxlint": "1.76.0",
+		"size-limit": "13.0.3",
 		"ts-jest": "^29.1.1",
 		"tsup": "8.5.1",
 		"typescript": "5.9.3"
