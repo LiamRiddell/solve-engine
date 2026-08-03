@@ -33,7 +33,16 @@ import { formatValue } from "@solve-js/format/FormatEngine";
  * network data) must not use `=>`, since there is no stable expected value.
  */
 
-const DOCS_ROOT = path.resolve(__dirname, "../../../../docs/src/content/docs");
+const REPO_ROOT = path.resolve(__dirname, "../../../..");
+const DOCS_ROOT = path.join(REPO_ROOT, "docs/src/content/docs");
+
+/**
+ * Markdown outside the documentation tree that also carries `solve` blocks.
+ *
+ * The root README is the first thing anyone reads and the most expensive place
+ * to be wrong, so it is held to the same standard as the reference pages.
+ */
+const EXTRA_FILES = [path.join(REPO_ROOT, "README.md")];
 
 interface Example {
   file: string;
@@ -42,19 +51,10 @@ interface Example {
   expected: string | null;
 }
 
-function collectExamples(dir: string): Example[] {
-  if (!fs.existsSync(dir)) return [];
+function collectExamples(dir: string, extraFiles: string[] = []): Example[] {
   const out: Example[] = [];
 
-  const walk = (current: string): void => {
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-        continue;
-      }
-      if (!/\.mdx?$/.test(entry.name)) continue;
-
+  const parseFile = (full: string): void => {
       const lines = fs.readFileSync(full, "utf8").split(/\r?\n/);
       let inBlock = false;
       lines.forEach((raw, i) => {
@@ -92,14 +92,28 @@ function collectExamples(dir: string): Example[] {
           });
         }
       });
+  };
+
+  const walk = (current: string): void => {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!/\.mdx?$/.test(entry.name)) continue;
+      parseFile(full);
     }
   };
 
-  walk(dir);
+  if (fs.existsSync(dir)) walk(dir);
+  for (const file of extraFiles) {
+    if (fs.existsSync(file)) parseFile(file);
+  }
   return out;
 }
 
-const examples = collectExamples(DOCS_ROOT);
+const examples = collectExamples(DOCS_ROOT, EXTRA_FILES);
 
 describe("documented examples evaluate as documented", () => {
   test("the documentation directory was found", () => {
@@ -111,6 +125,16 @@ describe("documented examples evaluate as documented", () => {
   test("at least one example was collected", () => {
     // Without this, deleting every example would look like a green suite.
     expect(examples.length).toBeGreaterThan(0);
+  });
+
+  test("the root README contributed examples", () => {
+    // The README claims in prose that every example in it is executed here.
+    // If a rename or a move quietly stopped it being collected, that claim
+    // would become false while the suite stayed green.
+    const fromReadme = examples.filter(
+      (ex) => ex.file.endsWith("README.md") && ex.expected !== null,
+    );
+    expect(fromReadme.length).toBeGreaterThan(0);
   });
 
   // Group consecutive non-blank lines so a multi-line example shares one engine.

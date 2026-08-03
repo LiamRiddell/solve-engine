@@ -291,7 +291,23 @@ function handleExecuteBatch(msg: ExecuteBatchMsg): void {
 
 // ── Message handler ───────────────────────────────────────────────────
 
-self.onmessage = (event: MessageEvent) => {
+/**
+ * Whether this module is executing inside a real worker global scope.
+ *
+ * Only `esbuild-plugin-inline-worker` splits this file into a separate worker
+ * bundle. Any other bundler, tsup included, treats it as an ordinary module and
+ * inlines the whole body into whatever imported it, which means the code below
+ * runs on the main thread or in Node rather than in a worker.
+ *
+ * Without this guard, importing the published package from Node throws
+ * `self is not defined` before a single expression can be evaluated. The check
+ * distinguishes the three environments: Node defines neither `self` nor
+ * `window`, a browser main thread defines both, and a worker defines only
+ * `self`.
+ */
+const inWorkerScope = typeof self !== "undefined" && typeof window === "undefined";
+
+const handleMessage = (event: MessageEvent) => {
 	const msg = event.data as EngineWorkerMessage;
 
 	switch (msg.type) {
@@ -334,3 +350,10 @@ self.onmessage = (event: MessageEvent) => {
 		}
 	}
 };
+
+// Installed only when genuinely running as a worker. Everywhere else this
+// module has been inlined into a host bundle, where binding a handler would at
+// best be inert and at worst intercept the host's own messages.
+if (inWorkerScope) {
+	self.onmessage = handleMessage;
+}
