@@ -13,7 +13,7 @@ export const OSRS_PACKAGE: IEnginePackage = {
   // authors reading this example — not because OSRS itself needs a real
   // floor. See PackageRegistry.ts's engineVersion doc comment and
   // ARCHITECTURE.md §5.3.
-  engineVersion: "^0.1.0",
+  engineVersion: "^1.0.0",
 
   lexerVocabulary: osrsLexerVocabulary,
 

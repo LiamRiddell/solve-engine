@@ -1,0 +1,61 @@
+# Changelog
+
+## 1.0.0-beta.0
+
+First published version. The engine itself is not new: it has been running
+inside the Solve plugin for Obsidian and was extracted into its own repository
+and package. What is new is that it is installable, documented, and checked.
+
+### Requirements
+
+Node 20 or later. Node 18 reached end of life, and shipping a new package
+against it was not worth doing.
+
+### Fixed before the first release
+
+**The published bundle threw on import in Node.** The root entry inlined a web
+worker module whose top-level `self.onmessage` ran at import time, so
+`import { ExpressionEngine } from "solve-engine"` failed with `self is not
+defined` before a single expression could be evaluated. Every test passed while
+this was true, because the suite runs against source through path aliases and
+nothing imported the build. A smoke test now imports the built package the way a
+consumer does, as part of the standard verification gate.
+
+**Type declarations resolved to the wrong module system.** Each of the 16
+subpaths declared a single flat `types` pointing at the ESM declarations, so a
+`require()` consumer resolved ESM-flavoured types from an ESM package and every
+`.d.cts` on disk was unreachable. Subpaths now use nested conditions.
+`arethetypeswrong` and `publint` run in continuous integration.
+
+**A prerelease engine would have rejected the packages it was for.** Semver
+sorts `1.0.0-beta.0` below `1.0.0`, so a package declaring `^1.0.0` fell outside
+the range. Compatibility is now checked against the coerced version, which is
+also the honest reading: a beta of 1.0.0 presents the 1.0.0 API surface.
+
+### Changed
+
+**Engines own their registries.** Plugin functions, the opcode registry and
+variable sources moved from module-level singletons onto a per-engine
+`EngineContext`. Two engines in one process no longer interfere: registering a
+package on one does not change what another computes. The `shared*` exports
+remain as deprecated aliases.
+
+**`PackageRegistry` is deprecated.** It writes into process-wide singletons that
+engines no longer read, so a package registered through it is invisible to every
+engine. Use `engine.registerPackage(pkg)`.
+
+### Known limitations
+
+Named openly rather than left to be discovered.
+
+- Two of the five singleton migrations are outstanding: the lexer and currency
+  exchange still have shared instances.
+- `variableSources` is registered and tracked but never consulted during
+  evaluation. It does nothing today.
+- `AsyncResolutionBatcher.onLineResult` is the only mechanism that patches a
+  resolved async value back into the document model, and it is not wired inside
+  the package. A host that does not supply it gets async values that never
+  resolve, with no error.
+- The VM benchmark cases are all below the comparison harness's noise floor, so
+  that suite contributes no regression signal yet.
+- The API surface may still move before 1.0 proper.

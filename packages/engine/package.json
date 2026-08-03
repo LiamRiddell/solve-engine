@@ -1,6 +1,6 @@
 {
   "name": "solve-engine",
-  "version": "0.1.0",
+  "version": "1.0.0-beta.0",
   "description": "The expression evaluation engine behind Solve \u2014 lexer, parser, bytecode VM, and an extensible package system.",
   "keywords": [
     "expression-evaluator",
@@ -28,7 +28,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "files": [
     "dist",
