@@ -34,11 +34,49 @@ export default defineConfig({
         baseUrl:
           "https://github.com/LiamRiddell/solve-engine/edit/main/docs/",
       },
-      customCss: ["./src/styles/custom.css"],
+      logo: {
+        light: "./src/assets/solve-mark-light.svg",
+        dark: "./src/assets/solve-mark-dark.svg",
+        alt: "",
+      },
+      favicon: "/favicon.svg",
+      // Order matters and is a dependency chain, not a preference: tokens
+      // define the palette, theme maps it onto Starlight's own variables, and
+      // background and components both read the result.
+      customCss: [
+        "./src/styles/tokens.css",
+        "./src/styles/theme.css",
+        "./src/styles/background.css",
+        "./src/styles/components.css",
+      ],
       expressiveCode: {
         // Registers the ```solve language. Without it every example in the
         // syntax reference falls back to unhighlighted plain text.
         shiki: { langs: [solveGrammar] },
+        // One Dark is the palette the playground's CodeMirror editor uses, so
+        // an expression looks the same in the docs as it does when the reader
+        // pastes it into the playground.
+        themes: ["one-dark-pro", "github-light"],
+        styleOverrides: {
+          borderRadius: "calc(var(--radius) + 4px)",
+          borderColor: "var(--border)",
+          codeFontFamily: "var(--sl-font-mono)",
+          codeFontSize: "var(--sl-text-sm)",
+          // Both themes paint their own near-black/near-white slab, which
+          // would sit as an opaque rectangle on top of the ambient backdrop.
+          // Transparent lets the glass frame in components.css show through.
+          codeBackground: "transparent",
+          frames: {
+            editorTabBarBackground: "transparent",
+            editorActiveTabBackground: "transparent",
+            editorActiveTabIndicatorTopColor: "var(--primary)",
+            editorTabBarBorderBottomColor: "var(--border)",
+            terminalBackground: "transparent",
+            terminalTitlebarBackground: "transparent",
+            terminalTitlebarBorderBottomColor: "var(--border)",
+            frameBoxShadowCssValue: "none",
+          },
+        },
       },
       sidebar: [
         {

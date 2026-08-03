@@ -1,0 +1,210 @@
+/*
+ * Starlight theme bridge.
+ *
+ * Starlight derives almost everything it draws from a small set of `--sl-*`
+ * variables, so mapping the brand tokens onto them here themes the whole site
+ * without touching Starlight's own component styles. Anything that still looks
+ * wrong afterwards is a genuine component override and belongs in
+ * `components.css`, not here.
+ *
+ * The neutral ramp is a straight ink → cloud interpolation rather than
+ * Starlight's default blue-tinted grays, because the brand neutral is a very
+ * slightly cyan-shifted near-black and mixing the two ramps reads as a colour
+ * cast rather than as a neutral.
+ */
+
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/roboto-mono";
+@import "@fontsource/instrument-serif";
+
+/* Brand wordmark face — self-hosted, single weight (Regular/400 only). */
+@font-face {
+  font-family: "BBH Bartle";
+  src: url("/fonts/BBHBartle-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── Dark (default) ─────────────────────────────────────────────────────── */
+:root {
+  /* Neutral ramp: ink → cloud. */
+  --sl-color-white: #fcfcfe;
+  --sl-color-gray-1: #e8e9ec;
+  --sl-color-gray-2: #c4c6cb;
+  --sl-color-gray-3: #8d9096;
+  --sl-color-gray-4: #5b5f66;
+  --sl-color-gray-5: #33373d;
+  --sl-color-gray-6: #14191c;
+  --sl-color-black: #03080a;
+
+  /* Accent — volt. `accent-high` is the text-on-dark tint, `accent-low` the
+     ink used for text sitting ON the accent, so the pair has to invert
+     cleanly. */
+  --sl-color-accent-low: #232d00;
+  --sl-color-accent: #c8ff00;
+  --sl-color-accent-high: #d9ff5c;
+
+  --sl-color-text: var(--muted-foreground);
+  --sl-color-text-accent: var(--primary);
+  --sl-color-text-invert: var(--primary-foreground);
+
+  /* The page background is painted by the ambient layer (background.css), so
+     the base surface is transparent and the chrome is glass over it. */
+  --sl-color-bg: transparent;
+  --sl-color-bg-nav: var(--glass-nav);
+  --sl-color-bg-sidebar: transparent;
+  --sl-color-bg-inline-code: var(--muted);
+  --sl-color-bg-accent: var(--primary);
+
+  --sl-color-hairline: var(--border);
+  --sl-color-hairline-light: var(--border);
+  --sl-color-hairline-shade: var(--border);
+  --sl-color-backdrop-overlay: rgb(3 8 10 / 0.72);
+
+  /* Shadows come from the token scale, which is transparent in light mode and
+     a whisper of lift in dark. */
+  --sl-shadow-sm: 0 1px 2px var(--shadow-color);
+  --sl-shadow-md: 0 4px 12px -2px var(--shadow-color);
+  --sl-shadow-lg: 0 16px 40px -8px var(--shadow-color);
+
+  /* Typography. Geist for UI and prose, Roboto Mono for code (both matching
+     the app), Instrument Serif reserved for display type on the splash page. */
+  --sl-font:
+    "Geist Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    sans-serif;
+  --sl-font-mono: "Roboto Mono Variable", ui-monospace, SFMono-Regular, Menlo,
+    Consolas, monospace;
+  --font-brand: "BBH Bartle", var(--sl-font);
+  --font-display: "Instrument Serif", ui-serif, Georgia, serif;
+
+  --sl-line-height: 1.7;
+  --sl-line-height-headings: 1.15;
+
+  /* Starlight's headings run to 42px at desktop, which suits a marketing page
+     and overpowers a reference page where most sections are three lines and a
+     code block. This is the app's tighter scale. Unlayered, so it also beats
+     the ≥50em bump Starlight applies to its own defaults. */
+  --sl-text-h1: 2.25rem;
+  --sl-text-h2: 1.75rem;
+  --sl-text-h3: 1.375rem;
+  --sl-text-h4: 1.125rem;
+  --sl-text-h5: 1rem;
+
+  /* Slightly wider than Starlight's default so the syntax-reference tables,
+     which are two columns of code, stop wrapping mid-expression. */
+  --sl-content-width: 48rem;
+}
+
+/* ── Light ──────────────────────────────────────────────────────────────── */
+:root[data-theme="light"] {
+  --sl-color-white: #03080a;
+  --sl-color-gray-1: #14191c;
+  --sl-color-gray-2: #33373d;
+  --sl-color-gray-3: #5b5f66;
+  --sl-color-gray-4: #8d9096;
+  --sl-color-gray-5: #c4c6cb;
+  --sl-color-gray-6: #e8e9ec;
+  --sl-color-gray-7: #f4f4f7;
+  --sl-color-black: #ffffff;
+
+  /* Accent — grape. */
+  --sl-color-accent-low: #ede4fe;
+  --sl-color-accent: #7624f4;
+  --sl-color-accent-high: #4a12a8;
+
+  --sl-color-text-accent: var(--primary);
+  --sl-color-text-invert: var(--primary-foreground);
+  --sl-color-bg-nav: var(--glass-nav);
+  --sl-color-bg-sidebar: transparent;
+  --sl-color-bg-inline-code: var(--muted);
+  --sl-color-bg-accent: var(--primary);
+  --sl-color-backdrop-overlay: rgb(3 8 10 / 0.44);
+}
+
+/* ── Base typography ────────────────────────────────────────────────────── */
+
+body {
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Headings read as headings because of weight and tracking, not size alone —
+   the app sets display type tight and semibold rather than bold. */
+.sl-markdown-content :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--foreground);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.sl-markdown-content :is(h2, h3) {
+  scroll-margin-top: calc(var(--sl-nav-height) + 1.5rem);
+}
+
+/* A hairline under h2 gives long syntax pages a visible section rhythm that
+   heading size alone does not, at this content width.
+   The rule targets the heading WRAPPER, not the heading: Starlight makes an
+   autolinked heading `display: inline` so the anchor icon can sit beside it,
+   which would clip the rule to the width of the words. */
+.sl-markdown-content .sl-heading-wrapper.level-h2,
+.sl-markdown-content h2:not(:where(.sl-heading-wrapper *)) {
+  display: block;
+  padding-bottom: 0.4em;
+  border-bottom: 1px solid var(--border);
+}
+
+.sl-markdown-content p,
+.sl-markdown-content li {
+  color: var(--muted-foreground);
+}
+
+.sl-markdown-content strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
+
+.sl-markdown-content a:not(:where(.not-content *)) {
+  color: var(--link);
+  text-decoration-color: color-mix(in srgb, var(--link) 40%, transparent);
+  text-underline-offset: 0.25em;
+  transition: color 120ms ease;
+}
+
+.sl-markdown-content a:not(:where(.not-content *)):hover {
+  color: var(--link-hover);
+  text-decoration-color: currentColor;
+}
+
+/* Focus rings mirror the app's `ring-[3px] ring-ring/50`. */
+:root :is(a, button, input, summary, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 50%, transparent);
+  border-radius: calc(var(--radius) - 2px);
+}
+
+/* Selection picks up the brand rather than the browser default. */
+::selection {
+  background: color-mix(in srgb, var(--primary) 28%, transparent);
+  color: var(--foreground);
+}
+
+/* Scrollbars — neutral alpha only, never the brand accent (same rule the
+   playground follows). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--border-strong);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}

@@ -1,0 +1,599 @@
+/*
+ * Component overrides — Starlight's chrome redrawn in the app's shadcn idiom.
+ *
+ * Starlight puts its own rules in the `starlight.*` cascade layers and custom
+ * CSS is injected unlayered, so everything here already outclasses the default
+ * without `!important`. The few `!important`s that remain are marked with why.
+ *
+ * House style, inherited from the app:
+ *   · radius comes from `--radius` (0.5rem) and its derived steps
+ *   · light mode is FLAT — borders draw every edge, `--shadow-color` is
+ *     transparent, so `box-shadow` declarations quietly vanish there
+ *   · surfaces above the ambient backdrop are glass: translucent + blurred
+ *   · the accent is used sparingly, for state and emphasis, never as decoration
+ */
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+
+.header {
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+}
+
+/* The wordmark is the brand font at full size; the title text next to the mark
+   is what carries the brand signal, so no gradient or letter-spacing tricks. */
+.site-title {
+  font-family: var(--font-brand);
+  font-weight: 400;
+  font-size: 1.375rem;
+  letter-spacing: 0;
+  color: var(--foreground);
+}
+
+.site-title img {
+  height: 1.5rem;
+  width: auto;
+  color: var(--primary);
+}
+
+/* ── Search ─────────────────────────────────────────────────────────────── */
+
+/* shadcn Input: hairline border, input surface, muted placeholder text. */
+button[data-open-modal] {
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  background-color: var(--input-bg);
+  color: var(--faint);
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+button[data-open-modal]:hover {
+  border-color: var(--border-strong);
+  background-color: var(--card-hover);
+  color: var(--muted-foreground);
+}
+
+/* shadcn Kbd. */
+button[data-open-modal] > kbd {
+  background-color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 3px);
+  color: var(--faint);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-2xs);
+  padding: 0.0625rem 0.3125rem;
+}
+
+.dialog-frame {
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  background-color: var(--popover);
+  box-shadow: var(--sl-shadow-lg);
+}
+
+/* ── Sidebar ────────────────────────────────────────────────────────────── */
+
+.sidebar-pane {
+  border-inline-end: 1px solid var(--border);
+}
+
+/* Section headings — the uppercase micro-label the app uses above grouped
+   navigation, rather than Starlight's plain bold run-in. */
+.sidebar-content .top-level > li > details > summary .group-label > .large,
+.sidebar-content .top-level > li > .group-label > .large {
+  font-size: var(--sl-text-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--faint);
+}
+
+/* Nav items — shadcn sidebar rows: full-width hit area, rounded, tinted on
+   hover, accent-tinted when current. */
+.sidebar-content a {
+  display: block;
+  border-radius: calc(var(--radius) - 2px);
+  padding: 0.3125rem 0.625rem;
+  font-size: var(--sl-text-sm);
+  color: var(--muted-foreground);
+  text-decoration: none;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.sidebar-content a:hover {
+  background-color: var(--card-hover);
+  color: var(--foreground);
+}
+
+.sidebar-content a[aria-current="page"],
+.sidebar-content a[aria-current="page"]:hover {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+  font-weight: 500;
+}
+
+/* Starlight indents nested lists with a border-inline-start on the <ul>. */
+.sidebar-content ul ul {
+  border-inline-start: 1px solid var(--border);
+}
+
+.sidebar-content summary {
+  padding-block: 0.25rem;
+}
+
+/* shadcn Badge (pill, tinted, no border) for sidebar badges. */
+.sidebar-content .sl-badge,
+.sl-badge {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background-color: var(--secondary);
+  color: var(--secondary-foreground);
+  font-size: var(--sl-text-2xs);
+  font-weight: 500;
+  padding: 0.0625rem 0.5rem;
+}
+
+/* ── Hero + link buttons ────────────────────────────────────────────────── */
+
+.hero h1 {
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  color: var(--foreground);
+}
+
+.hero .tagline {
+  color: var(--muted-foreground);
+  font-size: clamp(var(--sl-text-base), calc(0.0625rem + 1.6vw), var(--sl-text-lg));
+  line-height: 1.6;
+}
+
+/* Starlight sizes the hero image at up to 25rem, which at this heading size
+   makes the mark compete with the sentence rather than sit beside it. */
+.hero > img,
+.hero > .hero-html {
+  filter: drop-shadow(0 0 4rem color-mix(in srgb, var(--primary) 16%, transparent));
+}
+
+@media (min-width: 50rem) {
+  .hero {
+    grid-template-columns: 8fr 3fr;
+    padding-block: clamp(2rem, calc(1rem + 6vmin), 5.5rem) 2rem;
+  }
+
+  .hero > img,
+  .hero > .hero-html {
+    width: min(100%, 13rem);
+    justify-self: center;
+  }
+}
+
+/* shadcn Button. Starlight's link buttons are pill-shaped and oversized; the
+   app's are `rounded-md h-10 px-8 text-sm font-medium`. */
+.sl-link-button {
+  border-radius: var(--radius);
+  font-size: var(--sl-text-sm);
+  font-weight: 500;
+  padding: 0.625rem 1.25rem;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+@media (min-width: 50rem) {
+  .sl-link-button {
+    font-size: var(--sl-text-sm);
+    padding: 0.6875rem 1.5rem;
+  }
+}
+
+.sl-link-button.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.sl-link-button.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--primary-foreground);
+}
+
+.sl-link-button.secondary {
+  border-color: var(--input);
+  background: var(--input-bg);
+  color: var(--foreground);
+}
+
+.sl-link-button.secondary:hover {
+  background: var(--accent);
+  border-color: var(--accent-border);
+  color: var(--accent-foreground);
+}
+
+.sl-link-button.minimal {
+  color: var(--muted-foreground);
+  padding-inline: 0.75rem;
+}
+
+.sl-link-button.minimal:hover {
+  background: var(--card-hover);
+  color: var(--foreground);
+}
+
+/* Icons in shadcn buttons are 1rem, not Starlight's 1.5rem. */
+.sl-link-button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* ── Cards ──────────────────────────────────────────────────────────────── */
+
+/* Starlight tints every fourth card a different hue. The app has one accent,
+   so the rainbow is replaced by a single card surface and an accent icon chip.
+   The `--sl-card-*` variables are still set, because the icon chip below reads
+   them and Starlight's nth-child rules would otherwise leak through. */
+.card {
+  --sl-card-border: var(--accent-border);
+  --sl-card-bg: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  background-color: var(--card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: clamp(1.25rem, calc(0.5rem + 1.5vw), 1.75rem);
+  gap: 0.75rem;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.card:hover {
+  border-color: var(--border-strong);
+  background-color: var(--card-hover);
+  transform: translateY(-2px);
+}
+
+.card .title {
+  font-size: var(--sl-text-lg);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--foreground);
+  gap: 0.75rem;
+}
+
+.card .icon {
+  border-radius: calc(var(--radius) - 2px);
+  border-color: var(--accent-border);
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+  padding: 0.3em;
+}
+
+.card .body {
+  color: var(--muted-foreground);
+  font-size: var(--sl-text-sm);
+  line-height: 1.65;
+}
+
+/* The staggered grid throws the second column half a card down the page. It
+   suits a marketing splash and fights a documentation index, so it is off. */
+.card-grid.stagger {
+  padding-bottom: 0;
+}
+
+.card-grid.stagger > *:nth-child(2n) {
+  transform: none;
+}
+
+/* ── Code ───────────────────────────────────────────────────────────────── */
+
+/* Inline code — shadcn's tinted chip rather than Starlight's grey block. */
+.sl-markdown-content code:not(:where(.expressive-code *)) {
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 3px);
+  background-color: var(--muted);
+  color: var(--foreground);
+  font-family: var(--sl-font-mono);
+  font-size: 0.85em;
+  padding: 0.15em 0.4em;
+}
+
+/* Expressive Code frames. `--code-background` is transparent so the frame
+   inherits the glass surface below rather than painting its own near-black
+   rectangle over the ambient backdrop. */
+.expressive-code .frame {
+  --code-background: transparent;
+  border-radius: calc(var(--radius) + 4px);
+  border: 1px solid var(--border);
+  background-color: var(--card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  overflow: hidden;
+}
+
+.expressive-code .frame pre {
+  border: none;
+  background: transparent;
+}
+
+.expressive-code .frame.has-title .header,
+.expressive-code .frame.is-terminal .header {
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.expressive-code .frame .title {
+  color: var(--muted-foreground);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-2xs);
+}
+
+.expressive-code .copy button {
+  border-radius: calc(var(--radius) - 3px);
+}
+
+/* ── Tables ─────────────────────────────────────────────────────────────── */
+
+/* The syntax reference is mostly two-column "you write / you get" tables, so
+   these carry more of the site's visual weight than tables usually do. Drawn
+   as a shadcn Table inside a bordered, rounded card. */
+.sl-markdown-content table:not(:where(.not-content *)) {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  background-color: var(--card);
+  overflow: hidden;
+  font-size: var(--sl-text-sm);
+}
+
+.sl-markdown-content :is(th, td):not(:where(.not-content *)) {
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 0.625rem 1rem;
+  text-align: start;
+  vertical-align: top;
+}
+
+.sl-markdown-content th:not(:where(.not-content *)) {
+  background-color: var(--muted);
+  color: var(--faint);
+  font-size: var(--sl-text-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.sl-markdown-content tbody tr:last-child :is(th, td):not(:where(.not-content *)) {
+  border-bottom: none;
+}
+
+/* Auto layout sizes every column to its content, which on a two-column table
+   leaves the right-hand third of the card empty and stops the header band
+   reaching the card edge. Letting the last column absorb the slack fixes
+   both. */
+.sl-markdown-content table :is(th, td):last-child:not(:where(.not-content *)) {
+  width: 100%;
+}
+
+.sl-markdown-content tbody tr:hover :is(th, td):not(:where(.not-content *)) {
+  background-color: var(--card-hover);
+}
+
+/* Expressions must not wrap mid-token — a broken expression is unreadable. */
+.sl-markdown-content table code {
+  white-space: nowrap;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 0.9em;
+}
+
+/* The left column is the expression, the right is the result: give the result
+   the accent so the eye can jump straight down it. */
+.sl-markdown-content table td:last-child:not(:only-child) code {
+  color: var(--accent-foreground);
+}
+
+/* ── Asides ─────────────────────────────────────────────────────────────── */
+
+/* Remapped from Starlight's blue/purple/orange/red hues onto the app's status
+   tokens, so a callout here matches an alert in the product. */
+.starlight-aside {
+  border-radius: calc(var(--radius) + 4px);
+  border: 1px solid var(--sl-color-asides-border);
+  border-inline-start-width: 3px;
+  color: var(--foreground);
+  padding: 1rem 1.25rem;
+}
+
+.starlight-aside--note {
+  --sl-color-asides-text-accent: var(--info-text);
+  --sl-color-asides-border: color-mix(in srgb, var(--info) 30%, transparent);
+  background-color: var(--info-bg);
+}
+
+.starlight-aside--tip {
+  --sl-color-asides-text-accent: var(--accent-foreground);
+  --sl-color-asides-border: var(--accent-border);
+  background-color: var(--accent);
+}
+
+.starlight-aside--caution {
+  --sl-color-asides-text-accent: var(--warning-text);
+  --sl-color-asides-border: color-mix(in srgb, var(--warning) 30%, transparent);
+  background-color: var(--warning-bg);
+}
+
+.starlight-aside--danger {
+  --sl-color-asides-text-accent: var(--destructive);
+  --sl-color-asides-border: color-mix(in srgb, var(--destructive) 30%, transparent);
+  background-color: color-mix(in srgb, var(--destructive) 8%, transparent);
+}
+
+.starlight-aside__title {
+  font-size: var(--sl-text-sm);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.starlight-aside__content {
+  color: var(--muted-foreground);
+  font-size: var(--sl-text-sm);
+}
+
+/* ── Table of contents ──────────────────────────────────────────────────── */
+
+starlight-toc a {
+  border-radius: calc(var(--radius) - 3px);
+  border-inline-start: 1px solid var(--border);
+  color: var(--faint);
+  font-size: var(--sl-text-xs);
+  transition:
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+starlight-toc a:hover {
+  color: var(--foreground);
+}
+
+starlight-toc a[aria-current="true"],
+starlight-toc a[aria-current="true"]:hover {
+  border-inline-start-color: var(--primary);
+  color: var(--accent-foreground);
+  font-weight: 500;
+}
+
+/* The mobile ToC is a bar pinned under the header, so it needs the same glass
+   treatment or the page scrolls visibly behind it. */
+mobile-starlight-toc nav > summary,
+mobile-starlight-toc nav > details > summary {
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Pagination + footer ────────────────────────────────────────────────── */
+
+.pagination-links a {
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  background-color: var(--card);
+  color: var(--muted-foreground);
+  padding: 0.875rem 1rem;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.pagination-links a:hover {
+  border-color: var(--border-strong);
+  background-color: var(--card-hover);
+}
+
+.pagination-links .link-title {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+footer :is(.meta, .sl-flex) a {
+  color: var(--muted-foreground);
+}
+
+/* ── Content panels + misc chrome ───────────────────────────────────────── */
+
+.content-panel + .content-panel {
+  border-top: 1px solid var(--border);
+}
+
+/* shadcn Select — used by the theme and language switchers. */
+.sl-select-wrapper select {
+  border: 1px solid var(--input);
+  border-radius: var(--radius);
+  background-color: var(--input-bg);
+  color: var(--muted-foreground);
+  font-size: var(--sl-text-sm);
+}
+
+.social-icons a {
+  color: var(--faint);
+  border-radius: calc(var(--radius) - 2px);
+  transition: color 120ms ease;
+}
+
+.social-icons a:hover {
+  color: var(--foreground);
+}
+
+/* Anchor links beside headings. */
+.sl-anchor-link {
+  color: var(--faint);
+}
+
+.sl-anchor-link:hover {
+  color: var(--primary);
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Landing page ───────────────────────────────────────────────────────── */
+
+/* The one place the accent is allowed to carry a headline. */
+.hero-accent {
+  color: var(--primary);
+}
+
+/* Three facts under the hero, drawn as one glass strip that splits into a
+   column on narrow screens. Values are set in the display serif — the same
+   pairing the app uses when a number is the point of the row. */
+.landing-strip {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1px;
+  margin-block: 1rem 3rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  background-color: var(--border);
+  overflow: hidden;
+}
+
+.landing-strip > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1.125rem 1.5rem;
+  background-color: var(--card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.landing-strip__value {
+  font-family: var(--font-display);
+  font-size: var(--sl-text-xl);
+  line-height: 1.1;
+  color: var(--foreground);
+}
+
+.landing-strip__label {
+  font-size: var(--sl-text-xs);
+  color: var(--faint);
+}
+
+@media (min-width: 50rem) {
+  .landing-strip {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}

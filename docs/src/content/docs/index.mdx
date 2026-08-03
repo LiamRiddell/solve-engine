@@ -3,23 +3,43 @@ title: Solve
 description: An expression evaluation engine for natural, human-readable calculations. Lexer, Pratt parser, bytecode VM, and an extensible package system.
 template: splash
 hero:
+  title: A calculator that reads like a&nbsp;<span class="hero-accent">sentence</span>.
   tagline: Write calculations the way you would say them. Solve reads the line, works out what you meant, and gives you the answer.
+  image:
+    dark: ../../assets/solve-mark-dark.svg
+    light: ../../assets/solve-mark-light.svg
+    alt: ""
   actions:
     - text: Get started
       link: /getting-started/introduction/
       icon: right-arrow
       variant: primary
-    - text: Try it in the playground
+    - text: Open the playground
       link: /playground/
       icon: rocket
       variant: secondary
-    - text: View on GitHub
+    - text: GitHub
       link: https://github.com/LiamRiddell/solve-engine
       icon: external
       variant: minimal
 ---
 
 import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<div class="landing-strip not-content">
+  <div>
+    <span class="landing-strip__value">Zero</span>
+    <span class="landing-strip__label">runtime dependencies</span>
+  </div>
+  <div>
+    <span class="landing-strip__value">Every keystroke</span>
+    <span class="landing-strip__label">incremental, cached, instant</span>
+  </div>
+  <div>
+    <span class="landing-strip__value">Node · browser · worker</span>
+    <span class="landing-strip__label">no DOM, no framework</span>
+  </div>
+</div>
 
 ## What it looks like
 
@@ -40,6 +60,9 @@ syntax to learn first, and no configuration to write.
 | `if 5 > 3 then 100 else 200` | `100` |
 | `1+2+b+3+b =>` | `2b+6`, keeping the unknown symbolic |
 
+Every example on this site is executed by the test suite. If one of them stops
+being true, the build goes red.
+
 ## Why it exists
 
 Most calculators make you translate your problem into their syntax. Solve tries
@@ -50,7 +73,7 @@ The engine is designed to run on every keystroke in a live editor, so the whole
 pipeline is built around being fast enough to feel instant and incremental
 enough not to redo work it has already done.
 
-<CardGrid stagger>
+<CardGrid>
   <Card title="Fast by construction" icon="rocket">
     Expressions compile to bytecode and run on a purpose-built virtual machine.
     Results are cached per line, and a dependency graph re-evaluates only the

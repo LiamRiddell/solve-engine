@@ -26,7 +26,7 @@ if (!referenceDir || !currentDir) {
 }
 
 const thresholds = JSON.parse(
-	fs.readFileSync(new URL("../benchmarks/thresholds.json", import.meta.url), "utf8"),
+	fs.readFileSync(new URL("../packages/engine/benchmarks/thresholds.json", import.meta.url), "utf8"),
 );
 
 /** Load every suite file in a directory, keyed by suite name. */

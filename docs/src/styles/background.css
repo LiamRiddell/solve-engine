@@ -1,0 +1,119 @@
+/*
+ * Ambient backdrop — a CSS port of the app's `AmbientBackground` component
+ * (gradient wash · drifting blurred blobs · fine grid). The app builds it from
+ * three Framer-Motion divs; there is no React on this site, so the blobs are
+ * three radial gradients in a single fixed layer and the drift is an animated
+ * `background-position`. Same look, one composited layer, no JavaScript.
+ *
+ * The blobs are deliberately NEUTRAL, exactly as in the app. A brand-coloured
+ * glow behind every page would leave the accent nothing to contrast against.
+ *
+ * Layering: `html` paints the flat base colour so overscroll never reveals
+ * white; `html::before` paints the gradient and blobs; `html::after` paints the
+ * grid on top of them. Both sit at z-index -1 behind Starlight's content, and
+ * both are `position: fixed` so the backdrop stays put while the page scrolls.
+ */
+
+html {
+  background-color: var(--background);
+}
+
+html::before,
+html::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+html::before {
+  background-image:
+    /* Blobs, in the app's order: top-left, upper-right, lower-centre. */
+    radial-gradient(
+      38rem 38rem at 8% 4%,
+      var(--ambient-blob) 0%,
+      transparent 68%
+    ),
+    radial-gradient(
+      42rem 42rem at 96% 26%,
+      var(--ambient-blob-soft) 0%,
+      transparent 68%
+    ),
+    radial-gradient(
+      34rem 34rem at 42% 104%,
+      var(--ambient-blob) 0%,
+      transparent 68%
+    ),
+    /* Base wash — from → via → to, matching the component's gradient stops. */
+      linear-gradient(
+        to bottom right,
+        var(--ambient-from),
+        var(--ambient-via) 45%,
+        var(--ambient-to)
+      );
+  background-repeat: no-repeat;
+  background-size:
+    140% 140%,
+    140% 140%,
+    140% 140%,
+    100% 100%;
+  background-position:
+    0% 0%,
+    100% 0%,
+    50% 100%,
+    0 0;
+  animation: ambient-drift 42s ease-in-out infinite;
+}
+
+html::after {
+  background-image:
+    linear-gradient(to right, var(--ambient-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--ambient-grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+  /* Fades the grid out down the page so it reads as texture behind the hero
+     rather than as graph paper behind the prose. */
+  mask-image: linear-gradient(to bottom, #000 0%, transparent 85%);
+}
+
+/* Each blob drifts on its own axis; the base wash (the 4th layer) is pinned so
+   the page colour itself never moves. */
+@keyframes ambient-drift {
+  0%,
+  100% {
+    background-position:
+      0% 0%,
+      100% 0%,
+      50% 100%,
+      0 0;
+  }
+  33% {
+    background-position:
+      14% 10%,
+      86% 12%,
+      38% 88%,
+      0 0;
+  }
+  66% {
+    background-position:
+      6% 18%,
+      94% 4%,
+      62% 94%,
+      0 0;
+  }
+}
+
+/* Motion is decoration here — the backdrop still reads correctly frozen. */
+@media (prefers-reduced-motion: reduce) {
+  html::before {
+    animation: none;
+  }
+}
+
+/* Printing a documentation page should produce ink on white, not a gradient. */
+@media print {
+  html::before,
+  html::after {
+    display: none;
+  }
+}

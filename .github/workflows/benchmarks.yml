@@ -11,7 +11,7 @@ on:
       - "packages/engine/src/**"
       - "packages/engine/__tests__/benchmarks/**"
       - "packages/engine/tools/**"
-      - "benchmarks/thresholds.json"
+      - "packages/engine/benchmarks/thresholds.json"
       - "scripts/compare-benchmarks.mjs"
       - "jest.bench.config.cjs"
       - ".github/workflows/benchmarks.yml"

@@ -463,7 +463,7 @@ function shouldEvaluateLine(engine: ExpressionEngine, text: string): boolean {
 	// prose when even that check finds nothing recognized — this is what
 	// lets all-word expressions with no digit/symbol evaluate correctly
 	// instead of being silently dropped before ever reaching the engine.
-	if (!/[0-9+\-*/^%=<>!&|~(){}\[\],;?#`$£€:\\]/.test(text) && text.includes(' ')) {
+	if (!/[0-9+\-*/^%=<>!&|~(){}[\],;?#`$£€:\\]/.test(text) && text.includes(' ')) {
 		const tokens = engine.tokenizeForClassification(text).filter(
 			(t) => t.type !== "WS" && t.type !== "NEWLINE"
 		);
