@@ -1,14 +1,13 @@
 /**
  * Package Unregistration — Shared-Registry Cleanup
  *
- * registerPackage() writes variable sources into sharedVariableResolver —
+ * registerPackage() writes variable sources into the engine's own resolver.
  * process-wide state. These tests verify unregisterPackage() reverses
  * exactly those contributions (plan Task 2).
  */
 
 import { describe, expect, test, jest } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
-import { sharedVariableResolver } from "@solve-js/variables/VariableResolver";
 import { getTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
@@ -42,10 +41,10 @@ describe("ExpressionEngine.unregisterPackage — shared registry cleanup", () =>
 		const pkg = makeTestPackage(source);
 
 		engine.registerPackage(pkg);
-		expect(await sharedVariableResolver.resolve("unregTestVar")).toBe(42);
+		expect(await engine.getContext().variableResolver.resolve("unregTestVar")).toBe(42);
 
 		engine.unregisterPackage(pkg.name);
-		expect(await sharedVariableResolver.resolve("unregTestVar")).toBeUndefined();
+		expect(await engine.getContext().variableResolver.resolve("unregTestVar")).toBeUndefined();
 	});
 
 	test("unregistering an unknown package returns false and changes nothing", () => {
@@ -62,9 +61,9 @@ describe("ExpressionEngine.unregisterPackage — shared registry cleanup", () =>
 		engine.unregisterPackage(pkg.name);
 		engine.registerPackage(pkg);
 
-		expect(await sharedVariableResolver.resolve("unregTestVar")).toBe(7);
+		expect(await engine.getContext().variableResolver.resolve("unregTestVar")).toBe(7);
 		expect(engine.unregisterPackage(pkg.name)).toBe(true);
-		expect(await sharedVariableResolver.resolve("unregTestVar")).toBeUndefined();
+		expect(await engine.getContext().variableResolver.resolve("unregTestVar")).toBeUndefined();
 	});
 
 	test("unregistration clears the bytecode cache", () => {
@@ -95,17 +94,17 @@ describe("ExpressionEngine.registerPackage — duplicate-name guard", () => {
 		const secondSource = makeVariableSource({ dupTestVar: 2 });
 
 		engine.registerPackage({ name: "dup-test-pkg", variableSources: [firstSource] });
-		expect(await sharedVariableResolver.resolve("dupTestVar")).toBe(1);
+		expect(await engine.getContext().variableResolver.resolve("dupTestVar")).toBe(1);
 
 		// Same name, different source — used to silently orphan firstSource
 		// instead of cleanly replacing it.
 		engine.registerPackage({ name: "dup-test-pkg", variableSources: [secondSource] });
-		expect(await sharedVariableResolver.resolve("dupTestVar")).toBe(2);
+		expect(await engine.getContext().variableResolver.resolve("dupTestVar")).toBe(2);
 
 		// Unregistering once must fully clean up — if the first registration
 		// had been orphaned, a stale source would still resolve here.
 		expect(engine.unregisterPackage("dup-test-pkg")).toBe(true);
-		expect(await sharedVariableResolver.resolve("dupTestVar")).toBeUndefined();
+		expect(await engine.getContext().variableResolver.resolve("dupTestVar")).toBeUndefined();
 	});
 
 	test("warns on the console when re-registering the same package name", () => {

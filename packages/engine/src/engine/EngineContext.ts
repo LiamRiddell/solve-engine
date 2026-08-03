@@ -12,14 +12,18 @@
  * by that engine. Anything that needs one of these registries receives the
  * context rather than importing a singleton.
  *
- * This module deliberately has no runtime imports. It is imported by `vm/`,
- * which `engine/` imports in turn, so a runtime dependency in this direction
- * would close a cycle. Every type it needs comes in through `import type`,
- * which is erased before the code runs.
+ * Runtime imports here are restricted to leaf modules of `vm/`. This file is
+ * imported by `vm/`, which `engine/` imports in turn, so pulling in anything
+ * that reaches back into `engine/` would close a cycle. `OpRegistry` and
+ * `VariableResolver` are safe because they import only types plus the error
+ * factory. Everything else arrives
+ * through `import type`, which is erased before the code runs.
  */
 
 import type { Value } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
+import { OpRegistry } from "@solve-js/vm/OpRegistry";
+import { VariableResolver } from "@solve-js/variables/VariableResolver";
 
 /**
  * A function a package contributes to the VM, reachable from bytecode through
@@ -52,6 +56,25 @@ export interface EngineContext {
 	 * why the allocator exists and why nothing should hardcode an index.
 	 */
 	readonly pluginFunctions: Record<number, PluginFunctionHandler>;
+
+	/**
+	 * Custom opcode handlers a package registered.
+	 *
+	 * Largely vestigial: packages reach the VM through `CALL_PLUGIN` and
+	 * {@link EngineContext.pluginFunctions} now, and nothing in the built-in
+	 * set registers an opcode. It moves here anyway because the VM interface
+	 * still requires a registry, and one shared instance would put any future
+	 * registration back into every engine at once.
+	 */
+	readonly opRegistry: OpRegistry;
+
+	/**
+	 * Named-variable sources a package contributed.
+	 *
+	 * A package registering a source used to make its variables visible to
+	 * every engine in the process, including ones that never registered it.
+	 */
+	readonly variableResolver: VariableResolver;
 }
 
 /**
@@ -62,6 +85,8 @@ export interface EngineContext {
 export function createEngineContext(): EngineContext {
 	return {
 		pluginFunctions: {},
+		opRegistry: new OpRegistry(),
+		variableResolver: new VariableResolver(),
 	};
 }
 

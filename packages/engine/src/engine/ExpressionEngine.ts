@@ -12,7 +12,6 @@ import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/Bytecode
 import { createVM, executeBytecode } from "@solve-js/vm/VM";
 import type { EvalResult, LineExecutionContext } from "@solve-js/vm/VM";
 import type { DocumentModel } from "@solve-js/engine/DocumentModel";
-import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { registerAsConverter, unregisterAsConverter } from "@solve-js/vm/VMBuiltins";
 import { createEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
@@ -24,7 +23,6 @@ import { assertEngineVersionCompatible } from "@solve-js/api/EngineVersionCompat
 import { registerTokenCategory, unregisterTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import type { CompletionItem } from "@solve-js/language/LanguageService";
 import type { LexerVocabulary } from "@solve-js/lexer/ExpressionLexer";
-import { sharedVariableResolver } from "@solve-js/variables/VariableResolver";
 import { QueryClient } from "@tanstack/query-core";
 import { createQueryClient, setActiveQueryClient } from "@solve-js/services/DataQueryService";
 import { ErrorFactory, EngineError, normalizeUnknownError } from "@solve-js/errors/UnifiedErrorFramework";
@@ -111,7 +109,7 @@ export interface LineEvaluation {
  * - Keystroke-level AbortSignal management
  *
  * Each engine instance has its own isolated lexer, registry, parser, and
- * LineCache. The VM is shared via `sharedOpRegistry` but each engine
+ * LineCache. The VM uses this engine's own opcode registry, and each engine
  * creates its own VM instance with configurable limits.
  *
  * @example
@@ -157,7 +155,7 @@ export class ExpressionEngine {
 
     /**
      * Per-package record of contributions made to the SHARED registries
-     * (sharedVariableResolver / resolver namespaces), so
+     * (this engine's variable resolver / resolver namespaces), so
      * {@link unregisterPackage} can reverse them. Keyed by package name.
      */
     private packageContributions = new Map<string, {
@@ -366,7 +364,7 @@ export class ExpressionEngine {
             // ExpressionEngine(...)` never returned an instance, and
             // whatever THIS package or earlier ones already wrote into
             // shared module-level registries (pluginFunctionRegistry,
-            // sharedVariableResolver, TokenCategoryMap, asConverterRegistry)
+            // TokenCategoryMap, asConverterRegistry)
             // had no owning engine instance left to call
             // unregisterPackage() and clean it up. Same containment shape
             // as AsyncResolutionBatcher.reExecuteMainThread()'s fatal-bug
@@ -387,7 +385,7 @@ export class ExpressionEngine {
 
         this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, localeCode);
         this.vm = createVM(
-            sharedOpRegistry,
+            this.context.opRegistry,
             this.config.vm.maxStackDepth,
             this.config.vm.maxInstructions,
             undefined,
@@ -442,7 +440,7 @@ export class ExpressionEngine {
      * - `lexerVocabulary` → engine's isolated lexer (via this.lexer.registerVocabulary)
      * - `prefixParselets` → engine's isolated ParseletRegistry
      * - `infixParselets` → engine's isolated ParseletRegistry
-     * - `variableSources` → sharedVariableResolver (shared across all engine instances)
+     * - `variableSources` → this engine's own variable resolver
      *
      * Built-in packages (ARITHMETIC, FUNCTION, UOM, etc.) are registered
      * via this method during construction. External user packages can also
@@ -543,7 +541,7 @@ export class ExpressionEngine {
         }
         if (pkg.variableSources) {
             for (const vs of pkg.variableSources) {
-                sharedVariableResolver.registerSource(vs);
+                this.context.variableResolver.registerSource(vs);
                 contribution.variableSources.push(vs);
             }
         }
@@ -593,7 +591,7 @@ export class ExpressionEngine {
      *
      * Reverses the package's contributions to the SHARED registries — plugin
      * functions (pluginFunctionRegistry), variable sources
-     * (sharedVariableResolver), async resolvers, and now
+     * (this engine's variable resolver), async resolvers, and now
      * token highlight categories (TokenCategoryMap) — which registerPackage
      * wrote into process-wide state. Also reverts
      * the package's lexer plugin (custom keyword/operator token types
@@ -619,7 +617,7 @@ export class ExpressionEngine {
             delete this.context.pluginFunctions[index];
         }
         for (const vs of contribution.variableSources) {
-            sharedVariableResolver.unregisterSource(vs);
+            this.context.variableResolver.unregisterSource(vs);
         }
         for (const namespace of contribution.resolverNamespaces) {
             this.resolverRegistry.unregister(namespace);
@@ -2663,6 +2661,23 @@ export class ExpressionEngine {
      */
     getVM(): VM {
         return this.vm;
+    }
+
+    /**
+     * This engine's registries.
+     *
+     * For introspection: checking what a package registered, or asserting that
+     * unregistering removed it. These used to be module-level singletons a
+     * caller could import directly, which is exactly the coupling
+     * {@link EngineContext} removes, so reaching them now goes through the
+     * engine that owns them.
+     *
+     * @returns The context created for this engine. Mutating what it holds
+     * affects this engine's behaviour, so treat it as read-only unless you are
+     * deliberately registering something.
+     */
+    getContext(): EngineContext {
+        return this.context;
     }
 
     getScopeManager(): ScopeManager {
