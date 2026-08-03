@@ -60,10 +60,11 @@ Named openly rather than left to be discovered.
   decisions are recorded in the code with the reasoning.
 - `variableSources` is registered and tracked but never consulted during
   evaluation. It does nothing today.
-- `AsyncResolutionBatcher.onLineResult` is the only mechanism that patches a
-  resolved async value back into the document model, and it is not wired inside
-  the package. A host that does not supply it gets async values that never
-  resolve, with no error.
+- `AsyncResolutionBatcher.onLineResult` must be supplied by any host that
+  displays async results. The engine cannot default it, because the host owns
+  the document and the batcher has no reference to one. Leaving it unset now
+  logs a warning the first time a value resolves with nowhere to go, rather
+  than failing silently.
 - The VM benchmark cases are all below the comparison harness's noise floor, so
   that suite contributes no regression signal yet.
 - The API surface may still move before 1.0 proper.

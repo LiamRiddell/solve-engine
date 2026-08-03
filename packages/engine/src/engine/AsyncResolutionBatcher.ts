@@ -130,14 +130,49 @@ export class AsyncResolutionBatcher {
 	public _testCaptures: AsyncResolutionEvent[] | null = null;
 
 	/**
-	 * Optional hook invoked for each line whose result is patched after an
-	 * async resolution (main-thread and worker-pool paths). The view layer
-	 * sets this to mirror resolved values straight into its own document
-	 * state (DocumentModel) — without it, consumers would have to mark
-	 * lines dirty and run a whole re-evaluation pass just to copy values
-	 * out of the LineCache. Cleared by clearAll(); re-wire on re-subscribe.
+	 * Called for each line whose result is patched after an async resolution,
+	 * on both the main-thread and worker-pool paths.
+	 *
+	 * **A host that displays async results must set this.** It is the only
+	 * mechanism that moves a resolved value out of the LineCache and into the
+	 * host's own document state. The engine cannot do it itself: it does not own
+	 * a document, the host does, and the batcher has no reference to one.
+	 *
+	 * Nullable rather than a constructor parameter because it is cleared by
+	 * `clearAll()` and re-wired on re-subscribe, so it cannot be readonly. That
+	 * makes it easy to miss, which is why {@link warnIfUnwired} exists: leaving
+	 * it unset means async values resolve into the cache and are never shown,
+	 * with nothing to indicate why. A host that genuinely does not want async
+	 * results should not register async resolvers at all.
 	 */
 	onLineResult: ((lineNumber: number, value: Value) => void) | null = null;
+
+	/**
+	 * Whether {@link warnIfUnwired} has already fired.
+	 *
+	 * Once per instance, not once per resolution. A document with fifty live
+	 * data lines would otherwise produce fifty identical warnings on the first
+	 * fetch, which is how a useful warning becomes noise people filter out.
+	 */
+	private warnedAboutMissingHook = false;
+
+	/**
+	 * Warn once if an async result resolved with no {@link onLineResult} wired.
+	 *
+	 * The failure this catches is silent by nature: the value arrives, the cache
+	 * updates, and the line keeps showing pending forever. Without this a host
+	 * author has no thread to pull on.
+	 */
+	private warnIfUnwired(): void {
+		if (this.onLineResult || this.warnedAboutMissingHook) return;
+		this.warnedAboutMissingHook = true;
+		console.warn(
+			"[solve-engine] An async result resolved but AsyncResolutionBatcher.onLineResult " +
+			"is not set, so the value cannot reach your document and the line will keep " +
+			"showing as pending. Set it to mirror resolved values into your own state. " +
+			"This warning appears once per batcher.",
+		);
+	}
 
 	/** High-water mark used when (re)creating the event stream. */
 	private readonly highWaterMark: number;
@@ -539,6 +574,7 @@ export class AsyncResolutionBatcher {
 			// Reconstruct Value from serialized result.
 			const value = reconstructValue(wr);
 			entry.result = value;
+			this.warnIfUnwired();
 			this.onLineResult?.(wr.lineNumber, value);
 			updatedLineNumbers.push(wr.lineNumber);
 		}
@@ -611,6 +647,7 @@ export class AsyncResolutionBatcher {
 
 				if (result.type === "value") {
 					entry.result = result.value;
+					this.warnIfUnwired();
 					this.onLineResult?.(lineNumber, result.value);
 					updatedLineNumbers.push(lineNumber);
 				} else if (result.type === "error") {
@@ -627,7 +664,9 @@ export class AsyncResolutionBatcher {
 					// level up from "uncaught exception" to "unhandled Result arm".
 					const value = errorValue(result.error.code, result.error.message);
 					entry.result = value;
-					this.onLineResult?.(lineNumber, value);
+					this.warnIfUnwired();
+					this.warnIfUnwired();
+				this.onLineResult?.(lineNumber, value);
 					updatedLineNumbers.push(lineNumber);
 				}
 				// If still pending, don't mark as updated — will be handled by the
@@ -643,6 +682,7 @@ export class AsyncResolutionBatcher {
 				const engineError = normalizeUnknownError(e);
 				const value = errorValue(engineError.code, engineError.message);
 				entry.result = value;
+				this.warnIfUnwired();
 				this.onLineResult?.(lineNumber, value);
 				updatedLineNumbers.push(lineNumber);
 			}
