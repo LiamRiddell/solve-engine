@@ -4,6 +4,12 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
+/**
+ * Prefix form of increase and decrease, as in `increase 100 by 10%`.
+ *
+ * The infix form is {@link IncreaseByParselet}. Both exist because the phrase
+ * reads naturally either side of the amount.
+ */
 export class IncreaseDecreaseParselet implements PrefixParselet {
 	readonly category = "Percentage";
 	constructor(private readonly multiplier: number) {}

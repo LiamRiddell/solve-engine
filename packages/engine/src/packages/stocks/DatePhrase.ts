@@ -49,6 +49,12 @@ const MONTH_NAMES: Record<string, number> = {
 	dec: 11, december: 11,
 };
 
+/**
+ * A date phrase recognised inside a stock query, normalised to ISO.
+ *
+ * Carries the original text alongside the parsed date so an error can quote
+ * what the user actually wrote rather than the interpretation.
+ */
 export interface ParsedDatePhrase {
 	/** ISO calendar date, e.g. "2005-04-12". */
 	isoDate: string;

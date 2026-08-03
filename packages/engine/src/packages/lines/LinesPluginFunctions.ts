@@ -41,6 +41,17 @@ function requireContext(context: LineExecutionContext | undefined): Value | null
 
 /** `prev`, the immediately-preceding line's cached result. */
 export const PREV_FN_IDX = allocatePluginFunctionIndex();
+/**
+ * The immediately preceding line's cached result.
+ *
+ * @param _args - Unused. `prev` takes no arguments.
+ * @param context - Per-line execution context. Supplies the document's
+ * cached results; without it the handler returns a LINES_NO_CONTEXT error
+ * rather than guessing, since line references are meaningless outside a
+ * document.
+ * @returns The computed Value, or an error Value when the context is
+ * missing or a referenced line has no numeric result.
+ */
 export function prevHandler(_args: Value[], context?: LineExecutionContext): Value {
   const ctxError = requireContext(context);
   if (ctxError) return ctxError;
@@ -52,6 +63,17 @@ export function prevHandler(_args: Value[], context?: LineExecutionContext): Val
 
 /** `line<N>` / `line N`, an arbitrary line's cached result by 1-based number. */
 export const LINE_REF_FN_IDX = allocatePluginFunctionIndex();
+/**
+ * An arbitrary line's cached result, by one-based line number.
+ *
+ * @param args - A single Number holding the target line number.
+ * @param context - Per-line execution context. Supplies the document's
+ * cached results; without it the handler returns a LINES_NO_CONTEXT error
+ * rather than guessing, since line references are meaningless outside a
+ * document.
+ * @returns The computed Value, or an error Value when the context is
+ * missing or a referenced line has no numeric result.
+ */
 export function lineRefHandler(args: Value[], context?: LineExecutionContext): Value {
   const ctxError = requireContext(context);
   if (ctxError) return ctxError;
@@ -97,6 +119,17 @@ function aggregateRange(from: number, to: number, context: LineExecutionContext,
 
 /** `sum(line X : line Y)` / `total(line X : line Y)`. */
 export const SUM_RANGE_FN_IDX = allocatePluginFunctionIndex();
+/**
+ * Sum of the numeric results across an inclusive line range.
+ *
+ * @param args - Two Numbers: the first and last line of the range.
+ * @param context - Per-line execution context. Supplies the document's
+ * cached results; without it the handler returns a LINES_NO_CONTEXT error
+ * rather than guessing, since line references are meaningless outside a
+ * document.
+ * @returns The computed Value, or an error Value when the context is
+ * missing or a referenced line has no numeric result.
+ */
 export function sumRangeHandler(args: Value[], context?: LineExecutionContext): Value {
   const ctxError = requireContext(context);
   if (ctxError) return ctxError;
@@ -105,6 +138,17 @@ export function sumRangeHandler(args: Value[], context?: LineExecutionContext): 
 
 /** `average(line X : line Y)`. */
 export const AVERAGE_RANGE_FN_IDX = allocatePluginFunctionIndex();
+/**
+ * Mean of the numeric results across an inclusive line range.
+ *
+ * @param args - Two Numbers: the first and last line of the range.
+ * @param context - Per-line execution context. Supplies the document's
+ * cached results; without it the handler returns a LINES_NO_CONTEXT error
+ * rather than guessing, since line references are meaningless outside a
+ * document.
+ * @returns The computed Value, or an error Value when the context is
+ * missing or a referenced line has no numeric result.
+ */
 export function averageRangeHandler(args: Value[], context?: LineExecutionContext): Value {
   const ctxError = requireContext(context);
   if (ctxError) return ctxError;
@@ -148,14 +192,38 @@ function aggregateAbove(context: LineExecutionContext, isAverage: boolean): Valu
   return sawUom ? uomValue(result, commonUnit!) : numberValue(result);
 }
 
+/** `total above`, every numeric result on lines before this one. */
 export const TOTAL_ABOVE_FN_IDX = allocatePluginFunctionIndex();
+/**
+ * Sum of every numeric result on lines above this one.
+ *
+ * @param _args - Unused. `total above` takes no arguments.
+ * @param context - Per-line execution context. Supplies the document's
+ * cached results; without it the handler returns a LINES_NO_CONTEXT error
+ * rather than guessing, since line references are meaningless outside a
+ * document.
+ * @returns The computed Value, or an error Value when the context is
+ * missing or a referenced line has no numeric result.
+ */
 export function totalAboveHandler(_args: Value[], context?: LineExecutionContext): Value {
   const ctxError = requireContext(context);
   if (ctxError) return ctxError;
   return aggregateAbove(context!, false);
 }
 
+/** `average above`, the mean of every numeric result before this line. */
 export const AVERAGE_ABOVE_FN_IDX = allocatePluginFunctionIndex();
+/**
+ * Mean of every numeric result on lines above this one.
+ *
+ * @param _args - Unused. `average above` takes no arguments.
+ * @param context - Per-line execution context. Supplies the document's
+ * cached results; without it the handler returns a LINES_NO_CONTEXT error
+ * rather than guessing, since line references are meaningless outside a
+ * document.
+ * @returns The computed Value, or an error Value when the context is
+ * missing or a referenced line has no numeric result.
+ */
 export function averageAboveHandler(_args: Value[], context?: LineExecutionContext): Value {
   const ctxError = requireContext(context);
   if (ctxError) return ctxError;
