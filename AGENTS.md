@@ -182,8 +182,17 @@ it explains, not in the doc block.
 
 Write for someone arriving cold. No history, no dates, no mention of which
 session produced something, and no restating what the next line already says.
-No em-dashes; use a comma, a colon, parentheses, or a second sentence. This is
-checked automatically on changed files.
+No em-dashes; use a comma, a colon, parentheses, or a second sentence.
+
+Every exported symbol outside `src/packages` carries a doc block, since that is
+what shows on hover. Two of these rules are checked rather than left to review:
+
+```bash
+npm run lint:comments
+npm run lint:docs
+```
+
+`docs-internal/CODING_STANDARDS.md` has the full standard and the reasoning.
 
 No escape hatches from the type system. A type that is hard to express usually
 means the design needs adjusting rather than the checker needing silencing.
