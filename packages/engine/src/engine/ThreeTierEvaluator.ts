@@ -9,6 +9,18 @@ import { Value, enableValueArena, disableValueArena, errorValue } from "@solve-j
 import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { isEmptyLine } from "@solve-js/engine/ExpressionEngineSafety";
+// Deliberately the shared lexer, not an engine's own.
+//
+// `classifyLine` and `findInlineSolves` are character-level scans for headings,
+// comment markers, code fences and backtick spans. Neither consults the
+// keyword, unit or operator tables, so every lexer returns the same answer and
+// there is nothing per-engine to respect. Pinned by
+// __tests__/lexer/LineClassificationIsVocabularyIndependent.spec.ts, which
+// compares a bare lexer against one carrying extra vocabulary.
+//
+// This matters because these are free functions with no engine to ask. Making
+// them engine-aware would mean changing their signatures and every caller for
+// no behavioural difference.
 import { sharedLexer } from "@solve-js/lexer/Lexer";
 import { CompilationWorkerManager, type CompileRequestItem } from "@solve-js/engine/CompilationWorkerManager";
 import { PageManager } from "@solve-js/engine/PageManager";

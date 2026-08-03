@@ -25,6 +25,18 @@
  */
 
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
+// Deliberately the shared lexer, not an engine's own.
+//
+// `classifyLine` and `findInlineSolves` are character-level scans for headings,
+// comment markers, code fences and backtick spans. Neither consults the
+// keyword, unit or operator tables, so every lexer returns the same answer and
+// there is nothing per-engine to respect. Pinned by
+// __tests__/lexer/LineClassificationIsVocabularyIndependent.spec.ts, which
+// compares a bare lexer against one carrying extra vocabulary.
+//
+// This matters because these are free functions with no engine to ask. Making
+// them engine-aware would mean changing their signatures and every caller for
+// no behavioural difference.
 import { sharedLexer } from "@solve-js/lexer/Lexer";
 
 // ── Constants ────────────────────────────────────────────────────────────

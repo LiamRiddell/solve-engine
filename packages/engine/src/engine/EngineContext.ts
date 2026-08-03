@@ -45,6 +45,19 @@ export type PluginFunctionHandler = (
  * then the opcode registry, the variable resolver, the lexer, and finally
  * currency exchange. The lexer comes near the end because package registration
  * writes vocabularies into it, so moving it early would churn every package.
+ *
+ * Currency exchange is deliberately NOT migrated, which is a departure from
+ * that plan. `CurrencyExchangeService` holds a cache of live market rates with
+ * a fifteen minute freshness window and no per-engine configuration. Sharing is
+ * the correct behaviour there: giving each engine its own would make two
+ * engines in one process fetch the same public endpoint independently, and let
+ * them disagree about the rate for one currency pair at one moment. The
+ * singleton rationale, that one engine's registration should not be visible to
+ * another, does not apply to a cache of state that is global in the real world.
+ *
+ * If a host ever needs per-engine rates, for a what-if scenario against
+ * historical figures, the answer is an optional override on the context that
+ * falls back to the shared cache, not a private copy per engine.
  */
 export interface EngineContext {
 	/**
