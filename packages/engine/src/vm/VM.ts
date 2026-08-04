@@ -3,7 +3,7 @@ import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomV
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { rowMajorToColumnMajor, matrixMultiply, matrixCompare, matIndex, matAt, inBounds, collectionToValues, matrixEntryToValue } from "@solve-js/vm/MatrixOps";
-import type { VM, OpRegistry, EquationDef } from "@solve-js/vm/OpRegistry";
+import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/vm/OpRegistry";
 import { convertUnit, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
@@ -68,6 +68,10 @@ export function createVM(
     // variable. See OpRegistry.ts's EquationDef doc comment. Same
     // VM-instance scoping reasoning as userFunctions above.
     const equations = new Map<string, EquationDef>();
+    // Bare scalar equations (`x^2-4 = 0`), kept in their own map rather than
+    // sharing the one above, since the two are solved by entirely different
+    // machinery. See OpRegistry.ts's ScalarEquationDef doc comment.
+    const scalarEquations = new Map<string, ScalarEquationDef>();
 
     return {
       push(v: Value) {
@@ -116,12 +120,18 @@ export function createVM(
       },
       getEquation(variable: string) { return equations.get(variable); },
       hasEquation(variable: string) { return equations.has(variable); },
+      defineScalarEquation(variable: string, lhsProgram: BytecodeProgram, rhsProgram: BytecodeProgram) {
+        scalarEquations.set(variable, { variable, lhsProgram, rhsProgram });
+      },
+      getScalarEquation(variable: string) { return scalarEquations.get(variable); },
+      hasScalarEquation(variable: string) { return scalarEquations.has(variable); },
       reset() {
         stack.length = 0;
         variables.clear();
         callFrames.length = 0;
         userFunctions.clear();
         equations.clear();
+        scalarEquations.clear();
         instructionCount = 0;
         // Abort any in-flight async work for the previous expression
         if (abortCurrent) { abortCurrent(); abortCurrent = undefined; }

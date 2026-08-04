@@ -1,11 +1,10 @@
-import { Value, ValueType, numberValue, stringValue, uomValue, errorValue, matrixValue, symbolicValue, type MatrixData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, stringValue, uomValue, errorValue, matrixValue, type MatrixData } from "@solve-js/vm/Value";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom } from "@solve-js/vm/VMConversion";
 import { transpose, determinant, inverse, matrixMultiply, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
-import { symbolicToValue, valueToSymbolic } from "@solve-js/vm/SymbolicOps";
+import { symbolicToValue, valueToSymbolic, solveEquationValues } from "@solve-js/vm/SymbolicOps";
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
 import { factorSymbolic } from "@solve-js/symbolic/Factor";
-import { solveForVariable, type SolveOutcome } from "@solve-js/symbolic/Solve";
 import { differentiate } from "@solve-js/symbolic/Derivative";
 import { integrate } from "@solve-js/symbolic/Integral";
 import { taylorSeries, jacobian } from "@solve-js/symbolic/Taylor";
@@ -526,12 +525,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         if (variableValue?.type !== ValueType.String) {
             return errorValue("SOLVE_REQUIRES_VARIABLE_NAME", "solve's second argument must be the name of the unknown.");
         }
-        const lhs = valueToSymbolic(lhsValue);
-        const rhs = valueToSymbolic(rhsValue);
-        if (lhs === null || rhs === null) {
-            return errorValue("SYMBOLIC_NONFINITE_OPERAND", "An equation side has no exact value to solve with.");
-        }
-        return solveOutcomeToValue(solveForVariable(lhs, rhs, variableValue.value as string));
+        return solveEquationValues(lhsValue, rhsValue, variableValue.value as string);
     },
     // der(expr, variable, order), the symbolic derivative. Genuinely symbolic
     // rather than a finite difference, so it is exact.
@@ -605,57 +599,6 @@ function symbolicVariableName(value: Value | undefined, verb: string): string | 
         return errorValue("SYMBOLIC_REQUIRES_VARIABLE_NAME", `${verb} needs the name of an unknown.`);
     }
     return value.value as string;
-}
-
-/**
- * Renders a {@link SolveOutcome} as a VM value.
- *
- * Several outcomes are answers rather than errors and read as sentences, since
- * "no real solutions" is the complete and correct response to `x^2+1=0` over
- * the reals and dressing it up as a failure would misrepresent it. Only the
- * genuinely-unsupported case becomes an error value.
- *
- * @param outcome - What the solver concluded.
- * @returns A Number for a single exact root, a Matrix row for several, a
- * Symbolic value for a surd, a String for the explanatory outcomes, or an Error.
- */
-/**
- * Renders one root as a value, keeping a fraction exact.
- *
- * A whole-number root becomes an ordinary Number, which reads naturally. A
- * fractional one stays Symbolic so it renders as `1/3`: routing it through
- * `symbolicToValue` would collapse it to a double and the number formatter
- * would show `0.33`, throwing away the exactness that solving exactly was for.
- *
- * @param root - The simplified root expression.
- * @returns A Number for an integer root, otherwise a Symbolic value.
- */
-function rootToValue(root: SymbolicNode): Value {
-    const value = symbolicToValue(root);
-    if (value.type === ValueType.Number && !Number.isInteger(value.toNumber())) return symbolicValue(root);
-    return value;
-}
-
-function solveOutcomeToValue(outcome: SolveOutcome): Value {
-    switch (outcome.kind) {
-        case "identity":
-            return stringValue("true for every value");
-        case "contradiction":
-            return stringValue("no solution");
-        case "no-real-solutions":
-            return stringValue(`no real solutions (${outcome.reason})`);
-        case "unsupported":
-            return errorValue("SYMBOLIC_SOLVE_UNSUPPORTED", `Cannot solve this equation: ${outcome.reason}.`);
-        case "roots": {
-            const values = outcome.exact.map(rootToValue);
-            for (const approximate of outcome.approximate) values.push(numberValue(approximate));
-            if (values.length === 0) return stringValue("no solution");
-            if (values.length === 1) return values[0];
-            // Several roots read best as a row of values, which the matrix
-            // formatter already renders as "[-2, 2]".
-            return matrixValue(1, values.length, values.map(v => (v.type === ValueType.Symbolic ? (v.value as SymbolicNode) : v.toNumber())));
-        }
-    }
 }
 
 /**

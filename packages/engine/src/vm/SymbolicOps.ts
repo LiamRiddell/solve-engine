@@ -16,7 +16,8 @@
  * and `CALL_BUILTIN` respectively.
  */
 
-import { Value, ValueType, numberValue, errorValue, symbolicValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, stringValue, errorValue, symbolicValue, matrixValue } from "@solve-js/vm/Value";
+import { solveForVariable, type SolveOutcome } from "@solve-js/symbolic/Solve";
 import {
 	type SymbolicNode,
 	constNode,
@@ -173,4 +174,73 @@ export function symbolicBuiltin(index: number, args: readonly Value[]): Value {
 	const name = SYMBOLIC_BUILTIN_NAMES[index];
 	if (name === undefined) return unsupported(`builtin ${index}`);
 	return symbolicToValue(callNode(name, nodes));
+}
+
+/**
+ * Renders one root as a value, keeping a fraction exact.
+ *
+ * A whole-number root becomes an ordinary Number, which reads naturally. A
+ * fractional one stays Symbolic so it renders as `1/3`: routing it through
+ * {@link symbolicToValue} would collapse it to a double and the number
+ * formatter would show `0.33`, throwing away the exactness that solving
+ * exactly was for.
+ */
+function rootToValue(root: SymbolicNode): Value {
+	const value = symbolicToValue(root);
+	if (value.type === ValueType.Number && !Number.isInteger(value.toNumber())) return symbolicValue(root);
+	return value;
+}
+
+/**
+ * Renders a {@link SolveOutcome} as a VM value.
+ *
+ * Several outcomes are answers rather than errors and read as sentences, since
+ * "no real solutions" is the complete and correct response to `x^2+1=0` over
+ * the reals and dressing it up as a failure would misrepresent it. Only the
+ * genuinely-unsupported case becomes an error value.
+ */
+function solveOutcomeToValue(outcome: SolveOutcome): Value {
+	switch (outcome.kind) {
+		case "identity":
+			return stringValue("true for every value");
+		case "contradiction":
+			return stringValue("no solution");
+		case "no-real-solutions":
+			return stringValue(`no real solutions (${outcome.reason})`);
+		case "unsupported":
+			return errorValue("SYMBOLIC_SOLVE_UNSUPPORTED", `Cannot solve this equation: ${outcome.reason}.`);
+		case "roots": {
+			const values = outcome.exact.map(rootToValue);
+			for (const approximate of outcome.approximate) values.push(numberValue(approximate));
+			if (values.length === 0) return stringValue("no solution");
+			if (values.length === 1) return values[0];
+			// Several roots read best as a row of values, which the matrix
+			// formatter already renders as "[-2, 2]".
+			return matrixValue(1, values.length, values.map(v => (v.type === ValueType.Symbolic ? (v.value as SymbolicNode) : v.toNumber())));
+		}
+	}
+}
+
+/**
+ * Solves `lhs = rhs` for a variable, given the two sides as already-evaluated
+ * Values, and renders the outcome.
+ *
+ * Shared by the `solve(equation, variable)` builtin and by the stored
+ * `x^2-4 = 0` then `x =>` form in `engine/ExpressionEngine.ts`. Both go through
+ * here rather than each rendering an outcome themselves, so the two surfaces
+ * cannot drift into disagreeing about what an answer looks like.
+ *
+ * @param lhsValue - The left-hand side, evaluated symbolic-tolerantly.
+ * @param rhsValue - The right-hand side, likewise.
+ * @param variable - The unknown to solve for.
+ * @returns The solution as a Value, or an error Value when a side has no exact
+ * value to solve with.
+ */
+export function solveEquationValues(lhsValue: Value, rhsValue: Value, variable: string): Value {
+	const lhs = valueToSymbolic(lhsValue);
+	const rhs = valueToSymbolic(rhsValue);
+	if (lhs === null || rhs === null) {
+		return errorValue("SYMBOLIC_NONFINITE_OPERAND", "An equation side has no exact value to solve with.");
+	}
+	return solveOutcomeToValue(solveForVariable(lhs, rhs, variable));
 }

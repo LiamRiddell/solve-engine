@@ -72,6 +72,34 @@ question.
 solve(x^2-4, x) // [-2, 2]
 ```
 
+### Writing the equation on its own line
+
+An equation containing exactly one unknown can be written plainly, then solved
+by asking for that unknown with an arrow. This is the same solver, reached a
+different way.
+
+```solve
+x^2-4 = 0
+x => // [-2, 2]
+```
+
+```solve
+2x+1 = x+4
+x => // 3
+```
+
+The unknown is whichever name has no value yet, so an equation can refer to
+variables already defined above it.
+
+```solve
+:a = 2
+a*n = 10
+n => // 5
+```
+
+An equation with two unknowns is not stored, because there would be no way to
+tell which one to solve for. Use `solve` and name it.
+
 ### Exact answers, including irrational ones
 
 An irrational root is given as a square root rather than a decimal, in lowest
