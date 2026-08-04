@@ -3,8 +3,8 @@ title: Solve
 description: A TypeScript library for evaluating natural language expressions. Units, currencies, percentages, dates, matrices and plain English, from one call.
 template: splash
 hero:
-  title: <span class="hero-eyebrow">Natural language expression engine</span>A calculation engine you embed.
-  tagline: Give it a line of text and it hands back a value, with units, currencies, dates and plain English already worked out. No UI, no DOM, no framework.
+  title: <span class="hero-eyebrow">Natural language expression engine</span>A <em class="hero-key">calculation engine</em> you <em class="hero-key">embed</em>.
+  tagline: Give it a line of text and it hands back a value, with units, currencies, dates and plain English already worked out. Nothing to render and no DOM to provide, so it runs in Node, a browser or a worker.
 ---
 
 import Notepad from '../../components/Notepad.astro';
@@ -15,7 +15,6 @@ import TestStats from '../../components/TestStats.astro';
 import PackageSize from '../../components/PackageSize.astro';
 import WhatsInTheBox from '../../components/WhatsInTheBox.astro';
 import HighlightLegend from '../../components/HighlightLegend.astro';
-import stats from '../../data/testStats.json';
 
 <div class="band band--tight not-content">
   <div class="band__inner">
@@ -27,11 +26,7 @@ import stats from '../../data/testStats.json';
         <code>npm install solve-engine</code>
       </div>
       <ul class="install__specs">
-        <li>MIT</li>
-        <li>{stats.runtimeDependencies} runtime dependencies</li>
-        <li>{stats.subpathExports} subpath exports</li>
-        <li>Node, browser and worker</li>
-        <li>TypeScript types included</li>
+        <li>MIT licensed</li>
       </ul>
     </div>
   </div>
