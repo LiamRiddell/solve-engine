@@ -96,16 +96,27 @@ export const POLYNOMIAL_MAX_TERMS = 2_000;
 export const POLYNOMIAL_MAX_DEGREE = 64;
 
 /** A monomial as a variable-to-exponent map. Exponents are always positive integers; a variable with exponent zero is removed. */
-type Monomial = Map<string, number>;
+export type Monomial = Map<string, number>;
 
-/** Serializes a monomial to its canonical {@link MonomialKey}. */
-function monomialToKey(monomial: Monomial): MonomialKey {
+/**
+ * Serializes a monomial to its canonical {@link MonomialKey}.
+ *
+ * @param monomial - The exponent map.
+ * @returns The key, with variables in sorted order and an exponent of one left
+ * implicit, so `{x: 2, y: 1}` becomes `"x^2*y"`.
+ */
+export function monomialToKey(monomial: Monomial): MonomialKey {
 	const names = [...monomial.keys()].sort();
 	return names.map(name => (monomial.get(name) === 1 ? name : `${name}^${monomial.get(name)}`)).join("*");
 }
 
-/** Parses a canonical {@link MonomialKey} back into a variable-to-exponent map. */
-function monomialFromKey(key: MonomialKey): Monomial {
+/**
+ * Parses a canonical {@link MonomialKey} back into a variable-to-exponent map.
+ *
+ * @param key - The key to parse. The empty key is the constant monomial.
+ * @returns The exponent map.
+ */
+export function monomialFromKey(key: MonomialKey): Monomial {
 	const monomial: Monomial = new Map();
 	if (key === "") return monomial;
 	for (const factor of key.split("*")) {
@@ -365,8 +376,14 @@ export function toPolynomial(node: SymbolicNode, allowDistribution = true): Poly
  * code, where `*` (42) sorts before `^` (94), putting the cross term first.
  * Comparing exponent vectors is both conventional and independent of how a key
  * happens to be spelled.
+ *
+ * @param a - The first monomial key.
+ * @param b - The second.
+ * @param vars - The variable names, in sorted order, which fixes the tie-break.
+ * @returns Negative when `a` sorts first, positive when `b` does, zero when
+ * they are the same monomial.
  */
-function compareMonomials(a: MonomialKey, b: MonomialKey, vars: readonly string[]): number {
+export function compareMonomials(a: MonomialKey, b: MonomialKey, vars: readonly string[]): number {
 	const degreeDifference = monomialDegree(b) - monomialDegree(a);
 	if (degreeDifference !== 0) return degreeDifference;
 

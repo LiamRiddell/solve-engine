@@ -51,8 +51,25 @@ That is an answer rather than a failure. A polynomial with no rational roots is
 returned as-is, including in the cases where it would split into higher-degree
 rational pieces, which are not searched for.
 
-Factoring in more than one variable stops after any shared constant and
-variable have been taken out.
+### More than one variable
+
+Factoring in several variables at once is a much harder problem than in one, so
+this recognises the standard shapes rather than running a general algorithm.
+
+```solve
+factor(x^2-y^2) // (x-y)*(x+y)
+factor(x^3-8y^3) // (x-2y)*(x^2+2x*y+4y^2)
+factor(x^2+2x*y+y^2) // (x+y)^2
+factor(a*x+a*y+b*x+b*y) // (a+b)*(x+y)
+```
+
+A difference of squares, a sum or difference of cubes, a perfect-square
+trinomial, and four terms that group into two pairs. Anything else stops after
+any shared constant and variable have been taken out.
+
+```solve
+factor(x^2+3x*y+y^2) // x^2+3x*y+y^2
+```
 
 ## Solving
 
