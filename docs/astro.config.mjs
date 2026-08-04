@@ -79,6 +79,7 @@ export default defineConfig({
         "./src/styles/notepad.css",
         "./src/styles/mermaid.css",
         "./src/styles/pipeline.css",
+        "./src/styles/pipeline-map.css",
         "./src/styles/explainer.css",
         "./src/styles/landing.css",
       ],

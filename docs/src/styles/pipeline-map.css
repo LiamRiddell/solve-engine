@@ -1,0 +1,301 @@
+/*
+ * The overview diagram.
+ *
+ * A three-column grid: what packages give a stage, the stage itself, and a
+ * bracket per cache. Everything lines up by row, so the relationships are read
+ * off the alignment and almost nothing has to be drawn. The only lines are the
+ * hairline connectors and the brackets, and both are borders rather than paths.
+ *
+ * Row placement is explicit, set by the component. See the note there: with a
+ * column pinned on each child, auto-placement will not put three cells on one
+ * row.
+ */
+
+.pmap {
+  margin: 1.75rem 0 2rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  padding: 1.25rem 1.125rem 1rem;
+}
+
+.pmap__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(11rem, 14rem) minmax(0, 1.15fr);
+  align-items: center;
+  row-gap: 0.375rem;
+}
+
+/* ── Headings ───────────────────────────────────────────────────────────── */
+
+.pmap__heading {
+  grid-row: 1;
+  color: var(--faint);
+  font-size: var(--sl-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding-bottom: 0.75rem;
+}
+
+.pmap__heading--left {
+  grid-column: 1;
+  text-align: end;
+  padding-inline-end: 1.25rem;
+}
+
+.pmap__heading--mid {
+  grid-column: 2;
+  text-align: center;
+}
+
+.pmap__heading--right {
+  grid-column: 3;
+  padding-inline-start: 1.5rem;
+}
+
+/* ── The stages ─────────────────────────────────────────────────────────── */
+
+/* One per row, in the middle column. Their order in the DOM is their order in
+   the pipeline, so no arrow is needed to say so. */
+.pmap__stage {
+  grid-column: 2;
+  display: grid;
+  gap: 0.0625rem;
+  border: 1px solid var(--border-strong);
+  border-radius: calc(var(--radius) - 2px);
+  padding: 0.5rem 0.75rem;
+  text-align: center;
+  position: relative;
+}
+
+/* The thread down the middle. Each stage draws the segment above itself, so
+   the column reads as one run without any element existing just to be a line. */
+.pmap__stage::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 50%;
+  bottom: 100%;
+  width: 1px;
+  height: 0.375rem;
+  background-color: var(--border-strong);
+}
+
+.pmap__stage-index {
+  color: var(--faint);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-2xs);
+}
+
+.pmap__stage-name {
+  color: var(--foreground);
+  font-size: var(--sl-text-sm);
+  font-weight: 500;
+}
+
+.pmap__stage-does {
+  color: var(--faint);
+  font-size: var(--sl-text-2xs);
+  line-height: 1.35;
+}
+
+/* ── Package contributions ──────────────────────────────────────────────── */
+
+.pmap__contrib {
+  grid-column: 1;
+  position: relative;
+  color: var(--muted-foreground);
+  font-size: var(--sl-text-xs);
+  line-height: 1.4;
+  text-align: end;
+  padding-inline-end: 1.25rem;
+}
+
+/* One hairline from the label to the stage beside it. Horizontal, so it can
+   never cross anything. */
+.pmap__contrib::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: 0;
+  top: 50%;
+  width: 1rem;
+  height: 1px;
+  background-color: var(--border);
+}
+
+/* The compiler consults no registry, and saying so is worth a row. */
+.pmap__contrib[data-empty] {
+  color: var(--faint);
+  font-style: italic;
+}
+
+.pmap__contrib[data-empty]::after {
+  background-color: transparent;
+}
+
+/* ── Cache brackets ─────────────────────────────────────────────────────── */
+
+/*
+ * One element spanning every stage row, its own rows taken from the outer grid
+ * with `subgrid`. That is what makes a bracket end exactly level with the
+ * bottom of the stage it covers rather than close to it, which is the whole
+ * reason this reads as a bracket and not as a floating label.
+ */
+.pmap__caches {
+  grid-column: 3;
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 0.75rem;
+  padding-inline-start: 1.5rem;
+}
+
+.pmap__bracket {
+  display: grid;
+  gap: 0.125rem;
+  align-content: center;
+  border-inline-start: 2px solid var(--border-strong);
+  padding: 0.25rem 0 0.25rem 0.625rem;
+}
+
+.pmap__bracket span {
+  color: var(--foreground);
+  font-size: var(--sl-text-xs);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.pmap__bracket small {
+  color: var(--faint);
+  font-size: var(--sl-text-2xs);
+  line-height: 1.35;
+}
+
+/* Lexer through Compiler: the four stages a cached program replaces. Rows are
+   relative to the subgrid, so 1 / 5 is the first four stages. */
+.pmap__bracket--bytecode {
+  grid-column: 1;
+  grid-row: 1 / 5;
+}
+
+/* All five: a line whose dependencies have not changed runs nothing at all. */
+.pmap__bracket--line {
+  grid-column: 2;
+  grid-row: 1 / 6;
+  border-inline-start-color: var(--primary);
+}
+
+/* ── In and out ─────────────────────────────────────────────────────────── */
+
+.pmap__io {
+  grid-column: 2;
+  margin: 0;
+  border: 1px dashed var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  color: var(--muted-foreground);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-xs);
+  padding: 0.375rem 0.75rem;
+  text-align: center;
+}
+
+.pmap__io--in {
+  grid-row: 2;
+}
+
+.pmap__io--out {
+  color: var(--primary);
+  border-color: var(--accent-border);
+  position: relative;
+}
+
+.pmap__io--out::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 50%;
+  bottom: 100%;
+  width: 1px;
+  height: 0.375rem;
+  background-color: var(--border-strong);
+}
+
+.pmap figcaption {
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+  color: var(--faint);
+  font-size: var(--sl-text-xs);
+  line-height: 1.6;
+}
+
+/* ── Narrow ─────────────────────────────────────────────────────────────── */
+
+/*
+ * Three columns need the width of three columns. Below that it becomes one:
+ * each contribution above its stage, the caches after the run. Every explicit
+ * row has to be overridden, including the inline ones the component sets, or
+ * the cells would still be trying to occupy rows that no longer mean anything.
+ */
+@media (max-width: 56rem) {
+  .pmap__grid {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0.25rem;
+  }
+
+  .pmap__heading--left,
+  .pmap__heading--right {
+    display: none;
+  }
+
+  .pmap__heading--mid,
+  .pmap__stage,
+  .pmap__contrib,
+  .pmap__io,
+  .pmap__caches {
+    grid-column: 1;
+    /* Beats the component's inline `grid-row`, which is the one place on this
+       site an `!important` earns itself: the alternative is emitting two sets
+       of inline styles and picking between them in the markup. */
+    grid-row: auto !important;
+    /* Restores contribution-then-its-stage. The two are emitted in separate
+       loops so the wide layout can place them on matching rows, which leaves
+       the DOM in the wrong order for a single column. */
+    order: var(--pmap-order, 0);
+  }
+
+  .pmap__heading--mid {
+    order: -1;
+  }
+
+  .pmap__io--in {
+    order: 0;
+  }
+
+  .pmap__caches {
+    display: grid;
+    grid-template-rows: auto;
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0.5rem;
+    padding-inline-start: 0;
+    margin-top: 0.75rem;
+  }
+
+  .pmap__bracket {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .pmap__contrib {
+    text-align: start;
+    padding-inline: 0.75rem;
+    padding-top: 0.5rem;
+  }
+
+  .pmap__contrib::after {
+    display: none;
+  }
+
+  .pmap__contrib::before {
+    content: "contributes ";
+    color: var(--faint);
+  }
+}
