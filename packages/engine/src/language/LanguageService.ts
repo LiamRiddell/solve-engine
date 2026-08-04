@@ -20,6 +20,16 @@ export interface CompletionItem {
 	detail?: string;
 }
 
+/**
+ * A completion candidate with its lowercased label precomputed.
+ *
+ * Internal to the prefix index; callers only ever see the {@link CompletionItem}.
+ */
+interface IndexedCompletionCandidate {
+	item: CompletionItem;
+	lowerLabel: string;
+}
+
 /** Completion results are capped, a document-wide candidate pool has no reason to return more than this. */
 const MAX_COMPLETIONS = 50;
 
@@ -156,6 +166,17 @@ export class LanguageService {
 	// every edit.
 	private staticCompletionCandidates: CompletionItem[] | null = null;
 
+	// The same candidates, bucketed by their lowercased first character with the
+	// lowercased label precomputed. getCompletions() runs on every keystroke and
+	// only ever wants candidates sharing the prefix's first character, so
+	// scanning the whole list and lowercasing each label per call was doing two
+	// avoidable things: touching entries that could not possibly match, and
+	// allocating a string per candidate per keystroke. That was affordable when
+	// the vocabulary was a few hundred entries. Deriving the unit list from the
+	// conversion tables took it past a thousand, and the warm completion
+	// benchmarks regressed roughly 2.9x until this was added.
+	private staticCompletionIndex: Map<string, IndexedCompletionCandidate[]> | null = null;
+
 	constructor(engine?: ExpressionEngine | null, options?: LanguageServiceOptions) {
 		this.engine = engine ?? null;
 		this.variableNameSource = options?.variableNameSource ?? (() => this.defaultVariableNames());
@@ -284,18 +305,23 @@ export class LanguageService {
 
 		if (!this.engine) return [];
 
-		const candidates = this.getStaticCompletionCandidates();
-		const variableCandidates: CompletionItem[] = [];
+		const matches: CompletionItem[] = [];
+
+		// Variables are read fresh every call and there are few of them, so they
+		// stay a linear scan.
 		for (const name of this.variableNameSource()) {
-			variableCandidates.push({ label: name, category: "variable" });
+			if (name.toLowerCase().startsWith(prefix)) {
+				matches.push({ label: name, category: "variable" });
+			}
 		}
 
-		const matches: CompletionItem[] = [];
-		for (const item of variableCandidates) {
-			if (item.label.toLowerCase().startsWith(prefix)) matches.push(item);
-		}
-		for (const item of candidates) {
-			if (item.label.toLowerCase().startsWith(prefix)) matches.push(item);
+		// Static candidates only ever match if they share the prefix's first
+		// character, so consult that bucket alone.
+		const bucket = this.getStaticCompletionIndex().get(prefix[0]);
+		if (bucket) {
+			for (const candidate of bucket) {
+				if (candidate.lowerLabel.startsWith(prefix)) matches.push(candidate.item);
+			}
 		}
 
 		matches.sort((a, b) => {
@@ -324,6 +350,32 @@ export class LanguageService {
 
 		this.staticCompletionCandidates = items;
 		return items;
+	}
+
+	/**
+	 * The static candidates bucketed by lowercased first character, built once
+	 * from {@link getStaticCompletionCandidates} and invalidated alongside it.
+	 */
+	private getStaticCompletionIndex(): Map<string, IndexedCompletionCandidate[]> {
+		if (this.staticCompletionIndex) return this.staticCompletionIndex;
+
+		const index = new Map<string, IndexedCompletionCandidate[]>();
+		for (const item of this.getStaticCompletionCandidates()) {
+			const lowerLabel = item.label.toLowerCase();
+			const firstCharacter = lowerLabel[0];
+			// A label cannot match any prefix if it is empty, and the prefix
+			// regex guarantees at least one character on the query side.
+			if (firstCharacter === undefined) continue;
+			let bucket = index.get(firstCharacter);
+			if (bucket === undefined) {
+				bucket = [];
+				index.set(firstCharacter, bucket);
+			}
+			bucket.push({ item, lowerLabel });
+		}
+
+		this.staticCompletionIndex = index;
+		return index;
 	}
 
 	private isKnownVariable(name: string): boolean {
@@ -386,5 +438,6 @@ export class LanguageService {
 	invalidateCache(): void {
 		this.cache.clear();
 		this.staticCompletionCandidates = null;
+		this.staticCompletionIndex = null;
 	}
 }
