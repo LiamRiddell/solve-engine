@@ -152,6 +152,7 @@ export default defineConfig({
             { slug: "syntax/symbolic" },
             { slug: "syntax/algebra" },
             { slug: "syntax/calculus" },
+            { slug: "syntax/complex" },
             { slug: "syntax/dice" },
             { slug: "syntax/live-data" },
             { slug: "syntax/trigger-words" },

@@ -79,9 +79,19 @@ describe("solveForVariable — exactness over convenience", () => {
 });
 
 describe("solveForVariable — answers that are not roots", () => {
-	test("a negative discriminant reports no real solutions and invents no complex root", () => {
-		const outcome = solve([1, 0, 1]);
-		expect(outcome.kind).toBe("no-real-solutions");
+	test("a negative discriminant gives the conjugate pair, which is what the quadratic actually has", () => {
+		// This used to report "no real solutions", which was a limitation of having
+		// no complex number to say the answer with rather than a property of the
+		// equation. x^2+1 = 0 has two roots and they are now returned.
+		expect(exactRoots([1, 0, 1])).toEqual(["-i", "i"]);
+	});
+
+	test("a conjugate pair with a non-zero real part", () => {
+		expect(exactRoots([1, 2, 5])).toEqual(["-1+2i", "-1-2i"].sort());
+	});
+
+	test("an irrational imaginary part keeps its surd form", () => {
+		expect(exactRoots([1, 0, 2])).toEqual(["-sqrt(2)*i", "sqrt(2)*i"]);
 	});
 
 	test("an identity is recognised as one", () => {

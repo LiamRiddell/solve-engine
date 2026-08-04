@@ -345,6 +345,11 @@ export function toPolynomial(node: SymbolicNode, allowDistribution = true): Poly
 			if (!allowDistribution && base.terms.size > 1) return null;
 			return polyPow(base, exponent);
 		}
+		case "complex":
+			// Coefficients here are rational by construction, so a complex literal
+			// puts the expression outside this representation. Returning null is what
+			// keeps factor and solve working over the rationals by default.
+			return null;
 		case "call":
 			// A function of an unknown is never a polynomial in it.
 			return null;

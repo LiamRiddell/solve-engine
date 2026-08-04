@@ -117,13 +117,12 @@ only after every exact method has been tried.
 Some equations have a correct answer that is not a list of roots.
 
 ```solve
-solve(x^2+1=0, x) // no real solutions (the discriminant is negative, so both roots are complex)
 solve(1=2, x) // no solution
 ```
 
-`x^2+1=0` has no real solutions because both of its roots are complex, and
-complex numbers are not supported. Solving in terms of another unknown works
-when the equation is linear in the one being solved for.
+`x^2+1=0` does have solutions, and they are [complex](/syntax/complex/).
+Solving in terms of another unknown works when the equation is linear in the one
+being solved for.
 
 ```solve
 solve(a*x+b=0, x) // -b/a

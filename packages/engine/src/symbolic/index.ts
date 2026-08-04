@@ -53,7 +53,29 @@ export {
 	nodeCount,
 	freeVariables,
 	substitute,
+	complexNode,
 } from "@solve-js/symbolic/SymbolicNode";
+
+export {
+	type Complex,
+	COMPLEX_ZERO,
+	COMPLEX_ONE,
+	COMPLEX_I,
+	complex,
+	isReal,
+	isComplexZero,
+	complexAdd,
+	complexSub,
+	complexMul,
+	complexDiv,
+	complexNeg,
+	complexConjugate,
+	complexNormSquared,
+	complexPow,
+	complexEquals,
+	formatComplex,
+	exactComplexSqrt,
+} from "@solve-js/symbolic/Complex";
 
 export { simplifySymbolic } from "@solve-js/symbolic/Simplify";
 

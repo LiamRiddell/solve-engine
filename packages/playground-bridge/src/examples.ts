@@ -225,6 +225,23 @@ export const exampleData: ExampleCategory[] = [
     ]
   },
   {
+    name: "Complex numbers",
+    description: "Exact complex arithmetic, and the roots that need it",
+    examples: [
+      { name: "Imaginary literal", expression: "3i", description: "A number written flush against the letter i is imaginary. The letter itself is never a reserved word, so a variable named i still works, and 3 * i is still a multiplication" },
+      { name: "The imaginary unit", expression: "1i*1i", description: "i squared is exactly minus one" },
+      { name: "Arithmetic", expression: "(2+3i)+(1-1i)", description: "Both parts are exact fractions, never floating-point" },
+      { name: "A real answer is real", expression: "(1+1i)*(1-1i)", description: "Exactly 2. In floating point the imaginary parts would cancel to a residue rather than to zero" },
+      { name: "Root of a negative", expression: "sqrt(-4)", description: "Has an answer now, and an exact one" },
+      { name: "Irrational root of a negative", expression: "sqrt(-2)", description: "Keeps its surd rather than being rounded" },
+      { name: "Conjugate", expression: "conj(2+3i)", description: "Flips the sign of the imaginary part" },
+      { name: "Parts", expression: "re(2+3i)", description: "re and im take a complex number apart" },
+      { name: "Modulus", expression: "abs(3+4i)", description: "Exact whenever it is rational" },
+      { name: "Complex roots", expression: "solve(x^2+1=0, x)", description: "Every quadratic has two roots, and both are returned" },
+      { name: "A conjugate pair", expression: "solve(x^2+2x+5=0, x)", description: "With a non-zero real part" },
+    ]
+  },
+  {
     name: "Calculus",
     description: "Symbolic derivatives, integrals, Taylor series and Jacobians",
     examples: [

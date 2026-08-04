@@ -151,6 +151,16 @@ x^2-4 = 0
 x => // [-2, 2]
 ```
 
+## Complex numbers
+
+```solve
+3i // 3i
+1i*1i // -1
+sqrt(-4) // 2i
+conj(2+3i) // 2-3i
+solve(x^2+1=0, x) // [-i, i]
+```
+
 ## Calculus
 
 ```solve

@@ -125,8 +125,8 @@ describe("documented limitations behave as documented", () => {
 		expect(evaluate("factor(x^2+1)")).toBe("x^2+1");
 	});
 
-	test("a negative discriminant reports no real solutions", () => {
-		expect(evaluate("solve(x^2+1=0, x)")).toMatch(/no real solutions/);
+	test("a negative discriminant returns the complex pair", () => {
+		expect(evaluate("solve(x^2+1=0, x)")).toBe("= [-i, i]");
 	});
 
 	test("multivariate factoring stops after the shared parts", () => {

@@ -31,6 +31,7 @@
 import {
 	type SymbolicNode,
 	constNode,
+	complexNode,
 } from "@solve-js/symbolic/SymbolicNode";
 import {
 	type Rational,
@@ -52,6 +53,7 @@ import {
 	polyCoefficients,
 } from "@solve-js/symbolic/Polynomial";
 import { rationalRoots } from "@solve-js/symbolic/Factor";
+import { COMPLEX_I, complex as complexValue } from "@solve-js/symbolic/Complex";
 
 /**
  * Highest polynomial degree {@link solveForVariable} will attempt.
@@ -127,18 +129,24 @@ function exactSqrt(value: bigint): bigint | null {
 }
 
 /**
- * Solves `ax^2 + bx + c = 0` over the reals.
+ * Solves `ax^2 + bx + c = 0` over the complex numbers.
  *
- * @returns Exact root nodes, which are rational constants when the
- * discriminant is a perfect square and surd expressions when it is not, or
- * `null` when the discriminant is negative and there are no real roots.
+ * A negative discriminant gives a conjugate pair rather than nothing. That is
+ * what a quadratic actually has, and reporting "no real solutions" instead was
+ * a limitation of not having a complex number to say it with.
+ *
+ * @returns The exact roots: rational constants for a perfect-square
+ * discriminant, surds for a positive non-square one, and complex values for a
+ * negative one.
  */
-function solveQuadratic(a: Rational, b: Rational, c: Rational): SymbolicNode[] | null {
+function solveQuadratic(a: Rational, b: Rational, c: Rational): SymbolicNode[] {
 	// discriminant = b^2 - 4ac
 	const discriminant = rationalSub(rationalMul(b, b), rationalMul(rational4(), rationalMul(a, c)));
-	if (rationalCompare(discriminant, RATIONAL_ZERO) < 0) return null;
-
 	const twoA = rationalMul(rational2(), a);
+
+	if (rationalCompare(discriminant, RATIONAL_ZERO) < 0) {
+		return complexQuadraticRoots(rationalNeg(b), discriminant, twoA);
+	}
 	if (isRationalZero(discriminant)) return [constNode(rationalDiv(rationalNeg(b), twoA))];
 
 	// A perfect-square discriminant needs both numerator and denominator to be
@@ -161,6 +169,57 @@ function solveQuadratic(a: Rational, b: Rational, c: Rational): SymbolicNode[] |
 	const lower: SymbolicNode = { kind: "div", left: { kind: "sub", left: constNode(rationalNeg(b)), right: surd }, right: constNode(twoA) };
 	const upper: SymbolicNode = { kind: "div", left: { kind: "add", left: constNode(rationalNeg(b)), right: surd }, right: constNode(twoA) };
 	return ascending ? [lower, upper] : [upper, lower];
+}
+
+/**
+ * The conjugate pair for a quadratic whose discriminant is negative.
+ *
+ * `sqrt(D)` for negative `D` is `sqrt(-D) * i`, so the roots are
+ * `(-b ± sqrt(|D|) i) / 2a`. When `sqrt(|D|)` is rational the whole root is a
+ * Gaussian rational and comes back as a single exact complex value; otherwise
+ * the irrational part stays as a surd multiplied by `i`.
+ *
+ * The negative root is returned first, matching the ordering the real cases use.
+ *
+ * @param negatedB - `-b`, already negated by the caller.
+ * @param discriminant - The negative discriminant.
+ * @param twoA - `2a`.
+ * @returns The two roots.
+ */
+function complexQuadraticRoots(negatedB: Rational, discriminant: Rational, twoA: Rational): SymbolicNode[] {
+	const magnitude = rationalNeg(discriminant);
+	const rootN = exactSqrt(magnitude.n);
+	const rootD = exactSqrt(magnitude.d);
+
+	if (rootN !== null && rootD !== null) {
+		// Everything stays in the Gaussian rationals, so each root is one exact
+		// complex value rather than an expression.
+		const imaginary = rationalDiv({ n: rootN, d: rootD }, twoA);
+		const real = rationalDiv(negatedB, twoA);
+		return [
+			complexNode(complexValue(real, rationalNeg(imaginary))),
+			complexNode(complexValue(real, imaginary)),
+		];
+	}
+
+	// The imaginary part is irrational, so it keeps its surd form times `i`.
+	//
+	// The division by `2a` is folded into the radicand rather than left outside
+	// it: `sqrt(m)/2a` is `sqrt(m/(2a)^2)`, which reduces. Building it the naive
+	// way leaves `-2*sqrt(2)*i/2` for `x^2+2=0`, since the simplifier's
+	// common-factor cancellation cannot see a `2` buried inside a surd's own
+	// coefficient. Doing the algebra here instead gives `-sqrt(2)*i`.
+	const real = rationalDiv(negatedB, twoA);
+	const scaledRadicand = rationalDiv(magnitude, rationalMul(twoA, twoA));
+	const imaginary: SymbolicNode = { kind: "mul", left: surdNode(scaledRadicand), right: complexNode(COMPLEX_I) };
+
+	if (isRationalZero(real)) {
+		return [{ kind: "neg", operand: imaginary }, imaginary];
+	}
+	return [
+		{ kind: "sub", left: constNode(real), right: imaginary },
+		{ kind: "add", left: constNode(real), right: imaginary },
+	];
 }
 
 /**
@@ -370,11 +429,6 @@ function solveUnivariate(descending: readonly Rational[]): SolveOutcome {
 	}
 	if (leftoverDegree === 2) {
 		const quadratic = solveQuadratic(remaining[0], remaining[1], remaining[2]);
-		if (quadratic === null) {
-			return exact.length > 0
-				? { kind: "roots", exact, approximate: [] }
-				: { kind: "no-real-solutions", reason: "the discriminant is negative, so both roots are complex" };
-		}
 		return { kind: "roots", exact: [...exact, ...quadratic], approximate: [] };
 	}
 	if (leftoverDegree <= 0) {

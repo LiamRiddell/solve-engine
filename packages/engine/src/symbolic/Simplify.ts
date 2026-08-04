@@ -59,6 +59,7 @@ import {
 	nodesEqual,
 	nodeCount,
 	SYMBOLIC_MAX_NODES,
+	complexNode,
 } from "@solve-js/symbolic/SymbolicNode";
 import {
 	type Rational,
@@ -77,6 +78,21 @@ import {
 	isRationalInteger,
 } from "@solve-js/symbolic/Rational";
 import { toPolynomial, fromPolynomial } from "@solve-js/symbolic/Polynomial";
+import {
+	type Complex,
+	complex,
+	complexAdd,
+	complexSub,
+	complexMul,
+	complexDiv,
+	complexNeg,
+	complexPow,
+	complexConjugate,
+	complexNormSquared,
+	exactComplexSqrt,
+	isComplexZero,
+	COMPLEX_I,
+} from "@solve-js/symbolic/Complex";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 // ── Flatten-and-collect (top-level sums only) ──────────────────────────────
@@ -304,16 +320,103 @@ export function simplifySymbolic(node: SymbolicNode): SymbolicNode {
 	return simplifyNode(node);
 }
 
+/**
+ * Reads a numeric atom as a complex value, so the arithmetic cases can treat a
+ * real constant and a complex one uniformly.
+ *
+ * Returns `null` for anything that is not a literal number, which is what keeps
+ * the real fast paths below from being disturbed.
+ */
+function asComplex(node: SymbolicNode): Complex | null {
+	if (node.kind === "complex") return node.value;
+	if (node.kind === "const") return complex(node.value);
+	return null;
+}
+
+/**
+ * Folds an arithmetic node whose operands are both literal numbers and at least
+ * one of which is complex.
+ *
+ * Returns `null` when the node is not that shape, leaving every real-only path
+ * exactly as it was: a pair of rational constants never reaches this, so
+ * ordinary arithmetic pays nothing for complex support.
+ */
+function foldComplexBinary(kind: "add" | "sub" | "mul" | "div", left: SymbolicNode, right: SymbolicNode): SymbolicNode | null {
+	if (left.kind !== "complex" && right.kind !== "complex") return null;
+	const a = asComplex(left);
+	const b = asComplex(right);
+	if (a === null || b === null) return null;
+	switch (kind) {
+		case "add": return complexNode(complexAdd(a, b));
+		case "sub": return complexNode(complexSub(a, b));
+		case "mul": return complexNode(complexMul(a, b));
+		case "div": return isComplexZero(b) ? null : complexNode(complexDiv(a, b));
+	}
+}
+
+/**
+ * Folds a function whose exact answer is complex.
+ *
+ * The only entries are the ones whose real-domain versions have a genuine hole:
+ * `sqrt` and `abs` of a negative, and the accessors that take a complex value
+ * apart. `sqrt(-4)` is exactly `2i`, which the real-only table above had to
+ * decline. Anything whose complex value is irrational, `sqrt(i)` for instance,
+ * still comes back `null` and stays symbolic.
+ *
+ * @returns The folded node, or `null` to leave the call alone.
+ */
+function foldComplexCall(name: string, args: readonly SymbolicNode[]): SymbolicNode | null {
+	if (args.length !== 1) return null;
+	const value = asComplex(args[0]);
+	if (value === null) return null;
+
+	switch (name) {
+		case "sqrt": {
+			const root = exactComplexSqrt(value);
+			if (root !== null) return complexNode(root);
+			// A negative real whose magnitude has no rational root is still worth
+			// rewriting: `sqrt(-2)` is `sqrt(2)*i`, which pulls the imaginary unit
+			// out where the rest of the system can work with it, instead of
+			// leaving a square root of a negative number sitting in the tree.
+			if (isRationalZero(value.im) && value.re.n < 0n) {
+				return {
+					kind: "mul",
+					left: { kind: "call", name: "sqrt", args: [constNode(rationalNeg(value.re))] },
+					right: complexNode(COMPLEX_I),
+				};
+			}
+			return null;
+		}
+		case "conj":
+			return complexNode(complexConjugate(value));
+		case "re":
+			return constNode(value.re);
+		case "im":
+			return constNode(value.im);
+		case "abs": {
+			// |z| is the square root of a rational, so it is only exact when that
+			// root is. The real-only table already handles a real argument.
+			if (isRationalZero(value.im)) return null;
+			const modulus = exactComplexSqrt(complex(complexNormSquared(value)));
+			return modulus === null || !isRationalZero(modulus.im) ? null : constNode(modulus.re);
+		}
+		default:
+			return null;
+	}
+}
+
 /** Recursive worker for {@link simplifySymbolic}, past the one-time size guard. */
 function simplifyNode(node: SymbolicNode): SymbolicNode {
 	switch (node.kind) {
 		case "const":
+		case "complex":
 		case "var":
 			return node;
 
 		case "neg": {
 			const operand = simplifyNode(node.operand);
 			if (operand.kind === "const") return constNode(rationalNeg(operand.value));
+			if (operand.kind === "complex") return complexNode(complexNeg(operand.value));
 			if (operand.kind === "neg") return operand.operand;
 			return { kind: "neg", operand };
 		}
@@ -322,6 +425,8 @@ function simplifyNode(node: SymbolicNode): SymbolicNode {
 			const left = simplifyNode(node.left);
 			const right = simplifyNode(node.right);
 			if (left.kind === "const" && right.kind === "const") return constNode(rationalAdd(left.value, right.value));
+			const foldedAdd = foldComplexBinary("add", left, right);
+			if (foldedAdd !== null) return foldedAdd;
 			if (left.kind === "const" && isRationalZero(left.value)) return right;
 			if (right.kind === "const" && isRationalZero(right.value)) return left;
 			return collectSum({ kind: "add", left, right });
@@ -331,6 +436,8 @@ function simplifyNode(node: SymbolicNode): SymbolicNode {
 			const left = simplifyNode(node.left);
 			const right = simplifyNode(node.right);
 			if (left.kind === "const" && right.kind === "const") return constNode(rationalSub(left.value, right.value));
+			const foldedSub = foldComplexBinary("sub", left, right);
+			if (foldedSub !== null) return foldedSub;
 			if (right.kind === "const" && isRationalZero(right.value)) return left;
 			if (left.kind === "const" && isRationalZero(left.value)) return simplifyNode({ kind: "neg", operand: right });
 			return collectSum({ kind: "sub", left, right });
@@ -340,6 +447,8 @@ function simplifyNode(node: SymbolicNode): SymbolicNode {
 			const left = simplifyNode(node.left);
 			const right = simplifyNode(node.right);
 			if (left.kind === "const" && right.kind === "const") return constNode(rationalMul(left.value, right.value));
+			const foldedMul = foldComplexBinary("mul", left, right);
+			if (foldedMul !== null) return foldedMul;
 			if ((left.kind === "const" && isRationalZero(left.value)) || (right.kind === "const" && isRationalZero(right.value))) {
 				return constNode(RATIONAL_ZERO);
 			}
@@ -387,6 +496,8 @@ function simplifyNode(node: SymbolicNode): SymbolicNode {
 			if (left.kind === "const" && right.kind === "const" && !isRationalZero(right.value)) {
 				return constNode(rationalDiv(left.value, right.value));
 			}
+			const foldedDiv = foldComplexBinary("div", left, right);
+			if (foldedDiv !== null) return foldedDiv;
 			if (right.kind === "const" && isRationalOne(right.value)) return left;
 			if (left.kind === "const" && isRationalZero(left.value)) return constNode(RATIONAL_ZERO);
 			// Cancel a single common factor: (a*b)/a -> b, (a*b)/b -> a. A narrow,
@@ -420,6 +531,9 @@ function simplifyNode(node: SymbolicNode): SymbolicNode {
 				if (base.kind === "const" && isRationalInteger(exponent.value)) {
 					return constNode(rationalPow(base.value, exponent.value.n));
 				}
+				if (base.kind === "complex" && isRationalInteger(exponent.value)) {
+					return complexNode(complexPow(base.value, exponent.value.n));
+				}
 			}
 			if (base.kind === "const" && isRationalOne(base.value)) return constNode(RATIONAL_ONE);
 			// 0^x is zero only for a positive exponent. 0^0 is one (handled
@@ -452,6 +566,8 @@ function simplifyNode(node: SymbolicNode): SymbolicNode {
 				const folded = foldCall(node.name, args.map(arg => (arg as { kind: "const"; value: Rational }).value));
 				if (folded !== null) return constNode(folded);
 			}
+			const complexFolded = foldComplexCall(node.name, args);
+			if (complexFolded !== null) return complexFolded;
 			return { kind: "call", name: node.name, args };
 		}
 	}
