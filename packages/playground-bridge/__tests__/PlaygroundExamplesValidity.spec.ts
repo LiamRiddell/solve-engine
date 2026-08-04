@@ -13,9 +13,16 @@ import { PLAYGROUND_PACKAGES, runEngine } from "@bridge/engine";
  * engine. This is exactly the gap that let broken content ship silently:
  * nothing exercised these strings through ExpressionEngine before a human
  * clicked them in the browser. Found and fixed via this suite:
- *   - "135lbs to kg" (Workout Tracker) — "lbs" isn't a recognized unit
- *     (only "lb" is, per the project's no-aliases policy); fixed the
- *     example content to say "lb".
+ *   - "135lbs to kg" (Workout Tracker) — "lbs" was not a recognized unit at
+ *     the time (only "lb" was); fixed the example content to say "lb".
+ *     NOTE: "lbs" DOES lex now. The old note attributed its absence to the
+ *     no-aliases policy, but that policy is about refusing to remap one
+ *     spelling onto another ("mt" to "t", "floz" to "US fluid ounce"), not
+ *     about rejecting spellings the conversion table genuinely carries. "lbs"
+ *     is a real key in that table, exactly like "pounds", "grams" and
+ *     "inches", all of which were already accepted. Its absence was a gap in
+ *     the hand-maintained lexer allowlist, which is now derived from the
+ *     table instead (see lexer/units.ts).
  *   - The entire CryptoCurrency category (12 examples, "1 BTC to USD" etc.)
  *     — see Issue_CryptoUnitsUnrecognized.spec.ts for the underlying
  *     lexer fix.

@@ -707,8 +707,8 @@ export const EXPLAINERS: Record<string, Explainer> = {
         note: "A case-insensitive engine has to choose, and whichever it chooses is silently wrong for the other reader. The answer still looks like an answer. Nothing about it invites a second look.",
       },
       {
-        title: "So it refuses",
-        summary: "No aliases, no guessing.",
+        title: "So it keeps the case",
+        summary: "Which is not the same as one spelling.",
         figure: {
           kind: "lines",
           lines: [
@@ -716,7 +716,7 @@ export const EXPLAINERS: Record<string, Explainer> = {
             { text: "5M + 1", value: "5,000,001", state: "computed" },
           ],
         },
-        note: "Case carries meaning, so it is honoured. This is the same instinct as errors being values rather than zeroes: a tool doing arithmetic on someone's real numbers should be wrong loudly or not at all.",
+        note: "Case carries meaning, so it is kept. That is not a rule about spelling: lb, lbs and pounds are all accepted, because those are the unit's own names rather than guesses about what you meant. What is refused is remapping one unit onto another.",
       },
     ],
   },

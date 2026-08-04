@@ -31,7 +31,7 @@
 import type { Token } from "@solve-js/lexer/Token";
 import { tokenTypeId } from "@solve-js/lexer/Token";
 import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
-import type { NormalizerRule, NormalizerMatch, TokenFusion } from "./NormalizerRule";
+import type { NormalizerRule, TokenFusion } from "./NormalizerRule";
 import { PhraseTrie } from "./PhraseTrie";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 

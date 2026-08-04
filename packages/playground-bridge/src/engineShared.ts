@@ -16,6 +16,7 @@ import type {
 	PerformanceStats,
 	LineStats,
 	VmTraceStep,
+	VmStackValue,
 	DiagnosticEventInfo,
 	QueryCacheEntry,
 	QueryClientConfig,
@@ -344,7 +345,7 @@ export function buildVmTrace(
 				stackDepth: step.stackDepth,
 				instructionNumber: step.instructionNumber,
 				elapsedNs: step.elapsedNs,
-				stack: (step as any).stack ?? [],
+				stack: (step as { stack?: VmStackValue[] }).stack ?? [],
 			};
 		});
 }
@@ -354,14 +355,19 @@ export function buildDiagnosticEvents(
 	events: readonly TimedEvent[] | null
 ): DiagnosticEventInfo[] {
 	if (!events) return [];
-	return events.map((e) => ({
-		type: e.type,
-		timestamp: Date.now(),
-		elapsedNs: e.elapsedNs,
-		expression: (e as any).expression ?? "",
-		details: (e as any).details ?? "",
-		groupKey: (e as any).expression ?? "",
-	}));
+	// `expression` and `details` are carried by some event kinds and not others,
+	// so they are read off an optional shape rather than the union.
+	return events.map((e) => {
+		const annotated = e as { expression?: string; details?: string };
+		return {
+			type: e.type,
+			timestamp: Date.now(),
+			elapsedNs: e.elapsedNs,
+			expression: annotated.expression ?? "",
+			details: annotated.details ?? "",
+			groupKey: annotated.expression ?? "",
+		};
+	});
 }
 
 /**
@@ -386,8 +392,10 @@ export function buildQueryCacheState(engine: ExpressionEngine | null): {
 			if (data == null) {
 				dataPreview = 'null';
 			} else if (typeof data === 'object') {
-				const obj = data as any;
-				if (obj.value !== undefined) dataPreview = String(obj.value) + (obj.unit ? ' ' + obj.unit : '');
+				// Cached payloads are whatever a resolver returned. Value-shaped
+				// ones render as "<value> <unit>"; anything else falls back to JSON.
+				const obj = data as { value?: unknown; unit?: unknown };
+				if (obj.value !== undefined) dataPreview = String(obj.value) + (obj.unit ? ' ' + String(obj.unit) : '');
 				else dataPreview = JSON.stringify(data).slice(0, 120);
 			} else {
 				dataPreview = String(data);
@@ -396,7 +404,7 @@ export function buildQueryCacheState(engine: ExpressionEngine | null): {
 				queryKey: q.queryKey.join(':'),
 				queryKeyArray: q.queryKey as string[],
 				status: q.state.status === 'success' ? 'fresh' as const : q.state.status === 'error' ? 'error' as const : 'fetching' as const,
-				dataType: data != null && typeof data === 'object' ? (data as any)?.unit || 'object' : typeof data,
+				dataType: data != null && typeof data === 'object' ? (data as { unit?: string }).unit || 'object' : typeof data,
 				dataPreview,
 				updatedAt: q.state.dataUpdatedAt,
 				staleTime: queryClientConfig.staleTime,

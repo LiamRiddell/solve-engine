@@ -16,6 +16,27 @@ npm run verify
 build. If it passes locally it should pass in continuous integration, and the
 two run the same script deliberately so they cannot drift.
 
+### Two TypeScript compilers, on purpose
+
+`npm run typecheck` uses **tsgo**, the native compiler that ships as
+TypeScript 7. It checks the whole engine in about a second, against roughly two
+for the JavaScript compiler.
+
+The `typescript` dependency stays on 5.9 even so, because tsgo cannot replace it
+yet. TypeScript 7 dropped the classic compiler API from its main export, and
+both of the tools that consume that API need it: `ts-jest` peer-declares
+`typescript >=4.3 <7`, and `tsup` uses it to emit the `.d.ts` bundle. So the
+JavaScript compiler still does the emitting and the test transform, and tsgo
+does the checking.
+
+`npm run typecheck:tsc` runs the same check through the JavaScript compiler. It
+is the tie-breaker when the two disagree, which they can: tsgo does not pick up
+`@types` packages hoisted to the workspace root the way tsc does, which is why
+`packages/engine/tsconfig.json` names `types: ["node"]` explicitly.
+
+The playground is already fully on TypeScript 7, since Vite transpiles and its
+`tsc -b` step only type checks.
+
 ## Layout
 
 | Path | Contents |

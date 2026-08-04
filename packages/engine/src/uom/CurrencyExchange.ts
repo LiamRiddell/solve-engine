@@ -127,8 +127,11 @@ export class CurrencyExchangeService {
       const rates: Record<string, number> = Array.isArray(data)
         ? Object.fromEntries(
             data
-              .filter((entry: unknown): entry is { quote: string; rate: number } =>
-                !!entry && typeof (entry as any).quote === "string" && typeof (entry as any).rate === "number")
+              .filter((entry: unknown): entry is { quote: string; rate: number } => {
+                if (typeof entry !== "object" || entry === null) return false;
+                const candidate = entry as { quote?: unknown; rate?: unknown };
+                return typeof candidate.quote === "string" && typeof candidate.rate === "number";
+              })
               .map((entry: { quote: string; rate: number }) => [entry.quote.toUpperCase(), entry.rate])
           )
         : (data.rates ?? {});

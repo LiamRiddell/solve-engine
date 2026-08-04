@@ -1,6 +1,6 @@
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { Token, tokenTypeId, TokenTypes } from "@solve-js/lexer/Token";
-import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
+import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { DiagnosticPipeline, DiagnosticEventType, type DiagnosticEvent } from "@solve-js/diagnostics";
 import { OpCode } from "@solve-js/parser/OpCode";
@@ -283,7 +283,7 @@ export class PrecedenceParser {
           this.fireParseletMatched(infixParselet, lookahead, false, infixParselet.bindingPower);
         }
         // Parselet handles its own recursion for right operand internally
-        infixParselet.parse(this as any, token, lookahead, builder);
+        infixParselet.parse(this, token, lookahead, builder);
       }
 
       idx = this.current;
@@ -473,7 +473,7 @@ export class PrecedenceParser {
       );
     }
 
-    prefixParselet.parse(this as any, token, builder);
+    prefixParselet.parse(this, token, builder);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════════
@@ -837,7 +837,7 @@ export class PrecedenceParser {
       tokenType: token.type,
       tokenValue: token.value,
       parseletCategory: parselet.category,
-      parseletType: (parselet as any).constructor?.name ?? "unknown",
+      parseletType: parselet.constructor?.name ?? "unknown",
       isPrefix,
       bindingPower,
       tokenOffset: token.offset || 0,

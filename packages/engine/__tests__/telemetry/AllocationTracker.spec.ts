@@ -205,7 +205,7 @@ describe("ExpressionEngine integration", () => {
         cleanup();
     });
 
-    test("all stages have valid wall times and non-negative alloc bytes", () => {
+    test("all stages have valid wall times and finite alloc bytes", () => {
         const { engine, cleanup } = createTrackedEngine();
         const { telemetry } = evalWithTelemetry(engine, "10 + 20 * 3");
         expectValidTelemetry(telemetry);

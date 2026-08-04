@@ -107,10 +107,31 @@ function countBuiltinPackages() {
 		.filter((entry) => entry.length > 0).length;
 }
 
+/**
+ * The engine's runtime dependency count and its number of subpath exports.
+ *
+ * Both are quoted on the landing page and both had already gone stale once: the
+ * page claimed no runtime dependencies while there were four, and then four
+ * after one was ported in-house and there were three. Neither is a number
+ * anybody will remember to update, so neither is written down.
+ *
+ * @returns {{ runtimeDependencies: number, subpathExports: number }} The counts.
+ */
+function readPackageShape() {
+	const pkg = JSON.parse(
+		fs.readFileSync(path.join(ROOT, "packages/engine/package.json"), "utf8"),
+	);
+	return {
+		runtimeDependencies: Object.keys(pkg.dependencies ?? {}).length,
+		subpathExports: Object.keys(pkg.exports ?? {}).length,
+	};
+}
+
 const stats = {
 	...readReport(),
 	docExamples: countDocExamples(DOCS_ROOT),
 	builtinPackages: countBuiltinPackages(),
+	...readPackageShape(),
 };
 
 const next = `${JSON.stringify(stats, null, 2)}\n`;
