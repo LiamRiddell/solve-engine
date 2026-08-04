@@ -15,7 +15,6 @@ import TestStats from '../../components/TestStats.astro';
 import PackageSize from '../../components/PackageSize.astro';
 import WhatsInTheBox from '../../components/WhatsInTheBox.astro';
 import HighlightLegend from '../../components/HighlightLegend.astro';
-import stats from '../../data/testStats.json';
 
 <div class="band band--tight not-content">
   <div class="band__inner">
@@ -28,10 +27,6 @@ import stats from '../../data/testStats.json';
       </div>
       <ul class="install__specs">
         <li>MIT</li>
-        <li>{stats.runtimeDependencies} runtime dependencies</li>
-        <li>{stats.subpathExports} subpath exports</li>
-        <li>Node, browser and worker</li>
-        <li>TypeScript types included</li>
       </ul>
     </div>
   </div>
