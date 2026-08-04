@@ -72,6 +72,11 @@ jobs:
       # The same gate a contributor runs, before anything can be published.
       - run: npm run verify
 
+      # And the one that checks the artefact rather than the working tree. A
+      # version cannot be replaced once it is on the registry, so the last thing
+      # before publishing is to install the tarball and use it.
+      - run: npm run test:consumer
+
       - name: Version pull request, or publish
         uses: changesets/action@v1
         with:

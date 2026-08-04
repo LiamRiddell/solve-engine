@@ -201,6 +201,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "prepublishOnly": "npm run build && node ../../scripts/assert-publishable.mjs .",
     "dev": "tsup --watch",
     "test": "jest --config jest.config.cjs --no-coverage",
     "typecheck": "tsgo --noEmit --skipLibCheck",
