@@ -287,47 +287,63 @@ export function polyCoefficients(p: Polynomial, variable: string): Rational[] {
  * rationals: a non-constant denominator, a non-integer or symbolic exponent,
  * any function call, or a safety-limit breach.
  */
-export function toPolynomial(node: SymbolicNode): Polynomial | null {
+export function toPolynomial(node: SymbolicNode, allowDistribution = true): Polynomial | null {
 	switch (node.kind) {
 		case "const":
 			return constantPolynomial(node.value);
 		case "var":
 			return { terms: new Map([[node.name, RATIONAL_ONE]]), vars: [node.name] };
 		case "neg": {
-			const operand = toPolynomial(node.operand);
+			const operand = toPolynomial(node.operand, allowDistribution);
 			return operand === null ? null : polyScale(operand, RATIONAL_MINUS_ONE);
 		}
 		case "add": {
-			const left = toPolynomial(node.left);
-			const right = left === null ? null : toPolynomial(node.right);
+			const left = toPolynomial(node.left, allowDistribution);
+			const right = left === null ? null : toPolynomial(node.right, allowDistribution);
 			return left === null || right === null ? null : polyAdd(left, right);
 		}
 		case "sub": {
-			const left = toPolynomial(node.left);
-			const right = left === null ? null : toPolynomial(node.right);
+			const left = toPolynomial(node.left, allowDistribution);
+			const right = left === null ? null : toPolynomial(node.right, allowDistribution);
 			return left === null || right === null ? null : polySub(left, right);
 		}
 		case "mul": {
-			const left = toPolynomial(node.left);
-			const right = left === null ? null : toPolynomial(node.right);
-			return left === null || right === null ? null : polyMul(left, right);
+			const left = toPolynomial(node.left, allowDistribution);
+			const right = left === null ? null : toPolynomial(node.right, allowDistribution);
+			if (left === null || right === null) return null;
+			// Multiplying into a multi-term sum is expansion, and the simplifier
+			// is not allowed to do that (see `Simplify.ts`), so it converts with
+			// distribution disabled and gets `null` here, leaving `(x+1)*(x+2)`
+			// as the user wrote it.
+			//
+			// Refusing only when BOTH sides are sums is not enough. Distributing
+			// a single factor over `(x-4)` copies that factor into both terms,
+			// and distributing a bare constant over a three-term sum grows the
+			// tree as well. So in this mode a product converts only when both
+			// sides are single terms, which is exactly what collecting `2b + 3b`
+			// into `5b` needs and nothing beyond it.
+			if (!allowDistribution && (left.terms.size > 1 || right.terms.size > 1)) return null;
+			return polyMul(left, right);
 		}
 		case "div": {
 			// Only a genuinely constant, non-zero denominator is divisible here.
 			// Anything else is a rational function, which this representation
 			// cannot express, so it must come back null rather than be approximated.
-			const right = toPolynomial(node.right);
+			const right = toPolynomial(node.right, allowDistribution);
 			if (right === null || right.vars.length > 0) return null;
 			const divisor = right.terms.get("") ?? RATIONAL_ZERO;
 			if (isRationalZero(divisor)) return null;
-			const left = toPolynomial(node.left);
+			const left = toPolynomial(node.left, allowDistribution);
 			return left === null ? null : polyScale(left, rationalDiv(RATIONAL_ONE, divisor));
 		}
 		case "pow": {
 			if (node.exponent.kind !== "const" || !isRationalInteger(node.exponent.value)) return null;
 			const exponent = Number(node.exponent.value.n);
-			const base = toPolynomial(node.base);
-			return base === null ? null : polyPow(base, exponent);
+			const base = toPolynomial(node.base, allowDistribution);
+			if (base === null) return null;
+			// Raising a sum to a power is expansion too, for the same reason.
+			if (!allowDistribution && base.terms.size > 1) return null;
+			return polyPow(base, exponent);
 		}
 		case "call":
 			// A function of an unknown is never a polynomial in it.
@@ -397,9 +413,30 @@ export function fromPolynomial(p: Polynomial): SymbolicNode {
 	const keys = [...p.terms.keys()].sort((a, b) => compareMonomials(a, b, p.vars));
 	if (keys.length === 0) return constNode(RATIONAL_ZERO);
 
+	// Lead with a positive term when the polynomial has one, so `5 - y` comes
+	// back as `5-y` rather than `-y+5`. Two reasons, and the second is the one
+	// that matters. It reads the way a person writes it. And it keeps the tree
+	// from growing: a leading negative needs a `neg` wrapper where the original
+	// had a `sub`, which broke `Simplify.ts`'s promise never to grow a tree, by
+	// one node for every additive level. The rule is deterministic and depends
+	// only on the polynomial, so two equal polynomials still render identically.
+	if (p.terms.get(keys[0])!.n < 0n) {
+		const firstPositive = keys.findIndex(key => p.terms.get(key)!.n > 0n);
+		if (firstPositive > 0) keys.unshift(...keys.splice(firstPositive, 1));
+	}
+
 	let result = termToNode(keys[0], p.terms.get(keys[0])!);
 	for (let i = 1; i < keys.length; i++) {
-		result = { kind: "add", left: result, right: termToNode(keys[i], p.terms.get(keys[i])!) };
+		const coeff = p.terms.get(keys[i])!;
+		// A negative term becomes a subtraction rather than an addition of a
+		// negation. That is one node smaller, which matters: `Simplify.ts`
+		// promises never to grow a tree, and routing `x - y` through here as
+		// `x + (-y)` broke exactly that promise by a node every time.
+		if (coeff.n < 0n) {
+			result = { kind: "sub", left: result, right: termToNode(keys[i], rationalNeg(coeff)) };
+		} else {
+			result = { kind: "add", left: result, right: termToNode(keys[i], coeff) };
+		}
 	}
 	return result;
 }

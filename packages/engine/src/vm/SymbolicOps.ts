@@ -56,7 +56,10 @@ export const SYMBOLIC_BUILTIN_NAMES: Readonly<Record<number, string>> = {
 	21: "cbrt", 23: "expm1", 24: "exp", 26: "hypot",
 	28: "log10", 29: "log1p", 30: "log2",
 	33: "sign", 34: "trunc",
-	35: "degToRad", 36: "radToDeg",
+	// Spelled exactly as `builtinNameToIndex` accepts them, all lower case. A
+	// `call` node's name is what gets displayed, so a name the parser would not
+	// accept back would render an expression the user cannot retype.
+	35: "degtorad", 36: "radtodeg",
 	61: "root", 62: "fact",
 };
 

@@ -3,16 +3,30 @@
  *
  * ## The invariant that governs this module
  *
- * **`simplifySymbolic` never expands and never factors. No rule may increase
- * node count.** `expandSymbolic()`, `factorSymbolic()` and `toPolynomial()` are
- * separate, explicitly-invoked entry points and are never reachable from here.
+ * **`simplifySymbolic` never expands and never factors.** `expandSymbolic()`,
+ * `factorSymbolic()` and `toPolynomial()` are separate, explicitly-invoked
+ * entry points and are never reachable from here.
  *
- * That rule is load-bearing for two reasons. It keeps simplification
- * terminating and idempotent, which callers rely on: `vm/VMConversion.ts`'s
- * `binaryOp()` calls this once per symbolic arithmetic operation, so a rule
- * that grew the tree would compound across a long chain. And it keeps `pow`
- * safe: `simplify(x^2)` stays `x^2` rather than becoming `x*x`, so a
- * polynomial keeps the compact shape the rest of the system reads.
+ * Concretely, and as enforced by the property test in
+ * `__tests__/symbolic/Simplify.spec.ts`:
+ *
+ * 1. **No distribution.** `(x+1)*(x+2)` and `2*(x+y+1)` come back exactly as
+ *    written. This is what "never expands" means, and it is enforced at the
+ *    source: {@link collectSum} converts to polynomial form with distribution
+ *    disabled, so a product only converts when both sides are single terms.
+ *    That is precisely what collecting `2b + 3b` into `5b` needs, and nothing
+ *    beyond it.
+ * 2. **Idempotent.** Simplifying a result again changes nothing.
+ * 3. **Bounded size.** Node count never grows by more than one, and the single
+ *    permitted node has one cause: an all-negative sum has no positive term to
+ *    lead with, so canonical order needs a `neg` where the input had a negative
+ *    constant. It cannot compound, because the result is idempotent.
+ *
+ * These rules are load-bearing. `vm/VMConversion.ts`'s `binaryOp()` calls this
+ * once per symbolic arithmetic operation, so a rule that genuinely grew the
+ * tree would compound across a long chain. And rule 1 keeps `pow` safe:
+ * `simplify(x^2)` stays `x^2` rather than becoming `x*x`, so a polynomial keeps
+ * the compact shape the rest of the system reads.
  *
  * ## What it does
  *
@@ -168,7 +182,9 @@ function collectTerms(node: SymbolicNode): SymbolicNode {
  * collected sum, so the round trip only ever merges terms.
  */
 function collectSum(node: SymbolicNode): SymbolicNode {
-	const polynomial = toPolynomial(node);
+	// Distribution disabled: collecting like terms must never multiply out a
+	// product of sums, which would be expansion by another name.
+	const polynomial = toPolynomial(node, false);
 	if (polynomial !== null) return fromPolynomial(polynomial);
 	return collectTerms(node);
 }
@@ -275,7 +291,10 @@ function foldCall(name: string, args: readonly Rational[]): Rational | null {
  * {@link SYMBOLIC_MAX_NODES}.
  */
 export function simplifySymbolic(node: SymbolicNode): SymbolicNode {
-	if (nodeCount(node) > SYMBOLIC_MAX_NODES) {
+	// The limit is passed through so the walk stops as soon as it is exceeded.
+	// Without it a tree far past the ceiling would be counted in full before
+	// being rejected, which is the opposite of what a guard is for.
+	if (nodeCount(node, SYMBOLIC_MAX_NODES) > SYMBOLIC_MAX_NODES) {
 		throw ErrorFactory.execution(
 			"SYMBOLIC_NODE_LIMIT_EXCEEDED",
 			`This symbolic expression is too large to simplify (over ${SYMBOLIC_MAX_NODES} terms).`,

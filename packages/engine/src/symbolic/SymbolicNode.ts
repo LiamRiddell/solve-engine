@@ -185,23 +185,43 @@ export function nodesEqual(a: SymbolicNode, b: SymbolicNode): boolean {
  * @param node - The tree to measure.
  * @returns The total node count, including `node` itself.
  */
-export function nodeCount(node: SymbolicNode): number {
-	switch (node.kind) {
-		case "const":
-		case "var":
-			return 1;
-		case "neg":
-			return 1 + nodeCount(node.operand);
-		case "pow":
-			return 1 + nodeCount(node.base) + nodeCount(node.exponent);
-		case "call":
-			return node.args.reduce((total, arg) => total + nodeCount(arg), 1);
-		case "add":
-		case "sub":
-		case "mul":
-		case "div":
-			return 1 + nodeCount(node.left) + nodeCount(node.right);
+export function nodeCount(node: SymbolicNode, limit = Number.POSITIVE_INFINITY): number {
+	// Iterative rather than recursive, and deliberately so. A deeply nested tree
+	// (a long `a+b+c+...` chain builds one nested `add` per term) would overflow
+	// the native call stack before a recursive walk could finish, which made the
+	// SYMBOLIC_NODE_LIMIT_EXCEEDED guard unreachable in exactly the case it
+	// exists for: the caller crashed instead of being told the tree was too big.
+	//
+	// `limit` lets the walk stop as soon as the answer can no longer matter,
+	// so the size guard costs O(limit) rather than O(tree).
+	const pending: SymbolicNode[] = [node];
+	let total = 0;
+	while (pending.length > 0) {
+		const current = pending.pop()!;
+		total++;
+		if (total > limit) return total;
+		switch (current.kind) {
+			case "const":
+			case "var":
+				break;
+			case "neg":
+				pending.push(current.operand);
+				break;
+			case "pow":
+				pending.push(current.base, current.exponent);
+				break;
+			case "call":
+				for (const arg of current.args) pending.push(arg);
+				break;
+			case "add":
+			case "sub":
+			case "mul":
+			case "div":
+				pending.push(current.left, current.right);
+				break;
+		}
 	}
+	return total;
 }
 
 /**
