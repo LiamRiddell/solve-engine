@@ -9,10 +9,15 @@ name: Publish
 # changelog entry before either becomes permanent, which is worth having for a
 # registry that does not let you replace a published version.
 #
-# `release.yml` is the other path and is bootstrap-only. Trusted publishing
-# cannot create a package that does not exist yet (npm/cli#8544), so the very
-# first publish has to go out under a token. After that, delete the token and
-# this workflow takes over.
+# This is the only workflow that publishes, and the only one npm will accept a
+# release from: it is registered as the package's trusted publisher, so an OIDC
+# token minted by any other workflow is rejected. Renaming this file breaks
+# publishing until the trusted publisher registration is updated to match.
+#
+# There is no token anywhere in here. `solve-engine@1.0.0-beta.0` was published
+# by hand to create the package, because trusted publishing cannot create one
+# that does not exist yet (npm/cli#8544), and the registration was added
+# afterwards. That was the only manual publish.
 on:
   push:
     branches: [main]
