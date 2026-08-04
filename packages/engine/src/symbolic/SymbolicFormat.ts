@@ -146,8 +146,18 @@ function collectDisplayTerms(node: SymbolicNode, negated: boolean, out: { negate
 			}
 			return;
 		}
-		default:
-			out.push({ negated, text: formatFactor(node) });
+		default: {
+			const text = formatFactor(node);
+			// A product or quotient whose leading coefficient is negative renders
+			// with the minus already inside it, and joining that to a sum with `+`
+			// gives `0.5*log(x-1)+-0.5*log(x+1)`. Lifting the sign out turns it back
+			// into the subtraction it is. Only these two kinds: for a `pow` a leading
+			// minus belongs to the base rather than to the whole factor, so `-2^2`
+			// must not become a subtracted `2^2`.
+			const liftsSign = (node.kind === "mul" || node.kind === "div") && text.startsWith("-");
+			if (liftsSign) out.push({ negated: !negated, text: text.slice(1) });
+			else out.push({ negated, text });
+		}
 	}
 }
 

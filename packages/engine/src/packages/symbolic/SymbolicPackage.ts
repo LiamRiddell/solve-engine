@@ -11,6 +11,7 @@ import { ConjParselet } from "./parselets/ConjParselet";
 import { ReParselet } from "./parselets/ReParselet";
 import { ImParselet } from "./parselets/ImParselet";
 import { CancelParselet } from "./parselets/CancelParselet";
+import { ApartParselet } from "./parselets/ApartParselet";
 import { imaginaryLiteralNormalizerRule } from "./normalizer/ImaginaryLiteralNormalizerRule";
 import { symbolicCallNormalizerRule } from "./normalizer/SymbolicCallNormalizerRule";
 import {
@@ -25,6 +26,7 @@ import {
 	SYMBOLIC_BUILTIN_RE,
 	SYMBOLIC_BUILTIN_IM,
 	SYMBOLIC_BUILTIN_CANCEL,
+	SYMBOLIC_BUILTIN_APART,
 } from "./SymbolicBuiltinIndex";
 
 /**
@@ -142,6 +144,14 @@ export const SYMBOLIC_FUNCTIONS: readonly SymbolicFunctionSurface[] = [
 		expected: "x+1",
 		docPage: "algebra.md",
 	},
+	{
+		word: "apart",
+		tokenType: "APART_FN",
+		builtinIndex: SYMBOLIC_BUILTIN_APART,
+		example: "apart((3x+5)/(x^2-1))",
+		expected: "4/(x-1)-1/(x+1)",
+		docPage: "algebra.md",
+	},
 ];
 
 /**
@@ -171,6 +181,7 @@ export const SYMBOLIC_PACKAGE: IEnginePackage = {
 		{ tokenType: "RE_FN", parselet: new ReParselet() },
 		{ tokenType: "IM_FN", parselet: new ImParselet() },
 		{ tokenType: "CANCEL_FN", parselet: new CancelParselet() },
+		{ tokenType: "APART_FN", parselet: new ApartParselet() },
 	],
 	tokenCategories: {
 		EXPAND_FN: "keyword",
@@ -185,6 +196,7 @@ export const SYMBOLIC_PACKAGE: IEnginePackage = {
 		RE_FN: "keyword",
 		IM_FN: "keyword",
 		CANCEL_FN: "keyword",
+		APART_FN: "keyword",
 	},
 };
 

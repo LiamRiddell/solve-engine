@@ -23,6 +23,7 @@ export const SYMBOLIC_WORD_TO_TOKEN_TYPE: Readonly<Record<string, string>> = {
 	re: "RE_FN",
 	im: "IM_FN",
 	cancel: "CANCEL_FN",
+	apart: "APART_FN",
 };
 
 /**

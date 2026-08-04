@@ -187,6 +187,34 @@ share no polynomial factor.
 cancel((x^2+1)/(x-1)) // (x^2+1)/(x-1)
 ```
 
+## Splitting a fraction apart
+
+`apart` is the other direction: it breaks a rational function into the simple
+fractions that add up to it, one for each factor of the denominator.
+
+```solve
+apart((3x+5)/(x^2-1)) // 4/(x-1)-1/(x+1)
+apart((x^2+1)/(x^3-x)) // -1/x+1/(x-1)+1/(x+1)
+```
+
+A repeated factor gets one piece per power of it, and a fraction that is not
+proper keeps its polynomial part out front.
+
+```solve
+apart(1/(x*(x+1)^2)) // 1/x-1/(x+1)-1/(x+1)^2
+apart((x^3+1)/(x^2-1)) // x+1/(x-1)
+```
+
+A denominator with nothing to split, because it is already irreducible, comes
+back as it was.
+
+```solve
+apart((2x+3)/(x^2+x+1)) // (2x+3)/(x^2+x+1)
+```
+
+This is what makes a rational function integrable. See
+[calculus](/syntax/calculus/).
+
 ## Exact coefficients
 
 Coefficients are exact rationals, not floating-point numbers. In ordinary

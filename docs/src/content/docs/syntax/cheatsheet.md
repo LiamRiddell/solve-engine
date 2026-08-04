@@ -142,6 +142,8 @@ expand((x+1)*(x+2)) // x^2+3x+2
 factor(x^2-4) // (x-2)*(x+2)
 solve(x^2-4=0, x) // [-2, 2]
 solve(2x+6=0, x) // -3
+cancel((x^2-1)/(x-1)) // x+1
+apart((3x+5)/(x^2-1)) // 4/(x-1)-1/(x+1)
 ```
 
 An equation with one unknown can also be written on its own line.

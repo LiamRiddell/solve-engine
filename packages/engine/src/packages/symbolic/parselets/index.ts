@@ -10,3 +10,4 @@ export { ConjParselet } from "./ConjParselet";
 export { ReParselet } from "./ReParselet";
 export { ImParselet } from "./ImParselet";
 export { CancelParselet } from "./CancelParselet";
+export { ApartParselet } from "./ApartParselet";

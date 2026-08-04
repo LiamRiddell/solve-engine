@@ -47,3 +47,7 @@ export const SYMBOLIC_BUILTIN_IM = 77;
 
 /** `cancel(expr)`, reducing a quotient of polynomials to lowest terms. */
 export const SYMBOLIC_BUILTIN_CANCEL = 78;
+
+/** `apart(expr)`, the partial-fraction decomposition of a rational function. */
+export const SYMBOLIC_BUILTIN_APART = 79;
+

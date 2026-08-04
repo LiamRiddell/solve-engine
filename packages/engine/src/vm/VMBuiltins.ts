@@ -6,6 +6,7 @@ import { symbolicToValue, valueToSymbolic, solveEquationValues } from "@solve-js
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
 import { factorSymbolic } from "@solve-js/symbolic/Factor";
 import { cancelSymbolic } from "@solve-js/symbolic/Gcd";
+import { apartSymbolic } from "@solve-js/symbolic/PartialFractions";
 import { differentiate } from "@solve-js/symbolic/Derivative";
 import { integrate } from "@solve-js/symbolic/Integral";
 import { taylorSeries, jacobian } from "@solve-js/symbolic/Taylor";
@@ -607,6 +608,12 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         const value = args[0];
         if (value.type !== ValueType.Symbolic) return value;
         return symbolicToValue(cancelSymbolic(value.value as SymbolicNode));
+    },
+    // apart(expr), the partial-fraction decomposition of a rational function.
+    79: (args) => {
+        const value = args[0];
+        if (value.type !== ValueType.Symbolic) return value;
+        return symbolicToValue(apartSymbolic(value.value as SymbolicNode));
     },
 };
 

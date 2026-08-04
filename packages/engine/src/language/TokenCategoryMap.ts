@@ -82,6 +82,7 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	RE_FN: "keyword",
 	IM_FN: "keyword",
 	CANCEL_FN: "keyword",
+	APART_FN: "keyword",
 	TIME_IN: "keyword",
 	DATE_IN: "keyword",
 	TIME_DIFFERENCE_BETWEEN: "keyword",
