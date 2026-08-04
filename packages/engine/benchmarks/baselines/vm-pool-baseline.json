@@ -1,106 +1,106 @@
 {
-  "timestamp": "2026-08-03T14:08:57.113Z",
+  "timestamp": "2026-08-04T18:04:33.402Z",
   "summary": {
-    "meanDeltaNs": 1275.5353333333335,
-    "meanPercentImprovement": 65.6154756205291,
-    "estimatedAllocCostNs": 1275.5353333333335
+    "meanDeltaNs": 1525.8263333333332,
+    "meanPercentImprovement": 68.48174077938945,
+    "estimatedAllocCostNs": 1525.8263333333332
   },
   "details": [
     {
       "name": "simple_add",
       "withoutPool": {
-        "meanNs": 1805.222,
-        "p95Ns": 2200,
-        "medianNs": 1300
+        "meanNs": 2012.944,
+        "p95Ns": 2400,
+        "medianNs": 1600
       },
       "withPool": {
-        "meanNs": 527.17,
-        "p95Ns": 800,
+        "meanNs": 431.67,
+        "p95Ns": 500,
         "medianNs": 400
       },
-      "deltaNs": 1278.0520000000001,
-      "speedupRatio": 0.29202502517695883,
-      "percentImprovement": 70.79749748230412
+      "deltaNs": 1581.274,
+      "speedupRatio": 0.21444709837928924,
+      "percentImprovement": 78.55529016207107
     },
     {
       "name": "variable_access",
       "withoutPool": {
-        "meanNs": 1821.392,
-        "p95Ns": 2100,
-        "medianNs": 1300
+        "meanNs": 2008.418,
+        "p95Ns": 2000,
+        "medianNs": 1700
       },
       "withPool": {
-        "meanNs": 485.598,
+        "meanNs": 538.938,
         "p95Ns": 600,
-        "medianNs": 400
+        "medianNs": 500
       },
-      "deltaNs": 1335.794,
-      "speedupRatio": 0.26660817660338904,
-      "percentImprovement": 73.33918233966111
+      "deltaNs": 1469.48,
+      "speedupRatio": 0.2683395587970233,
+      "percentImprovement": 73.16604412029767
     },
     {
       "name": "vector_creation",
       "withoutPool": {
-        "meanNs": 1966.872,
-        "p95Ns": 2300,
-        "medianNs": 1500
+        "meanNs": 2340.926,
+        "p95Ns": 2400,
+        "medianNs": 2000
       },
       "withPool": {
-        "meanNs": 749.236,
+        "meanNs": 896.668,
         "p95Ns": 900,
-        "medianNs": 700
+        "medianNs": 800
       },
-      "deltaNs": 1217.636,
-      "speedupRatio": 0.3809276861941194,
-      "percentImprovement": 61.90723138058806
+      "deltaNs": 1444.2579999999998,
+      "speedupRatio": 0.38303987396440553,
+      "percentImprovement": 61.69601260355944
     },
     {
       "name": "unit_conversion",
       "withoutPool": {
-        "meanNs": 2042.754,
-        "p95Ns": 2300,
-        "medianNs": 1600
+        "meanNs": 2263.094,
+        "p95Ns": 2600,
+        "medianNs": 1900
       },
       "withPool": {
-        "meanNs": 774.076,
+        "meanNs": 699.276,
         "p95Ns": 800,
-        "medianNs": 600
+        "medianNs": 700
       },
-      "deltaNs": 1268.6779999999999,
-      "speedupRatio": 0.37893745404488255,
-      "percentImprovement": 62.10625459551174
+      "deltaNs": 1563.8180000000002,
+      "speedupRatio": 0.3089911422150383,
+      "percentImprovement": 69.10088577849616
     },
     {
       "name": "dice_roll",
       "withoutPool": {
-        "meanNs": 1965.43,
+        "meanNs": 2246.822,
         "p95Ns": 2300,
-        "medianNs": 1500
+        "medianNs": 2000
       },
       "withPool": {
-        "meanNs": 729.746,
+        "meanNs": 885.628,
         "p95Ns": 900,
-        "medianNs": 600
+        "medianNs": 800
       },
-      "deltaNs": 1235.6840000000002,
-      "speedupRatio": 0.3712907608004355,
-      "percentImprovement": 62.870923919956454
+      "deltaNs": 1361.194,
+      "speedupRatio": 0.3941691865221188,
+      "percentImprovement": 60.58308134778812
     },
     {
       "name": "percentage",
       "withoutPool": {
-        "meanNs": 2102.012,
-        "p95Ns": 2400,
-        "medianNs": 1500
+        "meanNs": 2559.31,
+        "p95Ns": 2800,
+        "medianNs": 2000
       },
       "withPool": {
-        "meanNs": 784.644,
-        "p95Ns": 800,
-        "medianNs": 600
+        "meanNs": 824.376,
+        "p95Ns": 900,
+        "medianNs": 800
       },
-      "deltaNs": 1317.3680000000002,
-      "speedupRatio": 0.37328235994846837,
-      "percentImprovement": 62.671764005153165
+      "deltaNs": 1734.934,
+      "speedupRatio": 0.32210869335875686,
+      "percentImprovement": 67.78913066412431
     }
   ],
   "metadata": {

@@ -1,75 +1,76 @@
 {
   "suite": "language-service",
+  "harness": "mitata-1",
   "results": {
     "highlight_simple_arithmetic": {
-      "meanMs": 0.0060230000000040034,
-      "medianMs": 0.0052999999998064595,
-      "minMs": 0.004399999999805004
+      "meanMs": 0.006718677042801556,
+      "medianMs": 0.006,
+      "minMs": 0.0052
     },
     "highlight_mixed_expression": {
-      "meanMs": 0.008938000000002467,
-      "medianMs": 0.007700000000113505,
-      "minMs": 0.006699999999909778
+      "meanMs": 0.009358926048045219,
+      "medianMs": 0.0088,
+      "minMs": 0.0078
     },
     "highlight_long_expression": {
-      "meanMs": 0.2154796999999894,
-      "medianMs": 0.19419999999990978,
-      "minMs": 0.18519999999989523
+      "meanMs": 0.22533059360730592,
+      "medianMs": 0.2119,
+      "minMs": 0.205
     },
     "highlight_inline_solve_in_text": {
-      "meanMs": 0.006573569999994834,
-      "medianMs": 0.0052999999998064595,
-      "minMs": 0.004500000000007276
+      "meanMs": 0.005888175455729167,
+      "medianMs": 0.0057623046875,
+      "minMs": 0.0055153076171875
     },
     "highlight_unrecognized_prose": {
-      "meanMs": 0.04164961000000685,
-      "medianMs": 0.03600000000005821,
-      "minMs": 0.02849999999943975
+      "meanMs": 0.0315943264659271,
+      "medianMs": 0.0312,
+      "minMs": 0.0212
     },
     "highlight_warm_cache_hit": {
-      "meanMs": 0.00013043000000036045,
-      "medianMs": 0.00010000000020227162,
-      "minMs": 0.00009999999929277692
+      "meanMs": 0.000007259652091583233,
+      "medianMs": 0.000006640625,
+      "minMs": 0.000006396484375
     },
     "completions_cold_first_call": {
-      "meanMs": 2.609944599999966,
-      "medianMs": 2.468699999999444,
-      "minMs": 2.025499999999738
+      "meanMs": 0.49466102564102565,
+      "medianMs": 0.4782,
+      "minMs": 0.4203
     },
     "completions_warm_short_prefix": {
-      "meanMs": 0.007002470000003632,
-      "medianMs": 0.0063999999983934686,
-      "minMs": 0.006099999998696148
+      "meanMs": 0.004390625,
+      "medianMs": 0.0043206787109375,
+      "minMs": 0.0042377197265625
     },
     "completions_warm_specific_prefix": {
-      "meanMs": 0.004117369999997027,
-      "medianMs": 0.0037999999985913746,
-      "minMs": 0.0035999999981868314
+      "meanMs": 0.0007757245744977679,
+      "medianMs": 0.0007696044921875,
+      "minMs": 0.0007547119140625
     },
     "completions_warm_no_match": {
-      "meanMs": 0.003992179999994187,
-      "medianMs": 0.003500000000713044,
-      "minMs": 0.0033999999996012775
+      "meanMs": 0.0006367103794642857,
+      "medianMs": 0.0006231201171875,
+      "minMs": 0.000604638671875
     },
     "completions_warm_500_variables": {
-      "meanMs": 0.05997576000000517,
-      "medianMs": 0.05529999999998836,
-      "minMs": 0.05349999999998545
+      "meanMs": 0.05070678917815212,
+      "medianMs": 0.0489,
+      "minMs": 0.0477
     },
     "highlight_viewport_50_lines_cold": {
-      "meanMs": 0.2898284999999578,
-      "medianMs": 0.2659000000003289,
-      "minMs": 0.2334000000009837
+      "meanMs": 0.3715202290076336,
+      "medianMs": 0.3327,
+      "minMs": 0.2726
     },
     "highlight_viewport_100_lines_cold": {
-      "meanMs": 0.5719440000000577,
-      "medianMs": 0.5331999999998516,
-      "minMs": 0.45679999999993015
+      "meanMs": 0.60904625,
+      "medianMs": 0.6045,
+      "minMs": 0.5339
     },
     "highlight_viewport_200_lines_cold": {
-      "meanMs": 1.1814284999999836,
-      "medianMs": 1.0913000000000466,
-      "minMs": 0.9358000000011089
+      "meanMs": 1.2122417721518988,
+      "medianMs": 1.2161,
+      "minMs": 1.0929
     }
   }
 }

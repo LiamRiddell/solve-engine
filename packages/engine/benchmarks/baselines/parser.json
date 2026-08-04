@@ -1,35 +1,36 @@
 {
   "suite": "parser",
+  "harness": "mitata-1",
   "results": {
     "simple_arithmetic": {
-      "meanMs": 0.006019796000000024
+      "meanMs": 0.0058961119999992664
     },
     "complex_expression": {
-      "meanMs": 0.006625352000000003
+      "meanMs": 0.006329172000000253
     },
     "function_call": {
-      "meanMs": 0.005480556000000015
+      "meanMs": 0.0053006920000002716
     },
     "percentage": {
-      "meanMs": 0.005763071999999975
+      "meanMs": 0.005551615999998758
     },
     "unit_conversion": {
-      "meanMs": 0.005664844000000048
+      "meanMs": 0.005468740000000107
     },
     "datetime": {
-      "meanMs": 0.005626563999999962
+      "meanMs": 0.005332624000001233
     },
     "dice": {
-      "meanMs": 0.0058152479999999925
+      "meanMs": 0.005704796000000205
     },
     "vector": {
-      "meanMs": 0.00591910399999997
+      "meanMs": 0.005947424000001047
     },
     "variable": {
-      "meanMs": 0.005529504000000051
+      "meanMs": 0.0053770040000003065
     },
     "mixed": {
-      "meanMs": 0.006608266666667077
+      "meanMs": 0.006499833333335118
     }
   }
 }
