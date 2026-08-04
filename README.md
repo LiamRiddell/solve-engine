@@ -28,6 +28,7 @@ as you type.
 100 cm + 2 m                  // 300.00 cm
 30 fps * 3 minutes            // 5400.00 frames
 [1, 2; 3, 4] * [5, 6; 7, 8]   // [19, 22; 43, 50]
+expand((x+1)*(x+2))           // x^2+3x+2
 ```
 
 Every example in this file, and every example in the documentation, is executed
@@ -152,8 +153,13 @@ mid-thought is the normal case, not the edge case.
 
 - **Not a general-purpose language.** No loops, no I/O, no arbitrary code
   execution. Expressions compile to a fixed instruction set.
-- **Not a computer algebra system.** The symbolic layer simplifies and
-  rearranges within deliberate bounds. It will not do your integrals.
+- **Not a full computer algebra system.** There is a real one inside: exact
+  rational arithmetic, `expand`, `factor`, `solve`, and symbolic `der`,
+  `integral`, `taylor` and `jacobian`. It is deliberately bounded, and it says
+  what it cannot do rather than approximating. Factoring and solving work over
+  the rationals, so `x^2-2` comes back unfactored; there are no complex numbers,
+  so a negative discriminant reports no real solutions; and integration reports
+  when an expression has no elementary antiderivative instead of guessing.
 - **Not a spreadsheet.** Lines reference earlier lines. There are no sheets,
   no cells, and no circular references to resolve.
 - **Not arbitrary-precision by default.** Ordinary arithmetic uses doubles, and

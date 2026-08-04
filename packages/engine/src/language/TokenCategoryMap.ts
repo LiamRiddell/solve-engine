@@ -67,6 +67,16 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	REDUCE: "keyword",
 	SUM_FN: "keyword",
 	PROD_FN: "keyword",
+	// Symbolic algebra verbs (packages/symbolic/). Declared here alongside
+	// map/reduce rather than only on the package descriptor, so highlighting is
+	// correct without depending on registration order.
+	EXPAND_FN: "keyword",
+	FACTOR_FN: "keyword",
+	SOLVE_FN: "keyword",
+	DER_FN: "keyword",
+	INTEGRAL_FN: "keyword",
+	TAYLOR_FN: "keyword",
+	JACOBIAN_FN: "keyword",
 	TIME_IN: "keyword",
 	DATE_IN: "keyword",
 	TIME_DIFFERENCE_BETWEEN: "keyword",

@@ -74,8 +74,50 @@ describe("cross-pipeline consistency: diagnostic path vs. lean path", () => {
     expect(diagnostic).toBe("2b+6");
   });
 
+  test("=> with an exponent", () => {
+    const { diagnostic, lean } = compareLastLine(["x^2+3x+2 =>"]);
+    expect(diagnostic).toBe(lean);
+    expect(diagnostic).toBe("x^2+3x+2");
+  });
+
+  test("=> with a unary minus on a free variable", () => {
+    const { diagnostic, lean } = compareLastLine(["-x =>"]);
+    expect(diagnostic).toBe(lean);
+    expect(diagnostic).toBe("-x");
+  });
+
+  test("=> with a function applied to a free variable", () => {
+    const { diagnostic, lean } = compareLastLine(["sqrt(x) =>"]);
+    expect(diagnostic).toBe(lean);
+    expect(diagnostic).toBe("sqrt(x)");
+  });
+
   test("bare equation-statement then => solve", () => {
     const { diagnostic, lean } = compareLastLine(["a = [1, 2; 3, 4]", "a*x = [60; 70]", "x =>"]);
     expect(diagnostic).toBe(lean);
+  });
+
+  test("stored scalar equation then => solve", () => {
+    const { diagnostic, lean } = compareLastLine(["x^2-4 = 0", "x =>"]);
+    expect(diagnostic).toBe(lean);
+    expect(diagnostic).toBe("= [-2, 2]");
+  });
+
+  test("solve() as a function call", () => {
+    const { diagnostic, lean } = compareLastLine(["solve(x^2-4=0, x)"]);
+    expect(diagnostic).toBe(lean);
+    expect(diagnostic).toBe("= [-2, 2]");
+  });
+
+  test("factor() as a function call", () => {
+    const { diagnostic, lean } = compareLastLine(["factor(x^2-4)"]);
+    expect(diagnostic).toBe(lean);
+    expect(diagnostic).toBe("(x-2)*(x+2)");
+  });
+
+  test("der() as a function call", () => {
+    const { diagnostic, lean } = compareLastLine(["der(x^3, x)"]);
+    expect(diagnostic).toBe(lean);
+    expect(diagnostic).toBe("3x^2");
   });
 });

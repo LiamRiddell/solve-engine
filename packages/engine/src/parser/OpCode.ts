@@ -141,9 +141,11 @@ export enum OpCode {
 	RANGE_NEW = 156,    // (min, max already on stack) -> push a Range value `min:max`
 	MAP_INVOKE = 157,   // map(...) — see parser/BytecodeBuilder.ts's `anonymousBodies` side-table
 	REDUCE_INVOKE = 158, // reduce(...) — same anonymousBodies mechanism as MAP_INVOKE
-	THEREFORE_SOLVE = 159, // `=>` — symbolic-algebra solve/simplify operator
-	STORE_EQUATION_OR_ASSIGNMENT = 160, // bare (colon-less) `lhs = rhs` — ordinary assignment if concrete, a stored symbolic equation otherwise
-
+	// 159 and 160 were THEREFORE_SOLVE and STORE_EQUATION_OR_ASSIGNMENT, declared
+	// but never emitted by any parselet nor handled in the VM switch. Both shapes
+	// have effects (a stored equation, a direct vm.setVar()) that a cached
+	// bytecode program cannot represent, so engine/ExpressionEngine.ts intercepts
+	// them before compilation and always will. The numbers are free to reuse.
 }
 
 // Reverse lookup built once at module load, getOpCodeName() is called once

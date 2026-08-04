@@ -4,7 +4,7 @@ import { autoFormatIntegerOrFloat } from "@solve-js/utilities/Number";
 import { FormattingSettings, DEFAULT_FORMATTING_SETTINGS } from "./FormattingSettings";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { columnMajorToRowMajor } from "@solve-js/vm/MatrixOps";
-import { formatSymbolic, type SymbolicNode } from "@solve-js/vm/Symbolic";
+import { formatSymbolic, type SymbolicNode } from "@solve-js/symbolic";
 
 function formatNumber(value: number, locale: ILocale, settings: FormattingSettings): string {
   const dp = settings.floatResult.decimalPlaces;

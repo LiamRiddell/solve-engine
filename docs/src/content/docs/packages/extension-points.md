@@ -18,6 +18,13 @@ into a single token, and where implicit operators are inserted.
 Fusion is the mechanism that lets `next friday` be one thing without `next` or
 `friday` becoming reserved words.
 
+A rule can also fuse a word only in the position where it means something. The
+algebra package claims `factor`, `solve` and `expand`, all ordinary English
+words, by fusing them only when the very next token is an opening parenthesis.
+`factor(x^2-4)` is a call and `:factor = 1.5` is still a variable, and neither
+had to be given up for the other. Prefer this over a lexer keyword whenever the
+word is one a person might reasonably assign to.
+
 ## Parselets
 
 Parsing rules, registered per token type. A prefix parselet handles a token that
