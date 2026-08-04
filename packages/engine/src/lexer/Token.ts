@@ -39,6 +39,7 @@ export const TokenTypes = {
   PERCENT: "PERCENT",
   LSHIFT: "LSHIFT",
   RSHIFT: "RSHIFT",
+  URSHIFT: "URSHIFT",
   LPAREN: "LPAREN",
   RPAREN: "RPAREN",
   LBRACKET: "LBRACKET",

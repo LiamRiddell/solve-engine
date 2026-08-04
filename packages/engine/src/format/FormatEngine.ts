@@ -14,10 +14,29 @@ function formatNumber(value: number, locale: ILocale, settings: FormattingSettin
   return `${locale.display.resultPrefix}${formatted}`;
 }
 
-function formatHex(value: number, settings: FormattingSettings): string {
+/**
+ * Renders a number in whichever base it is tagged with.
+ *
+ * The zero padding is a hexadecimal setting and stays one. Applying it to a
+ * binary rendering would pad `0b101` out to the same digit count as a hex
+ * value, which is a different quantity of zeros and not what the setting asks
+ * for.
+ */
+function formatHex(value: number, settings: FormattingSettings, base?: string): string {
+  // Truncate and take the sign off before converting. `Number.toString(radix)`
+  // does neither: it renders -255 as "-ff", which lands the minus inside the
+  // literal as `0x-FF`, and it renders 255.7 as "ff.b3333333333", inventing
+  // fractional hex digits for a notation that has no use for them. Both were
+  // visible on `as hex` until the builtins started sharing this path.
+  const truncated = Math.trunc(value);
+  const sign = truncated < 0 ? "-" : "";
+  const magnitude = Math.abs(truncated);
+
+  if (base === "bin") return `= ${sign}0b${magnitude.toString(2)}`;
+  if (base === "oct") return `= ${sign}0o${magnitude.toString(8)}`;
   const padding = settings.hexResult.enablePadding ? settings.hexResult.paddingZeros : 0;
-  const hex = (value as number).toString(16).toUpperCase().padStart(padding, "0");
-  return `= 0x${hex}`;
+  const hex = magnitude.toString(16).toUpperCase().padStart(padding, "0");
+  return `= ${sign}0x${hex}`;
 }
 
 function formatBigInt(value: bigint): string {
@@ -194,7 +213,7 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
     case ValueType.Number:
       return formatNumber(value.value as number, locale, us);
     case ValueType.Hex:
-      return formatHex(value.value as number, us);
+      return formatHex(value.value as number, us, value.unit);
     case ValueType.BigInt:
       return formatBigInt(value.value as bigint);
     case ValueType.String:

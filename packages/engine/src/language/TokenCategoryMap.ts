@@ -170,6 +170,7 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	OR: "comparison",
 
 	// Bitwise operators
+	URSHIFT: "bitwise",
 	BIT_AND: "bitwise",
 	BIT_OR: "bitwise",
 	BIT_NOT: "bitwise",

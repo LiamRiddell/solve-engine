@@ -70,16 +70,27 @@ bit 31 is the sign bit.
 ```
 
 `>>` keeps the sign rather than filling with zeros, so a negative number stays
-negative.
+negative. `>>>` fills with zeros instead, which turns a negative into a large
+positive one.
 
 ```solve
 -16 >> 2 // -4
 -1 >> 1 // -1
+-8 >>> 1 // 2,147,483,644
+```
+
+The two agree on anything non-negative, so the difference only shows up on the
+sign bit.
+
+```solve
+8 >> 1 // 4
+8 >>> 1 // 4
 ```
 
 ## Bitwise operators
 
-`&` and `|` are and and or. Exclusive or is the word `xor`.
+`&` and `|` are and and or, `~` complements every bit, and exclusive or is the
+word `xor`.
 
 ```solve
 0xFF & 0x0F // 15
@@ -88,7 +99,11 @@ negative.
 0b1010 & 0b0110 // 2
 0b1010 | 0b0110 // 14
 0b1010 xor 0b0110 // 12
+~5 // -6
+~0 // -1
 ```
+
+`~` flips all 32 bits, which for a positive number means `~n` is `-(n+1)`.
 
 Exclusive or is a word because `^` is already exponentiation, which is the far
 more common thing to want on a page of sums. `2^10` is a thousand and change,
@@ -153,13 +168,28 @@ instead. Suffix an integer with `n` to keep full precision.
 123n * 2 // 246
 ```
 
-## What is not here
+## A base is still a number
 
-There is no bitwise NOT and no unsigned right shift (`>>>`). Both are the usual
-companions to the operators above, and neither is currently reachable.
+Converting a number to another base changes how it is written, not what it is,
+so the result keeps doing arithmetic.
 
-Note also that `and` is not a bitwise operator. It is the plain English word,
-and it adds.
+```solve
+hex(255) + 1 // 256
+(255 as binary) + 1 // 256
+~hex(255) // -256
+```
+
+A negative keeps its sign outside the literal, and a fraction is truncated,
+since there is no useful way to write a fractional hex digit.
+
+```solve
+hex(-255) // -0xFF
+255.7 as hex // 0xFF
+```
+
+## One word to watch
+
+`and` is not a bitwise operator. It is the plain English word, and it adds.
 
 ```solve
 5 and 3 // 8

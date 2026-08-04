@@ -1416,12 +1416,19 @@ export class ExpressionLexer {
         return new LexerToken('COMMENT', tokenTypeId('COMMENT'), text, text, pos, 0, this.line, col);
       }
 
-      // << (LSHIFT) and >> (RSHIFT)
+      // << (LSHIFT), >> (RSHIFT) and >>> (URSHIFT).
+      //
+      // >>> is tested before >>, or the two-char match would consume the first
+      // two angle brackets and leave a stray > for the parser to choke on.
       if (c0 === 60 && c1 === 60) {
         this.pos = pos + 2;
         return new LexerToken('LSHIFT', tokenTypeId('LSHIFT'), '<<', '<<', pos, 0, this.line, col);
       }
       if (c0 === 62 && c1 === 62) {
+        if (input.charCodeAt(pos + 2) === 62) {
+          this.pos = pos + 3;
+          return new LexerToken('URSHIFT', tokenTypeId('URSHIFT'), '>>>', '>>>', pos, 0, this.line, col);
+        }
         this.pos = pos + 2;
         return new LexerToken('RSHIFT', tokenTypeId('RSHIFT'), '>>', '>>', pos, 0, this.line, col);
       }
