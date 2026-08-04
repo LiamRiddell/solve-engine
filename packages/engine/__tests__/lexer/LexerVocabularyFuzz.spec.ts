@@ -15,6 +15,28 @@ import { describe, expect, test } from "@jest/globals";
 import { ExpressionLexer } from "@solve-js/lexer/ExpressionLexer";
 import type { LexerVocabulary } from "@solve-js/lexer/ExpressionLexer";
 import { TokenTypes } from "@solve-js/lexer/Token";
+import { knownUnits } from "@solve-js/lexer/units";
+
+/**
+ * Every unit name this file registers as a plugin fixture, plus the
+ * identifiers it relies on staying identifiers.
+ *
+ * A plugin may not override a built-in unit, and the built-in vocabulary is
+ * derived from the conversion tables rather than hand-listed, so it grows when
+ * those tables do. When it grew past a thousand entries, `ns` and `pt` became
+ * real units and four tests here started failing with an EngineError raised
+ * deep inside registration, which says nothing about which fixture is at
+ * fault. The guard below names it instead.
+ */
+const PLUGIN_UNIT_FIXTURES = [
+  "tile", "gp", "osrs", "tick",
+  "px", "em", "rem", "vh", "vw", "vmin", "vmax", "ch", "ex", "fr",
+  "foo", "baz", "nano", "micro", "mega", "q", "r", "n",
+  "customunit", "myunit", "unit_a", "unit_b",
+];
+
+/** Identifiers these tests assert stay IDENT, so none may become a unit. */
+const NON_UNIT_IDENTIFIERS = ["myVar", "qqz", "xyz", "uvw"];
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -134,6 +156,21 @@ const SINGLE_OPS: Array<{ chars: string; type: string }> = [
 ];
 
 // ── Test suites ───────────────────────────────────────────────────────────
+
+describe("LexerVocabulary Fuzz — the fixtures themselves", () => {
+  test("no plugin unit fixture collides with a built-in unit", () => {
+    // Registering one would throw "conflicts with a built-in unit" from inside
+    // registerVocabulary, far from the fixture that caused it. Fail here, with
+    // the name, instead.
+    const collisions = PLUGIN_UNIT_FIXTURES.filter((unit) => knownUnits.has(unit));
+    expect(collisions).toEqual([]);
+  });
+
+  test("identifiers these tests expect to stay identifiers are not units", () => {
+    const collisions = NON_UNIT_IDENTIFIERS.filter((name) => knownUnits.has(name));
+    expect(collisions).toEqual([]);
+  });
+});
 
 describe("LexerVocabulary Fuzz — keyword collision resistance", () => {
   test("registering a built-in keyword as plugin keyword throws EngineError", () => {
@@ -362,9 +399,12 @@ describe("LexerVocabulary Fuzz — operator collision resistance", () => {
     expect(types("1 + 2 * 3", plugin)).toEqual(["NUMBER", "PLUS", "NUMBER", "STAR", "NUMBER"]);
     expect(types("(1 + 2) * 3", plugin)).toEqual(["LPAREN", "NUMBER", "PLUS", "NUMBER", "RPAREN", "STAR", "NUMBER"]);
 
-    // Expression with plugin operators should work alongside built-in ones
-    // Note: avoiding built-in units (a=are, c=centi, bar=pressure, etc.)
-    expect(types("myVar::ns + xyz->uvw", plugin)).toEqual([
+    // Expression with plugin operators should work alongside built-in ones.
+    // Every identifier here must be a non-unit: the built-in vocabulary is
+    // derived from the conversion tables (see lexer/units.ts), so short
+    // plausible-looking names are very often real units. "ns" used to be safe
+    // and is now nanoseconds.
+    expect(types("myVar::qqz + xyz->uvw", plugin)).toEqual([
       "IDENT", "NAMESPACE", "IDENT", "PLUS", "IDENT", "ARROW", "IDENT",
     ]);
   });
@@ -451,7 +491,11 @@ describe("LexerVocabulary Fuzz — unit collision resistance", () => {
 
   test("plugin units work alongside regular identifiers", () => {
     const plugin: LexerVocabulary = {
-      units: ["tile", "gp", "osrs", "ns"],
+      // "ns" was here until it became a built-in (nanoseconds). A plugin
+      // cannot override a built-in unit, so the fixture has to be a name the
+      // conversion tables do not carry. PLUGIN_UNIT_FIXTURES below is asserted
+      // collision-free so this cannot silently rot again.
+      units: ["tile", "gp", "osrs", "tick"],
     };
 
     // Plugin units should be recognized
@@ -600,8 +644,12 @@ describe("LexerVocabulary Fuzz — stress test with all fuzz cases", () => {
       "**": "POWER",
       "??": "NULL_COALESCE",
     },
+    // CSS-flavoured fixtures standing in for "a plugin with its own units".
+    // "ns" (nanoseconds) and "pt" (pints) are absent on purpose: both are real
+    // entries in the conversion tables, and a plugin cannot override a built-in
+    // unit. See PLUGIN_UNIT_FIXTURES.
     units: [
-      "tile", "gp", "osrs", "ns", "pt", "px", "em", "rem", "vh", "vw",
+      "tile", "gp", "osrs", "px", "em", "rem", "vh", "vw",
       "vmin", "vmax", "ch", "ex", "fr",
     ],
   };

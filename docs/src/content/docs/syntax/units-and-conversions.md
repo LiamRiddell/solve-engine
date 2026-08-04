@@ -3,9 +3,14 @@ title: Units and conversions
 description: Units of measurement, arithmetic across units, and the general as-type conversion.
 ---
 
-Units are case-sensitive and have no aliases, which is deliberate. `m` is metres
-and `M` is the millions suffix, and guessing between them would produce
+Units are case-sensitive and are never remapped, which is deliberate. `m` is
+metres and `M` is the millions suffix, and guessing between them would produce
 confidently wrong answers.
+
+Most units have more than one spelling, and all of them work: `lb`, `lbs` and
+`pounds` are the same unit, as are `m`, `metre` and `metres`. What you will not
+get is a guess, so a spelling that is not a unit stays an error rather than
+being resolved to the nearest thing that looks similar.
 
 ## Arithmetic across units
 

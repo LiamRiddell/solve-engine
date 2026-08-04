@@ -111,15 +111,23 @@ export function expectValidTelemetry(telemetry: PipelineTelemetry | null): void 
         if (stage.wallTimeNs < 0) {
             throw new Error(`Stage "${stage.stage}" has negative wall time: ${stage.wallTimeNs}ns`);
         }
-        if (stage.allocBytes < 0) {
-            throw new Error(`Stage "${stage.stage}" has negative alloc bytes: ${stage.allocBytes}`);
+        // NOT asserted as non-negative. allocBytes is a heapUsed delta across
+        // the stage (see AllocationTracker.recordStage), so a garbage collection
+        // inside the stage legitimately produces a negative number. That says
+        // the collector ran, not that the telemetry is wrong, and there is no
+        // way to tell the two apart without heap snapshots. Requiring it to be
+        // non-negative made this suite fail intermittently on CI's Node 24 and
+        // reliably on a machine under load, in both cases for a measurement
+        // artifact. Finiteness is the property actually worth holding.
+        if (!Number.isFinite(stage.allocBytes)) {
+            throw new Error(`Stage "${stage.stage}" has non-finite alloc bytes: ${stage.allocBytes}`);
         }
     }
     if (telemetry.totalWallTimeNs < 0) {
         throw new Error(`Total wall time is negative: ${telemetry.totalWallTimeNs}ns`);
     }
-    if (telemetry.totalAllocBytes < 0) {
-        throw new Error(`Total alloc bytes is negative: ${telemetry.totalAllocBytes}`);
+    if (!Number.isFinite(telemetry.totalAllocBytes)) {
+        throw new Error(`Total alloc bytes is non-finite: ${telemetry.totalAllocBytes}`);
     }
 }
 
