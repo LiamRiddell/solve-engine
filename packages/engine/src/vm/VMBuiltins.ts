@@ -5,8 +5,11 @@ import { transpose, determinant, inverse, matrixMultiply } from "@solve-js/vm/Ma
 // Type-only, VM.ts imports pluginFunctionRegistry FROM this file, so a
 // runtime import the other direction would be circular; `import type` is
 // erased before compilation and doesn't create that problem.
-import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
+// EngineContext is imported for the {@link EngineContext} reference in
+// pluginFunctionRegistry's deprecation note below. Dropping it would leave that
+// link dangling, which is worse than an unused-import warning.
+// eslint-disable-next-line no-unused-vars
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/finance/data/CpiTable";
 
@@ -102,7 +105,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     29: (args) => numberValue(Math.log1p(args[0].toNumber())),
     30: (args) => numberValue(Math.log2(args[0].toNumber())),
     31: (args) => numberValue(Math.pow(args[0].toNumber(), args[1].toNumber())),
-    32: (args) => numberValue(Math.random()),
+    32: () => numberValue(Math.random()), // takes no arguments, unlike its neighbours
     33: (args) => numberValue(Math.sign(args[0].toNumber())),
     34: (args) => numberValue(Math.trunc(args[0].toNumber())),
     35: (args) => numberValue(args[0].toNumber() * Math.PI / 180),

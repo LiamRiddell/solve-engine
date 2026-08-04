@@ -63,11 +63,27 @@ import { sharedGlobalVariableStore } from '@solve-js/vm/GlobalVariableStore';
  * clone algorithm. Token instances with prototype chains or class methods
  * must be flattened to plain objects to avoid clone errors.
  *
+ * Copies every field Token declares. It used to copy five of the eight,
+ * dropping typeId, text and lineBreaks, and the result was cast through `any`
+ * back to Token. That made the type claim fields the receiver never actually
+ * got, which is why consumers on the main thread read `lineBreaks` with a
+ * `?? 0` fallback. Copying the whole token costs a few bytes per message and
+ * makes the declared type true.
+ *
  * @param t - The token to serialize.
  * @returns A plain object with the same fields.
  */
-function serializeToken(t: Token): any {
-    return { type: t.type, value: t.value, offset: t.offset, line: t.line, col: t.col };
+function serializeToken(t: Token): Token {
+    return {
+        type: t.type,
+        typeId: t.typeId,
+        value: t.value,
+        text: t.text,
+        offset: t.offset,
+        lineBreaks: t.lineBreaks,
+        line: t.line,
+        col: t.col,
+    };
 }
 
 /**
@@ -82,8 +98,8 @@ function serializeToken(t: Token): any {
 function serializeResult(result: DebugResult): DebugResult {
     return {
         ...result,
-        tokens: result.tokens.map(serializeToken) as any,
-        rawTokens: result.rawTokens.map(serializeToken) as any,
+        tokens: result.tokens.map(serializeToken),
+        rawTokens: result.rawTokens.map(serializeToken),
         lineResults: result.lineResults.map(lr => ({ ...lr })),
     };
 }

@@ -3,7 +3,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { ILocale, getLocale } from "@solve-js/constants/locales";
+import { getLocale } from "@solve-js/constants/locales";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
