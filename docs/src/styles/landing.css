@@ -45,6 +45,9 @@
 [data-has-hero] .band {
   /* The one content width on this page. See `.band__inner`. */
   --band-max: 78rem;
+  /* The narrower width a heading block sits at, and anything meant to line up
+     with one. Named because two things now depend on it agreeing. */
+  --band-head-max: 52rem;
   padding-block: clamp(3.5rem, 9vh, 7rem);
   padding-inline: clamp(1rem, 4vw, 3rem);
 }
@@ -81,7 +84,7 @@
    centred variant is the default here for the same reason: it makes a long
    page scan as a sequence of statements. */
 [data-has-hero] .band__head {
-  max-width: 52rem;
+  max-width: var(--band-head-max);
   margin-inline: auto;
   margin-bottom: clamp(1.75rem, 4vh, 3rem);
   text-align: center;
@@ -786,6 +789,21 @@
   margin: 2rem 0 0;
   color: rgb(252 252 254 / 0.4);
   font-size: var(--sl-text-xs);
+}
+
+/*
+ * The notepad directly under a heading block takes that block's width, so the
+ * demo and the sentence introducing it share a left and right edge. At the full
+ * band width it was half as wide again as the heading and the two read as
+ * unrelated things stacked on top of each other.
+ *
+ * The child combinator is doing real work here: it picks out the one notepad
+ * that is a direct child of a band, and leaves the five inside `.showcase__demo`
+ * alone, which sit in a two-column row and want the width of their column.
+ */
+[data-has-hero] .band__inner > .notepad-host {
+  max-width: var(--band-head-max);
+  margin-inline: auto;
 }
 
 /* ── Correctness band ───────────────────────────────────────────────────── */
