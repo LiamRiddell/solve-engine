@@ -124,10 +124,10 @@ describe("Phase A: exact rational coefficients", () => {
 		expect(evaluate("x*0.1 =>")).toBe("0.1x");
 	});
 
-	test("collecting through a product is still out of scope in this phase", () => {
-		// Phase B's canonical polynomial form is what turns these into `0.3x`
-		// and `2/3x`. Pinned here so the change is visible when it happens.
-		expect(evaluate("0.1x + 0.2x =>")).toBe("0.1x+0.2x");
-		expect(evaluate("x/3 + x/3 =>")).toBe("x/3+x/3");
+	test("collecting through a product combines exactly, with no floating-point drift", () => {
+		// The headline case for exact coefficients. In doubles 0.1 + 0.2 is
+		// 0.30000000000000004, so this is the assertion that would expose a
+		// regression back to float arithmetic.
+		expect(evaluate("0.1x + 0.2x =>")).toBe("0.3x");
 	});
 });

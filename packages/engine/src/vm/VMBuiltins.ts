@@ -2,6 +2,9 @@ import { Value, ValueType, numberValue, stringValue, uomValue, errorValue, type 
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom } from "@solve-js/vm/VMConversion";
 import { transpose, determinant, inverse, matrixMultiply } from "@solve-js/vm/MatrixOps";
+import { symbolicToValue } from "@solve-js/vm/SymbolicOps";
+import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
+import type { SymbolicNode } from "@solve-js/symbolic";
 // Type-only, VM.ts imports pluginFunctionRegistry FROM this file, so a
 // runtime import the other direction would be circular; `import type` is
 // erased before compilation and doesn't create that problem.
@@ -486,6 +489,20 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         const toMatrix = (v: Value): MatrixData =>
             v.type === ValueType.Matrix ? (v.value as MatrixData) : { rows: 1, cols: 1, data: [v.toNumber()], hasSymbolic: false };
         return matrixMultiply(toMatrix(a), toMatrix(b));
+    },
+    // ── Symbolic algebra (packages/symbolic/) ──
+    // expand(expr), multiplying out every product and power. Reached only
+    // through its own parselet, never the builtinNameToIndex name map, so that
+    // `expand` keeps working as an ordinary variable name; see
+    // packages/symbolic/normalizer/SymbolicCallNormalizerRule.ts.
+    //
+    // A non-symbolic argument has nothing to expand and is returned unchanged,
+    // which is why this does not go through the CALL_BUILTIN symbolic dispatch:
+    // `expand(2+3)` is simply 5.
+    67: (args) => {
+        const [value] = args;
+        if (value.type !== ValueType.Symbolic) return value;
+        return symbolicToValue(expandSymbolic(value.value as SymbolicNode));
     },
 };
 

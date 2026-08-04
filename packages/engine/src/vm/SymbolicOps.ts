@@ -63,6 +63,24 @@ export const SYMBOLIC_BUILTIN_NAMES: Readonly<Record<number, string>> = {
 const POW_BUILTIN_INDEX = 31;
 
 /**
+ * Builtin indices that take a symbolic argument on purpose and handle it
+ * themselves, so `vm/VM.ts` must **not** route them through
+ * {@link symbolicBuiltin}.
+ *
+ * These are the algebra verbs (`expand`, and the later phases' `factor`,
+ * `solve` and calculus functions). Every other builtin reads its arguments
+ * through `toNumber()` and has to be intercepted; these exist precisely to
+ * receive an expression containing unknowns, so intercepting them would report
+ * "cannot be applied to an expression that still contains an unknown" for the
+ * one family of functions where that is the whole point.
+ *
+ * Listed here rather than imported from `packages/symbolic/` because `vm/` must
+ * not import from `packages/`. `__tests__/engine/SymbolicSurfaceParity.spec.ts`
+ * asserts this set matches the package's own table.
+ */
+export const SYMBOLIC_NATIVE_BUILTINS: ReadonlySet<number> = new Set([67]);
+
+/**
  * Converts a Value into a {@link SymbolicNode}.
  *
  * @param v - The value to convert.

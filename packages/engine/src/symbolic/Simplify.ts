@@ -62,6 +62,7 @@ import {
 	isRationalMinusOne,
 	isRationalInteger,
 } from "@solve-js/symbolic/Rational";
+import { toPolynomial, fromPolynomial } from "@solve-js/symbolic/Polynomial";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 // ── Flatten-and-collect (top-level sums only) ──────────────────────────────
@@ -145,6 +146,31 @@ function collectTerms(node: SymbolicNode): SymbolicNode {
 		result = { kind: "add", left: result, right: constNode(constant) };
 	}
 	return result;
+}
+
+/**
+ * Collects a sum, preferring the canonical polynomial form and falling back to
+ * the tree-level {@link collectTerms} when the expression is not a polynomial.
+ *
+ * The two-step shape is what lets like terms combine through a product
+ * (`2b + 3b` becomes `5b`, which the tree walk alone cannot do, since it stops
+ * at the first `mul`) without disturbing anything the polynomial form cannot
+ * represent. `vx/sx - tx` is a rational function, so `toPolynomial` reports
+ * `null` and the original handling runs untouched. That fallback is what keeps
+ * symbolic matrix inverses rendering as they always have.
+ *
+ * Only `add` and `sub` route through here. The `mul` and `div` cases keep their
+ * own rules verbatim, including the reciprocal canonicalization and the
+ * single-common-factor cancellation, because the polynomial form can express
+ * neither.
+ *
+ * This does not violate the module's no-growth invariant: a polynomial is a
+ * collected sum, so the round trip only ever merges terms.
+ */
+function collectSum(node: SymbolicNode): SymbolicNode {
+	const polynomial = toPolynomial(node);
+	if (polynomial !== null) return fromPolynomial(polynomial);
+	return collectTerms(node);
 }
 
 // ── Exact function folding ──────────────────────────────────────────────────
@@ -259,7 +285,7 @@ function simplifyNode(node: SymbolicNode): SymbolicNode {
 			if (left.kind === "const" && right.kind === "const") return constNode(rationalAdd(left.value, right.value));
 			if (left.kind === "const" && isRationalZero(left.value)) return right;
 			if (right.kind === "const" && isRationalZero(right.value)) return left;
-			return collectTerms({ kind: "add", left, right });
+			return collectSum({ kind: "add", left, right });
 		}
 
 		case "sub": {
@@ -268,7 +294,7 @@ function simplifyNode(node: SymbolicNode): SymbolicNode {
 			if (left.kind === "const" && right.kind === "const") return constNode(rationalSub(left.value, right.value));
 			if (right.kind === "const" && isRationalZero(right.value)) return left;
 			if (left.kind === "const" && isRationalZero(left.value)) return simplifyNode({ kind: "neg", operand: right });
-			return collectTerms({ kind: "sub", left, right });
+			return collectSum({ kind: "sub", left, right });
 		}
 
 		case "mul": {

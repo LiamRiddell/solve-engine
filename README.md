@@ -28,6 +28,7 @@ as you type.
 100 cm + 2 m                  // 300.00 cm
 30 fps * 3 minutes            // 5400.00 frames
 [1, 2; 3, 4] * [5, 6; 7, 8]   // [19, 22; 43, 50]
+expand((x+1)*(x+2))           // x^2+3x+2
 ```
 
 Every example in this file, and every example in the documentation, is executed

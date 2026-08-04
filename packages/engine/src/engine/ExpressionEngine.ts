@@ -54,6 +54,7 @@ import {
     extractReadsAndWrites,
 } from "@solve-js/engine/ExpressionEngineSafety";
 import { buildTokenLookup } from "@solve-js/lexer/tokenRegistration";
+import { containsSymbolicCall } from "@solve-js/packages/symbolic";
 import { abortLogger } from "@solve-js/utilities/AbortControllerLogger";
 import { TokenNormalizer, BUILTIN_PHRASES, implicitMultiplyRule } from "@solve-js/normalizer";
 import type { TokenFusion } from "@solve-js/normalizer";
@@ -1335,6 +1336,17 @@ export class ExpressionEngine {
                 }
             }
             return this.simplifySymbolically(beforeTokens);
+        }
+
+        // An algebra verb (`expand(...)`, and the later phases' `factor`/
+        // `solve`) is itself a request to work symbolically, so it does not also
+        // need a trailing `=>`. Without this, `expand((x+1)*(x+2))` on its own
+        // line would hard-throw UNDEFINED_VARIABLE on `x` before ever reaching
+        // the builtin. Placed after the THEREFORE branch so an explicit `=>`
+        // still wins, and before the COLON/GLOBAL guard so the existing
+        // assignment grammars stay untouched.
+        if (containsSymbolicCall(normalizedTokens)) {
+            return this.simplifySymbolically(normalizedTokens);
         }
 
         // Already the colon-prefixed (`:name = value`) or `global :name`

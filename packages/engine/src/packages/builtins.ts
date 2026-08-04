@@ -26,6 +26,7 @@ import { CURRENCY_PACKAGE } from "./currency";
 import { VECTOR_PACKAGE } from "./vector";
 import { MATRIX_PACKAGE } from "./matrix";
 import { MAPREDUCE_PACKAGE } from "./mapreduce";
+import { SYMBOLIC_PACKAGE } from "./symbolic";
 import { BIGINT_PACKAGE } from "./biginteger";
 import { CONDITIONALS_PACKAGE } from "./conditionals";
 import { CONVERTERS_PACKAGE } from "./converters";
@@ -49,6 +50,7 @@ export {
   VECTOR_PACKAGE,
   MATRIX_PACKAGE,
   MAPREDUCE_PACKAGE,
+  SYMBOLIC_PACKAGE,
   BIGINT_PACKAGE,
   CONDITIONALS_PACKAGE,
   CONVERTERS_PACKAGE,
@@ -81,7 +83,7 @@ export {
 /**
  * The packages an engine registers when the caller names none.
  *
- * Nineteen of the twenty-one. Stocks and knowledge are excluded because both
+ * Twenty of the twenty-two. Stocks and knowledge are excluded because both
  * need a host-supplied data source and do nothing useful without one, so
  * registering them by default would only produce NOT_CONFIGURED results.
  *
@@ -101,6 +103,7 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   VECTOR_PACKAGE,
   MATRIX_PACKAGE,
   MAPREDUCE_PACKAGE,
+  SYMBOLIC_PACKAGE,
   BIGINT_PACKAGE,
   CONDITIONALS_PACKAGE,
   CONVERTERS_PACKAGE,

@@ -71,6 +71,13 @@ function formatFactor(node: SymbolicNode): string {
 			if (coeffVar) return formatCoefficient(coeffVar.coeff, coeffVar.name);
 			const coeffPow = tryExtractCoeffPow(node);
 			if (coeffPow) return formatCoefficient(coeffPow.coeff, formatFactor(coeffPow.power));
+			// A coefficient on a longer monomial juxtaposes too, so `2*x*y`
+			// renders `2x*y`, consistent with `2b` and `2x^2` above. Only the
+			// leading coefficient collapses; the `*` between distinct variables
+			// stays, matching how the rest of the engine writes products.
+			if (node.left.kind === "const" && node.right.kind === "mul") {
+				return formatCoefficient(node.left.value, formatFactor(node.right));
+			}
 			return `${formatFactor(node.left)}*${formatFactor(node.right)}`;
 		}
 		case "div":

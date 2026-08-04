@@ -1,7 +1,7 @@
 import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomValue, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, type MatrixEntry, type MatrixData, type RangeData } from "@solve-js/vm/Value";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType } from "@solve-js/symbolic";
-import { symbolicPow, symbolicNeg, symbolicBuiltin } from "@solve-js/vm/SymbolicOps";
+import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { rowMajorToColumnMajor, matrixMultiply, matrixCompare, matIndex, matAt, inBounds, collectionToValues, matrixEntryToValue } from "@solve-js/vm/MatrixOps";
 import type { VM, OpRegistry, EquationDef } from "@solve-js/vm/OpRegistry";
 import { convertUnit, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit } from "@solve-js/uom/UomConverter";
@@ -1065,7 +1065,10 @@ export function executeBytecode(
             // symbolic operand, so routing here is what stops `sqrt(x)` from
             // quietly returning 0. An index with no symbolic reading comes back
             // as an error rather than a number computed from that placeholder.
-            stack.push(sawSymbolic ? symbolicBuiltin(fnIdx, ordered) : fn(ordered));
+            // The algebra verbs are the exception: they exist to take an
+            // expression containing unknowns, so they run their own handler.
+            const routeSymbolically = sawSymbolic && !SYMBOLIC_NATIVE_BUILTINS.has(fnIdx);
+            stack.push(routeSymbolically ? symbolicBuiltin(fnIdx, ordered) : fn(ordered));
           }
           break;
         }
