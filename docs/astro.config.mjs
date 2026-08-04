@@ -150,6 +150,8 @@ export default defineConfig({
             { slug: "syntax/map-reduce-and-aggregates" },
             { slug: "syntax/vectors-and-matrices" },
             { slug: "syntax/symbolic" },
+            { slug: "syntax/algebra" },
+            { slug: "syntax/calculus" },
             { slug: "syntax/dice" },
             { slug: "syntax/live-data" },
             { slug: "syntax/trigger-words" },

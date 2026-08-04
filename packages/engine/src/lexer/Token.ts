@@ -167,6 +167,21 @@ export const TokenTypes = {
   REDUCE: "REDUCE",
   SUM_FN: "SUM_FN",
   PROD_FN: "PROD_FN",
+  // The algebra verbs (packages/symbolic/), fused from an ordinary IDENT only
+  // when immediately followed by `(`, so `factor`/`solve`/`expand` stay usable
+  // as variable names. Declared here rather than left to be minted on first use
+  // by `tokenTypeId()`, which is what {@link registerAllTokenTypes} exists for:
+  // a lazily-minted id depends on what else happened to be minted before it, so
+  // in a single-process run the id a normalizer rule produces can stop matching
+  // the id the parselet was registered under. Every token type a built-in
+  // package relies on belongs in this table.
+  EXPAND_FN: "EXPAND_FN",
+  FACTOR_FN: "FACTOR_FN",
+  SOLVE_FN: "SOLVE_FN",
+  DER_FN: "DER_FN",
+  INTEGRAL_FN: "INTEGRAL_FN",
+  TAYLOR_FN: "TAYLOR_FN",
+  JACOBIAN_FN: "JACOBIAN_FN",
   // `=>`, "therefore"/solve operator. The algebra itself lives in symbolic/;
   // packages/symbolic/ carries the grammar surface for the named operations.
   // A genuine 2-char lexer token (ExpressionLexer.ts's TWO_CHAR_OPS table),
