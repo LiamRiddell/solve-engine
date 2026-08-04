@@ -950,29 +950,6 @@
   text-wrap: pretty;
 }
 
-/* The budget, drawn. A bar is the one place a proportion reads instantly, and
-   the proportion is the whole reason the number is reassuring. */
-[data-has-hero] .size-band__meter {
-  margin: clamp(1.75rem, 4vh, 2.5rem) auto 0;
-  height: 4px;
-  border-radius: 999px;
-  background-color: var(--muted);
-  overflow: hidden;
-}
-
-[data-has-hero] .size-band__meter-fill {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background-color: var(--primary);
-}
-
-[data-has-hero] .size-band__meter-label {
-  margin: 0.625rem 0 0;
-  color: var(--faint);
-  font-size: var(--sl-text-xs);
-}
-
 [data-has-hero] .size-band__grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
