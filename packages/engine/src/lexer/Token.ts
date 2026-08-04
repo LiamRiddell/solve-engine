@@ -167,7 +167,8 @@ export const TokenTypes = {
   REDUCE: "REDUCE",
   SUM_FN: "SUM_FN",
   PROD_FN: "PROD_FN",
-  // `=>`, "therefore"/solve operator (symbolic algebra, packages/symbolic/).
+  // `=>`, "therefore"/solve operator. The algebra itself lives in symbolic/;
+  // packages/symbolic/ carries the grammar surface for the named operations.
   // A genuine 2-char lexer token (ExpressionLexer.ts's TWO_CHAR_OPS table),
   // same mechanism as ==/!=/>=/<=, not a normalizer-level fusion, "=" then
   // ">" is the opposite char order from GTE's ">=", so there's no collision.

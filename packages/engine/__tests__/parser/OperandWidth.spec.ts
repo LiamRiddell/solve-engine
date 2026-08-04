@@ -33,7 +33,7 @@ describe("bytecode operand widths", () => {
 		// automatically from the enum alone, so this pins the count: adding an
 		// opcode fails here, and whoever adds it has to decide its width
 		// deliberately rather than inherit zero by accident.
-		expect(allOpcodes.length).toBe(77);
+		expect(allOpcodes.length).toBe(75);
 	});
 
 	test("opcodes listed as taking operands actually record a non-zero width", () => {

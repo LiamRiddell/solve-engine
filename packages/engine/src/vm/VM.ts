@@ -1,6 +1,7 @@
 import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomValue, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, type MatrixEntry, type MatrixData, type RangeData } from "@solve-js/vm/Value";
-import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType } from "@solve-js/vm/Symbolic";
+import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType } from "@solve-js/symbolic";
+import { symbolicPow, symbolicNeg, symbolicBuiltin } from "@solve-js/vm/SymbolicOps";
 import { rowMajorToColumnMajor, matrixMultiply, matrixCompare, matIndex, matAt, inBounds, collectionToValues, matrixEntryToValue } from "@solve-js/vm/MatrixOps";
 import type { VM, OpRegistry, EquationDef } from "@solve-js/vm/OpRegistry";
 import { convertUnit, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit } from "@solve-js/uom/UomConverter";
@@ -544,7 +545,7 @@ export function executeBytecode(
     context?: LineExecutionContext,
     // Symbolic-tolerant mode (default false, every existing evaluation
     // path is completely unchanged): when true, LOAD_VAR pushes a
-    // Symbolic placeholder (vm/Symbolic.ts) for an undefined variable
+    // Symbolic placeholder (symbolic/SymbolicNode.ts) for an undefined variable
     // instead of throwing UNDEFINED_VARIABLE. Set only by the `=>`
     // solve/simplify path (H.2) and map/reduce's own reentrant calls when
     // folding a symbolic accumulator (H.3), never by top-level
@@ -814,6 +815,19 @@ export function executeBytecode(
           if (r.type === ValueType.Error) { stack.push(r); break; }
           if (l.type === ValueType.Pending) { stack.push(l); break; }
           if (r.type === ValueType.Pending) { stack.push(r); break; }
+          // Plain numbers first, so the overwhelmingly common case pays for no
+          // extra type test beyond the ones already above it.
+          if (l.type === ValueType.Number && r.type === ValueType.Number) {
+            stack.push(numberValue(Math.pow(l.value as number, r.value as number)));
+            break;
+          }
+          // A symbolic operand has to build a `pow` node. Falling through to
+          // Math.pow() here is what made `x^2` evaluate to 0, silently, since
+          // Value.toNumber() reports 0 for a symbolic value.
+          if (l.type === ValueType.Symbolic || r.type === ValueType.Symbolic) {
+            stack.push(symbolicPow(l, r));
+            break;
+          }
           stack.push(numberValue(Math.pow(l.toNumber(), r.toNumber())));
           break;
         }
@@ -821,6 +835,9 @@ export function executeBytecode(
           const v = safePop(stack);
           if (v.type === ValueType.BigInt) stack.push(bigIntValue(-(v.value as bigint)));
           else if (v.type === ValueType.Uom) stack.push(uomValue(-v.toNumber(), v.unit!));
+          // Without this branch, unary minus on a free variable produced `-0`,
+          // for the same toNumber() reason as EXP above.
+          else if (v.type === ValueType.Symbolic) stack.push(symbolicNeg(v));
           else stack.push(numberValue(-v.toNumber()));
           break;
         }
@@ -1031,9 +1048,25 @@ export function executeBytecode(
           const fnIdx = opcodes[ip++];
           const argCount = opcodes[ip++];
           const args: Value[] = [];
-          for (let i = 0; i < argCount; i++) args.push(safePop(stack));
+          // The symbolic flag is tracked while popping rather than by a second
+          // pass, so the ordinary numeric call pays one type comparison per
+          // argument and nothing else.
+          let sawSymbolic = false;
+          for (let i = 0; i < argCount; i++) {
+            const arg = safePop(stack);
+            if (arg.type === ValueType.Symbolic) sawSymbolic = true;
+            args.push(arg);
+          }
           const fn = builtinFunctions[fnIdx];
-          if (fn) stack.push(fn(args.reverse()));
+          if (fn) {
+            const ordered = args.reverse();
+            // One dispatch point covers all ~60 builtins. Each of their
+            // implementations reads args[n].toNumber(), which reports 0 for a
+            // symbolic operand, so routing here is what stops `sqrt(x)` from
+            // quietly returning 0. An index with no symbolic reading comes back
+            // as an error rather than a number computed from that placeholder.
+            stack.push(sawSymbolic ? symbolicBuiltin(fnIdx, ordered) : fn(ordered));
+          }
           break;
         }
         case OpCode.DEFINE_USER_FUNCTION: {

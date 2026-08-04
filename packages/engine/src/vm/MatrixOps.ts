@@ -1,5 +1,5 @@
 import { type MatrixData, type MatrixEntry, type RangeData, Value, ValueType, matrixValue, numberValue, boolValue, symbolicValue, errorValue } from "@solve-js/vm/Value";
-import { type SymbolicNode, constNode, simplifySymbolic } from "@solve-js/vm/Symbolic";
+import { type SymbolicNode, constNode, simplifySymbolic, isRationalZero, rationalToNumber } from "@solve-js/symbolic";
 
 /**
  * Shared, pure helpers for reading/building {@link MatrixData}. Kept
@@ -56,7 +56,11 @@ export function entryToSymbolic(entry: MatrixEntry): SymbolicNode {
 /** Collapses a simplified SymbolicNode back to a plain number when it's a pure constant, keeps matrix cells in their simplest representation rather than always carrying a wrapped tree. */
 export function symbolicToEntry(node: SymbolicNode): MatrixEntry {
 	const simplified = simplifySymbolic(node);
-	return simplified.kind === "const" ? simplified.value : simplified;
+	// Collapse to a plain number, never to the Rational itself. MatrixEntry is
+	// `number | boolean | SymbolicNode`, and a leaked Rational would satisfy the
+	// `typeof cell === "object"` test that FormatEngine.ts and Value.ts use to
+	// recognise a symbolic cell, rendering as garbage rather than throwing.
+	return simplified.kind === "const" ? rationalToNumber(simplified.value) : simplified;
 }
 
 /** Converts a matrix cell into a real Value, Boolean/Symbolic preserved as-is, plain numbers wrapped via numberValue(). Used anywhere a cell needs to leave MatrixData and become an ordinary VM value (indexing, map/reduce collection iteration). */
@@ -263,7 +267,10 @@ function symbolicDeterminant(m: MatrixData): Value {
 	let det: SymbolicNode = constNode(1);
 	for (let col = 0; col < n; col++) {
 		const pivot = simplifySymbolic(a[col][col]);
-		if (pivot.kind === "const" && pivot.value === 0) return numberValue(0);
+		// Exact, unlike the previous double comparison: a structurally-zero pivot
+		// could arrive as 5.551e-17 and be treated as non-zero, so a singular
+		// matrix reported a nonsense determinant instead of zero.
+		if (pivot.kind === "const" && isRationalZero(pivot.value)) return numberValue(0);
 		det = simplifySymbolic({ kind: "mul", left: det, right: pivot });
 		for (let r = col + 1; r < n; r++) {
 			const factor = simplifySymbolic({ kind: "div", left: a[r][col], right: pivot });
@@ -272,7 +279,7 @@ function symbolicDeterminant(m: MatrixData): Value {
 			}
 		}
 	}
-	return det.kind === "const" ? numberValue(det.value) : symbolicValue(det);
+	return det.kind === "const" ? numberValue(rationalToNumber(det.value)) : symbolicValue(det);
 }
 
 /** `|a|` / `det(a)`, dispatches to the symbolic or plain-numeric implementation based on `m.hasSymbolic`. */
@@ -368,7 +375,7 @@ function symbolicInverse(m: MatrixData): Value {
 	}
 	for (let col = 0; col < n; col++) {
 		const pivot = simplifySymbolic(a[col][col]);
-		if (pivot.kind === "const" && pivot.value === 0) {
+		if (pivot.kind === "const" && isRationalZero(pivot.value)) {
 			return errorValue(
 				"SYMBOLIC_SINGULAR_OR_UNSUPPORTED_PIVOT",
 				`Symbolic inverse: the pivot at row/col ${col} is exactly zero — this matrix's structure isn't invertible via this engine's diagonal-first symbolic elimination (no row-swapping); try reordering rows manually.`,
@@ -380,7 +387,7 @@ function symbolicInverse(m: MatrixData): Value {
 		for (let r = 0; r < n; r++) {
 			if (r === col) continue;
 			const factor = simplifySymbolic(a[r][col]);
-			if (factor.kind === "const" && factor.value === 0) continue;
+			if (factor.kind === "const" && isRationalZero(factor.value)) continue;
 			for (let c = 0; c < 2 * n; c++) {
 				a[r][c] = simplifySymbolic({ kind: "sub", left: a[r][c], right: { kind: "mul", left: factor, right: a[col][c] } });
 			}

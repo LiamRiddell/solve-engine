@@ -1,12 +1,12 @@
 /**
- * vm/Symbolic.ts — the bounded symbolic simplifier/formatter (pure
+ * symbolic/ — the bounded symbolic simplifier/formatter (pure
  * function tests), plus VM-level tests exercising `executeBytecode()`'s
  * `symbolicTolerant` flag directly (matching VMOpcodes.spec.ts's own
  * hand-built-bytecode convention) since there is no user-facing parser
  * surface for symbolic values until Phase H.2's `=>` operator lands.
  */
 import { describe, expect, test } from "@jest/globals";
-import { simplifySymbolic, formatSymbolic, constNode, varNode, type SymbolicNode } from "@solve-js/vm/Symbolic";
+import { simplifySymbolic, formatSymbolic, constNode, varNode, type SymbolicNode } from "@solve-js/symbolic";
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { OpCode } from "@solve-js/parser/OpCode";

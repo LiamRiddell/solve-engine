@@ -134,7 +134,20 @@ nice-to-have feature among several, now **the foundational prerequisite for roug
 Calca's feature list**. Its priority moves from "large effort, no particular urgency" to "build
 this first, everything else in this list depends on it."
 
-Full symbolic differentiation/equation-solving (keeping an actual manipulable expression tree and
+**Superseded 2026-08-04 by an explicit product decision. The paragraph below is kept because it
+explains a choice that was reasonable when it was made, not because it still describes the plan.**
+The engine is now building a real (bounded) computer-algebra system with exact rational
+coefficients, on the `feat/symbolic-cas` branch. The reason the numerical path was reopened is
+specific: **polynomial factoring cannot be done numerically at all.** `factor(x^2-4)` has to
+produce `(x-2)*(x+2)`, which requires a manipulable expression tree and exact arithmetic, so a
+request for factoring, calculus and general equation solving together forces the CAS. Symbolic
+differentiation also turns out to be *easier* to get right than finite differences once a `pow`
+node exists, and exact quadratic and cubic roots fall out of the same representation. Numerical
+methods survive only as a documented last resort for high-degree root finding (Phase 5 below).
+Complex roots remain out of scope, see Phase 3.
+
+The superseded reasoning: full symbolic differentiation/equation-solving (keeping an actual
+manipulable expression tree and
 applying calculus/algebra rules to it) would mean a second evaluation model living alongside the
 current flat-bytecode VM — a genuine, large undertaking on its own. The pragmatic path to the SAME
 user-visible capability, reusing the existing numeric bytecode-VM engine rather than building a
@@ -149,15 +162,30 @@ values and combine the results" — no symbolic manipulation required.
 
 - **Phase 1 (✅ shipped this iteration)**: user-defined, parameterized, reusable functions —
   item 2 below. Unlocks Phases 4-6 entirely; independently valuable on its own.
-- **Phase 2 (queued next)**: general Matrix value type, consolidating `Vector2`/`Vector3`/
+- **Phase 2 (✅ shipped 2026-08-02)**: general Matrix value type, consolidating `Vector2`/`Vector3`/
   `Vector4` into it (a vector becomes an N×1 matrix) — literals, 2D indexing, sub-matrix slicing,
-  transpose, inverse, determinant, matrix arithmetic.
+  transpose, inverse, determinant, matrix arithmetic. Landed as `MATRIX_PACKAGE`, `MatrixData`,
+  `vm/MatrixOps.ts`'s det/inv/transpose, and the `^T`/`^-1` suffix forms.
 - **Phase 3 (queued next)**: complex numbers (`i`, arithmetic, `conj()`, negative `sqrt()`).
-- **Phase 4 (depends on Phase 1)**: numerical `der()`/`taylor()`/`jacobian()`.
-- **Phase 5 (depends on Phase 1)**: `x => ...` general solving via numerical root-finding.
-- **Phase 6 (depends on Phase 1 for map/reduce; independent for the rest)**: `map`/`reduce`/
-  `sum`/`prod` over ranges, `let...in`, named parameters, heading-scoped variable scope,
-  mid-document locale switching, `;`-separated multi-statement lines.
+  Explicitly **out of scope for `feat/symbolic-cas`**: Phases 4 and 5 report "no real solutions"
+  for a negative discriminant, and factoring stops at irreducible-over-the-rationals, precisely
+  because there is no complex value type to express the answer in. This phase is what would
+  remove that limitation.
+- **Phase 4 (🔄 in progress on `feat/symbolic-cas`)**: **symbolic** `der()`/`taylor()`/`jacobian()`
+  over an exact expression tree, no longer the numerical approximation described above.
+- **Phase 5 (🔄 in progress on `feat/symbolic-cas`)**: `solve()` and `x => ...`, exact for linear,
+  quadratic, cubic and quartic, with rational-root extraction first and numerical root-finding
+  retained only as a documented fallback for higher degree.
+- **Phase 7 (🔄 in progress on `feat/symbolic-cas`, prerequisite for 4 and 5)**: the CAS core
+  itself, which no earlier phase accounted for because the numerical path did not need it. Exact
+  rational coefficients, `pow` and function-application nodes (whose absence meant `x^2 + 3x + 2 =>`
+  silently returned `3x+2`), a canonical multivariate polynomial form, `expand()`, and `factor()`.
+  Factoring goes beyond Calca's own surface, which the roadmap treats as a floor rather than a
+  ceiling.
+- **Phase 6 (partly shipped 2026-08-02)**: `map`/`reduce`/`sum`/`prod` over ranges **shipped**
+  (`MAPREDUCE_PACKAGE`, plus the `RANGE_NEW`/`MAP_INVOKE`/`REDUCE_INVOKE` opcodes). Still queued:
+  `let...in`, named parameters, heading-scoped variable scope, mid-document locale switching, and
+  `;`-separated multi-statement lines.
 
 Attempting Phases 2-6 in the same pass as Phase 1 would be reckless — each is itself a non-trivial
 design (a matrix value representation touching `Value.ts`/`FormatEngine.ts`/every Vector consumer;

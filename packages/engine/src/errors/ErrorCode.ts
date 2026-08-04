@@ -78,6 +78,20 @@ export const CoreErrorCodes = {
   /** `MAP_INVOKE`/`REDUCE_INVOKE`'s anonymous-body-index lookup failing. Same class as `INTERNAL_MISSING_FUNCTION_BODY` above, for the `anonymousBodies` side-table instead of `userFunctionBodies`. */
   INTERNAL_MISSING_ANONYMOUS_BODY: "INTERNAL_MISSING_ANONYMOUS_BODY",
 
+  // ── Symbolic algebra (symbolic/, vm/SymbolicOps.ts) ──
+  /** A coefficient grew past `RATIONAL_MAX_BITS`, e.g. repeated exact elimination multiplying denominators together. */
+  SYMBOLIC_RATIONAL_OVERFLOW: "SYMBOLIC_RATIONAL_OVERFLOW",
+  /** `NaN` or `±Infinity` reaching a symbolic expression, neither of which has an exact rational value. */
+  SYMBOLIC_NONFINITE_OPERAND: "SYMBOLIC_NONFINITE_OPERAND",
+  /** Division by an exactly-zero rational. Exact, unlike the double comparison it replaced, which could not distinguish a true zero from `5.551e-17`. */
+  SYMBOLIC_DIVISION_BY_ZERO: "SYMBOLIC_DIVISION_BY_ZERO",
+  /** A tree exceeding `SYMBOLIC_MAX_NODES` entering the simplifier. */
+  SYMBOLIC_NODE_LIMIT_EXCEEDED: "SYMBOLIC_NODE_LIMIT_EXCEEDED",
+  /** A builtin with no symbolic reading (`min`, `random`, the finance block, ...) applied to an expression still containing an unknown. Returned rather than computing against `toNumber()`'s placeholder zero. */
+  SYMBOLIC_UNSUPPORTED_FUNCTION: "SYMBOLIC_UNSUPPORTED_FUNCTION",
+  /** A finite number whose decimal form could not be read back, which the regex covering every `Number.prototype.toString` output should make unreachable. */
+  INTERNAL_RATIONAL_PARSE: "INTERNAL_RATIONAL_PARSE",
+
   // ── Engine (engine/ExpressionEngine.ts, engine/ExpressionEngineSafety.ts, engine/AsyncResolutionBatcher.ts) ──
   EXPRESSION_TOO_LONG: "EXPRESSION_TOO_LONG",
   EXPRESSION_TOO_COMPLEX: "EXPRESSION_TOO_COMPLEX",
