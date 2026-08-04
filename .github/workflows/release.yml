@@ -12,6 +12,12 @@ jobs:
   publish:
     name: Publish to npm
     runs-on: ubuntu-24.04
+    # NPM_TOKEN lives in this environment rather than in a repository secret, so
+    # the credential is reachable only from a run GitHub has admitted to it.
+    # Without this line the secret does not resolve at all, and the symptom is
+    # misleading: npm reports an authentication failure, which reads as a bad
+    # token rather than as a secret that was never injected.
+    environment: npm
     permissions:
       contents: read
       # Required for npm provenance, which signs the package against this
