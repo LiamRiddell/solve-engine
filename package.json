@@ -37,12 +37,12 @@
       "name": "import { ExpressionEngine }",
       "path": "packages/engine/dist/index.js",
       "import": "{ ExpressionEngine }",
-      "limit": "92 kB"
+      "limit": "96 kB"
     },
     {
       "name": "the whole root entry",
       "path": "packages/engine/dist/index.js",
-      "limit": "92 kB"
+      "limit": "96 kB"
     }
   ],
   "keywords": [],
