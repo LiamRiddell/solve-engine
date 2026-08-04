@@ -27,7 +27,8 @@
     "verify:all": "npm run verify && npm run build --prefix playground",
     "size": "size-limit",
     "stats:tests": "node scripts/collect-test-stats.mjs",
-    "lint:stats": "node scripts/collect-test-stats.mjs --check"
+    "lint:stats": "node scripts/collect-test-stats.mjs --check",
+    "lint:sidebar": "node scripts/check-sidebar.mjs"
   },
   "size-limit": [
     {

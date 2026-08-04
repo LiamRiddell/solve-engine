@@ -172,6 +172,11 @@ jobs:
       - run: npm ci --prefix docs
       - run: npm run build --prefix docs
 
+      # The sidebar lists its pages explicitly so it can be in reading order
+      # rather than alphabetical. This is the cost of that: a page nobody added
+      # to the list would otherwise be reachable only by search.
+      - run: npm run lint:sidebar
+
   comment-style:
     name: Comment style
     runs-on: ubuntu-24.04
