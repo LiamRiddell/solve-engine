@@ -75,8 +75,16 @@ function formatFactor(node: SymbolicNode): string {
 			// renders `2x*y`, consistent with `2b` and `2x^2` above. Only the
 			// leading coefficient collapses; the `*` between distinct variables
 			// stays, matching how the rest of the engine writes products.
+			//
+			// The digit guard is not cosmetic. Juxtaposing onto text that itself
+			// starts with a digit produces a different number: `3*(2*x)` would
+			// render as `32x`, which reads as thirty-two x. Such a shape should
+			// have been folded to `6x` by the simplifier, so this is a safety net
+			// rather than the normal path, but a formatter must never be able to
+			// print one value as another.
 			if (node.left.kind === "const" && node.right.kind === "mul") {
-				return formatCoefficient(node.left.value, formatFactor(node.right));
+				const inner = formatFactor(node.right);
+				if (!/^[\d.]/.test(inner)) return formatCoefficient(node.left.value, inner);
 			}
 			return `${formatFactor(node.left)}*${formatFactor(node.right)}`;
 		}

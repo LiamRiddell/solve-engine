@@ -1,12 +1,15 @@
 import { Value, ValueType, numberValue, stringValue, uomValue, errorValue, matrixValue, symbolicValue, type MatrixData } from "@solve-js/vm/Value";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom } from "@solve-js/vm/VMConversion";
-import { transpose, determinant, inverse, matrixMultiply } from "@solve-js/vm/MatrixOps";
+import { transpose, determinant, inverse, matrixMultiply, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
 import { symbolicToValue, valueToSymbolic } from "@solve-js/vm/SymbolicOps";
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
 import { factorSymbolic } from "@solve-js/symbolic/Factor";
 import { solveForVariable, type SolveOutcome } from "@solve-js/symbolic/Solve";
-import type { SymbolicNode } from "@solve-js/symbolic";
+import { differentiate } from "@solve-js/symbolic/Derivative";
+import { integrate } from "@solve-js/symbolic/Integral";
+import { taylorSeries, jacobian } from "@solve-js/symbolic/Taylor";
+import { freeVariables, type SymbolicNode } from "@solve-js/symbolic";
 // Type-only, VM.ts imports pluginFunctionRegistry FROM this file, so a
 // runtime import the other direction would be circular; `import type` is
 // erased before compilation and doesn't create that problem.
@@ -530,7 +533,79 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         }
         return solveOutcomeToValue(solveForVariable(lhs, rhs, variableValue.value as string));
     },
+    // der(expr, variable, order), the symbolic derivative. Genuinely symbolic
+    // rather than a finite difference, so it is exact.
+    70: (args) => {
+        const [target, variableValue, orderValue] = args;
+        const variable = symbolicVariableName(variableValue, "der");
+        if (typeof variable !== "string") return variable;
+        const expression = valueToSymbolic(target);
+        if (expression === null) return errorValue("SYMBOLIC_NONFINITE_OPERAND", "der needs an expression with an exact value.");
+        return symbolicToValue(differentiate(expression, variable, orderValue?.toNumber() ?? 1));
+    },
+    // integral(expr, variable), the indefinite integral without a constant of
+    // integration. Reports what it cannot do rather than approximating; see
+    // symbolic/Integral.ts.
+    71: (args) => {
+        const [target, variableValue] = args;
+        const variable = symbolicVariableName(variableValue, "integral");
+        if (typeof variable !== "string") return variable;
+        const expression = valueToSymbolic(target);
+        if (expression === null) return errorValue("SYMBOLIC_NONFINITE_OPERAND", "integral needs an expression with an exact value.");
+        const result = integrate(expression, variable);
+        if (!result.ok) return errorValue("SYMBOLIC_INTEGRAL_UNSUPPORTED", `Cannot integrate this: ${result.reason}.`);
+        return symbolicToValue(result.value);
+    },
+    // taylor(expr, variable = point, degree).
+    72: (args) => {
+        const [target, variableValue, pointValue, degreeValue] = args;
+        const variable = symbolicVariableName(variableValue, "taylor");
+        if (typeof variable !== "string") return variable;
+        const expression = valueToSymbolic(target);
+        const point = valueToSymbolic(pointValue);
+        if (expression === null || point === null || point.kind !== "const") {
+            return errorValue("SYMBOLIC_NONFINITE_OPERAND", "taylor needs an expression and an exact expansion point.");
+        }
+        return symbolicToValue(taylorSeries(expression, variable, point.value, degreeValue.toNumber()));
+    },
+    // jacobian(f1, f2, ...), variadic. The variables are not named: they come
+    // from the union of the functions' own unknowns, sorted, matching Calca.
+    73: (args) => {
+        const functions: SymbolicNode[] = [];
+        for (const arg of args) {
+            const node = valueToSymbolic(arg);
+            if (node === null) return errorValue("SYMBOLIC_NONFINITE_OPERAND", "jacobian needs expressions with exact values.");
+            functions.push(node);
+        }
+        const variables = new Set<string>();
+        for (const fn of functions) for (const name of freeVariables(fn)) variables.add(name);
+        const sorted = [...variables].sort();
+        if (sorted.length === 0) return errorValue("SYMBOLIC_JACOBIAN_NO_VARIABLES", "jacobian needs at least one unknown to differentiate against.");
+
+        const rows = jacobian(functions, sorted);
+        // Row-major here, which matrixValue's own helper converts to the
+        // column-major storage MatrixData uses.
+        const rowMajor: (number | boolean | SymbolicNode)[] = [];
+        for (const row of rows) {
+            for (const cell of row) rowMajor.push(symbolicToEntry(cell));
+        }
+        return matrixValue(rows.length, sorted.length, rowMajorToColumnMajor(rows.length, sorted.length, rowMajor));
+    },
 };
+
+/**
+ * Reads the variable-name argument the algebra verbs push as a String.
+ *
+ * @param value - The argument in the name position.
+ * @param verb - The verb's name, for the error message.
+ * @returns The name, or an error Value to return directly.
+ */
+function symbolicVariableName(value: Value | undefined, verb: string): string | Value {
+    if (value?.type !== ValueType.String) {
+        return errorValue("SYMBOLIC_REQUIRES_VARIABLE_NAME", `${verb} needs the name of an unknown.`);
+    }
+    return value.value as string;
+}
 
 /**
  * Renders a {@link SolveOutcome} as a VM value.

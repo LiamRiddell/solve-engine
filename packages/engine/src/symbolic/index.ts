@@ -52,6 +52,7 @@ export {
 	nodesEqual,
 	nodeCount,
 	freeVariables,
+	substitute,
 } from "@solve-js/symbolic/SymbolicNode";
 
 export { simplifySymbolic } from "@solve-js/symbolic/Simplify";

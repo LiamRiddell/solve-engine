@@ -95,6 +95,18 @@ export const CoreErrorCodes = {
   SYMBOLIC_SOLVE_UNSUPPORTED: "SYMBOLIC_SOLVE_UNSUPPORTED",
   /** `solve`'s second argument not being a bare name. */
   SOLVE_REQUIRES_VARIABLE_NAME: "SOLVE_REQUIRES_VARIABLE_NAME",
+  /** A derivative order outside 0..`DERIVATIVE_MAX_ORDER`. */
+  SYMBOLIC_DERIVATIVE_ORDER_LIMIT: "SYMBOLIC_DERIVATIVE_ORDER_LIMIT",
+  /** An expression with no known elementary antiderivative. Reported rather than approximated, since a wrong integral is indistinguishable from a right one at the point of use. */
+  SYMBOLIC_INTEGRAL_UNSUPPORTED: "SYMBOLIC_INTEGRAL_UNSUPPORTED",
+  /** A Taylor degree outside 0..`TAYLOR_MAX_DEGREE`. */
+  SYMBOLIC_TAYLOR_DEGREE_LIMIT: "SYMBOLIC_TAYLOR_DEGREE_LIMIT",
+  /** A Taylor coefficient that does not reduce to an exact number at the expansion point. */
+  SYMBOLIC_TAYLOR_INEXACT: "SYMBOLIC_TAYLOR_INEXACT",
+  /** An algebra verb's variable-name argument not being a bare name. */
+  SYMBOLIC_REQUIRES_VARIABLE_NAME: "SYMBOLIC_REQUIRES_VARIABLE_NAME",
+  /** `jacobian` called with expressions containing no unknown to differentiate against. */
+  SYMBOLIC_JACOBIAN_NO_VARIABLES: "SYMBOLIC_JACOBIAN_NO_VARIABLES",
   /** A finite number whose decimal form could not be read back, which the regex covering every `Number.prototype.toString` output should make unreachable. */
   INTERNAL_RATIONAL_PARSE: "INTERNAL_RATIONAL_PARSE",
 

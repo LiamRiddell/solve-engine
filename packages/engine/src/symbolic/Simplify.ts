@@ -228,6 +228,26 @@ function foldCall(name: string, args: readonly Rational[]): Rational | null {
 			const rootD = exactSqrt(first.d);
 			return rootN === null || rootD === null ? null : { n: rootN, d: rootD };
 		}
+		// Exact values at the points where these functions are rational. Every
+		// entry is exact, not rounded, which is what lets a Taylor series about
+		// the origin come out with exact coefficients. Deliberately narrow:
+		// `sin(1)` and `log(2)` are irrational and must stay symbolic.
+		case "sin":
+		case "tan":
+		case "asin":
+		case "atan":
+		case "sinh":
+		case "tanh":
+			return args.length === 1 && isRationalZero(first) ? RATIONAL_ZERO : null;
+		case "cos":
+		case "exp":
+		case "cosh":
+			return args.length === 1 && isRationalZero(first) ? RATIONAL_ONE : null;
+		case "log":
+			return args.length === 1 && isRationalOne(first) ? RATIONAL_ZERO : null;
+		case "acos":
+			// acos(1) = 0 is the only rational value; acos(0) is pi/2, which is not.
+			return args.length === 1 && isRationalOne(first) ? RATIONAL_ZERO : null;
 		case "fact": {
 			if (args.length !== 1 || !isRationalInteger(first) || first.n < 0n || first.n > MAX_FOLDED_FACTORIAL) return null;
 			let total = 1n;
@@ -308,6 +328,17 @@ function simplifyNode(node: SymbolicNode): SymbolicNode {
 			if (right.kind === "const" && isRationalOne(right.value)) return left;
 			if (left.kind === "const" && isRationalMinusOne(left.value)) return simplifyNode({ kind: "neg", operand: right });
 			if (right.kind === "const" && isRationalMinusOne(right.value)) return simplifyNode({ kind: "neg", operand: left });
+			// Gather adjacent constant factors: c1*(c2*rest) -> (c1*c2)*rest, and
+			// the mirrored shape. Differentiation builds exactly these, so without
+			// this the second derivative of x^3 stays as 3*(2*x) rather than 6x.
+			// This removes a node rather than adding one, so the module's
+			// no-growth invariant still holds.
+			if (left.kind === "const" && right.kind === "mul" && right.left.kind === "const") {
+				return simplifyNode({ kind: "mul", left: constNode(rationalMul(left.value, right.left.value)), right: right.right });
+			}
+			if (right.kind === "const" && left.kind === "mul" && left.left.kind === "const") {
+				return simplifyNode({ kind: "mul", left: constNode(rationalMul(right.value, left.left.value)), right: left.right });
+			}
 			// Canonicalize a reciprocal factor into division: (1/a)*b -> b/a,
 			// a*(1/b) -> a/b. A narrow display-canonicalization rule, needed
 			// because matrix multiply builds cells as mul(entry, entry) in

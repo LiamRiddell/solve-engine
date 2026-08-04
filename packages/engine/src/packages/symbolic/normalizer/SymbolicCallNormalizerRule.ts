@@ -14,6 +14,11 @@ export const SYMBOLIC_WORD_TO_TOKEN_TYPE: Readonly<Record<string, string>> = {
 	expand: "EXPAND_FN",
 	factor: "FACTOR_FN",
 	solve: "SOLVE_FN",
+	der: "DER_FN",
+	derivative: "DER_FN",
+	integral: "INTEGRAL_FN",
+	taylor: "TAYLOR_FN",
+	jacobian: "JACOBIAN_FN",
 };
 
 /**

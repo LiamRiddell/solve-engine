@@ -243,3 +243,39 @@ function collectVariables(node: SymbolicNode, into: Set<string>): void {
 			collectVariables(node.right, into);
 	}
 }
+
+/**
+ * Replaces every occurrence of a variable with an expression.
+ *
+ * @param node - The tree to rewrite.
+ * @param variable - The variable name to replace.
+ * @param replacement - What to put in its place.
+ * @returns A new tree. The input is not modified.
+ */
+export function substitute(node: SymbolicNode, variable: string, replacement: SymbolicNode): SymbolicNode {
+	switch (node.kind) {
+		case "const":
+			return node;
+		case "var":
+			return node.name === variable ? replacement : node;
+		case "neg":
+			return { kind: "neg", operand: substitute(node.operand, variable, replacement) };
+		case "pow":
+			return {
+				kind: "pow",
+				base: substitute(node.base, variable, replacement),
+				exponent: substitute(node.exponent, variable, replacement),
+			};
+		case "call":
+			return { kind: "call", name: node.name, args: node.args.map(arg => substitute(arg, variable, replacement)) };
+		case "add":
+		case "sub":
+		case "mul":
+		case "div":
+			return {
+				kind: node.kind,
+				left: substitute(node.left, variable, replacement),
+				right: substitute(node.right, variable, replacement),
+			};
+	}
+}
