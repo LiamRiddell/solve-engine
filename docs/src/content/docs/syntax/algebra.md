@@ -112,6 +112,48 @@ solve(x^2-2=0, x) // [-sqrt(2), sqrt(2)]
 Roots that are not rational and not expressible this way are approximated, and
 only after every exact method has been tried.
 
+### Cubics and quartics
+
+Both have closed forms, and both are used. A cubic goes through Cardano's
+method, which returns all three roots including the complex pair.
+
+```solve
+solve(x^3-8=0, x) // [2, -1-sqrt(3)*i, -1+sqrt(3)*i]
+solve(x^3-2=0, x) // [cbrt(2), -cbrt(2)/2-cbrt(2)*sqrt(3)/2*i, -cbrt(2)/2+cbrt(2)*sqrt(3)/2*i]
+```
+
+Cardano's formula for a cubic that has no neat root produces a genuinely long
+expression, nested cube roots over square roots. It is returned anyway, because
+it is the exact answer and rounding it away would throw information out.
+
+A quartic is solved when it has no odd power, or when it splits into two
+quadratics with rational coefficients.
+
+```solve
+solve(x^4-4x^2+4=0, x) // [-sqrt(2), sqrt(2)]
+solve(x^4-3x^2+1=0, x) // [-sqrt((3+sqrt(5))/2), sqrt((3+sqrt(5))/2), -sqrt((3-sqrt(5))/2), sqrt((3-sqrt(5))/2)]
+solve(x^4+4x^2+4x+15=0, x) // [-1-sqrt(2)*i, -1+sqrt(2)*i, 1-2i, 1+2i]
+```
+
+### The two cases that stay approximate
+
+A cubic with three distinct real roots and no rational one is the *casus
+irreducibilis*, and its roots are reported as decimals.
+
+```solve
+solve(x^3-3x+1=0, x) // [-1.88, 0.35, 1.53]
+```
+
+That is not a gap in effort. It is a theorem that those three roots cannot be
+written with real radicals at all: Cardano's formula reaches them only by taking
+cube roots of complex numbers, and the expression that does exist involves a
+cosine of an arccosine of an irrational. Three accurate decimals are the more
+useful answer.
+
+Any remaining quartic, and every equation of degree five to eight, is solved
+numerically for the same kind of reason. A general quartic does have a closed
+form, four radicals deep, and no one can read it.
+
 ### Answers that are not numbers
 
 Some equations have a correct answer that is not a list of roots.

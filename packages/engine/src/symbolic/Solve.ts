@@ -1,13 +1,14 @@
 /**
- * Solving a polynomial equation for one variable, over the reals.
+ * Solving a polynomial equation for one variable.
  *
  * ## The order of attack, and why it is this order
  *
  * Exact answers first, approximation only as a last resort and always labelled
  * as such. Rational roots are extracted by the same rational-root theorem
- * `Factor.ts` uses, then a surviving quadratic is solved by formula. Only a
- * remainder that neither of those reaches falls through to numerical root
- * finding.
+ * `Factor.ts` uses, each one dividing the degree down. What survives goes to
+ * the closed form for its degree: the quadratic formula, Cardano for a cubic,
+ * and the biquadratic or resolvent-cubic split for a quartic. Only a remainder
+ * that none of those reaches falls through to numerical root finding.
  *
  * A quadratic with a positive non-square discriminant returns its **surd**
  * form, so `x^2-2=0` gives `sqrt(2)` rather than `1.41421356`. A system that
@@ -15,17 +16,21 @@
  * stopped being one. The surd is reduced to lowest form, so the equal but
  * unreadable `sqrt(8)/2` does not surface.
  *
+ * Complex roots are returned, not skipped. `x^2+1=0` gives `-i` and `i`. The
+ * "no real solutions" outcome survives for the cases where it is genuinely the
+ * answer, such as a quartic whose complex roots have no closed form here.
+ *
  * ## What is deliberately not here
  *
- * Complex roots. A negative discriminant reports that there are no real
- * solutions rather than inventing `i`, because there is no complex value type
- * to express the answer in. That is a stated limitation, not a silent one.
+ * The *casus irreducibilis*: a cubic with three distinct real roots and no
+ * rational one. Those roots provably cannot be written in real radicals, so
+ * `CubicQuartic.ts` returns them numerically and this module labels them
+ * approximate. See that module's header for why the trigonometric form is not
+ * dressed up as an exact answer.
  *
- * Cardano's method for a cubic with no rational root. Its *casus irreducibilis*
- * case has three real roots that cannot be written without complex
- * intermediates, so the exact path would be correct for some cubics and not
- * others. Those go to the numerical fallback instead, which is honest about
- * being approximate.
+ * A general quartic that neither is biquadratic nor splits into two rational
+ * quadratics. Ferrari's method reaches it, but through a radical nested four
+ * deep that nothing downstream could read or use.
  */
 
 import {
@@ -54,6 +59,8 @@ import {
 } from "@solve-js/symbolic/Polynomial";
 import { rationalRoots } from "@solve-js/symbolic/Factor";
 import { COMPLEX_I, complex as complexValue } from "@solve-js/symbolic/Complex";
+import { exactIntegerSqrt, surdNode } from "@solve-js/symbolic/Radicals";
+import { type RootSet, solveCubic, solveQuartic } from "@solve-js/symbolic/CubicQuartic";
 
 /**
  * Highest polynomial degree {@link solveForVariable} will attempt.
@@ -115,19 +122,6 @@ function divideByRoot(descending: readonly Rational[], root: Rational): Rational
 	return quotient;
 }
 
-/** Exact integer square root, or `null` when `value` is not a perfect square. Decides whether a discriminant gives rational roots or surds. */
-function exactSqrt(value: bigint): bigint | null {
-	if (value < 0n) return null;
-	if (value < 2n) return value;
-	let previous = value;
-	let current = (value + 1n) / 2n;
-	while (current < previous) {
-		previous = current;
-		current = (previous + value / previous) / 2n;
-	}
-	return previous * previous === value ? previous : null;
-}
-
 /**
  * Solves `ax^2 + bx + c = 0` over the complex numbers.
  *
@@ -151,8 +145,8 @@ function solveQuadratic(a: Rational, b: Rational, c: Rational): SymbolicNode[] {
 
 	// A perfect-square discriminant needs both numerator and denominator to be
 	// perfect squares, since the rational's own square root is taken componentwise.
-	const rootN = exactSqrt(discriminant.n);
-	const rootD = exactSqrt(discriminant.d);
+	const rootN = exactIntegerSqrt(discriminant.n);
+	const rootD = exactIntegerSqrt(discriminant.d);
 	if (rootN !== null && rootD !== null) {
 		const root: Rational = { n: rootN, d: rootD };
 		const plus = rationalDiv(rationalAdd(rationalNeg(b), root), twoA);
@@ -188,8 +182,8 @@ function solveQuadratic(a: Rational, b: Rational, c: Rational): SymbolicNode[] {
  */
 function complexQuadraticRoots(negatedB: Rational, discriminant: Rational, twoA: Rational): SymbolicNode[] {
 	const magnitude = rationalNeg(discriminant);
-	const rootN = exactSqrt(magnitude.n);
-	const rootD = exactSqrt(magnitude.d);
+	const rootN = exactIntegerSqrt(magnitude.n);
+	const rootD = exactIntegerSqrt(magnitude.d);
 
 	if (rootN !== null && rootD !== null) {
 		// Everything stays in the Gaussian rationals, so each root is one exact
@@ -220,42 +214,6 @@ function complexQuadraticRoots(negatedB: Rational, discriminant: Rational, twoA:
 		{ kind: "sub", left: constNode(real), right: imaginary },
 		{ kind: "add", left: constNode(real), right: imaginary },
 	];
-}
-
-/**
- * Builds the square root of a positive rational in lowest surd form.
- *
- * `sqrt(8)` becomes `2*sqrt(2)` rather than being left as-is, which is what
- * makes `x^2-2=0` come out as `sqrt(2)` instead of the equal but unreadable
- * `sqrt(8)/2`. Written as a `sqrt` call rather than a power of one half so it
- * renders the way it is normally written, and so the simplifier's own exact
- * folding collapses it when the radicand turns out to be a perfect square.
- *
- * `sqrt(n/d)` is computed as `sqrt(n*d)/d`, which keeps the whole extraction in
- * integers.
- */
-function surdNode(value: Rational): SymbolicNode {
-	const radicand = value.n * value.d;
-
-	// Pull out the largest square factor by trial division.
-	let extracted = 1n;
-	let remaining = radicand;
-	for (let factor = 2n; factor * factor <= remaining; factor++) {
-		const square = factor * factor;
-		while (remaining % square === 0n) {
-			remaining /= square;
-			extracted *= factor;
-		}
-	}
-
-	const root: SymbolicNode = { kind: "call", name: "sqrt", args: [constNode({ n: remaining, d: 1n })] };
-	const scale: Rational = { n: extracted, d: value.d };
-	return isRationalOneValue(scale) ? root : { kind: "mul", left: constNode(scale), right: root };
-}
-
-/** Whether a rational is exactly one, used by {@link surdNode} to skip a redundant coefficient. */
-function isRationalOneValue(value: Rational): boolean {
-	return value.n === 1n && value.d === 1n;
 }
 
 /** The rational two, built once per call rather than exported, since it is only needed here. */
@@ -404,6 +362,26 @@ function solveLinearWithOtherUnknowns(polynomial: Polynomial, variable: string):
 	};
 }
 
+/**
+ * The closed form for a leftover cubic or quartic, when one exists.
+ *
+ * Reached only after every rational root has been divided out, so what arrives
+ * here genuinely needs radicals. A cubic always has a closed form of some kind;
+ * a quartic has one only in the two families {@link solveQuartic} covers.
+ *
+ * @param descending - Descending coefficients of the leftover polynomial.
+ * @returns The roots, or `null` when the numerical fallback should take over.
+ */
+function closedFormRoots(descending: readonly Rational[]): RootSet | null {
+	if (descending.length === 4) {
+		return solveCubic(descending[0], descending[1], descending[2], descending[3]);
+	}
+	if (descending.length === 5) {
+		return solveQuartic(descending[0], descending[1], descending[2], descending[3], descending[4], solveQuadratic);
+	}
+	return null;
+}
+
 /** Solves a single-variable polynomial given its descending coefficients. */
 function solveUnivariate(descending: readonly Rational[]): SolveOutcome {
 	const exact: SymbolicNode[] = [];
@@ -437,7 +415,13 @@ function solveUnivariate(descending: readonly Rational[]): SolveOutcome {
 			: { kind: "no-real-solutions", reason: "there is no value that satisfies this equation" };
 	}
 
-	// Degree three or more with no rational root left. Approximate, and say so.
+	const closedForm = closedFormRoots(remaining);
+	if (closedForm !== null) {
+		return { kind: "roots", exact: [...exact, ...closedForm.exact], approximate: closedForm.approximate };
+	}
+
+	// Degree five or more, or a quartic with no readable closed form. Approximate,
+	// and say so.
 	const approximate = numericRoots(remaining);
 	if (exact.length === 0 && approximate.length === 0) {
 		return { kind: "no-real-solutions", reason: "no real root was found within the polynomial's root bound" };

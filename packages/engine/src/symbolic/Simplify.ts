@@ -79,6 +79,7 @@ import {
 } from "@solve-js/symbolic/Rational";
 import { toPolynomial, fromPolynomial } from "@solve-js/symbolic/Polynomial";
 import { cancelSymbolic } from "@solve-js/symbolic/Gcd";
+import { exactIntegerSqrt, exactIntegerCbrt } from "@solve-js/symbolic/Radicals";
 import {
 	type Complex,
 	complex,
@@ -214,19 +215,6 @@ function rationalFloor(r: Rational): bigint {
 	return r.n < 0n && truncated * r.d !== r.n ? truncated - 1n : truncated;
 }
 
-/** Exact integer square root, or `null` when `value` is not a perfect square. This is what keeps `sqrt(2)` unfolded. */
-function exactSqrt(value: bigint): bigint | null {
-	if (value < 0n) return null;
-	if (value < 2n) return value;
-	let previous = value;
-	let current = (value + 1n) / 2n;
-	while (current < previous) {
-		previous = current;
-		current = (previous + value / previous) / 2n;
-	}
-	return previous * previous === value ? previous : null;
-}
-
 /** Largest factorial this will fold. Beyond this the exact result is enormous and the caller almost certainly wants the numeric builtin instead. */
 const MAX_FOLDED_FACTORIAL = 500n;
 
@@ -257,8 +245,18 @@ function foldCall(name: string, args: readonly Rational[]): Rational | null {
 			return args.length === 1 ? { n: rationalFloor(rationalAdd(first, { n: 1n, d: 2n })), d: 1n } : null;
 		case "sqrt": {
 			if (args.length !== 1 || first.n < 0n) return null;
-			const rootN = exactSqrt(first.n);
-			const rootD = exactSqrt(first.d);
+			const rootN = exactIntegerSqrt(first.n);
+			const rootD = exactIntegerSqrt(first.d);
+			return rootN === null || rootD === null ? null : { n: rootN, d: rootD };
+		}
+		case "cbrt": {
+			// Unlike the square root this accepts a negative: every real number has
+			// a real cube root, so `cbrt(-8)` is exactly `-2`. Cardano's formula
+			// leans on this, which is how a cubic whose closed form happens to be
+			// rational still comes back as a plain number.
+			if (args.length !== 1) return null;
+			const rootN = exactIntegerCbrt(first.n);
+			const rootD = exactIntegerCbrt(first.d);
 			return rootN === null || rootD === null ? null : { n: rootN, d: rootD };
 		}
 		// Exact values at the points where these functions are rational. Every
