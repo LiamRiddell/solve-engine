@@ -1,12 +1,12 @@
 /**
- * vm/Symbolic.ts — the bounded symbolic simplifier/formatter (pure
+ * symbolic/ — the bounded symbolic simplifier/formatter (pure
  * function tests), plus VM-level tests exercising `executeBytecode()`'s
  * `symbolicTolerant` flag directly (matching VMOpcodes.spec.ts's own
  * hand-built-bytecode convention) since there is no user-facing parser
  * surface for symbolic values until Phase H.2's `=>` operator lands.
  */
 import { describe, expect, test } from "@jest/globals";
-import { simplifySymbolic, formatSymbolic, constNode, varNode, type SymbolicNode } from "@solve-js/vm/Symbolic";
+import { simplifySymbolic, formatSymbolic, constNode, varNode, type SymbolicNode } from "@solve-js/symbolic";
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { OpCode } from "@solve-js/parser/OpCode";
@@ -82,11 +82,21 @@ describe("simplifySymbolic — flatten-and-collect top-level sums", () => {
     expect(formatSymbolic(simplifySymbolic(add(varNode("x"), varNode("x"))))).toBe("2x");
   });
 
-  test("does NOT collect terms inside a product (explicitly out of scope)", () => {
-    // 2*b + 3*b should NOT become 5b — collecting through mul is deferred.
+  test("collects terms through a product, via the canonical polynomial form", () => {
+    // This assertion is inverted from what it originally pinned. The tree walk
+    // alone stops at the first `mul`, so `2*b + 3*b` stayed `2b+3b`. Routing a
+    // sum through Polynomial.ts first collects it properly.
     const tree = add(mul(constNode(2), varNode("b")), mul(constNode(3), varNode("b")));
     const simplified = simplifySymbolic(tree);
-    expect(formatSymbolic(simplified)).toBe("2b+3b");
+    expect(formatSymbolic(simplified)).toBe("5b");
+  });
+
+  test("a sum that is not a polynomial keeps the tree-level handling", () => {
+    // `vx/sx` has a non-constant denominator, so toPolynomial reports null and
+    // the original collectTerms path runs. This is what preserves symbolic
+    // matrix inverse output; see SymbolicAlgebra.spec.ts.
+    const tree = sub(div(varNode("vx"), varNode("sx")), varNode("tx"));
+    expect(formatSymbolic(simplifySymbolic(tree))).toBe("vx/sx-tx");
   });
 });
 

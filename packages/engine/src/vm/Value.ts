@@ -1,5 +1,5 @@
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import type { SymbolicNode } from "@solve-js/vm/Symbolic";
+import type { SymbolicNode } from "@solve-js/symbolic";
 
 /**
  * A single matrix cell. `boolean` covers element-wise comparison results
@@ -57,7 +57,7 @@ export enum ValueType {
 	Matrix = 7,
 	/** A first-class integer range `min:max`, both inclusive. Value is {@link RangeData}. */
 	Range = 8,
-	/** A symbolic/algebraic expression tree (free-variable formula, not a concrete number). Value is a `SymbolicNode` (`@solve-js/vm/Symbolic`). */
+	/** A symbolic/algebraic expression tree (free-variable formula, not a concrete number). Value is a `SymbolicNode` (`@solve-js/symbolic`). */
 	Symbolic = 9,
 	/** Boolean true/false. Value is `boolean`. */
 	Boolean = 10,
@@ -469,7 +469,12 @@ export function matrixValue(rows: number, cols: number, data: readonly MatrixEnt
 	// A SymbolicNode cell is the only object-typed MatrixEntry variant
 	// (number/boolean are primitives), a cheap, always-correct way to
 	// derive hasSymbolic without asking every caller to track it by hand.
-	const hasSymbolic = data.some(cell => typeof cell === "object" && cell !== null);
+	// The `"kind" in cell` half is a tripwire, not redundancy. MatrixEntry is
+	// `number | boolean | SymbolicNode`, so an object cell should always be a
+	// node; requiring the discriminant means a Rational that escaped
+	// MatrixOps.ts's symbolicToEntry() shows up as a wrong result rather than as
+	// a matrix that silently believes it is symbolic.
+	const hasSymbolic = data.some(cell => typeof cell === "object" && cell !== null && "kind" in cell);
 	const m: MatrixData = { rows, cols, data, hasSymbolic };
 	if (_arenaActive && _arena) return _arena.acquire(ValueType.Matrix, m);
 	return new Value(ValueType.Matrix, m);
@@ -492,7 +497,7 @@ export function rangeValue(min: number, max: number): Value {
 	return new Value(ValueType.Range, r);
 }
 
-/** Create a Symbolic value, a free-variable algebraic expression tree (`vm/Symbolic.ts`'s `SymbolicNode`), not a concrete number. */
+/** Create a Symbolic value, a free-variable algebraic expression tree (`symbolic/SymbolicNode.ts`'s `SymbolicNode`), not a concrete number. */
 export function symbolicValue(node: SymbolicNode): Value {
 	if (_arenaActive && _arena) return _arena.acquire(ValueType.Symbolic, node);
 	return new Value(ValueType.Symbolic, node);

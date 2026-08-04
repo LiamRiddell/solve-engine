@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, Radio } from "lucide-react"
 import { useDiagnosticReportStore } from "@/stores/diagnosticReport"
 import { usePipelineStore } from "@/stores/pipeline"
 import { cn } from "@/lib/utils"
+import { TAB_ROOT } from "@/components/shared/tabChrome"
 
 interface VarEntry {
   variable: string
@@ -108,7 +109,7 @@ export function DagTab() {
   }, [snap])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={TAB_ROOT}>
       <div className="flex items-center gap-2 border-b px-4 py-1.5">
         <span className="text-muted-foreground text-xs">
           {nodeCount} variable{nodeCount !== 1 ? "s" : ""} · {edgeCount} read{edgeCount !== 1 ? "s" : ""} · {sourceCount} data source
@@ -140,7 +141,7 @@ export function DagTab() {
                       className={cn(
                         "flex min-w-8.5 shrink-0 items-center justify-center rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold",
                         entry.producerLine
-                          ? "cursor-pointer border-cyan-500/20 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400"
+                          ? "cursor-pointer border-[var(--chart-3)]/20 bg-[var(--chart-3)]/10 text-[var(--chart-3)]"
                           : "text-muted-foreground border-muted-foreground/20 bg-muted text-[9px] font-normal tracking-wide uppercase",
                       )}
                     >
@@ -149,11 +150,11 @@ export function DagTab() {
                     <span className="text-primary min-w-0 flex-1 truncate font-mono text-sm">{entry.variable}</span>
                     <span className="flex shrink-0 gap-1.5">
                       {isUnused ? (
-                        <span title="Defined but never read anywhere in this document" className="rounded bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-medium text-cyan-600 dark:text-cyan-400">
+                        <span title="Defined but never read anywhere in this document" className="rounded bg-[var(--chart-3)]/10 px-1.5 py-0.5 text-[9px] font-medium text-[var(--chart-3)]">
                           unused
                         </span>
                       ) : (
-                        <span title={`Read by ${entry.consumers.length} lines`} className="rounded bg-sky-500/10 px-1.5 py-0.5 text-[9px] font-medium text-sky-600 dark:text-sky-400">
+                        <span title={`Read by ${entry.consumers.length} lines`} className="rounded bg-[var(--info-bg)] px-1.5 py-0.5 text-[9px] font-medium text-[var(--info-text)]">
                           {entry.consumers.length} read{entry.consumers.length !== 1 ? "s" : ""}
                         </span>
                       )}
@@ -195,7 +196,7 @@ export function DagTab() {
             })}
 
             {perLineDeps.length > 0 && (
-              <div className="text-muted-foreground px-3 py-2 text-[10px] font-semibold tracking-wide uppercase">Per-Line Dependencies</div>
+              <div className="text-muted-foreground px-3 py-2 text-[10px] font-semibold tracking-[0.12em] uppercase">Per-Line Dependencies</div>
             )}
             {perLineDeps.map((entry) => (
               <div key={entry.lineNumber} className="border-b">
@@ -203,14 +204,14 @@ export function DagTab() {
                   <span
                     title="Go to this line"
                     onClick={() => selectLine(entry.lineNumber)}
-                    className="flex min-w-8.5 cursor-pointer items-center justify-center rounded border border-cyan-500/20 bg-cyan-500/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-cyan-600 dark:text-cyan-400"
+                    className="flex min-w-8.5 cursor-pointer items-center justify-center rounded border border-[var(--chart-3)]/20 bg-[var(--chart-3)]/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[var(--chart-3)]"
                   >
                     L{entry.lineNumber}
                   </span>
                   <span className="text-primary font-mono text-sm">depends on</span>
                   <span className="flex flex-wrap gap-1">
                     {entry.sources.map((src) => (
-                      <span key={src} className="flex items-center gap-1 rounded bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] text-amber-600 dark:text-amber-400">
+                      <span key={src} className="flex items-center gap-1 rounded bg-[var(--warning-bg)] px-2 py-0.5 font-mono text-[10px] text-[var(--warning-text)]">
                         <Radio className="size-3" /> {src}
                       </span>
                     ))}
@@ -220,16 +221,16 @@ export function DagTab() {
             ))}
 
             {dataSourceEntries.length > 0 && (
-              <div className="text-muted-foreground px-3 py-2 text-[10px] font-semibold tracking-wide uppercase">Data Source Dependencies</div>
+              <div className="text-muted-foreground px-3 py-2 text-[10px] font-semibold tracking-[0.12em] uppercase">Data Source Dependencies</div>
             )}
             {dataSourceEntries.map((entry) => (
               <div key={entry.key} className="border-b">
                 <div onClick={() => toggleSource(entry.key)} className="hover:bg-muted/50 flex cursor-pointer items-center gap-2 px-3 py-2 select-none">
                   {expandedSources.has(entry.key) ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-                  <span className="flex flex-1 items-center gap-1 font-mono text-sm text-amber-600 dark:text-amber-400">
+                  <span className="flex flex-1 items-center gap-1 font-mono text-sm text-[var(--warning-text)]">
                     <Radio className="size-3.5" /> {entry.key}
                   </span>
-                  <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-medium text-amber-600 dark:text-amber-400">
+                  <span className="rounded bg-[var(--warning-bg)] px-1.5 py-0.5 text-[9px] font-medium text-[var(--warning-text)]">
                     {entry.consumers.length} line{entry.consumers.length !== 1 ? "s" : ""}
                   </span>
                 </div>

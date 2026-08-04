@@ -14,7 +14,7 @@
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType, type MatrixData } from "@solve-js/vm/Value";
-import { formatSymbolic, type SymbolicNode } from "@solve-js/vm/Symbolic";
+import { formatSymbolic, type SymbolicNode } from "@solve-js/symbolic";
 import { newTrackedEngine } from "@tools/trackedEngine";
 
 function engine() {

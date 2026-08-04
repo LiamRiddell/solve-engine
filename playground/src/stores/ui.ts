@@ -4,7 +4,6 @@ export type ActiveTab =
   | "tokens"
   | "summary"
   | "errors"
-  | "qa"
   | "flow"
   | "bytecode"
   | "vmtrace"

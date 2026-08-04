@@ -15,6 +15,7 @@ import { useDiagnosticReportStore } from "@/stores/diagnosticReport"
 import { formatDuration } from "@bridge/utils"
 import { Card, CardFooter, CardHeader } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { TAB_BODY } from "@/components/shared/tabChrome"
 
 function formatTime(ts: number): string {
   const d = new Date(ts)
@@ -61,7 +62,7 @@ export function WorkersTab() {
   const latencyBarClass = engineLatencyBarClass(engine).trim()
 
   return (
-    <div className="flex-1 space-y-3 overflow-y-auto p-4">
+    <div className={TAB_BODY}>
       {/* Engine Worker Card */}
       <Card size="sm" className="gap-0 py-0">
         <CardHeader className="bg-muted/50 flex-row items-center gap-2 border-b py-2">
@@ -69,8 +70,8 @@ export function WorkersTab() {
           <span className="text-sm font-medium">Engine Worker</span>
           <span
             className={cn(
-              "ml-auto rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase",
-              engineStatus(engine) === "busy" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-muted text-muted-foreground",
+              "ml-auto rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.12em] uppercase",
+              engineStatus(engine) === "busy" ? "bg-[var(--warning-bg)] text-[var(--warning-text)]" : "bg-muted text-muted-foreground",
             )}
           >
             {engineStatus(engine)}
@@ -86,7 +87,7 @@ export function WorkersTab() {
             <div
               className={cn(
                 "h-full rounded-full",
-                latencyBarClass === "slow" ? "bg-destructive" : latencyBarClass === "warn" ? "bg-amber-500" : "bg-emerald-500",
+                latencyBarClass === "slow" ? "bg-destructive" : latencyBarClass === "warn" ? "bg-[var(--warning)]" : "bg-[var(--success)]",
               )}
               style={{ width: `${engineLatencyBarPct(engine)}%` }}
             />
@@ -111,8 +112,8 @@ export function WorkersTab() {
           <span className="text-sm font-medium">Query Cache</span>
           <span
             className={cn(
-              "ml-auto rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase",
-              qcHasData(queryCache) ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground",
+              "ml-auto rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.12em] uppercase",
+              qcHasData(queryCache) ? "bg-[var(--success-bg)] text-[var(--success-text)]" : "bg-muted text-muted-foreground",
             )}
           >
             {qcStatus(queryCache)}
@@ -120,9 +121,9 @@ export function WorkersTab() {
         </CardHeader>
         <div className="grid grid-cols-3 gap-3 px-4 py-2 text-xs">
           <Metric label="Total queries" value={String(queryCache.totalQueries)} />
-          <Metric label="Fresh" value={String(queryCache.freshQueries)} className="text-emerald-600 dark:text-emerald-400" />
-          <Metric label="Stale" value={String(queryCache.staleQueries)} className="text-amber-600 dark:text-amber-400" />
-          <Metric label="Fetching" value={String(queryCache.fetchingQueries)} className="text-blue-600 dark:text-blue-400" />
+          <Metric label="Fresh" value={String(queryCache.freshQueries)} className="text-[var(--success-text)]" />
+          <Metric label="Stale" value={String(queryCache.staleQueries)} className="text-[var(--warning-text)]" />
+          <Metric label="Fetching" value={String(queryCache.fetchingQueries)} className="text-[var(--info-text)]" />
           <Metric label="Errors" value={String(queryCache.errorQueries)} className="text-destructive" />
           <Metric label="Last activity" value={qcLastActivityAgo(queryCache)} />
         </div>
@@ -145,8 +146,8 @@ export function WorkersTab() {
           <span className="text-sm font-medium">Compiled Bytecode</span>
           <span
             className={cn(
-              "ml-auto rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase",
-              bytecodeEntries.length > 0 ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-muted text-muted-foreground",
+              "ml-auto rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.12em] uppercase",
+              bytecodeEntries.length > 0 ? "bg-[var(--warning-bg)] text-[var(--warning-text)]" : "bg-muted text-muted-foreground",
             )}
           >
             {bytecodeEntries.length > 0 ? "populated" : "empty"}
@@ -176,7 +177,7 @@ export function WorkersTab() {
             recentLog.map((entry, i) => (
               <div key={i} className="grid grid-cols-[6rem_4.5rem_1fr] items-center gap-2 border-t px-4 py-1 font-mono text-xs">
                 <span className="text-muted-foreground/70">{formatTime(entry.ts)}</span>
-                <span className={cn("rounded px-1 text-[10px]", entry.source === "engine" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" : "bg-violet-500/10 text-violet-600 dark:text-violet-400")}>
+                <span className={cn("rounded px-1 text-[10px]", entry.source === "engine" ? "bg-[var(--info-bg)] text-[var(--info-text)]" : "bg-[var(--chart-1)]/10 text-[var(--chart-1)]")}>
                   {entry.source === "query-cache" ? "query" : entry.source}
                 </span>
                 <span className={cn("truncate", entry.error && "text-destructive")}>{entry.msg}</span>

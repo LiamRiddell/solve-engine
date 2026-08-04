@@ -375,21 +375,24 @@
   background: rgb(200 255 0 / 0.16);
 }
 
-/* Syntax highlight colors — "One Dark" palette, hardcoded to match. */
-.cm-solve-number { color: #61afef; }
-.cm-solve-string { color: #98c379; }
-.cm-solve-keyword { color: #c678dd; }
-.cm-solve-operator { color: #abb2bf; }
-.cm-solve-comparison { color: #56b6c2; }
-.cm-solve-bitwise { color: #56b6c2; }
-.cm-solve-function { color: #e5c07b; }
-.cm-solve-variable { color: #e06c75; }
-.cm-solve-unit { color: #56b6c2; }
-.cm-solve-datetime { color: #d19a66; }
-.cm-solve-vector { color: #d19a66; }
-.cm-solve-punctuation { color: #5c6370; }
-.cm-solve-error { color: #e06c75; text-decoration: underline wavy; }
-.cm-solve-osrs-item { color: #a6e22e; font-weight: 600; }
+/* Syntax highlight colors — "One Dark" palette, hardcoded to match.
+   Class names come from the engine's `tokenClassName()`, which namespaces on
+   the library rather than on the editor. The editor happens to be CodeMirror
+   here, but nothing about these names says so. */
+.solve-number { color: #61afef; }
+.solve-string { color: #98c379; }
+.solve-keyword { color: #c678dd; }
+.solve-operator { color: #abb2bf; }
+.solve-comparison { color: #56b6c2; }
+.solve-bitwise { color: #56b6c2; }
+.solve-function { color: #e5c07b; }
+.solve-variable { color: #e06c75; }
+.solve-unit { color: #56b6c2; }
+.solve-datetime { color: #d19a66; }
+.solve-vector { color: #d19a66; }
+.solve-punctuation { color: #5c6370; }
+.solve-error { color: #e06c75; text-decoration: underline wavy; }
+.solve-osrs-item { color: #a6e22e; font-weight: 600; }
 
 /* ── Inline results ────────────────────────────────────────────── */
 .os-result-inline {

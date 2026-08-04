@@ -68,7 +68,8 @@ tier table and what "advanced-public" vs. "internal" means for semver purposes. 
 |---|---|
 | `api/` | `PackageRegistry`/`IEnginePackage` — the plugin-registration facade. |
 | `engine/` | `ExpressionEngine` (orchestrator), `DocumentModel`, `ThreeTierEvaluator`, `AsyncResolutionBatcher`, `ExpressionEngineSafety` (validation). |
-| `vm/` | `Value`/`ValueType`, `OpRegistry`, `VM.ts` (dispatch loop), `VMBuiltins` (plugin-function registry), `DependencyGraph`, `GlobalVariableStore`, `ScopeManager`. |
+| `vm/` | `Value`/`ValueType`, `OpRegistry`, `VM.ts` (dispatch loop), `VMBuiltins` (plugin-function registry), `MatrixOps`, `SymbolicOps` (the `Value` ↔ `SymbolicNode` bridge), `DependencyGraph`, `GlobalVariableStore`, `ScopeManager`. |
+| `symbolic/` | The computer-algebra core: `Rational` (exact bigint arithmetic), `SymbolicNode` (the expression tree), `Simplify`, `SymbolicFormat`. Pure mathematics, importing nothing from `lexer/`, `parser/`, `vm/` or `engine/`. It sits below `vm/` rather than inside `packages/` because `vm/Value.ts` embeds a `SymbolicNode` in its own value union and in `MatrixEntry`, so the tree is core VM data; a package may import from `parser/`, never the reverse. |
 | `lexer/` | `ExpressionLexer` (scanner), `Lexer` (streaming wrapper), `Token`/`TokenTypes`. |
 | `parser/` | `PrecedenceParser`, `ParseletRegistry`, `BytecodeBuilder`, `OpCode`, `BindingPower`, `PhrasePattern` (declarative phrase-grammar builder). |
 | `normalizer/` | `TokenNormalizer`, `PhraseTrie` (multi-word phrase fusion), implicit-multiply rule. |

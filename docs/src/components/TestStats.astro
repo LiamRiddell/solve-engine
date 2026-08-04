@@ -1,0 +1,116 @@
+---
+/**
+ * The correctness band: how big the test suite is, said plainly and loudly.
+ *
+ * The numbers are imported rather than written. `scripts/collect-test-stats.mjs`
+ * reads them out of the full suite's own Jest report and CI fails if the
+ * committed file has drifted, so this cannot end up quoting a total that was
+ * true last spring.
+ *
+ * Rendered complete on the server. The script only animates a number that is
+ * already correct in the markup, which means a reader with no JavaScript, or
+ * one who arrives before the script does, still gets the claim.
+ */
+import stats from "../data/testStats.json";
+
+const formatted = {
+  tests: stats.tests.toLocaleString("en-GB"),
+  suites: stats.suites.toLocaleString("en-GB"),
+  docExamples: stats.docExamples.toLocaleString("en-GB"),
+  builtinPackages: stats.builtinPackages.toLocaleString("en-GB"),
+};
+---
+
+<div class="band stats-band not-content">
+  <div class="band__inner">
+    <span class="band__eyebrow">Correctness</span>
+
+    <p class="stats-band__figure">
+      <span class="stats-band__number" data-count-to={stats.tests}>{formatted.tests}</span>
+      <span class="stats-band__unit">tests</span>
+    </p>
+
+    <p class="stats-band__lede">
+      Run on every commit, on every supported version of Node, before anything
+      reaches npm.
+    </p>
+
+    <dl class="stats-band__grid">
+      <div>
+        <dt data-count-to={stats.suites}>{formatted.suites}</dt>
+        <dd>spec files, covering the lexer, the normaliser, the parser, the virtual machine and every shipped package.</dd>
+      </div>
+      <div>
+        <dt data-count-to={stats.docExamples}>{formatted.docExamples}</dt>
+        <dd>examples in this documentation, each one executed by the suite and checked against its printed answer.</dd>
+      </div>
+      <div>
+        <dt data-count-to={stats.builtinPackages}>{formatted.builtinPackages}</dt>
+        <dd>language packages registered by default, each one tested on its own and again in combination.</dd>
+      </div>
+    </dl>
+
+    <p class="stats-band__note">
+      The documentation figure is the one worth dwelling on. Every example you
+      will read on this site is input the engine actually evaluates during the
+      test run, compared against the result printed beside it. A page cannot
+      drift away from the engine without the build going red first.
+    </p>
+  </div>
+</div>
+
+<script>
+  /**
+   * Counts each figure up from zero, once, when the band first comes into view.
+   *
+   * Starts from the rendered text rather than replacing it, so if any of this
+   * fails the number on screen is still the right one.
+   */
+  const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function animate(el: HTMLElement): void {
+    const target = Number(el.dataset.countTo);
+    if (!Number.isFinite(target) || target <= 0) return;
+
+    const duration = 1100;
+    const started = performance.now();
+    const format = (value: number) => Math.round(value).toLocaleString("en-GB");
+
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - started) / duration);
+      // Ease out: fast at the start, settling rather than stopping dead.
+      const eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = format(target * eased);
+      if (progress < 1) requestAnimationFrame(tick);
+    };
+
+    el.textContent = "0";
+    requestAnimationFrame(tick);
+  }
+
+  function init(): void {
+    const figures = document.querySelectorAll<HTMLElement>("[data-count-to]");
+    if (figures.length === 0 || REDUCED) return;
+
+    if (typeof IntersectionObserver !== "function") return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          observer.unobserve(entry.target);
+          animate(entry.target as HTMLElement);
+        }
+      },
+      { threshold: 0.6 },
+    );
+
+    for (const figure of figures) observer.observe(figure);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init, { once: true });
+  } else {
+    init();
+  }
+</script>

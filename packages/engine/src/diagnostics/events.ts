@@ -1,7 +1,7 @@
 
 
 import type { MatrixData, RangeData } from "@solve-js/vm/Value";
-import type { SymbolicNode } from "@solve-js/vm/Symbolic";
+import type { SymbolicNode } from "@solve-js/symbolic";
 
 /**
  * Diagnostic event types as string constants (not const enum, for cross-module compatibility with isolatedModules)

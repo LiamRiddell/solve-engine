@@ -24,8 +24,105 @@
    too. */
 header.header {
   border-bottom: 1px solid var(--border);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  /* The bar floats over content that scrolls beneath it, and the landing page
+     sends notepads and code frames under it. A heavier blur than the tint alone
+     would give is what keeps the wordmark and the links legible while that is
+     happening. `saturate` stops the blurred sample going grey. */
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+
+/*
+ * Layout for the replaced header (src/components/Header.astro). Starlight's
+ * three-column grid went with its component, so the whole band is defined here:
+ * brand and search on the left, navigation on the right, one gap between every
+ * pair of things.
+ */
+.topbar {
+  --topbar-gap: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--topbar-gap);
+  height: 100%;
+}
+
+.topbar__lead {
+  display: flex;
+  align-items: center;
+  gap: var(--topbar-gap);
+  /* Lets the wordmark clip rather than push the search field off the bar. */
+  min-width: 0;
+}
+
+.title-wrapper {
+  overflow: clip;
+  /* Keeps the focus ring off the clip edge. */
+  padding: 0.25rem;
+  margin: -0.25rem;
+  min-width: 0;
+}
+
+/* Wide enough to read as a search field, never so wide that it crowds the
+   links. Below the width at which Starlight draws a field at all, the control
+   is a bare icon button and sizing it would leave a gap. */
+.topbar__search {
+  flex: none;
+}
+
+@media (min-width: 50rem) {
+  .topbar__search {
+    width: clamp(11rem, 20vw, 17rem);
+  }
+}
+
+.topbar__trail {
+  display: flex;
+  align-items: center;
+  gap: var(--topbar-gap);
+}
+
+.topbar__nav {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.topbar__nav a {
+  color: var(--muted-foreground);
+  font-size: var(--sl-text-sm);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 120ms ease;
+}
+
+.topbar__nav a:hover,
+.topbar__nav a[aria-current="page"] {
+  color: var(--foreground);
+}
+
+/* Room is tight once the mobile menu button is fixed over the right end of the
+   bar, and every one of these links is in the sidebar behind that button. */
+@media (max-width: 63rem) {
+  .topbar__nav,
+  .topbar__trail .social-icons {
+    display: none;
+  }
+}
+
+/* Below Starlight's own breakpoint the whole trailing group goes. Starlight
+   renders the theme select and the social icons again inside the mobile menu,
+   so nothing is lost, and keeping them here cost enough width to clip the
+   wordmark to "SOL" on a 320px screen. */
+@media (max-width: 50rem) {
+  .topbar__trail {
+    display: none;
+  }
+}
+
+.social-icons {
+  align-items: center;
+  gap: 0.5rem;
 }
 
 /* The wordmark is the whole brand mark. There is no icon beside it. BBH Bartle
@@ -150,10 +247,9 @@ starlight-menu-button[aria-expanded="true"] button,
   font-weight: 500;
 }
 
-/* Starlight indents nested lists with a border-inline-start on the <ul>. */
-.sidebar-content ul ul {
-  border-inline-start: 1px solid var(--border);
-}
+/* No rule for nested lists here on purpose. Starlight already draws the indent
+   guide, on the <li> rather than on the <ul>, so adding one to the <ul> as well
+   put two hairlines nine pixels apart down the whole sidebar. */
 
 .sidebar-content summary {
   padding-block: 0.25rem;
@@ -517,9 +613,19 @@ starlight-menu-button[aria-expanded="true"] button,
 
 /* ── Table of contents ──────────────────────────────────────────────────── */
 
+/*
+ * The rail down the left of the contents is one continuous line, so the
+ * segments that make it up must not be rounded: a radius on each link turns a
+ * rail into a column of separate ticks with a notch between every pair, and the
+ * active one reads as clipped rather than marked.
+ *
+ * The width is the same on every item, active or not, so marking one is a
+ * change of colour and never a change of layout. Widening the border on the
+ * current item instead would shift its text sideways as you scroll.
+ */
 starlight-toc a {
-  border-radius: calc(var(--radius) - 3px);
-  border-inline-start: 1px solid var(--border);
+  border-radius: 0;
+  border-inline-start: 2px solid var(--border);
   color: var(--faint);
   font-size: var(--sl-text-xs);
   transition:
@@ -529,12 +635,13 @@ starlight-toc a {
 
 starlight-toc a:hover {
   color: var(--foreground);
+  border-inline-start-color: var(--border-strong);
 }
 
 starlight-toc a[aria-current="true"],
 starlight-toc a[aria-current="true"]:hover {
   border-inline-start-color: var(--primary);
-  color: var(--accent-foreground);
+  color: var(--foreground);
   font-weight: 500;
 }
 

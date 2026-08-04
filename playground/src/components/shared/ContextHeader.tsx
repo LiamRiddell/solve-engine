@@ -26,7 +26,7 @@ export function ContextHeader({
   return (
     <div className="bg-card sticky top-0 z-10 flex items-center gap-3 border-b px-4 py-2">
       <div className="flex shrink-0 items-center gap-2">
-        <span className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+        <span className="text-muted-foreground text-[10px] font-semibold tracking-[0.12em] uppercase">
           {label}
         </span>
         <Badge variant="secondary">{lineBadge}</Badge>

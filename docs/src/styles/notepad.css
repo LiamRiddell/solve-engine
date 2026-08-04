@@ -84,7 +84,7 @@
    what makes the expressions read as the foreground. Wins over the token
    colours below because prose is never code. */
 .notepad__prose,
-.notepad__prose[class*="cm-solve-"] {
+.notepad__prose[class*="solve-"] {
   color: var(--faint);
 }
 
@@ -163,11 +163,11 @@
 /*
  * ── Syntax highlighting ──────────────────────────────────────────────────
  *
- * The class names are produced by the engine's own `categoryClassName()`
- * adapter, so this block is the CSS half of the contract any editor
- * integration implements. The adapter's rule is that the category name IS the
- * class-name key, which means a package that registers a new token category
- * gets a predictable class here for free; only a colour has to be added.
+ * The class names are produced by the engine's own `tokenClassName()`, so this
+ * block is the CSS half of the contract any editor integration implements. The
+ * rule is that the category name IS the class-name key, which means a package
+ * that registers a new token category gets a predictable class here for free;
+ * only a colour has to be added.
  *
  * These are the One Dark hues the Solve playground's editor uses, so an
  * expression looks the same in the docs, in the playground and in a host that
@@ -206,40 +206,73 @@
   --solve-hl-error: #b3261e;
 }
 
-.cm-solve-number { color: var(--solve-hl-number); }
-.cm-solve-string { color: var(--solve-hl-string); }
-.cm-solve-keyword { color: var(--solve-hl-keyword); }
-.cm-solve-operator { color: var(--solve-hl-operator); }
-.cm-solve-comparison { color: var(--solve-hl-comparison); }
-.cm-solve-bitwise { color: var(--solve-hl-bitwise); }
-.cm-solve-function { color: var(--solve-hl-function); }
-.cm-solve-variable { color: var(--solve-hl-variable); }
-.cm-solve-unit { color: var(--solve-hl-unit); }
-.cm-solve-datetime { color: var(--solve-hl-datetime); }
-.cm-solve-vector { color: var(--solve-hl-vector); }
-.cm-solve-punctuation { color: var(--solve-hl-punctuation); }
-.cm-solve-error {
+.solve-number { color: var(--solve-hl-number); }
+.solve-string { color: var(--solve-hl-string); }
+.solve-keyword { color: var(--solve-hl-keyword); }
+.solve-operator { color: var(--solve-hl-operator); }
+.solve-comparison { color: var(--solve-hl-comparison); }
+.solve-bitwise { color: var(--solve-hl-bitwise); }
+.solve-function { color: var(--solve-hl-function); }
+.solve-variable { color: var(--solve-hl-variable); }
+.solve-unit { color: var(--solve-hl-unit); }
+.solve-datetime { color: var(--solve-hl-datetime); }
+.solve-vector { color: var(--solve-hl-vector); }
+.solve-punctuation { color: var(--solve-hl-punctuation); }
+.solve-error {
   color: var(--solve-hl-error);
   text-decoration: underline wavy;
 }
 
-/* A swatch list for the highlighting section of the landing page: the same
-   classes, shown as themselves. */
+/*
+ * The syntax-highlighting key.
+ *
+ * Two columns, not a wide grid of pairs. A grid was geometrically correct and
+ * looked wrong: eleven samples of very different widths (`42`, `"gbp"`, `>=`)
+ * left-aligned into five columns gives five ragged edges, nothing for the eye
+ * to lock onto, and a last row two thirds empty.
+ *
+ * One gutter fixes it. The sample is right-aligned against it and the name is
+ * left-aligned away from it, so the element has exactly two clean vertical
+ * edges however long the samples get. Tall and narrow rather than short and
+ * wide, which also sits better beside the code column it shares a row with.
+ */
 .hl-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1.5rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 1rem;
+  row-gap: 0.5rem;
+  align-items: baseline;
+  /* Explicit rather than inherited. Zeroing the margin to escape Starlight's
+     sibling spacing also removed the space this needs to read as its own
+     element rather than as a continuation of the paragraph above it. */
+  margin: 1.75rem 0 0;
+}
+
+/* The wrapper exists to pair a sample with its name in the markup. Removing its
+   box lets both take part in the list's own grid, which is what puts every
+   sample in one column and every name in the other.
+
+   It also settles an old bug for good: Starlight adds a top margin between
+   sibling elements in markdown content, and a margin on a box that does not
+   exist has nothing to push. */
+.hl-legend > div {
+  display: contents;
+}
+
+.hl-legend dt {
+  grid-column: 1;
   font-family: var(--sl-font-mono);
-  font-size: var(--sl-text-xs);
-}
-
-.hl-legend li {
-  color: var(--faint);
-}
-
-.hl-legend b {
+  font-size: var(--sl-text-sm);
   font-weight: 400;
+  line-height: 1.4;
+  text-align: end;
+  white-space: nowrap;
+}
+
+.hl-legend dd {
+  grid-column: 2;
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: var(--sl-text-xs);
+  line-height: 1.4;
 }

@@ -5,6 +5,7 @@ import { useDiagnosticReportStore } from "@/stores/diagnosticReport"
 import { fmt } from "@bridge/utils"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { TAB_ROOT } from "@/components/shared/tabChrome"
 
 /** Acronyms that should stay fully uppercase instead of naive per-word title-casing. */
 const ACRONYMS = new Set(["vm", "dag", "ip"])
@@ -85,7 +86,7 @@ export function StreamTab() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={TAB_ROOT}>
       <div className="flex items-center gap-2 border-b px-4 py-1.5">
         <span
           className={cn("flex items-center gap-1 text-xs", streamingActive && "text-primary")}
@@ -160,7 +161,7 @@ export function StreamTab() {
                   <span
                     className={cn(
                       "flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-xs",
-                      isAsync ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-muted text-muted-foreground",
+                      isAsync ? "bg-[var(--warning-bg)] text-[var(--warning-text)]" : "bg-muted text-muted-foreground",
                     )}
                   >
                     {isAsync ? <Clock className="size-3" /> : "#"} {groupKey}
@@ -175,7 +176,7 @@ export function StreamTab() {
                       <div key={i} className="grid grid-cols-[4rem_5rem_9rem_1fr] items-center gap-2 px-4 py-1 font-mono text-xs">
                         <span className="text-muted-foreground">{evt.elapsedNs > 0 ? fmt(evt.elapsedNs) : "—"}</span>
                         <span className="text-muted-foreground/70">{fmtClock(evt.timestamp)}</span>
-                        <span className="text-violet-600 dark:text-violet-400">{fmtType(evt.type)}</span>
+                        <span className="text-[var(--chart-1)]">{fmtType(evt.type)}</span>
                         <span className="truncate">
                           {evt.expression}
                           {evt.details && <span className="text-muted-foreground ml-2">{evt.details}</span>}

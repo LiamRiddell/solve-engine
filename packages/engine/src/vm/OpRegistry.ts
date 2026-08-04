@@ -34,6 +34,30 @@ export interface EquationDef {
 }
 
 /**
+ * A stored scalar equation, the general `x^2 - 4 = 0` shape, kept separate from
+ * {@link EquationDef} rather than merged into it.
+ *
+ * The two are genuinely different problems solved by different machinery.
+ * {@link EquationDef} is a product chain of matrix factors solved by inverting
+ * their product; this is an arbitrary polynomial in one unknown solved by
+ * `symbolic/Solve.ts`. Merging them into one optional-field type would mean
+ * every consumer branching on which half is populated, and would put the older,
+ * already-shipped matrix path at risk of being changed by accident.
+ *
+ * Both sides are compiled programs rather than pre-evaluated values, because
+ * neither side can be evaluated until solve time: they contain the very unknown
+ * being solved for.
+ */
+export interface ScalarEquationDef {
+	/** The unknown this equation is keyed by and will be solved for. */
+	variable: string;
+	/** Compiled left-hand side, evaluated symbolic-tolerantly at solve time. */
+	lhsProgram: BytecodeProgram;
+	/** Compiled right-hand side, likewise. */
+	rhsProgram: BytecodeProgram;
+}
+
+/**
  * Handler function for plugin-registered opcodes via CALL_PLUGIN (opcode 50).
  * No longer dispatched directly from the VM switch, plugins register
  * functions in pluginFunctionRegistry instead.
@@ -163,6 +187,10 @@ export interface VM {
 	defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram): void;
 	getEquation(variable: string): EquationDef | undefined;
 	hasEquation(variable: string): boolean;
+	/** Register (or redefine) a stored scalar equation (`x^2-4 = 0`), keyed by its unknown. See {@link ScalarEquationDef}. */
+	defineScalarEquation(variable: string, lhsProgram: BytecodeProgram, rhsProgram: BytecodeProgram): void;
+	getScalarEquation(variable: string): ScalarEquationDef | undefined;
+	hasScalarEquation(variable: string): boolean;
 	reset(): void;
 	getMaxInstructions(): number;
 	getMaxStackDepth(): number;

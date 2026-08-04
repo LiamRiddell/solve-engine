@@ -1,6 +1,6 @@
 //#region Imports
 
-import { VM, type EquationDef } from "@solve-js/vm/OpRegistry";
+import { VM, type EquationDef, type ScalarEquationDef } from "@solve-js/vm/OpRegistry";
 import { matrixMultiply, inverse } from "@solve-js/vm/MatrixOps";
 import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
 import { LineCache, LineCacheEntry } from "@solve-js/cache/LineCache";
@@ -54,6 +54,8 @@ import {
     extractReadsAndWrites,
 } from "@solve-js/engine/ExpressionEngineSafety";
 import { buildTokenLookup } from "@solve-js/lexer/tokenRegistration";
+import { containsSymbolicCall } from "@solve-js/packages/symbolic";
+import { solveEquationValues } from "@solve-js/vm/SymbolicOps";
 import { abortLogger } from "@solve-js/utilities/AbortControllerLogger";
 import { TokenNormalizer, BUILTIN_PHRASES, implicitMultiplyRule } from "@solve-js/normalizer";
 import type { TokenFusion } from "@solve-js/normalizer";
@@ -1329,12 +1331,41 @@ export class ExpressionEngine {
                 throw ErrorFactory.parsing('THEREFORE_REQUIRES_EXPRESSION', `"=>" needs an expression or variable name before it.`);
             }
             if (beforeTokens.length === 1 && (beforeTokens[0].type === 'IDENT' || beforeTokens[0].type === 'UNIT')) {
-                const equation = this.vm.getEquation(beforeTokens[0].value);
+                // The matrix product-chain equation is checked FIRST and its
+                // behaviour is unchanged. The scalar kind is only consulted when
+                // that finds nothing, so the older path can never be diverted.
+                const name = beforeTokens[0].value;
+                const equation = this.vm.getEquation(name);
+                const scalar = this.vm.getScalarEquation(name);
                 if (equation) {
-                    return this.solveEquation(equation);
+                    const solved = this.solveEquation(equation);
+                    // A product chain of names is stored as a matrix equation
+                    // on sight, since whether the factors are matrices is only
+                    // knowable at solve time. When they turn out not to be,
+                    // `a*n = 10` with a plain numeric `a` is an ordinary scalar
+                    // equation, so fall through to that rather than leaving the
+                    // user with "must be a Matrix" for a line that has a
+                    // perfectly good answer. Every other failure (a missing
+                    // factor, a singular matrix) still surfaces unchanged.
+                    const isNotMatrix = solved.type === ValueType.Error && solved.value === 'EQUATION_FACTOR_NOT_MATRIX';
+                    if (!isNotMatrix || !scalar) return solved;
+                }
+                if (scalar) {
+                    return this.solveScalarEquation(scalar);
                 }
             }
             return this.simplifySymbolically(beforeTokens);
+        }
+
+        // An algebra verb (`expand(...)`, and the later phases' `factor`/
+        // `solve`) is itself a request to work symbolically, so it does not also
+        // need a trailing `=>`. Without this, `expand((x+1)*(x+2))` on its own
+        // line would hard-throw UNDEFINED_VARIABLE on `x` before ever reaching
+        // the builtin. Placed after the THEREFORE branch so an explicit `=>`
+        // still wins, and before the COLON/GLOBAL guard so the existing
+        // assignment grammars stay untouched.
+        if (containsSymbolicCall(normalizedTokens)) {
+            return this.simplifySymbolically(normalizedTokens);
         }
 
         // Already the colon-prefixed (`:name = value`) or `global :name`
@@ -1345,7 +1376,13 @@ export class ExpressionEngine {
         if (eqIdx === -1) return null;
 
         const names = this.parseFactorChain(normalizedTokens.slice(0, eqIdx));
-        if (names === null) return null;
+        if (names === null) {
+            // Not a product chain. It may still be a general scalar equation
+            // (`x^2-4 = 0`), which is a strictly narrower attempt made only
+            // after every existing shape has declined. See
+            // {@link tryStoreScalarEquation} for what it refuses to swallow.
+            return this.tryStoreScalarEquation(normalizedTokens, eqIdx);
+        }
 
         const rhsTokens = normalizedTokens.slice(eqIdx + 1);
 
@@ -1358,7 +1395,101 @@ export class ExpressionEngine {
         const freeVar = names[names.length - 1];
         const factorNames = names.slice(0, -1);
         this.vm.defineEquation(freeVar, factorNames, this.compileAdHoc(rhsTokens));
+        // Also stored as a scalar equation, so that `a*n = 10` with a numeric
+        // `a` still has an answer. Which of the two kinds applies depends on
+        // whether the factors are matrices, and that is not known until solve
+        // time; storing both costs one extra compile of a line the user is
+        // about to ask about anyway. The matrix kind is always tried first, so
+        // this cannot change what an existing document does.
+        this.vm.defineScalarEquation(freeVar, this.compileAdHoc(normalizedTokens.slice(0, eqIdx)), this.compileAdHoc(rhsTokens));
         return stringValue(`${freeVar} stored as an equation — solve with "${freeVar} =>"`);
+    }
+
+    /**
+     * Stores a general scalar equation (`x^2 - 4 = 0`) keyed by its unknown, or
+     * returns `null` to let ordinary processing continue.
+     *
+     * This is the riskiest pattern match in the file, because a bare `=` is
+     * already claimed by three shipped grammars, and swallowing any of them
+     * would break a working feature silently. Each is excluded deliberately:
+     *
+     * - **A user-defined function definition** (`f(x) = 2*x`). Its left side is
+     *   a name followed by `(`, which no equation ever is, so a `LPAREN` in
+     *   second position declines outright. This is the exclusion that matters
+     *   most: `parseFactorChain` already returns `null` for it, so without this
+     *   guard the definition grammar would be intercepted before the parser
+     *   ever saw it.
+     * - **A bare assignment** (`a = [1,2;3,4]`) and **a product-chain matrix
+     *   equation** (`a*x = [60;70]`). Both are handled by `parseFactorChain`
+     *   above and never reach here.
+     * - **A colon-prefixed or global assignment**. Excluded earlier still.
+     *
+     * Two further conditions narrow it to genuine equations. There must be
+     * exactly one top-level `=` (an `==` comparison lexes as `EQUALITY`, a
+     * different token, so it cannot collide), and at least one side must carry
+     * an unknown. Without that last check `2+2 = 4` would become an equation
+     * with no variable and report an identity, where today it is a parse error;
+     * changing an unrelated line's behaviour is not this feature's business.
+     *
+     * @param normalizedTokens - The whole line's normalized tokens.
+     * @param eqIdx - Index of the first `EQUALS` token.
+     * @returns A confirmation value when stored, or `null` to decline.
+     */
+    private tryStoreScalarEquation(normalizedTokens: Token[], eqIdx: number): Value | null {
+        if (normalizedTokens[1]?.type === 'LPAREN') return null;
+        if (eqIdx === 0 || eqIdx === normalizedTokens.length - 1) return null;
+
+        const lhsTokens = normalizedTokens.slice(0, eqIdx);
+        const rhsTokens = normalizedTokens.slice(eqIdx + 1);
+        if (rhsTokens.some(t => t.type === 'EQUALS')) return null;
+
+        const unknowns = this.equationUnknowns(lhsTokens, rhsTokens);
+        if (unknowns.length !== 1) return null;
+
+        const variable = unknowns[0];
+        this.vm.defineScalarEquation(variable, this.compileAdHoc(lhsTokens), this.compileAdHoc(rhsTokens));
+        return stringValue(`${variable} stored as an equation — solve with "${variable} =>"`);
+    }
+
+    /**
+     * The names in an equation that have no value yet, which is what makes them
+     * the thing to solve for.
+     *
+     * A name that already holds a value is not an unknown: in `y = 2` followed
+     * by `x + y = 5`, only `x` is being solved for. A name that is a defined
+     * function is likewise excluded, so a call to one never looks like an
+     * unknown.
+     *
+     * @param lhsTokens - Left-hand side tokens.
+     * @param rhsTokens - Right-hand side tokens.
+     * @returns The distinct unassigned names, in first-seen order.
+     */
+    private equationUnknowns(lhsTokens: Token[], rhsTokens: Token[]): string[] {
+        const unknowns: string[] = [];
+        for (const token of [...lhsTokens, ...rhsTokens]) {
+            if (token.type !== 'IDENT' && token.type !== 'UNIT') continue;
+            if (this.vm.getVar(token.value) !== undefined) continue;
+            if (this.vm.hasUserFunction(token.value)) continue;
+            if (!unknowns.includes(token.value)) unknowns.push(token.value);
+        }
+        return unknowns;
+    }
+
+    /**
+     * Solves a stored scalar equation via `symbolic/Solve.ts`.
+     *
+     * Both sides are evaluated symbolic-tolerantly first, so the unknown
+     * survives as a `Symbolic` value rather than throwing, and a side that
+     * reduces to a plain number is lifted into the symbolic domain to match.
+     *
+     * @param equation - The stored equation.
+     * @returns The solution, rendered by the same helper `solve()` uses, so the
+     * two surfaces cannot disagree about how an outcome reads.
+     */
+    private solveScalarEquation(equation: ScalarEquationDef): Value {
+        const lhs = this.executeSymbolicTolerant(equation.lhsProgram);
+        const rhs = this.executeSymbolicTolerant(equation.rhsProgram);
+        return solveEquationValues(lhs, rhs, equation.variable);
     }
 
     //#endregion

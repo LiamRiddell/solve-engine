@@ -78,6 +78,38 @@ export const CoreErrorCodes = {
   /** `MAP_INVOKE`/`REDUCE_INVOKE`'s anonymous-body-index lookup failing. Same class as `INTERNAL_MISSING_FUNCTION_BODY` above, for the `anonymousBodies` side-table instead of `userFunctionBodies`. */
   INTERNAL_MISSING_ANONYMOUS_BODY: "INTERNAL_MISSING_ANONYMOUS_BODY",
 
+  // ── Symbolic algebra (symbolic/, vm/SymbolicOps.ts) ──
+  /** A coefficient grew past `RATIONAL_MAX_BITS`, e.g. repeated exact elimination multiplying denominators together. */
+  SYMBOLIC_RATIONAL_OVERFLOW: "SYMBOLIC_RATIONAL_OVERFLOW",
+  /** `NaN` or `±Infinity` reaching a symbolic expression, neither of which has an exact rational value. */
+  SYMBOLIC_NONFINITE_OPERAND: "SYMBOLIC_NONFINITE_OPERAND",
+  /** Division by an exactly-zero rational. Exact, unlike the double comparison it replaced, which could not distinguish a true zero from `5.551e-17`. */
+  SYMBOLIC_DIVISION_BY_ZERO: "SYMBOLIC_DIVISION_BY_ZERO",
+  /** A tree exceeding `SYMBOLIC_MAX_NODES` entering the simplifier. */
+  SYMBOLIC_NODE_LIMIT_EXCEEDED: "SYMBOLIC_NODE_LIMIT_EXCEEDED",
+  /** A builtin with no symbolic reading (`min`, `random`, the finance block, ...) applied to an expression still containing an unknown. Returned rather than computing against `toNumber()`'s placeholder zero. */
+  SYMBOLIC_UNSUPPORTED_FUNCTION: "SYMBOLIC_UNSUPPORTED_FUNCTION",
+  /** The rational-root search exceeding `FACTOR_MAX_ROOT_CANDIDATES`. The candidate set is the product of two divisor sets, so a highly-composite coefficient escapes quickly. */
+  SYMBOLIC_FACTOR_LIMIT_EXCEEDED: "SYMBOLIC_FACTOR_LIMIT_EXCEEDED",
+  /** An equation outside what the solver attempts: not a polynomial, above the degree ceiling, or non-linear in the unknown while another unknown is present. */
+  SYMBOLIC_SOLVE_UNSUPPORTED: "SYMBOLIC_SOLVE_UNSUPPORTED",
+  /** `solve`'s second argument not being a bare name. */
+  SOLVE_REQUIRES_VARIABLE_NAME: "SOLVE_REQUIRES_VARIABLE_NAME",
+  /** A derivative order outside 0..`DERIVATIVE_MAX_ORDER`. */
+  SYMBOLIC_DERIVATIVE_ORDER_LIMIT: "SYMBOLIC_DERIVATIVE_ORDER_LIMIT",
+  /** An expression with no known elementary antiderivative. Reported rather than approximated, since a wrong integral is indistinguishable from a right one at the point of use. */
+  SYMBOLIC_INTEGRAL_UNSUPPORTED: "SYMBOLIC_INTEGRAL_UNSUPPORTED",
+  /** A Taylor degree outside 0..`TAYLOR_MAX_DEGREE`. */
+  SYMBOLIC_TAYLOR_DEGREE_LIMIT: "SYMBOLIC_TAYLOR_DEGREE_LIMIT",
+  /** A Taylor coefficient that does not reduce to an exact number at the expansion point. */
+  SYMBOLIC_TAYLOR_INEXACT: "SYMBOLIC_TAYLOR_INEXACT",
+  /** An algebra verb's variable-name argument not being a bare name. */
+  SYMBOLIC_REQUIRES_VARIABLE_NAME: "SYMBOLIC_REQUIRES_VARIABLE_NAME",
+  /** `jacobian` called with expressions containing no unknown to differentiate against. */
+  SYMBOLIC_JACOBIAN_NO_VARIABLES: "SYMBOLIC_JACOBIAN_NO_VARIABLES",
+  /** A finite number whose decimal form could not be read back, which the regex covering every `Number.prototype.toString` output should make unreachable. */
+  INTERNAL_RATIONAL_PARSE: "INTERNAL_RATIONAL_PARSE",
+
   // ── Engine (engine/ExpressionEngine.ts, engine/ExpressionEngineSafety.ts, engine/AsyncResolutionBatcher.ts) ──
   EXPRESSION_TOO_LONG: "EXPRESSION_TOO_LONG",
   EXPRESSION_TOO_COMPLEX: "EXPRESSION_TOO_COMPLEX",

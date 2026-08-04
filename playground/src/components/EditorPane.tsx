@@ -17,7 +17,8 @@ import { markdown } from "@codemirror/lang-markdown"
 import { oneDark } from "@codemirror/theme-one-dark"
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine"
 import { LanguageService } from "@solve-js/language/LanguageService"
-import { categoryClassName, completionItemToOption } from "@solve-js/language/adapters/codemirror"
+import { tokenClassName } from "@solve-js/language/tokenClassName"
+import { completionItemToOption } from "@solve-js/language/adapters/codemirror"
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins"
 import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage"
 import type { LineResult } from "@bridge/engine"
@@ -86,7 +87,7 @@ function buildErrorPopover(detail: ErrorDetail): HTMLDivElement {
   const header = document.createElement("div")
   header.className = "flex items-center gap-1.5"
   const badge = document.createElement("span")
-  badge.className = `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${meta.badgeClass}`
+  badge.className = `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em] uppercase tracking-wide ${meta.badgeClass}`
   const dot = document.createElement("span")
   dot.className = `size-1.5 rounded-full ${meta.dotClass}`
   badge.append(dot, document.createTextNode(meta.label))
@@ -339,7 +340,7 @@ function createHighlightPlugin(languageService: LanguageService) {
         while (pos <= to) {
           const line = view.state.doc.lineAt(pos)
           for (const token of languageService.getSemanticTokens(line.text, line.number)) {
-            builder.add(line.from + token.from, line.from + token.to, Decoration.mark({ class: categoryClassName(token.category) }))
+            builder.add(line.from + token.from, line.from + token.to, Decoration.mark({ class: tokenClassName(token.category) }))
           }
           pos = line.to + 1
         }
@@ -568,7 +569,7 @@ export function EditorPane() {
   return (
     <main className={cn("flex min-h-0 flex-1 flex-col", editorCollapsed && "w-0 min-w-0 overflow-hidden")}>
       <div className="bg-card/40 flex h-9 shrink-0 items-center justify-between border-b px-3">
-        <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">
+        <span className="text-muted-foreground flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.12em] uppercase">
           <Code2 className="size-3.5" /> Editor
         </span>
         <ExamplesMenu />

@@ -1,0 +1,91 @@
+---
+title: The package system
+description: Registration, isolation and version compatibility.
+---
+
+import Explainer from "../../../components/Explainer.tsx";
+
+## Registration
+
+A package declares what it contributes and is registered into shared registries.
+Registration is ordered, and arithmetic goes first so later packages build on a
+working operator set.
+
+Registering a duplicate name is refused, because a silent overwrite would orphan
+whatever the first registration contributed.
+
+```mermaid Every check that stands between a package and a working engine.
+sequenceDiagram
+  participant App as Your code
+  participant Engine as Engine
+  participant Reg as Registries
+
+  App->>Engine: register(package)
+  Engine->>Engine: engine version in the declared range?
+  alt out of range
+    Engine-->>App: refused, naming both versions
+  else in range
+    Engine->>Reg: name already taken?
+    alt taken
+      Reg-->>App: refused, no silent overwrite
+    else free
+      Engine->>Reg: keywords, operators, units
+      Engine->>Reg: parselets and token types
+      Engine->>Reg: token categories
+      Reg-->>Engine: warn on any token type two packages both claim
+      Engine-->>App: registered
+    end
+  end
+```
+
+Every check that stands between a package and a working engine, in order.
+
+<Explainer id="registration" client:load />
+
+## Version compatibility
+
+Each package declares the engine version range it was built against. The range
+is checked at registration and an incompatible package is refused with a message
+naming both versions, rather than failing later in a way that looks like a bug
+in the package.
+
+## Collision visibility
+
+Two packages claiming the same token type would silently shadow each other. The
+registry warns when that happens, naming both, because the failure is otherwise
+extremely hard to diagnose.
+
+## Configuration
+
+A package that needs configuration is exposed as a factory rather than a
+constant. This is how the stocks and knowledge packages take a fetching function
+without the engine ever holding credentials.
+
+## Registering a subset
+
+`BUILTIN_PACKAGES` is an ordinary array, so a host that does not want a
+particular package can filter it out.
+
+```ts
+const packages = BUILTIN_PACKAGES.filter(p => p.name !== "solve-symbolic");
+const engine = new ExpressionEngine("en", false, undefined, undefined, packages);
+```
+
+Do this to change **behaviour**, not to chase speed. Dropping a package removes
+the words it claims from the grammar, which matters if your host wants one of
+them back as an ordinary name. Without the symbolic package, `factor`, `solve`
+and `expand` are just variables again.
+
+It saves very little time. Measured on the symbolic package, the largest of the
+built-ins, leaving it out moves engine construction by around 1.3 microseconds
+and ordinary line evaluation by about 0.03 microseconds per line. Both are
+roughly one percent, which is inside the noise of the measurement. A package
+contributes a few registry entries and, at most, one normalizer rule that
+declines quickly on tokens it does not claim.
+
+It saves no bundle size at all. Registration happens at runtime, while what ends
+up in your bundle is decided by imports, and those are static. The symbolic
+package's grammar is about eight kilobytes of the engine's brotli-compressed
+total, and that code ships whether you register it or not, because the virtual
+machine's builtin table imports the algebra functions directly. Filtering the
+array changes which words parse, not which code loads.

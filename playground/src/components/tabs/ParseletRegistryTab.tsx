@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
+import { TAB_BODY, TAB_ROOT } from "@/components/shared/tabChrome"
 
 interface BpItem {
   tokenType: string
@@ -87,7 +88,7 @@ export function ParseletRegistryTab() {
 
   if (!result) {
     return (
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className={TAB_BODY}>
         <EmptyState icon={Wrench} text="No parselet data available" hint="Evaluate an expression to see the parselet registry and matched parselets" />
       </div>
     )
@@ -100,7 +101,7 @@ export function ParseletRegistryTab() {
       : (lineResults[0]?.expression ?? expression ?? "")
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={TAB_ROOT}>
       <ContextHeader
         label="Parselets"
         lineBadge={activeLineBadge}
@@ -119,7 +120,7 @@ export function ParseletRegistryTab() {
         }
       />
 
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+      <div className={TAB_BODY}>
         {/* Matched Parselets */}
         <div className="rounded-md border">
           <div className="bg-muted/50 flex items-center gap-2 border-b px-3 py-1.5">
@@ -142,8 +143,8 @@ export function ParseletRegistryTab() {
                       className={cn(
                         "flex items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-[10px]",
                         prefixTokenTypes.has(mp.tokenType)
-                          ? "border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
-                          : "border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
+                          ? "border-[var(--chart-1)]/30 bg-[var(--chart-1)]/10 text-[var(--chart-1)]"
+                          : "border-[var(--chart-3)]/30 bg-[var(--chart-3)]/10 text-[var(--chart-3)]",
                       )}
                     >
                       <span className="text-[9px] font-bold tracking-wide uppercase opacity-80">{mp.parseletType}</span>
@@ -172,7 +173,7 @@ export function ParseletRegistryTab() {
             <div className="max-h-80 overflow-y-auto">
               <Table className="font-mono text-xs">
                 <TableHeader className="bg-muted/30 sticky top-0">
-                  <TableRow className="text-muted-foreground text-[10px] tracking-wide uppercase">
+                  <TableRow className="text-muted-foreground text-[10px] font-semibold tracking-[0.12em] uppercase">
                     <TableHead>Kind</TableHead>
                     <TableHead>Token</TableHead>
                     <TableHead className="text-right">Left BP</TableHead>
@@ -183,9 +184,9 @@ export function ParseletRegistryTab() {
                 </TableHeader>
                 <TableBody>
                   {filteredPrefix.map((p) => (
-                    <TableRow key={"pre-" + p.tokenType} className={cn(matchedTokenTypes.has(p.tokenType) && "bg-amber-500/5")}>
+                    <TableRow key={"pre-" + p.tokenType} className={cn(matchedTokenTypes.has(p.tokenType) && "bg-[var(--warning-bg)]")}>
                       <TableCell>
-                        <span className="rounded bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-bold text-violet-600 uppercase dark:text-violet-400">
+                        <span className="rounded bg-[var(--chart-1)]/10 px-1.5 py-0.5 text-[9px] font-bold text-[var(--chart-1)] uppercase dark:text-[var(--chart-1)]">
                           prefix
                         </span>
                       </TableCell>
@@ -193,7 +194,7 @@ export function ParseletRegistryTab() {
                         <span
                           className={cn(
                             "rounded border px-1.5 py-0.5 font-semibold",
-                            matchedTokenTypes.has(p.tokenType) ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400" : "text-muted-foreground",
+                            matchedTokenTypes.has(p.tokenType) ? "border-[var(--warning)]/30 bg-[var(--warning-bg)] text-[var(--warning-text)]" : "text-muted-foreground",
                           )}
                         >
                           {p.tokenType}
@@ -204,7 +205,7 @@ export function ParseletRegistryTab() {
                       <TableCell>{p.category || "—"}</TableCell>
                       <TableCell>
                         {matchedTokenTypes.has(p.tokenType) ? (
-                          <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-600 uppercase dark:text-emerald-400">matched</span>
+                          <span className="rounded bg-[var(--success-bg)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--success-text)] uppercase dark:text-[var(--success-text)]">matched</span>
                         ) : (
                           <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 text-[9px] font-bold uppercase">unused</span>
                         )}
@@ -212,15 +213,15 @@ export function ParseletRegistryTab() {
                     </TableRow>
                   ))}
                   {filteredInfix.map((p) => (
-                    <TableRow key={"in-" + p.tokenType} className={cn(matchedTokenTypes.has(p.tokenType) && "bg-amber-500/5")}>
+                    <TableRow key={"in-" + p.tokenType} className={cn(matchedTokenTypes.has(p.tokenType) && "bg-[var(--warning-bg)]")}>
                       <TableCell>
-                        <span className="rounded bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-bold text-cyan-600 uppercase dark:text-cyan-400">infix</span>
+                        <span className="rounded bg-[var(--chart-3)]/10 px-1.5 py-0.5 text-[9px] font-bold text-[var(--chart-3)] uppercase dark:text-[var(--chart-3)]">infix</span>
                       </TableCell>
                       <TableCell>
                         <span
                           className={cn(
                             "rounded border px-1.5 py-0.5 font-semibold",
-                            matchedTokenTypes.has(p.tokenType) ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400" : "text-muted-foreground",
+                            matchedTokenTypes.has(p.tokenType) ? "border-[var(--warning)]/30 bg-[var(--warning-bg)] text-[var(--warning-text)]" : "text-muted-foreground",
                           )}
                         >
                           {p.tokenType}
@@ -231,7 +232,7 @@ export function ParseletRegistryTab() {
                       <TableCell>{p.category || "—"}</TableCell>
                       <TableCell>
                         {matchedTokenTypes.has(p.tokenType) ? (
-                          <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-600 uppercase dark:text-emerald-400">matched</span>
+                          <span className="rounded bg-[var(--success-bg)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--success-text)] uppercase dark:text-[var(--success-text)]">matched</span>
                         ) : (
                           <span className="text-muted-foreground bg-muted rounded px-1.5 py-0.5 text-[9px] font-bold uppercase">unused</span>
                         )}
@@ -264,7 +265,7 @@ export function ParseletRegistryTab() {
               {bpTierGroups.map((group) => (
                 <div key={group.label}>
                   <div className="mb-1 flex items-baseline gap-1.5">
-                    <span className="text-[10px] font-bold tracking-wide uppercase">{group.label}</span>
+                    <span className="text-[10px] font-semibold tracking-[0.12em] uppercase">{group.label}</span>
                     <span className="text-muted-foreground font-mono text-[9px]">
                       BP {group.range[0]}–{group.range[1]}
                     </span>
@@ -278,9 +279,9 @@ export function ParseletRegistryTab() {
                         className={cn(
                           "flex items-center gap-1.5 rounded-md border px-2 py-0.5 font-mono text-[10px]",
                           item.kind === "prefix"
-                            ? "border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
-                            : "border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
-                          item.matched && "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                            ? "border-[var(--chart-1)]/30 bg-[var(--chart-1)]/10 text-[var(--chart-1)]"
+                            : "border-[var(--chart-3)]/30 bg-[var(--chart-3)]/10 text-[var(--chart-3)]",
+                          item.matched && "border-[var(--warning)]/40 bg-[var(--warning-bg)] text-[var(--warning-text)]",
                         )}
                       >
                         <span className="font-bold">{item.tokenType}</span>

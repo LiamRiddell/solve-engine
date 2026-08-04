@@ -1,0 +1,521 @@
+/*
+ * Stepped explainers embedded in reference pages.
+ *
+ * Same language as the pipeline walkthrough, one size down: this sits inside a
+ * page's prose rather than being the point of the page. Hairlines, no fills,
+ * the brand colour only on the thing the current step is about.
+ */
+
+.xp {
+  --xp-gap: 0.875rem;
+  margin: 1.75rem 0 2rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  overflow: hidden;
+}
+
+/* ── Rail ───────────────────────────────────────────────────────────────── */
+
+.xp__rail {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.xp__rail > li {
+  position: relative;
+  border-inline-start: 1px solid var(--border);
+  min-width: 0;
+}
+
+.xp__rail > li:first-child {
+  border-inline-start: none;
+}
+
+.xp__step {
+  display: grid;
+  gap: 0.125rem;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0.625rem 0.75rem 0.75rem;
+  text-align: start;
+  transition: background-color 140ms ease;
+}
+
+.xp__step:hover {
+  background-color: var(--card-hover);
+}
+
+.xp__step-index {
+  color: var(--faint);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-2xs);
+}
+
+.xp__step-title {
+  color: var(--muted-foreground);
+  font-size: var(--sl-text-sm);
+  font-weight: 500;
+  transition: color 140ms ease;
+}
+
+.xp__step-summary {
+  color: var(--faint);
+  font-size: var(--sl-text-2xs);
+  line-height: 1.4;
+}
+
+.xp__step[data-state="current"] .xp__step-title {
+  color: var(--foreground);
+}
+
+.xp__step[data-state="current"] .xp__step-index,
+.xp__step[data-state="done"] .xp__step-index {
+  color: var(--primary);
+}
+
+/* The autoplay clock, drawn as the current step's underline so the thing that
+   moves is the thing that is timing out. */
+.xp__progress {
+  position: absolute;
+  inset-inline-start: 0;
+  bottom: -1px;
+  width: 100%;
+  height: 2px;
+  background-color: var(--primary);
+  transform-origin: left;
+  animation: xp-progress 5200ms linear forwards;
+}
+
+@keyframes xp-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* ── Viewport ───────────────────────────────────────────────────────────── */
+
+.xp__viewport {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  padding: 1.125rem 1rem;
+  min-height: 15rem;
+}
+
+.xp__note {
+  margin: 0;
+  color: var(--faint);
+  font-size: var(--sl-text-xs);
+  line-height: 1.6;
+  max-width: 68ch;
+}
+
+/* ── Lines figure ───────────────────────────────────────────────────────── */
+
+.xp__lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-xs);
+}
+
+.xp__line {
+  display: grid;
+  grid-template-columns: 1.75rem minmax(0, 1fr) auto 4.5rem;
+  gap: 0.625rem;
+  align-items: baseline;
+  padding: 0.3125rem 0.75rem;
+  opacity: 0;
+  transform: translateX(-0.25rem);
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease,
+    background-color 200ms ease,
+    color 200ms ease;
+}
+
+.xp__line[data-shown="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+.xp__line + .xp__line {
+  border-top: 1px solid var(--border);
+}
+
+.xp__line-number {
+  color: var(--faint);
+  text-align: end;
+}
+
+.xp__line-text {
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xp__line-value {
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.xp__line-tag {
+  color: var(--faint);
+  font-size: var(--sl-text-2xs);
+  letter-spacing: 0.04em;
+  text-align: end;
+  text-transform: uppercase;
+}
+
+/* The five states a line can be in. Each one changes exactly two things, the
+   text colour and the answer colour, so a document reads as a document rather
+   than as a heat map. */
+.xp__line[data-state="computed"] .xp__line-text,
+.xp__line[data-state="resolved"] .xp__line-text {
+  color: var(--foreground);
+}
+
+.xp__line[data-state="computed"] .xp__line-value,
+.xp__line[data-state="resolved"] .xp__line-value {
+  color: var(--primary);
+}
+
+.xp__line[data-state="edited"] {
+  background-color: var(--accent-subtle);
+}
+
+.xp__line[data-state="edited"] .xp__line-text {
+  color: var(--primary);
+}
+
+.xp__line[data-state="edited"] .xp__line-tag {
+  color: var(--primary);
+}
+
+.xp__line[data-state="stale"] .xp__line-text {
+  color: var(--faint);
+  text-decoration: line-through;
+  text-decoration-color: var(--border-strong);
+}
+
+.xp__line[data-state="cached"] {
+  opacity: 0.55;
+}
+
+.xp__line[data-state="pending"] .xp__line-text {
+  color: var(--muted-foreground);
+}
+
+.xp__line[data-state="pending"] .xp__line-tag {
+  color: var(--warning-text);
+}
+
+.xp__line[data-state="error"] .xp__line-tag {
+  color: var(--destructive);
+}
+
+/* ── Flow figure ────────────────────────────────────────────────────────── */
+
+.xp__flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.xp__flow[data-direction="column"] {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.xp__node {
+  display: grid;
+  gap: 0.1875rem;
+  flex: 1 1 auto;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  padding: 0.5rem 0.75rem;
+  opacity: 0;
+  transform: translateY(0.25rem);
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease,
+    border-color 200ms ease;
+}
+
+.xp__node[data-shown="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+.xp__node-label {
+  color: var(--foreground);
+  font-size: var(--sl-text-sm);
+}
+
+.xp__node-detail {
+  color: var(--faint);
+  font-size: var(--sl-text-2xs);
+  line-height: 1.4;
+}
+
+.xp__node[data-active] {
+  border-color: var(--accent-border);
+  background-color: var(--accent-subtle);
+}
+
+.xp__node[data-active] .xp__node-label {
+  color: var(--primary);
+}
+
+/* A stage this step skips. Struck through rather than hidden, because the point
+   is which stages did not have to run. */
+.xp__node[data-skipped][data-shown="true"] {
+  opacity: 0.4;
+}
+
+.xp__node[data-skipped] .xp__node-label {
+  text-decoration: line-through;
+  text-decoration-color: var(--border-strong);
+}
+
+/* ── Chips figure ───────────────────────────────────────────────────────── */
+
+.xp__chips-wrap {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.xp__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The colour lives on the chip so it is inherited rather than declared on the
+   text itself. A category class like `solve-unit` lands on that inner span, and
+   a `color` declared there would outrank it. */
+.xp__chip {
+  display: grid;
+  gap: 0.125rem;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  padding: 0.375rem 0.625rem;
+  opacity: 0;
+  transform: translateY(0.375rem);
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease,
+    border-color 220ms ease;
+}
+
+.xp__chip[data-shown="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+.xp__chip-text {
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-sm);
+}
+
+.xp__chip-label {
+  color: var(--faint);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-2xs);
+  letter-spacing: 0.04em;
+}
+
+.xp__chip[data-changed] {
+  border-color: var(--accent-border);
+  background-color: var(--accent-subtle);
+}
+
+.xp__caption {
+  margin: 0;
+  color: var(--faint);
+  font-size: var(--sl-text-2xs);
+}
+
+/* ── Controls ───────────────────────────────────────────────────────────── */
+
+.xp__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem var(--xp-gap);
+  border-top: 1px solid var(--border);
+  padding: 0.625rem 1rem;
+}
+
+.xp__eyebrow {
+  color: var(--faint);
+  font-size: var(--sl-text-2xs);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.xp__buttons {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.xp__control {
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  background: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  font-size: var(--sl-text-xs);
+  padding: 0.25rem 0.625rem;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.xp__control:hover {
+  color: var(--foreground);
+  border-color: var(--border-strong);
+}
+
+/* ── Narrow ─────────────────────────────────────────────────────────────── */
+
+@media (max-width: 50rem) {
+  .xp__step-summary {
+    display: none;
+  }
+
+  .xp__line {
+    grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+  }
+
+  /* The state is already carried by the colour of the row, and at this width
+     the label is the thing pushing the answer off the edge. */
+  .xp__line-tag {
+    display: none;
+  }
+}
+
+/* Below this the rail cannot hold five readable titles, so it scrolls. */
+@media (max-width: 34rem) {
+  .xp__rail {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .xp__rail::-webkit-scrollbar {
+    display: none;
+  }
+
+  .xp__rail > li {
+    flex: 0 0 auto;
+  }
+
+  .xp__step {
+    white-space: nowrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .xp__line,
+  .xp__node,
+  .xp__chip,
+  .xp__progress {
+    animation: none;
+    transition: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── Stack figure ───────────────────────────────────────────────────────── */
+
+.xp__stack-wrap {
+  display: grid;
+  gap: 0.625rem;
+  justify-items: start;
+}
+
+.xp__stack-instruction {
+  margin: 0;
+  color: var(--primary);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-xs);
+}
+
+/* Drawn bottom-up, the way a stack is described everywhere else. */
+.xp__stack {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: start;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-height: 6rem;
+}
+
+.xp__cell {
+  display: flex;
+  align-items: baseline;
+  gap: 0.625rem;
+  border: 1px solid var(--border-strong);
+  border-radius: calc(var(--radius) - 2px);
+  min-width: 9rem;
+  padding: 0.3125rem 0.625rem;
+  opacity: 0;
+  transform: translateY(0.375rem);
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease;
+}
+
+.xp__cell[data-shown="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+.xp__cell-value {
+  color: var(--foreground);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-sm);
+}
+
+/* The type is the whole argument for this figure, so it is always shown and
+   never abbreviated: the cell holds a value, not a number. */
+.xp__cell-type {
+  color: var(--faint);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-2xs);
+  margin-inline-start: auto;
+}
+
+.xp__cell[data-changed] {
+  border-color: var(--accent-border);
+  background-color: var(--accent-subtle);
+}

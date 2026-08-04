@@ -47,9 +47,9 @@
   padding-inline: clamp(1rem, 4vw, 3rem);
 }
 
-[data-has-hero] .band + .band {
-  border-top: 1px solid var(--border);
-}
+/* No rule between bands. Space is the separator: a hairline every few hundred
+   pixels chops a long page into slabs and fights the whitespace that is doing
+   the work. Sections that genuinely need an edge draw their own. */
 
 [data-has-hero] .band--tight {
   padding-block: clamp(2rem, 5vh, 3.5rem);
@@ -265,13 +265,22 @@
    colour and each cell paints the page colour back over it, which gives clean
    lines in both axes as the grid reflows, without a cell ever becoming a
    different shade of near-black. */
+/* One column on a phone, two on a tablet, four on a desktop. Two 170px cells
+   side by side on a 375px screen left each heading breaking across three lines,
+   which is not a saving. */
 [data-has-hero] .specs {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: 1fr;
   gap: 1px;
   border: 1px solid var(--border);
   background-color: var(--border);
   counter-reset: spec;
+}
+
+@media (min-width: 30rem) {
+  [data-has-hero] .specs {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (min-width: 62rem) {
@@ -284,7 +293,7 @@
    markdown content. That is right for prose and wrong for a grid: it pushes
    every cell after the first down, so the first one alone sits proud of the
    row. Same for the install line, where the flex gap already does the job. */
-[data-has-hero] :is(.specs, .install) > * + * {
+[data-has-hero] :is(.specs, .install, .showcase__rows, .stats-band__grid) > * + * {
   margin-top: 0;
 }
 
@@ -737,4 +746,233 @@
   margin: 2rem 0 0;
   color: rgb(252 252 254 / 0.4);
   font-size: var(--sl-text-xs);
+}
+
+/* ── Correctness band ───────────────────────────────────────────────────── */
+
+/*
+ * The one place on the page where a number is the headline. Everything here is
+ * sized off the viewport so the figure stays the biggest thing in view on a
+ * phone and on a wide desktop alike, which is the whole point of leading with
+ * it.
+ */
+[data-has-hero] .stats-band .band__inner {
+  text-align: center;
+}
+
+[data-has-hero] .stats-band__figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.25em;
+  margin: 0;
+}
+
+[data-has-hero] .stats-band__number {
+  color: var(--foreground);
+  /* Tabular figures so a counting animation does not shuffle the digits
+     sideways on every frame. */
+  font-feature-settings: "tnum" 1;
+  font-size: clamp(4rem, 17vw, 12rem);
+  font-weight: 600;
+  letter-spacing: -0.05em;
+  line-height: 0.9;
+}
+
+[data-has-hero] .stats-band__unit {
+  color: var(--primary);
+  font-size: clamp(1.5rem, 4.5vw, 3rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+[data-has-hero] .stats-band__lede {
+  margin: 1.5rem auto 0;
+  max-width: 34rem;
+  color: var(--muted-foreground);
+  font-size: clamp(1rem, 1.3vw, 1.1875rem);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+[data-has-hero] .stats-band__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: clamp(1.75rem, 4vw, 3.5rem);
+  margin: clamp(2.5rem, 6vh, 4.5rem) 0 0;
+  border-top: 1px solid var(--border);
+  padding-top: clamp(1.75rem, 4vh, 2.75rem);
+  text-align: start;
+}
+
+[data-has-hero] .stats-band__grid > div {
+  margin: 0;
+}
+
+[data-has-hero] .stats-band__grid dt {
+  color: var(--foreground);
+  font-feature-settings: "tnum" 1;
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+[data-has-hero] .stats-band__grid dd {
+  margin: 0.625rem 0 0;
+  color: var(--faint);
+  font-size: var(--sl-text-sm);
+  line-height: 1.55;
+}
+
+[data-has-hero] .stats-band__note {
+  margin: clamp(2rem, 5vh, 3rem) auto 0;
+  max-width: 44rem;
+  color: var(--faint);
+  font-size: var(--sl-text-sm);
+  line-height: 1.65;
+  text-align: start;
+}
+
+/* ── Narrow viewports ───────────────────────────────────────────────────── */
+
+/*
+ * A grid or flex child defaults to `min-width: auto`, which means it refuses to
+ * shrink below the widest unbreakable thing inside it. On this page that thing
+ * is a code block, so at phone widths a single column was being forced to 668px
+ * and taking the whole document with it. Every layout child here opts out, and
+ * the code block scrolls inside its own frame instead, which is where a long
+ * line should scroll.
+ */
+[data-has-hero] .split > *,
+[data-has-hero] .showcase > *,
+[data-has-hero] .showcase__body > *,
+[data-has-hero] .specs > *,
+[data-has-hero] .stats-band__grid > *,
+[data-has-hero] .band__inner > * {
+  min-width: 0;
+}
+
+[data-has-hero] .expressive-code,
+[data-has-hero] .expressive-code pre {
+  max-width: 100%;
+}
+
+/* Belt and braces. Nothing on this page is allowed to widen the document: a
+   band that overflows takes the header and every other band with it, and the
+   symptom shows up nowhere near the cause. */
+[data-has-hero] .band,
+[data-has-hero] .band__inner {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+/* ── Size band ──────────────────────────────────────────────────────────── */
+
+/*
+ * Same shape as the correctness band: one figure large enough to be the point,
+ * supporting numbers under a rule, and a closing paragraph. The one addition is
+ * the budget meter, which exists because "80 kB" means nothing without knowing
+ * what would be too much.
+ */
+[data-has-hero] .size-band .band__inner {
+  text-align: center;
+}
+
+[data-has-hero] .size-band__figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.25em 0.5em;
+  margin: 0;
+}
+
+[data-has-hero] .size-band__number {
+  color: var(--foreground);
+  font-feature-settings: "tnum" 1;
+  font-size: clamp(3.5rem, 14vw, 10rem);
+  font-weight: 600;
+  letter-spacing: -0.05em;
+  line-height: 0.9;
+}
+
+[data-has-hero] .size-band__unit {
+  color: var(--primary);
+  font-size: clamp(1.125rem, 3vw, 2rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+[data-has-hero] .size-band__lede {
+  margin: 1.5rem auto 0;
+  max-width: 38rem;
+  color: var(--muted-foreground);
+  font-size: clamp(1rem, 1.3vw, 1.1875rem);
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+/* The budget, drawn. A bar is the one place a proportion reads instantly, and
+   the proportion is the whole reason the number is reassuring. */
+[data-has-hero] .size-band__meter {
+  margin: clamp(1.75rem, 4vh, 2.5rem) auto 0;
+  max-width: 30rem;
+  height: 4px;
+  border-radius: 999px;
+  background-color: var(--muted);
+  overflow: hidden;
+}
+
+[data-has-hero] .size-band__meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background-color: var(--primary);
+}
+
+[data-has-hero] .size-band__meter-label {
+  margin: 0.625rem 0 0;
+  color: var(--faint);
+  font-size: var(--sl-text-xs);
+}
+
+[data-has-hero] .size-band__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: clamp(1.75rem, 4vw, 3.5rem);
+  margin: clamp(2.5rem, 6vh, 4rem) 0 0;
+  border-top: 1px solid var(--border);
+  padding-top: clamp(1.75rem, 4vh, 2.75rem);
+  text-align: start;
+}
+
+[data-has-hero] .size-band__grid > div {
+  margin: 0;
+}
+
+[data-has-hero] .size-band__grid dt {
+  color: var(--foreground);
+  font-feature-settings: "tnum" 1;
+  font-size: clamp(1.75rem, 3.5vw, 2.5rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+[data-has-hero] .size-band__grid dd {
+  margin: 0.625rem 0 0;
+  color: var(--faint);
+  font-size: var(--sl-text-sm);
+  line-height: 1.55;
+}
+
+[data-has-hero] .size-band__note {
+  margin: clamp(2rem, 5vh, 3rem) auto 0;
+  max-width: 46rem;
+  color: var(--faint);
+  font-size: var(--sl-text-sm);
+  line-height: 1.65;
+  text-align: start;
 }

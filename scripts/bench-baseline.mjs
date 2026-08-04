@@ -17,6 +17,13 @@ const child = spawn(
 	process.execPath,
 	[
 		"--expose-gc",
+		// Must match the `bench` script's own flags in package.json. mitata is
+		// ESM-only and loaded through a real dynamic import (tools/testUtils.ts's
+		// loadMeasure), which throws "A dynamic import callback was invoked
+		// without --experimental-vm-modules" under Jest without this. Omitting it
+		// here failed every measuring suite while still writing the baselines the
+		// run was meant to produce, so the reference data silently became garbage.
+		"--experimental-vm-modules",
 		"node_modules/jest/bin/jest.js",
 		"--config",
 		"jest.bench.config.cjs",

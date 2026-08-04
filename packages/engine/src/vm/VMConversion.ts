@@ -2,12 +2,8 @@ import { Value, ValueType, numberValue, bigIntValue, uomValue, matrixValue, erro
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { sameShape } from "@solve-js/vm/MatrixOps";
-import { type SymbolicNode, constNode, simplifySymbolic } from "@solve-js/vm/Symbolic";
-
-/** Converts a Value into a SymbolicNode, its own tree if already Symbolic, else a `const` node wrapping its numeric value. */
-function toSymbolicNode(v: Value): SymbolicNode {
-    return v.type === ValueType.Symbolic ? (v.value as SymbolicNode) : constNode(v.toNumber());
-}
+import { type SymbolicNode, simplifySymbolic } from "@solve-js/symbolic";
+import { valueToSymbolic } from "@solve-js/vm/SymbolicOps";
 
 /**
  * Unify two Value operands that may carry units of measurement.
@@ -48,7 +44,7 @@ export function unifyUom(l: Value, r: Value): { lv: number; rv: number; unit: st
  * Handles BigInt, UoM, Vector, Symbolic, and plain Number operands.
  *
  * @param symbolicOp - which SymbolicNode kind to build when either operand
- *   is Symbolic (`vm/Symbolic.ts`). Only ADD/SUB/MUL/DIV pass this (the
+ *   is Symbolic (`symbolic/SymbolicNode.ts`). Only ADD/SUB/MUL/DIV pass this (the
  *   "four arithmetic opcodes" the symbolic-algebra phase scopes itself
  *   to), MOD's own call site passes nothing, so a Symbolic operand there
  *   falls through to the ordinary numeric path (`toNumber()` -> 0), an
@@ -82,12 +78,23 @@ export function binaryOp(
     // Symbolic dispatch, either operand carries a free-variable formula.
     // Builds the corresponding SymbolicNode (the non-symbolic side, if
     // any, becomes a `const` node via its own numeric value), simplifies
-    // it (vm/Symbolic.ts's deliberately bounded rule set), and wraps the
+    // it (symbolic/Simplify.ts's deliberately bounded rule set), and wraps the
     // result back as Symbolic. `symbolicOp` is undefined for opcodes that
     // don't support this (currently just MOD), those fall through to the
     // ordinary numeric path below unchanged.
     if (symbolicOp && (l.type === ValueType.Symbolic || r.type === ValueType.Symbolic)) {
-        const node: SymbolicNode = { kind: symbolicOp, left: toSymbolicNode(l), right: toSymbolicNode(r) };
+        const left = valueToSymbolic(l);
+        const right = valueToSymbolic(r);
+        // An operand with no exact rational image (NaN, ±Infinity) used to be
+        // folded in as a `const` built from a double, which either threw deep
+        // inside the simplifier or produced a nonsense coefficient. Report it.
+        if (left === null || right === null) {
+            return errorValue(
+                "SYMBOLIC_NONFINITE_OPERAND",
+                "A symbolic expression cannot combine with a value that has no exact number (NaN or infinity).",
+            );
+        }
+        const node: SymbolicNode = { kind: symbolicOp, left, right };
         return symbolicValue(simplifySymbolic(node));
     }
 

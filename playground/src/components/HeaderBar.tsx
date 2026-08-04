@@ -32,7 +32,7 @@ export function HeaderBar() {
         >
           <BrandWordmark className="text-foreground text-xl" />
         </a>
-        <span className="text-muted-foreground border-border rounded-full border px-2 py-0.5 text-[10px] font-medium tracking-wide uppercase">
+        <span className="text-muted-foreground border-border rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em] uppercase">
           Playground
         </span>
       </div>

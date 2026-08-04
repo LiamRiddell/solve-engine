@@ -6,6 +6,7 @@ import { usePipelineStore } from "@/stores/pipeline"
 import { EmptyState } from "@/components/shared/EmptyState"
 import { categoryMeta } from "@/lib/errorCategory"
 import { cn } from "@/lib/utils"
+import { TAB_BODY, TAB_ROOT } from "@/components/shared/tabChrome"
 
 async function copyText(text: string): Promise<void> {
   try {
@@ -49,7 +50,7 @@ function ErrorCard({ lr, selected, onSelect }: { lr: LineResult; selected: boole
       <div className="flex items-center gap-2">
         <span className="text-muted-foreground shrink-0 font-mono text-[11px] font-bold">L{lr.lineNumber ?? 1}</span>
         <span
-          className={cn("inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide", meta.badgeClass)}
+          className={cn("inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-[0.12em] uppercase tracking-wide", meta.badgeClass)}
         >
           <span className={cn("size-1.5 rounded-full", meta.dotClass)} />
           {meta.label}
@@ -117,7 +118,7 @@ export function ErrorsTab() {
 
   if (!result) {
     return (
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className={TAB_BODY}>
         <EmptyState icon={AlertTriangle} text="No errors yet" hint="Evaluate an expression to see errors here." />
       </div>
     )
@@ -133,7 +134,7 @@ export function ErrorsTab() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={TAB_ROOT}>
       <div className="flex items-center gap-2 border-b px-4 py-1.5">
         <span className="text-muted-foreground text-xs">
           {errored.length === 0 ? "No errors" : `${errored.length} error${errored.length !== 1 ? "s" : ""}`}

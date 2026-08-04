@@ -44,3 +44,10 @@ det([1,2;3,4]) // -2
 ```
 
 The inverse operator leaves ordinary numbers alone, so `5^-1` is still `0.2`.
+
+A matrix whose entries contain unknowns is inverted symbolically, and those
+entries carry exact rational coefficients rather than floating-point ones. That
+removes a class of wrong answer: a pivot that is structurally zero could
+previously arrive as a value like `0.0000000000000000555` after elimination and
+be treated as non-zero, so a singular matrix was reported as invertible. See
+[Symbolic evaluation](/syntax/symbolic/).

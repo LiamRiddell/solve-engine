@@ -46,3 +46,4 @@ docs/.astro
 # Benchmark output from an ordinary run. Only `npm run bench:baseline`
 # writes the tracked baselines under benchmarks/baselines/.
 packages/engine/benchmarks/current/
+.jest-report.json

@@ -1,0 +1,47 @@
+---
+title: Async and live data
+description: How pending values work, and the obligation a host takes on.
+---
+
+import Explainer from "../../../components/Explainer.tsx";
+
+Some expressions cannot be answered immediately because they depend on data from
+the network. Currency conversion, weather and stock lookups are the built-in
+cases.
+
+## Pending is a value
+
+Rather than blocking or returning a placeholder number, the engine returns a
+value whose type is pending. It carries the key of the query it is waiting on.
+
+```ts
+import { ValueType } from "solve-engine/vm";
+
+const [value] = engine.evaluateExpression("10 USD to GBP");
+value.type === ValueType.Pending; // true, on the first evaluation
+```
+
+This is deliberate. Returning zero, or the last known value, would produce a
+confidently wrong answer, which is the failure mode the engine works hardest to
+avoid.
+
+<Explainer id="pending" client:load />
+
+## Re-evaluating when data arrives
+
+The engine starts the fetch in the background and records that the line depends
+on it. When the data lands, the line needs to be evaluated again.
+
+Wiring that notification is the host's responsibility. If you do not connect it,
+pending values never resolve and nothing tells you why.
+
+## Supplying your own data source
+
+Any package can declare an async resolver. The helper handles caching,
+deduplication and cancellation, so a resolver is usually only the fetch itself.
+
+```ts
+import { createQueryResolver } from "solve-engine/resolvers";
+```
+
+See [writing packages](/packages/authoring-a-package/) for the full shape.

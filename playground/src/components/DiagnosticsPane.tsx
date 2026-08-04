@@ -11,7 +11,6 @@ import {
   Settings,
   Gauge,
   Radio,
-  FlaskConical,
   AlertTriangle,
 } from "lucide-react"
 import { useDiagnosticReportStore } from "@/stores/diagnosticReport"
@@ -20,7 +19,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { OutputTab } from "@/components/tabs/OutputTab"
 import { SummaryTab } from "@/components/tabs/SummaryTab"
 import { ErrorsTab } from "@/components/tabs/ErrorsTab"
-import { QaTab } from "@/components/tabs/QaTab"
 import { PipelineTab } from "@/components/tabs/PipelineTab"
 import { BytecodeTab } from "@/components/tabs/BytecodeTab"
 import { VmTraceTab } from "@/components/tabs/VmTraceTab"
@@ -47,11 +45,10 @@ const TABS: { id: ActiveTab; label: string; icon: typeof Terminal }[] = [
   { id: "workers", label: "Workers", icon: Settings },
   { id: "perf", label: "Perf", icon: Gauge },
   { id: "stream", label: "Stream", icon: Radio },
-  { id: "qa", label: "QA", icon: FlaskConical },
 ]
 
 /**
- * Hosts the 13 diagnostic/introspection tabs behind a shadcn Tabs nav.
+ * Hosts the diagnostic and introspection tabs behind a shadcn Tabs nav.
  * Ported from playground's DiagnosticsPane.vue.
  */
 export function DiagnosticsPane() {
@@ -118,9 +115,6 @@ export function DiagnosticsPane() {
         </TabsContent>
         <TabsContent value="stream" className="mt-0 flex min-h-0 flex-col">
           <StreamTab key={runId} />
-        </TabsContent>
-        <TabsContent value="qa" className="mt-0 flex min-h-0 flex-col">
-          <QaTab />
         </TabsContent>
       </Tabs>
     </section>
