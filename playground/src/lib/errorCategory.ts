@@ -19,12 +19,12 @@ export interface ErrorCategoryMeta {
 }
 
 export const CATEGORY_META: Record<string, ErrorCategoryMeta> = {
-  PARSING: { label: "Parsing", badgeClass: "bg-amber-500/15 text-amber-600 dark:text-amber-400", dotClass: "bg-amber-500" },
-  VALIDATION: { label: "Validation", badgeClass: "bg-amber-500/15 text-amber-600 dark:text-amber-400", dotClass: "bg-amber-500" },
-  EXECUTION: { label: "Execution", badgeClass: "bg-rose-500/15 text-rose-600 dark:text-rose-400", dotClass: "bg-rose-500" },
-  EXTERNAL: { label: "External", badgeClass: "bg-sky-500/15 text-sky-600 dark:text-sky-400", dotClass: "bg-sky-500" },
-  INTERNAL: { label: "Internal", badgeClass: "bg-violet-500/15 text-violet-600 dark:text-violet-400", dotClass: "bg-violet-500" },
-  CONFIG: { label: "Config", badgeClass: "bg-violet-500/15 text-violet-600 dark:text-violet-400", dotClass: "bg-violet-500" },
+  PARSING: { label: "Parsing", badgeClass: "bg-[var(--warning-bg)] text-[var(--warning-text)]", dotClass: "bg-[var(--warning)]" },
+  VALIDATION: { label: "Validation", badgeClass: "bg-[var(--warning-bg)] text-[var(--warning-text)]", dotClass: "bg-[var(--warning)]" },
+  EXECUTION: { label: "Execution", badgeClass: "bg-[var(--destructive)]/15 text-[var(--destructive)]", dotClass: "bg-[var(--destructive)]" },
+  EXTERNAL: { label: "External", badgeClass: "bg-[var(--info-bg)] text-[var(--info-text)]", dotClass: "bg-[var(--info)]" },
+  INTERNAL: { label: "Internal", badgeClass: "bg-[var(--chart-1)]/15 text-[var(--chart-1)]", dotClass: "bg-[var(--chart-1)]" },
+  CONFIG: { label: "Config", badgeClass: "bg-[var(--chart-1)]/15 text-[var(--chart-1)]", dotClass: "bg-[var(--chart-1)]" },
 }
 
 export const DEFAULT_CATEGORY_META: ErrorCategoryMeta = CATEGORY_META.EXECUTION

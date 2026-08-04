@@ -8,6 +8,8 @@ import { ContextHeader } from "@/components/shared/ContextHeader"
 import { EmptyState } from "@/components/shared/EmptyState"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { TAB_BODY, TAB_ROOT } from "@/components/shared/tabChrome"
+import { tokenClass } from "@/components/shared/tokenClass"
 
 const EMPTY_NORMALIZER_OUTPUT: NormalizerOutput = { type: "normalizer", inputTokenCount: 0, outputTokenCount: 0, fusions: [], rulesApplied: [], tokens: [], phrases: {} }
 
@@ -17,13 +19,22 @@ const NON_WORD_TYPES = new Set([
   "SEMICOLON", "QUESTION", "EXCLAMATION", "EOF", "WS", "NEWLINE",
 ])
 
-function tokenClass(t: { type?: string }): string {
-  const type = String(t.type || "").toLowerCase()
-  if (["number", "hex", "bigint"].includes(type)) return "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400"
-  if (type === "ident") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-  if (["star", "plus", "minus", "slash", "caret", "equals"].includes(type)) return "border-muted-foreground/30 bg-muted text-muted-foreground"
-  if (type === "keyword" || type.includes("_by")) return "border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
-  return "border-muted-foreground/20 bg-muted text-muted-foreground"
+/**
+ * The chip a token is drawn in, coloured by its semantic category.
+ *
+ * This used to be a hand-written table mapping about a dozen token type names
+ * to colours picked here. It knew about numbers, identifiers and five
+ * operators, and everything else, every unit, string, comparison and date, fell
+ * through to the same grey. It also had no way to learn: a package that
+ * registers a token type could never be coloured by it.
+ *
+ * The engine already answers this question for the editor, so it answers it
+ * here too. The chip keeps its own border and fill; only the text colour comes
+ * from the category, which is what makes a token the same colour here as it is
+ * two panes to the left.
+ */
+function tokenChipClass(t: { type?: string }): string {
+  return cn("border-border bg-muted", tokenClass(t.type) ?? "text-muted-foreground")
 }
 
 interface TrieBranch {
@@ -198,7 +209,7 @@ export function NormalizerTab() {
 
   if (!normalizerStage) {
     return (
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className={TAB_BODY}>
         <EmptyState icon={RefreshCw} text="No normalizer data available" hint="Evaluate an expression to see token normalization details" />
       </div>
     )
@@ -210,16 +221,16 @@ export function NormalizerTab() {
       : (lineResults[0]?.expression ?? expression ?? "")
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={TAB_ROOT}>
       <ContextHeader label="Normalizing" lineBadge={selectedLine !== null ? `L${selectedLine}` : "All Lines"} expression={activeExpression} />
 
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+      <div className={TAB_BODY}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <StatCard label="Input Tokens" value={String(data.inputTokenCount)} />
           <StatCard label="Output Tokens" value={String(data.outputTokenCount)} />
           <StatCard label="Fusions" value={String(data.fusions.length)} />
           <StatCard label="Tokens Removed" value={String(tokensRemoved)} className={tokensRemoved > 0 ? "text-destructive" : undefined} />
-          <StatCard label="Type-Guard Skips" value={String(typeGuardSkipCount)} className="text-blue-600 dark:text-blue-400" />
+          <StatCard label="Type-Guard Skips" value={String(typeGuardSkipCount)} className="text-[var(--info-text)]" />
         </div>
 
         {/* Token Fusions */}
@@ -248,7 +259,7 @@ export function NormalizerTab() {
                           <td className="py-1.5">
                             <span className="flex flex-wrap gap-1">
                               {fusion.sourceTokens.map((st, si) => (
-                                <span key={si} title={`${st.type}: ${st.value}`} className={cn("rounded border px-1.5 py-0.5 font-mono", tokenClass(st))}>
+                                <span key={si} title={`${st.type}: ${st.value}`} className={cn("rounded border px-1.5 py-0.5 font-mono", tokenChipClass(st))}>
                                   {st.value}
                                 </span>
                               ))}
@@ -258,7 +269,7 @@ export function NormalizerTab() {
                           <td className="py-1.5">
                             <span
                               title={`${fusion.fusedToken.type}: ${fusion.fusedToken.value}`}
-                              className={cn("flex w-fit items-center gap-1.5 rounded border px-1.5 py-0.5 font-mono", tokenClass(fusion.fusedToken))}
+                              className={cn("flex w-fit items-center gap-1.5 rounded border px-1.5 py-0.5 font-mono", tokenChipClass(fusion.fusedToken))}
                             >
                               <span className="text-[9px] uppercase opacity-70">{fusion.fusedToken.type}</span>
                               <span className="font-semibold">{fusion.fusedToken.value}</span>
@@ -289,23 +300,23 @@ export function NormalizerTab() {
           </div>
           <div className="flex flex-col gap-1">
             {diffSegments.map((seg, si) => (
-              <div key={si} className={cn("grid grid-cols-[1fr_5rem_1fr] items-center gap-1 rounded-sm px-1 py-0.5", seg.isFusion && "bg-amber-500/5")}>
+              <div key={si} className={cn("grid grid-cols-[1fr_5rem_1fr] items-center gap-1 rounded-sm px-1 py-0.5", seg.isFusion && "bg-[var(--warning-bg)]")}>
                 <div className="flex flex-wrap gap-1">
                   {seg.isFusion
                     ? seg.sourceTokens.map((st, ti) => (
-                        <span key={ti} title={`${st.type}: ${st.value}`} className={cn("rounded border px-1.5 py-0.5 font-mono text-xs", tokenClass(st))}>
+                        <span key={ti} title={`${st.type}: ${st.value}`} className={cn("rounded border px-1.5 py-0.5 font-mono text-xs", tokenChipClass(st))}>
                           {st.value}
                         </span>
                       ))
                     : seg.rawToken && (
-                        <span title={`${seg.rawToken.type}: ${seg.rawToken.value}`} className={cn("rounded border px-1.5 py-0.5 font-mono text-xs", tokenClass(seg.rawToken))}>
+                        <span title={`${seg.rawToken.type}: ${seg.rawToken.value}`} className={cn("rounded border px-1.5 py-0.5 font-mono text-xs", tokenChipClass(seg.rawToken))}>
                           {seg.rawToken.value}
                         </span>
                       )}
                 </div>
                 <div className="text-muted-foreground text-center text-[10px]">
                   {seg.isFusion ? (
-                    <span title={`Fused by rule: ${seg.fusionRule}`} className="bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded px-1 py-0.5 text-[9px]">
+                    <span title={`Fused by rule: ${seg.fusionRule}`} className="bg-[var(--warning-bg)] text-[var(--warning-text)] rounded px-1 py-0.5 text-[9px]">
                       {seg.fusionRule}
                     </span>
                   ) : seg.rawToken ? (
@@ -316,16 +327,16 @@ export function NormalizerTab() {
                   {seg.isFusion ? (
                     <>
                       {seg.fusedTokens.map((ft, fi) => (
-                        <span key={fi} title={`${ft.type}: ${ft.value}`} className={cn("flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-xs", tokenClass(ft))}>
+                        <span key={fi} title={`${ft.type}: ${ft.value}`} className={cn("flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-xs", tokenChipClass(ft))}>
                           <span className="text-[9px] uppercase opacity-70">{ft.type}</span>
                           <span className="font-semibold">{ft.value}</span>
                         </span>
                       ))}
-                      <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded px-1 py-0.5 text-[9px]">fusion</span>
+                      <span className="bg-[var(--warning-bg)] text-[var(--warning-text)] rounded px-1 py-0.5 text-[9px]">fusion</span>
                     </>
                   ) : (
                     seg.normalizedToken && (
-                      <span title={`${seg.normalizedToken.type}: ${seg.normalizedToken.value}`} className={cn("rounded border px-1.5 py-0.5 font-mono text-xs", tokenClass(seg.normalizedToken))}>
+                      <span title={`${seg.normalizedToken.type}: ${seg.normalizedToken.value}`} className={cn("rounded border px-1.5 py-0.5 font-mono text-xs", tokenChipClass(seg.normalizedToken))}>
                         {seg.normalizedToken.value}
                       </span>
                     )
@@ -415,7 +426,7 @@ export function NormalizerTab() {
 function StatCard({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
     <Card size="sm">
-      <div className="text-muted-foreground px-4 text-[10px] font-medium uppercase">{label}</div>
+      <div className="text-muted-foreground px-4 text-[10px] font-semibold tracking-[0.12em] uppercase">{label}</div>
       <div className={cn("mt-0.5 px-4 font-mono text-lg font-bold", className)}>{value}</div>
     </Card>
   )

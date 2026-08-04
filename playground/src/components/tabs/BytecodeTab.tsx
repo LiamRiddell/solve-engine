@@ -9,6 +9,7 @@ import { ConstantsExplorer } from "@/components/shared/ConstantsExplorer"
 import { VariablesChips } from "@/components/shared/VariablesChips"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
+import { TAB_ROOT } from "@/components/shared/tabChrome"
 
 /** Ported from playground's BytecodeTab.vue. */
 export function BytecodeTab() {
@@ -28,7 +29,7 @@ export function BytecodeTab() {
       : (lineResults[0]?.expression ?? expression ?? "")
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={TAB_ROOT}>
       <ContextHeader
         label="Bytecode"
         lineBadge={lineBadge}
@@ -72,9 +73,9 @@ export function BytecodeTab() {
                   {opcodes.map((op, i) => (
                     <TableRow key={i}>
                       <TableCell className="text-muted-foreground text-right">{i}</TableCell>
-                      <TableCell className="text-blue-500 dark:text-blue-400">0x{op.value.toString(16).toUpperCase().padStart(2, "0")}</TableCell>
-                      <TableCell className="font-semibold text-violet-600 dark:text-violet-400">{op.name}</TableCell>
-                      <TableCell className="text-emerald-600 dark:text-emerald-400">{op.args.length > 0 ? op.args.join(", ") : "—"}</TableCell>
+                      <TableCell className="text-[var(--info-text)]">0x{op.value.toString(16).toUpperCase().padStart(2, "0")}</TableCell>
+                      <TableCell className="font-semibold text-[var(--chart-1)]">{op.name}</TableCell>
+                      <TableCell className="text-[var(--success-text)]">{op.args.length > 0 ? op.args.join(", ") : "—"}</TableCell>
                       <TableCell className="text-muted-foreground whitespace-normal">{describeOpcode(op.name, op.args)}</TableCell>
                     </TableRow>
                   ))}

@@ -4,8 +4,8 @@ import { useDiagnosticReportStore } from "@/stores/diagnosticReport"
 import { cn } from "@/lib/utils"
 
 const STATUS_DOT_CLASS: Record<string, string> = {
-  ready: "bg-emerald-500 shadow-[0_0_5px_rgba(16,185,129,0.5)]",
-  busy: "bg-amber-500 animate-pulse",
+  ready: "bg-[var(--success)] shadow-[0_0_5px_color-mix(in_srgb,var(--success)_50%,transparent)]",
+  busy: "bg-[var(--warning)] animate-pulse",
   error: "bg-destructive",
 }
 

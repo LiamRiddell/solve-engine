@@ -6,6 +6,7 @@ import { fmt, computeOverhead, getDominantStage, STAGE_COLORS, TELEMETRY_STAGE_C
 import { EmptyState } from "@/components/shared/EmptyState"
 import { TimingWaterfall, type WaterfallSegment } from "@/components/shared/TimingWaterfall"
 import { cn } from "@/lib/utils"
+import { TAB_BODY } from "@/components/shared/tabChrome"
 
 const EMPTY_STATS = { lexerTime: 0, parserTime: 0, bytecodeTime: 0, executionTime: 0, totalTime: 0 }
 
@@ -196,7 +197,7 @@ export function PerfTab() {
     })
     cards.push({
       label: "Total",
-      color: "#b5e48c",
+      color: "var(--chart-6)",
       displayTime: fmt(stats.totalTime),
       displayAvg: "avg " + fmt(totalVals.reduce((a, b) => a + b, 0) / Math.max(1, totalVals.length)),
       sparkline: sparklineData(totalVals),
@@ -208,11 +209,11 @@ export function PerfTab() {
 
   const telemetryTotalTime = pipelineTelemetry?.stages?.reduce((sum, s) => sum + s.wallTimeNs, 0) ?? 0
   const telemetryTotalBytes = pipelineTelemetry?.stages?.reduce((sum, s) => sum + s.allocBytes, 0) ?? 0
-  const stageColor = (stage: string) => TELEMETRY_STAGE_COLORS[stage] ?? "#6a6a6a"
+  const stageColor = (stage: string) => TELEMETRY_STAGE_COLORS[stage] ?? "var(--faint)"
 
   if (flameSegments.length === 0) {
     return (
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className={TAB_BODY}>
         <EmptyState icon={Gauge} text="No timing data" hint="Evaluate an expression to see performance stats." />
       </div>
     )
@@ -222,8 +223,8 @@ export function PerfTab() {
     <div className="flex-1 space-y-4 overflow-y-auto p-4">
       {arenaStats.enabled && (
         <div className="grid grid-cols-2 gap-3">
-          <StatCard label="Arena Usage" value={`${arenaStats.usage} / ${arenaStats.capacity}`} sub={`${(arenaStats.capacity > 0 ? (arenaStats.usage / arenaStats.capacity) * 100 : 0).toFixed(1)}% utilized`} color="#c084fc" />
-          <StatCard label="Arena Capacity" value={String(arenaStats.capacity)} sub="Bump-allocator active" color="#7bdff2" />
+          <StatCard label="Arena Usage" value={`${arenaStats.usage} / ${arenaStats.capacity}`} sub={`${(arenaStats.capacity > 0 ? (arenaStats.usage / arenaStats.capacity) * 100 : 0).toFixed(1)}% utilized`} color="var(--chart-1)" />
+          <StatCard label="Arena Capacity" value={String(arenaStats.capacity)} sub="Bump-allocator active" color="var(--chart-7)" />
         </div>
       )}
 
@@ -348,7 +349,7 @@ export function PerfTab() {
             <div className="p-2">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="text-muted-foreground text-[10px] tracking-wide uppercase">
+                  <tr className="text-muted-foreground text-[10px] font-semibold tracking-[0.12em] uppercase">
                     <th className="px-2 py-1 text-left font-normal">Stage</th>
                     <th className="px-2 py-1 text-left font-normal">Wall Time</th>
                     <th className="px-2 py-1 text-left font-normal">Alloc Bytes</th>
@@ -368,7 +369,7 @@ export function PerfTab() {
                       <td className="text-muted-foreground px-2 py-1 font-mono">{s.allocBytes > 0 ? `${s.allocBytes} B` : "—"}</td>
                       <td className="px-2 py-1">
                         {s.cacheHit ? (
-                          <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-600 dark:text-emerald-400">Hit</span>
+                          <span className="rounded bg-[var(--success-bg)] px-1.5 py-0.5 text-[9px] font-bold text-[var(--success-text)]">Hit</span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
@@ -383,7 +384,7 @@ export function PerfTab() {
                 <span className="font-mono">{fmt(telemetryTotalTime)}</span>
                 <span className="font-mono">{telemetryTotalBytes > 0 ? `${telemetryTotalBytes} B` : "—"}</span>
                 {pipelineTelemetry.fastPath && (
-                  <span className="ml-auto flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                  <span className="ml-auto flex items-center gap-1 text-[var(--warning-text)]">
                     <Zap className="size-3" /> Fast path
                   </span>
                 )}
@@ -414,7 +415,7 @@ function StatCard({
   return (
     <div className={cn("rounded-md border p-2.5 transition-opacity", dimmed && "opacity-40")}>
       <div className="flex items-center justify-between">
-        <span className="text-muted-foreground text-[10px] font-medium uppercase">{label}</span>
+        <span className="text-muted-foreground text-[10px] font-semibold tracking-[0.12em] uppercase">{label}</span>
         <span className="size-1.5 rounded-full" style={{ background: color }} />
       </div>
       <div className="mt-1 font-mono text-base font-bold" style={{ color }}>

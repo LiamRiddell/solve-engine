@@ -7,14 +7,15 @@ import { fmt, STAGE_COLORS } from "@bridge/utils"
 import { EmptyState } from "@/components/shared/EmptyState"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { TAB_BODY } from "@/components/shared/tabChrome"
 
 const EMPTY_STATS = { lexerTime: 0, parserTime: 0, bytecodeTime: 0, executionTime: 0, totalTime: 0 }
 
 /** Tier badge classes — tier-1 (fresh) and tier-2 (cached) share the same "success" styling. */
 const TIER_CLASS: Record<string, string> = {
-  "tier-1": "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
-  "tier-2": "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
-  "tier-3": "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
+  "tier-1": "bg-[var(--success-bg)] text-[var(--success-text)] border-[var(--success)]/30",
+  "tier-2": "bg-[var(--success-bg)] text-[var(--success-text)] border-[var(--success)]/30",
+  "tier-3": "bg-[var(--warning-bg)] text-[var(--warning-text)] border-[var(--warning)]/30",
   "tier-skip": "bg-destructive/10 text-destructive border-destructive/30",
 }
 
@@ -48,7 +49,7 @@ export function SummaryTab() {
 
   if (!result) {
     return (
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className={TAB_BODY}>
         <EmptyState icon={LayoutDashboard} text="No summary yet" hint="Evaluate an expression to see full-document stats." />
       </div>
     )
@@ -73,9 +74,9 @@ export function SummaryTab() {
   }
 
   return (
-    <div className="flex-1 space-y-3 overflow-y-auto p-4">
+    <div className={TAB_BODY}>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <StatCard label="Total Time" value={fmt(stats.totalTime)} color="#b5e48c" />
+        <StatCard label="Total Time" value={fmt(stats.totalTime)} color="var(--chart-6)" />
         {timingCards.map((card) => (
           <StatCard key={card.label} label={card.label} value={card.value} color={card.color} />
         ))}
@@ -84,8 +85,8 @@ export function SummaryTab() {
         <StatCard label="Lines" value={String(lineResults.length)} color={STAGE_COLORS.Lexer} />
         <StatCard label="Tokens" value={String(tokens)} color={STAGE_COLORS.Lexer} />
         <StatCard label="Opcodes" value={String(opcodes)} color={STAGE_COLORS.Compile} />
-        <StatCard label="Cache Hit Rate" value={cacheHitRate} color="#ff6ec7" />
-        <StatCard label="Errors" value={String(errorCount)} color={errorCount > 0 ? "#ff6b6b" : "#8a8a8a"} />
+        <StatCard label="Cache Hit Rate" value={cacheHitRate} color="var(--chart-5)" />
+        <StatCard label="Errors" value={String(errorCount)} color={errorCount > 0 ? "var(--destructive)" : "var(--faint)"} />
       </div>
 
       <div className="flex flex-col gap-1">
@@ -117,7 +118,7 @@ function StatCard({ label, value, color }: { label: string; value: string; color
   return (
     <Card size="sm">
       <div className="flex items-center justify-between px-4">
-        <span className="text-muted-foreground text-[10px] font-medium uppercase">{label}</span>
+        <span className="text-muted-foreground text-[10px] font-semibold tracking-[0.12em] uppercase">{label}</span>
         <span className="size-1.5 rounded-full" style={{ background: color }} />
       </div>
       <div className="mt-1 px-4 font-mono text-lg font-bold" style={{ color }}>
