@@ -34,6 +34,15 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
 
+      # Node 22 ships npm 10, and trusted publishing needs 11.5.1 or newer. The
+      # failure without this does not explain itself: npm falls back to looking
+      # for a token, does not find one, and reports an authentication error,
+      # which points at the credential rather than at the client version.
+      - name: Use an npm that understands trusted publishing
+        run: |
+          npm install -g npm@latest
+          npm --version
+
       - run: npm ci
 
       # The same gate a contributor runs: type check, tests, build, and the
@@ -69,9 +78,8 @@ jobs:
             *)   dist_tag=latest ;;
           esac
           echo "Publishing with dist-tag: $dist_tag"
-          npm publish --provenance --access public --tag "$dist_tag"
-        env:
-          # Prefer npm Trusted Publishing (OIDC) over a long-lived token. If
-          # this repository is configured as a trusted publisher, NODE_AUTH_TOKEN
-          # can be removed entirely.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # No --provenance and no NODE_AUTH_TOKEN. This repository is
+          # registered as a trusted publisher for the package, so npm
+          # authenticates the workflow over OIDC and generates the provenance
+          # attestation on its own.
+          npm publish --access public --tag "$dist_tag"
