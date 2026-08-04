@@ -1,5 +1,20 @@
-name: Release
+name: Release (bootstrap only)
 
+# The one-time path that creates the package on npm, and nothing after that.
+#
+# Trusted publishing cannot publish a package that does not exist yet: npm needs
+# the package present before a trusted publisher can be configured against it,
+# and there is no way to register one in advance (npm/cli#8544). So the first
+# version goes out under a token, from here.
+#
+# Once `solve-engine` exists on the registry:
+#   1. Configure the trusted publisher on npmjs.com against this repository and
+#      `publish.yml`.
+#   2. Delete the NPM_TOKEN secret.
+#   3. Release through `publish.yml` from then on, which needs no token at all.
+#
+# This file is kept rather than deleted because it is also the escape hatch if
+# trusted publishing is ever unavailable, but it should not be the normal route.
 on:
   push:
     tags: ["v*"]
