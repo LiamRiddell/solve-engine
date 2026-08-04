@@ -5,6 +5,7 @@ import { transpose, determinant, inverse, matrixMultiply, symbolicToEntry, rowMa
 import { symbolicToValue, valueToSymbolic, solveEquationValues } from "@solve-js/vm/SymbolicOps";
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
 import { factorSymbolic } from "@solve-js/symbolic/Factor";
+import { cancelSymbolic } from "@solve-js/symbolic/Gcd";
 import { differentiate } from "@solve-js/symbolic/Derivative";
 import { integrate } from "@solve-js/symbolic/Integral";
 import { taylorSeries, jacobian } from "@solve-js/symbolic/Taylor";
@@ -601,6 +602,12 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     75: (args) => applyComplexAccessor("conj", args[0]),
     76: (args) => applyComplexAccessor("re", args[0]),
     77: (args) => applyComplexAccessor("im", args[0]),
+    // cancel(expr), reducing a quotient of polynomials to lowest terms.
+    78: (args) => {
+        const value = args[0];
+        if (value.type !== ValueType.Symbolic) return value;
+        return symbolicToValue(cancelSymbolic(value.value as SymbolicNode));
+    },
 };
 
 /**

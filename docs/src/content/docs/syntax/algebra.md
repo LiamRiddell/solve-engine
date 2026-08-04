@@ -128,6 +128,23 @@ being solved for.
 solve(a*x+b=0, x) // -b/a
 ```
 
+## Cancelling a fraction
+
+A quotient of polynomials reduces to lowest terms, automatically and on request.
+
+```solve
+cancel((x^2-1)/(x-1)) // x+1
+cancel((x^3-1)/(x-1)) // x^2+x+1
+cancel((2x^2+4x)/(2x)) // x+2
+```
+
+A fraction with nothing to cancel is left as written, and so is one whose parts
+share no polynomial factor.
+
+```solve
+cancel((x^2+1)/(x-1)) // (x^2+1)/(x-1)
+```
+
 ## Exact coefficients
 
 Coefficients are exact rationals, not floating-point numbers. In ordinary

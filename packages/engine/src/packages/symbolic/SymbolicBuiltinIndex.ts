@@ -44,3 +44,6 @@ export const SYMBOLIC_BUILTIN_RE = 76;
 
 /** `im(z)`, the imaginary part. */
 export const SYMBOLIC_BUILTIN_IM = 77;
+
+/** `cancel(expr)`, reducing a quotient of polynomials to lowest terms. */
+export const SYMBOLIC_BUILTIN_CANCEL = 78;

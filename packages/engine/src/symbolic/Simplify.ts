@@ -78,6 +78,7 @@ import {
 	isRationalInteger,
 } from "@solve-js/symbolic/Rational";
 import { toPolynomial, fromPolynomial } from "@solve-js/symbolic/Polynomial";
+import { cancelSymbolic } from "@solve-js/symbolic/Gcd";
 import {
 	type Complex,
 	complex,
@@ -508,6 +509,15 @@ function simplifyNode(node: SymbolicNode): SymbolicNode {
 			if (left.kind === "mul") {
 				if (nodesEqual(left.left, right)) return left.right;
 				if (nodesEqual(left.right, right)) return left.left;
+			}
+			// Cancel a genuine common polynomial factor, so `(x^2-1)/(x-1)` reduces
+			// to `x+1`. This is contraction rather than expansion: the result is
+			// always smaller, so the no-growth invariant holds. A rational function
+			// in more than one variable, `vx/sx`, has no univariate gcd and comes
+			// back untouched.
+			const cancelled = cancelSymbolic({ kind: "div", left, right });
+			if (cancelled.kind !== "div" || cancelled.left !== left || cancelled.right !== right) {
+				return simplifyNode(cancelled);
 			}
 			// The same cancellation through a leading minus: -(a*b)/a -> -b.
 			// Without this the rule is asymmetric, and a quadratic's two surd
