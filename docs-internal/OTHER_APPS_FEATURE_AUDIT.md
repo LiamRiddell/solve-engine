@@ -29,7 +29,7 @@ Status legend matches the SoulverCore audit: ✅ implemented, ⏸️ deliberatel
 reason given), ❌ **confirmed engine limitation** (root cause + a concrete design sketch for a
 future fix — this is the category the user asked this document to capture for future planning).
 
-Last updated: 2026-08-01.
+Last updated: 2026-08-04.
 
 ---
 
@@ -171,12 +171,15 @@ values and combine the results" — no symbolic manipulation required.
   for a negative discriminant, and factoring stops at irreducible-over-the-rationals, precisely
   because there is no complex value type to express the answer in. This phase is what would
   remove that limitation.
-- **Phase 4 (🔄 in progress on `feat/symbolic-cas`)**: **symbolic** `der()`/`taylor()`/`jacobian()`
-  over an exact expression tree, no longer the numerical approximation described above.
-- **Phase 5 (🔄 in progress on `feat/symbolic-cas`)**: `solve()` and `x => ...`, exact for linear,
-  quadratic, cubic and quartic, with rational-root extraction first and numerical root-finding
-  retained only as a documented fallback for higher degree.
-- **Phase 7 (🔄 in progress on `feat/symbolic-cas`, prerequisite for 4 and 5)**: the CAS core
+- **Phase 4 (✅ shipped 2026-08-04)**: **symbolic** `der()`/`derivative()`/`integral()`/`taylor()`/
+  `jacobian()` over an exact expression tree, not the numerical approximation described above.
+  `integral()` goes beyond Calca and reports what it cannot integrate rather than approximating.
+- **Phase 5 (✅ mostly shipped 2026-08-04)**: `solve(equation, variable)`, exact by rational-root
+  extraction then the quadratic formula, with an irrational root given as a reduced surd and
+  numerical root-finding retained only as a documented fallback. **Still queued**: the bare
+  `x^2-4=0` then `x =>` stored-scalar-equation form, deferred because its trigger shape collides
+  with the user-function definition grammar (`f(x) = ...`) and with bare assignment.
+- **Phase 7 (✅ shipped 2026-08-04, prerequisite for 4 and 5)**: the CAS core
   itself, which no earlier phase accounted for because the numerical path did not need it. Exact
   rational coefficients, `pow` and function-application nodes (whose absence meant `x^2 + 3x + 2 =>`
   silently returned `3x+2`), a canonical multivariate polynomial form, `expand()`, and `factor()`.

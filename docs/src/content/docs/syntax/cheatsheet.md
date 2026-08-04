@@ -132,6 +132,25 @@ An unknown stays an unknown rather than becoming an error.
 
 ```solve
 1+2+b+3+b => // 2b+6
+x^2+3x+2 => // x^2+3x+2
+```
+
+## Algebra
+
+```solve
+expand((x+1)*(x+2)) // x^2+3x+2
+factor(x^2-4) // (x-2)*(x+2)
+solve(x^2-4=0, x) // [-2, 2]
+solve(2x+6=0, x) // -3
+```
+
+## Calculus
+
+```solve
+der(x^3, x) // 3x^2
+integral(x^2, x) // 1/3x^3
+taylor(sin(x), x=0, 5) // 1/120x^5-1/6x^3+x
+jacobian(x*y, x+y) // [y, x; 1, 1]
 ```
 
 ## Money

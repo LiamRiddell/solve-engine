@@ -274,3 +274,66 @@ declare `"^0.1.0"` purely as a canonical worked example for future package autho
 advanced-public-tier breaking changes — a discipline this repo does not yet practice (see
 `ARCHITECTURE.md` §5.3's closing note). This pass builds the mechanism; making version bumps
 actually happen going forward is a separate, unstarted process change.
+
+## 2026-08-04 — A real computer-algebra system, with exact rational coefficients
+
+Shipped on `feat/symbolic-cas` as five sequential commits: the core, the canonical polynomial
+form, factoring, solving, and calculus. See [`syntax/algebra.md`](../docs/src/content/docs/syntax/algebra.md)
+and [`syntax/calculus.md`](../docs/src/content/docs/syntax/calculus.md) for the user-facing surface.
+
+**This reverses a decision.** [`OTHER_APPS_FEATURE_AUDIT.md`](./OTHER_APPS_FEATURE_AUDIT.md)'s Calca
+roadmap committed to *numerical approximation* for `der`/`taylor`/`jacobian`/`x => ...`, on the
+reasonable ground that a real CAS is a large undertaking and finite differences reuse the existing
+bytecode VM. Polynomial **factoring** is what forced the revisit: `factor(x^2-4)` has to produce
+`(x-2)*(x+2)`, which no numerical method can. Once the tree and exact arithmetic exist for that,
+symbolic differentiation turns out to be *easier* to get right than finite differences (no step
+size to trade truncation against rounding), and exact quadratic roots fall out of the same
+representation. The old paragraph is kept in place with the reversal noted above it, per this
+folder's own convention.
+
+**The gap was bigger than "we do not factor".** `SymbolicNode` had no `pow` node and no
+function-application node, and `Value.toNumber()` reports `0` for a symbolic operand by design. Any
+opcode reaching for `.toNumber()` without checking `.isSymbolic()` therefore computed with zero and
+returned a confident, error-free, wrong answer: `x^2+3x+2 =>` was returning `3x+2`, `-x =>` was
+returning `-0`, and `sqrt(x) =>` was returning `0`. Three silent wrong answers, sitting in a
+shipped feature, none of which any test caught because no test asked.
+
+**Why exact rationals, concretely.** The rational-root theorem tests a candidate by evaluating the
+polynomial there and asking whether the result is zero; in floating point a near miss and a true
+root are indistinguishable, so factoring and exact solving are simply not available on doubles.
+Exactness also closed a live bug in already-shipped code: `MatrixOps` compared pivots with `=== 0`
+on a double, so a structurally-zero pivot arriving as `5.551e-17` made a singular symbolic matrix
+look invertible. `rationalFromNumber` converts through the decimal string rather than the IEEE
+expansion, so `0.1` is `1/10` and not `3602879701896397/36028797018963968`.
+
+**Where it lives, and why that mattered.** `src/symbolic/` is the pure-mathematics core;
+`src/packages/symbolic/` is grammar and registration only; `src/vm/SymbolicOps.ts` is the one
+module that legitimately knows both `Value` and `SymbolicNode`. The core cannot sit inside
+`packages/`, because `vm/Value.ts` already embeds a `SymbolicNode` in its value union and in
+`MatrixEntry`, and a package may import from `parser/` but never the reverse.
+
+**Structural guard.** `SymbolicSurfaceParity.spec.ts` is driven from one table in
+`SymbolicPackage.ts` and checks, per verb, that the normalizer's token type has a registered
+parselet, that the builtin index has a live implementation, that the word still works as an ordinary
+variable name, that all three public entry points agree, and that the documented example sits in a
+runnable ` ```solve ` block. It caught two genuine wiring bugs while being written, including the
+VM's symbolic interception swallowing `expand()` before it could receive the very expression it
+exists to take.
+
+**Property tests did the real verification.** Expanding a factorization reproduces the input;
+substituting an exact root gives exactly zero; differentiating an integral returns what was
+integrated. Each of those caught a bug that hand-written cases had missed, including a guard that
+treated `(x-1)^2` as unfactored and a formatter that rendered `3*(2*x)` as `32x`.
+
+**Deliberately not done**, each reported rather than approximated: complex numbers (so a negative
+discriminant says "no real solutions" and `x^2+1` stays unfactored), Cardano for a cubic with no
+rational root (its *casus irreducibilis* needs complex intermediates, so those take the documented
+numerical fallback), multivariate factoring beyond content and common-monomial extraction,
+polynomial GCD and rational-function simplification, and the bare `x^2-4=0` then `x =>`
+stored-scalar-equation form, whose trigger shape collides with the user-function definition grammar
+and wants its own pass.
+
+**Rode along**: `scripts/bench-baseline.mjs` was missing `--experimental-vm-modules`, which the
+`bench` script passes. mitata is ESM-only and lazily imported, so every measuring suite threw while
+the run still wrote the baselines it was meant to produce, quietly turning the reference data into
+garbage. A gate nobody has watched fail is not known to work, which this folder already knew.
