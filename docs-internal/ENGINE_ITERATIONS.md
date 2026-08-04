@@ -344,3 +344,49 @@ back to the scalar solver on exactly that error.
 `bench` script passes. mitata is ESM-only and lazily imported, so every measuring suite threw while
 the run still wrote the baselines it was meant to produce, quietly turning the reference data into
 garbage. A gate nobody has watched fail is not known to work, which this folder already knew.
+
+## 2026-08-04 — Finishing the CAS (`feat/cas-complete`)
+
+`feat/symbolic-cas` shipped a real CAS with a list of stated limitations. This iteration closed
+that list. Every item below was previously documented as "deliberately not done"; the entry above
+is left as written, because it records what was true and why, which is this folder's convention.
+
+**Complex numbers, and the order that forced.** Exact Gaussian rationals (`Complex.ts`), so
+`x^2+1=0` gives `-i` and `i` rather than "no real solutions", and `sqrt(-4)` is exactly `2i`. This
+had to come first, and not for tidiness: a cubic with a negative discriminant is solvable in
+radicals only through the cube roots of a complex number, so exact cubics were blocked on it.
+
+**Polynomial GCD** (`Gcd.ts`), which `cancel()` exposes and which partial fractions and rational
+integration are both built on. `(x^2-1)/(x-1)` reduces to `x+1`.
+
+**Closed-form cubics and quartics** (`CubicQuartic.ts`). Cardano covers every cubic; quartics are
+covered when biquadratic or when the resolvent cubic splits them into two rational quadratics. The
+*casus irreducibilis* stays numeric **and stays a stated limitation**, because its three real roots
+provably have no expression in real radicals — that is a theorem, not a gap in effort, and the
+trigonometric form that does exist is a cosine of an arccosine of an irrational that nothing
+downstream could use.
+
+**Partial fractions and rational integration** (`PartialFractions.ts`). `apart()` is new, and
+`integral()` now handles any rational function whose denominator has no repeated irreducible
+quadratic factor. The coefficients come from an exact linear solve rather than the cover-up method,
+because one Gaussian elimination covers distinct linear factors, repeated ones and irreducible
+quadratics, where cover-up needs separate machinery for each.
+
+**Multivariate factoring** (`MultivariateFactor.ts`), by pattern rather than by algorithm, and the
+module says so: difference of squares, sum and difference of cubes, perfect-square trinomial, and
+four-term grouping.
+
+**What the property tests caught this time.** Roots verified by substitution over the complex plane;
+decompositions verified by recombining over the original denominator; factorizations verified by
+expanding. Real bugs found: `surdNode` built a `Rational` as a literal rather than through
+`rational()`, so an unreduced `6/108` escaped normalization the first time a Cardano root exercised
+it; a biquadratic reported four roots where a repeated inner solution gave two;
+`factorUnivariate` leaves `x^3-x` unfactored because the rational-root theorem has no candidates at
+all when the constant term is zero.
+
+**Rode along.** `CONJ_FN`, `RE_FN`, `IM_FN`, `CANCEL_FN` and `IMAGINARY` were never declared in
+`Token.ts`, though its own comment says every token type a built-in package relies on belongs
+there — the same lazily-minted-id drift that has already bitten once. And a sum whose right side was
+a product with a negative leading coefficient rendered `0.5*log(x-1)+-0.5*log(x+1)`; the sign is
+lifted in the formatter now, for `mul` and `div` only, since for a `pow` a leading minus belongs to
+the base.

@@ -166,11 +166,12 @@ values and combine the results" — no symbolic manipulation required.
   `Vector4` into it (a vector becomes an N×1 matrix) — literals, 2D indexing, sub-matrix slicing,
   transpose, inverse, determinant, matrix arithmetic. Landed as `MATRIX_PACKAGE`, `MatrixData`,
   `vm/MatrixOps.ts`'s det/inv/transpose, and the `^T`/`^-1` suffix forms.
-- **Phase 3 (queued next)**: complex numbers (`i`, arithmetic, `conj()`, negative `sqrt()`).
-  Explicitly **out of scope for `feat/symbolic-cas`**: Phases 4 and 5 report "no real solutions"
-  for a negative discriminant, and factoring stops at irreducible-over-the-rationals, precisely
-  because there is no complex value type to express the answer in. This phase is what would
-  remove that limitation.
+- **Phase 3 (✅ shipped 2026-08-04)**: complex numbers (`i`, exact Gaussian-rational arithmetic,
+  `conj()`/`re()`/`im()`, negative `sqrt()`). It was out of scope for `feat/symbolic-cas`, where
+  Phases 4 and 5 reported "no real solutions" for a negative discriminant precisely because
+  there was no complex value to say it with. `feat/cas-complete` closed it, and the closure was
+  a prerequisite rather than a nicety: Cardano's formula reaches the real roots of a cubic
+  through the cube roots of a complex number, so exact cubics could not exist before this did.
 - **Phase 4 (✅ shipped 2026-08-04)**: **symbolic** `der()`/`derivative()`/`integral()`/`taylor()`/
   `jacobian()` over an exact expression tree, not the numerical approximation described above.
   `integral()` goes beyond Calca and reports what it cannot integrate rather than approximating.
