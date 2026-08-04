@@ -150,9 +150,21 @@ function rowsFor(entries) {
 	return [...byScale.values()].sort((a, b) => b.ratio - a.ratio || a.difference - b.difference);
 }
 
-/** Escapes a spelling for a markdown table cell. */
+/**
+ * Escapes a spelling for a code span inside a markdown table cell.
+ *
+ * The backslash is replaced first. Doing the pipe first would then double the
+ * backslash that replacement had just introduced, and escaping one
+ * metacharacter while leaving the other is the incomplete-sanitization shape
+ * regardless of what the input turns out to hold.
+ *
+ * No unit spelling contains either character today. The one that comes close is
+ * the inch, spelled `"`, which needs no escaping here. This is written to hold
+ * anyway, since the table is regenerated whenever the upstream package moves.
+ */
 function cell(spelling) {
-	return `\`${spelling.replace(/\|/g, "\\|")}\``;
+	const escaped = spelling.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
+	return `\`${escaped}\``;
 }
 
 const { entries, kinds } = readTable();
