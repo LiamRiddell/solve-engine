@@ -6,6 +6,7 @@ import { useDiagnosticReportStore } from "@/stores/diagnosticReport"
 import { formatDuration } from "@bridge/utils"
 import { EmptyState } from "@/components/shared/EmptyState"
 import { cn } from "@/lib/utils"
+import { TAB_BODY } from "@/components/shared/tabChrome"
 
 function hitRatePct(entry: CacheHistoryEntry): number {
   const total = entry.cacheHits + entry.cacheMisses
@@ -28,11 +29,11 @@ function freshnessPct(entry: QueryCacheEntry, nowMs: number): number {
   return Math.min(100, Math.max(0, (elapsed / entry.staleTime) * 100))
 }
 
-function freshnessBarClass(entry: QueryCacheEntry, nowMs: number): "bg-emerald-500" | "bg-amber-500" | "bg-destructive" {
-  if (!entry.staleTime || entry.staleTime <= 0) return "bg-emerald-500"
+function freshnessBarClass(entry: QueryCacheEntry, nowMs: number): "bg-[var(--success)]" | "bg-[var(--warning)]" | "bg-destructive" {
+  if (!entry.staleTime || entry.staleTime <= 0) return "bg-[var(--success)]"
   const pct = freshnessPct(entry, nowMs)
-  if (pct < 50) return "bg-emerald-500"
-  if (pct < 90) return "bg-amber-500"
+  if (pct < 50) return "bg-[var(--success)]"
+  if (pct < 90) return "bg-[var(--warning)]"
   return "bg-destructive"
 }
 
@@ -120,7 +121,7 @@ export function CacheTab() {
 
   if (!cache) {
     return (
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className={TAB_BODY}>
         <EmptyState icon={Database} text="No cache data" hint="Evaluate an expression to see cache diagnostics." />
       </div>
     )
@@ -131,7 +132,7 @@ export function CacheTab() {
       {/* Page Cache */}
       {heatmapEntries.length > 0 && (
         <div>
-          <div className="text-muted-foreground mb-1.5 text-[10px] font-semibold tracking-wide uppercase">Page Cache</div>
+          <div className="text-muted-foreground mb-1.5 text-[10px] font-semibold tracking-[0.12em] uppercase">Page Cache</div>
           <div className="rounded-md border">
             <div className="bg-muted/50 flex flex-wrap items-center gap-2 border-b px-3 py-1.5">
               <span className="flex items-center gap-1.5 text-sm font-medium">
@@ -153,7 +154,7 @@ export function CacheTab() {
                   className={cn(
                     "flex w-16 flex-col items-center rounded-md border px-1.5 py-1 text-center",
                     page.temperature === "hot" && "border-destructive/30 bg-destructive/10",
-                    page.temperature === "warm" && "border-amber-500/30 bg-amber-500/10",
+                    page.temperature === "warm" && "border-[var(--warning)]/30 bg-[var(--warning-bg)]",
                     page.temperature === "cold" && "bg-muted",
                   )}
                 >
@@ -166,7 +167,7 @@ export function CacheTab() {
             </div>
             <div className="text-muted-foreground flex flex-wrap items-center gap-3 border-t px-3 py-1.5 text-[10px]">
               <span className="text-destructive">● Hot</span>
-              <span className="text-amber-600 dark:text-amber-400">● Warm</span>
+              <span className="text-[var(--warning-text)]">● Warm</span>
               <span>● Cold</span>
               <span>Hot = viewport ±3 pages · Warm = viewport ±6 pages · Cold = beyond</span>
             </div>
@@ -176,7 +177,7 @@ export function CacheTab() {
 
       {/* Bytecode & Line Cache */}
       <div className="space-y-3">
-        <div className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">Bytecode &amp; Line Cache</div>
+        <div className="text-muted-foreground text-[10px] font-semibold tracking-[0.12em] uppercase">Bytecode &amp; Line Cache</div>
 
         <div className="rounded-md border">
           <div className="bg-muted/50 flex items-center gap-2 border-b px-3 py-1.5">
@@ -240,7 +241,7 @@ export function CacheTab() {
                     >
                       <span className="text-muted-foreground font-mono">#{entry.runId}</span>
                       <div className="bg-muted flex h-3 overflow-hidden rounded-sm">
-                        <div className="flex items-center justify-center bg-emerald-500/60 text-[8px] text-white" style={{ width: `${hitBarPct(entry)}%` }}>
+                        <div className="flex items-center justify-center bg-[var(--success-bg)] text-[8px] text-white" style={{ width: `${hitBarPct(entry)}%` }}>
                           {entry.cacheHits || ""}
                         </div>
                         <div className="bg-destructive/60 flex items-center justify-center text-[8px] text-white" style={{ width: `${missBarPct(entry)}%` }}>
@@ -251,7 +252,7 @@ export function CacheTab() {
                     </div>
                   ))}
                   <div className="text-muted-foreground flex items-center gap-3 pt-1 text-[9px]">
-                    <span className="text-emerald-600 dark:text-emerald-400">■ Hit</span>
+                    <span className="text-[var(--success-text)]">■ Hit</span>
                     <span className="text-destructive">■ Miss</span>
                     <span className="ml-auto">Overall: {overallHitRate}%</span>
                   </div>
@@ -314,7 +315,7 @@ export function CacheTab() {
       {/* Async Data */}
       {(queryCacheEntries.length > 0 || asyncCacheEntries.length > 0) && (
         <div className="space-y-3">
-          <div className="text-muted-foreground text-[10px] font-semibold tracking-wide uppercase">Async Data</div>
+          <div className="text-muted-foreground text-[10px] font-semibold tracking-[0.12em] uppercase">Async Data</div>
 
           {asyncCacheEntries.length > 0 && (
             <div className="rounded-md border">
@@ -331,8 +332,8 @@ export function CacheTab() {
                   <div key={pkg.packageId} className="flex flex-col gap-1 p-2">
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                       <span className="font-mono font-semibold">{pkg.packageId}</span>
-                      <span className="text-emerald-600 dark:text-emerald-400">{pkg.resolvedCount} resolved</span>
-                      <span className="text-amber-600 dark:text-amber-400">{pkg.inFlightCount} in-flight</span>
+                      <span className="text-[var(--success-text)]">{pkg.resolvedCount} resolved</span>
+                      <span className="text-[var(--warning-text)]">{pkg.inFlightCount} in-flight</span>
                       <span className={pkg.errorCount > 0 ? "text-destructive" : "text-muted-foreground"}>
                         {pkg.errorCount} error{pkg.errorCount !== 1 ? "s" : ""}
                       </span>
@@ -346,7 +347,7 @@ export function CacheTab() {
                             title={e.status + (e.errorMessage ? `: ${e.errorMessage}` : "")}
                             className={cn(
                               "rounded px-1.5 py-0.5 font-mono text-[10px]",
-                              e.status === "error" ? "bg-destructive/10 text-destructive" : e.status === "in_flight" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" : "bg-muted",
+                              e.status === "error" ? "bg-destructive/10 text-destructive" : e.status === "in_flight" ? "bg-[var(--warning-bg)] text-[var(--warning-text)]" : "bg-muted",
                             )}
                           >
                             {e.key}
@@ -384,9 +385,9 @@ export function CacheTab() {
                         <span
                           className={cn(
                             "rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase",
-                            entry.status === "fresh" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-                            entry.status === "stale" && "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-                            entry.status === "fetching" && "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+                            entry.status === "fresh" && "bg-[var(--success-bg)] text-[var(--success-text)]",
+                            entry.status === "stale" && "bg-[var(--warning-bg)] text-[var(--warning-text)]",
+                            entry.status === "fetching" && "bg-[var(--info-bg)] text-[var(--info-text)]",
                             entry.status === "error" && "bg-destructive/10 text-destructive",
                           )}
                         >
@@ -448,7 +449,7 @@ export function CacheTab() {
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[8rem_1fr] items-start gap-2">
-      <span className="text-muted-foreground text-[10px] font-medium uppercase">{label}</span>
+      <span className="text-muted-foreground text-[10px] font-semibold tracking-[0.12em] uppercase">{label}</span>
       <span>{children}</span>
     </div>
   )

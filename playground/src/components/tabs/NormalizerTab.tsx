@@ -8,6 +8,7 @@ import { ContextHeader } from "@/components/shared/ContextHeader"
 import { EmptyState } from "@/components/shared/EmptyState"
 import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { TAB_BODY, TAB_ROOT } from "@/components/shared/tabChrome"
 
 const EMPTY_NORMALIZER_OUTPUT: NormalizerOutput = { type: "normalizer", inputTokenCount: 0, outputTokenCount: 0, fusions: [], rulesApplied: [], tokens: [], phrases: {} }
 
@@ -19,10 +20,10 @@ const NON_WORD_TYPES = new Set([
 
 function tokenClass(t: { type?: string }): string {
   const type = String(t.type || "").toLowerCase()
-  if (["number", "hex", "bigint"].includes(type)) return "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400"
-  if (type === "ident") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+  if (["number", "hex", "bigint"].includes(type)) return "border-[var(--info)]/30 bg-[var(--info-bg)] text-[var(--info-text)]"
+  if (type === "ident") return "border-[var(--success)]/30 bg-[var(--success-bg)] text-[var(--success-text)]"
   if (["star", "plus", "minus", "slash", "caret", "equals"].includes(type)) return "border-muted-foreground/30 bg-muted text-muted-foreground"
-  if (type === "keyword" || type.includes("_by")) return "border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
+  if (type === "keyword" || type.includes("_by")) return "border-[var(--chart-1)]/30 bg-[var(--chart-1)]/10 text-[var(--chart-1)]"
   return "border-muted-foreground/20 bg-muted text-muted-foreground"
 }
 
@@ -198,7 +199,7 @@ export function NormalizerTab() {
 
   if (!normalizerStage) {
     return (
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className={TAB_BODY}>
         <EmptyState icon={RefreshCw} text="No normalizer data available" hint="Evaluate an expression to see token normalization details" />
       </div>
     )
@@ -210,16 +211,16 @@ export function NormalizerTab() {
       : (lineResults[0]?.expression ?? expression ?? "")
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={TAB_ROOT}>
       <ContextHeader label="Normalizing" lineBadge={selectedLine !== null ? `L${selectedLine}` : "All Lines"} expression={activeExpression} />
 
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+      <div className={TAB_BODY}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <StatCard label="Input Tokens" value={String(data.inputTokenCount)} />
           <StatCard label="Output Tokens" value={String(data.outputTokenCount)} />
           <StatCard label="Fusions" value={String(data.fusions.length)} />
           <StatCard label="Tokens Removed" value={String(tokensRemoved)} className={tokensRemoved > 0 ? "text-destructive" : undefined} />
-          <StatCard label="Type-Guard Skips" value={String(typeGuardSkipCount)} className="text-blue-600 dark:text-blue-400" />
+          <StatCard label="Type-Guard Skips" value={String(typeGuardSkipCount)} className="text-[var(--info-text)]" />
         </div>
 
         {/* Token Fusions */}
@@ -289,7 +290,7 @@ export function NormalizerTab() {
           </div>
           <div className="flex flex-col gap-1">
             {diffSegments.map((seg, si) => (
-              <div key={si} className={cn("grid grid-cols-[1fr_5rem_1fr] items-center gap-1 rounded-sm px-1 py-0.5", seg.isFusion && "bg-amber-500/5")}>
+              <div key={si} className={cn("grid grid-cols-[1fr_5rem_1fr] items-center gap-1 rounded-sm px-1 py-0.5", seg.isFusion && "bg-[var(--warning-bg)]")}>
                 <div className="flex flex-wrap gap-1">
                   {seg.isFusion
                     ? seg.sourceTokens.map((st, ti) => (
@@ -305,7 +306,7 @@ export function NormalizerTab() {
                 </div>
                 <div className="text-muted-foreground text-center text-[10px]">
                   {seg.isFusion ? (
-                    <span title={`Fused by rule: ${seg.fusionRule}`} className="bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded px-1 py-0.5 text-[9px]">
+                    <span title={`Fused by rule: ${seg.fusionRule}`} className="bg-[var(--warning-bg)] text-[var(--warning-text)] rounded px-1 py-0.5 text-[9px]">
                       {seg.fusionRule}
                     </span>
                   ) : seg.rawToken ? (
@@ -321,7 +322,7 @@ export function NormalizerTab() {
                           <span className="font-semibold">{ft.value}</span>
                         </span>
                       ))}
-                      <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded px-1 py-0.5 text-[9px]">fusion</span>
+                      <span className="bg-[var(--warning-bg)] text-[var(--warning-text)] rounded px-1 py-0.5 text-[9px]">fusion</span>
                     </>
                   ) : (
                     seg.normalizedToken && (
@@ -415,7 +416,7 @@ export function NormalizerTab() {
 function StatCard({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
     <Card size="sm">
-      <div className="text-muted-foreground px-4 text-[10px] font-medium uppercase">{label}</div>
+      <div className="text-muted-foreground px-4 text-[10px] font-semibold tracking-[0.12em] uppercase">{label}</div>
       <div className={cn("mt-0.5 px-4 font-mono text-lg font-bold", className)}>{value}</div>
     </Card>
   )

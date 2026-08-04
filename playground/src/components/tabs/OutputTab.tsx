@@ -7,6 +7,7 @@ import { useTokensStore, matchToken } from "@/stores/tokens"
 import { usePipelineStore } from "@/stores/pipeline"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { TAB_ROOT } from "@/components/shared/tabChrome"
 
 interface GroupEntry {
   line: number
@@ -23,9 +24,9 @@ function getTier(result: LineResult): "tier-1" | "tier-2" | "tier-3" | "tier-ski
 }
 
 const TIER_CLASS: Record<string, string> = {
-  "tier-1": "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  "tier-2": "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  "tier-3": "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  "tier-1": "bg-[var(--success-bg)] text-[var(--success-text)]",
+  "tier-2": "bg-[var(--success-bg)] text-[var(--success-text)]",
+  "tier-3": "bg-[var(--warning-bg)] text-[var(--warning-text)]",
   "tier-skip": "bg-destructive/10 text-destructive",
 }
 
@@ -184,7 +185,7 @@ export function OutputTab() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={TAB_ROOT}>
       <div className="flex items-center gap-2 border-b px-4 py-1.5">
         <label className="text-muted-foreground flex items-center gap-1.5 text-xs">
           <input type="checkbox" checked={groupByLine} onChange={(e) => setGroupByLine(e.target.checked)} />
@@ -212,16 +213,16 @@ export function OutputTab() {
 
       {result && tierSummary.total > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 border-b px-4 py-1.5">
-          <span className="text-muted-foreground text-[10px] font-medium uppercase">Evaluation Tiers</span>
-          <span title={tierTooltips.t1} className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+          <span className="text-muted-foreground text-[10px] font-semibold tracking-[0.12em] uppercase">Evaluation Tiers</span>
+          <span title={tierTooltips.t1} className="rounded-full bg-[var(--success-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--success-text)]">
             T1: {tierSummary.t1} fresh
           </span>
-          <span title={tierTooltips.t2} className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+          <span title={tierTooltips.t2} className="rounded-full bg-[var(--success-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--success-text)]">
             T2: {tierSummary.t2} cached
           </span>
           <span
             title={tierTooltips.t3}
-            className="flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 dark:text-amber-400"
+            className="flex items-center gap-1 rounded-full bg-[var(--warning-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--warning-text)]"
           >
             {tierSummary.t3 > 0 && <LoaderCircle className="size-2.5 animate-spin" />}
             T3: {tierSummary.t3} pending
@@ -284,7 +285,7 @@ export function OutputTab() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-muted-foreground text-[10px] font-medium uppercase">Tokens</span>
+                  <span className="text-muted-foreground text-[10px] font-semibold tracking-[0.12em] uppercase">Tokens</span>
                   {entry.tokens.map((t, i) => (
                     <span
                       key={i}
@@ -298,14 +299,14 @@ export function OutputTab() {
 
                 {entry.result && (
                   <div className="mt-1.5 flex items-center gap-2 border-t pt-1.5 font-mono text-xs">
-                    <span className={cn(entry.result.error ? "text-destructive" : "text-violet-600 dark:text-violet-400")}>{entry.result.type}</span>
+                    <span className={cn(entry.result.error ? "text-destructive" : "text-[var(--chart-1)]")}>{entry.result.type}</span>
                     <span className="text-muted-foreground">→</span>
                     <span className={cn("flex items-center gap-1", entry.result.error ? "text-destructive" : "text-primary")}>
                       {entry.result.type === "Pending" && !entry.result.error && <LoaderCircle className="size-2.5 animate-spin" />}
                       {entry.result.error || entry.result.result || (entry.result.type === "Pending" ? "awaiting resolution…" : "")}
                     </span>
                     {entry.result.timedOut && (
-                      <span title="API fetch timed out — result is a 0 gp fallback, not real data" className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                      <span title="API fetch timed out — result is a 0 gp fallback, not real data" className="flex items-center gap-1 text-[var(--warning-text)]">
                         <AlertTriangle className="size-3" /> timed out
                       </span>
                     )}

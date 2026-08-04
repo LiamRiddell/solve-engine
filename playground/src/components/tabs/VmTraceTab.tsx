@@ -8,17 +8,18 @@ import { EmptyState } from "@/components/shared/EmptyState"
 import { Input } from "@/components/ui/input"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
+import { TAB_ROOT } from "@/components/shared/tabChrome"
 
 const STACK_TYPE_COLOR: Record<string, string> = {
-  "vm-stack-number": "border-blue-500/40 text-blue-600 dark:text-blue-400",
-  "vm-stack-hex": "border-indigo-500/40 text-indigo-600 dark:text-indigo-400",
-  "vm-stack-bigint": "border-violet-500/40 text-violet-600 dark:text-violet-400",
-  "vm-stack-string": "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
-  "vm-stack-datetime": "border-amber-500/40 text-amber-600 dark:text-amber-400",
-  "vm-stack-percentage": "border-pink-500/40 text-pink-600 dark:text-pink-400",
-  "vm-stack-uom": "border-cyan-500/40 text-cyan-600 dark:text-cyan-400",
-  "vm-stack-array": "border-orange-500/40 text-orange-600 dark:text-orange-400",
-  "vm-stack-boolean": "border-teal-500/40 text-teal-600 dark:text-teal-400",
+  "vm-stack-number": "border-[var(--info)]/40 text-[var(--info-text)]",
+  "vm-stack-hex": "border-[var(--chart-1)]/40 text-[var(--chart-1)]",
+  "vm-stack-bigint": "border-[var(--chart-1)]/40 text-[var(--chart-1)]",
+  "vm-stack-string": "border-[var(--success)]/40 text-[var(--success-text)]",
+  "vm-stack-datetime": "border-[var(--warning)]/40 text-[var(--warning-text)]",
+  "vm-stack-percentage": "border-[var(--chart-5)]/40 text-[var(--chart-5)]",
+  "vm-stack-uom": "border-[var(--chart-3)]/40 text-[var(--chart-3)]",
+  "vm-stack-array": "border-[var(--chart-2)]/40 text-[var(--chart-2)]",
+  "vm-stack-boolean": "border-[var(--chart-3)]/40 text-[var(--chart-3)]",
   "vm-stack-other": "border-muted-foreground/30 text-muted-foreground",
 }
 
@@ -52,7 +53,7 @@ export function VmTraceTab() {
       : (lineResults[0]?.expression ?? expression ?? "")
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={TAB_ROOT}>
       <ContextHeader
         label="VM Trace"
         lineBadge={lineBadge}
@@ -129,8 +130,8 @@ export function VmTraceTab() {
                   <TableRow key={i} className={cn(step === steps[steps.length - 1] && "bg-destructive/5")}>
                     <TableCell>{step.instructionNumber}</TableCell>
                     <TableCell>{step.ip}</TableCell>
-                    <TableCell className="text-blue-600 dark:text-blue-400">0x{step.opcode.toString(16).toUpperCase().padStart(2, "0")}</TableCell>
-                    <TableCell className="font-semibold text-violet-600 dark:text-violet-400">{step.opcodeName}</TableCell>
+                    <TableCell className="text-[var(--info-text)]">0x{step.opcode.toString(16).toUpperCase().padStart(2, "0")}</TableCell>
+                    <TableCell className="font-semibold text-[var(--chart-1)]">{step.opcodeName}</TableCell>
                     <TableCell className="whitespace-normal">
                       <span className="flex flex-wrap items-center gap-1">
                         <span className="bg-muted rounded px-1 text-[10px]">{step.stackDepth}</span>

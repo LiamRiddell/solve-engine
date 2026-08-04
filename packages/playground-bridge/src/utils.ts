@@ -135,19 +135,28 @@ export function getDominantStage(s: PerformanceStats): string {
 /**
  * Stage color map for dominant-stage coloring in flamegraphs, heatmaps,
  * and stat cards — the 5-phase timing model (Lexer/Parser/Compile/VM/
- * Overhead). Values match `--stage-lexer`/`--stage-parser`/
- * `--stage-compiler`/`--stage-vm` in `main.css`; kept as a JS mirror
- * (rather than read from computed CSS custom properties at runtime)
- * since these are also used inside inline SVG sparklines and canvas-free
- * style bindings where a plain hex string is simplest. This is the ONE
- * place these five colors are defined — do not hardcode them elsewhere.
+ * Overhead).
+ *
+ * These are `var()` references rather than hex, so a stage is the same color
+ * here, in the documentation site and in the app, and re-themes with them.
+ * They used to be five hardcoded hex values that matched nothing: the site
+ * moved onto a shared token palette and this did not follow, so the two
+ * drifted into different products wearing the same wordmark.
+ *
+ * A `var()` string works everywhere these are used, which is CSS custom
+ * properties, inline `style` bindings and inline SVG `fill`/`stroke`. Anywhere
+ * a literal color is genuinely required (a canvas 2D context, for instance),
+ * resolve it with `getComputedStyle` rather than reintroducing a hex here.
+ *
+ * The chart palette has a fixed order that is never cycled, so the assignment
+ * below is deliberate: the pipeline reads left to right and so do the hues.
  */
 export const STAGE_COLORS: Record<string, string> = {
-  Lexer: '#7bdff2',
-  Parser: '#c7a9ff',
-  Compile: '#90e0ef',
-  VM: '#faff69',
-  Overhead: '#6a6a6a',
+  Lexer: 'var(--chart-7)',
+  Parser: 'var(--chart-1)',
+  Compile: 'var(--chart-3)',
+  VM: 'var(--chart-4)',
+  Overhead: 'var(--faint)',
 };
 
 /**
@@ -156,15 +165,16 @@ export const STAGE_COLORS: Record<string, string> = {
  * a genuinely different taxonomy from `STAGE_COLORS` above (it has a
  * separate "normalizer" phase and no "compile"/"overhead" split), so it
  * gets its own map rather than being forced into the 5-phase one. Colors
- * still draw from the same underlying palette as `--stage-*` in main.css.
+ * still draw from the same token palette as {@link STAGE_COLORS}, so a phase
+ * named in both maps is the same color in both.
  */
 export const TELEMETRY_STAGE_COLORS: Record<string, string> = {
-  lexer: '#7bdff2',
-  parser: '#c7a9ff',
-  normalizer: '#90e0ef',
-  vm: '#faff69',
-  resolver: '#6a6a6a',
-  orchestrator: '#b5e48c',
+  lexer: 'var(--chart-7)',
+  parser: 'var(--chart-1)',
+  normalizer: 'var(--chart-3)',
+  vm: 'var(--chart-4)',
+  resolver: 'var(--faint)',
+  orchestrator: 'var(--chart-6)',
 };
 
 /**

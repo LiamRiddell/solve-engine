@@ -14,10 +14,10 @@ const TYPE_LABEL: Record<ConstantInfo["type"], string> = {
   hex: "Hex Values",
 }
 const TYPE_DOT: Record<ConstantInfo["type"], string> = {
-  number: "bg-blue-500",
-  string: "bg-emerald-500",
-  bigint: "bg-violet-500",
-  hex: "bg-amber-500",
+  number: "bg-[var(--info)]",
+  string: "bg-[var(--success)]",
+  bigint: "bg-[var(--chart-1)]",
+  hex: "bg-[var(--warning)]",
 }
 
 interface ConstantGroup {
@@ -164,7 +164,7 @@ export function ConstantsExplorer({ constants }: { constants: ConstantInfo[] }) 
                           <code className="font-mono">
                             {valueSegments(group.type, item.value, query).map((seg, i) =>
                               seg.highlight ? (
-                                <mark key={i} className="bg-yellow-300/60 dark:bg-yellow-500/40">
+                                <mark key={i} className="bg-[var(--warning)]/60 dark:bg-[var(--warning)]/40">
                                   {seg.text}
                                 </mark>
                               ) : (

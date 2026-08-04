@@ -14,6 +14,7 @@ import { TimingWaterfall } from "@/components/shared/TimingWaterfall"
 import { Button } from "@/components/ui/button"
 import { ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { TAB_BODY, TAB_ROOT } from "@/components/shared/tabChrome"
 
 const GATE_STAGES = new Set(["safety_length", "safety_complexity", "cache_check", "async_preflight"])
 
@@ -87,10 +88,10 @@ function getStagePreview(stage: PipelineStageResult): string {
 
 function tokClass(t: { type?: string }): string {
   const type = String(t.type || "").toLowerCase()
-  if (["number", "hex", "bigint"].includes(type)) return "text-blue-600 dark:text-blue-400"
-  if (type === "ident") return "text-emerald-600 dark:text-emerald-400"
+  if (["number", "hex", "bigint"].includes(type)) return "text-[var(--info-text)]"
+  if (type === "ident") return "text-[var(--success-text)]"
   if (["star", "plus", "minus", "slash", "caret", "equals"].includes(type)) return "text-muted-foreground"
-  if (type === "keyword" || type.includes("_by")) return "text-violet-600 dark:text-violet-400"
+  if (type === "keyword" || type.includes("_by")) return "text-[var(--chart-1)]"
   return "text-muted-foreground"
 }
 
@@ -294,7 +295,7 @@ export function PipelineTab() {
             startNs: timeline.pendingNs,
             endNs,
             label: stillWaiting ? "Waiting…" : isError ? "Failed" : "Resolved",
-            color: isError ? "#ff6b6b" : stillWaiting ? "#faff69" : "#ff9b54",
+            color: isError ? "var(--destructive)" : stillWaiting ? "var(--chart-4)" : "var(--chart-2)",
             status,
             tooltipTitle: "Async Wait",
             tooltipLines: [`Started at ${fmt(timeline.pendingNs)}`, durationNs !== null ? `${isError ? "Failed" : "Resolved"} after ${fmt(durationNs)}` : "Still waiting…"],
@@ -313,8 +314,8 @@ export function PipelineTab() {
         <div className="flex flex-col gap-2.5">
           <StatGrid
             rows={[
-              { label: "Line Type", value: classification, color: "#90e0ef" },
-              { label: "Evaluated", value: o.skip ? "No — skipped" : "Yes", color: o.skip ? "#ff6b6b" : "#b5e48c" },
+              { label: "Line Type", value: classification, color: "var(--chart-3)" },
+              { label: "Evaluated", value: o.skip ? "No — skipped" : "Yes", color: o.skip ? "var(--destructive)" : "var(--chart-6)" },
               { label: "Inline Solves", value: o.hasInlineSolve ? String(inlineSolveSpans.length || 1) : "0" },
             ]}
           />
@@ -326,7 +327,7 @@ export function PipelineTab() {
                   <span
                     key={i}
                     title={`Tokens [${span.startTokenIndex}..${span.endTokenIndex}] · column ${span.columnNumber ?? 1}`}
-                    className="rounded border border-violet-500/30 bg-violet-500/10 px-1.5 py-0.5 font-mono text-[10px] text-violet-600 dark:text-violet-400"
+                    className="rounded border border-[var(--chart-1)]/30 bg-[var(--chart-1)]/10 px-1.5 py-0.5 font-mono text-[10px] text-[var(--chart-1)]"
                   >
                     s`{span.expression ?? "?"}`
                   </span>
@@ -341,7 +342,7 @@ export function PipelineTab() {
     safety_length(stage) {
       const o = stage.output as any
       const pct = o.maxLength > 0 ? (o.expressionLength / o.maxLength) * 100 : 0
-      const color = o.passed ? "#90e0ef" : "#ff6b6b"
+      const color = o.passed ? "var(--chart-3)" : "var(--destructive)"
       return (
         <div className="flex flex-col gap-2">
           <StatGrid
@@ -378,9 +379,9 @@ export function PipelineTab() {
               <div className="text-muted-foreground mb-1 text-[9px] tracking-wide uppercase">Token Type Breakdown</div>
               <div className="flex flex-wrap gap-1">
                 {typeEntries.map(([type, count]) => (
-                  <span key={type} className="flex items-center gap-1 rounded border border-cyan-500/20 bg-cyan-500/10 px-1.5 py-0.5 text-[10px]">
+                  <span key={type} className="flex items-center gap-1 rounded border border-[var(--chart-3)]/20 bg-[var(--chart-3)]/10 px-1.5 py-0.5 text-[10px]">
                     <span className="font-mono">{type}</span>
-                    <span className="font-bold text-cyan-600 dark:text-cyan-400">×{count}</span>
+                    <span className="font-bold text-[var(--chart-3)]">×{count}</span>
                   </span>
                 ))}
               </div>
@@ -412,10 +413,10 @@ export function PipelineTab() {
       return (
         <StatGrid
           rows={[
-            { label: "Input Tokens", value: String(o.inputTokenCount), color: "#7bdff2" },
-            { label: "Output Tokens", value: String(o.outputTokenCount), color: "#90e0ef" },
-            { label: "Removed", value: String(removed), color: removed > 0 ? "#ff6b6b" : undefined },
-            { label: "Fusions", value: String(fusions.length), color: fusions.length > 0 ? "#c7a9ff" : undefined },
+            { label: "Input Tokens", value: String(o.inputTokenCount), color: "var(--chart-7)" },
+            { label: "Output Tokens", value: String(o.outputTokenCount), color: "var(--chart-3)" },
+            { label: "Removed", value: String(removed), color: removed > 0 ? "var(--destructive)" : undefined },
+            { label: "Fusions", value: String(fusions.length), color: fusions.length > 0 ? "var(--chart-1)" : undefined },
           ]}
         />
       )
@@ -425,7 +426,7 @@ export function PipelineTab() {
       const o = stage.output as any
       const b = o.breakdown ?? { tokenCount: 0, functionCalls: 0, nestingDepth: 0 }
       const pct = o.maxComplexity > 0 ? (o.complexityScore / o.maxComplexity) * 100 : 0
-      const color = o.passed ? "#90e0ef" : "#ff6b6b"
+      const color = o.passed ? "var(--chart-3)" : "var(--destructive)"
       return (
         <div className="flex flex-col gap-2">
           <StatGrid rows={[{ label: "Status", value: o.passed ? "Passed" : (o.errorMessage ?? "Failed"), color }, { label: "Score", value: `${o.complexityScore} / ${o.maxComplexity}` }]} />
@@ -450,12 +451,12 @@ export function PipelineTab() {
       return (
         <div className="flex flex-col gap-2">
           {o.isAssignment && (
-            <span className="self-start rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide uppercase" style={{ color: "#faff69", background: "rgba(250,255,105,0.12)", border: "1px solid rgba(250,255,105,0.25)" }}>
+            <span className="self-start rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide uppercase" style={{ color: "var(--chart-4)", background: "color-mix(in srgb, var(--chart-4) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--chart-4) 25%, transparent)" }}>
               Assignment
             </span>
           )}
-          <ChipGroup label="Reads" items={reads} color="#7bdff2" />
-          <ChipGroup label="Writes" items={writes} color="#faff69" />
+          <ChipGroup label="Reads" items={reads} color="var(--chart-7)" />
+          <ChipGroup label="Writes" items={writes} color="var(--chart-4)" />
         </div>
       )
     },
@@ -463,7 +464,7 @@ export function PipelineTab() {
     cache_check(stage) {
       const o = stage.output as any
       const hit = o.hit as boolean
-      const color = hit ? "#90e0ef" : "#7bdff2"
+      const color = hit ? "var(--chart-3)" : "var(--chart-7)"
       return (
         <div className="flex flex-col gap-2">
           <StatGrid rows={[{ label: "Status", value: hit ? "Hit" : "Miss", color }, { label: "Cache Size", value: `${o.cacheSize ?? "?"} entries` }]} />
@@ -497,9 +498,9 @@ export function PipelineTab() {
                     key={type}
                     title={`${info.prefix ? "Prefix" : "Infix"} parselet · category: ${info.category}\nClick to inspect in Parselets tab`}
                     onClick={() => focusParselet(type)}
-                    className="flex cursor-pointer items-center gap-1 rounded border border-violet-500/20 bg-violet-500/10 px-1.5 py-0.5 text-[10px]"
+                    className="flex cursor-pointer items-center gap-1 rounded border border-[var(--chart-1)]/20 bg-[var(--chart-1)]/10 px-1.5 py-0.5 text-[10px]"
                   >
-                    <span className="font-mono font-bold text-violet-600 dark:text-violet-400">{type}</span>
+                    <span className="font-mono font-bold text-[var(--chart-1)]">{type}</span>
                     {info.count > 1 && <span className="text-muted-foreground">×{info.count}</span>}
                   </span>
                 ))}
@@ -519,21 +520,21 @@ export function PipelineTab() {
         <div className="flex flex-col gap-2">
           <StatGrid
             rows={[
-              { label: "Opcodes", value: String(o.opcodeCount ?? 0), color: "#c7a9ff" },
-              { label: "Number Constants", value: String(o.numberConstants ?? 0), color: "#7bdff2" },
-              { label: "String Constants", value: String(o.stringConstants ?? 0), color: "#90e0ef" },
+              { label: "Opcodes", value: String(o.opcodeCount ?? 0), color: "var(--chart-1)" },
+              { label: "Number Constants", value: String(o.numberConstants ?? 0), color: "var(--chart-7)" },
+              { label: "String Constants", value: String(o.stringConstants ?? 0), color: "var(--chart-3)" },
             ]}
           />
           <div className="flex flex-wrap gap-1">
             <span
               className="rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide uppercase"
-              style={o.hasAsync ? { background: "rgba(255,155,84,0.15)", color: "#ff9b54" } : { background: "rgba(107,107,117,0.1)", color: "var(--text-muted, #8a8a8a)" }}
+              style={o.hasAsync ? { background: "color-mix(in srgb, var(--chart-2) 15%, transparent)", color: "var(--chart-2)" } : { background: "var(--muted)", color: "var(--faint)" }}
             >
               {o.hasAsync ? "Has Async Opcodes" : "No Async Opcodes"}
             </span>
             <span
               className="rounded px-1.5 py-0.5 text-[9px] font-bold tracking-wide uppercase"
-              style={o.cached ? { background: "rgba(144,224,239,0.15)", color: "#90e0ef" } : { background: "rgba(107,107,117,0.1)", color: "var(--text-muted, #8a8a8a)" }}
+              style={o.cached ? { background: "color-mix(in srgb, var(--chart-3) 15%, transparent)", color: "var(--chart-3)" } : { background: "var(--muted)", color: "var(--faint)" }}
             >
               {o.cached ? "Served From Cache" : "Freshly Compiled"}
             </span>
@@ -544,7 +545,7 @@ export function PipelineTab() {
 
     async_preflight(stage) {
       const o = stage.output as any
-      const color = o.path === "pending" ? "#faff69" : "#90e0ef"
+      const color = o.path === "pending" ? "var(--chart-4)" : "var(--chart-3)"
       const timeline = getAsyncTimeline(stage)
       const hasTimeline = timeline.pendingNs !== null
       return (
@@ -559,7 +560,7 @@ export function PipelineTab() {
           {o.path === "pending" && (
             <div>
               <div className="text-muted-foreground mb-1 text-[9px] tracking-wide uppercase">Pending Query Key</div>
-              <code className="block text-[10px] break-all text-amber-500">{o.pendingQueryKey ?? "—"}</code>
+              <code className="block text-[10px] break-all text-[var(--warning-text)]">{o.pendingQueryKey ?? "—"}</code>
             </div>
           )}
           {hasTimeline && (
@@ -577,7 +578,7 @@ export function PipelineTab() {
       return (
         <StatGrid
           rows={[
-            { label: "Result Type", value: o.resultType ?? "Value", color: "#faff69" },
+            { label: "Result Type", value: o.resultType ?? "Value", color: "var(--chart-4)" },
             { label: "Instructions", value: String(o.totalInstructions ?? 0) },
             { label: "Max Stack Depth", value: String(o.stackDepth ?? 0) },
             { label: "Pending", value: o.isPending ? "Yes" : "No" },
@@ -594,16 +595,16 @@ export function PipelineTab() {
       if (!reads.length && !writes.length && !dataSources.length) return <EmptyNote text="Nothing registered in the dependency graph for this line." />
       return (
         <div className="flex flex-col gap-2">
-          <ChipGroup label="Reads" items={reads} color="#7bdff2" />
-          <ChipGroup label="Writes" items={writes} color="#faff69" />
-          <ChipGroup label="Data Sources" items={dataSources} color="#ff9b54" />
+          <ChipGroup label="Reads" items={reads} color="var(--chart-7)" />
+          <ChipGroup label="Writes" items={writes} color="var(--chart-4)" />
+          <ChipGroup label="Data Sources" items={dataSources} color="var(--chart-2)" />
         </div>
       )
     },
 
     linecache(stage) {
       const o = stage.output as any
-      return <StatGrid rows={[{ label: "Line", value: String(o.lineNumber ?? "—") }, { label: "Status", value: o.stored ? "Cached" : "Not Stored", color: o.stored ? "#90e0ef" : "#ff6b6b" }]} />
+      return <StatGrid rows={[{ label: "Line", value: String(o.lineNumber ?? "—") }, { label: "Status", value: o.stored ? "Cached" : "Not Stored", color: o.stored ? "var(--chart-3)" : "var(--destructive)" }]} />
     },
 
     result(stage) {
@@ -622,7 +623,7 @@ export function PipelineTab() {
       if (raw === formatted) {
         return (
           <div className="flex flex-col items-center gap-1.5">
-            <span className="text-sm font-bold" style={{ color: "#faff69" }}>
+            <span className="text-sm font-bold" style={{ color: "var(--chart-4)" }}>
               {formatted}
             </span>
             {typeBadge}
@@ -634,13 +635,13 @@ export function PipelineTab() {
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground text-[9px] tracking-wide uppercase">Raw:</span>
-            <span className="font-mono text-[11px]" style={{ color: "#ffa07a" }}>
+            <span className="font-mono text-[11px]" style={{ color: "var(--chart-2)" }}>
               {raw}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground text-[9px] tracking-wide uppercase">Formatted:</span>
-            <span className="text-sm font-bold" style={{ color: "#faff69" }}>
+            <span className="text-sm font-bold" style={{ color: "var(--chart-4)" }}>
               {formatted}
             </span>
           </div>
@@ -686,9 +687,9 @@ export function PipelineTab() {
             <div className="text-muted-foreground mb-1 text-[9px] tracking-wide uppercase">Rules Applied</div>
             <div className="flex flex-wrap gap-1.5">
               {rulesApplied.map((r: any) => (
-                <span key={r.rule} className="flex items-center gap-1 rounded border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[10px]">
+                <span key={r.rule} className="flex items-center gap-1 rounded border border-[var(--chart-3)]/20 bg-[var(--chart-3)]/10 px-2 py-0.5 text-[10px]">
                   <span className="font-mono">{r.rule}</span>
-                  <span className="font-semibold text-cyan-600 dark:text-cyan-400">×{r.count}</span>
+                  <span className="font-semibold text-[var(--chart-3)]">×{r.count}</span>
                 </span>
               ))}
             </div>
@@ -713,7 +714,7 @@ export function PipelineTab() {
                     </td>
                     <td className="text-muted-foreground py-1 pr-2">→</td>
                     <td className="py-1">
-                      <span className="text-muted-foreground">{f.fusedToken.type}</span> <span style={{ color: "#ffa07a" }}>{f.fusedToken.value}</span>
+                      <span className="text-muted-foreground">{f.fusedToken.type}</span> <span style={{ color: "var(--chart-2)" }}>{f.fusedToken.value}</span>
                     </td>
                   </tr>
                 ))}
@@ -740,7 +741,7 @@ export function PipelineTab() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={TAB_ROOT}>
       <div className="flex items-center gap-2 border-b px-4 py-1.5">
         <label className="text-muted-foreground flex items-center gap-1.5 text-xs">
           <span className="font-mono">#</span> Line
@@ -764,14 +765,14 @@ export function PipelineTab() {
         </Button>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+      <div className={TAB_BODY}>
         {hasResult && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-            <StatCard label="Tokens" value={String(tokens)} color="#7bdff2" />
-            <StatCard label="Opcodes" value={String(opcodes)} color="#90e0ef" />
-            <StatCard label="Cache" value={cache} color="#ff6ec7" />
-            <StatCard label="Async" value={async_} color="#ff9b54" />
-            {displayStages.length > 0 && <StatCard label="Stages" value={String(displayStages.length)} color="#b5e48c" />}
+            <StatCard label="Tokens" value={String(tokens)} color="var(--chart-7)" />
+            <StatCard label="Opcodes" value={String(opcodes)} color="var(--chart-3)" />
+            <StatCard label="Cache" value={cache} color="var(--chart-5)" />
+            <StatCard label="Async" value={async_} color="var(--chart-2)" />
+            {displayStages.length > 0 && <StatCard label="Stages" value={String(displayStages.length)} color="var(--chart-6)" />}
           </div>
         )}
 
@@ -819,7 +820,7 @@ function StatCard({ label, value, color }: { label: string; value: string; color
   return (
     <div className="rounded-md border p-2.5">
       <div className="flex items-center justify-between">
-        <span className="text-muted-foreground text-[10px] font-medium uppercase">{label}</span>
+        <span className="text-muted-foreground text-[10px] font-semibold tracking-[0.12em] uppercase">{label}</span>
         <span className="size-1.5 rounded-full" style={{ background: color }} />
       </div>
       <div className="mt-1 font-mono text-lg font-bold" style={{ color }}>
