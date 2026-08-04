@@ -45,9 +45,6 @@
 [data-has-hero] .band {
   /* The one content width on this page. See `.band__inner`. */
   --band-max: 78rem;
-  /* The narrower width a heading block sits at, and anything meant to line up
-     with one. Named because two things now depend on it agreeing. */
-  --band-head-max: 52rem;
   padding-block: clamp(3.5rem, 9vh, 7rem);
   padding-inline: clamp(1rem, 4vw, 3rem);
 }
@@ -63,28 +60,27 @@
 /*
  * The band is full bleed and its content is not. That is what "full width"
  * means here: the section owns the whole viewport so a background or a rule
- * could run edge to edge, while the text inside stops at a width somebody can
- * still read a line of.
+ * could run edge to edge, while the content inside stops at one width and stays
+ * there however wide the monitor gets.
  *
- * One number, named once, used by every band including the ones that used to
- * have their own. There were three different widths before this: 78rem here,
- * 92rem on the showcase, and the Oyren panel at 48rem, so a reader scrolling
- * the page saw the left edge of the content move three times.
+ * This is the only width constraint on the page, and that is the point. There
+ * were seven at one stage: 78rem here, 92rem on the showcase, 52rem on every
+ * heading block, 48rem in the Oyren panel, and three more on individual
+ * paragraphs. Each was defensible on its own and together they meant the left
+ * edge of the content moved seven times on the way down the page.
+ *
+ * So nothing nested inside declares its own. If something needs to be narrower
+ * than the column, that is a reason to look at the column.
  */
 [data-has-hero] .band__inner {
   max-width: var(--band-max);
   margin-inline: auto;
 }
 
-[data-has-hero] .band__inner--narrow {
-  max-width: 46rem;
-}
-
 /* Apple sets the heading block centred and the detail beneath it left. The
    centred variant is the default here for the same reason: it makes a long
    page scan as a sequence of statements. */
 [data-has-hero] .band__head {
-  max-width: var(--band-head-max);
   margin-inline: auto;
   margin-bottom: clamp(1.75rem, 4vh, 3rem);
   text-align: center;
@@ -710,11 +706,8 @@
   text-align: center;
 }
 
-/* Narrower than a band's content on purpose, because it is one short piece of
-   copy rather than a section of them, but derived from the same number so the
-   two stay related if that number ever moves. */
 .oyren__inner {
-  max-width: calc(var(--band-max, 78rem) * 0.62);
+  max-width: var(--band-max, 78rem);
   margin-inline: auto;
 }
 
@@ -736,7 +729,6 @@
 
 .oyren__body {
   margin: 1.25rem auto 0;
-  max-width: 44rem;
   color: rgb(252 252 254 / 0.68);
   font-size: clamp(1rem, 1.3vw, 1.1875rem);
   line-height: 1.65;
@@ -791,21 +783,6 @@
   font-size: var(--sl-text-xs);
 }
 
-/*
- * The notepad directly under a heading block takes that block's width, so the
- * demo and the sentence introducing it share a left and right edge. At the full
- * band width it was half as wide again as the heading and the two read as
- * unrelated things stacked on top of each other.
- *
- * The child combinator is doing real work here: it picks out the one notepad
- * that is a direct child of a band, and leaves the five inside `.showcase__demo`
- * alone, which sit in a two-column row and want the width of their column.
- */
-[data-has-hero] .band__inner > .notepad-host {
-  max-width: var(--band-head-max);
-  margin-inline: auto;
-}
-
 /* ── Correctness band ───────────────────────────────────────────────────── */
 
 /*
@@ -847,7 +824,6 @@
 
 [data-has-hero] .stats-band__lede {
   margin: 1.5rem auto 0;
-  max-width: 34rem;
   color: var(--muted-foreground);
   font-size: clamp(1rem, 1.3vw, 1.1875rem);
   line-height: 1.6;
@@ -886,7 +862,6 @@
 
 [data-has-hero] .stats-band__note {
   margin: clamp(2rem, 5vh, 3rem) auto 0;
-  max-width: 44rem;
   color: var(--faint);
   font-size: var(--sl-text-sm);
   line-height: 1.65;
@@ -969,11 +944,33 @@
 
 [data-has-hero] .size-band__lede {
   margin: 1.5rem auto 0;
-  max-width: 38rem;
   color: var(--muted-foreground);
   font-size: clamp(1rem, 1.3vw, 1.1875rem);
   line-height: 1.6;
   text-wrap: pretty;
+}
+
+/* The budget, drawn. A bar is the one place a proportion reads instantly, and
+   the proportion is the whole reason the number is reassuring. */
+[data-has-hero] .size-band__meter {
+  margin: clamp(1.75rem, 4vh, 2.5rem) auto 0;
+  height: 4px;
+  border-radius: 999px;
+  background-color: var(--muted);
+  overflow: hidden;
+}
+
+[data-has-hero] .size-band__meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background-color: var(--primary);
+}
+
+[data-has-hero] .size-band__meter-label {
+  margin: 0.625rem 0 0;
+  color: var(--faint);
+  font-size: var(--sl-text-xs);
 }
 
 [data-has-hero] .size-band__grid {
@@ -1007,7 +1004,6 @@
 
 [data-has-hero] .size-band__note {
   margin: clamp(2rem, 5vh, 3rem) auto 0;
-  max-width: 46rem;
   color: var(--faint);
   font-size: var(--sl-text-sm);
   line-height: 1.65;
