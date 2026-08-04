@@ -150,6 +150,13 @@ jobs:
       # Needs the build above, which is why it lives in this job.
       - run: npm run lint:units
 
+      # Installs the packed tarball into a scratch project and uses it by bare
+      # specifier. `npm run smoke` imports packages/engine/dist directly, which
+      # is why it passed while 1.0.0-beta.0 went out containing no dist at all:
+      # the files it read were on disk regardless of what got packed. This reads
+      # only what npm would actually serve.
+      - run: npm run test:consumer
+
   playground:
     name: Playground builds
     runs-on: ubuntu-24.04
