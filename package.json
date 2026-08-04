@@ -31,6 +31,8 @@
     "lint:sidebar": "node scripts/check-sidebar.mjs",
     "stats:size": "node scripts/collect-package-size.mjs",
     "lint:size": "node scripts/collect-package-size.mjs --check",
+    "changeset:version": "changeset version && npm install --package-lock-only --ignore-scripts",
+    "changeset:publish": "changeset publish",
     "stats:units": "node scripts/generate-unit-reference.mjs",
     "lint:units": "node scripts/generate-unit-reference.mjs --check"
   },

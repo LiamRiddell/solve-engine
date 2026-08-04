@@ -1,0 +1,87 @@
+name: Publish
+
+# The ongoing release path: changesets accumulate on main, this opens a
+# "Version packages" pull request that bumps the version and writes the
+# changelog, and merging that pull request publishes and tags.
+#
+# Nothing is published by pushing to main directly. The version pull request is
+# the gate, and it is a real one: it shows the exact version bump and the exact
+# changelog entry before either becomes permanent, which is worth having for a
+# registry that does not let you replace a published version.
+#
+# This is the only workflow that publishes, and the only one npm will accept a
+# release from: it is registered as the package's trusted publisher, so an OIDC
+# token minted by any other workflow is rejected. Renaming this file breaks
+# publishing until the trusted publisher registration is updated to match.
+#
+# There is no token anywhere in here. `solve-engine@1.0.0-beta.0` was published
+# by hand to create the package, because trusted publishing cannot create one
+# that does not exist yet (npm/cli#8544), and the registration was added
+# afterwards. That was the only manual publish.
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Version or publish
+    runs-on: ubuntu-24.04
+    # Declared even though trusted publishing needs no secret from here. npm's
+    # trusted publisher config takes an optional environment name, and when one
+    # is registered the OIDC token is only accepted if it came from that
+    # environment. Binding it here is what makes that check mean anything.
+    environment: npm
+
+    permissions:
+      # Push the version commit and the release tags.
+      contents: write
+      # Open and update the version pull request.
+      pull-requests: write
+      # Mint the OIDC token that trusted publishing authenticates with. Without
+      # this the publish falls back to looking for a token and fails.
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # changesets compares against the history to work out what changed, so
+          # a shallow clone gives it nothing to read.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      # Node 22 ships npm 10, and trusted publishing needs 11.5.1 or newer. The
+      # failure without this is not obvious: npm simply looks for a token it
+      # cannot find and reports an authentication error, rather than saying the
+      # client is too old to speak OIDC.
+      - name: Use an npm that understands trusted publishing
+        run: |
+          npm install -g npm@latest
+          npm --version
+
+      - run: npm ci
+
+      # The same gate a contributor runs, before anything can be published.
+      - run: npm run verify
+
+      - name: Version pull request, or publish
+        uses: changesets/action@v1
+        with:
+          version: npm run changeset:version
+          publish: npm run changeset:publish
+          title: "chore: version packages"
+          commit: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No NODE_AUTH_TOKEN and no --provenance. Trusted publishing
+          # authenticates over OIDC, and it generates provenance attestations on
+          # its own; passing the flag as well is redundant rather than harmful,
+          # but leaving it out keeps it clear where the signing comes from.
