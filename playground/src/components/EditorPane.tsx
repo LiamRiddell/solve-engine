@@ -17,7 +17,8 @@ import { markdown } from "@codemirror/lang-markdown"
 import { oneDark } from "@codemirror/theme-one-dark"
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine"
 import { LanguageService } from "@solve-js/language/LanguageService"
-import { categoryClassName, completionItemToOption } from "@solve-js/language/adapters/codemirror"
+import { tokenClassName } from "@solve-js/language/tokenClassName"
+import { completionItemToOption } from "@solve-js/language/adapters/codemirror"
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins"
 import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage"
 import type { LineResult } from "@bridge/engine"
@@ -339,7 +340,7 @@ function createHighlightPlugin(languageService: LanguageService) {
         while (pos <= to) {
           const line = view.state.doc.lineAt(pos)
           for (const token of languageService.getSemanticTokens(line.text, line.number)) {
-            builder.add(line.from + token.from, line.from + token.to, Decoration.mark({ class: categoryClassName(token.category) }))
+            builder.add(line.from + token.from, line.from + token.to, Decoration.mark({ class: tokenClassName(token.category) }))
           }
           pos = line.to + 1
         }

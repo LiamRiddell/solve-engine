@@ -1,0 +1,83 @@
+/*
+ * Diagrams.
+ *
+ * Mermaid paints the shapes from the theme variables the client script hands
+ * it, so almost nothing here touches the drawing itself. What is left is the
+ * frame around it and the state before it renders: the raw source is on the
+ * page from the first paint, and it should look deliberate while it is there
+ * rather than look like a page that has broken.
+ */
+
+.mermaid-figure {
+  margin: 1.75rem 0;
+  padding: 0;
+}
+
+.mermaid-figure figcaption {
+  margin-top: 0.75rem;
+  color: var(--faint);
+  font-size: var(--sl-text-xs);
+  text-align: center;
+}
+
+/* Before rendering this is the diagram source, monospaced and dimmed so it
+   reads as a listing. After rendering it is an SVG, and the source styling has
+   nothing left to apply to. */
+pre.mermaid {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  background: none;
+  color: var(--faint);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-xs);
+  line-height: 1.6;
+  overflow-x: auto;
+  padding: 1rem 1.125rem;
+  white-space: pre;
+}
+
+/* Rendered. The hairline goes: a diagram already has its own edges, and boxing
+   it as well makes the page look like a stack of panels. */
+pre.mermaid[data-rendered="true"] {
+  border: none;
+  padding: 0.5rem 0;
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+}
+
+/* Mermaid scales a diagram down to fit its container, which on a narrow column
+   can take the labels below reading size. The floor stops that: past this width
+   the figure scrolls instead of shrinking further. */
+pre.mermaid svg {
+  min-width: 26rem;
+  height: auto;
+}
+
+/* Mermaid emits its own font-family on most text nodes but not all of them, and
+   the ones it misses fall back to the browser's serif. */
+pre.mermaid svg text,
+pre.mermaid svg .nodeLabel,
+pre.mermaid svg .edgeLabel {
+  font-family: var(--sl-font);
+}
+
+/* The one place the brand colour appears in a diagram: a node marked `accent`
+   is the path the surrounding prose is actually talking about. Applied here
+   rather than through mermaid's theme variables because it is per-node, and
+   `classDef` in the diagram source would repeat the same six declarations in
+   every file. */
+pre.mermaid svg .accent > rect,
+pre.mermaid svg .accent > polygon,
+pre.mermaid svg .accent > path,
+pre.mermaid svg .accent > circle {
+  fill: var(--accent);
+  stroke: var(--accent-border);
+}
+
+pre.mermaid svg .accent .nodeLabel,
+pre.mermaid svg .accent .nodeLabel p {
+  color: var(--accent-foreground);
+  fill: var(--accent-foreground);
+}

@@ -84,7 +84,7 @@
    what makes the expressions read as the foreground. Wins over the token
    colours below because prose is never code. */
 .notepad__prose,
-.notepad__prose[class*="cm-solve-"] {
+.notepad__prose[class*="solve-"] {
   color: var(--faint);
 }
 
@@ -163,11 +163,11 @@
 /*
  * ── Syntax highlighting ──────────────────────────────────────────────────
  *
- * The class names are produced by the engine's own `categoryClassName()`
- * adapter, so this block is the CSS half of the contract any editor
- * integration implements. The adapter's rule is that the category name IS the
- * class-name key, which means a package that registers a new token category
- * gets a predictable class here for free; only a colour has to be added.
+ * The class names are produced by the engine's own `tokenClassName()`, so this
+ * block is the CSS half of the contract any editor integration implements. The
+ * rule is that the category name IS the class-name key, which means a package
+ * that registers a new token category gets a predictable class here for free;
+ * only a colour has to be added.
  *
  * These are the One Dark hues the Solve playground's editor uses, so an
  * expression looks the same in the docs, in the playground and in a host that
@@ -206,19 +206,19 @@
   --solve-hl-error: #b3261e;
 }
 
-.cm-solve-number { color: var(--solve-hl-number); }
-.cm-solve-string { color: var(--solve-hl-string); }
-.cm-solve-keyword { color: var(--solve-hl-keyword); }
-.cm-solve-operator { color: var(--solve-hl-operator); }
-.cm-solve-comparison { color: var(--solve-hl-comparison); }
-.cm-solve-bitwise { color: var(--solve-hl-bitwise); }
-.cm-solve-function { color: var(--solve-hl-function); }
-.cm-solve-variable { color: var(--solve-hl-variable); }
-.cm-solve-unit { color: var(--solve-hl-unit); }
-.cm-solve-datetime { color: var(--solve-hl-datetime); }
-.cm-solve-vector { color: var(--solve-hl-vector); }
-.cm-solve-punctuation { color: var(--solve-hl-punctuation); }
-.cm-solve-error {
+.solve-number { color: var(--solve-hl-number); }
+.solve-string { color: var(--solve-hl-string); }
+.solve-keyword { color: var(--solve-hl-keyword); }
+.solve-operator { color: var(--solve-hl-operator); }
+.solve-comparison { color: var(--solve-hl-comparison); }
+.solve-bitwise { color: var(--solve-hl-bitwise); }
+.solve-function { color: var(--solve-hl-function); }
+.solve-variable { color: var(--solve-hl-variable); }
+.solve-unit { color: var(--solve-hl-unit); }
+.solve-datetime { color: var(--solve-hl-datetime); }
+.solve-vector { color: var(--solve-hl-vector); }
+.solve-punctuation { color: var(--solve-hl-punctuation); }
+.solve-error {
   color: var(--solve-hl-error);
   text-decoration: underline wavy;
 }

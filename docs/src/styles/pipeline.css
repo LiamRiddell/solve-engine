@@ -1,0 +1,496 @@
+/*
+ * The animated pipeline walkthrough.
+ *
+ * Same language as the rest of the site: one flat ink surface, hairlines
+ * instead of fills, the brand colour reserved for the thing the stage is
+ * actually about. Nothing here has a drop shadow, because light mode has no
+ * shadow colour and a panel that only exists in one theme is not a panel.
+ */
+
+.pw {
+  --pw-gap: 1rem;
+  margin: 2rem 0 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 6px);
+  overflow: hidden;
+}
+
+/* ── Head ───────────────────────────────────────────────────────────────── */
+
+.pw__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem var(--pw-gap);
+  border-bottom: 1px solid var(--border);
+  padding: 0.875rem 1.125rem;
+}
+
+.pw__examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.pw__example {
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  background: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-xs);
+  padding: 0.3125rem 0.625rem;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+
+.pw__example:hover {
+  color: var(--foreground);
+  border-color: var(--border-strong);
+}
+
+.pw__example[aria-selected="true"] {
+  background-color: var(--accent);
+  border-color: var(--accent-border);
+  color: var(--accent-foreground);
+}
+
+.pw__blurb {
+  flex: 1 1 16rem;
+  margin: 0;
+  color: var(--faint);
+  font-size: var(--sl-text-xs);
+}
+
+/* ── Stage rail ─────────────────────────────────────────────────────────── */
+
+.pw__rail {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.pw__rail > li {
+  position: relative;
+  border-inline-start: 1px solid var(--border);
+}
+
+.pw__rail > li:first-child {
+  border-inline-start: none;
+}
+
+.pw__step {
+  display: grid;
+  gap: 0.1875rem;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0.75rem 0.875rem 0.875rem;
+  text-align: start;
+  transition: background-color 140ms ease;
+}
+
+.pw__step:hover {
+  background-color: var(--card-hover);
+}
+
+.pw__step-index {
+  color: var(--faint);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-2xs);
+}
+
+.pw__step-title {
+  color: var(--muted-foreground);
+  font-size: var(--sl-text-sm);
+  font-weight: 500;
+  transition: color 140ms ease;
+}
+
+.pw__step-summary {
+  color: var(--faint);
+  font-size: var(--sl-text-2xs);
+  line-height: 1.4;
+}
+
+.pw__step[data-state="current"] .pw__step-title {
+  color: var(--foreground);
+}
+
+.pw__step[data-state="current"] .pw__step-index,
+.pw__step[data-state="done"] .pw__step-index {
+  color: var(--primary);
+}
+
+/* The autoplay clock, drawn as the current step's underline rather than as a
+   separate bar, so the thing that is moving is the thing that is timing out. */
+.pw__progress {
+  position: absolute;
+  inset-inline-start: 0;
+  bottom: -1px;
+  height: 2px;
+  background-color: var(--primary);
+  transform-origin: left;
+  animation: pw-progress linear forwards;
+  width: 100%;
+}
+
+@keyframes pw-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* ── Viewport ───────────────────────────────────────────────────────────── */
+
+.pw__viewport {
+  padding: 1.25rem 1.125rem;
+  min-height: 19rem;
+}
+
+.pw__stage {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.pw__stage--split {
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 1rem 2rem;
+}
+
+.pw__note {
+  margin: 0;
+  color: var(--faint);
+  font-size: var(--sl-text-xs);
+  line-height: 1.6;
+  max-width: 62ch;
+}
+
+.pw__note--full {
+  grid-column: 1 / -1;
+}
+
+.pw__label {
+  margin: 0 0 0.5rem;
+  color: var(--faint);
+  font-size: var(--sl-text-2xs);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ── Lexing ─────────────────────────────────────────────────────────────── */
+
+.pw__source {
+  margin: 0;
+  color: var(--faint);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-base);
+  white-space: pre;
+}
+
+.pw__source-hit {
+  background-color: var(--accent);
+  border-radius: 3px;
+  color: var(--accent-foreground);
+  padding: 0.125rem 0;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.pw__tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pw__tokens--before {
+  opacity: 0.5;
+}
+
+.pw__token {
+  display: grid;
+  gap: 0.125rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  padding: 0.375rem 0.625rem;
+  opacity: 0;
+  transform: translateY(0.375rem);
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease,
+    border-color 220ms ease;
+}
+
+.pw__token[data-shown="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+.pw__token-text {
+  color: var(--foreground);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-sm);
+}
+
+.pw__token-type {
+  color: var(--faint);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-2xs);
+  letter-spacing: 0.04em;
+}
+
+/* The two things normalisation does, marked so the eye finds them without
+   reading the note first. */
+.pw__token[data-change] {
+  border-color: var(--accent-border);
+  background-color: var(--accent-subtle);
+}
+
+.pw__token[data-change] .pw__token-text,
+.pw__token[data-change] .pw__token-type {
+  color: var(--primary);
+}
+
+.pw__arrow {
+  margin: 0;
+  color: var(--faint);
+  font-size: var(--sl-text-sm);
+}
+
+/* ── Parsing ────────────────────────────────────────────────────────────── */
+
+.pw__tree,
+.pw__children {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pw__children {
+  margin-inline-start: 1.125rem;
+  border-inline-start: 1px solid var(--border);
+  padding-inline-start: 1.125rem;
+}
+
+.pw__branch {
+  padding-block: 0.1875rem;
+}
+
+.pw__node {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.625rem;
+}
+
+.pw__node-label {
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  color: var(--foreground);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-sm);
+  padding: 0.1875rem 0.5rem;
+}
+
+.pw__node-detail {
+  color: var(--faint);
+  font-size: var(--sl-text-xs);
+}
+
+/* ── Compilation and execution ──────────────────────────────────────────── */
+
+.pw__code,
+.pw__pool,
+.pw__stack {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-xs);
+}
+
+.pw__instruction {
+  display: grid;
+  grid-template-columns: 1.5rem 10rem minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: baseline;
+  padding-block: 0.25rem;
+  opacity: 0;
+  transform: translateX(-0.25rem);
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease;
+}
+
+.pw__instruction[data-shown="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+.pw__instruction-index {
+  color: var(--faint);
+  text-align: end;
+}
+
+.pw__instruction-op {
+  color: var(--foreground);
+}
+
+.pw__instruction-comment {
+  color: var(--faint);
+}
+
+/* Execution marks where the machine is, which is the only moving part of that
+   stage besides the stack itself. */
+.pw__instruction[data-state="ahead"] {
+  opacity: 0.35;
+}
+
+.pw__instruction[data-state="current"] .pw__instruction-op {
+  color: var(--primary);
+}
+
+.pw__instruction[data-state="current"] .pw__instruction-index {
+  color: var(--primary);
+}
+
+.pw__pools {
+  display: grid;
+  gap: 1.25rem;
+  align-content: start;
+}
+
+.pw__pool li {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  gap: 0.5rem;
+  padding-block: 0.1875rem;
+  color: var(--foreground);
+}
+
+.pw__pool-index {
+  color: var(--faint);
+  text-align: end;
+}
+
+.pw__pool-empty {
+  margin: 0;
+  color: var(--faint);
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-xs);
+}
+
+/* The stack is drawn bottom-up, the way it is described everywhere else. */
+.pw__stack {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: start;
+  gap: 0.25rem;
+  min-height: 7rem;
+}
+
+.pw__cell {
+  border: 1px solid var(--border-strong);
+  border-radius: calc(var(--radius) - 2px);
+  color: var(--foreground);
+  min-width: 5rem;
+  padding: 0.3125rem 0.625rem;
+  animation: pw-push 180ms ease;
+}
+
+@keyframes pw-push {
+  from {
+    opacity: 0;
+    transform: translateY(0.375rem);
+  }
+}
+
+.pw__step-note {
+  margin: 0.625rem 0 0;
+  color: var(--faint);
+  font-size: var(--sl-text-xs);
+}
+
+.pw__answer {
+  color: var(--primary);
+  font-family: var(--sl-font-mono);
+  font-weight: 400;
+}
+
+/* ── Controls ───────────────────────────────────────────────────────────── */
+
+.pw__controls {
+  display: flex;
+  gap: 0.5rem;
+  border-top: 1px solid var(--border);
+  padding: 0.75rem 1.125rem;
+}
+
+.pw__control {
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  background: none;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  font-size: var(--sl-text-xs);
+  padding: 0.3125rem 0.75rem;
+  transition:
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.pw__control:hover {
+  color: var(--foreground);
+  border-color: var(--border-strong);
+}
+
+/* ── Narrow ─────────────────────────────────────────────────────────────── */
+
+@media (max-width: 56rem) {
+  .pw__rail {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .pw__step-summary {
+    display: none;
+  }
+
+  .pw__stage--split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .pw__token,
+  .pw__instruction,
+  .pw__cell,
+  .pw__step,
+  .pw__example,
+  .pw__control {
+    animation: none;
+    transition: none;
+  }
+
+  .pw__token,
+  .pw__instruction {
+    opacity: 1;
+    transform: none;
+  }
+}

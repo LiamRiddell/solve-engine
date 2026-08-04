@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plate, PlateContent, usePlateEditor } from "platejs/react";
 import { ExpressionEngine } from "solve-engine";
 import { formatValue } from "solve-engine/format";
-import { LanguageService, categoryClassName } from "solve-engine/language";
+import { LanguageService, tokenClassName } from "solve-engine/language";
 
 /**
  * A live Solve notepad: an editable column of lines on the left, the answers
@@ -32,7 +32,7 @@ import { LanguageService, categoryClassName } from "solve-engine/language";
  *
  * The colours come from the engine's own `LanguageService`, the same one an
  * editor integration would use, and the class names from its shipped
- * `categoryClassName` adapter. Nothing here re-implements the lexer, so a
+ * `tokenClassName` helper. Nothing here re-implements the lexer, so a
  * package that registers a new token category is highlighted on this page
  * without a single change to this file.
  */
@@ -164,7 +164,7 @@ function classifyLine(
     if (token.from >= codeEnd) continue;
     marks.push(
       range(token.from, Math.min(token.to, codeEnd), {
-        solveClass: categoryClassName(token.category),
+        solveClass: tokenClassName(token.category),
       }),
     );
   }

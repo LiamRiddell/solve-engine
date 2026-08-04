@@ -36,6 +36,17 @@ Both could have been exceptions or nulls. Making them value types means they
 propagate through arithmetic and arrive with their cause intact, rather than
 being coerced to zero and producing a plausible but wrong result.
 
+```mermaid The same document, with a live price that has not arrived yet.
+flowchart TD
+  price["AAPL price<br/><i>pending</i>"] --> mul["× 100"]
+  mul --> pendingOut["<i>pending</i><br/>shown as waiting"]
+
+  bad["A rate that failed to fetch<br/><i>error: no such symbol</i>"] --> add["+ 50"]
+  add --> errOut["<i>error: no such symbol</i><br/>the cause survives the arithmetic"]
+
+  coerce["If either were coerced to 0"] --> wrong["0 and 50<br/>plausible, authoritative, wrong"]
+```
+
 ## No public holidays in working-day arithmetic
 
 Correct holiday handling needs a region-specific, continuously updated calendar.

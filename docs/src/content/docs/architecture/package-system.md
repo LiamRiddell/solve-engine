@@ -12,6 +12,30 @@ working operator set.
 Registering a duplicate name is refused, because a silent overwrite would orphan
 whatever the first registration contributed.
 
+```mermaid Every check that stands between a package and a working engine.
+sequenceDiagram
+  participant App as Your code
+  participant Engine as Engine
+  participant Reg as Registries
+
+  App->>Engine: register(package)
+  Engine->>Engine: engine version in the declared range?
+  alt out of range
+    Engine-->>App: refused, naming both versions
+  else in range
+    Engine->>Reg: name already taken?
+    alt taken
+      Reg-->>App: refused, no silent overwrite
+    else free
+      Engine->>Reg: keywords, operators, units
+      Engine->>Reg: parselets and token types
+      Engine->>Reg: token categories
+      Reg-->>Engine: warn on any token type two packages both claim
+      Engine-->>App: registered
+    end
+  end
+```
+
 ## Version compatibility
 
 Each package declares the engine version range it was built against. The range
