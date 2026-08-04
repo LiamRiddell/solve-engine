@@ -613,9 +613,19 @@ starlight-menu-button[aria-expanded="true"] button,
 
 /* ── Table of contents ──────────────────────────────────────────────────── */
 
+/*
+ * The rail down the left of the contents is one continuous line, so the
+ * segments that make it up must not be rounded: a radius on each link turns a
+ * rail into a column of separate ticks with a notch between every pair, and the
+ * active one reads as clipped rather than marked.
+ *
+ * The width is the same on every item, active or not, so marking one is a
+ * change of colour and never a change of layout. Widening the border on the
+ * current item instead would shift its text sideways as you scroll.
+ */
 starlight-toc a {
-  border-radius: calc(var(--radius) - 3px);
-  border-inline-start: 1px solid var(--border);
+  border-radius: 0;
+  border-inline-start: 2px solid var(--border);
   color: var(--faint);
   font-size: var(--sl-text-xs);
   transition:
@@ -625,12 +635,13 @@ starlight-toc a {
 
 starlight-toc a:hover {
   color: var(--foreground);
+  border-inline-start-color: var(--border-strong);
 }
 
 starlight-toc a[aria-current="true"],
 starlight-toc a[aria-current="true"]:hover {
   border-inline-start-color: var(--primary);
-  color: var(--accent-foreground);
+  color: var(--foreground);
   font-weight: 500;
 }
 
