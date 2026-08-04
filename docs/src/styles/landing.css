@@ -153,6 +153,17 @@
   text-wrap: balance;
 }
 
+/* The two words the headline is actually making a claim about: what it is, and
+   the thing that distinguishes it from a calculator app. Marked with `em` so
+   the emphasis survives with styles off and is announced by a screen reader,
+   with the italics turned back off because the accent colour is doing the work
+   here and a slant would fight the tight letter-spacing above. */
+[data-has-hero] .hero-key {
+  color: var(--primary);
+  font-style: normal;
+  font-weight: inherit;
+}
+
 [data-has-hero] .hero .copy > * {
   max-width: 20ch;
 }
