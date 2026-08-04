@@ -68,15 +68,25 @@ function countDocExamples(dir) {
  * @returns {{ tests: number, suites: number }} The counts.
  */
 function readReport() {
-	if (!fs.existsSync(REPORT)) {
+	// Read and handle the failure, rather than asking whether the file exists
+	// and then reading it. The two-step version is a time-of-check to
+	// time-of-use race: the answer can stop being true between the question
+	// and the read, and there is no reason to ask a question whose answer the
+	// read gives anyway.
+	let raw;
+	try {
+		raw = fs.readFileSync(REPORT, "utf8");
+	} catch (error) {
+		if (error.code !== "ENOENT") throw error;
 		console.error(
-			`No Jest report at ${path.relative(ROOT, REPORT)}.\n` +
+			`No Jest report at ${path.relative(ROOT, REPORT)}.
+` +
 				"Run `npm run test:full` first; it writes one as a side effect.",
 		);
 		process.exit(1);
 	}
 
-	const report = JSON.parse(fs.readFileSync(REPORT, "utf8"));
+	const report = JSON.parse(raw);
 	return {
 		tests: report.numTotalTests,
 		suites: report.numTotalTestSuites,
@@ -135,7 +145,17 @@ const stats = {
 };
 
 const next = `${JSON.stringify(stats, null, 2)}\n`;
-const current = fs.existsSync(TARGET) ? fs.readFileSync(TARGET, "utf8") : "";
+/** The committed copy, or "" when there is not one yet. Same reasoning as above. */
+function readCommitted() {
+	try {
+		return fs.readFileSync(TARGET, "utf8");
+	} catch (error) {
+		if (error.code === "ENOENT") return "";
+		throw error;
+	}
+}
+
+const current = readCommitted();
 
 if (process.argv.includes("--check")) {
 	if (current !== next) {
