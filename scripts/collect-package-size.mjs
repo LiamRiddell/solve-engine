@@ -5,6 +5,12 @@
  * a landing page is worth what the reader's confidence in it is worth, and a
  * number typed in by hand is wrong by the next release.
  *
+ * There is no size budget. `size-limit` is used here as a measuring instrument
+ * rather than a gate: it does a real bundle, which is the only honest way to
+ * answer "what does importing this cost", and it reports rather than fails. The
+ * `--check` mode below is still a gate, but on **staleness**, not on size, so a
+ * jump in the figure has to be committed and shows up as a reviewable diff.
+ *
  * Two different questions get two different answers here, because conflating
  * them is how size claims become misleading:
  *
@@ -68,7 +74,6 @@ function bundled() {
 	return {
 		importOneGzip: single.size,
 		importEverythingGzip: whole.size,
-		budget: single.sizeLimit,
 	};
 }
 

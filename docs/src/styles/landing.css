@@ -914,28 +914,16 @@
   text-wrap: pretty;
 }
 
-/* The budget, drawn. A bar is the one place a proportion reads instantly, and
-   the proportion is the whole reason the number is reassuring. */
-[data-has-hero] .size-band__meter {
-  margin: clamp(1.75rem, 4vh, 2.5rem) auto 0;
-  max-width: 30rem;
-  height: 4px;
-  border-radius: 999px;
-  background-color: var(--muted);
-  overflow: hidden;
-}
-
-[data-has-hero] .size-band__meter-fill {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background-color: var(--primary);
-}
-
-[data-has-hero] .size-band__meter-label {
-  margin: 0.625rem 0 0;
+/* What the size bought. Set narrower and quieter than the lede above it, so the
+   two read as a claim and then its evidence rather than as two competing
+   paragraphs. */
+[data-has-hero] .size-band__body {
+  margin: clamp(1.25rem, 3vh, 1.75rem) auto 0;
+  max-width: 42rem;
   color: var(--faint);
-  font-size: var(--sl-text-xs);
+  font-size: var(--sl-text-sm);
+  line-height: 1.7;
+  text-wrap: pretty;
 }
 
 [data-has-hero] .size-band__grid {
