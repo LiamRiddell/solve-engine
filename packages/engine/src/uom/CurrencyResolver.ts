@@ -8,7 +8,6 @@ import type { QueryClient } from "@tanstack/query-core";
 import type { Token } from "@solve-js/lexer";
 import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
-import type { Value } from "@solve-js/vm/Value";
 import { numberValue } from "@solve-js/vm/Value";
 import {
 	currencyExchangeService,

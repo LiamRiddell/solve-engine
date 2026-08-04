@@ -151,8 +151,22 @@ export interface OpcodeInfo {
 }
 export interface ConstantInfo {
 	type: "number" | "string" | "bigint" | "hex";
-	value: any;
+	/** Narrowed by `type`. Hex constants arrive as numbers. */
+	value: number | string | bigint;
 	index: number;
+}
+
+/**
+ * The optional `timedOut` marker a Value carries after an async resolution gave
+ * up. Not on the Value type itself, since it only exists on that one path.
+ */
+interface MaybeTimedOut {
+	readonly timedOut?: boolean;
+}
+
+/** The one field the debug payload's parselet entries are read for. */
+interface DebugParseletEntry {
+	readonly parseletType?: string;
 }
 export interface PerformanceStats {
 	lexerTime: number;
@@ -708,7 +722,7 @@ export function runEngineWithStreaming(
 										lineNumber: ln,
 										result: reErrorFields ? "" : resultValue,
 										type: reErrorFields ? "Error" : formatType(reResult.value),
-										timedOut: (reResult.value as any).timedOut ?? false,
+										timedOut: (reResult.value as MaybeTimedOut).timedOut ?? false,
 										stages: reResult.diagnostic?.stages,
 										...reErrorFields,
 									},
@@ -795,7 +809,7 @@ export function runEngineWithStreaming(
 					if (isUnrecognizedBareWord(trimmed, result.error)) continue;
 
 					const parselet =
-						(result.debug?.parselets?.[0] as any)?.parseletType ??
+						(result.debug?.parselets?.[0] as DebugParseletEntry | undefined)?.parseletType ??
 						"Expression";
 					const parseletCategories = result.debug?.summary?.parseCategories ?? {};
 
@@ -840,8 +854,8 @@ export function runEngineWithStreaming(
 								({
 									...t,
 									line: lineNum,
-									col: (t as any).col ?? 0,
-									lineBreaks: (t as any).lineBreaks ?? 0,
+									col: t.col ?? 0,
+									lineBreaks: t.lineBreaks ?? 0,
 								}) as Token
 						);
 						rawTokens.push(...tokensWithLine);
@@ -1187,7 +1201,7 @@ export function runEngine(expression: string): DebugResult {
 			if (isUnrecognizedBareWord(trimmed, result.error)) return;
 
 			const parselet =
-				(result.debug?.parselets?.[0] as any)?.parseletType ??
+				(result.debug?.parselets?.[0] as DebugParseletEntry | undefined)?.parseletType ??
 				"Expression";
 			const parseletCategories = result.debug?.summary?.parseCategories ?? {};
 
@@ -1217,8 +1231,8 @@ export function runEngine(expression: string): DebugResult {
 						({
 							...t,
 							line: lineNum,
-							col: (t as any).col ?? 0,
-							lineBreaks: (t as any).lineBreaks ?? 0,
+							col: t.col ?? 0,
+							lineBreaks: t.lineBreaks ?? 0,
 						}) as Token
 				);
 				rawTokens.push(...tokensWithLine);
@@ -1306,7 +1320,7 @@ export function runEngine(expression: string): DebugResult {
 					parseletCategories,
 					opcodeCount: perLineOpCount,
 					wasCached,
-					timedOut: (result.value as any).timedOut ?? false,
+					timedOut: (result.value as MaybeTimedOut).timedOut ?? false,
 				});
 			}
 		});

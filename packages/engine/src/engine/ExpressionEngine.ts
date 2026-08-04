@@ -46,9 +46,7 @@ import { DEFAULT_CONFIG, mergeEngineConfig, type EngineConfig } from "@solve-js/
 import {
     DiagnosticPipeline,
     TimelineDiagnosticCollector,
-    DiagnosticEventType,
-    type DiagnosticEvent,
-    type CategorizedParselet
+    DiagnosticEventType
 } from "@solve-js/diagnostics";
 import {
     checkExpressionLength,
@@ -864,7 +862,9 @@ export class ExpressionEngine {
         // We just await the resolver and dispatch to the batcher on completion.
 
         try {
-            const value = await resolver;
+            // The resolved value is not needed here, only the fact that it
+            // settled: the batcher re-reads it from the cache on re-evaluation.
+            await resolver;
             if (signal.aborted) {
                 abortLogger.staleDataDiscarded(queryKey, "signal aborted after resolve");
                 return;
@@ -2878,11 +2878,17 @@ export class ExpressionEngine {
      * Previously accessed via `(vm as any).checkpointer.getAllCheckpoints?.()`.
      */
     getCheckpoints(): CheckpointSnapshot[] {
-        // The checkpointer is set on the VM by ThreeTierEvaluator.
-        // Access it via the VM. Same pattern the playground used via (vm as any).checkpointer.
-        const checkpointer = (this.vm as any).checkpointer as
-            | { getAllCheckpoints(): readonly { lineNumber: number; variables: Record<string, unknown> }[] }
-            | undefined;
+        // ThreeTierEvaluator attaches the checkpointer to the VM at runtime, so
+        // it is not on the VM's declared surface. Describing the shape being
+        // read, rather than reaching through `any`, keeps the expectation
+        // checkable: if getAllCheckpoints' signature moves, this stops
+        // compiling instead of failing at the call.
+        const vmWithCheckpointer = this.vm as {
+            checkpointer?: {
+                getAllCheckpoints(): readonly { lineNumber: number; variables: Record<string, unknown> }[];
+            };
+        };
+        const checkpointer = vmWithCheckpointer.checkpointer;
         if (!checkpointer) return [];
 
         const raw = checkpointer.getAllCheckpoints();

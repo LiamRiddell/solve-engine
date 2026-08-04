@@ -28,7 +28,10 @@ interface ConstantGroup {
   matchCount?: number
 }
 
-function displayValue(type: ConstantInfo["type"], value: string | number): string {
+// Takes ConstantInfo["value"] rather than a narrower hand-written union, so a
+// change to what the bridge can carry (bigint constants, for one) surfaces here
+// as a compile error rather than a silently missing case.
+function displayValue(type: ConstantInfo["type"], value: ConstantInfo["value"]): string {
   switch (type) {
     case "string":
       return `"${String(value)}"`
@@ -43,7 +46,7 @@ function displayValue(type: ConstantInfo["type"], value: string | number): strin
 
 function valueSegments(
   type: ConstantInfo["type"],
-  value: string | number,
+  value: ConstantInfo["value"],
   query: string,
 ): Array<{ text: string; highlight: boolean }> {
   const display = displayValue(type, value)

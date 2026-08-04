@@ -15,7 +15,6 @@
 // boolean, a single branch that V8's JIT eliminates when allocation tracking
 // is disabled in production.
 
-import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 

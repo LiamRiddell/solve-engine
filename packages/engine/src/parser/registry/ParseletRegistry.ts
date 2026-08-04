@@ -2,6 +2,27 @@ import { PrefixParselet, InfixParselet } from "@solve-js/parser/Parselet";
 import { tokenTypeId } from "@solve-js/lexer/Token";
 
 /**
+ * Binding-power fields a parselet may expose beyond what its interface
+ * requires, read only for diagnostic display.
+ *
+ * `PrefixParselet` declares no binding power at all and `InfixParselet` declares
+ * a single `bindingPower`, but some parselets carry a separate left and right
+ * power. The diagnostic views want whatever is there without requiring it, so
+ * this describes the optional surface instead of reaching through `any` at each
+ * access. `category` is not here: both interfaces already declare it.
+ */
+interface ParseletBindingPowers {
+	readonly bindingPower?: number;
+	readonly leftBindingPower?: number;
+	readonly rightBindingPower?: number;
+}
+
+/** Reads the optional binding-power fields off a parselet for diagnostics. */
+function bindingPowersOf(parselet: PrefixParselet | InfixParselet): ParseletBindingPowers {
+	return parselet as ParseletBindingPowers;
+}
+
+/**
  * Dual-keyed ParseletRegistry, accepts both string token types and
  * integer token type IDs for fast dispatch in the Parser hot path.
  *
@@ -49,8 +70,8 @@ export class ParseletRegistry {
 		if (existing && existing !== parselet) {
 			console.warn(
 				`[ParseletRegistry] Prefix parselet for token "${tokenType}" is already registered ` +
-				`(category: "${(existing as any).category ?? "unknown"}"). Overwriting with a new ` +
-				`parselet (category: "${(parselet as any).category ?? "unknown"}") — the previous ` +
+				`(category: "${existing.category ?? "unknown"}"). Overwriting with a new ` +
+				`parselet (category: "${parselet.category ?? "unknown"}") — the previous ` +
 				`parselet is now unreachable. Two packages may be claiming the same token type.`,
 			);
 		}
@@ -64,8 +85,8 @@ export class ParseletRegistry {
 		if (existing && existing !== parselet) {
 			console.warn(
 				`[ParseletRegistry] Infix parselet for token "${tokenType}" is already registered ` +
-				`(category: "${(existing as any).category ?? "unknown"}"). Overwriting with a new ` +
-				`parselet (category: "${(parselet as any).category ?? "unknown"}") — the previous ` +
+				`(category: "${existing.category ?? "unknown"}"). Overwriting with a new ` +
+				`parselet (category: "${parselet.category ?? "unknown"}") — the previous ` +
 				`parselet is now unreachable. Two packages may be claiming the same token type.`,
 			);
 		}
@@ -79,8 +100,8 @@ export class ParseletRegistry {
 		for (const [tokenType, parselet] of this.prefixParselets) {
 			result.push({
 				tokenType,
-				bindingPower: (parselet as any).bindingPower ?? 0,
-				category: (parselet as any).category,
+				bindingPower: bindingPowersOf(parselet).bindingPower ?? 0,
+				category: parselet.category,
 			});
 		}
 		return result;
@@ -92,9 +113,9 @@ export class ParseletRegistry {
 		for (const [tokenType, parselet] of this.infixParselets) {
 			result.push({
 				tokenType,
-				leftBindingPower: (parselet as any).leftBindingPower ?? 0,
-				rightBindingPower: (parselet as any).rightBindingPower ?? 0,
-				category: (parselet as any).category,
+				leftBindingPower: bindingPowersOf(parselet).leftBindingPower ?? 0,
+				rightBindingPower: bindingPowersOf(parselet).rightBindingPower ?? 0,
+				category: parselet.category,
 			});
 		}
 		return result;
