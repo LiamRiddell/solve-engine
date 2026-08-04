@@ -13,6 +13,7 @@ import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/Norma
 export const SYMBOLIC_WORD_TO_TOKEN_TYPE: Readonly<Record<string, string>> = {
 	expand: "EXPAND_FN",
 	factor: "FACTOR_FN",
+	solve: "SOLVE_FN",
 };
 
 /**

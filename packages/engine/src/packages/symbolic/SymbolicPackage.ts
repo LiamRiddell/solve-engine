@@ -1,8 +1,9 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { ExpandParselet } from "./parselets/ExpandParselet";
 import { FactorParselet } from "./parselets/FactorParselet";
+import { SolveParselet } from "./parselets/SolveParselet";
 import { symbolicCallNormalizerRule } from "./normalizer/SymbolicCallNormalizerRule";
-import { SYMBOLIC_BUILTIN_EXPAND, SYMBOLIC_BUILTIN_FACTOR } from "./SymbolicBuiltinIndex";
+import { SYMBOLIC_BUILTIN_EXPAND, SYMBOLIC_BUILTIN_FACTOR, SYMBOLIC_BUILTIN_SOLVE } from "./SymbolicBuiltinIndex";
 
 /**
  * One algebra verb's whole surface, in a single row.
@@ -47,6 +48,14 @@ export const SYMBOLIC_FUNCTIONS: readonly SymbolicFunctionSurface[] = [
 		expected: "(x-2)*(x+2)",
 		docPage: "algebra.md",
 	},
+	{
+		word: "solve",
+		tokenType: "SOLVE_FN",
+		builtinIndex: SYMBOLIC_BUILTIN_SOLVE,
+		example: "solve(x^2-4=0, x)",
+		expected: "= [-2, 2]",
+		docPage: "algebra.md",
+	},
 ];
 
 /**
@@ -66,8 +75,9 @@ export const SYMBOLIC_PACKAGE: IEnginePackage = {
 	prefixParselets: [
 		{ tokenType: "EXPAND_FN", parselet: new ExpandParselet() },
 		{ tokenType: "FACTOR_FN", parselet: new FactorParselet() },
+		{ tokenType: "SOLVE_FN", parselet: new SolveParselet() },
 	],
-	tokenCategories: { EXPAND_FN: "keyword", FACTOR_FN: "keyword" },
+	tokenCategories: { EXPAND_FN: "keyword", FACTOR_FN: "keyword", SOLVE_FN: "keyword" },
 };
 
 /** The token types the algebra verbs fuse into, for the engine's own "is this line symbolic" check. */

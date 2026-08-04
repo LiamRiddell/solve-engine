@@ -91,6 +91,10 @@ export const CoreErrorCodes = {
   SYMBOLIC_UNSUPPORTED_FUNCTION: "SYMBOLIC_UNSUPPORTED_FUNCTION",
   /** The rational-root search exceeding `FACTOR_MAX_ROOT_CANDIDATES`. The candidate set is the product of two divisor sets, so a highly-composite coefficient escapes quickly. */
   SYMBOLIC_FACTOR_LIMIT_EXCEEDED: "SYMBOLIC_FACTOR_LIMIT_EXCEEDED",
+  /** An equation outside what the solver attempts: not a polynomial, above the degree ceiling, or non-linear in the unknown while another unknown is present. */
+  SYMBOLIC_SOLVE_UNSUPPORTED: "SYMBOLIC_SOLVE_UNSUPPORTED",
+  /** `solve`'s second argument not being a bare name. */
+  SOLVE_REQUIRES_VARIABLE_NAME: "SOLVE_REQUIRES_VARIABLE_NAME",
   /** A finite number whose decimal form could not be read back, which the regex covering every `Number.prototype.toString` output should make unreachable. */
   INTERNAL_RATIONAL_PARSE: "INTERNAL_RATIONAL_PARSE",
 

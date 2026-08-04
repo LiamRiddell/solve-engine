@@ -72,6 +72,7 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	// correct without depending on registration order.
 	EXPAND_FN: "keyword",
 	FACTOR_FN: "keyword",
+	SOLVE_FN: "keyword",
 	TIME_IN: "keyword",
 	DATE_IN: "keyword",
 	TIME_DIFFERENCE_BETWEEN: "keyword",

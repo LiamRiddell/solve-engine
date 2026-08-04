@@ -54,6 +54,53 @@ rational pieces, which are not searched for.
 Factoring in more than one variable stops after any shared constant and
 variable have been taken out.
 
+## Solving
+
+`solve` takes an equation and the unknown to solve for.
+
+```solve
+solve(2x+6=0, x) // -3
+solve(x^2-4=0, x) // [-2, 2]
+solve(x^2-3x+2=0, x) // [1, 2]
+solve(3x-1=0, x) // 1/3
+```
+
+A missing right-hand side means zero, so `solve(x^2-4, x)` asks the same
+question.
+
+```solve
+solve(x^2-4, x) // [-2, 2]
+```
+
+### Exact answers, including irrational ones
+
+An irrational root is given as a square root rather than a decimal, in lowest
+form.
+
+```solve
+solve(x^2-2=0, x) // [-sqrt(2), sqrt(2)]
+```
+
+Roots that are not rational and not expressible this way are approximated, and
+only after every exact method has been tried.
+
+### Answers that are not numbers
+
+Some equations have a correct answer that is not a list of roots.
+
+```solve
+solve(x^2+1=0, x) // no real solutions (the discriminant is negative, so both roots are complex)
+solve(1=2, x) // no solution
+```
+
+`x^2+1=0` has no real solutions because both of its roots are complex, and
+complex numbers are not supported. Solving in terms of another unknown works
+when the equation is linear in the one being solved for.
+
+```solve
+solve(a*x+b=0, x) // -b/a
+```
+
 ## Exact coefficients
 
 Coefficients are exact rationals, not floating-point numbers. In ordinary

@@ -348,6 +348,15 @@ function simplifyNode(node: SymbolicNode): SymbolicNode {
 				if (nodesEqual(left.left, right)) return left.right;
 				if (nodesEqual(left.right, right)) return left.left;
 			}
+			// The same cancellation through a leading minus: -(a*b)/a -> -b.
+			// Without this the rule is asymmetric, and a quadratic's two surd
+			// roots render differently from each other: `sqrt(2)` for the one
+			// that cancelled and `-2*sqrt(2)/2` for the one that did not.
+			if (left.kind === "neg" && left.operand.kind === "mul") {
+				const product = left.operand;
+				if (nodesEqual(product.left, right)) return simplifyNode({ kind: "neg", operand: product.right });
+				if (nodesEqual(product.right, right)) return simplifyNode({ kind: "neg", operand: product.left });
+			}
 			return { kind: "div", left, right };
 		}
 

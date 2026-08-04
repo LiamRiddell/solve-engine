@@ -17,3 +17,6 @@ export const SYMBOLIC_BUILTIN_EXPAND = 67;
 
 /** `factor(expr)`, see `packages/symbolic/parselets/FactorParselet.ts`. */
 export const SYMBOLIC_BUILTIN_FACTOR = 68;
+
+/** `solve(equation, variable)`, see `packages/symbolic/parselets/SolveParselet.ts`. */
+export const SYMBOLIC_BUILTIN_SOLVE = 69;
