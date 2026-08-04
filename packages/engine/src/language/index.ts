@@ -11,4 +11,5 @@ export {
 	unregisterTokenCategory,
 	UNCATEGORIZED_TOKEN_TYPES,
 } from "./TokenCategoryMap";
-export { categoryClassName, completionItemToOption } from "./adapters/codemirror";
+export { tokenClassName, createTokenClassName, DEFAULT_TOKEN_CLASS_PREFIX } from "./tokenClassName";
+export { completionItemToOption } from "./adapters/codemirror";

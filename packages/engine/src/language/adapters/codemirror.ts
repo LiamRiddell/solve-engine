@@ -2,29 +2,9 @@ import type { TokenCategory } from "@solve-js/language/TokenCategory";
 import type { CompletionItem } from "@solve-js/language/LanguageService";
 
 /**
- * The only CodeMirror-specific thing in this whole feature: maps a semantic
- * category to a predictable, stable CSS class name for use with
- * `Decoration.mark({ class: categoryClassName(token.category) })`.
- *
- * Deliberately trivial, the category name IS the class-name key
- * (`"number"` → `cm-solve-number`), so there's no separate table to keep in
- * sync as categories grow. A brand-new category (including one contributed
- * by a solve-js package at runtime) automatically gets a matching,
- * predictable class name with zero changes here.
- *
- * Actual colors are pure CSS, resolved from `--solve-hl-{category}` custom
- * properties by each consumer (src/app, playground). This module only ever
- * produces class name strings; it has no dependency on `@codemirror/*`
- * itself; each consumer builds its own `Decoration`/`RangeSetBuilder` calls.
- */
-export function categoryClassName(category: TokenCategory): string {
-	return `cm-solve-${category}`;
-}
-
-/**
  * Maps a semantic category to one of `@codemirror/autocomplete`'s built-in
- * completion "type" strings (which drive its default gutter icon), the
- * only other CodeMirror-specific thing this feature needs. Falls back to
+ * completion "type" strings (which drive its default gutter icon), the one
+ * genuinely CodeMirror-specific thing this feature needs. Falls back to
  * "text" for anything unmapped, including plugin-contributed categories
  * (e.g. OSRS's "osrs-item"), a reasonable neutral default rather than a
  * hard failure for a category this adapter doesn't know about yet.

@@ -3,11 +3,15 @@ title: Design decisions
 description: Choices that shaped the engine, and the reasoning behind them.
 ---
 
+import Explainer from "../../../components/Explainer.tsx";
+
 ## Bytecode rather than tree walking
 
 Re-evaluating on every keystroke makes interpretation speed the dominant cost.
 Compiling once and executing repeatedly is the standard answer, and it also
 makes bounding execution straightforward.
+
+<Explainer id="whyBytecode" client:load />
 
 ## Precedence climbing rather than a generated parser
 
@@ -41,11 +45,24 @@ whenever the other side of a conversion was a time unit. It made `today + 5 m`
 add five minutes to someone who wrote metres, which is precisely the confidently
 wrong answer this rule exists to prevent.
 
+<Explainer id="caseSensitivity" client:load />
+
 ## Errors and pending are values
 
 Both could have been exceptions or nulls. Making them value types means they
 propagate through arithmetic and arrive with their cause intact, rather than
 being coerced to zero and producing a plausible but wrong result.
+
+```mermaid The same document, with a live price that has not arrived yet.
+flowchart TD
+  price["AAPL price<br/><i>pending</i>"] --> mul["× 100"]
+  mul --> pendingOut["<i>pending</i><br/>shown as waiting"]
+
+  bad["A rate that failed to fetch<br/><i>error: no such symbol</i>"] --> add["+ 50"]
+  add --> errOut["<i>error: no such symbol</i><br/>the cause survives the arithmetic"]
+
+  coerce["If either were coerced to 0"] --> wrong["0 and 50<br/>plausible, authoritative, wrong"]
+```
 
 ## No public holidays in working-day arithmetic
 

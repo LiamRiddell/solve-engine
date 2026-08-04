@@ -12,7 +12,7 @@
 		"test:ci": "node --expose-gc node_modules/jest/bin/jest.js --no-coverage --logHeapUsage",
 		"test:engine": "node --expose-gc node_modules/jest/bin/jest.js --testPathPattern=\"packages/engine/__tests__/engine\" --no-coverage --logHeapUsage",
 		"test:light": "node --expose-gc node_modules/jest/bin/jest.js --no-coverage --logHeapUsage --testPathIgnorePatterns=\"LexerVocabularyFuzz|Fuzz|BreakageTests|LongDocumentRobustness\"",
-		"test:full": "node --expose-gc --max-old-space-size=4096 node_modules/jest/bin/jest.js --config jest.full.config.cjs --no-coverage --runInBand --forceExit",
+		"test:full": "node --expose-gc --max-old-space-size=4096 node_modules/jest/bin/jest.js --config jest.full.config.cjs --no-coverage --runInBand --forceExit --json --outputFile=.jest-report.json",
 		"test:oom": "node --expose-gc --max-old-space-size=4096 node_modules/jest/bin/jest.js --no-coverage --logHeapUsage --testPathPattern=\"BreakageTests\\.|LexerFuzz\\.|LongDocumentRobustness\\.\" --runInBand",
 		"test:watch": "jest --watch",
 		"typecheck": "npm run typecheck --workspace=packages/engine",
@@ -25,7 +25,10 @@
 		"bench:baseline": "node scripts/bench-baseline.mjs",
 		"bench:compare": "node scripts/compare-benchmarks.mjs",
 		"verify:all": "npm run verify && npm run build --prefix playground",
-		"size": "size-limit"
+		"size": "size-limit",
+		"stats:tests": "node scripts/collect-test-stats.mjs",
+		"lint:stats": "node scripts/collect-test-stats.mjs --check",
+		"lint:sidebar": "node scripts/check-sidebar.mjs"
 	},
 	"size-limit": [
 		{

@@ -3,6 +3,8 @@ title: Async and live data
 description: How pending values work, and the obligation a host takes on.
 ---
 
+import Explainer from "../../../components/Explainer.tsx";
+
 Some expressions cannot be answered immediately because they depend on data from
 the network. Currency conversion, weather and stock lookups are the built-in
 cases.
@@ -22,6 +24,8 @@ value.type === ValueType.Pending; // true, on the first evaluation
 This is deliberate. Returning zero, or the last known value, would produce a
 confidently wrong answer, which is the failure mode the engine works hardest to
 avoid.
+
+<Explainer id="pending" client:load />
 
 ## Re-evaluating when data arrives
 

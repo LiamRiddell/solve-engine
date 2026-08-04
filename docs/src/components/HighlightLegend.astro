@@ -1,0 +1,21 @@
+---
+/**
+ * The syntax-highlighting key, rendered from verified data.
+ *
+ * Was hand-written markup, and was wrong twice: a swatch is easy to get wrong
+ * and impossible to spot. The entries now come from `data/highlightLegend.ts`,
+ * which an engine spec runs through `getSemanticTokens` on every test run.
+ */
+import { HIGHLIGHT_LEGEND } from "../data/highlightLegend";
+---
+
+<dl class="hl-legend">
+  {
+    HIGHLIGHT_LEGEND.map((entry) => (
+      <div>
+        <dt class={`solve-${entry.category}`}>{entry.token}</dt>
+        <dd>{entry.category}</dd>
+      </div>
+    ))
+  }
+</dl>

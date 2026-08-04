@@ -74,7 +74,22 @@ jobs:
             echo "::error::Documentation assets are not prefixed with ${SITE_BASE}. The base path was not applied."
             exit 1
           fi
-          echo "Base path applied correctly."
+
+          # Assets being right does not mean links are. A cross-reference typed
+          # into a page as /syntax/cheatsheet/ builds and deploys happily and
+          # then 404s, which is how a set of broken links reached production
+          # once already. Every root-relative link should carry the prefix by
+          # the time it lands in dist; protocol-relative URLs are not ours.
+          stray=$(grep -rohE '(href|src)="/[^"]*"' docs/dist --include='*.html' \
+            | grep -v "\"${SITE_BASE}" \
+            | grep -v '="//' \
+            | sort -u || true)
+          if [ -n "$stray" ]; then
+            echo "::error::These links are missing the ${SITE_BASE} prefix and will 404 once deployed:"
+            echo "$stray"
+            exit 1
+          fi
+          echo "Base path applied correctly, to assets and to links."
 
       - uses: actions/upload-pages-artifact@v5
         with:

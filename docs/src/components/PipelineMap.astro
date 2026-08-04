@@ -1,0 +1,130 @@
+---
+/**
+ * The engine in one picture: the pipeline, what packages contribute to it, and
+ * what the caches let it skip.
+ *
+ * Deliberately not a mermaid diagram. Mermaid is good at sequences and bad at
+ * this: three separate relationships onto five nodes gave it six dotted edges
+ * that crossed each other, an input arrow that landed on the wrong stage, and a
+ * shape a metre tall. The relationships here are not really arrows, they are
+ * "this belongs to that", and a row of a table says that without drawing a
+ * single line.
+ *
+ * So: the five stages down the middle, what each one reads from a package on
+ * the left, and on the right a bracket per cache covering the stages it skips.
+ * Alignment carries the meaning, so nothing crosses anything.
+ *
+ * Every cell is placed on an explicit grid row. Auto-placement will not do it:
+ * with a column pinned on each child it refuses to backtrack, and a set of
+ * three-per-stage cells came out as thirteen rows, several of them empty.
+ *
+ * That forces the contributions and the stages into separate loops, which is
+ * fine while the rows do the pairing and wrong the moment the grid collapses
+ * to one column: the narrow layout would read as five contributions followed
+ * by five stages. Each cell carries a `--pmap-order` so the single-column
+ * layout can interleave them back into contribution-then-its-stage.
+ */
+
+/** One stage, with what a package gives it. Order is the pipeline's order. */
+const STAGES = [
+  {
+    name: "Lexer",
+    does: "characters become tokens",
+    contributes: "keywords, operators, units",
+  },
+  {
+    name: "Normaliser",
+    does: "the token stream is rewritten",
+    contributes: "phrases and rewrite rules",
+  },
+  {
+    name: "Parser",
+    does: "tokens become structure",
+    contributes: "parselets and binding powers",
+  },
+  {
+    name: "Compiler",
+    does: "structure becomes bytecode",
+    // The one stage that consults no registry: it emits opcodes for whatever
+    // the parselets produced, so it needs no knowledge of who produced them.
+    contributes: null,
+  },
+  {
+    name: "Virtual machine",
+    does: "the bytecode runs",
+    contributes: "functions it can call",
+  },
+];
+
+/** Row 1 is the headings, row 2 the input, so the stages start here. */
+const FIRST_STAGE_ROW = 3;
+const OUT_ROW = FIRST_STAGE_ROW + STAGES.length;
+---
+
+<figure class="pmap not-content">
+  <div class="pmap__grid" style={`--pmap-stages: ${STAGES.length}`}>
+    <span class="pmap__heading pmap__heading--left">Packages contribute</span>
+    <span class="pmap__heading pmap__heading--mid">Pipeline</span>
+    <span class="pmap__heading pmap__heading--right">Caches skip</span>
+
+    <p class="pmap__io pmap__io--in">Document text</p>
+
+    {
+      STAGES.map((stage, index) => (
+        <span
+          class="pmap__contrib"
+          style={`grid-row: ${FIRST_STAGE_ROW + index}; --pmap-order: ${1 + index * 2}`}
+          data-empty={stage.contributes === null || undefined}
+        >
+          {stage.contributes ?? "nothing"}
+        </span>
+      ))
+    }
+
+    {
+      STAGES.map((stage, index) => (
+        <div
+          class="pmap__stage"
+          style={`grid-row: ${FIRST_STAGE_ROW + index}; --pmap-order: ${2 + index * 2}`}
+        >
+          <span class="pmap__stage-index">{index + 1}</span>
+          <span class="pmap__stage-name">{stage.name}</span>
+          <span class="pmap__stage-does">{stage.does}</span>
+        </div>
+      ))
+    }
+
+    {/*
+      One element spanning every stage row, using `subgrid` so its own rows are
+      the outer grid's rows. That is what lets a bracket end exactly level with
+      the bottom of the Compiler rather than approximately there.
+    */}
+    <div
+      class="pmap__caches"
+      style={`grid-row: ${FIRST_STAGE_ROW} / ${OUT_ROW}; --pmap-order: ${2 + STAGES.length * 2}`}
+    >
+      <div class="pmap__bracket pmap__bracket--bytecode">
+        <span>Bytecode cache</span>
+        <small>same expression text, compiled before</small>
+      </div>
+      <div class="pmap__bracket pmap__bracket--line">
+        <span>Line cache</span>
+        <small>nothing this line depends on changed</small>
+      </div>
+    </div>
+
+    <p
+      class="pmap__io pmap__io--out"
+      style={`grid-row: ${OUT_ROW}; --pmap-order: ${3 + STAGES.length * 2}`}
+    >
+      Value
+    </p>
+  </div>
+
+  <figcaption>
+    Five stages, in order. A package contributes to four of them; the compiler
+    is the exception, because it emits opcodes for whatever the parselets
+    produced. Each bracket covers the stages that cache lets the engine skip
+    entirely.
+  </figcaption>
+</figure>

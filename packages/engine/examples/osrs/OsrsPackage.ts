@@ -40,9 +40,9 @@ export const OSRS_PACKAGE: IEnginePackage = {
 
   // "osrs-item" is a plugin-defined category (not one of the built-in
   // TokenCategory values) — proves categories are genuinely
-  // open-ended, and gets a matching `cm-solve-osrs-item` CSS class "for
-  // free" from the CodeMirror adapter's `cm-solve-${category}` convention,
-  // no adapter changes required.
+  // open-ended, and gets a matching `solve-osrs-item` CSS class "for
+  // free" from `tokenClassName()`'s `${prefix}${category}` convention,
+  // in whatever editor the host happens to be using.
   tokenCategories: {
     OSRS_KEYWORD: "keyword",
     GAME_ITEM: "osrs-item",

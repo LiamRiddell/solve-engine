@@ -11,6 +11,9 @@ import Notepad from '../../components/Notepad.astro';
 import HeroActions from '../../components/HeroActions.astro';
 import ShowcaseNav from '../../components/ShowcaseNav.astro';
 import OyrenCta from '../../components/OyrenCta.astro';
+import TestStats from '../../components/TestStats.astro';
+import HighlightLegend from '../../components/HighlightLegend.astro';
+import stats from '../../data/testStats.json';
 
 <div class="band band--tight not-content">
   <HeroActions />
@@ -22,8 +25,8 @@ import OyrenCta from '../../components/OyrenCta.astro';
     </div>
     <ul class="install__specs">
       <li>MIT</li>
-      <li>No runtime dependencies</li>
-      <li>Sixteen subpath exports</li>
+      <li>{stats.runtimeDependencies} runtime dependencies</li>
+      <li>{stats.subpathExports} subpath exports</li>
       <li>Node, browser and worker</li>
       <li>TypeScript types included</li>
     </ul>
@@ -289,44 +292,43 @@ if 5 > 3 then 100 else 200
     <div class="split">
       <div>
 
-`getSemanticTokens` returns a category per span. `categoryClassName` turns a
+`getSemanticTokens` returns a category per span. `tokenClassName` turns a
 category into a stable class name, so a package that registers a brand new
 token type gets a class without anyone editing an adapter.
 
-Colours are ordinary CSS. The same categories drive completions through
-`getCompletions`, so one integration covers both.
+The names are namespaced on Solve, not on any editor, and the prefix is yours
+to change if your app already owns one. Colours are ordinary CSS. The same
+categories drive completions through `getCompletions`, so one integration
+covers both.
 
-<ul class="hl-legend">
-  <li><b class="cm-solve-number">number</b></li>
-  <li><b class="cm-solve-string">string</b></li>
-  <li><b class="cm-solve-keyword">keyword</b></li>
-  <li><b class="cm-solve-operator">operator</b></li>
-  <li><b class="cm-solve-comparison">comparison</b></li>
-  <li><b class="cm-solve-function">function</b></li>
-  <li><b class="cm-solve-variable">variable</b></li>
-  <li><b class="cm-solve-unit">unit</b></li>
-  <li><b class="cm-solve-datetime">datetime</b></li>
-  <li><b class="cm-solve-vector">vector</b></li>
-  <li><b class="cm-solve-punctuation">punctuation</b></li>
-</ul>
+<HighlightLegend />
 
       </div>
       <div>
 
 ```ts
-import { LanguageService, categoryClassName } from "solve-engine/language";
+import { LanguageService, tokenClassName } from "solve-engine/language";
 
 const language = new LanguageService(engine);
 
 for (const token of language.getSemanticTokens(lineText, lineNumber)) {
-  paint(token.from, token.to, categoryClassName(token.category));
-  // "number" becomes "cm-solve-number"
+  paint(token.from, token.to, tokenClassName(token.category));
+  // "number" becomes "solve-number"
 }
 ```
 
 ```css
-.cm-solve-number { color: var(--solve-hl-number); }
-.cm-solve-unit   { color: var(--solve-hl-unit); }
+.solve-number { color: var(--solve-hl-number); }
+.solve-unit   { color: var(--solve-hl-unit); }
+```
+
+Already own a namespace? Bind your own prefix once and use it everywhere.
+
+```ts
+import { createTokenClassName } from "solve-engine/language";
+
+const className = createTokenClassName("cm-solve-");
+className("number"); // "cm-solve-number"
 ```
 
       </div>
@@ -385,7 +387,7 @@ export const gamePackage: IEnginePackage = {
   asyncResolvers: [new OsrsAsyncResolver()],
 
   // A category nobody has seen before. It gets a matching
-  // "cm-solve-osrs-item" class with no adapter changes.
+  // "solve-osrs-item" class in any editor, with no adapter changes.
   tokenCategories: { GAME_ITEM: "osrs-item" },
 };
 ```
@@ -490,19 +492,19 @@ value.toNumber(); // the number underneath
           <path d="M12 3 20.5 7.5v9L12 21l-8.5-4.5v-9Z" />
           <path d="M3.5 7.5 12 12l8.5-4.5M12 12v9" />
         </svg>
-        <h3>No runtime dependencies</h3>
+        <h3>No host to satisfy</h3>
         <p>No DOM, no editor coupling, no framework. It runs in Node, in a browser, in a worker or on a server.</p>
       </div>
     </div>
 
     <p class="band__note">
-      Every example in this documentation is executed by the test suite, so if
-      one stops being true the build goes red. Start with
-      <a href="/guide/embedding/">embedding the engine</a>, or
+      Start with <a href="/guide/embedding/">embedding the engine</a>, or
       <a href="/guide/editor-integration/">editor integration</a> if you are
       wiring it to a live document like the ones above.
     </p>
   </div>
 </div>
+
+<TestStats />
 
 <OyrenCta />

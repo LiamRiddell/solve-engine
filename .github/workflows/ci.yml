@@ -92,6 +92,13 @@ jobs:
       # difference is a test failure.
       - run: npm run test:full
 
+      # The landing page quotes the size of this suite. That number is only
+      # worth printing if it cannot go stale, so it is derived from the run that
+      # just happened and this fails when the committed copy disagrees. A pull
+      # request that adds tests updates it; one that does not cannot claim a
+      # total it did not produce.
+      - run: npm run lint:stats
+
   package:
     name: Package publishes correctly
     runs-on: ubuntu-24.04
@@ -164,6 +171,11 @@ jobs:
 
       - run: npm ci --prefix docs
       - run: npm run build --prefix docs
+
+      # The sidebar lists its pages explicitly so it can be in reading order
+      # rather than alphabetical. This is the cost of that: a page nobody added
+      # to the list would otherwise be reachable only by search.
+      - run: npm run lint:sidebar
 
   comment-style:
     name: Comment style

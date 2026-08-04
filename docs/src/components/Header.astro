@@ -1,0 +1,86 @@
+---
+/**
+ * The site header, rearranged.
+ *
+ * Starlight's own header is a three-column grid that pins the search field to
+ * the middle column so it lines up with the content column beneath it. That is
+ * a sensible default for a pure documentation site, but this one is a product
+ * page with documentation attached, so the top bar reads better as a single
+ * band: brand and search together on the left, navigation on the right.
+ *
+ * Everything except the arrangement is still Starlight's. The search, theme
+ * select and social icons come from the virtual module, so they keep working
+ * with Pagefind, with the keyboard shortcut and with the mobile layout.
+ */
+import config from "virtual:starlight/user-config";
+
+import LanguageSelect from "virtual:starlight/components/LanguageSelect";
+import Search from "virtual:starlight/components/Search";
+import SiteTitle from "virtual:starlight/components/SiteTitle";
+import SocialIcons from "virtual:starlight/components/SocialIcons";
+import ThemeSelect from "virtual:starlight/components/ThemeSelect";
+
+const shouldRenderSearch =
+  config.pagefind ||
+  config.components.Search !== "@astrojs/starlight/components/Search.astro";
+
+/**
+ * `BASE_URL` already carries a trailing slash, so every path here is written
+ * without a leading one. Hardcoding `/getting-started/` instead would break on
+ * GitHub Pages, where the whole site is served from a repository subdirectory.
+ */
+const base = import.meta.env.BASE_URL;
+
+/**
+ * One link per top-level area, in the order someone actually meets them:
+ * install it, learn the syntax, embed it, then go and play with it. The
+ * sidebar covers everything below that level, so this stays short.
+ */
+const links = [
+  { label: "Get started", href: `${base}getting-started/introduction/` },
+  { label: "Syntax", href: `${base}syntax/cheatsheet/` },
+  { label: "Embedding", href: `${base}guide/embedding/` },
+  { label: "Playground", href: `${base}playground/` },
+];
+
+const path = Astro.url.pathname;
+---
+
+{/* Deliberately not `.header`. Starlight's page frame already wraps this in a
+    `header.header` element, and Expressive Code names its code-frame title bar
+    `.header` as well, so a third `.header` in the tree makes every rule that
+    touches it need a qualifier. `topbar` collides with nothing. */}
+<div class="topbar">
+  <div class="topbar__lead">
+    <div class="title-wrapper sl-flex">
+      <SiteTitle />
+    </div>
+    {
+      shouldRenderSearch && (
+        <div class="topbar__search print:hidden">
+          <Search />
+        </div>
+      )
+    }
+  </div>
+
+  <div class="topbar__trail print:hidden">
+    <nav class="topbar__nav" aria-label="Main">
+      {
+        links.map((link) => (
+          <a
+            href={link.href}
+            aria-current={path.startsWith(link.href) ? "page" : undefined}
+          >
+            {link.label}
+          </a>
+        ))
+      }
+    </nav>
+    <div class="sl-flex social-icons">
+      <SocialIcons />
+    </div>
+    <ThemeSelect />
+    <LanguageSelect />
+  </div>
+</div>
