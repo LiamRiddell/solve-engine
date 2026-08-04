@@ -71,6 +71,7 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	// map/reduce rather than only on the package descriptor, so highlighting is
 	// correct without depending on registration order.
 	EXPAND_FN: "keyword",
+	FACTOR_FN: "keyword",
 	TIME_IN: "keyword",
 	DATE_IN: "keyword",
 	TIME_DIFFERENCE_BETWEEN: "keyword",

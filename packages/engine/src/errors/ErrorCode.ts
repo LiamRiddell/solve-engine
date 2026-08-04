@@ -89,6 +89,8 @@ export const CoreErrorCodes = {
   SYMBOLIC_NODE_LIMIT_EXCEEDED: "SYMBOLIC_NODE_LIMIT_EXCEEDED",
   /** A builtin with no symbolic reading (`min`, `random`, the finance block, ...) applied to an expression still containing an unknown. Returned rather than computing against `toNumber()`'s placeholder zero. */
   SYMBOLIC_UNSUPPORTED_FUNCTION: "SYMBOLIC_UNSUPPORTED_FUNCTION",
+  /** The rational-root search exceeding `FACTOR_MAX_ROOT_CANDIDATES`. The candidate set is the product of two divisor sets, so a highly-composite coefficient escapes quickly. */
+  SYMBOLIC_FACTOR_LIMIT_EXCEEDED: "SYMBOLIC_FACTOR_LIMIT_EXCEEDED",
   /** A finite number whose decimal form could not be read back, which the regex covering every `Number.prototype.toString` output should make unreachable. */
   INTERNAL_RATIONAL_PARSE: "INTERNAL_RATIONAL_PARSE",
 

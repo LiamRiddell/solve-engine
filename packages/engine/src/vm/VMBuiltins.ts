@@ -4,6 +4,7 @@ import { unifyUom } from "@solve-js/vm/VMConversion";
 import { transpose, determinant, inverse, matrixMultiply } from "@solve-js/vm/MatrixOps";
 import { symbolicToValue } from "@solve-js/vm/SymbolicOps";
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
+import { factorSymbolic } from "@solve-js/symbolic/Factor";
 import type { SymbolicNode } from "@solve-js/symbolic";
 // Type-only, VM.ts imports pluginFunctionRegistry FROM this file, so a
 // runtime import the other direction would be circular; `import type` is
@@ -503,6 +504,14 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         const [value] = args;
         if (value.type !== ValueType.Symbolic) return value;
         return symbolicToValue(expandSymbolic(value.value as SymbolicNode));
+    },
+    // factor(expr), writing a polynomial as a product of irreducible factors
+    // over the RATIONALS. x^2-2 and x^2+1 come back unchanged, which is the
+    // correct answer over that field rather than a failure; see symbolic/Factor.ts.
+    68: (args) => {
+        const [value] = args;
+        if (value.type !== ValueType.Symbolic) return value;
+        return symbolicToValue(factorSymbolic(value.value as SymbolicNode));
     },
 };
 

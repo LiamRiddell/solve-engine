@@ -20,6 +20,40 @@ expand((x+y)^2) // x^2+2x*y+y^2
 Terms come out in descending degree, so an expression always reads the way it
 is conventionally written and two equal expressions always render identically.
 
+## Factoring
+
+`factor` is the inverse: it writes a polynomial as a product.
+
+```solve
+factor(x^2-4) // (x-2)*(x+2)
+factor(x^2+3x+2) // (x+1)*(x+2)
+factor(x^2-2x+1) // (x-1)^2
+factor(2x^2+4x) // 2x*(x+2)
+factor(x^3-1) // (x-1)*(x^2+x+1)
+```
+
+A repeated root becomes a power rather than a repeated factor, and a shared
+constant or variable comes out in front.
+
+### Factoring over what
+
+Factoring only means something once you say over which numbers. `x^2-2` factors
+over the real numbers as `(x-sqrt(2))(x+sqrt(2))`, and `x^2+1` factors only over
+the complex numbers. Both are left alone here, because this factors over the
+**rationals**.
+
+```solve
+factor(x^2-2) // x^2-2
+factor(x^2+1) // x^2+1
+```
+
+That is an answer rather than a failure. A polynomial with no rational roots is
+returned as-is, including in the cases where it would split into higher-degree
+rational pieces, which are not searched for.
+
+Factoring in more than one variable stops after any shared constant and
+variable have been taken out.
+
 ## Exact coefficients
 
 Coefficients are exact rationals, not floating-point numbers. In ordinary

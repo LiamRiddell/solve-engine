@@ -78,7 +78,7 @@ const POW_BUILTIN_INDEX = 31;
  * not import from `packages/`. `__tests__/engine/SymbolicSurfaceParity.spec.ts`
  * asserts this set matches the package's own table.
  */
-export const SYMBOLIC_NATIVE_BUILTINS: ReadonlySet<number> = new Set([67]);
+export const SYMBOLIC_NATIVE_BUILTINS: ReadonlySet<number> = new Set([67, 68]);
 
 /**
  * Converts a Value into a {@link SymbolicNode}.

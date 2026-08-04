@@ -14,3 +14,6 @@
 
 /** `expand(expr)`, see `packages/symbolic/parselets/ExpandParselet.ts`. */
 export const SYMBOLIC_BUILTIN_EXPAND = 67;
+
+/** `factor(expr)`, see `packages/symbolic/parselets/FactorParselet.ts`. */
+export const SYMBOLIC_BUILTIN_FACTOR = 68;
