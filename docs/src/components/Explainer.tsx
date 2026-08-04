@@ -23,6 +23,8 @@ function howManyBeats(figure: Figure): number {
       return figure.nodes.length;
     case "chips":
       return figure.chips.length;
+    case "stack":
+      return figure.cells.length;
   }
 }
 
@@ -106,6 +108,27 @@ function Explainer({ id }: { id: string }) {
               </li>
             ))}
           </ol>
+        )}
+
+        {figure.kind === "stack" && (
+          <div className="xp__stack-wrap">
+            {figure.instruction && (
+              <p className="xp__stack-instruction">{figure.instruction}</p>
+            )}
+            <ol className="xp__stack">
+              {figure.cells.map((cell, index) => (
+                <li
+                  key={`${cell.value}-${index}`}
+                  className="xp__cell"
+                  data-shown={index < revealed}
+                  data-changed={cell.changed || undefined}
+                >
+                  <span className="xp__cell-value">{cell.value}</span>
+                  {cell.type && <span className="xp__cell-type">{cell.type}</span>}
+                </li>
+              ))}
+            </ol>
+          </div>
         )}
 
         {figure.kind === "chips" && (

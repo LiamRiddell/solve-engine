@@ -3,6 +3,8 @@ title: Overview
 description: How the pieces fit together.
 ---
 
+import Explainer from "../../../components/Explainer.tsx";
+
 The engine is a pipeline with a plugin system attached to it, plus a caching
 layer that makes it viable to run continuously.
 
@@ -46,10 +48,14 @@ Execution produces a value: a type, a payload, and sometimes a unit. Errors and
 pending states are values too, which means they propagate through arithmetic
 instead of being coerced into numbers.
 
+<Explainer id="values" client:load />
+
 ## Packages
 
 Every feature is a package, registered into shared registries at startup. The
 pipeline itself knows nothing about percentages, dates or currencies.
+
+<Explainer id="packages" client:load />
 
 ## Caching
 
@@ -57,19 +63,7 @@ Three layers. Compiled bytecode is cached by expression text. Line results are
 cached by line. A dependency graph tracks which lines depend on which variables,
 so an edit recomputes only what it must.
 
-```mermaid What happens to the other lines when line 3 is edited.
-flowchart TD
-  edit["Line 3 edited"] --> deps{"Dependency graph:<br/>who reads line 3?"}
-  deps -->|"nobody"| one["Recompile and run line 3 only"]
-  deps -->|"lines 7 and 9"| many["Invalidate 3, 7 and 9"]
-  many --> bytecode{"Seen this<br/>expression text before?"}
-  bytecode -->|"yes"| reuse["Reuse the cached bytecode"]
-  bytecode -->|"no"| recompile["Compile it"]
-  reuse --> run["Run"]
-  recompile --> run
-  one --> run
-  run --> rest["Every other line keeps its cached result"]
-```
+<Explainer id="caches" client:load />
 
 ## Further reading
 

@@ -12,6 +12,7 @@ import HeroActions from '../../components/HeroActions.astro';
 import ShowcaseNav from '../../components/ShowcaseNav.astro';
 import OyrenCta from '../../components/OyrenCta.astro';
 import TestStats from '../../components/TestStats.astro';
+import HighlightLegend from '../../components/HighlightLegend.astro';
 
 <div class="band band--tight not-content">
   <HeroActions />
@@ -299,19 +300,7 @@ to change if your app already owns one. Colours are ordinary CSS. The same
 categories drive completions through `getCompletions`, so one integration
 covers both.
 
-<dl class="hl-legend">
-  <div><dt class="solve-number">42</dt><dd>number</dd></div>
-  <div><dt class="solve-string">"gbp"</dt><dd>string</dd></div>
-  <div><dt class="solve-keyword">if</dt><dd>keyword</dd></div>
-  <div><dt class="solve-operator">+</dt><dd>operator</dd></div>
-  <div><dt class="solve-comparison">&gt;=</dt><dd>comparison</dd></div>
-  <div><dt class="solve-function">sqrt</dt><dd>function</dd></div>
-  <div><dt class="solve-variable">total</dt><dd>variable</dd></div>
-  <div><dt class="solve-unit">km</dt><dd>unit</dd></div>
-  <div><dt class="solve-datetime">friday</dt><dd>dateTime</dd></div>
-  <div><dt class="solve-vector">[1, 2]</dt><dd>vector</dd></div>
-  <div><dt class="solve-punctuation">( )</dt><dd>punctuation</dd></div>
-</dl>
+<HighlightLegend />
 
       </div>
       <div>

@@ -51,8 +51,19 @@ export interface Chip {
   className?: string;
 }
 
+/** One cell on the virtual machine's stack. */
+export interface StackCell {
+  /** What is in the cell, as the machine would print it. */
+  value: string;
+  /** The value's type, which is the point: the stack does not hold numbers. */
+  type?: string;
+  /** Marks a cell this step pushed or changed. */
+  changed?: boolean;
+}
+
 export type Figure =
   | { kind: "lines"; lines: LineCell[] }
+  | { kind: "stack"; cells: StackCell[]; instruction?: string }
   | { kind: "flow"; nodes: FlowNode[]; direction?: "row" | "column" }
   | { kind: "chips"; chips: Chip[]; caption?: string };
 
@@ -292,6 +303,420 @@ export const EXPLAINERS: Record<string, Explainer> = {
           ],
         },
         note: "Re-evaluation goes through the same dependency graph as any other change, so the arrival of one rate recomputes exactly the lines that were waiting on it. The illustrative rate here is not a real one.",
+      },
+    ],
+  },
+
+  /* -- Values ------------------------------------------------------------ */
+
+  values: {
+    eyebrow: "Every result",
+    steps: [
+      {
+        title: "A value",
+        summary: "Type, payload, sometimes a unit.",
+        figure: {
+          kind: "stack",
+          instruction: "12 km",
+          cells: [{ value: "12 km", type: "Uom", changed: true }],
+        },
+        note: "Not a number with a label stuck to it. The type is part of the value and the unit travels with it, which is what lets the next operation reconcile the two sides rather than guess.",
+      },
+      {
+        title: "Arithmetic keeps it",
+        summary: "5 km + 3 km",
+        figure: {
+          kind: "stack",
+          instruction: "ADD",
+          cells: [{ value: "8 km", type: "Uom", changed: true }],
+        },
+        note: "Both operands carried a unit, so addition asked the unit system to reconcile them before adding. Had they been incompatible, the answer would have been an error rather than a number that looked fine.",
+      },
+      {
+        title: "Errors are values",
+        summary: "They propagate, they do not throw.",
+        figure: {
+          kind: "stack",
+          instruction: "ADD",
+          cells: [{ value: "no such symbol", type: "Error", changed: true }],
+        },
+        note: "Adding fifty to an error gives the error back, with its cause intact. Nothing along the way had to check for it, and nothing coerced it to zero on the way past.",
+      },
+      {
+        title: "So is pending",
+        summary: "Waiting is not the same as nothing.",
+        figure: {
+          kind: "stack",
+          instruction: "MUL",
+          cells: [{ value: "waiting on a rate", type: "Pending", changed: true }],
+        },
+        note: "A value whose data has not arrived is its own type, carrying the key of the query it is waiting on. Returning zero, or the last known number, is the failure mode this design exists to avoid.",
+      },
+    ],
+  },
+
+  /* -- Packages ---------------------------------------------------------- */
+
+  packages: {
+    eyebrow: "Every feature",
+    steps: [
+      {
+        title: "A package declares",
+        summary: "A plain object, every field optional.",
+        figure: {
+          kind: "flow",
+          direction: "column",
+          nodes: [
+            { label: "Vocabulary", detail: "keywords, operators and units the lexer should know", active: true },
+            { label: "Parselets", detail: "how its token types parse, and how tightly they bind" },
+            { label: "Functions", detail: "what the virtual machine can call" },
+            { label: "Rules and categories", detail: "token rewrites, conversion targets, highlight categories" },
+          ],
+        },
+        note: "You declare only the part of the language you are adding. Arithmetic itself is a package with exactly this shape, which is the strongest evidence that these are the real extension points rather than a reduced set offered to outsiders.",
+      },
+      {
+        title: "Registration",
+        summary: "Into shared registries, in order.",
+        figure: {
+          kind: "flow",
+          direction: "column",
+          nodes: [
+            { label: "Arithmetic first", detail: "so later packages build on a working operator set", active: true },
+            { label: "Then the other built-ins" },
+            { label: "Then yours" },
+          ],
+        },
+        note: "Order matters and is not a preference. A package that adds an operator needs the operators it composes with to exist already.",
+      },
+      {
+        title: "The pipeline reads them",
+        summary: "It knows nothing about your feature.",
+        figure: {
+          kind: "flow",
+          nodes: [
+            { label: "Lexer", detail: "reads vocabulary", active: true },
+            { label: "Normaliser", detail: "reads rewrite rules", active: true },
+            { label: "Parser", detail: "reads parselets", active: true },
+            { label: "Compiler", skipped: true },
+            { label: "VM", detail: "reads functions", active: true },
+          ],
+        },
+        note: "Four of the five stages consult a registry rather than a hardcoded table. The compiler is the exception: it emits opcodes for whatever the parselets produced, so it needs no knowledge of who produced them.",
+      },
+      {
+        title: "Nothing is special",
+        summary: "Percentages are a package. So are dates.",
+        figure: {
+          kind: "flow",
+          nodes: [
+            { label: "Arithmetic" },
+            { label: "Percentage" },
+            { label: "Datetime" },
+            { label: "Units" },
+            { label: "Currency" },
+            { label: "Yours", active: true },
+          ],
+        },
+        note: "There is no privileged core with plugins bolted around it. Your package is registered by the same call, into the same registries, with the same capabilities as the ones that shipped with the engine.",
+      },
+    ],
+  },
+
+  /* -- Why bytecode ------------------------------------------------------ */
+
+  whyBytecode: {
+    eyebrow: "The trade",
+    steps: [
+      {
+        title: "Tree walking",
+        summary: "Re-descend on every evaluation.",
+        figure: {
+          kind: "flow",
+          direction: "column",
+          nodes: [
+            { label: "Keystroke", detail: "the document is evaluated again", active: true },
+            { label: "Walk the tree", detail: "a virtual call and a branch at every node" },
+            { label: "Walk it again", detail: "next keystroke, same work" },
+          ],
+        },
+        note: "The structure is convenient to build and expensive to run. Every evaluation pays the cost of navigating the shape as well as the cost of doing the arithmetic.",
+      },
+      {
+        title: "Compile once",
+        summary: "The parse emits bytecode directly.",
+        figure: {
+          kind: "flow",
+          nodes: [
+            { label: "Parse" },
+            { label: "Bytecode", detail: "a flat byte array plus constant pools", active: true },
+          ],
+        },
+        note: "No syntax tree is built at all. The parselets emit instructions as they go, which also means there is no tree to allocate and none to collect afterwards.",
+      },
+      {
+        title: "Run many times",
+        summary: "A loop over a byte array.",
+        figure: {
+          kind: "flow",
+          direction: "column",
+          nodes: [
+            { label: "Keystroke", active: true },
+            { label: "Cached program", detail: "keyed by expression text" },
+            { label: "Execute", detail: "a switch over bytes, no pointer chasing" },
+          ],
+        },
+        note: "Sequential memory, a switch rather than dynamic dispatch, and compilation skipped entirely when the text has not changed. Compiling once and executing many times is the whole argument.",
+      },
+      {
+        title: "And it can be bounded",
+        summary: "The reason that matters most.",
+        figure: {
+          kind: "flow",
+          direction: "column",
+          nodes: [
+            { label: "Instruction budget", detail: "counted, per execution", active: true },
+            { label: "Stack depth", detail: "checked, per instruction", active: true },
+            { label: "A named error", detail: "rather than a hang" },
+          ],
+        },
+        note: "Bounding a tree walk means threading a budget through a recursive descent. Bounding a loop over an array is a counter. The input is untrusted and arrives one character at a time, so this is not a nicety.",
+      },
+    ],
+  },
+
+  /* -- Dispatch ---------------------------------------------------------- */
+
+  dispatch: {
+    eyebrow: "One instruction",
+    steps: [
+      {
+        title: "Fetch",
+        summary: "Read the next opcode.",
+        figure: {
+          kind: "flow",
+          nodes: [
+            { label: "Fetch", active: true },
+            { label: "Budget" },
+            { label: "Depth" },
+            { label: "Switch" },
+            { label: "Advance" },
+          ],
+        },
+        note: "The program counter indexes into a byte array. There is no node to visit and no pointer to follow.",
+      },
+      {
+        title: "Check the budget",
+        summary: "Before any work happens.",
+        figure: {
+          kind: "flow",
+          nodes: [
+            { label: "Fetch", skipped: true },
+            { label: "Budget", active: true },
+            { label: "Depth" },
+            { label: "Switch" },
+            { label: "Advance" },
+          ],
+        },
+        note: "Every instruction increments a counter and compares it against a configurable limit. Exceeding it produces a named error, which is what turns a pathological expression into a message rather than a frozen tab.",
+      },
+      {
+        title: "Check the depth",
+        summary: "Same idea, other resource.",
+        figure: {
+          kind: "flow",
+          nodes: [
+            { label: "Fetch", skipped: true },
+            { label: "Budget", skipped: true },
+            { label: "Depth", active: true },
+            { label: "Switch" },
+            { label: "Advance" },
+          ],
+        },
+        note: "Stack depth is bounded too, and separately configurable. Both limits are checked before the instruction runs rather than after, so nothing has been half done by the time a limit is reached.",
+      },
+      {
+        title: "Dispatch",
+        summary: "A switch, with a fast path.",
+        figure: {
+          kind: "flow",
+          direction: "column",
+          nodes: [
+            { label: "Both operands plain numbers?", active: true },
+            { label: "Yes: inlined arithmetic", detail: "no function call, no allocation" },
+            { label: "No: the general path", detail: "units, errors, pending, matrices" },
+          ],
+        },
+        note: "The common case in a real document is two ordinary numbers, so the frequent arithmetic opcodes test for it and handle it inline. Everything else falls through to the path that knows about the other value types.",
+      },
+    ],
+  },
+
+  /* -- Values on the stack ----------------------------------------------- */
+
+  stackValues: {
+    eyebrow: "The stack",
+    steps: [
+      {
+        title: "Push",
+        summary: "PUSH_NUMBER 0",
+        figure: {
+          kind: "stack",
+          instruction: "PUSH_NUMBER 0",
+          cells: [{ value: "5", type: "Number", changed: true }],
+        },
+        note: "A constant from the number pool. So far this looks exactly like a stack of numbers, which is where most stack machines stop.",
+      },
+      {
+        title: "Attach a unit",
+        summary: "UOM_CONVERT",
+        figure: {
+          kind: "stack",
+          instruction: "UOM_CONVERT",
+          cells: [{ value: "5 km", type: "Uom", changed: true }],
+        },
+        note: "The number and the unit name are popped and one value is pushed in their place. The cell now holds something with a type, not a number that somebody downstream has to remember is kilometres.",
+      },
+      {
+        title: "Two of them",
+        summary: "The second operand, built the same way.",
+        figure: {
+          kind: "stack",
+          instruction: "PUSH_NUMBER 1, PUSH_STRING 0, UOM_CONVERT",
+          cells: [
+            { value: "5 km", type: "Uom" },
+            { value: "3 km", type: "Uom", changed: true },
+          ],
+        },
+        note: "Both operands are unit values sitting on the stack. Addition has not happened yet, and when it does it will not need to know what a kilometre is.",
+      },
+      {
+        title: "Operate",
+        summary: "ADD",
+        figure: {
+          kind: "stack",
+          instruction: "ADD",
+          cells: [{ value: "8 km", type: "Uom", changed: true }],
+        },
+        note: "Both popped, the units reconciled, one value pushed. Had either been an error or a pending value, that is what would be sitting here instead, with its cause intact rather than flattened into a number.",
+      },
+    ],
+  },
+
+  /* -- Registration checks ----------------------------------------------- */
+
+  registration: {
+    eyebrow: "Refusals",
+    steps: [
+      {
+        title: "Version range",
+        summary: "Checked before anything is registered.",
+        figure: {
+          kind: "flow",
+          direction: "column",
+          nodes: [
+            { label: "The package declares a range", detail: "the engine version it was built against", active: true },
+            { label: "In range: carry on" },
+            { label: "Out of range: refused", detail: "with a message naming both versions" },
+          ],
+        },
+        note: "Refusing at registration is the point. An incompatible package that registers successfully fails later, somewhere unrelated, in a way that looks like a bug in the package rather than a mismatch.",
+      },
+      {
+        title: "Duplicate names",
+        summary: "Refused, never overwritten.",
+        figure: {
+          kind: "chips",
+          chips: [
+            { text: "currency", label: "registered" },
+            { text: "currency", label: "refused", changed: true },
+          ],
+          caption: "The second registration does not win. It does not happen.",
+        },
+        note: "A silent overwrite would orphan everything the first registration contributed, and the symptom would surface in whichever feature happened to stop working. Refusing keeps the failure next to its cause.",
+      },
+      {
+        title: "Token collisions",
+        summary: "Warned, because they cannot be refused.",
+        figure: {
+          kind: "chips",
+          chips: [
+            { text: "GAME_ITEM", label: "package A" },
+            { text: "GAME_ITEM", label: "package B", changed: true },
+          ],
+          caption: "Both are named in the warning.",
+        },
+        note: "Two packages claiming the same token type would shadow each other silently, and the resulting misparse is extremely hard to trace back. The registry names both, which turns a mystery into a five-minute fix.",
+      },
+      {
+        title: "Configuration",
+        summary: "A factory, not a constant.",
+        figure: {
+          kind: "flow",
+          direction: "column",
+          nodes: [
+            { label: "You supply the fetcher", detail: "so the engine never holds credentials", active: true },
+            { label: "The factory returns a package" },
+            { label: "Registered like any other" },
+          ],
+        },
+        note: "This is how the stocks and knowledge packages take a data source. The engine gains a feature without gaining a network dependency or a secret to look after, which is also why those two are opt-in rather than built in.",
+      },
+    ],
+  },
+
+  /* -- Case sensitivity -------------------------------------------------- */
+
+  caseSensitivity: {
+    eyebrow: "Refusing to guess",
+    steps: [
+      {
+        title: "One letter apart",
+        summary: "Both of these are valid.",
+        figure: {
+          kind: "lines",
+          lines: [
+            { text: "5m", value: "5.00 m", state: "computed" },
+            { text: "5M", value: "5,000,000", state: "computed" },
+          ],
+        },
+        note: "Lower case m is metres. Upper case M is the millions suffix. These are the values the engine returns, and they differ by six orders of magnitude and a dimension.",
+      },
+      {
+        title: "It is not an edge case",
+        summary: "The same holds for k.",
+        figure: {
+          kind: "lines",
+          lines: [
+            { text: "2k", value: "2,000", state: "computed" },
+            { text: "2K", value: "2.00 K", state: "computed" },
+          ],
+        },
+        note: "Lower case k is the thousands suffix. Upper case K is kelvin. Anyone writing about temperature and anyone writing about money are both served, and neither has to escape anything.",
+      },
+      {
+        title: "The alternative",
+        summary: "Accept both cases, pick one.",
+        figure: {
+          kind: "lines",
+          lines: [
+            { text: "5M", value: "5.00 m", state: "error", tag: "wrong" },
+            { text: "2K", value: "2,000", state: "error", tag: "wrong" },
+          ],
+        },
+        note: "A case-insensitive engine has to choose, and whichever it chooses is silently wrong for the other reader. The answer still looks like an answer. Nothing about it invites a second look.",
+      },
+      {
+        title: "So it refuses",
+        summary: "No aliases, no guessing.",
+        figure: {
+          kind: "lines",
+          lines: [
+            { text: "5 m in cm", value: "500.00 cm", state: "computed" },
+            { text: "5M + 1", value: "5,000,001", state: "computed" },
+          ],
+        },
+        note: "Case carries meaning, so it is honoured. This is the same instinct as errors being values rather than zeroes: a tool doing arithmetic on someone's real numbers should be wrong loudly or not at all.",
       },
     ],
   },

@@ -3,6 +3,8 @@ title: The package system
 description: Registration, isolation and version compatibility.
 ---
 
+import Explainer from "../../../components/Explainer.tsx";
+
 ## Registration
 
 A package declares what it contributes and is registered into shared registries.
@@ -35,6 +37,10 @@ sequenceDiagram
     end
   end
 ```
+
+Every check that stands between a package and a working engine, in order.
+
+<Explainer id="registration" client:load />
 
 ## Version compatibility
 

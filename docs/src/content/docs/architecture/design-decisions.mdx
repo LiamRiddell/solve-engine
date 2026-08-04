@@ -3,11 +3,15 @@ title: Design decisions
 description: Choices that shaped the engine, and the reasoning behind them.
 ---
 
+import Explainer from "../../../components/Explainer.tsx";
+
 ## Bytecode rather than tree walking
 
 Re-evaluating on every keystroke makes interpretation speed the dominant cost.
 Compiling once and executing repeatedly is the standard answer, and it also
 makes bounding execution straightforward.
+
+<Explainer id="whyBytecode" client:load />
 
 ## Precedence climbing rather than a generated parser
 
@@ -29,6 +33,8 @@ rather than reserved globally.
 `m` is metres and `M` is a millions suffix. Accepting both cases, or guessing
 between plausible aliases, produces confidently wrong answers. Refusing to guess
 is the safer default for a tool doing arithmetic on someone's real numbers.
+
+<Explainer id="caseSensitivity" client:load />
 
 ## Errors and pending are values
 
