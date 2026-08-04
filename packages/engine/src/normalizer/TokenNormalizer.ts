@@ -89,6 +89,13 @@ const DEFAULT_OPTIONS: Required<NormalizerOptions> = {
  * from the first source token, which preserves source-map accuracy
  * for error messages and diagnostic highlighting.
  *
+ * It also records where the source text ENDS, on `sourceEnd`. The start alone
+ * is not enough to describe the span a fusion covers, because `text` is the
+ * replacement rather than the original: `10 frames` fuses into a FRAME_COUNT
+ * whose text is `10`, and a timecode fuses into a token whose text is a
+ * comma-separated tuple that appears nowhere in the line. Anything painting the
+ * line needs both ends, and only this function is in a position to know them.
+ *
  * @param type         - The new token type (e.g., "CARET", "TIMES_BY")
  * @param text         - The combined text representation (e.g., "to the power of")
  * @param sourceTokens - The original tokens being fused (at least 2)
@@ -100,7 +107,8 @@ export function createFusedToken(
   sourceTokens: Token[]
 ): Token {
   const first = sourceTokens[0];
-  return new LexerToken(
+  const last = sourceTokens[sourceTokens.length - 1];
+  const token = new LexerToken(
     type,
     tokenTypeId(type),
     text,
@@ -110,6 +118,30 @@ export function createFusedToken(
     first.line,
     first.col,
   );
+  token.sourceEnd = last.offset + last.value.length;
+  return token;
+}
+
+/**
+ * Record, on a token that replaced several, where its source text ended.
+ *
+ * Called centrally rather than left to each rule. A rule that builds its
+ * replacement by hand rather than through {@link createFusedToken} is doing
+ * nothing wrong, and several do: the date-literal rule needs a token whose
+ * value is an epoch and whose text is the source, which that factory cannot
+ * express. Stamping here means every fusion carries its span, including ones
+ * written after this was.
+ *
+ * Reads `sourceEnd` off the last source token when it has one, so a fusion of
+ * a fusion still describes the original text rather than the intermediate.
+ *
+ * @param fused - The single token the rule produced.
+ * @param sourceTokens - The tokens it consumed.
+ */
+function recordSourceSpan(fused: Token, sourceTokens: Token[]): void {
+  const last = sourceTokens[sourceTokens.length - 1];
+  if (!last) return;
+  fused.sourceEnd = last.sourceEnd ?? last.offset + last.value.length;
 }
 
 //#endregion
@@ -394,6 +426,7 @@ export class TokenNormalizer {
               result.push(rt);
             }
             if (trieMatch.consumed > 1 && trieMatch.replacement.length === 1) {
+              recordSourceSpan(trieMatch.replacement[0], sourceTokens);
               fusionHandler({
                 rule: trieMatch.ruleName ?? "phrase-trie",
                 sourceTokens,
@@ -422,6 +455,7 @@ export class TokenNormalizer {
             // - Multiple tokens → single token: classic fusion
             // - Multiple tokens → fewer tokens: partial fusion
             if (match.consumed > 1 && match.replacement.length === 1) {
+              recordSourceSpan(match.replacement[0], sourceTokens);
               fusionHandler({
                 rule: rule.name,
                 sourceTokens,

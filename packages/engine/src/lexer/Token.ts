@@ -19,6 +19,20 @@ export interface Token {
 	lineBreaks: number;
 	line: number;
 	col: number;
+	/**
+	 * End offset of the source text this token was fused from, exclusive.
+	 *
+	 * Only set on tokens the normalizer built by fusing several lexer tokens
+	 * into one, and only there because those are the tokens whose `value` no
+	 * longer describes the text they came from. `10 frames` fuses into a
+	 * FRAME_COUNT whose value is `10`, so `offset + value.length` would cover
+	 * two characters of a nine-character phrase.
+	 *
+	 * Evaluation never reads this. It exists so that a consumer painting a line
+	 * (see `LanguageService.getSemanticTokens`) can highlight a fused phrase as
+	 * the one thing the parser will see rather than as its parts.
+	 */
+	sourceEnd?: number;
 }
 
 /**

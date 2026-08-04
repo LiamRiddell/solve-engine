@@ -50,6 +50,41 @@ describe("LanguageService Benchmarks", () => {
     });
   }
 
+  // ─── getSemanticTokens with normalization folded in ───
+  //
+  // `normalizeForHighlighting` is what makes a phrase-fused type reachable
+  // from the highlighting path: a date literal, a timecode, a package's own
+  // fused token. It also means running the normalizer per keystroke, which is
+  // the reason it is off by default rather than simply switched on. These
+  // record both sides on the same inputs so the price is a number rather than
+  // a feeling.
+
+  for (const c of highlightCases) {
+    test(`getSemanticTokens cold, normalized: "${c.name}" (${c.iters.toLocaleString()} iter)`, async () => {
+      const engine = new ExpressionEngine("en", false);
+      const service = new LanguageService(engine, { normalizeForHighlighting: true });
+      let line = 1;
+      const r = await benchmarkFn(() => {
+        service.getSemanticTokens(c.input, line++);
+      }, c.iters, Math.min(100, Math.floor(c.iters / 10)));
+      recordSample(results, `${c.name}_normalized`, r);
+      expect(r.medianMs).toBeLessThan(2);
+    });
+  }
+
+  test("getSemanticTokens cold, normalized: a line that actually fuses", async () => {
+    // Every case above is one the normalizer finds nothing to do on, which
+    // measures the overhead of asking. This one measures the work itself.
+    const engine = new ExpressionEngine("en", false);
+    const service = new LanguageService(engine, { normalizeForHighlighting: true });
+    let line = 1;
+    const r = await benchmarkFn(() => {
+      service.getSemanticTokens("12/09/2026 + 10 frames", line++);
+    }, 10000, 100);
+    recordSample(results, "highlight_fusing_line_normalized", r);
+    expect(r.medianMs).toBeLessThan(2);
+  });
+
   test("getSemanticTokens warm (cache hit — same line, same text, repeated)", async () => {
     const engine = new ExpressionEngine("en", false);
     const service = new LanguageService(engine);

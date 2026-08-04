@@ -184,23 +184,46 @@ export class Lexer {
     return this.collectHighlightTokens(lineText);
   }
 
-  private collectHighlightTokens(lineText: string): {type: string; value: string; offset: number; col: number; length: number; category: TokenCategory | undefined}[] {
+  /**
+   * The same tokens {@link getHighlightTokens} reduces, before reduction.
+   *
+   * Exists because normalization operates on tokens, not on the flattened
+   * shape, and a consumer that wants phrase-fused highlighting has to run the
+   * normalizer between the two. See `LanguageService.getSemanticTokens`.
+   *
+   * @param lineText - One line of source.
+   * @returns Every token on the line that is worth painting, unreduced.
+   */
+  getHighlightTokenObjects(lineText: string): Token[] {
+    const classification = this.expressionLexer.classifyLine(lineText);
+    if (classification.skip && lineText.startsWith("> ")) {
+      return this.collectTokenObjects(lineText.slice(2));
+    }
+    if (classification.skip) return [];
+    return this.collectTokenObjects(lineText);
+  }
+
+  private collectTokenObjects(lineText: string): Token[] {
     this.resetExpression(lineText);
-    const result: {type: string; value: string; offset: number; col: number; length: number; category: TokenCategory | undefined}[] = [];
+    const result: Token[] = [];
     for (const token of this) {
       if (token.type === "WS" || token.type === "NEWLINE") continue;
       if (token.type.startsWith("MD_")) continue;
       if (token.type === "INLINE_SOLVE_START" || token.type === "BACKTICK_CLOSE") continue;
-      result.push({
-        type: token.type,
-        value: token.value,
-        offset: token.offset,
-        col: token.col,
-        length: token.value.length,
-        category: getTokenCategory(token.type),
-      });
+      result.push(token);
     }
     return result;
+  }
+
+  private collectHighlightTokens(lineText: string): {type: string; value: string; offset: number; col: number; length: number; category: TokenCategory | undefined}[] {
+    return this.collectTokenObjects(lineText).map(token => ({
+      type: token.type,
+      value: token.value,
+      offset: token.offset,
+      col: token.col,
+      length: token.value.length,
+      category: getTokenCategory(token.type),
+    }));
   }
 }
 
