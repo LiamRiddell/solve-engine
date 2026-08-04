@@ -175,12 +175,21 @@ for (const suite of Object.keys(reference).sort()) {
 			continue;
 		}
 		const suiteFailed = geomean > thresholds.suiteGeomeanFailRatio;
+		// Warned but not failed is the interesting band. A uniform slowdown that
+		// clears every per-case limit still shows up here, and losing it entirely
+		// when the failure line moved out to 1.4 would have thrown away the only
+		// signal that catches that shape.
+		const suiteWarned = !suiteFailed && geomean > thresholds.suiteGeomeanWarnRatio;
 		if (suiteFailed) {
 			failures.push(
 				`${suite}: geometric mean ${geomean.toFixed(3)}x across ${ratios.length} cases, over the ${thresholds.suiteGeomeanFailRatio}x suite limit`,
 			);
+		} else if (suiteWarned) {
+			warnings.push(
+				`${suite}: geometric mean ${geomean.toFixed(3)}x across ${ratios.length} cases, over the ${thresholds.suiteGeomeanWarnRatio}x suite warning line`,
+			);
 		}
-		suiteSummaries.push({ suite, geomean, cases: ratios.length, failed: suiteFailed });
+		suiteSummaries.push({ suite, geomean, cases: ratios.length, failed: suiteFailed, warned: suiteWarned });
 	}
 }
 
@@ -211,7 +220,8 @@ if (rows.length === 0) {
 	lines.push("| Suite | Cases | Geometric mean |");
 	lines.push("| --- | ---: | ---: |");
 	for (const s of suiteSummaries) {
-		lines.push(`| ${s.suite} | ${s.cases} | ${s.geomean.toFixed(3)}x${s.failed ? " **over limit**" : ""} |`);
+		const mark = s.failed ? " **over limit**" : s.warned ? " over warning line" : "";
+		lines.push(`| ${s.suite} | ${s.cases} | ${s.geomean.toFixed(3)}x${mark} |`);
 	}
 }
 

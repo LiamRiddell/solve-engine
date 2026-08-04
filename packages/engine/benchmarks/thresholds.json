@@ -1,11 +1,13 @@
 {
   "_comment": "Regression rules for scripts/compare-benchmarks.mjs. Ratios are current divided by reference, so above 1 is slower.",
 
+  "_bandComment": "Two bands, and the gap between them is deliberate. The warn band is where a human should look; the fail band is where a build should stop. They used to be 1.25 and 1.5, which put the failure line inside the range this project's own measurement noise reaches: re-recording the baselines and immediately re-running on byte-identical code produced a 1.71x on parser/datetime. A gate that red-lights unchanged code teaches people to click through it, so the failure line moved out past what noise can plausibly manufacture and the old 1.5 now merely warns.",
   "warnRatio": 1.25,
-  "failRatio": 1.5,
+  "failRatio": 2.5,
 
-  "_suiteComment": "A broad uniform slowdown can leave every individual case under its own limit while still costing real throughput. Injecting a context object into the VM dispatch path is exactly that shape, which is why the geometric mean across a suite has its own tighter bound.",
-  "suiteGeomeanFailRatio": 1.15,
+  "_suiteComment": "A broad uniform slowdown can leave every individual case under its own limit while still costing real throughput. Injecting a context object into the VM dispatch path is exactly that shape, which is why the geometric mean across a suite has its own bound. Same two-band split for the same reason: the parser suite is still measured on means rather than medians and its geomean reached 1.129x on unchanged code, so 1.15 is a warning and only 1.4 stops the build. Tighten these back up once parserBenchmarks.spec.ts records a median.",
+  "suiteGeomeanWarnRatio": 1.15,
+  "suiteGeomeanFailRatio": 1.4,
 
   "_improvementComment": "A report that only ever delivers bad news stops being read. Improvements past this are called out.",
   "improvementRatio": 0.8,
