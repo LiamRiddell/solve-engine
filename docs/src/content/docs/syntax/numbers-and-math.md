@@ -39,12 +39,18 @@ gcd(12, 18) // 6
 
 ## Bases
 
+Numbers can be written and displayed in hexadecimal, binary or octal.
+
 ```solve
+0xFF // 255
 hex(255) // 0xFF
 bin(5) // 0b101
 255 as hex // 0xFF
 255 as binary // 0b11111111
 ```
+
+Bit shifts, bitwise operators and data-size units are on the
+[programmer math](/syntax/programmer-math/) page.
 
 ## Big integers
 

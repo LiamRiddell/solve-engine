@@ -77,6 +77,19 @@ clamp 15 between 1 and 10 // 10
 0.75 as fraction // 3/4
 ```
 
+## Programmer math
+
+```solve
+0xFF // 255
+0b1010 // 10
+0o17 // 15
+1 << 8 // 256
+0xFF & 0x0F // 15
+0xF0 | 0x0F // 255
+12 xor 10 // 6
+1 KiB in bytes // 1024.00 bytes
+```
+
 ## Conditionals
 
 ```solve
