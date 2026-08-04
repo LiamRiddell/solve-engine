@@ -408,6 +408,15 @@ export default function PipelineWalkthrough() {
   }, []);
 
   const stageMeta = STAGES[stage];
+  const railRef = useRef<HTMLOListElement>(null);
+
+  // On a phone the rail is a scrolling strip rather than five equal columns, so
+  // advancing to a stage that is off to the right would otherwise look like
+  // nothing happened.
+  useEffect(() => {
+    const current = railRef.current?.children[stage] as HTMLElement | undefined;
+    current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [stage]);
 
   return (
     <div className="pw not-content" ref={rootRef}>
@@ -439,7 +448,7 @@ export default function PipelineWalkthrough() {
         <p className="pw__blurb">{example.blurb}</p>
       </div>
 
-      <ol className="pw__rail">
+      <ol className="pw__rail" ref={railRef}>
         {STAGES.map((entry, index) => (
           <li key={entry.id}>
             <button

@@ -11,6 +11,7 @@ import Notepad from '../../components/Notepad.astro';
 import HeroActions from '../../components/HeroActions.astro';
 import ShowcaseNav from '../../components/ShowcaseNav.astro';
 import OyrenCta from '../../components/OyrenCta.astro';
+import TestStats from '../../components/TestStats.astro';
 
 <div class="band band--tight not-content">
   <HeroActions />
@@ -22,7 +23,7 @@ import OyrenCta from '../../components/OyrenCta.astro';
     </div>
     <ul class="install__specs">
       <li>MIT</li>
-      <li>No runtime dependencies</li>
+      <li>Four runtime dependencies</li>
       <li>Sixteen subpath exports</li>
       <li>Node, browser and worker</li>
       <li>TypeScript types included</li>
@@ -298,19 +299,19 @@ to change if your app already owns one. Colours are ordinary CSS. The same
 categories drive completions through `getCompletions`, so one integration
 covers both.
 
-<ul class="hl-legend">
-  <li><b class="solve-number">number</b></li>
-  <li><b class="solve-string">string</b></li>
-  <li><b class="solve-keyword">keyword</b></li>
-  <li><b class="solve-operator">operator</b></li>
-  <li><b class="solve-comparison">comparison</b></li>
-  <li><b class="solve-function">function</b></li>
-  <li><b class="solve-variable">variable</b></li>
-  <li><b class="solve-unit">unit</b></li>
-  <li><b class="solve-datetime">datetime</b></li>
-  <li><b class="solve-vector">vector</b></li>
-  <li><b class="solve-punctuation">punctuation</b></li>
-</ul>
+<dl class="hl-legend">
+  <div><dt class="solve-number">42</dt><dd>number</dd></div>
+  <div><dt class="solve-string">"gbp"</dt><dd>string</dd></div>
+  <div><dt class="solve-keyword">if</dt><dd>keyword</dd></div>
+  <div><dt class="solve-operator">+</dt><dd>operator</dd></div>
+  <div><dt class="solve-comparison">&gt;=</dt><dd>comparison</dd></div>
+  <div><dt class="solve-function">sqrt</dt><dd>function</dd></div>
+  <div><dt class="solve-variable">total</dt><dd>variable</dd></div>
+  <div><dt class="solve-unit">km</dt><dd>unit</dd></div>
+  <div><dt class="solve-datetime">friday</dt><dd>datetime</dd></div>
+  <div><dt class="solve-vector">[1, 2]</dt><dd>vector</dd></div>
+  <div><dt class="solve-punctuation">( )</dt><dd>punctuation</dd></div>
+</dl>
 
       </div>
       <div>
@@ -501,19 +502,19 @@ value.toNumber(); // the number underneath
           <path d="M12 3 20.5 7.5v9L12 21l-8.5-4.5v-9Z" />
           <path d="M3.5 7.5 12 12l8.5-4.5M12 12v9" />
         </svg>
-        <h3>No runtime dependencies</h3>
+        <h3>No host to satisfy</h3>
         <p>No DOM, no editor coupling, no framework. It runs in Node, in a browser, in a worker or on a server.</p>
       </div>
     </div>
 
     <p class="band__note">
-      Every example in this documentation is executed by the test suite, so if
-      one stops being true the build goes red. Start with
-      <a href="/guide/embedding/">embedding the engine</a>, or
+      Start with <a href="/guide/embedding/">embedding the engine</a>, or
       <a href="/guide/editor-integration/">editor integration</a> if you are
       wiring it to a live document like the ones above.
     </p>
   </div>
 </div>
+
+<TestStats />
 
 <OyrenCta />

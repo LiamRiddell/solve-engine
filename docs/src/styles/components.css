@@ -110,6 +110,16 @@ header.header {
   }
 }
 
+/* Below Starlight's own breakpoint the whole trailing group goes. Starlight
+   renders the theme select and the social icons again inside the mobile menu,
+   so nothing is lost, and keeping them here cost enough width to clip the
+   wordmark to "SOL" on a 320px screen. */
+@media (max-width: 50rem) {
+  .topbar__trail {
+    display: none;
+  }
+}
+
 .social-icons {
   align-items: center;
   gap: 0.5rem;
@@ -237,10 +247,9 @@ starlight-menu-button[aria-expanded="true"] button,
   font-weight: 500;
 }
 
-/* Starlight indents nested lists with a border-inline-start on the <ul>. */
-.sidebar-content ul ul {
-  border-inline-start: 1px solid var(--border);
-}
+/* No rule for nested lists here on purpose. Starlight already draws the indent
+   guide, on the <li> rather than on the <ul>, so adding one to the <ul> as well
+   put two hairlines nine pixels apart down the whole sidebar. */
 
 .sidebar-content summary {
   padding-block: 0.25rem;

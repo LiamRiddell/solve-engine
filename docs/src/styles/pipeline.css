@@ -462,16 +462,56 @@
 /* ── Narrow ─────────────────────────────────────────────────────────────── */
 
 @media (max-width: 56rem) {
-  .pw__rail {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-
   .pw__step-summary {
     display: none;
   }
 
   .pw__stage--split {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Five equal columns stop working long before the viewport does: at phone width
+   each stage gets about 57px, which is not enough for the word Normalisation.
+   The rail becomes a scrolling strip instead, with each step wide enough to
+   read. The current step is scrolled into view when it changes. */
+@media (max-width: 40rem) {
+  .pw__rail {
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .pw__rail::-webkit-scrollbar {
+    display: none;
+  }
+
+  .pw__rail > li {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+  }
+
+  .pw__step {
+    white-space: nowrap;
+  }
+
+  .pw__instruction {
+    grid-template-columns: 1.25rem minmax(0, 1fr);
+  }
+
+  /* The comment column is the first thing to go: the instruction itself is
+     what the stage is about, and the note beneath already carries the prose. */
+  .pw__instruction-comment {
+    display: none;
+  }
+
+  .pw__viewport {
+    padding-inline: 0.875rem;
+  }
+
+  .pw__head,
+  .pw__controls {
+    padding-inline: 0.875rem;
   }
 }
 

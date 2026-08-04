@@ -1,0 +1,133 @@
+/**
+ * Records how big the test suite actually is, for the landing page to quote.
+ *
+ * A number like "3908 tests" on a marketing page is worth exactly as much as
+ * the reader's confidence that someone still counts them. Typing it in means it
+ * is wrong within a fortnight and nobody notices, which is worse than not
+ * claiming it at all.
+ *
+ * So it is derived. The full suite already runs in CI and already knows the
+ * numbers, so this reads them out of Jest's own report and writes them where
+ * the site can import them. `--check` then fails the build if the committed
+ * file has drifted, which makes the number self-maintaining: a pull request
+ * that adds tests has to update it, and one that does not cannot claim a total
+ * it did not produce.
+ *
+ * Usage:
+ *   node scripts/collect-test-stats.mjs           write from the last report
+ *   node scripts/collect-test-stats.mjs --check   fail if the file is stale
+ */
+
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const REPORT = path.join(ROOT, ".jest-report.json");
+const TARGET = path.join(ROOT, "docs/src/data/testStats.json");
+const DOCS_ROOT = path.join(ROOT, "docs/src/content/docs");
+
+/**
+ * Counts the documented examples that carry an asserted result.
+ *
+ * Deliberately the same rule `DocExamples.spec.ts` applies when it decides what
+ * to execute: a line inside a ```solve block with a `//` expectation on it. Two
+ * counts of the same thing that disagree would be worse than one, so if that
+ * rule ever changes, both have to change together.
+ *
+ * @param {string} dir - Directory to walk.
+ * @returns {number} How many lines the doc-example suite asserts.
+ */
+function countDocExamples(dir) {
+	let total = 0;
+
+	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+		const full = path.join(dir, entry.name);
+		if (entry.isDirectory()) {
+			total += countDocExamples(full);
+			continue;
+		}
+		if (!/\.mdx?$/.test(entry.name)) continue;
+
+		let inBlock = false;
+		for (const line of fs.readFileSync(full, "utf8").split(/\r?\n/)) {
+			if (line.trimStart().startsWith("```")) {
+				inBlock = /^```solve\b/.test(line.trim());
+				continue;
+			}
+			if (inBlock && line.includes("//") && line.trim() !== "") total++;
+		}
+	}
+
+	return total;
+}
+
+/**
+ * Reads the totals out of Jest's report.
+ *
+ * @returns {{ tests: number, suites: number }} The counts.
+ */
+function readReport() {
+	if (!fs.existsSync(REPORT)) {
+		console.error(
+			`No Jest report at ${path.relative(ROOT, REPORT)}.\n` +
+				"Run `npm run test:full` first; it writes one as a side effect.",
+		);
+		process.exit(1);
+	}
+
+	const report = JSON.parse(fs.readFileSync(REPORT, "utf8"));
+	return {
+		tests: report.numTotalTests,
+		suites: report.numTotalTestSuites,
+	};
+}
+
+/**
+ * Counts the language packages the engine registers by default.
+ *
+ * Read off the array rather than off a comment above it, so adding a package
+ * moves the number on the site without anyone remembering to.
+ *
+ * @returns {number} How many entries `BUILTIN_PACKAGES` has.
+ */
+function countBuiltinPackages() {
+	const source = fs.readFileSync(
+		path.join(ROOT, "packages/engine/src/packages/builtins.ts"),
+		"utf8",
+	);
+	const list = source.match(/export const BUILTIN_PACKAGES[^=]*=\s*\[([^\]]*)\]/);
+	if (!list) {
+		console.error("Could not find BUILTIN_PACKAGES in builtins.ts.");
+		process.exit(1);
+	}
+	return list[1]
+		.split(",")
+		.map((entry) => entry.trim())
+		.filter((entry) => entry.length > 0).length;
+}
+
+const stats = {
+	...readReport(),
+	docExamples: countDocExamples(DOCS_ROOT),
+	builtinPackages: countBuiltinPackages(),
+};
+
+const next = `${JSON.stringify(stats, null, 2)}\n`;
+const current = fs.existsSync(TARGET) ? fs.readFileSync(TARGET, "utf8") : "";
+
+if (process.argv.includes("--check")) {
+	if (current !== next) {
+		console.error(
+			"docs/src/data/testStats.json is out of date.\n" +
+				`  committed: ${current.trim() || "(missing)"}\n` +
+				`  actual:    ${next.trim()}\n` +
+				"Run `npm run stats:tests` and commit the result.",
+		);
+		process.exit(1);
+	}
+	console.log(`Test stats are current: ${stats.tests} tests in ${stats.suites} suites.`);
+} else {
+	fs.writeFileSync(TARGET, next);
+	console.log(`Wrote ${path.relative(ROOT, TARGET)}: ${stats.tests} tests in ${stats.suites} suites.`);
+}
