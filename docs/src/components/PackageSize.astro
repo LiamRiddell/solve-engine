@@ -1,0 +1,85 @@
+---
+/**
+ * What the package weighs, said in the two ways that are both true.
+ *
+ * The numbers come from `scripts/collect-package-size.mjs`, which runs a real
+ * bundle and a real `npm pack`, and CI fails when the committed file has
+ * drifted. Nothing here is typed in.
+ *
+ * The section deliberately gives the install size as well as the bundled one.
+ * Quoting eighty kilobytes alone would be true and would still feel like a
+ * trick to somebody who then looks in `node_modules` and finds seven megabytes.
+ * Saying both, and saying what the difference is made of, costs one line and is
+ * the reason to believe the first number.
+ */
+import sizes from "../data/packageSize.json";
+import stats from "../data/testStats.json";
+
+const kb = (bytes: number) => `${Math.round(bytes / 1000)} kB`;
+const mb = (bytes: number) => `${(bytes / 1_000_000).toFixed(1)} MB`;
+
+/**
+ * How much of the budget is spent, for the meter.
+ *
+ * The budget is a real gate: `size-limit` fails the build above it, so this is
+ * a number with consequences rather than a decoration.
+ */
+const budgetUsed = Math.round((sizes.importOneGzip / sizes.budget) * 100);
+
+/** The gap between importing one name and importing the whole entry. */
+const treeShakeSaving = sizes.importEverythingGzip - sizes.importOneGzip;
+---
+
+<div class="band size-band not-content">
+  <div class="band__inner">
+    <span class="band__eyebrow">Size</span>
+
+    <p class="size-band__figure">
+      <span class="size-band__number">{kb(sizes.importOneGzip)}</span>
+      <span class="size-band__unit">minified and gzipped</span>
+    </p>
+
+    <p class="size-band__lede">
+      That is what reaches your users when you import the engine. It is measured
+      by bundling it for real, on every commit, and the build fails above {kb(sizes.budget)}.
+    </p>
+
+    <div class="size-band__meter" aria-hidden="true">
+      <span class="size-band__meter-fill" style={`width: ${budgetUsed}%`}></span>
+    </div>
+    <p class="size-band__meter-label">
+      {budgetUsed}% of the {kb(sizes.budget)} budget
+    </p>
+
+    <dl class="size-band__grid">
+      <div>
+        <dt>{mb(sizes.tarballBytes)}</dt>
+        <dd>downloaded from npm, across {sizes.fileCount} files.</dd>
+      </div>
+      <div>
+        <dt>{mb(sizes.unpackedBytes)}</dt>
+        <dd>
+          on disk once installed, nearly all of it TypeScript declarations and
+          the CommonJS build. None of it reaches a browser.
+        </dd>
+      </div>
+      <div>
+        <dt>{stats.runtimeDependencies}</dt>
+        <dd>
+          runtime dependencies, so the number above is close to the number your
+          lockfile grows by.
+        </dd>
+      </div>
+    </dl>
+
+    <p class="size-band__note">
+      One thing worth being straight about: importing a single name costs
+      {treeShakeSaving === 0 ? " exactly " : " within "}
+      {treeShakeSaving === 0 ? "the same as" : `${treeShakeSaving} bytes of`} importing
+      everything, because every subpath reaches the engine core. The {stats.subpathExports} subpath
+      exports exist so you can import from where a thing lives and so a bundler can
+      resolve types correctly, not because they let you take a smaller slice. If
+      that changes, this paragraph changes with it.
+    </p>
+  </div>
+</div>

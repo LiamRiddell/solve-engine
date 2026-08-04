@@ -134,6 +134,12 @@ jobs:
       # second entry exists so that stops being invisible if it changes.
       - run: npm run size
 
+      # The landing page quotes this bundle size and what npm unpacks. Both are
+      # derived from the build that just happened, so this fails when the
+      # committed copy has drifted rather than letting the site claim a figure
+      # from three releases ago.
+      - run: npm run lint:size
+
   playground:
     name: Playground builds
     runs-on: ubuntu-24.04
