@@ -14,6 +14,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { Value, ValueType, numberValue } from "@solve-js/vm/Value";
+import { formatValue } from "@solve-js/format/FormatEngine";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { registerAsConverter, unregisterAsConverter } from "@solve-js/vm/VMBuiltins";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
@@ -131,20 +132,46 @@ describe("as sci", () => {
 });
 
 describe("as binary / as octal", () => {
-  test("10 as binary -> \"0b1010\"", () => {
-    expect(parseAndExecute("10 as binary").value).toBe("0b1010");
+  // These assert the display and the underlying value separately, because the
+  // pair is the point. A base is a way of writing a number, so the value has to
+  // stay a number and only the rendering changes. Asserting the string alone is
+  // what let `(255 as binary) + 1` evaluate to 1 for as long as it did.
+  test("10 as binary displays as 0b1010 and is still ten", () => {
+    const value = parseAndExecute("10 as binary");
+    expect(formatValue(value)).toBe("= 0b1010");
+    expect(value.value).toBe(10);
+    expect(value.type).toBe(ValueType.Hex);
   });
 
-  test("10 as bin -> \"0b1010\" (alias)", () => {
-    expect(parseAndExecute("10 as bin").value).toBe("0b1010");
+  test("10 as bin -> 0b1010 (alias)", () => {
+    expect(formatValue(parseAndExecute("10 as bin"))).toBe("= 0b1010");
   });
 
-  test("8 as octal -> \"0o10\"", () => {
-    expect(parseAndExecute("8 as octal").value).toBe("0o10");
+  test("8 as octal displays as 0o10 and is still eight", () => {
+    const value = parseAndExecute("8 as octal");
+    expect(formatValue(value)).toBe("= 0o10");
+    expect(value.value).toBe(8);
   });
 
-  test("8 as oct -> \"0o10\" (alias)", () => {
-    expect(parseAndExecute("8 as oct").value).toBe("0o10");
+  test("8 as oct -> 0o10 (alias)", () => {
+    expect(formatValue(parseAndExecute("8 as oct"))).toBe("= 0o10");
+  });
+
+  test("a converted number still does arithmetic", () => {
+    expect(parseAndExecute("(255 as binary) + 1").toNumber()).toBe(256);
+    expect(parseAndExecute("(255 as octal) + 1").toNumber()).toBe(256);
+    expect(parseAndExecute("(255 as hex) + 1").toNumber()).toBe(256);
+  });
+
+  test("a negative keeps the sign outside the literal", () => {
+    // -255 rendered as `0x-FF` until the sign was taken off before conversion.
+    expect(formatValue(parseAndExecute("-255 as hex"))).toBe("= -0xFF");
+    expect(formatValue(parseAndExecute("-255 as binary"))).toBe("= -0b11111111");
+  });
+
+  test("a fraction truncates rather than growing fractional digits", () => {
+    // `255.7 as hex` used to render 0xFF.B3333333333.
+    expect(formatValue(parseAndExecute("255.7 as hex"))).toBe("= 0xFF");
   });
 });
 

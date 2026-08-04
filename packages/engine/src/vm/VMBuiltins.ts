@@ -1,4 +1,4 @@
-import { Value, ValueType, numberValue, stringValue, uomValue, errorValue, matrixValue, type MatrixData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixValue, type MatrixData } from "@solve-js/vm/Value";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom } from "@solve-js/vm/VMConversion";
 import { transpose, determinant, inverse, matrixMultiply, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
@@ -22,31 +22,6 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 // eslint-disable-next-line no-unused-vars
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/finance/data/CpiTable";
-
-// ── Local formatting helpers for hex()/bin() (indices 48/49 below) ─────────
-//
-// Deliberately NOT imported from vm/VM.ts (which has its own private
-// toBinaryString()/toOctalString() used by OpCode.TO_BINARY/TO_OCTAL)
-// VM.ts imports builtinFunctions FROM this file, so importing the other
-// direction would create a circular module dependency. These are tiny,
-// self-contained duplicates matching the same sign-handling convention
-// (see VM.ts's toBinaryString/toOctalString) and the same uppercase-digit
-// convention as FormatEngine.ts's formatHex() (its "= 0x{PADDED}" display
-// string isn't reusable as-is, it's tied to FormattingSettings padding
-// config that a plain builtin function call has no access to, so this
-// matches its digit-formatting convention rather than importing it).
-
-/** "255" -> "0xFF", "-255" -> "-0xFF". Truncates toward zero first. */
-function toHexPrefixedString(n: number): string {
-    const t = Math.trunc(n);
-    return t < 0 ? `-0x${Math.abs(t).toString(16).toUpperCase()}` : `0x${t.toString(16).toUpperCase()}`;
-}
-
-/** "10" -> "0b1010", "-10" -> "-0b1010". Truncates toward zero first. */
-function toBinPrefixedString(n: number): string {
-    const t = Math.trunc(n);
-    return t < 0 ? `-0b${Math.abs(t).toString(2)}` : `0b${t.toString(2)}`;
-}
 
 /**
  * Registry of built-in mathematical functions.
@@ -248,9 +223,9 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // function call that returns an ordinary String value, matching
     // Python's hex()/JS convention of a function returning display text,
     // not a numeric type.
-    48: (args) => stringValue(toHexPrefixedString(args[0].toNumber())),
+    48: (args) => hexValue(args[0].toNumber()),
     // bin(n). Same call-syntax shape as hex() above, e.g. bin(10) -> "0b1010".
-    49: (args) => stringValue(toBinPrefixedString(args[0].toNumber())),
+    49: (args) => hexValue(args[0].toNumber(), "bin"),
     // int(x), coerce ANY value (Number, Percentage, Uom, String, Hex, ...)
     // to a plain integer Number, truncating any fractional part toward
     // zero (Math.trunc semantics: int(5.7) -> 5, int(-5.7) -> -5). Distinct

@@ -345,10 +345,26 @@ export function numberValue(n: number): Value {
 	return new Value(ValueType.Number, n);
 }
 
-/** Create a Hex-typed Value (0x-prefix literals). */
-export function hexValue(n: number): Value {
-	if (_arenaActive && _arena) return _arena.acquire(ValueType.Hex, n);
-	return new Value(ValueType.Hex, n);
+/** Which base a {@link ValueType.Hex} value is displayed in. */
+export type DisplayBase = "hex" | "bin" | "oct";
+
+/**
+ * Create a Hex-typed Value: a **number** that displays in another base.
+ *
+ * The type is numeric on purpose, and that is the whole point of it. A base is
+ * a way of writing a quantity, not a different kind of quantity, so `0xFF + 1`
+ * has to be 256. Returning a string instead makes it 1, because a string reads
+ * as zero in arithmetic, and nothing about that failure is visible at the point
+ * of use.
+ *
+ * @param n - The number itself, in full precision.
+ * @param base - How to display it, defaulting to hexadecimal. Carried in the
+ * `unit` slot, which is free for this type.
+ */
+export function hexValue(n: number, base: DisplayBase = "hex"): Value {
+	const tag = base === "hex" ? undefined : base;
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.Hex, n, tag);
+	return new Value(ValueType.Hex, n, tag);
 }
 
 /** Create a BigInt-typed Value (arbitrary-precision integer). */

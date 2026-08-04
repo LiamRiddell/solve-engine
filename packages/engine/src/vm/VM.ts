@@ -522,16 +522,6 @@ function toScientificString(n: number): string {
     return `${trimmed}e${exponent}`;
 }
 
-function toBinaryString(n: number): string {
-    const t = Math.trunc(n);
-    return t < 0 ? `-0b${Math.abs(t).toString(2)}` : `0b${t.toString(2)}`;
-}
-
-function toOctalString(n: number): string {
-    const t = Math.trunc(n);
-    return t < 0 ? `-0o${Math.abs(t).toString(8)}` : `0o${t.toString(8)}`;
-}
-
 /**
  * Execute bytecode with optional diagnostic pipeline integration.
  *
@@ -877,6 +867,15 @@ export function executeBytecode(
           } else {
             stack.push(numberValue(l.toNumber() >> r.toNumber()));
           }
+          break;
+        }
+        case OpCode.URSHIFT: {
+          const r = safePop(stack), l = safePop(stack);
+          // No BigInt branch, unlike its siblings above. `>>>` is defined on a
+          // 32-bit unsigned word and JavaScript refuses it on a BigInt, so
+          // there is nothing to widen to: BigInt(-8) >>> 1n is a TypeError, not
+          // a large number. Both operands go through the 32-bit path.
+          stack.push(numberValue(l.toNumber() >>> r.toNumber()));
           break;
         }
         case OpCode.BIT_AND: {
@@ -1285,14 +1284,16 @@ export function executeBytecode(
           stack.push(stringValue(toScientificString(v.toNumber())));
           break;
         }
+        // Numeric, like TO_HEX above. A base is a way of writing a number, so
+        // `(255 as binary) + 1` has to be 256; as a string it was 1.
         case OpCode.TO_BINARY: {
           const v = safePop(stack);
-          stack.push(stringValue(toBinaryString(v.toNumber())));
+          stack.push(hexValue(v.toNumber(), "bin"));
           break;
         }
         case OpCode.TO_OCTAL: {
           const v = safePop(stack);
-          stack.push(stringValue(toOctalString(v.toNumber())));
+          stack.push(hexValue(v.toNumber(), "oct"));
           break;
         }
         case OpCode.CALL_AS_CONVERTER: {

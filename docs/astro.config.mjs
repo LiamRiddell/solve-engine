@@ -140,6 +140,8 @@ export default defineConfig({
             { slug: "syntax/numbers-and-math" },
             { slug: "syntax/percentages" },
             { slug: "syntax/units-and-conversions" },
+            { slug: "syntax/programmer-math" },
+            { slug: "syntax/unit-reference" },
             { slug: "syntax/money-and-finance" },
             { slug: "syntax/dates" },
             { slug: "syntax/time" },

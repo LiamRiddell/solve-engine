@@ -18,6 +18,10 @@ export const ARITHMETIC_PACKAGE: IEnginePackage = {
     { tokenType: "E", parselet: new ConstantParselet() },
     { tokenType: "PLUS", parselet: new PrefixOpParselet(OpCode.POS) },
     { tokenType: "MINUS", parselet: new PrefixOpParselet(OpCode.NEG) },
+    // `~x`. The opcode and the lexer token both already existed; without this
+    // registration the token reached the parser and stopped there, so `~5`
+    // reported "no prefix parselet found" rather than -6.
+    { tokenType: "BIT_NOT", parselet: new PrefixOpParselet(OpCode.BIT_NOT) },
   ],
   infixParselets: [
     { tokenType: "PLUS", parselet: new BinaryOpParselet(BindingPower.Sum, OpCode.ADD) },
@@ -31,6 +35,7 @@ export const ARITHMETIC_PACKAGE: IEnginePackage = {
     { tokenType: "DIVIDE_BY", parselet: new BinaryOpParselet(BindingPower.Product, OpCode.DIV) },
     { tokenType: "LSHIFT", parselet: new BinaryOpParselet(BindingPower.Sum, OpCode.LSHIFT) },
     { tokenType: "RSHIFT", parselet: new BinaryOpParselet(BindingPower.Sum, OpCode.RSHIFT) },
+    { tokenType: "URSHIFT", parselet: new BinaryOpParselet(BindingPower.Sum, OpCode.URSHIFT) },
     { tokenType: "BIT_AND", parselet: new BinaryOpParselet(BindingPower.Product, OpCode.BIT_AND) },
     { tokenType: "BIT_OR", parselet: new BinaryOpParselet(BindingPower.Sum, OpCode.BIT_OR) },
     { tokenType: "BIT_XOR", parselet: new BinaryOpParselet(BindingPower.BitwiseXor, OpCode.BIT_XOR) },
