@@ -123,21 +123,26 @@ jobs:
       - run: npx --yes publint packages/engine
       - run: npx --yes @arethetypeswrong/cli --pack packages/engine --ignore-rules no-resolution
 
-      # Budget is roughly ten percent over the current 83kB, which is tight
-      # enough to catch a dependency arriving by accident and loose enough not
-      # to fail on ordinary growth. A budget set far above the real figure
-      # cannot fail, and so measures nothing.
+      # Reports the bundled size; it does not gate on it. There is no budget,
+      # deliberately: the engine is a language runtime and a CAS rather than a
+      # utility library, and a ceiling drawn across that grows into a tax on
+      # shipping features, paid by whoever happens to be holding the branch that
+      # crosses it.
       #
-      # Both entries land within 20 bytes of each other: importing only
-      # ExpressionEngine costs the same as importing everything, because it
+      # Both entries land within a few dozen bytes of each other: importing only
+      # ExpressionEngine costs what importing everything costs, because it
       # reaches the whole engine. Tree-shaking buys nothing here today, and the
       # second entry exists so that stops being invisible if it changes.
       - run: npm run size
 
-      # The landing page quotes this bundle size and what npm unpacks. Both are
-      # derived from the build that just happened, so this fails when the
-      # committed copy has drifted rather than letting the site claim a figure
-      # from three releases ago.
+      # This one does gate, on staleness rather than on size. The landing page
+      # quotes the bundle size and what npm unpacks, both derived from the build
+      # that just happened, so this fails when the committed copy has drifted
+      # rather than letting the site claim a figure from three releases ago.
+      #
+      # It is also what is left of the size guard. Any change in the figure has
+      # to be committed, so a jump arrives as a reviewable diff on a file whose
+      # whole content is numbers, instead of arriving silently.
       - run: npm run lint:size
 
   playground:

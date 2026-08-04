@@ -47,9 +47,19 @@ describe("the duplicated tables agree with their real sources", () => {
 		}
 	});
 
-	test("the natively-symbolic set is exactly the algebra verbs the package registers", () => {
+	test("every algebra verb the package registers is exempt from symbolic interception", () => {
+		for (const fn of SYMBOLIC_FUNCTIONS) {
+			expect(SYMBOLIC_NATIVE_BUILTINS.has(fn.builtinIndex)).toBe(true);
+		}
+	});
+
+	test("the only exempt index without a verb row is the imaginary literal", () => {
+		// `3i` is fused by its own normalizer rule rather than being a word, so it
+		// has no row in SYMBOLIC_FUNCTIONS. Pinning that here keeps the exemption
+		// set from quietly growing entries nobody registered.
 		const fromPackage = new Set(SYMBOLIC_FUNCTIONS.map(fn => fn.builtinIndex));
-		expect([...SYMBOLIC_NATIVE_BUILTINS].sort()).toEqual([...fromPackage].sort());
+		const extra = [...SYMBOLIC_NATIVE_BUILTINS].filter(index => !fromPackage.has(index));
+		expect(extra).toEqual([74]);
 	});
 
 	test("pow is deliberately absent from the name table, being special-cased into a pow node", () => {
@@ -132,15 +142,20 @@ describe("solveEquationValues, shared by solve() and the stored equation form", 
 		expect(result.type).toBe(ValueType.Matrix);
 	});
 
-	test("an outcome that is not a root reads as a sentence rather than an error", () => {
-		const noRealRoots = symbolicValue({
+	test("a quadratic with complex roots returns them rather than a sentence", () => {
+		const complexRoots = symbolicValue({
 			kind: "add",
 			left: { kind: "pow", base: varNode("x"), exponent: constNode(2) },
 			right: constNode(1),
 		});
-		const result = solveEquationValues(noRealRoots, numberValue(0), "x");
+		const result = solveEquationValues(complexRoots, numberValue(0), "x");
+		expect(result.type).toBe(ValueType.Matrix);
+	});
+
+	test("an outcome that is genuinely not a root still reads as a sentence", () => {
+		const result = solveEquationValues(numberValue(1), numberValue(2), "x");
 		expect(result.type).toBe(ValueType.String);
-		expect(String(result.value)).toMatch(/no real solutions/);
+		expect(String(result.value)).toMatch(/no solution/);
 	});
 
 	test("a side with no exact value is reported", () => {

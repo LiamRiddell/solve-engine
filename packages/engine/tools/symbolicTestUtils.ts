@@ -105,3 +105,78 @@ export function seededInts(seed: number): (span: number) => number {
 		return (state % (2 * span + 1)) - span;
 	};
 }
+
+/**
+ * Evaluates a symbolic tree numerically over the complex plane.
+ *
+ * {@link evaluateNumerically} returns a real and cannot represent the value of
+ * an expression containing `i`, so verifying a complex root needs this instead.
+ * Both parts come back, and a root is confirmed by checking each is zero to
+ * tolerance.
+ *
+ * @param node - The tree to evaluate.
+ * @param bindings - A real value for each free variable.
+ * @returns The value as a real and imaginary pair.
+ * @throws {Error} When the tree names a function with no numeric form here.
+ */
+export function evaluateComplexNumerically(
+	node: SymbolicNode,
+	bindings: Readonly<Record<string, number>>,
+): { re: number; im: number } {
+	const add = (a: { re: number; im: number }, b: { re: number; im: number }) => ({ re: a.re + b.re, im: a.im + b.im });
+	const mul = (a: { re: number; im: number }, b: { re: number; im: number }) => ({
+		re: a.re * b.re - a.im * b.im,
+		im: a.re * b.im + a.im * b.re,
+	});
+
+	switch (node.kind) {
+		case "const":
+			return { re: Number(node.value.n) / Number(node.value.d), im: 0 };
+		case "complex":
+			return {
+				re: Number(node.value.re.n) / Number(node.value.re.d),
+				im: Number(node.value.im.n) / Number(node.value.im.d),
+			};
+		case "var":
+			return { re: node.name in bindings ? bindings[node.name] : Number.NaN, im: 0 };
+		case "neg": {
+			const inner = evaluateComplexNumerically(node.operand, bindings);
+			return { re: -inner.re, im: -inner.im };
+		}
+		case "add":
+			return add(evaluateComplexNumerically(node.left, bindings), evaluateComplexNumerically(node.right, bindings));
+		case "sub": {
+			const right = evaluateComplexNumerically(node.right, bindings);
+			return add(evaluateComplexNumerically(node.left, bindings), { re: -right.re, im: -right.im });
+		}
+		case "mul":
+			return mul(evaluateComplexNumerically(node.left, bindings), evaluateComplexNumerically(node.right, bindings));
+		case "div": {
+			const a = evaluateComplexNumerically(node.left, bindings);
+			const b = evaluateComplexNumerically(node.right, bindings);
+			const denominator = b.re * b.re + b.im * b.im;
+			return { re: (a.re * b.re + a.im * b.im) / denominator, im: (a.im * b.re - a.re * b.im) / denominator };
+		}
+		case "pow": {
+			const base = evaluateComplexNumerically(node.base, bindings);
+			const exponent = evaluateComplexNumerically(node.exponent, bindings);
+			// Only an integer exponent is needed here, which repeated multiplication
+			// handles exactly enough for a verification check.
+			let result = { re: 1, im: 0 };
+			for (let i = 0; i < Math.abs(exponent.re); i++) result = mul(result, base);
+			if (exponent.re < 0) {
+				const denominator = result.re * result.re + result.im * result.im;
+				return { re: result.re / denominator, im: -result.im / denominator };
+			}
+			return result;
+		}
+		case "call": {
+			const argument = evaluateComplexNumerically(node.args[0], bindings);
+			if (node.name === "sqrt" && argument.im === 0) {
+				return argument.re >= 0 ? { re: Math.sqrt(argument.re), im: 0 } : { re: 0, im: Math.sqrt(-argument.re) };
+			}
+			if (argument.im !== 0) throw new Error(`no complex numeric form for "${node.name}"`);
+			return { re: evaluateNumerically(node, bindings), im: 0 };
+		}
+	}
+}

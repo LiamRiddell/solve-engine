@@ -125,14 +125,21 @@ describe("documented limitations behave as documented", () => {
 		expect(evaluate("factor(x^2+1)")).toBe("x^2+1");
 	});
 
-	test("a negative discriminant reports no real solutions", () => {
-		expect(evaluate("solve(x^2+1=0, x)")).toMatch(/no real solutions/);
+	test("a negative discriminant returns the complex pair", () => {
+		expect(evaluate("solve(x^2+1=0, x)")).toBe("= [-i, i]");
 	});
 
-	test("multivariate factoring stops after the shared parts", () => {
-		// Not `(x+y)^2`. Beyond content and common-monomial extraction this does
-		// not attempt multivariate factoring, and says so rather than guessing.
-		expect(evaluate("factor(x^2+2x*y+y^2)")).toBe("x^2+2x*y+y^2");
+	test("multivariate factoring recognises the standard shapes", () => {
+		// A perfect-square trinomial and a difference of squares are patterns, not
+		// a general multivariate algorithm. See MultivariateFactor.ts.
+		expect(evaluate("factor(x^2+2x*y+y^2)")).toBe("(x+y)^2");
+		expect(evaluate("factor(x^2-y^2)")).toBe("(x-y)*(x+y)");
+	});
+
+	test("multivariate factoring stops after the shared parts when no pattern matches", () => {
+		// Not a perfect square, and it does not factor over the rationals at all,
+		// so this stops rather than guessing.
+		expect(evaluate("factor(x^2+3x*y+y^2)")).toBe("x^2+3x*y+y^2");
 	});
 
 	test("a rational function is left alone by expand", () => {

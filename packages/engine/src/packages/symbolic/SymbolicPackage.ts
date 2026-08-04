@@ -6,6 +6,13 @@ import { DerParselet } from "./parselets/DerParselet";
 import { IntegralParselet } from "./parselets/IntegralParselet";
 import { TaylorParselet } from "./parselets/TaylorParselet";
 import { JacobianParselet } from "./parselets/JacobianParselet";
+import { ImaginaryParselet } from "./parselets/ImaginaryParselet";
+import { ConjParselet } from "./parselets/ConjParselet";
+import { ReParselet } from "./parselets/ReParselet";
+import { ImParselet } from "./parselets/ImParselet";
+import { CancelParselet } from "./parselets/CancelParselet";
+import { ApartParselet } from "./parselets/ApartParselet";
+import { imaginaryLiteralNormalizerRule } from "./normalizer/ImaginaryLiteralNormalizerRule";
 import { symbolicCallNormalizerRule } from "./normalizer/SymbolicCallNormalizerRule";
 import {
 	SYMBOLIC_BUILTIN_EXPAND,
@@ -15,6 +22,11 @@ import {
 	SYMBOLIC_BUILTIN_INTEGRAL,
 	SYMBOLIC_BUILTIN_TAYLOR,
 	SYMBOLIC_BUILTIN_JACOBIAN,
+	SYMBOLIC_BUILTIN_CONJ,
+	SYMBOLIC_BUILTIN_RE,
+	SYMBOLIC_BUILTIN_IM,
+	SYMBOLIC_BUILTIN_CANCEL,
+	SYMBOLIC_BUILTIN_APART,
 } from "./SymbolicBuiltinIndex";
 
 /**
@@ -100,6 +112,46 @@ export const SYMBOLIC_FUNCTIONS: readonly SymbolicFunctionSurface[] = [
 		expected: "= [y, x; 1, 1]",
 		docPage: "calculus.md",
 	},
+	{
+		word: "conj",
+		tokenType: "CONJ_FN",
+		builtinIndex: SYMBOLIC_BUILTIN_CONJ,
+		example: "conj(2+3i)",
+		expected: "2-3i",
+		docPage: "complex.md",
+	},
+	{
+		word: "re",
+		tokenType: "RE_FN",
+		builtinIndex: SYMBOLIC_BUILTIN_RE,
+		example: "re(2+3i)",
+		expected: "= 2",
+		docPage: "complex.md",
+	},
+	{
+		word: "im",
+		tokenType: "IM_FN",
+		builtinIndex: SYMBOLIC_BUILTIN_IM,
+		example: "im(2+3i)",
+		expected: "= 3",
+		docPage: "complex.md",
+	},
+	{
+		word: "cancel",
+		tokenType: "CANCEL_FN",
+		builtinIndex: SYMBOLIC_BUILTIN_CANCEL,
+		example: "cancel((x^2-1)/(x-1))",
+		expected: "x+1",
+		docPage: "algebra.md",
+	},
+	{
+		word: "apart",
+		tokenType: "APART_FN",
+		builtinIndex: SYMBOLIC_BUILTIN_APART,
+		example: "apart((3x+5)/(x^2-1))",
+		expected: "4/(x-1)-1/(x+1)",
+		docPage: "algebra.md",
+	},
 ];
 
 /**
@@ -115,7 +167,7 @@ export const SYMBOLIC_FUNCTIONS: readonly SymbolicFunctionSurface[] = [
  */
 export const SYMBOLIC_PACKAGE: IEnginePackage = {
 	name: "solve-symbolic",
-	normalizerRules: [symbolicCallNormalizerRule()],
+	normalizerRules: [symbolicCallNormalizerRule(), imaginaryLiteralNormalizerRule()],
 	prefixParselets: [
 		{ tokenType: "EXPAND_FN", parselet: new ExpandParselet() },
 		{ tokenType: "FACTOR_FN", parselet: new FactorParselet() },
@@ -124,6 +176,12 @@ export const SYMBOLIC_PACKAGE: IEnginePackage = {
 		{ tokenType: "INTEGRAL_FN", parselet: new IntegralParselet() },
 		{ tokenType: "TAYLOR_FN", parselet: new TaylorParselet() },
 		{ tokenType: "JACOBIAN_FN", parselet: new JacobianParselet() },
+		{ tokenType: "IMAGINARY", parselet: new ImaginaryParselet() },
+		{ tokenType: "CONJ_FN", parselet: new ConjParselet() },
+		{ tokenType: "RE_FN", parselet: new ReParselet() },
+		{ tokenType: "IM_FN", parselet: new ImParselet() },
+		{ tokenType: "CANCEL_FN", parselet: new CancelParselet() },
+		{ tokenType: "APART_FN", parselet: new ApartParselet() },
 	],
 	tokenCategories: {
 		EXPAND_FN: "keyword",
@@ -133,6 +191,12 @@ export const SYMBOLIC_PACKAGE: IEnginePackage = {
 		INTEGRAL_FN: "keyword",
 		TAYLOR_FN: "keyword",
 		JACOBIAN_FN: "keyword",
+		IMAGINARY: "number",
+		CONJ_FN: "keyword",
+		RE_FN: "keyword",
+		IM_FN: "keyword",
+		CANCEL_FN: "keyword",
+		APART_FN: "keyword",
 	},
 };
 

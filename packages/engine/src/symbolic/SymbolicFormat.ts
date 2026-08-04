@@ -12,6 +12,7 @@
 
 import type { SymbolicNode } from "@solve-js/symbolic/SymbolicNode";
 import { type Rational, formatRational } from "@solve-js/symbolic/Rational";
+import { formatComplex } from "@solve-js/symbolic/Complex";
 
 /** Extracts `{coeff, name}` from a `const*var` or `var*const` shape, or `null` when `node` is not one. */
 function tryExtractCoeffVar(node: SymbolicNode & { kind: "mul" }): { coeff: Rational; name: string } | null {
@@ -50,6 +51,13 @@ function formatFactor(node: SymbolicNode): string {
 	switch (node.kind) {
 		case "const":
 			return formatRational(node.value);
+		case "complex":
+			// Only a value with BOTH parts is a sum, and only a sum needs brackets
+			// inside a product: `(2+3i)*x` but `sqrt(2)*i`. Bracketing every
+			// complex would make the common imaginary-only case read as `(i)`.
+			return node.value.re.n !== 0n && node.value.im.n !== 0n
+				? `(${formatComplex(node.value)})`
+				: formatComplex(node.value);
 		case "var":
 			return node.name;
 		case "add":
@@ -120,8 +128,36 @@ function collectDisplayTerms(node: SymbolicNode, negated: boolean, out: { negate
 			out.push({ negated: isNegative !== negated, text: formatRational(magnitude) });
 			return;
 		}
-		default:
-			out.push({ negated, text: formatFactor(node) });
+		case "complex": {
+			// Split into two display terms so a complex at the top level joins the
+			// surrounding sum naturally: `2+3i` and `-1-2i` rather than a single
+			// bracketed blob. The bracketing in formatFactor is for when a complex
+			// sits inside a product, where it genuinely needs it.
+			const { re, im } = node.value;
+			if (re.n !== 0n) {
+				const negativeReal = re.n < 0n;
+				out.push({ negated: negativeReal !== negated, text: formatRational(negativeReal ? { n: -re.n, d: re.d } : re) });
+			}
+			if (im.n !== 0n) {
+				const negativeImaginary = im.n < 0n;
+				const magnitude = negativeImaginary ? { n: -im.n, d: im.d } : im;
+				const text = magnitude.n === 1n && magnitude.d === 1n ? "i" : `${formatRational(magnitude)}i`;
+				out.push({ negated: negativeImaginary !== negated, text });
+			}
+			return;
+		}
+		default: {
+			const text = formatFactor(node);
+			// A product or quotient whose leading coefficient is negative renders
+			// with the minus already inside it, and joining that to a sum with `+`
+			// gives `0.5*log(x-1)+-0.5*log(x+1)`. Lifting the sign out turns it back
+			// into the subtraction it is. Only these two kinds: for a `pow` a leading
+			// minus belongs to the base rather than to the whole factor, so `-2^2`
+			// must not become a subtracted `2^2`.
+			const liftsSign = (node.kind === "mul" || node.kind === "div") && text.startsWith("-");
+			if (liftsSign) out.push({ negated: !negated, text: text.slice(1) });
+			else out.push({ negated, text });
+		}
 	}
 }
 

@@ -19,6 +19,11 @@ export const SYMBOLIC_WORD_TO_TOKEN_TYPE: Readonly<Record<string, string>> = {
 	integral: "INTEGRAL_FN",
 	taylor: "TAYLOR_FN",
 	jacobian: "JACOBIAN_FN",
+	conj: "CONJ_FN",
+	re: "RE_FN",
+	im: "IM_FN",
+	cancel: "CANCEL_FN",
+	apart: "APART_FN",
 };
 
 /**

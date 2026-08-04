@@ -47,6 +47,25 @@ integral(cos(x), x) // sin(x)
 integral(1/x, x) // log(x)
 ```
 
+### Rational functions
+
+Any quotient of polynomials is integrable, and this is the one family where that
+is a guarantee rather than a table lookup. There is no single rule for a
+rational function, so it is first split into
+[partial fractions](/syntax/algebra/), and each of those pieces does have a
+rule: a logarithm, a power, or an arctangent.
+
+```solve
+integral((3x+5)/(x^2-1), x) // 4*log(x-1)-log(x+1)
+integral(x^2/(x^2+1), x) // x-atan(x)
+integral(1/(x-1)^2, x) // -1/(x-1)
+integral(1/(x^2+2x+2), x) // atan(x+1)
+```
+
+The one shape left out is a denominator with a repeated irreducible quadratic
+factor, such as `1/(x^2+1)^2`, which needs a reduction formula rather than the
+three rules above.
+
 ### What integration cannot do
 
 Unlike differentiation, integration has no method that always succeeds. Many
@@ -60,9 +79,10 @@ integral(exp(x^2), x) // Cannot integrate this: no elementary antiderivative is 
 That is deliberate. A wrong integral is indistinguishable from a right one
 wherever it gets used, so reporting the limit is more useful than hiding it.
 
-What is covered: any polynomial, a constant, `1/x` and `1/(1+x^2)`, the standard
-functions `exp`, `sin`, `cos` and `log` applied to a linear argument, sums of
-any of those, and a constant multiple of any of those.
+What is covered: any polynomial, a constant, any rational function whose
+denominator has no repeated irreducible quadratic factor, the standard functions
+`exp`, `sin`, `cos` and `log` applied to a linear argument, sums of any of
+those, and a constant multiple of any of those.
 
 ## Taylor series
 

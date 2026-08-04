@@ -130,6 +130,7 @@ export function differentiate(node: SymbolicNode, variable: string, order = 1): 
 function derive(node: SymbolicNode, variable: string): SymbolicNode {
 	switch (node.kind) {
 		case "const":
+		case "complex":
 			return zero();
 		case "var":
 			return node.name === variable ? one() : zero();

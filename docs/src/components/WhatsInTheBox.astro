@@ -1,0 +1,81 @@
+---
+/**
+ * What the download is made of, as four cells rather than a paragraph.
+ *
+ * This sits directly under the size figure and exists to answer the question
+ * that figure provokes. Ninety-odd kilobytes is a lot for a library, and the
+ * only honest reply is to show that it is not a library. A list of the parts
+ * does that in a glance where a sentence of the same content asks the reader to
+ * hold four clauses in their head and total them up.
+ *
+ * Reuses the `.specs` grid from the "built for editors" band rather than
+ * growing a second card style. The cell numbers there come from a CSS counter,
+ * so a second grid on the page numbers itself from one with nothing to keep in
+ * sync by hand.
+ *
+ * The package count is read from the collected stats rather than typed, for the
+ * same reason every other number on this page is: the claim is checkable, and a
+ * hand-typed count is wrong by the next package.
+ */
+import stats from "../data/testStats.json";
+---
+
+<div class="band not-content">
+  <div class="band__inner">
+    <div class="band__head">
+      <span class="band__eyebrow">What's in the box</span>
+      <h2 class="band__title">A language, not a maths helper.</h2>
+    </div>
+
+    <div class="specs">
+      <div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="4" cy="12" r="1.8" />
+          <circle cx="9.33" cy="12" r="1.8" />
+          <circle cx="14.67" cy="12" r="1.8" />
+          <circle cx="20" cy="12" r="1.8" />
+          <path d="M5.8 12h1.73M11.13 12h1.74M16.47 12h1.73" />
+        </svg>
+        <h3>A real front end</h3>
+        <p>A lexer, a Pratt parser, a bytecode compiler and a virtual machine. Text goes in one end and instructions come out the other.</p>
+      </div>
+      <div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 5v15M8 20h8" />
+          <path d="M4.5 8.5h15" />
+          <path d="M4.5 8.5 2 14h5Z" />
+          <path d="M19.5 8.5 17 14h5Z" />
+        </svg>
+        <h3>Quantities, not numbers</h3>
+        <p>Units with dimensional analysis, currencies, dates, times and timezones. The kind that refuse to be added when they should not be.</p>
+      </div>
+      <div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 4H5.5v16H8" />
+          <path d="M16 4h2.5v16H16" />
+          <circle cx="10" cy="9.5" r="1.05" />
+          <circle cx="14" cy="9.5" r="1.05" />
+          <circle cx="10" cy="14.5" r="1.05" />
+          <circle cx="14" cy="14.5" r="1.05" />
+        </svg>
+        <h3>Matrices and models</h3>
+        <p>Matrix arithmetic with determinants and inverses, statistics over ranges, and the finance functions people actually reach for.</p>
+      </div>
+      <div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 4v16h16" />
+          <path d="M7 17.5c2.6 0 2.9-10 6-10 2.6 0 3.4 5.5 5.5 5.5" />
+        </svg>
+        <h3>A computer-algebra system</h3>
+        <p>Factors, differentiates, integrates and solves, over exact rational and complex arithmetic rather than floating point.</p>
+      </div>
+    </div>
+
+    <p class="band__note">
+      That is {stats.builtinPackages} built-in packages, all of it inside the figure
+      above and none of it fetched at runtime. Nothing here is an optional extra
+      you install afterwards, and nothing here calls out to a service to do the
+      work.
+    </p>
+  </div>
+</div>

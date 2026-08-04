@@ -26,7 +26,7 @@ import { differentiate } from "@solve-js/symbolic/Derivative";
 import { integrate } from "@solve-js/symbolic/Integral";
 import { taylorSeries } from "@solve-js/symbolic/Taylor";
 import { RATIONAL_ZERO, rational } from "@solve-js/symbolic/Rational";
-import { poly, evaluateNumerically, seededInts } from "@tools/symbolicTestUtils";
+import { poly, evaluateNumerically, evaluateComplexNumerically, seededInts } from "@tools/symbolicTestUtils";
 
 const x = varNode("x");
 const y = varNode("y");
@@ -296,9 +296,16 @@ describe("solving is verified by substitution", () => {
 			if (outcome.kind !== "roots") continue;
 			for (const root of outcome.exact) {
 				const substituted = simplifySymbolic(substitute(p, "x", root));
-				// A rational root vanishes exactly; a surd needs the numeric check.
-				if (substituted.kind === "const") expect(substituted.value.n).toBe(0n);
-				else expect(evaluateNumerically(substituted, {})).toBeCloseTo(0, 8);
+				// A rational root vanishes exactly. A surd or a complex root leaves
+				// an expression the simplifier cannot fully reduce, so it is checked
+				// over the complex plane: both parts must be zero.
+				if (substituted.kind === "const") {
+					expect(substituted.value.n).toBe(0n);
+				} else {
+					const value = evaluateComplexNumerically(substituted, {});
+					expect(value.re).toBeCloseTo(0, 8);
+					expect(value.im).toBeCloseTo(0, 8);
+				}
 				checked++;
 			}
 		}

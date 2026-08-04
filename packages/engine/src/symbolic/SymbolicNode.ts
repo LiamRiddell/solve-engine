@@ -25,6 +25,8 @@
 
 import type { Rational } from "@solve-js/symbolic/Rational";
 import { rationalFromNumber } from "@solve-js/symbolic/Rational";
+import type { Complex } from "@solve-js/symbolic/Complex";
+import { complexEquals } from "@solve-js/symbolic/Complex";
 
 /**
  * A symbolic (algebraic) expression tree.
@@ -34,6 +36,7 @@ import { rationalFromNumber } from "@solve-js/symbolic/Rational";
  */
 export type SymbolicNode =
 	| { kind: "const"; value: Rational }
+	| { kind: "complex"; value: Complex }
 	| { kind: "var"; name: string }
 	| { kind: "add"; left: SymbolicNode; right: SymbolicNode }
 	| { kind: "sub"; left: SymbolicNode; right: SymbolicNode }
@@ -119,6 +122,8 @@ export function symbolicKey(node: SymbolicNode): string {
 	switch (node.kind) {
 		case "const":
 			return `${node.value.n}/${node.value.d}`;
+		case "complex":
+			return `C(${node.value.re.n}/${node.value.re.d},${node.value.im.n}/${node.value.im.d})`;
 		case "var":
 			return `v:${node.name}`;
 		case "neg":
@@ -153,6 +158,8 @@ export function nodesEqual(a: SymbolicNode, b: SymbolicNode): boolean {
 			const other = b as typeof a;
 			return a.value.n === other.value.n && a.value.d === other.value.d;
 		}
+		case "complex":
+			return complexEquals(a.value, (b as typeof a).value);
 		case "var":
 			return a.name === (b as typeof a).name;
 		case "neg":
@@ -202,6 +209,7 @@ export function nodeCount(node: SymbolicNode, limit = Number.POSITIVE_INFINITY):
 		if (total > limit) return total;
 		switch (current.kind) {
 			case "const":
+			case "complex":
 			case "var":
 				break;
 			case "neg":
@@ -241,6 +249,7 @@ export function freeVariables(node: SymbolicNode): ReadonlySet<string> {
 function collectVariables(node: SymbolicNode, into: Set<string>): void {
 	switch (node.kind) {
 		case "const":
+		case "complex":
 			return;
 		case "var":
 			into.add(node.name);
@@ -275,6 +284,7 @@ function collectVariables(node: SymbolicNode, into: Set<string>): void {
 export function substitute(node: SymbolicNode, variable: string, replacement: SymbolicNode): SymbolicNode {
 	switch (node.kind) {
 		case "const":
+		case "complex":
 			return node;
 		case "var":
 			return node.name === variable ? replacement : node;
@@ -298,4 +308,19 @@ export function substitute(node: SymbolicNode, variable: string, replacement: Sy
 				right: substitute(node.right, variable, replacement),
 			};
 	}
+}
+
+/**
+ * A complex literal in a symbolic expression.
+ *
+ * Collapses to an ordinary real constant when the imaginary part is zero, so
+ * `(1+i)*(1-i)` reads as `2` rather than `2+0i`. That collapse is why callers
+ * should build complex values through here rather than as an object literal.
+ *
+ * @param value - The exact complex value.
+ * @returns A complex node, or a `const` node when the value is really real.
+ */
+export function complexNode(value: Complex): SymbolicNode {
+	if (value.im.n === 0n) return { kind: "const", value: value.re };
+	return { kind: "complex", value };
 }

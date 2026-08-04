@@ -55,8 +55,8 @@ describe("storing a scalar equation, then solving it", () => {
 		expect(last(["x^2-2 = 0", "x =>"])).toBe("= [-sqrt(2), sqrt(2)]");
 	});
 
-	test("no real solutions is reported, not invented", () => {
-		expect(last(["x^2+1 = 0", "x =>"])).toMatch(/no real solutions/);
+	test("a quadratic with complex roots returns them", () => {
+		expect(last(["x^2+1 = 0", "x =>"])).toBe("= [-i, i]");
 	});
 
 	test("redefining the equation replaces it", () => {

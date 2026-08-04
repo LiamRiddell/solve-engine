@@ -5,10 +5,13 @@ import { transpose, determinant, inverse, matrixMultiply, symbolicToEntry, rowMa
 import { symbolicToValue, valueToSymbolic, solveEquationValues } from "@solve-js/vm/SymbolicOps";
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
 import { factorSymbolic } from "@solve-js/symbolic/Factor";
+import { cancelSymbolic } from "@solve-js/symbolic/Gcd";
+import { apartSymbolic } from "@solve-js/symbolic/PartialFractions";
 import { differentiate } from "@solve-js/symbolic/Derivative";
 import { integrate } from "@solve-js/symbolic/Integral";
 import { taylorSeries, jacobian } from "@solve-js/symbolic/Taylor";
-import { freeVariables, type SymbolicNode } from "@solve-js/symbolic";
+import { freeVariables, callNode, constNode, complexNode, complex as complexValue, type SymbolicNode } from "@solve-js/symbolic";
+import { RATIONAL_ZERO, rationalFromNumber } from "@solve-js/symbolic/Rational";
 // Type-only, VM.ts imports pluginFunctionRegistry FROM this file, so a
 // runtime import the other direction would be circular; `import type` is
 // erased before compilation and doesn't create that problem.
@@ -51,7 +54,14 @@ function toBinPrefixedString(n: number): string {
  */
 export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // ── Populated below ──
-    0: (args) => numberValue(Math.sqrt(args[0].toNumber())),
+    // sqrt: a negative argument has a complex answer now that there is a complex
+    // number to give, so this no longer quietly returns NaN. The exact path runs
+    // first, so sqrt(-4) is 2i rather than an approximation.
+    0: (args) => {
+        const value = args[0].toNumber();
+        if (value >= 0) return numberValue(Math.sqrt(value));
+        return symbolicToValue(callNode("sqrt", [constNode(value)]));
+    },
     // abs(a): for a Matrix, "|a|" (Calca's determinant-pipe notation) is a
     // valid alias for det(a) (index 64), reusing the SAME implementation
     // not a separate one. Plain-number abs is unaffected.
@@ -585,7 +595,41 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         }
         return matrixValue(rows.length, sorted.length, rowMajorToColumnMajor(rows.length, sorted.length, rowMajor));
     },
+    // An imaginary literal, 3i. The parselet pushes the numeric part and this
+    // turns it into an exact imaginary value.
+    74: (args) => symbolicToValue(complexNode(complexValue(RATIONAL_ZERO, rationalFromNumber(args[0].toNumber())))),
+    // conj(z), re(z) and im(z). Each folds immediately for a literal and stays
+    // symbolic for anything still carrying an unknown.
+    75: (args) => applyComplexAccessor("conj", args[0]),
+    76: (args) => applyComplexAccessor("re", args[0]),
+    77: (args) => applyComplexAccessor("im", args[0]),
+    // cancel(expr), reducing a quotient of polynomials to lowest terms.
+    78: (args) => {
+        const value = args[0];
+        if (value.type !== ValueType.Symbolic) return value;
+        return symbolicToValue(cancelSymbolic(value.value as SymbolicNode));
+    },
+    // apart(expr), the partial-fraction decomposition of a rational function.
+    79: (args) => {
+        const value = args[0];
+        if (value.type !== ValueType.Symbolic) return value;
+        return symbolicToValue(apartSymbolic(value.value as SymbolicNode));
+    },
 };
+
+/**
+ * Applies one of the complex accessors to a value.
+ *
+ * @param name - The accessor name, matching what the simplifier folds.
+ * @param value - The argument.
+ * @returns The folded result, or the call left symbolic when the argument still
+ * contains an unknown.
+ */
+function applyComplexAccessor(name: string, value: Value): Value {
+    const node = valueToSymbolic(value);
+    if (node === null) return errorValue("SYMBOLIC_NONFINITE_OPERAND", name + " needs a value with an exact number.");
+    return symbolicToValue(callNode(name, [node]));
+}
 
 /**
  * Reads the variable-name argument the algebra verbs push as a String.

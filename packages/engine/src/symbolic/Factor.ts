@@ -49,6 +49,7 @@ import {
 	polyUnivariateVar,
 	polyCoefficients,
 } from "@solve-js/symbolic/Polynomial";
+import { factorMultivariate } from "@solve-js/symbolic/MultivariateFactor";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
@@ -356,9 +357,11 @@ function monomialNode(monomial: Map<string, number>): SymbolicNode | null {
  * 2. Pull out the rational content, the shared factor across all coefficients.
  * 3. Pull out the highest power of each variable dividing every term, so
  *    `2x^2+4x` becomes `2x*(x+2)`.
- * 4. **Stop if more than one variable remains.** Multivariate factoring beyond
- *    content and common-monomial extraction is not attempted, rather than
- *    half-attempted.
+ * 4. If more than one variable remains, hand off to
+ *    {@link factorMultivariate}'s pattern set: a difference of squares, a sum
+ *    or difference of cubes, a perfect-square trinomial, or four terms that
+ *    group. Anything it declines stops here, with the content and common
+ *    monomial extracted and nothing guessed at beyond them.
  * 5. Extract rational roots by the rational-root theorem, dividing each out
  *    with its multiplicity.
  * 6. Leave whatever survives as one irreducible-over-the-rationals factor.
@@ -388,8 +391,11 @@ export function factorSymbolic(node: SymbolicNode): SymbolicNode {
 
 	const variable = polyUnivariateVar(reduced);
 	if (variable === null) {
-		// Constant remainder, or genuinely multivariate. Either way there is
-		// nothing further this module attempts.
+		// Constant remainder, or genuinely multivariate. The pattern set in
+		// `MultivariateFactor.ts` covers the shapes a person actually writes;
+		// anything it declines stops at the content and common monomial.
+		const patterned = factorMultivariate(reduced);
+		if (patterned !== null) return assemble(content, monomialFactor, patterned);
 		const pieces = buildPieces(content, monomialFactor, reduced);
 		return pieces ?? node;
 	}
@@ -424,6 +430,26 @@ function scaleTerms(p: Polynomial, k: Rational): Polynomial {
 	const terms = new Map<string, Rational>();
 	for (const [key, coeff] of p.terms) terms.set(key, rationalMul(coeff, k));
 	return { terms, vars: p.vars };
+}
+
+/**
+ * Multiplies an already-factored remainder back together with the content and
+ * common monomial that were pulled off before it.
+ *
+ * @param content - The rational content, left off when it is one.
+ * @param monomialFactor - The common monomial, or `null` when there was none.
+ * @param factored - The factored remainder.
+ * @returns The whole factorization as one expression.
+ */
+function assemble(content: Rational, monomialFactor: SymbolicNode | null, factored: SymbolicNode): SymbolicNode {
+	const pieces: SymbolicNode[] = [];
+	if (!isRationalOne(content)) pieces.push(constNode(content));
+	if (monomialFactor !== null) pieces.push(monomialFactor);
+	pieces.push(factored);
+
+	let result = pieces[0];
+	for (let i = 1; i < pieces.length; i++) result = { kind: "mul", left: result, right: pieces[i] };
+	return result;
 }
 
 /** Assembles the content, common monomial and remainder for the multivariate stop case, or `null` when nothing was extracted. */

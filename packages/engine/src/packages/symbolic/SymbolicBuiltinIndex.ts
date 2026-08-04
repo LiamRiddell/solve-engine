@@ -32,3 +32,22 @@ export const SYMBOLIC_BUILTIN_TAYLOR = 72;
 
 /** `jacobian(f1, f2, ...)`, variadic. */
 export const SYMBOLIC_BUILTIN_JACOBIAN = 73;
+
+/** An imaginary literal such as `3i`, see `packages/symbolic/parselets/ImaginaryParselet.ts`. */
+export const SYMBOLIC_BUILTIN_IMAGINARY = 74;
+
+/** `conj(z)`, the complex conjugate. */
+export const SYMBOLIC_BUILTIN_CONJ = 75;
+
+/** `re(z)`, the real part. */
+export const SYMBOLIC_BUILTIN_RE = 76;
+
+/** `im(z)`, the imaginary part. */
+export const SYMBOLIC_BUILTIN_IM = 77;
+
+/** `cancel(expr)`, reducing a quotient of polynomials to lowest terms. */
+export const SYMBOLIC_BUILTIN_CANCEL = 78;
+
+/** `apart(expr)`, the partial-fraction decomposition of a rational function. */
+export const SYMBOLIC_BUILTIN_APART = 79;
+
