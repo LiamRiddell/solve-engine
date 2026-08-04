@@ -12,7 +12,11 @@
  */
 
 .notepad-host {
-  --np-row: 1.75rem;
+  /* The row height, and so the whole notepad's height. It was 1.75rem, which is
+     double leading on 14px text: airy enough that a fourteen-line document
+     needed most of a viewport, and loose enough that a column of expressions
+     stopped reading as one block. */
+  --np-row: 1.375rem;
   /* Wide enough for a fully spelled out date ("Wednesday, September 23, 2026"),
      which is the longest thing the formatter emits. */
   --np-answer-width: 17rem;
@@ -57,7 +61,7 @@
 
 .notepad__lines {
   overflow-x: auto;
-  padding: 0.875rem 0;
+  padding: 0.625rem 0;
 }
 
 .notepad__content {
@@ -91,7 +95,7 @@
 .notepad__answers {
   border-inline-start: 1px solid var(--border);
   background: none;
-  padding-block: 0.875rem;
+  padding-block: 0.625rem;
 }
 
 .notepad__answer {

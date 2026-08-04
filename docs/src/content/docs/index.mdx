@@ -18,20 +18,22 @@ import HighlightLegend from '../../components/HighlightLegend.astro';
 import stats from '../../data/testStats.json';
 
 <div class="band band--tight not-content">
-  <HeroActions />
+  <div class="band__inner">
+    <HeroActions />
 
-  <div class="install">
-    <div class="install__cmd">
-      <span class="install__prompt" aria-hidden="true">$</span>
-      <code>npm install solve-engine</code>
+    <div class="install">
+      <div class="install__cmd">
+        <span class="install__prompt" aria-hidden="true">$</span>
+        <code>npm install solve-engine</code>
+      </div>
+      <ul class="install__specs">
+        <li>MIT</li>
+        <li>{stats.runtimeDependencies} runtime dependencies</li>
+        <li>{stats.subpathExports} subpath exports</li>
+        <li>Node, browser and worker</li>
+        <li>TypeScript types included</li>
+      </ul>
     </div>
-    <ul class="install__specs">
-      <li>MIT</li>
-      <li>{stats.runtimeDependencies} runtime dependencies</li>
-      <li>{stats.subpathExports} subpath exports</li>
-      <li>Node, browser and worker</li>
-      <li>TypeScript types included</li>
-    </ul>
   </div>
 </div>
 

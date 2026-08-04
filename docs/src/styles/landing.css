@@ -43,6 +43,8 @@
    no tinted panel anywhere on this page: sections are separated by a hairline
    and by the space around them, never by a change of shade. */
 [data-has-hero] .band {
+  /* The one content width on this page. See `.band__inner`. */
+  --band-max: 78rem;
   padding-block: clamp(3.5rem, 9vh, 7rem);
   padding-inline: clamp(1rem, 4vw, 3rem);
 }
@@ -55,20 +57,30 @@
   padding-block: clamp(2rem, 5vh, 3.5rem);
 }
 
+/*
+ * The band is full bleed and its content is not. That is what "full width"
+ * means here: the section owns the whole viewport so a background or a rule
+ * could run edge to edge, while the content inside stops at one width and stays
+ * there however wide the monitor gets.
+ *
+ * This is the only width constraint on the page, and that is the point. There
+ * were seven at one stage: 78rem here, 92rem on the showcase, 52rem on every
+ * heading block, 48rem in the Oyren panel, and three more on individual
+ * paragraphs. Each was defensible on its own and together they meant the left
+ * edge of the content moved seven times on the way down the page.
+ *
+ * So nothing nested inside declares its own. If something needs to be narrower
+ * than the column, that is a reason to look at the column.
+ */
 [data-has-hero] .band__inner {
-  max-width: 78rem;
+  max-width: var(--band-max);
   margin-inline: auto;
-}
-
-[data-has-hero] .band__inner--narrow {
-  max-width: 46rem;
 }
 
 /* Apple sets the heading block centred and the detail beneath it left. The
    centred variant is the default here for the same reason: it makes a long
    page scan as a sequence of statements. */
 [data-has-hero] .band__head {
-  max-width: 52rem;
   margin-inline: auto;
   margin-bottom: clamp(1.75rem, 4vh, 3rem);
   text-align: center;
@@ -186,6 +198,18 @@
 }
 
 /* Oyren's button keeps Oyren's colours, in both themes. */
+/*
+ * Every button in the hero is the same height, declared rather than left to
+ * come out of padding and line-height agreeing. They did agree, at 41px, but a
+ * bordered button beside a filled one reads taller than it measures, and any
+ * later change to the wordmark's size or the label's leading would have made
+ * the difference real rather than optical.
+ */
+[data-has-hero] .hero-actions .sl-link-button {
+  min-height: 2.5625rem;
+  box-sizing: border-box;
+}
+
 [data-has-hero] .btn-oyren {
   gap: 0.625rem;
   border-color: rgb(252 252 254 / 0.16);
@@ -203,6 +227,10 @@
   display: block;
   width: auto;
   height: 0.9375rem;
+  /* Belt and braces: an image that failed to load falls back to its alt text
+     at whatever size that is, and would otherwise be the one thing able to
+     push this button past its neighbours. */
+  max-height: 0.9375rem;
   /* The wordmark is the last thing on the line, so it wants the optical
      baseline of the text beside it rather than the box centre. */
   transform: translateY(0.5px);
@@ -268,11 +296,13 @@
 /* One column on a phone, two on a tablet, four on a desktop. Two 170px cells
    side by side on a 375px screen left each heading breaking across three lines,
    which is not a saving. */
+/* The 1px gaps still rule the cells apart from each other, because those are
+   edges between real things. The outer border is gone: it boxed the section,
+   and a boxed section reads as a divider. */
 [data-has-hero] .specs {
   display: grid;
   grid-template-columns: 1fr;
   gap: 1px;
-  border: 1px solid var(--border);
   background-color: var(--border);
   counter-reset: spec;
 }
@@ -375,8 +405,11 @@
 /* The showcase gets more of the viewport than the reading-width bands do. It
    is two columns of its own, and the left one holds live expressions that
    should not have to scroll sideways to be read. */
+/* The showcase used to be 14rem wider than everything else, which read as the
+   page losing its alignment rather than as emphasis. It keeps the modifier so
+   the markup does not have to change, and now keeps the page's width. */
 [data-has-hero] .band--wide .band__inner {
-  max-width: 92rem;
+  max-width: var(--band-max);
 }
 
 [data-has-hero] .showcase__head {
@@ -471,8 +504,11 @@
   color: var(--primary);
 }
 
+/* Rows keep the hairline between them, which separates one example from the
+   next. The frame around the whole list does not, for the same reason the
+   specs grid lost its. */
 [data-has-hero] .showcase__rows {
-  border: 1px solid var(--border);
+  border: none;
 }
 
 [data-has-hero] .showcase__row {
@@ -671,7 +707,7 @@
 }
 
 .oyren__inner {
-  max-width: 48rem;
+  max-width: var(--band-max, 78rem);
   margin-inline: auto;
 }
 
@@ -693,7 +729,6 @@
 
 .oyren__body {
   margin: 1.25rem auto 0;
-  max-width: 44rem;
   color: rgb(252 252 254 / 0.68);
   font-size: clamp(1rem, 1.3vw, 1.1875rem);
   line-height: 1.65;
@@ -789,7 +824,6 @@
 
 [data-has-hero] .stats-band__lede {
   margin: 1.5rem auto 0;
-  max-width: 34rem;
   color: var(--muted-foreground);
   font-size: clamp(1rem, 1.3vw, 1.1875rem);
   line-height: 1.6;
@@ -800,9 +834,9 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
   gap: clamp(1.75rem, 4vw, 3.5rem);
-  margin: clamp(2.5rem, 6vh, 4.5rem) 0 0;
-  border-top: 1px solid var(--border);
-  padding-top: clamp(1.75rem, 4vh, 2.75rem);
+  /* No rule here. It ran the width of the section and read as a divider
+     between sections rather than as part of one. The space does the work. */
+  margin: clamp(3.5rem, 8vh, 5.5rem) 0 0;
   text-align: start;
 }
 
@@ -828,7 +862,6 @@
 
 [data-has-hero] .stats-band__note {
   margin: clamp(2rem, 5vh, 3rem) auto 0;
-  max-width: 44rem;
   color: var(--faint);
   font-size: var(--sl-text-sm);
   line-height: 1.65;
@@ -861,10 +894,14 @@
 
 /* Belt and braces. Nothing on this page is allowed to widen the document: a
    band that overflows takes the header and every other band with it, and the
-   symptom shows up nowhere near the cause. */
+   symptom shows up nowhere near the cause.
+
+   Deliberately only `overflow-x` now. This rule used to set `max-width: 100%`
+   as well, which sits later in the file than `.band__inner`'s own max-width and
+   at equal specificity, so it silently replaced the reading width with the full
+   viewport. The bands had been spanning the whole page ever since. */
 [data-has-hero] .band,
 [data-has-hero] .band__inner {
-  max-width: 100%;
   overflow-x: clip;
 }
 
@@ -907,7 +944,6 @@
 
 [data-has-hero] .size-band__lede {
   margin: 1.5rem auto 0;
-  max-width: 38rem;
   color: var(--muted-foreground);
   font-size: clamp(1rem, 1.3vw, 1.1875rem);
   line-height: 1.6;
@@ -918,9 +954,8 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
   gap: clamp(1.75rem, 4vw, 3.5rem);
-  margin: clamp(2.5rem, 6vh, 4rem) 0 0;
-  border-top: 1px solid var(--border);
-  padding-top: clamp(1.75rem, 4vh, 2.75rem);
+  /* As on the correctness band: no rule, more space. */
+  margin: clamp(3.5rem, 8vh, 5rem) 0 0;
   text-align: start;
 }
 
@@ -946,7 +981,6 @@
 
 [data-has-hero] .size-band__note {
   margin: clamp(2rem, 5vh, 3rem) auto 0;
-  max-width: 46rem;
   color: var(--faint);
   font-size: var(--sl-text-sm);
   line-height: 1.65;
