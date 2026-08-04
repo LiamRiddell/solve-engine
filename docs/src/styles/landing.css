@@ -199,15 +199,28 @@
 
 /* Oyren's button keeps Oyren's colours, in both themes. */
 /*
- * Every button in the hero is the same height, declared rather than left to
- * come out of padding and line-height agreeing. They did agree, at 41px, but a
- * bordered button beside a filled one reads taller than it measures, and any
- * later change to the wordmark's size or the label's leading would have made
- * the difference real rather than optical.
+ * Every button in the hero is exactly one height, and it is set rather than
+ * arrived at.
+ *
+ * A `min-height` was not enough. It made them equal at the time and left the
+ * height still a product of padding, line-height and whatever the tallest child
+ * happened to be, so the Oyren button's wordmark and the docs button's arrow
+ * were each free to change it. These are single-line buttons with short labels,
+ * so a fixed height costs nothing and removes the question.
+ *
+ * The filled and the outlined button still read slightly differently at a
+ * glance, because a visible border carries weight a solid fill does not. That
+ * is the border doing its job, not a size difference.
  */
 [data-has-hero] .hero-actions .sl-link-button {
-  min-height: 2.5625rem;
+  height: 2.5625rem;
   box-sizing: border-box;
+  /* Nothing inside gets to push the box around. */
+  line-height: 1;
+}
+
+[data-has-hero] .hero-actions .sl-link-button > * {
+  flex: none;
 }
 
 [data-has-hero] .btn-oyren {
