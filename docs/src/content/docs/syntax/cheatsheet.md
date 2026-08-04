@@ -144,6 +144,13 @@ solve(x^2-4=0, x) // [-2, 2]
 solve(2x+6=0, x) // -3
 ```
 
+An equation with one unknown can also be written on its own line.
+
+```solve
+x^2-4 = 0
+x => // [-2, 2]
+```
+
 ## Calculus
 
 ```solve

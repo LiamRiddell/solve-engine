@@ -174,11 +174,13 @@ values and combine the results" — no symbolic manipulation required.
 - **Phase 4 (✅ shipped 2026-08-04)**: **symbolic** `der()`/`derivative()`/`integral()`/`taylor()`/
   `jacobian()` over an exact expression tree, not the numerical approximation described above.
   `integral()` goes beyond Calca and reports what it cannot integrate rather than approximating.
-- **Phase 5 (✅ mostly shipped 2026-08-04)**: `solve(equation, variable)`, exact by rational-root
+- **Phase 5 (✅ shipped 2026-08-04)**: `solve(equation, variable)`, exact by rational-root
   extraction then the quadratic formula, with an irrational root given as a reduced surd and
-  numerical root-finding retained only as a documented fallback. **Still queued**: the bare
-  `x^2-4=0` then `x =>` stored-scalar-equation form, deferred because its trigger shape collides
-  with the user-function definition grammar (`f(x) = ...`) and with bare assignment.
+  numerical root-finding retained only as a documented fallback. The bare `x^2-4=0` then `x =>`
+  stored form ships too, guarded against the three grammars that already claim a bare `=` (a
+  user-function definition, a bare assignment, and the matrix product chain). A product chain of
+  non-matrix factors now falls back to the scalar solver, so `a*n = 10` with a numeric `a` has an
+  answer instead of reporting "must be a Matrix".
 - **Phase 7 (✅ shipped 2026-08-04, prerequisite for 4 and 5)**: the CAS core
   itself, which no earlier phase accounted for because the numerical path did not need it. Exact
   rational coefficients, `pow` and function-application nodes (whose absence meant `x^2 + 3x + 2 =>`

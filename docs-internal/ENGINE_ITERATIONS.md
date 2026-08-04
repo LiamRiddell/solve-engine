@@ -329,9 +329,16 @@ treated `(x-1)^2` as unfactored and a formatter that rendered `3*(2*x)` as `32x`
 discriminant says "no real solutions" and `x^2+1` stays unfactored), Cardano for a cubic with no
 rational root (its *casus irreducibilis* needs complex intermediates, so those take the documented
 numerical fallback), multivariate factoring beyond content and common-monomial extraction,
-polynomial GCD and rational-function simplification, and the bare `x^2-4=0` then `x =>`
-stored-scalar-equation form, whose trigger shape collides with the user-function definition grammar
-and wants its own pass.
+polynomial GCD and rational-function simplification.
+
+**Late addition, same day**: the bare `x^2-4=0` then `x =>` stored form, initially deferred because
+a bare `=` is already claimed by three shipped grammars and `trySymbolicGrammar` runs before the
+parser, so a pattern match there can swallow a working feature silently. The exclusion that mattered
+was the user-function definition (`f(x) = 2*x`), which reaches the same code path because
+`parseFactorChain` declines it too. Writing its documentation then exposed a real gap in the older
+matrix path: `a*n = 10` with a numeric `a` matched the product-chain shape and reported "must be a
+Matrix" for a line with a perfectly good answer, so a chain now stores both equation kinds and falls
+back to the scalar solver on exactly that error.
 
 **Rode along**: `scripts/bench-baseline.mjs` was missing `--experimental-vm-modules`, which the
 `bench` script passes. mitata is ESM-only and lazily imported, so every measuring suite threw while
