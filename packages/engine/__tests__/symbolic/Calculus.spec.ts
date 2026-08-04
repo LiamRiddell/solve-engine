@@ -13,6 +13,17 @@ import { integrate } from "@solve-js/symbolic/Integral";
 import { taylorSeries, jacobian, TAYLOR_MAX_DEGREE } from "@solve-js/symbolic/Taylor";
 import { simplifySymbolic, formatSymbolic, symbolicKey, constNode, varNode, callNode, powNode, type SymbolicNode } from "@solve-js/symbolic";
 import { RATIONAL_ZERO } from "@solve-js/symbolic/Rational";
+import { poly, evaluateNumerically } from "@tools/symbolicTestUtils";
+
+/** Numerically evaluates an expression with `x` bound to a value. */
+function evaluateAt(node: SymbolicNode, value: number): number {
+	return evaluateNumerically(node, { x: value });
+}
+
+/** Applies a named function numerically, for comparing the derivative table against finite differences. */
+function applyNamed(name: string, value: number): number {
+	return evaluateNumerically(callNode(name, [varNode("t")]), { t: value });
+}
 
 /** Differentiates and renders. */
 function der(node: SymbolicNode, order = 1): string {
@@ -215,38 +226,4 @@ function expectOk(result: ReturnType<typeof integrate>): SymbolicNode {
 	return result.value;
 }
 
-/** Applies a named function numerically, for comparing the derivative table against finite differences. */
-function applyNamed(name: string, value: number): number {
-	const table: Record<string, (v: number) => number> = {
-		sin: Math.sin, cos: Math.cos, tan: Math.tan, exp: Math.exp, log: Math.log,
-		sqrt: Math.sqrt, asin: Math.asin, acos: Math.acos, atan: Math.atan,
-		sinh: Math.sinh, cosh: Math.cosh, tanh: Math.tanh, sign: Math.sign,
-	};
-	const fn = table[name];
-	if (!fn) throw new Error(`no numeric form for ${name}`);
-	return fn(value);
-}
 
-/** Numerically evaluates an expression with `x` bound to a value. */
-function evaluateAt(node: SymbolicNode, value: number): number {
-	switch (node.kind) {
-		case "const":
-			return Number(node.value.n) / Number(node.value.d);
-		case "var":
-			return node.name === "x" ? value : Number.NaN;
-		case "neg":
-			return -evaluateAt(node.operand, value);
-		case "add":
-			return evaluateAt(node.left, value) + evaluateAt(node.right, value);
-		case "sub":
-			return evaluateAt(node.left, value) - evaluateAt(node.right, value);
-		case "mul":
-			return evaluateAt(node.left, value) * evaluateAt(node.right, value);
-		case "div":
-			return evaluateAt(node.left, value) / evaluateAt(node.right, value);
-		case "pow":
-			return Math.pow(evaluateAt(node.base, value), evaluateAt(node.exponent, value));
-		case "call":
-			return applyNamed(node.name, evaluateAt(node.args[0], value));
-	}
-}

@@ -12,22 +12,11 @@ import { solveForVariable, SOLVE_MAX_DEGREE } from "@solve-js/symbolic/Solve";
 import { toPolynomial, polyCoefficients } from "@solve-js/symbolic/Polynomial";
 import { simplifySymbolic, formatSymbolic, constNode, varNode, type SymbolicNode } from "@solve-js/symbolic";
 import { RATIONAL_ZERO, rationalAdd, rationalMul, isRationalZero, type Rational } from "@solve-js/symbolic/Rational";
+import { poly, evaluateNumerically } from "@tools/symbolicTestUtils";
 
-/** Builds a univariate polynomial tree from descending integer coefficients. */
-function poly(descending: number[], variable = "x"): SymbolicNode {
-	let result: SymbolicNode = constNode(0);
-	const degree = descending.length - 1;
-	descending.forEach((coeff, index) => {
-		if (coeff === 0) return;
-		const power = degree - index;
-		let term: SymbolicNode = constNode(coeff);
-		if (power === 1) term = { kind: "mul", left: term, right: varNode(variable) };
-		else if (power > 1) {
-			term = { kind: "mul", left: term, right: { kind: "pow", base: varNode(variable), exponent: constNode(power) } };
-		}
-		result = { kind: "add", left: result, right: term };
-	});
-	return simplifySymbolic(result);
+/** Numerically evaluates a closed-form root, for checking a surd denotes the value it should. */
+function rootValue(node: SymbolicNode): number {
+	return evaluateNumerically(node, {});
 }
 
 /** Solves `expression = 0` for x. */
@@ -80,7 +69,7 @@ describe("solveForVariable — exactness over convenience", () => {
 		// The symbolic form is exact; this checks it denotes what it should.
 		const outcome = solve([1, 0, -2]);
 		if (outcome.kind !== "roots") throw new Error("expected roots");
-		const magnitudes = outcome.exact.map(root => Math.abs(evaluateNumerically(simplifySymbolic(root))));
+		const magnitudes = outcome.exact.map(root => Math.abs(rootValue(simplifySymbolic(root))));
 		for (const magnitude of magnitudes) expect(magnitude).toBeCloseTo(Math.SQRT2, 12);
 	});
 
@@ -211,27 +200,3 @@ function evaluateAscending(ascending: readonly Rational[], x: Rational): Rationa
 	return total;
 }
 
-/** Numerically evaluates a simplified root node, for checking that a surd denotes the value it should. */
-function evaluateNumerically(node: SymbolicNode): number {
-	switch (node.kind) {
-		case "const":
-			return Number(node.value.n) / Number(node.value.d);
-		case "neg":
-			return -evaluateNumerically(node.operand);
-		case "add":
-			return evaluateNumerically(node.left) + evaluateNumerically(node.right);
-		case "sub":
-			return evaluateNumerically(node.left) - evaluateNumerically(node.right);
-		case "mul":
-			return evaluateNumerically(node.left) * evaluateNumerically(node.right);
-		case "div":
-			return evaluateNumerically(node.left) / evaluateNumerically(node.right);
-		case "pow":
-			return Math.pow(evaluateNumerically(node.base), evaluateNumerically(node.exponent));
-		case "call":
-			if (node.name === "sqrt") return Math.sqrt(evaluateNumerically(node.args[0]));
-			throw new Error(`no numeric evaluation for ${node.name}`);
-		case "var":
-			throw new Error("a root should contain no free variable");
-	}
-}

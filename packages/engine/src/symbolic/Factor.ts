@@ -373,6 +373,10 @@ export function factorSymbolic(node: SymbolicNode): SymbolicNode {
 	const polynomial = toPolynomial(node);
 	if (polynomial === null || polynomial.terms.size === 0) return node;
 	if (polyDegree(polynomial) > FACTOR_MAX_DEGREE) return node;
+	// A constant has no factorization in this sense. Splitting an integer into
+	// primes is a different feature, and without this the content-extraction
+	// path below would hand back `12*1`.
+	if (polynomial.vars.length === 0) return node;
 
 	const content = contentOf(polynomial);
 	const primitive = isRationalOne(content)
