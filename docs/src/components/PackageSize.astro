@@ -16,7 +16,8 @@
  * percentage-of-budget reading tells a reader how close the authors are to a
  * line the authors drew themselves, which is a fact about this project's
  * housekeeping rather than about the package. What a reader wants to know is
- * what the kilobytes bought, so that is what this says instead.
+ * what the kilobytes bought, and `WhatsInTheBox.astro` answers that in the band
+ * immediately below this one.
  */
 import sizes from "../data/packageSize.json";
 import stats from "../data/testStats.json";
@@ -47,16 +48,8 @@ const importGap = Math.abs(sizes.importEverythingGzip - sizes.importOneGzip);
     <p class="size-band__lede">
       That is what reaches your users when you import the engine, measured by
       bundling it for real on every commit. It is a lot for a library, and this
-      is not a library: it is a language and its runtime.
-    </p>
-
-    <p class="size-band__body">
-      A lexer, a Pratt parser, a bytecode compiler and a virtual machine. Units
-      with dimensional analysis, currencies, dates, times and timezones.
-      Matrices, statistics and finance. A computer-algebra system that factors,
-      differentiates, integrates and solves over exact rational and complex
-      arithmetic. That is {stats.builtinPackages} built-in packages, all of it in
-      the figure above, none of it fetched at runtime.
+      is not a library: it is a language and its runtime. What that buys is
+      broken down directly below.
     </p>
 
     <dl class="size-band__grid">

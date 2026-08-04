@@ -914,18 +914,6 @@
   text-wrap: pretty;
 }
 
-/* What the size bought. Set narrower and quieter than the lede above it, so the
-   two read as a claim and then its evidence rather than as two competing
-   paragraphs. */
-[data-has-hero] .size-band__body {
-  margin: clamp(1.25rem, 3vh, 1.75rem) auto 0;
-  max-width: 42rem;
-  color: var(--faint);
-  font-size: var(--sl-text-sm);
-  line-height: 1.7;
-  text-wrap: pretty;
-}
-
 [data-has-hero] .size-band__grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
