@@ -25,6 +25,11 @@ jobs:
   release:
     name: Version or publish
     runs-on: ubuntu-24.04
+    # Declared even though trusted publishing needs no secret from here. npm's
+    # trusted publisher config takes an optional environment name, and when one
+    # is registered the OIDC token is only accepted if it came from that
+    # environment. Binding it here is what makes that check mean anything.
+    environment: npm
 
     permissions:
       # Push the version commit and the release tags.
