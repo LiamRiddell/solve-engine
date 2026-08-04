@@ -47,9 +47,9 @@
   padding-inline: clamp(1rem, 4vw, 3rem);
 }
 
-[data-has-hero] .band + .band {
-  border-top: 1px solid var(--border);
-}
+/* No rule between bands. Space is the separator: a hairline every few hundred
+   pixels chops a long page into slabs and fights the whitespace that is doing
+   the work. Sections that genuinely need an edge draw their own. */
 
 [data-has-hero] .band--tight {
   padding-block: clamp(2rem, 5vh, 3.5rem);

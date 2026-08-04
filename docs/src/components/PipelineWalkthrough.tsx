@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useWalkthrough } from "./useWalkthrough";
 import {
   EXAMPLES,
   STAGES,
@@ -31,20 +32,6 @@ const STAGE_MS = 5200;
 
 /** How long between the pieces of one stage arriving, in milliseconds. */
 const BEAT_MS = 90;
-
-function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-
-  useEffect(() => {
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(query.matches);
-    const onChange = (event: MediaQueryListEvent) => setReduced(event.matches);
-    query.addEventListener("change", onChange);
-    return () => query.removeEventListener("change", onChange);
-  }, []);
-
-  return reduced;
-}
 
 /** The expression, with the span the current token came from picked out. */
 function SourceLine({
@@ -88,7 +75,7 @@ function LexingStage({
             className="pw__token"
             data-shown={index < revealed}
           >
-            <span className="pw__token-text">{token.text}</span>
+            <span className={`pw__token-text solve-${token.category}`}>{token.text}</span>
             <span className="pw__token-type">{token.type}</span>
           </li>
         ))}
@@ -114,7 +101,7 @@ function NormalisationStage({
       <ol className="pw__tokens pw__tokens--before">
         {example.lexed.map((token, index) => (
           <li key={`${token.type}-${index}`} className="pw__token" data-shown={true}>
-            <span className="pw__token-text">{token.text}</span>
+            <span className={`pw__token-text solve-${token.category}`}>{token.text}</span>
             <span className="pw__token-type">{token.type}</span>
           </li>
         ))}
@@ -132,7 +119,7 @@ function NormalisationStage({
             data-shown={index < revealed}
             data-change={token.change ?? undefined}
           >
-            <span className="pw__token-text">{token.text}</span>
+            <span className={`pw__token-text solve-${token.category}`}>{token.text}</span>
             <span className="pw__token-type">{token.type}</span>
           </li>
         ))}
@@ -314,98 +301,25 @@ function beatsFor(example: PipelineExample, stage: number): number {
 
 export default function PipelineWalkthrough() {
   const [exampleIndex, setExampleIndex] = useState(0);
-  const [stage, setStage] = useState(0);
-  // Starts fully revealed so the server-rendered markup is the complete first
-  // stage rather than a box of invisible chips. That is what a reader sees
-  // before the island hydrates, and all a reader without JavaScript ever sees.
-  // The animation takes over on mount.
-  const [revealed, setRevealed] = useState(() => beatsFor(EXAMPLES[0], 0));
-  const [mounted, setMounted] = useState(false);
-  const [playing, setPlaying] = useState(true);
-  const reduced = useReducedMotion();
-  const rootRef = useRef<HTMLDivElement>(null);
-
   const example = EXAMPLES[exampleIndex];
-  const beats = beatsFor(example, stage);
 
-  useEffect(() => setMounted(true), []);
-
-  // Autoplay waits until the walkthrough is actually on screen. Without this it
-  // would run its five stages while the reader is still at the top of the page
-  // and arrive already finished, which is worse than never having moved.
-  const [inView, setInView] = useState(false);
-  useEffect(() => {
-    const node = rootRef.current;
-    if (!node) return;
-    if (typeof IntersectionObserver !== "function") {
-      setInView(true);
-      return;
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) setInView(entry.isIntersecting);
-      },
-      { threshold: 0.25 },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-
-  /** Takes over from autoplay. Any deliberate action stops the carousel. */
-  const takeOver = useCallback((next: () => void) => {
-    setPlaying(false);
-    next();
-  }, []);
-
-  const goToStage = useCallback(
-    (next: number) => {
-      setStage(((next % STAGES.length) + STAGES.length) % STAGES.length);
-      setRevealed(0);
-    },
-    [],
-  );
-
-  // Reveal the pieces of the current stage one beat apart. Reduced motion skips
-  // straight to the end, so nothing is ever hidden behind an animation that is
-  // not going to run.
-  useEffect(() => {
-    if (!mounted) return;
-    if (reduced) {
-      setRevealed(beats);
-      return;
-    }
-    setRevealed(0);
-    let shown = 0;
-    const timer = window.setInterval(() => {
-      shown += 1;
-      setRevealed(shown);
-      if (shown >= beats) window.clearInterval(timer);
-    }, BEAT_MS);
-    return () => window.clearInterval(timer);
-  }, [beats, mounted, reduced, stage, exampleIndex]);
-
-  // Autoplay. Paused while the reader is anywhere near the component, so the
-  // stage cannot change out from under someone who is reading it.
-  useEffect(() => {
-    if (!mounted || !playing || reduced || !inView) return;
-    const timer = window.setTimeout(() => {
-      setStage((current) => (current + 1) % STAGES.length);
-      setRevealed(0);
-    }, STAGE_MS);
-    return () => window.clearTimeout(timer);
-  }, [inView, mounted, playing, reduced, stage, exampleIndex]);
-
-  useEffect(() => {
-    const node = rootRef.current;
-    if (!node) return;
-    const pause = () => setPlaying(false);
-    node.addEventListener("pointerenter", pause);
-    node.addEventListener("focusin", pause);
-    return () => {
-      node.removeEventListener("pointerenter", pause);
-      node.removeEventListener("focusin", pause);
-    };
-  }, []);
+  const {
+    step: stage,
+    revealed,
+    playing,
+    inView,
+    reduced,
+    rootRef,
+    goTo: goToStage,
+    takeOver,
+    setPlaying,
+  } = useWalkthrough({
+    stepCount: STAGES.length,
+    beatsFor: (index) => beatsFor(example, index),
+    stageMs: STAGE_MS,
+    beatMs: BEAT_MS,
+    resetKey: exampleIndex,
+  });
 
   const stageMeta = STAGES[stage];
   const railRef = useRef<HTMLOListElement>(null);
@@ -436,8 +350,7 @@ export default function PipelineWalkthrough() {
               onClick={() =>
                 takeOver(() => {
                   setExampleIndex(index);
-                  setStage(0);
-                  setRevealed(0);
+                  goToStage(0);
                 })
               }
             >

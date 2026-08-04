@@ -3,6 +3,8 @@ title: Editor integration
 description: Completions, syntax highlighting and token categories.
 ---
 
+import Explainer from "../../../components/Explainer.tsx";
+
 The language entry point provides what an editor needs, without assuming which
 editor.
 
@@ -20,6 +22,11 @@ function names, unit names, and package-contributed keywords.
 Every token carries a category such as number, unit, function or operator. Map
 those categories to your own theme rather than hardcoding colours, so that a
 package adding new syntax is highlighted without further work.
+
+The route from a line of text to a coloured line is four short steps, and the
+engine only owns the middle two.
+
+<Explainer id="highlighting" client:load />
 
 ## Checking a line parses
 

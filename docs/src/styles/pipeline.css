@@ -241,8 +241,10 @@
   transform: none;
 }
 
+/* No `color` here. Each chip carries its own `solve-<category>` class, so the
+   tokens are painted from the same palette an editor gets, and a colour
+   declared on this element would outrank it. */
 .pw__token-text {
-  color: var(--foreground);
   font-family: var(--sl-font-mono);
   font-size: var(--sl-text-sm);
 }
@@ -261,7 +263,9 @@
   background-color: var(--accent-subtle);
 }
 
-.pw__token[data-change] .pw__token-text,
+/* Only the type label takes the accent. The token text keeps its category
+   colour, because "this one was inserted" and "this one is an operator" are
+   different facts and the chip has room to say both. */
 .pw__token[data-change] .pw__token-type {
   color: var(--primary);
 }

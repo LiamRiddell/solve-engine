@@ -20,6 +20,15 @@ export interface LexedToken {
   text: string;
   /** The lexer's type name, shown as the chip's label. */
   type: string;
+  /**
+   * The semantic category the language service assigns this type.
+   *
+   * Present so the chips are coloured by the same palette an editor gets from
+   * `tokenClassName`, rather than being a monochrome diagram of a thing whose
+   * whole point is that it is coloured. Verified against the engine's own
+   * `getTokenCategory`, so a recategorised token type fails a test.
+   */
+  category: string;
   /** Start offset into the expression, inclusive. */
   from: number;
   /** End offset into the expression, exclusive. */
@@ -30,6 +39,8 @@ export interface LexedToken {
 export interface NormalisedToken {
   text: string;
   type: string;
+  /** As on {@link LexedToken}. */
+  category: string;
   /**
    * `fused` covers tokens the normaliser merged into one, `inserted` covers an
    * operator it made explicit, and `null` means the token came through
@@ -122,13 +133,13 @@ export const EXAMPLES: PipelineExample[] = [
     expression: "half of 250",
     blurb: "Two words the parser never learns, fused into one token.",
     lexed: [
-      { text: "half", type: "IDENT", from: 0, to: 4 },
-      { text: "of", type: "OF", from: 5, to: 7 },
-      { text: "250", type: "NUMBER", from: 8, to: 11 },
+      { text: "half", type: "IDENT", from: 0, to: 4 , category: "variable" },
+      { text: "of", type: "OF", from: 5, to: 7 , category: "keyword" },
+      { text: "250", type: "NUMBER", from: 8, to: 11 , category: "number" },
     ],
     normalised: [
-      { text: "half of", type: "HALF_OF", change: "fused" },
-      { text: "250", type: "NUMBER", change: null },
+      { text: "half of", type: "HALF_OF", change: "fused" , category: "keyword" },
+      { text: "250", type: "NUMBER", change: null , category: "number" },
     ],
     normalisationNote:
       "Phrase fusion collapses IDENT and OF into a single HALF_OF token. Neither half nor of is a reserved word, so both stay ordinary English anywhere else on the line.",
@@ -163,21 +174,21 @@ export const EXAMPLES: PipelineExample[] = [
     expression: "5(3 + 2)",
     blurb: "A multiplication nobody typed, made explicit before parsing.",
     lexed: [
-      { text: "5", type: "NUMBER", from: 0, to: 1 },
-      { text: "(", type: "LPAREN", from: 1, to: 2 },
-      { text: "3", type: "NUMBER", from: 2, to: 3 },
-      { text: "+", type: "PLUS", from: 4, to: 5 },
-      { text: "2", type: "NUMBER", from: 6, to: 7 },
-      { text: ")", type: "RPAREN", from: 7, to: 8 },
+      { text: "5", type: "NUMBER", from: 0, to: 1 , category: "number" },
+      { text: "(", type: "LPAREN", from: 1, to: 2 , category: "punctuation" },
+      { text: "3", type: "NUMBER", from: 2, to: 3 , category: "number" },
+      { text: "+", type: "PLUS", from: 4, to: 5 , category: "operator" },
+      { text: "2", type: "NUMBER", from: 6, to: 7 , category: "number" },
+      { text: ")", type: "RPAREN", from: 7, to: 8 , category: "punctuation" },
     ],
     normalised: [
-      { text: "5", type: "NUMBER", change: null },
-      { text: "*", type: "STAR", change: "inserted" },
-      { text: "(", type: "LPAREN", change: null },
-      { text: "3", type: "NUMBER", change: null },
-      { text: "+", type: "PLUS", change: null },
-      { text: "2", type: "NUMBER", change: null },
-      { text: ")", type: "RPAREN", change: null },
+      { text: "5", type: "NUMBER", change: null , category: "number" },
+      { text: "*", type: "STAR", change: "inserted" , category: "operator" },
+      { text: "(", type: "LPAREN", change: null , category: "punctuation" },
+      { text: "3", type: "NUMBER", change: null , category: "number" },
+      { text: "+", type: "PLUS", change: null , category: "operator" },
+      { text: "2", type: "NUMBER", change: null , category: "number" },
+      { text: ")", type: "RPAREN", change: null , category: "punctuation" },
     ],
     normalisationNote:
       "A number followed by an opening parenthesis implies a multiplication. Inserting the operator here means the parser needs no special case for it, and the same rule covers 2x and 50%.",
@@ -219,18 +230,18 @@ export const EXAMPLES: PipelineExample[] = [
     expression: "5km + 3km",
     blurb: "Units ride along on the stack instead of being stripped off.",
     lexed: [
-      { text: "5", type: "NUMBER", from: 0, to: 1 },
-      { text: "km", type: "UNIT", from: 1, to: 3 },
-      { text: "+", type: "PLUS", from: 4, to: 5 },
-      { text: "3", type: "NUMBER", from: 6, to: 7 },
-      { text: "km", type: "UNIT", from: 7, to: 9 },
+      { text: "5", type: "NUMBER", from: 0, to: 1 , category: "number" },
+      { text: "km", type: "UNIT", from: 1, to: 3 , category: "unit" },
+      { text: "+", type: "PLUS", from: 4, to: 5 , category: "operator" },
+      { text: "3", type: "NUMBER", from: 6, to: 7 , category: "number" },
+      { text: "km", type: "UNIT", from: 7, to: 9 , category: "unit" },
     ],
     normalised: [
-      { text: "5", type: "NUMBER", change: null },
-      { text: "km", type: "UNIT", change: null },
-      { text: "+", type: "PLUS", change: null },
-      { text: "3", type: "NUMBER", change: null },
-      { text: "km", type: "UNIT", change: null },
+      { text: "5", type: "NUMBER", change: null , category: "number" },
+      { text: "km", type: "UNIT", change: null , category: "unit" },
+      { text: "+", type: "PLUS", change: null , category: "operator" },
+      { text: "3", type: "NUMBER", change: null , category: "number" },
+      { text: "km", type: "UNIT", change: null , category: "unit" },
     ],
     normalisationNote:
       "Nothing to rewrite. The lexer already recognised km as a unit rather than as an identifier, because packages contribute their vocabulary to it directly.",

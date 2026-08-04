@@ -3,6 +3,8 @@ title: Core concepts
 description: Lines, values, packages and the pipeline, in the order they matter.
 ---
 
+import Explainer from "../../../components/Explainer.tsx";
+
 Five ideas cover almost everything.
 
 ## Lines
@@ -50,6 +52,8 @@ skips the first four stages entirely.
 A dependency graph records which lines read which variables. When a line
 changes, only the lines that transitively depend on it are recomputed. Editing
 one line of a large document does not re-evaluate the document.
+
+<Explainer id="incremental" client:load />
 
 That, plus the bytecode cache, is what makes it viable to run the whole pipeline
 on every keystroke.

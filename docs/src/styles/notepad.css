@@ -251,11 +251,9 @@
 .sl-markdown-content .hl-legend > * + * {
   display: grid;
   align-content: start;
-  gap: 0.25rem;
+  gap: 0.125rem;
   margin: 0;
-  border: 1px solid var(--border);
-  border-radius: calc(var(--radius) - 2px);
-  padding: 0.5rem 0.625rem 0.5625rem;
+  padding: 0;
 }
 
 /* No `color` here. The category class on each `dt` is what carries the colour,

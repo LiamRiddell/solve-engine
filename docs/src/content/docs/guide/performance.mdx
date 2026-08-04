@@ -3,6 +3,8 @@ title: Performance
 description: What makes it fast, and what to avoid.
 ---
 
+import Explainer from "../../../components/Explainer.tsx";
+
 The engine is built to run on every keystroke, which sets the performance bar.
 
 ## Bytecode, not tree walking
@@ -16,6 +18,8 @@ it makes the execution step easy to bound.
 Compiled bytecode is cached by expression text, so an unchanged line skips
 lexing, normalising, parsing and compiling entirely. Line results are cached
 separately, so an unchanged line skips execution too.
+
+<Explainer id="caches" client:load />
 
 ## Incremental re-evaluation
 

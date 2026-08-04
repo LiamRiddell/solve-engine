@@ -1,5 +1,6 @@
 import { describe, expect, test } from "@jest/globals";
 import { tokenTypeName } from "@solve-js/lexer/Token";
+import { getTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { newTrackedEngine } from "@tools/trackedEngine";
 import { EXAMPLES } from "../../../../docs/src/data/pipelineStages";
@@ -62,6 +63,7 @@ describe("pipeline walkthrough data matches the engine", () => {
           tokens.map((token) => ({
             text: token.value,
             type: typeName(token.type),
+            category: getTokenCategory(typeName(token.type)),
             from: token.offset,
             to: token.offset + token.value.length,
           })),
@@ -85,9 +87,14 @@ describe("pipeline walkthrough data matches the engine", () => {
           (prepared.normalizedTokens ?? []).map((token) => ({
             text: token.value,
             type: typeName(token.type),
+            category: getTokenCategory(typeName(token.type)),
           })),
         ).toEqual(
-          example.normalised.map((token) => ({ text: token.text, type: token.type })),
+          example.normalised.map((token) => ({
+            text: token.text,
+            type: token.type,
+            category: token.category,
+          })),
         );
       });
 
