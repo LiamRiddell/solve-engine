@@ -157,3 +157,20 @@ polynomial, so it is also left as written.
 ```solve
 expand(x/y + 1) // x/y+1
 ```
+
+## If you do not want these words
+
+`factor`, `solve`, `expand`, `der`, `derivative`, `integral`, `taylor` and
+`jacobian` are only treated as functions when the very next character is an
+opening parenthesis, so they remain usable as ordinary variable names.
+
+```solve
+:factor = 1.5
+:factor * 2 // 3
+```
+
+If a host wants them gone entirely, the package can be left out at
+registration. That is a decision about which words your grammar claims, not a
+performance one: it does not measurably speed the engine up, and it does not
+make the bundle smaller. See
+[the package system](/architecture/package-system/) for the measurements.
