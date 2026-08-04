@@ -20,16 +20,27 @@
  * suite to one machine, the live cases now probe reachability first and report
  * an outage instead of failing on it. See `isOpenMeteoReachable`. Anything
  * still assertable offline stays asserted.
+ *
+ * That reachability probe only covers `geocoding-api.open-meteo.com` though —
+ * the live cases go on to hit `api.open-meteo.com` (a different host) for the
+ * forecast call, which can return its own transient 5xx even when geocoding
+ * answered fine. That gap is what actually failed CI once (geocoding up,
+ * forecast 503). `isTransientFetchError`/`isTransientResolvedError` close it:
+ * a server-side failure from EITHER endpoint is treated the same as an
+ * outage; a genuine bug in the code under test (a 4xx, a malformed response)
+ * still fails the test normally.
  */
 import { describe, expect, test } from "@jest/globals";
 import { QueryClient } from "@tanstack/query-core";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { ValueType, stringValue, uomValue } from "@solve-js/vm/Value";
+import { ValueType, stringValue, uomValue, type Value } from "@solve-js/vm/Value";
 import { setActiveQueryClient } from "@solve-js/services/DataQueryService";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { WEATHER_PACKAGE, fetchCityWeather } from "@solve-js/packages/weather";
+import { WeatherErrorCodes } from "@solve-js/packages/weather/OpenMeteoClient";
+import { EngineError } from "@solve-js/errors/UnifiedErrorFramework";
 
 const WEATHER_FN_IDX = WEATHER_PACKAGE.pluginFunctions![0].index;
 
@@ -66,6 +77,36 @@ async function isOpenMeteoReachable(): Promise<boolean> {
 /** Reports the outage once, in a form that is obvious in a CI log. */
 function reportOffline(what: string): void {
 	console.warn(`[weather] SKIPPED "${what}": Open-Meteo is unreachable from this environment.`);
+}
+
+/**
+ * `isOpenMeteoReachable` only probes `geocoding-api.open-meteo.com` — the
+ * live tests then go on to hit `api.open-meteo.com` (a different host) for
+ * the forecast call, which can independently return a transient 5xx even
+ * when geocoding is up. That gap is exactly what failed CI: geocoding
+ * reachable, forecast returned 503, the direct `fetchCityWeather` call
+ * threw an `EngineError` no reachability probe had caught. This treats a
+ * server-side (5xx) failure from either Open-Meteo endpoint the same as an
+ * outage — still asserted if OTHER assertions are reachable without it,
+ * never used to paper over an actual bug in the code under test (a 4xx, a
+ * malformed-response error, or any non-EngineError still fails normally).
+ */
+function isTransientFetchError(err: unknown): boolean {
+	if (!(err instanceof EngineError)) return false;
+	if (err.code !== WeatherErrorCodes.GEOCODING_API_ERROR && err.code !== WeatherErrorCodes.FORECAST_API_ERROR) return false;
+	const status = err.context?.status;
+	return typeof status === "number" && status >= 500;
+}
+
+/**
+ * Same idea as {@link isTransientFetchError}, for the RESOLVED error `Value`
+ * shape `createQueryResolver`'s default `onError` produces — that path
+ * never rejects (see `resolvers/QueryResolver.ts`'s `fetchAndCache`), a
+ * fetch failure surfaces as `ValueType.Error` instead, so the preflight
+ * test below needs its own transient check rather than a try/catch.
+ */
+function isTransientResolvedError(value: Value): boolean {
+	return value.type === ValueType.Error && /returned 5\d\d/.test(String(value.unit ?? ""));
 }
 
 function buildQueryBytecode(query: string, fnIdx: number) {
@@ -109,7 +150,16 @@ describe("fetchCityWeather — REAL Open-Meteo network call", () => {
 				return;
 			}
 
-			const data = await fetchCityWeather("London", new AbortController().signal);
+			let data;
+			try {
+				data = await fetchCityWeather("London", new AbortController().signal);
+			} catch (err) {
+				if (isTransientFetchError(err)) {
+					reportOffline("resolves plausible current conditions for a real city (London)");
+					return;
+				}
+				throw err;
+			}
 			expect(data.resolvedName.length).toBeGreaterThan(0);
 			expect(typeof data.description).toBe("string");
 			expect(data.description.length).toBeGreaterThan(0);
@@ -129,14 +179,23 @@ describe("fetchCityWeather — REAL Open-Meteo network call", () => {
 			// invented weather, and that holds however the lookup failed. Only
 			// the specific reason needs the API to be up.
 			const attempt = fetchCityWeather("Zzznotarealplacexyz123", new AbortController().signal);
+			// .then(onFulfilled, onRejected): a successful resolve here is
+			// itself the bug (thrown synchronously from onFulfilled, which
+			// propagates out of this test uncaught, correctly failing it) —
+			// distinct from the expected-rejection path, whose error becomes
+			// `caught` below rather than being re-thrown.
+			const caught: unknown = await attempt.then(
+				() => { throw new Error("fetchCityWeather should have rejected for a nonsense location"); },
+				(err) => err,
+			);
 
-			if (!(await isOpenMeteoReachable())) {
-				await expect(attempt).rejects.toThrow();
+			if (isTransientFetchError(caught) || !(await isOpenMeteoReachable())) {
 				reportOffline("the 'No location found' message assertion");
 				return;
 			}
 
-			await expect(attempt).rejects.toThrow(/No location found/);
+			expect(caught).toBeInstanceOf(Error);
+			expect((caught as Error).message).toMatch(/No location found/);
 		},
 		20_000,
 	);
@@ -163,6 +222,11 @@ describe("WEATHER_PACKAGE resolver — REAL end-to-end preflight + cache read-ba
 			expect(result).not.toBeNull();
 
 			const resolved = await result!.resolver;
+			if (isTransientResolvedError(resolved)) {
+				reportOffline("preflight() triggers a real fetch");
+				qc.clear();
+				return;
+			}
 			expect(resolved.type).toBe(ValueType.String);
 			expect(String(resolved.value)).toMatch(/°C/);
 

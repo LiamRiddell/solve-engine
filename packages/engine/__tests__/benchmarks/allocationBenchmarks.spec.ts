@@ -1,58 +1,110 @@
 /**
  * Allocation Tracking Benchmarks
  *
- * Measures heap allocation with process.memoryUsage().heapUsed, which includes
- * V8 internals and engine bootstrap as well as the work being measured.
+ * Measures heap cost with process.memoryUsage().heapUsed. Every "fresh engine"
+ * case measures engine bootstrap plus the operation and attributes the whole
+ * figure to the operation, so the budgets are larger than the operation alone
+ * would suggest. Bootstrap on its own measures about 182KB: the built-in
+ * package set is 19 packages, each registering vocabulary, parselets and
+ * normaliser rules at construction.
  *
- * Every "fresh engine" case below measures bootstrap plus the operation and
- * attributes the whole delta to the operation. That is why the budgets are so
- * much larger than the work being measured would suggest.
+ * These cases used to take a plain end-minus-start heapUsed delta, and that is
+ * what made them flaky. Such a delta counts garbage that has not been collected
+ * yet, so it reports what the collector happened to be doing rather than what
+ * the code cost. V8 sizes the young generation from the history of the process
+ * rather than from the measurement: across a bench run of twelve suites in one
+ * process new space here reaches 64MB, roomy enough that a short operation
+ * triggers no scavenge at all and every byte it touched stays in the reading.
  *
- * The fresh-engine budgets moved from 256KB to 2MB. The first move followed
- * measuring bootstrap alone at roughly 442KB, which put 256KB out of reach no
- * matter how cheap the operation was. The cause is growth rather than a leak:
- * the built-in package set is now 19 packages, each registering vocabulary,
- * parselets and normaliser rules at construction. Per-evaluation cost on an
- * already-warm engine was measured at 9KB for one, then 5.4KB and 1.8KB
- * amortised over 100 and 1000, so it falls as caches fill rather than growing.
+ * Repeating identical code, the 50-line document case read anywhere from 1.42MB
+ * to 2.29MB as a plain delta. Its budget was 2MB, inside that range, so it
+ * failed at random in full bench runs while passing alone. A bound that sits
+ * inside the spread of its own metric is not a bound, and which side it lands
+ * on is decided by what ran earlier in the process.
  *
- * The second move was for a different reason, and it is the one worth reading.
- * Across four consecutive runs of identical code, the same case measured
- * anywhere from 665KB to 1.38MB. These assertions do not control for when
- * garbage collection lands inside the measured span, so run-to-run variation of
- * roughly two times is normal. A bound tight enough to be interesting is
- * therefore a bound that fails at random.
+ * Every footprint case now uses trackRetained: the heap is settled on both
+ * sides and the engine is still reachable across the closing settle. That reads
+ * the same 50-line case at 337KB in a full bench run and 340KB standalone, a
+ * spread of about one percent where the old metric moved by a megabyte. The
+ * budgets below sit at roughly twice the largest reading observed, which leaves
+ * them able to catch a doubling in retained cost while staying well clear of
+ * the metric's own noise.
  *
- * Read them accordingly. They catch an order-of-magnitude change, nothing
- * finer. The per-case ratio against the merge base in scripts/compare-benchmarks.mjs
- * is what actually guards allocation cost, because it compares two runs on one
- * machine minutes apart and cancels most of this noise.
+ * The warm cases are different in kind. They measure churn on an already-built
+ * engine, where a retained figure is near zero by construction, so they keep
+ * the plain delta and stay correspondingly coarse. Their budgets keep a lot of
+ * headroom deliberately: the plain delta is history-sensitive, and the 200-eval
+ * case still swings between 2.0MB and 2.8MB run to run to prove it.
  *
- * The real fix is a measurement that separates bootstrap from the operation and
- * counts objects rather than sampling a heap total. That is worth more than any
- * further adjustment to the numbers below.
+ * Nothing here is written to packages/engine/benchmarks, so
+ * scripts/compare-benchmarks.mjs does not see allocation numbers at all — it
+ * compares recorded timings and expresses its noise floor in milliseconds. The
+ * assertions below are the only guard these figures have, which is the reason
+ * they are worth keeping honest.
  *
- * Current budgets (heap bytes):
- * - Fresh engine plus one operation: < 2MB (bootstrap dominates, and it is noisy)
- * - Parser warm: < 768KB (bytecode cached, V8 noise dominates)
- * - VM warm total: < 4MB for 200 evals
- * - Document 50-line: < 2MB
- * - Document 200-line: < 4MB
+ * Set SOLVE_ALLOC_LOG to a file path to record every measurement when
+ * retuning a budget. It writes to a file rather than the console because jest's
+ * reporter discards per-suite console output once more than one suite runs,
+ * which is exactly the multi-suite case worth measuring.
+ *
+ * Observed in a full 12-suite bench run on the development machine:
+ * - Fresh engine plus one operation: 166KB simple, 430KB mixed  (budget 1MB)
+ * - Parser cold, 3 expressions: 249KB                           (budget 1MB)
+ * - Normalizer fresh pipeline: 136KB                            (budget 1MB)
+ * - Document 50-line: 337KB                                     (budget 768KB)
+ * - Document 200-line: 728KB                                    (budget 1.5MB)
+ * - Parser warm, delta: 61KB                                    (budget 768KB)
+ * - Orchestrator warm fast path, delta: 9.7KB                   (budget 768KB)
+ * - VM warm, 200 evals, delta: 2.0MB to 2.8MB                   (budget 4MB)
  */
 
+import { appendFileSync } from "fs";
 import { describe, expect, test, beforeAll } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 
 // ── Global setup: force GC if available ──────────────────────────────────
 const gc = (global as unknown as { gc?: () => void }).gc;
 
-/** Track heap delta around a function call. Returns { result, deltaBytes }. */
-function trackHeapDelta<T>(fn: () => T): { result: T; deltaBytes: number } {
-  if (gc) gc();
+/** Record a measurement when SOLVE_ALLOC_LOG names a file. Off by default. */
+function note(label: string, bytes: number): void {
+  const target = process.env.SOLVE_ALLOC_LOG;
+  if (target) appendFileSync(target, `ALLOC ${label} = ${bytes}\n`);
+}
+
+/**
+ * Settle the heap. Two passes rather than one, because the first leaves behind
+ * objects that only become collectable once the weak references and
+ * finalisation it triggered have cleared, and that residue is large enough to
+ * read at this scale. Measured on the warm fast-path case, the second pass is
+ * the difference between reading 455KB of float and reading its actual 9.7KB.
+ */
+function settle(): void {
+  if (gc) {
+    gc();
+    gc();
+  }
+}
+
+/**
+ * Bytes still reachable after `fn`, with the heap settled on both sides.
+ *
+ * Whatever `fn` returns is read after the closing settle, so it stays live
+ * across that collection and its cost lands in the figure. Return the engine,
+ * or the case measures nothing and passes for the wrong reason.
+ *
+ * Residual float means this does not read zero for work that retains nothing:
+ * a created-and-discarded engine measures up to 150KB, and a case that follows
+ * a heavy one can read negative when the opening settle left more behind than
+ * the case itself retains. That is the noise floor the budgets have to clear,
+ * and it is why they are not set anywhere near the observed values.
+ */
+function trackRetained<T>(fn: () => T): { result: T; bytes: number } {
+  settle();
   const start = process.memoryUsage().heapUsed;
   const result = fn();
+  settle();
   const end = process.memoryUsage().heapUsed;
-  return { result, deltaBytes: end - start };
+  return { result, bytes: end - start };
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -61,6 +113,18 @@ function trackHeapDelta<T>(fn: () => T): { result: T; deltaBytes: number } {
 function createEngine(): ExpressionEngine {
   return new ExpressionEngine("en", false);
 }
+
+/** Build a document of `n` assignment lines. */
+function buildDocument(n: number): string {
+  const lines: string[] = [];
+  for (let i = 0; i < n; i++) {
+    lines.push(`:v${i} = ${i + 1}`);
+  }
+  return lines.join("\n");
+}
+
+/** Shared by every case that builds an engine and performs one small operation. */
+const FRESH_ENGINE_BUDGET = 1024 * 1024;
 
 describe("Allocation Benchmarks", () => {
   let engine: ExpressionEngine;
@@ -75,35 +139,45 @@ describe("Allocation Benchmarks", () => {
   // Lexer allocation budgets
   // ═══════════════════════════════════════════════════════════════════════
 
-  test("lexer: simple arithmetic (fresh engine) allocates < 2MB", () => {
-    const { deltaBytes } = trackHeapDelta(() => {
+  test("lexer: simple arithmetic (fresh engine) retains < 1MB", () => {
+    const { bytes } = trackRetained(() => {
       const e = createEngine();
       e.evaluateLine(1, "1 + 2");
+      return e;
     });
-    expect(deltaBytes).toBeLessThan(2 * 1024 * 1024);
+    note("lexer simple", bytes);
+    // 166KB observed, of which about 182KB is bootstrap — the operation itself
+    // is inside the noise, which is the honest reading of this case.
+    expect(bytes).toBeLessThan(FRESH_ENGINE_BUDGET);
   });
 
-  test("lexer: mixed expression (fresh engine) allocates < 2MB", () => {
-    const { deltaBytes } = trackHeapDelta(() => {
+  test("lexer: mixed expression (fresh engine) retains < 1MB", () => {
+    const { bytes } = trackRetained(() => {
       const e = createEngine();
       e.evaluateLine(1, "$10 + 50% of 200 - 3 kg");
+      return e;
     });
-    expect(deltaBytes).toBeLessThan(2 * 1024 * 1024);
+    note("lexer mixed", bytes);
+    // 430KB observed, the largest of the fresh-engine cases: currency and unit
+    // handling populate caches that the simple arithmetic case never touches.
+    expect(bytes).toBeLessThan(FRESH_ENGINE_BUDGET);
   });
 
   // ═══════════════════════════════════════════════════════════════════════
   // Parser allocation budgets
   // ═══════════════════════════════════════════════════════════════════════
 
-  test("parser: cold compile (3 expressions) allocates < 2MB", () => {
-    if (gc) gc();
-    const start = process.memoryUsage().heapUsed;
-    const e = createEngine();
-    e.evaluateLine(1, "1 + 2 * 3");
-    e.evaluateLine(2, "sqrt(144) + 5");
-    e.evaluateLine(3, "10% of 200");
-    const end = process.memoryUsage().heapUsed;
-    expect(end - start).toBeLessThan(2 * 1024 * 1024);
+  test("parser: cold compile (3 expressions) retains < 1MB", () => {
+    const { bytes } = trackRetained(() => {
+      const e = createEngine();
+      e.evaluateLine(1, "1 + 2 * 3");
+      e.evaluateLine(2, "sqrt(144) + 5");
+      e.evaluateLine(3, "10% of 200");
+      return e;
+    });
+    note("parser cold", bytes);
+    // 249KB observed.
+    expect(bytes).toBeLessThan(FRESH_ENGINE_BUDGET);
   });
 
   test("parser: warm compile allocates < 768KB (bytecode cached)", () => {
@@ -112,13 +186,16 @@ describe("Allocation Benchmarks", () => {
     engine.evaluateLine(101, "sqrt(144) + 5");
     engine.evaluateLine(102, "10% of 200");
 
-    if (gc) gc();
+    settle();
     const start = process.memoryUsage().heapUsed;
     engine.evaluateLine(100, "1 + 2 * 3");
     engine.evaluateLine(101, "sqrt(144) + 5");
     engine.evaluateLine(102, "10% of 200");
     const end = process.memoryUsage().heapUsed;
-    // ~20KB observed; V8 internal noise prevents sub-1KB
+    note("parser warm", end - start);
+    // 61KB observed, not the 20KB an older comment here claimed. Churn rather
+    // than footprint, so this stays a plain delta and keeps the wide budget
+    // that a history-sensitive metric needs.
     expect(end - start).toBeLessThan(768 * 1024);
   });
 
@@ -126,11 +203,15 @@ describe("Allocation Benchmarks", () => {
   // VM allocation budgets
   // ═══════════════════════════════════════════════════════════════════════
 
-  test("vm: simple add (fresh engine) allocates < 2MB", () => {
-    const { deltaBytes } = trackHeapDelta(() => {
-      createEngine().evaluateLine(1, "1 + 2");
+  test("vm: simple add (fresh engine) retains < 1MB", () => {
+    const { bytes } = trackRetained(() => {
+      const e = createEngine();
+      e.evaluateLine(1, "1 + 2");
+      return e;
     });
-    expect(deltaBytes).toBeLessThan(2 * 1024 * 1024);
+    note("vm simple", bytes);
+    // 177KB observed.
+    expect(bytes).toBeLessThan(FRESH_ENGINE_BUDGET);
   });
 
   test("vm: repeated evaluation allocates < 4MB total for 200 warm evals", () => {
@@ -138,18 +219,17 @@ describe("Allocation Benchmarks", () => {
     engine.evaluateLine(200, "1 + 2");
     engine.evaluateLine(201, "3 * 4");
 
-    if (gc) gc();
+    settle();
     const start = process.memoryUsage().heapUsed;
     for (let i = 0; i < 100; i++) {
       engine.evaluateLine(200, "1 + 2");
       engine.evaluateLine(201, "3 * 4");
     }
     const end = process.memoryUsage().heapUsed;
-    // Raised from 2MB after this passed one run and failed the next at 2.98MB.
-    // The previous bound left five percent of headroom on a heap delta the
-    // comment beside it already described as noise-dominated, which is not a
-    // threshold so much as a coin toss. Whether a garbage collection lands
-    // inside the measured span moves this more than the code does.
+    note("vm repeated", end - start);
+    // 2.0MB to 2.8MB observed across runs — the widest spread left in the file,
+    // and the reason the churn cases keep generous budgets. Raised from 2MB
+    // after this passed one run and failed the next at 2.98MB.
     //
     // Per-evaluation cost was measured separately at 9KB for one evaluation and
     // 1.8KB amortised over a thousand, so it falls as caches fill. 200 warm
@@ -161,11 +241,17 @@ describe("Allocation Benchmarks", () => {
   // Normalizer bypass (no vocabs registered → zero overhead)
   // ═══════════════════════════════════════════════════════════════════════
 
-  test("normalizer: fresh pipeline allocates < 2MB", () => {
-    const { deltaBytes } = trackHeapDelta(() => {
-      createEngine().evaluateLine(1, "1 + 2 * 3 - 4 / 2");
+  test("normalizer: fresh pipeline retains < 1MB", () => {
+    const { bytes } = trackRetained(() => {
+      const e = createEngine();
+      e.evaluateLine(1, "1 + 2 * 3 - 4 / 2");
+      return e;
     });
-    expect(deltaBytes).toBeLessThan(2 * 1024 * 1024);
+    note("normalizer fresh", bytes);
+    // 136KB observed. This case follows the 200-eval churn case, so it is the
+    // one that occasionally reads negative when the opening settle inherits a
+    // dirtier heap than it leaves.
+    expect(bytes).toBeLessThan(FRESH_ENGINE_BUDGET);
   });
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -177,13 +263,17 @@ describe("Allocation Benchmarks", () => {
     // Warm to establish baseline
     e.evaluateLine(1, "1 + 2");
 
-    if (gc) gc();
+    settle();
     const start = process.memoryUsage().heapUsed;
     const [result] = e.evaluateLine(1, "1 + 2");
     const end = process.memoryUsage().heapUsed;
 
     expect(result?.value).toBe(3);
-    // ~455KB observed; V8 internal noise varies by platform
+    note("orchestrator warm", end - start);
+    // 9.7KB observed. An older comment here claimed 455KB, which was float left
+    // by a single-pass gc rather than anything this line allocates; the second
+    // settle pass removed it. The budget stays wide because the metric is a
+    // plain delta, not because a single warm evaluation costs anything close.
     expect(end - start).toBeLessThan(768 * 1024);
   });
 
@@ -191,35 +281,36 @@ describe("Allocation Benchmarks", () => {
   // Document-scale allocation
   // ═══════════════════════════════════════════════════════════════════════
 
-  test("document: 50-line doc (fresh engine) allocates < 2MB", () => {
-    const lines: string[] = [];
-    for (let i = 0; i < 50; i++) {
-      lines.push(`:v${i} = ${i + 1}`);
-    }
+  test("document: 50-line doc (fresh engine) retains < 768KB", () => {
+    const source = buildDocument(50);
 
-    if (gc) gc();
-    const start = process.memoryUsage().heapUsed;
-    const e = createEngine();
-    e.parseDocument(lines.join("\n"));
-    const end = process.memoryUsage().heapUsed;
+    const { bytes } = trackRetained(() => {
+      const e = createEngine();
+      e.parseDocument(source);
+      return e;
+    });
 
-    // ~556KB observed
-    expect(end - start).toBeLessThan(2 * 1024 * 1024);
+    note("doc 50", bytes);
+    // 337KB observed in a full bench run, 340KB standalone, of which about
+    // 182KB is engine bootstrap. The old comment on this line read "~556KB
+    // observed" against a 2MB budget while the case actually measured 2.19MB;
+    // both numbers described a metric this case no longer uses.
+    expect(bytes).toBeLessThan(768 * 1024);
   });
 
-  test("document: 200-line doc (fresh engine) allocates < 4MB", () => {
-    const lines: string[] = [];
-    for (let i = 0; i < 200; i++) {
-      lines.push(`:v${i} = ${i + 1}`);
-    }
+  test("document: 200-line doc (fresh engine) retains < 1.5MB", () => {
+    const source = buildDocument(200);
 
-    if (gc) gc();
-    const start = process.memoryUsage().heapUsed;
-    const e = createEngine();
-    e.parseDocument(lines.join("\n"));
-    const end = process.memoryUsage().heapUsed;
+    const { bytes } = trackRetained(() => {
+      const e = createEngine();
+      e.parseDocument(source);
+      return e;
+    });
 
-    // ~2.2MB observed
-    expect(end - start).toBeLessThan(4 * 1024 * 1024);
+    note("doc 200", bytes);
+    // 728KB observed in a full bench run, 751KB standalone, of which about
+    // 182KB is engine bootstrap. Four times the lines of the case above for
+    // roughly four times its document cost, which is the shape to expect.
+    expect(bytes).toBeLessThan(1536 * 1024);
   });
 });
