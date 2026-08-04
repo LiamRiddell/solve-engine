@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button"
 import { ChevronDown, ChevronUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { TAB_BODY, TAB_ROOT } from "@/components/shared/tabChrome"
+import { tokenClass } from "@/components/shared/tokenClass"
 
 const GATE_STAGES = new Set(["safety_length", "safety_complexity", "cache_check", "async_preflight"])
 
@@ -394,7 +395,7 @@ export function PipelineTab() {
             </div>
             <div className="flex flex-wrap gap-1">
               {tokens.slice(0, showCount).map((t, i) => (
-                <span key={i} title={`Type: ${t.type}\nValue: ${t.value}`} className="bg-muted rounded px-1 py-0.5 font-mono text-[9px]">
+                <span key={i} title={`Type: ${t.type}\nValue: ${t.value}`} className={cn("bg-muted rounded px-1 py-0.5 font-mono text-[9px]", tokenClass(t.type))}>
                   {t.value}
                 </span>
               ))}

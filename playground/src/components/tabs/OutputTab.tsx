@@ -8,6 +8,7 @@ import { usePipelineStore } from "@/stores/pipeline"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { TAB_ROOT } from "@/components/shared/tabChrome"
+import { tokenClass } from "@/components/shared/tokenClass"
 
 interface GroupEntry {
   line: number
@@ -290,7 +291,7 @@ export function OutputTab() {
                     <span
                       key={i}
                       title={`Type: ${t.type}\nValue: ${t.value}\nPos: ${t.offset}`}
-                      className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs"
+                      className={cn("bg-muted rounded px-1.5 py-0.5 font-mono text-xs", tokenClass(t.type))}
                     >
                       {t.value}
                     </span>
@@ -326,7 +327,7 @@ export function OutputTab() {
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {display.flatTokensList.map((t, i) => (
-              <span key={i} title={`Type: ${t.type}\nValue: ${t.value}\nPos: ${t.offset}`} className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs">
+              <span key={i} title={`Type: ${t.type}\nValue: ${t.value}\nPos: ${t.offset}`} className={cn("bg-muted rounded px-1.5 py-0.5 font-mono text-xs", tokenClass(t.type))}>
                 {t.value}
               </span>
             ))}
