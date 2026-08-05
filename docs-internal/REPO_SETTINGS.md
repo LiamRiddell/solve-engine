@@ -54,14 +54,18 @@ disabled gate protects nothing. Watch it, calibrate the thresholds in
 
 ## Actions
 
-- [ ] Settings, Actions, General, Workflow permissions: **Allow GitHub Actions
+- [x] Settings, Actions, General, Workflow permissions: **Allow GitHub Actions
       to create and approve pull requests** is on. Off by default, and the
       symptom is specific: the release workflow builds the version branch,
       pushes it, and then fails with `GitHub Actions is not permitted to create
       or approve pull requests`. The `pull-requests: write` grant in the
       workflow cannot override it, because this setting sits above the token.
       With it off, somebody has to open the version pull request by hand from
-      the `changeset-release/main` branch every release
+      the `changeset-release/main` branch every release. Turned on 2026-08-05,
+      after exactly that happened. Confirmed with
+      `gh api repos/LiamRiddell/solve-engine/actions/permissions/workflow`,
+      which reports it as `can_approve_pull_request_reviews`, a name that does
+      not obviously cover creating them
 
 ## npm
 
