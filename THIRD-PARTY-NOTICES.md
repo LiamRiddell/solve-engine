@@ -1,7 +1,44 @@
 # Third-party notices
 
-This project ships no runtime dependencies, but parts of it are derived from
-third-party open-source work. Those parts and their licences are listed here.
+This project ships one runtime dependency, `@tanstack/query-core`, which a
+consumer installs and can see, patch and audit for themselves. Everything else
+that third-party code contributes is compiled into the published bundle, where a
+consumer cannot see it. Those parts and their licences are listed here.
+
+## semver
+
+`packages/engine/src/api/EngineVersionCompatibility.ts` calls `satisfies`,
+`validRange` and `coerce` from [`semver`](https://github.com/npm/node-semver),
+and the build inlines the reachable part of that package into `dist` rather than
+declaring it as a runtime dependency.
+
+It is bundled because it is an implementation detail: it decides whether a
+package's declared `engineVersion` range admits the running engine, and it never
+reaches the public type surface. Inlining keeps it out of a consumer's lockfile,
+and tree-shaking means only the code those three functions reach is carried.
+
+The trade is worth stating. A bundled dependency cannot be patched by the person
+who installed this package, so if `semver` needs a security update it has to come
+through a release here. `@tanstack/query-core` is deliberately left external for
+that reason, being both larger and part of what this package's types expose.
+
+```
+The ISC License
+
+Copyright (c) Isaac Z. Schlueter and Contributors
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
+IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+```
 
 ## convert
 
