@@ -16,6 +16,39 @@ npm run verify
 build. If it passes locally it should pass in continuous integration, and the
 two run the same script deliberately so they cannot drift.
 
+That is everything the engine needs. The documentation site and the playground
+need one more step:
+
+```bash
+npm run setup
+```
+
+### Why that step exists
+
+`npm install` only covers the workspaces, and the workspaces are
+`packages/*`. `docs` and `playground` are deliberately outside them: both pull
+in a large front-end dependency tree that has no business in the published
+package's lockfile, and the playground resolves the engine through path aliases
+rather than as a dependency.
+
+So a fresh clone that runs `npm install` and then starts the documentation site
+gets an error about a missing import, most recently `mermaid`, which reads as a
+broken repository rather than a missing install. `npm run setup` does what
+continuous integration does, in the order it does it:
+
+1. build the engine, because the site depends on it through `file:` and that
+   package publishes only `dist`. Without this the failure surfaces when Vite
+   cannot resolve `solve-engine`, which looks like a documentation problem
+2. `npm ci --prefix docs`
+3. `npm ci --prefix playground`
+
+Rerun it after pulling changes that touch either project's dependencies, and
+after any change to the engine, since `dist` is not in the repository and a
+stale one leaves the site running yesterday's engine.
+
+On Windows, stop the dev server first. Astro holds a native binary open inside
+`docs/node_modules`, and reinstalling over it fails with `EPERM`.
+
 ### Two TypeScript compilers, on purpose
 
 `npm run typecheck` uses **tsgo**, the native compiler that ships as
