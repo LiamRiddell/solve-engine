@@ -38,18 +38,24 @@ updates:
 
   - package-ecosystem: github-actions
     directory: "/"
-    schedule: { interval: monthly }
+    schedule: { interval: weekly }
     groups:
       actions:
         patterns: ["*"]
-    ignore:
-      # Every `uses:` in this repository points at a floating major tag, which
-      # already picks up patches and minors without anyone opening a pull
-      # request. Accepting those updates here would replace the tag with an
-      # exact pin such as `@v4.37.4` and then bill a pull request for every
-      # subsequent patch, which is strictly worse than the tag it replaced.
-      # Majors still come through, because moving to a new major tag is a real
-      # upgrade decision rather than a bump.
-      - dependency-name: "*"
-        update-types:
-          ["version-update:semver-patch", "version-update:semver-minor"]
+    # Every `uses:` is pinned to a commit SHA, and patch and minor updates are
+    # accepted rather than ignored. That is the reverse of what this file said
+    # before, and the reversal is the point.
+    #
+    # The old note argued that a floating major tag already picks up patches
+    # without anyone opening a pull request, and treated that as the saving.
+    # It is the exposure. A tag is a mutable pointer owned by someone else: the
+    # code behind `@v1` can change at any moment, with no diff and no review,
+    # and the next run executes it. `changesets/action` runs in the job that
+    # holds `id-token: write`, so that is a stranger's unreviewed code holding
+    # the ability to mint a publishing credential for this package. This is not
+    # hypothetical; it is how tj-actions/changed-files was used to steal secrets
+    # from thousands of repositories in March 2025, by repointing tags.
+    #
+    # A SHA cannot be repointed. The cost is a pull request when an action moves,
+    # which is the review the tag was skipping. Grouped and weekly, so it
+    # arrives as one batch rather than one per action.
