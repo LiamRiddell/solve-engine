@@ -25,10 +25,25 @@ jobs:
       contents: read
       actions: read
 
+    # The two codeql-action steps below are the one deliberate exception to the
+    # SHA pinning everywhere else, and scripts/check-action-pins.mjs allows them
+    # by name rather than by accident.
+    #
+    # Pinning this action freezes the CodeQL CLI bundle it downloads, so the
+    # analysis engine and its queries stop moving: the scanner ages while the
+    # vulnerabilities do not. GitHub also enables parts of this action through
+    # server-side flags that are withdrawn from old releases over time, so a pin
+    # left alone does not merely stagnate, it quietly loses functionality.
+    #
+    # The trade is acceptable here and nowhere else. This job holds
+    # `security-events: write` with read-only access to everything else, it never
+    # runs in publish.yml, and it cannot publish or push. The worst a compromise
+    # buys is forged or suppressed alerts, not a release. Weighed against a
+    # scanner that silently degrades, floating is the safer failure.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+      - uses: github/codeql-action/init@v4
         with:
           # One pack covers both, since CodeQL analyses TypeScript by way of
           # JavaScript rather than as a separate language.
@@ -38,6 +53,6 @@ jobs:
           # extra security queries earn their runtime here.
           queries: security-extended
 
-      - uses: github/codeql-action/analyze@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+      - uses: github/codeql-action/analyze@v4
         with:
           category: "/language:javascript-typescript"

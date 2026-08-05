@@ -17,6 +17,9 @@
  * accept action updates weekly. Rotting loudly, as a pull request somebody
  * reads, is the trade being made against changing silently.
  *
+ * One action is exempt, by name and with its reason recorded below, because for
+ * that one the pin is what causes the harm.
+ *
  * Usage:
  *   node scripts/check-action-pins.mjs
  */
@@ -31,7 +34,30 @@ const WORKFLOWS = path.join(ROOT, ".github/workflows");
 /** A 40-character hex commit SHA, which is the only immutable way to name a revision. */
 const SHA = /^[0-9a-f]{40}$/;
 
+/**
+ * Actions allowed to float, with the reason each one is worth the exception.
+ *
+ * Keyed on the path without a revision, so `github/codeql-action/init` and
+ * `.../analyze` are listed separately rather than a prefix matching whatever
+ * else might appear under that owner later.
+ *
+ * The bar is high and specific: floating has to be *safer* than pinning for that
+ * action, not merely more convenient. Convenience is what the tag was already
+ * buying everywhere else, and it is what this check exists to refuse.
+ */
+const ALLOWED_TO_FLOAT = new Map([
+	[
+		"github/codeql-action/init",
+		"pinning freezes the CodeQL bundle, so the scanner ages while the vulnerabilities do not",
+	],
+	[
+		"github/codeql-action/analyze",
+		"same bundle as init; the two move together and must not disagree",
+	],
+]);
+
 const problems = [];
+const floating = [];
 let pinned = 0;
 
 for (const entry of fs.readdirSync(WORKFLOWS)) {
@@ -57,6 +83,12 @@ for (const entry of fs.readdirSync(WORKFLOWS)) {
 				pinned++;
 				return;
 			}
+
+			const reason = ALLOWED_TO_FLOAT.get(at === -1 ? reference : reference.slice(0, at));
+			if (reason !== undefined) {
+				floating.push(`${reference} — ${reason}`);
+				return;
+			}
 			problems.push(`${entry}:${index + 1}  ${reference}`);
 		});
 }
@@ -73,4 +105,7 @@ if (problems.length > 0) {
 	process.exit(1);
 }
 
-console.log(`All ${pinned} action reference(s) are pinned to a commit SHA.`);
+console.log(`${pinned} action reference(s) pinned to a commit SHA.`);
+// Printed rather than passed over in silence. An exception nobody sees is
+// indistinguishable from a gap in the check.
+for (const entry of floating) console.log(`  floating by exception: ${entry}`);
