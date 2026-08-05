@@ -1,18 +1,24 @@
 name: Publish
 
-# The ongoing release path: changesets accumulate on main, this opens a
-# "Version packages" pull request that bumps the version and writes the
-# changelog, and merging that pull request publishes and tags.
+# The release path, in two halves that are deliberately not the same event.
 #
-# Nothing is published by pushing to main directly. The version pull request is
-# the gate, and it is a real one: it shows the exact version bump and the exact
-# changelog entry before either becomes permanent, which is worth having for a
-# registry that does not let you replace a published version.
+#   · pushing to main opens or updates a "Version packages" pull request, which
+#     bumps the version and writes the changelog from the accumulated
+#     changesets. Merging it changes the repository and nothing else.
+#   · pushing a `solve-engine@<version>` tag publishes that version to npm.
+#
+# The split exists because a merge should not be able to publish. Under the
+# previous arrangement the version pull request was both the review gate and the
+# trigger, so an ordinary-looking merge put a version on a registry that does not
+# allow replacing one. Now the irreversible step has its own deliberate act, and
+# the tag is a thing somebody has to mean.
 #
 # This is the only workflow that publishes, and the only one npm will accept a
 # release from: it is registered as the package's trusted publisher, so an OIDC
 # token minted by any other workflow is rejected. Renaming this file breaks
-# publishing until the trusted publisher registration is updated to match.
+# publishing until the trusted publisher registration is updated to match, which
+# is also why the tag trigger was added here rather than in a release.yml of its
+# own.
 #
 # There is no token anywhere in here. `solve-engine@1.0.0-beta.0` was published
 # by hand to create the package, because trusted publishing cannot create one
@@ -21,10 +27,11 @@ name: Publish
 on:
   push:
     branches: [main]
+    tags: ["solve-engine@*"]
 
 # Every other workflow declares this and this one did not, so it was relying on
 # the repository default staying at `read`. That default is a setting somebody
-# can change in a menu, and the job below is the one that can publish, so the
+# can change in a menu, and the jobs below are the ones that can publish, so the
 # floor is stated here rather than inherited.
 permissions:
   contents: read
@@ -34,23 +41,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Version or publish
+  version:
+    name: Version pull request
+    # Tags land in this same workflow, so the trigger has to be re-checked per
+    # job rather than assumed from the file.
+    if: startsWith(github.ref, 'refs/heads/')
     runs-on: ubuntu-24.04
-    # Declared even though trusted publishing needs no secret from here. npm's
-    # trusted publisher config takes an optional environment name, and when one
-    # is registered the OIDC token is only accepted if it came from that
-    # environment. Binding it here is what makes that check mean anything.
-    environment: npm
 
     permissions:
-      # Push the version commit and the release tags.
+      # Push the version branch.
       contents: write
       # Open and update the version pull request.
       pull-requests: write
-      # Mint the OIDC token that trusted publishing authenticates with. Without
-      # this the publish falls back to looking for a token and fails.
-      id-token: write
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -58,6 +60,44 @@ jobs:
           # changesets compares against the history to work out what changed, so
           # a shallow clone gives it nothing to read.
           fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - run: npm ci
+
+      # No `publish:` key. This job can no longer put anything on the registry,
+      # which is the point of the split, and it holds no `id-token` permission
+      # to do it with either.
+      - name: Version pull request
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        with:
+          version: npm run changeset:version
+          title: "chore: version packages"
+          commit: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish:
+    name: Publish to npm
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    # npm's trusted publisher config takes an optional environment name, and
+    # when one is registered the OIDC token is only accepted if it came from
+    # that environment. Binding it here is what makes that check mean anything.
+    environment: npm
+
+    permissions:
+      contents: read
+      # Mint the OIDC token that trusted publishing authenticates with. Without
+      # this the publish falls back to looking for a token it cannot find.
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -80,6 +120,12 @@ jobs:
 
       - run: npm ci
 
+      # What the tag claims and what the tree actually contains have to be the
+      # same thing. Without this a tag typo publishes the previous version under
+      # the new name, and the registry keeps it forever.
+      - name: Check the tag against package.json
+        run: node scripts/assert-release-tag.mjs "${GITHUB_REF_NAME}"
+
       # The same gate a contributor runs, before anything can be published.
       - run: npm run verify
 
@@ -88,16 +134,17 @@ jobs:
       # before publishing is to install the tarball and use it.
       - run: npm run test:consumer
 
-      - name: Version pull request, or publish
-        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
-        with:
-          version: npm run changeset:version
-          publish: npm run changeset:publish
-          title: "chore: version packages"
-          commit: "chore: version packages"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # No NODE_AUTH_TOKEN and no --provenance. Trusted publishing
-          # authenticates over OIDC, and it generates provenance attestations on
-          # its own; passing the flag as well is redundant rather than harmful,
-          # but leaving it out keeps it clear where the signing comes from.
+      # The dist-tag is derived rather than typed. `1.0.0-beta.2` went out on
+      # `latest` because the publish command defaulted there, which left the
+      # `beta` tag pointing at an older, broken release. A prerelease now takes
+      # its own identifier as the dist-tag and only a stable version can become
+      # `latest`.
+      - name: Publish
+        run: |
+          DIST_TAG="$(node scripts/assert-release-tag.mjs "${GITHUB_REF_NAME}" --dist-tag)"
+          echo "Publishing ${GITHUB_REF_NAME} to the '${DIST_TAG}' dist-tag."
+          npm publish --workspace=packages/engine --tag "${DIST_TAG}"
+        # No NODE_AUTH_TOKEN and no --provenance. Trusted publishing
+        # authenticates over OIDC, and it generates provenance attestations on
+        # its own; passing the flag as well is redundant rather than harmful,
+        # but leaving it out keeps it clear where the signing comes from.

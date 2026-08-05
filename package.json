@@ -35,7 +35,6 @@
     "stats:size": "node scripts/collect-package-size.mjs",
     "lint:size": "node scripts/collect-package-size.mjs --check",
     "changeset:version": "changeset version && npm install --package-lock-only --ignore-scripts && npm run build && npm run stats:size",
-    "changeset:publish": "changeset publish",
     "stats:units": "node scripts/generate-unit-reference.mjs",
     "lint:units": "node scripts/generate-unit-reference.mjs --check"
   },

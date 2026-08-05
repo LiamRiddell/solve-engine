@@ -52,9 +52,31 @@ requests. A performance gate that flaps gets disabled within two weeks, and a
 disabled gate protects nothing. Watch it, calibrate the thresholds in
 `packages/engine/benchmarks/thresholds.json`, then promote it.
 
+## Actions
+
+- [x] Settings, Actions, General, Workflow permissions: **Allow GitHub Actions
+      to create and approve pull requests** is on. Off by default, and the
+      symptom is specific: the release workflow builds the version branch,
+      pushes it, and then fails with `GitHub Actions is not permitted to create
+      or approve pull requests`. The `pull-requests: write` grant in the
+      workflow cannot override it, because this setting sits above the token.
+      With it off, somebody has to open the version pull request by hand from
+      the `changeset-release/main` branch every release. Turned on 2026-08-05,
+      after exactly that happened. Confirmed with
+      `gh api repos/LiamRiddell/solve-engine/actions/permissions/workflow`,
+      which reports it as `can_approve_pull_request_reviews`, a name that does
+      not obviously cover creating them
+
 ## npm
 
 - [ ] Trusted Publishing (OIDC) configured against this repository, in
       preference to storing a long-lived `NPM_TOKEN` secret
+- [ ] The trusted publisher registration names **`publish.yml`** and the `npm`
+      environment. It binds to the workflow filename, so renaming that file, or
+      moving publishing into a different one, makes npm reject the token. This
+      is why the tag trigger lives in `publish.yml` alongside the version job
+      rather than in a release workflow of its own
 - [ ] Provenance requires a public repository, so publication happens after the
       visibility flip, not before
+- [ ] `beta` dist-tag points at a release that actually works. It pointed at
+      `1.0.0-beta.0` long after that version was found to be published empty
