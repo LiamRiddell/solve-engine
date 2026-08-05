@@ -6,6 +6,7 @@
     "solve-playground-bridge": "0.0.0"
   },
   "changesets": [
+    "drop-tslib-bundle-semver",
     "republish-with-dist"
   ]
 }
