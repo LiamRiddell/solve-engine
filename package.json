@@ -30,7 +30,7 @@
     "stats:tests": "node scripts/collect-test-stats.mjs",
     "lint:stats": "node scripts/collect-test-stats.mjs --check",
     "lint:sidebar": "node scripts/check-sidebar.mjs",
-		"lint:actions": "node scripts/check-action-pins.mjs",
+    "lint:actions": "node scripts/check-action-pins.mjs",
     "stats:size": "node scripts/collect-package-size.mjs",
     "lint:size": "node scripts/collect-package-size.mjs --check",
     "changeset:version": "changeset version && npm install --package-lock-only --ignore-scripts && npm run build && npm run stats:size",
