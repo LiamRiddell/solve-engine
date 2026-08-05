@@ -91,6 +91,40 @@ If a change touches the lexer, the parser, the virtual machine dispatch loop, or
 any caching layer, say so in the pull request so it gets the attention it
 deserves.
 
+## Releasing
+
+Two steps, on purpose. Nothing a merge does can put a version on npm, because a
+published version cannot be replaced and a merge is too easy a thing to do by
+accident.
+
+**Describe the change.** Add a changeset in the same pull request as the work:
+
+```bash
+npx changeset
+```
+
+It asks for a bump type and a description. That description becomes the
+changelog entry a stranger reads to decide whether to upgrade, so write it for
+them rather than for the diff.
+
+**Cut the release.** Merging to `main` opens a `chore: version packages` pull
+request that bumps the version, writes `CHANGELOG.md`, and regenerates the size
+figures the documentation site quotes. Review the version and the changelog
+there, then merge it. That changes the repository and publishes nothing.
+
+To publish, tag the commit the version pull request produced:
+
+```bash
+git tag solve-engine@1.0.0-beta.3 && git push origin solve-engine@1.0.0-beta.3
+```
+
+The tag has to match `packages/engine/package.json` exactly or the workflow
+refuses, so tag the version commit rather than whatever is on `main` at the
+time. The dist-tag is worked out from the version: a prerelease goes to its own
+identifier, `beta` for `1.0.0-beta.3`, and only a stable version becomes
+`latest`. Nobody types the dist-tag, which is how `1.0.0-beta.2` ended up on
+`latest` while `beta` still pointed at a broken release.
+
 ## Reporting problems
 
 For something that evaluates incorrectly, the syntax issue form is the fastest
