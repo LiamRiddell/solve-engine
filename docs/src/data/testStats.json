@@ -3,6 +3,6 @@
   "suites": 212,
   "docExamples": 305,
   "builtinPackages": 20,
-  "runtimeDependencies": 3,
+  "runtimeDependencies": 1,
   "subpathExports": 16
 }

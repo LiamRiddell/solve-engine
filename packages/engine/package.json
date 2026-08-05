@@ -1,7 +1,7 @@
 {
   "name": "solve-engine",
   "version": "1.0.0-beta.1",
-  "description": "The expression evaluation engine behind Solve — lexer, parser, bytecode VM, and an extensible package system.",
+  "description": "The expression evaluation engine behind Solve \u2014 lexer, parser, bytecode VM, and an extensible package system.",
   "keywords": [
     "expression-evaluator",
     "calculator",
@@ -208,9 +208,7 @@
     "typecheck:tsc": "tsc --noEmit --skipLibCheck"
   },
   "dependencies": {
-    "@tanstack/query-core": "^5.100.10",
-    "semver": "^7.6.0",
-    "tslib": "^2.6.1"
+    "@tanstack/query-core": "^5.100.10"
   },
   "devDependencies": {
     "@jest/globals": "^30.4.1",
@@ -218,6 +216,7 @@
     "@types/semver": "^7.5.0",
     "convert": "^7.0.0",
     "jest": "^30.4.2",
+    "semver": "^7.6.0",
     "ts-jest": "^29.4.12",
     "tsup": "8.5.1",
     "typescript": "5.9.3"

@@ -16,7 +16,6 @@
     "resolveJsonModule": true,
     "noImplicitAny": true,
     "isolatedModules": true,
-    "importHelpers": true,
     "inlineSourceMap": true,
     "inlineSources": true,
     "skipLibCheck": true

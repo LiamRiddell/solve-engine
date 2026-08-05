@@ -104,11 +104,67 @@ function readCommitted() {
 	}
 }
 
+/**
+ * How closely each field has to match for the committed file to count as current.
+ *
+ * This used to be one string comparison over the whole file, which was wrong,
+ * and wrong in the way that only shows up once somebody regenerates the file on
+ * a different machine from the one CI uses. Two of these numbers are
+ * reproducible to the byte and three are not:
+ *
+ *   · the gzipped figures come from bundling `dist`, and the bundle is
+ *     deterministic. A Windows checkout and a Linux runner agree exactly, which
+ *     has been checked rather than assumed.
+ *   · `fileCount` is a structural fact about the package. Also exact.
+ *   · the tarball and unpacked figures are the sum of what is on disk, and that
+ *     drifts by around a kilobyte across platforms. `package.json` alone carries
+ *     225 more bytes in a Windows working tree because of its line endings,
+ *     while git stores it with LF and CI therefore packs the shorter one.
+ *
+ * So the byte totals get a tolerance and everything else does not. The tolerance
+ * is far tighter than the precision the number is ever shown at: the site
+ * renders these to a tenth of a megabyte, which on a two megabyte tarball is
+ * a step of about five percent.
+ */
+const EXACT = ["importOneGzip", "importEverythingGzip", "fileCount"];
+const TOLERANT = { tarballBytes: 0.005, unpackedBytes: 0.005 };
+
+/** Field names whose committed value no longer describes the package. */
+function staleFields(committed) {
+	const stale = [];
+
+	for (const field of EXACT) {
+		if (committed[field] !== sizes[field]) stale.push(field);
+	}
+
+	for (const [field, tolerance] of Object.entries(TOLERANT)) {
+		const was = committed[field];
+		if (typeof was !== "number") {
+			stale.push(field);
+			continue;
+		}
+		if (Math.abs(sizes[field] - was) / was > tolerance) stale.push(field);
+	}
+
+	return stale;
+}
+
 if (process.argv.includes("--check")) {
-	if (readCommitted() !== next) {
+	const raw = readCommitted();
+	let committed;
+	try {
+		committed = JSON.parse(raw);
+	} catch {
+		committed = null;
+	}
+
+	const stale = committed ? staleFields(committed) : ["(the file is missing or unreadable)"];
+
+	if (stale.length > 0) {
 		console.error(
 			"docs/src/data/packageSize.json is out of date.\n" +
-				`  committed: ${readCommitted().trim() || "(missing)"}\n` +
+				`  stale:     ${stale.join(", ")}\n` +
+				`  committed: ${raw.trim() || "(missing)"}\n` +
 				`  actual:    ${next.trim()}\n` +
 				"Run `npm run stats:size` and commit the result.",
 		);

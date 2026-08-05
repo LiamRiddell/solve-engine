@@ -9,7 +9,6 @@
 		"allowJs": true,
 		"noImplicitAny": true,
 		"moduleResolution": "bundler",
-		"importHelpers": true,
 		"isolatedModules": true,
 		"skipLibCheck": true,
 		"strictNullChecks": true,
