@@ -23,6 +23,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { collectExamples, groupExamples } from "../tools/docExampleCorpus.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENGINE = path.join(ROOT, "packages/engine");
@@ -148,6 +149,82 @@ try {
 }
 check('require("solve-engine") evaluates 2 + 2 -> 4', cjsResult === "4", `got ${cjsResult}`);
 
+// -- The documented corpus, against the installed package -----------------
+//
+// The cases above are a smoke test. This is the real one: every example the
+// documentation asserts, with the results the docs already commit to, executed
+// against what npm serves rather than against `src`. It is the same corpus
+// `__tests__/docs/DocExamples.spec.ts` runs, so the two agreeing is the actual
+// claim being made: that the packaged bundle behaves like the source it was
+// built from.
+console.log("\nDocumented examples, against the installed package");
+
+const corpus = collectExamples(path.join(ROOT, "docs/src/content/docs"), [path.join(ROOT, "README.md")]);
+const groups = groupExamples(corpus);
+const asserted = corpus.filter(example => example.expected !== null);
+
+// A third implementation of the same parsing rule lives in
+// collect-test-stats.mjs, and its result is committed. If any of the three
+// drifts, the corpus quietly shrinks and this run keeps passing on less, so the
+// counts are compared rather than trusted. That script walks the docs tree
+// only, so README examples are excluded from the comparison.
+const stats = JSON.parse(fs.readFileSync(path.join(ROOT, "docs/src/data/testStats.json"), "utf8"));
+const assertedInDocs = asserted.filter(example => !example.file.endsWith("README.md")).length;
+check(
+	`the corpus matches the committed count (${stats.docExamples})`,
+	assertedInDocs === stats.docExamples,
+	`collected ${assertedInDocs}`,
+);
+
+fs.writeFileSync(path.join(scratch, "corpus.json"), JSON.stringify(groups));
+fs.writeFileSync(
+	path.join(scratch, "probe-docs.mjs"),
+	[
+		'import { ExpressionEngine } from "solve-engine";',
+		'import { formatValue } from "solve-engine/format";',
+		'import { readFileSync } from "node:fs";',
+		'const groups = JSON.parse(readFileSync("corpus.json", "utf8"));',
+		"const results = [];",
+		"for (const group of groups) {",
+		'  const engine = new ExpressionEngine("en");',
+		"  group.forEach((example, index) => {",
+		"    let actual = null;",
+		"    try {",
+		"      const [value] = engine.evaluateLine(index + 1, example.expression);",
+		// Double backslash: this string is source that gets written to a file, so
+		// the regex needs to survive one round of escaping to reach the probe as
+		// `\s`. Written singly it reaches the probe as `s`, which matches the
+		// letter and leaves the leading space on every result.
+		'      if (example.expected !== null) actual = formatValue(value).replace(/^=\\s*/, "");',
+		'    } catch (error) { actual = "threw: " + error.message; }',
+		"    if (example.expected !== null) results.push({ file: example.file, line: example.line, expression: example.expression, expected: example.expected, actual });",
+		"  });",
+		"  engine.clear();",
+		"}",
+		"process.stdout.write(JSON.stringify(results));",
+	].join("\n"),
+);
+
+let docResults = [];
+try {
+	docResults = JSON.parse(run("node", ["probe-docs.mjs"], scratch));
+} catch (error) {
+	console.error(`  the documentation probe did not run: ${error.message}`);
+}
+
+const mismatches = docResults.filter(result => result.actual !== result.expected);
+check(
+	`${docResults.length} documented examples evaluate as documented`,
+	docResults.length === asserted.length && mismatches.length === 0,
+	mismatches.length > 0 ? `${mismatches.length} mismatched` : `ran ${docResults.length} of ${asserted.length}`,
+);
+for (const bad of mismatches.slice(0, 12)) {
+	console.log(`        ${path.relative(ROOT, bad.file)}:${bad.line}  ${bad.expression}`);
+	console.log(`          expected ${bad.expected}`);
+	console.log(`          actual   ${bad.actual}`);
+}
+if (mismatches.length > 12) console.log(`        ...and ${mismatches.length - 12} more`);
+
 console.log("\nWhat actually got installed");
 const installed = path.join(scratch, "node_modules/solve-engine");
 const manifest = JSON.parse(fs.readFileSync(path.join(installed, "package.json"), "utf8"));
@@ -165,7 +242,7 @@ fs.rmSync(scratch, { recursive: true, force: true });
 
 console.log("");
 if (failures.length > 0) {
-	console.error(`consumer-e2e: ${failures.length} of ${CASES.length + 3} checks failed.`);
+	console.error(`consumer-e2e: ${failures.length} of ${CASES.length + 5} checks failed.`);
 	process.exit(1);
 }
-console.log(`consumer-e2e: ${CASES.length + 3} checks passed against an installed copy.`);
+console.log(`consumer-e2e: ${CASES.length + 5} checks passed against an installed copy, including ${docResults.length} documented examples.`);
