@@ -1,6 +1,7 @@
 import type { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import type { TokenCategory } from "@solve-js/language/TokenCategory";
 import { getTokenCategory } from "@solve-js/language/TokenCategoryMap";
+import type { Token } from "@solve-js/lexer/Token";
 import { knownUnits } from "@solve-js/lexer/units";
 import { getMeasure } from "@solve-js/uom/UomConverter";
 
@@ -83,6 +84,21 @@ export interface LanguageServiceOptions {
 	 * evaluation engine's DAG snapshot instead.
 	 */
 	variableNameSource?: () => Iterable<string>;
+
+	/**
+	 * Run the normalizer on the highlighting path, so phrase-fused tokens are
+	 * classified as the thing the parser will actually see.
+	 *
+	 * Off by default, and the default is a judgement rather than an oversight.
+	 * Highlighting runs per keystroke, normalization is real work, and a host
+	 * that is happy with lexer-level categories should not start paying for
+	 * fusion because a new version shipped. Turn it on and `12/09/2026` is one
+	 * `datetime` span instead of five number and operator spans; leave it off
+	 * and nothing about this class changes.
+	 *
+	 * See `benchmarks/languageServiceBenchmarks.spec.ts` for what it costs.
+	 */
+	normalizeForHighlighting?: boolean;
 }
 
 /**
@@ -139,6 +155,7 @@ export interface LanguageServiceOptions {
 export class LanguageService {
 	private engine: ExpressionEngine | null;
 	private variableNameSource: () => Iterable<string>;
+	private readonly normalizeForHighlighting: boolean;
 
 	// Bounded cache keyed by line number ALONE, not `${lineNumber}:${lineText}`
 	// as an earlier version of this class did. A line's previous text state is
@@ -180,6 +197,7 @@ export class LanguageService {
 	constructor(engine?: ExpressionEngine | null, options?: LanguageServiceOptions) {
 		this.engine = engine ?? null;
 		this.variableNameSource = options?.variableNameSource ?? (() => this.defaultVariableNames());
+		this.normalizeForHighlighting = options?.normalizeForHighlighting ?? false;
 	}
 
 	private defaultVariableNames(): Iterable<string> {
@@ -190,6 +208,89 @@ export class LanguageService {
 			for (const name of written) names.add(name);
 		}
 		return names;
+	}
+
+	/**
+	 * Lex a line, normalize it, and place every resulting token back in the
+	 * source text.
+	 *
+	 * ## Why placing them back is the hard part
+	 *
+	 * Normalization produces three kinds of token and only one of them can be
+	 * highlighted the obvious way.
+	 *
+	 * A token the normalizer left alone still describes its own text, so its
+	 * span is `offset` to `offset + value.length`, exactly as before.
+	 *
+	 * A FUSED token does not. `10 frames` becomes a FRAME_COUNT whose value is
+	 * `10`, and a timecode becomes a token whose value is a comma-separated
+	 * tuple appearing nowhere on the line. Those carry `sourceEnd`, set by
+	 * `createFusedToken`, which is the only place that knows where the fusion
+	 * ended.
+	 *
+	 * An INSERTED token has no text at all. Implicit multiplication puts a STAR
+	 * at the following token's offset, so `5(3)` gains a `*` sitting exactly
+	 * where the `(` is. Painting it would colour a character the reader never
+	 * typed as an operator, and would overlap the token that really is there.
+	 * These are dropped, detected by the one test that needs no cooperation
+	 * from any rule: a token with no recorded fusion span must match the text
+	 * at its own offset, and an inserted one does not.
+	 *
+	 * @param lineText - The raw line.
+	 * @returns Spans in the same shape `Lexer.getHighlightTokens` returns.
+	 */
+	private classifyNormalized(
+		lineText: string,
+	): { type: string; value: string; offset: number; col: number; length: number; category: TokenCategory | undefined }[] {
+		const lexer = this.engine!.getLexer();
+		const raw = lexer.getHighlightTokenObjects(lineText);
+		if (raw.length === 0) return [];
+
+		// Offsets from a blockquote line are relative to the stripped text, so
+		// the text this checks against has to be stripped the same way.
+		const source =
+			lineText.startsWith("> ") && lexer.classifyLine(lineText).skip ? lineText.slice(2) : lineText;
+
+		let normalized: Token[];
+		try {
+			normalized = this.engine!.getNormalizer().normalize(raw);
+		} catch {
+			// Normalization is an enhancement here, not a requirement. A rule
+			// that throws on a half-typed line should cost the reader phrase
+			// colouring, not all colouring.
+			normalized = raw;
+		}
+
+		const out: {
+			type: string;
+			value: string;
+			offset: number;
+			col: number;
+			length: number;
+			category: TokenCategory | undefined;
+		}[] = [];
+
+		for (const token of normalized) {
+			let end: number;
+			if (token.sourceEnd !== undefined) {
+				end = token.sourceEnd;
+			} else if (source.startsWith(token.value, token.offset)) {
+				end = token.offset + token.value.length;
+			} else {
+				continue;
+			}
+
+			out.push({
+				type: token.type,
+				value: token.value,
+				offset: token.offset,
+				col: token.col,
+				length: end - token.offset,
+				category: getTokenCategory(token.type),
+			});
+		}
+
+		return out;
 	}
 
 	/**
@@ -216,7 +317,9 @@ export class LanguageService {
 		}
 
 		const lexer = this.engine.getLexer();
-		const lexed = lexer.getHighlightTokens(lineText);
+		const lexed = this.normalizeForHighlighting
+			? this.classifyNormalized(lineText)
+			: lexer.getHighlightTokens(lineText);
 		if (lexed.length === 0) {
 			this.putCache(lineNumber, lineText, []);
 			return [];

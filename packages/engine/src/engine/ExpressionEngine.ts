@@ -2840,6 +2840,20 @@ export class ExpressionEngine {
     }
 
     /**
+     * This engine's token normalizer, with every phrase and rule its packages
+     * registered.
+     *
+     * Exposed for the highlighting path. `LanguageService` classifies tokens
+     * after the lexer but can only see phrase-fused types (a date literal, a
+     * timecode, a package's own fused token) by running the same normalizer
+     * evaluation runs. Sharing this instance rather than building a second one
+     * is what keeps the two from disagreeing.
+     */
+    getNormalizer(): TokenNormalizer {
+        return this.normalizer;
+    }
+
+    /**
      * Every completion candidate contributed by currently-registered
      * packages (`IEnginePackage.completionItems`), flattened across all of
      * them. Used by `LanguageService.getCompletions()`.

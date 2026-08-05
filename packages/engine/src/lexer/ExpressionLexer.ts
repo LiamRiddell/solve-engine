@@ -182,6 +182,8 @@ export class LexerToken implements Token {
     public lineBreaks: number,
     public line: number,
     public col: number,
+    /** See {@link Token.sourceEnd}. Set only on normalizer-fused tokens. */
+    public sourceEnd?: number,
   ) {}
 }
 
