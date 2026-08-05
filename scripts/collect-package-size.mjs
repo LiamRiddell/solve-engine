@@ -77,13 +77,99 @@ function bundled() {
 	};
 }
 
+/**
+ * The first complete JSON value in a command's output.
+ *
+ * npm writes the tarball name to stderr and the JSON to stdout, but a warning
+ * can still land in front of it, so the value has to be found rather than
+ * assumed to start at character zero.
+ *
+ * This used to do `raw.slice(raw.indexOf("["))`, which found the first opening
+ * bracket anywhere in the output. That is only the start of the value while the
+ * value happens to be an array, and it stopped being one, at which point the
+ * search found a nested `files` array most of the way into the document and
+ * parsed that instead. It then failed on the text after it, which pointed at
+ * character 25,841 of the output and said nothing about the real cause.
+ *
+ * Scanning to the matching close brace or bracket makes the extraction say what
+ * it means: take one value, ignore whatever surrounds it.
+ */
+function firstJsonValue(raw) {
+	// The ordinary case, and the only one when nothing else wrote to stdout.
+	try {
+		return JSON.parse(raw);
+	} catch {
+		// Something is wrapped around it. Fall through and go looking.
+	}
+
+	// Every place a value could begin, tried in order. Candidates are tested
+	// rather than trusted because a line of prose can contain a bracket too:
+	// picking the first one and committing to it is the mistake this function
+	// exists to stop making.
+	for (let start = 0; start < raw.length; start++) {
+		const opener = raw[start];
+		if (opener !== "[" && opener !== "{") continue;
+
+		const closer = opener === "[" ? "]" : "}";
+		let depth = 0;
+		let inString = false;
+		let escaped = false;
+
+		for (let i = start; i < raw.length; i++) {
+			const c = raw[i];
+			if (inString) {
+				if (escaped) escaped = false;
+				else if (c === "\\") escaped = true;
+				else if (c === '"') inString = false;
+				continue;
+			}
+			if (c === '"') inString = true;
+			else if (c === opener) depth++;
+			else if (c === closer && --depth === 0) {
+				try {
+					return JSON.parse(raw.slice(start, i + 1));
+				} catch {
+					break; // Not a value after all. Try the next opener.
+				}
+			}
+		}
+	}
+
+	throw new Error(`no JSON value found in:\n${raw.slice(0, 400)}`);
+}
+
+/**
+ * The one packed package, whichever way the npm in use reports it.
+ *
+ * npm 12 changed the shape of `npm pack --json` from a list of packages to an
+ * object keyed by package name. Both have to be read, because the two npms are
+ * both in use here: the publish workflow pins npm 12 so it can speak OIDC to
+ * the registry, while every other job takes whatever the Node version ships.
+ * Reading only one shape means the numbers agree everywhere until a release,
+ * which is the worst moment to find out.
+ */
+function onlyPackage(parsed) {
+	const entry = Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0];
+
+	// Loud rather than silent. Without this a third shape would write a file
+	// with keys missing, because JSON.stringify drops undefined, and the check
+	// would then report drift somewhere unrelated.
+	for (const field of ["size", "unpackedSize", "entryCount"]) {
+		if (typeof entry?.[field] !== "number") {
+			throw new Error(
+				`npm pack --json reported no numeric "${field}". ` +
+					`Its output shape has changed again: ${JSON.stringify(parsed).slice(0, 200)}`,
+			);
+		}
+	}
+
+	return entry;
+}
+
 /** What npm ships and unpacks, straight from `npm pack`. */
 function published() {
 	const raw = run("npm", ["pack", "--dry-run", "--json", "--workspace=packages/engine"]);
-	// npm prints the tarball name on stderr and the JSON on stdout, but a
-	// warning can still land in front of the array, so start at the bracket.
-	const parsed = JSON.parse(raw.slice(raw.indexOf("[")));
-	const entry = parsed[0];
+	const entry = onlyPackage(firstJsonValue(raw));
 	return {
 		tarballBytes: entry.size,
 		unpackedBytes: entry.unpackedSize,
