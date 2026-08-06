@@ -5,8 +5,8 @@
  * This exists because `docs-internal/SOULVERCORE_FEATURE_AUDIT.md` was written
  * by reading the code and asking "do we have something in this area", and the
  * answer to that question is not the same as "does the documented syntax work".
- * It marked 39 of 40 pages implemented. Measured, 97 of the 122 documented
- * examples below produce the documented answer, 10 do not, and 15 differ only
+ * It marked 39 of 40 pages implemented. Measured, 98 of the 122 documented
+ * examples below produce the documented answer, 8 do not, and 16 differ only
  * in formatting. It credited `as timespan` and
  * `as laptime` to `packages/time`, where the only occurrence of the word
  * "timespan" is a doc comment. It credited the rounding page to `as decimal`
@@ -136,6 +136,9 @@ const SUPPORTED: readonly Example[] = [
 	["bases", "0x9F31 to decimal", "40753"],
 	["bases", "0b101101 as base 8", "0o55"],
 
+	// Money times a count, and two-unit conversions (2026-08-06).
+	["units", "$30 * 4 days", "120"],
+
 	// Calendar periods and week numbers (2026-08-06).
 	["dates", "days in Q3", "92 days"],
 	["dates", "days in February 2020", "29 days"],
@@ -214,8 +217,6 @@ const GAPS: readonly Example[] = [
 	["rates", "30 hours at $30/hour", "900"],
 	["rates", "$500 at $20/hour", "25 hours"],
 	// Money times a duration. Soulver reads this as   per day for 4 days.
-	["units", "$30 * 4 days", "120"],
-	["timespans", "12.5 minutes in minutes and seconds", "12 min 30 s"],
 ];
 
 /**
@@ -246,6 +247,8 @@ const FORMATTING_ONLY: readonly (readonly [string, string, string])[] = [
 	// Clock and laptime arithmetic is correct; only the rendering differs.
 	// Soulver prints a bare time where this prints the full date it lands on,
 	// and an interval as hours and minutes where this gives total minutes.
+	// Right split, written out in full rather than abbreviated.
+	["12.5 minutes in minutes and seconds", "12 min 30 s", "12 minutes 30 seconds"],
 	["16:00 + 3 hours 12 minutes", "7:12 pm", "7:12:00 PM"],
 	["4pm to 3am", "11 hours", "660 minutes"],
 	["(03:04:05 + 01:02:03) as laptime", "04:06:08", "04:06:08"],
@@ -353,8 +356,8 @@ describe("Soulver parity — documented examples that do not", () => {
 		// quotes this number. A change here without a change there leaves the
 		// audit stating a total it did not measure, which is how the previous
 		// version of that document ended up fictional.
-		expect(GAPS.length).toBe(10);
-		expect(SUPPORTED.length).toBe(97);
+		expect(GAPS.length).toBe(8);
+		expect(SUPPORTED.length).toBe(98);
 	});
 });
 

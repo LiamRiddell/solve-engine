@@ -1,4 +1,4 @@
-import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixValue, percentageValue, type MatrixData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, type MatrixData } from "@solve-js/vm/Value";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom } from "@solve-js/vm/VMConversion";
 import { transpose, determinant, inverse, matrixMultiply, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
@@ -655,6 +655,38 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // daysCount(n) -> n labelled as days. "days in Q3" is a count of days
     // and should say so; a bare 92 loses what was being counted.
     93: (args) => uomValue(args[0].toNumber(), "days"),
+    // asTwoUnits(value, majorUnit, minorUnit) -> "12 min 30 s".
+    //
+    // "12.5 minutes in minutes and seconds" asks for one quantity split
+    // across two units, which every other conversion path cannot express:
+    // they each produce a single number in a single unit.
+    //
+    // The whole part goes to the major unit and the remainder to the minor,
+    // so nothing is lost. A pair that is not ordered major-then-minor, or
+    // that spans two different measures, reports rather than guessing.
+    94: (args) => {
+        const major = args[1].value as string;
+        const minor = args[2].value as string;
+        const majorEntry = UNIT_TABLE[major.toLowerCase()] as readonly [number, number] | undefined;
+        const minorEntry = UNIT_TABLE[minor.toLowerCase()] as readonly [number, number] | undefined;
+        if (majorEntry === undefined || minorEntry === undefined) {
+            return errorValue("UNKNOWN_UNIT", `${major} and ${minor}: one of these is not a unit`);
+        }
+        if (majorEntry[0] !== minorEntry[0]) {
+            return errorValue("INCOMPATIBLE_UNITS", `${major} and ${minor} measure different things`);
+        }
+        if (minorEntry[1] >= majorEntry[1]) {
+            return errorValue("INCOMPATIBLE_UNITS", `${major} and ${minor}: name the larger unit first`);
+        }
+        const source = args[0];
+        const sourceEntry = source.type === ValueType.Uom && source.unit !== undefined
+            ? (UNIT_TABLE[source.unit.toLowerCase()] as readonly [number, number] | undefined)
+            : undefined;
+        const inBase = source.toNumber() * (sourceEntry?.[1] ?? majorEntry[1]);
+        const majorCount = Math.floor(inBase / majorEntry[1]);
+        const minorCount = Math.round(((inBase - majorCount * majorEntry[1]) / minorEntry[1]) * 1000) / 1000;
+        return stringValue(`${majorCount} ${major} ${minorCount} ${minor}`);
+    },
     // ── Investments (packages/finance/) ────────────────────────────────────
     // compoundFutureValueEvery(principal, rate, years, periodsPerYear)
     // FV = P(1 + r/n)^(n·y). Index 51 is the same formula with n fixed at 1;

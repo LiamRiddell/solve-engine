@@ -13,6 +13,7 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { unifyUom, binaryOp } from "@solve-js/vm/VMConversion";
+import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 
@@ -318,6 +319,37 @@ function invokeFrameBody(
         throw bodyResult.error;
     }
     return bodyResult.value;
+}
+
+/**
+ * `$30 × 4 days`, money multiplied by a count of something.
+ *
+ * The unit system refused this outright, because there is no such unit as a
+ * dollar-day and combining the two is genuinely undefined in general. But it
+ * is not undefined in the one case where exactly one side is money: the other
+ * side is then a count, and the answer is that much money.
+ *
+ * Restricted to money on purpose. `3 kg × 4 days` really has no meaning worth
+ * guessing at, and it still says so.
+ *
+ * @returns The product, or null when this is not the money case.
+ */
+function moneyTimesQuantity(l: Value, r: Value): Value | null {
+    if (l.type !== ValueType.Uom || r.type !== ValueType.Uom) return null;
+    // Captured before the rate guard, which narrows the property away.
+    const leftUnit = l.unit;
+    const rightUnit = r.unit;
+    if (leftUnit === undefined || rightUnit === undefined) return null;
+    // Checked directly rather than through isRateUnit(), whose `unit is
+    // string` signature narrows both locals to never on the negative branch.
+    if (leftUnit.includes("/") || rightUnit.includes("/")) return null;
+
+    const leftIsMoney = CURRENCY_DISPLAY[leftUnit.toUpperCase()] !== undefined;
+    const rightIsMoney = CURRENCY_DISPLAY[rightUnit.toUpperCase()] !== undefined;
+    // Exactly one side. Money times money is not a thing either.
+    if (leftIsMoney === rightIsMoney) return null;
+
+    return uomValue(l.toNumber() * r.toNumber(), leftIsMoney ? leftUnit : rightUnit);
 }
 
 /**
@@ -823,6 +855,12 @@ export function executeBytecode(
           } else if (r.type === ValueType.Uom && isRateUnit(r.unit) && l.type === ValueType.Uom && l.unit) {
             // Commutative: "3 minutes × 30 fps" too.
             stack.push(multiplyRateByMatchingUom(r, l));
+          } else if (moneyTimesQuantity(l, r) !== null) {
+            // "$30 × 4 days" is $120: an amount of money multiplied by a
+            // count of something. Without this the unit system refused it
+            // outright ("Cannot combine incompatible units: USD and days"),
+            // because there is no such unit as a dollar-day.
+            stack.push(moneyTimesQuantity(l, r)!);
           } else {
             stack.push(binaryOp(l, r, (a, b) => a * b, (a, b) => a * b, "mul"));
           }

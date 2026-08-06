@@ -4,6 +4,8 @@ import { ConvertParselet } from "./parselets/ConvertParselet";
 import { PossibilitiesParselet } from "./parselets/PossibilitiesParselet";
 import { uomPossibilitiesNormalizerRule } from "./normalizer/PossibilitiesNormalizerRule";
 import { compoundQuantityNormalizerRule } from "./normalizer/CompoundQuantityNormalizerRule";
+import { twoUnitConversionNormalizerRule } from "./normalizer/TwoUnitConversionNormalizerRule";
+import { TwoUnitConversionParselet } from "./parselets/TwoUnitConversionParselet";
 import { reversedConversionNormalizerRule } from "./normalizer/ReversedConversionNormalizerRule";
 import { CookingConversionParselet } from "./parselets/CookingConversionParselet";
 import { COOKING_CONVERT_IDX, cookingConvertHandler } from "./parselets/CookingPluginFunctions";
@@ -30,12 +32,14 @@ export const UOM_PACKAGE: IEnginePackage = {
     { tokenType: "UOM_POSSIBILITIES_QUERY", parselet: new PossibilitiesParselet() },
   ],
   infixParselets: [
+    { tokenType: "IN_TWO_UNITS", parselet: new TwoUnitConversionParselet(94) },
     { tokenType: "UNIT", parselet: new UomLiteralParselet() },
     { tokenType: "INGREDIENT_NAME", parselet: new CookingConversionParselet() },
   ],
   normalizerRules: [
     uomPossibilitiesNormalizerRule(),
     compoundQuantityNormalizerRule(),
+    twoUnitConversionNormalizerRule(),
     reversedConversionNormalizerRule(),
     ingredientNameNormalizerRule(),
   ],
