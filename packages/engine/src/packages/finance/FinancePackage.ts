@@ -1,4 +1,5 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
+import { InvestmentGrowthParselet, PresentValueParselet, ReturnOnInvestmentParselet, AnnualReturnParselet } from "./parselets/InvestmentParselets";
 import { CompoundInterestParselet } from "./parselets/CompoundInterestParselet";
 import { LoanRepaymentParselet } from "./parselets/LoanRepaymentParselet";
 import { SalesTaxParselet } from "./parselets/SalesTaxParselet";
@@ -14,6 +15,9 @@ import { inYearDollarsNormalizerRule } from "./normalizer/InYearDollarsNormalize
 // CALL_BUILTIN indices. See VMBuiltins.ts for the handler implementations.
 const COMPOUND_FV = 51, COMPOUND_INTEREST = 52;
 const LOAN_REPAYMENT = 55, LOAN_INTEREST = 56;
+// Investments (documented Soulver spellings). See VMBuiltins.ts 80-84.
+const COMPOUND_FV_EVERY = 80, COMPOUND_INTEREST_EVERY = 81;
+const PRESENT_VALUE = 82, ROI = 83, ANNUAL_RETURN = 84;
 const TAX_ADD = 58, TAX_REMOVE = 59;
 // 60 = inflationAdjust(amount, fromYear, toYear). See InflationQueryParselet.ts
 // and VMBuiltins.ts. The other three inflation calculations (present-year
@@ -74,13 +78,17 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     "vat off": "TAX_OFF",
     "what is": "WHAT_IS",
     "what was": "WHAT_WAS",
+    "present value of": "PRESENT_VALUE_OF",
+    "annual return on": "ANNUAL_RETURN_ON",
     "value of": "VALUE_OF",
     "worth in": "WORTH_IN",
     "assuming": "ASSUMING",
   },
   prefixParselets: [
-    { tokenType: "COMPOUND_INTEREST_ON", parselet: new CompoundInterestParselet(COMPOUND_FV) },
-    { tokenType: "INTEREST_ON", parselet: new CompoundInterestParselet(COMPOUND_INTEREST) },
+    { tokenType: "PRESENT_VALUE_OF", parselet: new PresentValueParselet(PRESENT_VALUE) },
+    { tokenType: "ANNUAL_RETURN_ON", parselet: new AnnualReturnParselet(ANNUAL_RETURN) },
+    { tokenType: "COMPOUND_INTEREST_ON", parselet: new CompoundInterestParselet(COMPOUND_FV, COMPOUND_FV_EVERY) },
+    { tokenType: "INTEREST_ON", parselet: new CompoundInterestParselet(COMPOUND_INTEREST, COMPOUND_INTEREST_EVERY) },
 
     { tokenType: "DAILY_REPAYMENT_ON", parselet: new LoanRepaymentParselet(LOAN_REPAYMENT, 365) },
     { tokenType: "MONTHLY_REPAYMENT_ON", parselet: new LoanRepaymentParselet(LOAN_REPAYMENT, 12) },
@@ -100,6 +108,12 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     { tokenType: "VALUE_OF", parselet: new InflationFutureValueParselet() },
   ],
   infixParselets: [
+    // The documented bare forms: "$1,000 after 3 years at 7%" and the "for
+    // ... compounding monthly" variant. Both pivot words behave identically;
+    // Soulver uses "after" for the annual form and "for" with an interval.
+    { tokenType: "AFTER", parselet: new InvestmentGrowthParselet(COMPOUND_FV, COMPOUND_FV_EVERY) },
+    { tokenType: "FOR_DURATION", parselet: new InvestmentGrowthParselet(COMPOUND_FV, COMPOUND_FV_EVERY) },
+    { tokenType: "INVESTED", parselet: new ReturnOnInvestmentParselet(ROI) },
     { tokenType: "IN_YEAR_DOLLARS", parselet: new InYearDollarsParselet() },
   ],
   normalizerRules: [

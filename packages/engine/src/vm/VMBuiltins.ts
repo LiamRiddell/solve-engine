@@ -1,4 +1,4 @@
-import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixValue, type MatrixData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixValue, percentageValue, type MatrixData } from "@solve-js/vm/Value";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom } from "@solve-js/vm/VMConversion";
 import { transpose, determinant, inverse, matrixMultiply, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
@@ -589,6 +589,86 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         const value = args[0];
         if (value.type !== ValueType.Symbolic) return value;
         return symbolicToValue(apartSymbolic(value.value as SymbolicNode));
+    },
+    // ── Investments (packages/finance/) ────────────────────────────────────
+    // compoundFutureValueEvery(principal, rate, years, periodsPerYear)
+    // FV = P(1 + r/n)^(n·y). Index 51 is the same formula with n fixed at 1;
+    // this one backs "compounding monthly"/"quarterly"/"daily"/"weekly".
+    // Kept separate rather than widening 51, because 51 is also the public
+    // compoundInterest(principal, rate, years) call and its arity is part of
+    // that contract.
+    80: (args) => {
+        const principal = args[0].toNumber();
+        const rate = args[1].toNumber();
+        const years = args[2].toNumber();
+        const perYear = args[3].toNumber();
+        if (perYear <= 0) {
+            return errorValue("INVALID_RATE", `compounding: ${perYear} periods per year is not a period`);
+        }
+        if (1 + rate / perYear <= 0) {
+            return errorValue("INVALID_RATE", `compounding: rate ${rate} makes each period non-positive`);
+        }
+        const fv = principal * Math.pow(1 + rate / perYear, perYear * years);
+        return args[0].type === ValueType.Uom ? uomValue(fv, args[0].unit!) : numberValue(fv);
+    },
+    // compoundInterestEarnedEvery(principal, rate, years, periodsPerYear)
+    // The interest-only portion of index 80, i.e. FV - P.
+    81: (args) => {
+        const principal = args[0].toNumber();
+        const rate = args[1].toNumber();
+        const years = args[2].toNumber();
+        const perYear = args[3].toNumber();
+        if (perYear <= 0 || 1 + rate / perYear <= 0) {
+            return errorValue("INVALID_RATE", `compounding: rate ${rate} over ${perYear} periods per year is not usable`);
+        }
+        const interest = principal * (Math.pow(1 + rate / perYear, perYear * years) - 1);
+        return args[0].type === ValueType.Uom ? uomValue(interest, args[0].unit!) : numberValue(interest);
+    },
+    // presentValue(futureValue, rate, years) -> FV / (1 + r)^y, what a sum
+    // promised in the future is worth today. The inverse of index 51.
+    82: (args) => {
+        const future = args[0].toNumber();
+        const rate = args[1].toNumber();
+        const years = args[2].toNumber();
+        if (1 + rate <= 0) {
+            return errorValue("INVALID_RATE", `presentValue: rate ${rate} makes (1 + rate) non-positive`);
+        }
+        const pv = future / Math.pow(1 + rate, years);
+        return args[0].type === ValueType.Uom ? uomValue(pv, args[0].unit!) : numberValue(pv);
+    },
+    // returnOnInvestment(invested, returned) -> (returned - invested) /
+    // invested, the gain as a multiple of what was put in. $500 in and $1,500
+    // out is 2x, not 3x: ROI conventionally measures the profit against the
+    // cost, so doubling your money is 1x return and tripling it is 2x. The
+    // money multiple (3x here) is a different figure; `$1,500 / $500` gives it.
+    83: (args) => {
+        const invested = args[0].toNumber();
+        const returned = args[1].toNumber();
+        if (invested === 0) {
+            return errorValue("INVALID_RATE", "roi: nothing was invested, so there is no return on it");
+        }
+        return numberValue((returned - invested) / invested);
+    },
+    // annualisedReturn(invested, returned, years) -> CAGR, the constant
+    // yearly rate that turns `invested` into `returned` over `years`:
+    // (returned/invested)^(1/years) - 1. Returned as a Percentage so it
+    // renders "13.99%" rather than 0.1399.
+    84: (args) => {
+        const invested = args[0].toNumber();
+        const returned = args[1].toNumber();
+        const years = args[2].toNumber();
+        if (invested <= 0) {
+            return errorValue("INVALID_RATE", "annual return: the amount invested must be positive");
+        }
+        if (years <= 0) {
+            return errorValue("INVALID_RATE", "annual return: the period must be longer than zero");
+        }
+        if (returned <= 0) {
+            // A total loss has no finite compound rate; -100% a year is the
+            // limit, and pretending otherwise would invent a number.
+            return errorValue("INVALID_RATE", "annual return: nothing was returned, so there is no annual rate");
+        }
+        return percentageValue(Math.pow(returned / invested, 1 / years) - 1);
     },
 };
 

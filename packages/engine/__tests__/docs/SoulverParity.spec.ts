@@ -5,8 +5,8 @@
  * This exists because `docs-internal/SOULVERCORE_FEATURE_AUDIT.md` was written
  * by reading the code and asking "do we have something in this area", and the
  * answer to that question is not the same as "does the documented syntax work".
- * It marked 39 of 40 pages implemented. Measured, 42 of the 123 documented
- * examples below produce the documented answer, 77 do not, and 4 differ only
+ * It marked 39 of 40 pages implemented. Measured, 48 of the 123 documented
+ * examples below produce the documented answer, 70 do not, and 5 differ only
  * in formatting. It credited `as timespan` and
  * `as laptime` to `packages/time`, where the only occurrence of the word
  * "timespan" is a doc comment. It credited the rounding page to `as decimal`
@@ -109,6 +109,14 @@ const SUPPORTED: readonly Example[] = [
 	["mortgages", "annual interest on $10,000 over 6 years at 6%", "322.08"],
 	["mortgages", "total interest on $10,000 over 6 years at 6%", "1932.48"],
 
+	// The investments page (2026-08-06). Mortgages already worked.
+	["investments", "$1,000 after 3 years at 7%", "1225.04"],
+	["investments", "$1,000 for 3 years at 7% compounding monthly", "1232.93"],
+	["investments", "$1,000 for 3 years at 7% compounding quarterly", "1231.44"],
+	["investments", "interest on $1,000 after 3 years @ 7%", "225.04"],
+	["investments", "annual return on $1,000 invested $2,500 returned after 7 years", "13.99%"],
+	["investments", "present value of $1,000 after 20 years at 10%", "148.64"],
+
 	["conditionals", "20km == 20,000 m", "true"],
 	["conditionals", "if 5 > 3 then 10 else 20", "10"],
 ];
@@ -129,16 +137,6 @@ const GAPS: readonly Example[] = [
 	["inflation", "value of $500 in 2028 assuming 5% inflation", "411.35"], // gives 551.25: compounds up, Soulver discounts
 	["inflation", "what is $4.2k from 2003", "6795.58"], // gives 7473.26: CPI table disagrees
 	["inflation", "what was $500 worth in 1997", "269.56"], // gives 245.11
-
-	// -- The user's named gap. Mortgages work; nothing else on the two
-	// -- investment pages does.
-	["investments", "$1,000 after 3 years at 7%", "1225.04"],
-	["investments", "$1,000 for 3 years at 7% compounding monthly", "1232.93"],
-	["investments", "$1,000 for 3 years at 7% compounding quarterly", "1231.44"],
-	["investments", "interest on $1,000 after 3 years @ 7%", "225.04"],
-	["investments", "$500 invested $1,500 returned", "2x"],
-	["investments", "annual return on $1,000 invested $2,500 returned after 7 years", "13.99%"],
-	["investments", "present value of $1,000 after 20 years at 10%", "148.64"],
 
 	// -- Not implemented. Parses to an error rather than a wrong number, which
 	// -- at least tells the truth.
@@ -219,6 +217,9 @@ const FORMATTING_ONLY: readonly (readonly [string, string, string])[] = [
 	["0.35 as %", "35%", "35.00%"],
 	["40 to 90 as %", "125%", "125.00%"],
 	["100,000 + 200,000", "300k", "300,000"],
+	// The right number. Soulver renders a return as a multiplier; this keeps
+	// it numeric so it stays composable.
+	["$500 invested $1,500 returned", "2x", "2"],
 	// Right count, but the "workdays" label is dropped from the answer.
 	["workdays in 3 weeks", "15 workdays", "15"],
 ];
@@ -319,8 +320,8 @@ describe("Soulver parity — documented examples that do not", () => {
 		// quotes this number. A change here without a change there leaves the
 		// audit stating a total it did not measure, which is how the previous
 		// version of that document ended up fictional.
-		expect(GAPS.length).toBe(77);
-		expect(SUPPORTED.length).toBe(42);
+		expect(GAPS.length).toBe(70);
+		expect(SUPPORTED.length).toBe(48);
 	});
 });
 

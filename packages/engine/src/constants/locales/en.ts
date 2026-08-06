@@ -88,6 +88,9 @@ export const enLocale: ILocale = {
     // prepositions, same accepted-risk category as "between"/"from" above
     // see Token.ts's OVER/RATE_AT doc comment.
     over: "OVER", at: "RATE_AT",
+    // The investment grammar (packages/finance/). See Token.ts.
+    after: "AFTER", for: "FOR_DURATION", compounding: "COMPOUNDING",
+    invested: "INVESTED", returned: "RETURNED",
     by: "BY",
     vec2: "VEC2", vec3: "VEC3", vec4: "VEC4",
      float: "FLOAT",

@@ -259,6 +259,23 @@ export const TokenTypes = {
   // create an unintended coupling if "@" is ever wired up.
   OVER: "OVER",
   RATE_AT: "RATE_AT",
+  // The investment grammar's connectives (packages/finance/), same
+  // accepted-risk category as OVER/RATE_AT above. "after"/"for" are
+  // prepositions; "compounding", "invested" and "returned" are participles,
+  // and none is a plausible `:variableName`.
+  //
+  // "after" and "for" are the pivots Soulver's own documented syntax uses,
+  // `$1,000 after 3 years at 7%` and `$1,000 for 3 years at 7% compounding
+  // monthly`. This package originally substituted "over" for both and said so
+  // in CompoundInterestParselet.ts's doc comment; the documented spellings now
+  // work as well, and "over" is kept so nothing that already parsed stops.
+  AFTER: "AFTER",
+  PRESENT_VALUE_OF: "PRESENT_VALUE_OF",
+  ANNUAL_RETURN_ON: "ANNUAL_RETURN_ON",
+  FOR_DURATION: "FOR_DURATION",
+  COMPOUNDING: "COMPOUNDING",
+  INVESTED: "INVESTED",
+  RETURNED: "RETURNED",
   // Fused phrase tokens (see FinancePackage.ts's `phrases` field)
   // deliberately NOT bare single-word keywords: "interest", "tax", "vat",
   // "repayment", "principal" etc. are all common, plausible variable names

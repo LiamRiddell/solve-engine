@@ -355,7 +355,9 @@ function combinePercentage(l: Value, r: Value, sign: 1 | -1): Value | null {
     // is $345.00, not a bare 345.
     const factor = 1 + sign * r.toNumber();
     if (l.type === ValueType.Number) return numberValue(l.toNumber() * factor);
-    if (l.type === ValueType.Uom) return uomValue(l.toNumber() * factor, l.unit);
+    // A Uom with no unit string is not something this can scale meaningfully,
+    // so it falls through to the ordinary path rather than inventing one.
+    if (l.type === ValueType.Uom && l.unit !== undefined) return uomValue(l.toNumber() * factor, l.unit);
     return null;
 }
 
