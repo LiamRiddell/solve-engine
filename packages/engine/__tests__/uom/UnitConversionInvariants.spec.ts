@@ -45,16 +45,37 @@ describe("unit vocabularies stay disjoint", () => {
     }
   });
 
-  test("every extended measure name is distinct from every base measure name", () => {
-    // getMeasure() returns a plain string, and callers compare those strings to
-    // decide convertibility. If an extended category were named "length", a
-    // base length unit and an extended one would look convertible and then
-    // fail in the arithmetic.
+  test("an extended measure that shares a base measure name actually converts", () => {
+    // This test used to require the two vocabularies to name disjoint measures,
+    // on the grounds that a shared name would look convertible and then fail in
+    // the arithmetic. The arithmetic works now: an extended unit declaring
+    // `measure: "length"` states its ratio in the same metres the base table
+    // does, so the two compose. The requirement is therefore the opposite one,
+    // that a shared name is honoured rather than forbidden.
     const baseMeasures = new Set(Object.values(MEASURE_KIND_NAMES));
-    const clashes = [...new Set(EXTENDED_NAMES.map((u) => EXTENDED_UNITS[u].measure))].filter((m) =>
-      baseMeasures.has(m)
-    );
-    expect(clashes).toEqual([]);
+    const shared = EXTENDED_NAMES.filter((unit) => baseMeasures.has(EXTENDED_UNITS[unit].measure));
+    expect(shared.length).toBeGreaterThan(0);
+
+    for (const unit of shared) {
+      const { measure, toBase } = EXTENDED_UNITS[unit];
+      // Every base table measure states its ratios against one unit, and for
+      // the two shared here that unit is the metre and the gram.
+      const baseUnit = measure === "length" ? "m" : "g";
+      expect(getMeasure(baseUnit)).toBe(measure);
+      expect(canConvert(unit, baseUnit)).toBe(true);
+      expect(canConvert(baseUnit, unit)).toBe(true);
+      expect(convertUnit(1, unit, baseUnit)).toBeCloseTo(toBase, 9);
+      // And back, so the bridge is not one-directional.
+      expect(convertUnit(toBase, baseUnit, unit)).toBeCloseTo(1, 9);
+    }
+  });
+
+  test("an extended measure the base table has no concept of still cannot cross", () => {
+    // The bridge is by measure name, not by being in the extended table, so
+    // pace and speed remain unreachable from a length or a duration.
+    expect(canConvert("min_km", "m")).toBe(false);
+    expect(canConvert("mph", "km")).toBe(false);
+    expect(canConvert("m", "min_km")).toBe(false);
   });
 });
 

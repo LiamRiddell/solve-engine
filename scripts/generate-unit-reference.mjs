@@ -35,6 +35,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TABLE = path.join(ROOT, "packages/engine/src/uom/generated/UnitTable.generated.ts");
+const EXTENDED = path.join(ROOT, "packages/engine/src/uom/ExtendedUnits.ts");
 const ENGINE = path.join(ROOT, "packages/engine/dist/index.js");
 const TARGET = path.join(ROOT, "docs/src/content/docs/syntax/unit-reference.md");
 
@@ -167,7 +168,81 @@ function cell(spelling) {
 	return `\`${escaped}\``;
 }
 
-const { entries, kinds } = readTable();
+/**
+ * Reads a `toBase` value, which is written as a number or a small expression.
+ *
+ * `ExtendedUnits.ts` states ratios the way they are defined rather than as a
+ * decimal someone worked out: a knot is `1852 / 3600` because a nautical mile
+ * is 1852 metres and an hour is 3600 seconds, and that is worth keeping
+ * readable in the source.
+ *
+ * Parsed explicitly rather than evaluated. Handing repository text to `eval`
+ * to save a dozen lines is how a documentation generator becomes a way to run
+ * code, and an unrecognised shape throws here rather than quietly producing a
+ * ratio that is wrong in a table nobody double-checks.
+ */
+function ratioValue(raw) {
+	// Numeric separators are readability only, and `Number` does not accept
+	// them: `1_000_000` parses as NaN rather than as a million.
+	const text = raw.replace(/(\d)_(\d)/g, "$1$2").replace(/(\d)_(\d)/g, "$1$2");
+	const plain = /^-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?$/;
+	if (plain.test(text)) return Number(text);
+
+	const binary = text.match(/^(-?\d+(?:\.\d+)?)\s*([*/])\s*(-?\d+(?:\.\d+)?)$/);
+	if (binary !== null) {
+		const [, left, operator, right] = binary;
+		return operator === "/" ? Number(left) / Number(right) : Number(left) * Number(right);
+	}
+
+	throw new Error(`Cannot read the ratio ${JSON.stringify(text)}. Extend ratioValue rather than guessing at it.`);
+}
+
+/**
+ * The units defined outside the generated table.
+ *
+ * `ExtendedUnits.ts` carries everything the `convert` package has no concept
+ * of, which is two different things: measures it never had (speed, pace,
+ * voltage) and units missing from measures it does have (a furlong is a
+ * length). Both belong on a page that claims to list every spelling the engine
+ * accepts, and leaving them off made that claim false by about thirty units.
+ *
+ * @returns Entries in the same shape `readTable` produces, keyed to a measure
+ * id continuing after the generated table's.
+ */
+function readExtended(kinds) {
+	const source = fs.readFileSync(EXTENDED, "utf8");
+	const entries = [];
+	const extraKinds = { ...kinds };
+
+	// Measure names arrive as strings here rather than as numeric ids, so each
+	// new one is given an id after the generated table's, and a name that
+	// already exists reuses its id so the two merge into one section.
+	const byName = new Map(Object.entries(kinds).map(([id, name]) => [name, Number(id)]));
+	let nextId = Math.max(...Object.keys(kinds).map(Number)) + 1;
+
+	for (const match of source.matchAll(/^\s+([A-Za-z_][A-Za-z0-9_]*):\s*\{\s*measure:\s*"([^"]+)",\s*toBase:\s*([^}]+)\}/gm)) {
+		const [, spelling, measure, ratio] = match;
+		if (!byName.has(measure)) {
+			byName.set(measure, nextId);
+			extraKinds[nextId] = measure;
+			nextId++;
+		}
+		entries.push({
+			spelling,
+			kind: byName.get(measure),
+			ratio: ratioValue(ratio.trim().replace(/,$/, "")),
+			difference: 0,
+		});
+	}
+
+	if (entries.length === 0) throw new Error("Parsed no extended units; the file format has changed.");
+	return { entries, kinds: extraKinds };
+}
+
+const base = readTable();
+const extra = readExtended(base.kinds);
+const entries = [...base.entries, ...extra.entries];
+const kinds = extra.kinds;
 const typable = await keepTypable(entries);
 
 const byKind = new Map();

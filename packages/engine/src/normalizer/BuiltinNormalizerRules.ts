@@ -222,7 +222,9 @@ export const BUILTIN_PHRASES: Record<string, string> = {
 	"multiply by": "MULTIPLY_BY",
 	"divide by": "DIVIDE_BY",
 	// The past-tense spellings, which is how the operation is usually written
-	// out: "3 multiplied by 4". Same tokens, so no new parselets.
+	// out: "3 multiplied by 4". Same tokens, so no new parselets. Both this
+	// branch and the parity branch added "multiplied by" independently; the
+	// merge kept both copies and the locale table rejected the duplicate key.
 	"multiplied by": "MULTIPLY_BY",
 	"divided by": "DIVIDE_BY",
 };
