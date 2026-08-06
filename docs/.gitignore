@@ -1,0 +1,5 @@
+# Generated at build time by starlight-typedoc from the engine's TypeScript.
+# The API reference is rendered from the shipped types on every build, so it is
+# not committed. See astro.config.mjs.
+src/content/docs/api/
+typedoc-sidebar.json
