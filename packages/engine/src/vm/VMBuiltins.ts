@@ -687,6 +687,28 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         const minorCount = Math.round(((inBase - majorCount * majorEntry[1]) / minorEntry[1]) * 1000) / 1000;
         return stringValue(`${majorCount} ${major} ${minorCount} ${minor}`);
     },
+    // makeRate(value, denominatorUnit) -> value per that unit.
+    //
+    // `3 hours / day` is a rate, `3 hours / 3 days` is a division. The
+    // difference is whether a number was written in the denominator, which
+    // is decided at parse time, so this only ever receives the rate case.
+    //
+    // Building the rate directly rather than dividing by an implied 1 is the
+    // whole point: a division makes same-measure units cancel, which turned
+    // `3 hours / day` into 0.125 when that shortcut was tried.
+    95: (args) => {
+        const source = args[0];
+        const denominator = String(args[1].value);
+        const numerator = source.type === ValueType.Uom && source.unit !== undefined
+            ? source.unit
+            : "";
+        if (numerator.includes("/")) {
+            return errorValue("INVALID_RATE_UNIT", `${numerator}/${denominator}: that is already a rate`);
+        }
+        // A bare number over a unit is a countless rate, "30/week", which the
+        // rate machinery already renders without a numerator unit.
+        return uomValue(source.toNumber(), `${numerator}/${denominator}`);
+    },
     // ── Investments (packages/finance/) ────────────────────────────────────
     // compoundFutureValueEvery(principal, rate, years, periodsPerYear)
     // FV = P(1 + r/n)^(n·y). Index 51 is the same formula with n fixed at 1;

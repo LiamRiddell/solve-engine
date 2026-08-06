@@ -9,8 +9,8 @@ build and fails in both directions: a regression in something that works, and
 also a gap that starts working without being promoted out of its list. If this
 file and that spec disagree, the spec is right.
 
-As of 2026-08-06: **98 of 122** documented examples produce the documented
-answer, 8 do not, 16 differ only in formatting.
+As of 2026-08-06: **99 of 122** documented examples produce the documented
+answer, 7 do not, 16 differ only in formatting.
 
 See `SOULVERCORE_FEATURE_AUDIT.md` for why the previous per-page audit was
 unreliable, and the same reason this file avoids per-page status claims.
@@ -24,7 +24,7 @@ entries in the spec's `GAPS` list.
 
 | Area | Rows | What is missing | Shape of the work |
 |---|---|---|---|
-| Rates | 6 | `3 hours / day`, `$99 per week`, `$20/day + $300/week`, `$24 a day for a year`, `30 hours at $30/hour`, `$500 at $20/hour` | **Structural, and the naive fix is a trap.** Inserting the implied `1` (`/ day` -> `/ 1 day`) was tried and reverted: it makes `$50/week * 12 weeks` work but turns `3 hours / day` into 0.125, because same-measure units then cancel to a dimensionless number instead of forming a rate. A wrong answer where there had been an honest error. The real distinction is that a denominator with **no number** means a rate while `/ 3 days` means division, and that has to be decided where the numerator's measure is known, not by a token rewrite. Separately, `$20/day + $300/week` needs period unification, and `at` with a rate (multiply or divide depending on which side carries the rate) is its own parselet. |
+| Rates | 5 | `$99 per week`, `30 bottles / week`, `$20/day + $300/week`, `$24 a day for a year`, `30 hours at $30/hour`, `$500 at $20/hour` | The core is done: a denominator with no number now builds a rate directly instead of dividing, so `3 hours / day` is a rate and `3 hours / 3 days` still cancels. What is left is (a) a bare number as the numerator, where the fused token ends up in operand position and the expression throws, (b) rate addition across differing periods, which needs the two reconciled first, and (c) `at` with a rate, which multiplies or divides depending on which side carries it. All fail loudly rather than answering wrongly. |
 | Inflation data | 2 | `what is $4.2k from 2003`, `what was $500 worth in 1997` | **Blocked on data, not code.** See below. |
 
 ## Currencies
