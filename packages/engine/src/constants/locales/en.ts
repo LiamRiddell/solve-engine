@@ -88,6 +88,8 @@ export const enLocale: ILocale = {
     // prepositions, same accepted-risk category as "between"/"from" above
     // see Token.ts's OVER/RATE_AT doc comment.
     over: "OVER", at: "RATE_AT",
+    // Only "rounded". Bare "round" is already the round(x) function above.
+    rounded: "ROUNDED",
     // The investment grammar (packages/finance/). See Token.ts.
     after: "AFTER", for: "FOR_DURATION", compounding: "COMPOUNDING",
     invested: "INVESTED", returned: "RETURNED",

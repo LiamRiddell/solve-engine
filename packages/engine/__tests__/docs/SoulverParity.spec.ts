@@ -5,8 +5,8 @@
  * This exists because `docs-internal/SOULVERCORE_FEATURE_AUDIT.md` was written
  * by reading the code and asking "do we have something in this area", and the
  * answer to that question is not the same as "does the documented syntax work".
- * It marked 39 of 40 pages implemented. Measured, 50 of the 122 documented
- * examples below produce the documented answer, 67 do not, and 5 differ only
+ * It marked 39 of 40 pages implemented. Measured, 57 of the 122 documented
+ * examples below produce the documented answer, 57 do not, and 8 differ only
  * in formatting. It credited `as timespan` and
  * `as laptime` to `packages/time`, where the only occurrence of the word
  * "timespan" is a doc comment. It credited the rounding page to `as decimal`
@@ -119,6 +119,15 @@ const SUPPORTED: readonly Example[] = [
 	["sales-tax", "tax on $300 at 15%", "45"],
 	["trig", "sin(90 degrees)", "1"],
 
+	// The rounding page (2026-08-06).
+	["rounding", "1/3 to 2 dp", "0.33"],
+	["rounding", "5.5 rounded", "6"],
+	["rounding", "5.5 rounded down", "5"],
+	["rounding", "5.5 rounded up", "6"],
+	["rounding", "37 to nearest 10", "40"],
+	["rounding", "2,100 to nearest thousand", "2000"],
+	["rounding", "21 rounded up to nearest 5", "25"],
+
 	["conditionals", "20km == 20,000 m", "true"],
 	["conditionals", "if 5 > 3 then 10 else 20", "10"],
 ];
@@ -148,13 +157,6 @@ const GAPS: readonly Example[] = [
 	["operators", "3 multiplied by 4", "12"],
 	["operators", "1,000 divided by 200", "5"],
 	["operators", "remainder of 21 divided by 5", "1"],
-	["rounding", "1/3 to 2 dp", "0.33"],
-	["rounding", "5.5 rounded", "6"],
-	["rounding", "5.5 rounded down", "5"],
-	["rounding", "5.5 rounded up", "6"],
-	["rounding", "37 to nearest 10", "40"],
-	["rounding", "2,100 to nearest thousand", "2000"],
-	["rounding", "21 rounded up to nearest 5", "25"],
 	["misc", "greater of 100 and 200", "200"],
 	["misc", "lesser of 5 and 10", "5"],
 	["misc", "gcd of 20 and 30", "10"],
@@ -175,9 +177,6 @@ const GAPS: readonly Example[] = [
 	["logs-roots", "81 is 9 to what power", "2"],
 	["trig", "sind(90)", "1"],
 	["trig", "asind(0.5)", "30"],
-	["large-numbers", "3 million + 10%", "3.3M"],
-	["large-numbers", "5 billion", "5G"],
-	["large-numbers", "2.5 bn", "2.5G"],
 	["units", "5 hours 30 minutes to seconds", "19800"],
 	["units", "meters in 10 km", "10000 m"],
 	["units", "days in 3 weeks", "21 days"],
@@ -222,6 +221,11 @@ const FORMATTING_ONLY: readonly (readonly [string, string, string])[] = [
 	["0.35 as %", "35%", "35.00%"],
 	["40 to 90 as %", "125%", "125.00%"],
 	["100,000 + 200,000", "300k", "300,000"],
+	// The word magnitudes parse and compute correctly (2026-08-06); Soulver
+	// abbreviates large answers in its output and this engine does not.
+	["3 million + 10%", "3.3M", "3,300,000"],
+	["5 billion", "5G", "5,000,000,000"],
+	["2.5 bn", "2.5G", "2,500,000,000"],
 	// The right number. Soulver renders a return as a multiplier; this keeps
 	// it numeric so it stays composable.
 	["$500 invested $1,500 returned", "2x", "2"],
@@ -325,8 +329,8 @@ describe("Soulver parity — documented examples that do not", () => {
 		// quotes this number. A change here without a change there leaves the
 		// audit stating a total it did not measure, which is how the previous
 		// version of that document ended up fictional.
-		expect(GAPS.length).toBe(67);
-		expect(SUPPORTED.length).toBe(50);
+		expect(GAPS.length).toBe(57);
+		expect(SUPPORTED.length).toBe(57);
 	});
 });
 

@@ -1,5 +1,7 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { AsConverterParselet } from "./parselets/AsConverterParselet";
+import { RoundedParselet, ToNearestParselet, DecimalPlacesParselet } from "./parselets/RoundingParselets";
+import { decimalPlacesNormalizerRule } from "./normalizer/DecimalPlacesNormalizerRule";
 
 /**
  * The general `<expr> as <type>` conversion/display mechanism, one
@@ -24,7 +26,20 @@ import { AsConverterParselet } from "./parselets/AsConverterParselet";
  */
 export const CONVERTERS_PACKAGE: IEnginePackage = {
   name: "solve-converters",
+  phrases: {
+    // A phrase, not a bare "nearest": "to" is already an infix operator
+    // (percentage change), so the two words have to arrive as one token for
+    // the parser to tell the grammars apart. See RoundingParselets.ts.
+    "to nearest": "TO_NEAREST",
+    "to the nearest": "TO_NEAREST",
+  },
   infixParselets: [
     { tokenType: "AS", parselet: new AsConverterParselet() },
+    { tokenType: "ROUNDED", parselet: new RoundedParselet() },
+    { tokenType: "TO_NEAREST", parselet: new ToNearestParselet() },
+    { tokenType: "DECIMAL_PLACES", parselet: new DecimalPlacesParselet() },
+  ],
+  normalizerRules: [
+    decimalPlacesNormalizerRule(),
   ],
 };

@@ -159,6 +159,13 @@ export const TokenTypes = {
   ELSE: "ELSE",
   AS: "AS",
   CONVERTER_NAME: "CONVERTER_NAME",
+  // Rounding (packages/converters/). "rounded" is a bare keyword: it is a
+  // past participle with no plausible use as a :variableName, the same
+  // accepted-risk category as "between"/"from". TO_NEAREST and
+  // DECIMAL_PLACES are fused, since "to" already means percentage change.
+  ROUNDED: "ROUNDED",
+  TO_NEAREST: "TO_NEAREST",
+  DECIMAL_PLACES: "DECIMAL_PLACES",
   // Fused two-word phrase tokens (see MathPhrasesPackage.ts's `phrases`
   // field), deliberately NOT bare single-word keywords: "average"
   // "total", "count", etc. are common variable names, and this codebase
