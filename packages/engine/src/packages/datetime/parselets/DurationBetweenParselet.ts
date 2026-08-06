@@ -31,7 +31,7 @@ export class DurationBetweenParselet implements PrefixParselet {
     const unit = token.value; // the fused UNIT token's original text, e.g. "days"
 
     parser.parseExpression(BindingPower.Product, builder); // first endpoint
-    parser.consume("PLUS"); // "and"
+    parser.consume("AND_CONJ"); // "and"
     parser.parseExpression(BindingPower.Lowest, builder); // second endpoint
 
     // An unsigned Uom("ms") span, a plugin function rather than SUB, since

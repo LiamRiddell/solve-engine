@@ -238,16 +238,18 @@ describe("[daily|monthly|annual|total] repayment/interest on ... (phrase-fused, 
 });
 
 describe("tax on / tax off / vat on / vat off (phrase-fused, real engine)", () => {
-  test("tax on 300 at 20% -> 360", () => {
-    expect(evalReal("tax on 300 at 20%").toNumber()).toBeCloseTo(360, 6);
+  test("tax on 300 at 20% -> 60, the tax itself", () => {
+    // Changed 2026-08-06: the phrase gives the tax, not the bill. The
+    // taxAdd() function form still gives the total, see above.
+    expect(evalReal("tax on 300 at 20%").toNumber()).toBeCloseTo(60, 6);
   });
 
   test("tax off 360 at 20% -> 300 (extracts the pre-tax amount)", () => {
     expect(evalReal("tax off 360 at 20%").toNumber()).toBeCloseTo(300, 6);
   });
 
-  test("vat on 300 at 20% -> 360 ('vat on' is an alias spelling of 'tax on')", () => {
-    expect(evalReal("vat on 300 at 20%").toNumber()).toBeCloseTo(360, 6);
+  test("vat on 300 at 20% -> 60 ('vat on' is an alias spelling of 'tax on')", () => {
+    expect(evalReal("vat on 300 at 20%").toNumber()).toBeCloseTo(60, 6);
   });
 
   test("vat off 360 at 20% -> 300 ('vat off' is an alias spelling of 'tax off')", () => {
@@ -257,7 +259,7 @@ describe("tax on / tax off / vat on / vat off (phrase-fused, real engine)", () =
   test("tax on $300 at 8% -> a currency-typed result, preserving the '$' unit", () => {
     const value = evalReal("tax on $300 at 8%");
     expect(value.type).toBe(ValueType.Uom);
-    expect(value.toNumber()).toBeCloseTo(324, 6);
+    expect(value.toNumber()).toBeCloseTo(24, 6);
   });
 });
 
@@ -271,7 +273,7 @@ describe("FINANCE_PACKAGE — real engine wiring", () => {
   });
 
   test("tax on works via the real engine", () => {
-    expect(evalReal("tax on 300 at 20%").toNumber()).toBeCloseTo(360, 6);
+    expect(evalReal("tax on 300 at 20%").toNumber()).toBeCloseTo(60, 6);
   });
 
   test("regression guard: ':tax = ...' still works as a variable — phrase fusion for Finance must not claim bare 'tax' as a keyword (same regression class as MathPhrasesPackage.ts's ':total' guard)", () => {

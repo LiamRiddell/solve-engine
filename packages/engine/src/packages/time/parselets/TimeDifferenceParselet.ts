@@ -37,7 +37,7 @@ export class TimeDifferenceParselet implements PrefixParselet {
         `Expected a city or zone name after "time difference between" (e.g. "time difference between Seattle and Moscow")`,
       );
     }
-    parser.consume("PLUS"); // "and"
+    parser.consume("AND_CONJ"); // "and"
     const zone2 = tryConsumeZoneReference(parser);
     if (zone2 === null) {
       throw ErrorFactory.parsing(

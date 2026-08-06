@@ -23,6 +23,8 @@ export const builtinNameToIndex: Record<string, number> = {
   // convention) -- same indices as their short forms above, not a separate
   // implementation.
   arcsin: 11, arccos: 12, arctan: 13,
+  // Degree-taking variants (VMBuiltins.ts 87-92).
+  sind: 87, cosd: 88, tand: 89, asind: 90, acosd: 91, atand: 92,
   sinh: 15, cosh: 16, tanh: 17,
   asinh: 18, acosh: 19, atanh: 20,
   cbrt: 21, clz32: 22, expm1: 23, exp: 24,

@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
+import { readCompoundingInterval } from "./InvestmentParselets";
 
 /**
  * `compound interest on <principal> over <years> at <rate>%` -> future
@@ -35,38 +36,62 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
  * (`[principal, years, rate]` -> `[principal, rate, years]`) right before
  * the builtin call so both call styles share one implementation.
  *
- * DEVIATION FROM SOULVERCORE: the real SoulverCore syntax is
- * `$1,000 after 3 years at 7%` (no "compound interest on"/"interest on"
- * trigger phrase at all, "after" itself is the leading pivot word) and
- * `interest on $1,000 after 3 years @ 7%`. This package uses "over"
- * instead of "after" (avoids any future collision with datetime's
- * "X days after Y"-style phrasing, and matches the "over" wording
- * SoulverCore itself uses for the mortgage grammar, see
- * LoanRepaymentParselet.ts) and always requires the explicit
- * "compound interest on"/"interest on" trigger rather than a bare
- * `$X after Y years at Z%` with no leading verb, deliberately consistent
- * with this package's other two grammars rather than a third distinct
- * shape. SoulverCore's optional "compounding monthly/quarterly" interval
- * (`$1,000 for 3 years at 7% compounding monthly`) is also NOT implemented
- *, annual compounding only; out of scope for this pass.
+ * This parselet used to be the only way to reach compound interest, using
+ * "over" where Soulver documents "after"/"for", and requiring the leading
+ * "compound interest on"/"interest on" verb where Soulver has none. That was
+ * recorded here as a deliberate deviation, and it meant that every expression
+ * on Soulver's investments page threw.
+ *
+ * It is closed. `InvestmentParselets.ts` adds the bare `$1,000 after 3 years
+ * at 7%` form, the `for ... compounding monthly` interval variant, present
+ * value and return on investment. This parselet keeps its "compound interest
+ * on X over Y at Z%" spelling so nothing that already parsed stops, and now
+ * also accepts "after"/"for" and the "@" rate separator.
  */
 export class CompoundInterestParselet implements PrefixParselet {
   readonly category = "Finance";
 
-  constructor(private readonly builtinIndex: number) {}
+  /**
+   * @param builtinIndex - Annual-compounding builtin.
+   * @param intervalIndex - Builtin taking an explicit periods-per-year, used
+   * when the expression ends in "compounding monthly" or similar.
+   */
+  constructor(
+    private readonly builtinIndex: number,
+    private readonly intervalIndex: number,
+  ) {}
 
   parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
-    parser.parseExpression(BindingPower.Lowest, builder); // principal
-    parser.consume("OVER");
+    // Above `Conditional`, which is where InvestmentGrowthParselet registers
+    // "after"/"for". Parsed at `Lowest` the principal would swallow the whole
+    // "after 3 years at 7%" tail as its own investment expression, and this
+    // parselet would then run out of input looking for the connective.
+    parser.parseExpression(BindingPower.Conditional, builder); // principal
+    // "over" was this package's own substitution for Soulver's "after"/"for"
+    // (see the DEVIATION note above). All three are accepted now, so
+    // `interest on $1,000 after 3 years at 7%` parses as documented while
+    // every expression that already used "over" keeps working.
+    if (!parser.match("AFTER") && !parser.match("FOR_DURATION")) {
+      parser.consume("OVER");
+    }
     parser.parseExpression(BindingPower.Lowest, builder); // years
-    parser.consume("RATE_AT");
+    if (!parser.match("RATE_AT")) parser.consume("AT");
     parser.parseExpression(BindingPower.Lowest, builder); // rate
+    const periods = readCompoundingInterval(parser);
 
     // Stack: [principal, years, rate] -> SWAP -> [principal, rate, years]
     builder.emitOpcode(OpCode.SWAP);
 
+    if (periods === 1) {
+      builder.emitOpcode(OpCode.CALL_BUILTIN);
+      builder.emitIndex(this.builtinIndex);
+      builder.emitIndex(3);
+      return;
+    }
+    builder.emitOpcode(OpCode.PUSH_NUMBER);
+    builder.emitNumber(periods);
     builder.emitOpcode(OpCode.CALL_BUILTIN);
-    builder.emitIndex(this.builtinIndex);
-    builder.emitIndex(3);
+    builder.emitIndex(this.intervalIndex);
+    builder.emitIndex(4);
   }
 }

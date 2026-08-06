@@ -6,7 +6,7 @@ export const deLocale: ILocale = {
   label: "Deutsch",
   keywordMap: {
     pi: "PI", e: "E",
-    plus: "PLUS", add: "PLUS", und: "PLUS",
+    plus: "PLUS", add: "PLUS", und: "AND_CONJ",
     minus: "MINUS", subtract: "MINUS", entfernen: "MINUS", nehmen: "MINUS",
     mal: "STAR", multiplizieren: "STAR",
     teilen: "SLASH",

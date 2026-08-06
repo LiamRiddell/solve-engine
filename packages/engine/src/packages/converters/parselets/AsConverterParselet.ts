@@ -16,12 +16,28 @@ const BUILTIN_CONVERTERS: Record<string, OpCode> = {
   hex: OpCode.TO_HEX,
   fraction: OpCode.TO_FRACTION,
   multiplier: OpCode.TO_MULTIPLIER,
+  // "20 to 40 as x". Only reachable in converter position, immediately after
+  // "as", so a variable named x is unaffected.
+  x: OpCode.TO_MULTIPLIER,
   sci: OpCode.TO_SCI,
   scientific: OpCode.TO_SCI,
   binary: OpCode.TO_BINARY,
   bin: OpCode.TO_BINARY,
   octal: OpCode.TO_OCTAL,
   oct: OpCode.TO_OCTAL,
+};
+
+/**
+ * Radixes reachable as "as base <n>".
+ *
+ * The same three the named converters cover, because these are the bases the
+ * engine can actually render a literal for. A base-7 renderer would be a
+ * different feature, not a missing table entry.
+ */
+const BASE_CONVERTERS: Record<number, OpCode> = {
+  2: OpCode.TO_BINARY,
+  8: OpCode.TO_OCTAL,
+  16: OpCode.TO_HEX,
 };
 
 /**
@@ -97,8 +113,34 @@ export class AsConverterParselet implements InfixParselet {
     parser.consume();
     const name = nextToken.value.toLowerCase();
 
+    // "as base 8", the radix written as a number rather than a name. Only the
+    // three radixes this engine can render are accepted, and an unsupported
+    // one says so rather than silently falling through to "unknown converter",
+    // which would be true but unhelpful.
+    if (name === "base") {
+      const radixToken = parser.peek();
+      const radix = radixToken?.type === "NUMBER" ? Number(radixToken.value) : NaN;
+      const opcode = BASE_CONVERTERS[radix];
+      if (opcode === undefined) {
+        throw ErrorFactory.parsing(
+          "AS_CONVERTER_UNSUPPORTED_BASE",
+          `"as base ${radixToken?.value ?? "?"}": only bases ${Object.keys(BASE_CONVERTERS).join(", ")} can be written out`,
+        );
+      }
+      parser.consume();
+      builder.emitOpcode(opcode);
+      return;
+    }
+
     const builtinOp = BUILTIN_CONVERTERS[name];
     if (builtinOp !== undefined) {
+      // "50 as x of 5" and "2 as multiplier of 1": the multiple is relative to
+      // a base rather than to 1, so divide before converting. Only meaningful
+      // for the multiplier converters; "255 as hex of 5" is not a thing.
+      if (builtinOp === OpCode.TO_MULTIPLIER && parser.match("OF")) {
+        parser.parseExpression(BindingPower.Conditional, builder);
+        builder.emitOpcode(OpCode.DIV);
+      }
       builder.emitOpcode(builtinOp);
       return;
     }

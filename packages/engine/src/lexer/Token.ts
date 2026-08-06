@@ -88,6 +88,18 @@ export const TokenTypes = {
   PI: "PI",
   E: "E",
   MOD: "MOD",
+  // The English word "and", which is NOT the same thing as "+" even though it
+  // adds. It used to map straight onto PLUS in the locale keyword map, which
+  // made "3 and 4" evaluate to 7 correctly and then quietly broke every phrase
+  // that uses "and" as a list separator: "average of 36, 42, 19 and 81" parsed
+  // its last argument as "19 + 81" and returned 178/3 rather than 178/4.
+  //
+  // Giving it its own type lets a parselet tell the two apart. It is still an
+  // infix addition (see ArithmeticPackage.ts) so "3 and 4" is unchanged, but it
+  // binds at BindingPower.Conjunction, one step looser than Sum, so a phrase
+  // parselet can parse an argument at Conjunction and get "1 + 2" whole while
+  // still stopping at "and".
+  AND_CONJ: "AND_CONJ",
   OF: "OF",
   INCREASE_BY: "INCREASE_BY",
   DECREASE_BY: "DECREASE_BY",
@@ -147,6 +159,13 @@ export const TokenTypes = {
   ELSE: "ELSE",
   AS: "AS",
   CONVERTER_NAME: "CONVERTER_NAME",
+  // Rounding (packages/converters/). "rounded" is a bare keyword: it is a
+  // past participle with no plausible use as a :variableName, the same
+  // accepted-risk category as "between"/"from". TO_NEAREST and
+  // DECIMAL_PLACES are fused, since "to" already means percentage change.
+  ROUNDED: "ROUNDED",
+  TO_NEAREST: "TO_NEAREST",
+  DECIMAL_PLACES: "DECIMAL_PLACES",
   // Fused two-word phrase tokens (see MathPhrasesPackage.ts's `phrases`
   // field), deliberately NOT bare single-word keywords: "average"
   // "total", "count", etc. are common variable names, and this codebase
@@ -163,8 +182,26 @@ export const TokenTypes = {
   SMALLER_OF: "SMALLER_OF",
   HALF_OF: "HALF_OF",
   MIDPOINT_BETWEEN: "MIDPOINT_BETWEEN",
+  REMAINDER_OF: "REMAINDER_OF",
+  NTH_ROOT: "NTH_ROOT",
+  LOG_PHRASE: "LOG_PHRASE",
+  LOG_BASE: "LOG_BASE",
+  GCD_OF: "GCD_OF",
+  LCM_OF: "LCM_OF",
+  SQUARE_ROOT_OF: "SQUARE_ROOT_OF",
+  CUBE_ROOT_OF: "CUBE_ROOT_OF",
   RANDOM_NUMBER: "RANDOM_NUMBER",
   IS_TO: "IS_TO",
+  // Bare "is", the trigger for the solve-for-the-unknown percentage family
+  // (packages/percentage/IsWhatParselet.ts). Safe as a bare keyword: it is a
+  // verb, not a plausible :variableName, and the "is to" proportion phrase is
+  // fused earlier so it still wins.
+  IS: "IS",
+  PCT_ON: "PCT_ON",
+  PCT_OFF: "PCT_OFF",
+  OF_WHAT: "OF_WHAT",
+  OFF_WHAT: "OFF_WHAT",
+  ON_WHAT: "ON_WHAT",
   // CLAMP stays a bare single-word keyword: "clamp X between Y and Z" has
   // the value X between the trigger and "between", so it can't be
   // phrase-fused like the others above (same structural reason
@@ -247,6 +284,23 @@ export const TokenTypes = {
   // create an unintended coupling if "@" is ever wired up.
   OVER: "OVER",
   RATE_AT: "RATE_AT",
+  // The investment grammar's connectives (packages/finance/), same
+  // accepted-risk category as OVER/RATE_AT above. "after"/"for" are
+  // prepositions; "compounding", "invested" and "returned" are participles,
+  // and none is a plausible `:variableName`.
+  //
+  // "after" and "for" are the pivots Soulver's own documented syntax uses,
+  // `$1,000 after 3 years at 7%` and `$1,000 for 3 years at 7% compounding
+  // monthly`. This package originally substituted "over" for both and said so
+  // in CompoundInterestParselet.ts's doc comment; the documented spellings now
+  // work as well, and "over" is kept so nothing that already parsed stops.
+  AFTER: "AFTER",
+  PRESENT_VALUE_OF: "PRESENT_VALUE_OF",
+  ANNUAL_RETURN_ON: "ANNUAL_RETURN_ON",
+  FOR_DURATION: "FOR_DURATION",
+  COMPOUNDING: "COMPOUNDING",
+  INVESTED: "INVESTED",
+  RETURNED: "RETURNED",
   // Fused phrase tokens (see FinancePackage.ts's `phrases` field)
   // deliberately NOT bare single-word keywords: "interest", "tax", "vat",
   // "repayment", "principal" etc. are all common, plausible variable names
@@ -267,6 +321,7 @@ export const TokenTypes = {
   TOTAL_LOAN_INTEREST_ON: "TOTAL_LOAN_INTEREST_ON",
   TAX_ON: "TAX_ON",
   TAX_OFF: "TAX_OFF",
+  TAX_IN_PHRASE: "TAX_IN_PHRASE",
   // Inflation-adjusted value (packages/finance/) -- fused phrase
   // tokens (see FinancePackage.ts's `phrases` field), same reasoning
   // as the tax/interest phrases above: "what"/"was"/"value"/"worth"
@@ -319,6 +374,10 @@ export const TokenTypes = {
   MONTH_ON: "MONTH_ON",
   MONTH_IN: "MONTH_IN",
   WEEK_ON: "WEEK_ON",
+  DAYS_IN_PERIOD: "DAYS_IN_PERIOD",
+  IN_TWO_UNITS: "IN_TWO_UNITS",
+  PER_UNIT: "PER_UNIT",
+  AT_RATE: "AT_RATE",
   WEEK_IN: "WEEK_IN",
   // `<unit> between <date> and <date>`, fused UNIT+BETWEEN, exactly like
   // UNTIL_UNIT/SINCE_UNIT above.

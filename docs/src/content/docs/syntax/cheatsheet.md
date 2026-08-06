@@ -190,7 +190,7 @@ jacobian(x*y, x+y) // [y, x; 1, 1]
 ```solve
 $100 + $50 // $150.00
 10 dollars // $10.00
-tax on 100 at 20% // 120
+tax on 100 at 20% // 20
 ```
 
 Currency conversion such as `10 USD to GBP` reaches the network, so it resolves

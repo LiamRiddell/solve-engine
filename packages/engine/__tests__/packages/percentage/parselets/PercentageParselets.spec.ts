@@ -124,8 +124,10 @@ describe("Percentage Parselets", () => {
     expect(parseAndExecute("50% + 10%")).toBe(0.6);
   });
 
-  test("percentage in expression: 50 + 20%", () => {
-    expect(parseAndExecute("50 + 20%")).toBe(50.2);
+  test("percentage in expression: 50 + 20% is a 20% increase", () => {
+    // Changed 2026-08-06: a percentage combined with a quantity is relative
+    // to it. See PercentParselet.ts and the VM's combinePercentage().
+    expect(parseAndExecute("50 + 20%")).toBe(60);
   });
 
   test("percentage of: 10% of 20", () => {

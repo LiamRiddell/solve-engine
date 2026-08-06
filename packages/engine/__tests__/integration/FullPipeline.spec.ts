@@ -185,8 +185,10 @@ describe("Full pipeline: Lexer → Parser → BytecodeBuilder → VM", () => {
     expect(fullEval("10 mod 3")).toBe(1);
   });
 
-  test("BODMAS: percent in expression: 10 + 10% = 10.1", () => {
-    expect(fullEval("10 + 10%")).toBeCloseTo(10.1);
+  test("BODMAS: percent in expression: 10 + 10% = 11", () => {
+    // Changed 2026-08-06: a percentage combined with a quantity is relative
+    // to it. See PercentParselet.ts and the VM's combinePercentage().
+    expect(fullEval("10 + 10%")).toBeCloseTo(11);
   });
 
   test("BODMAS: parentheses before exp: (2 + 3) ^ 2 = 25", () => {

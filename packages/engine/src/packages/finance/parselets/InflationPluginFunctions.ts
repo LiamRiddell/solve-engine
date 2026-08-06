@@ -53,13 +53,21 @@ export function inflationToYearFromPresentHandler(args: Value[]): Value {
 }
 
 /**
- * "value of $X in FUTURE_YEAR assuming N% inflation" -> a simple flat-rate
- * compound-growth projection, NOT CPI-table-based (future years aren't in
- * the historical table) -- years = FUTURE_YEAR - present year, then the
- * same compound-growth formula as the Finance package's compoundFutureValue
- * builtin (VMBuiltins.ts index 51): FV = amount * (1 + rate) ^ years.
- * `rate` is a decimal fraction (e.g. 0.03 for 3%), matching that
- * convention everywhere else in this codebase.
+ * "value of $X in FUTURE_YEAR assuming N% inflation" -> what that money will
+ * be WORTH then, i.e. its purchasing power, discounted rather than grown:
+ * PV = amount / (1 + rate) ^ years. Not CPI-table-based, since future years
+ * are not in the historical table. `rate` is a decimal fraction (0.03 for 3%),
+ * matching the convention everywhere else in this codebase.
+ *
+ * This used to multiply, reporting `value of $500 in 2028 assuming 5%
+ * inflation` as a number LARGER than $500. That is the wrong direction and it
+ * inverts the meaning of the question: inflation makes money worth less, and
+ * the whole point of asking is to see how much less. Soulver answers $411.35
+ * for that line, and shows the same figure for its `purchasing power of $500
+ * in 2028 at 5% inflation` phrasing, which is what settles the reading.
+ *
+ * Growing a sum at a rate is still available and is a different question:
+ * `$500 after 4 years at 5%` (see InvestmentParselets.ts).
  */
 export function inflationFutureValueHandler(args: Value[]): Value {
   const amountValue = args[0];
@@ -70,6 +78,6 @@ export function inflationFutureValueHandler(args: Value[]): Value {
     return errorValue("INVALID_RATE", `inflationFutureValue: rate ${rate} makes (1 + rate) non-positive`);
   }
   const amount = amountValue.toNumber();
-  const fv = amount * Math.pow(1 + rate, years);
-  return amountValue.type === ValueType.Uom ? uomValue(fv, amountValue.unit!) : numberValue(fv);
+  const worth = amount / Math.pow(1 + rate, years);
+  return amountValue.type === ValueType.Uom ? uomValue(worth, amountValue.unit!) : numberValue(worth);
 }

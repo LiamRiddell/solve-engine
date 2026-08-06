@@ -13,6 +13,8 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { unifyUom, binaryOp } from "@solve-js/vm/VMConversion";
+import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
+import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 
@@ -320,6 +322,111 @@ function invokeFrameBody(
     return bodyResult.value;
 }
 
+/**
+ * `$20/day + $300/week`, two rates over different periods.
+ *
+ * Adding them reported incompatible units, because USD/day and USD/week are
+ * literally different unit strings. They are the same kind of thing measured
+ * per different periods, though, so one converts into the other and the sum is
+ * meaningful. The right operand's period wins, which is the one the reader
+ * just wrote and so the one they are thinking in.
+ *
+ * @returns The converted left magnitude, or null when these are not two rates
+ * sharing a numerator.
+ */
+function unifyRatePeriods(l: Value, r: Value): number | null {
+    if (l.type !== ValueType.Uom || r.type !== ValueType.Uom) return null;
+    const leftUnit = l.unit;
+    const rightUnit = r.unit;
+    if (leftUnit === undefined || rightUnit === undefined) return null;
+
+    const leftSlash = leftUnit.indexOf("/");
+    const rightSlash = rightUnit.indexOf("/");
+    if (leftSlash < 0 || rightSlash < 0) return null;
+    // Same thing being measured, or there is nothing to reconcile.
+    if (leftUnit.slice(0, leftSlash) !== rightUnit.slice(0, rightSlash)) return null;
+
+    const leftPeriod = UNIT_TABLE[leftUnit.slice(leftSlash + 1).toLowerCase()] as readonly [number, number] | undefined;
+    const rightPeriod = UNIT_TABLE[rightUnit.slice(rightSlash + 1).toLowerCase()] as readonly [number, number] | undefined;
+    if (leftPeriod === undefined || rightPeriod === undefined) return null;
+    if (leftPeriod[0] !== rightPeriod[0]) return null;
+
+    // Per a longer period is a larger number: $20/day is $140/week.
+    return l.toNumber() * (rightPeriod[1] / leftPeriod[1]);
+}
+
+/**
+ * `$30 × 4 days`, money multiplied by a count of something.
+ *
+ * The unit system refused this outright, because there is no such unit as a
+ * dollar-day and combining the two is genuinely undefined in general. But it
+ * is not undefined in the one case where exactly one side is money: the other
+ * side is then a count, and the answer is that much money.
+ *
+ * Restricted to money on purpose. `3 kg × 4 days` really has no meaning worth
+ * guessing at, and it still says so.
+ *
+ * @returns The product, or null when this is not the money case.
+ */
+function moneyTimesQuantity(l: Value, r: Value): Value | null {
+    if (l.type !== ValueType.Uom || r.type !== ValueType.Uom) return null;
+    // Captured before the rate guard, which narrows the property away.
+    const leftUnit = l.unit;
+    const rightUnit = r.unit;
+    if (leftUnit === undefined || rightUnit === undefined) return null;
+    // Checked directly rather than through isRateUnit(), whose `unit is
+    // string` signature narrows both locals to never on the negative branch.
+    if (leftUnit.includes("/") || rightUnit.includes("/")) return null;
+
+    const leftIsMoney = CURRENCY_DISPLAY[leftUnit.toUpperCase()] !== undefined;
+    const rightIsMoney = CURRENCY_DISPLAY[rightUnit.toUpperCase()] !== undefined;
+    // Exactly one side. Money times money is not a thing either.
+    if (leftIsMoney === rightIsMoney) return null;
+
+    return uomValue(l.toNumber() * r.toNumber(), leftIsMoney ? leftUnit : rightUnit);
+}
+
+/**
+ * `X + 10%` and `X - 10%`, where the percentage is relative to X.
+ *
+ * A percentage on its own means nothing; it is a proportion *of* something.
+ * Which of the two readings applies depends on what it is being combined with,
+ * so the decision is made here where both operands are known, the same way
+ * Datetime and Rate are handled in these opcodes:
+ *
+ *   200 + 10%     220        a percentage of a quantity is relative to it
+ *   $300 + 15%    $345.00    and that includes money and other units
+ *   10% + 20%     30%        two percentages are just proportions, they add
+ *   30% + 0.4     70%        as does a percentage and a bare fraction
+ *   100% + 2      300%       which is why this is 300% and not 3
+ *
+ * Returns `null` when neither operand is a Percentage, leaving the caller's
+ * existing paths untouched.
+ *
+ * @param sign - `1` for addition, `-1` for subtraction.
+ */
+function combinePercentage(l: Value, r: Value, sign: 1 | -1): Value | null {
+    if (l.type === ValueType.Percentage) {
+        // A percentage on the left keeps the result a percentage, whatever is
+        // on the right, because the thing being described is still a
+        // proportion. Only Number/Percentage make sense here; anything else
+        // (a date, a matrix) falls through to the ordinary error path.
+        if (r.type !== ValueType.Percentage && r.type !== ValueType.Number) return null;
+        return percentageValue(l.toNumber() + sign * r.toNumber());
+    }
+    if (r.type !== ValueType.Percentage) return null;
+
+    // A percentage on the right of something concrete scales it. Uom covers
+    // money and every other unit, and the unit has to survive: "$300 + 15%"
+    // is $345.00, not a bare 345.
+    const factor = 1 + sign * r.toNumber();
+    if (l.type === ValueType.Number) return numberValue(l.toNumber() * factor);
+    // A Uom with no unit string is not something this can scale meaningfully,
+    // so it falls through to the ordinary path rather than inventing one.
+    if (l.type === ValueType.Uom && l.unit !== undefined) return uomValue(l.toNumber() * factor, l.unit);
+    return null;
+}
+
 /** Extract milliseconds from a duration Value (UoM time unit or plain number).
  *  Used by ADD/SUB datetime fast paths and DATE_ADD/DATE_SUB opcodes. */
 function extractDurationMs(value: Value): number {
@@ -506,12 +613,23 @@ function toFractionString(n: number): string {
 }
 
 /**
- * "1 + n" growth multiplier, e.g. a 50% increase (stored as the fraction
- * 0.5, matching Percentage's convention) reads as "1.5x".
+ * A value rendered as a multiple, "4x".
+ *
+ * What counts as the multiple depends on what is being converted, which is why
+ * this takes the Value rather than a number:
+ *
+ * - A **percentage** is a change, so it grows: 50% more is 1.5x, and
+ *   `20 to 40 as x` (a 100% change) is 2x.
+ * - **Anything else** is already the ratio: `20/5 as multiplier` is 4x.
+ *
+ * It used to add 1 unconditionally, so `20/5 as multiplier` answered 5x.
+ * Telling the two apart only became possible when `%` started producing a
+ * Percentage-typed value instead of a bare fraction (see PercentParselet.ts).
  */
-function toMultiplierString(n: number): string {
-    const multiplier = Math.round((1 + n) * 1e6) / 1e6;
-    return `${multiplier}x`;
+function toMultiplierString(value: Value): string {
+    const n = value.toNumber();
+    const multiple = value.type === ValueType.Percentage ? 1 + n : n;
+    return `${Math.round(multiple * 1e6) / 1e6}x`;
 }
 
 /** Scientific notation with trailing mantissa zeros trimmed ("1.50e+6" -> "1.5e+6"). */
@@ -683,19 +801,25 @@ export function executeBytecode(
         // ═══════════════════════════════════════════════════════════════
         case OpCode.ADD: {
           const r = safePop(stack), l = safePop(stack);
-          if (l.type === ValueType.Number && r.type === ValueType.Number) {
+          const pctAdd = combinePercentage(l, r, 1);
+          const ratePeriodAdd = pctAdd === null ? unifyRatePeriods(l, r) : null;
+          if (pctAdd !== null) {
+            stack.push(pctAdd);
+          } else if (ratePeriodAdd !== null) {
+            // Two rates over different periods, reconciled onto the right
+            // operand's period before adding.
+            stack.push(uomValue(ratePeriodAdd + r.toNumber(), r.unit!));
+          } else if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(numberValue((l.value as number) + (r.value as number)));
           } else if (l.type === ValueType.Boolean && r.type === ValueType.Boolean) {
-            // The word "and" lexes as PLUS (en.ts: `and: "PLUS"`, a
-            // long-standing synonym for arithmetic "+", "5 and 3" = 8).
-            // PLUS is a Tier-1 hardcoded infix operator (see
-            // parser/BindingPower.ts's BUILTIN_INFIX_BP), so a registered
-            // parselet can never intercept the word "and" the way it can
-            // for genuinely new tokens like "or"/"&&". This opcode-level
-            // type check is the only way "true and false" reads as logical
-            // AND rather than falling through to NaN-producing numeric
-            // addition. Mirrors the Datetime/Rate special-casing already
-            // done here for the same reason (operand-type-driven dispatch).
+            // The word "and" is a synonym for arithmetic "+" ("5 and 3" = 8)
+            // and also the boolean conjunction ("true and false"). It has its
+            // own token type now (AND_CONJ, see Token.ts) rather than mapping
+            // onto PLUS, but it still compiles to this opcode, because which
+            // of the two meanings applies is a property of the operands rather
+            // than of the word. So the dispatch stays here, where the operand
+            // types are known, mirroring the Datetime/Rate special-casing
+            // already done in this opcode for the same reason.
             stack.push(boolValue((l.value as boolean) && (r.value as boolean)));
           } else if (l.type === ValueType.Datetime) {
             if (r.type === ValueType.Datetime) {
@@ -723,7 +847,13 @@ export function executeBytecode(
         }
         case OpCode.SUB: {
           const r = safePop(stack), l = safePop(stack);
-          if (l.type === ValueType.Number && r.type === ValueType.Number) {
+          const pctSub = combinePercentage(l, r, -1);
+          const ratePeriodSub = pctSub === null ? unifyRatePeriods(l, r) : null;
+          if (pctSub !== null) {
+            stack.push(pctSub);
+          } else if (ratePeriodSub !== null) {
+            stack.push(uomValue(ratePeriodSub - r.toNumber(), r.unit!));
+          } else if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(numberValue((l.value as number) - (r.value as number)));
           } else if (l.type === ValueType.Datetime) {
             if (r.type === ValueType.Datetime) {
@@ -767,6 +897,12 @@ export function executeBytecode(
           } else if (r.type === ValueType.Uom && isRateUnit(r.unit) && l.type === ValueType.Uom && l.unit) {
             // Commutative: "3 minutes × 30 fps" too.
             stack.push(multiplyRateByMatchingUom(r, l));
+          } else if (moneyTimesQuantity(l, r) !== null) {
+            // "$30 × 4 days" is $120: an amount of money multiplied by a
+            // count of something. Without this the unit system refused it
+            // outright ("Cannot combine incompatible units: USD and days"),
+            // because there is no such unit as a dollar-day.
+            stack.push(moneyTimesQuantity(l, r)!);
           } else {
             stack.push(binaryOp(l, r, (a, b) => a * b, (a, b) => a * b, "mul"));
           }
@@ -1276,7 +1412,7 @@ export function executeBytecode(
         }
         case OpCode.TO_MULTIPLIER: {
           const v = safePop(stack);
-          stack.push(stringValue(toMultiplierString(v.toNumber())));
+          stack.push(stringValue(toMultiplierString(v)));
           break;
         }
         case OpCode.TO_SCI: {
