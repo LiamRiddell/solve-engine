@@ -37,6 +37,18 @@ max(3, 7) // 7
 gcd(12, 18) // 6
 ```
 
+## Angles
+
+Trigonometric functions take radians. An angle written with a unit is converted,
+so the unit is never quietly dropped.
+
+```solve
+sin(Pi/2) // 1
+sin(30 deg) // 0.50
+cos(60 degrees) // 0.50
+tan(45 deg) // 1.00
+```
+
 ## Bases
 
 Numbers can be written and displayed in hexadecimal, binary or octal.

@@ -24,6 +24,46 @@ import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/Engi
 import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/finance/data/CpiTable";
 
 /**
+ * Reads a trigonometric argument as radians, converting when it carries an
+ * angle unit.
+ *
+ * The functions take radians, as they do everywhere. What they did with
+ * `sin(45 deg)` was call `toNumber()`, which drops the unit and leaves 45, so
+ * the answer was the sine of forty-five *radians*: a wrong number, with nothing
+ * to indicate that a unit had been thrown away. Writing the unit is the
+ * clearest possible statement that degrees were meant.
+ *
+ * Only angle units are touched. `sin(45 kg)` is not something to be helpful
+ * about and keeps falling through to the plain number, which is the existing
+ * behaviour for a nonsensical unit rather than a new opinion about it.
+ *
+ * @param value - The argument as it arrived.
+ * @returns The angle in radians.
+ */
+function toRadians(value: Value): number {
+    const magnitude = value.toNumber();
+    if (value.type !== ValueType.Uom || value.unit === undefined) return magnitude;
+
+    switch (value.unit) {
+        case "deg":
+        case "degs":
+        case "degree":
+        case "degrees":
+        case "°":
+            return magnitude * Math.PI / 180;
+        case "grad":
+        case "grads":
+        case "gradian":
+        case "gradians":
+        case "gon":
+        case "gons":
+            return magnitude * Math.PI / 200;
+        default:
+            return magnitude;
+    }
+}
+
+/**
  * Registry of built-in mathematical functions.
  * Indexed by the number pushed as an operand of OpCode.CALL_BUILTIN.
  */
@@ -41,9 +81,9 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // valid alias for det(a) (index 64), reusing the SAME implementation
     // not a separate one. Plain-number abs is unaffected.
     1: (args) => args[0].type === ValueType.Matrix ? determinant(args[0].value as MatrixData) : numberValue(Math.abs(args[0].toNumber())),
-    2: (args) => numberValue(Math.sin(args[0].toNumber())),
-    3: (args) => numberValue(Math.cos(args[0].toNumber())),
-    4: (args) => numberValue(Math.tan(args[0].toNumber())),
+    2: (args) => numberValue(Math.sin(toRadians(args[0]))),
+    3: (args) => numberValue(Math.cos(toRadians(args[0]))),
+    4: (args) => numberValue(Math.tan(toRadians(args[0]))),
     5: (args) => numberValue(Math.log(args[0].toNumber())),
     6: (args) => numberValue(Math.ceil(args[0].toNumber())),
     7: (args) => numberValue(Math.floor(args[0].toNumber())),
