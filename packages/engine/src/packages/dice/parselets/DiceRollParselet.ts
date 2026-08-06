@@ -36,7 +36,7 @@ const keywordLedRollPattern = definePhrasePattern({
         // separator's token type (a bare `parser.consume()`), so it never
         // surfaced this; matching that real lexer behavior explicitly here
         // rather than the aspirational "AND" the old code's comment implied.
-        { kind: "keyword", tokenTypes: ["PLUS"] },
+        { kind: "keyword", tokenTypes: ["AND_CONJ"] },
         { kind: "expr" },
       ],
       emit: emitDiceRollCall,

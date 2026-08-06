@@ -1,4 +1,4 @@
-import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixValue, type MatrixData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, type MatrixData } from "@solve-js/vm/Value";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom } from "@solve-js/vm/VMConversion";
 import { transpose, determinant, inverse, matrixMultiply, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
@@ -22,6 +22,48 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 // eslint-disable-next-line no-unused-vars
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/finance/data/CpiTable";
+import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
+
+/** The angle measure's kind in UNIT_TABLE. Its base unit is the radian. */
+const ANGLE_KIND = 0;
+
+/**
+ * A trig argument in radians.
+ *
+ * `sin(90 degrees)` used to answer 0.89, because the builtin read the number
+ * and discarded the unit, so 90 was taken as 90 radians. The engine already
+ * knew the conversion, `90 degrees in radians` has always given 1.5708; the
+ * trig functions simply never asked.
+ *
+ * A plain number is still radians, which is the convention everywhere else and
+ * what `sin(pi/2)` relies on.
+ */
+function angleInRadians(value: Value): number {
+    if (value.type === ValueType.Uom && value.unit !== undefined) {
+        const entry = UNIT_TABLE[value.unit.toLowerCase()];
+        // Every angle entry's ratio converts that spelling to radians.
+        if (entry !== undefined && entry[0] === ANGLE_KIND) return value.toNumber() * entry[1];
+    }
+    return value.toNumber();
+}
+
+/**
+ * The plural spelling of a unit, when the count calls for one and the table
+ * has it.
+ *
+ * `$500 at $20/hour` is twenty-five hours, not twenty-five hour. The
+ * denominator is written singular in the rate, so a count derived from it
+ * inherits the wrong number unless it is adjusted here. Only spellings the
+ * unit table already knows are used, so nothing is invented.
+ *
+ * @param unit - The unit as written.
+ * @param count - How many, deciding singular or plural.
+ */
+function pluraliseUnit(unit: string, count: number): string {
+    if (count === 1) return unit;
+    const plural = `${unit}s`;
+    return UNIT_TABLE[plural.toLowerCase()] === undefined ? unit : plural;
+}
 
 /**
  * Registry of built-in mathematical functions.
@@ -41,9 +83,10 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // valid alias for det(a) (index 64), reusing the SAME implementation
     // not a separate one. Plain-number abs is unaffected.
     1: (args) => args[0].type === ValueType.Matrix ? determinant(args[0].value as MatrixData) : numberValue(Math.abs(args[0].toNumber())),
-    2: (args) => numberValue(Math.sin(args[0].toNumber())),
-    3: (args) => numberValue(Math.cos(args[0].toNumber())),
-    4: (args) => numberValue(Math.tan(args[0].toNumber())),
+    // sin/cos/tan accept an angle with a unit; see angleInRadians().
+    2: (args) => numberValue(Math.sin(angleInRadians(args[0]))),
+    3: (args) => numberValue(Math.cos(angleInRadians(args[0]))),
+    4: (args) => numberValue(Math.tan(angleInRadians(args[0]))),
     5: (args) => numberValue(Math.log(args[0].toNumber())),
     6: (args) => numberValue(Math.ceil(args[0].toNumber())),
     7: (args) => numberValue(Math.floor(args[0].toNumber())),
@@ -358,11 +401,13 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         const { monthlyPayment } = amortizeLoan(principal, rate, years);
         return args[0].type === ValueType.Uom ? uomValue(monthlyPayment, args[0].unit!) : numberValue(monthlyPayment);
     },
-    // taxAdd(amount, rate) -> amount * (1 + rate). Backs "tax on $X at R%" /
-    // "VAT on $X at R%". No default rate is baked in anywhere, the caller
-    // always supplies one explicitly, since tax rates vary by region and
-    // change over time; this package makes no assumption about which rate
-    // applies.
+    // taxAdd(amount, rate) -> amount * (1 + rate), the tax-inclusive total.
+    // Backs the taxAdd() function-call form, whose name promises exactly this.
+    // The "tax on $X at R%" PHRASE does NOT use it, see index 86.
+    //
+    // No default rate is baked in anywhere, the caller always supplies one
+    // explicitly, since tax rates vary by region and change over time; this
+    // package makes no assumption about which rate applies.
     58: (args) => {
         const amount = args[0].toNumber();
         const rate = args[1].toNumber();
@@ -589,6 +634,222 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         const value = args[0];
         if (value.type !== ValueType.Symbolic) return value;
         return symbolicToValue(apartSymbolic(value.value as SymbolicNode));
+    },
+    // taxIn(amount, rate) -> amount - amount/(1 + rate), the tax already
+    // contained in a tax-INCLUSIVE total. Backs "tax in/of/from $X at R%".
+    // The complement of taxRemove (index 59): the two sum to the gross amount.
+    85: (args) => {
+        const amount = args[0].toNumber();
+        const rate = args[1].toNumber();
+        if (1 + rate <= 0) {
+            return errorValue("INVALID_RATE", `taxIn: rate ${rate} makes (1 + rate) non-positive`);
+        }
+        const tax = amount - amount / (1 + rate);
+        return args[0].type === ValueType.Uom ? uomValue(tax, args[0].unit!) : numberValue(tax);
+    },
+    // taxOn(amount, rate) -> amount * rate, the tax itself.
+    //
+    // The "tax on $X at R%" phrase used to compile to taxAdd (index 58) and
+    // answer $345.00 for "tax on $300 at 15%". Soulver answers $45.00, and
+    // "the tax on $300" is the tax, not the bill. The total is "$300 + 15%",
+    // which reads as a relative increase (see PercentParselet.ts), or
+    // taxAdd(300, 0.15) for the function form.
+    86: (args) => {
+        const amount = args[0].toNumber();
+        const rate = args[1].toNumber();
+        const tax = amount * rate;
+        return args[0].type === ValueType.Uom ? uomValue(tax, args[0].unit!) : numberValue(tax);
+    },
+    // ── Degree-taking trig (sind/cosd/tand and the inverses) ──────────────
+    // The "d" spellings take and return degrees rather than radians, which is
+    // the convention every scientific calculator uses. sin(90 degrees) is the
+    // other way to say the same thing; both exist because both get typed.
+    87: (args) => numberValue(Math.sin(args[0].toNumber() * Math.PI / 180)),
+    88: (args) => numberValue(Math.cos(args[0].toNumber() * Math.PI / 180)),
+    89: (args) => numberValue(Math.tan(args[0].toNumber() * Math.PI / 180)),
+    90: (args) => numberValue(Math.asin(args[0].toNumber()) * 180 / Math.PI),
+    91: (args) => numberValue(Math.acos(args[0].toNumber()) * 180 / Math.PI),
+    92: (args) => numberValue(Math.atan(args[0].toNumber()) * 180 / Math.PI),
+    // daysCount(n) -> n labelled as days. "days in Q3" is a count of days
+    // and should say so; a bare 92 loses what was being counted.
+    93: (args) => uomValue(args[0].toNumber(), "days"),
+    // asTwoUnits(value, majorUnit, minorUnit) -> "12 min 30 s".
+    //
+    // "12.5 minutes in minutes and seconds" asks for one quantity split
+    // across two units, which every other conversion path cannot express:
+    // they each produce a single number in a single unit.
+    //
+    // The whole part goes to the major unit and the remainder to the minor,
+    // so nothing is lost. A pair that is not ordered major-then-minor, or
+    // that spans two different measures, reports rather than guessing.
+    94: (args) => {
+        const major = args[1].value as string;
+        const minor = args[2].value as string;
+        const majorEntry = UNIT_TABLE[major.toLowerCase()] as readonly [number, number] | undefined;
+        const minorEntry = UNIT_TABLE[minor.toLowerCase()] as readonly [number, number] | undefined;
+        if (majorEntry === undefined || minorEntry === undefined) {
+            return errorValue("UNKNOWN_UNIT", `${major} and ${minor}: one of these is not a unit`);
+        }
+        if (majorEntry[0] !== minorEntry[0]) {
+            return errorValue("INCOMPATIBLE_UNITS", `${major} and ${minor} measure different things`);
+        }
+        if (minorEntry[1] >= majorEntry[1]) {
+            return errorValue("INCOMPATIBLE_UNITS", `${major} and ${minor}: name the larger unit first`);
+        }
+        const source = args[0];
+        const sourceEntry = source.type === ValueType.Uom && source.unit !== undefined
+            ? (UNIT_TABLE[source.unit.toLowerCase()] as readonly [number, number] | undefined)
+            : undefined;
+        const inBase = source.toNumber() * (sourceEntry?.[1] ?? majorEntry[1]);
+        const majorCount = Math.floor(inBase / majorEntry[1]);
+        const minorCount = Math.round(((inBase - majorCount * majorEntry[1]) / minorEntry[1]) * 1000) / 1000;
+        return stringValue(`${majorCount} ${major} ${minorCount} ${minor}`);
+    },
+    // makeRate(value, denominatorUnit) -> value per that unit.
+    //
+    // `3 hours / day` is a rate, `3 hours / 3 days` is a division. The
+    // difference is whether a number was written in the denominator, which
+    // is decided at parse time, so this only ever receives the rate case.
+    //
+    // Building the rate directly rather than dividing by an implied 1 is the
+    // whole point: a division makes same-measure units cancel, which turned
+    // `3 hours / day` into 0.125 when that shortcut was tried.
+    95: (args) => {
+        const source = args[0];
+        const denominator = String(args[1].value);
+        const numerator = source.type === ValueType.Uom && source.unit !== undefined
+            ? source.unit
+            : "";
+        if (numerator.includes("/")) {
+            return errorValue("INVALID_RATE_UNIT", `${numerator}/${denominator}: that is already a rate`);
+        }
+        // A bare number over a unit is a countless rate, "30/week", which the
+        // rate machinery already renders without a numerator unit.
+        return uomValue(source.toNumber(), `${numerator}/${denominator}`);
+    },
+    // atRate(quantity, rate) -> whichever of the two the question implies.
+    //
+    //   30 hours at $30/hour   $900      a duration at a price per duration
+    //   $500 at $20/hour       25 hours   money at a price per duration
+    //
+    // Both are written with the same word and mean opposite operations. Which
+    // one applies is decided by which half of the rate the left side matches:
+    // match the denominator and you are buying that many, match the numerator
+    // and you are asking how many it buys.
+    96: (args) => {
+        const left = args[0];
+        const rate = args[1];
+        if (rate.type !== ValueType.Uom || rate.unit === undefined || !rate.unit.includes("/")) {
+            return errorValue("INVALID_RATE", "at: the right-hand side has to be a rate, as in \"$30/hour\"");
+        }
+        const slash = rate.unit.indexOf("/");
+        const numerator = rate.unit.slice(0, slash);
+        const denominator = rate.unit.slice(slash + 1);
+        const leftUnit = left.type === ValueType.Uom ? left.unit : undefined;
+
+        const denominatorEntry = UNIT_TABLE[denominator.toLowerCase()] as readonly [number, number] | undefined;
+        const leftEntry = leftUnit === undefined ? undefined : (UNIT_TABLE[leftUnit.toLowerCase()] as readonly [number, number] | undefined);
+
+        // "30 hours at $30/hour": the left side counts denominators.
+        if (leftEntry !== undefined && denominatorEntry !== undefined && leftEntry[0] === denominatorEntry[0]) {
+            const inDenominator = left.toNumber() * leftEntry[1] / denominatorEntry[1];
+            const total = inDenominator * rate.toNumber();
+            return numerator === "" ? numberValue(total) : uomValue(total, numerator);
+        }
+
+        // "$500 at $20/hour": the left side is the numerator, so divide.
+        if (leftUnit !== undefined && leftUnit === numerator) {
+            const count = left.toNumber() / rate.toNumber();
+            return uomValue(count, pluraliseUnit(denominator, count));
+        }
+
+        // A bare number counts denominators too: "30 at $30/hour".
+        if (leftUnit === undefined) {
+            const total = left.toNumber() * rate.toNumber();
+            return numerator === "" ? numberValue(total) : uomValue(total, numerator);
+        }
+
+        return errorValue("INCOMPATIBLE_UNITS", `at: ${leftUnit} matches neither side of ${rate.unit}`);
+    },
+    // ── Investments (packages/finance/) ────────────────────────────────────
+    // compoundFutureValueEvery(principal, rate, years, periodsPerYear)
+    // FV = P(1 + r/n)^(n·y). Index 51 is the same formula with n fixed at 1;
+    // this one backs "compounding monthly"/"quarterly"/"daily"/"weekly".
+    // Kept separate rather than widening 51, because 51 is also the public
+    // compoundInterest(principal, rate, years) call and its arity is part of
+    // that contract.
+    80: (args) => {
+        const principal = args[0].toNumber();
+        const rate = args[1].toNumber();
+        const years = args[2].toNumber();
+        const perYear = args[3].toNumber();
+        if (perYear <= 0) {
+            return errorValue("INVALID_RATE", `compounding: ${perYear} periods per year is not a period`);
+        }
+        if (1 + rate / perYear <= 0) {
+            return errorValue("INVALID_RATE", `compounding: rate ${rate} makes each period non-positive`);
+        }
+        const fv = principal * Math.pow(1 + rate / perYear, perYear * years);
+        return args[0].type === ValueType.Uom ? uomValue(fv, args[0].unit!) : numberValue(fv);
+    },
+    // compoundInterestEarnedEvery(principal, rate, years, periodsPerYear)
+    // The interest-only portion of index 80, i.e. FV - P.
+    81: (args) => {
+        const principal = args[0].toNumber();
+        const rate = args[1].toNumber();
+        const years = args[2].toNumber();
+        const perYear = args[3].toNumber();
+        if (perYear <= 0 || 1 + rate / perYear <= 0) {
+            return errorValue("INVALID_RATE", `compounding: rate ${rate} over ${perYear} periods per year is not usable`);
+        }
+        const interest = principal * (Math.pow(1 + rate / perYear, perYear * years) - 1);
+        return args[0].type === ValueType.Uom ? uomValue(interest, args[0].unit!) : numberValue(interest);
+    },
+    // presentValue(futureValue, rate, years) -> FV / (1 + r)^y, what a sum
+    // promised in the future is worth today. The inverse of index 51.
+    82: (args) => {
+        const future = args[0].toNumber();
+        const rate = args[1].toNumber();
+        const years = args[2].toNumber();
+        if (1 + rate <= 0) {
+            return errorValue("INVALID_RATE", `presentValue: rate ${rate} makes (1 + rate) non-positive`);
+        }
+        const pv = future / Math.pow(1 + rate, years);
+        return args[0].type === ValueType.Uom ? uomValue(pv, args[0].unit!) : numberValue(pv);
+    },
+    // returnOnInvestment(invested, returned) -> (returned - invested) /
+    // invested, the gain as a multiple of what was put in. $500 in and $1,500
+    // out is 2x, not 3x: ROI conventionally measures the profit against the
+    // cost, so doubling your money is 1x return and tripling it is 2x. The
+    // money multiple (3x here) is a different figure; `$1,500 / $500` gives it.
+    83: (args) => {
+        const invested = args[0].toNumber();
+        const returned = args[1].toNumber();
+        if (invested === 0) {
+            return errorValue("INVALID_RATE", "roi: nothing was invested, so there is no return on it");
+        }
+        return numberValue((returned - invested) / invested);
+    },
+    // annualisedReturn(invested, returned, years) -> CAGR, the constant
+    // yearly rate that turns `invested` into `returned` over `years`:
+    // (returned/invested)^(1/years) - 1. Returned as a Percentage so it
+    // renders "13.99%" rather than 0.1399.
+    84: (args) => {
+        const invested = args[0].toNumber();
+        const returned = args[1].toNumber();
+        const years = args[2].toNumber();
+        if (invested <= 0) {
+            return errorValue("INVALID_RATE", "annual return: the amount invested must be positive");
+        }
+        if (years <= 0) {
+            return errorValue("INVALID_RATE", "annual return: the period must be longer than zero");
+        }
+        if (returned <= 0) {
+            // A total loss has no finite compound rate; -100% a year is the
+            // limit, and pretending otherwise would invent a number.
+            return errorValue("INVALID_RATE", "annual return: nothing was returned, so there is no annual rate");
+        }
+        return percentageValue(Math.pow(returned / invested, 1 / years) - 1);
     },
 };
 

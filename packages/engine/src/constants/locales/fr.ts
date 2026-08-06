@@ -21,7 +21,7 @@ export const frLocale: ILocale = {
   label: "Français",
   keywordMap: {
     pi: "PI", e: "E",
-    plus: "PLUS", ajouter: "PLUS", et: "PLUS",
+    plus: "PLUS", ajouter: "PLUS", et: "AND_CONJ",
     moins: "MINUS", soustraire: "MINUS", enlever: "MINUS",
     fois: "STAR", multiplier: "STAR",
     diviser: "SLASH",

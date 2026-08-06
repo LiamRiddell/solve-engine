@@ -1,5 +1,8 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { VariadicAggregateParselet } from "./parselets/VariadicAggregateParselet";
+import { unaryPhraseParselet } from "./parselets/UnaryPhraseParselet";
+import { remainderOfParselet, nthRootParselet, logBaseParselet } from "./parselets/RemainderRootParselets";
+import { functionPhraseNormalizerRule } from "./normalizer/FunctionPhraseNormalizerRule";
 import { largerSmallerParselet } from "./parselets/LargerSmallerParselet";
 import { halfParselet } from "./parselets/HalfParselet";
 import { midpointParselet } from "./parselets/MidpointParselet";
@@ -10,6 +13,8 @@ import { ProportionParselet } from "./parselets/ProportionParselet";
 // CALL_BUILTIN indices. See VMBuiltins.ts for the handler implementations.
 const AVERAGE = 42, MEDIAN = 43, TOTAL = 44, COUNT = 45;
 const MIN = 9, MAX = 10;
+// Reused builtins: gcd/lcm and the two roots already exist as functions.
+const GCD = 38, LCM = 39, SQRT = 0, CBRT = 21;
 
 /**
  * Phrase-grammar math functions: `average/median/total/count of X, Y, Z`,
@@ -58,11 +63,20 @@ export const MATHPHRASES_PACKAGE: IEnginePackage = {
     "total of": "TOTAL_OF",
     "count of": "COUNT_OF",
     "larger of": "LARGER_OF",
+    "greater of": "LARGER_OF",
     "smaller of": "SMALLER_OF",
+    "lesser of": "SMALLER_OF",
     "half of": "HALF_OF",
     "midpoint between": "MIDPOINT_BETWEEN",
     "random number": "RANDOM_NUMBER",
     "is to": "IS_TO",
+    // Two-operand phrases reusing the gcd/lcm builtins.
+    "remainder of": "REMAINDER_OF",
+    "gcd of": "GCD_OF",
+    "lcm of": "LCM_OF",
+    // sqrt/cbrt spelled the way they are said.
+    "square root of": "SQUARE_ROOT_OF",
+    "cube root of": "CUBE_ROOT_OF",
   },
   prefixParselets: [
     { tokenType: "AVERAGE_OF", parselet: new VariadicAggregateParselet(AVERAGE) },
@@ -74,9 +88,19 @@ export const MATHPHRASES_PACKAGE: IEnginePackage = {
     { tokenType: "HALF_OF", parselet: halfParselet },
     { tokenType: "MIDPOINT_BETWEEN", parselet: midpointParselet },
     { tokenType: "RANDOM_NUMBER", parselet: randomNumberParselet },
+    { tokenType: "REMAINDER_OF", parselet: remainderOfParselet },
+    { tokenType: "NTH_ROOT", parselet: nthRootParselet },
+    { tokenType: "LOG_PHRASE", parselet: logBaseParselet },
+    { tokenType: "GCD_OF", parselet: largerSmallerParselet(GCD) },
+    { tokenType: "LCM_OF", parselet: largerSmallerParselet(LCM) },
+    { tokenType: "SQUARE_ROOT_OF", parselet: unaryPhraseParselet(SQRT) },
+    { tokenType: "CUBE_ROOT_OF", parselet: unaryPhraseParselet(CBRT) },
     { tokenType: "CLAMP", parselet: new ClampParselet() },
   ],
   infixParselets: [
     { tokenType: "IS_TO", parselet: new ProportionParselet() },
+  ],
+  normalizerRules: [
+    functionPhraseNormalizerRule(),
   ],
 };

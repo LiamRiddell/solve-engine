@@ -24,7 +24,7 @@ export const randomNumberParselet: PrefixParselet = definePhrasePattern({
       slots: [
         { kind: "keyword", tokenTypes: ["BETWEEN"] },
         { kind: "expr", bindingPower: BindingPower.Product },
-        { kind: "keyword", tokenTypes: ["PLUS"] },
+        { kind: "keyword", tokenTypes: ["AND_CONJ"] },
         { kind: "expr" },
       ],
       emit: (builder) => {

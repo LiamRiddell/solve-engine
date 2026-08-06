@@ -43,7 +43,7 @@ export class LoanRepaymentParselet implements PrefixParselet {
     parser.parseExpression(BindingPower.Lowest, builder); // principal
     parser.consume("OVER");
     parser.parseExpression(BindingPower.Lowest, builder); // years
-    parser.consume("RATE_AT");
+    if (!parser.match("RATE_AT")) parser.consume("AT");
     parser.parseExpression(BindingPower.Lowest, builder); // rate
 
     // Stack: [principal, years, rate] -> SWAP -> [principal, rate, years]

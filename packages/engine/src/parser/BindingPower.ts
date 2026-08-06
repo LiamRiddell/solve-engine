@@ -15,6 +15,12 @@ export const BindingPower = {
   LogicalOr: 12,   // `or`, `||` — loosest of the boolean-logic operators
   LogicalAnd: 14,  // `&&` — binds tighter than `or` ("a or b and c" = "a or (b and c)")
   Conditional: 20, // comparisons (`==`, `<`, `>=`, ...) — tighter than and/or, looser than arithmetic
+  // The word "and" as addition (`AND_CONJ`). One step looser than `Sum` on
+  // purpose: a phrase parselet collecting a list ("average of X, Y and Z")
+  // parses each argument at this level, which stops at "and" while still
+  // letting a genuine "+" inside an argument bind. Level 28 rather than 29 to
+  // leave room, and below Sum rather than above so "1 and 2 * 3" stays 7.
+  Conjunction: 28,
   Sum: 30,
   BitwiseXor: 35,
   Product: 40,

@@ -12,16 +12,18 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
  * "between" is fused into the trigger, X (an `expr`) comes next, not a
  * keyword, which `definePhrasePattern` can't start an alternative with.
  *
- * X is parsed at `BindingPower.Product` to guard against the "and"-lexes-
- * as-PLUS collision (see ConditionalsPackage.ts's doc comment)
- * otherwise X's own parse would greedily swallow "and Y" as addition
- * before this parselet's own "and" check ever runs.
+ * X is parsed at `BindingPower.Conjunction`, one step looser than `Sum`, so
+ * that it stops at "and" without also stopping at "+". This used to be
+ * `Product` for the same reason, back when the word "and" was the PLUS token
+ * itself and nothing weaker could tell them apart; the cost was that
+ * "midpoint between 100 + 50 and 300" could not be written, because the
+ * operand slot gave up at the "+". See Token.ts's AND_CONJ comment.
  */
 export const midpointParselet: PrefixParselet = {
   category: "MathPhrases",
   parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
-    parser.parseExpression(BindingPower.Product, builder); // X
-    parser.consume("PLUS"); // "and"
+    parser.parseExpression(BindingPower.Conjunction, builder); // X
+    parser.consume("AND_CONJ"); // "and"
     parser.parseExpression(BindingPower.Lowest, builder); // Y
     builder.emitOpcode(OpCode.ADD);
     builder.emitOpcode(OpCode.PUSH_NUMBER);

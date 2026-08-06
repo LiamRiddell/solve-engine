@@ -53,6 +53,32 @@ const SUFFIX_MAGNITUDE: Record<string, number> = {
 };
 
 /**
+ * The same magnitudes written as words, which is how most people write them.
+ * `3 million` is the ordinary spelling and only `3M` used to work.
+ *
+ * Unlike the single letters above these are matched case-insensitively and
+ * with the space that normally separates them from the number, because there
+ * is nothing for them to collide with: no unit is spelled "million", and the
+ * rule only fires directly after a numeric literal, so `:million = 5` and a
+ * bare `million` reference are both untouched.
+ *
+ * "m" is deliberately absent. It is the metre, and `5m` must stay 5 metres.
+ */
+const WORD_MAGNITUDE: Record<string, number> = {
+  thousand: 3,
+  thousands: 3,
+  million: 6,
+  millions: 6,
+  mn: 6,
+  billion: 9,
+  billions: 9,
+  bn: 9,
+  trillion: 12,
+  trillions: 12,
+  tn: 12,
+};
+
+/**
  * Plain unsigned decimal literal, digits, with at most one ".", as
  * produced by the lexer's ordinary NUMBER scanning. Deliberately excludes
  * `0x`/`0X` hex and `0b`/`0B` binary literals (also lexed as type
@@ -131,9 +157,14 @@ export function largeNumberSuffixNormalizerRule(priority = 65): NormalizerRule {
       // note on SUFFIX_MAGNITUDE above) sitting immediately adjacent to
       // the number, with no whitespace in between.
       if (suffixToken.type !== "IDENT" && suffixToken.type !== "UNIT") return null;
-      if (numberToken.offset + numberToken.text.length !== suffixToken.offset) return null;
 
-      const magnitude = SUFFIX_MAGNITUDE[suffixToken.value];
+      const adjacent = numberToken.offset + numberToken.text.length === suffixToken.offset;
+      // A single-letter suffix must touch the number: `5 k` is not 5,000, and
+      // more importantly `5 M` next to an unrelated variable M should not be.
+      // A word may be separated by the space it is normally written with.
+      const magnitude = adjacent
+        ? (SUFFIX_MAGNITUDE[suffixToken.value] ?? WORD_MAGNITUDE[suffixToken.value.toLowerCase()])
+        : WORD_MAGNITUDE[suffixToken.value.toLowerCase()];
       if (magnitude === undefined) return null;
 
       const scaled = scaleDecimalString(numberToken.text, magnitude);

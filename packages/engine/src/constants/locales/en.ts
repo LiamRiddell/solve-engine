@@ -19,7 +19,7 @@ export const enLocale: ILocale = {
   label: "English",
   keywordMap: {
     pi: "PI", e: "E",
-    plus: "PLUS", add: "PLUS", and: "PLUS",
+    plus: "PLUS", add: "PLUS", and: "AND_CONJ",
     minus: "MINUS", subtract: "MINUS", remove: "MINUS", take: "MINUS",
     times: "STAR", multiply: "STAR",
     divide: "SLASH",
@@ -43,6 +43,8 @@ export const enLocale: ILocale = {
     // call-syntax-only names, not plausible :variableName choices).
     root: "FUNC", fact: "FUNC", factorial: "FUNC",
     fround: "FUNC", hypot: "FUNC", imul: "FUNC",
+    sind: "FUNC", cosd: "FUNC", tand: "FUNC",
+    asind: "FUNC", acosd: "FUNC", atand: "FUNC",
     log10: "FUNC", log1p: "FUNC", log2: "FUNC",
     pow: "FUNC", random: "FUNC", sign: "FUNC", trunc: "FUNC",
     degtorad: "FUNC", radtodeg: "FUNC",
@@ -88,6 +90,12 @@ export const enLocale: ILocale = {
     // prepositions, same accepted-risk category as "between"/"from" above
     // see Token.ts's OVER/RATE_AT doc comment.
     over: "OVER", at: "RATE_AT",
+    // Only "rounded". Bare "round" is already the round(x) function above.
+    rounded: "ROUNDED",
+    is: "IS",
+    // The investment grammar (packages/finance/). See Token.ts.
+    after: "AFTER", for: "FOR_DURATION", compounding: "COMPOUNDING",
+    invested: "INVESTED", returned: "RETURNED",
     by: "BY",
     vec2: "VEC2", vec3: "VEC3", vec4: "VEC4",
      float: "FLOAT",
