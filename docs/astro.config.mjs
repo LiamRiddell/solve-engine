@@ -227,9 +227,11 @@ export default defineConfig({
           label: "Embedding guide",
           items: [
             { slug: "guide/embedding" },
+            { slug: "guide/typescript-usage" },
             { slug: "guide/formatting" },
             { slug: "guide/editor-integration" },
             { slug: "guide/async-and-live-data" },
+            { slug: "guide/async-data-sources" },
             { slug: "guide/performance" },
             { slug: "guide/subpath-exports" },
           ],
