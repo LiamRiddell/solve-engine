@@ -37,17 +37,24 @@ describe("an angle with a unit", () => {
 		expect(num("sin(90 deg)")).toBeCloseTo(1, 10);
 	});
 
-	test("the ° symbol is a separate, still-open lexer gap", () => {
-		// Not this conversion's doing: "90°" does not lex as a unit at all, so
-		// the symbol never reaches a trig function. Asserted rather than left
-		// out, so fixing the lexer surfaces here instead of going unnoticed.
-		expect(() => num("sin(90°)")).toThrow(/undefined variable/i);
+	test("the ° symbol works", () => {
+		// It could not reach a trig function at all until the degree sign was
+		// retyped as a unit: the lexer reads a unit as one run of [A-Za-z0-9_],
+		// so a non-ASCII character could never become one however well the
+		// converter understood it.
+		expect(num("sin(90°)")).toBeCloseTo(1, 10);
+		expect(num("cos(180°)")).toBeCloseTo(-1, 10);
 	});
 
 	test("and gradians, not just degrees", () => {
-		// 100 gradians is a right angle. "turns" is in the unit table but does
-		// not lex as a unit, the same gap as "°" above.
 		expect(num("sin(100 gradians)")).toBeCloseTo(1, 10);
+	});
+
+	test("`turns` is deliberately not a unit, and stays that way", () => {
+		// lexer/units.ts excludes it on purpose: "ordinary English, against a
+		// full-rotation angle unit". Admitting it would make the word "turns"
+		// in a sentence become a quantity. The unit is reachable as gradians.
+		expect(() => num("sin(0.25 turns)")).toThrow();
 	});
 
 	test("radians are unchanged by the conversion", () => {

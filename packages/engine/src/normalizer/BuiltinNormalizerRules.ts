@@ -32,6 +32,14 @@ import type { NormalizerRule, NormalizerMatch } from "./NormalizerRule";
  *
  * @see {@link TokenNormalizer.canStartPhrase}
  */
+/**
+ * Words that introduce a rate denominator when a unit follows.
+ *
+ * Kept next to the implicit-multiplication rule because that is the only
+ * thing they change here; the rate itself is built in the uom package.
+ */
+const RATE_DENOMINATOR_WORDS = new Set(["per", "a", "an", "each", "every"]);
+
 const PHRASE_START_WORDS = new Set([
   "to", "power", "increase", "decrease", "times", "multiply", "divide", "by",
 ]);
@@ -82,6 +90,15 @@ export function implicitMultiplyRule(
       // This prevents "2 power of 3" from becoming "2 * power of 3".
       const nextValue = next.value.toLowerCase();
       if (phraseGuard(nextValue)) return null;
+
+      // ── Guard: a rate denominator, not a multiplication ──
+      // "99 per week" is ninety-nine a week, not ninety-nine times something
+      // called per. The trie guard above cannot cover this, because these are
+      // not registered phrases; they are recognised by the uom package's
+      // bare-denominator rule, which runs after this one and then finds its
+      // fused token stranded in operand position. The slash spelling never had
+      // the problem, which is what made it hard to see.
+      if (RATE_DENOMINATOR_WORDS.has(nextValue) && tokens[pos + 2]?.type === "UNIT") return null;
 
       // ── Check trigger conditions ──
       const triggers =

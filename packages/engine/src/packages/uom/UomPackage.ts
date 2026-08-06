@@ -5,6 +5,7 @@ import { PossibilitiesParselet } from "./parselets/PossibilitiesParselet";
 import { uomPossibilitiesNormalizerRule } from "./normalizer/PossibilitiesNormalizerRule";
 import { compoundQuantityNormalizerRule } from "./normalizer/CompoundQuantityNormalizerRule";
 import { twoUnitConversionNormalizerRule } from "./normalizer/TwoUnitConversionNormalizerRule";
+import { degreeSymbolNormalizerRule } from "./normalizer/DegreeSymbolNormalizerRule";
 import { TwoUnitConversionParselet } from "./parselets/TwoUnitConversionParselet";
 import { bareRateDenominatorNormalizerRule } from "./normalizer/BareRateDenominatorNormalizerRule";
 import { PerUnitParselet } from "./parselets/PerUnitParselet";
@@ -43,6 +44,7 @@ export const UOM_PACKAGE: IEnginePackage = {
     uomPossibilitiesNormalizerRule(),
     compoundQuantityNormalizerRule(),
     twoUnitConversionNormalizerRule(),
+    degreeSymbolNormalizerRule(),
     bareRateDenominatorNormalizerRule(),
     reversedConversionNormalizerRule(),
     ingredientNameNormalizerRule(),

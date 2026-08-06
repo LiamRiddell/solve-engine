@@ -40,7 +40,20 @@ describe("a bare denominator makes a rate", () => {
 		expect(evaluate("3 hours each day").unit).toBe("hours/day");
 	});
 
-	test("money per period", () => {
+	test("a bare number as the numerator, with no unit of its own", () => {
+		// This threw until implicit multiplication stopped inserting a `*`
+		// between the number and the `per`. The slash spelling never had the
+		// problem, which is what made it hard to find.
+		expect(evaluate("99 per week").unit).toBe("/week");
+		expect(num("99 per week")).toBeCloseTo(99, 6);
+	});
+
+	test("and the same through an article", () => {
+		expect(evaluate("99 a week").unit).toBe("/week");
+	});
+
+	test("money per period, both spellings", () => {
+		expect(evaluate("$99 per week").unit).toBe("USD/week");
 		const value = evaluate("$99 / week");
 		expect(value.toNumber()).toBeCloseTo(99, 6);
 		expect(value.unit).toBe("USD/week");
@@ -83,6 +96,13 @@ describe("what the rate rule must not claim", () => {
 		expect(engine.evaluateExpression(":per + 1")[0].toNumber()).toBe(6);
 	});
 
+	test("implicit multiplication still fires where it should", () => {
+		// The guard added for rate words is narrow: it only suppresses the
+		// multiplication when one of those words is followed by a real unit.
+		expect(num("2 pi")).toBeCloseTo(Math.PI * 2, 6);
+		expect(num("2(3 + 4)")).toBe(14);
+	});
+
 	test("`a` before a non-unit is untouched", () => {
 		// The article only introduces a denominator when a real unit follows.
 		expect(num("seconds in a day")).toBeCloseTo(86400, 6);
@@ -91,14 +111,9 @@ describe("what the rate rule must not claim", () => {
 
 describe("still open, and failing honestly rather than wrongly", () => {
 	/**
-	 * Recorded so the boundary is visible. These throw rather than answering
-	 * something plausible, which is the acceptable failure, but they are not
-	 * done.
+	 * Recorded so the boundary is visible. This reports rather than answering
+	 * something plausible, which is the acceptable failure, but it is not done.
 	 */
-	test("a bare number as the numerator does not reach the rate parselet", () => {
-		expect(() => evaluate("99 per week")).toThrow();
-	});
-
 	test("adding rates over different periods is not unified", () => {
 		// `$20/day + $300/week` needs the two periods reconciled before they
 		// can be added. It reports incompatible units instead.
