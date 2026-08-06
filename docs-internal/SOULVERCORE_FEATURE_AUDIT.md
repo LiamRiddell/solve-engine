@@ -18,7 +18,63 @@ Status legend:
 - ⛔ **Out of scope** — not an engine/`packages/core` concern at all (editor/app-layer
   UI, or a feature with no distinct expression syntax).
 
-Last updated: 2026-08-01 (post-merge completion pass).
+Last updated: 2026-08-06.
+
+---
+
+## Read this before trusting anything below
+
+**The per-page statuses in this document were written by reading the code, not by
+running it, and most of them are wrong.**
+
+On 2026-08-06 every example expression that Soulver's own documentation states a
+result for was collected and executed against the engine. Of 123 such examples,
+**38 produce the documented answer, 81 do not, and 4 differ only in formatting.**
+This document claimed 39 of 40 pages were implemented.
+
+The gap is not carelessness so much as the wrong question. Each row below was
+filled in by asking "does the engine have something in this area", and answering
+yes. That is not the same as "does the documented syntax work". Two examples of
+the difference:
+
+- `general/number-rounding` is marked ✅, credited to `as decimal` plus the
+  formatter's rounding configuration. None of the ten rounding forms on that
+  page parse: not `1/3 to 2 dp`, not `5.5 rounded`, not `37 to nearest 10`.
+- `time/timespans-and-laptimes` is marked ✅ for `as timespan`/`as laptime`. The
+  only occurrence of the string "timespan" in `packages/time` is a doc comment.
+  No converter is registered and both forms return "Unknown converter".
+
+Some rows are worse than unimplemented, because the engine answers confidently
+and incorrectly:
+
+| Expression | This engine | Soulver |
+|---|---|---|
+| `average of 36, 42, 19 and 81` | 59.33 | 44.5 |
+| `median of 10, 20 and 30` | 30 | 20 |
+| `sin(90 degrees)` | 0.89 | 1.0 |
+| `200 + 10%` | 200.10 | 220 |
+| `20/5 as multiplier` | 5x | 4x |
+| `tax on $300 at 15%` | $345.00 | $45.00 |
+| `value of $500 in 2028 assuming 5% inflation` | $551.25 | $411.35 |
+
+The first two are fixed as of 2026-08-06: the word "and" was mapped onto the
+PLUS token, so the last two items of any "X, Y and Z" list were parsed as one
+sum. See `packages/engine/src/lexer/Token.ts`'s `AND_CONJ` comment. The rest are
+recorded and still open.
+
+`money-and-finance/mortgages` is the one finance row that was accurate. All eight
+of its documented examples match to the cent. `money-and-finance/investments` is
+marked ✅ for "compound interest / future value" and every documented form on
+that page throws; ROI, `annual return`, `present value` and the
+`compounding monthly`/`quarterly` intervals do not exist at all.
+
+**The measured state now lives in
+`packages/engine/__tests__/docs/SoulverParity.spec.ts`, which runs on every
+build.** It fails in both directions: a regression in something that works, and
+also a gap that starts working without being promoted out of the gap list. Treat
+that file as the source of truth and this document as commentary. The counts
+quoted above are asserted there, so they cannot drift from the code without
+failing a run.
 
 ---
 
@@ -46,7 +102,7 @@ Last updated: 2026-08-01 (post-merge completion pass).
 | Page | Status | Notes |
 |---|---|---|
 | `general/operators` | ✅ | `packages/arithmetic/` — `+ - * / ^ %`, parens, implicit multiplication. |
-| `general/number-rounding` | ✅ | `packages/converters/` (`as decimal`) + `FormatEngine`'s rounding config. |
+| `general/number-rounding` | ⛔ **wrong, measured** | 0 of 10 documented forms parse. The cited `as decimal` and formatter config are a different feature, not this page. |
 | `general/averages-and-median` | ✅ | `packages/mathphrases/` — `average of X, Y, Z`, `median of X, Y, Z`. |
 | `general/logarithms-and-roots` | ✅ | `packages/arithmetic/` / `FUNCTION_PACKAGE` — `sqrt`, `log`, `ln`, etc. (pre-existing). |
 | `general/trigonometry` | ✅ | `FUNCTION_PACKAGE` — `sin`/`cos`/`tan`/etc. (pre-existing). |
@@ -65,7 +121,7 @@ Last updated: 2026-08-01 (post-merge completion pass).
 | `time/timespans-and-laptimes` | ✅ | `packages/time/` — lap-time literals (`HH:MM:SS[.f]`), `as timespan`/`as laptime`. |
 | `time/clock-time-calculations` | ✅ | `packages/time/` — clock-time literals (`9:00am`, `16:00`), interval-between (`7:30 to 20:45`), arithmetic with day-rollover. |
 | `time/video-timecode-and-frame-rates` | ✅ | `packages/time/` — `HH:MM:SS:FF at/@ Nfps` literals (`Uom(totalFrames, "timecode@fps")`, activating the previously-dormant `@` lexer token), fps-aware carry arithmetic (`combineTimecode()` in `vm/VM.ts`), `... in frames` and the reverse `<N> frames @ <fps>` → `HH:MM:SS:FF` conversion. Previously explicitly deferred in `TimePackage.ts`'s own doc comment; now closed. |
-| `money-and-finance/investments` | ✅ | `packages/finance/` — compound interest / future value. |
+| `money-and-finance/investments` | ⛔ **wrong, measured** | Every documented form throws. `$1,000 after 3 years at 7%` does not parse; ROI, `annual return`, `present value` and `compounding monthly`/`quarterly` are absent. A `CompoundInterestParselet` exists but matches none of the documented phrasings. |
 | `money-and-finance/mortgages` | ✅ | `packages/finance/` — `LoanRepaymentParselet`, `amortizeLoan()` (daily/monthly/annual repayment & interest). |
 | `money-and-finance/sales-tax` | ✅ | `packages/finance/` — `SalesTaxParselet` (`tax on $X at Y%`) — deliberately requires an explicit rate, never hardcodes/assumes one (see the parselet's own doc comment). |
 | `money-and-finance/inflation-calculations` | ✅ | `packages/finance/` — bundled, explicitly-vintage-labeled US CPI-by-year table (1970-2026), `inflationAdjust(amount, fromYear, toYear)` plus 5 phrase forms (`what is $X from <year>`, `what was $X worth in <year>`, `$X in <year> dollars`, `value of $X in <futureYear> assuming N% inflation`). Previously explicitly deferred in `FinancePackage.ts`'s own doc comment; now closed. |
