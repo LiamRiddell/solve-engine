@@ -22,6 +22,7 @@ import { untilSinceNormalizerRule } from "./normalizer/UntilSinceNormalizerRule"
 import { betweenUnitNormalizerRule } from "./normalizer/BetweenUnitNormalizerRule";
 import { workdayRateDenominatorNormalizerRule } from "./normalizer/WorkdayRateDenominatorNormalizerRule";
 import { dateLiteralNormalizerRule } from "./normalizer/DateLiteralNormalizerRule";
+import { monthNameDateNormalizerRule } from "./normalizer/MonthNameDateNormalizerRule";
 import { dailyNoteLinkNormalizerRule } from "./normalizer/DailyNoteLinkNormalizerRule";
 import { formatIso8601Local } from "./Iso8601";
 
@@ -159,6 +160,10 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     betweenUnitNormalizerRule(),
     workdayRateDenominatorNormalizerRule(),
     dateLiteralNormalizerRule(),
+    // Dates with the month spelled out ("March 9, 2024"). Priority 64, just
+    // under the numeric rule, so an all-numeric literal is still claimed by
+    // the rule that has always claimed it.
+    monthNameDateNormalizerRule(),
     dailyNoteLinkNormalizerRule(),
   ],
   pluginFunctions: [

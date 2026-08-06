@@ -5,8 +5,8 @@
  * This exists because `docs-internal/SOULVERCORE_FEATURE_AUDIT.md` was written
  * by reading the code and asking "do we have something in this area", and the
  * answer to that question is not the same as "does the documented syntax work".
- * It marked 39 of 40 pages implemented. Measured, 85 of the 122 documented
- * examples below produce the documented answer, 29 do not, and 8 differ only
+ * It marked 39 of 40 pages implemented. Measured, 88 of the 122 documented
+ * examples below produce the documented answer, 26 do not, and 8 differ only
  * in formatting. It credited `as timespan` and
  * `as laptime` to `packages/time`, where the only occurrence of the word
  * "timespan" is a doc comment. It credited the rounding page to `as decimal`
@@ -136,6 +136,11 @@ const SUPPORTED: readonly Example[] = [
 	["bases", "0x9F31 to decimal", "40753"],
 	["bases", "0b101101 as base 8", "0o55"],
 
+	// Unblocked by month-name date literals (2026-08-06).
+	["dates", "days between 3 March and 30 May", "88 days"],
+	["workdays", "day of the week on January 24, 1984", "Tuesday"],
+	["workdays", "weekday on March 9, 2024", "Saturday"],
+
 	// Remainder, nth roots, base logs and base-relative multipliers (2026-08-06).
 	["multipliers", "2 as multiplier of 1", "2x"],
 	["operators", "remainder of 21 divided by 5", "1"],
@@ -212,9 +217,6 @@ const GAPS: readonly Example[] = [
 	["dates", "days in Q3", "92 days"],
 	["dates", "days in February 2020", "29 days"],
 	["dates", "week number on march 12, 2021", "10"],
-	["dates", "days between 3 March and 30 May", "88 days"],
-	["workdays", "day of the week on January 24, 1984", "Tuesday"],
-	["workdays", "weekday on March 9, 2024", "Saturday"],
 ];
 
 /**
@@ -336,8 +338,8 @@ describe("Soulver parity — documented examples that do not", () => {
 		// quotes this number. A change here without a change there leaves the
 		// audit stating a total it did not measure, which is how the previous
 		// version of that document ended up fictional.
-		expect(GAPS.length).toBe(29);
-		expect(SUPPORTED.length).toBe(85);
+		expect(GAPS.length).toBe(26);
+		expect(SUPPORTED.length).toBe(88);
 	});
 });
 

@@ -47,7 +47,7 @@ function resolveYear(digits: string): number | null {
  * February), letting the caller fall back to treating the source tokens
  * as ordinary arithmetic instead of a date.
  */
-function buildDateToken(
+export function buildDateToken(
   day: number,
   month: number,
   year: number,

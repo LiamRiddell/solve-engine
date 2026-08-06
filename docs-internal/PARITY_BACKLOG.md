@@ -9,8 +9,8 @@ build and fails in both directions: a regression in something that works, and
 also a gap that starts working without being promoted out of its list. If this
 file and that spec disagree, the spec is right.
 
-As of 2026-08-06: **85 of 122** documented examples produce the documented
-answer, 29 do not, 8 differ only in formatting.
+As of 2026-08-06: **88 of 122** documented examples produce the documented
+answer, 26 do not, 8 differ only in formatting.
 
 See `SOULVERCORE_FEATURE_AUDIT.md` for why the previous per-page audit was
 unreliable, and the same reason this file avoids per-page status claims.
@@ -27,9 +27,8 @@ entries in the spec's `GAPS` list.
 | Timespans | 7 | `as timespan`, `as laptime`, `3h 5m 10s` compound literals, `03:04:05 + 01:02:03` laptime arithmetic, `12.5 minutes in minutes and seconds` | **Structural.** The converters do not exist at all; the audit credited them to `packages/time` where the only occurrence of "timespan" is a doc comment. Compound duration literals need lexer work, not a parselet. |
 | Rates | 6 | `3 hours / day`, `$99 per week`, `$20/day + $300/week`, `$24 a day for a year`, `30 hours at $30/hour`, `$500 at $20/hour` | **Structural.** A bare unit in a denominator (`/ day` with no number) does not lex. Rate arithmetic across differing periods needs unification. |
 | Units | 5 | `5 hours 30 minutes to seconds`, `meters in 10 km`, `days in 3 weeks`, `seconds in a day`, `$30 * 4 days` | Reversed conversion (`<unit> in <quantity>`) is a new grammar. Compound quantities share the timespan lexer work. `$30 * 4 days` is a money-times-duration case the unit system currently rejects. |
-| Dates | 4 | `days in Q3`, `days in February 2020`, `week number on march 12, 2021`, `days between 3 March and 30 May` | Contained. Calendar queries over a named period. |
+| Dates | 3 | `days in Q3`, `days in February 2020`, `week number on march 12, 2021` | Contained. The date literals now parse; what is missing is the surrounding "how long is this named period" grammar. |
 | Clock | 3 | `16:00 + 3 hours 12 minutes`, `7:30 to 20:45`, `4pm to 3am` | Depends on the compound-duration literals above. |
-| Workdays | 2 | `day of the week on January 24, 1984`, `weekday on March 9, 2024` | Small, and worth noting: the audit marked these implemented. They never worked. |
 | Inflation data | 2 | `what is $4.2k from 2003`, `what was $500 worth in 1997` | **Blocked on data, not code.** See below. |
 
 ## Currencies
