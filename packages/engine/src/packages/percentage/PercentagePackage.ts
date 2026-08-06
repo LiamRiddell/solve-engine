@@ -1,6 +1,8 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { PercentParselet } from "./parselets/PercentParselet";
 import { IsWhatParselet } from "./parselets/IsWhatParselet";
+import { OnOffBaseParselet } from "./parselets/OnOffBaseParselet";
+import { percentOnOffNormalizerRule } from "./normalizer/PercentOnOffNormalizerRule";
 import { OfParselet } from "./parselets/OfParselet";
 import { OfWhatIsParselet } from "./parselets/OfWhatIsParselet";
 import { OnOffWhatIsParselet } from "./parselets/OnOffWhatIsParselet";
@@ -36,6 +38,10 @@ export const PERCENTAGE_PACKAGE: IEnginePackage = {
   infixParselets: [
     { tokenType: "PERCENT", parselet: new PercentParselet() },
     { tokenType: "IS", parselet: new IsWhatParselet() },
+    // "10% on 200" is 220 and "10% off 200" is 180: the percentage comes
+    // first, the base second. The reverse of "200 + 10%".
+    { tokenType: "PCT_ON", parselet: new OnOffBaseParselet(1) },
+    { tokenType: "PCT_OFF", parselet: new OnOffBaseParselet(-1) },
     { tokenType: "OF", parselet: new OfParselet() },
     { tokenType: "OF_WHAT_IS", parselet: new OfWhatIsParselet() },
     { tokenType: "ON_WHAT_IS", parselet: new OnOffWhatIsParselet(1) },
@@ -47,5 +53,8 @@ export const PERCENTAGE_PACKAGE: IEnginePackage = {
   prefixParselets: [
     { tokenType: "INCREASE", parselet: new IncreaseDecreaseParselet(1) },
     { tokenType: "DECREASE", parselet: new IncreaseDecreaseParselet(-1) },
+  ],
+  normalizerRules: [
+    percentOnOffNormalizerRule(),
   ],
 };

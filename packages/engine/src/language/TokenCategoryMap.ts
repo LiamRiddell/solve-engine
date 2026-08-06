@@ -119,6 +119,8 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	TAX_IN_PHRASE: "keyword",
 	IS_TO: "keyword",
 	IS: "keyword",
+	PCT_ON: "operator",
+	PCT_OFF: "operator",
 	OF_WHAT: "keyword",
 	OFF_WHAT: "keyword",
 	ON_WHAT: "keyword",

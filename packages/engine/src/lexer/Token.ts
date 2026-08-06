@@ -193,6 +193,8 @@ export const TokenTypes = {
   // verb, not a plausible :variableName, and the "is to" proportion phrase is
   // fused earlier so it still wins.
   IS: "IS",
+  PCT_ON: "PCT_ON",
+  PCT_OFF: "PCT_OFF",
   OF_WHAT: "OF_WHAT",
   OFF_WHAT: "OFF_WHAT",
   ON_WHAT: "ON_WHAT",

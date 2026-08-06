@@ -642,6 +642,16 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         const tax = amount * rate;
         return args[0].type === ValueType.Uom ? uomValue(tax, args[0].unit!) : numberValue(tax);
     },
+    // ── Degree-taking trig (sind/cosd/tand and the inverses) ──────────────
+    // The "d" spellings take and return degrees rather than radians, which is
+    // the convention every scientific calculator uses. sin(90 degrees) is the
+    // other way to say the same thing; both exist because both get typed.
+    87: (args) => numberValue(Math.sin(args[0].toNumber() * Math.PI / 180)),
+    88: (args) => numberValue(Math.cos(args[0].toNumber() * Math.PI / 180)),
+    89: (args) => numberValue(Math.tan(args[0].toNumber() * Math.PI / 180)),
+    90: (args) => numberValue(Math.asin(args[0].toNumber()) * 180 / Math.PI),
+    91: (args) => numberValue(Math.acos(args[0].toNumber()) * 180 / Math.PI),
+    92: (args) => numberValue(Math.atan(args[0].toNumber()) * 180 / Math.PI),
     // ── Investments (packages/finance/) ────────────────────────────────────
     // compoundFutureValueEvery(principal, rate, years, periodsPerYear)
     // FV = P(1 + r/n)^(n·y). Index 51 is the same formula with n fixed at 1;

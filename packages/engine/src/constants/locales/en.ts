@@ -43,6 +43,8 @@ export const enLocale: ILocale = {
     // call-syntax-only names, not plausible :variableName choices).
     root: "FUNC", fact: "FUNC", factorial: "FUNC",
     fround: "FUNC", hypot: "FUNC", imul: "FUNC",
+    sind: "FUNC", cosd: "FUNC", tand: "FUNC",
+    asind: "FUNC", acosd: "FUNC", atand: "FUNC",
     log10: "FUNC", log1p: "FUNC", log2: "FUNC",
     pow: "FUNC", random: "FUNC", sign: "FUNC", trunc: "FUNC",
     degtorad: "FUNC", radtodeg: "FUNC",
