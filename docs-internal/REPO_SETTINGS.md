@@ -28,6 +28,26 @@ need updating on a rename.
 - [ ] After the first deploy, load the site and confirm the documentation CSS,
       the playground, its font, and its worker chunk all resolve
 
+### When a deploy will not go through
+
+A Pages deployment's id is the commit sha. Once a deployment for a commit ends
+in a cancelled or failed state, GitHub will not create a working one for that
+same commit again: every retry creates a deployment with the same id, sees it is
+already terminal, and cancels in a few seconds with `Error: Deployment
+cancelled`. Re-running the job or dispatching the workflow does not help, because
+the commit has not changed.
+
+This is easy to walk into. If a deploy is slow, `actions/deploy-pages` aborts at
+its ten-minute timeout and cancels its own deployment, which poisons the commit.
+Cancelling a queued deploy by hand does the same. The signature to recognise is a
+fast cancel rather than a timeout: the backend answered, it just refused the
+commit.
+
+The fix is a new commit, which is a new sha and a fresh deployment id. Do not
+keep re-running the workflow on the poisoned commit. A slow-but-working backend
+is different: that one eventually succeeds, so let it run rather than cancelling
+it.
+
 ## Security
 
 - [ ] Private vulnerability reporting enabled. `SECURITY.md` sends people to the
