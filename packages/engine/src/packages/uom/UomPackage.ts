@@ -11,6 +11,7 @@ import { bareRateDenominatorNormalizerRule } from "./normalizer/BareRateDenomina
 import { PerUnitParselet } from "./parselets/PerUnitParselet";
 import { AtRateParselet } from "./parselets/AtRateParselet";
 import { atRateNormalizerRule } from "./normalizer/AtRateNormalizerRule";
+import { forDurationNormalizerRule } from "./normalizer/ForDurationNormalizerRule";
 import { reversedConversionNormalizerRule } from "./normalizer/ReversedConversionNormalizerRule";
 import { CookingConversionParselet } from "./parselets/CookingConversionParselet";
 import { COOKING_CONVERT_IDX, cookingConvertHandler } from "./parselets/CookingPluginFunctions";
@@ -49,6 +50,7 @@ export const UOM_PACKAGE: IEnginePackage = {
     twoUnitConversionNormalizerRule(),
     degreeSymbolNormalizerRule(),
     atRateNormalizerRule(),
+    forDurationNormalizerRule(),
     bareRateDenominatorNormalizerRule(),
     reversedConversionNormalizerRule(),
     ingredientNameNormalizerRule(),

@@ -34,6 +34,29 @@ const PER_WORDS = new Set(["per", "a", "an", "each", "every"]);
 // Priority above the implicit-multiplication rule (50), which would
 // otherwise insert a `*` between a bare number and the `per` that follows it
 // and leave the fused token in operand position.
+/**
+ * A word that is not a unit, standing where a rate numerator would be.
+ *
+ * `30 bottles / week` is thirty bottles a week. "bottles" is not a unit and
+ * never will be, so the only readings available are to drop it, which is what
+ * Soulver does, or to keep it as the label it plainly is. Keeping it says more
+ * and loses nothing.
+ *
+ * Only fires when the very next thing is a rate denominator, which is a strong
+ * enough signal to distinguish a count noun from a variable. The cost is real
+ * and stated: if `bottles` happens to be a defined variable, this reads the
+ * word rather than its value. That is asserted in the spec so the trade is
+ * visible rather than discovered.
+ */
+function isCountLabel(token: Token | undefined): boolean {
+	if (token === undefined || token.type !== "IDENT") return false;
+	const word = (token.text ?? token.value ?? "").toLowerCase();
+	if (PER_WORDS.has(word)) return false;
+	// A word, not a symbol or a single letter: single letters are overwhelmingly
+	// variables (`30 x / week`) and overwhelmingly not count nouns.
+	return /^[a-z][a-z_]{2,}$/.test(word) && UNIT_TABLE[word] === undefined;
+}
+
 export function bareRateDenominatorNormalizerRule(priority = 75): NormalizerRule {
 	return {
 		name: "uom:bare-rate-denominator",
@@ -41,6 +64,24 @@ export function bareRateDenominatorNormalizerRule(priority = 75): NormalizerRule
 		match(tokens, pos): NormalizerMatch | null {
 			const head = tokens[pos];
 			if (head === undefined) return null;
+
+			// `30 bottles / week`: a count noun in front of the denominator.
+			// Retyped as the unit it is acting as, so the rate keeps the label.
+			if (head.type === "NUMBER" && isCountLabel(tokens[pos + 1])) {
+				const label = tokens[pos + 1];
+				const after = tokens[pos + 2];
+				const introduces =
+					after?.type === "SLASH" ||
+					(after?.type === "IDENT" && PER_WORDS.has((after.text ?? after.value ?? "").toLowerCase()));
+				if (introduces && isUnit(tokens[pos + 3])) {
+					return {
+						consumed: 2,
+						replacement: [head, createFusedToken("UNIT", label.value, [label])],
+						ruleName: "uom:bare-rate-denominator",
+					};
+				}
+			}
+
 			if (!isUnit(tokens[pos + 1])) return null;
 
 			const isSlash = head.type === "SLASH";

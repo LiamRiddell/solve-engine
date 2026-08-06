@@ -48,6 +48,24 @@ function angleInRadians(value: Value): number {
 }
 
 /**
+ * The plural spelling of a unit, when the count calls for one and the table
+ * has it.
+ *
+ * `$500 at $20/hour` is twenty-five hours, not twenty-five hour. The
+ * denominator is written singular in the rate, so a count derived from it
+ * inherits the wrong number unless it is adjusted here. Only spellings the
+ * unit table already knows are used, so nothing is invented.
+ *
+ * @param unit - The unit as written.
+ * @param count - How many, deciding singular or plural.
+ */
+function pluraliseUnit(unit: string, count: number): string {
+    if (count === 1) return unit;
+    const plural = `${unit}s`;
+    return UNIT_TABLE[plural.toLowerCase()] === undefined ? unit : plural;
+}
+
+/**
  * Registry of built-in mathematical functions.
  * Indexed by the number pushed as an operand of OpCode.CALL_BUILTIN.
  */
@@ -741,7 +759,8 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
 
         // "$500 at $20/hour": the left side is the numerator, so divide.
         if (leftUnit !== undefined && leftUnit === numerator) {
-            return uomValue(left.toNumber() / rate.toNumber(), denominator);
+            const count = left.toNumber() / rate.toNumber();
+            return uomValue(count, pluraliseUnit(denominator, count));
         }
 
         // A bare number counts denominators too: "30 at $30/hour".

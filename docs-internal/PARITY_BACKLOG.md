@@ -9,8 +9,11 @@ build and fails in both directions: a regression in something that works, and
 also a gap that starts working without being promoted out of its list. If this
 file and that spec disagree, the spec is right.
 
-As of 2026-08-06: **102 of 122** documented examples produce the documented
-answer, 3 do not, 17 differ only in formatting.
+As of 2026-08-06: **104 of 122** documented examples produce the documented
+answer, 2 do not, 16 differ only in formatting.
+
+The two that remain are both the CPI table, and both are waiting on data
+rather than code.
 
 See `SOULVERCORE_FEATURE_AUDIT.md` for why the previous per-page audit was
 unreliable, and the same reason this file avoids per-page status claims.
@@ -19,12 +22,16 @@ unreliable, and the same reason this file avoids per-page status claims.
 
 ## Open, by area
 
+Only the inflation rows are left. Every other area on this table has been
+closed; the rows below are kept so the history of what the work involved is
+not lost.
+
+
 Ordered roughly by size of the work rather than by row count. "Rows" are
 entries in the spec's `GAPS` list.
 
 | Area | Rows | What is missing | Shape of the work |
 |---|---|---|---|
-| Rates | 1 | `30 bottles / week` | Everything else on the page is done. This needs an unrecognised word after a number to be read as a countable label rather than a variable, and dropping it (which is what Soulver does, answering `30/week`) would silently change `30 x / week` where `x` is a real variable. A wrong answer for a display nicety is not a trade worth making, so it stays open and failing loudly. |
 | Inflation data | 2 | `what is $4.2k from 2003`, `what was $500 worth in 1997` | **Blocked on data, not code.** See below. |
 
 ## Currencies

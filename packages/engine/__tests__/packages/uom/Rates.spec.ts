@@ -151,7 +151,13 @@ describe("a quantity at a rate", () => {
 		// by which half of the rate the left side matches.
 		const value = evaluate("$500 at $20/hour");
 		expect(value.toNumber()).toBeCloseTo(25, 6);
-		expect(value.unit).toBe("hour");
+		// Plural: the denominator is written singular in the rate, and a count
+		// derived from it would inherit the wrong number.
+		expect(value.unit).toBe("hours");
+	});
+
+	test("and singular when there is exactly one", () => {
+		expect(evaluate("$20 at $20/hour").unit).toBe("hour");
 	});
 
 	test("a bare number counts denominators", () => {
@@ -188,11 +194,64 @@ describe("what `at` must not disturb", () => {
 	});
 });
 
-describe("still open, and failing honestly rather than wrongly", () => {
+describe("a rate running for a period", () => {
+	test("`$24 a day for a year` is $8,760", () => {
+		// The article does two different jobs in one line: `a day` introduces
+		// the denominator, `a year` is how long the rate runs for.
+		const value = evaluate("$24 a day for a year");
+		expect(value.toNumber()).toBeCloseTo(8760, 6);
+		expect(value.unit).toBe("USD");
+	});
 
-	test("an unrecognised numerator word is not a unit", () => {
-		// "30 bottles / week" needs "bottles" to be treated as a countable
-		// label rather than a variable, which is a lexer question.
-		expect(() => evaluate("30 bottles / week")).toThrow();
+	test("and with the slash spelling", () => {
+		expect(num("$50/week for a year")).toBeCloseTo(2607.142857, 4);
+	});
+
+	test("the finance grammar's `for` is untouched", () => {
+		// `for 3 years` carries its own number and belongs to compound
+		// interest. Only the article form is rewritten.
+		expect(num("$1,000 for 3 years at 7%")).toBeCloseTo(1225.043, 2);
+		expect(num("interest on $1,000 for 3 years at 7% compounding monthly")).toBeCloseTo(232.926, 2);
+	});
+});
+
+describe("a count noun as the numerator", () => {
+	test("`30 bottles / week` keeps the label", () => {
+		// Soulver answers 30/week, dropping the word. Keeping it says more and
+		// loses nothing.
+		const value = evaluate("30 bottles / week");
+		expect(value.toNumber()).toBeCloseTo(30, 6);
+		expect(value.unit).toBe("bottles/week");
+	});
+
+	test("and through the `per` spelling", () => {
+		expect(evaluate("30 bottles per week").unit).toBe("bottles/week");
+	});
+
+	test("a single letter stays a variable", () => {
+		// `30 x / week` is overwhelmingly a variable, not a count noun, so
+		// single letters are excluded from the label reading entirely.
+		expect(() => evaluate("30 x / week")).toThrow(/undefined variable/i);
+	});
+
+	test("a word with no denominator after it is untouched", () => {
+		// The denominator is the signal. Without one this is ordinary implicit
+		// multiplication against a variable, and still fails as one.
+		expect(() => evaluate("30 bottles")).toThrow(/undefined variable/i);
+	});
+
+	test("the cost: a defined multi-letter variable loses to the label", () => {
+		// Stated rather than hidden. `bottles` here holds 5, and the rate reads
+		// the word instead of the value. The denominator requirement keeps this
+		// narrow, but it is a real trade and this is what it looks like.
+		const engine = newTrackedEngine("en");
+		engine.evaluateExpression(":bottles = 5");
+		const [value] = engine.evaluateExpression("30 bottles / week");
+		expect(value.unit).toBe("bottles/week");
+		expect(value.toNumber()).toBeCloseTo(30, 6);
+	});
+
+	test("implicit multiplication elsewhere is unaffected", () => {
+		expect(num("2 pi")).toBeCloseTo(Math.PI * 2, 6);
 	});
 });
