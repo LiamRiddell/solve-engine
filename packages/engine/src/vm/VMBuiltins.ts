@@ -358,11 +358,13 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         const { monthlyPayment } = amortizeLoan(principal, rate, years);
         return args[0].type === ValueType.Uom ? uomValue(monthlyPayment, args[0].unit!) : numberValue(monthlyPayment);
     },
-    // taxAdd(amount, rate) -> amount * (1 + rate). Backs "tax on $X at R%" /
-    // "VAT on $X at R%". No default rate is baked in anywhere, the caller
-    // always supplies one explicitly, since tax rates vary by region and
-    // change over time; this package makes no assumption about which rate
-    // applies.
+    // taxAdd(amount, rate) -> amount * (1 + rate), the tax-inclusive total.
+    // Backs the taxAdd() function-call form, whose name promises exactly this.
+    // The "tax on $X at R%" PHRASE does NOT use it, see index 86.
+    //
+    // No default rate is baked in anywhere, the caller always supplies one
+    // explicitly, since tax rates vary by region and change over time; this
+    // package makes no assumption about which rate applies.
     58: (args) => {
         const amount = args[0].toNumber();
         const rate = args[1].toNumber();
@@ -589,6 +591,31 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         const value = args[0];
         if (value.type !== ValueType.Symbolic) return value;
         return symbolicToValue(apartSymbolic(value.value as SymbolicNode));
+    },
+    // taxIn(amount, rate) -> amount - amount/(1 + rate), the tax already
+    // contained in a tax-INCLUSIVE total. Backs "tax in/of/from $X at R%".
+    // The complement of taxRemove (index 59): the two sum to the gross amount.
+    85: (args) => {
+        const amount = args[0].toNumber();
+        const rate = args[1].toNumber();
+        if (1 + rate <= 0) {
+            return errorValue("INVALID_RATE", `taxIn: rate ${rate} makes (1 + rate) non-positive`);
+        }
+        const tax = amount - amount / (1 + rate);
+        return args[0].type === ValueType.Uom ? uomValue(tax, args[0].unit!) : numberValue(tax);
+    },
+    // taxOn(amount, rate) -> amount * rate, the tax itself.
+    //
+    // The "tax on $X at R%" phrase used to compile to taxAdd (index 58) and
+    // answer $345.00 for "tax on $300 at 15%". Soulver answers $45.00, and
+    // "the tax on $300" is the tax, not the bill. The total is "$300 + 15%",
+    // which reads as a relative increase (see PercentParselet.ts), or
+    // taxAdd(300, 0.15) for the function form.
+    86: (args) => {
+        const amount = args[0].toNumber();
+        const rate = args[1].toNumber();
+        const tax = amount * rate;
+        return args[0].type === ValueType.Uom ? uomValue(tax, args[0].unit!) : numberValue(tax);
     },
     // ── Investments (packages/finance/) ────────────────────────────────────
     // compoundFutureValueEvery(principal, rate, years, periodsPerYear)

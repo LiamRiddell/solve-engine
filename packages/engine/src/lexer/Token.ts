@@ -296,6 +296,7 @@ export const TokenTypes = {
   TOTAL_LOAN_INTEREST_ON: "TOTAL_LOAN_INTEREST_ON",
   TAX_ON: "TAX_ON",
   TAX_OFF: "TAX_OFF",
+  TAX_IN_PHRASE: "TAX_IN_PHRASE",
   // Inflation-adjusted value (packages/finance/) -- fused phrase
   // tokens (see FinancePackage.ts's `phrases` field), same reasoning
   // as the tax/interest phrases above: "what"/"was"/"value"/"worth"

@@ -109,6 +109,7 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	TOTAL_LOAN_INTEREST_ON: "keyword",
 	TAX_ON: "keyword",
 	TAX_OFF: "keyword",
+	TAX_IN_PHRASE: "keyword",
 	IS_TO: "keyword",
 	RANDOM_NUMBER: "keyword",
 	WHAT_IS: "keyword",

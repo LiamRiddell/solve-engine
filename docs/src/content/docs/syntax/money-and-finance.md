@@ -22,8 +22,16 @@ network and resolves asynchronously. See
 ## Tax
 
 ```solve
-tax on 100 at 20% // 120
+tax on 100 at 20% // 20
+100 + 20% // 120
+tax off 120 at 20% // 100
+tax in 120 at 20% // 20
 ```
+
+`tax on` gives the tax, not the bill. The bill is `100 + 20%`, which reads as a
+twenty percent increase. Going the other way, `tax off` takes a tax-inclusive
+total back to the pre-tax amount and `tax in` (also `tax of`, `tax from`) pulls
+out the tax already inside it. `vat` is accepted everywhere `tax` is.
 
 No tax rate is ever assumed. You state it, because the correct rate depends on
 where you are and what you are buying.

@@ -18,7 +18,9 @@ const LOAN_REPAYMENT = 55, LOAN_INTEREST = 56;
 // Investments (documented Soulver spellings). See VMBuiltins.ts 80-84.
 const COMPOUND_FV_EVERY = 80, COMPOUND_INTEREST_EVERY = 81;
 const PRESENT_VALUE = 82, ROI = 83, ANNUAL_RETURN = 84;
-const TAX_ADD = 58, TAX_REMOVE = 59;
+// 58 (taxAdd) is not referenced here: it backs the taxAdd() function-call
+// form via the builtin-name registry, not a phrase in this package.
+const TAX_REMOVE = 59, TAX_IN = 85, TAX_ON = 86;
 // 60 = inflationAdjust(amount, fromYear, toYear). See InflationQueryParselet.ts
 // and VMBuiltins.ts. The other three inflation calculations (present-year
 // forms + the flat-rate future-value projection) are collision-safe
@@ -74,6 +76,14 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     "total interest on": "TOTAL_LOAN_INTEREST_ON",
     "tax on": "TAX_ON",
     "tax off": "TAX_OFF",
+    // The tax already inside a gross amount. Soulver documents "VAT in",
+    // "VAT of" and "VAT from" as three spellings of one thing.
+    "tax in": "TAX_IN_PHRASE",
+    "tax of": "TAX_IN_PHRASE",
+    "tax from": "TAX_IN_PHRASE",
+    "vat in": "TAX_IN_PHRASE",
+    "vat of": "TAX_IN_PHRASE",
+    "vat from": "TAX_IN_PHRASE",
     "vat on": "TAX_ON",
     "vat off": "TAX_OFF",
     "what is": "WHAT_IS",
@@ -100,8 +110,9 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     { tokenType: "ANNUAL_LOAN_INTEREST_ON", parselet: new LoanRepaymentParselet(LOAN_INTEREST, 1) },
     { tokenType: "TOTAL_LOAN_INTEREST_ON", parselet: new LoanRepaymentParselet(LOAN_INTEREST, 0) },
 
-    { tokenType: "TAX_ON", parselet: new SalesTaxParselet(TAX_ADD) },
+    { tokenType: "TAX_ON", parselet: new SalesTaxParselet(TAX_ON) },
     { tokenType: "TAX_OFF", parselet: new SalesTaxParselet(TAX_REMOVE) },
+    { tokenType: "TAX_IN_PHRASE", parselet: new SalesTaxParselet(TAX_IN) },
 
     { tokenType: "WHAT_IS", parselet: new InflationQueryParselet("what-is") },
     { tokenType: "WHAT_WAS", parselet: new InflationQueryParselet("what-was") },

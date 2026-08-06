@@ -80,7 +80,7 @@ const BUILTIN_KEYWORDS = [
 /** Built-in keyword → expected token type mapping */
 const KEYWORD_TOKEN_TYPES: Record<string, string> = {
   pi: "PI", e: "E",
-  plus: "PLUS", add: "PLUS", and: "PLUS",
+  plus: "PLUS", add: "PLUS", and: "AND_CONJ",
   minus: "MINUS", subtract: "MINUS", remove: "MINUS", take: "MINUS",
   times: "STAR", multiply: "STAR",
   divide: "SLASH",
