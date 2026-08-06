@@ -2,6 +2,7 @@ import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { AsConverterParselet } from "./parselets/AsConverterParselet";
 import { RoundedParselet, ToNearestParselet, DecimalPlacesParselet } from "./parselets/RoundingParselets";
 import { decimalPlacesNormalizerRule } from "./normalizer/DecimalPlacesNormalizerRule";
+import { converterPrepositionNormalizerRule } from "./normalizer/ConverterPrepositionNormalizerRule";
 
 /**
  * The general `<expr> as <type>` conversion/display mechanism, one
@@ -41,5 +42,6 @@ export const CONVERTERS_PACKAGE: IEnginePackage = {
   ],
   normalizerRules: [
     decimalPlacesNormalizerRule(),
+    converterPrepositionNormalizerRule(),
   ],
 };

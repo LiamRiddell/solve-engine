@@ -25,6 +25,19 @@ const BUILTIN_CONVERTERS: Record<string, OpCode> = {
 };
 
 /**
+ * Radixes reachable as "as base <n>".
+ *
+ * The same three the named converters cover, because these are the bases the
+ * engine can actually render a literal for. A base-7 renderer would be a
+ * different feature, not a missing table entry.
+ */
+const BASE_CONVERTERS: Record<number, OpCode> = {
+  2: OpCode.TO_BINARY,
+  8: OpCode.TO_OCTAL,
+  16: OpCode.TO_HEX,
+};
+
+/**
  * `<expr> as <type>`, general value/display conversion, e.g.
  * `50% as decimal` -> `0.5`, `255 as hex` -> `0xFF`, `0.5 as fraction` ->
  * `"1/2"`.
@@ -96,6 +109,25 @@ export class AsConverterParselet implements InfixParselet {
     }
     parser.consume();
     const name = nextToken.value.toLowerCase();
+
+    // "as base 8", the radix written as a number rather than a name. Only the
+    // three radixes this engine can render are accepted, and an unsupported
+    // one says so rather than silently falling through to "unknown converter",
+    // which would be true but unhelpful.
+    if (name === "base") {
+      const radixToken = parser.peek();
+      const radix = radixToken?.type === "NUMBER" ? Number(radixToken.value) : NaN;
+      const opcode = BASE_CONVERTERS[radix];
+      if (opcode === undefined) {
+        throw ErrorFactory.parsing(
+          "AS_CONVERTER_UNSUPPORTED_BASE",
+          `"as base ${radixToken?.value ?? "?"}": only bases ${Object.keys(BASE_CONVERTERS).join(", ")} can be written out`,
+        );
+      }
+      parser.consume();
+      builder.emitOpcode(opcode);
+      return;
+    }
 
     const builtinOp = BUILTIN_CONVERTERS[name];
     if (builtinOp !== undefined) {

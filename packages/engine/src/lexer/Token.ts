@@ -188,6 +188,14 @@ export const TokenTypes = {
   CUBE_ROOT_OF: "CUBE_ROOT_OF",
   RANDOM_NUMBER: "RANDOM_NUMBER",
   IS_TO: "IS_TO",
+  // Bare "is", the trigger for the solve-for-the-unknown percentage family
+  // (packages/percentage/IsWhatParselet.ts). Safe as a bare keyword: it is a
+  // verb, not a plausible :variableName, and the "is to" proportion phrase is
+  // fused earlier so it still wins.
+  IS: "IS",
+  OF_WHAT: "OF_WHAT",
+  OFF_WHAT: "OFF_WHAT",
+  ON_WHAT: "ON_WHAT",
   // CLAMP stays a bare single-word keyword: "clamp X between Y and Z" has
   // the value X between the trigger and "between", so it can't be
   // phrase-fused like the others above (same structural reason

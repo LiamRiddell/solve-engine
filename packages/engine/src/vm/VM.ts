@@ -547,12 +547,23 @@ function toFractionString(n: number): string {
 }
 
 /**
- * "1 + n" growth multiplier, e.g. a 50% increase (stored as the fraction
- * 0.5, matching Percentage's convention) reads as "1.5x".
+ * A value rendered as a multiple, "4x".
+ *
+ * What counts as the multiple depends on what is being converted, which is why
+ * this takes the Value rather than a number:
+ *
+ * - A **percentage** is a change, so it grows: 50% more is 1.5x, and
+ *   `20 to 40 as x` (a 100% change) is 2x.
+ * - **Anything else** is already the ratio: `20/5 as multiplier` is 4x.
+ *
+ * It used to add 1 unconditionally, so `20/5 as multiplier` answered 5x.
+ * Telling the two apart only became possible when `%` started producing a
+ * Percentage-typed value instead of a bare fraction (see PercentParselet.ts).
  */
-function toMultiplierString(n: number): string {
-    const multiplier = Math.round((1 + n) * 1e6) / 1e6;
-    return `${multiplier}x`;
+function toMultiplierString(value: Value): string {
+    const n = value.toNumber();
+    const multiple = value.type === ValueType.Percentage ? 1 + n : n;
+    return `${Math.round(multiple * 1e6) / 1e6}x`;
 }
 
 /** Scientific notation with trailing mantissa zeros trimmed ("1.50e+6" -> "1.5e+6"). */
@@ -1321,7 +1332,7 @@ export function executeBytecode(
         }
         case OpCode.TO_MULTIPLIER: {
           const v = safePop(stack);
-          stack.push(stringValue(toMultiplierString(v.toNumber())));
+          stack.push(stringValue(toMultiplierString(v)));
           break;
         }
         case OpCode.TO_SCI: {

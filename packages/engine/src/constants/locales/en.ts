@@ -90,6 +90,7 @@ export const enLocale: ILocale = {
     over: "OVER", at: "RATE_AT",
     // Only "rounded". Bare "round" is already the round(x) function above.
     rounded: "ROUNDED",
+    is: "IS",
     // The investment grammar (packages/finance/). See Token.ts.
     after: "AFTER", for: "FOR_DURATION", compounding: "COMPOUNDING",
     invested: "INVESTED", returned: "RETURNED",

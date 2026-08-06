@@ -1,5 +1,6 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { PercentParselet } from "./parselets/PercentParselet";
+import { IsWhatParselet } from "./parselets/IsWhatParselet";
 import { OfParselet } from "./parselets/OfParselet";
 import { OfWhatIsParselet } from "./parselets/OfWhatIsParselet";
 import { OnOffWhatIsParselet } from "./parselets/OnOffWhatIsParselet";
@@ -23,11 +24,18 @@ export const PERCENTAGE_PACKAGE: IEnginePackage = {
   name: "solve-percentage",
   phrases: {
     "of what is": "OF_WHAT_IS",
+    // Fused so that parsing the rate cannot swallow the "of": it is an infix
+    // operator in its own right ("10% of 200"), so a sub-expression would
+    // consume it and the trailing "what" before this parselet ever looked.
+    "of what": "OF_WHAT",
+    "off what": "OFF_WHAT",
+    "on what": "ON_WHAT",
     "on what is": "ON_WHAT_IS",
     "off what is": "OFF_WHAT_IS",
   },
   infixParselets: [
     { tokenType: "PERCENT", parselet: new PercentParselet() },
+    { tokenType: "IS", parselet: new IsWhatParselet() },
     { tokenType: "OF", parselet: new OfParselet() },
     { tokenType: "OF_WHAT_IS", parselet: new OfWhatIsParselet() },
     { tokenType: "ON_WHAT_IS", parselet: new OnOffWhatIsParselet(1) },

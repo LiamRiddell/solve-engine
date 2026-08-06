@@ -5,8 +5,8 @@
  * This exists because `docs-internal/SOULVERCORE_FEATURE_AUDIT.md` was written
  * by reading the code and asking "do we have something in this area", and the
  * answer to that question is not the same as "does the documented syntax work".
- * It marked 39 of 40 pages implemented. Measured, 65 of the 122 documented
- * examples below produce the documented answer, 49 do not, and 8 differ only
+ * It marked 39 of 40 pages implemented. Measured, 75 of the 122 documented
+ * examples below produce the documented answer, 39 do not, and 8 differ only
  * in formatting. It credited `as timespan` and
  * `as laptime` to `packages/time`, where the only occurrence of the word
  * "timespan" is a doc comment. It credited the rounding page to `as decimal`
@@ -119,6 +119,18 @@ const SUPPORTED: readonly Example[] = [
 	["sales-tax", "tax on $300 at 15%", "45"],
 	["trig", "sin(90 degrees)", "1"],
 
+	// The is-what family, base prepositions and the multiplier fix (2026-08-06).
+	["multipliers", "20/5 as multiplier", "4x"],
+	["percentages", "20 is 10% of what", "200"],
+	["percentages", "180 is what % off 200", "10%"],
+	["percentages", "20 is what % of 200", "10%"],
+	["percentages", "50 to 75 is what %", "50%"],
+	["fractions", "50 is 1/5 of what", "250"],
+	["logs-roots", "81 is 9 to what power", "2"],
+	["bases", "99 in binary", "0b1100011"],
+	["bases", "0x9F31 to decimal", "40753"],
+	["bases", "0b101101 as base 8", "0o55"],
+
 	// Operations spelled out in words (2026-08-06).
 	["operators", "3 multiplied by 4", "12"],
 	["operators", "1,000 divided by 200", "5"],
@@ -151,7 +163,6 @@ const SUPPORTED: readonly Example[] = [
 const GAPS: readonly Example[] = [
 	// -- Answers confidently, incorrectly. The worst category: a wrong number
 	// -- with no error is not recoverable by the person reading it.
-	["multipliers", "20/5 as multiplier", "4x"], // gives 5x
 	["multipliers", "2 as multiplier of 1", "2x"], // gives 3
 	// "value of $X in <future year> assuming N% inflation" is deliberately not
 	// listed: it discounts from the CURRENT year, so the figure Soulver's page
@@ -167,16 +178,10 @@ const GAPS: readonly Example[] = [
 	["operators", "remainder of 21 divided by 5", "1"],
 	["percentages", "10% on 200", "220"],
 	["percentages", "10% off 200", "180"],
-	["percentages", "20 is 10% of what", "200"],
-	["percentages", "180 is what % off 200", "10%"],
-	["percentages", "20 is what % of 200", "10%"],
-	["percentages", "50 to 75 is what %", "50%"],
-	["fractions", "50 is 1/5 of what", "250"],
 	["multipliers", "50 as x of 5", "10x"],
 	["multipliers", "20 to 40 as x", "2x"],
 	["logs-roots", "root 5 of 100", "2.5118864315"],
 	["logs-roots", "log 20 base 4", "2.1609640474"],
-	["logs-roots", "81 is 9 to what power", "2"],
 	["trig", "sind(90)", "1"],
 	["trig", "asind(0.5)", "30"],
 	["units", "5 hours 30 minutes to seconds", "19800"],
@@ -191,9 +196,6 @@ const GAPS: readonly Example[] = [
 	["rates", "$500 at $20/hour", "25 hours"],
 	// Money times a duration. Soulver reads this as   per day for 4 days.
 	["units", "$30 * 4 days", "120"],
-	["bases", "99 in binary", "0b1100011"],
-	["bases", "0x9F31 to decimal", "40753"],
-	["bases", "0b101101 as base 8", "0o55"],
 	["timespans", "5.5 minutes as timespan", "5 min 30 s"],
 	["timespans", "72 days as timespan", "10 weeks 2 days"],
 	["timespans", "3 hours 5 minutes 10 seconds", "3 hours 5 minutes 10 seconds"],
@@ -331,8 +333,8 @@ describe("Soulver parity — documented examples that do not", () => {
 		// quotes this number. A change here without a change there leaves the
 		// audit stating a total it did not measure, which is how the previous
 		// version of that document ended up fictional.
-		expect(GAPS.length).toBe(49);
-		expect(SUPPORTED.length).toBe(65);
+		expect(GAPS.length).toBe(39);
+		expect(SUPPORTED.length).toBe(75);
 	});
 });
 
