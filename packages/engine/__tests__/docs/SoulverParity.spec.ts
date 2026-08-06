@@ -5,8 +5,8 @@
  * This exists because `docs-internal/SOULVERCORE_FEATURE_AUDIT.md` was written
  * by reading the code and asking "do we have something in this area", and the
  * answer to that question is not the same as "does the documented syntax work".
- * It marked 39 of 40 pages implemented. Measured, 49 of the 122 documented
- * examples below produce the documented answer, 68 do not, and 5 differ only
+ * It marked 39 of 40 pages implemented. Measured, 50 of the 122 documented
+ * examples below produce the documented answer, 67 do not, and 5 differ only
  * in formatting. It credited `as timespan` and
  * `as laptime` to `packages/time`, where the only occurrence of the word
  * "timespan" is a doc comment. It credited the rounding page to `as decimal`
@@ -117,6 +117,7 @@ const SUPPORTED: readonly Example[] = [
 	["investments", "annual return on $1,000 invested $2,500 returned after 7 years", "13.99%"],
 	["investments", "present value of $1,000 after 20 years at 10%", "148.64"],
 	["sales-tax", "tax on $300 at 15%", "45"],
+	["trig", "sin(90 degrees)", "1"],
 
 	["conditionals", "20km == 20,000 m", "true"],
 	["conditionals", "if 5 > 3 then 10 else 20", "10"],
@@ -133,7 +134,6 @@ const GAPS: readonly Example[] = [
 	// -- with no error is not recoverable by the person reading it.
 	["multipliers", "20/5 as multiplier", "4x"], // gives 5x
 	["multipliers", "2 as multiplier of 1", "2x"], // gives 3
-	["trig", "sin(90 degrees)", "1"], // gives 0.89: the unit is ignored and 90 read as radians
 	// "value of $X in <future year> assuming N% inflation" is deliberately not
 	// listed: it discounts from the CURRENT year, so the figure Soulver's page
 	// quotes ($411.35, written when "now" was 2024) is not reproducible from a
@@ -325,8 +325,8 @@ describe("Soulver parity — documented examples that do not", () => {
 		// quotes this number. A change here without a change there leaves the
 		// audit stating a total it did not measure, which is how the previous
 		// version of that document ended up fictional.
-		expect(GAPS.length).toBe(68);
-		expect(SUPPORTED.length).toBe(49);
+		expect(GAPS.length).toBe(67);
+		expect(SUPPORTED.length).toBe(50);
 	});
 });
 

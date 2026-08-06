@@ -22,6 +22,30 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 // eslint-disable-next-line no-unused-vars
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/finance/data/CpiTable";
+import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
+
+/** The angle measure's kind in UNIT_TABLE. Its base unit is the radian. */
+const ANGLE_KIND = 0;
+
+/**
+ * A trig argument in radians.
+ *
+ * `sin(90 degrees)` used to answer 0.89, because the builtin read the number
+ * and discarded the unit, so 90 was taken as 90 radians. The engine already
+ * knew the conversion, `90 degrees in radians` has always given 1.5708; the
+ * trig functions simply never asked.
+ *
+ * A plain number is still radians, which is the convention everywhere else and
+ * what `sin(pi/2)` relies on.
+ */
+function angleInRadians(value: Value): number {
+    if (value.type === ValueType.Uom && value.unit !== undefined) {
+        const entry = UNIT_TABLE[value.unit.toLowerCase()];
+        // Every angle entry's ratio converts that spelling to radians.
+        if (entry !== undefined && entry[0] === ANGLE_KIND) return value.toNumber() * entry[1];
+    }
+    return value.toNumber();
+}
 
 /**
  * Registry of built-in mathematical functions.
@@ -41,9 +65,10 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // valid alias for det(a) (index 64), reusing the SAME implementation
     // not a separate one. Plain-number abs is unaffected.
     1: (args) => args[0].type === ValueType.Matrix ? determinant(args[0].value as MatrixData) : numberValue(Math.abs(args[0].toNumber())),
-    2: (args) => numberValue(Math.sin(args[0].toNumber())),
-    3: (args) => numberValue(Math.cos(args[0].toNumber())),
-    4: (args) => numberValue(Math.tan(args[0].toNumber())),
+    // sin/cos/tan accept an angle with a unit; see angleInRadians().
+    2: (args) => numberValue(Math.sin(angleInRadians(args[0]))),
+    3: (args) => numberValue(Math.cos(angleInRadians(args[0]))),
+    4: (args) => numberValue(Math.tan(angleInRadians(args[0]))),
     5: (args) => numberValue(Math.log(args[0].toNumber())),
     6: (args) => numberValue(Math.ceil(args[0].toNumber())),
     7: (args) => numberValue(Math.floor(args[0].toNumber())),
