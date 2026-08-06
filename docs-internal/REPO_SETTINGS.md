@@ -76,6 +76,16 @@ disabled gate protects nothing. Watch it, calibrate the thresholds in
       moving publishing into a different one, makes npm reject the token. This
       is why the tag trigger lives in `publish.yml` alongside the version job
       rather than in a release workflow of its own
+- [x] The `npm` environment's deployment branch and tag policy allows the tag
+      the release actually pushes, `solve-engine@*`. This is easy to miss because
+      the failure looks nothing like a policy problem: the publish job fails in
+      about a second with no steps run and no runner assigned, since GitHub
+      rejects the deployment before it starts. The policy allowed `main` and
+      `v*`, left from the original `v1.0.0-beta.0` tag, but `#45` moved the
+      scheme to `solve-engine@<version>` and nothing updated the environment.
+      Added 2026-08-06 when `solve-engine@1.0.0-beta.3` hit exactly this. The
+      stale `v*` entry is harmless and was left in place. Inspect with
+      `gh api repos/LiamRiddell/solve-engine/environments/npm/deployment-branch-policies`
 - [ ] Provenance requires a public repository, so publication happens after the
       visibility flip, not before
 - [ ] `beta` dist-tag points at a release that actually works. It pointed at
