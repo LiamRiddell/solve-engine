@@ -5,8 +5,8 @@
  * This exists because `docs-internal/SOULVERCORE_FEATURE_AUDIT.md` was written
  * by reading the code and asking "do we have something in this area", and the
  * answer to that question is not the same as "does the documented syntax work".
- * It marked 39 of 40 pages implemented. Measured, 88 of the 122 documented
- * examples below produce the documented answer, 26 do not, and 8 differ only
+ * It marked 39 of 40 pages implemented. Measured, 91 of the 122 documented
+ * examples below produce the documented answer, 20 do not, and 11 differ only
  * in formatting. It credited `as timespan` and
  * `as laptime` to `packages/time`, where the only occurrence of the word
  * "timespan" is a doc comment. It credited the rounding page to `as decimal`
@@ -136,6 +136,11 @@ const SUPPORTED: readonly Example[] = [
 	["bases", "0x9F31 to decimal", "40753"],
 	["bases", "0b101101 as base 8", "0o55"],
 
+	// Compound duration quantities and the timespan converters (2026-08-06).
+	["units", "5 hours 30 minutes to seconds", "19800"],
+	["timespans", "72 days as timespan", "10 weeks 2 days"],
+	["timespans", "5.5 minutes as laptime", "00:05:30"],
+
 	// Unblocked by month-name date literals (2026-08-06).
 	["dates", "days between 3 March and 30 May", "88 days"],
 	["workdays", "day of the week on January 24, 1984", "Tuesday"],
@@ -192,7 +197,6 @@ const GAPS: readonly Example[] = [
 
 	// -- Not implemented. Parses to an error rather than a wrong number, which
 	// -- at least tells the truth.
-	["units", "5 hours 30 minutes to seconds", "19800"],
 	["units", "meters in 10 km", "10000 m"],
 	["units", "days in 3 weeks", "21 days"],
 	["units", "seconds in a day", "86400 s"],
@@ -204,11 +208,6 @@ const GAPS: readonly Example[] = [
 	["rates", "$500 at $20/hour", "25 hours"],
 	// Money times a duration. Soulver reads this as   per day for 4 days.
 	["units", "$30 * 4 days", "120"],
-	["timespans", "5.5 minutes as timespan", "5 min 30 s"],
-	["timespans", "72 days as timespan", "10 weeks 2 days"],
-	["timespans", "3 hours 5 minutes 10 seconds", "3 hours 5 minutes 10 seconds"],
-	["timespans", "3h 5m 10s", "3 hours 5 minutes 10 seconds"],
-	["timespans", "5.5 minutes as laptime", "00:05:30"],
 	["timespans", "03:04:05 + 01:02:03", "04:06:08"],
 	["timespans", "12.5 minutes in minutes and seconds", "12 min 30 s"],
 	["clock", "16:00 + 3 hours 12 minutes", "7:12 pm"],
@@ -238,6 +237,12 @@ const FORMATTING_ONLY: readonly (readonly [string, string, string])[] = [
 	// The right number. Soulver renders a return as a multiplier; this keeps
 	// it numeric so it stays composable.
 	["$500 invested $1,500 returned", "2x", "2"],
+	// Right duration, written out in full rather than abbreviated.
+	["5.5 minutes as timespan", "5 min 30 s", "5 minutes 30 seconds"],
+	// A compound quantity is summed into its smallest unit and rendered as
+	// that total. The arithmetic is identical; Soulver restates the parts.
+	["3 hours 5 minutes 10 seconds in seconds", "11110 s", "11110"],
+	["3h 5m 10s in seconds", "11110 s", "11110"],
 	// Right count, but the "workdays" label is dropped from the answer.
 	["workdays in 3 weeks", "15 workdays", "15"],
 ];
@@ -338,8 +343,8 @@ describe("Soulver parity — documented examples that do not", () => {
 		// quotes this number. A change here without a change there leaves the
 		// audit stating a total it did not measure, which is how the previous
 		// version of that document ended up fictional.
-		expect(GAPS.length).toBe(26);
-		expect(SUPPORTED.length).toBe(88);
+		expect(GAPS.length).toBe(20);
+		expect(SUPPORTED.length).toBe(91);
 	});
 });
 
