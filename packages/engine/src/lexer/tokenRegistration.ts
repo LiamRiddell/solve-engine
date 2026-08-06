@@ -25,7 +25,6 @@ const BUILTIN_PHRASES: Record<string, string> = {
   'decrease by': 'DECREASE_BY',
   'times by': 'TIMES_BY',
   'multiply by': 'MULTIPLY_BY',
-  'multiplied by': 'MULTIPLY_BY',
   'divide by': 'DIVIDE_BY',
 };
 

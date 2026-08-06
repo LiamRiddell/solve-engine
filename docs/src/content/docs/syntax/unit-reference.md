@@ -156,9 +156,9 @@ Measured against **newton**.
 | Unit | Spellings | Relative size |
 | --- | --- | --- |
 | petanewton | `petanewtons`, `PN` | 1000000000000000 |
-| teranewton | `teranewtons`, `TN` | 1000000000000 |
+| teranewton | `teranewtons` | 1000000000000 |
 | giganewton | `giganewtons`, `GN` | 1000000000 |
-| meganewton | `meganewtons`, `MN` | 1000000 |
+| meganewton | `meganewtons` | 1000000 |
 | megapond | `tf`, `Mp` | 9806.65 |
 | kip | `klb`, `kipf`, `klbf` | 4448.22 |
 | kilonewton | `kilonewtons`, `kN` | 1000 |
@@ -170,7 +170,7 @@ Measured against **newton**.
 | poundal | `poundals`, `pdl` | 0.138255 |
 | decinewton | `decinewtons`, `dN` | 0.1 |
 | centinewton | `centinewtons`, `cN` | 0.01 |
-| millinewton | `millinewtons`, `mN` | 0.001 |
+| millinewton | `millinewtons` | 0.001 |
 | dyne | `dynes`, `dyn` | 0.00001 |
 | micronewton | `micronewtons` | 0.000001 |
 | nanonewton | `nanonewtons`, `nN` | 1e-9 |
@@ -262,11 +262,24 @@ Measured against **meter**.
 
 ## Luminance
 
-Measured against **nit**.
+Measured against **cd/m2**.
 
 | Unit | Spellings | Relative size |
 | --- | --- | --- |
-| nit | `nits`, `nt` | 1 |
+| Pcd/m2 | `Pcd/m2` | 1000000000000000 |
+| Tcd/m2 | `Tcd/m2` | 1000000000000 |
+| Gcd/m2 | `Gcd/m2` | 1000000000 |
+| Mcd/m2 | `Mcd/m2` | 1000000 |
+| kcd/m2 | `kcd/m2` | 1000 |
+| hcd/m2 | `hcd/m2` | 100 |
+| dacd/m2 | `dacd/m2` | 10 |
+| cd/m2 | `nit`, `nits`, `nt` | 1 |
+| dcd/m2 | `dcd/m2` | 0.1 |
+| ccd/m2 | `ccd/m2` | 0.01 |
+| mcd/m2 | `mcd/m2` | 0.001 |
+| ncd/m2 | `ncd/m2` | 1e-9 |
+| pcd/m2 | `pcd/m2` | 1e-12 |
+| fcd/m2 | `fcd/m2` | 1e-15 |
 
 ## Luminous intensity
 
@@ -364,7 +377,7 @@ Measured against **pascal**.
 | atmosphere | `atmospheres`, `atm` | 101325 |
 | bar | `bars` | 100000 |
 | decibar | `decibars`, `dbar` | 10000 |
-| psi | `psi` | 6894.76 |
+| psi | `lbf/in2` | 6894.76 |
 | inHg | `Hg` | 3386.39 |
 | kilopascal | `kilopascals`, `kPa`, `centibar`, `centibars`, `cbar` | 1000 |
 | inAq | `Aq` | 249.089 |
@@ -582,7 +595,7 @@ Measured against **m3s**.
 
 ## Spellings that are not listed
 
-The conversion tables carry 1504 spellings in total, and 491 of
+The conversion tables carry 1504 spellings in total, and 479 of
 them are missing above. Most are multi-word forms like `sq ft` and `cu yd`,
 which the tables can resolve but the lexer cannot tokenize, so they are
 unavailable when typing an expression. They are excluded here rather than listed
