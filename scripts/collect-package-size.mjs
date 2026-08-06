@@ -191,48 +191,40 @@ function readCommitted() {
 }
 
 /**
- * How closely each field has to match for the committed file to count as current.
+ * Every field has to match to the byte, because every field reproduces to the
+ * byte.
  *
- * This used to be one string comparison over the whole file, which was wrong,
- * and wrong in the way that only shows up once somebody regenerates the file on
- * a different machine from the one CI uses. Two of these numbers are
- * reproducible to the byte and three are not:
+ * An earlier version of this check gave the tarball and unpacked totals a half
+ * a percent tolerance, on the belief that they drifted across platforms. They
+ * do not. `.gitattributes` pins `eol=lf`, so a Windows working tree checks out
+ * the same line endings a Linux runner does, and `npm pack` therefore weighs
+ * the same on both. The apparent drift that motivated the tolerance came from a
+ * `package.json` that had been hand-edited into CRLF, not from a clean checkout,
+ * so it was measuring a mistake rather than a platform.
  *
- *   · the gzipped figures come from bundling `dist`, and the bundle is
- *     deterministic. A Windows checkout and a Linux runner agree exactly, which
- *     has been checked rather than assumed.
- *   · `fileCount` is a structural fact about the package. Also exact.
- *   · the tarball and unpacked figures are the sum of what is on disk, and that
- *     drifts by around a kilobyte across platforms. `package.json` alone carries
- *     225 more bytes in a Windows working tree because of its line endings,
- *     while git stores it with LF and CI therefore packs the shorter one.
+ * Confirmed rather than reasoned: a Windows checkout, the CI runner and the
+ * published `1.0.0-beta.3` all report `tarballBytes` 2073720 and `unpackedBytes`
+ * 8607865. The `dist` bundle is deterministic for the same reason the gzipped
+ * figures always matched, and everything else in the tarball is `eol=lf` text.
  *
- * So the byte totals get a tolerance and everything else does not. The tolerance
- * is far tighter than the precision the number is ever shown at: the site
- * renders these to a tenth of a megabyte, which on a two megabyte tarball is
- * a step of about five percent.
+ * The tolerance was not free. On the release that added the highlighting change
+ * it silently absorbed a six kilobyte growth in the tarball, which is exactly
+ * the kind of movement a size check exists to surface. Exact match gives the
+ * check its teeth back, and if a genuine platform difference ever does appear,
+ * failing on it is the right outcome: the fix is to make the packed bytes
+ * deterministic, not to widen the gate until the difference fits.
  */
-const EXACT = ["importOneGzip", "importEverythingGzip", "fileCount"];
-const TOLERANT = { tarballBytes: 0.005, unpackedBytes: 0.005 };
+const EXACT = [
+	"importOneGzip",
+	"importEverythingGzip",
+	"tarballBytes",
+	"unpackedBytes",
+	"fileCount",
+];
 
 /** Field names whose committed value no longer describes the package. */
 function staleFields(committed) {
-	const stale = [];
-
-	for (const field of EXACT) {
-		if (committed[field] !== sizes[field]) stale.push(field);
-	}
-
-	for (const [field, tolerance] of Object.entries(TOLERANT)) {
-		const was = committed[field];
-		if (typeof was !== "number") {
-			stale.push(field);
-			continue;
-		}
-		if (Math.abs(sizes[field] - was) / was > tolerance) stale.push(field);
-	}
-
-	return stale;
+	return EXACT.filter((field) => committed[field] !== sizes[field]);
 }
 
 if (process.argv.includes("--check")) {
