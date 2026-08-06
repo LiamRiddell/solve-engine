@@ -12,7 +12,7 @@
  */
 
 import { lookupUnit, convertRaw, convertResolved, convertToBestMetric } from "@solve-js/uom/UnitConversion";
-import { MEASURE_KIND_NAMES, MEASURE_SYMBOLS } from "@solve-js/uom/generated/UnitTable.generated";
+import { MEASURE_KIND_NAMES, MEASURE_SYMBOLS, UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { EXTENDED_UNITS } from "@solve-js/uom/ExtendedUnits";
 
 // ── "workday", a synthetic unit with no entry in the base table ───────────
@@ -128,9 +128,36 @@ export function canConvert(from: string, to: string): boolean {
     return fromExtended.measure === toExtended.measure;
   }
 
-  // Mixed: one side is a base unit and the other is extended or unknown. The
-  // measure spaces are disjoint by construction, so this can never convert.
-  return false;
+  // Mixed: one side is in the base table and the other is extended. That used
+  // to be refused outright, on the grounds that the two measure spaces are
+  // disjoint. They are not, once an extended unit names a measure the base
+  // table also has: `furlong` is a length and so is `m`, and the ratio between
+  // them is exactly what both tables already record.
+  return bridgesToBaseMeasure(from, to) || bridgesToBaseMeasure(to, from);
+}
+
+/**
+ * Whether `extendedUnit` extends a measure the base table also knows, so a
+ * value in it can reach `baseUnit`.
+ *
+ * The bridge works because both tables express a unit as a ratio to the same
+ * physical base: the generated table's length ratios are metres and its mass
+ * ratios are grams, and an extended unit declaring `measure: "length"` states
+ * its `toBase` in the same metres. Composing the two ratios is then ordinary
+ * arithmetic rather than a second conversion system.
+ *
+ * A measure the base table has no concept of, such as pace, still fails here,
+ * which is the behaviour this replaced and the reason the check is by measure
+ * name rather than by presence in the extended table.
+ */
+function bridgesToBaseMeasure(extendedUnit: string, baseUnit: string): boolean {
+  const extended = EXTENDED_UNITS[extendedUnit];
+  if (extended === undefined) return false;
+
+  const base = lookupUnit(resolveUnit(baseUnit));
+  if (base === undefined) return false;
+
+  return MEASURE_KIND_NAMES[base[0]] === extended.measure;
 }
 
 /**
@@ -190,9 +217,38 @@ export function convertUnit(value: number, from: string, to: string): number {
     return value * (fExt.toBase / tExt.toBase);
   }
 
+  // One side extended, the other in the base table, sharing a measure. Convert
+  // through the measure's base unit, which both tables state their ratios
+  // against: an extended length declares its `toBase` in metres, and the
+  // generated table's length ratios are metres too.
+  if (fExt !== undefined && bridgesToBaseMeasure(from, to)) {
+    return convertRaw(value * fExt.toBase, baseUnitFor(to), to);
+  }
+  if (tExt !== undefined && bridgesToBaseMeasure(to, from)) {
+    return convertRaw(value, from, baseUnitFor(from)) / tExt.toBase;
+  }
+
   // Offsets, cross-measure rejection and the unknown-unit throw all live in
   // convertRaw. Nothing is layered on top here any more.
   return convertRaw(value, from, to);
+}
+
+/**
+ * The unit a measure states its ratios against, found from any unit in it.
+ *
+ * Read out of the table rather than hard-coded, so it cannot drift from the
+ * ratios it has to agree with: the base is whichever unit of that measure has
+ * a ratio of exactly one.
+ */
+function baseUnitFor(unit: string): string {
+  const entry = lookupUnit(resolveUnit(unit));
+  if (entry === undefined) return unit;
+
+  for (const symbol of Object.keys(UNIT_TABLE)) {
+    const candidate = UNIT_TABLE[symbol];
+    if (candidate[0] === entry[0] && candidate[1] === 1) return symbol;
+  }
+  return unit;
 }
 
 /**

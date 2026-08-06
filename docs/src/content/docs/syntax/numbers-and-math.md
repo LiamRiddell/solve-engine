@@ -17,6 +17,25 @@ description: Arithmetic, operators, functions, big integers and number suffixes.
 `%` is the percent operator, not modulo. Writing `17 % 5` is a parse error
 because `17 %` is already a complete expression. Use `mod` or `modulo`.
 
+## Operators in words
+
+Most operators have a word form, which is often how a line reads more naturally.
+
+```solve
+8 times 9 // 72
+2 plus 3 // 5
+5 minus 3 // 2
+10 divide by 2 // 5
+3 multiplied by 4 // 12
+```
+
+`with` adds and `without` subtracts, which reads well for a running total.
+
+```solve
+40 with 2 // 42
+40 without 2 // 38
+```
+
 ## Suffixes
 
 ```solve

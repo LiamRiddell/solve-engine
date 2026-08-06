@@ -220,6 +220,7 @@ export const BUILTIN_PHRASES: Record<string, string> = {
 	"decrease by": "DECREASE_BY",
 	"times by": "TIMES_BY",
 	"multiply by": "MULTIPLY_BY",
+	"multiplied by": "MULTIPLY_BY",
 	"divide by": "DIVIDE_BY",
 	// The past-tense spellings, which is how the operation is usually written
 	// out: "3 multiplied by 4". Same tokens, so no new parselets.
