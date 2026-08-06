@@ -1,9 +1,42 @@
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import react from "@astrojs/react";
+import { createStarlightTypeDocPlugin } from "starlight-typedoc";
 import { solveGrammar } from "./src/solve-grammar.js";
 import { remarkMermaid } from "./src/plugins/remark-mermaid.mjs";
 import { rehypeBaseLinks } from "./src/plugins/rehype-base-links.mjs";
+
+// The API reference is generated from the engine's own TypeScript. TypeDoc reads
+// the doc block on every public export, which `scripts/check-doc-coverage.mjs`
+// already requires to exist, and renders it as markdown into `content/docs/api`.
+// That output is generated at build time and gitignored, so the reference cannot
+// drift from the shipped types the way a hand-written one would.
+//
+// Entry points are ordered the way someone learning the library meets them: the
+// engine and the language service first, the formatting and error surfaces next,
+// and the lower-level lexer, parser and VM after, rather than the alphabetical
+// order the exports map happens to use.
+const [starlightTypeDoc, typeDocSidebarGroup] = createStarlightTypeDocPlugin();
+
+const engine = "../packages/engine";
+const apiEntryPoints = [
+	"api",
+	"engine",
+	"language",
+	"format",
+	"errors",
+	"services",
+	"constants",
+	"variables",
+	"resolvers",
+	"normalizer",
+	"lexer",
+	"parser",
+	"vm",
+	"packages",
+	"utilities",
+	"uom",
+].map((name) => `${engine}/src/${name}/index.ts`);
 
 // GitHub Pages serves a project site from a subdirectory named after the
 // repository, so every absolute URL the site emits has to be prefixed. Getting
@@ -44,6 +77,35 @@ export default defineConfig({
   },
   integrations: [
     starlight({
+      plugins: [
+        starlightTypeDoc({
+          entryPoints: apiEntryPoints,
+          // The engine's tsconfig, for its `@solve-js/*` path aliases. Without
+          // it TypeDoc cannot resolve the cross-module imports and documents an
+          // empty surface.
+          tsconfig: `${engine}/tsconfig.json`,
+          output: "api",
+          sidebar: { label: "API reference", collapsed: true },
+          typeDoc: {
+            // Each entry point is one module, matching one subpath export, so
+            // the reference is organised the way the package is imported.
+            entryPointStrategy: "resolve",
+            // Keep the reading order set in `apiEntryPoints` (engine and the
+            // language service first, the lexer/parser/VM internals last)
+            // rather than resorting the modules alphabetically, which would
+            // open the reference on `constants`.
+            sortEntryPoints: false,
+            // The barrels have no README of their own; the section index is
+            // generated instead.
+            readme: "none",
+            // A member's own page, so a large class does not render as one wall.
+            outputFileStrategy: "members",
+            useCodeBlocks: true,
+            expandObjects: true,
+            parametersFormat: "table",
+          },
+        }),
+      ],
       title: "Solve",
       description:
         "An expression evaluation engine for natural, human-readable calculations. Lexer, Pratt parser, bytecode VM, and an extensible package system.",
@@ -204,6 +266,11 @@ export default defineConfig({
           link: "/playground/",
           attrs: { target: "_self" },
         },
+        // Populated by starlight-typedoc at build time. The pages under it are
+        // generated into `content/docs/api` and are not in the repository, so
+        // `scripts/check-sidebar.mjs` skips that prefix rather than reporting
+        // every generated page as missing from this file.
+        typeDocSidebarGroup,
       ],
     }),
     // The landing page runs the real engine in a Plate editor. Those islands
