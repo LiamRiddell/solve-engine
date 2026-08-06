@@ -709,6 +709,49 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         // rate machinery already renders without a numerator unit.
         return uomValue(source.toNumber(), `${numerator}/${denominator}`);
     },
+    // atRate(quantity, rate) -> whichever of the two the question implies.
+    //
+    //   30 hours at $30/hour   $900      a duration at a price per duration
+    //   $500 at $20/hour       25 hours   money at a price per duration
+    //
+    // Both are written with the same word and mean opposite operations. Which
+    // one applies is decided by which half of the rate the left side matches:
+    // match the denominator and you are buying that many, match the numerator
+    // and you are asking how many it buys.
+    96: (args) => {
+        const left = args[0];
+        const rate = args[1];
+        if (rate.type !== ValueType.Uom || rate.unit === undefined || !rate.unit.includes("/")) {
+            return errorValue("INVALID_RATE", "at: the right-hand side has to be a rate, as in \"$30/hour\"");
+        }
+        const slash = rate.unit.indexOf("/");
+        const numerator = rate.unit.slice(0, slash);
+        const denominator = rate.unit.slice(slash + 1);
+        const leftUnit = left.type === ValueType.Uom ? left.unit : undefined;
+
+        const denominatorEntry = UNIT_TABLE[denominator.toLowerCase()] as readonly [number, number] | undefined;
+        const leftEntry = leftUnit === undefined ? undefined : (UNIT_TABLE[leftUnit.toLowerCase()] as readonly [number, number] | undefined);
+
+        // "30 hours at $30/hour": the left side counts denominators.
+        if (leftEntry !== undefined && denominatorEntry !== undefined && leftEntry[0] === denominatorEntry[0]) {
+            const inDenominator = left.toNumber() * leftEntry[1] / denominatorEntry[1];
+            const total = inDenominator * rate.toNumber();
+            return numerator === "" ? numberValue(total) : uomValue(total, numerator);
+        }
+
+        // "$500 at $20/hour": the left side is the numerator, so divide.
+        if (leftUnit !== undefined && leftUnit === numerator) {
+            return uomValue(left.toNumber() / rate.toNumber(), denominator);
+        }
+
+        // A bare number counts denominators too: "30 at $30/hour".
+        if (leftUnit === undefined) {
+            const total = left.toNumber() * rate.toNumber();
+            return numerator === "" ? numberValue(total) : uomValue(total, numerator);
+        }
+
+        return errorValue("INCOMPATIBLE_UNITS", `at: ${leftUnit} matches neither side of ${rate.unit}`);
+    },
     // ── Investments (packages/finance/) ────────────────────────────────────
     // compoundFutureValueEvery(principal, rate, years, periodsPerYear)
     // FV = P(1 + r/n)^(n·y). Index 51 is the same formula with n fixed at 1;

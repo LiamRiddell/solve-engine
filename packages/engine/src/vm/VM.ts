@@ -14,6 +14,7 @@ import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { unifyUom, binaryOp } from "@solve-js/vm/VMConversion";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
+import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 
@@ -319,6 +320,39 @@ function invokeFrameBody(
         throw bodyResult.error;
     }
     return bodyResult.value;
+}
+
+/**
+ * `$20/day + $300/week`, two rates over different periods.
+ *
+ * Adding them reported incompatible units, because USD/day and USD/week are
+ * literally different unit strings. They are the same kind of thing measured
+ * per different periods, though, so one converts into the other and the sum is
+ * meaningful. The right operand's period wins, which is the one the reader
+ * just wrote and so the one they are thinking in.
+ *
+ * @returns The converted left magnitude, or null when these are not two rates
+ * sharing a numerator.
+ */
+function unifyRatePeriods(l: Value, r: Value): number | null {
+    if (l.type !== ValueType.Uom || r.type !== ValueType.Uom) return null;
+    const leftUnit = l.unit;
+    const rightUnit = r.unit;
+    if (leftUnit === undefined || rightUnit === undefined) return null;
+
+    const leftSlash = leftUnit.indexOf("/");
+    const rightSlash = rightUnit.indexOf("/");
+    if (leftSlash < 0 || rightSlash < 0) return null;
+    // Same thing being measured, or there is nothing to reconcile.
+    if (leftUnit.slice(0, leftSlash) !== rightUnit.slice(0, rightSlash)) return null;
+
+    const leftPeriod = UNIT_TABLE[leftUnit.slice(leftSlash + 1).toLowerCase()] as readonly [number, number] | undefined;
+    const rightPeriod = UNIT_TABLE[rightUnit.slice(rightSlash + 1).toLowerCase()] as readonly [number, number] | undefined;
+    if (leftPeriod === undefined || rightPeriod === undefined) return null;
+    if (leftPeriod[0] !== rightPeriod[0]) return null;
+
+    // Per a longer period is a larger number: $20/day is $140/week.
+    return l.toNumber() * (rightPeriod[1] / leftPeriod[1]);
 }
 
 /**
@@ -768,8 +802,13 @@ export function executeBytecode(
         case OpCode.ADD: {
           const r = safePop(stack), l = safePop(stack);
           const pctAdd = combinePercentage(l, r, 1);
+          const ratePeriodAdd = pctAdd === null ? unifyRatePeriods(l, r) : null;
           if (pctAdd !== null) {
             stack.push(pctAdd);
+          } else if (ratePeriodAdd !== null) {
+            // Two rates over different periods, reconciled onto the right
+            // operand's period before adding.
+            stack.push(uomValue(ratePeriodAdd + r.toNumber(), r.unit!));
           } else if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(numberValue((l.value as number) + (r.value as number)));
           } else if (l.type === ValueType.Boolean && r.type === ValueType.Boolean) {
@@ -809,8 +848,11 @@ export function executeBytecode(
         case OpCode.SUB: {
           const r = safePop(stack), l = safePop(stack);
           const pctSub = combinePercentage(l, r, -1);
+          const ratePeriodSub = pctSub === null ? unifyRatePeriods(l, r) : null;
           if (pctSub !== null) {
             stack.push(pctSub);
+          } else if (ratePeriodSub !== null) {
+            stack.push(uomValue(ratePeriodSub - r.toNumber(), r.unit!));
           } else if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(numberValue((l.value as number) - (r.value as number)));
           } else if (l.type === ValueType.Datetime) {

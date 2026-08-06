@@ -5,8 +5,8 @@
  * This exists because `docs-internal/SOULVERCORE_FEATURE_AUDIT.md` was written
  * by reading the code and asking "do we have something in this area", and the
  * answer to that question is not the same as "does the documented syntax work".
- * It marked 39 of 40 pages implemented. Measured, 100 of the 122 documented
- * examples below produce the documented answer, 6 do not, and 16 differ only
+ * It marked 39 of 40 pages implemented. Measured, 101 of the 122 documented
+ * examples below produce the documented answer, 5 do not, and 16 differ only
  * in formatting. It credited `as timespan` and
  * `as laptime` to `packages/time`, where the only occurrence of the word
  * "timespan" is a doc comment. It credited the rounding page to `as decimal`
@@ -136,7 +136,8 @@ const SUPPORTED: readonly Example[] = [
 	["bases", "0x9F31 to decimal", "40753"],
 	["bases", "0b101101 as base 8", "0o55"],
 
-	// Rates with a bare denominator (2026-08-06).
+	// Rates with a bare denominator, and cross-period addition (2026-08-06).
+	["rates", "$20/day + $300/week", "440"],
 	["rates", "$99 per week", "99"],
 	["rates", "3 hours / day", "3 hours/day"],
 
@@ -214,7 +215,6 @@ const GAPS: readonly Example[] = [
 
 	// -- Not implemented. Parses to an error rather than a wrong number, which
 	// -- at least tells the truth.
-	["rates", "$20/day + $300/week", "$440.00/week"],
 	["rates", "$24 a day for a year", "8765.82"],
 	["rates", "30 hours at $30/hour", "900"],
 	["rates", "$500 at $20/hour", "25 hours"],
@@ -358,8 +358,8 @@ describe("Soulver parity — documented examples that do not", () => {
 		// quotes this number. A change here without a change there leaves the
 		// audit stating a total it did not measure, which is how the previous
 		// version of that document ended up fictional.
-		expect(GAPS.length).toBe(6);
-		expect(SUPPORTED.length).toBe(100);
+		expect(GAPS.length).toBe(5);
+		expect(SUPPORTED.length).toBe(101);
 	});
 });
 

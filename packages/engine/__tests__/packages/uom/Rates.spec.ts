@@ -109,15 +109,48 @@ describe("what the rate rule must not claim", () => {
 	});
 });
 
-describe("still open, and failing honestly rather than wrongly", () => {
-	/**
-	 * Recorded so the boundary is visible. This reports rather than answering
-	 * something plausible, which is the acceptable failure, but it is not done.
-	 */
-	test("adding rates over different periods is not unified", () => {
-		// `$20/day + $300/week` needs the two periods reconciled before they
-		// can be added. It reports incompatible units instead.
+describe("rates over different periods", () => {
+	test("`$20/day + $300/week` is $440/week", () => {
+		// Reported incompatible units, because USD/day and USD/week are
+		// literally different unit strings. They measure the same thing per
+		// different periods, so one converts into the other.
 		const value = evaluate("$20/day + $300/week");
-		expect(String(value.value)).toMatch(/incompatible/i);
+		expect(value.toNumber()).toBeCloseTo(440, 6);
+		expect(value.unit).toBe("USD/week");
+	});
+
+	test("the right operand's period wins, being the one just written", () => {
+		expect(evaluate("$300/week + $20/day").unit).toBe("USD/day");
+		expect(num("$300/week + $20/day")).toBeCloseTo(62.857143, 5);
+	});
+
+	test("subtraction reconciles the same way", () => {
+		expect(num("$20/day - $70/week")).toBeCloseTo(70, 6);
+	});
+
+	test("matching periods are unaffected", () => {
+		expect(num("$20/day + $10/day")).toBeCloseTo(30, 6);
+	});
+
+	test("rates measuring different things are still refused", () => {
+		// Money per day and kilometres per hour have no common sum, and
+		// reconciling only the period would produce a confident nonsense.
+		expect(String(evaluate("$20/day + 5 km/hour").value)).toMatch(/incompatible/i);
+	});
+});
+
+describe("still open, and failing honestly rather than wrongly", () => {
+	test("`at` with a rate is not implemented", () => {
+		// "30 hours at $30/hour" should be $900. Registering an infix on `at`
+		// was tried and reverted: the finance grammar parses its own rate with
+		// the same word ("over 6 years at 6%"), and the infix took the token
+		// first, breaking every mortgage and investment expression.
+		expect(() => evaluate("30 hours at $30/hour")).toThrow();
+	});
+
+	test("an unrecognised numerator word is not a unit", () => {
+		// "30 bottles / week" needs "bottles" to be treated as a countable
+		// label rather than a variable, which is a lexer question.
+		expect(() => evaluate("30 bottles / week")).toThrow();
 	});
 });
