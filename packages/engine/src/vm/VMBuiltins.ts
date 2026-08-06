@@ -24,6 +24,46 @@ import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/Engi
 import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/finance/data/CpiTable";
 
 /**
+ * Reads a trigonometric argument as radians, converting when it carries an
+ * angle unit.
+ *
+ * The functions take radians, as they do everywhere. What they did with
+ * `sin(45 deg)` was call `toNumber()`, which drops the unit and leaves 45, so
+ * the answer was the sine of forty-five *radians*: a wrong number with no
+ * indication that a unit had been thrown away. Writing the unit is the clearest
+ * possible statement that degrees were meant.
+ *
+ * Only angle units are touched. `sin(45 kg)` is not a thing to be helpful about
+ * and keeps falling through to the plain number, which is the existing
+ * behaviour for a nonsensical unit rather than a new opinion about it.
+ *
+ * @param value - The argument as it arrived.
+ * @returns The angle in radians.
+ */
+function toRadians(value: Value): number {
+    const magnitude = value.toNumber();
+    if (value.type !== ValueType.Uom || value.unit === undefined) return magnitude;
+
+    switch (value.unit) {
+        case "deg":
+        case "degs":
+        case "degree":
+        case "degrees":
+        case "°":
+            return magnitude * Math.PI / 180;
+        case "grad":
+        case "grads":
+        case "gradian":
+        case "gradians":
+        case "gon":
+        case "gons":
+            return magnitude * Math.PI / 200;
+        default:
+            return magnitude;
+    }
+}
+
+/**
  * Registry of built-in mathematical functions.
  * Indexed by the number pushed as an operand of OpCode.CALL_BUILTIN.
  */
@@ -41,10 +81,27 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // valid alias for det(a) (index 64), reusing the SAME implementation
     // not a separate one. Plain-number abs is unaffected.
     1: (args) => args[0].type === ValueType.Matrix ? determinant(args[0].value as MatrixData) : numberValue(Math.abs(args[0].toNumber())),
-    2: (args) => numberValue(Math.sin(args[0].toNumber())),
-    3: (args) => numberValue(Math.cos(args[0].toNumber())),
-    4: (args) => numberValue(Math.tan(args[0].toNumber())),
-    5: (args) => numberValue(Math.log(args[0].toNumber())),
+    2: (args) => numberValue(Math.sin(toRadians(args[0]))),
+    3: (args) => numberValue(Math.cos(toRadians(args[0]))),
+    4: (args) => numberValue(Math.tan(toRadians(args[0]))),
+    // log(x) is the natural logarithm, and log(base, x) is the logarithm to a
+    // base, which is what Numi's `log 2 (10)` prefix form produces. Adding the
+    // second arity rather than changing the first: `log(x)` has meant Math.log
+    // here since before this, and quietly redefining it would change results in
+    // documents nobody is looking at.
+    5: (args) => {
+        const value = args[args.length - 1].toNumber();
+        if (args.length < 2) return numberValue(Math.log(value));
+
+        // Base 2 and base 10 go through the dedicated functions rather than a
+        // ratio of natural logs. `Math.log(8) / Math.log(2)` is
+        // 2.9999999999999996, so log base 2 of 8 would display as 3.00 rather
+        // than 3, which reads as an engine that cannot do arithmetic.
+        const base = args[0].toNumber();
+        if (base === 2) return numberValue(Math.log2(value));
+        if (base === 10) return numberValue(Math.log10(value));
+        return numberValue(Math.log(value) / Math.log(base));
+    },
     6: (args) => numberValue(Math.ceil(args[0].toNumber())),
     7: (args) => numberValue(Math.floor(args[0].toNumber())),
     8: (args) => numberValue(Math.round(args[0].toNumber())),

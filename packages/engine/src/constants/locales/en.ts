@@ -42,6 +42,9 @@ export const enLocale: ILocale = {
     // keywords, matching gcd/lcm/cbrt's precedent above (technical,
     // call-syntax-only names, not plausible :variableName choices).
     root: "FUNC", fact: "FUNC", factorial: "FUNC",
+    // ln -- natural logarithm. The same builtin as `log`, which is already
+    // Math.log here; `ln` is simply the spelling most calculators use for it.
+    ln: "FUNC",
     fround: "FUNC", hypot: "FUNC", imul: "FUNC",
     log10: "FUNC", log1p: "FUNC", log2: "FUNC",
     pow: "FUNC", random: "FUNC", sign: "FUNC", trunc: "FUNC",

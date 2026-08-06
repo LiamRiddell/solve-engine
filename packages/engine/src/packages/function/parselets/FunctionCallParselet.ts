@@ -18,6 +18,9 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 export const builtinNameToIndex: Record<string, number> = {
   sqrt: 0, abs: 1, sin: 2, cos: 3, tan: 4, log: 5,
   ceil: 6, floor: 7, round: 8, min: 9, max: 10,
+  // ln is log: this engine's `log` is Math.log, the natural logarithm, and
+  // `ln` is the more usual spelling for it. Same index, not a second function.
+  ln: 5,
   asin: 11, acos: 12, atan: 13, atan2: 14,
   // Long-form trig-function-inverse aliases (Numi/older-calculator naming
   // convention) -- same indices as their short forms above, not a separate
@@ -65,7 +68,30 @@ export const builtinNameToIndex: Record<string, number> = {
 };
 
 /**
- * A named function call with parenthesised arguments.
+ * Functions whose bare prefix form takes a base or degree before the value.
+ *
+ * `root 2 (8)` and `log 2 (10)` read as "the 2nd root of 8" and "the log base 2
+ * of 10", so the parenthesised group after the first argument is a second
+ * argument rather than a multiplication.
+ *
+ * Restricted to these two on purpose. `6 (3)` is 18 in this grammar, so a
+ * parenthesised group following a value normally multiplies, and treating it as
+ * an argument everywhere would turn `sqrt 16 (3)` into a two-argument `sqrt`
+ * instead of `4 * 3`.
+ */
+const PREFIX_TWO_ARG_FUNCTIONS: ReadonlySet<string> = new Set(["root", "log"]);
+
+/**
+ * A named function call, with or without parentheses.
+ *
+ * `sqrt(16)` and `sqrt 16` are the same call. The bare form is what a person
+ * writes on paper and what every calculator notepad in this category accepts,
+ * and it costs nothing here because the name is already a reserved `FUNC`
+ * token: there is no variable it could be confused with.
+ *
+ * The argument of a bare call is parsed at prefix binding power, which is what
+ * makes `sqrt 16 + 9` seven rather than five. The function binds to the value
+ * next to it and nothing further.
  *
  * Resolves the name to a builtin index at parse time rather than dispatching on
  * a string at run time, which is also why the name-to-index map is exported:
@@ -84,6 +110,17 @@ export class FunctionCallParselet implements PrefixParselet {
       );
     }
 
+    const argCount = parser.peek()?.type === "LPAREN"
+      ? this.parseParenthesised(parser, builder)
+      : this.parseBare(parser, builder, fnName);
+
+    builder.emitOpcode(OpCode.CALL_BUILTIN);
+    builder.emitIndex(fnIdx);
+    builder.emitIndex(argCount);
+  }
+
+  /** `fn(a, b)`. Arguments are comma-separated and the list may be empty. */
+  private parseParenthesised(parser: Parser, builder: BytecodeBuilder): number {
     parser.consume("LPAREN");
 
     let argCount = 0;
@@ -97,9 +134,51 @@ export class FunctionCallParselet implements PrefixParselet {
     }
 
     parser.consume("RPAREN");
+    return argCount;
+  }
 
-    builder.emitOpcode(OpCode.CALL_BUILTIN);
-    builder.emitIndex(fnIdx);
-    builder.emitIndex(argCount);
+  /**
+   * `fn x`, and `fn n (x)` for the two functions that take a base.
+   *
+   * Parsed at {@link BindingPower.Prefix} so the call takes the value beside it
+   * and stops: `sqrt 16 + 9` is seven, and `sin 45deg` still absorbs the unit,
+   * because a unit suffix binds tighter than a prefix.
+   */
+  private parseBare(parser: Parser, builder: BytecodeBuilder, fnName: string): number {
+    parser.parseExpression(BindingPower.Prefix, builder);
+
+    if (PREFIX_TWO_ARG_FUNCTIONS.has(fnName) && this.atImplicitGroup(parser)) {
+      // Step over the STAR the normalizer inserted, then take the group.
+      parser.consume("STAR");
+      parser.consume("LPAREN");
+      parser.parseExpression(BindingPower.Lowest, builder);
+      parser.consume("RPAREN");
+      return 2;
+    }
+    return 1;
+  }
+
+  /**
+   * Whether what follows is a parenthesised group written directly against the
+   * previous value, as the `(8)` in `root 2 (8)`.
+   *
+   * By the time a parselet sees them there is no bare `(` there: the implicit
+   * multiplication rule has already inserted a STAR, so `2 (8)` and `2 * (8)`
+   * arrive as the same three tokens. They are told apart by position. The
+   * inserted STAR is given the offset of the token it precedes, so it sits
+   * exactly where the `(` does, while a typed `*` occupies a column of its own.
+   *
+   * That distinction is the whole point: `log 2 (10)` is a logarithm to base 2,
+   * and `log 2 * (10)` is a natural log multiplied by ten, and a user who typed
+   * the second should not silently get the first.
+   */
+  private atImplicitGroup(parser: Parser): boolean {
+    const star = parser.peek();
+    if (star?.type !== "STAR") return false;
+
+    const group = parser.peekAt(1);
+    if (group?.type !== "LPAREN") return false;
+
+    return star.offset === group.offset;
   }
 }

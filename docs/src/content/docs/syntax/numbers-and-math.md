@@ -37,6 +37,50 @@ max(3, 7) // 7
 gcd(12, 18) // 6
 ```
 
+The brackets are optional for a single argument, which is how these are usually
+written by hand.
+
+```solve
+sqrt 16 // 4
+round 3.45 // 3
+fact 5 // 120
+ln 3 // 1.10
+```
+
+Without brackets the function takes the value next to it and stops there, so
+`sqrt 16 + 9` is thirteen rather than five. A unit still belongs to the value.
+
+```solve
+sqrt 16 + 9 // 13
+sin 45 deg // 0.71
+```
+
+Trigonometric functions take radians, and convert when the angle carries a unit.
+
+```solve
+sin(Pi/2) // 1
+cos 60 deg // 0.50
+sin 90 degrees // 1
+```
+
+`root` and `log` take a degree or base first, written before the bracketed
+value.
+
+```solve
+root 2 (8) // 2.83
+root 3 (27) // 3
+log 2 (8) // 3
+log 10 (1000) // 3
+```
+
+`log` with one argument is the natural logarithm, and `ln` is another name for
+the same thing.
+
+```solve
+log(1) // 0
+ln 1 // 0
+```
+
 ## Bases
 
 Numbers can be written and displayed in hexadecimal, binary or octal.
