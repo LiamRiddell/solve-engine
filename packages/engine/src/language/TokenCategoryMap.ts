@@ -146,6 +146,7 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	MONTH_ON: "keyword",
 	MONTH_IN: "keyword",
 	WEEK_ON: "keyword",
+	DAYS_IN_PERIOD: "keyword",
 	WEEK_IN: "keyword",
 	BETWEEN_UNIT: "keyword",
 	IS_WEEKEND: "keyword",

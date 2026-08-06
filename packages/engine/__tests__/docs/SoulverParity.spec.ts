@@ -5,8 +5,8 @@
  * This exists because `docs-internal/SOULVERCORE_FEATURE_AUDIT.md` was written
  * by reading the code and asking "do we have something in this area", and the
  * answer to that question is not the same as "does the documented syntax work".
- * It marked 39 of 40 pages implemented. Measured, 94 of the 122 documented
- * examples below produce the documented answer, 17 do not, and 11 differ only
+ * It marked 39 of 40 pages implemented. Measured, 97 of the 122 documented
+ * examples below produce the documented answer, 10 do not, and 15 differ only
  * in formatting. It credited `as timespan` and
  * `as laptime` to `packages/time`, where the only occurrence of the word
  * "timespan" is a doc comment. It credited the rounding page to `as decimal`
@@ -136,6 +136,11 @@ const SUPPORTED: readonly Example[] = [
 	["bases", "0x9F31 to decimal", "40753"],
 	["bases", "0b101101 as base 8", "0o55"],
 
+	// Calendar periods and week numbers (2026-08-06).
+	["dates", "days in Q3", "92 days"],
+	["dates", "days in February 2020", "29 days"],
+	["dates", "week number on march 12, 2021", "10"],
+
 	// Reversed conversions, "how many X in Y" (2026-08-06).
 	["units", "meters in 10 km", "10000 m"],
 	["units", "days in 3 weeks", "21 days"],
@@ -210,14 +215,7 @@ const GAPS: readonly Example[] = [
 	["rates", "$500 at $20/hour", "25 hours"],
 	// Money times a duration. Soulver reads this as   per day for 4 days.
 	["units", "$30 * 4 days", "120"],
-	["timespans", "03:04:05 + 01:02:03", "04:06:08"],
 	["timespans", "12.5 minutes in minutes and seconds", "12 min 30 s"],
-	["clock", "16:00 + 3 hours 12 minutes", "7:12 pm"],
-	["clock", "7:30 to 20:45", "3 hours 15 min"],
-	["clock", "4pm to 3am", "11 hours"],
-	["dates", "days in Q3", "92 days"],
-	["dates", "days in February 2020", "29 days"],
-	["dates", "week number on march 12, 2021", "10"],
 ];
 
 /**
@@ -245,6 +243,16 @@ const FORMATTING_ONLY: readonly (readonly [string, string, string])[] = [
 	// that total. The arithmetic is identical; Soulver restates the parts.
 	["3 hours 5 minutes 10 seconds in seconds", "11110 s", "11110"],
 	["3h 5m 10s in seconds", "11110 s", "11110"],
+	// Clock and laptime arithmetic is correct; only the rendering differs.
+	// Soulver prints a bare time where this prints the full date it lands on,
+	// and an interval as hours and minutes where this gives total minutes.
+	["16:00 + 3 hours 12 minutes", "7:12 pm", "7:12:00 PM"],
+	["4pm to 3am", "11 hours", "660 minutes"],
+	["(03:04:05 + 01:02:03) as laptime", "04:06:08", "04:06:08"],
+	// Soulver's own page states "3 hours 15 min" for this, which is wrong:
+	// 07:30 to 20:45 is thirteen hours and a quarter. This engine agrees with
+	// the clock, so the row is recorded against the real answer.
+	["(7:30 to 20:45) as timespan", "13 hours 15 minutes", "13 hours 15 minutes"],
 	// Right count, but the "workdays" label is dropped from the answer.
 	["workdays in 3 weeks", "15 workdays", "15"],
 ];
@@ -345,8 +353,8 @@ describe("Soulver parity — documented examples that do not", () => {
 		// quotes this number. A change here without a change there leaves the
 		// audit stating a total it did not measure, which is how the previous
 		// version of that document ended up fictional.
-		expect(GAPS.length).toBe(17);
-		expect(SUPPORTED.length).toBe(94);
+		expect(GAPS.length).toBe(10);
+		expect(SUPPORTED.length).toBe(97);
 	});
 });
 

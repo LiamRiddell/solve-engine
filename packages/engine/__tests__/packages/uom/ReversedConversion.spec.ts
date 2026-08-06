@@ -50,11 +50,12 @@ describe("asking how many X in Y", () => {
 });
 
 describe("what the reorder must not claim", () => {
-	test("`days in February 2020` is left alone", () => {
-		// A different question: how long is a named period. Silently rewriting
-		// it to "February 2020 in days" would answer something nobody asked.
-		// It still fails, and failing is correct until that grammar exists.
-		expect(() => evaluate("days in February 2020")).toThrow();
+	test("`days in February 2020` is left for the calendar grammar", () => {
+		// A different question: how long is a named period. Rewriting it to
+		// "February 2020 in days" would answer something nobody asked. It is
+		// now handled by DaysInPeriodParselet, and 29 rather than any
+		// conversion factor is how you can tell which path took it.
+		expect(num("days in February 2020")).toBe(29);
 	});
 
 	test("the ordinary direction is untouched", () => {

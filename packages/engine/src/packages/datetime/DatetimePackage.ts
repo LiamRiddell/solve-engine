@@ -23,6 +23,8 @@ import { betweenUnitNormalizerRule } from "./normalizer/BetweenUnitNormalizerRul
 import { workdayRateDenominatorNormalizerRule } from "./normalizer/WorkdayRateDenominatorNormalizerRule";
 import { dateLiteralNormalizerRule } from "./normalizer/DateLiteralNormalizerRule";
 import { monthNameDateNormalizerRule } from "./normalizer/MonthNameDateNormalizerRule";
+import { DaysInPeriodParselet } from "./parselets/DaysInPeriodParselet";
+import { daysInPeriodNormalizerRule } from "./normalizer/DaysInPeriodNormalizerRule";
 import { dailyNoteLinkNormalizerRule } from "./normalizer/DailyNoteLinkNormalizerRule";
 import { formatIso8601Local } from "./Iso8601";
 
@@ -120,6 +122,10 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     "what week is it": "WEEK_ON",
     "what week is it on": "WEEK_ON",
     "week of": "WEEK_ON",
+    // The spelling Soulver documents. Same question, same handler.
+    "week number on": "WEEK_ON",
+    "week number of": "WEEK_ON",
+    "week number": "WEEK_ON",
     "what week is it in": "WEEK_IN",
     "what week will it be in": "WEEK_IN",
     // Postfix day-type predicates.
@@ -130,6 +136,7 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     "is a business day": "IS_WORKDAY",
   },
   prefixParselets: [
+    { tokenType: "DAYS_IN_PERIOD", parselet: new DaysInPeriodParselet() },
     { tokenType: "NOW", parselet: new NowParselet(0) },
     { tokenType: "TODAY", parselet: new NowParselet(0) },
     { tokenType: "TOMORROW", parselet: new NowParselet(1) },
@@ -164,6 +171,7 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     // under the numeric rule, so an all-numeric literal is still claimed by
     // the rule that has always claimed it.
     monthNameDateNormalizerRule(),
+    daysInPeriodNormalizerRule(),
     dailyNoteLinkNormalizerRule(),
   ],
   pluginFunctions: [

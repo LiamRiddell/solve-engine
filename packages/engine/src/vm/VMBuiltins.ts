@@ -652,6 +652,9 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     90: (args) => numberValue(Math.asin(args[0].toNumber()) * 180 / Math.PI),
     91: (args) => numberValue(Math.acos(args[0].toNumber()) * 180 / Math.PI),
     92: (args) => numberValue(Math.atan(args[0].toNumber()) * 180 / Math.PI),
+    // daysCount(n) -> n labelled as days. "days in Q3" is a count of days
+    // and should say so; a bare 92 loses what was being counted.
+    93: (args) => uomValue(args[0].toNumber(), "days"),
     // ── Investments (packages/finance/) ────────────────────────────────────
     // compoundFutureValueEvery(principal, rate, years, periodsPerYear)
     // FV = P(1 + r/n)^(n·y). Index 51 is the same formula with n fixed at 1;
