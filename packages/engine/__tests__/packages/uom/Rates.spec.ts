@@ -139,14 +139,56 @@ describe("rates over different periods", () => {
 	});
 });
 
-describe("still open, and failing honestly rather than wrongly", () => {
-	test("`at` with a rate is not implemented", () => {
-		// "30 hours at $30/hour" should be $900. Registering an infix on `at`
-		// was tried and reverted: the finance grammar parses its own rate with
-		// the same word ("over 6 years at 6%"), and the infix took the token
-		// first, breaking every mortgage and investment expression.
-		expect(() => evaluate("30 hours at $30/hour")).toThrow();
+describe("a quantity at a rate", () => {
+	test("`30 hours at $30/hour` is $900", () => {
+		const value = evaluate("30 hours at $30/hour");
+		expect(value.toNumber()).toBeCloseTo(900, 6);
+		expect(value.unit).toBe("USD");
 	});
+
+	test("`$500 at $20/hour` is 25 hours", () => {
+		// The same word, the opposite operation. Which one applies is decided
+		// by which half of the rate the left side matches.
+		const value = evaluate("$500 at $20/hour");
+		expect(value.toNumber()).toBeCloseTo(25, 6);
+		expect(value.unit).toBe("hour");
+	});
+
+	test("a bare number counts denominators", () => {
+		expect(num("30 at $30/hour")).toBeCloseTo(900, 6);
+	});
+
+	test("the period is converted when it does not match", () => {
+		expect(num("120 minutes at $30/hour")).toBeCloseTo(60, 6);
+	});
+
+	test("a left side matching neither half is refused", () => {
+		// The error code; the message naming both units is in `unit`.
+		expect(String(evaluate("5 km at $30/hour").value)).toBe("INCOMPATIBLE_UNITS");
+	});
+});
+
+describe("what `at` must not disturb", () => {
+	/**
+	 * The reason this is triggered by a normalizer with lookahead rather than
+	 * by an infix on the plain word. An infix took the token before the finance
+	 * parselets could, and every mortgage and investment expression failed with
+	 * "Unexpected end of input".
+	 */
+	test("compound interest still parses", () => {
+		expect(num("$1,000 after 3 years at 7%")).toBeCloseTo(1225.043, 2);
+	});
+
+	test("mortgage repayments still parse", () => {
+		expect(num("monthly repayment on $10,000 over 6 years at 6%")).toBeCloseTo(165.73, 1);
+	});
+
+	test("sales tax still parses", () => {
+		expect(num("tax on $300 at 15%")).toBeCloseTo(45, 6);
+	});
+});
+
+describe("still open, and failing honestly rather than wrongly", () => {
 
 	test("an unrecognised numerator word is not a unit", () => {
 		// "30 bottles / week" needs "bottles" to be treated as a countable

@@ -9,8 +9,8 @@ build and fails in both directions: a regression in something that works, and
 also a gap that starts working without being promoted out of its list. If this
 file and that spec disagree, the spec is right.
 
-As of 2026-08-06: **101 of 122** documented examples produce the documented
-answer, 5 do not, 16 differ only in formatting.
+As of 2026-08-06: **102 of 122** documented examples produce the documented
+answer, 3 do not, 17 differ only in formatting.
 
 See `SOULVERCORE_FEATURE_AUDIT.md` for why the previous per-page audit was
 unreliable, and the same reason this file avoids per-page status claims.
@@ -24,7 +24,7 @@ entries in the spec's `GAPS` list.
 
 | Area | Rows | What is missing | Shape of the work |
 |---|---|---|---|
-| Rates | 3 | `30 bottles / week`, `30 hours at $30/hour`, `$500 at $20/hour` | Bare denominators and cross-period addition are done. **`at` with a rate was tried and reverted**: registering an infix on `at` broke every mortgage and investment expression, because the finance grammar parses its own rate with the same word (`over 6 years at 6%`) and the infix took the token first. It needs a trigger that cannot collide, or the finance parselets need to claim theirs earlier. `30 bottles / week` needs an unrecognised word after a number to be a countable label rather than a variable, which is a lexer question. Both fail loudly. |
+| Rates | 1 | `30 bottles / week` | Everything else on the page is done. This needs an unrecognised word after a number to be read as a countable label rather than a variable, and dropping it (which is what Soulver does, answering `30/week`) would silently change `30 x / week` where `x` is a real variable. A wrong answer for a display nicety is not a trade worth making, so it stays open and failing loudly. |
 | Inflation data | 2 | `what is $4.2k from 2003`, `what was $500 worth in 1997` | **Blocked on data, not code.** See below. |
 
 ## Currencies

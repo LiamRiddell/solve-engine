@@ -5,8 +5,8 @@
  * This exists because `docs-internal/SOULVERCORE_FEATURE_AUDIT.md` was written
  * by reading the code and asking "do we have something in this area", and the
  * answer to that question is not the same as "does the documented syntax work".
- * It marked 39 of 40 pages implemented. Measured, 101 of the 122 documented
- * examples below produce the documented answer, 5 do not, and 16 differ only
+ * It marked 39 of 40 pages implemented. Measured, 102 of the 122 documented
+ * examples below produce the documented answer, 3 do not, and 17 differ only
  * in formatting. It credited `as timespan` and
  * `as laptime` to `packages/time`, where the only occurrence of the word
  * "timespan" is a doc comment. It credited the rounding page to `as decimal`
@@ -136,7 +136,8 @@ const SUPPORTED: readonly Example[] = [
 	["bases", "0x9F31 to decimal", "40753"],
 	["bases", "0b101101 as base 8", "0o55"],
 
-	// Rates with a bare denominator, and cross-period addition (2026-08-06).
+	// Rates with a bare denominator, cross-period addition, at-rate (2026-08-06).
+	["rates", "30 hours at $30/hour", "900"],
 	["rates", "$20/day + $300/week", "440"],
 	["rates", "$99 per week", "99"],
 	["rates", "3 hours / day", "3 hours/day"],
@@ -216,8 +217,6 @@ const GAPS: readonly Example[] = [
 	// -- Not implemented. Parses to an error rather than a wrong number, which
 	// -- at least tells the truth.
 	["rates", "$24 a day for a year", "8765.82"],
-	["rates", "30 hours at $30/hour", "900"],
-	["rates", "$500 at $20/hour", "25 hours"],
 	// Money times a duration. Soulver reads this as   per day for 4 days.
 ];
 
@@ -242,6 +241,9 @@ const FORMATTING_ONLY: readonly (readonly [string, string, string])[] = [
 	["$500 invested $1,500 returned", "2x", "2"],
 	// Right duration, written out in full rather than abbreviated.
 	["5.5 minutes as timespan", "5 min 30 s", "5 minutes 30 seconds"],
+	// Right answer and right measure; the denominator keeps the singular
+	// spelling it was written with rather than being pluralised for display.
+	["$500 at $20/hour", "25 hours", "25 hour"],
 	// A compound quantity is summed into its smallest unit and rendered as
 	// that total. The arithmetic is identical; Soulver restates the parts.
 	["3 hours 5 minutes 10 seconds in seconds", "11110 s", "11110"],
@@ -358,8 +360,8 @@ describe("Soulver parity — documented examples that do not", () => {
 		// quotes this number. A change here without a change there leaves the
 		// audit stating a total it did not measure, which is how the previous
 		// version of that document ended up fictional.
-		expect(GAPS.length).toBe(5);
-		expect(SUPPORTED.length).toBe(101);
+		expect(GAPS.length).toBe(3);
+		expect(SUPPORTED.length).toBe(102);
 	});
 });
 

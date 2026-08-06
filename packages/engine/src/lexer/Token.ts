@@ -377,6 +377,7 @@ export const TokenTypes = {
   DAYS_IN_PERIOD: "DAYS_IN_PERIOD",
   IN_TWO_UNITS: "IN_TWO_UNITS",
   PER_UNIT: "PER_UNIT",
+  AT_RATE: "AT_RATE",
   WEEK_IN: "WEEK_IN",
   // `<unit> between <date> and <date>`, fused UNIT+BETWEEN, exactly like
   // UNTIL_UNIT/SINCE_UNIT above.
