@@ -4,6 +4,7 @@ import { ConvertParselet } from "./parselets/ConvertParselet";
 import { PossibilitiesParselet } from "./parselets/PossibilitiesParselet";
 import { uomPossibilitiesNormalizerRule } from "./normalizer/PossibilitiesNormalizerRule";
 import { compoundQuantityNormalizerRule } from "./normalizer/CompoundQuantityNormalizerRule";
+import { reversedConversionNormalizerRule } from "./normalizer/ReversedConversionNormalizerRule";
 import { CookingConversionParselet } from "./parselets/CookingConversionParselet";
 import { COOKING_CONVERT_IDX, cookingConvertHandler } from "./parselets/CookingPluginFunctions";
 import { ingredientNameNormalizerRule } from "./normalizer/IngredientNameNormalizerRule";
@@ -35,6 +36,7 @@ export const UOM_PACKAGE: IEnginePackage = {
   normalizerRules: [
     uomPossibilitiesNormalizerRule(),
     compoundQuantityNormalizerRule(),
+    reversedConversionNormalizerRule(),
     ingredientNameNormalizerRule(),
   ],
   pluginFunctions: [

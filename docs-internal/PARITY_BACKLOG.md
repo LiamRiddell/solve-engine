@@ -9,8 +9,8 @@ build and fails in both directions: a regression in something that works, and
 also a gap that starts working without being promoted out of its list. If this
 file and that spec disagree, the spec is right.
 
-As of 2026-08-06: **91 of 122** documented examples produce the documented
-answer, 20 do not, 11 differ only in formatting.
+As of 2026-08-06: **94 of 122** documented examples produce the documented
+answer, 17 do not, 11 differ only in formatting.
 
 See `SOULVERCORE_FEATURE_AUDIT.md` for why the previous per-page audit was
 unreliable, and the same reason this file avoids per-page status claims.
@@ -26,7 +26,7 @@ entries in the spec's `GAPS` list.
 |---|---|---|---|
 | Timespans | 2 | `03:04:05 + 01:02:03` laptime arithmetic, `12.5 minutes in minutes and seconds` | The converters and compound literals are done. What is left is arithmetic on `HH:MM:SS` literals, and a multi-unit output format. |
 | Rates | 6 | `3 hours / day`, `$99 per week`, `$20/day + $300/week`, `$24 a day for a year`, `30 hours at $30/hour`, `$500 at $20/hour` | **Structural, and the naive fix is a trap.** Inserting the implied `1` (`/ day` -> `/ 1 day`) was tried and reverted: it makes `$50/week * 12 weeks` work but turns `3 hours / day` into 0.125, because same-measure units then cancel to a dimensionless number instead of forming a rate. A wrong answer where there had been an honest error. The real distinction is that a denominator with **no number** means a rate while `/ 3 days` means division, and that has to be decided where the numerator's measure is known, not by a token rewrite. Separately, `$20/day + $300/week` needs period unification, and `at` with a rate (multiply or divide depending on which side carries the rate) is its own parselet. |
-| Units | 5 | `5 hours 30 minutes to seconds`, `meters in 10 km`, `days in 3 weeks`, `seconds in a day`, `$30 * 4 days` | Reversed conversion (`<unit> in <quantity>`) is a new grammar. Compound quantities share the timespan lexer work. `$30 * 4 days` is a money-times-duration case the unit system currently rejects. |
+| Units | 1 | `$30 * 4 days` | A money-times-duration case the unit system rejects outright ("Cannot combine incompatible units: USD and days"). Soulver reads it as $30 per day for four days. |
 | Dates | 3 | `days in Q3`, `days in February 2020`, `week number on march 12, 2021` | Contained. The date literals now parse; what is missing is the surrounding "how long is this named period" grammar. |
 | Clock | 3 | `16:00 + 3 hours 12 minutes`, `7:30 to 20:45`, `4pm to 3am` | Depends on the compound-duration literals above. |
 | Inflation data | 2 | `what is $4.2k from 2003`, `what was $500 worth in 1997` | **Blocked on data, not code.** See below. |
