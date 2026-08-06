@@ -102,6 +102,20 @@ export function tryParseDatePhrase(parser: Parser): ParsedDatePhrase | null {
 	const first = parser.peek();
 	if (!first) return null;
 
+	// Already fused into a date literal by the datetime package's normalizer,
+	// which is what "April 12, 2005" now becomes before the parser sees it.
+	// Taking the fused token is strictly better than re-deriving the date from
+	// its parts: it has already been validated against the calendar.
+	if (first.type === "DATETIME_LITERAL") {
+		parser.consume();
+		const date = new Date(Number(first.value));
+		if (Number.isNaN(date.getTime())) return null;
+		return {
+			isoDate: `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`,
+			raw: first.text ?? first.value,
+		};
+	}
+
 	// ── Numeric SLASH/MINUS form: NUMBER SEP NUMBER SEP NUMBER ──
 	// or "12 April 2005" (NUMBER IDENT [COMMA] NUMBER), both start with a
 	// NUMBER, disambiguated below by what follows it. Consume-then-check is

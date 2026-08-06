@@ -25,10 +25,19 @@ describe("Issue #81: Percentage calculation error", () => {
     expect(result.toNumber()).toBeCloseTo(0.5, 10);
   });
 
-  test("1+15%+25% should equal 1.4 (percentages resolve before addition)", () => {
+  // Changed 2026-08-06, deliberately. This used to assert 1.4, on the reading
+  // that `15%` is the number 0.15 and addition is addition. A percentage added
+  // to a quantity is now relative to that quantity, which is what Soulver does
+  // and what `200 + 10%` has to mean for the answer to be 220 rather than
+  // 200.10. So the chain compounds: 1 + 15% = 1.15, and 1.15 + 25% = 1.4375.
+  //
+  // The rest of this file is untouched and still passes, which is the useful
+  // part: issue #81 was reported because `15%` did not resolve to 0.15 at all,
+  // and it still does.
+  test("1+15%+25% compounds, each percentage applying to the running total", () => {
     const [result] = engine.evaluateLine(1, "1+15%+25%");
-    // 1 + 0.15 + 0.25 = 1.4
-    expect(result.toNumber()).toBeCloseTo(1.4, 10);
+    // 1 × 1.15 = 1.15, then 1.15 × 1.25 = 1.4375
+    expect(result.toNumber()).toBeCloseTo(1.4375, 10);
   });
 
   test("percentage as multiplication operand: 200*10%", () => {
@@ -37,10 +46,10 @@ describe("Issue #81: Percentage calculation error", () => {
     expect(result.toNumber()).toBeCloseTo(20, 10);
   });
 
-  test("percentage with addition: 100+10%", () => {
+  test("percentage with addition: 100+10% is a 10% increase", () => {
     const [result] = engine.evaluateLine(1, "100+10%");
-    // 100 + 0.10 = 100.1
-    expect(result.toNumber()).toBeCloseTo(100.1, 10);
+    // 100 × 1.10 = 110. Was 100.1, see the note above.
+    expect(result.toNumber()).toBeCloseTo(110, 10);
   });
 
   test("chained percentage: 50%+25%", () => {

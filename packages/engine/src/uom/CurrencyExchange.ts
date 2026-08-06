@@ -3,6 +3,7 @@
  * Integrates with DataQueryService for worker-based execution
  */
 
+import { isIso4217 } from "@solve-js/uom/Iso4217";
 import { createTimeoutSignal } from "@solve-js/utilities/TimeoutSignal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
@@ -322,23 +323,21 @@ export class CurrencyExchangeService {
   // ------------------------------------------------------------------------
 
   /**
-   * Check whether `code` is a recognized currency code (fiat or the
-   * cryptocurrencies in {@link CRYPTO_IDS}), a fixed allowlist, not a
-   * live lookup against any API.
+   * Check whether `code` is a recognized currency code: any active ISO 4217
+   * code, or one of the cryptocurrencies in {@link CRYPTO_IDS}.
+   *
+   * This used to be a hand-written list of forty-six codes, which meant
+   * `$100 in UAH` returned an unconverted hundred dollars rather than saying
+   * it could not convert. Answering from the standard rather than from
+   * whichever codes happened to get added is what stops that class of bug.
+   *
+   * Recognising a code is not the same as having a rate for it. That is
+   * answered later, by the exchange provider; conflating the two is what
+   * produced the silent failure.
    */
   isCurrency(code: string): boolean {
-    // Check against known currency codes
-    const knownCurrencies = [
-      "USD", "EUR", "GBP", "JPY", "AUD", "CAD", "CHF", "CNY", "SEK", "NOK",
-      "DKK", "NZD", "KRW", "SGD", "HKD", "INR", "BRL", "ZAR", "MXN", "RUB",
-      "TRY", "SAR", "AED", "ILS", "PLN", "CZK", "HUF", "THB", "IDR", "MYR",
-      "PHP", "CLP", "COP", "ARS", "NGN", "EGP", "PKR", "BDT", "VND", "KES",
-      "MAD", "QAR", "KWD", "OMR", "BHD", "JOD",
-      "BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "DOT",
-    ];
-    return knownCurrencies.includes(code.toUpperCase());
+    return isIso4217(code) || this.isCryptoCode(code);
   }
-
 }
 
 // ============================================================================

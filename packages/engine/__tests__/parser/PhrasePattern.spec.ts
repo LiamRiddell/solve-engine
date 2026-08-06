@@ -47,20 +47,20 @@ const testPattern = definePhrasePattern({
     {
       slots: [
         { kind: "keyword", tokenTypes: ["BETWEEN"] },
-        // "and" lexes as PLUS (en.ts: `and: "PLUS"`, a synonym for
-        // arithmetic "+") — not a dedicated AND token. Since PLUS is also
-        // a real active infix operator here (registerPackageForTesting(ARITHMETIC_PACKAGE, )),
-        // this first expr slot MUST use a binding power above Sum, or
-        // parseExpression() will happily swallow "and 3" as if computing
-        // "2 + 3" instead of stopping so the PLUS keyword slot below can
-        // consume it — the exact bug DiceRollParselet.ts's identical
-        // BindingPower.Product choice guards against in real use.
-        { kind: "expr", bindingPower: BindingPower.Product },
-        { kind: "keyword", tokenTypes: ["PLUS"] },
+        // "and" is its own token (AND_CONJ) that still adds, but binds one
+        // step looser than Sum. That is what lets this expr slot stop before
+        // it rather than swallowing "and 3" as "2 + 3".
+        //
+        // This slot used to need `BindingPower.Product` to defend against
+        // exactly that, back when the locale mapped `and: "PLUS"`. Product
+        // stopped "and" but also stopped a genuine "+", so "between 1 + 1 and
+        // 3" could not be written. Conjunction stops only the word.
+        { kind: "expr", bindingPower: BindingPower.Conjunction },
+        { kind: "keyword", tokenTypes: ["AND_CONJ"] },
         { kind: "expr" },
       ],
       emit: (builder, captures) => {
-        expect(captures.map((c) => c.type)).toEqual(["BETWEEN", "PLUS"]);
+        expect(captures.map((c) => c.type)).toEqual(["BETWEEN", "AND_CONJ"]);
         builder.emitOpcode(OpCode.PUSH_NUMBER);
         builder.emitNumber(0);
       },
@@ -134,7 +134,7 @@ describe("definePhrasePattern — alternative dispatch and captures", () => {
   });
 
   test("throws when a later keyword slot doesn't match (e.g. 'between X to Y')", () => {
-    expect(() => run("between 2 to 3")).toThrow(/Expected one of \[PLUS\]/i);
+    expect(() => run("between 2 to 3")).toThrow(/Expected one of \[AND_CONJ\]/i);
   });
 
   test("throws when a keyword slot hits end of input instead of a token", () => {

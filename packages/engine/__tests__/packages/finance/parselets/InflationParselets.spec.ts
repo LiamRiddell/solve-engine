@@ -144,14 +144,17 @@ describe("$X in YEAR dollars -> express an amount in a specific historical year'
 });
 
 describe("value of $X in FUTURE_YEAR assuming N% inflation -> flat-rate projection (real engine)", () => {
-  test(`value of $500 in ${CURRENT_YEAR + 5} assuming 3% inflation -> 500 * 1.03^5`, () => {
+  // Changed 2026-08-06: this asks what $500 will be WORTH, so it discounts.
+  // It used to multiply, reporting a number larger than $500 for a question
+  // about how much inflation erodes it. See InflationPluginFunctions.ts.
+  test(`value of $500 in ${CURRENT_YEAR + 5} assuming 3% inflation -> 500 / 1.03^5`, () => {
     const value = evalReal(`value of $500 in ${CURRENT_YEAR + 5} assuming 3% inflation`);
-    expect(value.toNumber()).toBeCloseTo(500 * Math.pow(1.03, 5), 3);
+    expect(value.toNumber()).toBeCloseTo(500 / Math.pow(1.03, 5), 3);
   });
 
-  test(`value of 1000 in ${CURRENT_YEAR + 1} assuming 5% inflation -> 1000 * 1.05`, () => {
+  test(`value of 1000 in ${CURRENT_YEAR + 1} assuming 5% inflation -> 1000 / 1.05`, () => {
     const value = evalReal(`value of 1000 in ${CURRENT_YEAR + 1} assuming 5% inflation`);
-    expect(value.toNumber()).toBeCloseTo(1000 * 1.05, 3);
+    expect(value.toNumber()).toBeCloseTo(1000 / 1.05, 3);
   });
 });
 

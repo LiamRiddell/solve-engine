@@ -61,8 +61,16 @@ import { MULTI_WORD_CITY_ZONES } from "./timezones/CityZones";
  * session found real trouble with (see MathPhrasesPackage.ts's "total"
  * regression note). `time in <city>` covers the same need unambiguously.
  */
+import { toTimespanString, toLaptimeString } from "./TimespanConverters";
+
 export const TIME_PACKAGE: IEnginePackage = {
   name: "solve-time",
+  asConverters: {
+    // The two ways of writing a duration out. See TimespanConverters.ts.
+    timespan: toTimespanString,
+    laptime: toLaptimeString,
+    lap: toLaptimeString,
+  },
   phrases: {
     "time in": "TIME_IN",
     "date in": "DATE_IN",

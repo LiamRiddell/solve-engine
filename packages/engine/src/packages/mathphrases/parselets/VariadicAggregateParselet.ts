@@ -31,10 +31,18 @@ export class VariadicAggregateParselet implements PrefixParselet {
 
   parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     let argCount = 0;
-    parser.parseExpression(BindingPower.Lowest, builder);
+    // Arguments are parsed at `Conjunction` rather than `Lowest` so that the
+    // trailing "and" of an English list ("36, 42, 19 and 81") ends an argument
+    // instead of being consumed as the addition it also is. `+` binds tighter
+    // (`Sum`), so "average of 1 + 2, 3" still gets 1 + 2 as one argument.
+    //
+    // Parsing at `Lowest` is what made "average of 36, 42, 19 and 81" return
+    // 59.33: it read three arguments, the last being 19 + 81, and divided 178
+    // by 3. Soulver returns 44.5.
+    parser.parseExpression(BindingPower.Conjunction, builder);
     argCount++;
-    while (parser.match("COMMA")) {
-      parser.parseExpression(BindingPower.Lowest, builder);
+    while (parser.match("COMMA") || parser.match("AND_CONJ")) {
+      parser.parseExpression(BindingPower.Conjunction, builder);
       argCount++;
     }
 

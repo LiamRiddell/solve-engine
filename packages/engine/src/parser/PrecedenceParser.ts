@@ -257,10 +257,18 @@ export class PrecedenceParser {
         const typeId = lookahead.typeId;
 
         if (typeId === PrecedenceParser.PERCENT_ID) {
-          // Postfix: no right operand. "50%" → value / 100
+          // Postfix: no right operand. "50%" → Percentage holding 0.5.
+          //
+          // Must stay byte-for-byte equivalent to PercentParselet, which is
+          // the Tier-2 registration of the same operator. This path is the one
+          // that actually runs for ordinary expressions, so a change made only
+          // in the parselet does nothing at all: that is exactly how the
+          // divide-by-100 here outlived its replacement and kept `200 + 10%`
+          // answering 200.10.
           builder.emitOpcode(OpCode.PUSH_NUMBER);
           builder.emitNumber(100);
           builder.emitOpcode(OpCode.DIV);
+          builder.emitOpcode(OpCode.TO_PERCENTAGE);
         } else if (typeId === PrecedenceParser.CARET_ID && this.tryEmitMatrixCaretOp(builder)) {
           // `^T` (transpose) or `^-1` (inverse), already fully handled
           // including consuming their own trailing tokens.
