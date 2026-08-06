@@ -77,12 +77,26 @@ jobs:
           npm run bench
 
       - name: Compare
-        run: node scripts/compare-benchmarks.mjs /tmp/bench-base packages/engine/benchmarks/current
+        run: |
+          # Written to a file as well as to stdout, because two later consumers
+          # need it and neither can reach a previous step's stdout: the job
+          # summary, and the pull request comment.
+          #
+          # The exit status is carried around the pipe by hand. `tee` would
+          # otherwise report its own success and hide a regression, and letting
+          # the failure abort the step here would skip the summary that explains
+          # what regressed.
+          set -o pipefail
+          status=0
+          node scripts/compare-benchmarks.mjs /tmp/bench-base packages/engine/benchmarks/current \
+            | tee benchmark-comparison.md || status=$?
+          cat benchmark-comparison.md >> "$GITHUB_STEP_SUMMARY"
+          exit $status
 
       # A single comment updated in place, rather than one per push. Marked
       # continue-on-error because the default token cannot comment on a pull
       # request from a fork, and a missing convenience should not fail a run
-      # whose real output already went to the step summary.
+      # whose real output already went to the job summary and the log.
       - name: Comment on the pull request
         if: always()
         continue-on-error: true
@@ -91,13 +105,20 @@ jobs:
           script: |
             const fs = require('fs');
             const marker = '<!-- benchmark-comparison -->';
-            const summaryPath = process.env.GITHUB_STEP_SUMMARY;
-            let body = marker + '\n';
+
+            // Reads the file the Compare step wrote, not GITHUB_STEP_SUMMARY.
+            // Every step is given its own summary file, so reading that
+            // variable here opened this step's own empty one. The read
+            // succeeded, so the catch never fired, and every comment posted was
+            // a bare marker with no comparison in it.
+            let report = '';
             try {
-              body += fs.readFileSync(summaryPath, 'utf8');
+              report = fs.readFileSync('benchmark-comparison.md', 'utf8').trim();
             } catch {
-              body += 'The comparison produced no output.';
+              report = '';
             }
+
+            const body = marker + '\n' + (report === '' ? 'The comparison produced no output.' : report);
             const { owner, repo } = context.repo;
             const issue_number = context.issue.number;
             const comments = await github.rest.issues.listComments({ owner, repo, issue_number });
