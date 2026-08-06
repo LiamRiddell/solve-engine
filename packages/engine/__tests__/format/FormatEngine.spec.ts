@@ -157,7 +157,10 @@ describe("Locale framework", () => {
   it("contains all expected keywords in english locale", () => {
     const locale = getLocale("en");
     expect(locale.keywordMap.plus).toBe("PLUS");
-    expect(locale.keywordMap.and).toBe("PLUS");
+    // The word "and" has its own token type: it still adds, but a phrase
+		// parselet has to be able to tell it apart from "+" to use it as a list
+		// separator ("average of 1, 2 and 3"). See Token.ts AND_CONJ.
+		expect(locale.keywordMap.and).toBe("AND_CONJ");
     expect(locale.keywordMap.of).toBe("OF");
     expect(locale.keywordMap.roll).toBe("ROLL");
     expect(locale.keywordMap.sin).toBe("FUNC");

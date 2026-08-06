@@ -28,7 +28,7 @@ export class ClampParselet implements PrefixParselet {
     if (mid?.type === "BETWEEN") {
       parser.consume();
       parser.parseExpression(BindingPower.Product, builder); // lo — Product bp guards against "and" (PLUS) swallowing hi
-      parser.consume("PLUS"); // "and" — see ConditionalsPackage.ts's doc comment
+      parser.consume("AND_CONJ"); // "and" — see ConditionalsPackage.ts's doc comment
       parser.parseExpression(BindingPower.Lowest, builder); // hi
     } else if (mid?.type === "FROM") {
       parser.consume();

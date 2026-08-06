@@ -133,6 +133,10 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 
 	// Arithmetic / assignment-style operators
 	PLUS: "operator",
+	// The word "and". An operator rather than a keyword: it adds, and syntax
+	// highlighting that painted it as a keyword would make "5 and 3" look
+	// structurally different from "5 + 3" when the two mean the same thing.
+	AND_CONJ: "operator",
 	MINUS: "operator",
 	STAR: "operator",
 	SLASH: "operator",

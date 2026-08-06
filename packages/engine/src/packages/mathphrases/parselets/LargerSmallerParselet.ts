@@ -29,7 +29,7 @@ export function largerSmallerParselet(builtinIndex: number): PrefixParselet {
     category: "MathPhrases",
     parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
       parser.parseExpression(BindingPower.Product, builder); // X
-      parser.consume("PLUS"); // "and"
+      parser.consume("AND_CONJ"); // "and"
       parser.parseExpression(BindingPower.Lowest, builder); // Y
       builder.emitOpcode(OpCode.CALL_BUILTIN);
       builder.emitIndex(builtinIndex);

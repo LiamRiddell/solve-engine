@@ -686,16 +686,14 @@ export function executeBytecode(
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(numberValue((l.value as number) + (r.value as number)));
           } else if (l.type === ValueType.Boolean && r.type === ValueType.Boolean) {
-            // The word "and" lexes as PLUS (en.ts: `and: "PLUS"`, a
-            // long-standing synonym for arithmetic "+", "5 and 3" = 8).
-            // PLUS is a Tier-1 hardcoded infix operator (see
-            // parser/BindingPower.ts's BUILTIN_INFIX_BP), so a registered
-            // parselet can never intercept the word "and" the way it can
-            // for genuinely new tokens like "or"/"&&". This opcode-level
-            // type check is the only way "true and false" reads as logical
-            // AND rather than falling through to NaN-producing numeric
-            // addition. Mirrors the Datetime/Rate special-casing already
-            // done here for the same reason (operand-type-driven dispatch).
+            // The word "and" is a synonym for arithmetic "+" ("5 and 3" = 8)
+            // and also the boolean conjunction ("true and false"). It has its
+            // own token type now (AND_CONJ, see Token.ts) rather than mapping
+            // onto PLUS, but it still compiles to this opcode, because which
+            // of the two meanings applies is a property of the operands rather
+            // than of the word. So the dispatch stays here, where the operand
+            // types are known, mirroring the Datetime/Rate special-casing
+            // already done in this opcode for the same reason.
             stack.push(boolValue((l.value as boolean) && (r.value as boolean)));
           } else if (l.type === ValueType.Datetime) {
             if (r.type === ValueType.Datetime) {

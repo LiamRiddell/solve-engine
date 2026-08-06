@@ -88,6 +88,18 @@ export const TokenTypes = {
   PI: "PI",
   E: "E",
   MOD: "MOD",
+  // The English word "and", which is NOT the same thing as "+" even though it
+  // adds. It used to map straight onto PLUS in the locale keyword map, which
+  // made "3 and 4" evaluate to 7 correctly and then quietly broke every phrase
+  // that uses "and" as a list separator: "average of 36, 42, 19 and 81" parsed
+  // its last argument as "19 + 81" and returned 178/3 rather than 178/4.
+  //
+  // Giving it its own type lets a parselet tell the two apart. It is still an
+  // infix addition (see ArithmeticPackage.ts) so "3 and 4" is unchanged, but it
+  // binds at BindingPower.Conjunction, one step looser than Sum, so a phrase
+  // parselet can parse an argument at Conjunction and get "1 + 2" whole while
+  // still stopping at "and".
+  AND_CONJ: "AND_CONJ",
   OF: "OF",
   INCREASE_BY: "INCREASE_BY",
   DECREASE_BY: "DECREASE_BY",

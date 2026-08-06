@@ -19,7 +19,7 @@ export const enLocale: ILocale = {
   label: "English",
   keywordMap: {
     pi: "PI", e: "E",
-    plus: "PLUS", add: "PLUS", and: "PLUS",
+    plus: "PLUS", add: "PLUS", and: "AND_CONJ",
     minus: "MINUS", subtract: "MINUS", remove: "MINUS", take: "MINUS",
     times: "STAR", multiply: "STAR",
     divide: "SLASH",

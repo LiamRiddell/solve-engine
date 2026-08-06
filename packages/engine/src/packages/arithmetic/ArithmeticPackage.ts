@@ -25,6 +25,10 @@ export const ARITHMETIC_PACKAGE: IEnginePackage = {
   ],
   infixParselets: [
     { tokenType: "PLUS", parselet: new BinaryOpParselet(BindingPower.Sum, OpCode.ADD) },
+    // The word "and", which adds exactly like "+" but at a looser binding
+    // power so a phrase parselet can use it as a list separator. See
+    // Token.ts's AND_CONJ comment for why it is not simply mapped to PLUS.
+    { tokenType: "AND_CONJ", parselet: new BinaryOpParselet(BindingPower.Conjunction, OpCode.ADD) },
     { tokenType: "MINUS", parselet: new BinaryOpParselet(BindingPower.Sum, OpCode.SUB) },
     { tokenType: "STAR", parselet: new BinaryOpParselet(BindingPower.Product, OpCode.MUL) },
     { tokenType: "SLASH", parselet: new BinaryOpParselet(BindingPower.Product, OpCode.DIV) },
