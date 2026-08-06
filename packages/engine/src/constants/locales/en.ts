@@ -19,9 +19,10 @@ export const enLocale: ILocale = {
   label: "English",
   keywordMap: {
     pi: "PI", e: "E",
-    plus: "PLUS", add: "PLUS", and: "PLUS",
+    plus: "PLUS", add: "PLUS", and: "PLUS", with: "PLUS",
     minus: "MINUS", subtract: "MINUS", remove: "MINUS", take: "MINUS",
-    times: "STAR", multiply: "STAR",
+    without: "MINUS",
+    times: "STAR", multiply: "STAR", mul: "STAR",
     divide: "SLASH",
     modulo: "MOD", mod: "MOD",
     exponent: "CARET", prime: "CARET",
@@ -78,7 +79,11 @@ export const enLocale: ILocale = {
     // sum(/total(/average( fusion), so `:map = [...]`/`:sum = 100`/etc.
     // keep working as ordinary variable names.
     clamp: "CLAMP",
-    convert: "CONVERT", to: "TO", best: "BEST", in: "IN",
+    // `into` is a third spelling of the conversion operator, alongside `to` and
+    // `in`. It reads better before a unit than either ("300 cm into m"), and
+    // costs nothing: it is not a plausible variable name and has no other
+    // meaning in the grammar.
+    convert: "CONVERT", to: "TO", best: "BEST", in: "IN", into: "IN",
     next: "NEXT", last: "LAST", until: "UNTIL", since: "SINCE",
     sunday: "SUNDAY", monday: "MONDAY", tuesday: "TUESDAY", wednesday: "WEDNESDAY",
     thursday: "THURSDAY", friday: "FRIDAY", saturday: "SATURDAY",

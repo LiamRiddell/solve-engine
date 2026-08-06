@@ -235,19 +235,26 @@ Measured against **meter**.
 | terameter | `terametre`, `terameters`, `terametres`, `Tm` | 1000000000000 |
 | gigameter | `gigametre`, `gigameters`, `gigametres`, `Gm` | 1000000000 |
 | megameter | `megametre`, `megameters`, `megametres`, `Mm` | 1000000 |
+| league | `leagues` | 4828.03 |
 | NM | `nmi` | 1852 |
 | mile | `miles`, `mi` | 1609.34 |
 | kilometer | `kilometre`, `kilometers`, `kilometres`, `km` | 1000 |
+| furlong | `furlongs` | 201.168 |
+| cable | `cables` | 185.2 |
 | hectometer | `hectometre`, `hectometers`, `hectometres`, `hm` | 100 |
+| chain | `chains` | 20.1168 |
 | decameter | `decametre`, `decameters`, `decametres`, `dam` | 10 |
+| rod | `rods` | 5.0292 |
 | meter | `meters`, `metre`, `metres`, `m` | 1 |
 | yard | `yards`, `yd` | 0.9144 |
 | foot | `feet`, `ft` | 0.3048 |
+| hand | `hands` | 0.1016 |
 | decimeter | `decimetre`, `decimeters`, `decimetres`, `dm` | 0.1 |
 | inch | `inches` | 0.0254 |
 | centimeter | `centimetre`, `centimeters`, `centimetres`, `cm` | 0.01 |
 | pica | `picas` | 0.0042333 |
 | millimeter | `millimetre`, `millimeters`, `millimetres`, `mm` | 0.001 |
+| mil | `mils` | 0.0000254 |
 | micrometer | `micrometre`, `micrometers`, `micrometres` | 0.000001 |
 | nanometer | `nanometre`, `nanometers`, `nanometres`, `nm` | 1e-9 |
 | picometer | `picometre`, `picometers`, `picometres` | 1e-12 |
@@ -294,6 +301,7 @@ Measured against **gram**.
 | teragram | `teragrams`, `Tg`, `megatonne`, `megatonnes`, `Mt` | 1000000000000 |
 | gigagram | `gigagrams`, `Gg`, `kilotonne`, `kilotonnes`, `kt` | 1000000000 |
 | megagram | `megagrams`, `Mg`, `tonne`, `tonnes`, `t` | 1000000 |
+| centner | `centners` | 100000 |
 | cwt | `cwt` | 50800 |
 | cental | `cental` | 45360 |
 | stone | `stones`, `st` | 6350.29 |
@@ -304,6 +312,7 @@ Measured against **gram**.
 | ounce | `ounces`, `oz` | 28.3495 |
 | decagram | `decagrams`, `dag` | 10 |
 | gram | `grams`, `g` | 1 |
+| carat | `carats` | 0.2 |
 | decigram | `decigrams`, `dg` | 0.1 |
 | grain | `grains`, `gr` | 0.0647989 |
 | centigram | `centigrams`, `cg` | 0.01 |
@@ -478,9 +487,102 @@ Measured against **stere**.
 | pm3 | `pm3` | 1e-36 |
 | fm3 | `fm3` | 1e-45 |
 
+## Speed
+
+Measured against **mps**.
+
+| Unit | Spellings | Relative size |
+| --- | --- | --- |
+| mps | `mps` | 1 |
+| kn | `kn` | 0.514444 |
+| mph | `mph` | 0.44704 |
+| ft_s | `ft_s` | 0.3048 |
+| kph | `kph` | 0.277778 |
+
+## Pace
+
+
+
+| Unit | Spellings | Relative size |
+| --- | --- | --- |
+| min_km | `min_km` | 0.06 |
+| min_mi | `min_mi` | 0.0372823 |
+
+## Voltage
+
+
+
+| Unit | Spellings | Relative size |
+| --- | --- | --- |
+| kV | `kV` | 1000 |
+| mV | `mV` | 0.001 |
+
+## Current
+
+Measured against **A**.
+
+| Unit | Spellings | Relative size |
+| --- | --- | --- |
+| kA | `kA` | 1000 |
+| A | `A` | 1 |
+| mA | `mA` | 0.001 |
+
+## Apparent power
+
+Measured against **VA**.
+
+| Unit | Spellings | Relative size |
+| --- | --- | --- |
+| MVA | `MVA` | 1000000 |
+| kVA | `kVA` | 1000 |
+| VA | `VA` | 1 |
+
+## Reactive power
+
+
+
+| Unit | Spellings | Relative size |
+| --- | --- | --- |
+| Mvar | `Mvar` | 1000000 |
+| kvar | `kvar` | 1000 |
+
+## Reactive energy
+
+Measured against **varh**.
+
+| Unit | Spellings | Relative size |
+| --- | --- | --- |
+| Mvarh | `Mvarh` | 1000000 |
+| kvarh | `kvarh` | 1000 |
+| varh | `varh` | 1 |
+
+## Volume flow rate
+
+Measured against **m3s**.
+
+| Unit | Spellings | Relative size |
+| --- | --- | --- |
+| m3s | `m3s` | 1 |
+| cfs | `cfs` | 0.0283168 |
+| lps | `lps` | 0.001 |
+| m3h | `m3h` | 0.000277778 |
+| gpm | `gpm` | 0.0000630902 |
+| lpm | `lpm` | 0.0000166667 |
+
+## Parts per
+
+
+
+| Unit | Spellings | Relative size |
+| --- | --- | --- |
+| permille | `permille` | 0.001 |
+| ppm | `ppm` | 0.000001 |
+| ppb | `ppb` | 1e-9 |
+| ppt | `ppt` | 1e-12 |
+
 ## Spellings that are not listed
 
-The conversion tables carry 1456 spellings in total, and 491 of
+The conversion tables carry 1504 spellings in total, and 491 of
 them are missing above. Most are multi-word forms like `sq ft` and `cu yd`,
 which the tables can resolve but the lexer cannot tokenize, so they are
 unavailable when typing an expression. They are excluded here rather than listed

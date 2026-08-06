@@ -107,4 +107,35 @@ export const EXTENDED_UNITS: Record<string, ExtendedUnitDef> = {
   ppb: { measure: "partsPer", toBase: 1e-9 },
   ppt: { measure: "partsPer", toBase: 1e-12 }, // parts per trillion (chemistry/environmental convention)
   permille: { measure: "partsPer", toBase: 1e-3 },
+  // ── Length, extending the base table rather than replacing it ─────────
+  //
+  // These share the `length` measure with the generated table, so they convert
+  // against metres and everything derived from them. Ratios are the exact
+  // international definitions, all of which are whole multiples of the inch
+  // (0.0254 m exactly) except the mil, which is a thousandth of one.
+  mil: { measure: "length", toBase: 0.0000254 },
+  mils: { measure: "length", toBase: 0.0000254 },
+  hand: { measure: "length", toBase: 0.1016 }, // 4 in
+  hands: { measure: "length", toBase: 0.1016 },
+  rod: { measure: "length", toBase: 5.0292 }, // 16.5 ft
+  rods: { measure: "length", toBase: 5.0292 },
+  chain: { measure: "length", toBase: 20.1168 }, // 66 ft, 4 rods
+  chains: { measure: "length", toBase: 20.1168 },
+  furlong: { measure: "length", toBase: 201.168 }, // 10 chains
+  furlongs: { measure: "length", toBase: 201.168 },
+  cable: { measure: "length", toBase: 185.2 }, // a tenth of a nautical mile
+  cables: { measure: "length", toBase: 185.2 },
+  league: { measure: "length", toBase: 4828.032 }, // 3 miles
+  leagues: { measure: "length", toBase: 4828.032 },
+
+  // ── Mass ──────────────────────────────────────────────────────────────
+  // The metric carat is exactly 200 mg by definition, not the older and
+  // variable gemstone carat, and not the karat that measures gold purity.
+  carat: { measure: "mass", toBase: 0.2 },
+  carats: { measure: "mass", toBase: 0.2 },
+  // The metric centner, 100 kg, as used across continental Europe. The
+  // Imperial hundredweight is a different quantity and is already `cwt`.
+  centner: { measure: "mass", toBase: 100000 },
+  centners: { measure: "mass", toBase: 100000 },
+
 };
