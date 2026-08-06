@@ -6,9 +6,17 @@
     "solve-playground-bridge": "0.0.0"
   },
   "changesets": [
+    "and-list-separator",
+    "compound-durations",
     "drop-tslib-bundle-semver",
+    "investments-and-percentages",
+    "is-what-and-bases",
+    "iso-4217-currencies",
     "normalizer-aware-highlighting",
     "republish-with-dist",
-    "tree-shaking-contract"
+    "rounding-and-number-words",
+    "tree-shaking-contract",
+    "word-operators-and-units",
+    "word-operators"
   ]
 }
