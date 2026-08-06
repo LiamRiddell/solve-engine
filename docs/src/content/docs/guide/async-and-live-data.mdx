@@ -1,47 +1,109 @@
 ---
 title: Async and live data
-description: How pending values work, and the obligation a host takes on.
+description: The pending lifecycle, and consuming it with async and await.
 ---
 
 import Explainer from "../../../components/Explainer.tsx";
 
 Some expressions cannot be answered immediately because they depend on data from
 the network. Currency conversion, weather and stock lookups are the built-in
-cases.
+cases. This page is about consuming them from TypeScript.
 
 ## Pending is a value
 
-Rather than blocking or returning a placeholder number, the engine returns a
-value whose type is pending. It carries the key of the query it is waiting on.
+Rather than blocking or returning a placeholder, the engine returns a value
+whose type is `Pending`. It carries the key of the query it is waiting on.
 
 ```ts
 import { ValueType } from "solve-engine/vm";
 
 const [value] = engine.evaluateExpression("10 USD to GBP");
 value.type === ValueType.Pending; // true, on the first evaluation
+value.value;                      // "currency:USD:GBP", the query key
 ```
 
-This is deliberate. Returning zero, or the last known value, would produce a
-confidently wrong answer, which is the failure mode the engine works hardest to
-avoid.
+Returning zero, or the last known rate, would be a confidently wrong answer,
+which is the failure mode the engine works hardest to avoid.
 
 <Explainer id="pending" client:load />
 
-## Re-evaluating when data arrives
+## Waiting for the answer
 
 The engine starts the fetch in the background and records that the line depends
-on it. When the data lands, the line needs to be evaluated again.
+on it. When the data lands it does not push the new value at you; it tells you
+which lines changed, and you re-evaluate them.
 
-Wiring that notification is the host's responsibility. If you do not connect it,
-pending values never resolve and nothing tells you why.
+`getEventStream()` is that notification, as a standard `ReadableStream`. Read it
+with `await`:
+
+```ts
+const engine = new ExpressionEngine("en");
+const reader = engine.getEventStream().getReader();
+
+// First evaluation: pending, no rate yet.
+let [value] = engine.evaluateExpression("10 USD to GBP");
+
+// Wait for the fetch to land, then evaluate the same line again.
+const { value: event } = await reader.read();
+if (event?.type === "lines-updated") {
+  [value] = engine.evaluateExpression("10 USD to GBP");
+  value.type;       // ValueType.Uom now, not Pending
+  value.toNumber(); // the converted amount
+}
+```
+
+A `lines-updated` event carries `lineNumbers` (which lines to re-evaluate) and
+`affectedQueryKeys` (what resolved). In a document you re-evaluate the lines it
+names rather than the whole thing.
+
+## Reacting continuously
+
+An editor does not read one event and stop. It keeps a loop, and each event is a
+signal to recompute the lines that changed and repaint them.
+
+```ts
+async function watch(engine: ExpressionEngine, onChange: (lines: number[]) => void) {
+  const reader = engine.getEventStream().getReader();
+  while (true) {
+    const { value: event, done } = await reader.read();
+    if (done) break;
+    if (event.type === "lines-updated") onChange(event.lineNumbers);
+  }
+}
+```
+
+Because the stream applies backpressure, a slow consumer cannot be flooded: the
+engine buffers up to a limit and waits rather than growing without bound.
+
+## When a fetch fails
+
+A failed lookup is its own event rather than a thrown error, so one dead request
+does not break the loop.
+
+```ts
+if (event.type === "error") {
+  console.warn(`${event.queryKey} failed:`, event.error.message);
+  // The line stays pending; decide whether to retry or show the failure.
+}
+```
+
+## Cleaning up
+
+A pending value keeps the background fetch, and the batcher behind it, reachable.
+Dropping your reference to the engine is not enough to release them. Call
+`clear()` when you are finished, or a long-lived process leaks the work of every
+document it has seen.
+
+```ts
+engine.clear();
+```
+
+In Node this is also what lets the process exit: an engine with live async work
+outstanding keeps the event loop alive until it is cleared.
 
 ## Supplying your own data source
 
-Any package can declare an async resolver. The helper handles caching,
-deduplication and cancellation, so a resolver is usually only the fetch itself.
-
-```ts
-import { createQueryResolver } from "solve-engine/resolvers";
-```
-
-See [writing packages](/packages/authoring-a-package/) for the full shape.
+The built-in resolvers are currency, weather and stocks. To make the engine
+resolve something else, currency rates from your own service, prices from your
+own API, you write an async resolver. See
+[writing an async data source](/guide/async-data-sources/).
