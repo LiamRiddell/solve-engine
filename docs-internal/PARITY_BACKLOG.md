@@ -9,8 +9,8 @@ build and fails in both directions: a regression in something that works, and
 also a gap that starts working without being promoted out of its list. If this
 file and that spec disagree, the spec is right.
 
-As of 2026-08-06: **79 of 122** documented examples produce the documented
-answer, 35 do not, 8 differ only in formatting.
+As of 2026-08-06: **85 of 122** documented examples produce the documented
+answer, 29 do not, 8 differ only in formatting.
 
 See `SOULVERCORE_FEATURE_AUDIT.md` for why the previous per-page audit was
 unreliable, and the same reason this file avoids per-page status claims.
@@ -29,10 +29,7 @@ entries in the spec's `GAPS` list.
 | Units | 5 | `5 hours 30 minutes to seconds`, `meters in 10 km`, `days in 3 weeks`, `seconds in a day`, `$30 * 4 days` | Reversed conversion (`<unit> in <quantity>`) is a new grammar. Compound quantities share the timespan lexer work. `$30 * 4 days` is a money-times-duration case the unit system currently rejects. |
 | Dates | 4 | `days in Q3`, `days in February 2020`, `week number on march 12, 2021`, `days between 3 March and 30 May` | Contained. Calendar queries over a named period. |
 | Clock | 3 | `16:00 + 3 hours 12 minutes`, `7:30 to 20:45`, `4pm to 3am` | Depends on the compound-duration literals above. |
-| Multipliers | 3 | `2 as multiplier of 1`, `50 as x of 5`, `20 to 40 as x` | Small. `as x` needs `x` accepted as a converter name, and the `of <base>` variant takes a second operand. |
 | Workdays | 2 | `day of the week on January 24, 1984`, `weekday on March 9, 2024` | Small, and worth noting: the audit marked these implemented. They never worked. |
-| Logs and roots | 2 | `root 5 of 100`, `log 20 base 4` | Small but not trivial: `log` is already a `FUNC`, so `log 20 base 4` cannot go through the ordinary call path. |
-| Operators | 1 | `remainder of 21 divided by 5` | Small. A phrase in front of the existing `divided by`. |
 | Inflation data | 2 | `what is $4.2k from 2003`, `what was $500 worth in 1997` | **Blocked on data, not code.** See below. |
 
 ## Currencies
@@ -43,8 +40,8 @@ examples need live rates).
 
 | Issue | Status |
 |---|---|
-| `$100 in UAH` silently returns the original amount, unconverted | Being fixed |
-| `CurrencyExchange.isCurrency()` is a hardcoded 46-code allowlist; ISO 4217 has ~180 active codes | Being fixed |
+| `$100 in UAH` silently returned the original amount, unconverted | Fixed |
+| `CurrencyExchange.isCurrency()` was a hardcoded 46-code allowlist | Fixed: answers from the ISO 4217 active set, whole set asserted |
 | An unrecognised target fails **silently** rather than erroring | Open, and the more important half |
 
 The silent failure is the real defect. A code the engine does not know should

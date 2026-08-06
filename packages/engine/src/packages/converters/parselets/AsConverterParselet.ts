@@ -16,6 +16,9 @@ const BUILTIN_CONVERTERS: Record<string, OpCode> = {
   hex: OpCode.TO_HEX,
   fraction: OpCode.TO_FRACTION,
   multiplier: OpCode.TO_MULTIPLIER,
+  // "20 to 40 as x". Only reachable in converter position, immediately after
+  // "as", so a variable named x is unaffected.
+  x: OpCode.TO_MULTIPLIER,
   sci: OpCode.TO_SCI,
   scientific: OpCode.TO_SCI,
   binary: OpCode.TO_BINARY,
@@ -131,6 +134,13 @@ export class AsConverterParselet implements InfixParselet {
 
     const builtinOp = BUILTIN_CONVERTERS[name];
     if (builtinOp !== undefined) {
+      // "50 as x of 5" and "2 as multiplier of 1": the multiple is relative to
+      // a base rather than to 1, so divide before converting. Only meaningful
+      // for the multiplier converters; "255 as hex of 5" is not a thing.
+      if (builtinOp === OpCode.TO_MULTIPLIER && parser.match("OF")) {
+        parser.parseExpression(BindingPower.Conditional, builder);
+        builder.emitOpcode(OpCode.DIV);
+      }
       builder.emitOpcode(builtinOp);
       return;
     }

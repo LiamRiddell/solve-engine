@@ -1,6 +1,8 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { VariadicAggregateParselet } from "./parselets/VariadicAggregateParselet";
 import { unaryPhraseParselet } from "./parselets/UnaryPhraseParselet";
+import { remainderOfParselet, nthRootParselet, logBaseParselet } from "./parselets/RemainderRootParselets";
+import { functionPhraseNormalizerRule } from "./normalizer/FunctionPhraseNormalizerRule";
 import { largerSmallerParselet } from "./parselets/LargerSmallerParselet";
 import { halfParselet } from "./parselets/HalfParselet";
 import { midpointParselet } from "./parselets/MidpointParselet";
@@ -69,6 +71,7 @@ export const MATHPHRASES_PACKAGE: IEnginePackage = {
     "random number": "RANDOM_NUMBER",
     "is to": "IS_TO",
     // Two-operand phrases reusing the gcd/lcm builtins.
+    "remainder of": "REMAINDER_OF",
     "gcd of": "GCD_OF",
     "lcm of": "LCM_OF",
     // sqrt/cbrt spelled the way they are said.
@@ -85,6 +88,9 @@ export const MATHPHRASES_PACKAGE: IEnginePackage = {
     { tokenType: "HALF_OF", parselet: halfParselet },
     { tokenType: "MIDPOINT_BETWEEN", parselet: midpointParselet },
     { tokenType: "RANDOM_NUMBER", parselet: randomNumberParselet },
+    { tokenType: "REMAINDER_OF", parselet: remainderOfParselet },
+    { tokenType: "NTH_ROOT", parselet: nthRootParselet },
+    { tokenType: "LOG_PHRASE", parselet: logBaseParselet },
     { tokenType: "GCD_OF", parselet: largerSmallerParselet(GCD) },
     { tokenType: "LCM_OF", parselet: largerSmallerParselet(LCM) },
     { tokenType: "SQUARE_ROOT_OF", parselet: unaryPhraseParselet(SQRT) },
@@ -93,5 +99,8 @@ export const MATHPHRASES_PACKAGE: IEnginePackage = {
   ],
   infixParselets: [
     { tokenType: "IS_TO", parselet: new ProportionParselet() },
+  ],
+  normalizerRules: [
+    functionPhraseNormalizerRule(),
   ],
 };

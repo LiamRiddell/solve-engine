@@ -5,8 +5,8 @@
  * This exists because `docs-internal/SOULVERCORE_FEATURE_AUDIT.md` was written
  * by reading the code and asking "do we have something in this area", and the
  * answer to that question is not the same as "does the documented syntax work".
- * It marked 39 of 40 pages implemented. Measured, 79 of the 122 documented
- * examples below produce the documented answer, 35 do not, and 8 differ only
+ * It marked 39 of 40 pages implemented. Measured, 85 of the 122 documented
+ * examples below produce the documented answer, 29 do not, and 8 differ only
  * in formatting. It credited `as timespan` and
  * `as laptime` to `packages/time`, where the only occurrence of the word
  * "timespan" is a doc comment. It credited the rounding page to `as decimal`
@@ -136,6 +136,14 @@ const SUPPORTED: readonly Example[] = [
 	["bases", "0x9F31 to decimal", "40753"],
 	["bases", "0b101101 as base 8", "0o55"],
 
+	// Remainder, nth roots, base logs and base-relative multipliers (2026-08-06).
+	["multipliers", "2 as multiplier of 1", "2x"],
+	["operators", "remainder of 21 divided by 5", "1"],
+	["multipliers", "50 as x of 5", "10x"],
+	["multipliers", "20 to 40 as x", "2x"],
+	["logs-roots", "root 5 of 100", "2.5118864315"],
+	["logs-roots", "log 20 base 4", "2.1609640474"],
+
 	// Operations spelled out in words (2026-08-06).
 	["operators", "3 multiplied by 4", "12"],
 	["operators", "1,000 divided by 200", "5"],
@@ -168,7 +176,6 @@ const SUPPORTED: readonly Example[] = [
 const GAPS: readonly Example[] = [
 	// -- Answers confidently, incorrectly. The worst category: a wrong number
 	// -- with no error is not recoverable by the person reading it.
-	["multipliers", "2 as multiplier of 1", "2x"], // gives 3
 	// "value of $X in <future year> assuming N% inflation" is deliberately not
 	// listed: it discounts from the CURRENT year, so the figure Soulver's page
 	// quotes ($411.35, written when "now" was 2024) is not reproducible from a
@@ -180,11 +187,6 @@ const GAPS: readonly Example[] = [
 
 	// -- Not implemented. Parses to an error rather than a wrong number, which
 	// -- at least tells the truth.
-	["operators", "remainder of 21 divided by 5", "1"],
-	["multipliers", "50 as x of 5", "10x"],
-	["multipliers", "20 to 40 as x", "2x"],
-	["logs-roots", "root 5 of 100", "2.5118864315"],
-	["logs-roots", "log 20 base 4", "2.1609640474"],
 	["units", "5 hours 30 minutes to seconds", "19800"],
 	["units", "meters in 10 km", "10000 m"],
 	["units", "days in 3 weeks", "21 days"],
@@ -334,8 +336,8 @@ describe("Soulver parity — documented examples that do not", () => {
 		// quotes this number. A change here without a change there leaves the
 		// audit stating a total it did not measure, which is how the previous
 		// version of that document ended up fictional.
-		expect(GAPS.length).toBe(35);
-		expect(SUPPORTED.length).toBe(79);
+		expect(GAPS.length).toBe(29);
+		expect(SUPPORTED.length).toBe(85);
 	});
 });
 
