@@ -320,6 +320,45 @@ function invokeFrameBody(
     return bodyResult.value;
 }
 
+/**
+ * `X + 10%` and `X - 10%`, where the percentage is relative to X.
+ *
+ * A percentage on its own means nothing; it is a proportion *of* something.
+ * Which of the two readings applies depends on what it is being combined with,
+ * so the decision is made here where both operands are known, the same way
+ * Datetime and Rate are handled in these opcodes:
+ *
+ *   200 + 10%     220        a percentage of a quantity is relative to it
+ *   $300 + 15%    $345.00    and that includes money and other units
+ *   10% + 20%     30%        two percentages are just proportions, they add
+ *   30% + 0.4     70%        as does a percentage and a bare fraction
+ *   100% + 2      300%       which is why this is 300% and not 3
+ *
+ * Returns `null` when neither operand is a Percentage, leaving the caller's
+ * existing paths untouched.
+ *
+ * @param sign - `1` for addition, `-1` for subtraction.
+ */
+function combinePercentage(l: Value, r: Value, sign: 1 | -1): Value | null {
+    if (l.type === ValueType.Percentage) {
+        // A percentage on the left keeps the result a percentage, whatever is
+        // on the right, because the thing being described is still a
+        // proportion. Only Number/Percentage make sense here; anything else
+        // (a date, a matrix) falls through to the ordinary error path.
+        if (r.type !== ValueType.Percentage && r.type !== ValueType.Number) return null;
+        return percentageValue(l.toNumber() + sign * r.toNumber());
+    }
+    if (r.type !== ValueType.Percentage) return null;
+
+    // A percentage on the right of something concrete scales it. Uom covers
+    // money and every other unit, and the unit has to survive: "$300 + 15%"
+    // is $345.00, not a bare 345.
+    const factor = 1 + sign * r.toNumber();
+    if (l.type === ValueType.Number) return numberValue(l.toNumber() * factor);
+    if (l.type === ValueType.Uom) return uomValue(l.toNumber() * factor, l.unit);
+    return null;
+}
+
 /** Extract milliseconds from a duration Value (UoM time unit or plain number).
  *  Used by ADD/SUB datetime fast paths and DATE_ADD/DATE_SUB opcodes. */
 function extractDurationMs(value: Value): number {
@@ -683,7 +722,10 @@ export function executeBytecode(
         // ═══════════════════════════════════════════════════════════════
         case OpCode.ADD: {
           const r = safePop(stack), l = safePop(stack);
-          if (l.type === ValueType.Number && r.type === ValueType.Number) {
+          const pctAdd = combinePercentage(l, r, 1);
+          if (pctAdd !== null) {
+            stack.push(pctAdd);
+          } else if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(numberValue((l.value as number) + (r.value as number)));
           } else if (l.type === ValueType.Boolean && r.type === ValueType.Boolean) {
             // The word "and" is a synonym for arithmetic "+" ("5 and 3" = 8)
@@ -721,7 +763,10 @@ export function executeBytecode(
         }
         case OpCode.SUB: {
           const r = safePop(stack), l = safePop(stack);
-          if (l.type === ValueType.Number && r.type === ValueType.Number) {
+          const pctSub = combinePercentage(l, r, -1);
+          if (pctSub !== null) {
+            stack.push(pctSub);
+          } else if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(numberValue((l.value as number) - (r.value as number)));
           } else if (l.type === ValueType.Datetime) {
             if (r.type === ValueType.Datetime) {

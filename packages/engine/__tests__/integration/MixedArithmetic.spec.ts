@@ -485,8 +485,10 @@ describe("Mixed arithmetic: percentage with number and UOM", () => {
     expect(evalNum("50% + 10%")).toBeCloseTo(0.6);
   });
 
-  test("100 + 20%", () => {
-    expect(evalNum("100 + 20%")).toBe(100.2);
+  test("100 + 20% is a 20% increase", () => {
+    // Changed 2026-08-06: a percentage combined with a quantity is relative
+    // to it. See PercentParselet.ts and the VM's combinePercentage().
+    expect(evalNum("100 + 20%")).toBe(120);
   });
 
   test("10% of 50 kg + 20", () => {

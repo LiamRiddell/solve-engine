@@ -37,9 +37,13 @@ describe("Issue #79: Percentage Operator Precedence", () => {
     expect(result).toBeCloseTo(1.02, 5);
   });
 
-  test("100 - 10% should equal 99.9", () => {
+  // Changed 2026-08-06: a percentage subtracted from a quantity is relative
+  // to it, so this is a 10% discount rather than a subtraction of 0.1. See
+  // PercentParselet.ts. Issue #79 was about operator precedence, and the
+  // precedence this file exists to pin is unchanged.
+  test("100 - 10% is a 10% discount", () => {
     const result = engine.evaluateNumber("100 - 10%");
-    expect(result).toBeCloseTo(99.9, 5);
+    expect(result).toBeCloseTo(90, 5);
   });
 
   test("5 * 10% should equal 0.5", () => {

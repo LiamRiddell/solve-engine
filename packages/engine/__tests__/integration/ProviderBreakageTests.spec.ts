@@ -106,7 +106,10 @@ describe("Provider Breakage Tests - Comprehensive Provider Validation", () => {
       expect(result.lines[0].inlineSolves[0].result).toBeDefined();
       
       const value = result.lines[0].inlineSolves[0].result!;
-      expect(value.type).toBe(ValueType.Number);
+      // Two percentages add as proportions and the result is still a
+      // proportion, so the type is Percentage now rather than Number. The
+      // number is unchanged: 0.5 + 0.1 = 0.6, rendered "60%".
+      expect(value.type).toBe(ValueType.Percentage);
       expect(value.toNumber()).toBeCloseTo(0.6, 5);
     });
   });

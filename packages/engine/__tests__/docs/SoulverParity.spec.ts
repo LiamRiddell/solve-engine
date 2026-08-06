@@ -5,8 +5,8 @@
  * This exists because `docs-internal/SOULVERCORE_FEATURE_AUDIT.md` was written
  * by reading the code and asking "do we have something in this area", and the
  * answer to that question is not the same as "does the documented syntax work".
- * It marked 39 of 40 pages implemented. Measured, 38 of the 123 documented
- * examples below produce the documented answer, 81 do not, and 4 differ only
+ * It marked 39 of 40 pages implemented. Measured, 42 of the 123 documented
+ * examples below produce the documented answer, 77 do not, and 4 differ only
  * in formatting. It credited `as timespan` and
  * `as laptime` to `packages/time`, where the only occurrence of the word
  * "timespan" is a doc comment. It credited the rounding page to `as decimal`
@@ -77,6 +77,11 @@ const SUPPORTED: readonly Example[] = [
 	["misc", "clamp 26 between 5 and 25", "25"],
 
 	["percentages", "10% of 200", "20"],
+	// A percentage combined with a quantity is relative to it (2026-08-06).
+	["percentages", "200 + 10%", "220"],
+	["percentages", "200 - 10%", "180"],
+	["percentages", "10% + 20%", "30%"],
+	["percentages", "30% + 0.4", "70%"],
 	["fractions", "2/10 as fraction", "1/5"],
 	["fractions", "50% as fraction", "1/2"],
 	["fractions", "2/3 of 600", "400"],
@@ -117,10 +122,6 @@ const SUPPORTED: readonly Example[] = [
 const GAPS: readonly Example[] = [
 	// -- Answers confidently, incorrectly. The worst category: a wrong number
 	// -- with no error is not recoverable by the person reading it.
-	["percentages", "200 + 10%", "220"], // gives 200.10; `%` yields a plain 0.1 rather than a Percentage
-	["percentages", "200 - 10%", "180"], // gives 199.90, same cause
-	["percentages", "10% + 20%", "30%"], // gives 0.30
-	["percentages", "30% + 0.4", "70%"], // gives 0.70
 	["multipliers", "20/5 as multiplier", "4x"], // gives 5x
 	["multipliers", "2 as multiplier of 1", "2x"], // gives 3
 	["trig", "sin(90 degrees)", "1"], // gives 0.89: the unit is ignored and 90 read as radians
@@ -318,8 +319,8 @@ describe("Soulver parity — documented examples that do not", () => {
 		// quotes this number. A change here without a change there leaves the
 		// audit stating a total it did not measure, which is how the previous
 		// version of that document ended up fictional.
-		expect(GAPS.length).toBe(81);
-		expect(SUPPORTED.length).toBe(38);
+		expect(GAPS.length).toBe(77);
+		expect(SUPPORTED.length).toBe(42);
 	});
 });
 
