@@ -182,6 +182,10 @@ export const TokenTypes = {
   SMALLER_OF: "SMALLER_OF",
   HALF_OF: "HALF_OF",
   MIDPOINT_BETWEEN: "MIDPOINT_BETWEEN",
+  GCD_OF: "GCD_OF",
+  LCM_OF: "LCM_OF",
+  SQUARE_ROOT_OF: "SQUARE_ROOT_OF",
+  CUBE_ROOT_OF: "CUBE_ROOT_OF",
   RANDOM_NUMBER: "RANDOM_NUMBER",
   IS_TO: "IS_TO",
   // CLAMP stays a bare single-word keyword: "clamp X between Y and Z" has

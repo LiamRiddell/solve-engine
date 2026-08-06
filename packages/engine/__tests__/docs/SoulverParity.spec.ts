@@ -5,8 +5,8 @@
  * This exists because `docs-internal/SOULVERCORE_FEATURE_AUDIT.md` was written
  * by reading the code and asking "do we have something in this area", and the
  * answer to that question is not the same as "does the documented syntax work".
- * It marked 39 of 40 pages implemented. Measured, 57 of the 122 documented
- * examples below produce the documented answer, 57 do not, and 8 differ only
+ * It marked 39 of 40 pages implemented. Measured, 65 of the 122 documented
+ * examples below produce the documented answer, 49 do not, and 8 differ only
  * in formatting. It credited `as timespan` and
  * `as laptime` to `packages/time`, where the only occurrence of the word
  * "timespan" is a doc comment. It credited the rounding page to `as decimal`
@@ -119,6 +119,16 @@ const SUPPORTED: readonly Example[] = [
 	["sales-tax", "tax on $300 at 15%", "45"],
 	["trig", "sin(90 degrees)", "1"],
 
+	// Operations spelled out in words (2026-08-06).
+	["operators", "3 multiplied by 4", "12"],
+	["operators", "1,000 divided by 200", "5"],
+	["misc", "greater of 100 and 200", "200"],
+	["misc", "lesser of 5 and 10", "5"],
+	["misc", "gcd of 20 and 30", "10"],
+	["misc", "lcm of 5 and 8", "40"],
+	["logs-roots", "square root of 81", "9"],
+	["logs-roots", "cube root of 27", "3"],
+
 	// The rounding page (2026-08-06).
 	["rounding", "1/3 to 2 dp", "0.33"],
 	["rounding", "5.5 rounded", "6"],
@@ -154,13 +164,7 @@ const GAPS: readonly Example[] = [
 
 	// -- Not implemented. Parses to an error rather than a wrong number, which
 	// -- at least tells the truth.
-	["operators", "3 multiplied by 4", "12"],
-	["operators", "1,000 divided by 200", "5"],
 	["operators", "remainder of 21 divided by 5", "1"],
-	["misc", "greater of 100 and 200", "200"],
-	["misc", "lesser of 5 and 10", "5"],
-	["misc", "gcd of 20 and 30", "10"],
-	["misc", "lcm of 5 and 8", "40"],
 	["percentages", "10% on 200", "220"],
 	["percentages", "10% off 200", "180"],
 	["percentages", "20 is 10% of what", "200"],
@@ -170,8 +174,6 @@ const GAPS: readonly Example[] = [
 	["fractions", "50 is 1/5 of what", "250"],
 	["multipliers", "50 as x of 5", "10x"],
 	["multipliers", "20 to 40 as x", "2x"],
-	["logs-roots", "square root of 81", "9"],
-	["logs-roots", "cube root of 27", "3"],
 	["logs-roots", "root 5 of 100", "2.5118864315"],
 	["logs-roots", "log 20 base 4", "2.1609640474"],
 	["logs-roots", "81 is 9 to what power", "2"],
@@ -329,8 +331,8 @@ describe("Soulver parity — documented examples that do not", () => {
 		// quotes this number. A change here without a change there leaves the
 		// audit stating a total it did not measure, which is how the previous
 		// version of that document ended up fictional.
-		expect(GAPS.length).toBe(57);
-		expect(SUPPORTED.length).toBe(57);
+		expect(GAPS.length).toBe(49);
+		expect(SUPPORTED.length).toBe(65);
 	});
 });
 

@@ -6,10 +6,10 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 
 /**
- * `larger of X and Y` / `smaller of X and Y`. Reuses the existing
- * `min`/`max` CALL_BUILTIN indices (9/10, see VMBuiltins.ts) rather than
- * duplicating their logic. This is purely a phrase-grammar front end for
- * functionality that already exists.
+ * `<phrase> of X and Y`, a two-operand phrase front end for a builtin that
+ * already exists. Backs `larger of`/`greater of` and `smaller of`/`lesser of`
+ * (min/max, indices 9/10) and `gcd of`/`lcm of` (indices 38/39), reusing those
+ * implementations rather than duplicating them.
  *
  * Triggered on a fused `LARGER_OF`/`SMALLER_OF` token (see
  * MathPhrasesPackage.ts's `phrases` field). NOT built on
@@ -18,17 +18,15 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
  * mismatch as `ClampParselet`/`IfThenElseParselet` (see their doc
  * comments), so this is hand-written too.
  *
- * "and" lexes as `PLUS` (a pre-existing arithmetic word-synonym), not a
- * literal "AND" token. See ConditionalsPackage.ts's doc comment. Parsing
- * X at `BindingPower.Product` guards against X's own parse greedily
- * consuming "and Y" as PLUS addition before this parselet's own "and"
- * check runs.
+ * X is parsed at `BindingPower.Conjunction` so it stops at "and" without also
+ * stopping at "+", which is what lets "larger of 1 + 1 and 3" be written. See
+ * Token.ts's AND_CONJ comment.
  */
 export function largerSmallerParselet(builtinIndex: number): PrefixParselet {
   return {
     category: "MathPhrases",
     parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
-      parser.parseExpression(BindingPower.Product, builder); // X
+      parser.parseExpression(BindingPower.Conjunction, builder); // X
       parser.consume("AND_CONJ"); // "and"
       parser.parseExpression(BindingPower.Lowest, builder); // Y
       builder.emitOpcode(OpCode.CALL_BUILTIN);
