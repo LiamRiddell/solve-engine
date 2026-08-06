@@ -221,5 +221,6 @@
     "tsup": "8.5.1",
     "typescript": "5.9.3"
   },
+  "//sideEffects": "Load-bearing claim, not boilerplate. tsup's splitting emits bare chunk imports at the top of dist/index.js, and this field tells Rollup, webpack and Vite they may delete them, which esbuild reports as [ignored-bare-import] once per import during `npm run size`. The engine does have module-level work to lose: registerAllTokenTypes(), _PrecedenceParser.BP_TABLE and its cached token ids, and several process-wide registries. It is safe because every chunk doing that work is also imported for its bindings somewhere, so no bundler can drop it. That is a property of how tsup currently splits the code rather than a design guarantee, so `npm run smoke:bundled` (scripts/check-tree-shaking.mjs) proves it on every run of `npm run verify` instead of assuming it, and its header explains the two fixes if it ever stops holding.",
   "sideEffects": false
 }
