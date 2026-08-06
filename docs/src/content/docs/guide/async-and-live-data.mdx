@@ -37,6 +37,8 @@ which lines changed, and you re-evaluate them.
 with `await`:
 
 ```ts
+import { ExpressionEngine } from "solve-engine";
+
 const engine = new ExpressionEngine("en");
 const reader = engine.getEventStream().getReader();
 

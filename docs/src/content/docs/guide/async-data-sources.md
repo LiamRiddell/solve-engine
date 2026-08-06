@@ -20,7 +20,7 @@ A resolver implements
 
 ```ts
 import type { IAsyncResolver, AsyncCheckResult } from "solve-engine/resolvers";
-import { uomValue } from "solve-engine/vm";
+import { uomValue, type Value } from "solve-engine/vm";
 
 class RatesResolver implements IAsyncResolver {
   readonly namespace = "myrates";
