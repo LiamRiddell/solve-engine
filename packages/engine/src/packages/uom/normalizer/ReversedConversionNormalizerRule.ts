@@ -3,6 +3,15 @@ import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/Norma
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 
+/** Whether a token is a unit spelling the engine knows. */
+function isUnit(token: Token | undefined): boolean {
+	if (token === undefined || token.type !== "UNIT") return false;
+	return UNIT_TABLE[(token.value ?? "").toLowerCase()] !== undefined;
+}
+
+/** Articles that stand in for "one" in front of a unit. */
+const ARTICLES = new Set(["a", "an"]);
+
 /**
  * Conversions asked the other way round: `meters in 10 km`, `days in 3 weeks`,
  * `seconds in a day`.
@@ -24,16 +33,6 @@ import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
  *   asked.
  * - `10 km in m` is untouched, since it does not start with a bare unit.
  */
-
-/** Whether a token is a unit spelling the engine knows. */
-function isUnit(token: Token | undefined): boolean {
-	if (token === undefined || token.type !== "UNIT") return false;
-	return UNIT_TABLE[(token.value ?? "").toLowerCase()] !== undefined;
-}
-
-/** Articles that stand in for "one" in front of a unit. */
-const ARTICLES = new Set(["a", "an"]);
-
 export function reversedConversionNormalizerRule(priority = 61): NormalizerRule {
 	return {
 		name: "uom:reversed-conversion",

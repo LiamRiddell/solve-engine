@@ -3,34 +3,6 @@ import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/Norma
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 
-/**
- * Quantities written as several units at once: `3 hours 5 minutes 10 seconds`,
- * `5 hours 30 minutes`, `3h 5m 10s`.
- *
- * This is how durations are actually written, and none of it parsed. The two
- * parts sat next to each other as separate quantities and the parser reported
- * an unexpected number, which is why `5 hours 30 minutes to seconds`,
- * `16:00 + 3 hours 12 minutes` and the timespan examples all failed at the
- * same place for the same reason.
- *
- * The parts are summed into the smallest unit present, so
- * `3 hours 5 minutes 10 seconds` becomes 11,110 seconds and behaves as one
- * quantity everywhere afterwards: convertible, addable to a clock time, and
- * comparable. The engine renders that total rather than restating the parts,
- * which differs from Soulver's output but not from its arithmetic.
- *
- * Deliberately narrow, because a sequence of number-unit pairs is a shape that
- * ordinary arithmetic also produces:
- *
- * - Every part must belong to the same measure. `3 hours 5 metres` is not a
- *   quantity and is left alone.
- * - The units must strictly decrease. `5 minutes 3 hours` is not how anyone
- *   writes a duration, and treating it as one would silently reinterpret a
- *   multiplication.
- * - Every part after the first must be a bare positive integer with no sign,
- *   so `3 hours -5 minutes` stays a subtraction.
- */
-
 /** The time measure's kind in UNIT_TABLE. Its base unit is the second. */
 const TIME_KIND = 14;
 
@@ -62,6 +34,33 @@ function unitEntry(
 /** A bare unsigned integer or decimal, never hex or scientific. */
 const PLAIN_NUMBER = /^\d+(\.\d+)?$/;
 
+/**
+ * Quantities written as several units at once: `3 hours 5 minutes 10 seconds`,
+ * `5 hours 30 minutes`, `3h 5m 10s`.
+ *
+ * This is how durations are actually written, and none of it parsed. The two
+ * parts sat next to each other as separate quantities and the parser reported
+ * an unexpected number, which is why `5 hours 30 minutes to seconds`,
+ * `16:00 + 3 hours 12 minutes` and the timespan examples all failed at the
+ * same place for the same reason.
+ *
+ * The parts are summed into the smallest unit present, so
+ * `3 hours 5 minutes 10 seconds` becomes 11,110 seconds and behaves as one
+ * quantity everywhere afterwards: convertible, addable to a clock time, and
+ * comparable. The engine renders that total rather than restating the parts,
+ * which differs from Soulver's output but not from its arithmetic.
+ *
+ * Deliberately narrow, because a sequence of number-unit pairs is a shape that
+ * ordinary arithmetic also produces:
+ *
+ * - Every part must belong to the same measure. `3 hours 5 metres` is not a
+ *   quantity and is left alone.
+ * - The units must strictly decrease. `5 minutes 3 hours` is not how anyone
+ *   writes a duration, and treating it as one would silently reinterpret a
+ *   multiplication.
+ * - Every part after the first must be a bare positive integer with no sign,
+ *   so `3 hours -5 minutes` stays a subtraction.
+ */
 export function compoundQuantityNormalizerRule(priority = 63): NormalizerRule {
 	return {
 		name: "uom:compound-quantity",

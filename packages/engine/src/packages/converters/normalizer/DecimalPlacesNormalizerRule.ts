@@ -1,6 +1,11 @@
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 
+const PLACE_WORDS = new Set(["dp", "dps", "decimals", "digits", "digit"]);
+
+/** Two-word spellings whose first word alone means nothing here. */
+const PLACE_PHRASES = new Set(["decimal"]);
+
 /**
  * Fuses `to <n> dp` into one token carrying the place count.
  *
@@ -19,11 +24,6 @@ import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
  * "digits" is included because Soulver documents `π to 5 digits` as 3.14159,
  * which is five decimal places rather than five significant figures.
  */
-const PLACE_WORDS = new Set(["dp", "dps", "decimals", "digits", "digit"]);
-
-/** Two-word spellings whose first word alone means nothing here. */
-const PLACE_PHRASES = new Set(["decimal"]);
-
 export function decimalPlacesNormalizerRule(priority = 66): NormalizerRule {
 	return {
 		name: "converters:decimal-places",
