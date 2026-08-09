@@ -2,29 +2,6 @@ import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { buildDateToken } from "./DateLiteralNormalizerRule";
 
-/**
- * Dates written with the month as a word: `March 9, 2024`, `3 March`,
- * `January 24, 1984`.
- *
- * `DateLiteralNormalizerRule` covers the all-numeric orderings and nothing
- * else, so every documented expression built on a spelled-out month failed,
- * and several failed in a way that looked unrelated to dates:
- *
- *   weekday on March 9, 2024        Unexpected token after expression: "9"
- *   days between 3 March and 30 May Expected AND_CONJ but got STAR
- *
- * The second is the interesting one. With no month-name rule, `3 March` fell
- * through to implicit multiplication, so the parser was genuinely looking at
- * `3 * March` and reporting exactly that. The parselets those expressions
- * needed were all present and working: `weekday on 2024-03-09` answered
- * Saturday the whole time. Only the literal was missing.
- *
- * A year of its own (`February 2020`) resolves to the first of that month, so
- * a caller asking about the month as a period has a date inside it to work
- * from. Ambiguity is resolved by width: a number after a month name is a year
- * when it has four digits, otherwise a day.
- */
-
 /** Month names and the common abbreviations, to their 1-based number. */
 const MONTHS: Record<string, number> = {
 	january: 1, jan: 1,
@@ -64,6 +41,28 @@ function looksLikeYear(digits: string): boolean {
 	return digits.length === 4;
 }
 
+/**
+ * Dates written with the month as a word: `March 9, 2024`, `3 March`,
+ * `January 24, 1984`.
+ *
+ * `DateLiteralNormalizerRule` covers the all-numeric orderings and nothing
+ * else, so every documented expression built on a spelled-out month failed,
+ * and several failed in a way that looked unrelated to dates:
+ *
+ *   weekday on March 9, 2024        Unexpected token after expression: "9"
+ *   days between 3 March and 30 May Expected AND_CONJ but got STAR
+ *
+ * The second is the interesting one. With no month-name rule, `3 March` fell
+ * through to implicit multiplication, so the parser was genuinely looking at
+ * `3 * March` and reporting exactly that. The parselets those expressions
+ * needed were all present and working: `weekday on 2024-03-09` answered
+ * Saturday the whole time. Only the literal was missing.
+ *
+ * A year of its own (`February 2020`) resolves to the first of that month, so
+ * a caller asking about the month as a period has a date inside it to work
+ * from. Ambiguity is resolved by width: a number after a month name is a year
+ * when it has four digits, otherwise a day.
+ */
 export function monthNameDateNormalizerRule(priority = 64): NormalizerRule {
 	return {
 		name: "datetime:month-name-date",

@@ -3,6 +3,11 @@ import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/Norma
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 
+function isUnit(token: Token | undefined): boolean {
+	if (token === undefined || token.type !== "UNIT") return false;
+	return UNIT_TABLE[(token.value ?? "").toLowerCase()] !== undefined;
+}
+
 /**
  * Recognises `in <unit> and <unit>`, the two-unit conversion.
  *
@@ -12,11 +17,6 @@ import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
  *
  * Both names must be real units, so `in minutes and pay me` is left alone.
  */
-function isUnit(token: Token | undefined): boolean {
-	if (token === undefined || token.type !== "UNIT") return false;
-	return UNIT_TABLE[(token.value ?? "").toLowerCase()] !== undefined;
-}
-
 export function twoUnitConversionNormalizerRule(priority = 59): NormalizerRule {
 	return {
 		name: "uom:two-unit-conversion",

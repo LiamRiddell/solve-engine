@@ -3,25 +3,6 @@ import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/Norma
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 
-/**
- * Retypes `at` to `AT_RATE`, but only when a rate actually follows.
- *
- *   30 hours at $30/hour   ->  AT_RATE
- *   $500 at $20/hour       ->  AT_RATE
- *   over 6 years at 6%     ->  left alone
- *
- * The lookahead is the entire point. Registering an ordinary infix parselet on
- * `at` was tried and broke every mortgage and investment expression: the
- * finance grammar parses its own rate with the same word, and the infix took
- * the token before those parselets could consume it, so
- * `$1,000 after 3 years at 7%` failed with "Unexpected end of input".
- *
- * Looking for a denominator ahead separates them cleanly, because a finance
- * rate is a bare percentage and never has one. The scan is deliberately short
- * and stops at anything that ends a clause, so a `/` much later in the line
- * cannot drag an unrelated `at` into this.
- */
-
 /** Whether a token is a unit spelling the engine knows. */
 function isUnit(token: Token | undefined): boolean {
 	if (token === undefined || token.type !== "UNIT") return false;
@@ -50,6 +31,24 @@ function hasRateAhead(tokens: readonly Token[], from: number): boolean {
 	return false;
 }
 
+/**
+ * Retypes `at` to `AT_RATE`, but only when a rate actually follows.
+ *
+ *   30 hours at $30/hour   ->  AT_RATE
+ *   $500 at $20/hour       ->  AT_RATE
+ *   over 6 years at 6%     ->  left alone
+ *
+ * The lookahead is the entire point. Registering an ordinary infix parselet on
+ * `at` was tried and broke every mortgage and investment expression: the
+ * finance grammar parses its own rate with the same word, and the infix took
+ * the token before those parselets could consume it, so
+ * `$1,000 after 3 years at 7%` failed with "Unexpected end of input".
+ *
+ * Looking for a denominator ahead separates them cleanly, because a finance
+ * rate is a bare percentage and never has one. The scan is deliberately short
+ * and stops at anything that ends a clause, so a `/` much later in the line
+ * cannot drag an unrelated `at` into this.
+ */
 export function atRateNormalizerRule(priority = 73): NormalizerRule {
 	return {
 		name: "uom:at-rate",
