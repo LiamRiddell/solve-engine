@@ -19,6 +19,8 @@ import { videoTimecodeNormalizerRule } from "./normalizer/VideoTimecodeNormalize
 import { frameCountNormalizerRule } from "./normalizer/FrameCountNormalizerRule";
 import { MULTI_WORD_CITY_ZONES } from "./timezones/CityZones";
 
+import { toTimespanString, toLaptimeString } from "./TimespanConverters";
+
 /**
  * Clock-time-of-day arithmetic: `9:00am`, `16:00`, `4pm` (anchored to
  * today's calendar date), `7:30 to 20:45` / `4pm to 3am` interval
@@ -61,8 +63,6 @@ import { MULTI_WORD_CITY_ZONES } from "./timezones/CityZones";
  * session found real trouble with (see MathPhrasesPackage.ts's "total"
  * regression note). `time in <city>` covers the same need unambiguously.
  */
-import { toTimespanString, toLaptimeString } from "./TimespanConverters";
-
 export const TIME_PACKAGE: IEnginePackage = {
   name: "solve-time",
   asConverters: {

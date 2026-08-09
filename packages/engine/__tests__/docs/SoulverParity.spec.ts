@@ -5,8 +5,8 @@
  * This exists because `docs-internal/SOULVERCORE_FEATURE_AUDIT.md` was written
  * by reading the code and asking "do we have something in this area", and the
  * answer to that question is not the same as "does the documented syntax work".
- * It marked 39 of 40 pages implemented. Measured, 104 of the 122 documented
- * examples below produce the documented answer, 2 do not, and 16 differ only
+ * It marked 39 of 40 pages implemented. Measured, 104 of the 120 documented
+ * examples below produce the documented answer, none do not, and 16 differ only
  * in formatting. It credited `as timespan` and
  * `as laptime` to `packages/time`, where the only occurrence of the word
  * "timespan" is a doc comment. It credited the rounding page to `as decimal`
@@ -207,14 +207,19 @@ const SUPPORTED: readonly Example[] = [
 const GAPS: readonly Example[] = [
 	// -- Answers confidently, incorrectly. The worst category: a wrong number
 	// -- with no error is not recoverable by the person reading it.
+	// The two "what is $X from <year>" rows are gone for the same reason as the
+	// projection below: they adjust to the CURRENT year, and Soulver's figures
+	// were computed when its documentation was written, which the implied rates
+	// put several years before 2026. No table accuracy makes a fixed string
+	// reproducible. CpiTableAccuracy.spec.ts checks the table against the IMF
+	// series instead, which is the thing that can actually be wrong.
+	//
 	// "value of $X in <future year> assuming N% inflation" is deliberately not
 	// listed: it discounts from the CURRENT year, so the figure Soulver's page
 	// quotes ($411.35, written when "now" was 2024) is not reproducible from a
 	// fixed string. The direction was wrong (it compounded up) and is fixed;
 	// InflationParselets.spec.ts asserts the relationship against the real
 	// current year, which is the only stable way to state it.
-	["inflation", "what is $4.2k from 2003", "6795.58"], // gives 7473.26: CPI table disagrees
-	["inflation", "what was $500 worth in 1997", "269.56"], // gives 245.11
 
 	// -- Not implemented. Parses to an error rather than a wrong number, which
 	// -- at least tells the truth.
@@ -358,7 +363,7 @@ describe("Soulver parity — documented examples that do not", () => {
 		// quotes this number. A change here without a change there leaves the
 		// audit stating a total it did not measure, which is how the previous
 		// version of that document ended up fictional.
-		expect(GAPS.length).toBe(2);
+		expect(GAPS.length).toBe(0);
 		expect(SUPPORTED.length).toBe(104);
 	});
 });

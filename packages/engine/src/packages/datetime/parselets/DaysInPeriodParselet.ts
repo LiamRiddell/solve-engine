@@ -5,27 +5,6 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
-/**
- * `days in <period>`: how long a named stretch of the calendar is.
- *
- *   days in February 2020   29 days
- *   days in Q3              92 days
- *   days in 2024            366 days
- *
- * Distinct from the unit conversion that looks identical. `days in 3 weeks`
- * converts a quantity and is handled by `ReversedConversionNormalizerRule`;
- * this asks how many days a real calendar period contains, which depends on
- * which period it is. February is 28 days or 29, and no conversion factor
- * expresses that.
- *
- * That is also why the reversed-conversion rule deliberately declines a date:
- * rewriting `days in February 2020` to `February 2020 in days` would answer a
- * different question with a plausible-looking number.
- *
- * The count is computed at parse time, because the period is written out
- * literally and there is nothing to defer.
- */
-
 /** VMBuiltins.ts index for labelling a count as days. */
 const DAYS_COUNT_BUILTIN = 93;
 
@@ -47,6 +26,26 @@ function daysInYear(year: number): number {
 	return daysInMonth(year, 2) === 29 ? 366 : 365;
 }
 
+/**
+ * `days in <period>`: how long a named stretch of the calendar is.
+ *
+ *   days in February 2020   29 days
+ *   days in Q3              92 days
+ *   days in 2024            366 days
+ *
+ * Distinct from the unit conversion that looks identical. `days in 3 weeks`
+ * converts a quantity and is handled by `ReversedConversionNormalizerRule`;
+ * this asks how many days a real calendar period contains, which depends on
+ * which period it is. February is 28 days or 29, and no conversion factor
+ * expresses that.
+ *
+ * That is also why the reversed-conversion rule deliberately declines a date:
+ * rewriting `days in February 2020` to `February 2020 in days` would answer a
+ * different question with a plausible-looking number.
+ *
+ * The count is computed at parse time, because the period is written out
+ * literally and there is nothing to defer.
+ */
 export class DaysInPeriodParselet implements PrefixParselet {
 	readonly category = "Datetime";
 

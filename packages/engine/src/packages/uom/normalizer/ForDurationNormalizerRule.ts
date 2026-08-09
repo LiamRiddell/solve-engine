@@ -3,6 +3,15 @@ import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/Norma
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 
+/** Whether a token is a unit spelling the engine knows. */
+function isUnit(token: Token | undefined): boolean {
+	if (token === undefined || token.type !== "UNIT") return false;
+	return UNIT_TABLE[(token.value ?? "").toLowerCase()] !== undefined;
+}
+
+/** Articles meaning "one" in this position. */
+const ARTICLES = new Set(["a", "an"]);
+
 /**
  * `for a <unit>` as "times one of them": `$24 a day for a year` is $8,760.
  *
@@ -18,16 +27,6 @@ import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
  * Requires the article. `for 3 years` keeps a number of its own and belongs to
  * the finance grammar (`$1,000 for 3 years at 7%`), which this must not touch.
  */
-
-/** Whether a token is a unit spelling the engine knows. */
-function isUnit(token: Token | undefined): boolean {
-	if (token === undefined || token.type !== "UNIT") return false;
-	return UNIT_TABLE[(token.value ?? "").toLowerCase()] !== undefined;
-}
-
-/** Articles meaning "one" in this position. */
-const ARTICLES = new Set(["a", "an"]);
-
 export function forDurationNormalizerRule(priority = 76): NormalizerRule {
 	return {
 		name: "uom:for-duration",

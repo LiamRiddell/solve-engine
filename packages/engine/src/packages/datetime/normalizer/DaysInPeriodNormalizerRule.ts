@@ -2,19 +2,6 @@ import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 
-/**
- * Recognises `days in <calendar period>` and nothing else.
- *
- * `days in February 2020` asks how long a real month is; `days in 3 weeks`
- * converts a quantity. The two are spelled identically for the first two
- * words, so this cannot be an ordinary fused phrase: registering `days in`
- * unconditionally claimed the conversion as well and broke it.
- *
- * The lookahead is what separates them. Only a quarter, a month name, a
- * four-digit year, or a date literal the month-name rule has already fused
- * counts as a period; anything else is left for the conversion path.
- */
-
 /** Quarter names, which have no other meaning in this position. */
 const QUARTERS = new Set(["q1", "q2", "q3", "q4"]);
 
@@ -38,6 +25,18 @@ function startsPeriod(token: Token | undefined): boolean {
 	return token.type === "NUMBER" && /^\d{4}$/.test(token.text ?? "");
 }
 
+/**
+ * Recognises `days in <calendar period>` and nothing else.
+ *
+ * `days in February 2020` asks how long a real month is; `days in 3 weeks`
+ * converts a quantity. The two are spelled identically for the first two
+ * words, so this cannot be an ordinary fused phrase: registering `days in`
+ * unconditionally claimed the conversion as well and broke it.
+ *
+ * The lookahead is what separates them. Only a quarter, a month name, a
+ * four-digit year, or a date literal the month-name rule has already fused
+ * counts as a period; anything else is left for the conversion path.
+ */
 export function daysInPeriodNormalizerRule(priority = 60): NormalizerRule {
 	return {
 		name: "datetime:days-in-period",
