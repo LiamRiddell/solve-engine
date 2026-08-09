@@ -8,6 +8,7 @@
   "changesets": [
     "and-list-separator",
     "compound-durations",
+    "cpi-projected-years",
     "drop-tslib-bundle-semver",
     "investments-and-percentages",
     "is-what-and-bases",
