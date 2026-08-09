@@ -42,8 +42,16 @@ export const CPI_TABLE: Readonly<Record<number, number>> = {
   2010: 218.1, 2011: 224.9, 2012: 229.6, 2013: 233.0, 2014: 236.7,
   2015: 237.0, 2016: 240.0, 2017: 245.1, 2018: 251.1, 2019: 255.7,
   2020: 258.8, 2021: 271.0, 2022: 292.7, 2023: 304.7, 2024: 313.7,
-  // 2025-2026: preliminary/projected estimates. See doc comment above.
-  2025: 320.6, 2026: 327.4,
+  // 2025-2026 were projected from model knowledge and are now derived from
+  // the IMF monthly CPI series (statisticsoftheworld.com,
+  // IMF.CPI.YOY.M?geo=USA), chained forward from the published 2024 figure
+  // using annual mean year-over-year rates. 2026 covers January to June only,
+  // so it remains a partial year and will move.
+  //
+  // The projections were 320.6 and 327.4, low by 0.49% and 1.63%. Everything
+  // from 2021 to 2024 reproduced the same series to within 0.02%, which is
+  // what makes those two the only entries worth changing.
+  2025: 322.2, 2026: 332.7,
 } as const;
 
 /** Earliest/latest year this table has data for, used for range-check error messages. */

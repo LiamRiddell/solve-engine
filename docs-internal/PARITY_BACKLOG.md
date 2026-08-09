@@ -12,8 +12,13 @@ file and that spec disagree, the spec is right.
 As of 2026-08-06: **104 of 122** documented examples produce the documented
 answer, 2 do not, 16 differ only in formatting.
 
-The two that remain are both the CPI table, and both are waiting on data
-rather than code.
+The two that remain are both the CPI table. Both are waiting on data rather
+than code, and the row below records what was actually tried.
+
+They are also year-dependent, in the same way as the future-projection row
+that was removed from the corpus earlier: Soulver's documented figures were
+computed when "today" was 2024, so they are not reproducible from a fixed
+string regardless of how accurate the table becomes.
 
 See `SOULVERCORE_FEATURE_AUDIT.md` for why the previous per-page audit was
 unreliable, and the same reason this file avoids per-page status claims.
@@ -54,7 +59,7 @@ conversion happened and the rate was 1.
 
 | Item | Why not |
 |---|---|
-| CPI table accuracy (~10% off Soulver) | Needs a real series rather than invented numbers. **Planned for a separate PR** using statisticsoftheworld.com (free, no key, 1,000 requests a day), fetched through the existing `createQueryResolver` caching so the quota is not a constraint. Until then the bundled table stays labelled approximate, because more precise-looking numbers without a source would remove the one signal that they are not authoritative. |
+| CPI table accuracy (~10% off Soulver) | **statisticsoftheworld.com was evaluated and does not cover the range.** `GET /api/v1/series/IMF.CPI.YOY.M?geo=USA` works, needs no key, and returns IMF monthly year-over-year rates, but only 317 observations: 2000-01 to 2026-06, even when `from=1960-01-01` is requested. The bundled table spans 1970-2026, and one of the two failing rows (`what was $500 worth in 1997`) is before the API begins, so it cannot be answered from this source at all. It could refresh 2000 onward, which would need the year-over-year rates chained into index levels since the API publishes rates rather than an index. A source covering 1970-1999 is still needed, or the table stays bundled and labelled approximate for those years. |
 | `0.25 turns` as an angle literal | `turn`/`turns` are **deliberately excluded** in `lexer/units.ts`: "ordinary English, against a full-rotation angle unit". Admitting them would make the word "turns" in a sentence become a quantity. The unit stays reachable as gradians, and the exclusion is now asserted rather than merely commented. `90°` is fixed. |
 | Soulver's abbreviated output (`300k`, `3.3M`) | The values are correct; only the rendering differs. Not a bug fix but a formatting **default**: switching it on changes how every large number in every document renders, including ones with no relation to this work. It belongs in `FormattingSettings` as an opt-in (`abbreviateLargeNumbers`), decided deliberately rather than acquired as a side effect of a parity pass. Recorded in the spec's `FORMATTING_ONLY` list meanwhile, so the difference stays visible. |
 | `latest` dist-tag pointing at a prerelease | Cannot be fixed while every published version is a prerelease: npm requires a `latest`. Resolves itself at 1.0.0. |
