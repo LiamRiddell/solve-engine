@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="static/solve-engine-banner-github.png" alt="Solve, a natural language expression engine" width="100%" />
+<a href="https://oyren.ai/"><img src="static/solve-engine-banner-github.png" alt="Solve, a natural language expression engine" width="100%" /></a>
 
 **A calculator that reads like a sentence.**
 
