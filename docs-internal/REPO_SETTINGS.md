@@ -108,5 +108,3 @@ disabled gate protects nothing. Watch it, calibrate the thresholds in
       `gh api repos/LiamRiddell/solve-engine/environments/npm/deployment-branch-policies`
 - [ ] Provenance requires a public repository, so publication happens after the
       visibility flip, not before
-- [ ] `beta` dist-tag points at a release that actually works. It pointed at
-      `1.0.0-beta.0` long after that version was found to be published empty
