@@ -5,20 +5,24 @@ name: Publish
 #   · pushing to main opens or updates a "Version packages" pull request, which
 #     bumps the version and writes the changelog from the accumulated
 #     changesets. Merging it changes the repository and nothing else.
-#   · pushing a `solve-engine@<version>` tag publishes that version to npm.
+#   · publishing a GitHub Release against a `solve-engine@<version>` tag
+#     publishes that version to npm.
 #
 # The split exists because a merge should not be able to publish. Under the
 # previous arrangement the version pull request was both the review gate and the
 # trigger, so an ordinary-looking merge put a version on a registry that does not
-# allow replacing one. Now the irreversible step has its own deliberate act, and
-# the tag is a thing somebody has to mean.
+# allow replacing one. Now the irreversible step has its own deliberate act: a
+# maintainer publishing a release, once whatever pull requests belong in it are
+# merged. A bare tag push does nothing on its own, which is also why one can
+# exist (as `solve-engine@1.0.0-beta.4` and `.beta.5` did, briefly) without
+# having published anything.
 #
 # This is the only workflow that publishes, and the only one npm will accept a
 # release from: it is registered as the package's trusted publisher, so an OIDC
 # token minted by any other workflow is rejected. Renaming this file breaks
 # publishing until the trusted publisher registration is updated to match, which
-# is also why the tag trigger was added here rather than in a release.yml of its
-# own.
+# is also why the release trigger was added here rather than in a release.yml of
+# its own.
 #
 # There is no token anywhere in here. `solve-engine@1.0.0-beta.0` was published
 # by hand to create the package, because trusted publishing cannot create one
@@ -27,7 +31,20 @@ name: Publish
 on:
   push:
     branches: [main]
-    tags: ["solve-engine@*"]
+  # Publishing is triggered by a GitHub Release, not a bare tag push. The
+  # release flow is: merge whatever pull requests belong in this release,
+  # then publish a release against a `solve-engine@<version>` tag matching
+  # the version already sitting in package.json (create the tag from the
+  # release UI if it does not exist yet). That is the deliberate act, in the
+  # same spirit as the split described above; a tag on its own now does
+  # nothing, which also means one can be pushed early without publishing
+  # anything by accident.
+  release:
+    types: [published]
+  # Moves `latest` to the current package.json version on demand, with no new
+  # release. Exists because `latest` can drift behind `beta` (see the comment
+  # on the Publish step below) and fixing that should not require cutting one.
+  workflow_dispatch:
 
 # Every other workflow declares this and this one did not, so it was relying on
 # the repository default staying at `read`. That default is a setting somebody
@@ -43,9 +60,9 @@ concurrency:
 jobs:
   version:
     name: Version pull request
-    # Tags land in this same workflow, so the trigger has to be re-checked per
-    # job rather than assumed from the file.
-    if: startsWith(github.ref, 'refs/heads/')
+    # Tags and manual dispatches land in this same workflow, so the trigger
+    # has to be re-checked per job rather than assumed from the file.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')
     runs-on: ubuntu-24.04
 
     permissions:
@@ -83,7 +100,7 @@ jobs:
 
   publish:
     name: Publish to npm
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'release'
     runs-on: ubuntu-24.04
     # npm's trusted publisher config takes an optional environment name, and
     # when one is registered the OIDC token is only accepted if it came from
@@ -96,8 +113,16 @@ jobs:
       # this the publish falls back to looking for a token it cannot find.
       id-token: write
 
+    # Read from the release object rather than github.ref. Both should agree,
+    # since a release is always tied to a tag, but the release payload is the
+    # one thing here that cannot be pointing somewhere else by accident.
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -124,7 +149,7 @@ jobs:
       # same thing. Without this a tag typo publishes the previous version under
       # the new name, and the registry keeps it forever.
       - name: Check the tag against package.json
-        run: node scripts/assert-release-tag.mjs "${GITHUB_REF_NAME}"
+        run: node scripts/assert-release-tag.mjs "${RELEASE_TAG}"
 
       # The same gate a contributor runs, before anything can be published.
       - run: npm run verify
@@ -136,15 +161,64 @@ jobs:
 
       # The dist-tag is derived rather than typed. `1.0.0-beta.2` went out on
       # `latest` because the publish command defaulted there, which left the
-      # `beta` tag pointing at an older, broken release. A prerelease now takes
-      # its own identifier as the dist-tag and only a stable version can become
-      # `latest`.
+      # `beta` tag pointing at an older, broken release.
+      #
+      # For now, every release also becomes `latest`, on top of its own
+      # prerelease tag. There is no stable line yet, a beta is what a plain
+      # `npm install solve-engine` actually gets people, and `latest` sitting
+      # several versions behind (as happened after `1.0.0-beta.2`) is worse
+      # than a prerelease being the default. Revisit this once a real `1.0.0`
+      # ships and `latest` should mean something narrower again.
+      #
+      # The version already being on the registry is not treated as an error.
+      # A GitHub Release can be published against a tag whose version this
+      # workflow already shipped, most often to move `latest` onto it after
+      # the fact, and that has to work without a red X for the publish it
+      # correctly declines to repeat.
       - name: Publish
         run: |
-          DIST_TAG="$(node scripts/assert-release-tag.mjs "${GITHUB_REF_NAME}" --dist-tag)"
-          echo "Publishing ${GITHUB_REF_NAME} to the '${DIST_TAG}' dist-tag."
-          npm publish --workspace=packages/engine --tag "${DIST_TAG}"
+          DIST_TAG="$(node scripts/assert-release-tag.mjs "${RELEASE_TAG}" --dist-tag)"
+          VERSION="$(node -p "require('./packages/engine/package.json').version")"
+          if npm view "solve-engine@${VERSION}" version >/dev/null 2>&1; then
+            echo "solve-engine@${VERSION} is already on the registry. Only syncing dist-tags."
+          else
+            echo "Publishing ${RELEASE_TAG} to the '${DIST_TAG}' dist-tag."
+            npm publish --workspace=packages/engine --tag "${DIST_TAG}"
+          fi
+          if [ "${DIST_TAG}" != "latest" ]; then
+            echo "Also pointing 'latest' at ${RELEASE_TAG}."
+            npm dist-tag add "${RELEASE_TAG}" latest
+          fi
         # No NODE_AUTH_TOKEN and no --provenance. Trusted publishing
         # authenticates over OIDC, and it generates provenance attestations on
         # its own; passing the flag as well is redundant rather than harmful,
         # but leaving it out keeps it clear where the signing comes from.
+
+  sync-latest-tag:
+    name: Point latest at the current release
+    # Manual only, and only useful when `latest` has drifted without a new
+    # version to publish, such as right after this policy changed.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    environment: npm
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Use an npm that understands trusted publishing
+        run: npm install -g npm@12.0.2
+
+      - name: Point latest at the version in package.json
+        run: |
+          VERSION="$(node -p "require('./packages/engine/package.json').version")"
+          echo "Pointing 'latest' at solve-engine@${VERSION}."
+          npm dist-tag add "solve-engine@${VERSION}" latest
