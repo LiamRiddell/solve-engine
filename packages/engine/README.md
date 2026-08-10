@@ -4,6 +4,10 @@
 
 **A calculator that reads like a sentence.**
 
+Type what you mean. Units, currencies, percentages, dates, matrices and
+plain-English phrasing all work in the same expression, and the answer
+appears as you type.
+
 [![npm](https://img.shields.io/npm/v/solve-engine?color=%230b7285&label=npm)](https://www.npmjs.com/package/solve-engine)
 [![CI](https://github.com/LiamRiddell/solve-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/LiamRiddell/solve-engine/actions/workflows/ci.yml)
 [![Node](https://img.shields.io/node/v/solve-engine)](https://nodejs.org)
@@ -15,9 +19,12 @@
 
 </div>
 
-A lexer, Pratt parser, bytecode VM, and an extensible package system for
-evaluating natural-language-flavoured expressions: `2 + 2 * 10`, `50% of 200`,
-`3 days + 4 hours`, `10 USD to GBP`, `100 cm + 2 m`.
+That's what a user sees. This package is the engine behind it: a lexer, a
+Pratt parser, a bytecode VM, and an extensible package system, with units,
+currencies, percentages, dates and matrices already built in. There's no
+expression parser to write and no plumbing to wire up. It evaluates
+natural-language-flavoured expressions out of the box: `2 + 2 * 10`,
+`50% of 200`, `3 days + 4 hours`, `10 USD to GBP`, `100 cm + 2 m`.
 
 Originally the engine inside
 [Solve for Obsidian](https://github.com/LiamRiddell/obsidian-solve), extracted

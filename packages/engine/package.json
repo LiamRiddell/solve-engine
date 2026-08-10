@@ -1,7 +1,7 @@
 {
   "name": "solve-engine",
   "version": "1.0.0-beta.6",
-  "description": "The expression evaluation engine behind Solve — lexer, parser, bytecode VM, and an extensible package system.",
+  "description": "An embeddable expression engine for natural-language calculations: units, currencies, percentages, dates and matrices, with the parsing and evaluation plumbing already built.",
   "keywords": [
     "expression-evaluator",
     "calculator",
