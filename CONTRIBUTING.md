@@ -145,18 +145,22 @@ request that bumps the version, writes `CHANGELOG.md`, and regenerates the size
 figures the documentation site quotes. Review the version and the changelog
 there, then merge it. That changes the repository and publishes nothing.
 
-To publish, tag the commit the version pull request produced:
+To publish, publish a GitHub Release against a tag matching the version the
+pull request just produced (create the tag from the release UI if it does not
+exist yet):
 
-```bash
-git tag solve-engine@1.0.0-beta.3 && git push origin solve-engine@1.0.0-beta.3
+```
+Tag:     solve-engine@1.0.0-beta.4
+Target:  main
 ```
 
 The tag has to match `packages/engine/package.json` exactly or the workflow
-refuses, so tag the version commit rather than whatever is on `main` at the
-time. The dist-tag is worked out from the version: a prerelease goes to its own
-identifier, `beta` for `1.0.0-beta.3`, and only a stable version becomes
-`latest`. Nobody types the dist-tag, which is how `1.0.0-beta.2` ended up on
-`latest` while `beta` still pointed at a broken release.
+refuses, so release the version commit rather than whatever is on `main` at
+the time. Every release publishes to the `latest` dist-tag, prerelease or not:
+there is no stable line yet, so a beta is what a plain `npm install
+solve-engine` actually gets people, and `latest` sitting several versions
+behind was worse than that. A bare tag push, without a release, does not
+publish anything.
 
 ## Reporting problems
 
