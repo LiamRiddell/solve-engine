@@ -30,6 +30,10 @@ const RULES = [
 		// into a workflow comment this way and GitHub rejected the whole file
 		// with "This run likely failed because of a workflow file issue", which
 		// says nothing about which character or which line.
+		//
+		// Tab and newline are deliberately outside both ranges: they are
+		// ordinary whitespace in source, not evidence of a mangled escape.
+		// eslint-disable-next-line no-control-regex -- detecting these characters is this rule's entire job
 		pattern: /[\x00-\x08\x0B-\x1F\x7F-\x9F]/g,
 		message: "Control character. Probably a mangled escape sequence.",
 	},
