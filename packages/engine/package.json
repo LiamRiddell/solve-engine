@@ -1,6 +1,6 @@
 {
   "name": "solve-engine",
-  "version": "1.0.0-beta.5",
+  "version": "1.0.0-beta.6",
   "description": "The expression evaluation engine behind Solve — lexer, parser, bytecode VM, and an extensible package system.",
   "keywords": [
     "expression-evaluator",
