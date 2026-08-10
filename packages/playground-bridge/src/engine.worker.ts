@@ -332,6 +332,14 @@ function refreshTab(tabId: string, text: string): void {
  * @param e - The `MessageEvent` from the main thread.
  */
 self.onmessage = (e: MessageEvent<{ id: number; tabId: string; expression: string; stream?: boolean; abort?: boolean; close?: boolean }>) => {
+    // A real postMessage always carries a browser-populated origin the
+    // sender cannot spoof, so this only ever rejects a genuine mismatch. It
+    // is skipped, not enforced, when either side is unset, which covers the
+    // test harness driving this handler directly with a plain object and
+    // no location global (see WorkerGlobalRefreshStorm.spec.ts), without
+    // opening anything a real message could exploit.
+    if (e.origin && self.location && e.origin !== self.location.origin) return;
+
     const { id, tabId, expression, stream, abort, close } = e.data;
 
     // ── Handle explicit abort message (e.g., user cleared expression) ──

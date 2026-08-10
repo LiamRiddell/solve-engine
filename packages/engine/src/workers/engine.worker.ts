@@ -320,6 +320,14 @@ function handleExecuteBatch(msg: ExecuteBatchMsg): void {
 const inWorkerScope = typeof self !== "undefined" && typeof window === "undefined";
 
 const handleMessage = (event: MessageEvent) => {
+	// A real postMessage always carries a browser-populated origin the
+	// sender cannot spoof, so this only ever rejects a genuine mismatch. It
+	// is skipped, not enforced, when either side is unset, which covers the
+	// test harness driving this handler directly with a plain object and
+	// no location global (see WorkerIntegration.spec.ts), without opening
+	// anything a real message could exploit.
+	if (event.origin && self.location && event.origin !== self.location.origin) return;
+
 	const msg = event.data as EngineWorkerMessage;
 
 	switch (msg.type) {
