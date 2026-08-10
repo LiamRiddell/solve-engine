@@ -2,16 +2,11 @@
 
 <a href="https://oyren.ai/"><img src="static/solve-engine-banner-github.png" alt="Solve, a natural language expression engine" width="100%" /></a>
 
-**A natural-language expression engine, ready to embed.**
+**A calculator that reads like a sentence.**
 
-Type what you mean: units, currencies, percentages, dates, matrices and
+Type what you mean. Units, currencies, percentages, dates, matrices and
 plain-English phrasing all work in the same expression, and the answer
-appears as you type. That's the experience a user gets. What you get as a
-developer is the library behind it: a lexer, parser, and evaluator with all
-of that built in, so you can drop this functionality into any site without
-writing an expression parser yourself.
-
-Open source, sponsored by [Oyren](https://oyren.ai/).
+appears as you type.
 
 [![npm](https://img.shields.io/npm/v/solve-engine?color=%230b7285&label=npm)](https://www.npmjs.com/package/solve-engine)
 [![CI](https://github.com/LiamRiddell/solve-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/LiamRiddell/solve-engine/actions/workflows/ci.yml)
@@ -26,6 +21,14 @@ Open source, sponsored by [Oyren](https://oyren.ai/).
 </div>
 
 ---
+
+That's what a user sees. What you're looking at is the engine behind it: a
+lexer, parser, and evaluator, with units, currencies, percentages, dates and
+matrices already built in. There's no expression parser to write, no
+plumbing to wire up. Install it, point it at an input, and everything below
+is there out of the box.
+
+Open source, sponsored by [Oyren](https://oyren.ai/).
 
 ```solve
 1024 * 8                      // 8,192
