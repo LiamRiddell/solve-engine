@@ -2,11 +2,16 @@
 
 <a href="https://oyren.ai/"><img src="static/solve-engine-banner-github.png" alt="Solve, a natural language expression engine" width="100%" /></a>
 
-**A calculator that reads like a sentence.**
+**A natural-language expression engine, ready to embed.**
 
-Type what you mean. Units, currencies, percentages, dates, matrices and
-plain-English phrasing all work in the same expression, and the answer appears
-as you type.
+Type what you mean: units, currencies, percentages, dates, matrices and
+plain-English phrasing all work in the same expression, and the answer
+appears as you type. That's the experience a user gets. What you get as a
+developer is the library behind it: a lexer, parser, and evaluator with all
+of that built in, so you can drop this functionality into any site without
+writing an expression parser yourself.
+
+Open source, sponsored by [Oyren](https://oyren.ai/).
 
 [![npm](https://img.shields.io/npm/v/solve-engine?color=%230b7285&label=npm)](https://www.npmjs.com/package/solve-engine)
 [![CI](https://github.com/LiamRiddell/solve-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/LiamRiddell/solve-engine/actions/workflows/ci.yml)
