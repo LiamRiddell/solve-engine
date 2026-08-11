@@ -1724,7 +1724,26 @@ export class ExpressionEngine {
         // Bypasses bytecode caching entirely, both shapes have effects
         // (a stored equation, a direct vm.setVar()) a cached program can't
         // represent. See trySymbolicGrammar()'s own doc comment.
-        const symbolicResult = this.trySymbolicGrammar(normalizedTokens, lineNumber);
+        // The symbolic grammar parses its own operand sub-ranges (see
+        // simplifySymbolically/compileAdHoc), so it can throw the parser's
+        // errors from here, ahead of the try/catch guarding the main parse
+        // below. Caught into the same 'parse' result every other failure in
+        // this method returns, because a throw escaping prepareExpression
+        // reaches tryCompileExpression(), which is documented as a
+        // non-throwing boolean and is called by LanguageService on every
+        // visible line on every keystroke. `total =` is a line half-typed on
+        // the way to `total = 5`, and it took the editor down.
+        let symbolicResult: Value | null;
+        try {
+            symbolicResult = this.trySymbolicGrammar(normalizedTokens, lineNumber);
+        } catch (e) {
+            // reads/writes supplied for the same reason the main parse's catch
+            // supplies them: the line names variables even though it does not
+            // yet parse, so a caller tracking dependencies can re-evaluate it
+            // once the user finishes typing.
+            const { reads, writes } = extractReadsAndWrites(normalizedTokens);
+            return { kind: 'error', stage: 'parse', error: normalizeUnknownError(e), reads, writes, normalizedTokens };
+        }
         if (symbolicResult !== null) {
             return { kind: 'symbolic-solve', normalizedTokens, value: symbolicResult };
         }
@@ -3296,8 +3315,34 @@ export class ExpressionEngine {
 	 * goes through the parser's own throw/catch inside prepareExpression()
 	 * unavoidable without restructuring the parser's failure signaling, which
 	 * is out of scope here.
+	 *
+	 * The "non-throwing" in the first line is a contract callers rely on, not
+	 * a description of the happy path, so it is enforced here rather than left
+	 * to every stage below agreeing to return its errors. It had been left to
+	 * them, and they did not all agree: the lexer throws on an unterminated
+	 * string (`"`), and the symbolic grammar threw on an assignment whose
+	 * right-hand side is still empty (`total =`). LanguageService calls this
+	 * per visible line per keystroke, so both reached CodeMirror's transaction
+	 * dispatch and broke the editor on input that is merely half-typed.
+	 *
+	 * A catch costs nothing on the path that does not throw, so the "no" answer
+	 * this method exists to make cheap stays cheap. Anything that does throw
+	 * was already paying for the Error it constructed.
 	 */
 	tryCompileExpression(expression: string): boolean {
+		try {
+			return this.tryCompileExpressionUnguarded(expression);
+		} catch {
+			// "Does this compile" has a truthful answer for every one of these:
+			// no. Swallowing is safe precisely because the answer is a boolean
+			// with no detail to lose; callers wanting the reason call
+			// compileExpression(), which still throws.
+			return false;
+		}
+	}
+
+	/** The body of {@link tryCompileExpression}, which owns the contract. */
+	private tryCompileExpressionUnguarded(expression: string): boolean {
 		const { tokens, hasParens } = this.lexToTokens(expression);
 		const prep = this.prepareExpression(expression, tokens, hasParens);
 		return prep.kind !== 'error';

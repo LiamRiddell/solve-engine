@@ -1,0 +1,14 @@
+{
+	"id": "33cebf73",
+	"seed": 3887,
+	"generator": "expression",
+	"outcome": "contract",
+	"detail": "tryCompileExpression() is documented non-throwing and returns a boolean, but threw: _EngineError: Unterminated string literal: \"💩%=é|]A\t\t1$\t*9X$\\≠<./|)÷Z(:6xAA,-28Bあ7&@=9µ1~[°{é​Xא>`#'#-\r+#≠+8א]:3é3*ć B%6{[;0Ac@`*;]'?X@);Z7Y9\u0000|\u0000 \\4Yµ7µ];4~|2!×}278B]%|4°a5*∞Y~^ا",
+	"found": "2026-08-11",
+	"shrinkSteps": 6,
+	"input": {
+		"kind": "expression",
+		"source": "%=ا"
+	},
+	"status": "open"
+}

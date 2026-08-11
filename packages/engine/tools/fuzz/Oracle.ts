@@ -204,14 +204,18 @@ export function runExpressionCase(source: string, engine: ExpressionEngine, opti
 	engine.clear();
 
 	const started = performance.now();
+	let outcome: Outcome;
 	try {
 		const values = engine.evaluateExpression(source);
 		const elapsedMs = performance.now() - started;
+		outcome = classifyDuration({ kind: "ok", elapsedMs, detail: "value" }, options);
 		for (const value of values) {
 			const malformed = contractViolation(value);
-			if (malformed) return { kind: "contract", elapsedMs, detail: malformed };
+			if (malformed) {
+				outcome = { kind: "contract", elapsedMs, detail: malformed };
+				break;
+			}
 		}
-		return classifyDuration({ kind: "ok", elapsedMs, detail: "value" }, options);
 	} catch (thrown) {
 		const elapsedMs = performance.now() - started;
 		if (isEngineError(thrown)) {
@@ -225,10 +229,47 @@ export function runExpressionCase(source: string, engine: ExpressionEngine, opti
 					stack: firstFrames(engineError.cause),
 				};
 			}
-			return classifyDuration({ kind: "ok", elapsedMs, code: engineError.code, detail: `EngineError ${engineError.code}` }, options);
+			outcome = classifyDuration({ kind: "ok", elapsedMs, code: engineError.code, detail: `EngineError ${engineError.code}` }, options);
+		} else {
+			return describeThrow(thrown, elapsedMs);
 		}
-		return describeThrow(thrown, elapsedMs);
 	}
+
+	const probeViolation = probeContractViolation(source, engine);
+	return probeViolation ? { kind: "contract", elapsedMs: outcome.elapsedMs, detail: probeViolation } : outcome;
+}
+
+/**
+ * Check the engine's one *non*-throwing entry point against the same source.
+ *
+ * Everything else the fuzzer drives is documented `@throws`, so the oracle
+ * counts a thrown `EngineError` as a pass. `tryCompileExpression()` is the
+ * exception: it answers with a boolean, and `LanguageService` calls it per
+ * visible line per keystroke to decide highlighting, so a throw from it lands
+ * in a caller that has no catch. That difference is why 2.6 million cases
+ * never found `hello =` taking an editor down. The invariant the oracle was
+ * asserting was simply weaker than the contract this method publishes.
+ *
+ * Run *after* the evaluation rather than before it, because the symbolic
+ * grammar this reaches assigns variables and stores equations. Probing first
+ * would change what the evaluation then saw and make a case behave differently
+ * alone than in a soak.
+ *
+ * @param source - The same line the case just evaluated.
+ * @param engine - The case's engine, deliberately not cleared in between.
+ * @returns A description of the violation, or `null` if the contract held.
+ */
+function probeContractViolation(source: string, engine: ExpressionEngine): string | null {
+	let compiled: unknown;
+	try {
+		compiled = engine.tryCompileExpression(source);
+	} catch (thrown) {
+		return `tryCompileExpression() is documented non-throwing and returns a boolean, but threw: ${describeBriefly(thrown)}`;
+	}
+	if (typeof compiled !== "boolean") {
+		return `tryCompileExpression() returned ${typeof compiled} rather than a boolean`;
+	}
+	return null;
 }
 
 /**
