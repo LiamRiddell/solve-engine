@@ -4,11 +4,23 @@
  * ## The order of attack, and why it is this order
  *
  * Exact answers first, approximation only as a last resort and always labelled
- * as such. Rational roots are extracted by the same rational-root theorem
- * `Factor.ts` uses, each one dividing the degree down. What survives goes to
- * the closed form for its degree: the quadratic formula, Cardano for a cubic,
- * and the biquadratic or resolvent-cubic split for a quartic. Only a remainder
- * that none of those reaches falls through to numerical root finding.
+ * as such.
+ *
+ * 1. `x` itself, as many times as it divides the polynomial. This step exists
+ *    because the rational-root theorem is stated for a **non-zero** constant
+ *    term, so without it `x^5-x=0` found no rational roots at all and fell
+ *    straight through to numerics, despite every one of its five roots being
+ *    exact. Dividing `x` out first is what turns that equation back into
+ *    `x^4-1`, whose roots are `±1` and then `±i`.
+ * 2. Every rational root, by the same rational-root theorem `Factor.ts` uses,
+ *    each divided out **exactly** over the rationals with its full
+ *    multiplicity. In floating point a near-root and a real root are
+ *    indistinguishable, which is the whole reason `Rational.ts` exists.
+ * 3. The closed form for whatever degree survives: the quadratic formula,
+ *    Cardano for a cubic, and the biquadratic or resolvent-cubic split for a
+ *    quartic.
+ * 4. Only a remainder that none of those reaches goes to `NumericRoots.ts`,
+ *    which finds **all** of its roots at once in the complex plane.
  *
  * A quadratic with a positive non-square discriminant returns its **surd**
  * form, so `x^2-2=0` gives `sqrt(2)` rather than `1.41421356`. A system that
@@ -16,9 +28,21 @@
  * stopped being one. The surd is reduced to lowest form, so the equal but
  * unreadable `sqrt(8)/2` does not surface.
  *
- * Complex roots are returned, not skipped. `x^2+1=0` gives `-i` and `i`. The
- * "no real solutions" outcome survives for the cases where it is genuinely the
- * answer, such as a quartic whose complex roots have no closed form here.
+ * ## Complex roots are roots
+ *
+ * `x^2+1=0` gives `-i` and `i`, and the numerical stage works in complex
+ * arithmetic throughout rather than scanning the real line for sign changes.
+ * A real-only scan is why `solve(x^5-1=0, x)` used to answer with `1` and
+ * nothing else: the other four roots are complex, the scan could not see them,
+ * and one root out of five was reported as though it were the whole answer.
+ *
+ * ## Every root is accounted for
+ *
+ * Each stage records how much of the degree it consumed. When those do not add
+ * up to the degree of the equation, the outcome is `incomplete` rather than
+ * `roots`, and it carries how many are missing. A partial list presented as a
+ * complete one is the worst answer available here, because nothing about it
+ * looks wrong.
  *
  * ## What is deliberately not here
  *
@@ -30,7 +54,12 @@
  *
  * A general quartic that neither is biquadratic nor splits into two rational
  * quadratics. Ferrari's method reaches it, but through a radical nested four
- * deep that nothing downstream could read or use.
+ * deep that nothing downstream could read or use, so its roots come back
+ * numerically instead.
+ *
+ * A quintic's radicals, which by Abel-Ruffini do not exist in general, and the
+ * cyclotomic forms that do exist for the special cases such as `x^5-1`. Those
+ * nest deeply enough that four accurate decimals are the more useful answer.
  */
 
 import {
@@ -46,7 +75,6 @@ import {
 	rationalDiv,
 	rationalNeg,
 	rationalSub,
-	rationalToNumber,
 	rationalCompare,
 	isRationalZero,
 } from "@solve-js/symbolic/Rational";
@@ -61,6 +89,7 @@ import { rationalRoots } from "@solve-js/symbolic/Factor";
 import { COMPLEX_I, complex as complexValue } from "@solve-js/symbolic/Complex";
 import { exactIntegerSqrt, surdNode } from "@solve-js/symbolic/Radicals";
 import { type RootSet, solveCubic, solveQuartic } from "@solve-js/symbolic/CubicQuartic";
+import { type ApproximateRoot, approximateRoots } from "@solve-js/symbolic/NumericRoots";
 
 /**
  * Highest polynomial degree {@link solveForVariable} will attempt.
@@ -71,27 +100,35 @@ import { type RootSet, solveCubic, solveQuartic } from "@solve-js/symbolic/Cubic
  */
 export const SOLVE_MAX_DEGREE = 8;
 
-/** Iteration ceiling for the bisection fallback, enough to reach {@link NEWTON_TOLERANCE} from any bracket the scan produces. */
-export const NEWTON_MAX_ITERATIONS = 100;
-
-/** Convergence width for the numerical fallback. */
-export const NEWTON_TOLERANCE = 1e-12;
-
-/** How many sub-intervals the numerical fallback scans for sign changes across the root bound. */
-const NUMERIC_SCAN_STEPS = 2_000;
-
 /**
  * The outcome of solving an equation.
  *
- * Several of these are answers rather than failures. "No real solutions" is the
- * correct and complete response to `x^2+1=0` over the reals, and an identity is
- * the correct response to `x+1=x+1`.
+ * Several of these are answers rather than failures: an identity is the correct
+ * response to `x+1=x+1`, and a contradiction to `1=2`.
+ *
+ * There is deliberately no "no real solutions" case. Every polynomial of degree
+ * `n` has `n` roots over the complex numbers, and this solver reports them, so
+ * the only honest ways to answer are the complete list, a stated shortfall, or
+ * a stated refusal.
  */
 export type SolveOutcome =
-	/** One or more solutions. `exact` carries those expressible as a rational or a surd; `approximate` carries any found numerically. */
-	| { kind: "roots"; readonly exact: readonly SymbolicNode[]; readonly approximate: readonly number[] }
-	/** Real solutions exist nowhere, as for `x^2+1=0`. */
-	| { kind: "no-real-solutions"; readonly reason: string }
+	/** Every solution. `exact` carries those expressible as a rational, a surd or a Gaussian rational; `approximate` carries any found numerically. */
+	| { kind: "roots"; readonly exact: readonly SymbolicNode[]; readonly approximate: readonly ApproximateRoot[] }
+	/**
+	 * Some solutions, and the count of those this solver could not reach.
+	 *
+	 * Distinct from `roots` so that a caller cannot present a partial list as a
+	 * whole one by accident, which is the failure this case exists to stop.
+	 */
+	| {
+		kind: "incomplete";
+		readonly exact: readonly SymbolicNode[];
+		readonly approximate: readonly ApproximateRoot[];
+		/** How many roots, counted with multiplicity, are unaccounted for. */
+		readonly missing: number;
+		/** Why they are, in a sentence fit to show a reader. */
+		readonly reason: string;
+	}
 	/** True for every value of the variable, as for `x+1=x+1`. */
 	| { kind: "identity" }
 	/** True for no value of the variable, as for `x=x+1`. */
@@ -103,13 +140,6 @@ export type SolveOutcome =
 function evaluateRational(descending: readonly Rational[], x: Rational): Rational {
 	let total = RATIONAL_ZERO;
 	for (const coeff of descending) total = rationalAdd(rationalMul(total, x), coeff);
-	return total;
-}
-
-/** Evaluates descending-order coefficients at a double, for the numerical fallback only. */
-function evaluateNumeric(descending: readonly Rational[], x: number): number {
-	let total = 0;
-	for (const coeff of descending) total = total * x + rationalToNumber(coeff);
 	return total;
 }
 
@@ -226,62 +256,13 @@ function rational4(): Rational {
 	return { n: 4n, d: 1n };
 }
 
-/**
- * Real roots of a polynomial found numerically, by scanning for sign changes
- * across the Cauchy root bound and bisecting each bracket.
- *
- * Bisection rather than Newton-Raphson: it cannot diverge, cannot stall on a
- * zero derivative, and its error bound is known in advance. For a fallback
- * whose whole purpose is to give an answer where the exact methods could not,
- * predictability is worth more than the faster convergence.
- */
-function numericRoots(descending: readonly Rational[]): number[] {
-	const leading = rationalToNumber(descending[0]);
-	if (leading === 0) return [];
-
-	// Cauchy bound: every real root lies within 1 + max|a_i / a_n|.
-	let bound = 0;
-	for (let i = 1; i < descending.length; i++) {
-		const ratio = Math.abs(rationalToNumber(descending[i]) / leading);
-		if (ratio > bound) bound = ratio;
-	}
-	bound += 1;
-
-	const roots: number[] = [];
-	const step = (2 * bound) / NUMERIC_SCAN_STEPS;
-	let previousX = -bound;
-	let previousY = evaluateNumeric(descending, previousX);
-	for (let i = 1; i <= NUMERIC_SCAN_STEPS; i++) {
-		const x = -bound + i * step;
-		const y = evaluateNumeric(descending, x);
-		if (previousY === 0) roots.push(previousX);
-		else if ((previousY < 0) !== (y < 0)) roots.push(bisect(descending, previousX, x));
-		previousX = x;
-		previousY = y;
-	}
-	return roots;
-}
-
-/** Narrows a sign-change bracket to {@link NEWTON_TOLERANCE}. */
-function bisect(descending: readonly Rational[], low: number, high: number): number {
-	let left = low;
-	let right = high;
-	let leftValue = evaluateNumeric(descending, left);
-	for (let i = 0; i < NEWTON_MAX_ITERATIONS && right - left > NEWTON_TOLERANCE; i++) {
-		const middle = (left + right) / 2;
-		const middleValue = evaluateNumeric(descending, middle);
-		if ((leftValue < 0) === (middleValue < 0)) {
-			left = middle;
-			leftValue = middleValue;
-		} else {
-			right = middle;
-		}
-	}
-	return (left + right) / 2;
+/** A real number as an {@link ApproximateRoot}, for the *casus irreducibilis* roots that arrive from `CubicQuartic.ts` as plain doubles. */
+function realApproximation(value: number): ApproximateRoot {
+	return { re: value, im: 0 };
 }
 
 /**
- * Solves `lhs = rhs` for one variable over the reals.
+ * Solves `lhs = rhs` for one variable over the complex numbers.
  *
  * @param lhs - Left-hand side of the equation.
  * @param rhs - Right-hand side.
@@ -382,49 +363,163 @@ function closedFormRoots(descending: readonly Rational[]): RootSet | null {
 	return null;
 }
 
-/** Solves a single-variable polynomial given its descending coefficients. */
-function solveUnivariate(descending: readonly Rational[]): SolveOutcome {
-	const exact: SymbolicNode[] = [];
+/**
+ * The rational roots of a polynomial and the factor left once they are gone.
+ *
+ * `x` comes out first because the rational-root theorem needs a non-zero
+ * constant term to say anything at all. Skipping that step is the single defect
+ * that made `x^5-x=0` and `x^3-x=0` numerical problems: with a zero constant
+ * term {@link rationalRoots} correctly reports no candidates, and the whole
+ * equation then fell past every exact method it should have used.
+ *
+ * @param descending - Descending coefficients, the leading one non-zero.
+ * @returns The distinct rational roots in ascending order, and the coefficients
+ * of the factor that survives. How much of the degree was consumed is not
+ * returned because it does not need to be: every division drops exactly one
+ * coefficient, so it is the difference in length and cannot drift from it.
+ */
+function extractRationalRoots(descending: readonly Rational[]): { roots: Rational[]; remaining: Rational[] } {
+	const roots: Rational[] = [];
 	let remaining = [...descending];
 
-	// Exact rational roots first, each divided out so the remaining degree drops.
-	let roots = [...rationalRoots(remaining)].sort(rationalCompare);
-	while (roots.length > 0 && remaining.length > 1) {
-		for (const root of roots) {
+	let powersOfX = 0;
+	while (remaining.length > 1 && isRationalZero(remaining[remaining.length - 1])) {
+		remaining = remaining.slice(0, -1);
+		powersOfX++;
+	}
+	// A repeated root is one solution, not several, so zero is recorded once
+	// however many powers of `x` came out.
+	if (powersOfX > 0) roots.push(RATIONAL_ZERO);
+
+	while (remaining.length > 1) {
+		const found = rationalRoots(remaining);
+		if (found.length === 0) break;
+		for (const root of found) {
+			let multiplicity = 0;
 			while (remaining.length > 1 && isRationalZero(evaluateRational(remaining, root))) {
 				remaining = divideByRoot(remaining, root);
+				multiplicity++;
 			}
-			// A repeated root is one solution, not several, so it is recorded once.
-			exact.push(constNode(root));
+			// Guarded rather than assumed: a candidate that is no longer a root of
+			// what is left must not be reported as one.
+			if (multiplicity > 0) roots.push(root);
 		}
-		roots = remaining.length > 1 ? [...rationalRoots(remaining)].sort(rationalCompare) : [];
 	}
 
+	// Ascending, so a row of roots reads low to high the way a reader expects.
+	return { roots: roots.sort(rationalCompare), remaining };
+}
+
+/**
+ * Solves a single-variable polynomial given its descending coefficients.
+ *
+ * Every path out of here goes through {@link finish}, and what it is told is
+ * the degree of the factor still **unsolved**, read off the length of the
+ * coefficient array that is left rather than accumulated in a counter as the
+ * stages go. That distinction is the point. A counter is a promise each branch
+ * has to keep, and the defect this replaces was exactly a branch that answered
+ * for one root of five without anything downstream noticing; an array length is
+ * a fact about the polynomial that no branch can misremember.
+ *
+ * Each leftover branch is therefore all-or-nothing: it either solves the whole
+ * surviving factor or reports it whole as unsolved.
+ */
+function solveUnivariate(descending: readonly Rational[]): SolveOutcome {
+	const { roots, remaining } = extractRationalRoots(descending);
+
+	const exact: SymbolicNode[] = roots.map(constNode);
+	const approximate: ApproximateRoot[] = [];
 	const leftoverDegree = remaining.length - 1;
+	const solvedDegree = descending.length - remaining.length;
+
+	if (leftoverDegree <= 0) return finish(exact, approximate, solvedDegree, 0, "");
 	if (leftoverDegree === 1) {
+		// Unreachable in practice, since a linear factor's root is rational and so
+		// was already extracted. Kept because the alternative to a cheap branch is
+		// an unhandled degree.
 		exact.push(constNode(rationalDiv(rationalNeg(remaining[1]), remaining[0])));
-		return { kind: "roots", exact, approximate: [] };
+		return finish(exact, approximate, solvedDegree + 1, 0, "");
 	}
 	if (leftoverDegree === 2) {
-		const quadratic = solveQuadratic(remaining[0], remaining[1], remaining[2]);
-		return { kind: "roots", exact: [...exact, ...quadratic], approximate: [] };
-	}
-	if (leftoverDegree <= 0) {
-		return exact.length > 0
-			? { kind: "roots", exact, approximate: [] }
-			: { kind: "no-real-solutions", reason: "there is no value that satisfies this equation" };
+		exact.push(...solveQuadratic(remaining[0], remaining[1], remaining[2]));
+		return finish(exact, approximate, solvedDegree + 2, 0, "");
 	}
 
 	const closedForm = closedFormRoots(remaining);
 	if (closedForm !== null) {
-		return { kind: "roots", exact: [...exact, ...closedForm.exact], approximate: closedForm.approximate };
+		exact.push(...closedForm.exact);
+		approximate.push(...closedForm.approximate.map(realApproximation));
+		return finish(exact, approximate, solvedDegree + leftoverDegree, 0, "");
 	}
 
-	// Degree five or more, or a quartic with no readable closed form. Approximate,
-	// and say so.
-	const approximate = numericRoots(remaining);
-	if (exact.length === 0 && approximate.length === 0) {
-		return { kind: "no-real-solutions", reason: "no real root was found within the polynomial's root bound" };
+	// No closed form this module reaches: a quintic or beyond, or a quartic whose
+	// radicals nest four deep. Every root of what is left is found at once in the
+	// complex plane rather than one at a time by deflation.
+	const numeric = approximateRoots(remaining);
+	if (numeric !== null) {
+		approximate.push(...numeric);
+		return finish(exact, approximate, solvedDegree + leftoverDegree, 0, "");
+	}
+	return finish(
+		exact,
+		approximate,
+		solvedDegree,
+		leftoverDegree,
+		`a degree-${leftoverDegree} factor of it has no exact solution here and the numerical method did not converge on that factor`,
+	);
+}
+
+/**
+ * The single exit from the univariate solver, where the answer is checked
+ * against the question before it is handed back.
+ *
+ * This exists because of a specific failure that a message could not have
+ * prevented. `solve(x^5-1=0, x)` returned `1`: a correct root, a fifth of the
+ * answer, and indistinguishable from a complete one to anybody reading it. So
+ * the relationship between what was asked and what was found is asserted here
+ * rather than left to each branch to remember, and an answer that does not hold
+ * up comes back as `incomplete` with the shortfall counted.
+ *
+ * Two things are checked, and both are cheap because both quantities are
+ * already known:
+ *
+ * 1. **Coverage.** A factor of degree `unsolvedDegree` was not solved, so that
+ *    many roots are missing however many were found.
+ * 2. **Coherence.** A stage that claims to have solved a factor of degree one
+ *    or more has to have produced at least one root for it and cannot have
+ *    produced more than its degree. Neither is possible for a correct stage, so
+ *    either would be a defect in the solver rather than a property of the
+ *    equation, and handing back roots after seeing one would be trusting
+ *    exactly what has just been shown to be untrustworthy.
+ *
+ * @param exact - Roots known exactly.
+ * @param approximate - Roots found numerically.
+ * @param solvedDegree - How much of the degree the stages above actually solved.
+ * @param unsolvedDegree - The degree of the factor they did not.
+ * @param reason - Why that factor was not solved, used only when one was not.
+ * @returns `roots` when every root is accounted for, `incomplete` otherwise.
+ */
+function finish(
+	exact: readonly SymbolicNode[],
+	approximate: readonly ApproximateRoot[],
+	solvedDegree: number,
+	unsolvedDegree: number,
+	reason: string,
+): SolveOutcome {
+	const found = exact.length + approximate.length;
+	const incoherent = solvedDegree >= 1 && (found < 1 || found > solvedDegree);
+	if (unsolvedDegree > 0 || incoherent) {
+		return {
+			kind: "incomplete",
+			exact,
+			approximate,
+			// A distinct root can stand for several equal ones, so the count found
+			// is a lower bound on what it covers. The degree left unsolved is not.
+			missing: incoherent ? Math.max(1, solvedDegree + unsolvedDegree - found) : unsolvedDegree,
+			reason: incoherent
+				? `${found} root${found === 1 ? "" : "s"} were produced for a degree-${solvedDegree + unsolvedDegree} equation, which does not add up`
+				: reason,
+		};
 	}
 	return { kind: "roots", exact, approximate };
 }

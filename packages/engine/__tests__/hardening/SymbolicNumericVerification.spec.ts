@@ -575,6 +575,198 @@ describe("every root solve returns satisfies the equation it came from", () => {
 	});
 });
 
+// ── solve, verified for completeness as well as correctness ────────────────
+
+/**
+ * The half of solving that residual checking alone cannot see.
+ *
+ * A root that satisfies the equation is a correct root, and a list of correct
+ * roots can still be the wrong answer: `solve(x^5-1=0, x)` once returned `1`,
+ * which is a perfectly good root and one fifth of the truth, with nothing in
+ * the output to say so. So each case here is checked twice. Every root goes
+ * back into the polynomial over the complex plane and must leave a residual at
+ * the level of rounding, and then the roots as a set have to multiply back up
+ * to the polynomial they came from, which they can only do if none is missing.
+ *
+ * The reconstruction is what makes "the root count equals the degree with
+ * multiplicity" an assertion rather than a hope. The solver reports a repeated
+ * root once, so the count of distinct roots is not the degree and comparing
+ * them would be wrong; instead every way of distributing the degree across the
+ * roots reported is tried, and one of them has to rebuild the polynomial.
+ */
+describe("solve accounts for every root, not just the ones it finds easily", () => {
+	/** Every way of writing `total` as `parts` positive whole numbers. */
+	function multiplicityAssignments(total: number, parts: number): number[][] {
+		if (parts < 1 || total < parts) return [];
+		if (parts === 1) return [[total]];
+		const out: number[][] = [];
+		for (let first = 1; first <= total - (parts - 1); first++) {
+			for (const rest of multiplicityAssignments(total - first, parts - 1)) out.push([first, ...rest]);
+		}
+		return out;
+	}
+
+	/** Multiplies `(x - root)` into a descending coefficient list. */
+	function timesLinearFactor(descending: readonly Cpx[], root: Cpx): Cpx[] {
+		const product: Cpx[] = new Array(descending.length + 1).fill(null).map(() => cpx(0));
+		for (let i = 0; i < descending.length; i++) {
+			product[i] = add(product[i], descending[i]);
+			product[i + 1] = sub(product[i + 1], mul(descending[i], root));
+		}
+		return product;
+	}
+
+	/**
+	 * Whether the roots, under some assignment of multiplicities, multiply back
+	 * up to the polynomial.
+	 *
+	 * The multiplicities are searched rather than asked for, because the solver
+	 * does not report them and the point of the check is not to trust it about
+	 * anything. There are at most a handful of assignments at these degrees.
+	 */
+	function rootsRebuild(coefficients: readonly number[], roots: readonly Cpx[]): boolean {
+		const degree = coefficients.length - 1;
+		const largest = Math.max(1, ...coefficients.map(Math.abs));
+		for (const multiplicities of multiplicityAssignments(degree, roots.length)) {
+			let product: Cpx[] = [cpx(coefficients[0])];
+			roots.forEach((root, index) => {
+				for (let k = 0; k < multiplicities[index]; k++) product = timesLinearFactor(product, root);
+			});
+			const agrees = product.every((value, index) => magnitude(sub(value, cpx(coefficients[index]))) <= 1e-6 * largest);
+			if (agrees) return true;
+		}
+		return false;
+	}
+
+	/** Fails unless a root leaves the polynomial at the level of rounding rather than merely small. */
+	function expectRootSatisfies(coefficients: readonly number[], root: Cpx, context: string): void {
+		const residual = magnitude(polynomialAt(coefficients, root));
+		// The scale Horner's method itself reaches, which is what a residual has
+		// to be judged against: for a degree-eight polynomial with coefficients in
+		// the hundreds, a "small" absolute residual means nothing on its own.
+		let scale = 0;
+		for (const coefficient of coefficients) scale = scale * magnitude(root) + Math.abs(coefficient);
+		if (!(residual <= 1e-8 * Math.max(1, scale))) {
+			throw new Error(`${context}: root ${root.re}+${root.im}i leaves a residual of ${residual}`);
+		}
+	}
+
+	const cases: { source: string; coefficients: number[]; distinct: number }[] = [
+		// The reported defect. Every one of these five roots is exact:
+		// x(x-1)(x+1)(x-i)(x+i). It used to answer [-1.00, -1, 0, 1.00, 1],
+		// naming -1 and 1 twice each and both complex roots not at all.
+		{ source: "solve(x^5-x=0, x)", coefficients: [1, 0, 0, 0, -1, 0], distinct: 5 },
+		// Answered `1` and nothing else, with no sign that four roots were missing.
+		{ source: "solve(x^5-1=0, x)", coefficients: [1, 0, 0, 0, 0, -1], distinct: 5 },
+		// Answered [-1.0000000000000002, 7.07e-17, 1] for three exact roots.
+		{ source: "solve(x^3-x=0, x)", coefficients: [1, 0, -1, 0], distinct: 3 },
+		// Answered "no real solutions" while x^4+1, x^4+4 and x^4-x^2+1 all
+		// returned four complex roots.
+		{ source: "solve(x^4-2x^2+3=0, x)", coefficients: [1, 0, -2, 0, 3], distinct: 4 },
+		{ source: "solve(x^2-2=0, x)", coefficients: [1, 0, -2], distinct: 2 },
+		// A genuine double root, which is one solution reported once.
+		{ source: "solve(x^2-4x+4=0, x)", coefficients: [1, -4, 4], distinct: 1 },
+		// No closed form at all, so the whole answer comes from the numerical path.
+		{ source: "solve(x^5+x+1=0, x)", coefficients: [1, 0, 0, 0, 1, 1], distinct: 5 },
+		{ source: "solve(x^4+1=0, x)", coefficients: [1, 0, 0, 0, 1], distinct: 4 },
+		{ source: "solve(x^4+4=0, x)", coefficients: [1, 0, 0, 0, 4], distinct: 4 },
+		{ source: "solve(x^4-x^2+1=0, x)", coefficients: [1, 0, -1, 0, 1], distinct: 4 },
+		{ source: "solve(x^6-1=0, x)", coefficients: [1, 0, 0, 0, 0, 0, -1], distinct: 6 },
+		{ source: "solve(x^8-1=0, x)", coefficients: [1, 0, 0, 0, 0, 0, 0, 0, -1], distinct: 8 },
+		// A repeated irrational root, reported once like any other repeat.
+		{ source: "solve(x^4-4x^2+4=0, x)", coefficients: [1, 0, -4, 0, 4], distinct: 2 },
+		{ source: "solve(x^3-2=0, x)", coefficients: [1, 0, 0, -2], distinct: 3 },
+	];
+
+	test.each(cases)("$source returns roots that all satisfy it", ({ source, coefficients }) => {
+		const engine = newTrackedEngine("en");
+		for (const root of solvedRoots(engine, source)) expectRootSatisfies(coefficients, root, source);
+		engine.clear();
+	});
+
+	test.each(cases)("$source reports $distinct distinct roots", ({ source, distinct }) => {
+		const engine = newTrackedEngine("en");
+		expect(solvedRoots(engine, source)).toHaveLength(distinct);
+		engine.clear();
+	});
+
+	test.each(cases)("$source returns roots that multiply back up to it", ({ source, coefficients }) => {
+		const engine = newTrackedEngine("en");
+		const roots = solvedRoots(engine, source);
+		if (!rootsRebuild(coefficients, roots)) {
+			throw new Error(`${source}: ${roots.length} roots do not reconstruct a degree-${coefficients.length - 1} polynomial`);
+		}
+		engine.clear();
+	});
+
+	test("x^5-x is answered exactly, with no numerical method involved at all", () => {
+		// Every root of x(x-1)(x+1)(x^2+1) is exact, so nothing here may arrive as
+		// a decimal that is nearly right. Compared without tolerance on purpose:
+		// -1.0000000000004656 is what the defect looked like.
+		const engine = newTrackedEngine("en");
+		const roots = solvedRoots(engine, "solve(x^5-x=0, x)");
+		const asText = roots.map(root => `${root.re},${root.im}`).sort();
+		expect(asText).toEqual(["-1,0", "0,-1", "0,1", "0,0", "1,0"].sort());
+		engine.clear();
+	});
+
+	test("x^3-x is answered exactly too, rather than losing the zero to rounding", () => {
+		const engine = newTrackedEngine("en");
+		expect(solvedRoots(engine, "solve(x^3-x=0, x)").map(root => root.re).sort((a, b) => a - b)).toEqual([-1, 0, 1]);
+		engine.clear();
+	});
+
+	test("a determinant of whole numbers is a whole number", () => {
+		// The same class of defect one subsystem over: [1,2,3;4,5,6;7,8,9] is
+		// singular, and elimination in doubles answered 6.661338147750939e-16.
+		// An integer matrix has an integer determinant, so anything else is the
+		// method showing through the answer.
+		const engine = newTrackedEngine("en");
+		expect(engine.evaluateLine(1, "det([1,2,3;4,5,6;7,8,9])")[0].toNumber()).toBe(0);
+		expect(engine.evaluateLine(2, "det([2,0;0,3])")[0].toNumber()).toBe(6);
+		expect(engine.evaluateLine(3, "det([1,2,3;4,5,7;7,8,9])")[0].toNumber()).toBe(6);
+		expect(engine.evaluateLine(4, "det([0,1;1,0])")[0].toNumber()).toBe(-1);
+		engine.clear();
+	});
+
+	test("120 random integer polynomials of degree 2 to 6 are solved completely", () => {
+		const random = seededRandom(0x5eed45);
+		const engine = newTrackedEngine("en");
+		let checked = 0;
+		for (let trial = 0; trial < 120; trial++) {
+			const degree = 2 + Math.floor(random() * 5);
+			const coefficients = [smallInt(random, 4)];
+			for (let i = 0; i < degree; i++) coefficients.push(Math.floor(random() * 11) - 5);
+			const source = `solve(${polynomialSource(coefficients)}=0, x)`;
+
+			const roots = solvedRoots(engine, source);
+			for (const root of roots) expectRootSatisfies(coefficients, root, source);
+			if (!rootsRebuild(coefficients, roots)) {
+				throw new Error(`${source}: ${roots.length} roots do not reconstruct a degree-${degree} polynomial`);
+			}
+			checked++;
+		}
+		// A guard on the guard: a change that made every case decline would leave
+		// the loop above asserting nothing.
+		expect(checked).toBe(120);
+		engine.clear();
+	});
+
+	test.failing("a quintic that factors over the rationals is still solved numerically", () => {
+		// x^5+x+1 is (x^2+x+1)(x^3-x^2+1), so two of its roots are exactly
+		// -1/2 ± sqrt(3)/2 i and a third is a Cardano expression. The solver only
+		// divides out **linear** rational factors, so it never sees the quadratic
+		// one and answers the whole equation with decimals. Recorded rather than
+		// fixed: searching for higher-degree rational factors is a different
+		// algorithm (Zassenhaus or LLL), not a refinement of this one.
+		const engine = newTrackedEngine("en");
+		const [value] = engine.evaluateLine(1, "solve(x^5+x+1=0, x)");
+		const cells = value.type === ValueType.Matrix ? matrixCells(value.value as MatrixData) : [];
+		const printed = cells.map(cell => (typeof cell === "object" ? formatSymbolic(cell) : String(cell))).join(", ");
+		expect(printed).toContain("sqrt(3)");
+	});
+});
+
 // ── derivatives ────────────────────────────────────────────────────────────
 
 describe("der agrees with numerical differentiation", () => {

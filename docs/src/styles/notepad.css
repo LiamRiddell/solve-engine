@@ -117,9 +117,36 @@
   color: var(--primary);
 }
 
+/* A refusal is not an answer, so it must not be painted like one. Amber rather
+   than red: the engine declining to guess is the correct outcome, not a
+   failure, and red would read as something having gone wrong with the page. */
+.notepad__answer[data-kind="error"] {
+  color: var(--warning-text);
+}
+
+/* A notepad in `showErrors` mode. The column is showing sentences now instead
+   of figures, so it takes more of the width and is set from the left, where a
+   sentence starts. It still clips rather than wraps, because one editor row to
+   one answer row is the invariant the whole layout rests on; the full text is
+   on the row's `title`. */
+.notepad--errors {
+  --np-answer-width: min(30rem, 62%);
+}
+
+.notepad--errors .notepad__answer {
+  text-align: start;
+}
+
 @media (max-width: 48rem) {
   .notepad-host {
     --np-answer-width: 9rem;
+  }
+
+  /* A refusal is clipped at any width a phone can offer, so past this point the
+     expression column is the one worth the space: it is the half a reader edits,
+     and the full message is still on the row's `title`. */
+  .notepad--errors {
+    --np-answer-width: 52%;
   }
 }
 

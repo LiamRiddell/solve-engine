@@ -506,6 +506,54 @@ value.toNumber(); // the number underneath
 
 <TestStats />
 
+<div class="band not-content">
+  <div class="band__inner">
+    <div class="band__head">
+      <span class="band__eyebrow">Security</span>
+      <h2 class="band__title">It evaluates untrusted input on purpose.</h2>
+      <p class="band__lede">
+        A calculator's job is to evaluate whatever somebody typed, so hostile
+        input is the normal case rather than the edge case. Five claims, each
+        one something you can check rather than take on trust.
+      </p>
+    </div>
+
+    <ul class="facts">
+      <li>
+        <strong>No eval, no Function constructor</strong>
+        No code generation anywhere in the source. Expressions compile to a
+        fixed instruction set and run on a machine that can only do what its
+        opcodes do.
+      </li>
+      <li>
+        <strong>No I/O of its own</strong>
+        No file reads, no processes, no sockets. The only requests belong to
+        live data, when an expression asks for a rate or a forecast.
+      </li>
+      <li>
+        <strong>One runtime dependency</strong>
+        <code>@tanstack/query-core</code>. The parser, the virtual machine, the
+        unit table and the computer algebra are all in the repository.
+      </li>
+      <li>
+        <strong>2.6 million fuzz cases, zero process deaths</strong>
+        Seeded and shrinking, against the expression grammar and the bytecode
+        VM. Every finding is committed as a reproducer.
+      </li>
+      <li>
+        <strong>Bounded by construction</strong>
+        Length, nesting, instructions, stack, collection size, total allocation
+        and call count are all capped, each with a named error.
+      </li>
+    </ul>
+
+    <p class="band__note">
+      <a href="/guide/security/">The security page</a> shows how to check every
+      one of those, and hands you a live engine to type something hostile into.
+    </p>
+  </div>
+</div>
+
 <PackageSize />
 
 <WhatsInTheBox />

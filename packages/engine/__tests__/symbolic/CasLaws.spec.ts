@@ -13,7 +13,10 @@ import {
 	simplifySymbolic,
 	symbolicKey,
 	substitute,
+	complex,
+	complexNode,
 	constNode,
+	rationalFromNumber,
 	varNode,
 	powNode,
 	callNode,
@@ -316,8 +319,14 @@ describe("solving is verified by substitution", () => {
 		const p = poly([1, 0, 0, 0, -1, -1]); // x^5 - x - 1
 		const outcome = solveForVariable(p, constNode(0), "x");
 		if (outcome.kind !== "roots") throw new Error("expected roots");
+		expect(outcome.approximate.length).toBe(5);
 		for (const approximate of outcome.approximate) {
-			expect(evaluateNumerically(p, { x: approximate })).toBeCloseTo(0, 8);
+			// Substituted over the complex plane, since four of the five roots are
+			// off the real line and a real-only check would silently skip them.
+			const substituted = substitute(p, "x", complexNode(complex(rationalFromNumber(approximate.re), rationalFromNumber(approximate.im))));
+			const value = evaluateComplexNumerically(simplifySymbolic(substituted), {});
+			expect(value.re).toBeCloseTo(0, 8);
+			expect(value.im).toBeCloseTo(0, 8);
 		}
 	});
 

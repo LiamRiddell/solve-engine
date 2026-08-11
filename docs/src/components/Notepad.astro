@@ -8,9 +8,11 @@ interface Props {
   minRows?: number;
   /** Accessible name for the editable region. */
   label?: string;
+  /** Show refusals in the answer column. See the component's own prop doc. */
+  showErrors?: boolean;
 }
 
-const { initial, minRows, label } = Astro.props;
+const { initial, minRows, label, showErrors } = Astro.props;
 
 // The interactive notepad is `client:only`, so nothing of it exists in the
 // built HTML. That would leave every example on this site invisible to Pagefind
@@ -30,5 +32,6 @@ const lines = initial.replace(/\s+$/, "").split("\n");
     initial={initial}
     minRows={minRows}
     label={label}
+    showErrors={showErrors}
   />
 </div>

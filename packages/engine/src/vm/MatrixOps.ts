@@ -284,15 +284,104 @@ function toWorkingRows(m: MatrixData): number[][] {
 }
 
 /**
- * `|a|` / `det(a)`, Gaussian elimination with partial pivoting, reusing
- * the elimination's own running pivot product as the determinant (rather
- * than a separate cofactor-expansion implementation). A row swap flips the
- * product's sign, matching the standard determinant-under-row-swap
- * identity. A zero pivot column (no non-zero candidate at or below it)
- * means the matrix is singular, determinant 0, not an error, since 0 is
- * the mathematically correct answer for a singular matrix.
+ * Largest matrix {@link integerDeterminant} will attempt.
+ *
+ * Bareiss keeps every intermediate a minor of the original matrix, so the
+ * bigints stay bounded by Hadamard's inequality rather than growing without
+ * limit. What this bounds is the cubic loop itself, and it follows the
+ * precedent of {@link SYMBOLIC_INVERSE_DIMENSION_LIMIT}: a named ceiling with
+ * a stated reason rather than an arbitrary inline number. A larger matrix
+ * still gets an answer, from the elimination below.
+ */
+const EXACT_DETERMINANT_DIMENSION_LIMIT = 12;
+
+/**
+ * Every cell as an exact bigint, or `null` when the matrix is not wholly
+ * integral.
+ *
+ * Booleans are excluded rather than coerced, so a matrix of comparison results
+ * keeps whatever the elimination has always made of it.
+ */
+function toIntegerRows(m: MatrixData): bigint[][] | null {
+	if (m.rows > EXACT_DETERMINANT_DIMENSION_LIMIT) return null;
+	const rows: bigint[][] = [];
+	for (let r = 0; r < m.rows; r++) {
+		const row: bigint[] = [];
+		for (let c = 0; c < m.cols; c++) {
+			const cell = matAt(m, r, c);
+			if (typeof cell !== "number" || !Number.isSafeInteger(cell)) return null;
+			row.push(BigInt(cell));
+		}
+		rows.push(row);
+	}
+	return rows;
+}
+
+/**
+ * The determinant of an integer matrix, exactly, by Bareiss's fraction-free
+ * elimination.
+ *
+ * Ordinary elimination divides by the pivot at every step, and those divisions
+ * are what leave `det([1,2,3;4,5,6;7,8,9])` reading `6.661338147750939e-16`
+ * instead of the zero it is. The matrix is singular, and "very nearly zero" is
+ * not a different answer from zero, it is the same answer with the reader left
+ * to decide. Bareiss divides by the **previous** pivot instead, and that
+ * division is exactly divisible as a theorem, so every intermediate stays a
+ * whole number and a singular matrix comes out as an exact `0n`.
+ *
+ * @param rows - The matrix, row-major, which this mutates as its working copy.
+ * @returns The determinant.
+ */
+function integerDeterminant(rows: bigint[][]): bigint {
+	const n = rows.length;
+	let previous = 1n;
+	let sign = 1n;
+
+	for (let k = 0; k < n - 1; k++) {
+		if (rows[k][k] === 0n) {
+			let candidate = -1;
+			for (let r = k + 1; r < n; r++) {
+				if (rows[r][k] !== 0n) {
+					candidate = r;
+					break;
+				}
+			}
+			// No pivot anywhere in the column means a zero column below k, so the
+			// matrix is singular and its determinant is exactly zero.
+			if (candidate === -1) return 0n;
+			const swapped = rows[k];
+			rows[k] = rows[candidate];
+			rows[candidate] = swapped;
+			sign = -sign;
+		}
+		for (let i = k + 1; i < n; i++) {
+			for (let j = k + 1; j < n; j++) {
+				rows[i][j] = (rows[i][j] * rows[k][k] - rows[i][k] * rows[k][j]) / previous;
+			}
+		}
+		previous = rows[k][k];
+	}
+	return sign * rows[n - 1][n - 1];
+}
+
+/**
+ * `|a|` / `det(a)`, exactly when every cell is a whole number, and otherwise by
+ * Gaussian elimination with partial pivoting, reusing the elimination's own
+ * running pivot product as the determinant (rather than a separate
+ * cofactor-expansion implementation). A row swap flips the product's sign,
+ * matching the standard determinant-under-row-swap identity. A zero pivot
+ * column (no non-zero candidate at or below it) means the matrix is singular,
+ * determinant 0, not an error, since 0 is the mathematically correct answer for
+ * a singular matrix.
+ *
+ * The integer route is tried first because an integer matrix has an integer
+ * determinant, and a method that cannot return one is answering a question
+ * nobody asked. See {@link integerDeterminant}.
  */
 function numericDeterminant(m: MatrixData): Value {
+	const integers = toIntegerRows(m);
+	if (integers !== null) return numberValue(Number(integerDeterminant(integers)));
+
 	const n = m.rows;
 	const a = toWorkingRows(m);
 	let det = 1;

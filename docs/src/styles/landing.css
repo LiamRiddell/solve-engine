@@ -892,6 +892,54 @@
   text-align: start;
 }
 
+/* ── Security facts ─────────────────────────────────────────────────────── */
+
+/*
+ * Five short claims, each of which a sceptical reader can go and check. A
+ * paragraph would have been the same words and none of the scannability, and
+ * the point of this band is that someone evaluating the library can take it in
+ * without reading it.
+ *
+ * A hairline above each item rather than a card around it, matching the spec
+ * grid further up the page: the page is one flat surface and panels sitting on
+ * top of it are the thing this design does not do.
+ */
+/* `auto-fit` rather than `auto-fill`, which is what puts all five claims on one
+   row on a desktop: the extra track collapses and the five share the width,
+   instead of four sitting in a row with the fifth stranded underneath. Below
+   about a tablet it falls to three, then to one. */
+[data-has-hero] .facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0 clamp(1.25rem, 2.4vw, 2.25rem);
+  margin: clamp(2rem, 5vh, 3rem) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-has-hero] .facts li {
+  border-top: 1px solid var(--border);
+  padding: 1rem 0 1.25rem;
+  color: var(--faint);
+  font-size: var(--sl-text-sm);
+  line-height: 1.6;
+}
+
+[data-has-hero] .facts strong {
+  display: block;
+  margin-bottom: 0.375rem;
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+/* A package name has no spaces in it, so on a narrow column it would otherwise
+   set the minimum width of its grid track and take the whole page wider with
+   it. `anywhere` only breaks when there is no other option. */
+[data-has-hero] .facts code {
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
 /* ── Narrow viewports ───────────────────────────────────────────────────── */
 
 /*
@@ -907,6 +955,7 @@
 [data-has-hero] .showcase__body > *,
 [data-has-hero] .specs > *,
 [data-has-hero] .stats-band__grid > *,
+[data-has-hero] .facts > *,
 [data-has-hero] .band__inner > * {
   min-width: 0;
 }

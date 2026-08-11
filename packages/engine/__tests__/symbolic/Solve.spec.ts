@@ -122,16 +122,20 @@ describe("solveForVariable — answers that are not roots", () => {
 
 describe("solveForVariable — the numerical fallback", () => {
 	test("a quintic with no rational root is approximated and marked as such", () => {
-		// x^5 - x - 1 = 0 has one real root near 1.1673, and no rational one.
+		// x^5 - x - 1 = 0 has one real root near 1.1673 and no rational one, and it
+		// has four more roots in two conjugate pairs. Reporting only the real one
+		// was the defect: one root out of five reads exactly like all of them.
 		const outcome = solve([1, 0, 0, 0, -1, -1]);
 		if (outcome.kind !== "roots") throw new Error(`expected roots, got ${outcome.kind}`);
 		expect(outcome.exact).toHaveLength(0);
-		expect(outcome.approximate).toHaveLength(1);
-		expect(outcome.approximate[0]).toBeCloseTo(1.1673039783, 8);
+		expect(outcome.approximate).toHaveLength(5);
+		const real = outcome.approximate.filter(root => root.im === 0);
+		expect(real).toHaveLength(1);
+		expect(real[0].re).toBeCloseTo(1.1673039783, 8);
 	});
 
 	test("an exact root found alongside an approximate one stays in the exact list", () => {
-		// (x-1)(x^5 - x - 1): one rational root, one irrational.
+		// (x-1)(x^5 - x - 1): one rational root, five that are not.
 		const outcome = solveForVariable(
 			{ kind: "mul", left: poly([1, -1]), right: poly([1, 0, 0, 0, -1, -1]) },
 			constNode(0),
@@ -140,6 +144,60 @@ describe("solveForVariable — the numerical fallback", () => {
 		if (outcome.kind !== "roots") throw new Error(`expected roots, got ${outcome.kind}`);
 		expect(outcome.exact.map(r => formatSymbolic(simplifySymbolic(r)))).toContain("1");
 		expect(outcome.approximate.length).toBeGreaterThan(0);
+	});
+});
+
+describe("solveForVariable — a zero constant term", () => {
+	test("x itself is divided out first, so x^5-x is solved exactly", () => {
+		// The rational-root theorem is stated for a non-zero constant term, so
+		// with one of zero it correctly reports no candidates. Without dividing
+		// `x` out first that answer was taken as "no rational roots at all" and
+		// the whole equation fell through to numerics, which returned -1 and 1
+		// twice each and neither complex root.
+		expect(exactRoots([1, 0, 0, 0, -1, 0])).toEqual(["-1", "-i", "0", "1", "i"].sort());
+	});
+
+	test("and x^3-x, whose zero used to come back as 7.07e-17", () => {
+		expect(exactRoots([1, 0, -1, 0])).toEqual(["-1", "0", "1"]);
+	});
+
+	test("a repeated factor of x is still one root", () => {
+		// x^4 - x^3 = x^3(x-1). Zero is a root three times over and one solution.
+		expect(exactRoots([1, -1, 0, 0, 0])).toEqual(["0", "1"]);
+	});
+
+	test("nothing is approximated on any of those", () => {
+		const outcome = solve([1, 0, 0, 0, -1, 0]);
+		if (outcome.kind !== "roots") throw new Error(`expected roots, got ${outcome.kind}`);
+		expect(outcome.approximate).toEqual([]);
+	});
+});
+
+describe("solveForVariable — every root is accounted for", () => {
+	test("a quintic with one rational root reports the other four rather than stopping", () => {
+		// x^5-1 answered `1` alone, which is a correct root and a fifth of the
+		// answer, with nothing to say the rest were missing.
+		const outcome = solve([1, 0, 0, 0, 0, -1]);
+		if (outcome.kind !== "roots") throw new Error(`expected roots, got ${outcome.kind}`);
+		expect(outcome.exact).toHaveLength(1);
+		expect(outcome.approximate).toHaveLength(4);
+	});
+
+	test("the four are two conjugate pairs, since a real polynomial's roots come in them", () => {
+		const outcome = solve([1, 0, 0, 0, 0, -1]);
+		if (outcome.kind !== "roots") throw new Error(`expected roots, got ${outcome.kind}`);
+		const negative = outcome.approximate.filter(root => root.im < 0);
+		expect(negative).toHaveLength(2);
+		for (const root of negative) {
+			expect(outcome.approximate.some(other => other.re === root.re && other.im === -root.im)).toBe(true);
+		}
+	});
+
+	test("a degree above the ceiling is refused outright rather than half-answered", () => {
+		const tooLarge = new Array(SOLVE_MAX_DEGREE + 2).fill(0);
+		tooLarge[0] = 1;
+		tooLarge[tooLarge.length - 1] = -1;
+		expect(solve(tooLarge).kind).toBe("unsupported");
 	});
 });
 

@@ -316,7 +316,7 @@ function distinct(roots: readonly SymbolicNode[]): SymbolicNode[] {
  * alone. Deciding it numerically would be one rounding error away from claiming
  * a real root where there is a complex one.
  */
-function biquadraticRoots(p: Rational, r: Rational): SymbolicNode[] | null {
+function biquadraticRoots(p: Rational, r: Rational): SymbolicNode[] {
 	const discriminant = rationalSub(rationalMul(p, p), rationalMul(FOUR, r));
 	if (rationalCompare(discriminant, RATIONAL_ZERO) < 0) return complexBiquadraticRoots(p, r);
 
@@ -385,23 +385,36 @@ function halved(node: SymbolicNode): SymbolicNode {
 /**
  * The four roots of a biquadratic whose inner quadratic has no real solution.
  *
- * `y` is then `-p/2 ± i*sqrt(|D|)/2`, whose modulus is `sqrt(r)`. When that
- * modulus is rational both components of `sqrt(y)` are square roots of
- * rationals, so all four roots come out as exact surds. `x^4+1=0` is the case
+ * `y` is then `-p/2 ± i*sqrt(|D|)/2`, whose modulus is `sqrt(r)`, and
+ * `sqrt(a+bi)` has real part `sqrt((|y|+a)/2)` and imaginary part
+ * `sqrt((|y|-a)/2)`. Both of those radicands are non-negative here rather than
+ * needing to be checked: `|y|` is `sqrt(r)` and `a` is `-p/2`, and a negative
+ * discriminant is exactly the statement that `p^2 < 4r`, so `|y| > |a|`.
+ *
+ * When `sqrt(r)` is itself rational every component is a square root of a
+ * rational and all four roots come out as ordinary surds. `x^4+1=0` is the case
  * worth having: its roots are `±sqrt(2)/2 ± sqrt(2)/2 i`, which no real-only
  * solver can report at all.
+ *
+ * When `sqrt(r)` is irrational the components nest one level, exactly as
+ * {@link nestedSquareRoots} does for the real case. This used to decline
+ * instead, which is how `x^4-2x^2+3=0` came to answer "no real solutions" while
+ * its siblings `x^4+1`, `x^4+4` and `x^4-x^2+1` all returned four complex
+ * roots. Same family, same shape of answer, and the difference was only whether
+ * a `3` happened to be a perfect square.
  */
-function complexBiquadraticRoots(p: Rational, r: Rational): SymbolicNode[] | null {
+function complexBiquadraticRoots(p: Rational, r: Rational): SymbolicNode[] {
+	const centre = rationalDiv(rationalNeg(p), TWO);
 	const modulus = exactRationalSqrt(r);
-	if (modulus === null) return null;
 
-	// sqrt(a+bi) has real part sqrt((|z|+a)/2) and imaginary part sqrt((|z|-a)/2).
-	const realPart = rationalDiv(rationalAdd(modulus, rationalDiv(rationalNeg(p), TWO)), TWO);
-	const imaginaryPart = rationalDiv(rationalSub(modulus, rationalDiv(rationalNeg(p), TWO)), TWO);
-	if (rationalCompare(realPart, RATIONAL_ZERO) < 0 || rationalCompare(imaginaryPart, RATIONAL_ZERO) < 0) return null;
+	const re = modulus === null
+		? nestedSurd(surdNode(r), centre)
+		: surdNode(rationalDiv(rationalAdd(modulus, centre), TWO));
+	const imaginaryMagnitude = modulus === null
+		? nestedSurd(surdNode(r), rationalNeg(centre))
+		: surdNode(rationalDiv(rationalSub(modulus, centre), TWO));
 
-	const re = surdNode(realPart);
-	const im: SymbolicNode = { kind: "mul", left: surdNode(imaginaryPart), right: complexNode(COMPLEX_I) };
+	const im: SymbolicNode = { kind: "mul", left: imaginaryMagnitude, right: complexNode(COMPLEX_I) };
 	const first: SymbolicNode = { kind: "add", left: re, right: im };
 	const second: SymbolicNode = { kind: "sub", left: re, right: im };
 	return [
@@ -410,6 +423,20 @@ function complexBiquadraticRoots(p: Rational, r: Rational): SymbolicNode[] | nul
 		second,
 		first,
 	];
+}
+
+/**
+ * `sqrt((surd + offset)/2)`, written so the offset's sign reads naturally.
+ *
+ * A negative offset becomes a subtraction rather than the addition of a
+ * negative, so the radicand prints as `(sqrt(3)-1)/2` rather than
+ * `(sqrt(3)+-1)/2`.
+ */
+function nestedSurd(surd: SymbolicNode, offset: Rational): SymbolicNode {
+	const shifted: SymbolicNode = offset.n >= 0n
+		? { kind: "add", left: surd, right: constNode(offset) }
+		: { kind: "sub", left: surd, right: constNode(rationalNeg(offset)) };
+	return { kind: "call", name: "sqrt", args: [halved(shifted)] };
 }
 
 /**
