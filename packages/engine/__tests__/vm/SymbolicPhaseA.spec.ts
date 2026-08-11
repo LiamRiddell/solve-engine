@@ -53,7 +53,12 @@ describe("Phase A regressions: a symbolic operand no longer collapses to zero", 
 	});
 
 	test("a builtin with no symbolic reading reports that, rather than computing against zero", () => {
-		expect(evaluate("random(x) =>")).toBe("SYMBOLIC_UNSUPPORTED_FUNCTION");
+		// `clz32` rather than `random`, which used to stand here: `random` takes
+		// no arguments at all, so `random(x)` is now caught by the arity check
+		// at the CALL_BUILTIN dispatch and never reaches the symbolic routing
+		// this test is about. `clz32` takes one argument and has no symbolic
+		// reading, which is the shape the test wants.
+		expect(evaluate("clz32(x) =>")).toBe("SYMBOLIC_UNSUPPORTED_FUNCTION");
 	});
 });
 

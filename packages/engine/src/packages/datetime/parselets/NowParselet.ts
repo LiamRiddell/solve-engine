@@ -16,20 +16,33 @@ import { OpCode } from "@solve-js/parser/OpCode";
  * to. dayOffset must stay applied at evaluation time (ADD on top of
  * DATE_NOW), not baked in at parse time, so "now"/"tomorrow"/"yesterday"
  * stay relative to whenever the bytecode actually runs.
+ *
+ * The offset is emitted as a duration IN DAYS rather than as its length in
+ * milliseconds. It used to be `dayOffset * 24 * 60 * 60 * 1000`, which is only
+ * a day long when no daylight-saving transition falls inside it: on the day a
+ * zone springs forward "tomorrow" was really 23 hours away and on the day it
+ * falls back 25, so the answer was an hour out and could name the wrong
+ * calendar day outright. Tagging the number with "days" hands the decision to
+ * the ADD opcode, which steps the calendar day field instead (see
+ * `vm/VM.ts`'s shiftDatetime()). The same `PUSH_NUMBER; PUSH_STRING;
+ * UOM_CONVERT` trio any unit literal compiles to (see UomLiteralParselet).
  */
 export class NowParselet implements PrefixParselet {
 	readonly category = "Date/Time";
-	private readonly msOffset: number;
+	private readonly dayOffset: number;
 
 	constructor(dayOffset: number = 0) {
-		this.msOffset = dayOffset * 24 * 60 * 60 * 1000;
+		this.dayOffset = dayOffset;
 	}
 
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     builder.emitOpcode(OpCode.DATE_NOW);
-    if (this.msOffset !== 0) {
+    if (this.dayOffset !== 0) {
       builder.emitOpcode(OpCode.PUSH_NUMBER);
-      builder.emitNumber(this.msOffset);
+      builder.emitNumber(this.dayOffset);
+      builder.emitOpcode(OpCode.PUSH_STRING);
+      builder.emitString("days");
+      builder.emitOpcode(OpCode.UOM_CONVERT);
       builder.emitOpcode(OpCode.ADD);
     }
   }

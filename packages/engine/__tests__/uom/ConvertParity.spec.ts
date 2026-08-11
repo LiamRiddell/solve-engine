@@ -22,6 +22,37 @@ import { getMeasure, convertUnit, getBestUnit, getConvertiblePossibilities } fro
 
 const ALL_UNITS = Object.keys(UNIT_TABLE);
 
+/**
+ * The spellings whose ratio the port deliberately does not mirror.
+ *
+ * `convert` records the square decimetre as 0.1 square metres when a decimetre
+ * is 0.1 metres and 0.1 squared is 0.01. That is an arithmetic error rather
+ * than a rounding choice or a convention, so the generator corrects it on the
+ * way through and states why: see UPSTREAM_UNIT_CORRECTIONS in
+ * scripts/generate-unit-table.mjs.
+ *
+ * The sweeps below skip these six and the DEVIATION test pins the difference,
+ * so parity keeps its teeth over the other 1450 spellings.
+ */
+const CORRECTED_UNITS = new Set([
+  "square decimeter",
+  "square decimetre",
+  "square decimeters",
+  "square decimetres",
+  "dm²",
+  "dm2",
+]);
+
+/**
+ * The measure whose best-unit list the port deliberately does not mirror.
+ *
+ * Upstream's illuminance list descends after its first entry, which the forward
+ * walk in `convertToBestMetric` cannot follow, so every magnitude at or above
+ * one lux ran past lux and µlx onto nanolux. Corrected in the generator for the
+ * same reason and pinned in the DEVIATION test below.
+ */
+const CORRECTED_BEST_UNIT_MEASURE = "illuminance";
+
 /** Values chosen to exercise zero, both signs, subnormal-ish and huge magnitudes. */
 const SAMPLE_QUANTITIES = [0, 1, -1, 0.1, 3.14159, 1e-9, 1e12, -273.15, Number.MAX_SAFE_INTEGER];
 
@@ -101,7 +132,9 @@ describe("ported unit table matches convert v7.0.2", () => {
     const mismatches: string[] = [];
     for (const [, units] of byKind) {
       for (const from of units) {
+        if (CORRECTED_UNITS.has(from)) continue;
         for (const to of units) {
+          if (CORRECTED_UNITS.has(to)) continue;
           for (const quantity of SAMPLE_QUANTITIES) {
             const ported = convertRaw(quantity, from, to);
             const upstream = convert(quantity, from as never).to(to as never) as unknown as number;
@@ -149,6 +182,33 @@ describe("ported unit table matches convert v7.0.2", () => {
     }
   });
 
+  test("DEVIATION: the square decimetre is corrected rather than mirrored", () => {
+    // A decimetre is 0.1 metres and 0.1 squared is 0.01, so a square decimetre
+    // is a hundredth of a square metre. Upstream records 0.1, which makes it ten
+    // times too large: `1 m2 in dm2` answered 10 rather than 100, and so did
+    // every other conversion routed through it. Every neighbouring prefix in the
+    // same table squares its length correctly and the cubic decimetre is right,
+    // so this is one mistyped ratio and not a different idea of a decimetre.
+    for (const spelling of CORRECTED_UNITS) {
+      expect(UNIT_TABLE[spelling][1]).toBe(0.01);
+    }
+    expect(convert(1, "m2").to("dm2" as never)).toBe(10);
+    expect(convertRaw(1, "m2", "dm2")).toBeCloseTo(100, 9);
+  });
+
+  test("DEVIATION: the illuminance best-unit list is corrected rather than mirrored", () => {
+    // Upstream ships [lux 1, µlx 1e-6, nlx 1e-9, klx 1000]. convertToBestMetric
+    // walks forwards and breaks at the first threshold the magnitude does not
+    // reach, so a list that descends after its first entry does not merely pick
+    // a poor unit: a normally lit office read as five hundred billion nanolux.
+    // Read field by field rather than compared whole: upstream's "best" result
+    // carries its own toString, which a deep equality would flag.
+    const upstream = convert(500, "lux").to("best") as { quantity: number; unit: string };
+    expect(upstream.unit).toBe("nlx");
+    expect(upstream.quantity).toBeCloseTo(500_000_000_000, 0);
+    expect(convertToBestMetric(500, "lux")).toEqual({ quantity: 500, unit: "lux" });
+  });
+
   test("DEVIATION: the time-to-metres guess is not reproduced", () => {
     // Upstream reinterprets `m` as minutes when the other side is a time unit.
     // We refuse instead, because that guess reached `<date> + <duration>` and
@@ -168,6 +228,8 @@ describe("ported unit table matches convert v7.0.2", () => {
 
     const mismatches: string[] = [];
     for (const unit of ALL_UNITS) {
+      if (CORRECTED_UNITS.has(unit)) continue;
+      if (MEASURE_KIND_NAMES[UNIT_TABLE[unit][0]] === CORRECTED_BEST_UNIT_MEASURE) continue;
       for (const quantity of magnitudes) {
         const ported = convertToBestMetric(quantity, unit);
         const upstream = convert(quantity, unit as never).to("best") as { quantity: number; unit: string };

@@ -16,7 +16,6 @@ export interface FormattingSettings {
   };
   unitOfMeasurementResult: {
     decimalPlaces: number;
-    unitNames: boolean;
   };
   percentageResult: {
     decimalPlaces: number;
@@ -38,7 +37,6 @@ export const DEFAULT_FORMATTING_SETTINGS: FormattingSettings = {
   },
   unitOfMeasurementResult: {
     decimalPlaces: 2,
-    unitNames: true,
   },
   percentageResult: {
     decimalPlaces: 2,

@@ -113,7 +113,10 @@ describe("error paths report rather than guess", () => {
 	});
 
 	test("a builtin with no symbolic reading, applied to an unknown", () => {
-		const value = rawValue("random(x) =>");
+		// `clz32` rather than `random`: `random` takes no arguments, so
+		// `random(x)` is now an arity error raised before the symbolic routing
+		// this test is about. See SymbolicPhaseA.spec.ts's twin of this test.
+		const value = rawValue("clz32(x) =>");
 		expect(value.type).toBe(ValueType.Error);
 		expect(String(value.value)).toBe("SYMBOLIC_UNSUPPORTED_FUNCTION");
 	});

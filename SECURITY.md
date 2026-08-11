@@ -41,9 +41,11 @@ fetching function supplied by the host rather than an API key, and neither is
 registered by default: unconfigured, they return a `NOT_CONFIGURED` value rather
 than a guess.
 
-**One built-in package does reach the network.** Weather is part of the default
-package set and calls Open-Meteo, a keyless public endpoint, when an expression
-asks for a forecast. The city name in the expression is what gets sent. Nothing
+**Two built-in packages reach the network.** Both are in the default package
+set. Weather calls Open-Meteo, a keyless public endpoint, when an expression
+asks for a forecast, and sends the city name from the expression. Currency
+fetches exchange rates when an expression converts between currencies, and
+sends the two currency codes. Nothing
 else leaves the process, and no request happens unless an expression asks for
 one. A host that wants no outbound traffic at all should assemble its package
 list rather than using the built-in set.

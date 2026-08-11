@@ -69,9 +69,12 @@ describe("Extended UoM categories: end-to-end", () => {
   test("apparent power, reactive power, and real power stay distinct measures", () => {
     expect(() => engine.evaluateLine(1, "1 VA to kW")).not.toThrow();
     const [result] = engine.evaluateLine(1, "1 VA to kW");
-    // Cross-measure "to" conversion is a no-op that keeps the source unit
-    // (mirrors existing UOM_CONVERT_TO behavior for any incompatible pair).
-    expect(result.unit).toBe("VA");
+    // This used to assert that the unit came back as "VA", pinning the
+    // cross-measure no-op UOM_CONVERT_TO performed for any incompatible pair.
+    // Handing the input back is indistinguishable from a conversion that
+    // succeeded at a rate of one, so the opcode reports INCOMPATIBLE_UNITS now,
+    // the same way "1 kV + 1 A" does in the test above.
+    expect(result.type).toBe(ValueType.Error);
   });
 
   test("volume flow rate: convert 1 cfs to lps", () => {

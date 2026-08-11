@@ -14,7 +14,14 @@ Several orders are recognised, resolved by the active locale where ambiguous.
 | --- | --- |
 | `25/12/2023` | day, month, year |
 | `2023-12-25` | ISO order |
+| `2024-5-3` | ISO order, unpadded |
 | `25.12.2023` | dot separated |
+
+Write a literal as one run of characters, with no spaces around its
+separators. That is what tells a date from the arithmetic it is spelled
+identically to: `2024-5-3` is a date, and `2024 - 5 - 3` is 2016. Spacing
+decides it on its own, so a padded chain like `2024 - 05 - 03` is subtraction
+too.
 
 ## Arithmetic
 

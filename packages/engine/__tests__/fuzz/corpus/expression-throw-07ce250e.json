@@ -1,0 +1,15 @@
+{
+	"id": "07ce250e",
+	"seed": 4037875,
+	"generator": "expression",
+	"outcome": "throw",
+	"detail": "TypeError: Cannot read properties of undefined (reading 'toUpperCase')",
+	"found": "2026-08-10",
+	"shrinkSteps": 13,
+	"input": {
+		"kind": "expression",
+		"source": "next friday * [5905,93%,2868;09,0b1010000,255;0xf3,923%,-879182] * 333K * 4-14-01* \"czyra\""
+	},
+	"status": "fixed",
+	"note": "uom/Iso4217.ts's isIso4217 does code.toUpperCase() with no guard, and its callers reach it with undefined. From the ./vm surface that is a string-table index out of range. From ORDINARY SOURCE it was the OperandWidth desync, and in that path it runs inside preflight, outside executeBytecode()'s try/catch, so the raw TypeError escaped evaluateExpression() to the host. FIXED: parser/OperandWidth.ts omitted OpCode.DATE_LITERAL, so OPERAND_BYTES[95] was 0 and every scanner using nextInstruction() read the literal's constant-pool index as an opcode. The date literal in this source (4-14-01) is what desynchronised the currency preflight walk. __tests__/parser/OperandWidth.spec.ts now compiles real source with emitOpcode() instrumented and requires the table to reproduce the emitted opcode boundaries exactly, which catches an omission of this shape rather than only a change in the size of the enum."
+}

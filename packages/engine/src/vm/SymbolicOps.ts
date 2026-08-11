@@ -16,10 +16,13 @@
  * and `CALL_BUILTIN` respectively.
  */
 
-import { Value, ValueType, numberValue, stringValue, errorValue, symbolicValue, matrixValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, stringValue, errorValue, symbolicValue, matrixValue, faultedOperand } from "@solve-js/vm/Value";
 import { solveForVariable, type SolveOutcome } from "@solve-js/symbolic/Solve";
+import type { ApproximateRoot } from "@solve-js/symbolic/NumericRoots";
 import {
 	type SymbolicNode,
+	complex,
+	complexNode,
 	constNode,
 	powNode,
 	callNode,
@@ -162,9 +165,13 @@ export function symbolicNeg(v: Value): Value {
 export function symbolicBuiltin(index: number, args: readonly Value[]): Value {
 	const nodes: SymbolicNode[] = [];
 	for (const arg of args) {
-		// Propagate an Error operand unchanged rather than replacing it, so the
-		// original code and message reach the caller.
-		if (arg.type === ValueType.Error) return arg;
+		// Propagate a faulted operand unchanged rather than replacing it, so the
+		// original code and message (or pending query key) reach the caller.
+		// Pending counts: valueToSymbolic() below returns null for one, which
+		// would report "no symbolic reading" for a value that simply has not
+		// arrived yet.
+		const faulted = faultedOperand(arg);
+		if (faulted) return faulted;
 		const node = valueToSymbolic(arg);
 		if (node === null) return unsupported(SYMBOLIC_BUILTIN_NAMES[index] ?? `builtin ${index}`);
 		nodes.push(node);
@@ -195,12 +202,31 @@ function rootToValue(root: SymbolicNode): Value {
 }
 
 /**
+ * Renders one numerically-found root as a value.
+ *
+ * A root off the real line becomes an exact complex node built from the two
+ * doubles, so it displays as `-0.809+0.5878i` rather than being dropped or
+ * flattened to its real part. The rational conversion is of the double's own
+ * decimal form, so nothing is invented: the value shown is the value found, and
+ * the number formatter rounds it for display exactly as it rounds any other.
+ */
+function approximateRootToValue(root: ApproximateRoot): Value {
+	if (root.im === 0) return numberValue(root.re);
+	return symbolicValue(complexNode(complex(rationalFromNumber(root.re), rationalFromNumber(root.im))));
+}
+
+/**
  * Renders a {@link SolveOutcome} as a VM value.
  *
- * Several outcomes are answers rather than errors and read as sentences, since
- * "no real solutions" is the complete and correct response to `x^2+1=0` over
- * the reals and dressing it up as a failure would misrepresent it. Only the
- * genuinely-unsupported case becomes an error value.
+ * Some outcomes are answers rather than errors and read as sentences, since
+ * "no solution" is the complete and correct response to `1=2` and dressing it
+ * up as a failure would misrepresent it.
+ *
+ * An `incomplete` outcome becomes an error even though roots were found. That
+ * is the point of it: `solve(x^5-1=0, x)` answering `1` was wrong in the way
+ * that matters most, because one root of five looks exactly like the whole
+ * answer. Saying how many are missing is the only reading a user cannot be
+ * misled by.
  */
 function solveOutcomeToValue(outcome: SolveOutcome): Value {
 	switch (outcome.kind) {
@@ -208,13 +234,18 @@ function solveOutcomeToValue(outcome: SolveOutcome): Value {
 			return stringValue("true for every value");
 		case "contradiction":
 			return stringValue("no solution");
-		case "no-real-solutions":
-			return stringValue(`no real solutions (${outcome.reason})`);
 		case "unsupported":
 			return errorValue("SYMBOLIC_SOLVE_UNSUPPORTED", `Cannot solve this equation: ${outcome.reason}.`);
+		case "incomplete": {
+			const found = outcome.exact.length + outcome.approximate.length;
+			return errorValue(
+				"SYMBOLIC_SOLVE_INCOMPLETE",
+				`Only ${found} of this equation's ${found + outcome.missing} roots could be found: ${outcome.reason}.`,
+			);
+		}
 		case "roots": {
 			const values = outcome.exact.map(rootToValue);
-			for (const approximate of outcome.approximate) values.push(numberValue(approximate));
+			for (const approximate of outcome.approximate) values.push(approximateRootToValue(approximate));
 			if (values.length === 0) return stringValue("no solution");
 			if (values.length === 1) return values[0];
 			// Several roots read best as a row of values, which the matrix

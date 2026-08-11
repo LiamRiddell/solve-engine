@@ -1,0 +1,15 @@
+{
+	"id": "0f1ff551",
+	"seed": 4007210,
+	"generator": "expression",
+	"outcome": "internal",
+	"detail": "raw exception normalised to UNEXPECTED_ERROR: The number Infinity cannot be converted to a BigInt because it is not an integer",
+	"found": "2026-08-10",
+	"shrinkSteps": 16,
+	"input": {
+		"kind": "expression",
+		"source": "9/\"\"/6n"
+	},
+	"status": "fixed",
+	"note": "vm/VMConversion.ts's toBigIntOperand() calls BigInt() on a fractional Number, which throws a raw RangeError, relabelled UNEXPECTED_ERROR/INTERNAL. Reachable from ordinary source: 1n + 0.5, 1n & 1.5, 1n << 1.5. Same shape as the problem vm/VMBuiltinArity.ts was written to fix for builtin arity: a user's typo reported as an engine bug. FIXED: vm/VMConversion.ts's toBigIntOperand() now checks the operand has a whole-number form before calling BigInt(), and raises a recoverable BIGINT_INEXACT_OPERAND execution error naming the offending value instead of letting V8's RangeError out. Covers fractions, both infinities and NaN, and every operator that shares the conversion (+ - * / mod, the bitwise ops, the shifts). Pinned by __tests__/hardening/ArithmeticBigInt.spec.ts."
+}

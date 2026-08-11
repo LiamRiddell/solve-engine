@@ -1,23 +1,28 @@
 import { PrefixParselet, InfixParselet } from "@solve-js/parser/Parselet";
 import { tokenTypeId } from "@solve-js/lexer/Token";
+import { BindingPower } from "@solve-js/parser/BindingPower";
 
 /**
- * Binding-power fields a parselet may expose beyond what its interface
+ * The one binding-power field a parselet may expose beyond what its interface
  * requires, read only for diagnostic display.
  *
- * `PrefixParselet` declares no binding power at all and `InfixParselet` declares
- * a single `bindingPower`, but some parselets carry a separate left and right
- * power. The diagnostic views want whatever is there without requiring it, so
- * this describes the optional surface instead of reaching through `any` at each
- * access. `category` is not here: both interfaces already declare it.
+ * `InfixParselet` requires `bindingPower`; `PrefixParselet` declares none, and
+ * some prefix parselets carry one anyway. That single field is the whole
+ * optional surface deliberately. A `leftBindingPower`/`rightBindingPower` pair
+ * used to be read here as well, and reading a name off an object this way finds
+ * PRIVATE fields too, since TypeScript's `private` exists only at compile time:
+ * `BinaryOpParselet` holds a private `rightBindingPower` meaning "the minimum
+ * power to parse my right operand at", which is a different quantity from "the
+ * power at which I bind to my right" and differs from it by one. Reading it
+ * silently reported that other number. So neither is read.
+ *
+ * `category` is not here: both interfaces already declare it.
  */
 interface ParseletBindingPowers {
 	readonly bindingPower?: number;
-	readonly leftBindingPower?: number;
-	readonly rightBindingPower?: number;
 }
 
-/** Reads the optional binding-power fields off a parselet for diagnostics. */
+/** Reads the optional binding-power field off a parselet for diagnostics. */
 function bindingPowersOf(parselet: PrefixParselet | InfixParselet): ParseletBindingPowers {
 	return parselet as ParseletBindingPowers;
 }
@@ -94,27 +99,59 @@ export class ParseletRegistry {
 		this.infixById.set(tokenTypeId(tokenType), parselet);
 	}
 
-	/** Iterate all registered prefix parselets for diagnostic display. */
+	/**
+	 * Iterate all registered prefix parselets for diagnostic display.
+	 *
+	 * `PrefixParselet` declares no binding power, and this used to read a field
+	 * of that name and report 0 for every one of them. 0 is not a neutral
+	 * wrong answer: it is the value that means "not an operator, stop the
+	 * expression", so a host drawing a table from this was told none of them
+	 * bind at all. A prefix parselet in this parser has no per-parselet power
+	 * to report, they all bind at the prefix level and each chooses for itself
+	 * at what power to parse its own operand, so that level is what is
+	 * reported. A parselet that does carry its own `bindingPower` still wins.
+	 */
 	getAllPrefix(): Array<{ tokenType: string; bindingPower: number; category?: string }> {
 		const result: Array<{ tokenType: string; bindingPower: number; category?: string }> = [];
 		for (const [tokenType, parselet] of this.prefixParselets) {
 			result.push({
 				tokenType,
-				bindingPower: bindingPowersOf(parselet).bindingPower ?? 0,
+				bindingPower: bindingPowersOf(parselet).bindingPower ?? BindingPower.Prefix,
 				category: parselet.category,
 			});
 		}
 		return result;
 	}
 
-	/** Iterate all registered infix parselets for diagnostic display. */
+	/**
+	 * Iterate all registered infix parselets for diagnostic display.
+	 *
+	 * The field an `InfixParselet` actually declares is `bindingPower`. This
+	 * used to read `leftBindingPower` and `rightBindingPower`, which no
+	 * parselet in this codebase declares, so both reads were `undefined`, both
+	 * fell to the `?? 0` default, and the public `getParseletRegistry()`
+	 * reported a binding power of 0 for every one of the ~60 infix operators.
+	 * A host building a precedence table from it was told `*` and `+` bind
+	 * equally, and that neither binds at all.
+	 *
+	 * The left/right split: `bindingPower` is the LEFT power, and the right is
+	 * one higher. That is the standard encoding for a left-associative
+	 * operator, and it is what the parser itself does, see
+	 * `PrecedenceParser.parseExpression()`'s `bp + 1` for the right operand.
+	 * Every operator is reported that way, `^` included. Associativity is not
+	 * something a parselet declares, it is a property of how each one calls
+	 * `parseExpression`, so this API cannot report it without a new field on
+	 * the interface. See {@link ParseletBindingPowers} for why scraping a
+	 * plausible-looking one off the parselet is worse than not reporting it.
+	 */
 	getAllInfix(): Array<{ tokenType: string; leftBindingPower: number; rightBindingPower: number; category?: string }> {
 		const result: Array<{ tokenType: string; leftBindingPower: number; rightBindingPower: number; category?: string }> = [];
 		for (const [tokenType, parselet] of this.infixParselets) {
+			const left = bindingPowersOf(parselet).bindingPower ?? 0;
 			result.push({
 				tokenType,
-				leftBindingPower: bindingPowersOf(parselet).leftBindingPower ?? 0,
-				rightBindingPower: bindingPowersOf(parselet).rightBindingPower ?? 0,
+				leftBindingPower: left,
+				rightBindingPower: left + 1,
 				category: parselet.category,
 			});
 		}

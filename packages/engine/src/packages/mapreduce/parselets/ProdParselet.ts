@@ -37,6 +37,13 @@ export class ProdParselet implements PrefixParselet {
     parseCollectionExpr(parser, builder);
     parser.consume("RPAREN");
 
-    emitInvoke(builder, OpCode.REDUCE_INVOKE, { kind: 0, program: bodyProgram }, ["acc", "x"], 0);
+    // One, the multiplicative identity, for the reason spelled out in
+    // `SumParselet.ts`: seeding from the collection's first element skipped
+    // the element expression for that element, so `prod(x*2, [2,3,4])` folded
+    // to 2*6*8 = 96 rather than 4*6*8 = 192.
+    builder.emitOpcode(OpCode.PUSH_NUMBER);
+    builder.emitNumber(1);
+
+    emitInvoke(builder, OpCode.REDUCE_INVOKE, { kind: 0, program: bodyProgram }, ["acc", "x"], 1);
   }
 }

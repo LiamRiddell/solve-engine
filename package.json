@@ -24,6 +24,7 @@
     "lint": "oxlint packages/engine/src packages/playground-bridge/src scripts",
     "lint:comments": "node scripts/check-comment-style.mjs --all",
     "lint:docs": "node scripts/check-doc-coverage.mjs",
+    "fuzz": "node scripts/fuzz.mjs",
     "bench": "node --expose-gc --experimental-vm-modules node_modules/jest/bin/jest.js --config jest.bench.config.cjs --runInBand",
     "bench:baseline": "node scripts/bench-baseline.mjs",
     "bench:compare": "node scripts/compare-benchmarks.mjs",

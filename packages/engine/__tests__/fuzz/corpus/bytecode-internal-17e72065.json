@@ -1,0 +1,23 @@
+{
+	"id": "17e72065",
+	"seed": 3002200,
+	"generator": "bytecode",
+	"outcome": "internal",
+	"detail": "raw exception normalised to UNEXPECTED_ERROR: safePop(...).value.toLowerCase is not a function",
+	"found": "2026-08-10",
+	"shrinkSteps": 8,
+	"input": {
+		"kind": "bytecode",
+		"program": {
+			"opcodes": [
+				14,
+				131,
+				145
+			],
+			"numbers": [],
+			"strings": []
+		}
+	},
+	"status": "fixed",
+	"note": "A unit-name operand read off the value stack is assumed to be a string. Malformed bytecode can leave any Value type there. vm/VM.ts, the UOM band. FIXED: the unit and converter names read off the value stack went through a compile-time-only `as string` cast. vm/VM.ts now reads them through stringOperand(), which raises MALFORMED_BYTECODE_OPERAND_TYPE naming the opcode and what was on the stack instead. This also stops a Uom being built around a non-string unit, which is what carried the fault forward into unrelated handlers."
+}

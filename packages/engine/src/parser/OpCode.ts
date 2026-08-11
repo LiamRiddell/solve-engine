@@ -141,11 +141,19 @@ export enum OpCode {
 	RANGE_NEW = 156,    // (min, max already on stack) -> push a Range value `min:max`
 	MAP_INVOKE = 157,   // map(...) — see parser/BytecodeBuilder.ts's `anonymousBodies` side-table
 	REDUCE_INVOKE = 158, // reduce(...) — same anonymousBodies mechanism as MAP_INVOKE
+	// An algebra verb's expression argument, evaluated with the verb's own
+	// named unknown bound to itself (`der(x^2, x)` reads `x` as the unknown
+	// even where the document also has a value for it). Operand = an index
+	// into `anonymousBodies`, whose `params[0]` carries the name to bind, the
+	// same side-table and the same call-frame shadowing MAP_INVOKE uses for a
+	// transform body's parameters. See vm/VM.ts's handler.
+	BIND_UNKNOWN = 159,
 	// 159 and 160 were THEREFORE_SOLVE and STORE_EQUATION_OR_ASSIGNMENT, declared
 	// but never emitted by any parselet nor handled in the VM switch. Both shapes
 	// have effects (a stored equation, a direct vm.setVar()) that a cached
 	// bytecode program cannot represent, so engine/ExpressionEngine.ts intercepts
-	// them before compilation and always will. The numbers are free to reuse.
+	// them before compilation and always will. 159 has since been reused above;
+	// 160 is still free.
 }
 
 // Reverse lookup built once at module load, getOpCodeName() is called once

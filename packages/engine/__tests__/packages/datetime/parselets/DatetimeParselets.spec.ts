@@ -64,23 +64,27 @@ describe("Datetime Parselets", () => {
     expect((result.value as number)).toBeLessThanOrEqual(after);
   });
 
-  test("now + 1 day yields timestamp + 86400000", () => {
-    const now = Date.now();
+  test("now + 1 day lands on tomorrow's date at the same time of day", () => {
+    const now = new Date();
     parseAndExecute("now"); // warmup
-    const result = parseAndExecute("now + 1 day");
-    const elapsed = (result.value as number) - now;
-    // Allow for up to 100ms variance due to system clock precision
-    expect(elapsed).toBeGreaterThanOrEqual(86399900);
-    expect(elapsed).toBeLessThanOrEqual(86400100);
+    const result = parseAndExecute("now + 1 day").value as number;
+    // Derived from the calendar rather than hardcoded to 86,400,000: the day
+    // a zone changes its offset is 23 or 25 hours long, and the answer still
+    // has to be tomorrow at the same time on it. The 100ms window is the
+    // original tolerance for the clock ticking between the two readings.
+    const expected = new Date(now);
+    expected.setDate(expected.getDate() + 1);
+    expect(result - expected.getTime()).toBeGreaterThanOrEqual(0);
+    expect(result - expected.getTime()).toBeLessThanOrEqual(100);
   });
 
-  test("now - 1 day yields timestamp - 86400000", () => {
-    const now = Date.now();
-    const result = parseAndExecute("now - 1 day");
-    const elapsed = (result.value as number) - now;
-    // Allow for up to 100ms variance due to system clock precision
-    expect(elapsed).toBeGreaterThanOrEqual(-86400100);
-    expect(elapsed).toBeLessThanOrEqual(-86399900);
+  test("now - 1 day lands on yesterday's date at the same time of day", () => {
+    const now = new Date();
+    const result = parseAndExecute("now - 1 day").value as number;
+    const expected = new Date(now);
+    expected.setDate(expected.getDate() - 1);
+    expect(result - expected.getTime()).toBeGreaterThanOrEqual(0);
+    expect(result - expected.getTime()).toBeLessThanOrEqual(100);
   });
 
   test("now + 2 hours yields timestamp + 7200000", () => {
@@ -101,33 +105,49 @@ describe("Datetime Parselets", () => {
     expect(elapsed).toBeLessThanOrEqual(1800100);
   });
 
-  test("now + 2 weeks yields timestamp + 1209600000", () => {
-    const now = Date.now();
-    const result = parseAndExecute("now + 2 weeks");
-    const elapsed = (result.value as number) - now;
-    // Allow for up to 100ms variance due to system clock precision
-    expect(elapsed).toBeGreaterThanOrEqual(1209599900);
-    expect(elapsed).toBeLessThanOrEqual(1209600100);
+  test("now + 2 weeks lands fourteen calendar days on", () => {
+    const now = new Date();
+    const result = parseAndExecute("now + 2 weeks").value as number;
+    // Same reasoning as the "+ 1 day" test above: a fortnight containing a
+    // daylight-saving transition is not 14 x 86,400,000 ms long.
+    const expected = new Date(now);
+    expected.setDate(expected.getDate() + 14);
+    expect(result - expected.getTime()).toBeGreaterThanOrEqual(0);
+    expect(result - expected.getTime()).toBeLessThanOrEqual(100);
   });
 
-  test("now + 3 months yields timestamp + approx 7776000000", () => {
-    const now = Date.now();
-    const result = parseAndExecute("now + 3 months");
-    const elapsed = (result.value as number) - now;
-    // convert uses 30 days/month = 2592000000 ms
-    // 3 months * 2592000000 ms = 7776000000 ms
-    // Allow for variance due to system clock precision
-    expect(elapsed).toBeGreaterThanOrEqual(7775999000);
-    expect(elapsed).toBeLessThanOrEqual(7776001000);
+  test("now + 3 months lands three calendar months on, not ninety days on", () => {
+    // This used to assert exactly 7,776,000,000 ms, which is the unit table's
+    // fixed 30-day month times three. Three real months are 89 to 92 days, so
+    // that was wrong on nearly every date: from January it landed a day early,
+    // from July two days early. The expectation is worked out from the
+    // calendar instead, clamping the day of the month because a 31st has no
+    // counterpart in a 30-day month (November 30 plus three months is
+    // February 28, never March 2).
+    const now = new Date();
+    const result = new Date(parseAndExecute("now + 3 months").value as number);
+
+    const targetMonthCount = now.getFullYear() * 12 + now.getMonth() + 3;
+    const expectedYear = Math.floor(targetMonthCount / 12);
+    const expectedMonth = targetMonthCount % 12;
+    const lastDayOfExpectedMonth = new Date(expectedYear, expectedMonth + 1, 0).getDate();
+
+    expect(result.getFullYear()).toBe(expectedYear);
+    expect(result.getMonth()).toBe(expectedMonth);
+    expect(result.getDate()).toBe(Math.min(now.getDate(), lastDayOfExpectedMonth));
   });
 
-  test("now + 1 year yields timestamp + approx 31536000000", () => {
-    const now = Date.now();
-    const result = parseAndExecute("now + 1 year");
-    const elapsed = (result.value as number) - now;
-    // convert uses 365 days/year = 31536000 seconds
-    expect(elapsed).toBeGreaterThanOrEqual(31535999000);
-    expect(elapsed).toBeLessThanOrEqual(31536001000);
+  test("now + 1 year lands on the same date next year, not 365 days on", () => {
+    // 31,536,000,000 ms is 365 days, a day short of a year whenever a
+    // February 29 falls inside the span. The leap day itself is the one date
+    // with no counterpart a year later, and clamps back to February 28.
+    const now = new Date();
+    const result = new Date(parseAndExecute("now + 1 year").value as number);
+    const isLeapDay = now.getMonth() === 1 && now.getDate() === 29;
+
+    expect(result.getFullYear()).toBe(now.getFullYear() + 1);
+    expect(result.getMonth()).toBe(now.getMonth());
+    expect(result.getDate()).toBe(isLeapDay ? 28 : now.getDate());
   });
 
   test("now + 10 seconds yields timestamp + ~10000", () => {

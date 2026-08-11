@@ -44,10 +44,42 @@ function formatCoefficient(coeff: Rational, text: string): string {
 }
 
 /**
+ * How deep the printer will walk before eliding the rest.
+ *
+ * This walk and {@link collectDisplayTerms} call each other down the tree with
+ * nothing counting the levels, so the native stack was the only bound on
+ * either, and it is reached at about 1,170 levels (measured, three frames per
+ * level). `SYMBOLIC_MAX_NODES` admits ten thousand nodes, and for a chain size
+ * and depth are the same number, so there was a wide band of trees the engine
+ * called legal and could not print. What came out of that band was a raw
+ * `RangeError` reading "Maximum call stack size exceeded", from `formatValue()`
+ * of all places, which is the one call a host makes to render an answer it has
+ * already been given and therefore the one it is least likely to have wrapped
+ * in a `try`.
+ *
+ * About half the measured limit rather than the quarter that would be
+ * comfortable, because an expression five hundred levels deep must still print
+ * in full (pinned in `__tests__/hardening/DenialOfServiceRecursionDepth.spec.ts`)
+ * and a printer that elides what it can render is its own kind of wrong answer.
+ * {@link formatSymbolic} therefore also catches the overflow itself, so the
+ * margin being wrong somewhere with less stack to spare degrades the display
+ * rather than escaping as a RangeError.
+ *
+ * Eliding rather than throwing, because the caller asked to display a value and
+ * an ellipsis is a display. It is also honest in a way silent truncation would
+ * not be: the marker says the text is not the whole tree.
+ */
+const MAX_FORMAT_DEPTH = 600;
+
+/** What stands in for the part of a tree too deep to print. */
+const ELIDED = "...";
+
+/**
  * Formats a factor, wrapping a nested sum in parentheses, which is needed
  * whenever it appears inside a `mul`, `div`, `neg` or `pow`.
  */
-function formatFactor(node: SymbolicNode): string {
+function formatFactor(node: SymbolicNode, depth: number): string {
+	if (depth >= MAX_FORMAT_DEPTH) return ELIDED;
 	switch (node.kind) {
 		case "const":
 			return formatRational(node.value);
@@ -62,23 +94,31 @@ function formatFactor(node: SymbolicNode): string {
 			return node.name;
 		case "add":
 		case "sub":
-			return `(${formatSymbolic(node)})`;
+			// Not `depth + 1`: this hands the SAME node to the sum printer, and
+			// the counter has to measure tree levels rather than call frames, or
+			// a five-hundred-level expression would be elided at two hundred and
+			// fifty. Every other recursion below descends into a child, and
+			// those do count.
+			return `(${formatSum(node, depth)})`;
 		case "neg":
-			return `-${formatFactor(node.operand)}`;
+			return `-${formatFactor(node.operand, depth + 1)}`;
 		case "call":
-			return `${node.name}(${node.args.map(formatSymbolic).join(", ")})`;
+			// Written as an arrow rather than passing `formatSum` to `map`
+			// directly: `map` calls its callback with the index as a second
+			// argument, which would arrive here as the depth.
+			return `${node.name}(${node.args.map(arg => formatSum(arg, depth + 1)).join(", ")})`;
 		case "pow": {
-			const base = isAtomic(node.base) ? formatFactor(node.base) : `(${formatSymbolic(node.base)})`;
+			const base = isAtomic(node.base) ? formatFactor(node.base, depth + 1) : `(${formatSum(node.base, depth + 1)})`;
 			// An exponent that is itself compound needs brackets, since `x^n+1`
 			// would otherwise read as `(x^n)+1`.
-			const exponent = isAtomic(node.exponent) ? formatFactor(node.exponent) : `(${formatSymbolic(node.exponent)})`;
+			const exponent = isAtomic(node.exponent) ? formatFactor(node.exponent, depth + 1) : `(${formatSum(node.exponent, depth + 1)})`;
 			return `${base}^${exponent}`;
 		}
 		case "mul": {
 			const coeffVar = tryExtractCoeffVar(node);
 			if (coeffVar) return formatCoefficient(coeffVar.coeff, coeffVar.name);
 			const coeffPow = tryExtractCoeffPow(node);
-			if (coeffPow) return formatCoefficient(coeffPow.coeff, formatFactor(coeffPow.power));
+			if (coeffPow) return formatCoefficient(coeffPow.coeff, formatFactor(coeffPow.power, depth + 1));
 			// A coefficient on a longer monomial juxtaposes too, so `2*x*y`
 			// renders `2x*y`, consistent with `2b` and `2x^2` above. Only the
 			// leading coefficient collapses; the `*` between distinct variables
@@ -91,13 +131,23 @@ function formatFactor(node: SymbolicNode): string {
 			// rather than the normal path, but a formatter must never be able to
 			// print one value as another.
 			if (node.left.kind === "const" && node.right.kind === "mul") {
-				const inner = formatFactor(node.right);
+				const inner = formatFactor(node.right, depth + 1);
 				if (!/^[\d.]/.test(inner)) return formatCoefficient(node.left.value, inner);
 			}
-			return `${formatFactor(node.left)}*${formatFactor(node.right)}`;
+			return `${formatFactor(node.left, depth + 1)}*${formatFactor(node.right, depth + 1)}`;
 		}
-		case "div":
-			return `${formatFactor(node.left)}/${formatFactor(node.right)}`;
+		case "div": {
+			// A denominator that is itself a product or a quotient must be
+			// bracketed. Without this, `1/(2*sqrt(x))` prints as `1/2*sqrt(x)`,
+			// which reads back as `(1/2)*sqrt(x)`, a different number: at x=9 the
+			// tree is 1/6 and the text says 1.5. `a/(b/c)` had the same problem,
+			// printing `a/b/c`, which regroups left-to-right into `(a/b)/c`.
+			// A sum or difference is already bracketed by formatFactor itself, and
+			// a power binds tighter than division so `1/x^2` needs nothing.
+			const denominator = formatFactor(node.right, depth + 1);
+			const needsBrackets = node.right.kind === "mul" || node.right.kind === "div";
+			return `${formatFactor(node.left, depth + 1)}/${needsBrackets ? `(${denominator})` : denominator}`;
+		}
 	}
 }
 
@@ -107,18 +157,22 @@ function formatFactor(node: SymbolicNode): string {
  * a `mul`/`div`/`pow`/`call` subtree becomes one opaque signed term via
  * {@link formatFactor} rather than aborting the whole walk.
  */
-function collectDisplayTerms(node: SymbolicNode, negated: boolean, out: { negated: boolean; text: string }[]): void {
+function collectDisplayTerms(node: SymbolicNode, negated: boolean, out: { negated: boolean; text: string }[], depth: number): void {
+	if (depth >= MAX_FORMAT_DEPTH) {
+		out.push({ negated, text: ELIDED });
+		return;
+	}
 	switch (node.kind) {
 		case "add":
-			collectDisplayTerms(node.left, negated, out);
-			collectDisplayTerms(node.right, negated, out);
+			collectDisplayTerms(node.left, negated, out, depth + 1);
+			collectDisplayTerms(node.right, negated, out, depth + 1);
 			return;
 		case "sub":
-			collectDisplayTerms(node.left, negated, out);
-			collectDisplayTerms(node.right, !negated, out);
+			collectDisplayTerms(node.left, negated, out, depth + 1);
+			collectDisplayTerms(node.right, !negated, out, depth + 1);
 			return;
 		case "neg":
-			collectDisplayTerms(node.operand, !negated, out);
+			collectDisplayTerms(node.operand, !negated, out, depth + 1);
 			return;
 		case "const": {
 			// An embedded zero term contributes nothing to the display.
@@ -147,7 +201,8 @@ function collectDisplayTerms(node: SymbolicNode, negated: boolean, out: { negate
 			return;
 		}
 		default: {
-			const text = formatFactor(node);
+			// Same node, so same depth. See formatFactor's add/sub case.
+			const text = formatFactor(node, depth);
 			// A product or quotient whose leading coefficient is negative renders
 			// with the minus already inside it, and joining that to a sum with `+`
 			// gives `0.5*log(x-1)+-0.5*log(x+1)`. Lifting the sign out turns it back
@@ -169,8 +224,32 @@ function collectDisplayTerms(node: SymbolicNode, negated: boolean, out: { negate
  * `"0"` rather than as an empty string.
  */
 export function formatSymbolic(node: SymbolicNode): string {
+	try {
+		return formatSum(node, 0);
+	} catch (thrown) {
+		// The depth guard above is what normally stops this, and this is the
+		// backstop for it being set half a stack away from the native limit: a
+		// caller that has already spent stack of its own can run out inside a
+		// tree the guard would have allowed. A stack overflow is a RangeError
+		// rather than an EngineError, so a host cannot tell it from a bug in its
+		// own code, and it arrives through `formatValue()`, which is a request
+		// to display an answer and has no business throwing. Nothing else is
+		// swallowed: any other error is the caller's to see.
+		if (thrown instanceof RangeError) return ELIDED;
+		throw thrown;
+	}
+}
+
+/**
+ * The body of {@link formatSymbolic}, carrying how deep the walk already is.
+ *
+ * Split out so the public entry point keeps its one-argument signature: it is
+ * exported, and a second parameter on it would be filled in by anything that
+ * passes it to `Array.prototype.map`.
+ */
+function formatSum(node: SymbolicNode, depth: number): string {
 	const terms: { negated: boolean; text: string }[] = [];
-	collectDisplayTerms(node, false, terms);
+	collectDisplayTerms(node, false, terms, depth);
 	if (terms.length === 0) return "0";
 
 	let out = "";

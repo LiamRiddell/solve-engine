@@ -67,6 +67,18 @@ describe("`and` still adds", () => {
 		// stopping the argument at `Product`: "1 + 2" is one item, "4" is another.
 		expect(evaluate("average of 1 + 2, 4 and 5")).toBeCloseTo(4, 10);
 	});
+
+	test("and looser than comparison, so `and` joins two comparisons", () => {
+		// The other half of the constraint on this binding power, and the one
+		// that a fix for the list behaviour got wrong: the word first sat at
+		// 28, above the comparisons, which made "5 > 3 and 2 > 1" group as
+		// "5 > (3 and 2) > 1" and answer false. Any future move of the level
+		// has to keep both this and the list tests above passing, which puts
+		// it strictly between the comparisons and `+`.
+		const engine = newTrackedEngine("en");
+		expect(engine.evaluateExpression("5 > 3 and 2 > 1")[0].value).toBe(true);
+		expect(engine.evaluateExpression("5 > 3 and 2 < 1")[0].value).toBe(false);
+	});
 });
 
 describe("the other phrases that use `and` as a separator", () => {

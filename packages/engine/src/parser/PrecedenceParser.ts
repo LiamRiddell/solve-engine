@@ -6,6 +6,7 @@ import { DiagnosticPipeline, DiagnosticEventType, type DiagnosticEvent } from "@
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower, buildBindingPowerTable } from "@solve-js/parser/BindingPower";
 import { getLocale } from "@solve-js/constants/locales";
+import { bigIntLiteralDigits } from "@solve-js/parser/BigIntLiteral";
 
 /**
  * Matches a CHAINED thousands-grouped integer using "." as the group
@@ -79,6 +80,7 @@ export class PrecedenceParser {
   private static readonly CARET_ID    = tokenTypeId(TokenTypes.CARET);
   private static readonly LSHIFT_ID   = tokenTypeId(TokenTypes.LSHIFT);
   private static readonly RSHIFT_ID   = tokenTypeId(TokenTypes.RSHIFT);
+  private static readonly URSHIFT_ID  = tokenTypeId(TokenTypes.URSHIFT);
   private static readonly BIT_AND_ID  = tokenTypeId(TokenTypes.BIT_AND);
   private static readonly BIT_OR_ID   = tokenTypeId(TokenTypes.BIT_OR);
   private static readonly BIT_XOR_ID  = tokenTypeId(TokenTypes.BIT_XOR);
@@ -98,6 +100,7 @@ export class PrecedenceParser {
     [tokenTypeId(TokenTypes.CARET)]:   OpCode.EXP,
     [tokenTypeId(TokenTypes.LSHIFT)]:  OpCode.LSHIFT,
     [tokenTypeId(TokenTypes.RSHIFT)]:  OpCode.RSHIFT,
+    [tokenTypeId(TokenTypes.URSHIFT)]: OpCode.URSHIFT,
     [tokenTypeId(TokenTypes.BIT_AND)]: OpCode.BIT_AND,
     [tokenTypeId(TokenTypes.BIT_OR)]:  OpCode.BIT_OR,
     [tokenTypeId(TokenTypes.BIT_XOR)]: OpCode.BIT_XOR,
@@ -196,7 +199,7 @@ export class PrecedenceParser {
    *
    * @param minBp - minimum binding power (precedence climbing threshold).
    *   For left-associative operators, the recursive call uses `bp + 1`.
-   *   For right-associative operators (^), it uses `bp`.
+   *   For right-associative operators (^), it uses `bp - 1`.
    * @param _builder - accepted for parselet API compatibility; always uses `this.builder`.
    */
   parseExpression(minBp: number = 0, _builder?: BytecodeBuilder): void {
@@ -275,7 +278,20 @@ export class PrecedenceParser {
         } else {
           // Infix: parse right operand, then emit opcode.
           // Right-associative for CARET (^), left-associative for all others.
-          const rightBp = (typeId === PrecedenceParser.CARET_ID) ? bp : bp + 1;
+          //
+          // The threshold has to be bp - 1, not bp. The loop above breaks on
+          // `bp <= minBp`, so a right operand parsed at `bp` stops at the next
+          // `^` exactly as one parsed at `bp + 1` does: the old special case
+          // was dead code and "2 ^ 3 ^ 2" grouped left, answering 64. One
+          // below lets the recursive call keep consuming `^`, which is what
+          // makes it 2^(3^2) = 512, as in mathematics, Python, Ruby and
+          // JavaScript's `**`.
+          //
+          // Nothing else sits between Exponent (50) and Product (40), so
+          // 49 cannot collide with another operator's level. Unary minus is
+          // unaffected: it parses its operand at Prefix (60), above `^`
+          // either way, so "-2 ^ 2" is still (-2)^2 = 4.
+          const rightBp = (typeId === PrecedenceParser.CARET_ID) ? bp - 1 : bp + 1;
           this.parseExpression(rightBp, builder);
           builder.emitOpcode(PrecedenceParser.INFIX_OPCODE[typeId]);
         }
@@ -386,11 +402,12 @@ export class PrecedenceParser {
       }
 
       case PrecedenceParser.BIGINT_ID: {
-        // Strip optional 'n' suffix before emitting as string
-        let raw = token.value;
-        if (raw.endsWith("n")) raw = raw.slice(0, -1);
+        // Strips the `n` and any thousands grouping the lexer coalesced in.
+        // This used to be `raw.slice(0, -1)` and nothing else, so `1.000n`
+        // reached BigInt("1.000") and threw a raw SyntaxError. See
+        // parser/BigIntLiteral.ts, which the parselet tier shares.
         builder.emitOpcode(OpCode.PUSH_BIGINT);
-        builder.emitString(raw);
+        builder.emitString(bigIntLiteralDigits(token.value, this.localeCode));
         return;
       }
 

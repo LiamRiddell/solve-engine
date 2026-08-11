@@ -118,13 +118,14 @@ describe("through the engine", () => {
 		expect(evaluate("$100 in UAH").type).toBe(evaluate("$100 in GBP").type);
 	});
 
-	test("an unknown code still fails SILENTLY, which is the half not yet fixed", () => {
-		// Asserted rather than left out. `$100 in ZZZ` returns an unconverted
-		// hundred dollars, which reads as a successful conversion at a rate of
-		// 1. Widening the code table removed the common case; it did not remove
-		// the failure mode. See docs-internal/PARITY_BACKLOG.md.
+	test("an unknown code is refused rather than handed back unconverted", () => {
+		// This used to assert the opposite, that `$100 in ZZZ` returned an
+		// unconverted hundred dollars, which reads as a successful conversion at
+		// a rate of 1. Widening the code table removed the common case but not
+		// the failure mode; the failure mode is gone now too, because the last
+		// `else` of UOM_CONVERT_TO/_IN in vm/VM.ts reports INCOMPATIBLE_UNITS
+		// instead of pushing its input back.
 		const value = evaluate("$100 in ZZZ");
-		expect(value.type).toBe(ValueType.Uom);
-		expect(value.toNumber()).toBe(100);
+		expect(value.type).toBe(ValueType.Error);
 	});
 });

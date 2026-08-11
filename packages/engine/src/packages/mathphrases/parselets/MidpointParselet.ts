@@ -12,8 +12,8 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
  * "between" is fused into the trigger, X (an `expr`) comes next, not a
  * keyword, which `definePhrasePattern` can't start an alternative with.
  *
- * X is parsed at `BindingPower.Conjunction`, one step looser than `Sum`, so
- * that it stops at "and" without also stopping at "+". This used to be
+ * X is parsed at `BindingPower.Conjunction`, the level "and" itself binds at,
+ * so that it stops at "and" without also stopping at "+". This used to be
  * `Product` for the same reason, back when the word "and" was the PLUS token
  * itself and nothing weaker could tell them apart; the cost was that
  * "midpoint between 100 + 50 and 300" could not be written, because the

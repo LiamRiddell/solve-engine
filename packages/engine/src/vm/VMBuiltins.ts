@@ -1,7 +1,7 @@
 import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, type MatrixData } from "@solve-js/vm/Value";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { unifyUom } from "@solve-js/vm/VMConversion";
-import { transpose, determinant, inverse, matrixMultiply, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
+import { unifyUom, power } from "@solve-js/vm/VMConversion";
+import { transpose, determinant, inverse, matrixMultiply, matrixPower, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
 import { symbolicToValue, valueToSymbolic, solveEquationValues } from "@solve-js/vm/SymbolicOps";
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
 import { factorSymbolic } from "@solve-js/symbolic/Factor";
@@ -66,6 +66,126 @@ function pluraliseUnit(unit: string, count: number): string {
 }
 
 /**
+ * The largest or smallest of a list of arguments.
+ *
+ * A plain loop, replicating Math.min/Math.max's exact semantics for bare
+ * numbers (NaN poisons the result wherever it appears; an empty list gives
+ * ±Infinity) without the intermediate array a .map()+spread allocates on every
+ * call.
+ *
+ * The two things this does that reading `.toNumber()` off each argument did
+ * not:
+ *
+ * Quantities are compared through unifyUom rather than by their magnitudes, so
+ * `max(1 km, 500 m)` is the kilometre. Comparing the bare numbers made 500 the
+ * larger of the two, which is the same defect the ordering opcodes in VM.ts
+ * had.
+ *
+ * The winner is returned as it was written rather than as a bare number, so
+ * the answer still carries its unit. `max(1 km, 500 m)` returning 500 was
+ * wrong twice over: it named the shorter distance AND dropped the unit that
+ * would have made the mistake visible. Only a Uom winner is passed through
+ * whole; anything else still reduces to a Number, because that is what every
+ * other numeric builtin here returns and widening min/max to hand back
+ * Datetimes or Percentages is a separate decision from fixing the unit bug.
+ *
+ * Arguments whose measures do not match cannot be ordered at all, so that is
+ * an error rather than an arbitrary pick, matching the ordering opcodes.
+ *
+ * @param wantLargest - max when true, min when false.
+ */
+function extremum(args: Value[], wantLargest: boolean): Value {
+    let best: Value | undefined;
+    let hasNaN = false;
+    for (const a of args) {
+        if (Number.isNaN(a.toNumber())) { hasNaN = true; continue; }
+        if (best === undefined) { best = a; continue; }
+        const { lv, rv, sameMeasure } = unifyUom(best, a);
+        if (!sameMeasure) {
+            const bestUnit = best.type === ValueType.Uom ? best.unit : undefined;
+            const otherUnit = a.type === ValueType.Uom ? a.unit : undefined;
+            return errorValue(
+                "INCOMPATIBLE_UNITS",
+                `Cannot compare incompatible units: ${bestUnit ?? "?"} and ${otherUnit ?? "?"}`,
+            );
+        }
+        if (wantLargest ? rv > lv : rv < lv) best = a;
+    }
+    if (hasNaN) return numberValue(NaN);
+    if (best === undefined) return numberValue(wantLargest ? -Infinity : Infinity);
+    return best.type === ValueType.Uom ? best : numberValue(best.toNumber());
+}
+
+/**
+ * Re-wrap a computed magnitude in its operand's unit.
+ *
+ * The rounding family (round/ceil/floor) and abs change how much of something
+ * there is, never what it is, so throwing the unit away is a straight loss of
+ * information: `$490 rounded to nearest hundred` answered a bare 500 and
+ * `abs(-5 kg)` a bare 5. The first of those is written in
+ * `converters/parselets/RoundingParselets.ts`'s own header as `$500`.
+ *
+ * Only Uom is carried across, matching {@link extremum} above: widening this
+ * to Datetime or Percentage is a separate decision from restoring a unit that
+ * was already there.
+ */
+function keepUnit(operand: Value, magnitude: number): Value {
+    if (operand.type === ValueType.Uom && operand.unit !== undefined) return uomValue(magnitude, operand.unit);
+    return numberValue(magnitude);
+}
+
+/**
+ * Refuses a `gcd`/`lcm` operand that the Euclidean loop cannot terminate on.
+ *
+ * `while (b !== 0) { [a, b] = [b, a % b] }` relies on the remainder shrinking
+ * to zero. A NaN never does, because `NaN !== 0` is true and `NaN % x` is NaN,
+ * and an infinity turns into a NaN on the first step and then never does
+ * either. So `gcd(4, arccos(2))` spun forever inside ONE opcode, which no
+ * ceiling in the engine can see: `maxInstructions` is checked between
+ * instructions and the allocation budget counts allocations, and this loop
+ * makes neither. The host froze, uninterruptibly, on nine characters of input.
+ *
+ * Found by the fuzzer as a hang. The same class `DenialOfServiceUnboundedWork.spec.ts`
+ * exists for, and the fix is that file's own prescription: bound the loop at
+ * the one place that knows the trip count is a number the user typed.
+ *
+ * @param a - The first operand, already truncated and made positive.
+ * @param b - The second, likewise.
+ * @param name - Which function to name in the message.
+ * @returns An Error Value to return instead, or `null` when the loop is safe.
+ */
+function nonFiniteEuclidOperand(a: number, b: number, name: string): Value | null {
+    if (Number.isFinite(a) && Number.isFinite(b)) return null;
+    const culprit = Number.isFinite(a) ? b : a;
+    return errorValue(
+        "INVALID_INTEGER_OPERAND",
+        `${name} needs two whole numbers, and ${Number.isNaN(culprit) ? "one of them has no value" : "one of them is infinite"}`,
+    );
+}
+
+/**
+ * The Euclidean algorithm, shared by `gcd` and `lcm`.
+ *
+ * Both had their own inline copy, which is how only one of them would have
+ * been fixed. Callers must have refused a non-finite operand first, see
+ * {@link nonFiniteEuclidOperand}.
+ *
+ * @param a - A non-negative, finite integer.
+ * @param b - The same.
+ * @returns Their greatest common divisor.
+ */
+function euclidGcd(a: number, b: number): number {
+    let x = a;
+    let y = b;
+    while (y !== 0) {
+        const t = y;
+        y = x % y;
+        x = t;
+    }
+    return x;
+}
+
+/**
  * Registry of built-in mathematical functions.
  * Indexed by the number pushed as an operand of OpCode.CALL_BUILTIN.
  */
@@ -82,38 +202,20 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // abs(a): for a Matrix, "|a|" (Calca's determinant-pipe notation) is a
     // valid alias for det(a) (index 64), reusing the SAME implementation
     // not a separate one. Plain-number abs is unaffected.
-    1: (args) => args[0].type === ValueType.Matrix ? determinant(args[0].value as MatrixData) : numberValue(Math.abs(args[0].toNumber())),
+    1: (args) => args[0].type === ValueType.Matrix ? determinant(args[0].value as MatrixData) : keepUnit(args[0], Math.abs(args[0].toNumber())),
     // sin/cos/tan accept an angle with a unit; see angleInRadians().
     2: (args) => numberValue(Math.sin(angleInRadians(args[0]))),
     3: (args) => numberValue(Math.cos(angleInRadians(args[0]))),
     4: (args) => numberValue(Math.tan(angleInRadians(args[0]))),
     5: (args) => numberValue(Math.log(args[0].toNumber())),
-    6: (args) => numberValue(Math.ceil(args[0].toNumber())),
-    7: (args) => numberValue(Math.floor(args[0].toNumber())),
-    8: (args) => numberValue(Math.round(args[0].toNumber())),
-    // min/max: a plain loop replicating Math.min/Math.max's exact semantics
-    // (NaN poisons the result regardless of position; empty args -> ±Infinity)
-    // avoids the intermediate array .map()+spread allocates on every call.
-    9: (args) => {
-        let result = Infinity;
-        let hasNaN = false;
-        for (const a of args) {
-            const n = a.toNumber();
-            if (Number.isNaN(n)) hasNaN = true;
-            else if (n < result) result = n;
-        }
-        return numberValue(hasNaN ? NaN : result);
-    },
-    10: (args) => {
-        let result = -Infinity;
-        let hasNaN = false;
-        for (const a of args) {
-            const n = a.toNumber();
-            if (Number.isNaN(n)) hasNaN = true;
-            else if (n > result) result = n;
-        }
-        return numberValue(hasNaN ? NaN : result);
-    },
+    // round/ceil/floor keep a unit for the same reason abs does; see keepUnit().
+    6: (args) => keepUnit(args[0], Math.ceil(args[0].toNumber())),
+    7: (args) => keepUnit(args[0], Math.floor(args[0].toNumber())),
+    8: (args) => keepUnit(args[0], Math.round(args[0].toNumber())),
+    // min/max: see extremum() for why the winner is carried around as a Value
+    // rather than as a running number.
+    9: (args) => extremum(args, false),
+    10: (args) => extremum(args, true),
     11: (args) => numberValue(Math.asin(args[0].toNumber())),
     12: (args) => numberValue(Math.acos(args[0].toNumber())),
     13: (args) => numberValue(Math.atan(args[0].toNumber())),
@@ -139,7 +241,24 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     28: (args) => numberValue(Math.log10(args[0].toNumber())),
     29: (args) => numberValue(Math.log1p(args[0].toNumber())),
     30: (args) => numberValue(Math.log2(args[0].toNumber())),
-    31: (args) => numberValue(Math.pow(args[0].toNumber(), args[1].toNumber())),
+    // pow(): the spelled-out form of `^`, so a Matrix base means the same
+    // repeated matrix multiplication `^` means. Without this branch
+    // `pow([1,2;3,4], 2)` was Math.pow of a value whose toNumber() is 0, and
+    // came back as the number 0. See vm/MatrixOps.ts's matrixPower().
+    31: (args) => {
+      if (args[0].type === ValueType.Matrix) {
+        if (args[1].type !== ValueType.Number) {
+          return errorValue("MATRIX_POWER_UNSUPPORTED", `pow: a matrix's exponent must be a whole number, as in "pow([1,2;3,4], 2)".`);
+        }
+        return matrixPower(args[0].value as MatrixData, args[1].value as number);
+      }
+      if (args[1].type === ValueType.Matrix) {
+        return errorValue("MATRIX_POWER_UNSUPPORTED", `pow: a matrix may only be the base, as in "pow([1,2;3,4], 2)".`);
+      }
+      // The spelled-out form of `^` answers what `^` answers, edge cases
+      // included. See power() in vm/VMConversion.ts.
+      return numberValue(power(args[0].toNumber(), args[1].toNumber()));
+    },
     32: () => numberValue(Math.random()), // takes no arguments, unlike its neighbours
     33: (args) => numberValue(Math.sign(args[0].toNumber())),
     34: (args) => numberValue(Math.trunc(args[0].toNumber())),
@@ -161,32 +280,37 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // gcd(a, b), Euclidean algorithm. Negative inputs are treated by
     // magnitude (gcd is conventionally defined over non-negative integers).
     38: (args) => {
-        let a = Math.trunc(Math.abs(args[0].toNumber()));
-        let b = Math.trunc(Math.abs(args[1].toNumber()));
-        while (b !== 0) {
-            const t = b;
-            b = a % b;
-            a = t;
-        }
-        return numberValue(a);
+        const a = Math.trunc(Math.abs(args[0].toNumber()));
+        const b = Math.trunc(Math.abs(args[1].toNumber()));
+        const nonFinite = nonFiniteEuclidOperand(a, b, "gcd");
+        if (nonFinite) return nonFinite;
+        return numberValue(euclidGcd(a, b));
     },
     // lcm(a, b) = |a*b| / gcd(a, b), via the same Euclidean gcd inline
     // (a standalone gcd() call site, no shared helper needed for two uses).
     39: (args) => {
         const a = Math.trunc(Math.abs(args[0].toNumber()));
         const b = Math.trunc(Math.abs(args[1].toNumber()));
+        const nonFinite = nonFiniteEuclidOperand(a, b, "lcm");
+        if (nonFinite) return nonFinite;
         if (a === 0 || b === 0) return numberValue(0);
-        let x = a, y = b;
-        while (y !== 0) {
-            const t = y;
-            y = x % y;
-            x = t;
-        }
-        return numberValue((a / x) * b);
+        return numberValue((a / euclidGcd(a, b)) * b);
     },
     // permutation(n, r) = n! / (n-r)!, computed as a running product
     // rather than two full factorials, so it stays exact for n well
     // beyond where n! itself would exceed Number.MAX_SAFE_INTEGER.
+    //
+    // The loop stops the moment the product stops being a representable
+    // double, which is both the answer `fact` (index 62) already gives for
+    // the same question and the thing that bounds the loop at all. `r` comes
+    // straight off the stack: `permutation(1000000000000, 1000000000000)`
+    // used to run a trillion iterations, of which the first ~170 computed
+    // something and the rest multiplied Infinity by a number, and it had not
+    // returned after thirty seconds. Every factor here is at least 1 and they
+    // descend from `n`, so a product that is still finite after 170 steps
+    // means the factors are small, which in turn means `r <= n` is small: the
+    // early exit bounds the trip count without a separate estimate, and
+    // without ever refusing a permutation that does have an answer.
     40: (args) => {
         const n = Math.trunc(args[0].toNumber());
         const r = Math.trunc(args[1].toNumber());
@@ -194,12 +318,27 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
             return errorValue("INVALID_RANGE", `permutation: invalid n=${n}, r=${r} (require 0 <= r <= n)`);
         }
         let result = 1;
-        for (let i = 0; i < r; i++) result *= (n - i);
+        for (let i = 0; i < r; i++) {
+            result *= (n - i);
+            if (!Number.isFinite(result)) {
+                return errorValue(
+                    "PERMUTATION_OVERFLOW",
+                    `permutation: P(${n}, ${r}) exceeds the maximum representable double (it passed it after ${i + 1} of ${r} factors)`,
+                );
+            }
+        }
         return numberValue(result);
     },
     // combination(n, r) = n! / (r! * (n-r)!), multiply-then-divide one
     // step at a time (standard technique) keeps every intermediate result
     // an integer, avoiding the overflow a naive factorial-ratio would hit.
+    //
+    // Same early exit, and needed for the same reason: `k = min(r, n-r)`
+    // halves the trip count and bounds nothing, so `combination(1e12, 5e11)`
+    // asked for five hundred billion iterations. The running value is C(n, i),
+    // which grows monotonically to the middle, so once it is past what a
+    // double can hold it never comes back, and the largest run this can now
+    // take is the thousand-odd steps C(n, k) needs to cross that line.
     41: (args) => {
         const n = Math.trunc(args[0].toNumber());
         const r = Math.trunc(args[1].toNumber());
@@ -208,7 +347,15 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         }
         const k = Math.min(r, n - r);
         let result = 1;
-        for (let i = 0; i < k; i++) result = (result * (n - i)) / (i + 1);
+        for (let i = 0; i < k; i++) {
+            result = (result * (n - i)) / (i + 1);
+            if (!Number.isFinite(result)) {
+                return errorValue(
+                    "COMBINATION_OVERFLOW",
+                    `combination: C(${n}, ${r}) exceeds the maximum representable double (it passed it after ${i + 1} of ${k} steps)`,
+                );
+            }
+        }
         return numberValue(Math.round(result));
     },
     // average(...), arithmetic mean of any number of arguments. Backs the
@@ -464,7 +611,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     61: (args) => {
         const n = args[0].toNumber();
         const x = args[1].toNumber();
-        return numberValue(Math.pow(x, 1 / n));
+        return numberValue(power(x, 1 / n));
     },
 
     // fact(n) / factorial(n) -- integer factorial. Deliberately rejects
@@ -683,8 +830,16 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // so nothing is lost. A pair that is not ordered major-then-minor, or
     // that spans two different measures, reports rather than guessing.
     94: (args) => {
-        const major = args[1].value as string;
-        const minor = args[2].value as string;
+        // Read rather than cast. The parselet always pairs this builtin with two
+        // PUSH_STRINGs, but `executeBytecode` is a public export, so a
+        // hand-built stream can leave any Value here and the cast is
+        // compile-time only: `major.toLowerCase()` on a boolean threw a raw
+        // TypeError that reached the host as an unexplained internal error.
+        const major = typeof args[1]?.value === "string" ? args[1].value : undefined;
+        const minor = typeof args[2]?.value === "string" ? args[2].value : undefined;
+        if (major === undefined || minor === undefined) {
+            return errorValue("UNKNOWN_UNIT", "both units have to be named, as in \"12.5 minutes in minutes and seconds\"");
+        }
         const majorEntry = UNIT_TABLE[major.toLowerCase()] as readonly [number, number] | undefined;
         const minorEntry = UNIT_TABLE[minor.toLowerCase()] as readonly [number, number] | undefined;
         if (majorEntry === undefined || minorEntry === undefined) {
@@ -850,6 +1005,28 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
             return errorValue("INVALID_RATE", "annual return: nothing was returned, so there is no annual rate");
         }
         return percentageValue(Math.pow(returned / invested, 1 / years) - 1);
+    },
+    // roundToPlaces(value, places) -> value rounded to that many decimal
+    // places, backing `<value> to <n> dp` (converters/parselets/
+    // RoundingParselets.ts).
+    //
+    // It exists because the obvious bytecode for it, "multiply by 10^p, round,
+    // divide by 10^p", is only safe for values small enough that the multiply
+    // is exact. `1e21 to 2 dp` came back as 999999999999999900000: 1e21 has no
+    // fractional part to round at all, and the round trip through 1e23 was
+    // pure loss. Asking for fewer decimal places than a number has cannot
+    // change it, so a value that is already whole is returned untouched.
+    97: (args) => {
+        const source = args[0];
+        const value = source.toNumber();
+        const places = args[1].toNumber();
+        if (!Number.isFinite(value) || Number.isInteger(value)) return keepUnit(source, value);
+        const scale = Math.pow(10, places);
+        const scaled = value * scale;
+        // Past 2^53 a double has no fractional digits left to round, so scaling
+        // any further only adds error. `1.5 to 100 dp` is 1.5.
+        if (!Number.isFinite(scaled) || Math.abs(scaled) > Number.MAX_SAFE_INTEGER) return keepUnit(source, value);
+        return keepUnit(source, Math.round(scaled) / scale);
     },
 };
 

@@ -27,8 +27,11 @@ const engine = new ExpressionEngine("en", false, {
 ```
 
 Safety limits exist because the engine is designed to run on untrusted input as
-someone types. They bound expression length, parse complexity, instruction count
-and stack depth, and each produces a clear error rather than hanging.
+someone types. They bound expression length, parse complexity, instruction
+count, stack depth, and how many elements a range or matrix may be expanded to
+by `map`/`reduce` (`vm.maxCollectionSize`, 100000 by default, which is what
+stops a typo like `sum(x, 1:100000000)` from allocating until the host runs out
+of memory). Each produces a clear error rather than hanging.
 
 ## Reading a result
 

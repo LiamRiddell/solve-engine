@@ -129,6 +129,19 @@ solve(x^2-2=0, x) // [-sqrt(2), sqrt(2)]
 Roots that are not rational and not expressible this way are approximated, and
 only after every exact method has been tried.
 
+A constant term of zero is not a special case, though it used to behave like
+one. `x` divides out first, and what is left goes through the exact methods
+like any other equation.
+
+```solve
+solve(x^3-x=0, x) // [-1, 0, 1]
+solve(x^5-x=0, x) // [-1, 0, 1, -i, i]
+```
+
+That second one is exact all the way through: `x^5-x` is `x(x-1)(x+1)(x^2+1)`,
+so all five roots are a rational or the imaginary unit and no approximation is
+involved anywhere.
+
 ### Cubics and quartics
 
 Both have closed forms, and both are used. A cubic goes through Cardano's
@@ -152,7 +165,14 @@ solve(x^4-3x^2+1=0, x) // [-sqrt((3+sqrt(5))/2), sqrt((3+sqrt(5))/2), -sqrt((3-s
 solve(x^4+4x^2+4x+15=0, x) // [-1-sqrt(2)*i, -1+sqrt(2)*i, 1-2i, 1+2i]
 ```
 
-### The two cases that stay approximate
+A biquadratic whose roots are complex is still exact, nesting one square root
+inside another where it has to.
+
+```solve
+solve(x^4-2x^2+3=0, x) // [-sqrt((sqrt(3)+1)/2)-sqrt((sqrt(3)-1)/2)*i, -sqrt((sqrt(3)+1)/2)+sqrt((sqrt(3)-1)/2)*i, sqrt((sqrt(3)+1)/2)-sqrt((sqrt(3)-1)/2)*i, sqrt((sqrt(3)+1)/2)+sqrt((sqrt(3)-1)/2)*i]
+```
+
+### What stays approximate
 
 A cubic with three distinct real roots and no rational one is the *casus
 irreducibilis*, and its roots are reported as decimals.
@@ -169,7 +189,24 @@ useful answer.
 
 Any remaining quartic, and every equation of degree five to eight, is solved
 numerically for the same kind of reason. A general quartic does have a closed
-form, four radicals deep, and no one can read it.
+form, four radicals deep, and no one can read it. A quintic has none at all,
+which is Abel's theorem rather than a limitation of this solver.
+
+The numerical method finds every root at once, in the complex plane, so what
+comes back is the whole set and not the part of it that happens to lie on the
+real line.
+
+```solve
+solve(x^5-1=0, x) // [1, -0.8090169944-0.5877852523i, -0.8090169944+0.5877852523i, 0.3090169944-0.9510565163i, 0.3090169944+0.9510565163i]
+```
+
+### A partial answer is never given as a whole one
+
+The number of roots an equation has is its degree, and the solver knows that
+before it starts. If it reaches the end with fewer, it reports how many are
+missing rather than handing back the ones it found, because a short list of
+correct roots reads exactly like a complete one and there is nothing in it for
+a reader to notice.
 
 ### Answers that are not numbers
 

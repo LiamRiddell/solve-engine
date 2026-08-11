@@ -489,7 +489,7 @@ describe("Cache Coherence", () => {
 	describe("bytecode cache size respects config.performance.defaultCacheSize", () => {
 		test("cache never grows past the configured limit — oldest entries are evicted", () => {
 			const engine = new ExpressionEngine("en", false, {
-				performance: { defaultCacheSize: 3, maxDocumentLines: 10000, parseTimeoutMs: 5000, executionTimeoutMs: 10000 },
+				performance: { defaultCacheSize: 3, maxDocumentLines: 10000 },
 			});
 
 			// 5 distinct expressions against a cache capped at 3 entries.
@@ -502,7 +502,7 @@ describe("Cache Coherence", () => {
 
 		test("a larger configured limit actually retains more entries than the old hardcoded default would have allowed", () => {
 			const engine = new ExpressionEngine("en", false, {
-				performance: { defaultCacheSize: 10, maxDocumentLines: 10000, parseTimeoutMs: 5000, executionTimeoutMs: 10000 },
+				performance: { defaultCacheSize: 10, maxDocumentLines: 10000 },
 			});
 
 			for (let i = 0; i < 10; i++) {

@@ -30,29 +30,29 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
  * (e.g., `today + 20 days`, `last monday`).
  */
 export interface DateConfig {
-  /** Default offset in days for relative date calculations when no offset is specified */
-  readonly defaultOffsetDays: number;
-  /** Maximum allowed positive offset in years (safety limit) */
+  /**
+   * How far forward a date offset whose COST grows with the offset may reach,
+   * in years. Enforced by `vm/VM.ts`'s `addBusinessDays()`.
+   *
+   * Bounds the walk, not the calendar. Every other date offset in the engine
+   * is arithmetic on a Date field, so `today + 100000 days` costs exactly what
+   * one day costs and needs no ceiling; workdays are the one offset that has
+   * to step day by day, because which days are skipped depends on where each
+   * step lands. `today + 100000000 workdays` therefore froze the host for
+   * thirteen seconds inside a single ADD opcode (where `vm.maxInstructions`
+   * cannot see it) and then answered "Invalid Date", and a trillion never
+   * returned at all.
+   *
+   * Release hardening: this field was declared, documented as a "safety
+   * limit", and read nowhere, so it bounded nothing. A limit a host can
+   * configure and the engine ignores is worse than no limit, because it reads
+   * as protection that is not there.
+   */
   readonly maxOffsetYears: number;
-  /** Maximum allowed negative offset in years (safety limit) */
+  /** How far BACK the same walk may reach, in years, as a negative number. See {@link maxOffsetYears}. */
   readonly minOffsetYears: number;
   /** Default date string format for display (moment.js format string) */
   readonly defaultFormat: string;
-}
-
-/**
- * Dice-related configuration.
- * Controls dice expression evaluation (e.g., `roll(1, 100)`, `3d6`).
- */
-export interface DiceConfig {
-  /** Default number of sides on a die when not specified */
-  readonly defaultSides: number;
-  /** Maximum allowed sides per die (prevents excessive allocation) */
-  readonly maxSides: number;
-  /** Maximum number of dice in a single roll expression */
-  readonly maxDice: number;
-  /** Default number of dice when not specified */
-  readonly defaultDice: number;
 }
 
 /**
@@ -72,12 +72,23 @@ export interface PerformanceConfig {
    * size limit of its own.
    */
   readonly defaultCacheSize: number;
-  /** Maximum number of document lines processed in a single pass */
+  /**
+   * Maximum lines a document may have for the engine to process it in one
+   * pass. Enforced by `ExpressionEngine.parseDocument()` and by
+   * `engine/DocumentModel.ts`'s `setDocument()`, the two entry points that
+   * take a whole document.
+   *
+   * A document costs memory per line whatever each line says: a parsed line
+   * record, a cache entry, a dependency-graph node. Two hundred thousand
+   * lines of `1 + 1` therefore exhausted the heap and aborted the process
+   * before any per-line limit had anything to object to, which is the same
+   * shape of hole as an unbounded expression and needs the same kind of
+   * ceiling. Refusing the document names the limit; a host that genuinely has
+   * a larger one raises this field.
+   *
+   * Release hardening: declared and read nowhere until now.
+   */
   readonly maxDocumentLines: number;
-  /** Maximum time (ms) allowed for parsing a single expression before timeout */
-  readonly parseTimeoutMs: number;
-  /** Maximum time (ms) allowed for executing a single expression before timeout */
-  readonly executionTimeoutMs: number;
 }
 
 /**
@@ -139,6 +150,60 @@ export interface WorkerConfig {
     readonly maxStackDepth: number;
     /** Maximum opcodes executed per expression, halts runaway infinite loops */
     readonly maxInstructions: number;
+    /**
+     * Maximum elements a collection may be expanded to before `map`/`reduce`/
+     * `sum`/`prod` will iterate it.
+     *
+     * A Range is stored as its two bounds and costs nothing until something
+     * materializes it, at which point it becomes one Value per element. Twenty
+     * characters (`sum(x, 1:100000000)`) therefore asked for a hundred million
+     * of them, and neither `maxInstructions` nor `maxStackDepth` could see it:
+     * the expansion happens inside a single opcode, so the instruction counter
+     * is never consulted while it runs, and the elements never reach the value
+     * stack. V8 aborted the whole process with "Reached heap limit", which a
+     * host embedding the engine cannot catch.
+     */
+    readonly maxCollectionSize: number;
+    /**
+     * Maximum elements (collection Values, matrix cells) one evaluation may
+     * materialize in total.
+     *
+     * `maxCollectionSize` above bounds a single collection. This bounds the sum
+     * of everything an expression asks for, which is a different question and
+     * the one that actually protects the host: two collections that are
+     * individually legal are legal together, and an operation whose result is
+     * the PRODUCT of two legal operands is bounded by neither of them. A matrix
+     * multiply is exactly that shape, so three lines within every other limit
+     * (`:a = map(1*x, 0:20000)`, `:b = transpose(a)`, `b * a`) asked for four
+     * hundred million cells and aborted the process.
+     *
+     * Counted in elements rather than bytes, because a count is what a call
+     * site has before it allocates. An element is 8 bytes as a numeric matrix
+     * cell and closer to a hundred as a full Value, so the default is worth
+     * roughly 16 MB of matrix or 200 MB of expanded collection: far past any
+     * document and far short of what an editor cannot survive.
+     */
+    readonly maxAllocatedElements: number;
+    /**
+     * Maximum user-defined-function calls one evaluation may make in TOTAL,
+     * however deeply or widely they nest.
+     *
+     * `maxFunctionRecursionDepth` bounds how DEEP calls nest and cannot see
+     * how MANY there are, and those are different numbers. Twenty-two lines of
+     * `f(n)(v) = f(n-1)(v) + f(n-1)(v)` reach a depth of only 22 against a
+     * limit of 50, and make 2,097,152 calls doing it: a fatal heap abort in
+     * under a second. `maxInstructions` cannot bound it either, because
+     * `executeBytecode()` re-enters itself per call and each reentrant call
+     * gets its OWN instruction count, so recursion refreshes its allowance on
+     * the way in. This is the tally that does not refresh; see
+     * `vm/AllocationBudget.ts`, which holds it for the same reason it holds
+     * the element tally.
+     *
+     * Counted in calls rather than in the instructions they run, because the
+     * call is the thing that multiplies: every call allocates a frame, its
+     * arguments and its result whatever its body says.
+     */
+    readonly maxFunctionCalls: number;
   }
 
 /**
@@ -157,15 +222,13 @@ export interface WorkerConfig {
  *     maxExpressionLength: 1000,
  *     maxComplexity: 200,
  *   },
- *   // date, dice, performance, vm, worker, diagnostic all use defaults
+ *   // date, performance, vm, worker, diagnostic all use defaults
  * });
  * ```
  */
 export interface EngineConfig {
     /** Date/time expression evaluation bounds and formatting */
     readonly date: DateConfig;
-    /** Dice roll expression controls */
-    readonly dice: DiceConfig;
     /** Performance budgets and cache sizing */
     readonly performance: PerformanceConfig;
     /** Safety limits for expression complexity */
@@ -183,25 +246,31 @@ export interface EngineConfig {
  */
 export const DEFAULT_CONFIG: EngineConfig = {
    date: {
-     defaultOffsetDays: 0,
+     // A century of workdays is about 26,000 steps, which is microseconds,
+     // and past any offset a person means. The walk is what these bound; see
+     // DateConfig above for why no other date offset needs a ceiling.
      maxOffsetYears: 100,
      minOffsetYears: -100,
      defaultFormat: 'YYYY-MM-DD'
-   },
-   dice: {
-     defaultSides: 6,
-     maxSides: 1000,
-     maxDice: 100,
-     defaultDice: 1
    },
    performance: {
      // Preserves the effective cache size the hardcoded (now-removed)
      // BYTECODE_CACHE_MAX_ENTRIES constant had, so wiring this field up
      // doesn't silently shrink the default cache for existing consumers.
      defaultCacheSize: 2000,
-     maxDocumentLines: 10000,
-     parseTimeoutMs: 5000,
-     executionTimeoutMs: 10000
+     // Raised from the 10,000 this field was declared with, which was never
+     // enforced and turned out to be under what this engine already supports:
+     // its paging design is tested against a 20,000-line document
+     // (`engine/PageManager.ts` and its spec) and its throughput benchmark
+     // parses a 50,000-line one. Twice the largest of those, and the same
+     // number `ConfigManager.validate()` already refuses to go above.
+     //
+     // Measured under a 256MB heap: setting a 100,000-line document costs
+     // 64MB, evaluating every line of a 20,000-line one costs 106MB, and
+     // 200,000 lines aborts the process before a single expression is looked
+     // at. A host with a small heap should lower this; the ceiling is here to
+     // stop the size that cannot work anywhere.
+     maxDocumentLines: 100000,
    },
     validation: {
       maxExpressionLength: 2000,
@@ -212,6 +281,21 @@ export const DEFAULT_CONFIG: EngineConfig = {
     vm: {
       maxStackDepth: 200,
       maxInstructions: 50000,
+      // Two orders of magnitude above anything a person types by hand (the
+      // longest range in the test suite is 1000 elements) and small enough
+      // that expanding it is measured in milliseconds rather than in whether
+      // the host survives.
+      maxCollectionSize: 100000,
+      // Twenty times the single-collection ceiling above, so an expression may
+      // legitimately handle a number of large collections, and two hundred
+      // times below the allocation that took the process down.
+      maxAllocatedElements: 2000000,
+      // Six hundred times the largest call count any test or example makes
+      // (five levels of composition is sixteen calls), and small enough that
+      // the calls it does allow cost single-digit megabytes rather than the
+      // heap. A document that needs more than ten thousand calls on one line
+      // is doing something a calculator was not built for.
+      maxFunctionCalls: 10000,
     },
     worker: {
       maxConcurrentWorkers: 4,
@@ -246,7 +330,6 @@ export function mergeEngineConfig(
 ): EngineConfig {
   return {
     date: { ...base.date, ...override.date },
-    dice: { ...base.dice, ...override.dice },
     performance: { ...base.performance, ...override.performance },
     validation: { ...base.validation, ...override.validation },
     vm: { ...base.vm, ...override.vm },
@@ -337,10 +420,15 @@ export class ConfigManager {
   }
 
   /**
-   * Get complete configuration
+   * Get complete configuration.
+   *
+   * A detached copy, section objects included. A top-level spread would hand
+   * the caller this manager's own section objects, so `getConfig().vm.x = 1`
+   * would be an undeclared back door into {@link set}, bypassing its path
+   * validation and reaching every later {@link get}.
    */
   getConfig(): EngineConfig {
-    return { ...this.config };
+    return mergeEngineConfig(this.config, {});
   }
 
   /**
@@ -351,10 +439,19 @@ export class ConfigManager {
   }
 
   /**
-   * Reset to default configuration
+   * Reset to default configuration.
+   *
+   * Goes through {@link mergeEngineConfig} for the same reason the constructor
+   * does. A top-level `{ ...DEFAULT_CONFIG }` copies the six section
+   * references, not the sections, so after a reset this manager's
+   * `performance` object WAS `DEFAULT_CONFIG.performance` and the next
+   * `set('performance.x', ...)` wrote into the module constant. That constant
+   * is what every `ExpressionEngine` is built from, so one manager's reset
+   * could change the cache size, instruction ceiling or allocation budget of
+   * every engine constructed later in the process.
    */
   reset(): void {
-    this.config = { ...DEFAULT_CONFIG };
+    this.config = mergeEngineConfig(DEFAULT_CONFIG, {});
   }
 
   /**
@@ -371,11 +468,6 @@ export class ConfigManager {
     // Validate date config
     if (this.config.date.maxOffsetYears > 1000) {
       errors.push('maxOffsetYears cannot exceed 1000');
-    }
-
-    // Validate dice config
-    if (this.config.dice.maxSides > 10000) {
-      errors.push('maxSides cannot exceed 10,000');
     }
 
     return {

@@ -111,14 +111,21 @@ interface FlatTerm {
  * it meets anything that is not a constant, a bare variable, or another
  * additive node, since collecting terms through a product is out of scope here.
  */
-function flattenSum(node: SymbolicNode, negated: boolean, out: FlatTerm[]): boolean {
+function flattenSum(node: SymbolicNode, negated: boolean, out: FlatTerm[], depth = 0): boolean {
+	// A second walk of its own, so the depth guard on `simplifyNode` does not
+	// cover it: this one is entered at whatever depth the simplifier reached
+	// and then descends the whole remaining chain, which for `a+(b+(c+...))`
+	// is as deep as the tree. `false` is the answer this function already gives
+	// for anything it cannot flatten, and the caller already knows what to do
+	// with it, so the guard needs no new outcome.
+	if (depth >= MAX_SIMPLIFY_DEPTH) return false;
 	switch (node.kind) {
 		case "add":
-			return flattenSum(node.left, negated, out) && flattenSum(node.right, negated, out);
+			return flattenSum(node.left, negated, out, depth + 1) && flattenSum(node.right, negated, out, depth + 1);
 		case "sub":
-			return flattenSum(node.left, negated, out) && flattenSum(node.right, !negated, out);
+			return flattenSum(node.left, negated, out, depth + 1) && flattenSum(node.right, !negated, out, depth + 1);
 		case "neg":
-			return flattenSum(node.operand, !negated, out);
+			return flattenSum(node.operand, !negated, out, depth + 1);
 		case "const":
 			out.push({ coeff: negated ? rationalNeg(node.value) : node.value, name: null });
 			return true;
@@ -316,7 +323,62 @@ export function simplifySymbolic(node: SymbolicNode): SymbolicNode {
 			{ limit: SYMBOLIC_MAX_NODES },
 		);
 	}
-	return simplifyNode(node);
+	// Restored rather than zeroed, because this function is genuinely reentrant
+	// (`vm/MatrixOps.ts` simplifies each cell of a symbolic product from inside
+	// a walk that is already in progress), so a nested call has to add to the
+	// enclosing depth rather than forget it. The `finally` is what makes a
+	// throw from deep inside, a rational overflow for instance, unable to leave
+	// the counter high and the simplifier quietly switched off for the rest of
+	// the process, which is the one failure mode a guard must not have.
+	const depthOnEntry = walkDepth;
+	try {
+		return simplifyNode(node);
+	} finally {
+		walkDepth = depthOnEntry;
+	}
+}
+
+/**
+ * How deep the simplifier will walk before leaving a subtree alone.
+ *
+ * `SYMBOLIC_MAX_NODES` bounds a tree's SIZE, and size and depth come apart
+ * completely for a chain, where a thousand nodes is a thousand levels. The
+ * recursive walk below runs out of native stack at around four thousand levels,
+ * which is well inside the ten thousand nodes the size guard admits, so there
+ * was a whole band of trees the engine called legal and then died on with a raw
+ * "Maximum call stack size exceeded" that no host can tell from a bug in its
+ * own code. `SymbolicNode.ts`'s `nodeCount()` was made iterative for exactly
+ * this reason; that made the size guard reachable without making the functions
+ * it guards able to walk what it admits.
+ *
+ * A quarter of the measured native limit, because these functions are called
+ * from inside the VM's dispatch loop, which has already spent stack of its own.
+ *
+ * Past it the subtree is returned as it came in. Simplification is an
+ * improvement to a tree, never a requirement of one, so an unsimplified branch
+ * is still exactly the expression the user wrote; the alternative, an error, is
+ * worse for a document whose deep line is otherwise perfectly answerable.
+ */
+const MAX_SIMPLIFY_DEPTH = 900;
+
+/** How deep the walk currently is. Module state; see {@link simplifySymbolic} for how it is kept honest. */
+let walkDepth = 0;
+
+/**
+ * Depth-bounded wrapper around the real worker.
+ *
+ * Every recursive call in {@link simplifyNodeAt} goes through here, so one
+ * increment per level is all the bookkeeping the guard needs. The decrement is
+ * deliberately not in a `finally`: a throw skips it, and the `finally` in
+ * {@link simplifySymbolic} restores the whole counter at the point the throw is
+ * caught, which is cheaper per node and exactly as correct.
+ */
+function simplifyNode(node: SymbolicNode): SymbolicNode {
+	if (walkDepth >= MAX_SIMPLIFY_DEPTH) return node;
+	walkDepth++;
+	const simplified = simplifyNodeAt(node);
+	walkDepth--;
+	return simplified;
 }
 
 /**
@@ -404,8 +466,8 @@ function foldComplexCall(name: string, args: readonly SymbolicNode[]): SymbolicN
 	}
 }
 
-/** Recursive worker for {@link simplifySymbolic}, past the one-time size guard. */
-function simplifyNode(node: SymbolicNode): SymbolicNode {
+/** Recursive worker for {@link simplifySymbolic}, past the one-time size guard and under the depth guard in {@link simplifyNode}. */
+function simplifyNodeAt(node: SymbolicNode): SymbolicNode {
 	switch (node.kind) {
 		case "const":
 		case "complex":

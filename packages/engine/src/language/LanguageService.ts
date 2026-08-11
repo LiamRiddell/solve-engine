@@ -220,7 +220,7 @@ export class LanguageService {
 	 * highlighted the obvious way.
 	 *
 	 * A token the normalizer left alone still describes its own text, so its
-	 * span is `offset` to `offset + value.length`, exactly as before.
+	 * span is `offset` to `offset + text.length`, exactly as before.
 	 *
 	 * A FUSED token does not. `10 frames` becomes a FRAME_COUNT whose value is
 	 * `10`, and a timecode becomes a token whose value is a comma-separated
@@ -274,8 +274,13 @@ export class LanguageService {
 			let end: number;
 			if (token.sourceEnd !== undefined) {
 				end = token.sourceEnd;
-			} else if (source.startsWith(token.value, token.offset)) {
-				end = token.offset + token.value.length;
+			} else if (source.startsWith(token.text, token.offset)) {
+				// `text`, not `value`. They are the same string for almost every
+				// token, and differ for a string literal, whose value is the
+				// payload while its text is the quoted source slice. Matching on
+				// value dropped every string literal from the painted line,
+				// since `gbp` does not appear at the offset where `"gbp"` does.
+				end = token.offset + token.text.length;
 			} else {
 				continue;
 			}

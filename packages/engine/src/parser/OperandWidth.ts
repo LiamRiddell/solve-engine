@@ -33,6 +33,12 @@ const ONE_OPERAND: readonly OpCode[] = [
 	OpCode.LOAD_GLOBAL_VAR,
 	OpCode.STORE_GLOBAL_VAR,
 	OpCode.DEFINE_USER_FUNCTION,
+	OpCode.BIND_UNKNOWN,
+	// Its operand is a constant-pool index, like PUSH_NUMBER's: the epoch-ms
+	// was resolved at parse time and stored in `numbers`. Omitting it made
+	// every scanner read that index byte as an opcode, so an ordinary date
+	// literal desynchronised the whole preflight walk.
+	OpCode.DATE_LITERAL,
 ];
 
 /**

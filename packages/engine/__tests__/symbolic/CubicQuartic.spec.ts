@@ -24,11 +24,23 @@ function coefficients(values: number[]): Rational[] {
 	return values.map(value => rational(BigInt(value)));
 }
 
+/**
+ * A root set as either this module or `Solve.ts` reports one.
+ *
+ * `CubicQuartic.ts` only ever approximates the *casus irreducibilis*, whose
+ * three roots are real, so its own approximate roots are plain numbers.
+ * `Solve.ts` reports over the complex plane and so pairs them.
+ */
+interface AnyRootSet {
+	readonly exact: readonly SymbolicNode[];
+	readonly approximate: readonly (number | { re: number; im: number })[];
+}
+
 /** Asserts every root of `roots` satisfies the polynomial with the given descending coefficients. */
-function expectAllRootsSatisfy(descending: number[], roots: RootSet): void {
+function expectAllRootsSatisfy(descending: number[], roots: AnyRootSet): void {
 	const points = [
 		...roots.exact.map(root => evaluateComplexNumerically(simplifySymbolic(root), {})),
-		...roots.approximate.map(value => ({ re: value, im: 0 })),
+		...roots.approximate.map(value => (typeof value === "number" ? { re: value, im: 0 } : value)),
 	];
 	expect(points.length).toBeGreaterThan(0);
 	for (const point of points) {
@@ -138,7 +150,7 @@ describe("solveCubic", () => {
 
 describe("solveQuartic", () => {
 	/** Solves a quartic through the public solver, which supplies the quadratic half. */
-	function quartic(descending: number[]): RootSet {
+	function quartic(descending: number[]): AnyRootSet {
 		const outcome = solveForVariable(poly(descending), constNode(0), "x");
 		if (outcome.kind !== "roots") throw new Error(`expected roots, got ${outcome.kind}`);
 		return { exact: outcome.exact, approximate: outcome.approximate };
@@ -203,9 +215,27 @@ describe("solveQuartic", () => {
 	test("a quartic with no readable closed form still gets numerical roots", () => {
 		// x^4 + x + 1 = 0 has no rational root, is not biquadratic, and its
 		// resolvent cubic has no rational root either. It has no real roots at all,
-		// so the honest answer is that none were found.
+		// which used to be reported as "no real solutions": true, and not the
+		// answer, since it has four complex ones. All four come back now, the same
+		// as they do for x^4+1 and x^4+4, which differ from it only in having a
+		// closed form.
 		const outcome = solveForVariable(poly([1, 0, 0, 1, 1]), constNode(0), "x");
-		expect(outcome.kind).toBe("no-real-solutions");
+		if (outcome.kind !== "roots") throw new Error(`expected roots, got ${outcome.kind}`);
+		expect(outcome.exact.length + outcome.approximate.length).toBe(4);
+		expectAllRootsSatisfy([1, 0, 0, 1, 1], outcome);
+		for (const root of outcome.approximate) expect(Math.abs(root.im)).toBeGreaterThan(0.1);
+	});
+
+	test("a biquadratic whose modulus is irrational is exact rather than declined", () => {
+		// x^4 - 2x^2 + 3 = 0. The inner quadratic solves to 1 ± sqrt(2)i, whose
+		// modulus is sqrt(3) rather than a rational, and that alone used to make
+		// the whole equation report "no real solutions" while x^4+1, x^4+4 and
+		// x^4-x^2+1 each returned four complex roots. The square root of 1+sqrt(2)i
+		// nests one level, exactly as the real biquadratic case already did.
+		const roots = quartic([1, 0, -2, 0, 3]);
+		expect(roots.approximate).toEqual([]);
+		expect(roots.exact).toHaveLength(4);
+		expectAllRootsSatisfy([1, 0, -2, 0, 3], roots);
 	});
 });
 

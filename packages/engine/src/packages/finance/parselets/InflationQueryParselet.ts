@@ -16,6 +16,32 @@ const INFLATION_ADJUST_BUILTIN_IDX = 60;
 type InflationQueryVariant = "what-is" | "what-was";
 
 /**
+ * Whether the rest of the line actually spells an inflation query.
+ *
+ * "what is" is an ordinary way to open a question, and this parselet used to
+ * claim every line that began with one: `what is 10% of 200` parsed the
+ * amount, found "of" where it wanted a year, and threw `Expected "from
+ * <year>"` at a question with nothing to do with inflation.
+ *
+ * Both grammars handled here are identified by a keyword further along the
+ * line, so look for one before committing to them:
+ *
+ *   what is $X from <year>                FROM
+ *   what is $X in <y1> worth in <y2>      WORTH_IN
+ *   what was $X worth in <year>           WORTH_IN
+ *
+ * A bare IN is deliberately not enough by itself, because `what is 10% of 200
+ * in euros` has one and is not an inflation query either.
+ */
+function hasInflationKeyword(parser: Parser): boolean {
+  for (let offset = 0; ; offset++) {
+    const token = parser.peekAt(offset);
+    if (!token) return false;
+    if (token.type === "FROM" || token.type === "WORTH_IN") return true;
+  }
+}
+
+/**
  * `what is $X from <year>` -> X (given as that year's dollars) expressed
  * in present-day dollars; `what is $X in <year1> worth in <year2>` -> X
  * adjusted between two arbitrary (non-present) years; `what was $X worth
@@ -55,6 +81,14 @@ export class InflationQueryParselet implements PrefixParselet {
   constructor(private readonly variant: InflationQueryVariant) {}
 
   parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
+    if (!hasInflationKeyword(parser)) {
+      // Not an inflation query, "what is" was just how the question opened.
+      // Read what follows as the ordinary expression it is, at `Lowest`, so
+      // the amount-guard binding power below does not truncate it either.
+      parser.parseExpression(BindingPower.Lowest, builder);
+      return;
+    }
+
     parser.parseExpression(BindingPower.Product, builder); // amount
 
     if (this.variant === "what-was") {

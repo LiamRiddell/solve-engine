@@ -1,0 +1,366 @@
+---
+title: Security
+description: The engine evaluates untrusted input by design. What it cannot do, what it refuses to do, and how to check both yourself.
+---
+
+import Notepad from '../../../components/Notepad.astro';
+
+A calculator's whole job is to evaluate whatever somebody typed, so hostile or
+malformed input is the normal case here rather than an edge case. In an editor
+integration it arrives one keystroke at a time from a person who is still
+mid-thought, and the process the engine is running in is the editor. Losing that
+process is not an acceptable outcome for a mistyped sum.
+
+Two things follow. The engine has no capability it does not need, and it refuses
+rather than fails when an expression asks for too much.
+
+Every claim below is checkable against the source, and where one command settles
+it, the command is here too.
+
+## Type something hostile
+
+The block below is a real engine running in your browser, the same component the
+front page uses. Every line in it is something the engine declines, and the
+answer column is the refusal it gives back.
+
+It is editable. Change a number, paste in the worst thing you can think of, hold
+a key down. The refusals follow what you type and the page carries on, which is
+the whole demonstration.
+
+<Notepad
+  showErrors
+  minRows={9}
+  label="Expressions the engine refuses"
+  initial={`sum(x, 1:100000000)
+5 kg in m
+sqrt()
+2 +* 3
+f(n) = f(n-1)
+f(5)
+1 km > 500 m`}
+/>
+
+Line by line, and none of these is a special case written for this page:
+
+- `sum(x, 1:100000000)` asks for a hundred million values from twenty
+  characters. A range costs nothing until something expands it, so this is the
+  cheapest way there is to ask for an enormous allocation. It comes back as
+  `COLLECTION_TOO_LARGE`, naming the setting that refused it: *This collection
+  has 100000000 elements, past the limit of 100000 (see the engine's
+  vm.maxCollectionSize setting).*
+- `5 kg in m` is not a conversion. Mass and length do not measure the same
+  thing, and the engine says so rather than handing back `5 kg` as though the
+  request had been honoured.
+- `sqrt()` gets *sqrt() takes 1 argument, but was given none*, from a check
+  against a table of builtin arities rather than from whatever happens inside
+  `sqrt` when its argument is missing.
+- `2 +* 3` is a parse error, reported as one and confined to its line.
+- `f(n) = f(n-1)` defines a function with no base case, and `f(5)` calls it. The
+  recursion guard stops it at a nesting depth of 50 rather than at whatever
+  depth the JavaScript call stack happens to give out, which is not a failure a
+  host can catch.
+- `1 km > 500 m` is `true`. It is here because the interesting half of a safety
+  story is the part where the engine still answers: units are unified for the
+  comparison rather than the numbers 1 and 500 being compared.
+
+Every one of those is recoverable. The engine instance is still usable, and the
+next line is evaluated normally, which is why the last line still answers after
+the six above it.
+
+One honest note while you are experimenting, because it is the first thing you
+will notice. An unterminated `"` is something the lexer cannot get past at all,
+so it fails the scan of the whole document rather than of one line, and the
+notepad clears the column rather than leaving yesterday's answers beside changed
+text. Close the quote and everything comes back. Blank is the correct thing to
+show there, for the same reason the engine reports a conversion it cannot do
+instead of returning the number unconverted: an error, never a guess.
+
+## No dynamic code execution
+
+There is no `eval`, no `new Function`, and no code generation anywhere in
+`packages/engine/src`. An expression is lexed, normalised, parsed and compiled
+to a fixed bytecode instruction set, then run on a virtual machine that can only
+do what its opcodes do. There is no path from an expression to arbitrary
+JavaScript, because there is nothing at the end of the pipeline that turns text
+into code.
+
+```sh
+grep -rn "eval("         packages/engine/src   # nothing
+grep -rn "new Function(" packages/engine/src   # nothing
+```
+
+The instruction set is a closed list. A package can add opcodes, and those are
+ordinary TypeScript functions the host chose to register, not something an
+expression can reach on its own. [The bytecode virtual
+machine](/architecture/bytecode-vm/) covers the shape of it.
+
+## No I/O of its own
+
+The engine reads no files, spawns no processes and opens no sockets. There is no
+import of `node:fs`, `node:child_process`, `node:net`, `node:http` or
+`node:https` anywhere in the source, which is one grep to confirm:
+
+```sh
+grep -rEn "from [\"'](node:)?(fs|child_process|net|http|https)[\"']" packages/engine/src
+```
+
+That is also why it runs unchanged in Node, in a browser and in a worker: there
+is no host facility it expects to find.
+
+### Except where you ask for live data
+
+There are four `fetch` calls in the source, in two files, and both of those
+files are live-data features rather than engine machinery:
+
+| File | Endpoint | Reached by |
+| --- | --- | --- |
+| `uom/CurrencyExchange.ts` | `api.frankfurter.dev` | a currency conversion, such as `100 USD in GBP` |
+| `uom/CurrencyExchange.ts` | `api.coingecko.com` | a crypto pair, such as `1 BTC in USD` |
+| `packages/weather/OpenMeteoClient.ts` | `geocoding-api.open-meteo.com` | a place name in a weather expression |
+| `packages/weather/OpenMeteoClient.ts` | `api.open-meteo.com` | the forecast itself |
+
+Be clear about what that means, because it is the one place where "no I/O" needs
+a qualification. Currency and weather are both in the default package set, so an
+engine constructed with no arguments will make those requests. Nothing is sent
+until an expression asks for a live figure: `2 + 2`, `15% of 2400` and
+`100 cm + 2 m` issue no requests at all. What leaves the process is what the
+expression contained, which is a currency code or a place name.
+
+Stocks and knowledge are the other two live-data packages. Both take a fetching
+function supplied by the host rather than an API key, and neither is registered
+by default, so unconfigured they return an honest "not configured" value rather
+than a guess.
+
+A host that wants no outbound traffic at all assembles its own package list:
+
+```ts
+import { ExpressionEngine } from "solve-engine";
+import {
+  BUILTIN_PACKAGES,
+  CURRENCY_PACKAGE,
+  WEATHER_PACKAGE,
+} from "solve-engine/packages";
+
+const offline = BUILTIN_PACKAGES.filter(
+  (pkg) => pkg !== CURRENCY_PACKAGE && pkg !== WEATHER_PACKAGE,
+);
+
+const engine = new ExpressionEngine("en", false, undefined, undefined, offline);
+```
+
+Eighteen packages instead of twenty, and no code path that can reach the
+network. A currency conversion then answers *No exchange rate available for USD
+to GBP*, which is the behaviour the engine aims for everywhere: an error, never
+a guess.
+
+## One runtime dependency
+
+`@tanstack/query-core`, which caches and deduplicates async resolution. That is
+the whole list, and `packages/engine/package.json` is the whole audit.
+
+Everything else is in this repository: the lexer, the normaliser, the parser,
+the virtual machine, the unit table, the currency and date handling, and the
+computer algebra. A supply chain you can read in an afternoon is a deliberate
+choice rather than an accident of scope.
+
+## Bounded by construction
+
+Untrusted input must not be able to hang or kill the host process. Every limit
+below is checked, and exceeding one raises a recoverable error that names what
+was refused, what the ceiling was, and which setting to change.
+
+| Setting | Default | What it counts | Error |
+| --- | --- | --- | --- |
+| `validation.maxExpressionLength` | 2,000 | characters in one expression, before lexing | `EXPRESSION_TOO_LONG` |
+| `validation.maxComplexity` | 500 | tokens, plus function calls x 5, plus deepest parenthesis nesting x 10 | `EXPRESSION_TOO_COMPLEX` |
+| `validation.maxNestingDepth` | 50 | recursive-descent depth in the parser | `NESTING_DEPTH_EXCEEDED` |
+| `vm.maxInstructions` | 50,000 | opcodes executed for one expression | `INSTRUCTION_LIMIT_EXCEEDED` |
+| `vm.maxStackDepth` | 200 | slots on the value stack | `STACK_LIMIT_EXCEEDED` |
+| `vm.maxCollectionSize` | 100,000 | elements in one expanded range or matrix | `COLLECTION_TOO_LARGE` |
+| `vm.maxAllocatedElements` | 2,000,000 | elements one evaluation may materialise in total | `ALLOCATION_LIMIT_EXCEEDED` |
+| `vm.maxFunctionCalls` | 10,000 | user-defined function calls in one evaluation, however they nest | `FUNCTION_CALL_LIMIT_EXCEEDED` |
+| `performance.maxDocumentLines` | 100,000 | lines in one document, checked before it is scanned | `DOCUMENT_TOO_LARGE` |
+| `date.maxOffsetYears` / `minOffsetYears` | 100 / -100 | how far a workday offset may walk, in years | `DATE_OFFSET_LIMIT_EXCEEDED` |
+
+The defaults live in `constants/Configuration.ts`, where each one is documented
+with the reasoning behind its value.
+
+Two details the table cannot show. The complexity score reaches its ceiling
+before the parser's nesting depth does at the default settings, so a deeply
+nested expression is usually refused by `maxComplexity` and the parser limit is
+the backstop for a host that raised it. And `COLLECTION_TOO_LARGE` arrives as an
+error value in the result rather than as a thrown error, which is the same
+information by a different route: a value that knows it is an error, and that
+stays an error through any operation it takes part in rather than degrading into
+a number.
+
+Two further limits are not `EngineConfig` fields at all, and putting them in the
+table as though they were would be overclaiming. Nested user-function calls are
+capped at a depth of 50 (`FUNCTION_RECURSION_LIMIT_EXCEEDED`), which is a
+parameter of `createVM` rather than a config field, so an `ExpressionEngine`
+always uses the default.
+The normaliser refuses to emit more than 10,000 tokens from one line
+(`NORMALIZED_TOKEN_LIMIT_EXCEEDED`), which is an option on the normaliser
+itself.
+
+### Changing them
+
+Pass a partial config to the constructor. Overrides are merged section by
+section, so a section you do not mention keeps its defaults:
+
+```ts
+import { ExpressionEngine } from "solve-engine";
+import { DEFAULT_CONFIG } from "solve-engine/constants";
+
+const engine = new ExpressionEngine("en", false, {
+  vm: { ...DEFAULT_CONFIG.vm, maxCollectionSize: 1_000 },
+});
+```
+
+The spread is not decoration. `Partial<EngineConfig>` is shallow, so a section
+you do supply has to be complete, and spreading the defaults into it is how you
+change one field without writing the other four out by hand.
+
+The ceiling you set is the one that appears in the refusal, so `sum(x, 1:5000)`
+on that engine answers *This collection has 5000 elements, past the limit of
+1000 (see the engine's vm.maxCollectionSize setting).*
+
+Ordinary expressions are nowhere near any of this. The longest range in the test
+suite is a thousand elements, and five levels of function composition is sixteen
+calls against a ceiling of ten thousand. The limits are set where a document
+cannot reach them and a denial-of-service attempt cannot avoid them.
+
+## Why there is a total allocation budget
+
+This is the part worth understanding, because it is the one a reader is most
+likely to get wrong when building something similar.
+
+Per-operation limits do not compose. Each of the three lines below passes every
+limit in the table above. The first two build vectors of 1,501 elements, a
+fraction of `maxCollectionSize`. The third multiplies them, and the result is
+not the size of either operand, it is their product:
+
+<Notepad
+  showErrors
+  label="Two legal operands, one impossible result"
+  initial={`:a = map(1*x, 0:1500)
+:b = transpose(a)
+b * a`}
+/>
+
+The answers on the first two lines are the vectors themselves, clipped to the
+width of the column. The third line is the point: *Evaluating this expression
+would materialise 2,253,001 matrix cells, past the limit of 2,000,000 elements
+for one evaluation.*
+
+Before 1.0.0 this shape of expression killed the process. The same three lines
+with a twenty thousand element vector ask for 400,040,001 cells, which aborted
+with a heap fatal that no `try` in the engine, the host, or the test runner
+could contain. A cap on collection size, on matrix size, on anything measured
+per site, passes all three lines, because the fatal quantity is not any input.
+Three properties fix it, and all three are needed:
+
+- **It is a total, not a per-site cap.** Twenty-five individually legal
+  collections in one expression are charged against one budget rather than each
+  being waved through on its own.
+- **It is consulted before allocating**, wherever the size is knowable in
+  advance. A matrix product works its size out from the two shapes, so the
+  refusal above happens instead of the allocation rather than after it.
+- **It is reset only by the outermost evaluation.** The instruction counter is
+  not: `executeBytecode` re-enters itself for function bodies and map or reduce
+  transforms, and each reentrant call gets a fresh instruction count, so
+  recursion refreshes its own allowance on the way in. A budget with that
+  property would bound nothing. This one does not refresh, which is why
+  `maxFunctionCalls` sits beside it.
+
+The cost of carrying the counter is an integer add and a compare at the sites
+that allocate, measured at roughly 3.5 percent on the virtual machine benchmark
+suite, which is at the edge of what run-to-run noise on one machine can resolve.
+
+## What is not bounded, honestly
+
+- **Element-wise matrix arithmetic** and builtins that return a matrix
+  (`transpose`, `inv`, `det`) are charged after allocating rather than before.
+  Their output cannot be larger than their input, so the first such allocation
+  is never the fatal one and the running total refuses the next.
+- **BigInt growth from repeated multiplication** is bounded by V8's own maximum
+  BigInt size, which raises a catchable `RangeError`. Exponentiation and shifts
+  are bounded by the engine, because both can ask for an arbitrarily large
+  integer from a short line.
+- **The per-document line cache** has no size limit of its own. It grows with
+  document size rather than with any one line, and the document itself is
+  bounded by `performance.maxDocumentLines`.
+
+## Fuzzed, not just tested
+
+A test suite checks what somebody thought to assert. A fuzzer checks the input
+nobody thought of, which for an engine like this one is most of the input it
+will ever see.
+
+The fuzzer is seeded, so a finding reproduces exactly. It shrinks a finding to a
+minimal reproducer automatically, and commits that reproducer to a corpus that
+replays on every ordinary test run, so a fixed bug cannot come back quietly.
+Two generators feed it:
+
+- **The expression grammar**, drawing its vocabulary from a live engine, so a
+  package added next month is covered without editing the fuzzer.
+- **The bytecode virtual machine**, generating and mutating opcode streams
+  directly. `executeBytecode` is a public export from `solve-engine/vm`, which
+  makes malformed bytecode a real caller surface rather than a hypothetical one,
+  so it is fuzzed as one.
+
+Three invariants are asserted, and only one of them can be observed from inside
+the process being tested. The runner therefore supervises a heap-limited child
+from outside:
+
+1. The process never dies. An out-of-memory abort is uncatchable, so it is
+   observed as a child exit code.
+2. Nothing hangs. A wedged synchronous loop cannot time itself out, so it is
+   observed as a heartbeat file that stopped advancing.
+3. Every failure is a well-formed `EngineError`, never a raw JavaScript
+   exception reaching the host.
+
+The 1.0.0 hardening run executed 2.6 million cases with no process death. It
+also found things review had not: a missing entry in the operand-width table
+that desynchronised every bytecode scanner after a date literal, nine raw
+exceptions reachable through the public `vm` export, and a nine-character
+expression that looped forever inside a single opcode where no limit could
+interrupt it.
+
+Run it yourself:
+
+```sh
+npm run fuzz                      # random seeds, both generators
+npm run fuzz -- --minutes=10      # a longer soak
+npm run fuzz -- --seed=12345      # a specific run, reproducibly
+```
+
+## Verified against the previous release
+
+A suite answers "does what I asserted still hold". Before a release the question
+is the other one: "did anything change that I did not intend", and no assertion
+can answer that, because the changes worth finding are the ones nobody thought
+to write down.
+
+`tools/differential/` runs a corpus through the last published build and the
+candidate build and classifies every disagreement by shape, so a reviewer makes
+one judgement per kind of change rather than one per row. The corpus comes from
+the documented examples, every string literal in the test suite, the recorded
+fuzz corpus and the grammar-aware generator. The clock, the timezone,
+`Math.random` and `fetch` are all pinned before the engine is imported, and each
+build is probed twice so that anything still unstable is dropped rather than
+reported as a difference.
+
+The baseline is an installed package rather than a git checkout, because the
+tarball is the artefact a user receives and two working trees compare two things
+nobody ever ran. The 1.0.0 run compared 40,892 expressions against
+`1.0.0-beta.6`. The candidate suffered zero process deaths against the
+baseline's 68, which is the safety limits on this page doing their job in the
+only way that counts.
+
+## Reporting a vulnerability
+
+Report privately through [GitHub's advisory
+form](https://github.com/LiamRiddell/solve-engine/security/advisories/new)
+rather than opening a public issue. A way around any bound on this page, or a
+way to make the engine consume unbounded time or memory, is a legitimate report.

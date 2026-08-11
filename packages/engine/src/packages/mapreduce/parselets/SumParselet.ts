@@ -44,6 +44,16 @@ export class SumParselet implements PrefixParselet {
     parseCollectionExpr(parser, builder);
     parser.consume("RPAREN");
 
-    emitInvoke(builder, OpCode.REDUCE_INVOKE, { kind: 0, program: bodyProgram }, ["acc", "x"], 0);
+    // Seed the accumulator with zero rather than letting `reduce` take the
+    // collection's first element. Seeding from the first element skips the
+    // element expression for that one element, so `sum(x*10, [5])` folded to
+    // 5 instead of 50, and `sum(x*2, [1,2,3])` to 1+4+6 = 11 instead of 12.
+    // The trivial `sum(x, c)` case is unaffected, which is why the shortfall
+    // stayed invisible: with the identity expression the skipped element is
+    // its own image.
+    builder.emitOpcode(OpCode.PUSH_NUMBER);
+    builder.emitNumber(0);
+
+    emitInvoke(builder, OpCode.REDUCE_INVOKE, { kind: 0, program: bodyProgram }, ["acc", "x"], 1);
   }
 }

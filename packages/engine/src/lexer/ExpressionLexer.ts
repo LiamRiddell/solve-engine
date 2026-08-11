@@ -159,7 +159,48 @@ function buildCharClassTable(): Uint8Array {
   table[96] = CharClass.BACKTICK; // `
 
   return table;
-}// ── Monomorphic Token class ───────────────────────────────────────────────
+}
+
+/**
+ * Whether a non-ASCII code point separates tokens rather than joining them.
+ *
+ * The CHAR_CLASS table above is 128 entries wide, so every code point past
+ * ASCII falls through to one branch that reads it as part of an identifier.
+ * That is right for `café`, `日本語` and emoji, and wrong for the dozen or so
+ * code points that are whitespace without being ASCII whitespace. Without this,
+ * a no-break space between two operands JOINED them: `1<NBSP>+<NBSP>1` lexed as
+ * one identifier and reported "Undefined variable: 1 + 1", and a byte-order
+ * mark at the head of a file did the same to its first line. Both arrive
+ * constantly in pasted text, from a web page, a word processor, a spreadsheet
+ * export, or a Windows editor that writes a BOM.
+ *
+ * The zero-width JOINERS are deliberately absent. U+200D is what holds a family
+ * emoji together as one grapheme, and U+200C is its non-joining partner; both
+ * bind their neighbours rather than separating them, so they stay identifier
+ * characters. U+200B, the zero-width SPACE, is a separator despite being
+ * invisible, which is exactly why it is worth handling: it is unreadable on
+ * screen and would otherwise silently break the line it lands in.
+ *
+ * @param cc - A UTF-16 code unit, only meaningful for values >= 128.
+ * @returns True when the character should be skipped like a space.
+ */
+function isUnicodeSpace(cc: number): boolean {
+  return (
+    cc === 0x0085 ||                    // NEL, next line
+    cc === 0x00A0 ||                    // no-break space
+    cc === 0x1680 ||                    // ogham space mark
+    (cc >= 0x2000 && cc <= 0x200A) ||   // en quad through hair space, incl. figure/thin space
+    cc === 0x200B ||                    // zero-width space
+    cc === 0x2028 ||                    // line separator
+    cc === 0x2029 ||                    // paragraph separator
+    cc === 0x202F ||                    // narrow no-break space
+    cc === 0x205F ||                    // medium mathematical space
+    cc === 0x3000 ||                    // ideographic space
+    cc === 0xFEFF                       // byte-order mark / zero-width no-break space
+  );
+}
+
+// ── Monomorphic Token class ───────────────────────────────────────────────
 // V8 assigns a single stable HiddenClass because all properties are
 // initialized in the constructor and never added/removed afterwards.
 // This enables fast property access (inline cache hits) and allows
@@ -891,7 +932,11 @@ export class ExpressionLexer {
 
         default: {
           // CharClass.SKIP, includes non-ASCII characters (code >= 128)
-          if (c0 === 0x00D7) {  // × → STAR
+          if (isUnicodeSpace(c0)) {
+            // A line holding nothing but a no-break space or a byte-order mark
+            // holds no expression, exactly as a line holding one space does.
+            // Yielding an IDENT for it made it an undefined variable instead.
+          } else if (c0 === 0x00D7) {  // × → STAR
             yield new LexerToken('STAR', tokenTypeId('STAR'), '\u00D7', '\u00D7', 0, 0, 1, 1);
             tokenIndex++;
           } else if (c0 === 0x00F7) {  // ÷ → SLASH
@@ -1066,7 +1111,18 @@ export class ExpressionLexer {
         // ── Non-ASCII characters ─────────────────────────────────────
         default: {
           const col = this.pos - this.lineStartPos + 1;
-          if (c0 === 0x00D7) {  // × → STAR
+          if (isUnicodeSpace(c0)) {
+            // Separates its neighbours instead of joining them. See
+            // isUnicodeSpace()'s doc comment: this branch is why a sum pasted
+            // out of a web page or a spreadsheet evaluates at all.
+            this.pos++;
+            if (c0 === 0x2028 || c0 === 0x2029 || c0 === 0x0085) {
+              // The three that are line breaks rather than spaces, tracked the
+              // same way "\n" is above so a later token reports its own line.
+              this.line++;
+              this.lineStartPos = this.pos;
+            }
+          } else if (c0 === 0x00D7) {  // × → STAR
             yield new LexerToken('STAR', tokenTypeId('STAR'), '\u00D7', '\u00D7', this.pos, 0, this.line, col);
             this.pos++;
             tokenIndex++;
@@ -1322,7 +1378,7 @@ export class ExpressionLexer {
         (cc >= 65 && cc <= 90) ||   // A-Z
         (cc >= 97 && cc <= 122) ||  // a-z
         cc === 95 ||                 // _
-        cc >= 128)                   // Unicode (accented chars, emoji, etc.)
+        (cc >= 128 && !isUnicodeSpace(cc)))  // Unicode (accented chars, emoji, etc.), but not Unicode whitespace
     ) {
       pos++;
     }
@@ -1459,6 +1515,22 @@ export class ExpressionLexer {
   // ── String literal tokenizer ──────────────────────────────────────────
   /**
    * Reads a double-quoted string literal. Supports backslash escapes.
+   *
+   * `text` is the raw source slice, quotes included, because that is what
+   * `offset` + `text.length` has to span for a host to underline the literal.
+   * `value` is the PAYLOAD, quotes excluded, because that is what
+   * `PUSH_STRING` puts into the Value.
+   *
+   * The two used to be the same string. `"abc"` carried the five characters
+   * `"abc"` as its value, which was invisible on screen (the formatter prints
+   * the payload raw and the retained quotes landed where a display would have
+   * put them back) and not invisible anywhere else: `parseFloat('"5"')` is NaN
+   * whatever the digits say, so `"5" + 5` answered 5.
+   *
+   * An unterminated literal is an error rather than a string that happens to
+   * reach the end of the line. It used to return what it had, so `"abc` and
+   * `"abc"` were indistinguishable by payload once the quotes were stripped,
+   * which is the other half of why they are stripped here rather than later.
    */
   private tokenizeString(): Token {
     const input = this.input;
@@ -1473,8 +1545,9 @@ export class ExpressionLexer {
       if (c0 === 34) {
         pos++;
         const text = input.slice(start, pos);
+        const value = input.slice(start + 1, pos - 1);
         this.pos = pos;
-        return new LexerToken('STRING', tokenTypeId('STRING'), text, text, start, lineBreaks, this.line, startCol);
+        return new LexerToken('STRING', tokenTypeId('STRING'), value, text, start, lineBreaks, this.line, startCol);
       }
       if (c0 === 92 && pos + 1 < len) {
         pos += 2;
@@ -1488,9 +1561,12 @@ export class ExpressionLexer {
       pos++;
     }
 
-    const text = input.slice(start, pos);
     this.pos = pos;
-    return new LexerToken('STRING', tokenTypeId('STRING'), text, text, start, lineBreaks, this.line, startCol);
+    throw ErrorFactory.parsing(
+      "UNTERMINATED_STRING",
+      `Unterminated string literal: ${input.slice(start, pos)}`,
+      { literal: input.slice(start, pos), offset: start },
+    );
   }
 
   // ── Markdown line scanner (Phase B) ───────────────────────────────────

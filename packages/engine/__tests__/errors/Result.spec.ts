@@ -14,7 +14,7 @@ import {
   tryCatch,
   tryCatchAsync,
 } from "@solve-js/errors/Result";
-import { ErrorFactory, EngineError } from "@solve-js/errors/EngineError";
+import { ErrorFactory, EngineError, ErrorCategory } from "@solve-js/errors/EngineError";
 
 describe("Result combinators", () => {
   test("ok()/err() construct the right shape", () => {
@@ -103,7 +103,13 @@ describe("Result combinators", () => {
     if (isErr(r)) {
       expect(r.error).toBeInstanceOf(EngineError);
       expect(r.error.message).toBe("native oops");
-      expect(r.error.recoverable).toBe(false); // internal() defaults recoverable:false
+      // normalizeUnknownError() overrides internal()'s recoverable:false
+      // default. An error the engine did not anticipate happened on ONE line
+      // and does not invalidate the instance, so it must not report as fatal.
+      // The INTERNAL category is what still says "engine's fault, worth
+      // reporting". See normalizeUnknownError()'s own doc comment.
+      expect(r.error.recoverable).toBe(true);
+      expect(r.error.category).toBe(ErrorCategory.INTERNAL);
       expect(r.error.cause).toBeInstanceOf(TypeError);
     }
   });

@@ -1,0 +1,15 @@
+{
+	"id": "bdb21e72",
+	"seed": 4007443,
+	"generator": "expression",
+	"outcome": "hang",
+	"detail": "hang during expression soak",
+	"found": "2026-08-10",
+	"shrinkSteps": 4,
+	"input": {
+		"kind": "expression",
+		"source": ":hq = 429% ^ e ^ 41:170 ^ true ^ 2:2147483648 ^ e ^ 77:3 ^ \"fw\" ^ 12:20 ^ 32.7233342 ^ 4:1000000000 ^ 242,408 ^ 36:83:98:39 ^ 12PM ^ last monday ^ pi ^ -2:93 ^ 3:06 ^ 4pi ^ -92:93 ^ -73:-65 tomorrow u= c(ed) = !\"\u0000\" != 35:73:87:57 remainder of (e) = increase sum(\"yk\", -76:116) by 55% | [0xd30caab0,65536,293090;427,285,603e89,498e-277][sum(if (e) then \"qzi\" by 11:38 else 2:1000000000 week number on until monday and 51:46:96:73 annual interest on i(tebft) = 6d130 >> prod(s, -39:89) mod 1.5429371781647206e+92 DOT week number on 623k milligram/lux <= false, -34:124), der(qbek(exs) = from 9:23 and 1921]"
+	},
+	"status": "fixed",
+	"note": "Exceeded the five-second per-case wall clock. Same family as the recorded slow entry: the cost is in compileExpression(), the input is well under maxExpressionLength, and no existing guard bounds parse time. FIXED, root cause and not just the symptom. The construct was the labelled-line fallback in engine/ExpressionEngine.ts's parseExpression(): when a line does not parse whole, it retries the fragment after each COLON, rightmost first, and each retry re-entered the SAME function, which ran the whole fallback again on its own suffix. Those inner suffixes are exactly the ones the outer loop already visits (a colon at j > i gives slice(j+1), which the outer loop tries directly), so every level below the first re-attempted parses that had already failed, and each of those levels did it again: k colons compiled 2^k times. That is why trimming from either end stalled and why no single construct looked slow, the cost was in the number of colons, not in any one of them. Profiled with --cpu-prof: 96.3% of the 18 seconds was inside the EngineError constructor (Error.captureStackTrace), with 524,288 errors constructed and discarded for the 723-character case and 65,536 for a 500-character prefix, both exact powers of two. The retry now gets a plain parse with no fallback of its own, which loses no coverage. Measured after: 723 chars 3.0ms with 22 errors, the hang case 6.1ms with 22, and a synthetic worst case of 160 colons 3.6ms with 161 errors, i.e. linear. Pinned by __tests__/hardening/DenialOfServiceUnboundedWork.spec.ts."
+}

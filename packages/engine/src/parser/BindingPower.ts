@@ -14,16 +14,41 @@ export const BindingPower = {
   Assignment: 10,
   LogicalOr: 12,   // `or`, `||` — loosest of the boolean-logic operators
   LogicalAnd: 14,  // `&&` — binds tighter than `or` ("a or b and c" = "a or (b and c)")
-  Conditional: 20, // comparisons (`==`, `<`, `>=`, ...) — tighter than and/or, looser than arithmetic
-  // The word "and" as addition (`AND_CONJ`). One step looser than `Sum` on
-  // purpose: a phrase parselet collecting a list ("average of X, Y and Z")
-  // parses each argument at this level, which stops at "and" while still
-  // letting a genuine "+" inside an argument bind. Level 28 rather than 29 to
-  // leave room, and below Sum rather than above so "1 and 2 * 3" stays 7.
-  Conjunction: 28,
+  // The word "and" (`AND_CONJ`), which is both arithmetic addition ("5 and 3"
+  // is 8) and boolean conjunction ("true and false"). A phrase parselet
+  // collecting a list ("average of X, Y and Z") parses each argument at this
+  // level, and an argument stops at any operator whose power is <= the level it
+  // was parsed at, so putting "and" here is what makes it end an argument
+  // rather than be consumed as the addition it also is. Everything an argument
+  // should keep binds tighter, including a genuine "+" (`Sum`).
+  //
+  // It sits BELOW `Conditional` because the boolean reading needs comparisons
+  // to be its operands: at 28, "5 > 3 and 2 > 1" parsed as "5 > (3 and 2) > 1"
+  // and answered false. Above `LogicalAnd` so that "and" is still the tighter
+  // of the two conjunctions, and two steps off each neighbour to leave room.
+  Conjunction: 16,
+  // The bitwise trio and the shifts, ordered exactly as C and JavaScript order
+  // them, which is the order every language that borrowed these operators from
+  // C uses: `|` looser than `xor`, `xor` looser than `&`, all three looser than
+  // comparison, and the shifts tighter than comparison but looser than `+`.
+  // They used to share one level (35) between `Sum` and `Product`, so
+  // "1 + 2 << 3" answered 17 where JavaScript answers 24 and "4 & 3 + 1"
+  // answered 1 where JavaScript answers 4. Each has its own level now because
+  // a shared level makes "4 | 6 & 3" group left instead of letting `&` win.
+  //
+  // They stay TIGHTER than `Conjunction` so that a phrase argument parsed at
+  // that level ("average of 5 | 3, 2 and 4") keeps its bitwise operators
+  // instead of stopping at the first one.
+  BitwiseOr: 18,   // `|`
+  BitwiseXor: 20,  // the `xor` keyword (`BIT_XOR`), not the `^` exponent token
+  BitwiseAnd: 22,  // `&`
+  Conditional: 24, // comparisons (`==`, `<`, `>=`, ...), tighter than the bitwise trio, looser than the shifts
+  Shift: 27,       // `<<`, `>>`, `>>>`
   Sum: 30,
-  BitwiseXor: 35,
   Product: 40,
+  // `^`, RIGHT-associative: "2 ^ 3 ^ 2" is 2^(3^2) = 512, as in mathematics,
+  // Python, Ruby and JavaScript's `**`. See PrecedenceParser.parseExpression
+  // and BinaryOpParselet for the two places that associativity is implemented.
   Exponent: 50,
   Prefix: 60,
   Postfix: 70,
@@ -88,12 +113,17 @@ const BUILTIN_INFIX_BP: Record<string, number> = {
   // Arithmetic (infix, RIGHT-associative, PrecedenceParser handles this specially)
   [TokenTypes.CARET]:    BindingPower.Exponent,
 
-  // Bitwise (infix, left-associative)
-  [TokenTypes.LSHIFT]:   BindingPower.BitwiseXor,
-  [TokenTypes.RSHIFT]:   BindingPower.BitwiseXor,
-  [TokenTypes.BIT_AND]:  BindingPower.BitwiseXor,
-  [TokenTypes.BIT_OR]:   BindingPower.BitwiseXor,
+  // Bitwise and shift (infix, left-associative), one level each, ordered as C
+  // and JavaScript order them. `>>>` used to be missing from this table
+  // entirely, which left it running at its Tier 2 parselet level while `>>`
+  // ran at the Tier 1 one, so "16 >> 3 & 1" and "16 >>> 3 & 1" grouped
+  // differently and answered 0 and 8.
+  [TokenTypes.BIT_OR]:   BindingPower.BitwiseOr,
   [TokenTypes.BIT_XOR]:  BindingPower.BitwiseXor,
+  [TokenTypes.BIT_AND]:  BindingPower.BitwiseAnd,
+  [TokenTypes.LSHIFT]:   BindingPower.Shift,
+  [TokenTypes.RSHIFT]:   BindingPower.Shift,
+  [TokenTypes.URSHIFT]:  BindingPower.Shift,
 
   // Postfix (no right operand, PrecedenceParser handles this specially)
   [TokenTypes.PERCENT]:  BindingPower.Postfix,
@@ -146,8 +176,19 @@ export function buildBindingPowerTable(): Uint8Array {
 }
 
 /**
- * Invalidate the cached BP table, call when plugins register new token types
- * that should participate in the built-in fast path.
+ * Drop the cached table, so the next {@link buildBindingPowerTable} call builds
+ * a fresh one sized to the token types registered by then.
+ *
+ * It does NOT add a plugin's operator to the Tier 1 fast path, which is what
+ * this comment used to promise. The values in the table come from
+ * `BUILTIN_INFIX_BP`, which is module-private and has no registration path, so
+ * a rebuilt table holds the same binding powers and a plugin token still reads
+ * 0. `PrecedenceParser.BP_TABLE` is a static initialized once at class
+ * definition time and never re-read, so it would not see a rebuild anyway.
+ *
+ * A plugin's infix operator takes the Tier 2 parselet-registry route instead,
+ * which is where an operator whose binding power the engine does not already
+ * know is meant to live.
  */
 export function invalidateBindingPowerTable(): void {
   _bpTable = null;

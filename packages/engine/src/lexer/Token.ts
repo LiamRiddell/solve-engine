@@ -96,9 +96,10 @@ export const TokenTypes = {
   //
   // Giving it its own type lets a parselet tell the two apart. It is still an
   // infix addition (see ArithmeticPackage.ts) so "3 and 4" is unchanged, but it
-  // binds at BindingPower.Conjunction, one step looser than Sum, so a phrase
-  // parselet can parse an argument at Conjunction and get "1 + 2" whole while
-  // still stopping at "and".
+  // binds at BindingPower.Conjunction, looser than both Sum and Conditional, so
+  // a phrase parselet can parse an argument at Conjunction and get "1 + 2"
+  // whole while still stopping at "and", and so "5 > 3 and 2 > 1" reads as the
+  // conjunction of two comparisons rather than "5 > (3 and 2) > 1".
   AND_CONJ: "AND_CONJ",
   OF: "OF",
   INCREASE_BY: "INCREASE_BY",

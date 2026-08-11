@@ -1,4 +1,5 @@
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { chargeAllocation } from "@solve-js/vm/AllocationBudget";
 import type { SymbolicNode } from "@solve-js/symbolic";
 
 /**
@@ -87,9 +88,37 @@ export enum ValueType {
 export class ValueArena {
 	private arena: Value[] = [];
 	private index: number = 0;
+	/** The block size to come back down to. Kept so {@link reset} can. */
+	private readonly initialSize: number;
+
+	/**
+	 * How much more than the last cycle needed the arena may go on holding
+	 * before it gives the difference back, and how much of it it keeps when it
+	 * does.
+	 *
+	 * A bump allocator that grows to serve one expensive line is working as
+	 * intended; one that never comes down is a leak wearing a cache's clothes.
+	 * `map(x*1, 1:100000)` is an ordinary line by every limit the engine has,
+	 * and it took the arena from 512 Values to 300,004, about 24MB that stayed
+	 * live through two forced full collections and through every later `1 + 1`,
+	 * because `acquire()` handles overflow with `push()` and `reset()` only
+	 * zeroed the bump index. The instance is module-level and survives
+	 * `disableValueArena()` on purpose, so that high-water mark was for the
+	 * life of the process.
+	 *
+	 * Keeping twice what the last cycle used, and only shrinking once holding
+	 * four times that, is what stops the release from becoming a different
+	 * performance bug: a steady scroll uses about the same number of Values
+	 * every frame, so it never meets the condition at all, and an alternating
+	 * heavy/light document degrades at worst to allocating the Values it would
+	 * have allocated with no arena in the first place.
+	 */
+	private static readonly SHRINK_WHEN_HOLDING_TIMES = 4;
+	private static readonly KEEP_TIMES = 2;
 
 	/** Pre-allocate initial block. 512 Values covers ~30-line viewport comfortably. */
 	constructor(initialSize: number = 512) {
+		this.initialSize = initialSize;
 		for (let i = 0; i < initialSize; i++) {
 			this.arena.push(new Value(ValueType.Number, 0));
 		}
@@ -109,9 +138,25 @@ export class ValueArena {
 		return v;
 	}
 
-	/** Reset for next scroll frame. O(1), just resets the index. */
+	/**
+	 * Reset for the next scroll frame, releasing a block the last frame turned
+	 * out not to need.
+	 *
+	 * Still O(1) in the ordinary case: one comparison against what the cycle
+	 * that just ended used, and the truncation only on the frame after an
+	 * unusually expensive one. Reading the usage here rather than at
+	 * `disableValueArena()` is what makes the policy "the first cycle that does
+	 * not need the block gives it back", which is the first thing a host does
+	 * after the line that grew it.
+	 */
 	reset(): void {
+		const usedLastCycle = this.index;
 		this.index = 0;
+		if (this.arena.length <= this.initialSize) return;
+		if (this.arena.length <= usedLastCycle * ValueArena.SHRINK_WHEN_HOLDING_TIMES) return;
+		// Never below the initial block, and never above what is already held,
+		// so this only ever truncates.
+		this.arena.length = Math.max(this.initialSize, usedLastCycle * ValueArena.KEEP_TIMES);
 	}
 
 	/** Current arena utilization (for diagnostics). */
@@ -307,6 +352,13 @@ export class Value {
 		// `.isSymbolic()` BEFORE reaching this fallback (see
 		// `VMConversion.ts`'s `binaryOp()`).
 		if (this.type === ValueType.Symbolic) return 0;
+		// A boolean has an obvious numeric reading and no branch used to give it
+		// one, so it fell through to `parseFloat(true)` -> NaN -> 0, and BOTH
+		// booleans read as zero: `true == false` answered true, and every
+		// arithmetic path that mixes a boolean with a number ("true and 5")
+		// contributed nothing. 1/0 is the reading every language with a numeric
+		// boolean coercion uses, and the one `if 1 then` already implies.
+		if (this.type === ValueType.Boolean) return this.value === true ? 1 : 0;
 
 		if (this._cachedNumber !== undefined) return this._cachedNumber;
 
@@ -330,6 +382,10 @@ export class Value {
 		}
 		if (this.type === ValueType.Range) return false;
 		if (this.type === ValueType.Symbolic) return false;
+		// Matches toNumber()'s boolean reading above. Without this a Boolean
+		// reached the string branch at the bottom and `parseFloat(true)` made
+		// every boolean report itself as NaN.
+		if (this.type === ValueType.Boolean) return false;
 		if (typeof this.value === 'number') return isNaN(this.value);
 		if (typeof this.value === 'bigint') return false;
 		return isNaN(parseFloat(this.value as string));
@@ -357,11 +413,14 @@ export type DisplayBase = "hex" | "bin" | "oct";
  * as zero in arithmetic, and nothing about that failure is visible at the point
  * of use.
  *
- * @param n - The number itself, in full precision.
+ * @param n - The number itself, in full precision. A `bigint` is accepted for
+ * the same reason the type is numeric at all: `12345678901234567890n as hex`
+ * has an exact answer, and forcing it through a double first rendered
+ * 0xAB54A98CEB1F0800 for a value ending 0AD2.
  * @param base - How to display it, defaulting to hexadecimal. Carried in the
  * `unit` slot, which is free for this type.
  */
-export function hexValue(n: number, base: DisplayBase = "hex"): Value {
+export function hexValue(n: number | bigint, base: DisplayBase = "hex"): Value {
 	const tag = base === "hex" ? undefined : base;
 	if (_arenaActive && _arena) return _arena.acquire(ValueType.Hex, n, tag);
 	return new Value(ValueType.Hex, n, tag);
@@ -482,6 +541,16 @@ export function timecodeFps(unit: string): number {
  * `rowMajorToColumnMajor()`.
  */
 export function matrixValue(rows: number, cols: number, data: readonly MatrixEntry[]): Value {
+	// Every matrix in the engine is born here, which makes this the one place
+	// that can charge for one without each producer having to remember to. The
+	// charge lands after `data` exists, so it is a backstop rather than a
+	// refusal: it cannot stop a single allocation that is already fatal (the
+	// sites whose size is knowable in advance charge before allocating, see
+	// `vm/VM.ts`'s matrix cases), but it does stop the second one, and it means
+	// an opcode added later inherits the bound without being told about it.
+	// Free in relative terms: the hasSymbolic scan just below is already O(n)
+	// over the same cells.
+	chargeAllocation(data.length, "matrix cells");
 	// A SymbolicNode cell is the only object-typed MatrixEntry variant
 	// (number/boolean are primitives), a cheap, always-correct way to
 	// derive hasSymbolic without asking every caller to track it by hand.
@@ -557,4 +626,50 @@ export function pendingValue(queryKey: string): Value {
  */
 export function errorValue(code: string, message: string): Value {
 	return new Value(ValueType.Error, code, message);
+}
+
+/**
+ * The first operand carrying a fault rather than a quantity, if any does.
+ *
+ * `Error` and `Pending` both read as the number 0 through {@link Value.toNumber},
+ * by a convention that only holds up as long as nothing asks. Every opcode and
+ * builtin that reaches for an operand's number without asking its type first
+ * therefore computes with a zero it cannot tell apart from a real one, and
+ * hands back an answer dressed in whatever type it was going to produce
+ * anyway. That is how `(5 kg to m) to s` came to answer `0.00 s`: the failed
+ * conversion is an Error, the second conversion read it as zero, and the unit
+ * the reader asked for made the result look like a conversion that worked.
+ *
+ * Operands are checked left to right, matching evaluation order, and the
+ * faulted Value is returned AS IT IS rather than replaced with a fresh one, so
+ * the original code and message (or the pending query key) reach the caller
+ * unchanged. `binaryOp` (vm/VMConversion.ts) and `OpCode.EXP` already did this
+ * inline; this is the same rule for every other site, in one place so a site
+ * added later can adopt it in a line.
+ *
+ * Three operands cover every call site in the VM (`MAT_INDEX2` and `MAT_SLICE`
+ * are the widest). A variadic signature would allocate an arguments array on
+ * paths that run per instruction; see {@link faultedIn} for the list case.
+ *
+ * @returns The faulted operand, or `null` when all of them carry a value.
+ */
+export function faultedOperand(a: Value, b?: Value, c?: Value): Value | null {
+	if (a.type === ValueType.Error || a.type === ValueType.Pending) return a;
+	if (b !== undefined && (b.type === ValueType.Error || b.type === ValueType.Pending)) return b;
+	if (c !== undefined && (c.type === ValueType.Error || c.type === ValueType.Pending)) return c;
+	return null;
+}
+
+/**
+ * {@link faultedOperand} over an already-built list, for the call sites that
+ * have one (a builtin's arguments, a plugin function's).
+ *
+ * @returns The first faulted element, or `null` when every element carries a value.
+ */
+export function faultedIn(values: readonly Value[]): Value | null {
+	for (let i = 0; i < values.length; i++) {
+		const v = values[i];
+		if (v.type === ValueType.Error || v.type === ValueType.Pending) return v;
+	}
+	return null;
 }

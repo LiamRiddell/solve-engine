@@ -1,24 +1,33 @@
+/**
+ * Render `value` in `locale` with `decimalPlaces` fractional digits and no
+ * digit grouping, leaving the locale's own decimal separator alone.
+ *
+ * Asks `Intl` not to group in the first place rather than formatting with
+ * grouping and then deleting a character afterwards. Deleting was wrong twice
+ * over. It used `String.replace` with a string pattern, which removes one
+ * occurrence, so "1,234,567" came back as "1234,567" and the surviving comma
+ * read as a decimal point. And it chose the character to delete from a
+ * two-case switch, "de-DE" or a comma for everything else, when a comma is the
+ * DECIMAL separator in French, Spanish, Italian, Portuguese and every other
+ * comma-decimal locale: deleting it turned 1.5 into "150", a hundred times the
+ * number, while leaving French's actual group separator (a narrow no-break
+ * space) in place. `numberResult.decimalSeparatorLocale` is an unvalidated
+ * host string, so no locale can be assumed.
+ *
+ * An unusable locale tag still throws the `RangeError` `toLocaleString` has
+ * always thrown for one, since swallowing it would hide the host's typo behind
+ * silently different output.
+ */
 function removeThousandsSeparators(
 	value: number,
 	locale: string,
 	decimalPlaces: number
 ) {
-	let localeNumber = value.toLocaleString(locale, {
+	return value.toLocaleString(locale, {
+		useGrouping: false,
 		maximumFractionDigits: decimalPlaces,
 		minimumFractionDigits: decimalPlaces,
 	});
-
-	switch (locale) {
-		case "de-DE":
-			localeNumber = localeNumber.replace(".", "");
-			break;
-
-		default:
-			localeNumber = localeNumber.replace(",", "");
-			break;
-	}
-
-	return localeNumber;
 }
 
 /**

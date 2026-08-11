@@ -32,7 +32,7 @@ import { formatValue, DEFAULT_FORMATTING_SETTINGS } from "solve-engine/format";
 
 formatValue(value, {
   ...DEFAULT_FORMATTING_SETTINGS,
-  unitOfMeasurementResult: { decimalPlaces: 0, unitNames: false },
+  unitOfMeasurementResult: { decimalPlaces: 0 },
 }); // "= 3000 m"
 ```
 

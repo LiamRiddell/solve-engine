@@ -77,6 +77,7 @@ function emitRoundDirection(builder: BytecodeBuilder, direction: Direction): voi
 const ROUND_BUILTIN = 8;
 const CEIL_BUILTIN = 6;
 const FLOOR_BUILTIN = 7;
+const ROUND_TO_PLACES_BUILTIN = 97;
 
 /** Reads an optional `up`/`down` immediately after `rounded`. */
 function readDirection(parser: Parser): Direction {
@@ -172,14 +173,18 @@ export class DecimalPlacesParselet implements InfixParselet {
 				`"to ${token.value} dp": expected a place count between 0 and 100`,
 			);
 		}
-		// value * 10^p, rounded, / 10^p.
-		const scale = Math.pow(10, places);
+		// A builtin, rather than the "× 10^p, round, ÷ 10^p" this used to
+		// emit. That sequence is exact only while the multiplication is, and
+		// asking for decimal places a number does not have is an ordinary
+		// thing to do: `1e21 to 2 dp` answered 999999999999999900000, having
+		// scaled a whole number up past the point where a double has any
+		// fractional digits at all and back down again. Whether the scaling is
+		// safe is a property of the value, which only the VM knows, so the
+		// decision belongs there. See VMBuiltins.ts's index 97.
 		builder.emitOpcode(OpCode.PUSH_NUMBER);
-		builder.emitNumber(scale);
-		builder.emitOpcode(OpCode.MUL);
-		emitRoundDirection(builder, "nearest");
-		builder.emitOpcode(OpCode.PUSH_NUMBER);
-		builder.emitNumber(scale);
-		builder.emitOpcode(OpCode.DIV);
+		builder.emitNumber(places);
+		builder.emitOpcode(OpCode.CALL_BUILTIN);
+		builder.emitIndex(ROUND_TO_PLACES_BUILTIN);
+		builder.emitIndex(2);
 	}
 }

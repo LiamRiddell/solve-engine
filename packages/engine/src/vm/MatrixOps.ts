@@ -1,5 +1,6 @@
-import { type MatrixData, type MatrixEntry, type RangeData, Value, ValueType, matrixValue, numberValue, boolValue, symbolicValue, errorValue } from "@solve-js/vm/Value";
+import { type MatrixData, type MatrixEntry, type RangeData, Value, ValueType, matrixValue, numberValue, boolValue, symbolicValue, errorValue, faultedOperand } from "@solve-js/vm/Value";
 import { type SymbolicNode, constNode, simplifySymbolic, isRationalZero, rationalToNumber } from "@solve-js/symbolic";
+import { checkedArray } from "@solve-js/vm/AllocationBudget";
 
 /**
  * Shared, pure helpers for reading/building {@link MatrixData}. Kept
@@ -112,6 +113,19 @@ export function columnMajorToRowMajor(m: MatrixData): MatrixEntry[] {
  * computed via `SymbolicNode` add/multiply + simplify instead of plain
  * `number` arithmetic, the ordinary numeric fast path only runs when
  * NEITHER operand carries any symbolic cell.
+ *
+ * The result array is asked for through `checkedArray()` rather than taken
+ * with a bare `new Array`, because this is the one arithmetic result whose
+ * size is the PRODUCT of two separately affordable operands, and the tally in
+ * `vm/AllocationBudget.ts` cannot refuse an allocation that has already
+ * happened. `OpCode.MUL` checks the same number before calling here, which is
+ * a duplicate check and not a duplicate charge (`checkAllocation` refuses
+ * without recording, deliberately). The check lives here as well because MUL
+ * is not the only way in: `dot()` is this same multiplication reached through
+ * `CALL_BUILTIN`, and `abs`, `det`, `inv` and `pow` reach it too, and every
+ * one of those used to arrive at a bare `new Array(rows * cols)`. Four hundred
+ * million cells through `dot()` aborted the process in 1.3 seconds while the
+ * `*` spelling of the identical product was refused in 18 milliseconds.
  */
 export function matrixMultiply(l: MatrixData, r: MatrixData): Value {
 	const lIsScalar = l.rows === 1 && l.cols === 1;
@@ -139,7 +153,7 @@ export function matrixMultiply(l: MatrixData, r: MatrixData): Value {
 
 	const resultRows = l.rows;
 	const resultCols = r.cols;
-	const data = new Array<MatrixEntry>(resultRows * resultCols);
+	const data = checkedArray<MatrixEntry>(resultRows * resultCols, "matrix cells");
 	for (let row = 0; row < resultRows; row++) {
 		for (let col = 0; col < resultCols; col++) {
 			if (useSymbolic) {
@@ -159,6 +173,64 @@ export function matrixMultiply(l: MatrixData, r: MatrixData): Value {
 		}
 	}
 	return matrixValue(resultRows, resultCols, data);
+}
+
+/**
+ * `a^k` for a square matrix and a whole, non-negative `k`, by repeated
+ * multiplication.
+ *
+ * Matrix power is repeated matrix multiplication, not the element-wise
+ * `Math.pow` the `^` operator otherwise means, so this cannot go through
+ * `binaryOp()`. `k = 0` is the identity, which is what makes the whole thing
+ * consistent: `a^0 * a^n` is `a^n` for every n.
+ *
+ * Squaring rather than multiplying one factor at a time keeps `a^1000000`
+ * to twenty multiplications instead of a million, so a large exponent is
+ * slow arithmetic rather than a hung editor. Symbolic cells ride along for
+ * free, since {@link matrixMultiply} already handles them.
+ *
+ * A non-square matrix, or an exponent that is negative or fractional, is
+ * refused rather than answered: `a^-1` is spelled that way and is taken by
+ * the parser's own caret-suffix rule (see `parser/PrecedenceParser.ts`), and
+ * a fractional matrix power is a genuinely different problem (a matrix
+ * square root need not exist, and need not be unique when it does).
+ *
+ * @param m - The base.
+ * @param exponent - The power, which must be a non-negative integer.
+ * @returns The resulting Matrix, or an error Value describing the refusal.
+ */
+export function matrixPower(m: MatrixData, exponent: number): Value {
+	if (!isSquare(m)) {
+		return errorValue("MATRIX_POWER_REQUIRES_SQUARE_MATRIX", `^: only a square matrix can be raised to a power (got ${m.rows}x${m.cols}).`);
+	}
+	if (!Number.isInteger(exponent) || exponent < 0) {
+		return errorValue(
+			"MATRIX_POWER_REQUIRES_WHOLE_EXPONENT",
+			`^: a matrix can only be raised to a whole number of 0 or more (got ${exponent}); "^-1" means the inverse and "^T" the transpose.`,
+		);
+	}
+	const n = m.rows;
+	const identity = new Array<MatrixEntry>(n * n).fill(0);
+	for (let i = 0; i < n; i++) identity[i + i * n] = 1;
+	let accumulated: MatrixData = { rows: n, cols: n, data: identity, hasSymbolic: false };
+	let squared = m;
+	let remaining = exponent;
+	while (remaining > 0) {
+		if (remaining % 2 === 1) {
+			const product = matrixMultiply(accumulated, squared);
+			if (product.type === ValueType.Error) return product;
+			accumulated = product.value as MatrixData;
+		}
+		remaining = Math.floor(remaining / 2);
+		if (remaining > 0) {
+			const doubled = matrixMultiply(squared, squared);
+			if (doubled.type === ValueType.Error) return doubled;
+			squared = doubled.value as MatrixData;
+		}
+	}
+	// Rebuilt through matrixValue() so the result carries a correctly
+	// recomputed `hasSymbolic`, rather than the identity's own `false`.
+	return matrixValue(accumulated.rows, accumulated.cols, accumulated.data);
 }
 
 /**
@@ -212,15 +284,104 @@ function toWorkingRows(m: MatrixData): number[][] {
 }
 
 /**
- * `|a|` / `det(a)`, Gaussian elimination with partial pivoting, reusing
- * the elimination's own running pivot product as the determinant (rather
- * than a separate cofactor-expansion implementation). A row swap flips the
- * product's sign, matching the standard determinant-under-row-swap
- * identity. A zero pivot column (no non-zero candidate at or below it)
- * means the matrix is singular, determinant 0, not an error, since 0 is
- * the mathematically correct answer for a singular matrix.
+ * Largest matrix {@link integerDeterminant} will attempt.
+ *
+ * Bareiss keeps every intermediate a minor of the original matrix, so the
+ * bigints stay bounded by Hadamard's inequality rather than growing without
+ * limit. What this bounds is the cubic loop itself, and it follows the
+ * precedent of {@link SYMBOLIC_INVERSE_DIMENSION_LIMIT}: a named ceiling with
+ * a stated reason rather than an arbitrary inline number. A larger matrix
+ * still gets an answer, from the elimination below.
+ */
+const EXACT_DETERMINANT_DIMENSION_LIMIT = 12;
+
+/**
+ * Every cell as an exact bigint, or `null` when the matrix is not wholly
+ * integral.
+ *
+ * Booleans are excluded rather than coerced, so a matrix of comparison results
+ * keeps whatever the elimination has always made of it.
+ */
+function toIntegerRows(m: MatrixData): bigint[][] | null {
+	if (m.rows > EXACT_DETERMINANT_DIMENSION_LIMIT) return null;
+	const rows: bigint[][] = [];
+	for (let r = 0; r < m.rows; r++) {
+		const row: bigint[] = [];
+		for (let c = 0; c < m.cols; c++) {
+			const cell = matAt(m, r, c);
+			if (typeof cell !== "number" || !Number.isSafeInteger(cell)) return null;
+			row.push(BigInt(cell));
+		}
+		rows.push(row);
+	}
+	return rows;
+}
+
+/**
+ * The determinant of an integer matrix, exactly, by Bareiss's fraction-free
+ * elimination.
+ *
+ * Ordinary elimination divides by the pivot at every step, and those divisions
+ * are what leave `det([1,2,3;4,5,6;7,8,9])` reading `6.661338147750939e-16`
+ * instead of the zero it is. The matrix is singular, and "very nearly zero" is
+ * not a different answer from zero, it is the same answer with the reader left
+ * to decide. Bareiss divides by the **previous** pivot instead, and that
+ * division is exactly divisible as a theorem, so every intermediate stays a
+ * whole number and a singular matrix comes out as an exact `0n`.
+ *
+ * @param rows - The matrix, row-major, which this mutates as its working copy.
+ * @returns The determinant.
+ */
+function integerDeterminant(rows: bigint[][]): bigint {
+	const n = rows.length;
+	let previous = 1n;
+	let sign = 1n;
+
+	for (let k = 0; k < n - 1; k++) {
+		if (rows[k][k] === 0n) {
+			let candidate = -1;
+			for (let r = k + 1; r < n; r++) {
+				if (rows[r][k] !== 0n) {
+					candidate = r;
+					break;
+				}
+			}
+			// No pivot anywhere in the column means a zero column below k, so the
+			// matrix is singular and its determinant is exactly zero.
+			if (candidate === -1) return 0n;
+			const swapped = rows[k];
+			rows[k] = rows[candidate];
+			rows[candidate] = swapped;
+			sign = -sign;
+		}
+		for (let i = k + 1; i < n; i++) {
+			for (let j = k + 1; j < n; j++) {
+				rows[i][j] = (rows[i][j] * rows[k][k] - rows[i][k] * rows[k][j]) / previous;
+			}
+		}
+		previous = rows[k][k];
+	}
+	return sign * rows[n - 1][n - 1];
+}
+
+/**
+ * `|a|` / `det(a)`, exactly when every cell is a whole number, and otherwise by
+ * Gaussian elimination with partial pivoting, reusing the elimination's own
+ * running pivot product as the determinant (rather than a separate
+ * cofactor-expansion implementation). A row swap flips the product's sign,
+ * matching the standard determinant-under-row-swap identity. A zero pivot
+ * column (no non-zero candidate at or below it) means the matrix is singular,
+ * determinant 0, not an error, since 0 is the mathematically correct answer for
+ * a singular matrix.
+ *
+ * The integer route is tried first because an integer matrix has an integer
+ * determinant, and a method that cannot return one is answering a question
+ * nobody asked. See {@link integerDeterminant}.
  */
 function numericDeterminant(m: MatrixData): Value {
+	const integers = toIntegerRows(m);
+	if (integers !== null) return numberValue(Number(integerDeterminant(integers)));
+
 	const n = m.rows;
 	const a = toWorkingRows(m);
 	let det = 1;
@@ -381,16 +542,26 @@ function symbolicInverse(m: MatrixData): Value {
 				`Symbolic inverse: the pivot at row/col ${col} is exactly zero — this matrix's structure isn't invertible via this engine's diagonal-first symbolic elimination (no row-swapping); try reordering rows manually.`,
 			);
 		}
-		for (let c = 0; c < 2 * n; c++) {
-			a[col][c] = simplifySymbolic({ kind: "div", left: a[col][c], right: pivot });
-		}
+		// Eliminate first, divide the pivot row through afterwards, which is
+		// the order {@link symbolicDeterminant} already uses and the reason it
+		// answers 0 for a structurally singular matrix this used to invert.
+		// Dividing first makes the factor the raw entry and the eliminated
+		// cell `b - a*(b/a)`, and the simplifier does not cancel a division
+		// buried under a multiplication, so the second pivot of `[a,b;a,b]`
+		// arrived as `b-a*b/a` rather than as zero and the matrix was inverted
+		// into cells containing `1/(b-a*b/a)`, a division by nothing. This
+		// order divides before multiplying instead: the factor is `a/a`, which
+		// does simplify to 1, leaving `b - b` and an exact zero pivot.
 		for (let r = 0; r < n; r++) {
 			if (r === col) continue;
-			const factor = simplifySymbolic(a[r][col]);
+			const factor = simplifySymbolic({ kind: "div", left: a[r][col], right: pivot });
 			if (factor.kind === "const" && isRationalZero(factor.value)) continue;
 			for (let c = 0; c < 2 * n; c++) {
 				a[r][c] = simplifySymbolic({ kind: "sub", left: a[r][c], right: { kind: "mul", left: factor, right: a[col][c] } });
 			}
+		}
+		for (let c = 0; c < 2 * n; c++) {
+			a[col][c] = simplifySymbolic({ kind: "div", left: a[col][c], right: pivot });
 		}
 	}
 	const data = new Array<MatrixEntry>(n * n);
@@ -408,6 +579,14 @@ export function inverse(m: MatrixData): Value {
 	return m.hasSymbolic ? symbolicInverse(m) : numericInverse(m);
 }
 
+/** The refusal {@link collectionToValues} answers with once a collection is bigger than the caller's ceiling. */
+function tooLarge(length: number, maxElements: number): Value {
+	return errorValue(
+		"COLLECTION_TOO_LARGE",
+		`This collection has ${length} elements, past the limit of ${maxElements} (see the engine's vm.maxCollectionSize setting).`,
+	);
+}
+
 /**
  * Reads a `map`/`reduce` "collection" argument into a flat array of
  * per-cell Values, a Matrix's own cells (column-major order, matching
@@ -416,17 +595,31 @@ export function inverse(m: MatrixData): Value {
  * 0:3)`'s spec example). Returns an error Value directly (not thrown) if
  * `v` is neither. Same "propagate as a value, don't throw" convention
  * `matrixMultiply`/`matrixCompare` above already use.
+ *
+ * `maxElements` bounds what a Range is allowed to become. It defaults to
+ * unbounded so that a caller with no configured engine (a direct unit test
+ * of this helper) behaves as before, every VM call site passes
+ * `vm.getMaxCollectionSize()`.
  */
-export function collectionToValues(v: Value): Value[] | Value {
-	if (v.type === ValueType.Error) return v;
+export function collectionToValues(v: Value, maxElements = Number.POSITIVE_INFINITY): Value[] | Value {
+	// Pending as well as Error: neither is a collection, and a collection that
+	// has not arrived is not an empty one. See `faultedOperand()` in vm/Value.ts.
+	const faulted = faultedOperand(v);
+	if (faulted) return faulted;
 	if (v.type === ValueType.Matrix) {
 		const m = v.value as MatrixData;
+		if (m.data.length > maxElements) return tooLarge(m.data.length, maxElements);
 		return m.data.map(matrixEntryToValue);
 	}
 	if (v.type === ValueType.Range) {
 		const r = v.value as RangeData;
-		const out: Value[] = [];
-		for (let i = r.min; i <= r.max; i++) out.push(numberValue(i));
+		// Counted before anything is allocated, not while allocating: the
+		// expansion of `1:100000000` reaches the heap limit and aborts the
+		// process, and an abort is not something a `try` can contain.
+		const length = r.max - r.min + 1;
+		if (length > maxElements) return tooLarge(length, maxElements);
+		const out: Value[] = new Array<Value>(length);
+		for (let i = 0; i < length; i++) out[i] = numberValue(r.min + i);
 		return out;
 	}
 	return errorValue(

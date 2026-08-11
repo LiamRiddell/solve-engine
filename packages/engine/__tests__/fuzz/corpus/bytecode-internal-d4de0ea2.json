@@ -1,0 +1,31 @@
+{
+	"id": "d4de0ea2",
+	"seed": 3249036,
+	"generator": "bytecode",
+	"outcome": "internal",
+	"detail": "raw exception normalised to UNEXPECTED_ERROR: leftUnit.indexOf is not a function",
+	"found": "2026-08-10",
+	"shrinkSteps": 2,
+	"input": {
+		"kind": "bytecode",
+		"program": {
+			"opcodes": [
+				13,
+				0,
+				10,
+				0,
+				80,
+				10,
+				0,
+				90,
+				80,
+				20
+			],
+			"numbers": [],
+			"strings": []
+		},
+		"origin": "now + 3 days"
+	},
+	"status": "fixed",
+	"note": "vm/Value.ts's rate-unit splitting assumes a string unit. Same class as the toLowerCase case: a unit name taken off the stack without a type check. FIXED: same two guards as d1a4c21d. UOM_CONVERT no longer casts the popped unit name, so vm/Value.ts rate splitting can no longer be handed a non-string unit."
+}

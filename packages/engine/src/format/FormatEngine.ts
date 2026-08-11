@@ -22,25 +22,77 @@ function formatNumber(value: number, locale: ILocale, settings: FormattingSettin
  * value, which is a different quantity of zeros and not what the setting asks
  * for.
  */
-function formatHex(value: number, settings: FormattingSettings, base?: string): string {
+function formatHex(value: number | bigint, settings: FormattingSettings, base?: string): string {
+  // An infinity or a NaN has no digits in any base, and asking for them
+  // produced `0xINFINITY`, a literal that reads back as nothing at all. Render
+  // the value itself, which is what every other non-finite result shows.
+  if (typeof value === "number" && !Number.isFinite(value)) return `= ${value}`;
+
   // Truncate and take the sign off before converting. `Number.toString(radix)`
   // does neither: it renders -255 as "-ff", which lands the minus inside the
   // literal as `0x-FF`, and it renders 255.7 as "ff.b3333333333", inventing
   // fractional hex digits for a notation that has no use for them. Both were
   // visible on `as hex` until the builtins started sharing this path.
-  const truncated = Math.trunc(value);
-  const sign = truncated < 0 ? "-" : "";
-  const magnitude = Math.abs(truncated);
+  //
+  // A bigint needs neither truncation nor a Math call, and must not be routed
+  // through one: passing it to Math.trunc() throws, and converting it to a
+  // double first is exactly the precision loss it is carried as a bigint to
+  // avoid.
+  const negative = typeof value === "bigint" ? value < 0n : value < 0;
+  const sign = negative ? "-" : "";
+  const digits = (radix: number): string =>
+    typeof value === "bigint"
+      ? (negative ? -value : value).toString(radix)
+      : Math.abs(Math.trunc(value)).toString(radix);
 
-  if (base === "bin") return `= ${sign}0b${magnitude.toString(2)}`;
-  if (base === "oct") return `= ${sign}0o${magnitude.toString(8)}`;
+  if (base === "bin") return `= ${sign}0b${digits(2)}`;
+  if (base === "oct") return `= ${sign}0o${digits(8)}`;
   const padding = settings.hexResult.enablePadding ? settings.hexResult.paddingZeros : 0;
-  const hex = magnitude.toString(16).toUpperCase().padStart(padding, "0");
+  const hex = digits(16).toUpperCase().padStart(padding, "0");
   return `= ${sign}0x${hex}`;
 }
 
+/**
+ * How many decimal digits of an exact integer this will render in full.
+ *
+ * A little above the ~19,729 digits of the largest bigint the VM will build
+ * (`vm/VM.ts`'s MAX_EXACT_POW_BITS / MAX_EXACT_SHIFT_BITS, 65,536 bits), so
+ * every value the engine can produce through `^` or `<<` still prints exactly
+ * and this ceiling only ever meets a value that came from somewhere else.
+ */
+const MAX_DISPLAYED_BIGINT_DIGITS = 20000;
+
+/**
+ * Renders an exact integer, or describes it when writing it out is itself the
+ * expensive operation.
+ *
+ * This used to be a bare `= ${value}` template, which renders whatever it is
+ * handed: `1n << 100000000` took 8.5 seconds here turning a 12.5MB integer
+ * into a thirty-million-character string, and a host has no way to opt out,
+ * since displaying the answer is what it asked the engine for. The VM's own
+ * ceiling on `<<` and `^` now stops that value existing, so this is the
+ * backstop for every other way a large bigint can arrive (repeated `x * x`,
+ * a Value a host built itself), and it costs one comparison for every value
+ * that is not absurd.
+ *
+ * The digit count is estimated from the bit length rather than measured, since
+ * measuring means doing the conversion this exists to avoid. Bit length comes
+ * off the hexadecimal form, which is linear in the size of the value where the
+ * decimal form is not.
+ */
 function formatBigInt(value: bigint): string {
-  return `= ${value}`;
+  const magnitude = value < 0n ? -value : value;
+  // Every bigint a person actually reads takes this line and nothing else:
+  // anything a double can hold is at most 309 digits, so it is printable
+  // without measuring it at all.
+  if (Number.isFinite(Number(magnitude))) return `= ${value}`;
+  const bits = magnitude.toString(16).length * 4;
+  if (bits * Math.LN2 / Math.LN10 <= MAX_DISPLAYED_BIGINT_DIGITS) return `= ${value}`;
+  const log10 = bits * Math.LN2 / Math.LN10;
+  const exponent = Math.floor(log10);
+  const mantissa = Math.pow(10, log10 - exponent);
+  const sign = value < 0n ? "-" : "";
+  return `= ${sign}~${mantissa.toFixed(3)}e+${exponent} (an exact integer of about ${(exponent + 1).toLocaleString("en-US")} digits, too large to print)`;
 }
 
 function formatString(value: string): string {
@@ -102,7 +154,6 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   if (unit === "ms") return `= ${formatMsDuration(value)}`;
 
   const dp = settings.unitOfMeasurementResult.decimalPlaces;
-  const useUnitNames = settings.unitOfMeasurementResult.unitNames;
 
   // For TimeSpan values (days, weeks, hours, etc.), format as integer if the value is a whole number
   const timeSpanUnits = ["days", "weeks", "hours", "minutes", "seconds", "day", "week", "hour", "minute", "second"];
@@ -133,8 +184,17 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
     return `= ${withSymbol}`;
   }
 
-  const unitLabel = useUnitNames ? (unit || "") : (unit || "");
-  return `= ${formatted} ${unitLabel}`.trim();
+  // The unit is written as the symbol the value carries. There used to be a
+  // `unitOfMeasurementResult.unitNames` setting here whose two branches were
+  // the same expression, so it never changed anything, and it was removed
+  // rather than implemented: the engine has no unit-name data to render from.
+  // The generated unit table maps a spelling to [measure, ratio] only, and
+  // names cannot be recovered from it, because units that differ by an OFFSET
+  // share a ratio, so "20 C" would come back as "20 kelvins". A real
+  // implementation needs a hand-authored name per unit plus pluralization and
+  // per-locale spelling (metre against meter), which is a feature rather than
+  // the repair of a dead ternary.
+  return `= ${formatted} ${unit || ""}`.trim();
 }
 
 function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings): string {
@@ -213,7 +273,7 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
     case ValueType.Number:
       return formatNumber(value.value as number, locale, us);
     case ValueType.Hex:
-      return formatHex(value.value as number, us, value.unit);
+      return formatHex(value.value as number | bigint, us, value.unit);
     case ValueType.BigInt:
       return formatBigInt(value.value as bigint);
     case ValueType.String:

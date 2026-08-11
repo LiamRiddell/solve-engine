@@ -2,6 +2,9 @@ import { Value } from "@solve-js/vm/Value";
 import { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { djb2Hash } from "@solve-js/utilities/Hash";
 import { SegmentTree } from "@solve-js/engine/SegmentTree";
+import { DEFAULT_CONFIG } from "@solve-js/constants/Configuration";
+import { countLines } from "@solve-js/utilities/Strings";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 // ── LineState ──────────────────────────────────────────────────────────────
 
@@ -168,13 +171,46 @@ export class DocumentModel {
 	 */
 	private dirtyLineIds: Set<number> = new Set();
 
+	/**
+	 * Most lines this model will hold. See `constants/Configuration.ts`'s
+	 * `performance.maxDocumentLines`, which is where the default comes from and
+	 * which a host raises through its engine config; a host that builds a
+	 * DocumentModel directly passes it here instead.
+	 */
+	private readonly maxLines: number;
+
+	/**
+	 * @param maxLines - Ceiling on the line count, defaulting to the engine's
+	 * configured one. Every line costs a LineState with six arrays in it
+	 * whatever the line says, so the cost of a document is its line count and
+	 * nothing else bounds it: two hundred thousand lines of `1 + 1` exhausted
+	 * the heap here, before a single expression had been looked at.
+	 */
+	constructor(maxLines: number = DEFAULT_CONFIG.performance.maxDocumentLines) {
+		this.maxLines = maxLines;
+	}
+
 	// ── Initialization ──────────────────────────────────────────────────
 
 	/**
 	 * Initialize or replace the entire document from a text blob.
 	 * Clears all existing state and assigns new persistent line IDs.
+	 *
+	 * @throws `DOCUMENT_TOO_LARGE` for a document past {@link maxLines}, before
+	 * any of it is stored. Recoverable: nothing has been replaced yet, so the
+	 * model still holds whatever it held.
 	 */
 	setDocument(text: string): void {
+		// Counted before anything is cleared, so a refused document leaves the
+		// previous one intact rather than half-replaced.
+		const lineCount = countLines(text, this.maxLines);
+		if (lineCount > this.maxLines) {
+			throw ErrorFactory.execution(
+				"DOCUMENT_TOO_LARGE",
+				`This document has more than ${this.maxLines.toLocaleString("en-US")} lines, which is the most the engine will hold at once`,
+				{ maxLines: this.maxLines },
+			);
+		}
 		this.lines.clear();
 		this.orderTree.clear();
 		this._positionCache = null;

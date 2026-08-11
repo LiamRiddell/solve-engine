@@ -4,6 +4,7 @@ import { Plate, PlateContent, usePlateEditor } from "platejs/react";
 import { ExpressionEngine } from "solve-engine";
 import { formatValue } from "solve-engine/format";
 import { LanguageService, tokenClassName } from "solve-engine/language";
+import { ValueType } from "solve-engine/vm";
 
 /**
  * A live Solve notepad: an editable column of lines on the left, the answers
@@ -41,7 +42,7 @@ import { LanguageService, tokenClassName } from "solve-engine/language";
 interface Answer {
   text: string;
   /** Drives the colour. `none` renders nothing at all. */
-  kind: "value" | "none";
+  kind: "value" | "error" | "none";
 }
 
 const EMPTY: Answer = { text: "", kind: "none" };
@@ -69,38 +70,77 @@ interface Props {
   minRows?: number;
   /** Accessible name, since a notepad is a labelled region, not just a textbox. */
   label?: string;
+  /**
+   * Show the engine's refusal in the answer column instead of leaving the row
+   * blank.
+   *
+   * Off by default, because in an ordinary notepad most lines are prose and
+   * prose does not parse, so an error beside every heading and sentence would
+   * be noise. On the security page it is the opposite: every line is there to
+   * be refused, and a blank column would hide the only thing the example is
+   * demonstrating.
+   *
+   * The column also gets wider and left aligned when this is set, because it is
+   * showing sentences rather than figures.
+   */
+  showErrors?: boolean;
 }
 
 function toLines(text: string): string[] {
   return text.replace(/\s+$/, "").split("\n");
 }
 
+/** How much of an answer the row's `title` carries. See its use below. */
+const TOOLTIP_LIMIT = 240;
+
+function truncateForTooltip(text: string): string | undefined {
+  if (!text) return undefined;
+  return text.length > TOOLTIP_LIMIT ? `${text.slice(0, TOOLTIP_LIMIT)}…` : text;
+}
+
+/**
+ * Render one result value.
+ *
+ * Some refusals come back as a value rather than as a thrown error, because the
+ * engine treats "this could not be worked out" as a kind of value that survives
+ * an operation instead of collapsing into a number. Those are answers as far as
+ * the parser is concerned and are not answers at all as far as a reader is
+ * concerned, so they are classified by type rather than painted in the brand
+ * colour beside the real ones.
+ */
+function toValueAnswer(result: unknown): Answer {
+  const text = stripMarker(formatValue(result as never));
+  const kind = (result as { type?: number }).type === ValueType.Error ? "error" : "value";
+  return { text, kind };
+}
+
 /**
  * Reduce one parsed line to what the answer column shows.
  *
- * Failures render as nothing, which is deliberate and matches the engine's
- * documented behaviour: "A line the engine cannot make sense of is left alone."
- * In a notepad most lines are prose, and prose does not parse, so surfacing
- * every parse failure would put an error beside every heading and sentence.
+ * Failures render as nothing unless the caller asks for them, which is
+ * deliberate and matches the engine's documented behaviour: "A line the engine
+ * cannot make sense of is left alone." In a notepad most lines are prose, and
+ * prose does not parse, so surfacing every parse failure would put an error
+ * beside every heading and sentence. See `showErrors` for the case where that
+ * trade runs the other way.
  *
  * A line with inline solves (backticked expressions inside prose) reports the
  * LAST one, because that is the line's conclusion. Showing every inline result
  * would need a column per solve.
  */
-function toAnswer(line: {
-  result: unknown;
-  error: string | null;
-  inlineSolves: Array<{ result?: unknown; error?: string | null }>;
-}): Answer {
-  if (line.error) return EMPTY;
-  if (line.result) {
-    return { text: stripMarker(formatValue(line.result as never)), kind: "value" };
-  }
+function toAnswer(
+  line: {
+    result: unknown;
+    error: string | null;
+    inlineSolves: Array<{ result?: unknown; error?: string | null }>;
+  },
+  showErrors: boolean,
+): Answer {
+  if (line.error) return showErrors ? { text: line.error, kind: "error" } : EMPTY;
+  if (line.result) return toValueAnswer(line.result);
 
   const inline = line.inlineSolves.at(-1);
-  if (inline?.result && !inline.error) {
-    return { text: stripMarker(formatValue(inline.result as never)), kind: "value" };
-  }
+  if (inline?.result && !inline.error) return toValueAnswer(inline.result);
 
   return EMPTY;
 }
@@ -191,7 +231,12 @@ function renderLeaf({
   );
 }
 
-export default function SolveNotepad({ initial, minRows = 0, label }: Props) {
+export default function SolveNotepad({
+  initial,
+  minRows = 0,
+  label,
+  showErrors = false,
+}: Props) {
   const seed = useMemo(() => toLines(initial), [initial]);
 
   const editor = usePlateEditor({
@@ -239,7 +284,7 @@ export default function SolveNotepad({ initial, minRows = 0, label }: Props) {
         // ends in a newline comes back one line short, which would leave the
         // final editor row with no answer row opposite it and quietly break
         // the one invariant this layout depends on.
-        const parsedAnswers = parsed.lines.map(toAnswer);
+        const parsedAnswers = parsed.lines.map((line) => toAnswer(line, showErrors));
         setAnswers(
           lines.map((_, i) => parsedAnswers[i] ?? EMPTY),
         );
@@ -251,7 +296,7 @@ export default function SolveNotepad({ initial, minRows = 0, label }: Props) {
       }
       setRevision((n) => n + 1);
     },
-    [engine, language],
+    [engine, language, showErrors],
   );
 
   useEffect(() => {
@@ -295,7 +340,7 @@ export default function SolveNotepad({ initial, minRows = 0, label }: Props) {
   const rows = Math.max(answers.length, minRows);
 
   return (
-    <div className="notepad">
+    <div className={showErrors ? "notepad notepad--errors" : "notepad"}>
       <div className="notepad__lines">
         <Plate
           editor={editor}
@@ -319,8 +364,11 @@ export default function SolveNotepad({ initial, minRows = 0, label }: Props) {
               className="notepad__answer"
               data-kind={answer.kind}
               /* A fully spelled out datetime is longer than any sane column
-                 width, so the ellipsised ones stay readable on hover. */
-              title={answer.text || undefined}
+                 width, so the ellipsised ones stay readable on hover. Truncated
+                 because some answers are much longer than that: a vector of
+                 1,501 elements prints to 8,000 characters, and a tooltip is a
+                 hint, not a document. */
+              title={truncateForTooltip(answer.text)}
             >
               {answer.text}
             </div>

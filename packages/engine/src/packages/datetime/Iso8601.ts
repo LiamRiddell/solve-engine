@@ -2,18 +2,22 @@
  * ISO8601 string <-> epoch-ms helpers backing the datetime package's
  * `<ISO8601 string> to date` and `<date/time> as iso8601` features.
  *
- * SCOPE DECISION: only QUOTED STRING literals (e.g.
- * `"2019-04-01T15:30:00+11:00" to date`) are supported as input here
- * time-of-day and UTC-offset suffixes are NOT covered by the bare numeric
- * date literal support in `normalizer/DateLiteralNormalizerRule.ts`
- * (`DATETIME_LITERAL`, ported from the former `feat/safety-limits-datetime-literals`
- * branch), which is date-only (`YYYY-MM-DD`, no `THH:MM:SS` suffix), an
- * unquoted `2019-04-01T15:30:00+11:00` is still genuinely ambiguous with
- * arithmetic (`2019 - 04 - 01 ...` reads as three subtractions) without a
- * much larger, dedicated lexer change to disambiguate a bare date-shaped
- * literal from a chain of minus signs AND parse the time/offset suffix. A
- * quoted STRING literal already lexes unambiguously today, so that's the
- * supported input shape for the full date-TIME case.
+ * SCOPE, revised in 1.0.0: {@link parseIso8601} is now reached by BOTH input
+ * shapes. A quoted string literal (`"2019-04-01T15:30:00+11:00" to date`)
+ * always came here; the bare, unquoted form now does too, fused into one
+ * DATETIME_LITERAL by `normalizer/DateLiteralNormalizerRule.ts` before the
+ * parser sees it.
+ *
+ * This file used to record that the bare form was out of scope because it is
+ * ambiguous with arithmetic (`2019 - 04 - 01` reads as two subtractions) and
+ * would need a dedicated lexer change. The date half of that ambiguity was
+ * already settled by the normalizer rule, and the differential run against
+ * 1.0.0-beta.6 showed what leaving the other half cost: a bare
+ * `2019-04-01T15:30:00+11:00` read its `+11:00` as a clock time being ADDED to
+ * the date, and answered TODAY at 11:00. Not the instant, not an error, and
+ * formatted as a date, which is the most convincing way to be wrong. The two
+ * spellings now answer identically, which is the only defensible arrangement
+ * when one of them was always right.
  */
 
 /**
@@ -46,14 +50,13 @@ const ISO8601_PATTERN =
  *   parse to a valid instant.
  */
 export function parseIso8601(s: string): number | null {
-  // A `ValueType.String` Value's `.value` in this engine retains its
-  // original surrounding double-quotes (STRING tokens carry their raw
-  // source text, quotes included. See lexer/ExpressionLexer.ts's
-  // tokenizeString(), and OpCode.PUSH_STRING, which pushes that raw text
-  // verbatim with no separate un-quoting step anywhere in the VM). Strip a
-  // single matching pair before pattern-matching, so `"2019-04-01..." to
-  // date` (a real quoted string literal in the expression) works the same
-  // as a caller that already passes an unquoted string.
+  // A `ValueType.String` Value's `.value` used to retain its original
+  // surrounding double-quotes, because `tokenizeString()` set the token's
+  // value to the raw source slice and `OpCode.PUSH_STRING` pushed that
+  // verbatim. It no longer does: the token's `value` is the payload and its
+  // `text` is the quoted slice. The strip below stays because this function
+  // is also reachable with text that came from somewhere other than a
+  // literal, and stripping a pair that is not there is a no-op.
   let trimmed = s.trim();
   if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
     trimmed = trimmed.slice(1, -1);

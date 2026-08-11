@@ -1,0 +1,21 @@
+{
+	"id": "ba0f8bfc",
+	"seed": 40,
+	"generator": "bytecode",
+	"outcome": "contract",
+	"detail": "executeBytecode returned {type:'value'} whose value is undefined, which EvalResult declares impossible",
+	"found": "2026-08-10",
+	"shrinkSteps": 0,
+	"input": {
+		"kind": "bytecode",
+		"program": {
+			"opcodes": [
+				3
+			],
+			"numbers": [],
+			"strings": []
+		}
+	},
+	"status": "fixed",
+	"note": "OpCode.DUP was the only stack opcode in vm/VM.ts not going through safePop(): it did stack.push(stack[stack.length - 1]). On an empty stack that pushed undefined, and the fallback return handed back {type:'value', value: undefined}, a shape EvalResult declares impossible, so the TypeError landed in the HOST's code rather than the engine's. Reachable only through the public ./vm export, since MatrixIndexParselet only emits DUP after a parsed expression. Fixed in vm/VM.ts by reading through safePop() and pushing twice. This entry is what stops it coming back."
+}

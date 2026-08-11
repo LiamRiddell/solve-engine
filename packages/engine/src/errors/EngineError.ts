@@ -55,20 +55,29 @@ export interface EngineErrorInit {
   /** An actionable, worked-example fix, e.g. `e.g. "weather in London"`. Mirrors this codebase's best existing messages (`WEATHER_EXPECTED_CITY`, `AS_CONVERTER_EXPECTED_NAME`). */
   suggestion?: string;
   /**
-   * `true` (the default) for every EXPECTED failure mode of user input or
-   * environment, bad syntax, an unknown variable/function, a safety limit
-   * exceeded, an external API being down. `false` is reserved for genuine
-   * ENGINE-INTERNAL invariant violations (corrupted bytecode, a stack
-   * underflow from a buggy plugin, an "impossible" state)
-   * `ErrorFactory.internal()`/`.config()` default to `false`, every other
-   * factory method defaults to `true`.
+   * Whether this engine instance is still usable. `true` for everything that
+   * went wrong on ONE line, whether the line's fault (bad syntax, an unknown
+   * variable, a safety limit exceeded), the environment's (an external API
+   * down), or the engine's own (corrupted bytecode, a stack underflow from a
+   * buggy plugin). `false` is for the far rarer case where there is no working
+   * engine to go on with: a configuration or package-registration failure,
+   * which is what `ErrorFactory.config()` is for and the only factory method
+   * that still defaults to it.
    *
-   * This does NOT gate "does evaluation of the rest of the document
-   * continue", with this engine's per-line containment, it always does
-   * even for a `recoverable: false` error (see `ARCHITECTURE.md`'s
-   * async-batcher/Tier-2 hardening notes). It gates MESSAGE FRAMING and
-   * telemetry: "fix your syntax" vs. "this is an engine bug, worth
-   * reporting". See `EngineError.isFatal()`.
+   * The category answers a different question, and the two used to be answered
+   * as one. Category INTERNAL says whose fault this is, the engine's, worth
+   * reporting as a bug. `recoverable` says whether the host may carry on, and
+   * after an internal slip on one line it may:
+   * `__tests__/hardening/RobustnessEngineLifecycle.spec.ts` alternates a
+   * throwing line with a good one five hundred times and every answer stays
+   * correct. Reporting that as `isFatal()` told a host the opposite, and a host
+   * that honours the name would tear a document down over one bad line.
+   *
+   * This has never gated "does evaluation of the rest of the document
+   * continue"; with this engine's per-line containment it always does, even for
+   * a `recoverable: false` error (see `ARCHITECTURE.md`'s async-batcher/Tier-2
+   * hardening notes). It gates what a host is TOLD. See
+   * {@link EngineError.isFatal}.
    */
   recoverable?: boolean;
   /** Character-offset span into the source expression, when available. Not yet threaded through every call site, populate opportunistically, don't block on retrofitting every existing throw site. */
@@ -226,14 +235,27 @@ export class ErrorFactory {
     return ErrorFactory.build(ErrorCategory.EXTERNAL, true, codeOrInit, message, context);
   }
 
-  /** Defaults `recoverable: false`, reserve for genuine engine-internal invariant violations, not user-input errors. */
+  /**
+   * Reserve for genuine engine-internal invariant violations (corrupted
+   * bytecode, a stack underflow from a buggy plugin, an "impossible" state),
+   * not for user-input errors: the category is a bug report.
+   *
+   * Defaults `recoverable: true` all the same, because every one of these sites
+   * is an invariant that failed on ONE line and none of them leaves the engine
+   * unusable. This used to default to `false`, which conflated "the engine's
+   * fault" with "the engine is finished" and told a host to tear a document
+   * down over a line it could simply have shown an error against. A site that
+   * has looked at its own case and concluded the instance really is gone can
+   * still pass `recoverable: false` explicitly. See {@link
+   * EngineErrorInit.recoverable}.
+   */
   static internal(code: string, message: string, context?: Record<string, unknown>): EngineError;
   static internal(init: EngineErrorInit): EngineError;
   static internal(codeOrInit: string | EngineErrorInit, message?: string, context?: Record<string, unknown>): EngineError {
-    return ErrorFactory.build(ErrorCategory.INTERNAL, false, codeOrInit, message, context);
+    return ErrorFactory.build(ErrorCategory.INTERNAL, true, codeOrInit, message, context);
   }
 
-  /** Defaults `recoverable: false`, a bad config is an environment-setup problem, not a per-line user-input error. */
+  /** Defaults `recoverable: false`, and is now the only method that does: a configuration or package-registration failure is the one class that leaves no working engine to carry on with, rather than one bad line in a document. */
   static config(code: string, message: string, context?: Record<string, unknown>): EngineError;
   static config(init: EngineErrorInit): EngineError;
   static config(codeOrInit: string | EngineErrorInit, message?: string, context?: Record<string, unknown>): EngineError {
@@ -251,6 +273,26 @@ export class ErrorFactory {
  * per-line containment) so a raw `TypeError` from a genuine engine bug
  * still surfaces as a structured, catalogued error instead of an opaque
  * uncaught exception.
+ *
+ * Both branches state RECOVERABLE explicitly, while keeping the INTERNAL
+ * category. The two fields answer different questions and were previously
+ * answering the same one:
+ *
+ *   category INTERNAL  whose fault is this? The engine's. Worth reporting.
+ *   recoverable        is this engine instance still usable? Yes.
+ *
+ * Everything reaching here is by definition something the engine did not
+ * anticipate on ONE line, and per-line containment means the next line
+ * evaluates normally, which `__tests__/hardening/RobustnessEngineLifecycle`
+ * demonstrates over hundreds of alternating failure/success pairs. Reporting
+ * that as `isFatal()` told a host the opposite, and a host that honours the
+ * name would tear a document down over a single bad line. The "this is an
+ * engine bug rather than your syntax" signal a caller wants for telemetry is
+ * the CATEGORY, which is unchanged.
+ *
+ * The flag is written out here rather than inherited from
+ * `ErrorFactory.internal()`, which now defaults the same way, so that this
+ * function's contract survives a future change to that default.
  */
 export function normalizeUnknownError(error: unknown): EngineError {
   if (error instanceof EngineError) return error;
@@ -260,11 +302,13 @@ export function normalizeUnknownError(error: unknown): EngineError {
       message: error.message,
       context: { originalErrorName: error.name },
       cause: error,
+      recoverable: true,
     });
   }
   return ErrorFactory.internal({
     code: "UNKNOWN_ERROR",
     message: "An unknown error occurred",
     context: { error: String(error) },
+    recoverable: true,
   });
 }

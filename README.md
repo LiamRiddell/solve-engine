@@ -126,10 +126,10 @@ is the typing. The engine is built to run on every keystroke, on a document
 rather than a single expression, where most lines have not changed and the one
 that did should not cost a full re-evaluation of the rest.
 
-Everything above the pipeline is a package. All 21 of them, arithmetic
+Everything above the pipeline is a package. All 22 of them, arithmetic
 included, register through the same public interface: token vocabulary,
 normaliser rules, parselets, and VM functions. There is no privileged built-in
-tier, which means an extension can do anything the built-ins can. Nineteen
+tier, which means an extension can do anything the built-ins can. Twenty
 register by default; stocks and knowledge stay out until a host supplies a data
 source.
 
@@ -164,14 +164,84 @@ mid-thought is the normal case, not the edge case.
 - **Not a full computer algebra system.** There is a real one inside: exact
   rational arithmetic, `expand`, `factor`, `solve`, and symbolic `der`,
   `integral`, `taylor` and `jacobian`. It is deliberately bounded, and it says
-  what it cannot do rather than approximating. Factoring and solving work over
-  the rationals, so `x^2-2` comes back unfactored; there are no complex numbers,
-  so a negative discriminant reports no real solutions; and integration reports
-  when an expression has no elementary antiderivative instead of guessing.
+  what it cannot do rather than approximating. Factoring works over the
+  rationals, so `x^2-2` comes back unfactored; solving goes further and works
+  over the complex numbers, so it answers with every root an equation has or
+  counts the ones it could not find; and integration reports when an expression
+  has no elementary antiderivative instead of guessing.
 - **Not a spreadsheet.** Lines reference earlier lines. There are no sheets,
   no cells, and no circular references to resolve.
 - **Not arbitrary-precision by default.** Ordinary arithmetic uses doubles, and
   a big-integer type is available where exactness matters.
+
+## Security
+
+This engine runs untrusted input by design: a calculator's whole job is to
+evaluate whatever someone typed. That shapes how it is built and how it is
+tested.
+
+**No dynamic code execution.** There is no `eval`, no `new Function`, and no
+code generation anywhere in the source. An expression is lexed, parsed, and
+compiled to a fixed bytecode instruction set, then run on a VM that can only do
+what its opcodes do. There is no path from an expression to arbitrary
+JavaScript.
+
+**No I/O of its own.** The engine reads no files and spawns no processes. It
+does make network requests, and the honest version of that is more specific
+than "opt in": two of the packages registered by default reach out on their
+own. `100 USD in GBP` fetches an exchange rate, and `weather in london` calls a
+geocoder, with no host configuration at all. Two further packages (stocks,
+knowledge) need a host-supplied data source and do nothing without one.
+
+If you need an engine that never touches the network, build the package list
+without those two rather than relying on a default:
+
+```ts
+import { ExpressionEngine } from "solve-engine";
+import { BUILTIN_PACKAGES, CURRENCY_PACKAGE, WEATHER_PACKAGE } from "solve-engine/packages";
+
+const offline = BUILTIN_PACKAGES.filter(
+  (p) => p !== CURRENCY_PACKAGE && p !== WEATHER_PACKAGE,
+);
+const engine = new ExpressionEngine("en", false, { packages: offline });
+```
+
+**One runtime dependency.** `@tanstack/query-core`, for caching async
+resolution. Everything else, including the parser, the VM, the unit table and
+the computer algebra, is in this repository.
+
+**Bounded by construction.** Untrusted input must not be able to hang or kill
+the host process, which for an editor plugin means the editor. Expression
+length, nesting depth, instruction count, stack depth, collection size, total
+allocation, function-call breadth and recursion depth are all capped. Most are configurable through
+`EngineConfig`; function recursion depth and the normaliser token cap are set
+elsewhere. Exceeding any of them raises a recoverable error naming what was
+refused rather than an unrecoverable one. The allocation budget exists
+because per-operation limits do not compose: two individually legal matrices
+can multiply into a fatal one.
+
+**Fuzzed, not just tested.** A seeded fuzzer with automatic shrinking runs
+against both the expression grammar and the bytecode VM. It generates malformed
+programs, mutates valid ones, and asserts three invariants: the process never
+dies, nothing hangs, and every failure is a well-formed `EngineError` rather
+than a raw JavaScript exception. `executeBytecode` is a public export, so
+malformed bytecode is a real caller surface and is fuzzed as one. Findings are
+shrunk to a minimal reproducer and committed to a corpus that replays on every
+test run, so a fixed bug cannot come back quietly.
+
+Run it yourself:
+
+```sh
+npm run fuzz                      # random seeds, both generators
+npm run fuzz -- --minutes=10      # a longer soak
+```
+
+**Verified against the previous release.** `tools/differential/` compares every
+expression it can find against the last published version and classifies every
+difference, so a behaviour change has to be deliberate rather than discovered
+afterwards.
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## Repository
 

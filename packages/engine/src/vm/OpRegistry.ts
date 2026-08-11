@@ -142,7 +142,26 @@ export class OpRegistry {
 export interface VM {
 	push(value: Value): void;
 	pop(): Value;
+	/**
+	 * Pop the top of the stack as a number.
+	 *
+	 * @throws `STACK_UNDERFLOW` (INTERNAL) if the stack is empty. Unlike
+	 *   `pop()`, which answers an empty stack with `0`, this reports it: a
+	 *   handler asking for a number has no way to tell that `0` from a real
+	 *   one. Every Value converts, so there is no operand-type throw here.
+	 */
 	popNumber(): number;
+	/**
+	 * Pop the top of the stack as a string, e.g. a unit name a handler's own
+	 * bytecode pushed for it to read.
+	 *
+	 * @throws `STACK_UNDERFLOW` (INTERNAL) if the stack is empty, and
+	 *   `MALFORMED_BYTECODE_OPERAND_TYPE` (VALIDATION, recoverable) if the
+	 *   value on top is not a string. Both are structured `EngineError`s
+	 *   naming this method, in place of the raw TypeError a bare `pop()!` and
+	 *   a compile-time-only cast used to produce somewhere further along. A
+	 *   handler that would rather branch than throw can `peek()` first.
+	 */
 	popString(): string;
 	peek(): Value;
 	getStack(): Value[];
@@ -192,8 +211,39 @@ export interface VM {
 	getScalarEquation(variable: string): ScalarEquationDef | undefined;
 	hasScalarEquation(variable: string): boolean;
 	reset(): void;
+	/** The innermost call frame's bindings, or `undefined` when no call is in progress. Read-only, for building a frame that extends the current one rather than replacing it (see `BIND_UNKNOWN`'s handler). */
+	getCallFrame(): ReadonlyMap<string, Value> | undefined;
 	getMaxInstructions(): number;
 	getMaxStackDepth(): number;
+	/** Maximum elements a Range or Matrix may be expanded to by `map`/`reduce`. See `constants/Configuration.ts`'s `maxCollectionSize`. */
+	getMaxCollectionSize(): number;
+	/**
+	 * Maximum elements (collection Values, matrix cells) one evaluation may
+	 * materialise in total.
+	 *
+	 * The bound the two limits above cannot be. Both are checked between
+	 * opcodes, so neither sees what one opcode allocates inside a loop of its
+	 * own, and `getMaxCollectionSize()` bounds one collection without bounding
+	 * the total. See `vm/AllocationBudget.ts` for the counter this configures
+	 * and for why charging goes through that module rather than through the VM.
+	 */
+	getMaxAllocatedElements(): number;
+	/**
+	 * Maximum user-defined-function calls one evaluation may make in total.
+	 *
+	 * `maxFunctionRecursionDepth` (see `pushCallFrame` above) bounds how DEEP
+	 * calls nest; this bounds how MANY there are, which is a different number
+	 * and the one a doubling chain runs away with: twenty-two lines of
+	 * `f(v) = g(v) + g(v)` reach two million calls at a depth of twenty-two.
+	 * Held by `vm/AllocationBudget.ts` rather than counted here, because it has
+	 * to survive `executeBytecode()` re-entering itself, exactly like the
+	 * element tally and unlike `maxInstructions`.
+	 */
+	getMaxFunctionCalls(): number;
+	/** How far forward `<date> + N workdays` may reach, in years. The one date offset that walks the calendar rather than computing, so the one with a ceiling. See `constants/Configuration.ts`'s `date.maxOffsetYears`. */
+	getMaxDateOffsetYears(): number;
+	/** The same bound backwards, as a negative number of years. */
+	getMinDateOffsetYears(): number;
 	getInstructionCount(): number;
 	incrementInstructions(n: number): void;
 	/** Active AbortSignal for the current expression evaluation. Checked before cache writes. */

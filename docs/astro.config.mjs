@@ -233,6 +233,7 @@ export default defineConfig({
             { slug: "guide/async-and-live-data" },
             { slug: "guide/async-data-sources" },
             { slug: "guide/performance" },
+            { slug: "guide/security" },
             { slug: "guide/subpath-exports" },
           ],
         },

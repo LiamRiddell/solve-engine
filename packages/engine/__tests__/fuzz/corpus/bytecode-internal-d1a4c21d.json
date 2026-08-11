@@ -1,0 +1,33 @@
+{
+	"id": "d1a4c21d",
+	"seed": 3006623,
+	"generator": "bytecode",
+	"outcome": "internal",
+	"detail": "raw exception normalised to UNEXPECTED_ERROR: numerator.includes is not a function",
+	"found": "2026-08-10",
+	"shrinkSteps": 2,
+	"input": {
+		"kind": "bytecode",
+		"program": {
+			"opcodes": [
+				13,
+				0,
+				10,
+				0,
+				80,
+				13,
+				1,
+				51,
+				95,
+				2
+			],
+			"numbers": [
+				"99"
+			],
+			"strings": []
+		},
+		"origin": "$99/week"
+	},
+	"status": "fixed",
+	"note": "The fraction converter assumes its operand is a string. vm/VMBuiltins.ts's converter table, index 95's handler. FIXED: PUSH_STRING now bounds-checks its constant-pool operand, so this stream is refused before the fraction/rate builtin sees a Uom whose unit is not a string. UOM_CONVERT also takes its unit name through stringOperand() now, so a non-string unit cannot be built into a Value at all."
+}

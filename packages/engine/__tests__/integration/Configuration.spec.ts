@@ -58,13 +58,16 @@ describe("mergeEngineConfig — per-section merge (not a shallow top-level sprea
     // A shallow `{ ...base, ...override }` would have replaced the whole
     // `performance` section with `{ defaultCacheSize: 500 }`, dropping these.
     expect(merged.performance.maxDocumentLines).toBe(DEFAULT_CONFIG.performance.maxDocumentLines);
-    expect(merged.performance.parseTimeoutMs).toBe(DEFAULT_CONFIG.performance.parseTimeoutMs);
-    expect(merged.performance.executionTimeoutMs).toBe(DEFAULT_CONFIG.performance.executionTimeoutMs);
   });
 
   test("sections not mentioned in the override are untouched", () => {
-    const merged = mergeEngineConfig(DEFAULT_CONFIG, { dice: { maxSides: 12 } as any });
-    expect(merged.dice.maxSides).toBe(12);
+    // Was written against `dice`, a section whose four fields were declared and
+    // read nowhere and which the release-hardening pass removed. Any section
+    // the surrounding assertions do not name works here; `worker` is the one
+    // nothing else in this file touches.
+    const merged = mergeEngineConfig(DEFAULT_CONFIG, { worker: { maxRetries: 12 } as any });
+    expect(merged.worker.maxRetries).toBe(12);
+    expect(merged.worker.idleTimeoutMs).toBe(DEFAULT_CONFIG.worker.idleTimeoutMs);
     expect(merged.vm).toEqual(DEFAULT_CONFIG.vm);
     expect(merged.date).toEqual(DEFAULT_CONFIG.date);
   });
@@ -83,7 +86,6 @@ describe("ExpressionEngine constructor — per-section config merge", () => {
     const effective = engine.getConfig();
     expect(effective.performance.defaultCacheSize).toBe(42);
     expect(effective.performance.maxDocumentLines).toBe(DEFAULT_CONFIG.performance.maxDocumentLines);
-    expect(effective.performance.parseTimeoutMs).toBe(DEFAULT_CONFIG.performance.parseTimeoutMs);
   });
 
   test("overriding one validation field doesn't drop the rest of that section", () => {

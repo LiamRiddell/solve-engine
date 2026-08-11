@@ -221,7 +221,10 @@ export class Lexer {
       value: token.value,
       offset: token.offset,
       col: token.col,
-      length: token.value.length,
+      // `text`, not `value`: this is a span into the source, and the two
+      // differ for a string literal, whose value is the payload while its
+      // text still carries the quote characters the reader typed.
+      length: token.text.length,
       category: getTokenCategory(token.type),
     }));
   }

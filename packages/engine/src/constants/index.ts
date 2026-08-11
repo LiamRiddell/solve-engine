@@ -5,7 +5,6 @@ export {
 export { ENGINE_VERSION } from "./version";
 export type {
 	DateConfig,
-	DiceConfig,
 	PerformanceConfig,
 	ValidationConfig,
 	WorkerConfig,
