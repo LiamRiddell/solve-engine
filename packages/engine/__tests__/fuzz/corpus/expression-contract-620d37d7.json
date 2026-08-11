@@ -1,0 +1,14 @@
+{
+	"id": "620d37d7",
+	"seed": 15,
+	"generator": "expression",
+	"outcome": "contract",
+	"detail": "tryCompileExpression() is documented non-throwing and returns a boolean, but threw: _EngineError: Expected token type \"RBRACKET\" but got \"COLON\" (\":\")",
+	"found": "2026-08-11",
+	"shrinkSteps": 5,
+	"input": {
+		"kind": "expression",
+		"source": "der("
+	},
+	"status": "open"
+}

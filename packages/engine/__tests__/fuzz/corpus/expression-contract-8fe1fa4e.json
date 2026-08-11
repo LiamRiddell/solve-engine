@@ -1,0 +1,14 @@
+{
+	"id": "8fe1fa4e",
+	"seed": 7337,
+	"generator": "expression",
+	"outcome": "contract",
+	"detail": "tryCompileExpression() is documented non-throwing and returns a boolean, but threw: _EngineError: Unterminated string literal: \">5^2\ny7Cc=}}{'-",
+	"found": "2026-08-11",
+	"shrinkSteps": 8,
+	"input": {
+		"kind": "expression",
+		"source": "c="
+	},
+	"status": "open"
+}

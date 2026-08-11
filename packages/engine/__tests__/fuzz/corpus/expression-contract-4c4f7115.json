@@ -1,0 +1,14 @@
+{
+	"id": "4c4f7115",
+	"seed": 4697,
+	"generator": "expression",
+	"outcome": "contract",
+	"detail": "tryCompileExpression() is documented non-throwing and returns a boolean, but threw: _EngineError: atan() takes 1 argument, but was given none",
+	"found": "2026-08-11",
+	"shrinkSteps": 5,
+	"input": {
+		"kind": "expression",
+		"source": "h="
+	},
+	"status": "open"
+}
