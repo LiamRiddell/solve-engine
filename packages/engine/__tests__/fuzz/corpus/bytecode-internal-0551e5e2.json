@@ -1,0 +1,24 @@
+{
+	"id": "0551e5e2",
+	"seed": 3007154,
+	"generator": "bytecode",
+	"outcome": "internal",
+	"detail": "raw exception normalised to UNEXPECTED_ERROR: Cannot read properties of undefined (reading 'toLowerCase')",
+	"found": "2026-08-10",
+	"shrinkSteps": 4,
+	"input": {
+		"kind": "bytecode",
+		"program": {
+			"opcodes": [
+				10,
+				161,
+				145
+			],
+			"numbers": [],
+			"strings": []
+		},
+		"origin": ":a = 5"
+	},
+	"status": "fixed",
+	"note": "A unit-name operand is read off the value stack and used as a string without a type check, so a malformed stream that leaves a Number there reaches .toLowerCase() on undefined. vm/VM.ts, the UOM band. Bytecode-only: the compiler always pairs the opcode with a PUSH_STRING. FIXED: PUSH_NUMBER read numbers[opcodes[ip++]] with no bounds check, so an out-of-range index pushed a Value whose .value was undefined and CALL_AS_CONVERTER then called .toLowerCase() on it. vm/VM.ts now reads every constant-pool operand through poolIndex()/poolString(), and CALL_AS_CONVERTER takes its name through stringOperand(). Both raise MALFORMED_BYTECODE_* as a recoverable VALIDATION error naming the opcode and the index."
+}

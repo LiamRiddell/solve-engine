@@ -57,10 +57,18 @@ const SUFFIX_MAGNITUDE: Record<string, number> = {
  * `3 million` is the ordinary spelling and only `3M` used to work.
  *
  * Unlike the single letters above these are matched case-insensitively and
- * with the space that normally separates them from the number, because there
- * is nothing for them to collide with: no unit is spelled "million", and the
- * rule only fires directly after a numeric literal, so `:million = 5` and a
- * bare `million` reference are both untouched.
+ * with the space that normally separates them from the number. The rule only
+ * fires directly after a numeric literal, so `:million = 5` and a bare
+ * `million` reference are both untouched.
+ *
+ * Case-insensitivity DOES collide, which the original version of this comment
+ * claimed it did not. The two-letter abbreviations lowercase into the newton's
+ * metric prefixes: `mN`, `MN` and `TN` are all real units and all match "mn",
+ * "mn" and "tn". `5 mN` came back as five million, and no spelling of the
+ * millinewton, meganewton or teranewton could reach the unit system at all.
+ * The match below therefore refuses a token the lexer typed as a UNIT, which
+ * costs nothing here because none of the words in this table is itself a unit
+ * spelling.
  *
  * "m" is deliberately absent. It is the metre, and `5m` must stay 5 metres.
  */
@@ -159,12 +167,22 @@ export function largeNumberSuffixNormalizerRule(priority = 65): NormalizerRule {
       if (suffixToken.type !== "IDENT" && suffixToken.type !== "UNIT") return null;
 
       const adjacent = numberToken.offset + numberToken.text.length === suffixToken.offset;
+      // A word magnitude never comes from a UNIT token. The words are matched
+      // case-insensitively (see WORD_MAGNITUDE), so "mn"/"bn"/"tn" otherwise
+      // swallow `mN`, `MN` and `TN`, and a written unit has to beat a
+      // differently-cased abbreviation of a number word. The single-letter
+      // table above is deliberately NOT restricted this way: bare "B" is a
+      // unit token and claiming it is the collision SUFFIX_MAGNITUDE's own
+      // note describes and accepts.
+      const wordMagnitude = suffixToken.type === "UNIT"
+        ? undefined
+        : WORD_MAGNITUDE[suffixToken.value.toLowerCase()];
       // A single-letter suffix must touch the number: `5 k` is not 5,000, and
       // more importantly `5 M` next to an unrelated variable M should not be.
       // A word may be separated by the space it is normally written with.
       const magnitude = adjacent
-        ? (SUFFIX_MAGNITUDE[suffixToken.value] ?? WORD_MAGNITUDE[suffixToken.value.toLowerCase()])
-        : WORD_MAGNITUDE[suffixToken.value.toLowerCase()];
+        ? (SUFFIX_MAGNITUDE[suffixToken.value] ?? wordMagnitude)
+        : wordMagnitude;
       if (magnitude === undefined) return null;
 
       const scaled = scaleDecimalString(numberToken.text, magnitude);

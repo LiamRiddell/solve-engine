@@ -173,3 +173,30 @@ describe("FINANCE_PACKAGE inflation — regression guards (bare variable names m
     expect(evalReal("(1 + 2) * 3").toNumber()).toBe(9);
   });
 });
+
+describe("\"what is\" only claims the line when the line is actually about inflation", () => {
+  // The parselet used to commit to the inflation grammar on the phrase alone
+  // and then demand a year, so "what is 10% of 200" threw `Expected "from
+  // <year>" or "in <year> worth in <year>"` at a question with nothing to do
+  // with inflation. Both inflation grammars are identified by a keyword later
+  // in the line, so anything without one is read as the ordinary expression it
+  // is and "what is" is just how the question was opened.
+  test("a percentage question is answered rather than refused", () => {
+    expect(evalReal("what is 10% of 200").toNumber()).toBeCloseTo(20, 10);
+    expect(evalReal("what is 25% of 80").toNumber()).toBeCloseTo(20, 10);
+  });
+
+  test("and so is plain arithmetic", () => {
+    expect(evalReal("what is 2 + 2").toNumber()).toBe(4);
+    expect(evalReal("what is 10 * 3 + 1").toNumber()).toBe(31);
+  });
+
+  test("while the inflation grammars still take the lines that are theirs", () => {
+    // The guard is presence of FROM or WORTH_IN, so both of these still route
+    // to the inflation math rather than to the fallback.
+    const ratio = inflationRatio(1970, CURRENT_YEAR)!;
+    expect(evalReal("what is $500 from 1970").toNumber()).toBeCloseTo(500 * ratio, 1);
+    const between = inflationRatio(1990, 2010)!;
+    expect(evalReal("what is $500 in 1990 worth in 2010").toNumber()).toBeCloseTo(500 * between, 1);
+  });
+});

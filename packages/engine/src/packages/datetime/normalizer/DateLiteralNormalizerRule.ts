@@ -24,6 +24,22 @@ const DOT_DAY_MONTH = /^\d{1,2}\.\d{1,2}$/;
 const DOT_LEADING_YEAR = /^\.(\d{2}|\d{4})$/;
 
 /**
+ * Month and day groups of an ISO 8601 date, which the standard requires to
+ * be zero-padded to exactly two digits.
+ *
+ * Enforcing that is what keeps the ISO branch from swallowing ordinary
+ * subtraction. The US branch already has an equivalent guard, its trailing
+ * year has to be 2 or 4 digits, so "100 - 50 - 25" stays arithmetic. The
+ * ISO branch had no such guard on its middle and trailing groups, so any
+ * subtraction chain that happened to start with a four-digit number was
+ * read as a date instead: "2024 - 5 - 3" answered "Friday, May 3, 2024"
+ * rather than 2016, and "2024 - 1 - 1 - 1" answered one millisecond before
+ * 2024. Neither of those spellings is a valid ISO date, so requiring the
+ * padding costs nothing and returns them to arithmetic.
+ */
+const ISO_MONTH_OR_DAY = /^\d{2}$/;
+
+/**
  * Resolves a year token's raw digit text to a 4-digit year.
  *
  * Accepts exactly 2 or 4 digits (matching the wiki's documented formats).
@@ -168,6 +184,10 @@ export function dateLiteralNormalizerRule(): NormalizerRule {
 
       // MINUS: ISO (YYYY-MM-DD) if the first group is exactly 4 digits, else US (MM-DD-YYYY)
       if (t0.value.length === 4) {
+        // Both remaining groups must be zero-padded to two digits, or this
+        // is a subtraction chain that merely starts with a year-shaped
+        // number. See ISO_MONTH_OR_DAY.
+        if (!ISO_MONTH_OR_DAY.test(t1.value) || !ISO_MONTH_OR_DAY.test(t2.value)) return null;
         // year=t0, month=t1, day=t2, buildDateToken takes (day, month, year)
         return buildDateToken(Number(t2.value), Number(t1.value), Number(t0.value), sourceTokens, "datetime:date-literal:iso");
       }

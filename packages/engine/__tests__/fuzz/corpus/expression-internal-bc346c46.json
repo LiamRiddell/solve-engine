@@ -1,0 +1,15 @@
+{
+	"id": "bc346c46",
+	"seed": 4008229,
+	"generator": "expression",
+	"outcome": "internal",
+	"detail": "raw exception normalised to UNEXPECTED_ERROR: Division by zero",
+	"found": "2026-08-10",
+	"shrinkSteps": 11,
+	"input": {
+		"kind": "expression",
+		"source": "3n/\"\""
+	},
+	"status": "fixed",
+	"note": "BigInt division by zero throws a raw RangeError from V8, relabelled UNEXPECTED_ERROR/INTERNAL. The Number path answers Infinity for 1/0, so the two numeric types disagree about dividing by zero and the BigInt one reports it as an engine fault. vm/VMConversion.ts's binaryOp. FIXED, and the question it raised is DECIDED: bigint division by zero stays an error rather than becoming Infinity, because a bigint division is exact integer division (7n / 2n is 3n, not 3.5) and integer division by zero has no answer in C, Java, Python or JavaScript's own BigInt either. The two numeric types were already not the same operation, so this is that one difference showing up at zero as well, not a new disagreement. What was actually wrong was the reporting: __tests__/hardening/ArithmeticBigInt.spec.ts already asserted this and its comment already explained it, but nothing implemented it, the test passed because V8's RangeError happens to read \"Division by zero\" and the VM relabelled it UNEXPECTED_ERROR/INTERNAL. vm/VMConversion.ts's bigIntDivisionByZero() now raises a recoverable BIGINT_DIVISION_BY_ZERO, and the spec asserts the code rather than the message."
+}

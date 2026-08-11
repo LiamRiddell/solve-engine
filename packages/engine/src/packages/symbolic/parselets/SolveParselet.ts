@@ -3,9 +3,9 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { SYMBOLIC_BUILTIN_SOLVE } from "@solve-js/packages/symbolic/SymbolicBuiltinIndex";
+import { emitVariableName, parseBoundExpression, emitBoundExpression } from "@solve-js/packages/symbolic/parselets/VariableArgument";
 
 /**
  * `solve(equation, variable)`, for example `solve(x^2-4=0, x)`.
@@ -22,21 +22,21 @@ import { SYMBOLIC_BUILTIN_SOLVE } from "@solve-js/packages/symbolic/SymbolicBuil
  * would demand that the variable already exist, which is exactly what solving
  * for it says it does not. Emitting it as a `PUSH_STRING` instead means the
  * builtin receives a plain String value and the VM needs no change at all.
+ *
+ * Both sides of the equation are held until that name has been read, so each
+ * evaluates with the unknown bound to itself rather than to whatever value the
+ * document may already have given it. See {@link emitBoundExpression}: with
+ * `:x = 5` above it, `solve(x^2-4=0, x)` was solving `21 = 0` and reporting,
+ * accurately for the question it was asked and uselessly for the one written,
+ * that there is no solution.
  */
 export class SolveParselet implements PrefixParselet {
 	readonly category = "Symbolic";
 
 	parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
 		parser.consume("LPAREN");
-		parser.parseExpression(BindingPower.Lowest, builder);
-
-		if (parser.match("EQUALS")) {
-			parser.parseExpression(BindingPower.Lowest, builder);
-		} else {
-			// No `=` written, so the equation is "this expression equals zero".
-			builder.emitOpcode(OpCode.PUSH_NUMBER);
-			builder.emitNumber(0);
-		}
+		const left = parseBoundExpression(parser, builder, "solve");
+		const right = parser.match("EQUALS") ? parseBoundExpression(parser, builder, "solve") : null;
 
 		parser.consume("COMMA");
 		// Requiring IDENT or UNIT here is the same protection VariableParselet
@@ -51,8 +51,16 @@ export class SolveParselet implements PrefixParselet {
 			);
 		}
 		parser.consume();
-		builder.emitOpcode(OpCode.PUSH_STRING);
-		builder.emitString(variable.value);
+
+		emitBoundExpression(builder, left, variable.value);
+		if (right) {
+			emitBoundExpression(builder, right, variable.value);
+		} else {
+			// No `=` written, so the equation is "this expression equals zero".
+			builder.emitOpcode(OpCode.PUSH_NUMBER);
+			builder.emitNumber(0);
+		}
+		emitVariableName(builder, variable.value);
 
 		parser.consume("RPAREN");
 

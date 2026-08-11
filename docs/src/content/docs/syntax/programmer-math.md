@@ -113,21 +113,26 @@ not three.
 2^10 // 1,024
 ```
 
-## Parenthesise anything mixed
+## Precedence
 
-This is the one thing to be careful about. These operators do not follow the
-precedence order that C, JavaScript, Python and their relatives share, so an
-expression that mixes them without brackets will not always mean what you
-expect. `|` binds tighter than `<<` here, where in C it is the other way round.
+These operators follow the precedence order that C, JavaScript, Python and
+their relatives share, so an expression that mixes them means what a programmer
+reads it as. Loosest to tightest: `|`, then `xor`, then `&`, then the
+comparisons, then the shifts, then `+` and `-`, then `*` and `/`.
 
 ```solve
-1 | 2 << 3 // 24
-(1 | 2) << 3 // 24
-1 | (2 << 3) // 17
+1 | 2 << 3 // 17
+1 + 2 << 3 // 24
+4 & 3 + 1 // 4
+4 | 6 & 3 // 6
 ```
 
-The last line is what a C programmer reads the first line as. Bracket anything
-that mixes a shift with a bitwise operator and the ambiguity goes away.
+Read those as `1 | (2 << 3)`, `(1 + 2) << 3`, `4 & (3 + 1)` and `4 | (6 & 3)`.
+The arithmetic happens first, then the shift, then the bitwise operators, and
+`&` wins against `|`.
+
+Brackets still cost nothing, and on a line that mixes three or four of these
+they read better than a precedence table does.
 
 ```solve
 (0xF0 | 0x0F) & 0xFF // 255

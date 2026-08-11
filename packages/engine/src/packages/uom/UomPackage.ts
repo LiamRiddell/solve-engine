@@ -16,6 +16,7 @@ import { reversedConversionNormalizerRule } from "./normalizer/ReversedConversio
 import { CookingConversionParselet } from "./parselets/CookingConversionParselet";
 import { COOKING_CONVERT_IDX, cookingConvertHandler } from "./parselets/CookingPluginFunctions";
 import { ingredientNameNormalizerRule } from "./normalizer/IngredientNameNormalizerRule";
+import { multiWordUnitNormalizerRule } from "./normalizer/MultiWordUnitNormalizerRule";
 
 /**
  * Units of measurement: `10 km`, `10 km to miles`, `convert 10 km to miles`,
@@ -45,6 +46,9 @@ export const UOM_PACKAGE: IEnginePackage = {
     { tokenType: "INGREDIENT_NAME", parselet: new CookingConversionParselet() },
   ],
   normalizerRules: [
+    // Highest priority of the unit rules: a two-word spelling has to become one
+    // token before anything else reads the first word as a unit on its own.
+    multiWordUnitNormalizerRule(),
     uomPossibilitiesNormalizerRule(),
     compoundQuantityNormalizerRule(),
     twoUnitConversionNormalizerRule(),

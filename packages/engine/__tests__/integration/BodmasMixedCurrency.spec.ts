@@ -146,7 +146,8 @@ describe("BODMAS: Multiplication/Division before Addition/Subtraction (mixed uni
   });
 });
 
-describe("BODMAS: Left-associativity (same precedence)", () => {
+// Left-associative everywhere except `^`, which groups to the right.
+describe("BODMAS: Associativity (same precedence)", () => {
   test("10 - 3 - 2 = 5 (left-assoc subtract)", () => {
     expect(evalNum("10 - 3 - 2")).toBe(5);
   });
@@ -155,9 +156,12 @@ describe("BODMAS: Left-associativity (same precedence)", () => {
     expect(evalNum("100 / 5 / 2")).toBe(10);
   });
 
-  test("2 ^ 3 ^ 2 = 64 (left-assoc exponent: (2^3)^2 = 64)", () => {
-    // Engine uses left-associative exponentiation like most calculators
-    expect(evalNum("2 ^ 3 ^ 2")).toBe(64);
+  test("2 ^ 3 ^ 2 = 512 (right-assoc exponent: 2^(3^2) = 512)", () => {
+    // Exponentiation follows mathematics, not pocket calculators: a tower of
+    // powers is evaluated from the top down, so this is 2^9. Python, Ruby,
+    // Wolfram and JavaScript's `**` all agree. `^` is the only operator in
+    // the engine that groups to the right.
+    expect(evalNum("2 ^ 3 ^ 2")).toBe(512);
   });
 
   test("$100 - $30 - $20 - $10 = $40", () => {
@@ -446,9 +450,10 @@ describe("BODMAS: Stress tests — deeply nested, many operators", () => {
     expect(evalNum("1*2*3*4*5")).toBe(120);
   });
 
-  test("2^2^2^2 = 256 (left-assoc: ((2^2)^2)^2 = 256)", () => {
-    // Engine uses left-associative exponentiation like most calculators
-    expect(evalNum("2^2^2^2")).toBe(256);
+  test("2^2^2^2 = 65536 (right-assoc: 2^(2^(2^2)) = 2^16)", () => {
+    // Same convention as the shorter chain above: mathematics rather than
+    // pocket calculators. Left grouping would be 256.
+    expect(evalNum("2^2^2^2")).toBe(65536);
   });
 
   test("((((((1+2)+3)+4)+5)+6)+7) = 28", () => {

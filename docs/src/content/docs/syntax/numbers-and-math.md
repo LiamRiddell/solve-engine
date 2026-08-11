@@ -17,6 +17,15 @@ description: Arithmetic, operators, functions, big integers and number suffixes.
 `%` is the percent operator, not modulo. Writing `17 % 5` is a parse error
 because `17 %` is already a complete expression. Use `mod` or `modulo`.
 
+`^` is the only operator that groups from the right. A tower of powers is
+worked out from the top down, as in mathematics: `2^3^2` means `2^(3^2)`, which
+is 2^9. Everything else groups from the left, so `10-3-2` is `(10-3)-2`.
+
+```solve
+2^3^2 // 512
+(2^3)^2 // 64
+```
+
 ## Operators in words
 
 Most operators have a word form, which is often how a line reads more naturally.

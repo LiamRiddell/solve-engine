@@ -73,9 +73,18 @@ function workdaysInDurationHandler(args: Value[]): Value {
     totalDays = v.toNumber();
   }
 
-  const fullWeeks = Math.floor(totalDays / 7);
-  const remainderDays = totalDays - fullWeeks * 7;
-  const workdays = fullWeeks * 5 + Math.min(remainderDays, 5);
+  // Counted on the magnitude, with the sign put back afterwards. Running
+  // the ratio directly on a negative day count borrowed a whole week from
+  // Math.floor() and then handed the borrowed days back through the
+  // remainder, so "workdays in -3 days" answered -1 instead of -3 and
+  // "workdays in -10 days" answered -6 instead of -8. A negative span
+  // reaches here whenever the duration came from a variable or a
+  // subtraction rather than a typed literal.
+  const sign = totalDays < 0 ? -1 : 1;
+  const magnitudeDays = Math.abs(totalDays);
+  const fullWeeks = Math.floor(magnitudeDays / 7);
+  const remainderDays = magnitudeDays - fullWeeks * 7;
+  const workdays = sign * (fullWeeks * 5 + Math.min(remainderDays, 5));
   return numberValue(workdays);
 }
 

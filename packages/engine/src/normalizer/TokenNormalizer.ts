@@ -118,7 +118,9 @@ export function createFusedToken(
     first.line,
     first.col,
   );
-  token.sourceEnd = last.offset + last.value.length;
+  // `text`, not `value`: this is where the SOURCE ended, and the two differ
+  // for a string literal, whose value is the payload without its quotes.
+  token.sourceEnd = last.sourceEnd ?? last.offset + last.text.length;
   return token;
 }
 
@@ -141,7 +143,7 @@ export function createFusedToken(
 function recordSourceSpan(fused: Token, sourceTokens: Token[]): void {
   const last = sourceTokens[sourceTokens.length - 1];
   if (!last) return;
-  fused.sourceEnd = last.sourceEnd ?? last.offset + last.value.length;
+  fused.sourceEnd = last.sourceEnd ?? last.offset + last.text.length;
 }
 
 //#endregion

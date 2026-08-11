@@ -1,0 +1,31 @@
+{
+	"id": "06fe4906",
+	"seed": 3000449,
+	"generator": "bytecode",
+	"outcome": "internal",
+	"detail": "raw exception normalised to UNEXPECTED_ERROR: Cannot destructure property 'opcodes' of 'bytecode' as it is undefined.",
+	"found": "2026-08-10",
+	"shrinkSteps": 3,
+	"input": {
+		"kind": "bytecode",
+		"program": {
+			"opcodes": [
+				10,
+				0,
+				3,
+				156,
+				157,
+				120,
+				0,
+				1
+			],
+			"numbers": [
+				"0"
+			],
+			"strings": []
+		},
+		"origin": "map(10*x, 0:20)"
+	},
+	"status": "fixed",
+	"note": "A reentrant executeBytecode() call made with an undefined program. MAP_INVOKE and REDUCE_INVOKE read their kind/ref/count operands with opcodes[ip++] and do not check that the stream still has them, so a truncated stream reaches invokeFrameBody() with program undefined and the destructure at the top of executeBytecode() throws. That destructure sits BEFORE the try, so in the nested call it is caught by the OUTER frame; a host calling executeBytecode() directly with such a program gets a raw TypeError. FIXED: MAP_INVOKE/REDUCE_INVOKE now read their kind/ref/count operands through operandByte(), which refuses a stream that ends mid-instruction, and requireKnownBodyKind() refuses a kind outside 0/1/2 rather than falling past every arm with program still undefined. executeBytecode() also checks the program is runnable BEFORE the destructure that used to throw outside its own try/catch, returning MALFORMED_BYTECODE_PROGRAM in the error arm."
+}

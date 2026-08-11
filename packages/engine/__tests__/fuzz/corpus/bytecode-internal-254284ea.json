@@ -1,0 +1,32 @@
+{
+	"id": "254284ea",
+	"seed": 4420829,
+	"generator": "bytecode",
+	"outcome": "internal",
+	"detail": "raw exception normalised to UNEXPECTED_ERROR: major.toLowerCase is not a function",
+	"found": "2026-08-10",
+	"shrinkSteps": 6,
+	"input": {
+		"kind": "bytecode",
+		"program": {
+			"opcodes": [
+				10,
+				0,
+				51,
+				0,
+				1,
+				10,
+				10,
+				3,
+				51,
+				94,
+				3
+			],
+			"numbers": [],
+			"strings": []
+		},
+		"origin": "sqrt(16) + max(1,2,3)"
+	},
+	"status": "fixed",
+	"note": "A unit-name operand read off the value stack is assumed to be a string. Malformed bytecode can leave any Value type there. vm/VM.ts, the UOM band. FIXED twice over: the PUSH_NUMBER pool-index guard refuses this stream before it reaches the builtin, and vm/VMBuiltins.ts index 94 (asTwoUnits) now reads its two unit-name arguments rather than casting them, returning an UNKNOWN_UNIT Value if either is not a string."
+}

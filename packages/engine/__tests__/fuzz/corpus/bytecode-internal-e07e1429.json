@@ -1,0 +1,21 @@
+{
+	"id": "e07e1429",
+	"seed": 3000105,
+	"generator": "bytecode",
+	"outcome": "internal",
+	"detail": "raw exception normalised to UNEXPECTED_ERROR: Cannot convert undefined to a BigInt",
+	"found": "2026-08-10",
+	"shrinkSteps": 19,
+	"input": {
+		"kind": "bytecode",
+		"program": {
+			"opcodes": [
+				11
+			],
+			"numbers": [],
+			"strings": []
+		}
+	},
+	"status": "fixed",
+	"note": "PUSH_BIGINT does BigInt(strings[opcodes[ip++]]) with no check that the operand indexes a real string, so a one-byte program reaches BigInt(undefined). Bytecode-only: the compiler never emits an out-of-range index. vm/VM.ts, PUSH_BIGINT case. FIXED: operandByte() in vm/VM.ts refuses an operand read past the end of the stream, so a one-byte [PUSH_BIGINT] program raises MALFORMED_BYTECODE_TRUNCATED instead of reaching BigInt(undefined). PUSH_BIGINT additionally parses its pooled literal through parseBigIntLiteral(), which turns V8s SyntaxError into MALFORMED_BYTECODE_BIGINT_LITERAL."
+}

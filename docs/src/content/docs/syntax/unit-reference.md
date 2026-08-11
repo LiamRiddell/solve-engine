@@ -55,8 +55,8 @@ Measured against **m2**.
 | deciare | `deciares`, `da` | 10 |
 | m2 | `centiare`, `centiares`, `ca` | 1 |
 | yd2 | `yd2` | 0.836127 |
-| dm2 | `dm2` | 0.1 |
 | ft2 | `ft2` | 0.092903 |
+| dm2 | `dm2` | 0.01 |
 | in2 | `in2` | 0.00064516 |
 | cm2 | `cm2` | 0.0001 |
 | mm2 | `mm2` | 0.000001 |
@@ -119,33 +119,33 @@ Measured against **joule**.
 
 | Unit | Spellings | Relative size |
 | --- | --- | --- |
-| PWh | `PWh` | 3600000000000000000 |
-| TWh | `TWh` | 3600000000000000 |
+| PW h | `PWh` | 3600000000000000000 |
+| TW h | `TWh` | 3600000000000000 |
 | petajoule | `petajoules`, `PJ` | 1000000000000000 |
-| GWh | `GWh` | 3600000000000 |
+| GW h | `GWh` | 3600000000000 |
 | terajoule | `terajoules`, `TJ` | 1000000000000 |
-| MWh | `MWh` | 3600000000 |
+| MW h | `MWh` | 3600000000 |
 | gigajoule | `gigajoules`, `GJ` | 1000000000 |
-| kWh | `kWh` | 3600000 |
+| kW h | `kWh` | 3600000 |
 | megajoule | `megajoules`, `MJ` | 1000000 |
-| hWh | `hWh` | 360000 |
-| daWh | `daWh` | 36000 |
-| Wh | `Wh` | 3600 |
+| hW h | `hWh` | 360000 |
+| daW h | `daWh` | 36000 |
+| W h | `Wh` | 3600 |
 | kilojoule | `kilojoules`, `kJ` | 1000 |
-| dWh | `dWh` | 360 |
+| dW h | `dWh` | 360 |
 | hectojoule | `hectojoules`, `hJ` | 100 |
-| cWh | `cWh` | 36 |
+| cW h | `cWh` | 36 |
 | decajoule | `decajoules`, `daJ` | 10 |
-| mWh | `mWh` | 3.6 |
+| mW h | `mWh` | 3.6 |
 | joule | `joules` | 1 |
 | decijoule | `decijoules`, `dJ` | 0.1 |
 | centijoule | `centijoules`, `cJ` | 0.01 |
 | millijoule | `millijoules`, `mJ` | 0.001 |
-| nWh | `nWh` | 0.0000036 |
+| nW h | `nWh` | 0.0000036 |
 | microjoule | `microjoules` | 0.000001 |
-| pWh | `pWh` | 3.6e-9 |
+| pW h | `pWh` | 3.6e-9 |
 | nanojoule | `nanojoules`, `nJ` | 1e-9 |
-| fWh | `fWh` | 3.6e-12 |
+| fW h | `fWh` | 3.6e-12 |
 | picojoule | `picojoules`, `pJ` | 1e-12 |
 | femtojoule | `femtojoules`, `fJ` | 1e-15 |
 
@@ -156,9 +156,9 @@ Measured against **newton**.
 | Unit | Spellings | Relative size |
 | --- | --- | --- |
 | petanewton | `petanewtons`, `PN` | 1000000000000000 |
-| teranewton | `teranewtons` | 1000000000000 |
+| teranewton | `teranewtons`, `TN` | 1000000000000 |
 | giganewton | `giganewtons`, `GN` | 1000000000 |
-| meganewton | `meganewtons` | 1000000 |
+| meganewton | `meganewtons`, `MN` | 1000000 |
 | megapond | `tf`, `Mp` | 9806.65 |
 | kip | `klb`, `kipf`, `klbf` | 4448.22 |
 | kilonewton | `kilonewtons`, `kN` | 1000 |
@@ -170,7 +170,7 @@ Measured against **newton**.
 | poundal | `poundals`, `pdl` | 0.138255 |
 | decinewton | `decinewtons`, `dN` | 0.1 |
 | centinewton | `centinewtons`, `cN` | 0.01 |
-| millinewton | `millinewtons` | 0.001 |
+| millinewton | `millinewtons`, `mN` | 0.001 |
 | dyne | `dynes`, `dyn` | 0.00001 |
 | micronewton | `micronewtons` | 0.000001 |
 | nanonewton | `nanonewtons`, `nN` | 1e-9 |
@@ -321,7 +321,7 @@ Measured against **gram**.
 | kilogram | `kilograms`, `kg` | 1000 |
 | pound | `pounds`, `lb`, `lbs` | 453.592 |
 | hectogram | `hectograms`, `hg` | 100 |
-| toz | `toz` | 31.1035 |
+| oz t | `toz` | 31.1035 |
 | ounce | `ounces`, `oz` | 28.3495 |
 | decagram | `decagrams`, `dag` | 10 |
 | gram | `grams`, `g` | 1 |
@@ -473,6 +473,7 @@ Measured against **stere**.
 | mi3 | `mi3` | 4168180000 |
 | km3 | `teraliter`, `teraliters`, `teralitre`, `teralitres`, `Tl`, `TL` | 1000000000 |
 | hm3 | `gigaliter`, `gigaliters`, `gigalitre`, `gigalitres`, `Gl`, `GL` | 1000000 |
+| ac ft | `ac ft` | 1233.48 |
 | dam3 | `megaliter`, `megaliters`, `megalitre`, `megalitres`, `Ml`, `ML` | 1000 |
 | MTON | `MTON` | 1.133 |
 | stere | `steres`, `m3`, `kiloliter`, `kiloliters`, `kilolitre`, `kilolitres`, `kl`, `kL` | 1 |
@@ -487,6 +488,7 @@ Measured against **stere**.
 | pint | `pints`, `pt` | 0.000473176 |
 | cup | `cups` | 0.000236588 |
 | deciliter | `deciliters`, `decilitre`, `decilitres`, `dl`, `dL` | 0.0001 |
+| fl oz | `fl oz` | 0.0000295735 |
 | in3 | `in3` | 0.0000163871 |
 | tablespoon | `tablespoons`, `tbsp` | 0.0000147868 |
 | centiliter | `centiliters`, `centilitre`, `centilitres`, `cl`, `cL` | 0.00001 |
@@ -595,7 +597,7 @@ Measured against **m3s**.
 
 ## Spellings that are not listed
 
-The conversion tables carry 1504 spellings in total, and 479 of
+The conversion tables carry 1504 spellings in total, and 459 of
 them are missing above. Most are multi-word forms like `sq ft` and `cu yd`,
 which the tables can resolve but the lexer cannot tokenize, so they are
 unavailable when typing an expression. They are excluded here rather than listed

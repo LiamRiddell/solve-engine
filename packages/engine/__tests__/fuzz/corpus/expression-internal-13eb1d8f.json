@@ -1,0 +1,15 @@
+{
+	"id": "13eb1d8f",
+	"seed": 12875,
+	"generator": "expression",
+	"outcome": "internal",
+	"detail": "raw exception normalised to UNEXPECTED_ERROR: Cannot convert 1.000 to a BigInt",
+	"found": "2026-08-10",
+	"shrinkSteps": 0,
+	"input": {
+		"kind": "expression",
+		"source": "1.000n"
+	},
+	"status": "fixed",
+	"note": "A decimal with exactly three fractional digits followed by n lexes as a BIGINT token whose text still contains the dot, so PUSH_BIGINT reaches BigInt('1.000') and throws a raw SyntaxError, relabelled UNEXPECTED_ERROR/INTERNAL. 1.01n and 1.1n are fine, which points at the three-digit thousands-separator handling rather than at the n suffix. Distinct from the bytecode entry with the same normalised wording: that one needs a hand-built opcode stream, this one is six characters of ordinary source. FIXED at the source rather than at the crash. The lexer coalesces a group of exactly three digits after a \".\" or \",\" into the number it is building, and the two places that turned a BIGINT token into pool text (parser/PrecedenceParser.ts's Tier-1 switch and packages/biginteger/parselets/BigIntNumberParselet.ts) both stripped only the trailing \"n\", so the separators reached BigInt(). New parser/BigIntLiteral.ts is shared by both tiers: it strips the locale's own thousands separator (so 1,000n is 1000n in en) and chained dot groups (1.234.567n is 1234567n in any locale), and raises INVALID_NUMBER_LITERAL for a single dot group the locale reads as a decimal point, rather than guessing between 1 and 1000. vm/VM.ts's PUSH_BIGINT additionally parses through parseBigIntLiteral() as a backstop for the ./vm surface."
+}

@@ -9,6 +9,11 @@
  * mirrored verbatim rather than hand-authored or recomputed from SI
  * definitions, and THIRD-PARTY-NOTICES.md for the upstream licence.
  *
+ * Mirrored verbatim EXCEPT where upstream is arithmetically wrong. Those few
+ * entries are marked "corrected" below and each one is justified in
+ * UPSTREAM_UNIT_CORRECTIONS / UPSTREAM_BEST_UNIT_CORRECTIONS in the generator.
+ * They are corrections of an upstream error, never a local preference.
+ *
  * Upstream: https://github.com/citycide/convert (MIT, Copyright (c) Jonah Snider)
  */
 
@@ -104,12 +109,12 @@ export const UNIT_TABLE: Readonly<Record<string, UnitEntry>> = {
   "square decametres": [1, 100],
   "dam²": [1, 100],
   "dam2": [1, 100],
-  "square decimeter": [1, 0.1],
-  "square decimetre": [1, 0.1],
-  "square decimeters": [1, 0.1],
-  "square decimetres": [1, 0.1],
-  "dm²": [1, 0.1],
-  "dm2": [1, 0.1],
+  "square decimeter": [1, 0.01], // corrected, upstream says 0.1
+  "square decimetre": [1, 0.01], // corrected, upstream says 0.1
+  "square decimeters": [1, 0.01], // corrected, upstream says 0.1
+  "square decimetres": [1, 0.01], // corrected, upstream says 0.1
+  "dm²": [1, 0.01], // corrected, upstream says 0.1
+  "dm2": [1, 0.01], // corrected, upstream says 0.1
   "square centimeter": [1, 0.0001],
   "square centimetre": [1, 0.0001],
   "square centimeters": [1, 0.0001],
@@ -1513,9 +1518,15 @@ export const UNIT_DIFFERENCES: Readonly<Record<string, number>> = {
 
 /**
  * Ordered `[symbol, threshold]` pairs per measure kind, used to pick the most
- * readable unit for a magnitude. Thresholds are expressed in the list's
- * SMALLEST unit, and the last entry whose threshold the absolute value reaches
- * wins.
+ * readable unit for a magnitude. Thresholds are expressed in the list's FIRST
+ * unit, which is therefore also its smallest, and the last entry whose
+ * threshold the absolute value reaches wins.
+ *
+ * The two properties are load-bearing together: `convertToBestMetric` converts
+ * the magnitude into the first unit and then walks forwards, breaking at the
+ * first threshold it does not reach. A list that does not ascend runs off the
+ * end of the sensible units rather than merely picking a poor one, and moving a
+ * different unit to the front silently changes what every threshold means.
  *
  * Metric only. The imperial lists exist upstream but nothing here has ever
  * requested them, so they are not ported.
@@ -1529,7 +1540,7 @@ export const BEST_UNITS_METRIC: Readonly<
   3: [["J", 1], ["Wh", 3600], ["kWh", 3600000], ["MWh", 3600000000], ["GWh", 3600000000000]], // energy
   4: [["N", 1]], // force
   5: [["Hz", 1], ["kHz", 1000], ["MHz", 1000000], ["GHz", 1000000000], ["THz", 1000000000000], ["PHz", 1000000000000000]], // frequency
-  6: [["lux", 1], ["µlx", 0.000001], ["nlx", 1e-9], ["klx", 1000]], // illuminance
+  6: [["lux", 1], ["klx", 1000]], // illuminance, corrected
   7: [["mm", 1], ["cm", 10], ["m", 1000], ["km", 1000000]], // length
   8: [["cd/m²", 1]], // luminance
   9: [["cd", 1]], // luminousIntensity

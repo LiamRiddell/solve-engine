@@ -26,6 +26,7 @@ import type { LexerVocabulary } from "@solve-js/lexer/ExpressionLexer";
 import { QueryClient } from "@tanstack/query-core";
 import { createQueryClient, setActiveQueryClient, getActiveQueryClient } from "@solve-js/services/DataQueryService";
 import { ErrorFactory, EngineError, normalizeUnknownError } from "@solve-js/errors/UnifiedErrorFramework";
+import { countLines } from "@solve-js/utilities/Strings";
 import {
 	ResolverRegistry,
 } from "@solve-js/resolvers/ResolverRegistry";
@@ -407,6 +408,11 @@ export class ExpressionEngine {
             this.config.vm.maxStackDepth,
             this.config.vm.maxInstructions,
             undefined,
+            this.config.vm.maxCollectionSize,
+            this.config.vm.maxAllocatedElements,
+            this.config.vm.maxFunctionCalls,
+            this.config.date.maxOffsetYears,
+            this.config.date.minOffsetYears,
             this.context,
         );
         this.queryClient = createQueryClient();
@@ -903,6 +909,20 @@ export class ExpressionEngine {
      * with precise coordinate mapping for inline solves.
      */
     parseDocument(input: string, options: UnifiedParsingOptions = { inputType: 'markdown' }): ParsingResult {
+        // Refused before the scan rather than during it. Every limit above this
+        // one bounds what a single LINE may ask for, and a document's cost is
+        // its line count whatever the lines say: two hundred thousand lines of
+        // `1 + 1` exhausted the heap on the per-line records alone, which is a
+        // process abort no host can catch. See
+        // `constants/Configuration.ts`'s `performance.maxDocumentLines`.
+        const maxLines = this.config.performance.maxDocumentLines;
+        if (countLines(input, maxLines) > maxLines) {
+            throw ErrorFactory.execution(
+                "DOCUMENT_TOO_LARGE",
+                `This document has more than ${maxLines.toLocaleString("en-US")} lines, which is the most the engine will process in one pass`,
+                { maxLines },
+            );
+        }
         // Scan the entire document in a single pass, bypasses the old
         // split('\n') → evaluateLines() → join('\n') → scanDocument()
         // roundtrip. scanDocument() classifies and tokenizes all lines
@@ -1084,8 +1104,14 @@ export class ExpressionEngine {
      * parseExpression(). Abstracts the API difference between the two parsers:
      * - PrecedenceParser:  parser.setBuilder(builder); parser.parseExpression(0)
      * - RD:                parser.builder = builder; parser.parseExpression(0)
+     *
+     * @param allowLabelFallback - Whether a line that does not parse whole may
+     * be retried as "&lt;label&gt;: &lt;expression&gt;". True for a real line, false for
+     * the retries that fallback makes itself, which is what stops it costing
+     * exponential time; see the loop below, and the comment on its recursive
+     * call for the measurement.
      */
-    private parseExpression(builder: BytecodeBuilder, tokens: Token[], hasParens?: boolean): void {
+    private parseExpression(builder: BytecodeBuilder, tokens: Token[], hasParens?: boolean, allowLabelFallback = true): void {
         this.parser.setBuilder(builder);
         // When autoBalanceParens is disabled, skip the O(n) paren-count scan
         // by always passing false, the parser will fail naturally on unmatched
@@ -1125,13 +1151,24 @@ export class ExpressionEngine {
             // approximation: 355/113" (see GitHub issue #65). Only
             // attempted once the whole-line parse has ALREADY failed, so
             // it can never change behavior for a line that already
-            // worked. Clock times ("9:30"), lap times ("03:04:05"), and
-            // ":name = value" variable definitions all consume their
+            // worked. VALID clock times ("9:30"), lap times ("03:04:05"),
+            // and ":name = value" variable definitions all consume their
             // colon(s) internally during lexing and never produce a real
             // COLON token, confirmed directly against the token stream
             // not assumed, so this can't misfire on any of them. Only a
             // genuine COLON token past position 0 counts (position 0 is
             // reserved for the existing leading-colon variable syntax).
+            //
+            // The word VALID is load-bearing, and used not to be here. An
+            // out-of-range clock time does leave a real COLON token behind,
+            // which landed it in this fallback and had it answered with
+            // whatever stood to the right of the colon: "24:00" answered 0,
+            // "9:60" answered 60, "100:5" answered 5. Those are ordinary
+            // things to type ("24:00" is a normal way to write the end of a
+            // day, "9:60" is a normal typo) and every one of them came back
+            // as a confident number with no hint that the time had been
+            // thrown away, so the numeric case is now refused outright, see
+            // the guard in the loop below.
             //
             // Tries every colon position from rightmost to leftmost, not
             // just the last one: a label can itself precede a
@@ -1141,12 +1178,62 @@ export class ExpressionEngine {
             // VariableParselet needs to recognize a definition at all,
             // leaving a bare "x = 5" that fails to parse. Falling back to
             // the next colon to the left ("value:") keeps ":x = 5" intact.
-            for (let i = tokens.length - 1; i >= 1; i--) {
+            for (let i = allowLabelFallback ? tokens.length - 1 : 0; i >= 1; i--) {
                 if (tokens[i].type !== "COLON") continue;
                 if (i + 1 >= tokens.length) continue;
+
+                // Nothing but numbers to the left of the colon means this is
+                // not a label at all: it is a time, a lap time or a timecode
+                // that the normalizer refused to fuse because one of its
+                // fields is out of range. A label is prose ("pi
+                // approximation:", "total:"), and the labelled lines this
+                // fallback exists for all have a word in front of the colon.
+                // Reading "24:00" as the label "24" and the expression "00"
+                // is never what was meant, so it is an error rather than an
+                // answer.
+                let labelIsAllNumeric = true;
+                for (let j = 0; j < i; j++) {
+                    const type = tokens[j].type;
+                    if (type !== "NUMBER" && type !== "COLON") {
+                        labelIsAllNumeric = false;
+                        break;
+                    }
+                }
+                if (labelIsAllNumeric) {
+                    // Rebuilt from the tokens rather than sliced out of the
+                    // source, which this level does not have. Everything up
+                    // to and including the field after the colon, so
+                    // "24:00 + 1" names "24:00" and not the whole line.
+                    const literal = tokens.slice(0, i + 2).map((t) => t.value).join("");
+                    throw ErrorFactory.parsing(
+                        "INVALID_TIME_LITERAL",
+                        `"${literal}" is not a valid time`,
+                        { tokenType: tokens[i].type, tokenValue: literal }
+                    );
+                }
+
                 builder.reset();
                 try {
-                    this.parseExpression(builder, tokens.slice(i + 1), hasParens);
+                    // `false`: the retry gets a plain parse, with no fallback
+                    // of its own. It used to get the full one, and that made
+                    // this loop cost exponential time for no extra coverage.
+                    //
+                    // A retry on `tokens.slice(i + 1)` that ran its own
+                    // fallback would try the suffix after each colon j > i,
+                    // which is `tokens.slice(j + 1)`, which is a slice THIS
+                    // loop already tried on an earlier iteration, since it
+                    // walks rightmost-first and j > i. So every level below
+                    // the first re-attempted parses that had already failed,
+                    // and each of those levels re-attempted them again: a line
+                    // with k colons compiled 2^k times. Measured on a
+                    // 723-character fuzz case with 19 colons: 524,288 parse
+                    // attempts, 18 seconds, and then the line was REJECTED. A
+                    // host evaluating per keystroke froze for that long.
+                    //
+                    // Nothing is lost by cutting it. The suffixes the deeper
+                    // levels reached are exactly the ones this loop visits
+                    // itself, in the same rightmost-first order.
+                    this.parseExpression(builder, tokens.slice(i + 1), hasParens, false);
                     return;
                 } catch {
                     // This colon's fragment didn't parse cleanly either
@@ -1188,9 +1275,17 @@ export class ExpressionEngine {
      * (a bare assignment's RHS, and an equation's own RHS at solve time)
      *, every one of these needs forward-tolerant reads of not-yet-defined
      * names, which ordinary evaluation deliberately never allows.
+     *
+     * `lineNumber` is the 1-based document line this program belongs to, so
+     * the RHS still receives a {@link makeLineContext}, a bare assignment's
+     * right-hand side (`total = prev`, `x = line2`) can therefore read
+     * cross-line results exactly as a bare expression line does. Defaults to
+     * `-1` (the "no real document" sentinel) for the expression-level and
+     * `=>`-without-a-document callers, which naturally yields the same
+     * `LINE_REF_NO_DOCUMENT` a single-expression eval already returns.
      */
-    private executeSymbolicTolerant(program: BytecodeProgram): Value {
-        const result = executeBytecode(program, this.vm, undefined, undefined, undefined, true);
+    private executeSymbolicTolerant(program: BytecodeProgram, lineNumber: number = -1): Value {
+        const result = executeBytecode(program, this.vm, undefined, undefined, this.makeLineContext(lineNumber), true);
         if (result.type === 'error') throw result.error;
         if (result.type === 'pending') {
             throw ErrorFactory.execution(
@@ -1201,9 +1296,9 @@ export class ExpressionEngine {
         return result.value;
     }
 
-    /** Compiles and executes `tokens` in symbolic-tolerant mode, the "just simplify this" `=>` fallback when there's no stored equation to solve. */
-    private simplifySymbolically(tokens: Token[]): Value {
-        return this.executeSymbolicTolerant(this.compileAdHoc(tokens));
+    /** Compiles and executes `tokens` in symbolic-tolerant mode, the "just simplify this" `=>` fallback when there's no stored equation to solve. `lineNumber` (1-based, `-1` outside a document) is forwarded so a bare assignment's RHS can resolve cross-line references. */
+    private simplifySymbolically(tokens: Token[], lineNumber: number = -1): Value {
+        return this.executeSymbolicTolerant(this.compileAdHoc(tokens), lineNumber);
     }
 
     /**
@@ -1250,7 +1345,7 @@ export class ExpressionEngine {
      * errors propagate as values" convention (DIMENSION_MISMATCH,
      * SINGULAR_MATRIX, ...).
      */
-    private solveEquation(equation: EquationDef): Value {
+    private solveEquation(equation: EquationDef, lineNumber: number = -1): Value {
         const factorValues: Value[] = [];
         for (const name of equation.factorNames) {
             const v = this.vm.getVar(name);
@@ -1279,7 +1374,7 @@ export class ExpressionEngine {
         const inv = inverse(combined);
         if (inv.type === ValueType.Error) return inv;
 
-        const rhsValue = this.executeSymbolicTolerant(equation.rhsProgram);
+        const rhsValue = this.executeSymbolicTolerant(equation.rhsProgram, lineNumber);
         if (rhsValue.type !== ValueType.Matrix) {
             return errorValue(
                 'EQUATION_RHS_NOT_MATRIX',
@@ -1321,7 +1416,7 @@ export class ExpressionEngine {
      * session's own Phase H.2 scope decision (full symbolic MATRICES, not
      * a general CAS).
      */
-    private trySymbolicGrammar(normalizedTokens: Token[]): Value | null {
+    private trySymbolicGrammar(normalizedTokens: Token[], lineNumber: number = -1): Value | null {
         if (normalizedTokens.length === 0) return null;
 
         const last = normalizedTokens[normalizedTokens.length - 1];
@@ -1338,7 +1433,7 @@ export class ExpressionEngine {
                 const equation = this.vm.getEquation(name);
                 const scalar = this.vm.getScalarEquation(name);
                 if (equation) {
-                    const solved = this.solveEquation(equation);
+                    const solved = this.solveEquation(equation, lineNumber);
                     // A product chain of names is stored as a matrix equation
                     // on sight, since whether the factors are matrices is only
                     // knowable at solve time. When they turn out not to be,
@@ -1351,10 +1446,10 @@ export class ExpressionEngine {
                     if (!isNotMatrix || !scalar) return solved;
                 }
                 if (scalar) {
-                    return this.solveScalarEquation(scalar);
+                    return this.solveScalarEquation(scalar, lineNumber);
                 }
             }
-            return this.simplifySymbolically(beforeTokens);
+            return this.simplifySymbolically(beforeTokens, lineNumber);
         }
 
         // An algebra verb (`expand(...)`, and the later phases' `factor`/
@@ -1365,7 +1460,7 @@ export class ExpressionEngine {
         // still wins, and before the COLON/GLOBAL guard so the existing
         // assignment grammars stay untouched.
         if (containsSymbolicCall(normalizedTokens)) {
-            return this.simplifySymbolically(normalizedTokens);
+            return this.simplifySymbolically(normalizedTokens, lineNumber);
         }
 
         // Already the colon-prefixed (`:name = value`) or `global :name`
@@ -1387,7 +1482,7 @@ export class ExpressionEngine {
         const rhsTokens = normalizedTokens.slice(eqIdx + 1);
 
         if (names.length === 1) {
-            const result = this.simplifySymbolically(rhsTokens);
+            const result = this.simplifySymbolically(rhsTokens, lineNumber);
             this.vm.setVar(names[0], result);
             return result;
         }
@@ -1486,9 +1581,9 @@ export class ExpressionEngine {
      * @returns The solution, rendered by the same helper `solve()` uses, so the
      * two surfaces cannot disagree about how an outcome reads.
      */
-    private solveScalarEquation(equation: ScalarEquationDef): Value {
-        const lhs = this.executeSymbolicTolerant(equation.lhsProgram);
-        const rhs = this.executeSymbolicTolerant(equation.rhsProgram);
+    private solveScalarEquation(equation: ScalarEquationDef, lineNumber: number = -1): Value {
+        const lhs = this.executeSymbolicTolerant(equation.lhsProgram, lineNumber);
+        const rhs = this.executeSymbolicTolerant(equation.rhsProgram, lineNumber);
         return solveEquationValues(lhs, rhs, equation.variable);
     }
 
@@ -1574,6 +1669,7 @@ export class ExpressionEngine {
         tokens: Token[],
         hasParens: boolean | undefined,
         onFusion?: (fusion: TokenFusion) => void,
+        lineNumber: number = -1,
     ):
         | { kind: 'empty' }
         | { kind: 'error'; stage: 'length' | 'complexity' | 'parse'; error: EngineError; reads?: string[]; writes?: string[]; normalizedTokens?: Token[] }
@@ -1605,7 +1701,7 @@ export class ExpressionEngine {
         // Bypasses bytecode caching entirely, both shapes have effects
         // (a stored equation, a direct vm.setVar()) a cached program can't
         // represent. See trySymbolicGrammar()'s own doc comment.
-        const symbolicResult = this.trySymbolicGrammar(normalizedTokens);
+        const symbolicResult = this.trySymbolicGrammar(normalizedTokens, lineNumber);
         if (symbolicResult !== null) {
             return { kind: 'symbolic-solve', normalizedTokens, value: symbolicResult };
         }
@@ -1754,7 +1850,7 @@ export class ExpressionEngine {
         tokens: Token[],
         hasParens?: boolean
     ): Value {
-        const prep = this.prepareExpression(expression, tokens, hasParens);
+        const prep = this.prepareExpression(expression, tokens, hasParens, undefined, lineNumber);
 
         if (prep.kind === 'empty') {
             const v = numberValue(0);
@@ -2189,7 +2285,7 @@ export class ExpressionEngine {
         // the measured span to also cover normalize/complexity-check/cache-
         // lookup, which measurably produced negative-allocation readings (a
         // GC sweep landing inside the wider window) well over half the time.
-        const prep = this.prepareExpression(expression, tokens, hasParens, onFusion);
+        const prep = this.prepareExpression(expression, tokens, hasParens, onFusion, lineNumber);
         if (trackEnabled && prep.kind === 'ready' && prep.parserAlloc) {
             stageAllocs.push(prep.parserAlloc);
         }

@@ -30,6 +30,8 @@
 export const CoreErrorCodes = {
   // ── Parser (parser/PrecedenceParser.ts, parser/BytecodeBuilder.ts, parser/PhrasePattern.ts) ──
   INVALID_NUMBER_LITERAL: "INVALID_NUMBER_LITERAL",
+  /** A `"` that never meets its closing partner (`lexer/ExpressionLexer.ts`'s `tokenizeString()`). Previously the tokenizer ran off the end of the input and returned what it had, so `"abc` lexed to an ordinary String and an unterminated literal was indistinguishable from a terminated one. */
+  UNTERMINATED_STRING: "UNTERMINATED_STRING",
   NO_PREFIX_PARSELET: "NO_PREFIX_PARSELET",
   UNEXPECTED_END_OF_INPUT: "UNEXPECTED_END_OF_INPUT",
   UNEXPECTED_TOKEN_TYPE: "UNEXPECTED_TOKEN_TYPE",
@@ -57,7 +59,9 @@ export const CoreErrorCodes = {
   EVALUATION_ERROR: "EVALUATION_ERROR",
   INSTRUCTION_LIMIT_EXCEEDED: "INSTRUCTION_LIMIT_EXCEEDED",
   STACK_LIMIT_EXCEEDED: "STACK_LIMIT_EXCEEDED",
-  /** New this phase. See `VM.ts`'s `safePop()`: a stack-underflow (corrupted bytecode, a buggy plugin) is now a controlled EngineError instead of a raw TypeError. Always `recoverable: false` (internal invariant violation). */
+  /** One evaluation asking for more elements (collection Values, matrix cells) than `vm.maxAllocatedElements` allows. The counter the two limits above cannot be: both are checked between opcodes, so neither can see what a single opcode allocates inside a loop of its own. See `vm/AllocationBudget.ts`. Recoverable, since it describes this expression rather than the engine. */
+  ALLOCATION_LIMIT_EXCEEDED: "ALLOCATION_LIMIT_EXCEEDED",
+  /** New this phase. See `VM.ts`'s `safePop()`: a stack-underflow (corrupted bytecode, a buggy plugin) is now a controlled EngineError instead of a raw TypeError. Category INTERNAL, since it is an engine or plugin fault rather than a typed line, but recoverable: it happened on one line and the engine is still usable. */
   STACK_UNDERFLOW: "STACK_UNDERFLOW",
   UNDEFINED_VARIABLE: "UNDEFINED_VARIABLE",
   /** New this phase, the Tier-2/`LOAD_GLOBAL_VAR` hardening: a global variable read before its async preflight resolved, surfaced as a controlled error instead of pushing `undefined`. */
@@ -68,15 +72,53 @@ export const CoreErrorCodes = {
   /** User-defined-function call/definition errors (`CALL_USER_FUNCTION`/`DEFINE_USER_FUNCTION` opcodes), calling a name with no matching definition, calling with the wrong argument count, and the deliberate v1 restriction that a function body can't itself contain async work. */
   UNDEFINED_FUNCTION: "UNDEFINED_FUNCTION",
   FUNCTION_ARITY_MISMATCH: "FUNCTION_ARITY_MISMATCH",
+  /** The same mistake against a BUILT-IN rather than a user-defined function (`sqrt()`, `atan2(1)`, `sqrt(1,2,3)`). Separate from `FUNCTION_ARITY_MISMATCH` above because the two are raised by different opcodes and a host may want to word them differently. Checked at the `CALL_BUILTIN` dispatch against `vm/VMBuiltinArity.ts`; recoverable, since it is a typo in the line, not an engine fault. */
+  BUILTIN_ARITY_MISMATCH: "BUILTIN_ARITY_MISMATCH",
   USER_FUNCTION_ASYNC_UNSUPPORTED: "USER_FUNCTION_ASYNC_UNSUPPORTED",
   /** A map/reduce transform body (inline expression or user-defined function) calling an async plugin. Same v1 scope restriction as `USER_FUNCTION_ASYNC_UNSUPPORTED` above, enforced both at parse time (`MAP_REDUCE_TRANSFORM_MUST_BE_SYNCHRONOUS`, packages/mapreduce/) and as a defense-in-depth runtime backstop here. */
   MAP_REDUCE_ASYNC_UNSUPPORTED: "MAP_REDUCE_ASYNC_UNSUPPORTED",
+  /** An algebra verb's expression argument (`BIND_UNKNOWN`'s body) calling an async plugin. Same v1 scope restriction as the two above, and likewise refused at parse time first (`SYMBOLIC_ARGUMENT_MUST_BE_SYNCHRONOUS`, packages/symbolic/). */
+  SYMBOLIC_ASYNC_UNSUPPORTED: "SYMBOLIC_ASYNC_UNSUPPORTED",
   /** `pushCallFrame()`'s recursion guard, a nested `CALL_USER_FUNCTION` re-enters `executeBytecode()`, so `maxInstructions` alone can't catch e.g. `f(x) = f(x)`; this is the dedicated backstop. `recoverable: true` (the default for `.execution()`), ordinary user-written infinite recursion, not an engine bug; the guard exists precisely so it surfaces as a clear error instead of overflowing the native call stack uncatchably. */
   FUNCTION_RECURSION_LIMIT_EXCEEDED: "FUNCTION_RECURSION_LIMIT_EXCEEDED",
+  /** The companion to the code above, and the half it could never see: how MANY user-defined-function calls one evaluation makes, rather than how deeply they nest. A twenty-two-line doubling chain nests twenty-two deep (legal) and makes two million calls (a fatal heap abort). Counted in `vm/AllocationBudget.ts`, because the tally has to survive `executeBytecode()` re-entering itself. Recoverable. */
+  FUNCTION_CALL_LIMIT_EXCEEDED: "FUNCTION_CALL_LIMIT_EXCEEDED",
+  /** A `<date> + N workdays` offset outside `date.maxOffsetYears`/`minOffsetYears`. Workdays are the one date offset that walks the calendar a day at a time, so the one whose cost is the offset; every other one moves a Date field once. Recoverable. */
+  DATE_OFFSET_LIMIT_EXCEEDED: "DATE_OFFSET_LIMIT_EXCEEDED",
+  /** A `<<`/`>>` with a bigint operand whose exact result would pass `MAX_EXACT_SHIFT_BITS`, in the spelling that has no meaningful inexact answer to fall back on (a plain number on the left, where JavaScript's 32-bit shift would silently answer 1). The same ceiling `^` has had all along; see `vm/VM.ts`'s `bigIntShift()`. Recoverable. */
+  BIGINT_SHIFT_LIMIT_EXCEEDED: "BIGINT_SHIFT_LIMIT_EXCEEDED",
+  /** An operand with no whole-number form (a fraction, an infinity, a NaN) meeting a bigint: `1n + 0.5`, `1n & 1.5`, `5n/pi`. `BigInt()` answers those with a raw RangeError, which the VM relabelled UNEXPECTED_ERROR, so a typo in the line was reported as an engine fault. Recoverable; see `vm/VMConversion.ts`'s `toBigIntOperand()`. */
+  BIGINT_INEXACT_OPERAND: "BIGINT_INEXACT_OPERAND",
+  /** `10n / 0n` and `10n mod 0n`. Deliberately NOT what `1 / 0` does, which is Infinity: a bigint division is exact integer division (`7n / 2n` is 3n), and integer division by zero has no answer, exactly as it has none in C, Java, Python or JavaScript's own BigInt. Previously V8's own RangeError, relabelled UNEXPECTED_ERROR. Recoverable; see `vm/VMConversion.ts`'s `bigIntDivisionByZero()`. */
+  BIGINT_DIVISION_BY_ZERO: "BIGINT_DIVISION_BY_ZERO",
   /** `DEFINE_USER_FUNCTION`'s body-index lookup failing, a compiler/VM invariant violation (the opcode stream referenced a `userFunctionBodies` slot that doesn't exist), never a user-input error. */
   INTERNAL_MISSING_FUNCTION_BODY: "INTERNAL_MISSING_FUNCTION_BODY",
   /** `MAP_INVOKE`/`REDUCE_INVOKE`'s anonymous-body-index lookup failing. Same class as `INTERNAL_MISSING_FUNCTION_BODY` above, for the `anonymousBodies` side-table instead of `userFunctionBodies`. */
   INTERNAL_MISSING_ANONYMOUS_BODY: "INTERNAL_MISSING_ANONYMOUS_BODY",
+
+  // ── Malformed bytecode on the public `./vm` surface (vm/VM.ts) ──
+  //
+  // `executeBytecode` is exported, so a bytecode program is caller input in
+  // the same sense an expression string is, and these five say so. They are
+  // VALIDATION rather than INTERNAL for exactly that reason: before they
+  // existed, every one of these cases reached a raw TypeError (`BigInt(undefined)`,
+  // `code.toUpperCase()` on a boolean, destructuring a program that was not
+  // there), which normalised to UNEXPECTED_ERROR and told the caller the
+  // engine was broken when their eleven bytes were. Reachable from ordinary
+  // source only through a compiler bug, which is why the messages name the
+  // opcode and the operand rather than the user's line.
+  /** An operand byte read past the end of the stream: the program ends in the middle of an instruction. */
+  MALFORMED_BYTECODE_TRUNCATED: "MALFORMED_BYTECODE_TRUNCATED",
+  /** A constant-pool operand indexing a `numbers`/`strings` entry that does not exist, or that is not of the pool's type. */
+  MALFORMED_BYTECODE_CONSTANT_INDEX: "MALFORMED_BYTECODE_CONSTANT_INDEX",
+  /** A unit or converter name read off the value stack that is not a string. Distinct from the pool case above: the operand is a Value another opcode pushed, not a pool entry. */
+  MALFORMED_BYTECODE_OPERAND_TYPE: "MALFORMED_BYTECODE_OPERAND_TYPE",
+  /** `MAP_INVOKE`/`REDUCE_INVOKE` carrying a body kind other than 0/1/2. Used to fall through every arm with no body and recurse into `executeBytecode(undefined)`. */
+  MALFORMED_BYTECODE_BODY_KIND: "MALFORMED_BYTECODE_BODY_KIND",
+  /** A `PUSH_BIGINT` pool entry that is not a whole number, e.g. `"1.000"`. `BigInt()` answers that with a raw SyntaxError. */
+  MALFORMED_BYTECODE_BIGINT_LITERAL: "MALFORMED_BYTECODE_BIGINT_LITERAL",
+  /** `executeBytecode()` called with something that is not a runnable program at all. Checked before the destructure that used to throw outside the function's own try/catch. */
+  MALFORMED_BYTECODE_PROGRAM: "MALFORMED_BYTECODE_PROGRAM",
 
   // ── Symbolic algebra (symbolic/, vm/SymbolicOps.ts) ──
   /** A coefficient grew past `RATIONAL_MAX_BITS`, e.g. repeated exact elimination multiplying denominators together. */
@@ -113,11 +155,15 @@ export const CoreErrorCodes = {
   // ── Engine (engine/ExpressionEngine.ts, engine/ExpressionEngineSafety.ts, engine/AsyncResolutionBatcher.ts) ──
   EXPRESSION_TOO_LONG: "EXPRESSION_TOO_LONG",
   EXPRESSION_TOO_COMPLEX: "EXPRESSION_TOO_COMPLEX",
+  /** A document with more lines than `performance.maxDocumentLines`. The per-line limits above bound what one line may ask for and say nothing about how many lines there are; two hundred thousand of `1 + 1` exhausted the heap on the line records alone. Recoverable. */
+  DOCUMENT_TOO_LARGE: "DOCUMENT_TOO_LARGE",
   NORMALIZED_TOKEN_LIMIT_EXCEEDED: "NORMALIZED_TOKEN_LIMIT_EXCEEDED",
   /** `"=>"` with nothing before it, needs an expression or variable name to solve/simplify. */
   THEREFORE_REQUIRES_EXPRESSION: "THEREFORE_REQUIRES_EXPRESSION",
   /** A `"=>"`-triggered expression called an async plugin (weather/stocks/currency). Same v1 scope restriction as user-function/map-reduce bodies. */
   THEREFORE_ASYNC_UNSUPPORTED: "THEREFORE_ASYNC_UNSUPPORTED",
+  /** Colon-separated numbers that are not a time any clock can show ("24:00", "9:60", "100:5"). Raised by the labeled-line fallback, which used to answer them with whatever stood after the colon. */
+  INVALID_TIME_LITERAL: "INVALID_TIME_LITERAL",
 
   // ── Config (constants/Configuration.ts) ──
   CONFIG_PATH_NOT_FOUND: "CONFIG_PATH_NOT_FOUND",

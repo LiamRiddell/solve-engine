@@ -33,15 +33,25 @@ export const ARITHMETIC_PACKAGE: IEnginePackage = {
     { tokenType: "STAR", parselet: new BinaryOpParselet(BindingPower.Product, OpCode.MUL) },
     { tokenType: "SLASH", parselet: new BinaryOpParselet(BindingPower.Product, OpCode.DIV) },
     { tokenType: "MOD", parselet: new BinaryOpParselet(BindingPower.Product, OpCode.MOD) },
-    { tokenType: "CARET", parselet: new BinaryOpParselet(BindingPower.Exponent, OpCode.EXP) },
+    // `^` is right-associative, so "2 ^ 3 ^ 2" is 2^(3^2) = 512. The Tier 1
+    // fast path in PrecedenceParser is what actually runs for `^`; this
+    // registration has to agree with it or the two tiers describe different
+    // languages.
+    { tokenType: "CARET", parselet: new BinaryOpParselet(BindingPower.Exponent, OpCode.EXP, true) },
     { tokenType: "TIMES_BY", parselet: new BinaryOpParselet(BindingPower.Product, OpCode.MUL) },
     { tokenType: "MULTIPLY_BY", parselet: new BinaryOpParselet(BindingPower.Product, OpCode.MUL) },
     { tokenType: "DIVIDE_BY", parselet: new BinaryOpParselet(BindingPower.Product, OpCode.DIV) },
-    { tokenType: "LSHIFT", parselet: new BinaryOpParselet(BindingPower.Sum, OpCode.LSHIFT) },
-    { tokenType: "RSHIFT", parselet: new BinaryOpParselet(BindingPower.Sum, OpCode.RSHIFT) },
-    { tokenType: "URSHIFT", parselet: new BinaryOpParselet(BindingPower.Sum, OpCode.URSHIFT) },
-    { tokenType: "BIT_AND", parselet: new BinaryOpParselet(BindingPower.Product, OpCode.BIT_AND) },
-    { tokenType: "BIT_OR", parselet: new BinaryOpParselet(BindingPower.Sum, OpCode.BIT_OR) },
+    // The shifts and the bitwise trio, at the levels BindingPower gives them
+    // and therefore at C and JavaScript precedence. These six are declared
+    // twice, here and in BUILTIN_INFIX_BP, and only the Tier 1 numbers are
+    // ever read, so the levels must be the SAME names in both places. When
+    // they were not, the four that had a fast-path entry ran at one level
+    // while `>>>`, which had none, ran at another.
+    { tokenType: "LSHIFT", parselet: new BinaryOpParselet(BindingPower.Shift, OpCode.LSHIFT) },
+    { tokenType: "RSHIFT", parselet: new BinaryOpParselet(BindingPower.Shift, OpCode.RSHIFT) },
+    { tokenType: "URSHIFT", parselet: new BinaryOpParselet(BindingPower.Shift, OpCode.URSHIFT) },
+    { tokenType: "BIT_AND", parselet: new BinaryOpParselet(BindingPower.BitwiseAnd, OpCode.BIT_AND) },
+    { tokenType: "BIT_OR", parselet: new BinaryOpParselet(BindingPower.BitwiseOr, OpCode.BIT_OR) },
     { tokenType: "BIT_XOR", parselet: new BinaryOpParselet(BindingPower.BitwiseXor, OpCode.BIT_XOR) },
   ],
   normalizerRules: [largeNumberSuffixNormalizerRule()],

@@ -28,25 +28,33 @@ function tokenize(input: string): Token[] {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("ExpressionLexer — string literals", () => {
+  // These four used to assert that `.value` KEPT its quote characters, which
+  // was the defect rather than the contract: the payload reached the Value
+  // with its delimiters attached, so `parseFloat` of `"5"` was NaN and
+  // `"5" + 5` answered 5. `.value` is now the payload and `.text` is still the
+  // raw source slice, which is what an underline needs.
   test("empty string", () => {
     const t = tokenize('""');
     expect(t).toHaveLength(1);
     expect(t[0].type).toBe("STRING");
-    expect(t[0].value).toBe('""');
+    expect(t[0].value).toBe("");
+    expect(t[0].text).toBe('""');
   });
 
   test("simple string", () => {
     const t = tokenize('"hello"');
     expect(t).toHaveLength(1);
     expect(t[0].type).toBe("STRING");
-    expect(t[0].value).toBe('"hello"');
+    expect(t[0].value).toBe("hello");
+    expect(t[0].text).toBe('"hello"');
   });
 
   test("string with spaces", () => {
     const t = tokenize('"hello world"');
     expect(t).toHaveLength(1);
     expect(t[0].type).toBe("STRING");
-    expect(t[0].value).toBe('"hello world"');
+    expect(t[0].value).toBe("hello world");
+    expect(t[0].text).toBe('"hello world"');
   });
 
   test("string with special characters", () => {
@@ -67,18 +75,19 @@ describe("ExpressionLexer — string literals", () => {
     expect(t[0].type).toBe("STRING");
   });
 
-  test("unterminated string still returns STRING", () => {
-    const t = tokenize('"unterminated');
-    expect(t).toHaveLength(1);
-    expect(t[0].type).toBe("STRING");
-    expect(t[0].value).toBe('"unterminated');
+  test("an unterminated string is an error, not a string", () => {
+    // This used to assert the opposite: the tokenizer ran off the end of the
+    // input and returned what it had, so `"unterminated` produced an ordinary
+    // STRING and nothing downstream could tell it from a closed one.
+    expect(() => tokenize('"unterminated')).toThrow(/[Uu]nterminated string/);
   });
 
   test("string with numbers inside", () => {
     const t = tokenize('"12345"');
     expect(t).toHaveLength(1);
     expect(t[0].type).toBe("STRING");
-    expect(t[0].value).toBe('"12345"');
+    expect(t[0].value).toBe("12345");
+    expect(t[0].text).toBe('"12345"');
   });
 
   test("string in expression context", () => {

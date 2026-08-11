@@ -1,0 +1,28 @@
+{
+	"id": "269772a0",
+	"seed": 3001358,
+	"generator": "bytecode",
+	"outcome": "internal",
+	"detail": "raw exception normalised to UNEXPECTED_ERROR: Cannot read properties of undefined (reading 'toUpperCase')",
+	"found": "2026-08-10",
+	"shrinkSteps": 1,
+	"input": {
+		"kind": "bytecode",
+		"program": {
+			"opcodes": [
+				10,
+				0,
+				13,
+				0,
+				13,
+				1,
+				81
+			],
+			"numbers": [],
+			"strings": []
+		},
+		"origin": "5 USD to EUR"
+	},
+	"status": "fixed",
+	"note": "uom/Iso4217.ts's isIso4217 does code.toUpperCase() with no guard, and its callers reach it with undefined. From the ./vm surface that is a string-table index out of range. From ORDINARY SOURCE it is the OperandWidth desync (see the expression-throw entry), and in that path it runs inside preflight, outside executeBytecode()'s try/catch, so the raw TypeError escapes evaluateExpression() to the host. FIXED: the PUSH_NUMBER/PUSH_STRING constant-pool operands are bounds-checked in vm/VM.ts, so an empty pool is refused with MALFORMED_BYTECODE_CONSTANT_INDEX before an undefined currency code can reach isIso4217. The ordinary-source path into the same isIso4217 call was the OperandWidth DATE_LITERAL desync, fixed separately (see expression-throw-07ce250e)."
+}

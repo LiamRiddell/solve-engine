@@ -1,0 +1,15 @@
+{
+	"id": "cfd7dc81",
+	"seed": 522760019,
+	"generator": "expression",
+	"outcome": "hang",
+	"detail": "hang during expression soak",
+	"found": "2026-08-11",
+	"shrinkSteps": 0,
+	"input": {
+		"kind": "expression",
+		"source": "gcd(4, arccos(2))"
+	},
+	"status": "fixed",
+	"note": "Found by the post-fix soak, and reduced by hand rather than by the shrinker: the soak did not save it, because its signature is the generic \"hang during expression soak\" string that the already-recorded hang entry also carries, and the runner skips a signature the corpus already knows. The generated case was 198 characters; compiling it took 4.6ms and executing it never finished. gcd and lcm each ran their own copy of the Euclidean algorithm, `while (b !== 0) { [a, b] = [b, a % b] }`, which terminates only because the remainder shrinks to zero. NaN never does (NaN !== 0 is true and NaN % x is NaN) and an infinity becomes a NaN on the first step, so gcd(4, arccos(2)) spun forever inside ONE opcode. No ceiling in the engine can see that: maxInstructions is checked between instructions and the allocation budget counts allocations, and this loop makes neither, so the host froze uninterruptibly on nine characters. FIXED in vm/VMBuiltins.ts: both operands are checked for finiteness before the loop and refused with an INVALID_INTEGER_OPERAND Value, and the two hand-copied loops are now one shared euclidGcd(). Pinned by __tests__/hardening/DenialOfServiceUnboundedWork.spec.ts."
+}

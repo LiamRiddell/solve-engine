@@ -1,0 +1,28 @@
+{
+	"id": "fff24865",
+	"seed": 3000118,
+	"generator": "bytecode",
+	"outcome": "internal",
+	"detail": "raw exception normalised to UNEXPECTED_ERROR: code.toUpperCase is not a function",
+	"found": "2026-08-10",
+	"shrinkSteps": 4,
+	"input": {
+		"kind": "bytecode",
+		"program": {
+			"opcodes": [
+				13,
+				0,
+				14,
+				119,
+				13,
+				1,
+				81
+			],
+			"numbers": [],
+			"strings": []
+		},
+		"origin": "5 USD to EUR"
+	},
+	"status": "fixed",
+	"note": "Same isIso4217 call as above, reached with a non-string rather than with undefined. uom/Iso4217.ts. FIXED: PUSH_STRING bounds-checks its constant-pool operand, and UOM_CONVERT_TO reads both unit names through stringOperand(), so isIso4217 can no longer be reached with a non-string."
+}

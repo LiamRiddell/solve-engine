@@ -48,6 +48,123 @@ const OUTPUT_PATH = path.join(
 
 const checkOnly = process.argv.includes("--check");
 
+/**
+ * Ratios where `convert` is wrong, corrected on the way through.
+ *
+ * The generated file is a verbatim mirror by design, so an entry here is a
+ * claim that UPSTREAM IS IN ERROR, not that this project prefers a different
+ * number. Rounding choices, calendar simplifications and non-derivable
+ * constants are upstream's to make and are mirrored unchanged; only an
+ * arithmetic mistake belongs in this list.
+ *
+ * Each entry records the value `convert` currently ships. Applying it asserts
+ * that value is still there, so upgrading `convert` past a fix fails the
+ * generator loudly and the correction gets DELETED rather than silently
+ * re-applied over a value that is already right.
+ */
+const UPSTREAM_UNIT_CORRECTIONS = [
+	{
+		units: [
+			"square decimeter",
+			"square decimetre",
+			"square decimeters",
+			"square decimetres",
+			"dm²",
+			"dm2",
+		],
+		upstream: 0.1,
+		corrected: 0.01,
+		why:
+			"A decimetre is a tenth of a metre and a tenth squared is a hundredth, so a " +
+			"square decimetre is 0.01 square metres. Upstream records 0.1, which makes it " +
+			"ten times too large and every conversion through it out by a factor of ten. " +
+			"Every other metric prefix in the same table squares its length correctly and " +
+			"the cubic decimetre is right at 0.001, so this is one mistyped ratio rather " +
+			"than a different convention about what a decimetre is.",
+	},
+];
+
+/**
+ * Best-unit lists where `convert` is wrong, corrected on the way through.
+ *
+ * Same standard as the ratio corrections above: upstream's choice of which
+ * units to offer is upstream's to make, and only a list that the selection
+ * algorithm cannot walk belongs here.
+ */
+const UPSTREAM_BEST_UNIT_CORRECTIONS = [
+	{
+		kind: 6,
+		upstream: [["lux", 1], ["µlx", 0.000001], ["nlx", 1e-9], ["klx", 1000]],
+		corrected: [["lux", 1], ["klx", 1000]],
+		why:
+			"convertToBestMetric walks the list forwards and keeps the last entry whose " +
+			"threshold the magnitude reaches, so a list that descends does not merely " +
+			"pick a poor unit, it runs off the end of the sensible ones: every value at " +
+			"or above one lux walked past lux and µlx and settled on NANOLUX, and a lit " +
+			"office read as 500,000,000,000 nlx.\n\n" +
+			"The two sub-lux entries are dropped rather than moved to the front, because " +
+			"the thresholds are expressed in the list's FIRST unit and would have to be " +
+			"restated in nanolux if nanolux led the list. Restating them does not " +
+			"survive: the algorithm reaches lux by converting the magnitude into the " +
+			"leading unit, and one lux in nanolux is 999999999.9999999 rather than 1e9, " +
+			"one ulp below its own threshold, so a plain 1 lux would report as 1000 µlx. " +
+			"Nothing is lost by dropping them either, because with lux leading the list " +
+			"the two were already unreachable: a magnitude under one lux breaks out at " +
+			"the first entry, and a magnitude over it clears both thresholds on the way " +
+			"past.",
+	},
+];
+
+/**
+ * Applies the corrections above to the freshly imported upstream tables.
+ *
+ * Mutates the imported objects rather than patching the emitted text, so the
+ * self-check below still verifies that every number written out parses back to
+ * the number it was generated from.
+ *
+ * @returns the set of unit spellings that were corrected, so the emitter can
+ * mark them in the output.
+ */
+function applyUpstreamCorrections(unitsObject, bestUnits) {
+	const correctedUnits = new Map();
+	for (const { units, upstream, corrected } of UPSTREAM_UNIT_CORRECTIONS) {
+		for (const unit of units) {
+			const entry = unitsObject[unit];
+			if (entry === undefined) {
+				throw new Error(
+					`Correction for ${JSON.stringify(unit)} no longer applies: convert has no such unit. ` +
+						`Delete it from UPSTREAM_UNIT_CORRECTIONS or repoint it.`
+				);
+			}
+			if (!Object.is(entry[1], upstream)) {
+				throw new Error(
+					`Correction for ${JSON.stringify(unit)} no longer applies: convert now ships ` +
+						`${entry[1]}, not the ${upstream} this correction was written against. ` +
+						`If upstream fixed it, delete the correction.`
+				);
+			}
+			unitsObject[unit] = [entry[0], corrected];
+			correctedUnits.set(unit, upstream);
+		}
+	}
+
+	const correctedKinds = new Map();
+	for (const { kind, upstream, corrected } of UPSTREAM_BEST_UNIT_CORRECTIONS) {
+		const entries = bestUnits[0][kind];
+		if (JSON.stringify(entries) !== JSON.stringify(upstream)) {
+			throw new Error(
+				`Best-unit correction for kind ${kind} no longer applies: convert now ships ` +
+					`${JSON.stringify(entries)}, not ${JSON.stringify(upstream)}. ` +
+					`If upstream fixed it, delete the correction.`
+			);
+		}
+		bestUnits[0][kind] = corrected;
+		correctedKinds.set(kind, upstream);
+	}
+
+	return { correctedUnits, correctedKinds };
+}
+
 /** Imports one of `convert`'s internal generated modules by file path. */
 async function importConvertModule(relativePath) {
 	const absolute = path.join(CONVERT_ROOT, relativePath);
@@ -106,6 +223,8 @@ async function main() {
 		}
 	}
 
+	const { correctedUnits, correctedKinds } = applyUpstreamCorrections(unitsObject, bestUnits);
+
 	const readback = { units: {}, differences: {}, best: {}, symbols: {} };
 	const lines = [];
 
@@ -119,6 +238,11 @@ async function main() {
  * dependencies. See scripts/generate-unit-table.mjs for why the tables are
  * mirrored verbatim rather than hand-authored or recomputed from SI
  * definitions, and THIRD-PARTY-NOTICES.md for the upstream licence.
+ *
+ * Mirrored verbatim EXCEPT where upstream is arithmetically wrong. Those few
+ * entries are marked "corrected" below and each one is justified in
+ * UPSTREAM_UNIT_CORRECTIONS / UPSTREAM_BEST_UNIT_CORRECTIONS in the generator.
+ * They are corrections of an upstream error, never a local preference.
  *
  * Upstream: https://github.com/citycide/convert (MIT, Copyright (c) Jonah Snider)
  */
@@ -149,7 +273,10 @@ export const UNIT_TABLE: Readonly<Record<string, UnitEntry>> = {`);
 		for (const [unit, ratio] of byKind.get(kind)) {
 			const text = emitNumber(ratio);
 			readback.units[unit] = [kind, Number(text)];
-			lines.push(`  ${emitKey(unit)}: [${kind}, ${text}],`);
+			const note = correctedUnits.has(unit)
+				? ` // corrected, upstream says ${emitNumber(correctedUnits.get(unit))}`
+				: "";
+			lines.push(`  ${emitKey(unit)}: [${kind}, ${text}],${note}`);
 		}
 	}
 	lines.push("};\n");
@@ -170,9 +297,15 @@ export const UNIT_DIFFERENCES: Readonly<Record<string, number>> = {`);
 	// ── BEST_UNITS_METRIC ──
 	lines.push(`/**
  * Ordered \`[symbol, threshold]\` pairs per measure kind, used to pick the most
- * readable unit for a magnitude. Thresholds are expressed in the list's
- * SMALLEST unit, and the last entry whose threshold the absolute value reaches
- * wins.
+ * readable unit for a magnitude. Thresholds are expressed in the list's FIRST
+ * unit, which is therefore also its smallest, and the last entry whose
+ * threshold the absolute value reaches wins.
+ *
+ * The two properties are load-bearing together: \`convertToBestMetric\` converts
+ * the magnitude into the first unit and then walks forwards, breaking at the
+ * first threshold it does not reach. A list that does not ascend runs off the
+ * end of the sensible units rather than merely picking a poor one, and moving a
+ * different unit to the front silently changes what every threshold means.
  *
  * Metric only. The imperial lists exist upstream but nothing here has ever
  * requested them, so they are not ported.
@@ -185,7 +318,8 @@ export const BEST_UNITS_METRIC: Readonly<
 		const pairs = entries
 			.map(([symbol, threshold]) => `[${emitKey(symbol)}, ${emitNumber(threshold)}]`)
 			.join(", ");
-		lines.push(`  ${kind}: [${pairs}], // ${kindNames.get(kind)}`);
+		const note = correctedKinds.has(kind) ? ", corrected" : "";
+		lines.push(`  ${kind}: [${pairs}], // ${kindNames.get(kind)}${note}`);
 	});
 	lines.push("};\n");
 

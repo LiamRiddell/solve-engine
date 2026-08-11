@@ -65,7 +65,20 @@ export class VideoTimecodeParselet implements PrefixParselet {
     parser.consume();
     const fps = parseFloat(fpsToken.value);
 
-    const fpsWhole = Math.floor(fps);
+    // Frames per timecode SECOND, which is the rounded frame rate rather
+    // than the exact one: non-drop-frame timecode at 29.97 fps still
+    // labels thirty frames per second (that mismatch with wall-clock time
+    // is the whole reason drop-frame notation exists). This is the same
+    // bucketing `framesToTimecodeString()` uses to go the other way, and
+    // the two directions have to agree or a timecode does not survive a
+    // round trip.
+    //
+    // Flooring instead, which is what this did, was wrong twice over at a
+    // fractional rate: it rejected frame 29 at 29.97 fps as out of range
+    // when 0-29 is exactly the valid set, and multiplying the elapsed
+    // seconds by the raw 29.97 made "01:00:00:00 at 29.97 fps" come back
+    // out as "00:59:56:12".
+    const fpsWhole = Math.round(fps);
     if (frames >= fpsWhole) {
       throw ErrorFactory.parsing(
         "TIMECODE_FRAME_OUT_OF_RANGE",
@@ -73,7 +86,7 @@ export class VideoTimecodeParselet implements PrefixParselet {
       );
     }
 
-    const totalFrames = Math.round((hours * 3600 + minutes * 60 + seconds) * fps) + frames;
+    const totalFrames = (hours * 3600 + minutes * 60 + seconds) * fpsWhole + frames;
 
     // Optional trailing "in frames", query the total frame count directly
     // rather than tagging the result with its fps context.

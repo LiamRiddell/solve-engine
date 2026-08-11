@@ -11,10 +11,14 @@
  * fail to parse, because the lexer sees an identifier and stops. Some
  * single-word entries fail too, `turn` among them.
  *
- * Worse than failing is nearly working. `1 fl oz` parses, but as `1 fl` applied
- * to a unit `oz`, so it evaluates to one fluid-ounce-shaped lie: `1.00 oz`.
- * `1 oz t` does the same and lands on tonnes, a factor of thirty thousand out.
- * A generated page that listed those as supported would be worse than no page.
+ * Worse than failing is nearly working. `1 fl oz` used to parse, but as `1 fl`
+ * applied to a unit `oz`, so it evaluated to one fluid-ounce-shaped lie:
+ * `1.00 oz`. `1 oz t` did the same and landed on tonnes, a factor of thirty
+ * thousand out. A generated page that listed those as supported would have been
+ * worse than no page. Both work now, because `uom:multi-word-unit` fuses a pair
+ * of unit tokens the table spells with a space between them, and the predicate
+ * below is what proves it: they are on the page because they came back carrying
+ * themselves, not because anyone decided they ought to.
  *
  * So every spelling is put through a real engine and kept only if it comes back
  * carrying itself as its unit. That predicate rejects all four cases above:

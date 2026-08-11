@@ -46,14 +46,13 @@ const ISO8601_PATTERN =
  *   parse to a valid instant.
  */
 export function parseIso8601(s: string): number | null {
-  // A `ValueType.String` Value's `.value` in this engine retains its
-  // original surrounding double-quotes (STRING tokens carry their raw
-  // source text, quotes included. See lexer/ExpressionLexer.ts's
-  // tokenizeString(), and OpCode.PUSH_STRING, which pushes that raw text
-  // verbatim with no separate un-quoting step anywhere in the VM). Strip a
-  // single matching pair before pattern-matching, so `"2019-04-01..." to
-  // date` (a real quoted string literal in the expression) works the same
-  // as a caller that already passes an unquoted string.
+  // A `ValueType.String` Value's `.value` used to retain its original
+  // surrounding double-quotes, because `tokenizeString()` set the token's
+  // value to the raw source slice and `OpCode.PUSH_STRING` pushed that
+  // verbatim. It no longer does: the token's `value` is the payload and its
+  // `text` is the quoted slice. The strip below stays because this function
+  // is also reachable with text that came from somewhere other than a
+  // literal, and stripping a pair that is not there is a no-op.
   let trimmed = s.trim();
   if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
     trimmed = trimmed.slice(1, -1);
