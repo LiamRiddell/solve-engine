@@ -22,6 +22,22 @@
  * Nothing here depends on a live exchange rate. A pair that reaches the
  * resolver returns Pending, which is the observable evidence that it got that
  * far, and is what the ISO spec asserts too.
+ *
+ * ## One assertion per `test.failing`
+ * A `test.failing` passes when its body throws, so only the FIRST assertion to
+ * fail is ever reached and the rest of the body never runs. Several assertions
+ * in one of them therefore hide each other: an assertion before the failing one
+ * can go from failing to PASSING, which means the behaviour it describes
+ * changed, and the run stays green because the test still fails further down.
+ *
+ * That is not hypothetical here. The rate-conversion cases below asserted the
+ * result type and then its number, and when `60 km/h in m/s` stopped being an
+ * error and started answering `0.00 /s` (a number in a unit with no numerator,
+ * from a conversion that had silently failed), the type assertion began passing
+ * and this suite reported nothing at all. A differential run against the last
+ * published build is what found it. Every `test.failing` in this file now makes
+ * exactly one assertion, so any one of them starting to pass is reported as a
+ * failure by Jest, which is the whole point of writing them this way.
  */
 
 import { describe, expect, test } from "@jest/globals";
@@ -143,16 +159,30 @@ describe("a code the lexer knows but the exchange does not", () => {
 });
 
 describe("a code the exchange knows but the lexer does not", () => {
-	test.failing("works as a source as well as a target", () => {
-		// BUG. `$100 in AFN` reaches the resolver, but `100 AFN in USD` fails at
-		// tokenization with "Undefined variable: AFN". The same code is money in
-		// one position and a typo in the other. Thirty-five active codes are in
-		// this state, including GHS, VES, PEN, IQD, KGS and BSD.
-		for (const code of ["AFN", "GHS", "VES", "PEN", "BSD"]) {
+	// BUG. `$100 in AFN` reaches the resolver, but `100 AFN in USD` fails at
+	// tokenization with "Undefined variable: AFN". The same code is money in
+	// one position and a typo in the other. Thirty-five active codes are in
+	// this state, including GHS, VES, PEN, IQD, KGS and BSD.
+	//
+	// One case per code, and the premise asserted separately below, for the
+	// reason in this file's header: a loop inside a single `test.failing` stops
+	// at the first code that fails, so the other four could each start working
+	// or start failing differently with nothing to show for it.
+	const EXCHANGE_ONLY_CODES = ["AFN", "GHS", "VES", "PEN", "BSD"];
+
+	test("the exchange really does consider all five of these money", () => {
+		// The premise of the five cases below. It passes today, which is exactly
+		// why it cannot live inside them.
+		for (const code of EXCHANGE_ONLY_CODES) {
 			expect(sharedCurrencyExchange.isCurrency(code)).toBe(true);
-			expect(throwsOnEvaluation(`100 ${code} in USD`)).toBe(false);
 		}
 	});
+
+	for (const code of EXCHANGE_ONLY_CODES) {
+		test.failing(`works as a source as well as a target: ${code}`, () => {
+			expect(throwsOnEvaluation(`100 ${code} in USD`)).toBe(false);
+		});
+	}
 
 	test("the target direction really does work today, which is what makes it asymmetric", () => {
 		expect(evaluate("$100 in AFN").type).toBe(ValueType.Pending);
@@ -243,35 +273,59 @@ describe("rate arithmetic", () => {
 });
 
 describe("rate conversion", () => {
+	/*
+	 * BUG, one cause, six cases. Converting a rate is not implemented: the
+	 * parser reads the target as a second denominator and the VM reports
+	 * "USD/hour/day: that is already a rate". A hundred an hour is twenty-four
+	 * hundred a day, and `unifyRatePeriods` in vm/VM.ts already computes exactly
+	 * this ratio for the `+` case, so the capability exists and conversion does
+	 * not use it.
+	 *
+	 * THIS IS THE BLOCK THAT HID A REGRESSION, and the reason every case below
+	 * asserts exactly one thing. It used to assert the type and then the number
+	 * inside one `test.failing` each. When the failure mode changed from a
+	 * visible error to `0.00 /s` (a conversion that failed, read as zero by the
+	 * conversion after it, and dressed in the unit the reader asked for), the
+	 * type assertion went from failing to passing while the number went on
+	 * failing, so the test went on "failing correctly" and the run stayed green
+	 * through a change that made the engine strictly worse. See this file's
+	 * header, and `DifferentialRegressions.spec.ts` for the run that caught it.
+	 *
+	 * Split this way, the type assertion passing IS a reported failure, which is
+	 * what a `test.failing` is for.
+	 */
+
 	test.failing("changes the period", () => {
-		// BUG. Converting a rate is not implemented: the parser reads the target
-		// as a second denominator and the VM reports "USD/hour/day: that is
-		// already a rate". A hundred an hour is twenty-four hundred a day, and
-		// `unifyRatePeriods` in vm/VM.ts already computes exactly this ratio for
-		// the `+` case, so the capability exists and conversion does not use it.
-		const perDay = evaluate("$100/hour in $/day");
-		expect(perDay.type).toBe(ValueType.Uom);
-		expect(perDay.toNumber()).toBeCloseTo(2400, 6);
+		expect(evaluate("$100/hour in $/day").toNumber()).toBeCloseTo(2400, 6);
+	});
+
+	test.failing("and answers in a unit rather than an error", () => {
+		expect(evaluate("$100/hour in $/day").type).toBe(ValueType.Uom);
 	});
 
 	test.failing("and the denominator, for a non-money rate", () => {
-		// BUG, same cause. Sixty kilometres an hour is 16.67 metres a second.
-		const perSecond = evaluate("60 km/h in m/s");
-		expect(perSecond.type).toBe(ValueType.Uom);
-		expect(perSecond.toNumber()).toBeCloseTo(60_000 / 3600, 6);
+		// Sixty kilometres an hour is 16.67 metres a second.
+		expect(evaluate("60 km/h in m/s").toNumber()).toBeCloseTo(60_000 / 3600, 6);
+	});
+
+	test.failing("which is likewise a unit rather than an error", () => {
+		expect(evaluate("60 km/h in m/s").type).toBe(ValueType.Uom);
 	});
 
 	test.failing("and does not silently do nothing when the target is a speed unit", () => {
-		// BUG, still. It used to be the worst of the three because it was silent:
-		// `60 km/h to mph` reported "60.00 km/h", the target dropped and the input
-		// handed back. That half is fixed, since the cross-measure branch of
-		// UOM_CONVERT_TO now reports INCOMPATIBLE_UNITS rather than pushing its
-		// input back, so the failure is at least visible. The conversion itself is
-		// still not implemented. Sixty kilometres an hour is 37.28 mph, which the
-		// engine computes correctly when the source is spelled `kph`.
-		const inMph = evaluate("60 km/h to mph");
-		expect(inMph.unit).toBe("mph");
-		expect(inMph.toNumber()).toBeCloseTo(37.28227153, 6);
+		// This one used to be the worst of the three because it was silent:
+		// `60 km/h to mph` reported "60.00 km/h", the target dropped and the
+		// input handed back. That half is fixed, since the cross-measure branch
+		// of UOM_CONVERT_TO now reports INCOMPATIBLE_UNITS rather than pushing
+		// its input back, so the failure is at least visible. The conversion
+		// itself is still not implemented. Sixty kilometres an hour is 37.28
+		// mph, which the engine computes correctly when the source is spelled
+		// `kph`.
+		expect(evaluate("60 km/h to mph").toNumber()).toBeCloseTo(37.28227153, 6);
+	});
+
+	test.failing("and keeps the unit that was asked for", () => {
+		expect(evaluate("60 km/h to mph").unit).toBe("mph");
 	});
 
 	test("the extended speed units convert between themselves correctly", () => {

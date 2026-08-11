@@ -420,10 +420,15 @@ export class ConfigManager {
   }
 
   /**
-   * Get complete configuration
+   * Get complete configuration.
+   *
+   * A detached copy, section objects included. A top-level spread would hand
+   * the caller this manager's own section objects, so `getConfig().vm.x = 1`
+   * would be an undeclared back door into {@link set}, bypassing its path
+   * validation and reaching every later {@link get}.
    */
   getConfig(): EngineConfig {
-    return { ...this.config };
+    return mergeEngineConfig(this.config, {});
   }
 
   /**
@@ -434,10 +439,19 @@ export class ConfigManager {
   }
 
   /**
-   * Reset to default configuration
+   * Reset to default configuration.
+   *
+   * Goes through {@link mergeEngineConfig} for the same reason the constructor
+   * does. A top-level `{ ...DEFAULT_CONFIG }` copies the six section
+   * references, not the sections, so after a reset this manager's
+   * `performance` object WAS `DEFAULT_CONFIG.performance` and the next
+   * `set('performance.x', ...)` wrote into the module constant. That constant
+   * is what every `ExpressionEngine` is built from, so one manager's reset
+   * could change the cache size, instruction ceiling or allocation budget of
+   * every engine constructed later in the process.
    */
   reset(): void {
-    this.config = { ...DEFAULT_CONFIG };
+    this.config = mergeEngineConfig(DEFAULT_CONFIG, {});
   }
 
   /**

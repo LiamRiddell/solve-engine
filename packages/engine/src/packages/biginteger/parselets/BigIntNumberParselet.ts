@@ -17,7 +17,10 @@ export class BigIntNumberParselet implements PrefixParselet {
     // Store as string to preserve arbitrary precision (exceeds Float64).
     // The digits come from the same helper the Tier-1 switch in
     // parser/PrecedenceParser.ts uses, so the two tiers cannot read a literal
-    // differently, which is what makes `1.000n` behave the same either way.
+    // differently. `1.000n` is what that buys: whichever tier parses it, a
+    // dot-decimal locale refuses it with the same INVALID_NUMBER_LITERAL and a
+    // dot-grouping locale like de reads it as 1000n. Neither tier guesses on
+    // its own.
     builder.emitOpcode(OpCode.PUSH_BIGINT);
     builder.emitString(bigIntLiteralDigits(token.value, parser.getLocaleCode()));
   }

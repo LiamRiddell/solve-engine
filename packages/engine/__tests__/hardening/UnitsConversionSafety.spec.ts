@@ -107,20 +107,30 @@ describe("a negative quantity on an offset scale", () => {
 		expect(convertUnit(-40, "K", "C")).toBeCloseTo(-313.15, 9);
 	});
 
-	test.failing("survives being written with a minus sign in front of it", () => {
-		// BUG. The unary minus binds looser than the conversion, so the engine
-		// evaluates -(40 C in F) and reports minus a hundred and four. The sign is
-		// applied to the converted number instead of to the input.
-		//
-		// Invisible on every ratio-only measure, because negating before or after
-		// a multiplication is the same thing. Only the offset scales expose it,
-		// and on those it is not a rounding difference: `-40 K in C` comes back
-		// positive.
-		expect(evaluate("-40 C in F").toNumber()).toBeCloseTo(-40, 6);
-		expect(evaluate("-10 C in F").toNumber()).toBeCloseTo(14, 6);
-		expect(evaluate("-273.15 C in K").toNumber()).toBeCloseTo(0, 6);
-		expect(evaluate("-40 K in C").toNumber()).toBeCloseTo(-313.15, 6);
-	});
+	// BUG. The unary minus binds looser than the conversion, so the engine
+	// evaluates -(40 C in F) and reports minus a hundred and four. The sign is
+	// applied to the converted number instead of to the input.
+	//
+	// Invisible on every ratio-only measure, because negating before or after
+	// a multiplication is the same thing. Only the offset scales expose it,
+	// and on those it is not a rounding difference: `-40 K in C` comes back
+	// positive.
+	//
+	// One assertion per case, because a `test.failing` stops at its first
+	// failing assertion and the ones after it never run: any of these four
+	// starting to answer differently, right or wrong, would otherwise be
+	// invisible. `UnitsCurrencyAndRates.spec.ts`'s header has the full account
+	// of the regression that shape hid.
+	for (const [source, expected] of [
+		["-40 C in F", -40],
+		["-10 C in F", 14],
+		["-273.15 C in K", 0],
+		["-40 K in C", -313.15],
+	] as const) {
+		test.failing(`survives being written with a minus sign in front of it: ${source}`, () => {
+			expect(evaluate(source).toNumber()).toBeCloseTo(expected, 6);
+		});
+	}
 
 	test.failing("and written with the words rather than the symbols", () => {
 		// BUG, same cause. Worth its own case because the word forms take a
@@ -219,26 +229,53 @@ describe("comparing two quantities", () => {
 });
 
 describe("multiplying two quantities together", () => {
+	/*
+	 * BUG, one cause, five cases. `binaryOp` unifies the two operands into a
+	 * common unit and applies the operator to the magnitudes, so the unit comes
+	 * out unchanged: ten metres by ten metres is reported as a hundred metres,
+	 * and two by three by four metres as twenty-four metres. An area is not a
+	 * length.
+	 *
+	 * The counterpart division is right, which is the reason to expect better
+	 * here: `10 m / 5 m` correctly returns a bare 2.
+	 *
+	 * One assertion each, for the reason given in `UnitsCurrencyAndRates.spec.ts`'s
+	 * header: the measure and the magnitude are two separate claims, and a
+	 * `test.failing` that asserts both reports only whichever fails first.
+	 *
+	 * Splitting them showed that immediately. The type assertion below was the
+	 * first line of the `test.failing` this block used to be, and it PASSES: the
+	 * product is a quantity, it is just the wrong quantity. So it was never
+	 * describing the bug at all, and its only effect inside that test was to
+	 * mask the two assertions after it if either of those ever changed.
+	 */
+
+	test("of the same measure does produce a quantity, whatever it says it is", () => {
+		// The premise of the two cases below rather than a claim about the bug,
+		// and it holds both today and after a fix.
+		expect(evaluate("10 m * 10 m").type).toBe(ValueType.Uom);
+	});
+
 	test.failing("of the same measure raises the dimension", () => {
-		// BUG. `binaryOp` unifies the two operands into a common unit and applies
-		// the operator to the magnitudes, so the unit comes out unchanged: ten
-		// metres by ten metres is reported as a hundred metres, and two by three
-		// by four metres as twenty-four metres. An area is not a length.
-		//
-		// The counterpart division is right, which is the reason to expect better
-		// here: `10 m / 5 m` correctly returns a bare 2.
 		const area = evaluate("10 m * 10 m");
-		expect(area.type).toBe(ValueType.Uom);
 		expect(getMeasure(area.unit!)).toBe("area");
+	});
+
+	test.failing("and the area it names is the right one", () => {
+		const area = evaluate("10 m * 10 m");
 		expect(convertUnit(area.toNumber(), area.unit!, "m2")).toBeCloseTo(100, 9);
 	});
 
 	test.failing("even when the two are written in different prefixes", () => {
-		// BUG, same cause, and the more alarming shape: the answer is not merely
-		// mislabelled, it is the product of a metre count and a metre count with
-		// one of them silently rescaled.
+		// The more alarming shape: the answer is not merely mislabelled, it is
+		// the product of a metre count and a centimetre count with one of them
+		// silently rescaled.
 		const area = evaluate("10 m * 3 cm");
 		expect(getMeasure(area.unit!)).toBe("area");
+	});
+
+	test.failing("and that one names the right area too", () => {
+		const area = evaluate("10 m * 3 cm");
 		expect(convertUnit(area.toNumber(), area.unit!, "m2")).toBeCloseTo(0.3, 9);
 	});
 

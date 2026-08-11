@@ -176,8 +176,19 @@ export function buildBindingPowerTable(): Uint8Array {
 }
 
 /**
- * Invalidate the cached BP table, call when plugins register new token types
- * that should participate in the built-in fast path.
+ * Drop the cached table, so the next {@link buildBindingPowerTable} call builds
+ * a fresh one sized to the token types registered by then.
+ *
+ * It does NOT add a plugin's operator to the Tier 1 fast path, which is what
+ * this comment used to promise. The values in the table come from
+ * `BUILTIN_INFIX_BP`, which is module-private and has no registration path, so
+ * a rebuilt table holds the same binding powers and a plugin token still reads
+ * 0. `PrecedenceParser.BP_TABLE` is a static initialized once at class
+ * definition time and never re-read, so it would not see a rebuild anyway.
+ *
+ * A plugin's infix operator takes the Tier 2 parselet-registry route instead,
+ * which is where an operator whose binding power the engine does not already
+ * know is meant to live.
  */
 export function invalidateBindingPowerTable(): void {
   _bpTable = null;

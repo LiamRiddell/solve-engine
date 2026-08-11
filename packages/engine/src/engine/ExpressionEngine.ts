@@ -184,6 +184,7 @@ export class ExpressionEngine {
         tokenCategories: string[];
         lexerVocabulary: LexerVocabulary | undefined;
         asConverterNames: string[];
+        normalizerRuleNames: string[];
     }>();
 
     /**
@@ -525,6 +526,15 @@ export class ExpressionEngine {
         // previously that method existed and worked correctly but was never
         // called from here, leaving a package's lexer contribution live
         // after "unregistering" it. tokenCategories is tracked the same way.
+        //
+        // normalizerRuleNames is tracked even though the normalizer is
+        // per-engine, because unlike phrases these do NOT die with the engine
+        // in any useful sense: a phrase goes into a text-keyed trie and
+        // registering it twice is idempotent, whereas a rule is pushed onto an
+        // array, so a host re-registering a package on every settings change
+        // accumulated one more copy of every rule each time and the normalizer
+        // tried all of them at every token position for the rest of the
+        // engine's life.
         const contribution = {
             pluginFunctionIndices: [] as number[],
             variableSources: [] as import("@solve-js/variables/IVariableSource").IVariableSource[],
@@ -532,6 +542,7 @@ export class ExpressionEngine {
             tokenCategories: [] as string[],
             lexerVocabulary: pkg.lexerVocabulary,
             asConverterNames: [] as string[],
+            normalizerRuleNames: [] as string[],
         };
 
         // Only lexerVocabulary can throw here (built-in keyword/operator/unit
@@ -584,6 +595,7 @@ export class ExpressionEngine {
         if (pkg.normalizerRules) {
             for (const rule of pkg.normalizerRules) {
                 this.normalizer.register(rule);
+                contribution.normalizerRuleNames.push(rule.name);
             }
         }
         if (pkg.tokenCategories) {
@@ -624,9 +636,17 @@ export class ExpressionEngine {
      * own contract). This engine-instance-local registration is reversed
      * here too, even though it isn't a "shared" registry, so a package's
      * lexer and highlighting contributions clean up together rather than
-     * only half-reversing on unregister. Per-engine parselets/phrases are
-     * still left in place: they live in this engine's isolated registries
-     * and are discarded with the engine instance.
+     * only half-reversing on unregister. Normalizer rules are reversed here
+     * for the same reason: they are per-engine, but they live in an ARRAY the
+     * normalizer walks at every token position, so re-registering a package
+     * appended a second copy of every rule and lexing got slower with every
+     * register/unregister cycle.
+     *
+     * Per-engine parselets and phrases are still left in place: a parselet
+     * lives in this engine's isolated registry and a phrase goes into a
+     * text-keyed trie where registering the same phrase twice is the same as
+     * registering it once, so neither accumulates and both are discarded with
+     * the engine instance.
      *
      * Clears the bytecode cache, removing handlers changes what compiled
      * bytecode is valid.
@@ -656,6 +676,9 @@ export class ExpressionEngine {
         }
         for (const name of contribution.asConverterNames) {
             unregisterAsConverter(name);
+        }
+        for (const ruleName of contribution.normalizerRuleNames) {
+            this.normalizer.unregister(ruleName);
         }
         this.packageCompletionItems.delete(packageName);
 

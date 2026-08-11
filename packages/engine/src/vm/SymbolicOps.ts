@@ -16,7 +16,7 @@
  * and `CALL_BUILTIN` respectively.
  */
 
-import { Value, ValueType, numberValue, stringValue, errorValue, symbolicValue, matrixValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, stringValue, errorValue, symbolicValue, matrixValue, faultedOperand } from "@solve-js/vm/Value";
 import { solveForVariable, type SolveOutcome } from "@solve-js/symbolic/Solve";
 import {
 	type SymbolicNode,
@@ -162,9 +162,13 @@ export function symbolicNeg(v: Value): Value {
 export function symbolicBuiltin(index: number, args: readonly Value[]): Value {
 	const nodes: SymbolicNode[] = [];
 	for (const arg of args) {
-		// Propagate an Error operand unchanged rather than replacing it, so the
-		// original code and message reach the caller.
-		if (arg.type === ValueType.Error) return arg;
+		// Propagate a faulted operand unchanged rather than replacing it, so the
+		// original code and message (or pending query key) reach the caller.
+		// Pending counts: valueToSymbolic() below returns null for one, which
+		// would report "no symbolic reading" for a value that simply has not
+		// arrived yet.
+		const faulted = faultedOperand(arg);
+		if (faulted) return faulted;
 		const node = valueToSymbolic(arg);
 		if (node === null) return unsupported(SYMBOLIC_BUILTIN_NAMES[index] ?? `builtin ${index}`);
 		nodes.push(node);

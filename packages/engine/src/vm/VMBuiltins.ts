@@ -1,6 +1,6 @@
 import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, type MatrixData } from "@solve-js/vm/Value";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { unifyUom } from "@solve-js/vm/VMConversion";
+import { unifyUom, power } from "@solve-js/vm/VMConversion";
 import { transpose, determinant, inverse, matrixMultiply, matrixPower, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
 import { symbolicToValue, valueToSymbolic, solveEquationValues } from "@solve-js/vm/SymbolicOps";
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
@@ -255,7 +255,9 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
       if (args[1].type === ValueType.Matrix) {
         return errorValue("MATRIX_POWER_UNSUPPORTED", `pow: a matrix may only be the base, as in "pow([1,2;3,4], 2)".`);
       }
-      return numberValue(Math.pow(args[0].toNumber(), args[1].toNumber()));
+      // The spelled-out form of `^` answers what `^` answers, edge cases
+      // included. See power() in vm/VMConversion.ts.
+      return numberValue(power(args[0].toNumber(), args[1].toNumber()));
     },
     32: () => numberValue(Math.random()), // takes no arguments, unlike its neighbours
     33: (args) => numberValue(Math.sign(args[0].toNumber())),
@@ -609,7 +611,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     61: (args) => {
         const n = args[0].toNumber();
         const x = args[1].toNumber();
-        return numberValue(Math.pow(x, 1 / n));
+        return numberValue(power(x, 1 / n));
     },
 
     // fact(n) / factorial(n) -- integer factorial. Deliberately rejects

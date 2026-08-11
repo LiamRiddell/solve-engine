@@ -361,36 +361,48 @@ describe("what the table holds that cannot be typed", () => {
 		}
 	});
 
-	test.failing("and for temperatures", () => {
-		// BUG. `°C` and `°F` are in the table, are listed in MEASURE_SYMBOLS, and
-		// are offered by `C to ?` as conversion targets, but typing either one
-		// fails with "Undefined variable: °C". The degree-symbol normalizer covers
-		// the angle case only.
-		const engine = newTrackedEngine("en");
-		try {
-			expect(engine.evaluateExpression("20°C in F")[0].toNumber()).toBeCloseTo(68, 6);
-			expect(engine.evaluateExpression("68°F in C")[0].toNumber()).toBeCloseTo(20, 6);
-		} finally {
-			engine.clear();
-		}
-	});
+	// BUG. `°C` and `°F` are in the table, are listed in MEASURE_SYMBOLS, and
+	// are offered by `C to ?` as conversion targets, but typing either one
+	// fails with "Undefined variable: °C". The degree-symbol normalizer covers
+	// the angle case only.
+	//
+	// A case per spelling: a `test.failing` never runs the assertions after the
+	// first one that fails, so the two would hide each other. See
+	// `UnitsCurrencyAndRates.spec.ts`'s header for the regression that shape hid.
+	for (const [source, expected] of [
+		["20°C in F", 68],
+		["68°F in C", 20],
+	] as const) {
+		test.failing(`and for temperatures: ${source}`, () => {
+			const engine = newTrackedEngine("en");
+			try {
+				expect(engine.evaluateExpression(source)[0].toNumber()).toBeCloseTo(expected, 6);
+			} finally {
+				engine.clear();
+			}
+		});
+	}
 
-	test.failing("and `<unit> to ?` only offers units that can be typed", () => {
-		// BUG, a smaller one. The possibilities list is drawn from MEASURE_SYMBOLS,
-		// which is a display vocabulary rather than a typeable one, so `C to ?`
-		// answers with `°F`, `°C` and `R` and `kg to ?` with `µg` and `oz t`. A
-		// suggestion the user cannot then type is worse than a shorter list.
-		const engine = newTrackedEngine("en");
-		try {
-			for (const unit of ["C", "kg", "lux", "m"]) {
+	// BUG, a smaller one. The possibilities list is drawn from MEASURE_SYMBOLS,
+	// which is a display vocabulary rather than a typeable one, so `C to ?`
+	// answers with `°F`, `°C` and `R` and `kg to ?` with `µg` and `oz t`. A
+	// suggestion the user cannot then type is worse than a shorter list.
+	//
+	// A case per unit rather than a loop inside one `test.failing`: the loop
+	// stopped at the first unit that failed, so the other three could be fixed,
+	// or broken further, with nothing reported either way.
+	for (const unit of ["C", "kg", "lux", "m"]) {
+		test.failing(`and "${unit} to ?" only offers units that can be typed`, () => {
+			const engine = newTrackedEngine("en");
+			try {
 				const answer = engine.evaluateExpression(`${unit} to ?`)[0].value as string;
 				const untypeable = answer.split(", ").filter((symbol) => !knownUnits.has(symbol));
 				expect(untypeable).toEqual([]);
+			} finally {
+				engine.clear();
 			}
-		} finally {
-			engine.clear();
-		}
-	});
+		});
+	}
 
 	test("the possibilities list is at least populated and mostly usable", () => {
 		const engine = newTrackedEngine("en");

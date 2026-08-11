@@ -29,7 +29,11 @@ playground/*.env
 packages/engine/dist
 
 # Testing
-coverage/
+#
+# Anchored to the repo root on purpose. A bare "coverage/" matches at any
+# depth, which silently swallowed packages/engine/__tests__/coverage/: thirteen
+# spec files that jest ran and git could never see.
+/coverage/
 
 # V8 profiling logs
 isolate-*.log

@@ -1,5 +1,5 @@
 import { OpCode } from "@solve-js/parser/OpCode";
-import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomValue, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, type MatrixEntry, type MatrixData, type RangeData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomValue, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData } from "@solve-js/vm/Value";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { rowMajorToColumnMajor, matrixMultiply, matrixPower, matrixCompare, matIndex, matAt, inBounds, collectionToValues, matrixEntryToValue } from "@solve-js/vm/MatrixOps";
@@ -13,7 +13,7 @@ import { builtinArityError } from "@solve-js/vm/VMBuiltinArity";
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power } from "@solve-js/vm/VMConversion";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
@@ -1213,27 +1213,48 @@ function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
  * help, because this is one instruction.
  *
  * 65536 bits is a little under twenty thousand decimal digits, far past any
- * result a person reads and far short of anything that stalls. Past it the
- * ordinary double path answers, which for a number that size means Infinity,
- * the same answer the engine gave before it had bigints at all.
+ * result a person reads and far short of anything that stalls.
+ *
+ * DECIDED (1.0.0, differential run 20260811): past the ceiling the operation is
+ * REFUSED, where it used to fall through to the ordinary double path and answer
+ * Infinity. Infinity is not the answer to `2n ^ 100000`; the answer is a
+ * 30,103-digit integer this engine has chosen not to build, and those are
+ * different facts. Reporting the second as the first discards the exactness the
+ * `n` type exists for AND the fact that a limit was reached, which is the
+ * failure mode ("a confident magnitude that is not the real one") that the rest
+ * of this release removes everywhere else.
+ *
+ * It is also the line this codebase already draws between its two numeric
+ * types, one operator over: `1 / 0` is Infinity and `1n / 0n` is refused,
+ * because exact integer arithmetic does not hand back approximations (see
+ * `bigIntDivisionByZero()` in vm/VMConversion.ts). The double spelling is
+ * untouched, so `2 ^ 100000` is still Infinity, exactly as IEEE 754 says.
  */
 const MAX_EXACT_POW_BITS = 65536;
 
 /**
- * Whether `base ^ exponent` should be computed exactly as a bigint.
+ * How many bits `base ^ exponent` would occupy as an exact bigint, or `null`
+ * when it has no exact bigint answer at all.
  *
- * Only a whole, non-negative exponent has a bigint answer at all (there is no
- * fractional bigint and no reciprocal one), and the result has to fit inside
- * {@link MAX_EXACT_POW_BITS}. The size is estimated from the base's magnitude
- * as a double, which is enough for a limit whose job is to reject the absurd:
- * a base too large for a double to hold is already past the limit.
+ * Only a whole, non-negative exponent has one (there is no fractional bigint
+ * and no reciprocal one); those cases return null and their caller keeps the
+ * ordinary double path, which is the correct answer for them rather than a
+ * fallback. The size is estimated from the base's magnitude as a double, which
+ * is enough for a limit whose job is to reject the absurd: a base too large for
+ * a double to hold is already past the limit.
+ *
+ * A magnitude of one or less is a special case for the same reason
+ * {@link bigIntShift} special-cases zero: 0, 1 and -1 raised to anything at all
+ * stay one bit wide, so `1n ^ 1000000` is exact, instant, and must not be
+ * refused by an estimate that only looks at the exponent.
  */
-function exactPowFits(base: Value, exponent: number): boolean {
-    if (!Number.isInteger(exponent) || exponent < 0) return false;
-    if (exponent === 0) return true;
+function exactPowBits(base: Value, exponent: number): number | null {
+    if (!Number.isInteger(exponent) || exponent < 0) return null;
+    if (exponent === 0) return 1;
     const magnitude = Math.abs(base.toNumber());
+    if (magnitude <= 1) return 1;
     const baseBits = magnitude <= 2 ? 1 : Math.log2(magnitude);
-    return baseBits * exponent <= MAX_EXACT_POW_BITS;
+    return baseBits * exponent;
 }
 
 /**
@@ -1247,7 +1268,7 @@ function exactPowFits(base: Value, exponent: number): boolean {
  * loop. `symbolic/Complex.ts`'s `complexPow` does the same thing for the same
  * shape of reason.
  *
- * `exponent` must be non-negative; {@link exactPowFits} is the guard.
+ * `exponent` must be non-negative; {@link exactPowBits} is the guard.
  */
 function bigIntPow(base: bigint, exponent: bigint): bigint {
     let result = 1n;
@@ -1302,28 +1323,33 @@ function bigIntBitLength(value: bigint): number {
  * bigint `>>` with a NEGATIVE count shifts the other way, so `1n >> -100000`
  * is the same unbounded growth spelled differently.
  *
- * Past the ceiling there is no exact answer to give, and what is given instead
- * depends on which operand made this a bigint operation at all:
+ * Past the ceiling the shift is REFUSED, whichever operand made it a bigint
+ * operation.
  *
- * - A bigint on the LEFT has a meaningful inexact answer, since `x << n` is
- *   `x * 2^n`. The ordinary double path takes it, exactly as it does for `^`
- *   past {@link MAX_EXACT_POW_BITS}, which for a number this size means
- *   Infinity. The two spellings of the same number therefore go on agreeing at
- *   every size instead of only below the ceiling.
- * - A plain number on the left (`1 << 100000n`, which reaches here because the
- *   bigint branch triggers on EITHER operand) has no such fallback. JavaScript's
- *   `<<` on numbers is a 32-bit operation whose count wraps modulo 32, so
- *   `1 << 100000` is 1: a confident wrong answer, which this engine refuses
- *   rather than prints. So that spelling is refused by name.
+ * DECIDED (1.0.0, differential run 20260811). The two spellings used to part
+ * company here: a bigint on the LEFT fell through to `x * 2^n` as a double,
+ * which for a number this size is Infinity, while a plain number on the left
+ * (`1 << 100000n`, which reaches here because the bigint branch triggers on
+ * EITHER operand) was refused by name, since JavaScript's 32-bit `<<` wraps its
+ * count modulo 32 and would answer 1.
  *
- * @throws `BIGINT_SHIFT_LIMIT_EXCEEDED` for the second case. Recoverable.
+ * `1n << 66000` is the case that settles it. It is a perfectly ordinary
+ * 19,870-digit integer, and answering `Infinity` says two false things about
+ * it: that it is beyond counting, and that nothing went wrong. The engine's own
+ * reason for having an `n` type is that a double's approximation of a large
+ * integer is not the integer, so approximating one as Infinity is that same
+ * mistake at the largest possible scale. `^` now refuses at its ceiling for the
+ * same reason (see {@link MAX_EXACT_POW_BITS}), which keeps `1n << k` and
+ * `2n ^ k`, the same number written two ways, answering the same way at every
+ * size.
+ *
+ * @throws `BIGINT_SHIFT_LIMIT_EXCEEDED` past the ceiling. Recoverable.
  */
 function bigIntShift(l: Value, r: Value, direction: 1 | -1): Value {
     const value = toBigIntOperand(l);
     const shift = toBigIntOperand(r);
-    // Zero shifted by anything is zero, and it has to be answered before the
-    // ceiling below, whose fallback multiplies by a power of two: `0 * Infinity`
-    // is NaN, and "0n << 10000000" has an exact, obvious answer.
+    // Zero shifted by anything is zero, and it costs nothing to say so, so it
+    // is answered rather than refused however absurd the count is.
     if (value === 0n) return bigIntValue(0n);
     // How many bits the result gains. Negative means it shrinks, which no
     // ceiling has to care about. `Number()` on an absurd shift count saturates
@@ -1332,7 +1358,6 @@ function bigIntShift(l: Value, r: Value, direction: 1 | -1): Value {
     if (grownBits <= 0 || bigIntBitLength(value) + grownBits <= MAX_EXACT_SHIFT_BITS) {
         return bigIntValue(direction === 1 ? value << shift : value >> shift);
     }
-    if (l.type === ValueType.BigInt) return numberValue(l.toNumber() * Math.pow(2, grownBits));
     throw ErrorFactory.execution(
         "BIGINT_SHIFT_LIMIT_EXCEEDED",
         `Shifting by ${shift} would build an exact integer of about ${(bigIntBitLength(value) + grownBits).toLocaleString("en-US")} bits, past the limit of ${MAX_EXACT_SHIFT_BITS.toLocaleString("en-US")} bits`,
@@ -1638,6 +1663,13 @@ export function executeBytecode(
         // ═══════════════════════════════════════════════════════════════
         case OpCode.ADD: {
           const r = safePop(stack), l = safePop(stack);
+          // binaryOp() at the bottom of this chain propagates a faulted
+          // operand, but only the branches that reach it do. The Datetime and
+          // timecode branches above it do not: they read the other operand as
+          // a duration, and a duration read off an Error is zero, so `today +
+          // (5 kg to m)` answered today. See faultedOperand().
+          const addFault = faultedOperand(l, r);
+          if (addFault) { stack.push(addFault); break; }
           const pctAdd = combinePercentage(l, r, 1);
           const ratePeriodAdd = pctAdd === null ? unifyRatePeriods(l, r) : null;
           if (pctAdd !== null) {
@@ -1688,6 +1720,9 @@ export function executeBytecode(
         }
         case OpCode.SUB: {
           const r = safePop(stack), l = safePop(stack);
+          // Same reason as ADD above.
+          const subFault = faultedOperand(l, r);
+          if (subFault) { stack.push(subFault); break; }
           const pctSub = combinePercentage(l, r, -1);
           const ratePeriodSub = pctSub === null ? unifyRatePeriods(l, r) : null;
           if (pctSub !== null) {
@@ -1820,7 +1855,7 @@ export function executeBytecode(
           // Plain numbers first, so the overwhelmingly common case pays for no
           // extra type test beyond the ones already above it.
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(numberValue(Math.pow(l.value as number, r.value as number)));
+            stack.push(numberValue(power(l.value as number, r.value as number)));
             break;
           }
           // A Matrix operand means matrix exponentiation, which is repeated
@@ -1858,17 +1893,36 @@ export function executeBytecode(
           // A bigint operand raised to a whole power has an exact answer, and
           // Math.pow does not give it: `2n ^ 100` came back as
           // 1.2676506002282294e+30, a double's approximation of the very
-          // integer this type exists to hold. See exactPowFits() for the two
-          // conditions and for why there is a size limit at all.
-          if ((l.type === ValueType.BigInt || r.type === ValueType.BigInt) && exactPowFits(l, r.toNumber())) {
-            stack.push(bigIntValue(bigIntPow(toBigIntOperand(l), toBigIntOperand(r))));
-            break;
+          // integer this type exists to hold. See exactPowBits() for when an
+          // exact answer exists at all, and for why there is a size limit.
+          if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
+            const powBits = exactPowBits(l, r.toNumber());
+            if (powBits !== null) {
+              // Past the ceiling this refuses rather than handing the sum back
+              // to the double path, which would report a 30,103-digit integer
+              // as Infinity. See MAX_EXACT_POW_BITS for the decision.
+              if (powBits > MAX_EXACT_POW_BITS) {
+                throw ErrorFactory.execution(
+                  "BIGINT_POW_LIMIT_EXCEEDED",
+                  `That power would build an exact integer of about ${Math.round(powBits).toLocaleString("en-US")} bits, past the limit of ${MAX_EXACT_POW_BITS.toLocaleString("en-US")} bits`,
+                  { limitBits: MAX_EXACT_POW_BITS },
+                );
+              }
+              stack.push(bigIntValue(bigIntPow(toBigIntOperand(l), toBigIntOperand(r))));
+              break;
+            }
+            // A fractional or negative exponent has no bigint answer at all
+            // (`4n ^ 0.5` is 2 and `2n ^ -1` is 0.5), so those keep the double
+            // path below, which is their right answer rather than a fallback.
           }
-          stack.push(numberValue(Math.pow(l.toNumber(), r.toNumber())));
+          stack.push(numberValue(power(l.toNumber(), r.toNumber())));
           break;
         }
         case OpCode.NEG: {
           const v = safePop(stack);
+          // A negated fault is still a fault, and `-0` looks like an answer.
+          const negFault = faultedOperand(v);
+          if (negFault) { stack.push(negFault); break; }
           if (v.type === ValueType.BigInt) stack.push(bigIntValue(-(v.value as bigint)));
           else if (v.type === ValueType.Uom) stack.push(uomValue(-v.toNumber(), v.unit!));
           // A negated percentage is still a percentage, for the same reason a
@@ -1886,6 +1940,8 @@ export function executeBytecode(
         }
         case OpCode.POS: {
           const v = safePop(stack);
+          const posFault = faultedOperand(v);
+          if (posFault) { stack.push(posFault); break; }
           if (v.type === ValueType.Uom) stack.push(uomValue(v.toNumber(), v.unit!));
           // Unary plus is a no-op, so it has to leave the type alone too.
           else if (v.type === ValueType.Percentage) stack.push(percentageValue(v.toNumber()));
@@ -1895,9 +1951,16 @@ export function executeBytecode(
 
         // ═══════════════════════════════════════════════════════════════
         // §4  Bitwise  (OpCode 30–36)
+        //     None of these routes through binaryOp(), so each one carries
+        //     its own faulted-operand check for the reason that function
+        //     documents: a bit pattern read off an Error or a Pending is the
+        //     bit pattern of zero, and `(5 kg to m) & 1` answered 0 with
+        //     nothing to say it had not been asked a real question.
         // ═══════════════════════════════════════════════════════════════
         case OpCode.LSHIFT: {
           const r = safePop(stack), l = safePop(stack);
+          const shiftFault = faultedOperand(l, r);
+          if (shiftFault) { stack.push(shiftFault); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             // Bounded, unlike the plain-number path below, which cannot grow:
             // a 32-bit shift is 32 bits whatever it is asked for. See
@@ -1910,6 +1973,8 @@ export function executeBytecode(
         }
         case OpCode.RSHIFT: {
           const r = safePop(stack), l = safePop(stack);
+          const rshiftFault = faultedOperand(l, r);
+          if (rshiftFault) { stack.push(rshiftFault); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntShift(l, r, -1));
           } else {
@@ -1923,11 +1988,15 @@ export function executeBytecode(
           // 32-bit unsigned word and JavaScript refuses it on a BigInt, so
           // there is nothing to widen to: BigInt(-8) >>> 1n is a TypeError, not
           // a large number. Both operands go through the 32-bit path.
+          const urshiftFault = faultedOperand(l, r);
+          if (urshiftFault) { stack.push(urshiftFault); break; }
           stack.push(numberValue(l.toNumber() >>> r.toNumber()));
           break;
         }
         case OpCode.BIT_AND: {
           const r = safePop(stack), l = safePop(stack);
+          const andFault = faultedOperand(l, r);
+          if (andFault) { stack.push(andFault); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntValue(toBigIntOperand(l) & toBigIntOperand(r)));
           } else {
@@ -1937,6 +2006,8 @@ export function executeBytecode(
         }
         case OpCode.BIT_OR: {
           const r = safePop(stack), l = safePop(stack);
+          const orFault = faultedOperand(l, r);
+          if (orFault) { stack.push(orFault); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntValue(toBigIntOperand(l) | toBigIntOperand(r)));
           } else {
@@ -1946,6 +2017,8 @@ export function executeBytecode(
         }
         case OpCode.BIT_XOR: {
           const r = safePop(stack), l = safePop(stack);
+          const xorFault = faultedOperand(l, r);
+          if (xorFault) { stack.push(xorFault); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntValue(toBigIntOperand(l) ^ toBigIntOperand(r)));
           } else {
@@ -1955,6 +2028,8 @@ export function executeBytecode(
         }
         case OpCode.BIT_NOT: {
           const v = safePop(stack);
+          const notFault = faultedOperand(v);
+          if (notFault) { stack.push(notFault); break; }
           if (v.type === ValueType.BigInt) stack.push(bigIntValue(~(v.value as bigint)));
           else stack.push(numberValue(~v.toNumber()));
           break;
@@ -1979,9 +2054,17 @@ export function executeBytecode(
         //     "a kilogram is not a metre" is a true statement about a pair
         //     that cannot be converted, whereas "a kilogram is less than a
         //     metre" is not a statement at all.
+        //
+        //     A faulted operand is the second case even for EQ and NEQ, and
+        //     all six propagate it. A kilogram is a quantity that is not a
+        //     metre; an Error is not a quantity, so there is nothing for it
+        //     to be equal to. Reading its number gave zero, which made
+        //     `(5 kg to m) == 0` answer true.
         // ═══════════════════════════════════════════════════════════════
         case OpCode.EQ: {
           const r = safePop(stack), l = safePop(stack);
+          const eqFault = faultedOperand(l, r);
+          if (eqFault) { stack.push(eqFault); break; }
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) === (r.value as number)));
           } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
@@ -2006,6 +2089,8 @@ export function executeBytecode(
         }
         case OpCode.NEQ: {
           const r = safePop(stack), l = safePop(stack);
+          const neqFault = faultedOperand(l, r);
+          if (neqFault) { stack.push(neqFault); break; }
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) !== (r.value as number)));
           } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
@@ -2026,6 +2111,8 @@ export function executeBytecode(
         }
         case OpCode.LT: {
           const r = safePop(stack), l = safePop(stack);
+          const ltFault = faultedOperand(l, r);
+          if (ltFault) { stack.push(ltFault); break; }
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) < (r.value as number)));
           } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
@@ -2044,6 +2131,8 @@ export function executeBytecode(
         }
         case OpCode.LTE: {
           const r = safePop(stack), l = safePop(stack);
+          const lteFault = faultedOperand(l, r);
+          if (lteFault) { stack.push(lteFault); break; }
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) <= (r.value as number)));
           } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
@@ -2061,6 +2150,8 @@ export function executeBytecode(
         }
         case OpCode.GT: {
           const r = safePop(stack), l = safePop(stack);
+          const gtFault = faultedOperand(l, r);
+          if (gtFault) { stack.push(gtFault); break; }
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) > (r.value as number)));
           } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
@@ -2078,6 +2169,8 @@ export function executeBytecode(
         }
         case OpCode.GTE: {
           const r = safePop(stack), l = safePop(stack);
+          const gteFault = faultedOperand(l, r);
+          if (gteFault) { stack.push(gteFault); break; }
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) >= (r.value as number)));
           } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
@@ -2096,14 +2189,24 @@ export function executeBytecode(
 
         // ═══════════════════════════════════════════════════════════════
         // §4c Logical / conditional select  (OpCode 130–132)
+        //
+        //     Truthiness is read through isTruthy(), which reads a number,
+        //     which is zero for a fault, so a failed operand used to be
+        //     quietly false. Both operands are already evaluated by the time
+        //     either opcode runs (this VM has no branch opcodes), so there is
+        //     no short-circuit to preserve by ignoring the right-hand one.
         // ═══════════════════════════════════════════════════════════════
         case OpCode.LOGICAL_AND: {
           const r = safePop(stack), l = safePop(stack);
+          const andLogicFault = faultedOperand(l, r);
+          if (andLogicFault) { stack.push(andLogicFault); break; }
           stack.push(boolValue(isTruthy(l) && isTruthy(r)));
           break;
         }
         case OpCode.LOGICAL_OR: {
           const r = safePop(stack), l = safePop(stack);
+          const orLogicFault = faultedOperand(l, r);
+          if (orLogicFault) { stack.push(orLogicFault); break; }
           stack.push(boolValue(isTruthy(l) || isTruthy(r)));
           break;
         }
@@ -2117,6 +2220,13 @@ export function executeBytecode(
           const elseVal = safePop(stack);
           const thenVal = safePop(stack);
           const condition = safePop(stack);
+          // Only the CONDITION is checked for a fault, unlike every other
+          // opcode here. Both arms are already evaluated, and the arm that is
+          // not chosen is not part of the answer: refusing `if 1 then 2 else
+          // (5 kg to m)` would report a failure the reader's own line never
+          // asked about. A faulted condition selects nothing, so it stands.
+          const conditionFault = faultedOperand(condition);
+          if (conditionFault) { stack.push(conditionFault); break; }
           stack.push(isTruthy(condition) ? thenVal : elseVal);
           break;
         }
@@ -2131,7 +2241,16 @@ export function executeBytecode(
           for (let i = 0; i < argCount; i++) args.push(safePop(stack));
           args.reverse();
           const fn = vm.context.pluginFunctions[fnIdx];
-          if (!fn) {
+          // A plugin handler reads its arguments the same way a builtin does,
+          // and none of them can do anything useful with an argument that
+          // failed or has not arrived: the call would be made with a zero, or
+          // with a query built from one. Checked here rather than in each
+          // handler, for the same reason the arity check below lives at the
+          // dispatch point.
+          const pluginArgFault = faultedIn(args);
+          if (pluginArgFault) {
+            stack.push(pluginArgFault);
+          } else if (!fn) {
             stack.push(numberValue(0));
           } else {
             const result = fn(args, context);
@@ -2178,6 +2297,14 @@ export function executeBytecode(
             if (arg.type === ValueType.Symbolic) sawSymbolic = true;
             args.push(arg);
           }
+          // The same argument as the symbolic routing below, for the operand
+          // type that has no reading at all rather than a non-numeric one:
+          // every implementation reads args[n].toNumber(), which is 0 for an
+          // Error and for a Pending, so `abs(5 kg to m)` answered 0 and
+          // `round(<a price still loading>)` answered 0 as well. One check
+          // here covers all ~90 of them; see faultedOperand() in vm/Value.ts.
+          const builtinArgFault = faultedIn(args);
+          if (builtinArgFault) { stack.push(builtinArgFault); break; }
           const fn = builtinFunctions[fnIdx];
           if (fn) {
             const ordered = args.reverse();
@@ -2376,14 +2503,22 @@ export function executeBytecode(
 
         // ═══════════════════════════════════════════════════════════════
         // §7  Type conversions  (OpCode 70–74, 140–145)
+        //     Every one of these restates a number in another notation, so a
+        //     faulted operand has nothing to restate and each propagates it
+        //     rather than converting the zero toNumber() reports. Without it
+        //     "(5 kg to m) as hex" answered 0x0 and "as binary" answered 0b0.
         // ═══════════════════════════════════════════════════════════════
         case OpCode.TO_NUMBER: {
           const v = safePop(stack);
+          const toNumberFault = faultedOperand(v);
+          if (toNumberFault) { stack.push(toNumberFault); break; }
           stack.push(numberValue(v.toNumber()));
           break;
         }
         case OpCode.TO_HEX: {
           const v = safePop(stack);
+          const toHexFault = faultedOperand(v);
+          if (toHexFault) { stack.push(toHexFault); break; }
           // A bigint keeps its bigint, exactly as ADD/SUB/MUL/DIV do:
           // `12345678901234567890n as hex` rendered 0xAB54A98CEB1F0800 while
           // the value ends 0AD2, because toNumber() rounded it first.
@@ -2392,21 +2527,29 @@ export function executeBytecode(
         }
         case OpCode.TO_PERCENTAGE: {
           const v = safePop(stack);
+          const toPercentageFault = faultedOperand(v);
+          if (toPercentageFault) { stack.push(toPercentageFault); break; }
           stack.push(percentageValue(v.toNumber()));
           break;
         }
         case OpCode.TO_FRACTION: {
           const v = safePop(stack);
+          const toFractionFault = faultedOperand(v);
+          if (toFractionFault) { stack.push(toFractionFault); break; }
           stack.push(stringValue(toFractionString(v.toNumber())));
           break;
         }
         case OpCode.TO_MULTIPLIER: {
           const v = safePop(stack);
+          const toMultiplierFault = faultedOperand(v);
+          if (toMultiplierFault) { stack.push(toMultiplierFault); break; }
           stack.push(stringValue(toMultiplierString(v)));
           break;
         }
         case OpCode.TO_SCI: {
           const v = safePop(stack);
+          const toSciFault = faultedOperand(v);
+          if (toSciFault) { stack.push(toSciFault); break; }
           stack.push(stringValue(toScientificString(v.toNumber())));
           break;
         }
@@ -2414,17 +2557,26 @@ export function executeBytecode(
         // `(255 as binary) + 1` has to be 256; as a string it was 1.
         case OpCode.TO_BINARY: {
           const v = safePop(stack);
+          const toBinaryFault = faultedOperand(v);
+          if (toBinaryFault) { stack.push(toBinaryFault); break; }
           stack.push(hexValue(v.type === ValueType.BigInt ? (v.value as bigint) : v.toNumber(), "bin"));
           break;
         }
         case OpCode.TO_OCTAL: {
           const v = safePop(stack);
+          const toOctalFault = faultedOperand(v);
+          if (toOctalFault) { stack.push(toOctalFault); break; }
           stack.push(hexValue(v.type === ValueType.BigInt ? (v.value as bigint) : v.toNumber(), "oct"));
           break;
         }
         case OpCode.CALL_AS_CONVERTER: {
           const name = stringOperand(safePop(stack), op, "converter name").toLowerCase();
           const value = safePop(stack);
+          // A registered converter is arbitrary host code reading the Value
+          // it is handed, so the fault is stopped before it gets there rather
+          // than inside each converter.
+          const converterFault = faultedOperand(value);
+          if (converterFault) { stack.push(converterFault); break; }
           const converter = asConverterRegistry.get(name);
           if (!converter) {
             stack.push(errorValue("UNKNOWN_AS_CONVERTER", `Unknown converter "as ${name}"`));
@@ -2439,14 +2591,28 @@ export function executeBytecode(
         // ═══════════════════════════════════════════════════════════════
         case OpCode.UOM_CONVERT: {
           const unit = stringOperand(safePop(stack), op, "unit name");
-          const val = safePop(stack).toNumber();
-          stack.push(uomValue(val, unit));
+          const operand = safePop(stack);
+          const faulted = faultedOperand(operand);
+          if (faulted) { stack.push(faulted); break; }
+          stack.push(uomValue(operand.toNumber(), unit));
           break;
         }
         case OpCode.UOM_CONVERT_TO: {
           const toUnit = stringOperand(safePop(stack), op, "target unit name");
           const fromUnit = stringOperand(safePop(stack), op, "source unit name");
-          const val = safePop(stack).toNumber();
+          const operand = safePop(stack);
+          // The quantity being converted may already have failed, and a
+          // conversion is the one operator that made that invisible: it reads
+          // the operand's number, gets the zero Error and Pending report, and
+          // pushes it back wearing the unit the reader asked for. `5 kg to m
+          // to s` answered `0.00 s` and `60 km/h in m/s` answered `0.00 /s`,
+          // a plausible number in a unit with no numerator, with the failed
+          // first conversion nowhere on screen. `binaryOp` has refused this
+          // for `+` and `*` since it was written, which is why the same value
+          // carried its fault everywhere except through here.
+          const faulted = faultedOperand(operand);
+          if (faulted) { stack.push(faulted); break; }
+          const val = operand.toNumber();
           const measure = getMeasure(fromUnit);
           const isCurrency = sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit);
           if (measure && getMeasure(toUnit) === measure) {
@@ -2479,14 +2645,23 @@ export function executeBytecode(
         }
         case OpCode.UOM_BEST: {
           const unit = stringOperand(safePop(stack), op, "unit name");
-          const val = safePop(stack).toNumber();
-          const { value, unit: bestUnit } = getBestUnit(val, unit);
+          const operand = safePop(stack);
+          const faulted = faultedOperand(operand);
+          if (faulted) { stack.push(faulted); break; }
+          const { value, unit: bestUnit } = getBestUnit(operand.toNumber(), unit);
           stack.push(uomValue(value, bestUnit));
           break;
         }
         case OpCode.UOM_CONVERT_IN: {
           const toUnit = stringOperand(safePop(stack), op, "target unit name");
           const left = safePop(stack);
+          // See UOM_CONVERT_TO above. This is the spelling `5 kg to m to s`
+          // actually reaches, since the second conversion's source is an
+          // expression rather than a literal: an Error is not a Uom, so it
+          // fell into the else branch at the bottom and came back out as
+          // `uomValue(0, "s")`.
+          const faulted = faultedOperand(left);
+          if (faulted) { stack.push(faulted); break; }
           if (left.type === ValueType.Uom) {
             const fromUnit = left.unit!;
             const val = left.toNumber();
@@ -2514,6 +2689,8 @@ export function executeBytecode(
         }
         case OpCode.UOM_GET_VALUE: {
           const v = safePop(stack);
+          const getValueFault = faultedOperand(v);
+          if (getValueFault) { stack.push(getValueFault); break; }
           stack.push(numberValue(v.toNumber()));
           break;
         }
@@ -2527,6 +2704,14 @@ export function executeBytecode(
           // "90 km / 3 day" -> "30 km/day": magnitude divides, units join.
           const denominatorVal = safePop(stack);
           const numeratorVal = safePop(stack);
+          // "60 km/h in m/s" reaches here with a failed conversion as its
+          // numerator, and a rate built from one is the same silent zero the
+          // conversion opcodes had, wearing an even stranger unit: the
+          // numerator label comes off the operand's type, so an Error
+          // contributed no label at all and the answer displayed as
+          // "0.00 /s", a rate of nothing per second.
+          const rateDivFault = faultedOperand(numeratorVal, denominatorVal);
+          if (rateDivFault) { stack.push(rateDivFault); break; }
           if (denominatorVal.type !== ValueType.Uom || !denominatorVal.unit) {
             stack.push(errorValue("RATE_MISSING_DENOMINATOR_UNIT", "Cannot build a rate: the right-hand side of \"/\" has no unit"));
             break;
@@ -2543,6 +2728,8 @@ export function executeBytecode(
           // than relying on operand-type auto-detection.
           const multiplier = safePop(stack);
           const rate = safePop(stack);
+          const rateMulFault = faultedOperand(rate, multiplier);
+          if (rateMulFault) { stack.push(rateMulFault); break; }
           if (rate.type !== ValueType.Uom || !isRateUnit(rate.unit)) {
             stack.push(errorValue("RATE_MUL_LEFT_NOT_A_RATE", "Left-hand side of a rate multiplication must be a rate (e.g. \"$50/week\")"));
             break;
@@ -2559,6 +2746,8 @@ export function executeBytecode(
           // real-world rate. "30/week as /month" -> "~130/month".
           const newDenominatorUnit = stringOperand(safePop(stack), op, "denominator unit name");
           const rate = safePop(stack);
+          const rateConvertFault = faultedOperand(rate);
+          if (rateConvertFault) { stack.push(rateConvertFault); break; }
           if (rate.type !== ValueType.Uom || !isRateUnit(rate.unit)) {
             stack.push(errorValue("RATE_CONVERT_NOT_A_RATE", "Cannot convert a non-rate value's denominator"));
             break;
@@ -2587,7 +2776,10 @@ export function executeBytecode(
           // "9:00am"/"16:00", anchored to TODAY's calendar date, not a
           // relative offset from `now` (so it stays correct regardless of
           // what time it currently is, "9:00am" always means 9am today).
-          const totalMinutes = safePop(stack).toNumber();
+          const minutesValue = safePop(stack);
+          const clockFault = faultedOperand(minutesValue);
+          if (clockFault) { stack.push(clockFault); break; }
+          const totalMinutes = minutesValue.toNumber();
           const now = new Date();
           const anchored = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
           anchored.setMinutes(totalMinutes);
@@ -2606,11 +2798,18 @@ export function executeBytecode(
           break;
         case OpCode.DATE_ADD: {
           const durValue = safePop(stack), dtValue = safePop(stack);
+          // A duration read off a fault is zero, so the date came back
+          // unmoved: an answer that looks exactly like a correct one. Same
+          // reasoning as OpCode.ADD's own check.
+          const dateAddFault = faultedOperand(dtValue, durValue);
+          if (dateAddFault) { stack.push(dateAddFault); break; }
           stack.push(datetimeValue(shiftDatetime(dtValue.toNumber(), durValue, 1, vm)));
           break;
         }
         case OpCode.DATE_SUB: {
           const durValue = safePop(stack), dtValue = safePop(stack);
+          const dateSubFault = faultedOperand(dtValue, durValue);
+          if (dateSubFault) { stack.push(dateSubFault); break; }
           stack.push(datetimeValue(shiftDatetime(dtValue.toNumber(), durValue, -1, vm)));
           break;
         }
@@ -2623,8 +2822,11 @@ export function executeBytecode(
           // from a Monday lands 7 days back, not today. Time-of-day is
           // preserved from `now` (matches "today"/"now" both resolving to
           // the current instant elsewhere in this file, not midnight).
-          const targetDay = safePop(stack).toNumber();
+          const targetDayValue = safePop(stack);
           const nowValue = safePop(stack);
+          const weekdayFault = faultedOperand(nowValue, targetDayValue);
+          if (weekdayFault) { stack.push(weekdayFault); break; }
+          const targetDay = targetDayValue.toNumber();
           const now = nowValue.toNumber();
           const currentDay = new Date(now).getDay();
           let diffDays = op === OpCode.DATE_NEXT_WEEKDAY
@@ -2657,20 +2859,32 @@ export function executeBytecode(
           // reverse to restore that order, then transpose once into the
           // column-major storage MatrixData actually uses.
           const rowMajor = checkedArray<MatrixEntry>(count, "matrix cells");
+          // A MatrixEntry is a number, a boolean or a symbolic node, so a
+          // faulted cell has nowhere to live inside the matrix and became a
+          // zero cell nothing could tell apart from a real one. The whole
+          // literal fails instead, the way one bad cell fails a map() (see
+          // MAP_INVOKE's own check).
+          let cellFault: Value | null = null;
           for (let i = count - 1; i >= 0; i--) {
             const cellVal = safePop(stack);
+            if (cellFault === null) cellFault = faultedOperand(cellVal);
             rowMajor[i] = cellVal.type === ValueType.Boolean ? (cellVal.value as boolean)
               : cellVal.type === ValueType.Symbolic ? (cellVal.value as SymbolicNodeType)
               : cellVal.toNumber();
           }
+          if (cellFault) { stack.push(cellFault); break; }
           stack.push(matrixValue(rows, cols, rowMajorToColumnMajor(rows, cols, rowMajor)));
           break;
         }
 
         case OpCode.MAT_INDEX1: {
           const indexVal = safePop(stack), matrixVal = safePop(stack);
-          if (matrixVal.type === ValueType.Error) { stack.push(matrixVal); break; }
-          if (indexVal.type === ValueType.Error) { stack.push(indexVal); break; }
+          // Pending as well as Error, here and in the three cases below: a
+          // value that has not arrived yet indexes no better than one that
+          // failed, and toNumber() reports zero for both. These checked only
+          // Error, so an index still loading read as cell 0.
+          const index1Fault = faultedOperand(matrixVal, indexVal);
+          if (index1Fault) { stack.push(index1Fault); break; }
           if (matrixVal.type !== ValueType.Matrix) {
             stack.push(errorValue("MATRIX_INDEX_NOT_A_MATRIX", `Cannot index a non-matrix value with "[...]".`));
             break;
@@ -2691,9 +2905,8 @@ export function executeBytecode(
 
         case OpCode.MAT_INDEX2: {
           const colVal = safePop(stack), rowVal = safePop(stack), matrixVal = safePop(stack);
-          if (matrixVal.type === ValueType.Error) { stack.push(matrixVal); break; }
-          if (rowVal.type === ValueType.Error) { stack.push(rowVal); break; }
-          if (colVal.type === ValueType.Error) { stack.push(colVal); break; }
+          const index2Fault = faultedOperand(matrixVal, rowVal, colVal);
+          if (index2Fault) { stack.push(index2Fault); break; }
           if (matrixVal.type !== ValueType.Matrix) {
             stack.push(errorValue("MATRIX_INDEX_NOT_A_MATRIX", `Cannot index a non-matrix value with "[...]".`));
             break;
@@ -2715,8 +2928,8 @@ export function executeBytecode(
 
         case OpCode.RANGE_NEW: {
           const maxVal = safePop(stack), minVal = safePop(stack);
-          if (minVal.type === ValueType.Error) { stack.push(minVal); break; }
-          if (maxVal.type === ValueType.Error) { stack.push(maxVal); break; }
+          const rangeFault = faultedOperand(minVal, maxVal);
+          if (rangeFault) { stack.push(rangeFault); break; }
           if (minVal.type !== ValueType.Number || maxVal.type !== ValueType.Number) {
             stack.push(errorValue("INVALID_RANGE_BOUND", `A range's bounds must be plain numbers (e.g. "0:3").`));
             break;
@@ -2740,9 +2953,8 @@ export function executeBytecode(
 
         case OpCode.MAT_SLICE: {
           const colRangeVal = safePop(stack), rowRangeVal = safePop(stack), matrixVal = safePop(stack);
-          if (matrixVal.type === ValueType.Error) { stack.push(matrixVal); break; }
-          if (rowRangeVal.type === ValueType.Error) { stack.push(rowRangeVal); break; }
-          if (colRangeVal.type === ValueType.Error) { stack.push(colRangeVal); break; }
+          const sliceFault = faultedOperand(matrixVal, rowRangeVal, colRangeVal);
+          if (sliceFault) { stack.push(sliceFault); break; }
           if (matrixVal.type !== ValueType.Matrix) {
             stack.push(errorValue("MATRIX_INDEX_NOT_A_MATRIX", `Cannot slice a non-matrix value with "[...]".`));
             break;
@@ -2865,7 +3077,8 @@ export function executeBytecode(
               ? (builtinFunctions[ref]?.(args) ?? errorValue("UNKNOWN_BUILTIN_FUNCTION", `map: unknown builtin function index ${ref}`))
               : invokeFrameBody(paramNames, program!, args, vm, pipeline, expression, context, !!symbolicTolerant);
 
-            if (resultVal.type === ValueType.Error) { mapError = resultVal; break; }
+            const resultFault = faultedOperand(resultVal);
+            if (resultFault) { mapError = resultFault; break; }
             resultData[i] = resultVal.type === ValueType.Boolean ? (resultVal.value as boolean)
               : resultVal.type === ValueType.Symbolic ? (resultVal.value as SymbolicNodeType)
               : resultVal.toNumber();
@@ -2941,7 +3154,8 @@ export function executeBytecode(
           let acc: Value;
           let startIdx: number;
           if (initialVal !== undefined) {
-            if (initialVal.type === ValueType.Error) { stack.push(initialVal); break; }
+            const initialFault = faultedOperand(initialVal);
+            if (initialFault) { stack.push(initialFault); break; }
             acc = initialVal;
             startIdx = 0;
           } else {
@@ -2960,7 +3174,8 @@ export function executeBytecode(
               ? (builtinFunctions[ref]?.(args) ?? errorValue("UNKNOWN_BUILTIN_FUNCTION", `reduce: unknown builtin function index ${ref}`))
               : invokeFrameBody(paramNames, program!, args, vm, pipeline, expression, context, !!symbolicTolerant);
 
-            if (resultVal.type === ValueType.Error) { reduceError = resultVal; break; }
+            const stepFault = faultedOperand(resultVal);
+            if (stepFault) { reduceError = stepFault; break; }
             acc = resultVal;
           }
           if (reduceError) { stack.push(reduceError); break; }

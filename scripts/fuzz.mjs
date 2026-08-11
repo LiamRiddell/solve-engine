@@ -346,6 +346,28 @@ async function loadCorpusModule() {
 
 // ── Reporting ─────────────────────────────────────────────────────────────
 
+/**
+ * The one line this process can honestly write about a failure it watched from
+ * outside.
+ *
+ * A crash and a hang arrive with none of what a failure normally carries: no
+ * thrown value, no error code, no stack, because the child that would have
+ * produced them is dead. What is left is how it stopped, so that is what this
+ * says. It deliberately does not try to describe the case, and nothing
+ * downstream expects it to: `Corpus.ts` signs these two kinds by their input
+ * precisely because no wording available here tells one hang from another.
+ *
+ * @param kind - "crash" or "hang".
+ * @param generator - Which fuzzer was running.
+ * @param result - What {@link runBlock} resolved with.
+ * @returns The detail line for the outcome.
+ */
+function observedFailureDetail(kind, generator, result) {
+	if (kind === "hang") return `no progress for ${options.caseTimeoutMs}ms during ${generator} soak`;
+	const how = result.signal ? `signal ${result.signal}` : `exit code ${result.exitCode}`;
+	return `child died with ${how} during ${generator} soak`;
+}
+
 /** A short, readable rendering of a case, for the console. */
 function describeCase(fuzzCase) {
 	if (!fuzzCase) return "(unknown)";
@@ -363,8 +385,8 @@ async function main() {
 	const deadline = options.minutes > 0 ? Date.now() + options.minutes * 60_000 : Infinity;
 	const startSeed = options.seed ?? ((Date.now() ^ (process.pid * 2654435761)) >>> 0) % 1_000_000_000;
 
-	const { makeEntry, saveEntry, caseId, failureSignature, loadCorpus } = await loadCorpusModule();
-	const summary = { executed: 0, findings: 0, saved: 0, slow: 0, crashes: 0, hangs: 0, asyncFailures: 0 };
+	const { makeEntry, saveEntry, caseId, failureSignature, knownOpenSignatures, loadCorpus } = await loadCorpusModule();
+	const summary = { executed: 0, findings: 0, saved: 0, known: 0, slow: 0, crashes: 0, hangs: 0, asyncFailures: 0 };
 
 	// Signatures already accounted for, seeded from the committed corpus.
 	//
@@ -373,10 +395,14 @@ async function main() {
 	// reduction costs a few hundred child processes, and the soak stops being a
 	// soak. Skipping a known signature is what lets the run get through enough
 	// cases to reach something new, which is the only reason to run it at all.
-	const seen = new Set();
-	for (const entry of loadCorpus(corpusDirectory)) {
-		seen.add(failureSignature({ kind: entry.outcome, detail: entry.detail }));
-	}
+	//
+	// Open entries only, through the same function the bounded Jest run uses.
+	// This loop used to take every entry, which meant a finding that had been
+	// investigated, fixed and marked `fixed` went on silencing anything that
+	// signed the same way, forever. Combined with a hang's signature being a
+	// constant sentence at the time, one recorded hang made the soak incapable
+	// of reporting another.
+	const seen = new Set(knownOpenSignatures(loadCorpus(corpusDirectory)));
 
 	console.log(`fuzzing from seed ${startSeed}, ${options.count} cases per generator per block, heap ${options.heapMb}MB`);
 
@@ -422,7 +448,8 @@ async function main() {
 				if (result.stderr.trim()) console.log(indent(result.stderr.trim()));
 				if (at) {
 					const derived = deriveCase(runner, generator, at.seed);
-					if (derived) collected.push({ seed: at.seed, outcome: { kind, detail: `${kind} during ${generator} soak`, elapsedMs: 0 }, input: derived });
+					const outcome = { kind, detail: observedFailureDetail(kind, generator, result), elapsedMs: 0 };
+					if (derived) collected.push({ seed: at.seed, outcome, input: derived });
 				}
 				// Skip past the offending seed so the next block makes progress.
 				seed = (at ? at.seed : seed) + 1;
@@ -434,8 +461,11 @@ async function main() {
 
 			for (const finding of collected) {
 				summary.findings++;
-				const signature = failureSignature(finding.outcome);
-				if (seen.has(signature)) continue;
+				const signature = failureSignature(finding.outcome, finding.input);
+				if (seen.has(signature)) {
+					summary.known++;
+					continue;
+				}
 				seen.add(signature);
 
 				console.log(`  FINDING [${finding.outcome.kind}] seed=${finding.seed}: ${finding.outcome.detail}`);
@@ -459,6 +489,13 @@ async function main() {
 					if (saveEntry(corpusDirectory, entry)) {
 						summary.saved++;
 						console.log(indent(`saved corpus/${entry.generator}-${entry.outcome}-${caseId(reduced.input)}.json`));
+					} else {
+						// Said out loud rather than left to a count. A finding that
+						// reaches this line got past the signature check and cost a
+						// whole shrink, so a reader who is told nothing reasonably
+						// assumes it was written down.
+						summary.known++;
+						console.log(indent("not saved: the corpus already holds this case, or a smaller one that fails the same way"));
 					}
 				}
 			}
@@ -473,7 +510,7 @@ async function main() {
 
 	console.log("");
 	console.log(`executed ${summary.executed} cases`);
-	console.log(`findings ${summary.findings} (${summary.saved} new corpus entries)`);
+	console.log(`findings ${summary.findings} (${summary.saved} new corpus entries, ${summary.known} already recorded)`);
 	console.log(`crashes ${summary.crashes}, hangs ${summary.hangs}, slow ${summary.slow}, async failures ${summary.asyncFailures}`);
 	process.exitCode = summary.crashes > 0 || summary.hangs > 0 || summary.findings > 0 ? 1 : 0;
 }

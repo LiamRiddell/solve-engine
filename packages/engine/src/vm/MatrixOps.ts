@@ -1,4 +1,4 @@
-import { type MatrixData, type MatrixEntry, type RangeData, Value, ValueType, matrixValue, numberValue, boolValue, symbolicValue, errorValue } from "@solve-js/vm/Value";
+import { type MatrixData, type MatrixEntry, type RangeData, Value, ValueType, matrixValue, numberValue, boolValue, symbolicValue, errorValue, faultedOperand } from "@solve-js/vm/Value";
 import { type SymbolicNode, constNode, simplifySymbolic, isRationalZero, rationalToNumber } from "@solve-js/symbolic";
 import { checkedArray } from "@solve-js/vm/AllocationBudget";
 
@@ -513,7 +513,10 @@ function tooLarge(length: number, maxElements: number): Value {
  * `vm.getMaxCollectionSize()`.
  */
 export function collectionToValues(v: Value, maxElements = Number.POSITIVE_INFINITY): Value[] | Value {
-	if (v.type === ValueType.Error) return v;
+	// Pending as well as Error: neither is a collection, and a collection that
+	// has not arrived is not an empty one. See `faultedOperand()` in vm/Value.ts.
+	const faulted = faultedOperand(v);
+	if (faulted) return faulted;
 	if (v.type === ValueType.Matrix) {
 		const m = v.value as MatrixData;
 		if (m.data.length > maxElements) return tooLarge(m.data.length, maxElements);

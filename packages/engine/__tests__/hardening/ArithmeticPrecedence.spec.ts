@@ -23,6 +23,14 @@
  * shifts, then `+`. They used to share a single level between `+` and `*`,
  * which no language does.
  *
+ * Grouping is all this file is about, and it is worth saying so, because `^`
+ * takes its grouping from one place and its arithmetic from another: it groups
+ * as mathematics, Python, Ruby and `**` do, and it COMPUTES as C99 and IEEE 754
+ * do, which differs from JavaScript for a base of exactly one or minus one
+ * raised to an infinity (`1 ^ (1/0)` is 1 here, not NaN). The two choices are
+ * independent and both are deliberate; see `power()` in vm/VMConversion.ts for
+ * the second, and `DifferentialRegressions.spec.ts` for how it was reached.
+ *
  * The reference for every bitwise and shift expectation below is the same
  * expression evaluated in JavaScript, computed separately and written in by
  * hand rather than read back off this engine.

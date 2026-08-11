@@ -56,6 +56,17 @@ export function caseId(fuzzCase: FuzzCase): string {
 }
 
 /**
+ * The kinds that are observed from outside the process suffering them.
+ *
+ * A crash is an exit code and a hang is a heartbeat that stopped advancing.
+ * Neither carries what a failure normally carries: there is no thrown value, no
+ * error code and no stack, because whatever would have produced one is dead. So
+ * everything the supervisor can write about them is the same sentence every
+ * time, and the sentence is about the supervisor rather than about the case.
+ */
+const OBSERVED_FROM_OUTSIDE: ReadonlySet<string> = new Set(["crash", "hang"]);
+
+/**
  * The signature the bounded run matches a failure against.
  *
  * Kind plus wording, because those are the two things that stay the same when
@@ -64,10 +75,23 @@ export function caseId(fuzzCase: FuzzCase): string {
  * different index or count each time it is reached, and matching on those would
  * make every recurrence look new.
  *
+ * A crash and a hang are signed by their input instead, because their wording
+ * distinguishes nothing (see {@link OBSERVED_FROM_OUTSIDE}). That is a weaker
+ * dedupe than the wording gives the other kinds: two inputs that hang for the
+ * same underlying reason are two signatures until they shrink to the same case.
+ * It is the right way round. A soak that files one hang twice has spent a
+ * shrink; a soak that mistakes the second hang for the first has lost it. The
+ * second is not hypothetical: on 2026-08-11 a run found that `gcd(4, arccos(2))`
+ * never returned and threw the finding away, because an unrelated hang recorded
+ * the day before already carried the sentence "hang during expression soak".
+ *
  * @param outcome - Kind and detail of a failure.
+ * @param input - The case that produced it, which is all that tells one crash
+ * or hang from another.
  * @returns A comparable string.
  */
-export function failureSignature(outcome: { kind: string; detail: string }): string {
+export function failureSignature(outcome: { kind: string; detail: string }, input: FuzzCase): string {
+	if (OBSERVED_FROM_OUTSIDE.has(outcome.kind)) return `${outcome.kind}::${caseId(input)}`;
 	const normalised = outcome.detail
 		// The value a conversion refused is the input, not the bug. Every
 		// non-numeric string reaching `BigInt()` is one finding, and leaving the
@@ -83,6 +107,11 @@ export function failureSignature(outcome: { kind: string; detail: string }): str
 	return `${outcome.kind}::${normalised}`;
 }
 
+/** The signature of a stored finding. */
+function entrySignature(entry: CorpusEntry): string {
+	return failureSignature({ kind: entry.outcome, detail: entry.detail }, entry.input);
+}
+
 /**
  * Signatures of the findings that are recorded and not yet fixed.
  *
@@ -91,6 +120,11 @@ export function failureSignature(outcome: { kind: string; detail: string }): str
  * always red is a suite nobody reads. With it, the suite says exactly one
  * thing: something is failing that the corpus does not already know about.
  *
+ * The soak uses it for the same question, and both of them must ask it of the
+ * open entries only. A `fixed` entry is a bug that is supposed to be gone: it
+ * stands for nothing that is allowed to happen now, so letting it answer "yes,
+ * known" silences a live finding on the strength of a dead one.
+ *
  * @param entries - A loaded corpus.
  * @returns The signatures to tolerate.
  */
@@ -98,7 +132,7 @@ export function knownOpenSignatures(entries: readonly CorpusEntry[]): ReadonlySe
 	const signatures = new Set<string>();
 	for (const entry of entries) {
 		if (entry.status !== "open") continue;
-		signatures.add(failureSignature({ kind: entry.outcome, detail: entry.detail }));
+		signatures.add(entrySignature(entry));
 	}
 	return signatures;
 }
@@ -144,11 +178,11 @@ export function loadCorpus(directory: string): CorpusEntry[] {
  */
 export function saveEntry(directory: string, entry: CorpusEntry): boolean {
 	fs.mkdirSync(directory, { recursive: true });
-	const signature = failureSignature({ kind: entry.outcome, detail: entry.detail });
+	const signature = entrySignature(entry);
 
 	for (const existing of loadCorpus(directory)) {
 		if (existing.id === entry.id) return false;
-		if (failureSignature({ kind: existing.outcome, detail: existing.detail }) !== signature) continue;
+		if (entrySignature(existing) !== signature) continue;
 		if (inputSize(existing.input) <= inputSize(entry.input)) return false;
 		// The new one is smaller, so it replaces the old file rather than joining
 		// it. A hand-written `note` or a `status` flip is the one thing worth

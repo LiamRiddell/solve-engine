@@ -154,7 +154,6 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   if (unit === "ms") return `= ${formatMsDuration(value)}`;
 
   const dp = settings.unitOfMeasurementResult.decimalPlaces;
-  const useUnitNames = settings.unitOfMeasurementResult.unitNames;
 
   // For TimeSpan values (days, weeks, hours, etc.), format as integer if the value is a whole number
   const timeSpanUnits = ["days", "weeks", "hours", "minutes", "seconds", "day", "week", "hour", "minute", "second"];
@@ -185,8 +184,17 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
     return `= ${withSymbol}`;
   }
 
-  const unitLabel = useUnitNames ? (unit || "") : (unit || "");
-  return `= ${formatted} ${unitLabel}`.trim();
+  // The unit is written as the symbol the value carries. There used to be a
+  // `unitOfMeasurementResult.unitNames` setting here whose two branches were
+  // the same expression, so it never changed anything, and it was removed
+  // rather than implemented: the engine has no unit-name data to render from.
+  // The generated unit table maps a spelling to [measure, ratio] only, and
+  // names cannot be recovered from it, because units that differ by an OFFSET
+  // share a ratio, so "20 C" would come back as "20 kelvins". A real
+  // implementation needs a hand-authored name per unit plus pluralization and
+  // per-locale spelling (metre against meter), which is a feature rather than
+  // the repair of a dead ternary.
+  return `= ${formatted} ${unit || ""}`.trim();
 }
 
 function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings): string {

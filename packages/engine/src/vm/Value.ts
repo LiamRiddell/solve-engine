@@ -627,3 +627,49 @@ export function pendingValue(queryKey: string): Value {
 export function errorValue(code: string, message: string): Value {
 	return new Value(ValueType.Error, code, message);
 }
+
+/**
+ * The first operand carrying a fault rather than a quantity, if any does.
+ *
+ * `Error` and `Pending` both read as the number 0 through {@link Value.toNumber},
+ * by a convention that only holds up as long as nothing asks. Every opcode and
+ * builtin that reaches for an operand's number without asking its type first
+ * therefore computes with a zero it cannot tell apart from a real one, and
+ * hands back an answer dressed in whatever type it was going to produce
+ * anyway. That is how `(5 kg to m) to s` came to answer `0.00 s`: the failed
+ * conversion is an Error, the second conversion read it as zero, and the unit
+ * the reader asked for made the result look like a conversion that worked.
+ *
+ * Operands are checked left to right, matching evaluation order, and the
+ * faulted Value is returned AS IT IS rather than replaced with a fresh one, so
+ * the original code and message (or the pending query key) reach the caller
+ * unchanged. `binaryOp` (vm/VMConversion.ts) and `OpCode.EXP` already did this
+ * inline; this is the same rule for every other site, in one place so a site
+ * added later can adopt it in a line.
+ *
+ * Three operands cover every call site in the VM (`MAT_INDEX2` and `MAT_SLICE`
+ * are the widest). A variadic signature would allocate an arguments array on
+ * paths that run per instruction; see {@link faultedIn} for the list case.
+ *
+ * @returns The faulted operand, or `null` when all of them carry a value.
+ */
+export function faultedOperand(a: Value, b?: Value, c?: Value): Value | null {
+	if (a.type === ValueType.Error || a.type === ValueType.Pending) return a;
+	if (b !== undefined && (b.type === ValueType.Error || b.type === ValueType.Pending)) return b;
+	if (c !== undefined && (c.type === ValueType.Error || c.type === ValueType.Pending)) return c;
+	return null;
+}
+
+/**
+ * {@link faultedOperand} over an already-built list, for the call sites that
+ * have one (a builtin's arguments, a plugin function's).
+ *
+ * @returns The first faulted element, or `null` when every element carries a value.
+ */
+export function faultedIn(values: readonly Value[]): Value | null {
+	for (let i = 0; i < values.length; i++) {
+		const v = values[i];
+		if (v.type === ValueType.Error || v.type === ValueType.Pending) return v;
+	}
+	return null;
+}

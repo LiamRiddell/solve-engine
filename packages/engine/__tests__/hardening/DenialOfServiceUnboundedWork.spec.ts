@@ -76,13 +76,45 @@ describe("an exact bigint is bounded by how many bits it may reach", () => {
 	test("exponentiation is the operator that has the guard", () => {
 		// Establishes that the ceiling exists and works, so the next case is
 		// about one operator having been missed rather than about the limit
-		// being wrong. 100,000 bits is above MAX_EXACT_POW_BITS (65,536), so the
-		// exact path stands aside and the ordinary double path answers, which
-		// for a number this size means Infinity.
+		// being wrong. 100,000 bits is above MAX_EXACT_POW_BITS (65,536).
 		const engine = newTrackedEngine("en");
-		const guarded = evaluate(engine, "2n ^ 100000");
-		expect(guarded.type).toBe(ValueType.Number);
-		expect(guarded.value).toBe(Infinity);
+		expect(refused(engine, "2n ^ 100000")).toBe(true);
+	});
+
+	test("and past it the exact operators refuse rather than answering Infinity", () => {
+		// DECIDED (1.0.0, differential run 20260811). This used to fall through
+		// to the ordinary double path, which for a number this size answers
+		// Infinity, and the shift was made to agree with it. That agreement was
+		// the right instinct about the wrong answer: `2n ^ 100000` names a
+		// 30,103-digit integer, and Infinity says both that it is beyond
+		// counting and that nothing was refused, neither of which is true.
+		//
+		// The engine already draws this line one operator over, for the same
+		// reason: `1 / 0` is Infinity and `1n / 0n` is refused, because exact
+		// integer arithmetic does not hand back approximations. The double
+		// spellings are untouched, so `2 ^ 100000` is still Infinity.
+		const engine = newTrackedEngine("en");
+		expect(evaluate(engine, "2n ^ 100000").value).toBe("BIGINT_POW_LIMIT_EXCEEDED");
+		expect(evaluate(engine, "1n << 100000").value).toBe("BIGINT_SHIFT_LIMIT_EXCEEDED");
+		// The double path keeps IEEE 754's answer, which is the whole reason
+		// the two types are different types.
+		const asDoubles = evaluate(engine, "2 ^ 100000");
+		expect(asDoubles.type).toBe(ValueType.Number);
+		expect(asDoubles.value).toBe(Infinity);
+	});
+
+	test("and an exact answer that costs nothing is still given", () => {
+		// The ceiling is on the size of the result, not on the size of the
+		// exponent, so the bases whose powers stay one bit wide are answered
+		// however absurd the exponent is. Without this the guard would refuse
+		// `1n ^ 1000000`, whose answer is 1.
+		const engine = newTrackedEngine("en");
+		expect(evaluate(engine, "1n ^ 1000000").value).toBe(BigInt(1));
+		expect(evaluate(engine, "0n << 10000000").value).toBe(BigInt(0));
+		// A fractional or negative exponent has no exact answer to bound, so
+		// those keep the double path rather than being refused with it.
+		expect(evaluate(engine, "4n ^ 0.5").value).toBe(2);
+		expect(evaluate(engine, "2n ^ -1").value).toBe(0.5);
 	});
 
 	test("both spellings agree while they are small enough to be exact", () => {
@@ -98,9 +130,9 @@ describe("an exact bigint is bounded by how many bits it may reach", () => {
 	});
 
 	test("and shifting is bounded by the same ceiling as raising to a power", () => {
-		// BUG. `<<` has no ceiling of any kind. `1n << 100000` builds an exact
+		// `<<` used to have no ceiling of any kind. `1n << 100000` built an exact
 		// 100,001-bit integer, 30,103 decimal digits, where `2n ^ 100000` asks
-		// for the identical value and is refused. The shift keeps going all the
+		// for the identical value and was refused. The shift kept going all the
 		// way to V8's own maximum bigint size: `1n << 1000000000` is a 125MB
 		// integer, and `1n << 10000000000` is the first size large enough that
 		// V8 itself says no.
@@ -113,19 +145,26 @@ describe("an exact bigint is bounded by how many bits it may reach", () => {
 		// that: displaying the answer is what it asked the engine for.
 		//
 		// Fixing the shift fixes the formatter, since the formatter is only ever
-		// as slow as the largest bigint the VM will hand it. The two operators
-		// agreeing is the whole assertion, so it does not pin which answer they
-		// agree on.
+		// as slow as the largest bigint the VM will hand it.
 		const engine = newTrackedEngine("en");
-		expect(evaluate(engine, "1n << 100000").value).toEqual(evaluate(engine, "2n ^ 100000").value);
+		expect(refused(engine, "1n << 100000")).toBe(true);
 	});
 
 	test("the same ceiling applies however the shift is spelled", () => {
-		// BUG, same cause. `VMConversion.ts`'s BigInt branch triggers when EITHER
-		// operand is one, so a bigint on the right of an ordinary number reaches
-		// the same unbounded shift, and `>>`'s sibling case has no guard either.
+		// `VMConversion.ts`'s BigInt branch triggers when EITHER operand is one,
+		// so a bigint on the right of an ordinary number reaches the same shift,
+		// and `>>`'s sibling case needs the same guard: a bigint `>>` with a
+		// negative count grows exactly as fast as a `<<` with a positive one.
+		//
+		// The four spellings answering the same way is the point. The one just
+		// past the ceiling is the case that decided it: `1n << 66000` is an
+		// ordinary 19,870-digit integer, and it used to come back as Infinity,
+		// with nothing on screen to say a limit had been reached.
 		const engine = newTrackedEngine("en");
 		expect(refused(engine, "1 << 100000n")).toBe(true);
+		expect(refused(engine, "1n << 66000")).toBe(true);
+		expect(refused(engine, "1n >> -100000")).toBe(true);
+		expect(refused(engine, "1 >> -100000n")).toBe(true);
 	});
 });
 

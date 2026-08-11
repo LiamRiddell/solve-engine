@@ -81,8 +81,8 @@ const FORBIDDEN: ReadonlySet<OutcomeKind> = new Set<OutcomeKind>(["throw", "cont
 const KNOWN_OPEN = knownOpenSignatures(loadCorpus(CORPUS_DIRECTORY));
 
 /** Whether a failure is one the corpus already accounts for. */
-function isKnown(outcome: { kind: OutcomeKind; detail: string }): boolean {
-	return KNOWN_OPEN.has(failureSignature(outcome));
+function isKnown(outcome: { kind: OutcomeKind; detail: string }, input: FuzzCase): boolean {
+	return KNOWN_OPEN.has(failureSignature(outcome, input));
 }
 
 /**
@@ -160,7 +160,7 @@ describe("fuzz corpus", () => {
 				try {
 					const outcome = runCase(entry.input, engine, BOUNDED_LIMITS);
 
-					if (FORBIDDEN.has(outcome.kind) && !isKnown(outcome)) {
+					if (FORBIDDEN.has(outcome.kind) && !isKnown(outcome, entry.input)) {
 						throw new Error(
 							`corpus entry ${entry.id} produced an unrecorded ${outcome.kind}: ${outcome.detail}\n` +
 							`  recorded as: ${entry.outcome} (${entry.detail})\n  ${describeCase(entry.input)}`,
@@ -198,7 +198,7 @@ describe("bounded bytecode fuzz", () => {
 				const fuzzCase = generateBytecodeCase(seed, { mutationPool: programs, mutationOrigins: origins });
 				const outcome = runCase(fuzzCase, null, BOUNDED_LIMITS);
 				executed++;
-				if (FORBIDDEN.has(outcome.kind) && !isKnown(outcome)) {
+				if (FORBIDDEN.has(outcome.kind) && !isKnown(outcome, fuzzCase)) {
 					throw new Error(
 						`seed ${seed} produced ${outcome.kind}: ${outcome.detail}\n  ${describeCase(fuzzCase)}\n` +
 						`  reduce it with: npm run fuzz -- --generator=bytecode --seed=${seed} --count=1`,
@@ -225,7 +225,7 @@ describe("bounded expression fuzz", () => {
 				const fuzzCase = generateExpressionCase(seed, vocabulary);
 				const outcome = runCase(fuzzCase, engine, BOUNDED_LIMITS);
 				executed++;
-				if (FORBIDDEN.has(outcome.kind) && !isKnown(outcome)) {
+				if (FORBIDDEN.has(outcome.kind) && !isKnown(outcome, fuzzCase)) {
 					throw new Error(
 						`seed ${seed} produced ${outcome.kind}: ${outcome.detail}\n  ${describeCase(fuzzCase)}\n` +
 						`  reduce it with: npm run fuzz -- --generator=expression --seed=${seed} --count=1`,

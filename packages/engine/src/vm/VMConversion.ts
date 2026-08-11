@@ -204,6 +204,42 @@ function exactBigInt(v: Value): bigint | null {
 }
 
 /**
+ * `base` raised to `exponent`, in doubles.
+ *
+ * DECIDED (1.0.0, differential run 20260811): where ECMAScript and C99/IEEE 754
+ * disagree about `pow`, this engine follows C99.
+ *
+ * They disagree in exactly one family of cases, a base of exactly ±1 with an
+ * exponent that is not a finite number. ECMAScript's `**` answers NaN for
+ * `1 ** Infinity` and `1 ** NaN`, on the reasoning that 1^infinity is an
+ * indeterminate FORM in the calculus of limits. C99 (F.9.4.4), IEEE 754's
+ * `pow`, Python and Ruby all answer 1, on the reasoning that this is not a
+ * limit: the base here is the number one, not something approaching it, and one
+ * multiplied by itself any number of times is one.
+ *
+ * `1^2^3^4^5` is what made the choice matter. `^` groups right, so that tower
+ * is 1^(2^(3^(4^5))); the inner tower overflows a double to Infinity, and the
+ * outermost step is 1^Infinity. Under ECMAScript's rule the answer is NaN, so
+ * an expression whose every base is 1 answers "not a number", and the reason is
+ * a rounding artefact three levels down rather than anything about the
+ * question. Under C99's rule it is 1, which is also what it is under exact
+ * arithmetic, which settles it: the release that exists to stop the engine
+ * answering confidently from an artefact should not itself do that.
+ *
+ * `NaN ^ 0` is 1 under both rules and needs no branch here.
+ */
+export function power(base: number, exponent: number): number {
+    // The overwhelmingly common case, and the one both standards agree on.
+    if (Number.isFinite(exponent)) return Math.pow(base, exponent);
+    // pow(1, y) is 1 for every y, a NaN exponent included.
+    if (base === 1) return 1;
+    // pow(-1, +-infinity) is 1 as well, but pow(-1, NaN) is NaN: C99 extends
+    // the rule to a NaN exponent only for the base +1.
+    if (base === -1 && !Number.isNaN(exponent)) return 1;
+    return Math.pow(base, exponent);
+}
+
+/**
  * Apply a numeric binary operation with type-aware dispatch.
  * Handles BigInt, UoM, Vector, Symbolic, and plain Number operands.
  *

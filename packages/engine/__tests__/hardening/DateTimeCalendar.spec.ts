@@ -15,6 +15,15 @@
  * minus-separated numbers whose first group had four digits, so ordinary
  * subtraction that began with a year-shaped number was silently answered
  * with a date.
+ *
+ * The first fix for that required the ISO branch's month and day to be
+ * zero-padded, which worked and cost `2024-5-3`, an ordinary way to write a
+ * date. What actually tells the two apart is whether the expression was
+ * written as one uninterrupted run of characters or with spaces around its
+ * operators, so that is what the rule tests now (see `writtenAsOneRun` in
+ * `datetime/normalizer/DateLiteralNormalizerRule.ts`). Both halves are pinned
+ * below: unpadded literals are dates, and every spaced chain, padded or not,
+ * is arithmetic.
  */
 
 import { describe, expect, test } from "@jest/globals";
@@ -203,14 +212,16 @@ describe("ISO week numbers at the year boundary", () => {
 });
 
 describe("date literals versus the arithmetic they look like", () => {
-	test("an ISO date needs its month and day zero-padded, so plain subtraction stays plain", () => {
+	test("a subtraction written with spaces around its operators stays subtraction", () => {
 		// The bug this guards: "2024 - 5 - 3" answered "Friday, May 3, 2024".
-		// Neither spelling below is a valid ISO 8601 date, and both are
-		// perfectly ordinary subtraction.
+		// The spaces are the whole signal. Nobody types them when they mean the
+		// date, so a spaced chain is arithmetic no matter how date-shaped its
+		// groups are.
 		expect(evaluate("2024 - 5 - 3").type).toBe(ValueType.Number);
 		expect(num("2024 - 5 - 3")).toBe(2016);
 		expect(num("2024 - 1 - 1")).toBe(2022);
 		expect(num("2020 - 10 - 2")).toBe(2008);
+		expect(num("1999 - 2 - 3")).toBe(1994);
 	});
 
 	test("a longer subtraction chain is not swallowed either", () => {
@@ -220,15 +231,42 @@ describe("date literals versus the arithmetic they look like", () => {
 		expect(num("2024 - 1 - 1 - 1")).toBe(2021);
 	});
 
-	test("a properly padded ISO date is still a date", () => {
+	test("zero-padding a spaced chain does not turn it into a date", () => {
+		// This is the one genuinely ambiguous spelling, and it reads as
+		// arithmetic. Padding is not evidence of a date: somebody subtracting
+		// writes "05" for the same reasons they write it anywhere else, and
+		// reading this as May 3 would leave that subtraction with no spelling
+		// at all. Spacing is evidence, and it points the other way.
+		expect(num("2024 - 05 - 03")).toBe(2016);
+		expect(num("12 - 25 - 2023")).toBe(-2036);
+		expect(num("1 - 1 - 2020")).toBe(-2020);
+	});
+
+	test("a division chain written with spaces stays division", () => {
+		// The same reasoning as the subtraction rows above, on the separator
+		// the European ordering uses. "25 / 12 / 2023" was Christmas 2023.
+		expect(num("25 / 12 / 2023")).toBeCloseTo(25 / 12 / 2023, 12);
+		expect(num("10 / 5 / 20")).toBeCloseTo(10 / 5 / 20, 12);
+	});
+
+	test("an ISO date is still a date, padded or not", () => {
 		expect(evaluate("2023-12-25").toNumber()).toBe(localMidnight(2023, 12, 25));
 		expect(evaluate("2023-01-31").toNumber()).toBe(localMidnight(2023, 1, 31));
 		expect(evaluate("1999-06-15").toNumber()).toBe(localMidnight(1999, 6, 15));
+		// Unpadded, which is how people type it. The US ordering has always
+		// accepted "1-1-2020", so requiring padding here was an inconsistency
+		// between two spellings of one rule rather than a policy.
+		expect(evaluate("2024-5-3").toNumber()).toBe(localMidnight(2024, 5, 3));
+		expect(evaluate("2024-5-03").toNumber()).toBe(localMidnight(2024, 5, 3));
+		expect(evaluate("2024-05-3").toNumber()).toBe(localMidnight(2024, 5, 3));
 	});
 
 	test("an out-of-range month or day in ISO shape falls back to arithmetic", () => {
 		expect(num("2024 - 13 - 01")).toBe(2010);
 		expect(num("2024 - 05 - 32")).toBe(1987);
+		// Unspaced too, where adjacency alone would have let them through.
+		expect(num("2024-13-01")).toBe(2010);
+		expect(num("2024-05-32")).toBe(1987);
 	});
 
 	test("the US format still requires a 2 or 4 digit year, so short chains stay arithmetic", () => {

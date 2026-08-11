@@ -90,6 +90,86 @@ describe("Date literal parsing (DateLiteralNormalizerRule + DateLiteralParselet)
       expect(result.type).toBe(ValueType.Datetime);
       expect(result.toNumber()).toBe(localMidnight(2023, 1, 31));
     });
+
+    test.each([
+      ["2024-5-3", "neither group padded"],
+      ["2024-5-03", "month unpadded, day padded"],
+      ["2024-05-3", "month padded, day unpadded"],
+      ["2024-05-03", "both padded"],
+    ])("%s is May 3 2024 (%s)", (source) => {
+      // Zero-padding is what ISO 8601 requires of a serialized date and not
+      // what people type. The US ordering in this same rule has always taken
+      // unpadded groups ("1-1-2020" below), so refusing them here was an
+      // inconsistency rather than a policy.
+      const engine = newTrackedEngine("en", false);
+      const [result] = engine.evaluateExpression(source);
+      expect(result.type).toBe(ValueType.Datetime);
+      expect(result.toNumber()).toBe(localMidnight(2024, 5, 3));
+    });
+
+    test("an unpadded date literal still takes a duration: 2024-5-3 + 1 day", () => {
+      const engine = newTrackedEngine("en", false);
+      const [result] = engine.evaluateExpression("2024-5-3 + 1 day");
+      expect(result.type).toBe(ValueType.Datetime);
+      expect(result.toNumber()).toBe(localMidnight(2024, 5, 4));
+    });
+
+    test("a group of three or more digits is not a date group: 2024-05-030", () => {
+      // The calendar check would not catch this on its own, since "030" reads
+      // back as day 30. Left as arithmetic: 2024 - 5 - 30.
+      const engine = newTrackedEngine("en", false);
+      const [result] = engine.evaluateExpression("2024-05-030");
+      expect(result.type).toBe(ValueType.Number);
+      expect(result.toNumber()).toBe(2024 - 5 - 30);
+    });
+  });
+
+  describe("spacing is what separates a date from the arithmetic it is spelled like", () => {
+    /*
+     * A date literal is written as one uninterrupted run of characters; a
+     * chain of operators is written with spaces around them. That difference
+     * survives only in the token offsets, since the tokens themselves are the
+     * same five either way, and it is the only signal that works for every
+     * ordering. See `writtenAsOneRun` in the rule.
+     *
+     * Zero-padding is deliberately NOT the signal, in either direction. It is
+     * absent from plenty of real dates and present in plenty of real
+     * arithmetic, so "2024 - 05 - 03" below is subtraction: reading it as a
+     * date would leave that subtraction with no spelling at all.
+     */
+
+    test.each([
+      ["2024 - 5 - 3", 2016],
+      ["2024 - 05 - 03", 2016],
+      ["1999 - 2 - 3", 1994],
+      ["2024 - 1 - 1 - 1", 2021],
+      ["12 - 25 - 2023", -2036],
+      ["1 - 1 - 2020", -2020],
+    ])("%s is subtraction, not a date", (source, expected) => {
+      const engine = newTrackedEngine("en", false);
+      const [result] = engine.evaluateExpression(source);
+      expect(result.type).toBe(ValueType.Number);
+      expect(result.toNumber()).toBe(expected);
+    });
+
+    test.each([
+      ["25 / 12 / 2023", 25 / 12 / 2023],
+      ["5 / 1 / 23", 5 / 1 / 23],
+    ])("%s is division, not a date", (source, expected) => {
+      const engine = newTrackedEngine("en", false);
+      const [result] = engine.evaluateExpression(source);
+      expect(result.type).toBe(ValueType.Number);
+      expect(result.toNumber()).toBeCloseTo(expected, 12);
+    });
+
+    test("one space anywhere in the run is enough: 2023- 12-25", () => {
+      // Adjacency is checked across the whole five-token run rather than at
+      // the first separator only, so a chain cannot be half a date.
+      const engine = newTrackedEngine("en", false);
+      const [result] = engine.evaluateExpression("2023- 12-25");
+      expect(result.type).toBe(ValueType.Number);
+      expect(result.toNumber()).toBe(2023 - 12 - 25);
+    });
   });
 
   describe("US format: MM-DD-YYYY", () => {
@@ -105,6 +185,14 @@ describe("Date literal parsing (DateLiteralNormalizerRule + DateLiteralParselet)
       const [result] = engine.evaluateExpression("01-31-2023");
       expect(result.type).toBe(ValueType.Datetime);
       expect(result.toNumber()).toBe(localMidnight(2023, 1, 31));
+    });
+
+    test("unpadded groups are accepted, and always have been: 1-1-2020 is Jan 1", () => {
+      // This row is the precedent the ISO ordering above now matches.
+      const engine = newTrackedEngine("en", false);
+      const [result] = engine.evaluateExpression("1-1-2020");
+      expect(result.type).toBe(ValueType.Datetime);
+      expect(result.toNumber()).toBe(localMidnight(2020, 1, 1));
     });
 
     test("2-digit year: 12-25-23 -> 2023", () => {
