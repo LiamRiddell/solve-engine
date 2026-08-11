@@ -173,6 +173,59 @@ mid-thought is the normal case, not the edge case.
 - **Not arbitrary-precision by default.** Ordinary arithmetic uses doubles, and
   a big-integer type is available where exactness matters.
 
+## Security
+
+This engine runs untrusted input by design: a calculator's whole job is to
+evaluate whatever someone typed. That shapes how it is built and how it is
+tested.
+
+**No dynamic code execution.** There is no `eval`, no `new Function`, and no
+code generation anywhere in the source. An expression is lexed, parsed, and
+compiled to a fixed bytecode instruction set, then run on a VM that can only do
+what its opcodes do. There is no path from an expression to arbitrary
+JavaScript.
+
+**No I/O of its own.** The engine reads no files, spawns no processes, and
+opens no sockets. The only network access is in three opt-in packages
+(currency, weather, stocks) that a host must supply a data source for; nothing
+is fetched unless the host wires it up.
+
+**One runtime dependency.** `@tanstack/query-core`, for caching async
+resolution. Everything else, including the parser, the VM, the unit table and
+the computer algebra, is in this repository.
+
+**Bounded by construction.** Untrusted input must not be able to hang or kill
+the host process, which for an editor plugin means the editor. Expression
+length, nesting depth, instruction count, stack depth, collection size, total
+allocation, function-call breadth and recursion depth are all capped. Every
+limit is configurable, and exceeding one raises a recoverable error naming what
+was refused rather than an unrecoverable one. The allocation budget exists
+because per-operation limits do not compose: two individually legal matrices
+can multiply into a fatal one.
+
+**Fuzzed, not just tested.** A seeded fuzzer with automatic shrinking runs
+against both the expression grammar and the bytecode VM. It generates malformed
+programs, mutates valid ones, and asserts three invariants: the process never
+dies, nothing hangs, and every failure is a well-formed `EngineError` rather
+than a raw JavaScript exception. `executeBytecode` is a public export, so
+malformed bytecode is a real caller surface and is fuzzed as one. Findings are
+shrunk to a minimal reproducer and committed to a corpus that replays on every
+test run, so a fixed bug cannot come back quietly.
+
+Run it yourself:
+
+```sh
+npm run fuzz                      # random seeds, both generators
+npm run fuzz -- --minutes=10      # a longer soak
+```
+
+**Verified against the previous release.** `tools/differential/` compares every
+expression it can find against the last published version and classifies every
+difference, so a behaviour change has to be deliberate rather than discovered
+afterwards.
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
+
 ## Repository
 
 | Path | What is in it |
