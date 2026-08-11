@@ -175,3 +175,33 @@ jobs:
         # authenticates over OIDC, and it generates provenance attestations on
         # its own; passing the flag as well is redundant rather than harmful,
         # but leaving it out keeps it clear where the signing comes from.
+
+  notify-obsidian-solve:
+    name: Tell obsidian-solve a release shipped
+    # needs + result check rather than a plain `needs:`, so this only fires
+    # once `npm publish` actually succeeded — not merely once this workflow
+    # reached the publish job. A release that fails `verify`/`test:consumer`
+    # (or npm itself rejects the publish) must not tell a downstream
+    # consumer a version exists that never made it to the registry.
+    needs: publish
+    if: needs.publish.result == 'success'
+    runs-on: ubuntu-24.04
+
+    # Nothing in this job touches this repo, only obsidian-solve's API — no
+    # repo permissions needed here, the DISPATCH_OBSIDIAN_SOLVE secret below
+    # carries its own.
+    permissions: {}
+
+    steps:
+      - name: Dispatch to obsidian-solve
+        env:
+          GH_TOKEN: ${{ secrets.DISPATCH_OBSIDIAN_SOLVE }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          # RELEASE_TAG is `solve-engine@<version>` (this workflow's own tag
+          # convention, see assert-release-tag.mjs) — obsidian-solve wants
+          # just the version, to pass straight to `npm install solve-engine@`.
+          version="${RELEASE_TAG#solve-engine@}"
+          gh api repos/LiamRiddell/obsidian-solve/dispatches \
+            -f event_type=solve-engine-released \
+            -f "client_payload[version]=${version}"
