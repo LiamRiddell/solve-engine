@@ -78,7 +78,14 @@ Publishing it runs the publish job, which:
 2. runs `npm run verify`, the same gate a contributor runs;
 3. runs `npm run test:consumer`, which installs the built tarball and uses it,
    because a version cannot be replaced once it is on the registry;
-4. publishes to the `latest` dist-tag over OIDC.
+4. publishes to the `latest` dist-tag over OIDC;
+5. tells `obsidian-solve` a release shipped, via a repository dispatch carrying
+   the bare version.
+
+That last step is gated on the publish job actually succeeding, not merely on
+the workflow reaching it. A release that fails `verify` or `test:consumer`, or
+that npm rejects, must not tell a downstream consumer a version exists that
+never reached the registry.
 
 Draft releases do not publish. The workflow listens for `released: [published]`,
 so a draft sits harmlessly until you publish it.
