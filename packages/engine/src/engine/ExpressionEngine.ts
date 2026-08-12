@@ -1061,7 +1061,11 @@ export class ExpressionEngine {
                         }
                     }
                 } else {
-                    const expression = lineText.trim();
+                    // Sliced from the same offset the tokens were, or the text
+                    // and the token stream describe different lines.
+                    const contentOffset = scanResult.classification.contentOffset;
+                    const evaluable = contentOffset === undefined ? lineText : lineText.slice(contentOffset - startPosition);
+                    const expression = evaluable.trim();
                     if (expression) {
                         // Pass pre-tokenized tokens from scanDocument to avoid re-lexing
                         try {

@@ -39,6 +39,22 @@ export interface LineClassification {
   skip: boolean;
   /** Whether the line contains inline solve markers (`s`...``) */
   hasInlineSolve: boolean;
+  /**
+   * Offset of the first evaluable character, when structural markup precedes
+   * it. Absolute, in the same coordinates the classification was asked for,
+   * and absent when the whole line is evaluable.
+   *
+   * A list marker is markup, not arithmetic. `- 100 + 20` is a bullet holding
+   * `100 + 20`, but `-` is also a prefix operator, so without this the line
+   * evaluated as negative one hundred and answered -80: a wrong answer that
+   * looks like a right one. `*` and `+` in the same position could not even do
+   * that, one erroring and the other correct by luck, so the three markers
+   * disagreed with each other about the same document.
+   *
+   * Consumers must slice both the text and the token stream from here, or the
+   * two describe different lines.
+   */
+  contentOffset?: number;
 }
 
 /** Inline solve position with precise coordinates */
@@ -750,6 +766,11 @@ export class ExpressionLexer {
           // this.pos will be at lineEnd (the newline position).
           const savedLen = this.len;
           this.len = lineEnd;
+          // Start past any structural marker, so the marker never becomes a
+          // token. Token source offsets stay absolute, so everything
+          // downstream (spans, highlighting, inline solves) still lines up
+          // with the raw document.
+          if (classification.contentOffset !== undefined) this.pos = classification.contentOffset;
           tokens = Array.from(this);
           this.len = savedLen;
           // this.pos is now at lineEnd, advance past newline below
@@ -1606,6 +1627,35 @@ export class ExpressionLexer {
    * Reads directly from this.input using start/end boundaries.
    * DOES NOT modify this.pos, purely a read-only classifier.
    */
+  /**
+   * Advance past the whitespace after a list marker, and past a task-item
+   * checkbox if one follows.
+   *
+   * The checkbox is included because it is markup by the same argument the
+   * marker is, and because leaving it stopped the line dead: `- [ ] 100 + 20`
+   * lexed `[ ]` as a matrix literal and reported that a matrix cannot be
+   * empty, which tells a user writing a to-do list nothing they can act on.
+   *
+   * @param from - Offset just past the marker character.
+   * @param end - Line end, never read past.
+   * @returns Offset of the first evaluable character.
+   */
+  private skipMarkerGap(from: number, end: number): number {
+    const input = this.input;
+    let pos = from;
+    while (pos < end && (input.charCodeAt(pos) === 32 || input.charCodeAt(pos) === 9)) pos++;
+
+    // `[ ]`, `[x]`, `[X]`, or any single-character state Obsidian allows.
+    if (pos + 2 < end && input.charCodeAt(pos) === 91 && input.charCodeAt(pos + 2) === 93) {
+      let after = pos + 3;
+      while (after < end && (input.charCodeAt(after) === 32 || input.charCodeAt(after) === 9)) after++;
+      // Only when whitespace followed, so `[1,2]` opening a real matrix is
+      // never mistaken for a checkbox.
+      if (after > pos + 3) return after;
+    }
+    return pos;
+  }
+
   private classifyFromPositions(start: number, end: number): LineClassification {
     const len = end;
 
@@ -1684,7 +1734,10 @@ export class ExpressionLexer {
         const idx = input.indexOf('s`', pos);
         hasInline = idx !== -1 && idx < len;
       }
-      return { type: 'list', skip: false, hasInlineSolve: hasInline };
+      // The space is what makes this a marker rather than an operator, and it
+      // is required by CommonMark for exactly that reason. `-100 + 20` has no
+      // space and stays arithmetic; `- 100 + 20` is a bullet.
+      return { type: 'list', skip: false, hasInlineSolve: hasInline, contentOffset: this.skipMarkerGap(pos + 1, len) };
     }
 
     // ── Ordered list: \n+ '. ' ────────────────────────────────────────
@@ -1699,7 +1752,7 @@ export class ExpressionLexer {
             const idx = input.indexOf('s`', pos);
             hasInline = idx !== -1 && idx < len;
           }
-          return { type: 'list', skip: false, hasInlineSolve: hasInline };
+          return { type: 'list', skip: false, hasInlineSolve: hasInline, contentOffset: this.skipMarkerGap(digitPos + 1, len) };
         }
       }
     }

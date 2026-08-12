@@ -198,31 +198,31 @@ describe("ExpressionLexer — classifyLine", () => {
 
   test("- item → list, evaluate", () => {
     expect(classify("- item")).toEqual({
-      type: "list", skip: false, hasInlineSolve: false,
+      type: "list", skip: false, hasInlineSolve: false, contentOffset: 2,
     });
   });
 
   test("* item → list, evaluate", () => {
     expect(classify("* item")).toEqual({
-      type: "list", skip: false, hasInlineSolve: false,
+      type: "list", skip: false, hasInlineSolve: false, contentOffset: 2,
     });
   });
 
   test("+ item → list, evaluate", () => {
     expect(classify("+ item")).toEqual({
-      type: "list", skip: false, hasInlineSolve: false,
+      type: "list", skip: false, hasInlineSolve: false, contentOffset: 2,
     });
   });
 
   test("1. item → list, evaluate", () => {
     expect(classify("1. item")).toEqual({
-      type: "list", skip: false, hasInlineSolve: false,
+      type: "list", skip: false, hasInlineSolve: false, contentOffset: 3,
     });
   });
 
   test("multi-digit ordered list → list, evaluate", () => {
     expect(classify("123. item")).toEqual({
-      type: "list", skip: false, hasInlineSolve: false,
+      type: "list", skip: false, hasInlineSolve: false, contentOffset: 5,
     });
   });
 
