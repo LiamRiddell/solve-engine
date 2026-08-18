@@ -82,17 +82,31 @@ jobs:
 
       - run: npm ci
 
-      # No `publish:` key. This job can no longer put anything on the registry,
-      # which is the point of the split, and it holds no `id-token` permission
-      # to do it with either.
+      # No `publish-script:` key. This job can no longer put anything on the
+      # registry, which is the point of the split, and it holds no `id-token`
+      # permission to do it with either. Without that key the action only ever
+      # opens the version pull request; tags and GitHub releases belong to the
+      # publish job below.
+      #
+      # The input names below are the v2 ones. v2 renamed every input this step
+      # passes (`version`/`title`/`commit` became
+      # `version-script`/`pr-title`/`commit-message`) and dropped the
+      # `GITHUB_TOKEN` environment variable in favour of the `github-token`
+      # input, which already defaults to `${{ github.token }}` — the same token
+      # the old `env:` block was passing by hand. Renaming was not optional: an
+      # unrecognised input is ignored rather than rejected, so the old spelling
+      # would have quietly reverted this step to the action's defaults and
+      # opened a pull request titled "Version Packages" that ran a bare
+      # `changeset version`, skipping the lockfile/build/size steps in
+      # `changeset:version`. v2 also requires Changesets CLI v3, which is why
+      # this moved in step with the `@changesets/cli` bump rather than on its
+      # own.
       - name: Version pull request
-        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        uses: changesets/action@198f833dd7d863100ea6e28967bc9a9fdefadb0a # v2.1.0
         with:
-          version: npm run changeset:version
-          title: "chore: version packages"
-          commit: "chore: version packages"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          version-script: npm run changeset:version
+          pr-title: "chore: version packages"
+          commit-message: "chore: version packages"
 
   publish:
     name: Publish to npm
