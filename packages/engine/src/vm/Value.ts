@@ -1,6 +1,6 @@
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { chargeAllocation } from "@solve-js/vm/AllocationBudget";
-import type { SymbolicNode } from "@solve-js/symbolic";
+import type { SymbolicNode, Rational } from "@solve-js/symbolic";
 import type { DecimalData } from "@solve-js/decimal";
 
 /**
@@ -206,6 +206,9 @@ export function persistentValue(v: Value): Value {
 	// referenced money value would silently drop back to the double: "a = $0.10,
 	// b = $0.20, a + b" must still be exact across the STORE_VAR round trip.
 	if (v.exact !== undefined) p.exact = v.exact;
+	// The rational sidecar survives the same round trip, so "a = 1/3, a + a + a"
+	// is exactly 1 rather than the drifted double a stored fraction would carry.
+	if (v.rational !== undefined) p.rational = v.rational;
 	return p;
 }
 
@@ -282,6 +285,24 @@ export class Value {
 	 * {@link recycle} so a reused arena Value never inherits a stale exact.
 	 */
 	public exact?: DecimalData;
+	/**
+	 * The exact rational value this Value stands for, when it has one.
+	 *
+	 * The second sidecar, the same shape as {@link exact} and for the same
+	 * reason: a fraction has no exact base-ten form (`1/3` is not any decimal),
+	 * so exact fraction arithmetic needs a numerator/denominator pair rather
+	 * than a coefficient and a scale. Integer division seeds it ("1/3" carries
+	 * the {@link Rational} 1/3), and `+`, `-`, `*`, `/` between rational-bearing
+	 * numbers keep it reduced, so "1/49 * 49" is exactly 1 and "5/6 - 1/6 - 1/6
+	 * - 1/6 - 1/6 - 1/6" is exactly 0 rather than the 1.6e-16 the doubles drift
+	 * to. `value` still holds the nearest double, recomputed from the exact
+	 * rational so accumulation error never creeps in, which is why the default
+	 * display and every `.value`/`toNumber()` reader are unchanged. Only a
+	 * fraction written with "/" carries it, so a decimal literal ("0.1") and a
+	 * transcendental result ("sqrt(2)") stay the plain doubles they were.
+	 * Cleared by {@link recycle} alongside {@link exact}.
+	 */
+	public rational?: Rational;
 
 	constructor(
 		type: ValueType,
@@ -314,6 +335,9 @@ export class Value {
 		// Clear the exact sidecar for the same reason: a reused Value that once
 		// held money must not carry that money's decimal into a plain number.
 		this.exact = undefined;
+		// The rational sidecar clears with it: a reused Value that once held a
+		// fraction must not carry that fraction into a plain number.
+		this.rational = undefined;
 	}
 
 	isNumber(): this is Value & { value: number } {
@@ -436,6 +460,22 @@ export function numberValue(n: number): Value {
 export function numberValueExact(n: number, exact: DecimalData): Value {
 	const v = numberValue(n);
 	v.exact = exact;
+	return v;
+}
+
+/**
+ * A Number that also carries the exact rational it evaluates to.
+ *
+ * The rational counterpart of {@link numberValueExact}: the type stays
+ * {@link ValueType.Number} and `value` stays the nearest double (recomputed
+ * from the rational, so a chain of fraction operations never accumulates
+ * float error), so this reads as an ordinary number everywhere. The `rational`
+ * sidecar is what keeps the next fraction operation and any `as fraction`
+ * exact. Integer division produces this (see the DIV opcode).
+ */
+export function numberValueRational(n: number, rational: Rational): Value {
+	const v = numberValue(n);
+	v.rational = rational;
 	return v;
 }
 
