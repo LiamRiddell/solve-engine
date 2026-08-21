@@ -135,6 +135,23 @@ export class LineCache {
   }
 
   /**
+   * Structured iteration for serialization: one record per stored entry,
+   * carrying the raw line number and expression key rather than the lossy
+   * "line:expression" display key `keys()`/`forEach()` produce (an expression
+   * containing a colon cannot be split back apart from that string). Used by
+   * the engine snapshot to walk every entry without re-parsing display keys.
+   */
+  snapshotEntries(): { line: number; expression: string; entry: LineCacheEntry }[] {
+    const out: { line: number; expression: string; entry: LineCacheEntry }[] = [];
+    for (const [line, entries] of this.byLine) {
+      for (const [exprKey, entry] of entries) {
+        out.push({ line, expression: exprKey, entry });
+      }
+    }
+    return out;
+  }
+
+  /**
    * Get all entry keys.
    */
   keys(): string[] {

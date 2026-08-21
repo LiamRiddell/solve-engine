@@ -20,6 +20,22 @@ import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { checkPackageCompatibility } from "@solve-js/api/PackageCompatibility";
 import { assertEngineVersionCompatible } from "@solve-js/api/EngineVersionCompatibility";
+import { ENGINE_VERSION } from "@solve-js/constants/version";
+import {
+    SNAPSHOT_FORMAT,
+    SNAPSHOT_VERSION,
+    SnapshotErrorCodes,
+    assertRestorable,
+    serializeValue,
+    deserializeValue,
+    serializeBytecode,
+    deserializeBytecode,
+    serializeUserFunction,
+    deserializeUserFunction,
+    type EngineSnapshot,
+    type SerializedValue,
+    type SerializedLineCacheEntry,
+} from "@solve-js/engine/EngineSnapshot";
 import { registerTokenCategory, unregisterTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import type { CompletionItem } from "@solve-js/language/LanguageService";
 import type { LexerVocabulary } from "@solve-js/lexer/ExpressionLexer";
@@ -78,6 +94,50 @@ import {
 // Re-export for consumers (playground imports these from ExpressionEngine)
 export type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo, AsyncCachePackageInfo };
 export type { DagSnapshot } from "@solve-js/vm/DependencyGraph";
+// The snapshot/restore surface, re-exported so `toJSON`/`fromJSON` callers can
+// import their types from the same module as `ExpressionEngine`.
+export {
+    SNAPSHOT_FORMAT,
+    SNAPSHOT_VERSION,
+    SnapshotErrorCodes,
+} from "@solve-js/engine/EngineSnapshot";
+export type {
+    EngineSnapshot,
+    SerializedValue,
+    SerializedBytecode,
+    SerializedUserFunction,
+    SerializedAnonymousBody,
+    SerializedLineCacheEntry,
+    SerializedDecimal,
+    SerializedRational,
+    SerializedNumber,
+} from "@solve-js/engine/EngineSnapshot";
+
+/**
+ * Options for {@link ExpressionEngine.fromJSON}, restoring a snapshot onto a
+ * fresh engine.
+ */
+export interface EngineRestoreOptions {
+    /**
+     * Packages to register on the restored engine. This MUST be the same set
+     * the snapshot was taken with: a snapshot carries compiled bytecode whose
+     * plugin-function indices and parselet-produced opcodes only line up
+     * against the packages that were present when it was written. Defaults to
+     * {@link BUILTIN_PACKAGES}, exactly like the constructor's own `packages`
+     * parameter, so a host using the default package set needs to pass nothing.
+     */
+    packages?: IEnginePackage[];
+    /** Config overrides, merged over `DEFAULT_CONFIG`, as in the constructor. */
+    config?: Partial<typeof DEFAULT_CONFIG>;
+    /** Turn on the diagnostic pipeline, as in the constructor's `diagnosticMode`. */
+    diagnosticMode?: boolean;
+    /**
+     * Override the locale the snapshot recorded. Rarely needed: the snapshot's
+     * own {@link EngineSnapshot.locale} is used by default, so a restored engine
+     * lexes the way the one that produced it did.
+     */
+    locale?: string;
+}
 
 /**
  * Return type of {@link evaluateLine} and {@link evaluateExpression}.
@@ -3582,6 +3642,193 @@ export class ExpressionEngine {
          this.vm.reset();
          this.lastTelemetry = null;
      }
+
+    //#endregion
+
+    //#region Public API, Snapshot / restore
+
+    /**
+     * Serialise this engine's session state into a plain, JSON-safe snapshot.
+     *
+     * Carries the three things a session accumulates in memory: named
+     * {@link ExpressionEngine} variables, user-defined functions, and the
+     * per-line result/bytecode cache (plus the expression-keyed bytecode cache).
+     * Restore it with {@link ExpressionEngine.fromJSON} onto a fresh engine, and
+     * later expressions resolve exactly as they would have on the engine that
+     * evaluated the document.
+     *
+     * What is deliberately NOT carried:
+     * - **Resolved async values.** Weather, stocks, currency, any package that
+     *   fetches: those results are point-in-time and must be re-fetched, not
+     *   restored stale. Every line backed by an async resolver (a DAG
+     *   data-source dependency, or an async plugin call in its bytecode) is
+     *   dropped from the line cache, and any variable whose most-recent
+     *   definition was such a line is dropped too. An in-flight (Pending) value
+     *   is likewise never written.
+     * - **Package-contributed state.** Core state only for v1; a package opt-in
+     *   is a follow-up.
+     * - **Symbolic (algebra) values.** Deferred: a variable holding one makes
+     *   this method throw {@link SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE}
+     *   (refused by name rather than dropped silently), and a cached line whose
+     *   result is symbolic is skipped (it re-evaluates on restore, algebra is
+     *   synchronous).
+     *
+     * The result survives `JSON.stringify` then `JSON.parse` unchanged.
+     *
+     * @returns A snapshot safe to store and hand back to `fromJSON`.
+     * @throws {@link SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE} if a variable
+     *   holds a value this v1 format cannot represent (a symbolic value).
+     */
+    toJSON(): EngineSnapshot {
+        // Async-backed lines: a line carries a DAG data-source dependency the
+        // moment it first goes pending (see executeAndStore's
+        // registerLineDataSourceDependency), and an async plugin call sets its
+        // bytecode's hasAsync. Either way its result is point-in-time and must
+        // be re-fetched rather than restored, so the line and any variable it
+        // defines are excluded below.
+        const dagSnapshot = this.dag.getSnapshot();
+        const asyncLines = new Set<number>();
+        for (const key of Object.keys(dagSnapshot.dataSourceDeps)) {
+            const line = Number(key);
+            if (!Number.isNaN(line)) asyncLines.add(line);
+        }
+
+        // Only the LAST definition of a variable decides its current value, so a
+        // variable is excluded only when its most-recent writer line is async.
+        // An earlier async definition later overwritten by a plain one is still
+        // carried, matching the value the live VM actually holds.
+        const lineEntries = this.lineCache.snapshotEntries();
+        const latestWriter = new Map<string, { line: number; async: boolean }>();
+        for (const { line, entry } of lineEntries) {
+            const isAsync = asyncLines.has(line) || entry.bytecode.hasAsync;
+            if (isAsync) asyncLines.add(line);
+            const writeVar = entry.writeVariable;
+            if (writeVar) {
+                const prev = latestWriter.get(writeVar);
+                if (!prev || line >= prev.line) latestWriter.set(writeVar, { line, async: isAsync });
+            }
+        }
+
+        const variables: Record<string, SerializedValue> = {};
+        for (const [name, value] of this.vm.getVariableEntries()) {
+            if (value.type === ValueType.Pending) continue; // in-flight async, not restorable
+            if (latestWriter.get(name)?.async) continue; // most recently written by an async line
+            variables[name] = serializeValue(value, `variable "${name}"`);
+        }
+
+        // A user-defined function body that calls an async plugin is refused at
+        // definition time (FUNCTION_BODY_MUST_BE_SYNCHRONOUS), so every stored
+        // function is pure compiled bytecode and safe to carry.
+        const userFunctions = this.vm.getUserFunctionDefs().map(serializeUserFunction);
+
+        const lineCache: SerializedLineCacheEntry[] = [];
+        for (const { line, expression, entry } of lineEntries) {
+            if (asyncLines.has(line)) continue; // async result, re-fetch on restore
+            if (entry.result.type === ValueType.Pending) continue; // still in flight
+            let result: SerializedValue;
+            try {
+                result = serializeValue(entry.result, `line ${line}`);
+            } catch (e) {
+                // A symbolic (algebra) result is the one value kind this v1 format
+                // defers. Skip the cached line rather than aborting the whole
+                // snapshot: the line re-evaluates on restore, and algebra is
+                // synchronous, so nothing is lost but the cache hit. Any other
+                // error is a real problem and propagates.
+                if (e instanceof EngineError && e.code === SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE) continue;
+                throw e;
+            }
+            lineCache.push({
+                line,
+                expression,
+                result,
+                bytecode: serializeBytecode(entry.bytecode),
+                reads: entry.readVariables.slice(),
+                writeVar: entry.writeVariable,
+            });
+        }
+
+        const bytecodeCache = Array.from(this.bytecodeCache.entries()).map(([expression, program]) => ({
+            expression,
+            program: serializeBytecode(program),
+        }));
+
+        return {
+            format: SNAPSHOT_FORMAT,
+            version: SNAPSHOT_VERSION,
+            engineVersion: ENGINE_VERSION,
+            locale: this.localeCode,
+            variables,
+            userFunctions,
+            lineCache,
+            bytecodeCache,
+        };
+    }
+
+    /**
+     * Restore a snapshot produced by {@link ExpressionEngine.toJSON} onto a
+     * fresh engine.
+     *
+     * The version gate runs first: a snapshot whose {@link EngineSnapshot.format}
+     * or {@link EngineSnapshot.version} does not match this engine's reader is
+     * refused with {@link SnapshotErrorCodes.SNAPSHOT_VERSION_MISMATCH} rather
+     * than restored wrongly. The engine is then built with the snapshot's locale
+     * (unless overridden) and the given `packages`, and its variable table,
+     * user-function registry, line cache, dependency graph, and bytecode cache
+     * are rehydrated from the snapshot.
+     *
+     * @param snapshot - A snapshot object, typically straight from `JSON.parse`.
+     * @param options - Packages (must match those the snapshot was taken with),
+     *   plus optional config, diagnostic mode, and locale override. See
+     *   {@link EngineRestoreOptions}.
+     * @returns A ready engine that behaves as though it had evaluated the
+     *   original document.
+     * @throws {@link SnapshotErrorCodes.SNAPSHOT_VERSION_MISMATCH} for a missing
+     *   or mismatched envelope, and
+     *   {@link SnapshotErrorCodes.SNAPSHOT_MALFORMED} for internally
+     *   inconsistent contents.
+     */
+    static fromJSON(snapshot: EngineSnapshot, options: EngineRestoreOptions = {}): ExpressionEngine {
+        // Refuse an incompatible or non-snapshot object before building anything.
+        assertRestorable(snapshot);
+        const locale = options.locale ?? snapshot.locale ?? "en";
+        const engine = new ExpressionEngine(locale, options.diagnosticMode ?? false, options.config, undefined, options.packages);
+        engine.restoreSnapshot(snapshot);
+        return engine;
+    }
+
+    /**
+     * Rehydrate this engine's state from a snapshot whose envelope has already
+     * been validated by {@link assertRestorable}. Instance-private, the public
+     * entry point is the static {@link ExpressionEngine.fromJSON}.
+     */
+    private restoreSnapshot(snapshot: EngineSnapshot): void {
+        for (const [name, sv] of Object.entries(snapshot.variables)) {
+            this.vm.setVar(name, deserializeValue(sv));
+        }
+        for (const fn of snapshot.userFunctions) {
+            const def = deserializeUserFunction(fn);
+            this.vm.defineUserFunction(def.name, def.params, def.program);
+        }
+        for (const e of snapshot.lineCache) {
+            const entry = new LineCacheEntry(
+                deserializeValue(e.result),
+                deserializeBytecode(e.bytecode),
+                e.reads.slice(),
+                e.writeVar,
+            );
+            // The empty-string expression key round-trips to the same
+            // expressionless slot LineCache stores it under; a non-empty key
+            // restores the same line/expression pairing it was written with.
+            this.lineCache.set(e.line, entry, e.expression);
+            // Rebuild the dependency graph so incremental re-evaluation
+            // (evaluateIncremental) still walks producers before consumers,
+            // exactly as it would have on the engine that evaluated the document.
+            this.dag.registerLine(e.line, e.reads, e.writeVar ? [e.writeVar] : []);
+        }
+        for (const { expression, program } of snapshot.bytecodeCache) {
+            this.bytecodeCache.set(expression, deserializeBytecode(program));
+        }
+    }
 
     //#endregion
 
