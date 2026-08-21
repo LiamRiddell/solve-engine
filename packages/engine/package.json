@@ -197,6 +197,26 @@
         "types": "./dist/services.d.cts",
         "default": "./dist/services.cjs"
       }
+    },
+    "./worker": {
+      "import": {
+        "types": "./dist/worker.d.ts",
+        "default": "./dist/worker.js"
+      },
+      "require": {
+        "types": "./dist/worker.d.cts",
+        "default": "./dist/worker.cjs"
+      }
+    },
+    "./testing": {
+      "import": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
+      },
+      "require": {
+        "types": "./dist/testing.d.cts",
+        "default": "./dist/testing.cjs"
+      }
     }
   },
   "scripts": {

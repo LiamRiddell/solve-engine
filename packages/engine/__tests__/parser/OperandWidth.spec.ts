@@ -156,6 +156,8 @@ const COMPILED_CORPUS: readonly string[] = [
 	"1:5", "map(x*2, [1,2,3])", "reduce(acc+x, [1,2,3])",
 	"sum(x, 1:5)", "prod(x, 1:5)",
 	"der(x^2, x)", "solve(x^2-4=0, x)", "integral(x, x)",
+	// Uncertainty, both spellings, which reach MAKE_UNCERTAIN (no operand byte).
+	"12.3 +/- 0.5", "(10 +/- 1) + (20 +/- 2)",
 	// Percentages and the finance phrases, which are where SWAP comes from.
 	"10% of 200", "increase 100 by 10%", "100 + 10%", "10 is what % of 50",
 	"20% off 100", "20% on 100", "what is 10% of 200",

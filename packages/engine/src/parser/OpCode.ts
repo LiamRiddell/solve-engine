@@ -42,6 +42,12 @@ export enum OpCode {
 	EXP = 25,
 	NEG = 26,
 	POS = 27,
+	// `a ± b` (or the ASCII `a +/- b`): pops the spread then the center off the
+	// stack and pushes a Number carrying a one-sigma uncertainty (`vm/Value.ts`'s
+	// numberValueUncertain). Takes no operand byte, like the other arithmetic
+	// ops. See packages/uncertainty/ for the parselet that emits it and
+	// vm/VMConversion.ts's uncertainOp for how the four arithmetic ops propagate.
+	MAKE_UNCERTAIN = 28,
 
 	// Bitwise
 	LSHIFT = 30,

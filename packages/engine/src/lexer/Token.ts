@@ -49,6 +49,12 @@ export const TokenTypes = {
   MINUS: "MINUS",
   STAR: "STAR",
   SLASH: "SLASH",
+  // The uncertainty operator, `±` (U+00B1) or the ASCII `+/-`. The symbol is
+  // lexed directly (ExpressionLexer.ts, alongside `×`/`÷`), and the ASCII
+  // spelling is fused from PLUS SLASH MINUS by a normalizer rule (see
+  // packages/uncertainty/). Registered here rather than left to be lazily
+  // minted so its id is stable, the same reasoning as the algebra verbs below.
+  PLUS_MINUS: "PLUS_MINUS",
   CARET: "CARET",
   PERCENT: "PERCENT",
   LSHIFT: "LSHIFT",
@@ -200,6 +206,15 @@ export const TokenTypes = {
   IS: "IS",
   PCT_ON: "PCT_ON",
   PCT_OFF: "PCT_OFF",
+  // Successive percentage change (packages/percentage/UpDownParselet.ts):
+  // `X up N%` grows, `X down N%` shrinks, chainable with `then` and
+  // repeatable with `N times`. Retyped from a bare `up`/`down` IDENT only
+  // when a percentage immediately follows (PercentUpDownNormalizerRule), so
+  // prose that merely mentions the words is untouched. Declared here rather
+  // than minted lazily for the same reason as the algebra verbs below: a
+  // normalizer rule and its parselet must agree on the id.
+  PCT_UP: "PCT_UP",
+  PCT_DOWN: "PCT_DOWN",
   OF_WHAT: "OF_WHAT",
   OFF_WHAT: "OFF_WHAT",
   ON_WHAT: "ON_WHAT",

@@ -209,6 +209,9 @@ export function persistentValue(v: Value): Value {
 	// The rational sidecar survives the same round trip, so "a = 1/3, a + a + a"
 	// is exactly 1 rather than the drifted double a stored fraction would carry.
 	if (v.rational !== undefined) p.rational = v.rational;
+	// The uncertainty sidecar survives too, so "a = 12.3 +/- 0.5, a * 4" still
+	// propagates the tolerance across the STORE_VAR round trip.
+	if (v.uncertainty !== undefined) p.uncertainty = v.uncertainty;
 	return p;
 }
 
@@ -303,6 +306,23 @@ export class Value {
 	 * Cleared by {@link recycle} alongside {@link exact}.
 	 */
 	public rational?: Rational;
+	/**
+	 * The one-sigma uncertainty (standard error) this value carries, when it
+	 * has one.
+	 *
+	 * The third sidecar, the same shape as {@link exact} and {@link rational}
+	 * and for the same reason: a measurement written `12.3 ± 0.5` is still the
+	 * number 12.3 everywhere it is read as one, so the type stays
+	 * {@link ValueType.Number} and `value` stays the center, while this non
+	 * negative field carries the tolerance. The `±` (or ASCII `+/-`) operator
+	 * seeds it, and `+`, `-`, `*`, `/` propagate it in quadrature for
+	 * independent errors (see `vm/VMConversion.ts`'s `uncertainOp`). Everything
+	 * else (a comparison, a transcendental function, a unit conversion) reads
+	 * the center through `toNumber()` and drops the tolerance, which is why a
+	 * value with no uncertainty behaves exactly as a plain number always did.
+	 * Cleared by {@link recycle} alongside the other two sidecars.
+	 */
+	public uncertainty?: number;
 
 	constructor(
 		type: ValueType,
@@ -338,6 +358,9 @@ export class Value {
 		// The rational sidecar clears with it: a reused Value that once held a
 		// fraction must not carry that fraction into a plain number.
 		this.rational = undefined;
+		// The uncertainty sidecar clears the same way: a reused Value that once
+		// carried a tolerance must not lend it to a plain number.
+		this.uncertainty = undefined;
 	}
 
 	isNumber(): this is Value & { value: number } {
@@ -476,6 +499,24 @@ export function numberValueExact(n: number, exact: DecimalData): Value {
 export function numberValueRational(n: number, rational: Rational): Value {
 	const v = numberValue(n);
 	v.rational = rational;
+	return v;
+}
+
+/**
+ * A Number that also carries a one-sigma uncertainty (standard error).
+ *
+ * The uncertainty counterpart of {@link numberValueExact}: the type stays
+ * {@link ValueType.Number} and `value` stays the center, so this reads as an
+ * ordinary number everywhere. The `uncertainty` sidecar is what lets `+`, `-`,
+ * `*`, `/` propagate the tolerance in quadrature. The `±` operator produces
+ * this (see the MAKE_UNCERTAIN opcode), as does any of those four ops when an
+ * operand already carries one. The magnitude is stored as given, callers pass a
+ * non-negative value (`Math.abs` at the seam, quadrature results are already
+ * non-negative).
+ */
+export function numberValueUncertain(n: number, uncertainty: number): Value {
+	const v = numberValue(n);
+	v.uncertainty = uncertainty;
 	return v;
 }
 

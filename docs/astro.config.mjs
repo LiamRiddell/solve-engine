@@ -34,6 +34,7 @@ const apiEntryPoints = [
 	"parser",
 	"vm",
 	"packages",
+	"testing",
 	"utilities",
 	"uom",
 ].map((name) => `${engine}/src/${name}/index.ts`);
@@ -228,6 +229,7 @@ export default defineConfig({
           items: [
             { slug: "guide/embedding" },
             { slug: "guide/typescript-usage" },
+            { slug: "guide/explaining-lines" },
             { slug: "guide/formatting" },
             { slug: "guide/editor-integration" },
             { slug: "guide/async-and-live-data" },
@@ -242,6 +244,7 @@ export default defineConfig({
           items: [
             { slug: "packages/authoring-a-package" },
             { slug: "packages/extension-points" },
+            { slug: "packages/testing-a-package" },
           ],
         },
         {
