@@ -46,6 +46,12 @@ export const BindingPower = {
   Shift: 27,       // `<<`, `>>`, `>>>`
   Sum: 30,
   Product: 40,
+  // `±` (the uncertainty operator), tighter than `+ - * /` and looser than `^`,
+  // so the tolerance attaches to its adjacent values: `12.3 ± 0.5 * 4` reads as
+  // `(12.3 ± 0.5) * 4` (the parenthesised headline case), and `2 + 3 ± 0.5` as
+  // `2 + (3 ± 0.5)`. A Tier-2 parselet (packages/uncertainty/), so this level is
+  // read off the parselet rather than the Tier-1 BUILTIN_INFIX_BP table below.
+  Uncertainty: 45,
   // `^`, RIGHT-associative: "2 ^ 3 ^ 2" is 2^(3^2) = 512, as in mathematics,
   // Python, Ruby and JavaScript's `**`. See PrecedenceParser.parseExpression
   // and BinaryOpParselet for the two places that associativity is implemented.

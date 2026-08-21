@@ -1,4 +1,4 @@
-import { Value, ValueType, numberValue, numberValueRational, bigIntValue, uomValue, uomValueExact, matrixValue, errorValue, symbolicValue, type MatrixData, type MatrixEntry } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueRational, numberValueUncertain, bigIntValue, uomValue, uomValueExact, matrixValue, errorValue, symbolicValue, type MatrixData, type MatrixEntry } from "@solve-js/vm/Value";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { decimalAdd, decimalSubtract, decimalMultiply, decimalDivide, decimalIsZero, decimalToNumber, decimalFromNumberIfExact, decimalCompare, type DecimalData } from "@solve-js/decimal";
@@ -487,6 +487,46 @@ export function exactRationalOp(l: Value, r: Value, op: "add" | "sub" | "mul" | 
         return null;
     }
     return numberValueRational(rationalToNumber(result), result);
+}
+
+/**
+ * The result of a `+`/`-`/`*`/`/` between operands, at least one of which
+ * carries a one-sigma uncertainty, propagated in quadrature. Null when it does
+ * not apply.
+ *
+ * Independent errors combine in quadrature, the common case the feature scopes
+ * itself to (correlated terms are a much larger problem and out of scope). The
+ * center follows the ordinary arithmetic; the spread follows the standard
+ * first-order rules:
+ *   add/sub: sigma = sqrt(sigma_a^2 + sigma_b^2)
+ *   mul:     sigma = sqrt((b*sigma_a)^2 + (a*sigma_b)^2)
+ *   div:     sigma = sqrt((sigma_a/b)^2 + (a*sigma_b/b^2)^2)
+ * The mul/div forms are the partial-derivative version of the relative-error
+ * rule sigma = |result| * sqrt((sigma_a/a)^2 + (sigma_b/b)^2), algebraically the
+ * same but without dividing by a center that may be zero. A plain number is
+ * read as an exact operand (uncertainty 0), which is what makes a scalar
+ * multiply `(a ± s) * k` come out as `s * |k|`.
+ *
+ * Returns null unless both operands are plain Numbers, so a unit, a matrix or
+ * any other typed operand keeps its own path (and drops the uncertainty, as a
+ * comparison or a transcendental function does). The VM gates the call on an
+ * uncertainty actually being present, so a plain `2 * 3` never reaches here.
+ */
+export function uncertainOp(l: Value, r: Value, op: "add" | "sub" | "mul" | "div"): Value | null {
+    if (l.type !== ValueType.Number || r.type !== ValueType.Number) return null;
+    const a = l.value as number;
+    const b = r.value as number;
+    const sa = l.uncertainty ?? 0;
+    const sb = r.uncertainty ?? 0;
+    let center: number;
+    let sigma: number;
+    switch (op) {
+        case "add": center = a + b; sigma = Math.hypot(sa, sb); break;
+        case "sub": center = a - b; sigma = Math.hypot(sa, sb); break;
+        case "mul": center = a * b; sigma = Math.hypot(b * sa, a * sb); break;
+        case "div": center = a / b; sigma = Math.hypot(sa / b, (a * sb) / (b * b)); break;
+    }
+    return numberValueUncertain(center, sigma);
 }
 
 /**

@@ -51,9 +51,10 @@ export const SPAN_BETWEEN_FN_IDX = allocatePluginFunctionIndex();
  * exact same input expression. This IS anchor-independent and exact for
  * any whole-week span (3 weeks = 21 days = exactly 15 workdays, regardless
  * of start day); for a partial-week remainder it's a reasonable capped
- * approximation, not a real calendar walk. Also does NOT exclude public
- * holidays. See `vm/VM.ts`'s `addBusinessDays()` doc comment for the
- * same holiday-scoping decision applied consistently across this feature.
+ * approximation, not a real calendar walk. Weekends-only by nature: with no
+ * anchor date there is no calendar day to test against a holiday calendar, so
+ * unlike the offset/`between` forms this consults none. See
+ * `DatetimePackage.ts`'s holiday scope note.
  */
 function workdaysInDurationHandler(args: Value[]): Value {
   const v = args[0];
@@ -180,10 +181,13 @@ function isWeekendOnDateHandler(args: Value[]): Value {
 /**
  * `<date> is a workday` / `is a weekday` -> Boolean.
  *
- * Mon-Fri only, with NO public-holiday exclusion, the same scope decision
- * `vm/VM.ts`'s `addBusinessDays()` and `workdaysInDurationHandler` above
- * already make, kept consistent so "is a workday" can never disagree with
- * the workday arithmetic in the line above it.
+ * Mon-Fri only, and deliberately blind to the holiday calendar: this answers
+ * "is this a weekday", a question about the week's shape, not "is this a
+ * working day in my region". Keeping it weekend-based means the predicate is a
+ * pure function of the date, decidable without any host configuration, and
+ * `is a workday` stays the exact complement of `is a weekend`. The working-day
+ * ARITHMETIC (offsets and `between`) is what consults the calendar. See
+ * `DatetimePackage.ts`'s holiday scope note.
  */
 function isWorkdayOnDateHandler(args: Value[]): Value {
   const epochMs = asEpochMs(args[0], "is a workday");

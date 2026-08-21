@@ -125,6 +125,8 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	IS: "keyword",
 	PCT_ON: "operator",
 	PCT_OFF: "operator",
+	PCT_UP: "operator",
+	PCT_DOWN: "operator",
 	OF_WHAT: "keyword",
 	OFF_WHAT: "keyword",
 	ON_WHAT: "keyword",
@@ -152,6 +154,9 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	AT_RATE: "keyword",
 	WEEK_IN: "keyword",
 	BETWEEN_UNIT: "keyword",
+	WORKDAYS_AFTER: "keyword",
+	WORKDAYS_BEFORE: "keyword",
+	WORKDAYS_BETWEEN: "keyword",
 	IS_WEEKEND: "keyword",
 	IS_WORKDAY: "keyword",
 	CURRENT_TIMESTAMP: "keyword",
@@ -170,6 +175,10 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	MINUS: "operator",
 	STAR: "operator",
 	SLASH: "operator",
+	// `±` / `+/-`, the uncertainty operator (packages/uncertainty/). A core
+	// lexer token, so its category lives in the built-in map alongside the other
+	// operators rather than being registered by the package.
+	PLUS_MINUS: "operator",
 	CARET: "operator",
 	PERCENT: "operator",
 	LSHIFT: "operator",
