@@ -79,6 +79,8 @@ export const CoreErrorCodes = {
   MAP_REDUCE_ASYNC_UNSUPPORTED: "MAP_REDUCE_ASYNC_UNSUPPORTED",
   /** An algebra verb's expression argument (`BIND_UNKNOWN`'s body) calling an async plugin. Same v1 scope restriction as the two above, and likewise refused at parse time first (`SYMBOLIC_ARGUMENT_MUST_BE_SYNCHRONOUS`, packages/symbolic/). */
   SYMBOLIC_ASYNC_UNSUPPORTED: "SYMBOLIC_ASYNC_UNSUPPORTED",
+  /** `explainLine()` asked to derive a line that resolves data asynchronously (a live-data or async-plugin line). A derivation is a sequence of settled intermediate values, which a pending result has none of, so the line is refused rather than explained with a hole in it. */
+  EXPLAIN_ASYNC_UNSUPPORTED: "EXPLAIN_ASYNC_UNSUPPORTED",
   /** `pushCallFrame()`'s recursion guard, a nested `CALL_USER_FUNCTION` re-enters `executeBytecode()`, so `maxInstructions` alone can't catch e.g. `f(x) = f(x)`; this is the dedicated backstop. `recoverable: true` (the default for `.execution()`), ordinary user-written infinite recursion, not an engine bug; the guard exists precisely so it surfaces as a clear error instead of overflowing the native call stack uncatchably. */
   FUNCTION_RECURSION_LIMIT_EXCEEDED: "FUNCTION_RECURSION_LIMIT_EXCEEDED",
   /** The companion to the code above, and the half it could never see: how MANY user-defined-function calls one evaluation makes, rather than how deeply they nest. A twenty-two-line doubling chain nests twenty-two deep (legal) and makes two million calls (a fatal heap abort). Counted in `vm/AllocationBudget.ts`, because the tally has to survive `executeBytecode()` re-entering itself. Recoverable. */
