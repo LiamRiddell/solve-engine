@@ -107,34 +107,36 @@ describe("a negative quantity on an offset scale", () => {
 		expect(convertUnit(-40, "K", "C")).toBeCloseTo(-313.15, 9);
 	});
 
-	// BUG. The unary minus binds looser than the conversion, so the engine
-	// evaluates -(40 C in F) and reports minus a hundred and four. The sign is
-	// applied to the converted number instead of to the input.
+	// FIXED with #89. The unary minus used to bind looser than the conversion,
+	// so the engine evaluated -(40 C in F) and reported minus a hundred and four:
+	// the sign landed on the converted number instead of on the input.
 	//
-	// Invisible on every ratio-only measure, because negating before or after
-	// a multiplication is the same thing. Only the offset scales expose it,
-	// and on those it is not a rounding difference: `-40 K in C` comes back
-	// positive.
+	// Invisible on every ratio-only measure, because negating before or after a
+	// multiplication is the same thing. Only the offset scales exposed it, and on
+	// those it was not a rounding difference: `-40 K in C` came back positive.
 	//
-	// One assertion per case, because a `test.failing` stops at its first
-	// failing assertion and the ones after it never run: any of these four
-	// starting to answer differently, right or wrong, would otherwise be
-	// invisible. `UnitsCurrencyAndRates.spec.ts`'s header has the full account
-	// of the regression that shape hid.
+	// A unit literal is the right operand of the unary minus (which parses its
+	// operand at Prefix, tighter than Product), so it no longer swallows a
+	// trailing `in`/`to`; the conversion binds at the outer level and the form is
+	// `(-40 C) in F`. See UomLiteralParselet's boundInsideProduct guard.
+	//
+	// One assertion per case, because a stopped test hides the assertions after
+	// its first failure: any of these four starting to answer differently, right
+	// or wrong, would otherwise be invisible.
 	for (const [source, expected] of [
 		["-40 C in F", -40],
 		["-10 C in F", 14],
 		["-273.15 C in K", 0],
 		["-40 K in C", -313.15],
 	] as const) {
-		test.failing(`survives being written with a minus sign in front of it: ${source}`, () => {
+		test(`survives being written with a minus sign in front of it: ${source}`, () => {
 			expect(evaluate(source).toNumber()).toBeCloseTo(expected, 6);
 		});
 	}
 
-	test.failing("and written with the words rather than the symbols", () => {
-		// BUG, same cause. Worth its own case because the word forms take a
-		// different route through the parser.
+	test("and written with the words rather than the symbols", () => {
+		// Same fix. Worth its own case because the word forms take a different
+		// route through the parser.
 		expect(evaluate("-40 celsius in fahrenheit").toNumber()).toBeCloseTo(-40, 6);
 	});
 

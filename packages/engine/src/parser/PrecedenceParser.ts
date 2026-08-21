@@ -56,6 +56,16 @@ export class PrecedenceParser {
   private localeCode: string;
 
   /**
+   * The binding power the current infix parselet is being invoked at, i.e. the
+   * `minBp` of the expression it sits inside. Set immediately before each Tier-2
+   * parselet runs. A parselet that decides whether to swallow a following
+   * loose operator (UomLiteralParselet with a trailing `in`/`to`) reads this to
+   * respect precedence it cannot otherwise see: `120 km / 2 hours in kph` must
+   * group as `(120 km / 2 hours) in kph`, not `120 km / (2 hours in kph)`.
+   */
+  infixMinBindingPower = 0;
+
+  /**
    * Static binding power table, built once at module load, shared across all instances.
    * Index = tokenTypeId, value = binding power (0 = not a built-in infix).
    */
@@ -306,6 +316,11 @@ export class PrecedenceParser {
         if (this.diagnosticPipeline) {
           this.fireParseletMatched(infixParselet, lookahead, false, infixParselet.bindingPower);
         }
+        // Expose the level this parselet is bound at, so one that peeks past its
+        // own token (a unit literal weighing whether a trailing `in`/`to` is
+        // its own or an outer operator's) can respect precedence. See
+        // infixMinBindingPower's doc comment.
+        this.infixMinBindingPower = minBp;
         // Parselet handles its own recursion for right operand internally
         infixParselet.parse(this, token, lookahead, builder);
       }
