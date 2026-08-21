@@ -204,6 +204,21 @@ export interface WorkerConfig {
      * arguments and its result whatever its body says.
      */
     readonly maxFunctionCalls: number;
+    /**
+     * Hard ceiling on how many bisection steps goal seek (`solve line N for
+     * <var> = <target>`, see `packages/goalseek/`) may take before it gives up
+     * with a structured error rather than continuing.
+     *
+     * Goal seek re-evaluates the target line's expression once per step while
+     * narrowing an interval, and an untrusted document must never be able to
+     * make that loop spin. `maxInstructions` bounds each individual
+     * re-evaluation, but not how many of them the search performs, so this is
+     * the tally that bounds the search itself, the same reason `maxFunctionCalls`
+     * exists alongside `maxInstructions`. Bisection halves the interval every
+     * step, so a hundred steps resolves an input to roughly one part in 2^100:
+     * far past any precision a document needs, and a definite stop either way.
+     */
+    readonly maxGoalSeekIterations: number;
   }
 
 /**
@@ -296,6 +311,12 @@ export const DEFAULT_CONFIG: EngineConfig = {
       // heap. A document that needs more than ten thousand calls on one line
       // is doing something a calculator was not built for.
       maxFunctionCalls: 10000,
+      // A hundred bisection steps resolve an input to one part in 2^100, far
+      // finer than any document needs and a firm stop for an untrusted one. A
+      // continuous, monotonic relationship converges in tens of steps, well
+      // under this; hitting it means the target is unreachable or the
+      // relationship is not the smooth one goal seek assumes.
+      maxGoalSeekIterations: 100,
     },
     worker: {
       maxConcurrentWorkers: 4,
