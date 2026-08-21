@@ -24,7 +24,9 @@ clamp 15 between 1 and 10 // 10
 
 ## Proportions
 
-| Expression | Result |
-| --- | --- |
-| `2 is to 4 as 5 is to what` | `10` |
-| `random number between 1 and 10` | a value in that range |
+```solve
+2 is to 4 as 5 is to what // 10
+```
+
+`random number between 1 and 10` gives a fresh value in that range each time, so
+it is shown here rather than pinned to one result.
