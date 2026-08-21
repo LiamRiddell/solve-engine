@@ -169,6 +169,8 @@ export function createVM(
       },
       getUserFunction(name: string) { return userFunctions.get(name); },
       hasUserFunction(name: string) { return userFunctions.has(name); },
+      getVariableEntries() { return Array.from(variables.entries()); },
+      getUserFunctionDefs() { return Array.from(userFunctions.values()); },
       defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram) {
         equations.set(variable, { variable, factorNames, rhsProgram });
       },

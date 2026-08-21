@@ -169,6 +169,14 @@ export const CoreErrorCodes = {
   /** Colon-separated numbers that are not a time any clock can show ("24:00", "9:60", "100:5"). Raised by the labeled-line fallback, which used to answer them with whatever stood after the colon. */
   INVALID_TIME_LITERAL: "INVALID_TIME_LITERAL",
 
+  // ── Snapshot / restore (engine/EngineSnapshot.ts, engine/ExpressionEngine.ts) ──
+  /** `fromJSON()` handed an object that is not a snapshot at all, or whose serialised-shape version does not match this engine's reader. The versioning gate that refuses an incompatible snapshot clearly rather than restoring it wrongly. See `engine/EngineSnapshot.ts`'s `assertRestorable()`. */
+  SNAPSHOT_VERSION_MISMATCH: "SNAPSHOT_VERSION_MISMATCH",
+  /** A snapshot with the right envelope but internally inconsistent contents (an unrecognised number sentinel, an unknown value tag). Distinct from a version mismatch: the format is right, the payload is not. */
+  SNAPSHOT_MALFORMED: "SNAPSHOT_MALFORMED",
+  /** A value the v1 snapshot format cannot yet represent (a symbolic/algebra value, a symbolic matrix cell). Deferred to a follow-up; refused by name rather than dropped silently. */
+  SNAPSHOT_UNSUPPORTED_VALUE: "SNAPSHOT_UNSUPPORTED_VALUE",
+
   // ── Config (constants/Configuration.ts) ──
   CONFIG_PATH_NOT_FOUND: "CONFIG_PATH_NOT_FOUND",
   INVALID_CONFIG_PATH: "INVALID_CONFIG_PATH",
