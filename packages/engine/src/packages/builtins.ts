@@ -32,6 +32,7 @@ import { CONDITIONALS_PACKAGE } from "./conditionals";
 import { CONVERTERS_PACKAGE } from "./converters";
 import { MATHPHRASES_PACKAGE } from "./mathphrases";
 import { FINANCE_PACKAGE } from "./finance";
+import { UNCERTAINTY_PACKAGE } from "./uncertainty";
 import { WEATHER_PACKAGE } from "./weather";
 import { createStocksPackage } from "./stocks";
 import { createKnowledgePackage } from "./knowledge";
@@ -56,6 +57,7 @@ export {
   CONVERTERS_PACKAGE,
   MATHPHRASES_PACKAGE,
   FINANCE_PACKAGE,
+  UNCERTAINTY_PACKAGE,
   WEATHER_PACKAGE,
   createStocksPackage,
   createKnowledgePackage,
@@ -83,8 +85,8 @@ export {
 /**
  * The packages an engine registers when the caller names none.
  *
- * Twenty of the twenty-two. Stocks and knowledge are excluded because both
- * need a host-supplied data source and do nothing useful without one, so
+ * Twenty-one of the twenty-three. Stocks and knowledge are excluded because
+ * both need a host-supplied data source and do nothing useful without one, so
  * registering them by default would only produce NOT_CONFIGURED results.
  *
  * Pass a filtered copy to the {@link ExpressionEngine} constructor to opt out
@@ -109,6 +111,7 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   CONVERTERS_PACKAGE,
   MATHPHRASES_PACKAGE,
   FINANCE_PACKAGE,
+  UNCERTAINTY_PACKAGE,
   WEATHER_PACKAGE,
   LINES_PACKAGE,
 ];

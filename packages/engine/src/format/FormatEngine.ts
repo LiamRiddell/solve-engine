@@ -16,6 +16,34 @@ function formatNumber(value: number, locale: ILocale, settings: FormattingSettin
 }
 
 /**
+ * Renders a measurement that carries a one-sigma uncertainty as
+ * `center ± spread`, e.g. `49.2 ± 2.0`.
+ *
+ * The center is shown the way any number is, whole numbers as integers and
+ * trailing zeros trimmed, so a tolerance-free-looking center still reads
+ * cleanly ("30 ± 2.24", not "30.00 ± 2.24"). The spread is shown to the same
+ * decimal-place budget but always keeps at least one fractional digit, which is
+ * what distinguishes it as a tolerance and gives "± 2.0" rather than "± 2".
+ * Both use `Intl` with `maximumFractionDigits`, so the trailing-zero trimming is
+ * locale-correct (a comma-decimal locale is not string-sliced on ".").
+ *
+ * The symbol is always the `±` glyph on output, even when the input was the
+ * ASCII `+/-`, since the glyph is the conventional notation and unambiguous to
+ * read back.
+ */
+function formatUncertain(center: number, uncertainty: number, locale: ILocale, settings: FormattingSettings): string {
+  const dp = settings.floatResult.decimalPlaces;
+  const useGrouping = settings.floatResult.enableSeperator;
+  const loc = settings.numberResult.decimalSeparatorLocale || "en-US";
+  // The spread needs room for at least one fractional digit, so a zero-decimal
+  // budget cannot leave minimumFractionDigits above maximumFractionDigits.
+  const spreadMax = Math.max(dp, 1);
+  const centerText = center.toLocaleString(loc, { useGrouping, minimumFractionDigits: 0, maximumFractionDigits: dp });
+  const spreadText = Math.abs(uncertainty).toLocaleString(loc, { useGrouping, minimumFractionDigits: 1, maximumFractionDigits: spreadMax });
+  return `${locale.display.resultPrefix}${centerText} ± ${spreadText}`;
+}
+
+/**
  * Renders a number in whichever base it is tagged with.
  *
  * The zero padding is a hexadecimal setting and stays one. Applying it to a
@@ -284,6 +312,11 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
 
   switch (value.type) {
     case ValueType.Number:
+      // A measurement with a tolerance renders as "center ± spread"; every
+      // other number is unchanged, so a plain value is byte-for-byte what it was.
+      if (value.uncertainty !== undefined) {
+        return formatUncertain(value.value as number, value.uncertainty, locale, us);
+      }
       return formatNumber(value.value as number, locale, us);
     case ValueType.Hex:
       return formatHex(value.value as number | bigint, us, value.unit);
