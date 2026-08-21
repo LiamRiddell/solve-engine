@@ -11,7 +11,7 @@ import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { createVM, executeBytecode } from "@solve-js/vm/VM";
 import type { EvalResult, LineExecutionContext } from "@solve-js/vm/VM";
-import type { DocumentModel } from "@solve-js/engine/DocumentModel";
+import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { registerAsConverter, unregisterAsConverter } from "@solve-js/vm/VMBuiltins";
 import { createEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
@@ -1019,6 +1019,21 @@ export class ExpressionEngine {
     private processScanResults(scanResults: ScanLineResult[]): ParsedLine[] {
         const result: ParsedLine[] = [];
 
+        // Cross-line features (line references, table columns) read earlier
+        // lines' text and results through the context that `makeLineContext()`
+        // builds from `this.documentModel`. The incremental `ThreeTierEvaluator`
+        // path sets that model, so `total above`, `line N` and `sum of column`
+        // resolve there. The batch path (`parseDocument`/`evaluateLines`) did
+        // not, so the same expressions reported a no-document error. Wire a
+        // model here for the length of the pass, filling each line's result in
+        // as it is computed so a backward reference sees it, and restore the
+        // previous model afterwards so a host that owns one is undisturbed.
+        const previousDocumentModel = this.documentModel;
+        const batchDocumentModel = new DocumentModel(this.config.performance.maxDocumentLines);
+        batchDocumentModel.setDocument(scanResults.map(s => s.text).join("\n"));
+        this.setDocumentModel(batchDocumentModel);
+
+        try {
         for (const scanResult of scanResults) {
             const lineText = scanResult.text;
             const lineNumber = scanResult.lineNumber;
@@ -1085,6 +1100,16 @@ export class ExpressionEngine {
             }
 
             result.push(parsedLine);
+
+            // Record the line's result so a later line referencing it (or the
+            // rows of a table above it) reads a real value rather than nothing.
+            const batchLine = batchDocumentModel.getLineAt(lineNumber);
+            if (batchLine) {
+                batchLine.result = parsedLine.result ?? inlineSolves[0]?.result ?? null;
+            }
+        }
+        } finally {
+            this.setDocumentModel(previousDocumentModel);
         }
 
         return result;

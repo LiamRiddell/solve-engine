@@ -9,6 +9,9 @@
 export { PackageRegistry, packageRegistry } from "./PackageRegistry";
 export type { IPackageRegistry, IEnginePackage } from "./PackageRegistry";
 
+export { defineFunction, DefineFunctionErrorCodes } from "./defineFunction";
+export type { FunctionSpec, FunctionArg, FunctionValueType } from "./defineFunction";
+
 export { checkPackageCompatibility } from "./PackageCompatibility";
 export type {
   CompatibilityReport,
