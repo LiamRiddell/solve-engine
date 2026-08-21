@@ -19,6 +19,7 @@ Stable. Changes follow semantic versioning.
 | `solve-engine/language` | Completions, token categories, highlighting |
 | `solve-engine/packages` | Built-in packages and their configuration |
 | `solve-engine/constants` | Locales and configuration defaults |
+| `solve-engine/worker` | Off-main-thread evaluation: the worker proxy, transports and result DTO |
 | `solve-engine/testing` | A test kit for package authors: `createTestEngine`, `expectExpression`, `expectPackage` |
 
 ## Advanced
@@ -41,6 +42,8 @@ package or building tooling.
 ## Internal
 
 Not exported and not covered by semantic versioning: telemetry, caching,
-diagnostics, worker plumbing and internal types. If you find yourself needing
+diagnostics, the internal compile/execute worker managers, and internal types.
+(The public `solve-engine/worker` entry above is the supported way to move
+evaluation off the main thread.) If you find yourself needing
 one of these, that is worth raising as an issue, because it usually means a
 public entry point is missing something.
