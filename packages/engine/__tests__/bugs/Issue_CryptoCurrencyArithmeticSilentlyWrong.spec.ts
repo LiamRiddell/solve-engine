@@ -122,7 +122,11 @@ describe("VM surfaces incompatible/unresolved units as an Error value instead of
     );
     const value = unwrapEvalResult(result);
     expect(value.type).toBe(ValueType.Error);
-    expect(formatValue(value).toLowerCase()).toContain("incompatible units");
+    // Two known, differing dimensions now read as a sentence rather than the
+    // bare "incompatible units" phrase (see UnitMismatchMessages.spec.ts). The
+    // error CODE is unchanged, which is what a matcher keys on.
+    expect(value.value).toBe("INCOMPATIBLE_UNITS");
+    expect(formatValue(value).toLowerCase()).toBe("mass and length cannot be added");
   });
 });
 
