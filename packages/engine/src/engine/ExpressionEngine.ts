@@ -77,6 +77,8 @@ import { solveEquationValues } from "@solve-js/vm/SymbolicOps";
 import { abortLogger } from "@solve-js/utilities/AbortControllerLogger";
 import { TokenNormalizer, BUILTIN_PHRASES, implicitMultiplyRule } from "@solve-js/normalizer";
 import type { TokenFusion } from "@solve-js/normalizer";
+import { UserUnitTable } from "@solve-js/packages/uom/UserUnitTable";
+import { userUnitExpansionRule } from "@solve-js/packages/uom/normalizer/UserUnitNormalizerRule";
 import { buildExplanation } from "@solve-js/explain";
 import type { Explanation } from "@solve-js/explain";
 import {
@@ -357,6 +359,14 @@ export class ExpressionEngine {
     private batcher: AsyncResolutionBatcher;
     /** Post-lexer token normalizer for phrase fusion, implicit multiply, etc. */
     private normalizer: TokenNormalizer;
+    /**
+     * Units defined by the current document (`1 sprint = 2 weeks`). Read by the
+     * user-unit normalizer rule to expand a name back to its definition, written
+     * by {@link tryDefineUserUnit} on a definition line. Document-scoped: cleared
+     * at the start of every {@link parseDocument} pass, so definitions never
+     * cross between documents.
+     */
+    private readonly userUnits = new UserUnitTable();
     /** TanStack Query client, injected into resolvers for cache reads/writes. */
     readonly queryClient: QueryClient;
     // Bytecode cache, avoids re-parsing identical expressions.
@@ -458,6 +468,14 @@ export class ExpressionEngine {
             50,
             (word) => this.normalizer.canStartPhrase(word),
         ));
+
+        // User-defined units (`1 sprint = 2 weeks`). Registered here rather than
+        // through the UOM package descriptor because it closes over this
+        // engine's own per-document unit table, and a package descriptor is
+        // shared across every engine in the process. Priority is above implicit
+        // multiply so a defined name is expanded whole (`6 * 2 weeks`) instead
+        // of first split into `6 * sprints` with the name stranded as a variable.
+        this.normalizer.register(userUnitExpansionRule(this.userUnits));
 
         const pkgList = packages ?? BUILTIN_PACKAGES;
         for (const pkg of pkgList) {
@@ -1037,6 +1055,14 @@ export class ExpressionEngine {
                 { maxLines },
             );
         }
+        // Fresh unit definitions for this pass. A host re-parses the whole
+        // document on each keystroke, so rebuilding the table top-to-bottom is
+        // what keeps a renamed or deleted definition from lingering. Only drop
+        // the bytecode cache when the previous pass actually defined a unit,
+        // since its cached programs may have expanded one, a document that never
+        // uses the feature keeps its cache and pays nothing here.
+        if (!this.userUnits.isEmpty) this.bytecodeCache.clear();
+        this.userUnits.clear();
         // Scan the entire document in a single pass, bypasses the old
         // split('\n') → evaluateLines() → join('\n') → scanDocument()
         // roundtrip. scanDocument() classifies and tokenizes all lines
@@ -1092,6 +1118,9 @@ export class ExpressionEngine {
      * bypassing the split→join roundtrip that this method performs.
      */
     evaluateLines(lines: string[]): ParsedLine[] {
+        // A whole-document pass, so definitions start empty (see parseDocument).
+        if (!this.userUnits.isEmpty) this.bytecodeCache.clear();
+        this.userUnits.clear();
         // Rejoin lines and scan in a single pass, scanDocument() handles
         // classification + tokenization for all lines in one character walk.
         const documentText = lines.join('\n');
@@ -1557,6 +1586,69 @@ export class ExpressionEngine {
      * session's own Phase H.2 scope decision (full symbolic MATRICES, not
      * a general CAS).
      */
+    /**
+     * Registers a document-scoped user unit from a `1 <name> = <n> <unit>` line
+     * and returns the `<name> defined` confirmation, or `null` when the line is
+     * not a unit definition (so ordinary processing continues unchanged).
+     *
+     * Like the symbolic-grammar shapes it sits beside, this has an effect (a
+     * stored definition) that no cached bytecode program could represent, so it
+     * short-circuits compilation the same way. See {@link UserUnitTable}.
+     *
+     * The pattern is kept deliberately narrow so it cannot swallow an equation:
+     *
+     * - The coefficient must be exactly `1`. `2 x = 10` stays a scalar equation
+     *   (`x =>` solves it); only the natural `1 sprint = 2 weeks` shape is a
+     *   definition.
+     * - The name is one or more identifiers, never a built-in unit (those lex as
+     *   UNIT, not IDENT), so a built-in unit cannot be redefined.
+     * - The base must be a recognized unit (a UNIT token). A non-unit right side
+     *   declines here and is left to whatever handled it before, so a defined
+     *   unit is always dimensioned, never free-standing.
+     *
+     * `tokens` are already normalized, so the implicit-multiply pass has usually
+     * inserted a STAR between the coefficient and the name (`1 * sprint`); it is
+     * tolerated and skipped.
+     */
+    private tryDefineUserUnit(tokens: Token[]): Value | null {
+        // Shortest definition is NUMBER IDENT EQUALS NUMBER UNIT.
+        if (tokens.length < 5) return null;
+        if (tokens[0].type !== 'NUMBER' || Number(tokens[0].value) !== 1) return null;
+
+        let i = 1;
+        // The implicit-multiply STAR between the coefficient and the name.
+        if (tokens[i].type === 'STAR') i++;
+
+        const nameWords: string[] = [];
+        while (i < tokens.length && tokens[i].type === 'IDENT') {
+            nameWords.push(tokens[i].value);
+            i++;
+        }
+        if (nameWords.length === 0) return null;
+
+        if (tokens[i]?.type !== 'EQUALS') return null;
+        i++;
+        if (tokens[i]?.type !== 'NUMBER') return null;
+        const ratioToken = tokens[i];
+        i++;
+        if (tokens[i]?.type !== 'UNIT') return null;
+        const baseToken = tokens[i];
+        i++;
+        // A definition is the whole line: anything trailing means this is some
+        // other construct that merely starts the same way.
+        if (i !== tokens.length) return null;
+
+        this.userUnits.define(nameWords, ratioToken.value, baseToken.value);
+        // A user unit is expanded at parse time, so the compiled bytecode for
+        // any line using one depends on the definitions in scope, which the
+        // cache key (the raw expression text) does not capture. A new or changed
+        // definition therefore invalidates every cached program, so a later
+        // `6 sprints` recompiles against this definition rather than a stale one.
+        // Definition lines are rare, so this clear is not on any hot path.
+        this.bytecodeCache.clear();
+        return stringValue(`${nameWords.join(' ')} defined`);
+    }
+
     private trySymbolicGrammar(normalizedTokens: Token[], lineNumber: number = -1): Value | null {
         if (normalizedTokens.length === 0) return null;
 
@@ -1853,7 +1945,12 @@ export class ExpressionEngine {
         // the way to `total = 5`, and it took the editor down.
         let symbolicResult: Value | null;
         try {
-            symbolicResult = this.trySymbolicGrammar(normalizedTokens, lineNumber);
+            // A user-unit definition (`1 sprint = 2 weeks`) is an effectful line
+            // like the symbolic shapes below, so it rides the same non-bytecode
+            // channel. Checked first, so it claims its narrow pattern before the
+            // scalar-equation grammar sees the bare `=`.
+            symbolicResult = this.tryDefineUserUnit(normalizedTokens)
+                ?? this.trySymbolicGrammar(normalizedTokens, lineNumber);
         } catch (e) {
             // reads/writes supplied for the same reason the main parse's catch
             // supplies them: the line names variables even though it does not
@@ -3645,6 +3742,7 @@ export class ExpressionEngine {
          this.scopeManager.clear();
          this.bytecodeCache.clear();
          this.vm.reset();
+         this.userUnits.clear();
          this.lastTelemetry = null;
      }
 
