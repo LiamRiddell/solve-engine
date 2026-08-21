@@ -228,6 +228,7 @@ export default defineConfig({
           items: [
             { slug: "guide/embedding" },
             { slug: "guide/typescript-usage" },
+            { slug: "guide/explaining-lines" },
             { slug: "guide/formatting" },
             { slug: "guide/editor-integration" },
             { slug: "guide/async-and-live-data" },
