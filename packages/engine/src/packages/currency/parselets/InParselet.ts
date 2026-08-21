@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { resolveCurrencyAlias } from "@solve-js/uom/CurrencyAliases";
+import { tryConsumeCurrencyOnDate, HISTORICAL_CURRENCY_FN_IDX } from "@solve-js/uom/HistoricalCurrency";
 
 /**
  * InParselet, handles the standalone `IN` keyword as a postfix conversion.
@@ -42,8 +43,31 @@ export class InParselet implements InfixParselet {
 			targetToken.type === "IN"
 		)) {
 			parser.consume();
+			const targetUnit = resolveCurrencyAlias(targetToken.value) ?? targetToken.value;
+
+			// `<money> in <currency> on <date>` where the left side is an
+			// expression (`$100`, a variable, a subexpression) rather than a bare
+			// UNIT literal. The source currency is unknown until the VM produces
+			// the left value, so only the target is checked here; the historical
+			// plugin reads the source currency off that Uom at runtime. See
+			// uom/HistoricalCurrency.ts. Anything that is not `on <date>` between
+			// currencies consumes nothing and falls through to the live path.
+			const isoDate = tryConsumeCurrencyOnDate(parser, targetUnit);
+			if (isoDate !== null) {
+				// The left expression is already a Uom on the stack; hand
+				// [amount, target, date] to the historical plugin.
+				builder.emitOpcode(OpCode.PUSH_STRING);
+				builder.emitString(targetUnit);
+				builder.emitOpcode(OpCode.PUSH_STRING);
+				builder.emitString(isoDate);
+				builder.emitOpcode(OpCode.CALL_PLUGIN);
+				builder.emitIndex(HISTORICAL_CURRENCY_FN_IDX);
+				builder.emitIndex(3);
+				return;
+			}
+
 			builder.emitOpcode(OpCode.PUSH_STRING);
-			builder.emitString(resolveCurrencyAlias(targetToken.value) ?? targetToken.value);
+			builder.emitString(targetUnit);
 			builder.emitOpcode(OpCode.UOM_CONVERT_IN);
 		}
 		// If the next token isn't a valid target unit, silently skip.

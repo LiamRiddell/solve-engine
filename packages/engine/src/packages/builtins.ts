@@ -22,7 +22,7 @@ import { TIME_PACKAGE } from "./time";
 import { DICE_PACKAGE } from "./dice";
 import { VARIABLES_PACKAGE } from "./variables";
 import { UOM_PACKAGE } from "./uom";
-import { CURRENCY_PACKAGE } from "./currency";
+import { CURRENCY_PACKAGE, createCurrencyPackage } from "./currency";
 import { VECTOR_PACKAGE } from "./vector";
 import { MATRIX_PACKAGE } from "./matrix";
 import { MAPREDUCE_PACKAGE } from "./mapreduce";
@@ -32,6 +32,7 @@ import { CONDITIONALS_PACKAGE } from "./conditionals";
 import { CONVERTERS_PACKAGE } from "./converters";
 import { MATHPHRASES_PACKAGE } from "./mathphrases";
 import { FINANCE_PACKAGE } from "./finance";
+import { UNCERTAINTY_PACKAGE } from "./uncertainty";
 import { WEATHER_PACKAGE } from "./weather";
 import { createStocksPackage } from "./stocks";
 import { createKnowledgePackage } from "./knowledge";
@@ -57,8 +58,10 @@ export {
   CONVERTERS_PACKAGE,
   MATHPHRASES_PACKAGE,
   FINANCE_PACKAGE,
+  UNCERTAINTY_PACKAGE,
   WEATHER_PACKAGE,
   createStocksPackage,
+  createCurrencyPackage,
   createKnowledgePackage,
   LINES_PACKAGE,
   GOALSEEK_PACKAGE,
@@ -111,6 +114,7 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   CONVERTERS_PACKAGE,
   MATHPHRASES_PACKAGE,
   FINANCE_PACKAGE,
+  UNCERTAINTY_PACKAGE,
   WEATHER_PACKAGE,
   LINES_PACKAGE,
   // After LINES_PACKAGE: goal seek's normalizer reads a LINE_REF the lines

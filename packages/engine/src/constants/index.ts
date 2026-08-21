@@ -5,6 +5,8 @@ export {
 export { ENGINE_VERSION } from "./version";
 export type {
 	DateConfig,
+	HolidayCalendar,
+	HolidayPredicate,
 	PerformanceConfig,
 	ValidationConfig,
 	WorkerConfig,

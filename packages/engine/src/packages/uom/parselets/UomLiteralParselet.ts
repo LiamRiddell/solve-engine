@@ -6,6 +6,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { isKnownUnit } from "@solve-js/lexer/units";
 import { resolveCurrencyAlias } from "@solve-js/uom/CurrencyAliases";
+import { tryConsumeCurrencyOnDate, HISTORICAL_CURRENCY_FN_IDX } from "@solve-js/uom/HistoricalCurrency";
 
 /**
  * Resolve `rawUnit` to its canonical ISO 4217 code if it's a recognized
@@ -50,8 +51,31 @@ export class UomLiteralParselet implements InfixParselet {
       // the target unit name collides with the IN keyword).
       if (targetToken?.type === "UNIT" || targetToken?.type === "IN") {
         parser.consume();
+        const targetUnit = resolveUnitAlias(targetToken.value);
+
+        // `<money> in <currency> on <date>`: a historical conversion through
+        // the host-supplied rate provider, distinct from the live conversion
+        // below. Only fires for two currencies followed by `on <date>`, so an
+        // ordinary `100 km in miles` or a dateless `100 USD in GBP` consumes
+        // nothing here and falls straight through. See uom/HistoricalCurrency.ts.
+        const isoDate = tryConsumeCurrencyOnDate(parser, targetUnit, unit);
+        if (isoDate !== null) {
+          // The source unit was pushed above; fold it and the amount into a
+          // currency Uom, then hand [amount, target, date] to the historical
+          // plugin, which reads the source currency back off that Uom.
+          builder.emitOpcode(OpCode.UOM_CONVERT);
+          builder.emitOpcode(OpCode.PUSH_STRING);
+          builder.emitString(targetUnit);
+          builder.emitOpcode(OpCode.PUSH_STRING);
+          builder.emitString(isoDate);
+          builder.emitOpcode(OpCode.CALL_PLUGIN);
+          builder.emitIndex(HISTORICAL_CURRENCY_FN_IDX);
+          builder.emitIndex(3);
+          return;
+        }
+
         builder.emitOpcode(OpCode.PUSH_STRING);
-        builder.emitString(resolveUnitAlias(targetToken.value));
+        builder.emitString(targetUnit);
         builder.emitOpcode(OpCode.UOM_CONVERT_TO);
         return;
       }

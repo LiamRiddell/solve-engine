@@ -42,6 +42,12 @@ export enum OpCode {
 	EXP = 25,
 	NEG = 26,
 	POS = 27,
+	// `a ± b` (or the ASCII `a +/- b`): pops the spread then the center off the
+	// stack and pushes a Number carrying a one-sigma uncertainty (`vm/Value.ts`'s
+	// numberValueUncertain). Takes no operand byte, like the other arithmetic
+	// ops. See packages/uncertainty/ for the parselet that emits it and
+	// vm/VMConversion.ts's uncertainOp for how the four arithmetic ops propagate.
+	MAKE_UNCERTAIN = 28,
 
 	// Bitwise
 	LSHIFT = 30,
@@ -91,6 +97,8 @@ export enum OpCode {
 	DATE_NEXT_WEEKDAY = 93,  // "next <Weekday>" — the next occurrence strictly after now
 	DATE_LAST_WEEKDAY = 94,  // "last <Weekday>" — the previous occurrence strictly before now
 	DATE_LITERAL = 95,       // Push a datetime literal whose epoch-ms was already resolved at parse time (see DateLiteralParselet)
+	DATE_WORKDAY_OFFSET = 96,   // "N working days after/before/from <date>" — a business-day walk from the anchor date. One operand byte: 0 forward, 1 backward. Same walk as `<date> + N workdays` (vm/VM.ts's addBusinessDays). See WorkdayOffsetParselet.
+	DATE_WORKDAYS_BETWEEN = 97, // "working days between <date> and <date>" — the count of working days in the inclusive span. See WorkdaysBetweenParselet and vm/BusinessDays.ts's countBusinessDaysBetween.
 
 	// Rate, "quantity per unit of something" ($99/week, 30 fps). See
 	// vm/Value.ts's rateValue()/isRateUnit()/splitRateUnit() for the

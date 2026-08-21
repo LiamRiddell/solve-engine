@@ -79,12 +79,20 @@ export const CoreErrorCodes = {
   MAP_REDUCE_ASYNC_UNSUPPORTED: "MAP_REDUCE_ASYNC_UNSUPPORTED",
   /** An algebra verb's expression argument (`BIND_UNKNOWN`'s body) calling an async plugin. Same v1 scope restriction as the two above, and likewise refused at parse time first (`SYMBOLIC_ARGUMENT_MUST_BE_SYNCHRONOUS`, packages/symbolic/). */
   SYMBOLIC_ASYNC_UNSUPPORTED: "SYMBOLIC_ASYNC_UNSUPPORTED",
+  /** `explainLine()` asked to derive a line that resolves data asynchronously (a live-data or async-plugin line). A derivation is a sequence of settled intermediate values, which a pending result has none of, so the line is refused rather than explained with a hole in it. */
+  EXPLAIN_ASYNC_UNSUPPORTED: "EXPLAIN_ASYNC_UNSUPPORTED",
   /** `pushCallFrame()`'s recursion guard, a nested `CALL_USER_FUNCTION` re-enters `executeBytecode()`, so `maxInstructions` alone can't catch e.g. `f(x) = f(x)`; this is the dedicated backstop. `recoverable: true` (the default for `.execution()`), ordinary user-written infinite recursion, not an engine bug; the guard exists precisely so it surfaces as a clear error instead of overflowing the native call stack uncatchably. */
   FUNCTION_RECURSION_LIMIT_EXCEEDED: "FUNCTION_RECURSION_LIMIT_EXCEEDED",
   /** The companion to the code above, and the half it could never see: how MANY user-defined-function calls one evaluation makes, rather than how deeply they nest. A twenty-two-line doubling chain nests twenty-two deep (legal) and makes two million calls (a fatal heap abort). Counted in `vm/AllocationBudget.ts`, because the tally has to survive `executeBytecode()` re-entering itself. Recoverable. */
   FUNCTION_CALL_LIMIT_EXCEEDED: "FUNCTION_CALL_LIMIT_EXCEEDED",
   /** A `<date> + N workdays` offset outside `date.maxOffsetYears`/`minOffsetYears`. Workdays are the one date offset that walks the calendar a day at a time, so the one whose cost is the offset; every other one moves a Date field once. Recoverable. */
   DATE_OFFSET_LIMIT_EXCEEDED: "DATE_OFFSET_LIMIT_EXCEEDED",
+  /** The anchor of `N working days after/before/from <expr>` was not a date (e.g. `5 working days after 3`). The grammar guarantees the count is a number, so this only fires on the anchor. Emitted as a recoverable Error value, not thrown, matching the datetime package's other type guards. See `vm/VM.ts`'s `DATE_WORKDAY_OFFSET` case. */
+  WORKDAY_OFFSET_EXPECTED_DATE: "WORKDAY_OFFSET_EXPECTED_DATE",
+  /** An endpoint of `working days between <expr> and <expr>` was not a date. Recoverable Error value. See `vm/VM.ts`'s `DATE_WORKDAYS_BETWEEN` case. */
+  WORKDAYS_BETWEEN_EXPECTED_DATES: "WORKDAYS_BETWEEN_EXPECTED_DATES",
+  /** The two endpoints of `working days between <expr> and <expr>` are further apart than `date.maxOffsetYears`/`minOffsetYears` allow the count's calendar walk to run. Recoverable Error value, the between-count's equivalent of `DATE_OFFSET_LIMIT_EXCEEDED`. See `vm/VM.ts`'s `DATE_WORKDAYS_BETWEEN` case. */
+  WORKDAYS_BETWEEN_RANGE_TOO_LARGE: "WORKDAYS_BETWEEN_RANGE_TOO_LARGE",
   /** A `<<`/`>>` with a bigint operand whose exact result would pass `MAX_EXACT_SHIFT_BITS`, whichever operand is the bigint. Both spellings refuse as of 1.0.0: a bigint on the left used to fall through to `x * 2^n` in doubles and report a 19,870-digit integer as Infinity. See `vm/VM.ts`'s `bigIntShift()`. Recoverable. */
   BIGINT_SHIFT_LIMIT_EXCEEDED: "BIGINT_SHIFT_LIMIT_EXCEEDED",
   /** The same ceiling for `^`, the operator it was written for: `2n ^ 100000` asks for the same 100,001-bit integer `1n << 100000` does, so the two spellings answer the same way. Also new in 1.0.0, and for the same reason: this used to fall through to the double path and answer Infinity. A fractional or negative exponent (`4n ^ 0.5`, `2n ^ -1`) has no exact answer to bound and still uses the double path. See `vm/VM.ts`'s `MAX_EXACT_POW_BITS`. Recoverable. */
@@ -168,6 +176,14 @@ export const CoreErrorCodes = {
   THEREFORE_ASYNC_UNSUPPORTED: "THEREFORE_ASYNC_UNSUPPORTED",
   /** Colon-separated numbers that are not a time any clock can show ("24:00", "9:60", "100:5"). Raised by the labeled-line fallback, which used to answer them with whatever stood after the colon. */
   INVALID_TIME_LITERAL: "INVALID_TIME_LITERAL",
+
+  // ── Snapshot / restore (engine/EngineSnapshot.ts, engine/ExpressionEngine.ts) ──
+  /** `fromJSON()` handed an object that is not a snapshot at all, or whose serialised-shape version does not match this engine's reader. The versioning gate that refuses an incompatible snapshot clearly rather than restoring it wrongly. See `engine/EngineSnapshot.ts`'s `assertRestorable()`. */
+  SNAPSHOT_VERSION_MISMATCH: "SNAPSHOT_VERSION_MISMATCH",
+  /** A snapshot with the right envelope but internally inconsistent contents (an unrecognised number sentinel, an unknown value tag). Distinct from a version mismatch: the format is right, the payload is not. */
+  SNAPSHOT_MALFORMED: "SNAPSHOT_MALFORMED",
+  /** A value the v1 snapshot format cannot yet represent (a symbolic/algebra value, a symbolic matrix cell). Deferred to a follow-up; refused by name rather than dropped silently. */
+  SNAPSHOT_UNSUPPORTED_VALUE: "SNAPSHOT_UNSUPPORTED_VALUE",
 
   // ── Config (constants/Configuration.ts) ──
   CONFIG_PATH_NOT_FOUND: "CONFIG_PATH_NOT_FOUND",
