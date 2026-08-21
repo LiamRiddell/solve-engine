@@ -70,9 +70,38 @@ Packages cross as names, not objects, because a package carries functions that
 `postMessage` cannot clone. `createWorkerEngine({ packages: ["solve-arithmetic",
 "solve-uom"] })` selects among the built-ins the worker already bundles; a custom package is
 baked into the worker entry via `startWorkerRuntime(transport, { packages })`
-and selected by name from the main side. A synchronous or pending result crosses
-in the DTO; streaming the async resolver's later live-data events across the
-boundary is not part of this first slice.
+and selected by name from the main side.
+
+### Live values that resolve later
+
+A currency, weather or historical-rate line comes back pending: the value is not
+in hand when `parseDocument` returns. It resolves inside the worker some time
+later, and `onResolved` is how that value reaches the main thread. It is a
+subscription, not a per-call promise, because a resolution belongs to whichever
+document is current when the value lands, not to one request.
+
+```ts
+const stop = engine.onResolved((lines) => {
+  for (const { lineNumber, value } of lines) render(lineNumber, value.text);
+});
+
+const result = await engine.parseDocument(text);
+// result.lines[n].result may be a pending DTO; onResolved delivers the live
+// value once it settles. `lines` is a batch, since resolutions that land in one
+// tick arrive together. Call stop() to unsubscribe.
+```
+
+A failed resolution arrives through `onAsyncError` with the same structured
+`EngineError` an in-process failure would surface. Both subscriptions track the
+current document: parsing a new document supersedes the old one, and a value
+still resolving for the superseded document is dropped rather than delivered
+against the new one.
+
+```ts
+engine.onAsyncError(({ queryKey, packageId, error }) => {
+  console.warn(`${packageId} could not resolve ${queryKey}: ${error.message}`);
+});
+```
 
 Nothing about the synchronous API changes. `solve-engine/worker` is a separate,
 side-effect-free entry point, so a host that never imports it pays nothing.
