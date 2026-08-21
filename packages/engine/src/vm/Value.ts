@@ -1,6 +1,7 @@
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { chargeAllocation } from "@solve-js/vm/AllocationBudget";
 import type { SymbolicNode } from "@solve-js/symbolic";
+import type { DecimalData } from "@solve-js/decimal";
 
 /**
  * A single matrix cell. `boolean` covers element-wise comparison results
@@ -200,7 +201,12 @@ export function isArenaActive(): boolean {
  * (HALT return), these must survive arena.reset() in the next scroll frame.
  */
 export function persistentValue(v: Value): Value {
-	return new Value(v.type, v.value, v.unit);
+	const p = new Value(v.type, v.value, v.unit);
+	// The exact sidecar has to survive being stored in a variable, or a
+	// referenced money value would silently drop back to the double: "a = $0.10,
+	// b = $0.20, a + b" must still be exact across the STORE_VAR round trip.
+	if (v.exact !== undefined) p.exact = v.exact;
+	return p;
 }
 
 // ── Dev-mode immutability guard (Part II, L5, Value model hardening) ──
@@ -262,6 +268,20 @@ export class Value {
 	public unit?: string;
 	/** Set by async resolvers when a fetch timed out, the result is a fallback (typically 0). */
 	public timedOut?: boolean;
+	/**
+	 * The exact base-ten value this Value stands for, when it has one.
+	 *
+	 * A sidecar rather than a replacement for `value`: money and decimal-point
+	 * literals set it to a {@link DecimalData} so that same-currency arithmetic
+	 * and display can be exact ("$0.10 + $0.20" is "$0.30", not
+	 * "$0.30000000000000004"), while `value` stays the nearest double so every
+	 * existing consumer that reads `.value` or `toNumber()` is unchanged. The
+	 * plain Number-times-Number fast paths deliberately ignore it, which is why
+	 * a bare "0.1 + 0.2" still answers the double it always did: exactness is
+	 * carried only where a unit-bearing operand asks for it. Cleared by
+	 * {@link recycle} so a reused arena Value never inherits a stale exact.
+	 */
+	public exact?: DecimalData;
 
 	constructor(
 		type: ValueType,
@@ -291,6 +311,9 @@ export class Value {
 		this._cachedNumber = typeof value === 'number' ? value : undefined;
 		// Clear timeout flag, recycled Values shouldn't inherit stale metadata.
 		this.timedOut = undefined;
+		// Clear the exact sidecar for the same reason: a reused Value that once
+		// held money must not carry that money's decimal into a plain number.
+		this.exact = undefined;
 	}
 
 	isNumber(): this is Value & { value: number } {
@@ -401,6 +424,21 @@ export function numberValue(n: number): Value {
 	return new Value(ValueType.Number, n);
 }
 
+/**
+ * A Number that also carries the exact decimal it was written as.
+ *
+ * The type stays {@link ValueType.Number} and `value` stays the nearest double,
+ * so this Value behaves exactly like any other number everywhere it is read as
+ * one. The `exact` sidecar only matters when it later meets a currency: that is
+ * what lets "$0.70 * 1.10" be exact while "0.1 + 0.2" stays the double it was.
+ * Decimal-point literals are compiled to this (see the PUSH_DECIMAL opcode).
+ */
+export function numberValueExact(n: number, exact: DecimalData): Value {
+	const v = numberValue(n);
+	v.exact = exact;
+	return v;
+}
+
 /** Which base a {@link ValueType.Hex} value is displayed in. */
 export type DisplayBase = "hex" | "bin" | "oct";
 
@@ -442,6 +480,21 @@ export function stringValue(s: string): Value {
 export function uomValue(n: number, unit: string): Value {
 	if (_arenaActive && _arena) return _arena.acquire(ValueType.Uom, n, unit);
 	return new Value(ValueType.Uom, n, unit);
+}
+
+/**
+ * A unit-of-measurement Value that also carries an exact decimal magnitude.
+ *
+ * This is how money keeps its precision: `value` is the nearest double (so
+ * `toNumber()` and every existing Uom path are unchanged), and `exact` is the
+ * decimal the amount really is. Same-currency arithmetic reads `exact` to stay
+ * exact, and the formatter reads it to round a half-cent the way a ledger does
+ * rather than the way `toFixed` does on a double.
+ */
+export function uomValueExact(n: number, unit: string, exact: DecimalData): Value {
+	const v = uomValue(n, unit);
+	v.exact = exact;
+	return v;
 }
 
 // ── Rate, "quantity per unit of something" (SoulverCore: `$99/week`
