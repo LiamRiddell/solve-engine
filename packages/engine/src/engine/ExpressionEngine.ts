@@ -60,6 +60,8 @@ import { solveEquationValues } from "@solve-js/vm/SymbolicOps";
 import { abortLogger } from "@solve-js/utilities/AbortControllerLogger";
 import { TokenNormalizer, BUILTIN_PHRASES, implicitMultiplyRule } from "@solve-js/normalizer";
 import type { TokenFusion } from "@solve-js/normalizer";
+import { buildExplanation } from "@solve-js/explain";
+import type { Explanation } from "@solve-js/explain";
 import {
     type DiagnosticPipelineResult,
     type PipelineStageResult,
@@ -3210,6 +3212,76 @@ export class ExpressionEngine {
      */
     evaluateExpression(expression: string): EvalResults {
         return this.evaluateLine(-1, expression);
+    }
+
+    /**
+     * Explain how a line reached its answer, as a readable derivation.
+     *
+     * This is a companion to {@link evaluateExpression}, not a replacement:
+     * `explainLine` is for the person reading the note, whereas the diagnostic
+     * pipeline (`evaluateLineWithDiagnostic`) is for the developer and reports
+     * stages, opcodes and timings. A host puts a derivation behind a hover or a
+     * disclosure, so this is an API rather than an `explain` keyword: it never
+     * consumes a word that a prose line might use, and it annotates a line the
+     * host has already chosen to explain.
+     *
+     * The returned {@link Explanation} walks the line's operations in evaluation
+     * order, each with the value it arrives at, and its `result` is identical to
+     * what {@link evaluateExpression} returns for the same line. Every value in
+     * the derivation is the engine's own, the operations are re-evaluated rather
+     * than re-derived, so a step can never disagree with the answer.
+     *
+     * A line with nothing to break down (a bare literal), or one built from a
+     * construct this slice does not derive yet (matrices, dates, function
+     * calls), comes back with an empty `steps` array and the answer in
+     * `result`, rather than an error.
+     *
+     * @param expression - The raw line to explain.
+     * @returns The ordered derivation and final value.
+     * @throws {EngineError} When the line does not evaluate at all, or resolves
+     * data asynchronously (a derivation has no meaning for either).
+     */
+    explainLine(expression: string): Explanation {
+        const { tokens } = this.lexToTokens(expression);
+        // Normalize exactly as the evaluation path does (COMMENT tokens have no
+        // parselet, phrase fusion turns "off"/"of" into their real operators),
+        // so the derivation reads the same token stream the answer came from.
+        const exprTokens = tokens.filter((t) => t.type !== "COMMENT");
+        const normalized = this.normalizer.normalize(exprTokens);
+        return buildExplanation({
+            expression,
+            tokens: normalized,
+            evaluate: (source) => this.evaluateIsolated(source),
+            locale: this.localeCode,
+        });
+    }
+
+    /**
+     * Evaluate a self-contained sub-expression without touching document state.
+     *
+     * Used only by {@link explainLine}. Unlike `evaluateExpression`, this never
+     * writes to the line cache or the dependency graph: it is handed the spans
+     * of a single line's own sub-expressions, and evaluating those to build a
+     * derivation must not disturb the document the line belongs to. An async
+     * (pending) result is rejected, a derivation cannot represent one.
+     */
+    private evaluateIsolated(expression: string): Value {
+        const { tokens, hasParens } = this.lexToTokens(expression);
+        const prep = this.prepareExpression(expression, tokens, hasParens, undefined, -1);
+        if (prep.kind === "empty") return numberValue(0);
+        if (prep.kind === "error") throw prep.error;
+        if (prep.kind === "symbolic-solve") return prep.value;
+
+        const result = this.executeRaw(prep.program, -1);
+        if (result.type === "error") throw result.error;
+        if (result.type === "pending") {
+            throw ErrorFactory.execution(
+                "EXPLAIN_ASYNC_UNSUPPORTED",
+                `A derivation cannot be built for a line that resolves data asynchronously: "${expression}"`,
+                { expression },
+            );
+        }
+        return result.value;
     }
 
 //#endregion
