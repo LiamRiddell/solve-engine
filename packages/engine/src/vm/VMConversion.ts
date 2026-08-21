@@ -111,6 +111,108 @@ export function compareUom(l: Value, r: Value): { lv: number; rv: number; equal:
 }
 
 /**
+ * The dimension nouns that do not read as their measure-kind name. A quantity
+ * of `time` reads as a duration in a sentence ("a duration cannot be converted
+ * to a length"), and the generated measure table spells luminous intensity as
+ * one camelCase token. Every other kind (length, mass, area, ...) already reads
+ * as the noun, so it is used unchanged.
+ */
+const MEASURE_NOUNS: Readonly<Record<string, string>> = {
+    time: "duration",
+    luminousIntensity: "luminous intensity",
+};
+
+/**
+ * The dimensions that are uncountable, so they take no indefinite article in
+ * the conversion sentence: "money", not "a money".
+ */
+const UNCOUNTABLE_MEASURES: ReadonlySet<string> = new Set(["money", "data"]);
+
+/** The past participle each combining op reads as in the mismatch sentence. */
+const COMBINE_VERBS: Readonly<Record<string, string>> = {
+    add: "added",
+    sub: "subtracted",
+    mul: "multiplied",
+    div: "divided",
+};
+
+/**
+ * Name the dimension a unit measures, as a noun a message can drop into a
+ * sentence: `kg` gives "mass", `hour` gives "duration", `USD` gives "money".
+ *
+ * Returns undefined when the unit has no single dimension to name (a compound
+ * rate such as "km/h", or a currency code the exchange does not recognise), so
+ * a caller can fall back to naming the raw unit rather than printing
+ * "undefined".
+ */
+export function describeMeasure(unit: string): string | undefined {
+    // Currencies are not in the measure table (getMeasure returns undefined for
+    // them), so they are named here before the table lookup.
+    if (sharedCurrencyExchange.isCurrency(unit)) return "money";
+    const measure = getMeasure(unit);
+    if (measure === undefined) return undefined;
+    return MEASURE_NOUNS[measure] ?? measure;
+}
+
+/**
+ * A dimension noun with the indefinite article that reads correctly: "a
+ * length", "an area", and the uncountable dimensions ("money") left bare.
+ */
+function withMeasureArticle(noun: string): string {
+    if (UNCOUNTABLE_MEASURES.has(noun)) return noun;
+    return /^[aeiou]/.test(noun) ? `an ${noun}` : `a ${noun}`;
+}
+
+/**
+ * The mismatch sentence naming the two differing dimensions of a refused
+ * `+`/`-`/`*` or comparison: "mass and length cannot be added".
+ *
+ * Returns undefined when there is no pair of differing dimensions to name: an
+ * unknown or compound unit on either side, or two currencies (both money, the
+ * missing-rate case rather than a dimension mismatch). The caller then keeps
+ * its own fallback, which names the units instead.
+ *
+ * @param verb - the past participle for the sentence ("added", "compared").
+ */
+export function describeMeasureMismatch(
+    lUnit: string | undefined,
+    rUnit: string | undefined,
+    verb: string,
+): string | undefined {
+    const left = lUnit === undefined ? undefined : describeMeasure(lUnit);
+    const right = rUnit === undefined ? undefined : describeMeasure(rUnit);
+    if (left !== undefined && right !== undefined && left !== right) {
+        return `${left} and ${right} cannot be ${verb}`;
+    }
+    return undefined;
+}
+
+/**
+ * The past participle for a combining opcode's mismatch sentence. MOD passes no
+ * op kind (see {@link binaryOp}), and reads as the neutral "combined".
+ */
+export function combineVerb(op: string | undefined): string {
+    return op !== undefined ? (COMBINE_VERBS[op] ?? "combined") : "combined";
+}
+
+/**
+ * The mismatch sentence for a conversion the engine cannot make: "a duration
+ * cannot be converted to a length".
+ *
+ * Returns undefined when either side has no dimension to name (a compound rate,
+ * or a currency code the exchange does not know), so the caller keeps its own
+ * fallback that names the two units instead.
+ */
+export function describeConversionMismatch(fromUnit: string, toUnit: string): string | undefined {
+    const from = describeMeasure(fromUnit);
+    const to = describeMeasure(toUnit);
+    if (from !== undefined && to !== undefined && from !== to) {
+        return `${withMeasureArticle(from)} cannot be converted to ${withMeasureArticle(to)}`;
+    }
+    return undefined;
+}
+
+/**
  * The answer an ordered comparison gives when the two quantities share no
  * measure.
  *
@@ -119,11 +221,16 @@ export function compareUom(l: Value, r: Value): { lv: number; rv: number; equal:
  * the same confidently-wrong shape `binaryOp` refuses below for `+`. Equality
  * is the exception and stays a boolean: a kilogram genuinely is not a metre,
  * so `==` can say false and mean it.
+ *
+ * The two dimensions are named where both are known and differ ("mass and
+ * length cannot be compared"), falling back to naming the units when they are
+ * not (see {@link describeMeasureMismatch}).
  */
 export function incomparableUnitsError(l: Value, r: Value): Value {
     const lUnit = l.type === ValueType.Uom ? l.unit : undefined;
     const rUnit = r.type === ValueType.Uom ? r.unit : undefined;
-    return errorValue("INCOMPATIBLE_UNITS", `Cannot compare incompatible units: ${lUnit ?? "?"} and ${rUnit ?? "?"}`);
+    const named = describeMeasureMismatch(lUnit, rUnit, "compared");
+    return errorValue("INCOMPATIBLE_UNITS", named ?? `Cannot compare incompatible units: ${lUnit ?? "?"} and ${rUnit ?? "?"}`);
 }
 
 /**
@@ -427,7 +534,13 @@ export function binaryOp(
             // mirrors the existing UOM_CONVERT_TO/_IN error path in VM.ts.
             const lUnit = l.type === ValueType.Uom ? l.unit : undefined;
             const rUnit = r.type === ValueType.Uom ? r.unit : undefined;
-            return errorValue("INCOMPATIBLE_UNITS", `Cannot combine incompatible units: ${lUnit ?? "?"} and ${rUnit ?? "?"}`);
+            // Name the two dimensions when they genuinely differ ("mass and
+            // length cannot be added"). Two currencies with no cached rate reach
+            // here too, and share the money dimension, so there is nothing to
+            // contrast: describeMeasureMismatch returns undefined and the
+            // unit-naming fallback below keeps the "BTC and ETH" form.
+            const named = describeMeasureMismatch(lUnit, rUnit, combineVerb(symbolicOp));
+            return errorValue("INCOMPATIBLE_UNITS", named ?? `Cannot combine incompatible units: ${lUnit ?? "?"} and ${rUnit ?? "?"}`);
         }
         return uomValue(op(lv, rv), unit!);
     }

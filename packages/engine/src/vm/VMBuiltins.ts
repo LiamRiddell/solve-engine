@@ -1,6 +1,6 @@
 import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, type MatrixData } from "@solve-js/vm/Value";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { unifyUom, power } from "@solve-js/vm/VMConversion";
+import { unifyUom, power, describeMeasureMismatch } from "@solve-js/vm/VMConversion";
 import { transpose, determinant, inverse, matrixMultiply, matrixPower, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
 import { symbolicToValue, valueToSymbolic, solveEquationValues } from "@solve-js/vm/SymbolicOps";
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
@@ -104,9 +104,13 @@ function extremum(args: Value[], wantLargest: boolean): Value {
         if (!sameMeasure) {
             const bestUnit = best.type === ValueType.Uom ? best.unit : undefined;
             const otherUnit = a.type === ValueType.Uom ? a.unit : undefined;
+            // Same phrasing as the ordering opcodes: name the two dimensions
+            // where they differ ("mass and length cannot be compared"), keeping
+            // the unit-naming fallback for anything with no dimension to name.
+            const named = describeMeasureMismatch(bestUnit, otherUnit, "compared");
             return errorValue(
                 "INCOMPATIBLE_UNITS",
-                `Cannot compare incompatible units: ${bestUnit ?? "?"} and ${otherUnit ?? "?"}`,
+                named ?? `Cannot compare incompatible units: ${bestUnit ?? "?"} and ${otherUnit ?? "?"}`,
             );
         }
         if (wantLargest ? rv > lv : rv < lv) best = a;
