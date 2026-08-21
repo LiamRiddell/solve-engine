@@ -26,6 +26,57 @@ separately, so an unchanged line skips execution too.
 A dependency graph records which lines read which variables, so editing a line
 recomputes only what transitively depends on it.
 
+## Off the main thread
+
+The caches and the dependency graph keep a re-parse small. They do not move the
+first parse of a large document off the thread that asked for it, and on every
+keystroke that first parse, or a paste, is where jank comes from.
+
+`solve-engine/worker` wraps the core evaluate methods behind a `postMessage`
+boundary, so a host can run them on a Web Worker or a Node `worker_threads`
+thread without hand-rolling the protocol. Results cross as a serialisable DTO,
+never as a live `Value`, which carries BigInt, matrix objects and exact-decimal
+sidecars that structured cloning cannot reproduce.
+
+```ts
+import { createWorkerEngine, eventTargetTransport } from "solve-engine/worker";
+
+const worker = new Worker(new URL("./engine.worker.ts", import.meta.url), { type: "module" });
+const engine = await createWorkerEngine({ transport: eventTargetTransport(worker) });
+
+const result = await engine.parseDocument(text);
+for (const line of result.lines) {
+  if (line.result) render(line.lineNumber, line.result.text);
+}
+```
+
+The worker entry is two lines: adapt the worker's own global onto a transport
+and start the runtime.
+
+```ts
+// engine.worker.ts
+import { startWorkerRuntime, eventTargetTransport } from "solve-engine/worker";
+startWorkerRuntime(eventTargetTransport(self));
+```
+
+An `AbortSignal` on a call rejects the promise and aborts the work on the other
+side, so a superseded keystroke does not race a stale result home.
+
+```ts
+const result = await engine.parseDocument(text, { signal });
+```
+
+Packages cross as names, not objects, because a package carries functions that
+`postMessage` cannot clone. `createWorkerEngine({ packages: ["solve-arithmetic",
+"solve-uom"] })` selects among the built-ins the worker already bundles; a custom package is
+baked into the worker entry via `startWorkerRuntime(transport, { packages })`
+and selected by name from the main side. A synchronous or pending result crosses
+in the DTO; streaming the async resolver's later live-data events across the
+boundary is not part of this first slice.
+
+Nothing about the synchronous API changes. `solve-engine/worker` is a separate,
+side-effect-free entry point, so a host that never imports it pays nothing.
+
 ## What to avoid
 
 Constructing a new engine per evaluation throws away every cache and re-registers
