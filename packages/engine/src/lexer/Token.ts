@@ -49,6 +49,12 @@ export const TokenTypes = {
   MINUS: "MINUS",
   STAR: "STAR",
   SLASH: "SLASH",
+  // The uncertainty operator, `±` (U+00B1) or the ASCII `+/-`. The symbol is
+  // lexed directly (ExpressionLexer.ts, alongside `×`/`÷`), and the ASCII
+  // spelling is fused from PLUS SLASH MINUS by a normalizer rule (see
+  // packages/uncertainty/). Registered here rather than left to be lazily
+  // minted so its id is stable, the same reasoning as the algebra verbs below.
+  PLUS_MINUS: "PLUS_MINUS",
   CARET: "CARET",
   PERCENT: "PERCENT",
   LSHIFT: "LSHIFT",

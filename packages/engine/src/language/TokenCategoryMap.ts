@@ -170,6 +170,10 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	MINUS: "operator",
 	STAR: "operator",
 	SLASH: "operator",
+	// `±` / `+/-`, the uncertainty operator (packages/uncertainty/). A core
+	// lexer token, so its category lives in the built-in map alongside the other
+	// operators rather than being registered by the package.
+	PLUS_MINUS: "operator",
 	CARET: "operator",
 	PERCENT: "operator",
 	LSHIFT: "operator",
