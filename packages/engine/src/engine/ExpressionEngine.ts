@@ -10,6 +10,7 @@ import { PrecedenceParser } from "@solve-js/parser/PrecedenceParser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { createVM, executeBytecode } from "@solve-js/vm/VM";
+import { resolveHolidayPredicate } from "@solve-js/vm/HolidayCalendar";
 import type { EvalResult, LineExecutionContext } from "@solve-js/vm/VM";
 import type { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { registerAsConverter, unregisterAsConverter } from "@solve-js/vm/VMBuiltins";
@@ -501,6 +502,10 @@ export class ExpressionEngine {
             this.config.date.maxOffsetYears,
             this.config.date.minOffsetYears,
             this.context,
+            // Resolved once here, not per evaluation: a host list becomes a
+            // Set lookup the walk can run cheaply. Undefined stays undefined,
+            // which the VM reads as weekends-only.
+            resolveHolidayPredicate(this.config.date.holidays),
         );
         this.queryClient = createQueryClient();
         this.batcher = new AsyncResolutionBatcher(this.dag, this.lineCache, this.vm);

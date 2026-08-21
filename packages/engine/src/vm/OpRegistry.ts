@@ -255,6 +255,8 @@ export interface VM {
 	getMaxDateOffsetYears(): number;
 	/** The same bound backwards, as a negative number of years. */
 	getMinDateOffsetYears(): number;
+	/** Whether the host's public-holiday calendar marks `epochMs` a holiday, for working-day arithmetic. Always `false` when no calendar is configured (weekends-only). Set from `constants/Configuration.ts`'s `date.holidays`; see `vm/HolidayCalendar.ts`. */
+	isHoliday(epochMs: number): boolean;
 	getInstructionCount(): number;
 	incrementInstructions(n: number): void;
 	/** Active AbortSignal for the current expression evaluation. Checked before cache writes. */

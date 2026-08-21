@@ -133,6 +133,10 @@ const COMPILED_CORPUS: readonly string[] = [
 	// point, which is the arm that had already drifted once.
 	"sqrt(16)", "max(1,2,3)", "f(x) = 2*x", "f(3)",
 	"workdays in 2 weeks", "days between 1-1-2020 and 2-1-2020",
+	// Business-day arithmetic in words: the offset (DATE_WORKDAY_OFFSET, one
+	// direction byte) and the inclusive count (DATE_WORKDAYS_BETWEEN, no operand).
+	"5 working days after 1-1-2020", "5 working days before 1-1-2020",
+	"working days between 1-1-2020 and 2-1-2020",
 	"\"2020-01-01\" to date", "timestamp", "is 1-1-2020 a weekday",
 	// Units and currency.
 	"5 km", "5 km to m", "5 km in m", "500 lux to best", "km to ?", "5 km to ?",

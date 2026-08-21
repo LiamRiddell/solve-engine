@@ -398,6 +398,15 @@ export const TokenTypes = {
   // `<unit> between <date> and <date>`, fused UNIT+BETWEEN, exactly like
   // UNTIL_UNIT/SINCE_UNIT above.
   BETWEEN_UNIT: "BETWEEN_UNIT",
+  // Business-day arithmetic in words, "N working/business days after|from|
+  // before <date>" (infix, the count is the left operand) and "working/
+  // business days between <date> and <date>" (prefix). Full phrases for the
+  // same reason as WORKDAYS_IN above: "working"/"business" are ordinary words,
+  // so only the complete phrase is claimed, never the bare leading word. See
+  // WorkdayOffsetParselet.ts / WorkdaysBetweenParselet.ts.
+  WORKDAYS_AFTER: "WORKDAYS_AFTER",
+  WORKDAYS_BEFORE: "WORKDAYS_BEFORE",
+  WORKDAYS_BETWEEN: "WORKDAYS_BETWEEN",
   // Postfix day-type predicates, "<date> is a weekend" / "is a workday".
   IS_WEEKEND: "IS_WEEKEND",
   IS_WORKDAY: "IS_WORKDAY",

@@ -11,17 +11,28 @@
  * the spring-forward Sunday that a millisecond-based implementation
  * mishandles.
  *
- * No public-holiday calendar is involved, which is a deliberate, documented
- * scope decision rather than an oversight. See `vm/VM.ts`'s
- * `addBusinessDays()`.
+ * The blocks up to "weekend and workday predicates" configure no calendar, so
+ * they pin the weekends-only default. The last two blocks then add the natural-
+ * language offset/`between` grammar and a host holiday calendar, which is the
+ * feature this file's default cases are the baseline for. See `vm/VM.ts`'s
+ * `addBusinessDays()` and `constants/Configuration.ts`'s `date.holidays`; the
+ * skipping logic itself is unit-tested in `__tests__/vm/BusinessDays.spec.ts`.
  */
 
 import { describe, expect, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
 import { ValueType } from "@solve-js/vm/Value";
+import type { HolidayCalendar } from "@solve-js/constants/Configuration";
 
 function evaluate(source: string) {
 	const engine = newTrackedEngine("en");
+	const [value] = engine.evaluateExpression(source);
+	return value;
+}
+
+/** Evaluate against an engine that has a host holiday calendar configured. */
+function evaluateWithHolidays(source: string, holidays: HolidayCalendar) {
+	const engine = newTrackedEngine("en", false, { date: { holidays } } as never);
 	const [value] = engine.evaluateExpression(source);
 	return value;
 }
@@ -195,5 +206,119 @@ describe("weekend and workday predicates", () => {
 
 	test("a duration is not a date, and is refused rather than read as an epoch", () => {
 		expect(evaluate("90 days as weekday").type).toBe(ValueType.Error);
+	});
+});
+
+describe("N working days after/before/from a date, in words", () => {
+	test("the words spell out exactly the same offset as the arithmetic form", () => {
+		// The whole point of the natural-language form: it must agree with
+		// `<date> + N workdays` to the millisecond, so both walk one calendar.
+		expectDate("5 working days after 2024-03-29", 2024, 4, 5);
+		expect(num("5 working days after 2024-03-29")).toBe(num("2024-03-29 + 5 workdays"));
+	});
+
+	test("business days is a synonym for working days", () => {
+		expect(num("5 business days after 2024-03-29")).toBe(num("5 working days after 2024-03-29"));
+	});
+
+	test("from reads like after", () => {
+		expect(num("3 working days from 2024-03-29")).toBe(num("3 working days after 2024-03-29"));
+	});
+
+	test("before walks backwards, the mirror of after", () => {
+		// Friday March 29 minus five working days is the Friday before.
+		expectDate("5 working days before 2024-03-29", 2024, 3, 22);
+		expect(num("5 working days before 2024-04-05")).toBe(num("2024-04-05 - 5 workdays"));
+	});
+
+	test("after and before round-trip", () => {
+		expectDate("5 working days before (5 working days after 2024-03-29)", 2024, 3, 29);
+	});
+
+	test("the singular day form is accepted for a count of one", () => {
+		expectDate("1 working day after 2024-03-29", 2024, 4, 1);
+	});
+
+	test("a relative anchor works, not only a literal", () => {
+		// Structural, since "today" moves: the answer is always a weekday.
+		const value = evaluate("3 business days from today");
+		expect(value.type).toBe(ValueType.Datetime);
+		expect(evaluate(`${new Date(value.toNumber()).getFullYear()}-01-01 is a workday`).type).not.toBe(ValueType.Error);
+		expect(new Date(value.toNumber()).getDay()).not.toBe(0);
+		expect(new Date(value.toNumber()).getDay()).not.toBe(6);
+	});
+
+	test("an anchor that is not a date is a clear error, not a wrong date", () => {
+		expect(evaluate("5 working days after 3").type).toBe(ValueType.Error);
+	});
+
+	test("weekends and month ends are skipped, same as the arithmetic form", () => {
+		// August 31 2024 was a Saturday; the following Monday is in September.
+		expectDate("1 working day after 2024-08-30", 2024, 9, 2);
+	});
+});
+
+describe("working days between two dates", () => {
+	test("every working day in a month, both ends counted", () => {
+		// Jan 1 2024 (Mon) through Jan 31 (Wed): 23 weekdays.
+		expect(num("working days between 2024-01-01 and 2024-01-31")).toBe(23);
+	});
+
+	test("business days between is the same count", () => {
+		expect(num("business days between 2024-01-01 and 2024-01-31")).toBe(23);
+	});
+
+	test("the order of the two dates does not matter", () => {
+		expect(num("working days between 2024-01-31 and 2024-01-01")).toBe(23);
+	});
+
+	test("a single working week is five", () => {
+		// Monday April 1 through Sunday April 7 2024.
+		expect(num("working days between 2024-04-01 and 2024-04-07")).toBe(5);
+	});
+
+	test("the same two dates as a plain span still measure calendar days", () => {
+		// The working-day count must not have disturbed `days between`.
+		expect(evaluate("days between 2024-01-01 and 2024-01-31").type).toBe(ValueType.Uom);
+		expect(num("days between 2024-01-01 and 2024-01-31")).toBe(30);
+	});
+
+	test("a non-date endpoint is refused", () => {
+		expect(evaluate("working days between 2024-01-01 and 5").type).toBe(ValueType.Error);
+	});
+});
+
+describe("a configured holiday calendar excludes those days too", () => {
+	// Christmas Day 2024 (Wed) and Boxing Day (Thu), as a plain list a host
+	// might pass. The same dates as a predicate function are covered in the
+	// resolver's own unit tests.
+	const christmas: HolidayCalendar = ["2024-12-25", "2024-12-26"];
+
+	test("an offset steps over the holidays", () => {
+		// Tuesday Dec 24 + 1 working day skips the 25th and 26th to Friday 27.
+		const value = evaluateWithHolidays("1 working day after 2024-12-24", christmas);
+		expect(value.type).toBe(ValueType.Datetime);
+		expect(value.toNumber()).toBe(new Date(2024, 11, 27).getTime());
+	});
+
+	test("with no calendar the same offset stops on the 25th", () => {
+		expectDate("1 working day after 2024-12-24", 2024, 12, 25);
+	});
+
+	test("the count drops the holidays inside the window", () => {
+		// Mon Dec 23 through Fri Dec 27: five weekdays, minus the two holidays.
+		expect(evaluateWithHolidays("working days between 2024-12-23 and 2024-12-27", christmas).toNumber()).toBe(3);
+		expect(num("working days between 2024-12-23 and 2024-12-27")).toBe(5);
+	});
+
+	test("weekends stay excluded whether or not a calendar is set", () => {
+		// A holiday list that names only weekdays must not resurrect weekends.
+		expect(evaluateWithHolidays("working days between 2024-04-01 and 2024-04-07", christmas).toNumber()).toBe(5);
+	});
+
+	test("the arithmetic form and the words agree under the same calendar", () => {
+		const words = evaluateWithHolidays("1 working day after 2024-12-24", christmas).toNumber();
+		const arithmetic = evaluateWithHolidays("2024-12-24 + 1 workday", christmas).toNumber();
+		expect(words).toBe(arithmetic);
 	});
 });
