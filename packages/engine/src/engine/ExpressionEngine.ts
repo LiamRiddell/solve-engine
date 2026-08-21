@@ -76,6 +76,8 @@ import { solveEquationValues } from "@solve-js/vm/SymbolicOps";
 import { abortLogger } from "@solve-js/utilities/AbortControllerLogger";
 import { TokenNormalizer, BUILTIN_PHRASES, implicitMultiplyRule } from "@solve-js/normalizer";
 import type { TokenFusion } from "@solve-js/normalizer";
+import { buildExplanation } from "@solve-js/explain";
+import type { Explanation } from "@solve-js/explain";
 import {
     type DiagnosticPipelineResult,
     type PipelineStageResult,
@@ -271,6 +273,18 @@ export class ExpressionEngine {
     private documentModel: DocumentModel | null = null;
 
     /**
+     * Batch cross-line source, set only for the duration of a
+     * `parseDocument`/`evaluateLines` pass (see {@link processScanResults}).
+     * The incremental path uses {@link documentModel}; the batch path has no
+     * such model, so cross-line closures read earlier lines from the scan and
+     * the results array the pass is already building. Both are references to
+     * arrays that exist regardless, so a document that uses no cross-line
+     * feature pays nothing: the closures are simply never called.
+     */
+    private batchScanResults: ScanLineResult[] | null = null;
+    private batchParsedLines: ParsedLine[] | null = null;
+
+    /**
      * Called once by `ThreeTierEvaluator`'s constructor. Not part of the
      * public evaluate-a-document contract, purely internal wiring so
      * {@link makeLineContext} has something to read from.
@@ -289,16 +303,28 @@ export class ExpressionEngine {
      */
     private makeLineContext(lineNumber: number): LineExecutionContext {
         const doc = this.documentModel;
+        const scan = doc ? null : this.batchScanResults;
+        const parsed = doc ? null : this.batchParsedLines;
         return {
             lineIndex: lineNumber,
-            getLineResult: doc ? (n: number) => doc.getLineAt(n)?.result ?? undefined : undefined,
+            getLineResult: doc
+                ? (n: number) => doc.getLineAt(n)?.result ?? undefined
+                : parsed
+                  ? (n: number) => parsed[n - 1]?.result ?? undefined
+                  : undefined,
             isLineBoundary: doc
                 ? (n: number) => {
                       const state = doc.getLineAt(n);
                       if (!state) return true; // out of range counts as a boundary — nothing to aggregate past it
                       return state.isEmpty || /^\s*#/.test(state.text);
                   }
-                : undefined,
+                : scan
+                  ? (n: number) => {
+                        const sr = scan[n - 1];
+                        if (!sr) return true;
+                        return sr.classification.skip || /^\s*#/.test(sr.text);
+                    }
+                  : undefined,
         };
     }
 
@@ -1079,6 +1105,22 @@ export class ExpressionEngine {
     private processScanResults(scanResults: ScanLineResult[]): ParsedLine[] {
         const result: ParsedLine[] = [];
 
+        // Cross-line features (line references, table columns) read earlier
+        // lines' text and results. The incremental `ThreeTierEvaluator` path
+        // reads them from `this.documentModel`; the batch path has none, so it
+        // reported a no-document error for `total above`, `line N` and
+        // `sum of column`. Point the batch cross-line source at the scan and
+        // the results array this pass is already building, for the length of
+        // the pass, and restore whatever a host had set afterwards. This is
+        // reference assignment, not allocation, so a document with no
+        // cross-line feature pays nothing (an earlier version built a whole
+        // `DocumentModel` per pass and grew the heap measurably).
+        const previousBatchScanResults = this.batchScanResults;
+        const previousBatchParsedLines = this.batchParsedLines;
+        this.batchScanResults = scanResults;
+        this.batchParsedLines = result;
+
+        try {
         for (const scanResult of scanResults) {
             const lineText = scanResult.text;
             const lineNumber = scanResult.lineNumber;
@@ -1144,7 +1186,14 @@ export class ExpressionEngine {
                 }
             }
 
+            // A later line referencing this one reads its result straight from
+            // the `result` array above, which already holds it, so nothing more
+            // needs recording here.
             result.push(parsedLine);
+        }
+        } finally {
+            this.batchScanResults = previousBatchScanResults;
+            this.batchParsedLines = previousBatchParsedLines;
         }
 
         return result;
@@ -3270,6 +3319,76 @@ export class ExpressionEngine {
      */
     evaluateExpression(expression: string): EvalResults {
         return this.evaluateLine(-1, expression);
+    }
+
+    /**
+     * Explain how a line reached its answer, as a readable derivation.
+     *
+     * This is a companion to {@link evaluateExpression}, not a replacement:
+     * `explainLine` is for the person reading the note, whereas the diagnostic
+     * pipeline (`evaluateLineWithDiagnostic`) is for the developer and reports
+     * stages, opcodes and timings. A host puts a derivation behind a hover or a
+     * disclosure, so this is an API rather than an `explain` keyword: it never
+     * consumes a word that a prose line might use, and it annotates a line the
+     * host has already chosen to explain.
+     *
+     * The returned {@link Explanation} walks the line's operations in evaluation
+     * order, each with the value it arrives at, and its `result` is identical to
+     * what {@link evaluateExpression} returns for the same line. Every value in
+     * the derivation is the engine's own, the operations are re-evaluated rather
+     * than re-derived, so a step can never disagree with the answer.
+     *
+     * A line with nothing to break down (a bare literal), or one built from a
+     * construct this slice does not derive yet (matrices, dates, function
+     * calls), comes back with an empty `steps` array and the answer in
+     * `result`, rather than an error.
+     *
+     * @param expression - The raw line to explain.
+     * @returns The ordered derivation and final value.
+     * @throws {EngineError} When the line does not evaluate at all, or resolves
+     * data asynchronously (a derivation has no meaning for either).
+     */
+    explainLine(expression: string): Explanation {
+        const { tokens } = this.lexToTokens(expression);
+        // Normalize exactly as the evaluation path does (COMMENT tokens have no
+        // parselet, phrase fusion turns "off"/"of" into their real operators),
+        // so the derivation reads the same token stream the answer came from.
+        const exprTokens = tokens.filter((t) => t.type !== "COMMENT");
+        const normalized = this.normalizer.normalize(exprTokens);
+        return buildExplanation({
+            expression,
+            tokens: normalized,
+            evaluate: (source) => this.evaluateIsolated(source),
+            locale: this.localeCode,
+        });
+    }
+
+    /**
+     * Evaluate a self-contained sub-expression without touching document state.
+     *
+     * Used only by {@link explainLine}. Unlike `evaluateExpression`, this never
+     * writes to the line cache or the dependency graph: it is handed the spans
+     * of a single line's own sub-expressions, and evaluating those to build a
+     * derivation must not disturb the document the line belongs to. An async
+     * (pending) result is rejected, a derivation cannot represent one.
+     */
+    private evaluateIsolated(expression: string): Value {
+        const { tokens, hasParens } = this.lexToTokens(expression);
+        const prep = this.prepareExpression(expression, tokens, hasParens, undefined, -1);
+        if (prep.kind === "empty") return numberValue(0);
+        if (prep.kind === "error") throw prep.error;
+        if (prep.kind === "symbolic-solve") return prep.value;
+
+        const result = this.executeRaw(prep.program, -1);
+        if (result.type === "error") throw result.error;
+        if (result.type === "pending") {
+            throw ErrorFactory.execution(
+                "EXPLAIN_ASYNC_UNSUPPORTED",
+                `A derivation cannot be built for a line that resolves data asynchronously: "${expression}"`,
+                { expression },
+            );
+        }
+        return result.value;
     }
 
 //#endregion

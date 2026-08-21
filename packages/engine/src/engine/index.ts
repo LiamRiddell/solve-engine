@@ -26,6 +26,8 @@ export type {
 	SerializedNumber,
 } from "./ExpressionEngine";
 
+export type { Explanation, ExplanationStep } from "@solve-js/explain";
+
 export { DocumentModel } from "./DocumentModel";
 export type {
 	LineState,
