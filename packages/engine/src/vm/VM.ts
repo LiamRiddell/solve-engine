@@ -1,7 +1,7 @@
 import { OpCode } from "@solve-js/parser/OpCode";
-import { Value, ValueType, numberValue, numberValueExact, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueExact, numberValueRational, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData } from "@solve-js/vm/Value";
 import { decimalFromLiteral, decimalFromNumberIfExact, decimalNegate, decimalToNumber, type DecimalData } from "@solve-js/decimal";
-import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType } from "@solve-js/symbolic";
+import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { rowMajorToColumnMajor, matrixMultiply, matrixPower, matrixCompare, matIndex, matAt, inBounds, collectionToValues, matrixEntryToValue } from "@solve-js/vm/MatrixOps";
 import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/vm/OpRegistry";
@@ -14,7 +14,7 @@ import { builtinArityError } from "@solve-js/vm/VMBuiltinArity";
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, compareRationalOperands } from "@solve-js/vm/VMConversion";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
@@ -1443,6 +1443,19 @@ function toFractionString(n: number): string {
 }
 
 /**
+ * Render an exact rational as a fraction: "1/3", "5/2", or a whole number as
+ * itself ("4").
+ *
+ * The exact counterpart of {@link toFractionString}'s continued-fraction guess,
+ * used when a value carries the rational it evaluates to. It is what makes
+ * "(1/1000003) as fraction" read "1/1000003" rather than the "0/1" the float
+ * approximation collapses to once the denominator passes its own ceiling.
+ */
+function rationalToFractionString(r: Rational): string {
+    return r.d === 1n ? String(r.n) : `${r.n}/${r.d}`;
+}
+
+/**
  * A value rendered as a multiple, "4x".
  *
  * What counts as the multiple depends on what is being converted, which is why
@@ -1695,6 +1708,14 @@ export function executeBytecode(
           // (5 kg to m)` answered today. See faultedOperand().
           const addFault = faultedOperand(l, r);
           if (addFault) { stack.push(addFault); break; }
+          // Fraction arithmetic stays exact when a rational already rides on an
+          // operand: "1/3 + 1/3 + 1/3" is exactly 1. The sidecar check gates it
+          // so this only ever PRESERVES a fraction, a plain integer sum never
+          // grows one and "1e16 + 1 - 1e16" stays the double it must be.
+          if (l.rational !== undefined || r.rational !== undefined) {
+            const ratAdd = exactRationalOp(l, r, "add");
+            if (ratAdd) { stack.push(ratAdd); break; }
+          }
           const pctAdd = combinePercentage(l, r, 1);
           const ratePeriodAdd = pctAdd === null ? unifyRatePeriods(l, r) : null;
           if (pctAdd !== null) {
@@ -1748,6 +1769,12 @@ export function executeBytecode(
           // Same reason as ADD above.
           const subFault = faultedOperand(l, r);
           if (subFault) { stack.push(subFault); break; }
+          // Preserve exact fractions, as ADD does above: "5/6 - 1/6 - 1/6 - 1/6
+          // - 1/6 - 1/6" is exactly 0, not the 1.6e-16 the doubles drift to.
+          if (l.rational !== undefined || r.rational !== undefined) {
+            const ratSub = exactRationalOp(l, r, "sub");
+            if (ratSub) { stack.push(ratSub); break; }
+          }
           const pctSub = combinePercentage(l, r, -1);
           const ratePeriodSub = pctSub === null ? unifyRatePeriods(l, r) : null;
           if (pctSub !== null) {
@@ -1793,6 +1820,13 @@ export function executeBytecode(
         }
         case OpCode.MUL: {
           const r = safePop(stack), l = safePop(stack);
+          // Preserve exact fractions before the double fast path: "2/7 * 14" is
+          // exactly 4 and "1/49 * 49" exactly 1. Gated on a rational already
+          // being present, so a plain "2 * 3" pays only the two sidecar checks.
+          if (l.rational !== undefined || r.rational !== undefined) {
+            const ratMul = exactRationalOp(l, r, "mul");
+            if (ratMul) { stack.push(ratMul); break; }
+          }
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(numberValue((l.value as number) * (r.value as number)));
           } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
@@ -1850,6 +1884,16 @@ export function executeBytecode(
               stack.push(rateValue(lv / rv, l.unit!, r.unit!));
             }
           } else {
+            // Integer division is the producer of exact fractions: "1/3" seeds
+            // the rational 1/3 that the rest of the system carries, so "1/3 + 1/3
+            // + 1/3" is exactly 1 and "1/3 as fraction" is exact. exactRationalOp
+            // declines for a non-integer operand, a bigint, or a zero divisor, so
+            // "1.5 / 0.25" and "1/0" keep the doubles binaryOp gives and "100n /
+            // 3n" stays exact integer division. The reduced result's nearest
+            // double equals the plain "a / b" quotient, so "10 / 4" is 2.5 and
+            // every existing division result is unchanged.
+            const ratDiv = exactRationalOp(l, r, "div");
+            if (ratDiv) { stack.push(ratDiv); break; }
             // The bigint arm refuses a zero divisor rather than letting V8's
             // own RangeError out. See bigIntDivisionByZero() for why this is
             // an error while `1 / 0` is Infinity.
@@ -1962,6 +2006,9 @@ export function executeBytecode(
           // Without this branch, unary minus on a free variable produced `-0`,
           // for the same toNumber() reason as EXP above.
           else if (v.type === ValueType.Symbolic) stack.push(symbolicNeg(v));
+          // Negating a fraction keeps it exact: "-(1/3)" carries the rational
+          // -1/3, so it still reads back exactly through "as fraction".
+          else if (v.type === ValueType.Number && v.rational !== undefined) stack.push(numberValueRational(-v.toNumber(), rationalNeg(v.rational)));
           else stack.push(numberValue(-v.toNumber()));
           break;
         }
@@ -1974,6 +2021,9 @@ export function executeBytecode(
           else if (v.type === ValueType.Uom) stack.push(uomValue(v.toNumber(), v.unit!));
           // Unary plus is a no-op, so it has to leave the type alone too.
           else if (v.type === ValueType.Percentage) stack.push(percentageValue(v.toNumber()));
+          // A no-op keeps a fraction's exact rational, the same way it keeps
+          // money's exact decimal above.
+          else if (v.type === ValueType.Number && v.rational !== undefined) stack.push(numberValueRational(v.toNumber(), v.rational));
           else stack.push(numberValue(v.toNumber()));
           break;
         }
@@ -2094,6 +2144,13 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const eqFault = faultedOperand(l, r);
           if (eqFault) { stack.push(eqFault); break; }
+          // Equal fractions are equal on the value, not on whichever doubles
+          // they rounded to: "1/49 * 49 == 1" is true. Gated on a rational being
+          // present, so "1 == 1" keeps its double compare below.
+          if (l.rational !== undefined || r.rational !== undefined) {
+            const cmp = compareRationalOperands(l, r);
+            if (cmp !== null) { stack.push(boolValue(cmp === 0)); break; }
+          }
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) === (r.value as number)));
           } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
@@ -2120,6 +2177,11 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const neqFault = faultedOperand(l, r);
           if (neqFault) { stack.push(neqFault); break; }
+          // The negation of EQ's rational branch, fraction for fraction.
+          if (l.rational !== undefined || r.rational !== undefined) {
+            const cmp = compareRationalOperands(l, r);
+            if (cmp !== null) { stack.push(boolValue(cmp !== 0)); break; }
+          }
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) !== (r.value as number)));
           } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
@@ -2142,6 +2204,10 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const ltFault = faultedOperand(l, r);
           if (ltFault) { stack.push(ltFault); break; }
+          if (l.rational !== undefined || r.rational !== undefined) {
+            const cmp = compareRationalOperands(l, r);
+            if (cmp !== null) { stack.push(boolValue(cmp < 0)); break; }
+          }
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) < (r.value as number)));
           } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
@@ -2162,6 +2228,10 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const lteFault = faultedOperand(l, r);
           if (lteFault) { stack.push(lteFault); break; }
+          if (l.rational !== undefined || r.rational !== undefined) {
+            const cmp = compareRationalOperands(l, r);
+            if (cmp !== null) { stack.push(boolValue(cmp <= 0)); break; }
+          }
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) <= (r.value as number)));
           } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
@@ -2181,6 +2251,10 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const gtFault = faultedOperand(l, r);
           if (gtFault) { stack.push(gtFault); break; }
+          if (l.rational !== undefined || r.rational !== undefined) {
+            const cmp = compareRationalOperands(l, r);
+            if (cmp !== null) { stack.push(boolValue(cmp > 0)); break; }
+          }
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) > (r.value as number)));
           } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
@@ -2200,6 +2274,10 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const gteFault = faultedOperand(l, r);
           if (gteFault) { stack.push(gteFault); break; }
+          if (l.rational !== undefined || r.rational !== undefined) {
+            const cmp = compareRationalOperands(l, r);
+            if (cmp !== null) { stack.push(boolValue(cmp >= 0)); break; }
+          }
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(boolValue((l.value as number) >= (r.value as number)));
           } else if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
@@ -2565,7 +2643,10 @@ export function executeBytecode(
           const v = safePop(stack);
           const toFractionFault = faultedOperand(v);
           if (toFractionFault) { stack.push(toFractionFault); break; }
-          stack.push(stringValue(toFractionString(v.toNumber())));
+          // A value carrying its exact rational renders that fraction exactly;
+          // everything else keeps the continued-fraction guess from the double,
+          // so "0.75 as fraction" is still "3/4".
+          stack.push(stringValue(v.rational !== undefined ? rationalToFractionString(v.rational) : toFractionString(v.toNumber())));
           break;
         }
         case OpCode.TO_MULTIPLIER: {
