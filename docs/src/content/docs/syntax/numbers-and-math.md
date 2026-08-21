@@ -86,6 +86,30 @@ Only a fraction written with `/` is exact. A decimal literal is still floating
 point, so `0.1 + 0.2` stays `0.30000000000000004`, and transcendental work
 (`sqrt`, `sin`, a non-integer power) stays floating point too.
 
+## Uncertainty
+
+A measurement can carry a tolerance, written `±` or the ASCII `+/-`, and the
+tolerance travels through the arithmetic so you do not have to track it on a
+second line. `12.3 ± 0.5` is the number 12.3 with a one-sigma uncertainty of
+0.5.
+
+```solve
+12.3 +/- 0.5 // 12.3 ± 0.5
+(12.3 +/- 0.5) * 4 // 49.2 ± 2.0
+(10 +/- 1) + (20 +/- 2) // 30 ± 2.24
+```
+
+`+`, `-`, `*` and `/` propagate it, combining independent errors in quadrature:
+a sum or difference adds the spreads as `sqrt(a² + b²)`, and a product or
+quotient adds the relative spreads the same way. A plain number counts as an
+exact value, so multiplying by one scales the spread. The `±` binds tighter than
+`+ - * /`, so `12.3 ± 0.5 * 4` is `(12.3 ± 0.5) * 4`; parenthesise to group
+otherwise.
+
+Everything else reads the centre and drops the tolerance: a comparison compares
+the centres, and `sqrt`, `sin` and the like work on the centre alone. Correlated
+errors, and a tolerance on a value with a unit, are out of scope.
+
 ## Functions
 
 ```solve

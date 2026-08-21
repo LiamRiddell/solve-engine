@@ -11,6 +11,7 @@ import {
   inflationFromYearToPresentHandler, inflationToYearFromPresentHandler, inflationFutureValueHandler,
 } from "./parselets/InflationPluginFunctions";
 import { inYearDollarsNormalizerRule } from "./normalizer/InYearDollarsNormalizerRule";
+import { recurringScheduleNormalizerRule } from "./normalizer/RecurringScheduleNormalizerRule";
 
 // CALL_BUILTIN indices. See VMBuiltins.ts for the handler implementations.
 const COMPOUND_FV = 51, COMPOUND_INTEREST = 52;
@@ -129,6 +130,10 @@ export const FINANCE_PACKAGE: IEnginePackage = {
   ],
   normalizerRules: [
     inYearDollarsNormalizerRule(),
+    // `450 monthly for 18 months` -> `450 * 18`. A recurring schedule totalled
+    // as a plain multiplication, so a currency amount stays currency and an
+    // exact one stays exact. See RecurringScheduleNormalizerRule.ts.
+    recurringScheduleNormalizerRule(),
   ],
   pluginFunctions: [
     { index: INFLATION_FROM_YEAR_TO_PRESENT_IDX, handler: inflationFromYearToPresentHandler },

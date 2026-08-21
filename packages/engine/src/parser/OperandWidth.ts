@@ -42,6 +42,10 @@ const ONE_OPERAND: readonly OpCode[] = [
 	// every scanner read that index byte as an opcode, so an ordinary date
 	// literal desynchronised the whole preflight walk.
 	OpCode.DATE_LITERAL,
+	// One byte, the offset direction (0 forward, 1 backward) for "N working
+	// days after/before/from <date>". See WorkdayOffsetParselet. DATE_WORKDAYS_BETWEEN
+	// takes no operand and so is not listed here.
+	OpCode.DATE_WORKDAY_OFFSET,
 ];
 
 /**

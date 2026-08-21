@@ -10,6 +10,7 @@ import { PrecedenceParser } from "@solve-js/parser/PrecedenceParser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { createVM, executeBytecode } from "@solve-js/vm/VM";
+import { resolveHolidayPredicate } from "@solve-js/vm/HolidayCalendar";
 import type { EvalResult, LineExecutionContext } from "@solve-js/vm/VM";
 import type { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { registerAsConverter, unregisterAsConverter } from "@solve-js/vm/VMBuiltins";
@@ -20,6 +21,22 @@ import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { checkPackageCompatibility } from "@solve-js/api/PackageCompatibility";
 import { assertEngineVersionCompatible } from "@solve-js/api/EngineVersionCompatibility";
+import { ENGINE_VERSION } from "@solve-js/constants/version";
+import {
+    SNAPSHOT_FORMAT,
+    SNAPSHOT_VERSION,
+    SnapshotErrorCodes,
+    assertRestorable,
+    serializeValue,
+    deserializeValue,
+    serializeBytecode,
+    deserializeBytecode,
+    serializeUserFunction,
+    deserializeUserFunction,
+    type EngineSnapshot,
+    type SerializedValue,
+    type SerializedLineCacheEntry,
+} from "@solve-js/engine/EngineSnapshot";
 import { registerTokenCategory, unregisterTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import type { CompletionItem } from "@solve-js/language/LanguageService";
 import type { LexerVocabulary } from "@solve-js/lexer/ExpressionLexer";
@@ -62,6 +79,8 @@ import { TokenNormalizer, BUILTIN_PHRASES, implicitMultiplyRule } from "@solve-j
 import type { TokenFusion } from "@solve-js/normalizer";
 import { UserUnitTable } from "@solve-js/packages/uom/UserUnitTable";
 import { userUnitExpansionRule } from "@solve-js/packages/uom/normalizer/UserUnitNormalizerRule";
+import { buildExplanation } from "@solve-js/explain";
+import type { Explanation } from "@solve-js/explain";
 import {
     type DiagnosticPipelineResult,
     type PipelineStageResult,
@@ -78,6 +97,50 @@ import {
 // Re-export for consumers (playground imports these from ExpressionEngine)
 export type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo, AsyncCachePackageInfo };
 export type { DagSnapshot } from "@solve-js/vm/DependencyGraph";
+// The snapshot/restore surface, re-exported so `toJSON`/`fromJSON` callers can
+// import their types from the same module as `ExpressionEngine`.
+export {
+    SNAPSHOT_FORMAT,
+    SNAPSHOT_VERSION,
+    SnapshotErrorCodes,
+} from "@solve-js/engine/EngineSnapshot";
+export type {
+    EngineSnapshot,
+    SerializedValue,
+    SerializedBytecode,
+    SerializedUserFunction,
+    SerializedAnonymousBody,
+    SerializedLineCacheEntry,
+    SerializedDecimal,
+    SerializedRational,
+    SerializedNumber,
+} from "@solve-js/engine/EngineSnapshot";
+
+/**
+ * Options for {@link ExpressionEngine.fromJSON}, restoring a snapshot onto a
+ * fresh engine.
+ */
+export interface EngineRestoreOptions {
+    /**
+     * Packages to register on the restored engine. This MUST be the same set
+     * the snapshot was taken with: a snapshot carries compiled bytecode whose
+     * plugin-function indices and parselet-produced opcodes only line up
+     * against the packages that were present when it was written. Defaults to
+     * {@link BUILTIN_PACKAGES}, exactly like the constructor's own `packages`
+     * parameter, so a host using the default package set needs to pass nothing.
+     */
+    packages?: IEnginePackage[];
+    /** Config overrides, merged over `DEFAULT_CONFIG`, as in the constructor. */
+    config?: Partial<typeof DEFAULT_CONFIG>;
+    /** Turn on the diagnostic pipeline, as in the constructor's `diagnosticMode`. */
+    diagnosticMode?: boolean;
+    /**
+     * Override the locale the snapshot recorded. Rarely needed: the snapshot's
+     * own {@link EngineSnapshot.locale} is used by default, so a restored engine
+     * lexes the way the one that produced it did.
+     */
+    locale?: string;
+}
 
 /**
  * Return type of {@link evaluateLine} and {@link evaluateExpression}.
@@ -213,6 +276,18 @@ export class ExpressionEngine {
     private documentModel: DocumentModel | null = null;
 
     /**
+     * Batch cross-line source, set only for the duration of a
+     * `parseDocument`/`evaluateLines` pass (see {@link processScanResults}).
+     * The incremental path uses {@link documentModel}; the batch path has no
+     * such model, so cross-line closures read earlier lines from the scan and
+     * the results array the pass is already building. Both are references to
+     * arrays that exist regardless, so a document that uses no cross-line
+     * feature pays nothing: the closures are simply never called.
+     */
+    private batchScanResults: ScanLineResult[] | null = null;
+    private batchParsedLines: ParsedLine[] | null = null;
+
+    /**
      * Called once by `ThreeTierEvaluator`'s constructor. Not part of the
      * public evaluate-a-document contract, purely internal wiring so
      * {@link makeLineContext} has something to read from.
@@ -231,16 +306,28 @@ export class ExpressionEngine {
      */
     private makeLineContext(lineNumber: number): LineExecutionContext {
         const doc = this.documentModel;
+        const scan = doc ? null : this.batchScanResults;
+        const parsed = doc ? null : this.batchParsedLines;
         return {
             lineIndex: lineNumber,
-            getLineResult: doc ? (n: number) => doc.getLineAt(n)?.result ?? undefined : undefined,
+            getLineResult: doc
+                ? (n: number) => doc.getLineAt(n)?.result ?? undefined
+                : parsed
+                  ? (n: number) => parsed[n - 1]?.result ?? undefined
+                  : undefined,
             isLineBoundary: doc
                 ? (n: number) => {
                       const state = doc.getLineAt(n);
                       if (!state) return true; // out of range counts as a boundary — nothing to aggregate past it
                       return state.isEmpty || /^\s*#/.test(state.text);
                   }
-                : undefined,
+                : scan
+                  ? (n: number) => {
+                        const sr = scan[n - 1];
+                        if (!sr) return true;
+                        return sr.classification.skip || /^\s*#/.test(sr.text);
+                    }
+                  : undefined,
         };
     }
 
@@ -433,6 +520,10 @@ export class ExpressionEngine {
             this.config.date.maxOffsetYears,
             this.config.date.minOffsetYears,
             this.context,
+            // Resolved once here, not per evaluation: a host list becomes a
+            // Set lookup the walk can run cheaply. Undefined stays undefined,
+            // which the VM reads as weekends-only.
+            resolveHolidayPredicate(this.config.date.holidays),
         );
         this.queryClient = createQueryClient();
         this.batcher = new AsyncResolutionBatcher(this.dag, this.lineCache, this.vm);
@@ -1048,6 +1139,22 @@ export class ExpressionEngine {
     private processScanResults(scanResults: ScanLineResult[]): ParsedLine[] {
         const result: ParsedLine[] = [];
 
+        // Cross-line features (line references, table columns) read earlier
+        // lines' text and results. The incremental `ThreeTierEvaluator` path
+        // reads them from `this.documentModel`; the batch path has none, so it
+        // reported a no-document error for `total above`, `line N` and
+        // `sum of column`. Point the batch cross-line source at the scan and
+        // the results array this pass is already building, for the length of
+        // the pass, and restore whatever a host had set afterwards. This is
+        // reference assignment, not allocation, so a document with no
+        // cross-line feature pays nothing (an earlier version built a whole
+        // `DocumentModel` per pass and grew the heap measurably).
+        const previousBatchScanResults = this.batchScanResults;
+        const previousBatchParsedLines = this.batchParsedLines;
+        this.batchScanResults = scanResults;
+        this.batchParsedLines = result;
+
+        try {
         for (const scanResult of scanResults) {
             const lineText = scanResult.text;
             const lineNumber = scanResult.lineNumber;
@@ -1113,7 +1220,14 @@ export class ExpressionEngine {
                 }
             }
 
+            // A later line referencing this one reads its result straight from
+            // the `result` array above, which already holds it, so nothing more
+            // needs recording here.
             result.push(parsedLine);
+        }
+        } finally {
+            this.batchScanResults = previousBatchScanResults;
+            this.batchParsedLines = previousBatchParsedLines;
         }
 
         return result;
@@ -3309,6 +3423,76 @@ export class ExpressionEngine {
         return this.evaluateLine(-1, expression);
     }
 
+    /**
+     * Explain how a line reached its answer, as a readable derivation.
+     *
+     * This is a companion to {@link evaluateExpression}, not a replacement:
+     * `explainLine` is for the person reading the note, whereas the diagnostic
+     * pipeline (`evaluateLineWithDiagnostic`) is for the developer and reports
+     * stages, opcodes and timings. A host puts a derivation behind a hover or a
+     * disclosure, so this is an API rather than an `explain` keyword: it never
+     * consumes a word that a prose line might use, and it annotates a line the
+     * host has already chosen to explain.
+     *
+     * The returned {@link Explanation} walks the line's operations in evaluation
+     * order, each with the value it arrives at, and its `result` is identical to
+     * what {@link evaluateExpression} returns for the same line. Every value in
+     * the derivation is the engine's own, the operations are re-evaluated rather
+     * than re-derived, so a step can never disagree with the answer.
+     *
+     * A line with nothing to break down (a bare literal), or one built from a
+     * construct this slice does not derive yet (matrices, dates, function
+     * calls), comes back with an empty `steps` array and the answer in
+     * `result`, rather than an error.
+     *
+     * @param expression - The raw line to explain.
+     * @returns The ordered derivation and final value.
+     * @throws {EngineError} When the line does not evaluate at all, or resolves
+     * data asynchronously (a derivation has no meaning for either).
+     */
+    explainLine(expression: string): Explanation {
+        const { tokens } = this.lexToTokens(expression);
+        // Normalize exactly as the evaluation path does (COMMENT tokens have no
+        // parselet, phrase fusion turns "off"/"of" into their real operators),
+        // so the derivation reads the same token stream the answer came from.
+        const exprTokens = tokens.filter((t) => t.type !== "COMMENT");
+        const normalized = this.normalizer.normalize(exprTokens);
+        return buildExplanation({
+            expression,
+            tokens: normalized,
+            evaluate: (source) => this.evaluateIsolated(source),
+            locale: this.localeCode,
+        });
+    }
+
+    /**
+     * Evaluate a self-contained sub-expression without touching document state.
+     *
+     * Used only by {@link explainLine}. Unlike `evaluateExpression`, this never
+     * writes to the line cache or the dependency graph: it is handed the spans
+     * of a single line's own sub-expressions, and evaluating those to build a
+     * derivation must not disturb the document the line belongs to. An async
+     * (pending) result is rejected, a derivation cannot represent one.
+     */
+    private evaluateIsolated(expression: string): Value {
+        const { tokens, hasParens } = this.lexToTokens(expression);
+        const prep = this.prepareExpression(expression, tokens, hasParens, undefined, -1);
+        if (prep.kind === "empty") return numberValue(0);
+        if (prep.kind === "error") throw prep.error;
+        if (prep.kind === "symbolic-solve") return prep.value;
+
+        const result = this.executeRaw(prep.program, -1);
+        if (result.type === "error") throw result.error;
+        if (result.type === "pending") {
+            throw ErrorFactory.execution(
+                "EXPLAIN_ASYNC_UNSUPPORTED",
+                `A derivation cannot be built for a line that resolves data asynchronously: "${expression}"`,
+                { expression },
+            );
+        }
+        return result.value;
+    }
+
 //#endregion
 
 //#region Compilation, Bytecode-only path
@@ -3561,6 +3745,193 @@ export class ExpressionEngine {
          this.userUnits.clear();
          this.lastTelemetry = null;
      }
+
+    //#endregion
+
+    //#region Public API, Snapshot / restore
+
+    /**
+     * Serialise this engine's session state into a plain, JSON-safe snapshot.
+     *
+     * Carries the three things a session accumulates in memory: named
+     * {@link ExpressionEngine} variables, user-defined functions, and the
+     * per-line result/bytecode cache (plus the expression-keyed bytecode cache).
+     * Restore it with {@link ExpressionEngine.fromJSON} onto a fresh engine, and
+     * later expressions resolve exactly as they would have on the engine that
+     * evaluated the document.
+     *
+     * What is deliberately NOT carried:
+     * - **Resolved async values.** Weather, stocks, currency, any package that
+     *   fetches: those results are point-in-time and must be re-fetched, not
+     *   restored stale. Every line backed by an async resolver (a DAG
+     *   data-source dependency, or an async plugin call in its bytecode) is
+     *   dropped from the line cache, and any variable whose most-recent
+     *   definition was such a line is dropped too. An in-flight (Pending) value
+     *   is likewise never written.
+     * - **Package-contributed state.** Core state only for v1; a package opt-in
+     *   is a follow-up.
+     * - **Symbolic (algebra) values.** Deferred: a variable holding one makes
+     *   this method throw {@link SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE}
+     *   (refused by name rather than dropped silently), and a cached line whose
+     *   result is symbolic is skipped (it re-evaluates on restore, algebra is
+     *   synchronous).
+     *
+     * The result survives `JSON.stringify` then `JSON.parse` unchanged.
+     *
+     * @returns A snapshot safe to store and hand back to `fromJSON`.
+     * @throws {@link SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE} if a variable
+     *   holds a value this v1 format cannot represent (a symbolic value).
+     */
+    toJSON(): EngineSnapshot {
+        // Async-backed lines: a line carries a DAG data-source dependency the
+        // moment it first goes pending (see executeAndStore's
+        // registerLineDataSourceDependency), and an async plugin call sets its
+        // bytecode's hasAsync. Either way its result is point-in-time and must
+        // be re-fetched rather than restored, so the line and any variable it
+        // defines are excluded below.
+        const dagSnapshot = this.dag.getSnapshot();
+        const asyncLines = new Set<number>();
+        for (const key of Object.keys(dagSnapshot.dataSourceDeps)) {
+            const line = Number(key);
+            if (!Number.isNaN(line)) asyncLines.add(line);
+        }
+
+        // Only the LAST definition of a variable decides its current value, so a
+        // variable is excluded only when its most-recent writer line is async.
+        // An earlier async definition later overwritten by a plain one is still
+        // carried, matching the value the live VM actually holds.
+        const lineEntries = this.lineCache.snapshotEntries();
+        const latestWriter = new Map<string, { line: number; async: boolean }>();
+        for (const { line, entry } of lineEntries) {
+            const isAsync = asyncLines.has(line) || entry.bytecode.hasAsync;
+            if (isAsync) asyncLines.add(line);
+            const writeVar = entry.writeVariable;
+            if (writeVar) {
+                const prev = latestWriter.get(writeVar);
+                if (!prev || line >= prev.line) latestWriter.set(writeVar, { line, async: isAsync });
+            }
+        }
+
+        const variables: Record<string, SerializedValue> = {};
+        for (const [name, value] of this.vm.getVariableEntries()) {
+            if (value.type === ValueType.Pending) continue; // in-flight async, not restorable
+            if (latestWriter.get(name)?.async) continue; // most recently written by an async line
+            variables[name] = serializeValue(value, `variable "${name}"`);
+        }
+
+        // A user-defined function body that calls an async plugin is refused at
+        // definition time (FUNCTION_BODY_MUST_BE_SYNCHRONOUS), so every stored
+        // function is pure compiled bytecode and safe to carry.
+        const userFunctions = this.vm.getUserFunctionDefs().map(serializeUserFunction);
+
+        const lineCache: SerializedLineCacheEntry[] = [];
+        for (const { line, expression, entry } of lineEntries) {
+            if (asyncLines.has(line)) continue; // async result, re-fetch on restore
+            if (entry.result.type === ValueType.Pending) continue; // still in flight
+            let result: SerializedValue;
+            try {
+                result = serializeValue(entry.result, `line ${line}`);
+            } catch (e) {
+                // A symbolic (algebra) result is the one value kind this v1 format
+                // defers. Skip the cached line rather than aborting the whole
+                // snapshot: the line re-evaluates on restore, and algebra is
+                // synchronous, so nothing is lost but the cache hit. Any other
+                // error is a real problem and propagates.
+                if (e instanceof EngineError && e.code === SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE) continue;
+                throw e;
+            }
+            lineCache.push({
+                line,
+                expression,
+                result,
+                bytecode: serializeBytecode(entry.bytecode),
+                reads: entry.readVariables.slice(),
+                writeVar: entry.writeVariable,
+            });
+        }
+
+        const bytecodeCache = Array.from(this.bytecodeCache.entries()).map(([expression, program]) => ({
+            expression,
+            program: serializeBytecode(program),
+        }));
+
+        return {
+            format: SNAPSHOT_FORMAT,
+            version: SNAPSHOT_VERSION,
+            engineVersion: ENGINE_VERSION,
+            locale: this.localeCode,
+            variables,
+            userFunctions,
+            lineCache,
+            bytecodeCache,
+        };
+    }
+
+    /**
+     * Restore a snapshot produced by {@link ExpressionEngine.toJSON} onto a
+     * fresh engine.
+     *
+     * The version gate runs first: a snapshot whose {@link EngineSnapshot.format}
+     * or {@link EngineSnapshot.version} does not match this engine's reader is
+     * refused with {@link SnapshotErrorCodes.SNAPSHOT_VERSION_MISMATCH} rather
+     * than restored wrongly. The engine is then built with the snapshot's locale
+     * (unless overridden) and the given `packages`, and its variable table,
+     * user-function registry, line cache, dependency graph, and bytecode cache
+     * are rehydrated from the snapshot.
+     *
+     * @param snapshot - A snapshot object, typically straight from `JSON.parse`.
+     * @param options - Packages (must match those the snapshot was taken with),
+     *   plus optional config, diagnostic mode, and locale override. See
+     *   {@link EngineRestoreOptions}.
+     * @returns A ready engine that behaves as though it had evaluated the
+     *   original document.
+     * @throws {@link SnapshotErrorCodes.SNAPSHOT_VERSION_MISMATCH} for a missing
+     *   or mismatched envelope, and
+     *   {@link SnapshotErrorCodes.SNAPSHOT_MALFORMED} for internally
+     *   inconsistent contents.
+     */
+    static fromJSON(snapshot: EngineSnapshot, options: EngineRestoreOptions = {}): ExpressionEngine {
+        // Refuse an incompatible or non-snapshot object before building anything.
+        assertRestorable(snapshot);
+        const locale = options.locale ?? snapshot.locale ?? "en";
+        const engine = new ExpressionEngine(locale, options.diagnosticMode ?? false, options.config, undefined, options.packages);
+        engine.restoreSnapshot(snapshot);
+        return engine;
+    }
+
+    /**
+     * Rehydrate this engine's state from a snapshot whose envelope has already
+     * been validated by {@link assertRestorable}. Instance-private, the public
+     * entry point is the static {@link ExpressionEngine.fromJSON}.
+     */
+    private restoreSnapshot(snapshot: EngineSnapshot): void {
+        for (const [name, sv] of Object.entries(snapshot.variables)) {
+            this.vm.setVar(name, deserializeValue(sv));
+        }
+        for (const fn of snapshot.userFunctions) {
+            const def = deserializeUserFunction(fn);
+            this.vm.defineUserFunction(def.name, def.params, def.program);
+        }
+        for (const e of snapshot.lineCache) {
+            const entry = new LineCacheEntry(
+                deserializeValue(e.result),
+                deserializeBytecode(e.bytecode),
+                e.reads.slice(),
+                e.writeVar,
+            );
+            // The empty-string expression key round-trips to the same
+            // expressionless slot LineCache stores it under; a non-empty key
+            // restores the same line/expression pairing it was written with.
+            this.lineCache.set(e.line, entry, e.expression);
+            // Rebuild the dependency graph so incremental re-evaluation
+            // (evaluateIncremental) still walks producers before consumers,
+            // exactly as it would have on the engine that evaluated the document.
+            this.dag.registerLine(e.line, e.reads, e.writeVar ? [e.writeVar] : []);
+        }
+        for (const { expression, program } of snapshot.bytecodeCache) {
+            this.bytecodeCache.set(expression, deserializeBytecode(program));
+        }
+    }
 
     //#endregion
 
