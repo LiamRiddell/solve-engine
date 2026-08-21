@@ -34,6 +34,7 @@ const apiEntryPoints = [
 	"parser",
 	"vm",
 	"packages",
+	"testing",
 	"utilities",
 	"uom",
 ].map((name) => `${engine}/src/${name}/index.ts`);
@@ -243,6 +244,7 @@ export default defineConfig({
           items: [
             { slug: "packages/authoring-a-package" },
             { slug: "packages/extension-points" },
+            { slug: "packages/testing-a-package" },
           ],
         },
         {
