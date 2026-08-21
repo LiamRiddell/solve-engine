@@ -36,6 +36,7 @@ import { WEATHER_PACKAGE } from "./weather";
 import { createStocksPackage } from "./stocks";
 import { createKnowledgePackage } from "./knowledge";
 import { LINES_PACKAGE } from "./lines";
+import { GOALSEEK_PACKAGE } from "./goalseek";
 
 export {
   ARITHMETIC_PACKAGE,
@@ -60,6 +61,7 @@ export {
   createStocksPackage,
   createKnowledgePackage,
   LINES_PACKAGE,
+  GOALSEEK_PACKAGE,
 };
 
 // ── All built-in packages (registration order matters: arithmetic first) ──
@@ -83,8 +85,8 @@ export {
 /**
  * The packages an engine registers when the caller names none.
  *
- * Twenty of the twenty-two. Stocks and knowledge are excluded because both
- * need a host-supplied data source and do nothing useful without one, so
+ * Twenty-one of the twenty-three. Stocks and knowledge are excluded because
+ * both need a host-supplied data source and do nothing useful without one, so
  * registering them by default would only produce NOT_CONFIGURED results.
  *
  * Pass a filtered copy to the {@link ExpressionEngine} constructor to opt out
@@ -111,4 +113,7 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   FINANCE_PACKAGE,
   WEATHER_PACKAGE,
   LINES_PACKAGE,
+  // After LINES_PACKAGE: goal seek's normalizer reads a LINE_REF the lines
+  // rule mints, and its parselet targets a line reference.
+  GOALSEEK_PACKAGE,
 ];
