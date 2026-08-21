@@ -20,7 +20,19 @@ export type {
 export { checkEngineVersionCompatibility, assertEngineVersionCompatible } from "./EngineVersionCompatibility";
 export type { EngineVersionCheckResult } from "./EngineVersionCompatibility";
 
-export { ExpressionEngine } from "@solve-js/engine";
+export { ExpressionEngine, SNAPSHOT_FORMAT, SNAPSHOT_VERSION, SnapshotErrorCodes } from "@solve-js/engine";
 export type { LineEvaluation, EvalResults } from "@solve-js/engine";
+export type {
+  EngineRestoreOptions,
+  EngineSnapshot,
+  SerializedValue,
+  SerializedBytecode,
+  SerializedUserFunction,
+  SerializedAnonymousBody,
+  SerializedLineCacheEntry,
+  SerializedDecimal,
+  SerializedRational,
+  SerializedNumber,
+} from "@solve-js/engine";
 
 export { ENGINE_VERSION } from "@solve-js/constants/version";
