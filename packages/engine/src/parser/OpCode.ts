@@ -26,6 +26,12 @@ export enum OpCode {
 	PUSH_STRING = 13,
 	PUSH_BOOLEAN = 14,
 	PUSH_VARIABLE = 15,
+	// A decimal-point literal, pushed with the exact base-ten value it was
+	// written as alongside the nearest double. The operand is a string-pool
+	// index holding the normalized "." decimal text (thousands grouping already
+	// stripped), read back into a Number-typed Value whose `exact` sidecar makes
+	// money that combines with it exact. See vm/Value.ts's numberValueExact().
+	PUSH_DECIMAL = 16,
 
 	// Arithmetic (BinaryOperator)
 	ADD = 20,

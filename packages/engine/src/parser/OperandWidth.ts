@@ -28,6 +28,9 @@ const ONE_OPERAND: readonly OpCode[] = [
 	OpCode.PUSH_HEX,
 	OpCode.PUSH_STRING,
 	OpCode.PUSH_BOOLEAN,
+	// Its operand is a string-pool index holding the exact decimal text, so a
+	// scanner must step over one byte exactly as it does for PUSH_STRING.
+	OpCode.PUSH_DECIMAL,
 	OpCode.LOAD_VAR,
 	OpCode.STORE_VAR,
 	OpCode.LOAD_GLOBAL_VAR,
