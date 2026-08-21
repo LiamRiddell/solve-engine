@@ -3715,8 +3715,9 @@ export class ExpressionEngine {
         // stale re-evaluations from in-flight promises that resolve after clear.
 		// This call is what actually releases per-document state. The batcher is
 		// reachable from the module-level data-query service, so an engine that
-		// goes out of scope without clear() stays retained: measured at 46.9KB
-		// per engine against 8.2KB for one that never parsed. See the class doc.
+		// goes out of scope without clear() stays retained: on the order of
+		// 200KB per engine against 8.2KB for one that never parsed, a figure
+		// that grows with the registered package set. See the class doc.
 		this.batcher.clearAll();
 
 		// The query cache holds a garbage-collection timer per cached query,
