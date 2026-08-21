@@ -14,7 +14,7 @@ import { builtinArityError } from "@solve-js/vm/VMBuiltinArity";
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, compareRationalOperands } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, compareRationalOperands } from "@solve-js/vm/VMConversion";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
@@ -1213,9 +1213,13 @@ function isTruthy(value: Value): boolean {
  * with no answer, so all three say so.
  */
 function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
+    // Name the two dimensions when both are known ("a duration cannot be
+    // converted to a length"). A compound rate or an unrecognised currency code
+    // has no single dimension to name, so it keeps the unit-naming fallback.
+    const named = describeConversionMismatch(fromUnit, toUnit);
     return errorValue(
         "INCOMPATIBLE_UNITS",
-        `Cannot convert ${fromUnit} to ${toUnit}: they do not measure the same thing`,
+        named ?? `Cannot convert ${fromUnit} to ${toUnit}: they do not measure the same thing`,
     );
 }
 
