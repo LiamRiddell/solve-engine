@@ -21,6 +21,7 @@ import {
 	startWorkerRuntime,
 	createLinkedTransports,
 	serializeValue,
+	serializeParsedLine,
 	serializeParsingResult,
 	type WorkerEngine,
 	type WorkerEngineOptions,
@@ -217,18 +218,12 @@ describe("the worker proxy matches the synchronous path", () => {
 	});
 
 	test("evaluateLines matches the synchronous per-line results", async () => {
-		const lines = ["x = 10", ":total = x + 5", "total * 2"];
+		const lines = [":total = 10 + 5", "total * 2", "3 km in meters"];
 		const engine = await worker();
 		const result = await engine.evaluateLines(lines);
 
-		const expected = syncEngine().evaluateLines(lines).map((line) => {
-			// serializeParsedLine is exercised transitively through the DTO shape.
-			return { ...line, result: line.result ? serializeValue(line.result) : null };
-		});
-
-		expect(result.map((line) => line.result?.number)).toEqual(
-			expected.map((line) => line.result?.number),
-		);
+		const expected = syncEngine().evaluateLines(lines).map((line) => serializeParsedLine(line));
+		expect(result).toEqual(expected);
 		expect(structuredClone(result)).toEqual(result);
 	});
 });
