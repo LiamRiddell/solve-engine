@@ -274,25 +274,25 @@ describe("rate arithmetic", () => {
 
 describe("rate conversion", () => {
 	/*
-	 * BUG, one cause, six cases. Converting a rate is not implemented: the
-	 * parser reads the target as a second denominator and the VM reports
-	 * "USD/hour/day: that is already a rate". A hundred an hour is twenty-four
-	 * hundred a day, and `unifyRatePeriods` in vm/VM.ts already computes exactly
-	 * this ratio for the `+` case, so the capability exists and conversion does
-	 * not use it.
+	 * Converting a rate. A rate carries the compound unit "numerator/denominator"
+	 * (km/h, m/s), and #89 made that unit a first-class conversion source and
+	 * target: `convertRate` in uom/UomConverter.ts converts each axis on its own,
+	 * and the slash-notation normalizer means a written `km/h` reaches it whole.
 	 *
-	 * THIS IS THE BLOCK THAT HID A REGRESSION, and the reason every case below
-	 * asserts exactly one thing. It used to assert the type and then the number
-	 * inside one `test.failing` each. When the failure mode changed from a
-	 * visible error to `0.00 /s` (a conversion that failed, read as zero by the
-	 * conversion after it, and dressed in the unit the reader asked for), the
-	 * type assertion went from failing to passing while the number went on
-	 * failing, so the test went on "failing correctly" and the run stayed green
-	 * through a change that made the engine strictly worse. See this file's
-	 * header, and `DifferentialRegressions.spec.ts` for the run that caught it.
+	 * The money-denominated cases below still assert exactly one thing each, which
+	 * is why this block is split. It used to assert the type and then the number
+	 * inside one `test.failing` each. When the failure mode changed from a visible
+	 * error to `0.00 /s` (a conversion that failed, read as zero by the conversion
+	 * after it, and dressed in the unit the reader asked for), the type assertion
+	 * went from failing to passing while the number went on failing, so the test
+	 * went on "failing correctly" and the run stayed green through a change that
+	 * made the engine strictly worse. See this file's header, and
+	 * `DifferentialRegressions.spec.ts` for the run that caught it.
 	 *
-	 * Split this way, the type assertion passing IS a reported failure, which is
-	 * what a `test.failing` is for.
+	 * A money target written with a symbol and slash, `in $/day`, is still not
+	 * captured: `$` lexes as a currency token, not a UNIT, so the slash-notation
+	 * normalizer leaves it alone and the target reads as `$` with a stray `/day`.
+	 * That pair stays `test.failing`, deferred with #89.
 	 */
 
 	test.failing("changes the period", () => {
@@ -303,28 +303,25 @@ describe("rate conversion", () => {
 		expect(evaluate("$100/hour in $/day").type).toBe(ValueType.Uom);
 	});
 
-	test.failing("and the denominator, for a non-money rate", () => {
+	test("and the denominator, for a non-money rate", () => {
 		// Sixty kilometres an hour is 16.67 metres a second.
 		expect(evaluate("60 km/h in m/s").toNumber()).toBeCloseTo(60_000 / 3600, 6);
 	});
 
-	test.failing("which is likewise a unit rather than an error", () => {
+	test("which is likewise a unit rather than an error", () => {
 		expect(evaluate("60 km/h in m/s").type).toBe(ValueType.Uom);
 	});
 
-	test.failing("and does not silently do nothing when the target is a speed unit", () => {
+	test("and does not silently do nothing when the target is a speed unit", () => {
 		// This one used to be the worst of the three because it was silent:
 		// `60 km/h to mph` reported "60.00 km/h", the target dropped and the
-		// input handed back. That half is fixed, since the cross-measure branch
-		// of UOM_CONVERT_TO now reports INCOMPATIBLE_UNITS rather than pushing
-		// its input back, so the failure is at least visible. The conversion
-		// itself is still not implemented. Sixty kilometres an hour is 37.28
-		// mph, which the engine computes correctly when the source is spelled
-		// `kph`.
+		// input handed back. Now the whole `km/h` is one unit and `convertRate`
+		// bridges it to the speed spelling `mph`. Sixty kilometres an hour is
+		// 37.28 mph, the same answer the engine gives when the source is `kph`.
 		expect(evaluate("60 km/h to mph").toNumber()).toBeCloseTo(37.28227153, 6);
 	});
 
-	test.failing("and keeps the unit that was asked for", () => {
+	test("and keeps the unit that was asked for", () => {
 		expect(evaluate("60 km/h to mph").unit).toBe("mph");
 	});
 

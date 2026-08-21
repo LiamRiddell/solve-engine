@@ -105,11 +105,20 @@ describe("a conversion error survives being fed into another conversion", () => 
 	});
 
 	test("an unconvertible rate stays an error rather than becoming zero", () => {
-		// Converting a rate is not implemented, which is a known gap recorded in
-		// UnitsCurrencyAndRates.spec.ts. Not implemented has to keep looking
-		// like not implemented.
-		expect(refused("60 km/h in m/s")).toBe(true);
+		// `60 km/h in m/s` is now a real conversion (see #89), so the case that
+		// guards the "read a failure as zero" shape is the one still not
+		// implemented: a money rate whose target is written with a currency
+		// symbol and a slash, `in $/day`. Not implemented has to keep looking
+		// like not implemented, never like `0.00 /day`.
 		expect(refused("$100/hour in $/day")).toBe(true);
+		expect(display("$100/hour in $/day")).not.toBe("0.00 /day");
+	});
+
+	test("and the rate conversions that #89 did implement answer a real value", () => {
+		// The other half of the same guard: now that it is implemented, it must
+		// answer the quantity, not zero in the asked-for unit.
+		expect(evaluate("60 km/h in m/s").type).toBe(ValueType.Uom);
+		expect(evaluate("60 km/h in m/s").toNumber()).toBeCloseTo(60_000 / 3600, 6);
 	});
 
 	test("a builtin does not read a conversion error as zero either", () => {
