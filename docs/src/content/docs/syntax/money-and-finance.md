@@ -63,13 +63,51 @@ out the tax already inside it. `vat` is accepted everywhere `tax` is.
 No tax rate is ever assumed. You state it, because the correct rate depends on
 where you are and what you are buying.
 
+## Recurring schedules
+
+A series adds itself up. `<amount> <period> for <duration>` gives the total, so
+a subscription, a salary or an instalment plan does not have to be worked out
+elsewhere and typed back in.
+
+```solve
+450 monthly for 18 months // 8,100
+12.99 monthly for 2 years // 311.76
+2000 every 2 weeks for 6 months // 26,000
+```
+
+The period is `daily`, `weekly`, `monthly`, `yearly` (also `annually`), or
+`every N days/weeks/months/years`. Money rides along and, where the amount is
+exact, so is the total.
+
+```solve
+$12.99 monthly for 2 years // $311.76
+```
+
+The total is the result. The number of payments is how it is reached, one per
+whole period on a scheduling year where a month is one of twelve and a week one
+of fifty-two, so `every 2 weeks for 6 months` is thirteen payments over half a
+year. A final part-period has not come due, so it is not counted.
+
+```solve
+2000 every 2 weeks for 5 weeks // 4,000
+```
+
 ## Interest and inflation
 
-| Expression | Result |
-| --- | --- |
-| `interest on 1000 at 5% over 3 years` | simple interest |
-| `monthly repayment on 200000 at 4% over 25 years` | a mortgage payment |
-| `what is $100 from 1990` | adjusted using a bundled price index |
+Interest compounds annually. The principal comes first, then the term, then the
+rate, and a mortgage repayment reads the same way.
 
-The inflation figures come from a bundled consumer price index and are an
-approximation, not a substitute for a real financial calculation.
+```solve
+interest on 1000 over 3 years at 5% // 157.63
+monthly repayment on 200000 over 25 years at 4% // 1,055.67
+```
+
+Inflation adjusts an amount into another year's money, from a bundled consumer
+price index.
+
+```solve
+what is $100 from 1990 // $254.55
+```
+
+The inflation figures are an approximation, not a substitute for a real
+financial calculation.

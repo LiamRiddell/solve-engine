@@ -53,3 +53,83 @@ between documents rather than constructing a new one, which is cheaper.
 ```ts
 engine.clear();
 ```
+
+## Snapshotting and restoring state
+
+That accumulated state, the variables, the user-defined functions, and the
+per-line result and bytecode caches, lives only in memory. `toJSON()` captures
+it as a plain object, and `fromJSON()` restores it onto a fresh engine, so a
+host can persist a session, warm-start a process, or move a document between
+contexts without re-evaluating the whole thing from scratch.
+
+```ts
+import { ExpressionEngine } from "solve-engine";
+
+const engine = new ExpressionEngine("en");
+engine.parseDocument(":price = 100\ndouble(x) = x * 2\n:total = double(price)");
+
+const state = engine.toJSON(); // a plain, JSON-safe object
+const json = JSON.stringify(state); // store it anywhere
+
+// Later, in another process:
+const restored = ExpressionEngine.fromJSON(JSON.parse(json));
+restored.evaluateExpression("double(total)"); // 400, with no re-evaluation
+```
+
+The snapshot is plain JSON. It survives `JSON.stringify` and `JSON.parse`
+unchanged: `bigint`s are written as strings, non-finite numbers (`Infinity`,
+`NaN`) are named rather than turned into `null`, and the compiled bytecode is
+carried as ordinary arrays.
+
+### Passing the same packages back
+
+`fromJSON` rebuilds the engine with the snapshot's own locale and, by default,
+the built-in packages. If the engine that produced the snapshot was constructed
+with a custom `packages` set, pass the **same** set when restoring: a snapshot
+carries compiled bytecode whose plugin indices and operators only line up
+against the packages that were present when it was written.
+
+```ts
+const restored = ExpressionEngine.fromJSON(state, { packages: myPackages });
+```
+
+`fromJSON` also accepts `config`, `diagnosticMode`, and a `locale` override, all
+matching the constructor.
+
+### What is and is not carried
+
+- **Carried:** variables, user-defined functions, the line cache (each line's
+  result, compiled bytecode, and the variables it reads and writes, so
+  incremental re-evaluation still works), and the expression-keyed bytecode
+  cache.
+- **Not carried: resolved async values.** Weather, stock, and currency results
+  are point-in-time and must be re-fetched, not restored stale (see
+  [Async and live data](/guide/async-and-live-data/)). Every line backed by an
+  async resolver is dropped from the snapshot, along with any variable whose
+  most recent definition came from one, so a restored engine re-fetches rather
+  than serving a value from another moment.
+- **Not carried: package-contributed state.** Only core engine state is
+  snapshotted for now; a package opt-in is planned.
+- **Deferred: symbolic (algebra) values.** A variable holding one makes
+  `toJSON()` throw a clear, coded error rather than dropping it silently; a
+  cached line whose result is symbolic is skipped and simply re-evaluates on
+  restore.
+
+### Refusing an incompatible snapshot
+
+Every snapshot carries a format version. `fromJSON` restores only the version it
+was built for and refuses anything else, or any object that is not a snapshot at
+all, with a coded `SNAPSHOT_VERSION_MISMATCH` error rather than restoring it
+wrongly.
+
+```ts
+import { EngineError } from "solve-engine/errors";
+
+try {
+  ExpressionEngine.fromJSON(fromAnOlderEngine);
+} catch (e) {
+  if (e instanceof EngineError && e.code === "SNAPSHOT_VERSION_MISMATCH") {
+    // Regenerate the snapshot, or re-evaluate the document from source.
+  }
+}
+```

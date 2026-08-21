@@ -19,3 +19,13 @@ export {
 	CoreErrorCodes,
 } from "./UnifiedErrorFramework";
 export type { EngineErrorInit, SourceSpan, Result, ErrorCode, CoreErrorCode } from "./UnifiedErrorFramework";
+
+export {
+	WorkerErrorCodes,
+	serializeEngineError,
+	deserializeEngineError,
+	workerCancelledError,
+	workerTerminatedError,
+	workerTransportError,
+} from "./WorkerError";
+export type { SerializedEngineError } from "./WorkerError";
