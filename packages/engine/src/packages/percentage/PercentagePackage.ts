@@ -9,6 +9,8 @@ import { OnOffWhatIsParselet } from "./parselets/OnOffWhatIsParselet";
 import { IncreaseDecreaseParselet } from "./parselets/IncreaseDecreaseParselet";
 import { IncreaseByParselet } from "./parselets/IncreaseByParselet";
 import { PercentageChangeParselet } from "./parselets/PercentageChangeParselet";
+import { UpDownParselet } from "./parselets/UpDownParselet";
+import { percentUpDownNormalizerRule } from "./normalizer/PercentUpDownNormalizerRule";
 
 /**
  * Percentage syntax: `50%`, `50% of 200`, `100 to 150` (percentage change),
@@ -21,6 +23,12 @@ import { PercentageChangeParselet } from "./parselets/PercentageChangeParselet";
  * variable-name-collision reason "total"/"average"/etc. are fused
  * elsewhere in this codebase, "what" is common enough to be worth
  * protecting as a `:variableName`.
+ *
+ * Successive change is `120 up 10% then down 10%` (118.80, not 120),
+ * `50 up 20%`, `80 down 15%` and the repeat form `100 up 10% three times`.
+ * `up`/`down` are retyped from a bare IDENT only when a percentage follows
+ * (percentUpDownNormalizerRule), so prose keeps the words. See
+ * UpDownParselet.ts.
  */
 export const PERCENTAGE_PACKAGE: IEnginePackage = {
   name: "solve-percentage",
@@ -49,6 +57,9 @@ export const PERCENTAGE_PACKAGE: IEnginePackage = {
     { tokenType: "TO", parselet: new PercentageChangeParselet() },
     { tokenType: "INCREASE_BY", parselet: new IncreaseByParselet(1) },
     { tokenType: "DECREASE_BY", parselet: new IncreaseByParselet(-1) },
+    // Successive change: "120 up 10% then down 10%" is 118.80, not 120.
+    { tokenType: "PCT_UP", parselet: new UpDownParselet(1) },
+    { tokenType: "PCT_DOWN", parselet: new UpDownParselet(-1) },
   ],
   prefixParselets: [
     { tokenType: "INCREASE", parselet: new IncreaseDecreaseParselet(1) },
@@ -56,5 +67,6 @@ export const PERCENTAGE_PACKAGE: IEnginePackage = {
   ],
   normalizerRules: [
     percentOnOffNormalizerRule(),
+    percentUpDownNormalizerRule(),
   ],
 };

@@ -1,5 +1,5 @@
 import { OpCode } from "@solve-js/parser/OpCode";
-import { Value, ValueType, numberValue, numberValueExact, numberValueRational, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData } from "@solve-js/vm/Value";
 import { decimalFromLiteral, decimalFromNumberIfExact, decimalNegate, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
@@ -8,13 +8,15 @@ import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/v
 import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
+import { CoreErrorCodes } from "@solve-js/errors/ErrorCode";
+import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@solve-js/vm/BusinessDays";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
 import { builtinFunctions, asConverterRegistry } from "@solve-js/vm/VMBuiltins";
 import { builtinArityError } from "@solve-js/vm/VMBuiltinArity";
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, compareRationalOperands } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, compareRationalOperands, uncertainOp } from "@solve-js/vm/VMConversion";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
@@ -70,6 +72,12 @@ export function createVM(
     // per-engine contexts keep working unchanged. An ExpressionEngine always
     // passes its own.
     context: EngineContext = defaultEngineContext,
+    // The host's resolved holiday predicate for working-day arithmetic, or
+    // undefined for weekends-only. Last, and optional, so every existing
+    // createVM() call site keeps the honest default without changing. An
+    // ExpressionEngine passes what `resolveHolidayPredicate(date.holidays)`
+    // returns. See constants/Configuration.ts's `date.holidays`.
+    holidayPredicate?: (epochMs: number) => boolean,
 ): VM {
     const stack: Value[] = [];
     const variables = new Map<string, Value>();
@@ -114,6 +122,10 @@ export function createVM(
       getMaxFunctionCalls() { return maxFunctionCalls; },
       getMaxDateOffsetYears() { return maxDateOffsetYears; },
       getMinDateOffsetYears() { return minDateOffsetYears; },
+      // False whenever no calendar was configured, which is what makes
+      // unconfigured working-day arithmetic weekends-only. See
+      // vm/BusinessDays.ts, the only reader.
+      isHoliday(epochMs: number) { return holidayPredicate ? holidayPredicate(epochMs) : false; },
       pop() {
         if (stack.length === 0) {
           return numberValue(0);
@@ -169,6 +181,8 @@ export function createVM(
       },
       getUserFunction(name: string) { return userFunctions.get(name); },
       hasUserFunction(name: string) { return userFunctions.has(name); },
+      getVariableEntries() { return Array.from(variables.entries()); },
+      getUserFunctionDefs() { return Array.from(userFunctions.values()); },
       defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram) {
         equations.set(variable, { variable, factorNames, rhsProgram });
       },
@@ -932,25 +946,23 @@ const WORKDAYS_PER_YEAR = 260;
  * Advance (or, for negative `n`, retreat) a Datetime by `n` business days,
  * skipping Saturdays/Sundays, e.g. Friday + 1 workday lands on Monday, not
  * Saturday. Backs the datetime package's `<date> + N workdays` / `<date> -
- * N workdays` arithmetic (see this function's ADD/SUB call sites below).
+ * N workdays` arithmetic and the `N working days after/before/from <date>`
+ * form (see this function's call sites below and `DATE_WORKDAY_OFFSET`).
  *
- * SCOPE DECISION: does NOT exclude public holidays, plain Mon-Fri
- * business-day math only. SoulverCore's own workday calculations
- * auto-exclude public holidays via a live-updating, region-configurable
- * holiday database; picking which holidays/region and keeping such a
- * database current is a real, separate piece of scope this pass
- * deliberately does not take on (matches this codebase's established
- * pattern of documenting a scoped-down simplification rather than silently
- * pretending to support something it doesn't, e.g. Finance's "no
- * hardcoded tax rate" decision in vm/VMBuiltins.ts).
+ * Skips public holidays too when the host has configured a calendar: the walk
+ * asks `vm.isHoliday()` about each candidate day and lands only on a working
+ * one. With no calendar `vm.isHoliday()` is always false, so this is weekends-
+ * only, the honest default (see `constants/Configuration.ts`'s `date.holidays`
+ * and `vm/BusinessDays.ts`). Same predicate every working-day form consults, so
+ * `<date> + N workdays` and `N working days after <date>` can never disagree.
  *
  * Walks one calendar day at a time (matching this file's existing
  * DATE_NEXT_WEEKDAY/DATE_LAST_WEEKDAY local-time convention below) rather
  * than a closed-form calculation, the exact skip pattern depends on which
- * day of the week the anchor date falls on, so there's no fixed ratio like
- * uom/UomConverter.ts's workday<->day RATE conversion (that's a linear
- * approximation acceptable for Rate math; actual date arithmetic needs the
- * real, exact answer).
+ * day of the week the anchor date falls on (and which days the host excludes),
+ * so there's no fixed ratio like uom/UomConverter.ts's workday<->day RATE
+ * conversion (that's a linear approximation acceptable for Rate math; actual
+ * date arithmetic needs the real, exact answer).
  *
  * That walk is why this is the one date offset with a ceiling on it. Every
  * other one moves a Date field once and lets Date recompute (see
@@ -960,14 +972,17 @@ const WORKDAYS_PER_YEAR = 260;
  * `today + 100000000 workdays` froze for 13.2 seconds and then answered
  * "Invalid Date", and `today + 1000000000000 workdays` never answered at all.
  * `date.maxOffsetYears`/`date.minOffsetYears` bound it, which is also the
- * first thing in the engine ever to read those two fields.
+ * first thing in the engine ever to read those two fields. The same bound,
+ * expanded to calendar days, is handed to the walk as its step cap, so a
+ * calendar that marks every day a holiday (nothing ever counts) is refused
+ * rather than looping forever.
  *
  * @throws `DATE_OFFSET_LIMIT_EXCEEDED` for an offset outside the configured
  * range. Recoverable: it is a statement about this line, not about the
  * engine.
  */
 function addBusinessDays(epochMs: number, n: number, vm: VM): number {
-    let remaining = Math.trunc(Math.abs(n));
+    const remaining = Math.trunc(Math.abs(n));
     const direction = n >= 0 ? 1 : -1;
     // Checked before the first step rather than counted during it, so a
     // hopeless offset costs nothing at all. Working in workdays rather than
@@ -983,13 +998,20 @@ function addBusinessDays(epochMs: number, n: number, vm: VM): number {
             { requestedWorkdays: remaining, limitYears, limitWorkdays },
         );
     }
-    const date = new Date(epochMs);
-    while (remaining > 0) {
-        date.setDate(date.getDate() + direction);
-        const day = date.getDay(); // 0=Sunday..6=Saturday
-        if (day !== 0 && day !== 6) remaining--;
+    // Seven calendar days per workday is the floor of a week with only one
+    // working day in it, which no real calendar reaches, so a legitimate
+    // in-limit offset never trips this. A pathological all-holiday calendar
+    // does, and is reported as the same limit error rather than hanging.
+    const maxCalendarSteps = limitWorkdays * 7 + 7;
+    const landed = walkBusinessDays(epochMs, n, (ms) => vm.isHoliday(ms), maxCalendarSteps);
+    if (landed === null) {
+        throw ErrorFactory.execution(
+            "DATE_OFFSET_LIMIT_EXCEEDED",
+            `A working-day offset of ${remaining.toLocaleString("en-US")} could not be reached within the ${limitYears}-year limit; the configured holiday calendar leaves too few working days`,
+            { requestedWorkdays: remaining, limitYears, maxCalendarSteps },
+        );
     }
-    return date.getTime();
+    return landed;
 }
 
 /** Milliseconds in a day that contains no daylight-saving transition. */
@@ -1712,6 +1734,15 @@ export function executeBytecode(
           // (5 kg to m)` answered today. See faultedOperand().
           const addFault = faultedOperand(l, r);
           if (addFault) { stack.push(addFault); break; }
+          // A carried uncertainty propagates in quadrature before anything else,
+          // so "(10 +/- 1) + (20 +/- 2)" is "30 ± 2.24". Gated on a sidecar
+          // being present, and checked ahead of the rational branch below so an
+          // uncertain operand is never folded into an exact fraction that would
+          // silently drop its tolerance. See uncertainOp().
+          if (l.uncertainty !== undefined || r.uncertainty !== undefined) {
+            const uncAdd = uncertainOp(l, r, "add");
+            if (uncAdd) { stack.push(uncAdd); break; }
+          }
           // Fraction arithmetic stays exact when a rational already rides on an
           // operand: "1/3 + 1/3 + 1/3" is exactly 1. The sidecar check gates it
           // so this only ever PRESERVES a fraction, a plain integer sum never
@@ -1773,6 +1804,13 @@ export function executeBytecode(
           // Same reason as ADD above.
           const subFault = faultedOperand(l, r);
           if (subFault) { stack.push(subFault); break; }
+          // Uncertainty propagates before the fraction path, same reasoning as
+          // ADD: "(10 +/- 1) - (20 +/- 2)" is "-10 ± 2.24" (the spread of a
+          // difference combines in quadrature exactly as a sum's does).
+          if (l.uncertainty !== undefined || r.uncertainty !== undefined) {
+            const uncSub = uncertainOp(l, r, "sub");
+            if (uncSub) { stack.push(uncSub); break; }
+          }
           // Preserve exact fractions, as ADD does above: "5/6 - 1/6 - 1/6 - 1/6
           // - 1/6 - 1/6" is exactly 0, not the 1.6e-16 the doubles drift to.
           if (l.rational !== undefined || r.rational !== undefined) {
@@ -1824,6 +1862,15 @@ export function executeBytecode(
         }
         case OpCode.MUL: {
           const r = safePop(stack), l = safePop(stack);
+          // Uncertainty first, so "(12.3 +/- 0.5) * 4" is "49.2 ± 2.0": a scalar
+          // multiply scales the spread by |k|, which the general quadrature rule
+          // gives when the plain operand is read as uncertainty 0. uncertainOp
+          // declines for a faulted or non-Number operand, so those keep their
+          // own paths below. See uncertainOp().
+          if (l.uncertainty !== undefined || r.uncertainty !== undefined) {
+            const uncMul = uncertainOp(l, r, "mul");
+            if (uncMul) { stack.push(uncMul); break; }
+          }
           // Preserve exact fractions before the double fast path: "2/7 * 14" is
           // exactly 4 and "1/49 * 49" exactly 1. Gated on a rational already
           // being present, so a plain "2 * 3" pays only the two sidecar checks.
@@ -1868,6 +1915,14 @@ export function executeBytecode(
         }
         case OpCode.DIV: {
           const r = safePop(stack), l = safePop(stack);
+          // Uncertainty first, ahead of both the Uom ratio and the exact-fraction
+          // paths below, so a carried tolerance is never dropped by either.
+          // uncertainOp declines unless both operands are plain Numbers, so
+          // "$10 / 2" and "1/3" are untouched. See uncertainOp().
+          if (l.uncertainty !== undefined || r.uncertainty !== undefined) {
+            const uncDiv = uncertainOp(l, r, "div");
+            if (uncDiv) { stack.push(uncDiv); break; }
+          }
           if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
             const { lv, rv, sameMeasure } = unifyUom(l, r);
             if (sameMeasure) {
@@ -2029,6 +2084,21 @@ export function executeBytecode(
           // money's exact decimal above.
           else if (v.type === ValueType.Number && v.rational !== undefined) stack.push(numberValueRational(v.toNumber(), v.rational));
           else stack.push(numberValue(v.toNumber()));
+          break;
+        }
+        case OpCode.MAKE_UNCERTAIN: {
+          // `center ± spread`: the parselet pushed the center first, then the
+          // spread, so the spread pops first. A faulted operand propagates
+          // rather than being read as a zero center or spread.
+          const spread = safePop(stack), center = safePop(stack);
+          const uncFault = faultedOperand(center, spread);
+          if (uncFault) { stack.push(uncFault); break; }
+          // The center is the measured value, the spread its one-sigma tolerance.
+          // The spread is taken as a magnitude, so "5 +/- -2" reads the same as
+          // "5 +/- 2". Only a plain-number center carries an uncertainty (a unit
+          // or other typed center falls back to its bare magnitude, units with
+          // uncertainty are out of scope for this slice).
+          stack.push(numberValueUncertain(center.toNumber(), Math.abs(spread.toNumber())));
           break;
         }
 
@@ -2949,6 +3019,55 @@ export function executeBytecode(
           const dateSubFault = faultedOperand(dtValue, durValue);
           if (dateSubFault) { stack.push(dateSubFault); break; }
           stack.push(datetimeValue(shiftDatetime(dtValue.toNumber(), durValue, -1, vm)));
+          break;
+        }
+        case OpCode.DATE_WORKDAY_OFFSET: {
+          // "N working days after/before/from <date>". One operand byte gives
+          // the direction: 0 forward (after/from), 1 backward (before). The
+          // anchor date is on top (WorkdayOffsetParselet compiles it last); the
+          // count is the left operand beneath it. Routed through the same
+          // addBusinessDays() as `<date> + N workdays`, so the two forms and
+          // the holiday calendar stay in lockstep.
+          const workdayDirection = operandByte(opcodes, ip++, op, "workday offset direction") === 1 ? -1 : 1;
+          const anchorValue = safePop(stack), countValue = safePop(stack);
+          const offsetFault = faultedOperand(countValue, anchorValue);
+          if (offsetFault) { stack.push(offsetFault); break; }
+          if (anchorValue.type !== ValueType.Datetime) {
+            stack.push(errorValue(
+              CoreErrorCodes.WORKDAY_OFFSET_EXPECTED_DATE,
+              `"working days after/before/from" expects a date to count from, got ${ValueType[anchorValue.type] ?? "an unsupported value"}`,
+            ));
+            break;
+          }
+          stack.push(datetimeValue(addBusinessDays(anchorValue.toNumber(), workdayDirection * countValue.toNumber(), vm)));
+          break;
+        }
+        case OpCode.DATE_WORKDAYS_BETWEEN: {
+          // "working days between <date> and <date>": the count of working days
+          // in the inclusive span, order-independent. Stack: [start, end], end
+          // on top (WorkdaysBetweenParselet compiles the second endpoint last).
+          const endValue = safePop(stack), startValue = safePop(stack);
+          const betweenFault = faultedOperand(startValue, endValue);
+          if (betweenFault) { stack.push(betweenFault); break; }
+          if (startValue.type !== ValueType.Datetime || endValue.type !== ValueType.Datetime) {
+            stack.push(errorValue(
+              CoreErrorCodes.WORKDAYS_BETWEEN_EXPECTED_DATES,
+              `"working days between" expects two dates, got ${ValueType[startValue.type] ?? "an unsupported value"} and ${ValueType[endValue.type] ?? "an unsupported value"}`,
+            ));
+            break;
+          }
+          // Bounded by the full configured offset range in calendar days, so a
+          // span of millennia is refused rather than walked a day at a time.
+          const spanLimitDays = Math.ceil((vm.getMaxDateOffsetYears() - vm.getMinDateOffsetYears()) * 366);
+          const workdayCount = countBusinessDaysBetween(startValue.toNumber(), endValue.toNumber(), (ms) => vm.isHoliday(ms), spanLimitDays);
+          if (workdayCount === null) {
+            stack.push(errorValue(
+              CoreErrorCodes.WORKDAYS_BETWEEN_RANGE_TOO_LARGE,
+              `The two dates are more than ${vm.getMaxDateOffsetYears() - vm.getMinDateOffsetYears()} years apart, past the working-day count's limit`,
+            ));
+            break;
+          }
+          stack.push(numberValue(workdayCount));
           break;
         }
         case OpCode.DATE_NEXT_WEEKDAY:

@@ -24,9 +24,11 @@ import { WORKDAYS_IN_FN_IDX } from "./DatetimeTimestampPluginFunctions";
  * SCOPE DECISION (see `DatetimeTimestampPluginFunctions.ts`'s
  * `workdaysInDurationHandler` doc comment for the full reasoning): the
  * count is a deterministic ratio (5 workdays per full week, remainder
- * capped at 5), NOT a real calendar walk anchored to "now", and does NOT
- * exclude public holidays, matching this session's established
- * holiday-scoping decision (see `vm/VM.ts`'s `addBusinessDays()`).
+ * capped at 5), NOT a real calendar walk anchored to "now". It is therefore
+ * weekends-only and consults no holiday calendar: with no anchor date there
+ * is no calendar day to look up. The forms that DO walk a real calendar (the
+ * offsets and `between`) skip configured holidays; this counts a span with no
+ * position on the calendar. See `DatetimePackage.ts`'s holiday scope note.
  */
 export class WorkdaysInParselet implements PrefixParselet {
   readonly category = "Date/Time";

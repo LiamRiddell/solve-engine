@@ -25,6 +25,30 @@
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
+ * A host's test for whether a calendar date is a public holiday, given the
+ * `Date` for that day at local midnight. Return `true` to exclude it from
+ * working-day arithmetic.
+ */
+export type HolidayPredicate = (date: Date) => boolean;
+
+/**
+ * The host-supplied public-holiday calendar, in the same "bring your own data"
+ * shape the stocks and weather packages already use for a host callback (see
+ * `packages/stocks/StocksPackage.ts`): weekends are decidable from the date
+ * alone, holidays are not, so they come from the host or not at all.
+ *
+ * Either a {@link HolidayPredicate}, for a host that computes holidays itself
+ * (an existing library, a region rule), or an iterable of specific dates as
+ * `YYYY-MM-DD` strings, epoch-millisecond numbers or `Date` objects, for a host
+ * that just has a list. Resolved to one internal predicate by
+ * `vm/HolidayCalendar.ts`'s `resolveHolidayPredicate()`.
+ *
+ * Left unset, working-day arithmetic skips weekends only, which is the honest
+ * default: the engine excludes exactly the days it can prove are non-working.
+ */
+export type HolidayCalendar = HolidayPredicate | Iterable<string | number | Date>;
+
+/**
  * Date-related configuration.
  * Controls the bounds and formatting for date/time expression evaluation
  * (e.g., `today + 20 days`, `last monday`).
@@ -53,6 +77,21 @@ export interface DateConfig {
   readonly minOffsetYears: number;
   /** Default date string format for display (moment.js format string) */
   readonly defaultFormat: string;
+  /**
+   * Public-holiday calendar for working-day arithmetic (`N working days after
+   * <date>`, `working days between <date> and <date>`, `<date> + N workdays`).
+   * See {@link HolidayCalendar}.
+   *
+   * Optional and unset by default: with no calendar, working-day arithmetic
+   * skips weekends only. A host that wants holidays excluded too supplies one
+   * here (`new ExpressionEngine("en", false, { date: { holidays } })`), the
+   * same way stocks and weather take a host data source. Threaded into the VM
+   * by `engine/ExpressionEngine.ts` exactly as {@link maxOffsetYears} is,
+   * because working-day math is a VM operation several grammar forms share, so
+   * the calendar has to be one source the VM owns rather than per-package state
+   * the VM cannot see.
+   */
+  readonly holidays?: HolidayCalendar;
 }
 
 /**

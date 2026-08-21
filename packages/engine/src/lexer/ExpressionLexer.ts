@@ -963,6 +963,9 @@ export class ExpressionLexer {
           } else if (c0 === 0x00F7) {  // ÷ → SLASH
             yield new LexerToken('SLASH', tokenTypeId('SLASH'), '\u00F7', '\u00F7', 0, 0, 1, 1);
             tokenIndex++;
+          } else if (c0 === 0x00B1) {  // U+00B1 plus-minus sign, the uncertainty operator
+            yield new LexerToken('PLUS_MINUS', tokenTypeId('PLUS_MINUS'), '\u00B1', '\u00B1', 0, 0, 1, 1);
+            tokenIndex++;
           } else if (c0 === 0x2260) {  // ≠ → NEQ
             yield new LexerToken('NEQ', tokenTypeId('NEQ'), '\u2260', '\u2260', 0, 0, 1, 1);
             tokenIndex++;
@@ -1149,6 +1152,10 @@ export class ExpressionLexer {
             tokenIndex++;
           } else if (c0 === 0x00F7) {  // ÷ → SLASH
             yield new LexerToken('SLASH', tokenTypeId('SLASH'), '\u00F7', '\u00F7', this.pos, 0, this.line, col);
+            this.pos++;
+            tokenIndex++;
+          } else if (c0 === 0x00B1) {  // U+00B1 plus-minus sign, the uncertainty operator
+            yield new LexerToken('PLUS_MINUS', tokenTypeId('PLUS_MINUS'), '\u00B1', '\u00B1', this.pos, 0, this.line, col);
             this.pos++;
             tokenIndex++;
           } else if (c0 === 0x2260) {  // ≠ → NEQ

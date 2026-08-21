@@ -202,6 +202,17 @@ export interface VM {
 	defineUserFunction(name: string, params: string[], program: BytecodeProgram): void;
 	getUserFunction(name: string): UserFunctionDef | undefined;
 	hasUserFunction(name: string): boolean;
+	/**
+	 * Every session-scoped variable currently defined, as `[name, value]` pairs,
+	 * for snapshotting the VM's state (see `engine/EngineSnapshot.ts`). The
+	 * returned array is a fresh copy, so mutating it does not touch the store,
+	 * and it reads the flat document-variable table only, never a transient
+	 * user-function call frame (those are call-scoped and gone by the time any
+	 * snapshot is taken).
+	 */
+	getVariableEntries(): [string, Value][];
+	/** Every user-defined function currently defined, as a fresh array copy, for snapshotting (see {@link getVariableEntries}). */
+	getUserFunctionDefs(): UserFunctionDef[];
 	/** Register (or redefine) a bare equation (`a*x = rhs`), keyed by its free variable. See {@link EquationDef}. */
 	defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram): void;
 	getEquation(variable: string): EquationDef | undefined;
@@ -244,6 +255,8 @@ export interface VM {
 	getMaxDateOffsetYears(): number;
 	/** The same bound backwards, as a negative number of years. */
 	getMinDateOffsetYears(): number;
+	/** Whether the host's public-holiday calendar marks `epochMs` a holiday, for working-day arithmetic. Always `false` when no calendar is configured (weekends-only). Set from `constants/Configuration.ts`'s `date.holidays`; see `vm/HolidayCalendar.ts`. */
+	isHoliday(epochMs: number): boolean;
 	getInstructionCount(): number;
 	incrementInstructions(n: number): void;
 	/** Active AbortSignal for the current expression evaluation. Checked before cache writes. */

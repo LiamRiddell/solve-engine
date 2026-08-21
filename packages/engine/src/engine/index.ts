@@ -1,5 +1,8 @@
 export {
 	ExpressionEngine,
+	SNAPSHOT_FORMAT,
+	SNAPSHOT_VERSION,
+	SnapshotErrorCodes,
 } from "./ExpressionEngine";
 export type {
 	CacheSnapshot,
@@ -11,7 +14,19 @@ export type {
 	DagSnapshot,
 	EvalResults,
 	LineEvaluation,
+	EngineRestoreOptions,
+	EngineSnapshot,
+	SerializedValue,
+	SerializedBytecode,
+	SerializedUserFunction,
+	SerializedAnonymousBody,
+	SerializedLineCacheEntry,
+	SerializedDecimal,
+	SerializedRational,
+	SerializedNumber,
 } from "./ExpressionEngine";
+
+export type { Explanation, ExplanationStep } from "@solve-js/explain";
 
 export { DocumentModel } from "./DocumentModel";
 export type {

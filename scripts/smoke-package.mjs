@@ -75,7 +75,8 @@ check("CJS: root entry requires and evaluates", () => {
 const subpaths = [
   "engine", "vm", "format", "language", "packages", "constants",
   "lexer", "parser", "normalizer", "variables", "resolvers",
-  "errors", "utilities", "uom", "services",
+  "errors", "utilities", "uom", "services", "worker",
+  "errors", "utilities", "uom", "services", "testing",
 ];
 
 for (const subpath of subpaths) {
