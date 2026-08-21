@@ -1,6 +1,7 @@
-import { Value, ValueType, numberValue, bigIntValue, uomValue, matrixValue, errorValue, symbolicValue, type MatrixData, type MatrixEntry } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, bigIntValue, uomValue, uomValueExact, matrixValue, errorValue, symbolicValue, type MatrixData, type MatrixEntry } from "@solve-js/vm/Value";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
+import { decimalAdd, decimalSubtract, decimalMultiply, decimalDivide, decimalIsZero, decimalToNumber, decimalFromNumberIfExact, decimalCompare, type DecimalData } from "@solve-js/decimal";
 import { sameShape } from "@solve-js/vm/MatrixOps";
 import { type SymbolicNode, simplifySymbolic } from "@solve-js/symbolic";
 import { valueToSymbolic } from "@solve-js/vm/SymbolicOps";
@@ -91,6 +92,18 @@ function largestFiniteMagnitude(a: number, b: number, c: number): number {
 export function compareUom(l: Value, r: Value): { lv: number; rv: number; equal: boolean; sameMeasure: boolean } {
     const { lv, rv, sameMeasure } = unifyUom(l, r);
     if (!sameMeasure) return { lv, rv, equal: false, sameMeasure: false };
+    // Same-currency money compares on its exact decimals, so "$0.1 + $0.2 ==
+    // $0.3" is true on the value rather than on whichever doubles the two sides
+    // happen to land on. The returned lv/rv (already the nearest doubles) order
+    // the same way, since rounding to nearest is monotonic.
+    if (
+        l.type === ValueType.Uom && r.type === ValueType.Uom &&
+        l.unit !== undefined && l.unit === r.unit &&
+        l.exact !== undefined && r.exact !== undefined &&
+        sharedCurrencyExchange.isCurrency(l.unit)
+    ) {
+        return { lv, rv, equal: decimalCompare(l.exact, r.exact) === 0, sameMeasure: true };
+    }
     if (lv === rv) return { lv, rv, equal: true, sameMeasure: true };
     if (!Number.isFinite(lv) || !Number.isFinite(rv)) return { lv, rv, equal: false, sameMeasure: true };
     const scale = largestFiniteMagnitude(lv, rv, r.toNumber());
@@ -240,6 +253,75 @@ export function power(base: number, exponent: number): number {
 }
 
 /**
+ * The exact decimal an operand contributes to a money operation, or null.
+ *
+ * A currency operand hands over the sidecar its literal or a prior exact result
+ * set. A plain scalar (the `3` in `$1.10 * 3`, the `1.10` in `$0.70 * 1.10`)
+ * hands over its own exact decimal: a whole number always has one, and a
+ * decimal-point literal carries one too, which is what lets a fractional
+ * multiplier stay exact against money without the bare `1.005 * 100` between
+ * two plain numbers changing at all. A fractional double with no sidecar (a
+ * `sqrt` result) has no exact decimal and returns null, dropping that operation
+ * back to the float path.
+ */
+function operandExactDecimal(v: Value): DecimalData | null {
+    if (v.exact !== undefined) return v.exact;
+    return decimalFromNumberIfExact(v.toNumber());
+}
+
+/**
+ * The exact result of a money arithmetic op, or null when it cannot be exact.
+ *
+ * Exactness is preserved only when the currency stays put: two amounts in the
+ * same currency, or a currency against a plain scalar. A cross-currency
+ * combination goes through an exchange rate, which is a double, so it is left
+ * to the float path below rather than dressed up as exact. Division falls back
+ * for a zero divisor so "$10 / 0" keeps the double's Infinity, and for two
+ * currencies (a ratio the VM computes before this is ever reached).
+ */
+function exactMoneyOp(l: Value, r: Value, op: "add" | "sub" | "mul" | "div"): Value | null {
+    const lMoney = l.type === ValueType.Uom && l.unit !== undefined && l.exact !== undefined && sharedCurrencyExchange.isCurrency(l.unit);
+    const rMoney = r.type === ValueType.Uom && r.unit !== undefined && r.exact !== undefined && sharedCurrencyExchange.isCurrency(r.unit);
+    if (!lMoney && !rMoney) return null;
+
+    let ld: DecimalData | null;
+    let rd: DecimalData | null;
+    let unit: string;
+    if (lMoney && rMoney) {
+        // Different currencies reconcile through a rate, which is a double, so
+        // only a shared currency stays exact. A ratio (money / money) is the
+        // VM's own DIV case and never arrives here.
+        if (l.unit !== r.unit || op === "div") return null;
+        ld = l.exact!; rd = r.exact!; unit = l.unit!;
+    } else if (lMoney && r.type !== ValueType.Uom) {
+        // The other side must be a plain scalar. A different-unit Uom ("$100 +
+        // 5 kg") is NOT a scalar, and must fall through to the float path so it
+        // surfaces the incompatible-units error rather than absorbing the 5 as
+        // though it were dollars.
+        ld = l.exact!; unit = l.unit!;
+        rd = operandExactDecimal(r);
+    } else if (rMoney && l.type !== ValueType.Uom) {
+        rd = r.exact!; unit = r.unit!;
+        ld = operandExactDecimal(l);
+    } else {
+        return null;
+    }
+    if (ld === null || rd === null) return null;
+
+    let result: DecimalData;
+    switch (op) {
+        case "add": result = decimalAdd(ld, rd); break;
+        case "sub": result = decimalSubtract(ld, rd); break;
+        case "mul": result = decimalMultiply(ld, rd); break;
+        case "div":
+            if (decimalIsZero(rd)) return null;
+            result = decimalDivide(ld, rd);
+            break;
+    }
+    return uomValueExact(decimalToNumber(result), unit, result);
+}
+
+/**
  * Apply a numeric binary operation with type-aware dispatch.
  * Handles BigInt, UoM, Vector, Symbolic, and plain Number operands.
  *
@@ -317,6 +399,15 @@ export function binaryOp(
     }
 
     if (l.type === ValueType.Uom || r.type === ValueType.Uom) {
+        // Money in the same currency (or money against a plain scalar) is exact:
+        // "$0.10 + $0.20" is "$0.30", not the double's "$0.30000000000000004".
+        // Only the four arithmetic ops carry an `op` kind (MOD passes none), and
+        // only currencies set the sidecar, so everything else falls straight
+        // through to the float unification below unchanged.
+        if (symbolicOp) {
+            const exactMoney = exactMoneyOp(l, r, symbolicOp);
+            if (exactMoney) return exactMoney;
+        }
         const { lv, rv, unit, sameMeasure } = unifyUom(l, r);
         // NaN is deliberately NOT intercepted here. A guard used to answer a
         // bare, unitless 0 for it, which turned an operand that means "no

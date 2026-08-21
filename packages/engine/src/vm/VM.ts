@@ -1,5 +1,6 @@
 import { OpCode } from "@solve-js/parser/OpCode";
-import { Value, ValueType, numberValue, stringValue, bigIntValue, hexValue, uomValue, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueExact, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData } from "@solve-js/vm/Value";
+import { decimalFromLiteral, decimalFromNumberIfExact, decimalNegate, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { rowMajorToColumnMajor, matrixMultiply, matrixPower, matrixCompare, matIndex, matAt, inBounds, collectionToValues, matrixEntryToValue } from "@solve-js/vm/MatrixOps";
@@ -829,6 +830,22 @@ function moneyTimesQuantity(l: Value, r: Value): Value | null {
 }
 
 /**
+ * The exact decimal a currency amount should carry, or null when it has none.
+ *
+ * Gated on the unit being a currency, so the exact-decimal machinery is money's
+ * and money's alone in this slice, every other Uom (km, kg, minutes) is left
+ * exactly as it was. The amount's exact value is either the sidecar a decimal
+ * literal already set, or, for a whole-number amount, the integer itself. A
+ * fractional double with no sidecar (`$sqrt(2)`, `$ (1/3) `) returns null and
+ * stays a float, which is the deliberate boundary: exactness only where an
+ * exact value actually exists.
+ */
+function moneyExactMagnitude(operand: Value, unit: string): DecimalData | null {
+    if (!sharedCurrencyExchange.isCurrency(unit)) return null;
+    return operand.exact ?? decimalFromNumberIfExact(operand.toNumber());
+}
+
+/**
  * `X + 10%` and `X - 10%`, where the percentage is relative to X.
  *
  * A percentage on its own means nothing; it is a proportion *of* something.
@@ -1646,6 +1663,14 @@ export function executeBytecode(
         case OpCode.PUSH_BIGINT:
           stack.push(bigIntValue(parseBigIntLiteral(poolString(opcodes, ip++, strings, op, "constant-pool index"), op)));
           break;
+        case OpCode.PUSH_DECIMAL: {
+          // A decimal-point literal: the exact base-ten value rides in the
+          // `exact` sidecar, the nearest double stays in `value`, so this reads
+          // as an ordinary Number everywhere except where it meets money.
+          const dec = decimalFromLiteral(poolString(opcodes, ip++, strings, op, "constant-pool index"));
+          stack.push(numberValueExact(decimalToNumber(dec), dec));
+          break;
+        }
         case OpCode.PUSH_HEX:
           stack.push(hexValue(numbers[poolIndex(opcodes, ip++, op, "constant-pool index", numbers.length, "number-pool")]));
           break;
@@ -1924,6 +1949,8 @@ export function executeBytecode(
           const negFault = faultedOperand(v);
           if (negFault) { stack.push(negFault); break; }
           if (v.type === ValueType.BigInt) stack.push(bigIntValue(-(v.value as bigint)));
+          // Negating money keeps it exact: "-$0.10" is exactly "-$0.10".
+          else if (v.type === ValueType.Uom && v.exact !== undefined) stack.push(uomValueExact(-v.toNumber(), v.unit!, decimalNegate(v.exact)));
           else if (v.type === ValueType.Uom) stack.push(uomValue(-v.toNumber(), v.unit!));
           // A negated percentage is still a percentage, for the same reason a
           // negated Uom is still measured in the same unit. Without this
@@ -1942,7 +1969,9 @@ export function executeBytecode(
           const v = safePop(stack);
           const posFault = faultedOperand(v);
           if (posFault) { stack.push(posFault); break; }
-          if (v.type === ValueType.Uom) stack.push(uomValue(v.toNumber(), v.unit!));
+          // Unary plus is a no-op, so money keeps its exact decimal too.
+          if (v.type === ValueType.Uom && v.exact !== undefined) stack.push(uomValueExact(v.toNumber(), v.unit!, v.exact));
+          else if (v.type === ValueType.Uom) stack.push(uomValue(v.toNumber(), v.unit!));
           // Unary plus is a no-op, so it has to leave the type alone too.
           else if (v.type === ValueType.Percentage) stack.push(percentageValue(v.toNumber()));
           else stack.push(numberValue(v.toNumber()));
@@ -2594,7 +2623,15 @@ export function executeBytecode(
           const operand = safePop(stack);
           const faulted = faultedOperand(operand);
           if (faulted) { stack.push(faulted); break; }
-          stack.push(uomValue(operand.toNumber(), unit));
+          // Money keeps its exact decimal from here on. The amount either
+          // arrived as a decimal literal (exact sidecar already set) or is a
+          // whole number, either of which has an exact decimal; a fractional
+          // double amount ("$sqrt(2)") has none and stays an ordinary float
+          // Uom. Only currencies carry the sidecar, so every other unit (km,
+          // kg, ...) is unchanged.
+          const money = moneyExactMagnitude(operand, unit);
+          if (money) stack.push(uomValueExact(operand.toNumber(), unit, money));
+          else stack.push(uomValue(operand.toNumber(), unit));
           break;
         }
         case OpCode.UOM_CONVERT_TO: {

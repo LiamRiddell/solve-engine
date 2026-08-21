@@ -19,6 +19,13 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 const CHAINED_DOT_THOUSANDS_GROUPS = /^\d{1,3}(\.\d{3}){2,}$/;
 
 /**
+ * A plain fractional literal (digits, one dot, digits), the gate for
+ * PUSH_DECIMAL. Mirrors PrecedenceParser's constant of the same name: it
+ * refuses scientific notation ("2.5e-3"), which stays an ordinary double.
+ */
+const PLAIN_DECIMAL = /^\d*\.\d*$/;
+
+/**
  * NOTE: for real evaluation, this class's `parse()` is dead code.
  * PrecedenceParser's Tier-1 fast-path switch handles NUMBER_ID inline
  * (with its own copy of this exact logic) and always `return`s before
@@ -33,6 +40,10 @@ export class NumberParselet implements PrefixParselet {
 
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
 		let v: number;
+		// Mirrors PrecedenceParser's Tier-1 NUMBER case: a fractional literal is
+		// pushed as PUSH_DECIMAL so its exact value survives to any money it
+		// meets, everything integer-shaped stays PUSH_NUMBER.
+		let decimalText: string | null = null;
 		const raw = token.value;
 		if (raw.startsWith("0x") || raw.startsWith("0X")) {
 			v = parseInt(raw, 16);
@@ -83,6 +94,12 @@ export class NumberParselet implements PrefixParselet {
 				normalized = normalized.replace(decimalSep, ".");
 			}
 			v = parseFloat(normalized);
+			if (PLAIN_DECIMAL.test(normalized)) decimalText = normalized;
+		}
+		if (decimalText !== null) {
+			builder.emitOpcode(OpCode.PUSH_DECIMAL);
+			builder.emitString(decimalText);
+			return;
 		}
 		builder.emitOpcode(OpCode.PUSH_NUMBER);
 		builder.emitNumber(v);

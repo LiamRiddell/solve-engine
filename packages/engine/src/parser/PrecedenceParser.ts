@@ -20,6 +20,16 @@ import { bigIntLiteralDigits } from "@solve-js/parser/BigIntLiteral";
 const CHAINED_DOT_THOUSANDS_GROUPS = /^\d{1,3}(\.\d{3}){2,}$/;
 
 /**
+ * A plain fractional literal: digits, exactly one dot, digits, nothing else.
+ *
+ * The gate for compiling to PUSH_DECIMAL. It admits "0.10", "1.005", ".5" and
+ * "5." and refuses anything with an exponent ("2.5e-3"), which parses as an
+ * ordinary double instead, since scientific notation has no exact base-ten
+ * value this representation would keep.
+ */
+const PLAIN_DECIMAL = /^\d*\.\d*$/;
+
+/**
  * ── Hybrid Precedence Climbing Parser ─────────────────────────────────────────
  *
  * Two-tier dispatch strategy:
@@ -361,6 +371,12 @@ export class PrecedenceParser {
       case PrecedenceParser.NUMBER_ID: {
         // Parse number with locale-aware separator normalization
         let v: number;
+        // The exact dot-decimal text for a literal written with a fractional
+        // point, so it can be pushed as PUSH_DECIMAL and keep its precision
+        // where it later meets money. Stays null for every integer shape
+        // (hex/bin/oct, chained-dot grouping, plain integers), which push the
+        // ordinary PUSH_NUMBER and are unchanged.
+        let decimalText: string | null = null;
         const raw = token.value;
         if (raw.startsWith("0x") || raw.startsWith("0X")) {
           v = parseInt(raw, 16);
@@ -410,6 +426,16 @@ export class PrecedenceParser {
             normalized = normalized.replace(decimalSep, ".");
           }
           v = parseFloat(normalized);
+          // A plain fractional literal (digits, one dot, digits) is what carries
+          // an exact decimal. Scientific notation like "2.5e-3" has a dot too
+          // but no exact base-ten form worth the trouble, so it stays a
+          // PUSH_NUMBER double, and so does any integer (grouping stripped).
+          if (PLAIN_DECIMAL.test(normalized)) decimalText = normalized;
+        }
+        if (decimalText !== null) {
+          builder.emitOpcode(OpCode.PUSH_DECIMAL);
+          builder.emitString(decimalText);
+          return;
         }
         builder.emitOpcode(OpCode.PUSH_NUMBER);
         builder.emitNumber(v);
