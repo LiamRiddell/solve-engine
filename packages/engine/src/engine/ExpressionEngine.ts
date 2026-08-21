@@ -239,6 +239,9 @@ export class ExpressionEngine {
                       return state.isEmpty || /^\s*#/.test(state.text);
                   }
                 : undefined,
+            // Raw source text of a line, for features that read markdown the
+            // evaluator skipped (a table's rows). See the tables package.
+            getLineText: doc ? (n: number) => doc.getLineAt(n)?.text : undefined,
         };
     }
 
