@@ -49,8 +49,9 @@ Line by line, and none of these is a special case written for this page:
   has 100000000 elements, past the limit of 100000 (see the engine's
   vm.maxCollectionSize setting).*
 - `5 kg in m` is not a conversion. Mass and length do not measure the same
-  thing, and the engine says so rather than handing back `5 kg` as though the
-  request had been honoured.
+  thing, and the engine says so in words, *a mass cannot be converted to a
+  length*, rather than handing back `5 kg` as though the request had been
+  honoured.
 - `sqrt()` gets *sqrt() takes 1 argument, but was given none*, from a check
   against a table of builtin arities rather than from whatever happens inside
   `sqrt` when its argument is missing.

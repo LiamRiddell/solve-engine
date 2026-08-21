@@ -37,6 +37,13 @@ The left operand decides the result unit.
 20C in F // 68.00 F
 ```
 
+A conversion between two different dimensions has no answer, so it is refused
+rather than guessed. The message names the dimensions rather than the units, so
+`1 hour in metres` reports *a duration cannot be converted to a length* and
+`5 kg in m` reports *a mass cannot be converted to a length*. Combining two
+different dimensions is refused the same way: `5 kg + 3 m` reports *mass and
+length cannot be added*.
+
 ## Rates and speeds
 
 A unit written with a slash is a rate: a quantity per one of something. `km/h`,
