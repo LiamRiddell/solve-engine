@@ -63,6 +63,35 @@ out the tax already inside it. `vat` is accepted everywhere `tax` is.
 No tax rate is ever assumed. You state it, because the correct rate depends on
 where you are and what you are buying.
 
+## Recurring schedules
+
+A series adds itself up. `<amount> <period> for <duration>` gives the total, so
+a subscription, a salary or an instalment plan does not have to be worked out
+elsewhere and typed back in.
+
+```solve
+450 monthly for 18 months // 8,100
+12.99 monthly for 2 years // 311.76
+2000 every 2 weeks for 6 months // 26,000
+```
+
+The period is `daily`, `weekly`, `monthly`, `yearly` (also `annually`), or
+`every N days/weeks/months/years`. Money rides along and, where the amount is
+exact, so is the total.
+
+```solve
+$12.99 monthly for 2 years // $311.76
+```
+
+The total is the result. The number of payments is how it is reached, one per
+whole period on a scheduling year where a month is one of twelve and a week one
+of fifty-two, so `every 2 weeks for 6 months` is thirteen payments over half a
+year. A final part-period has not come due, so it is not counted.
+
+```solve
+2000 every 2 weeks for 5 weeks // 4,000
+```
+
 ## Interest and inflation
 
 | Expression | Result |
