@@ -31,6 +31,23 @@ describe("Memory Leak Tests", () => {
 		return typeof process !== "undefined" && typeof process.memoryUsage === "function";
 	}
 
+	/**
+	 * Collect the heap thoroughly before a measurement.
+	 *
+	 * A single `global.gc()` runs one collection, which V8 does not guarantee
+	 * reclaims everything a following pass would, and under `--runInBand` the
+	 * heap earlier suites left behind inflates the baseline this test measures
+	 * against. On a shared CI runner that showed up as a 10K-iteration parse
+	 * growing past the bound purely because the transient allocation had not
+	 * been collected, while the same run passed on a quieter machine. Several
+	 * passes give a stable reading. It cannot hide a leak: memory that is still
+	 * referenced survives any number of collections.
+	 */
+	function forceGc(): void {
+		if (!global.gc) return;
+		for (let i = 0; i < 4; i++) global.gc();
+	}
+
 	function checkMemoryGrowth(
 		label: string,
 		beforeMB: number,
@@ -63,7 +80,7 @@ describe("Memory Leak Tests", () => {
 				return;
 			}
 
-			if (global.gc) global.gc();
+			forceGc();
 
 			const beforeMB = getHeapMB();
 
@@ -76,7 +93,7 @@ describe("Memory Leak Tests", () => {
 				engine.clear();
 			}
 
-			if (global.gc) global.gc();
+			forceGc();
 			const afterMB = getHeapMB();
 
 			// Cleared engines should collect down to roughly the construction
@@ -91,7 +108,7 @@ describe("Memory Leak Tests", () => {
 				return;
 			}
 
-			if (global.gc) global.gc();
+			forceGc();
 			const beforeMB = getHeapMB();
 
 			const iterations = 2000;
@@ -100,7 +117,7 @@ describe("Memory Leak Tests", () => {
 				engine.parseDocument(`:x${i} = ${i}\n:x${i} + 5`);
 			}
 
-			if (global.gc) global.gc();
+			forceGc();
 			const afterMB = getHeapMB();
 			const perIterationKB = ((afterMB - beforeMB) * 1024) / iterations;
 
@@ -120,7 +137,7 @@ describe("Memory Leak Tests", () => {
 				return;
 			}
 
-			if (global.gc) global.gc();
+			forceGc();
 			const beforeMB = getHeapMB();
 
 			const engine = new ExpressionEngine();
@@ -128,7 +145,7 @@ describe("Memory Leak Tests", () => {
 				engine.evaluateLine(i + 1, `${(i % 100) + 1} + ${(i % 50) + 1}`);
 			}
 
-			if (global.gc) global.gc();
+			forceGc();
 			const afterMB = getHeapMB();
 
 			// LineCache stores all 10K entries — this WILL grow.
@@ -142,7 +159,7 @@ describe("Memory Leak Tests", () => {
 				return;
 			}
 
-			if (global.gc) global.gc();
+			forceGc();
 			const beforeMB = getHeapMB();
 
 			const engine = new ExpressionEngine();
@@ -151,7 +168,7 @@ describe("Memory Leak Tests", () => {
 				expect(typeof result).toBe("number");
 			}
 
-			if (global.gc) global.gc();
+			forceGc();
 			const afterMB = getHeapMB();
 
 			checkMemoryGrowth("10K evaluateNumber", beforeMB, afterMB, 10000, 100);
@@ -163,7 +180,7 @@ describe("Memory Leak Tests", () => {
 				return;
 			}
 
-			if (global.gc) global.gc();
+			forceGc();
 			const beforeMB = getHeapMB();
 
 			for (let i = 0; i < 1000; i++) {
@@ -173,7 +190,7 @@ describe("Memory Leak Tests", () => {
 				expect(result.errors).toHaveLength(0);
 			}
 
-			if (global.gc) global.gc();
+			forceGc();
 			const afterMB = getHeapMB();
 
 			checkMemoryGrowth("1K engine create/dispose", beforeMB, afterMB, 1000, 200);
@@ -189,7 +206,7 @@ describe("Memory Leak Tests", () => {
 				return;
 			}
 
-			if (global.gc) global.gc();
+			forceGc();
 			const beforeMB = getHeapMB();
 
 			for (let i = 0; i < 1000; i++) {
@@ -201,7 +218,7 @@ describe("Memory Leak Tests", () => {
 				evaluator.terminateWorker();
 			}
 
-			if (global.gc) global.gc();
+			forceGc();
 			const afterMB = getHeapMB();
 
 			checkMemoryGrowth("1K evaluator create/dispose", beforeMB, afterMB, 1000, 200);
@@ -215,14 +232,14 @@ describe("Memory Leak Tests", () => {
 
 			const engine = new ExpressionEngine();
 
-			if (global.gc) global.gc();
+			forceGc();
 			const beforeMB = getHeapMB();
 
 			for (let i = 0; i < 5000; i++) {
 				engine.evaluateLine(i + 1, `${i} + ${i * 2}`);
 			}
 
-			if (global.gc) global.gc();
+			forceGc();
 			const afterMB = getHeapMB();
 
 			// LineCache fills with 5K entries — expected growth
@@ -245,13 +262,13 @@ describe("Memory Leak Tests", () => {
 				engine.evaluateLine(i + 1, `${i} + ${i * 2}`);
 			}
 
-			if (global.gc) global.gc();
+			forceGc();
 			const beforeClearMB = getHeapMB();
 
 			// Clear the cache
 			engine.getLineCache().clear();
 
-			if (global.gc) global.gc();
+			forceGc();
 			const afterClearMB = getHeapMB();
 
 			// Cache should be empty
