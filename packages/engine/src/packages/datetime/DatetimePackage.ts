@@ -4,6 +4,8 @@ import { NowParselet } from "./parselets/NowParselet";
 import { NextLastParselet } from "./parselets/NextLastParselet";
 import { UntilSinceParselet } from "./parselets/UntilSinceParselet";
 import { WorkdaysInParselet } from "./parselets/WorkdaysInParselet";
+import { WorkdayOffsetParselet } from "./parselets/WorkdayOffsetParselet";
+import { WorkdaysBetweenParselet } from "./parselets/WorkdaysBetweenParselet";
 import { DateFieldQueryParselet } from "./parselets/DateFieldQueryParselet";
 import { DurationBetweenParselet } from "./parselets/DurationBetweenParselet";
 import { DayTypePredicateParselet } from "./parselets/DayTypePredicateParselet";
@@ -41,6 +43,16 @@ import { formatIso8601Local } from "./Iso8601";
  *   arithmetic, special-cased in `vm/VM.ts`'s ADD/SUB dispatch for the
  *   `workday`/`workdays` UNIT (see `lexer/units.ts`) since business-day
  *   math needs actual weekend-skipping, not a linear ms conversion.
+ * - `N working/business days after|from|before <date>`, the natural-language
+ *   spelling of the same offset (`5 working days after 20 Dec`,
+ *   `3 business days from today`). Fused as INFIX phrase tokens
+ *   (`WORKDAYS_AFTER`/`WORKDAYS_BEFORE`) since the count is the left operand;
+ *   emits `DATE_WORKDAY_OFFSET`, which walks the very same `addBusinessDays()`
+ *   as `<date> + N workdays`. See `WorkdayOffsetParselet.ts`.
+ * - `working/business days between <date> and <date>`, the COUNT of working
+ *   days in the inclusive window (`working days between 1 Jan and 31 Jan`), the
+ *   working-day sibling of `<unit> between` below. Emits
+ *   `DATE_WORKDAYS_BETWEEN`. See `WorkdaysBetweenParselet.ts`.
  * - `<amount>/workday x <duration>`, a Rate, exactly like `$99/week`
  *   already works, using `uom/UomConverter.ts`'s workday<->day shim so
  *   `getMeasure()`/`convertUnit()` treat "workday" as a Time-measure unit
@@ -59,8 +71,9 @@ import { formatIso8601Local } from "./Iso8601";
  *   leading `how many` is accepted for it and for `until`/`since`, see
  *   `BetweenUnitNormalizerRule.ts`.
  * - `<date> is a weekend` / `is a workday`, postfix predicates, see
- *   `DayTypePredicateParselet.ts`. Mon-Fri only, matching the workday
- *   scope decision below.
+ *   `DayTypePredicateParselet.ts`. Mon-Fri only: these answer the week's
+ *   SHAPE (is this a weekday), which the holiday calendar deliberately does
+ *   not touch, see the scope note below.
  * - `current timestamp` / `<date/time> to timestamp` / `<ISO8601 string
  *   or unix timestamp> to date`. See `CurrentTimestampParselet.ts` /
  *   `ToTimestampParselet.ts` / `ToDateParselet.ts` and
@@ -84,21 +97,47 @@ import { formatIso8601Local } from "./Iso8601";
  *   feature across two packages for a marginal "which package owns the
  *   converter-name list" tidiness gain.
  *
- * SCOPE DECISION (workdays, both the count and the date-arithmetic forms):
- * plain Mon-Fri business-day math, with NO public-holiday exclusion.
- * SoulverCore's own workday calculations auto-exclude public holidays via
- * a live-updating, region-configurable holiday database, picking which
- * holidays/region and keeping such a database current is real, separate
- * scope this pass deliberately does not take on (see `vm/VM.ts`'s
- * `addBusinessDays()` doc comment for the fuller version of this note,
- * matching this session's established pattern of documenting a scoped-down
- * simplification rather than silently pretending to support something it
- * doesn't, e.g. Finance's "no hardcoded tax rate" decision).
+ * SCOPE DECISION (holidays): the business-day WALK and COUNT (the offset forms,
+ * `between`, and `<date> + N workdays`) skip weekends always, and public
+ * holidays too when the host configures a calendar via `date.holidays` (see
+ * `constants/Configuration.ts` and `vm/HolidayCalendar.ts`). No calendar means
+ * weekends-only, the honest default: the engine excludes exactly the days it
+ * can prove are non-working. Picking a region's holidays and keeping them
+ * current is the host's to own, the same "bring your own data source" shape
+ * stocks and weather use, so this package never guesses a holiday the caller
+ * did not supply.
+ *
+ * Two workday features stay weekends-only by design, and say so: `workdays in
+ * <duration>` (a deterministic ratio with no anchor date, so no calendar to
+ * consult, see `WorkdaysInParselet.ts`) and the `is a weekend`/`is a workday`
+ * predicates (which report the week's Mon-Fri shape, a different question from
+ * "is this a working day here"). See `vm/VM.ts`'s `addBusinessDays()` for the
+ * walk's side of this.
  */
 export const DATETIME_PACKAGE: IEnginePackage = {
   name: "solve-datetime",
   phrases: {
     "workdays in": "WORKDAYS_IN",
+    // Business-day arithmetic in words. "after"/"from" count forward, "before"
+    // back; the count is the left operand, so these fuse as INFIX tokens (see
+    // WorkdayOffsetParselet). Both "working" and "business" days, singular and
+    // plural, so "1 working day after" and "5 business days from" both read.
+    "working days after": "WORKDAYS_AFTER",
+    "business days after": "WORKDAYS_AFTER",
+    "working day after": "WORKDAYS_AFTER",
+    "business day after": "WORKDAYS_AFTER",
+    "working days from": "WORKDAYS_AFTER",
+    "business days from": "WORKDAYS_AFTER",
+    "working day from": "WORKDAYS_AFTER",
+    "business day from": "WORKDAYS_AFTER",
+    "working days before": "WORKDAYS_BEFORE",
+    "business days before": "WORKDAYS_BEFORE",
+    "working day before": "WORKDAYS_BEFORE",
+    "business day before": "WORKDAYS_BEFORE",
+    // The count form (prefix). Fusing the whole "working days between" keeps
+    // the bare `days between` rule from claiming the "days" first.
+    "working days between": "WORKDAYS_BETWEEN",
+    "business days between": "WORKDAYS_BETWEEN",
     "day of the week on": "WEEKDAY_ON",
     "weekday on": "WEEKDAY_ON",
     "current timestamp": "CURRENT_TIMESTAMP",
@@ -146,6 +185,7 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     { tokenType: "UNTIL_UNIT", parselet: new UntilSinceParselet("until") },
     { tokenType: "SINCE_UNIT", parselet: new UntilSinceParselet("since") },
     { tokenType: "WORKDAYS_IN", parselet: new WorkdaysInParselet() },
+    { tokenType: "WORKDAYS_BETWEEN", parselet: new WorkdaysBetweenParselet() },
     { tokenType: "WEEKDAY_ON", parselet: new DateFieldQueryParselet(WEEKDAY_ON_FN_IDX, "on") },
     { tokenType: "WEEKDAY_IN", parselet: new DateFieldQueryParselet(WEEKDAY_ON_FN_IDX, "in") },
     { tokenType: "MONTH_ON", parselet: new DateFieldQueryParselet(MONTH_ON_FN_IDX, "on") },
@@ -157,6 +197,8 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     { tokenType: "DATETIME_LITERAL", parselet: new DateLiteralParselet() },
   ],
   infixParselets: [
+    { tokenType: "WORKDAYS_AFTER", parselet: new WorkdayOffsetParselet("forward") },
+    { tokenType: "WORKDAYS_BEFORE", parselet: new WorkdayOffsetParselet("backward") },
     { tokenType: "TO_DATE", parselet: new ToDateParselet() },
     { tokenType: "TO_TIMESTAMP", parselet: new ToTimestampParselet() },
     { tokenType: "IS_WEEKEND", parselet: new DayTypePredicateParselet(IS_WEEKEND_FN_IDX) },

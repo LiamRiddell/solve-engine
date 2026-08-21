@@ -85,6 +85,12 @@ export const CoreErrorCodes = {
   FUNCTION_CALL_LIMIT_EXCEEDED: "FUNCTION_CALL_LIMIT_EXCEEDED",
   /** A `<date> + N workdays` offset outside `date.maxOffsetYears`/`minOffsetYears`. Workdays are the one date offset that walks the calendar a day at a time, so the one whose cost is the offset; every other one moves a Date field once. Recoverable. */
   DATE_OFFSET_LIMIT_EXCEEDED: "DATE_OFFSET_LIMIT_EXCEEDED",
+  /** The anchor of `N working days after/before/from <expr>` was not a date (e.g. `5 working days after 3`). The grammar guarantees the count is a number, so this only fires on the anchor. Emitted as a recoverable Error value, not thrown, matching the datetime package's other type guards. See `vm/VM.ts`'s `DATE_WORKDAY_OFFSET` case. */
+  WORKDAY_OFFSET_EXPECTED_DATE: "WORKDAY_OFFSET_EXPECTED_DATE",
+  /** An endpoint of `working days between <expr> and <expr>` was not a date. Recoverable Error value. See `vm/VM.ts`'s `DATE_WORKDAYS_BETWEEN` case. */
+  WORKDAYS_BETWEEN_EXPECTED_DATES: "WORKDAYS_BETWEEN_EXPECTED_DATES",
+  /** The two endpoints of `working days between <expr> and <expr>` are further apart than `date.maxOffsetYears`/`minOffsetYears` allow the count's calendar walk to run. Recoverable Error value, the between-count's equivalent of `DATE_OFFSET_LIMIT_EXCEEDED`. See `vm/VM.ts`'s `DATE_WORKDAYS_BETWEEN` case. */
+  WORKDAYS_BETWEEN_RANGE_TOO_LARGE: "WORKDAYS_BETWEEN_RANGE_TOO_LARGE",
   /** A `<<`/`>>` with a bigint operand whose exact result would pass `MAX_EXACT_SHIFT_BITS`, whichever operand is the bigint. Both spellings refuse as of 1.0.0: a bigint on the left used to fall through to `x * 2^n` in doubles and report a 19,870-digit integer as Infinity. See `vm/VM.ts`'s `bigIntShift()`. Recoverable. */
   BIGINT_SHIFT_LIMIT_EXCEEDED: "BIGINT_SHIFT_LIMIT_EXCEEDED",
   /** The same ceiling for `^`, the operator it was written for: `2n ^ 100000` asks for the same 100,001-bit integer `1n << 100000` does, so the two spellings answer the same way. Also new in 1.0.0, and for the same reason: this used to fall through to the double path and answer Infinity. A fractional or negative exponent (`4n ^ 0.5`, `2n ^ -1`) has no exact answer to bound and still uses the double path. See `vm/VM.ts`'s `MAX_EXACT_POW_BITS`. Recoverable. */
