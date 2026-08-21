@@ -19,6 +19,33 @@ network and resolves asynchronously. See
 | `10 USD in GBP` | converted at the current rate |
 | `100 euros to dollars` | the same, in words |
 
+## Exact decimals
+
+Money is exact. A price is a decimal, not a binary fraction, so amounts in the
+same currency add, subtract, multiply and divide without the rounding error a
+floating-point number carries.
+
+```solve
+$0.10 + $0.20 // $0.30
+$19.99 * 3 // $59.97
+$100 - $99.99 // $0.01
+$10 / 3 // $3.33
+$0.70 * 1.10 // $0.77
+```
+
+A half-cent rounds away from zero, the way a till rounds it, rather than the way
+`toFixed` rounds the nearest double sitting just below it.
+
+```solve
+$1.005 // $1.01
+$2.675 // $2.68
+```
+
+Exactness holds wherever a currency is involved, a currency against a plain
+number included. A bare decimal on its own is an ordinary floating-point number,
+and a conversion between two currencies goes through a live rate, which is not
+exact.
+
 ## Tax
 
 ```solve

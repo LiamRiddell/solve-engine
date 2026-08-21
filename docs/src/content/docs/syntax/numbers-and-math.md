@@ -52,6 +52,14 @@ Most operators have a word form, which is often how a line reads more naturally.
 3M // 3,000,000
 ```
 
+## Decimals
+
+A number written with a decimal point is an ordinary IEEE floating-point value,
+so `0.1 + 0.2` is the usual `0.30000000000000004` and transcendental work stays
+in floating point where it belongs. Money is the exception: amounts in a
+currency are held as exact decimals, so `$0.10 + $0.20` is `$0.30`. See
+[money and finance](/syntax/money-and-finance/) for what that covers.
+
 ## Functions
 
 ```solve
