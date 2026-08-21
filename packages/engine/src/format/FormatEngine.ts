@@ -1,4 +1,5 @@
 import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData } from "@solve-js/vm/Value";
+import { decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
 import { autoFormatIntegerOrFloat } from "@solve-js/utilities/Number";
 import { FormattingSettings, DEFAULT_FORMATTING_SETTINGS } from "./FormattingSettings";
@@ -150,7 +151,7 @@ function formatMsDuration(ms: number): string {
   return `${sign}${hours}:${mm}:${ss}`;
 }
 
-function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings): string {
+function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings, exact?: DecimalData): string {
   if (unit === "ms") return `= ${formatMsDuration(value)}`;
 
   const dp = settings.unitOfMeasurementResult.decimalPlaces;
@@ -177,10 +178,16 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   // through to the unchanged "amount CODE" format below.
   const currencyDisplay = unit ? CURRENCY_DISPLAY[unit.toUpperCase()] : undefined;
   if (currencyDisplay) {
+    // An exact money amount rounds from its decimal, not from the double: a
+    // half-cent like "$1.005" reads as "$1.01" here, where "(1.005).toFixed(2)"
+    // answers "1.00" because the double it is handed already sits below the
+    // value the user typed. Amounts with no exact decimal (a currency
+    // conversion, whose rate is a double) keep the toFixed rendering above.
+    const moneyText = exact ? decimalToFixed(exact, dp) : formatted;
     const sep = currencyDisplay.spaced ? " " : "";
     const withSymbol = currencyDisplay.position === "prefix"
-      ? `${currencyDisplay.symbol}${sep}${formatted}`
-      : `${formatted}${sep}${currencyDisplay.symbol}`;
+      ? `${currencyDisplay.symbol}${sep}${moneyText}`
+      : `${moneyText}${sep}${currencyDisplay.symbol}`;
     return `= ${withSymbol}`;
   }
 
@@ -194,7 +201,13 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   // implementation needs a hand-authored name per unit plus pluralization and
   // per-locale spelling (metre against meter), which is a feature rather than
   // the repair of a dead ternary.
-  return `= ${formatted} ${unit || ""}`.trim();
+  //
+  // An exact currency with no symbol in the display table above (one of the
+  // less common ISO codes) still rounds from its decimal here, so "1.005 UYW"
+  // reads the same way "$1.005" does. Non-currency Uoms never carry an exact,
+  // so this leaves "1.50 kg" exactly as it was.
+  const genericText = exact ? decimalToFixed(exact, dp) : formatted;
+  return `= ${genericText} ${unit || ""}`.trim();
 }
 
 function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings): string {
@@ -283,7 +296,7 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
     case ValueType.Datetime:
       return formatDatetime(value.value as number, locale);
     case ValueType.Uom:
-      return formatUom(value.value as number, value.unit, locale, us);
+      return formatUom(value.value as number, value.unit, locale, us, value.exact);
     case ValueType.Matrix:
       return formatMatrix(value.value as MatrixData, locale, us);
     case ValueType.Range: {
