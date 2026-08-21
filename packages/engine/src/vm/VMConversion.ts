@@ -1,9 +1,9 @@
-import { Value, ValueType, numberValue, bigIntValue, uomValue, uomValueExact, matrixValue, errorValue, symbolicValue, type MatrixData, type MatrixEntry } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueRational, bigIntValue, uomValue, uomValueExact, matrixValue, errorValue, symbolicValue, type MatrixData, type MatrixEntry } from "@solve-js/vm/Value";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { decimalAdd, decimalSubtract, decimalMultiply, decimalDivide, decimalIsZero, decimalToNumber, decimalFromNumberIfExact, decimalCompare, type DecimalData } from "@solve-js/decimal";
 import { sameShape } from "@solve-js/vm/MatrixOps";
-import { type SymbolicNode, simplifySymbolic } from "@solve-js/symbolic";
+import { type SymbolicNode, type Rational, simplifySymbolic, rational, rationalAdd, rationalSub, rationalMul, rationalDiv, rationalToNumber, rationalCompare, isRationalZero } from "@solve-js/symbolic";
 import { valueToSymbolic } from "@solve-js/vm/SymbolicOps";
 import { ErrorFactory, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
 
@@ -426,6 +426,86 @@ function exactMoneyOp(l: Value, r: Value, op: "add" | "sub" | "mul" | "div"): Va
             break;
     }
     return uomValueExact(decimalToNumber(result), unit, result);
+}
+
+/**
+ * The exact rational an operand contributes to a fraction operation, or null.
+ *
+ * A value that already carries a `rational` sidecar hands it over. A plain
+ * whole number (the "14" in "2/7 * 14", the "3" in "1/3 * 3") has the exact
+ * rational n/1. Everything else has none: a non-integer double with no sidecar
+ * (a decimal literal, a `sqrt` result) returns null so the operation drops to
+ * the float path, and a bigint returns null so "100n / 3n" stays exact INTEGER
+ * division (33n) rather than becoming the fraction 100/3. NaN and the
+ * infinities fail the integer test and return null with everything else.
+ */
+function operandRational(v: Value): Rational | null {
+    if (v.rational !== undefined) return v.rational;
+    if ((v.type === ValueType.Number || v.type === ValueType.Hex) && typeof v.value === "number" && Number.isInteger(v.value)) {
+        return rational(BigInt(v.value));
+    }
+    return null;
+}
+
+/**
+ * The exact rational result of a fraction operation, or null when it has none.
+ *
+ * DIV is the producer: "1/3" is two whole numbers, so both operands have a
+ * rational image and the quotient 1/3 seeds the sidecar the rest of the system
+ * propagates. ADD/SUB/MUL only ever preserve, their call sites reach here only
+ * when a `rational` sidecar already rides on an operand, so plain integer sums
+ * like "1e16 + 1 - 1e16" never grow one and stay the doubles they must be.
+ *
+ * The double is recomputed from the reduced result rather than from the operand
+ * doubles, which is the whole point: "1/6" six times over is exactly 1, not the
+ * 0.9999999999999999 the doubles accumulate to.
+ *
+ * Returns null (dropping to the float path) rather than throwing when a
+ * fraction cannot stay exact: a zero divisor keeps "1/0" as the double Infinity
+ * the float path gives, and a value past the rational magnitude ceiling keeps
+ * the doubles' answer rather than surfacing a fraction-overflow error for
+ * ordinary arithmetic.
+ */
+export function exactRationalOp(l: Value, r: Value, op: "add" | "sub" | "mul" | "div"): Value | null {
+    const lr = operandRational(l);
+    if (lr === null) return null;
+    const rr = operandRational(r);
+    if (rr === null) return null;
+    if (op === "div" && isRationalZero(rr)) return null;
+    let result: Rational;
+    try {
+        switch (op) {
+            case "add": result = rationalAdd(lr, rr); break;
+            case "sub": result = rationalSub(lr, rr); break;
+            case "mul": result = rationalMul(lr, rr); break;
+            case "div": result = rationalDiv(lr, rr); break;
+        }
+    } catch {
+        // Past RATIONAL_MAX_BITS the rational ops throw. The float answer is
+        // always available and always valid, so fall back to it rather than
+        // fail a line that only happened to build a very large fraction.
+        return null;
+    }
+    return numberValueRational(rationalToNumber(result), result);
+}
+
+/**
+ * Three-way comparison of two operands as exact fractions, or null.
+ *
+ * Mirrors {@link compareBigIntOperands}: when a rational rides on either side
+ * the comparison is decided on the fractions rather than on whichever doubles
+ * they rounded to, so "1/49 * 49 == 1" is true and two distinct fractions that
+ * share a nearest double still compare unequal. Returns null when either side
+ * has no rational image, leaving the caller's ordinary double comparison in
+ * place. The call sites gate on a rational actually being present first, so a
+ * plain "1 < 2" never reaches here.
+ */
+export function compareRationalOperands(l: Value, r: Value): -1 | 0 | 1 | null {
+    const lr = operandRational(l);
+    if (lr === null) return null;
+    const rr = operandRational(r);
+    if (rr === null) return null;
+    return rationalCompare(lr, rr);
 }
 
 /**
