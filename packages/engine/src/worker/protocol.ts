@@ -14,6 +14,7 @@ import type { EngineConfig } from "@solve-js/constants/Configuration";
 import type { UnifiedParsingOptions } from "@solve-js/types/ParsingResult";
 import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
 import type { SerializedEngineError } from "@solve-js/errors/WorkerError";
+import type { SerializedValue } from "./dto";
 
 /** The core evaluate methods the harness proxies. */
 export type WorkerMethod = "parseDocument" | "evaluateLines" | "evaluateExpression";
@@ -86,5 +87,50 @@ export interface ErrorMessage {
 	error: SerializedEngineError;
 }
 
+/**
+ * One line whose result changed after a later async resolution settled, carried
+ * as its freshly re-evaluated {@link SerializedValue}. The value, not the line
+ * number alone: the engine's own event names only the affected lines and leaves
+ * the resolved value in its cache, so the worker re-reads each line before it
+ * posts, and the main side receives a value it can render without a round-trip.
+ */
+export interface AsyncResolvedLine {
+	lineNumber: number;
+	value: SerializedValue;
+}
+
+/**
+ * A later async resolution settled, and these lines now carry live data.
+ *
+ * Unlike a {@link ResultMessage} this has no `id`: a resolution is not the
+ * answer to one request, it arrives whenever the live value lands, so it is a
+ * broadcast the main side routes to its subscribers rather than to a pending
+ * promise. `lines` is a batch because the engine collapses every resolution that
+ * settles in one tick into a single update.
+ */
+export interface AsyncUpdateMessage {
+	kind: "async-update";
+	lines: AsyncResolvedLine[];
+}
+
+/**
+ * A later async resolution failed. Carries the query and package that failed,
+ * plus the structured error flattened the same way a {@link ErrorMessage} is, so
+ * the main side reads the same `code`/`category`/`message` it would in-process.
+ * Like {@link AsyncUpdateMessage} it has no `id`: a failed resolution is a
+ * broadcast, not the rejection of one request's promise.
+ */
+export interface AsyncErrorMessage {
+	kind: "async-error";
+	queryKey: string;
+	packageId: string;
+	error: SerializedEngineError;
+}
+
 /** Everything the worker sends back. */
-export type WorkerToMainMessage = ReadyMessage | ResultMessage | ErrorMessage;
+export type WorkerToMainMessage =
+	| ReadyMessage
+	| ResultMessage
+	| ErrorMessage
+	| AsyncUpdateMessage
+	| AsyncErrorMessage;
