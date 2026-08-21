@@ -211,6 +211,18 @@ export class ExpressionEngine {
     private documentModel: DocumentModel | null = null;
 
     /**
+     * Batch cross-line source, set only for the duration of a
+     * `parseDocument`/`evaluateLines` pass (see {@link processScanResults}).
+     * The incremental path uses {@link documentModel}; the batch path has no
+     * such model, so cross-line closures read earlier lines from the scan and
+     * the results array the pass is already building. Both are references to
+     * arrays that exist regardless, so a document that uses no cross-line
+     * feature pays nothing: the closures are simply never called.
+     */
+    private batchScanResults: ScanLineResult[] | null = null;
+    private batchParsedLines: ParsedLine[] | null = null;
+
+    /**
      * Called once by `ThreeTierEvaluator`'s constructor. Not part of the
      * public evaluate-a-document contract, purely internal wiring so
      * {@link makeLineContext} has something to read from.
@@ -229,16 +241,28 @@ export class ExpressionEngine {
      */
     private makeLineContext(lineNumber: number): LineExecutionContext {
         const doc = this.documentModel;
+        const scan = doc ? null : this.batchScanResults;
+        const parsed = doc ? null : this.batchParsedLines;
         return {
             lineIndex: lineNumber,
-            getLineResult: doc ? (n: number) => doc.getLineAt(n)?.result ?? undefined : undefined,
+            getLineResult: doc
+                ? (n: number) => doc.getLineAt(n)?.result ?? undefined
+                : parsed
+                  ? (n: number) => parsed[n - 1]?.result ?? undefined
+                  : undefined,
             isLineBoundary: doc
                 ? (n: number) => {
                       const state = doc.getLineAt(n);
                       if (!state) return true; // out of range counts as a boundary — nothing to aggregate past it
                       return state.isEmpty || /^\s*#/.test(state.text);
                   }
-                : undefined,
+                : scan
+                  ? (n: number) => {
+                        const sr = scan[n - 1];
+                        if (!sr) return true;
+                        return sr.classification.skip || /^\s*#/.test(sr.text);
+                    }
+                  : undefined,
         };
     }
 
@@ -1019,6 +1043,22 @@ export class ExpressionEngine {
     private processScanResults(scanResults: ScanLineResult[]): ParsedLine[] {
         const result: ParsedLine[] = [];
 
+        // Cross-line features (line references, table columns) read earlier
+        // lines' text and results. The incremental `ThreeTierEvaluator` path
+        // reads them from `this.documentModel`; the batch path has none, so it
+        // reported a no-document error for `total above`, `line N` and
+        // `sum of column`. Point the batch cross-line source at the scan and
+        // the results array this pass is already building, for the length of
+        // the pass, and restore whatever a host had set afterwards. This is
+        // reference assignment, not allocation, so a document with no
+        // cross-line feature pays nothing (an earlier version built a whole
+        // `DocumentModel` per pass and grew the heap measurably).
+        const previousBatchScanResults = this.batchScanResults;
+        const previousBatchParsedLines = this.batchParsedLines;
+        this.batchScanResults = scanResults;
+        this.batchParsedLines = result;
+
+        try {
         for (const scanResult of scanResults) {
             const lineText = scanResult.text;
             const lineNumber = scanResult.lineNumber;
@@ -1084,7 +1124,14 @@ export class ExpressionEngine {
                 }
             }
 
+            // A later line referencing this one reads its result straight from
+            // the `result` array above, which already holds it, so nothing more
+            // needs recording here.
             result.push(parsedLine);
+        }
+        } finally {
+            this.batchScanResults = previousBatchScanResults;
+            this.batchParsedLines = previousBatchParsedLines;
         }
 
         return result;

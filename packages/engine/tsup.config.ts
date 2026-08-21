@@ -19,6 +19,7 @@ export default defineConfig({
 		uom: "src/uom/index.ts",
 		services: "src/services/index.ts",
 		worker: "src/worker/index.ts",
+		testing: "src/testing/index.ts",
 	},
 	format: ["esm", "cjs"],
 	/*

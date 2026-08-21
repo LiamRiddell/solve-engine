@@ -65,11 +65,20 @@ where you are and what you are buying.
 
 ## Interest and inflation
 
-| Expression | Result |
-| --- | --- |
-| `interest on 1000 at 5% over 3 years` | simple interest |
-| `monthly repayment on 200000 at 4% over 25 years` | a mortgage payment |
-| `what is $100 from 1990` | adjusted using a bundled price index |
+Interest compounds annually. The principal comes first, then the term, then the
+rate, and a mortgage repayment reads the same way.
 
-The inflation figures come from a bundled consumer price index and are an
-approximation, not a substitute for a real financial calculation.
+```solve
+interest on 1000 over 3 years at 5% // 157.63
+monthly repayment on 200000 over 25 years at 4% // 1,055.67
+```
+
+Inflation adjusts an amount into another year's money, from a bundled consumer
+price index.
+
+```solve
+what is $100 from 1990 // $254.55
+```
+
+The inflation figures are an approximation, not a substitute for a real
+financial calculation.

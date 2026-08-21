@@ -20,6 +20,7 @@ Stable. Changes follow semantic versioning.
 | `solve-engine/packages` | Built-in packages and their configuration |
 | `solve-engine/constants` | Locales and configuration defaults |
 | `solve-engine/worker` | Off-main-thread evaluation: the worker proxy, transports and result DTO |
+| `solve-engine/testing` | A test kit for package authors: `createTestEngine`, `expectExpression`, `expectPackage` |
 
 ## Advanced
 
