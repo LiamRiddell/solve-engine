@@ -21,6 +21,7 @@ export {
 	createStocksPackage,
 	createKnowledgePackage,
 	LINES_PACKAGE,
+	TABLES_PACKAGE,
 	BUILTIN_PACKAGES,
 } from "./builtins";
 
