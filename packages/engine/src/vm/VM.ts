@@ -1,5 +1,5 @@
 import { OpCode } from "@solve-js/parser/OpCode";
-import { Value, ValueType, numberValue, numberValueExact, numberValueRational, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData } from "@solve-js/vm/Value";
 import { decimalFromLiteral, decimalFromNumberIfExact, decimalNegate, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
@@ -14,7 +14,7 @@ import { builtinArityError } from "@solve-js/vm/VMBuiltinArity";
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, compareRationalOperands } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, compareRationalOperands, uncertainOp } from "@solve-js/vm/VMConversion";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
@@ -1712,6 +1712,15 @@ export function executeBytecode(
           // (5 kg to m)` answered today. See faultedOperand().
           const addFault = faultedOperand(l, r);
           if (addFault) { stack.push(addFault); break; }
+          // A carried uncertainty propagates in quadrature before anything else,
+          // so "(10 +/- 1) + (20 +/- 2)" is "30 ± 2.24". Gated on a sidecar
+          // being present, and checked ahead of the rational branch below so an
+          // uncertain operand is never folded into an exact fraction that would
+          // silently drop its tolerance. See uncertainOp().
+          if (l.uncertainty !== undefined || r.uncertainty !== undefined) {
+            const uncAdd = uncertainOp(l, r, "add");
+            if (uncAdd) { stack.push(uncAdd); break; }
+          }
           // Fraction arithmetic stays exact when a rational already rides on an
           // operand: "1/3 + 1/3 + 1/3" is exactly 1. The sidecar check gates it
           // so this only ever PRESERVES a fraction, a plain integer sum never
@@ -1773,6 +1782,13 @@ export function executeBytecode(
           // Same reason as ADD above.
           const subFault = faultedOperand(l, r);
           if (subFault) { stack.push(subFault); break; }
+          // Uncertainty propagates before the fraction path, same reasoning as
+          // ADD: "(10 +/- 1) - (20 +/- 2)" is "-10 ± 2.24" (the spread of a
+          // difference combines in quadrature exactly as a sum's does).
+          if (l.uncertainty !== undefined || r.uncertainty !== undefined) {
+            const uncSub = uncertainOp(l, r, "sub");
+            if (uncSub) { stack.push(uncSub); break; }
+          }
           // Preserve exact fractions, as ADD does above: "5/6 - 1/6 - 1/6 - 1/6
           // - 1/6 - 1/6" is exactly 0, not the 1.6e-16 the doubles drift to.
           if (l.rational !== undefined || r.rational !== undefined) {
@@ -1824,6 +1840,15 @@ export function executeBytecode(
         }
         case OpCode.MUL: {
           const r = safePop(stack), l = safePop(stack);
+          // Uncertainty first, so "(12.3 +/- 0.5) * 4" is "49.2 ± 2.0": a scalar
+          // multiply scales the spread by |k|, which the general quadrature rule
+          // gives when the plain operand is read as uncertainty 0. uncertainOp
+          // declines for a faulted or non-Number operand, so those keep their
+          // own paths below. See uncertainOp().
+          if (l.uncertainty !== undefined || r.uncertainty !== undefined) {
+            const uncMul = uncertainOp(l, r, "mul");
+            if (uncMul) { stack.push(uncMul); break; }
+          }
           // Preserve exact fractions before the double fast path: "2/7 * 14" is
           // exactly 4 and "1/49 * 49" exactly 1. Gated on a rational already
           // being present, so a plain "2 * 3" pays only the two sidecar checks.
@@ -1868,6 +1893,14 @@ export function executeBytecode(
         }
         case OpCode.DIV: {
           const r = safePop(stack), l = safePop(stack);
+          // Uncertainty first, ahead of both the Uom ratio and the exact-fraction
+          // paths below, so a carried tolerance is never dropped by either.
+          // uncertainOp declines unless both operands are plain Numbers, so
+          // "$10 / 2" and "1/3" are untouched. See uncertainOp().
+          if (l.uncertainty !== undefined || r.uncertainty !== undefined) {
+            const uncDiv = uncertainOp(l, r, "div");
+            if (uncDiv) { stack.push(uncDiv); break; }
+          }
           if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
             const { lv, rv, sameMeasure } = unifyUom(l, r);
             if (sameMeasure) {
@@ -2029,6 +2062,21 @@ export function executeBytecode(
           // money's exact decimal above.
           else if (v.type === ValueType.Number && v.rational !== undefined) stack.push(numberValueRational(v.toNumber(), v.rational));
           else stack.push(numberValue(v.toNumber()));
+          break;
+        }
+        case OpCode.MAKE_UNCERTAIN: {
+          // `center ± spread`: the parselet pushed the center first, then the
+          // spread, so the spread pops first. A faulted operand propagates
+          // rather than being read as a zero center or spread.
+          const spread = safePop(stack), center = safePop(stack);
+          const uncFault = faultedOperand(center, spread);
+          if (uncFault) { stack.push(uncFault); break; }
+          // The center is the measured value, the spread its one-sigma tolerance.
+          // The spread is taken as a magnitude, so "5 +/- -2" reads the same as
+          // "5 +/- 2". Only a plain-number center carries an uncertainty (a unit
+          // or other typed center falls back to its bare magnitude, units with
+          // uncertainty are out of scope for this slice).
+          stack.push(numberValueUncertain(center.toNumber(), Math.abs(spread.toNumber())));
           break;
         }
 
