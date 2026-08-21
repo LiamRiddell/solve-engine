@@ -125,6 +125,8 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	IS: "keyword",
 	PCT_ON: "operator",
 	PCT_OFF: "operator",
+	PCT_UP: "operator",
+	PCT_DOWN: "operator",
 	OF_WHAT: "keyword",
 	OFF_WHAT: "keyword",
 	ON_WHAT: "keyword",
