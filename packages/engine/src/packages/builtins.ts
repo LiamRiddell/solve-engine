@@ -22,7 +22,7 @@ import { TIME_PACKAGE } from "./time";
 import { DICE_PACKAGE } from "./dice";
 import { VARIABLES_PACKAGE } from "./variables";
 import { UOM_PACKAGE } from "./uom";
-import { CURRENCY_PACKAGE } from "./currency";
+import { CURRENCY_PACKAGE, createCurrencyPackage } from "./currency";
 import { VECTOR_PACKAGE } from "./vector";
 import { MATRIX_PACKAGE } from "./matrix";
 import { MAPREDUCE_PACKAGE } from "./mapreduce";
@@ -60,6 +60,7 @@ export {
   UNCERTAINTY_PACKAGE,
   WEATHER_PACKAGE,
   createStocksPackage,
+  createCurrencyPackage,
   createKnowledgePackage,
   LINES_PACKAGE,
 };
