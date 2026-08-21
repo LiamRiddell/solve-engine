@@ -103,3 +103,12 @@ add their own targets.
 0.5 as % // 50.00%
 0.75 as fraction // 3/4
 ```
+
+`as fraction` is exact for a value that was written as a fraction: the result is
+reduced to lowest terms rather than approximated, so a computed fraction reads
+back as itself. See [fractions](/syntax/numbers-and-math/#fractions).
+
+```solve
+10/4 as fraction // 5/2
+(1/3 + 1/7) as fraction // 10/21
+```
