@@ -298,3 +298,111 @@ export function getBestUnit(value: number, unit: string): { value: number; unit:
     return { value, unit: u };
   }
 }
+
+// ── Rate and derived-unit conversion ───────────────────────────────────────
+//
+// A rate value carries a compound unit spelled "numerator/denominator" (e.g.
+// "km/h", "m/s"), see vm/Value.ts's rateValue(). Plain convertUnit() cannot
+// touch one, because neither half is the whole unit and getMeasure("km/h") is
+// undefined. This section converts a rate to another rate, and bridges a rate
+// to the single-token speed spellings (mph, kph, mps, ...) that ExtendedUnits.ts
+// already carries, so "100 km/h in mph" and "60 mph in km/h" resolve instead of
+// reporting incompatible units.
+
+/** A rate reduced to a numerator unit over a denominator unit. */
+interface RateForm {
+  /** Magnitude, scaled so `value numerator/denominator` is the physical quantity. */
+  value: number;
+  /** Numerator unit spelling, or `""` for a countless rate such as `30/week`. */
+  numerator: string;
+  /** Denominator unit spelling. */
+  denominator: string;
+}
+
+/**
+ * Express `value unit` as a numerator/denominator rate, or `null` when `unit`
+ * is neither a compound rate spelling nor a single-token speed alias.
+ *
+ * A speed alias (mph, kph, ...) is one unit standing for a length/time rate, so
+ * it expands to the base pair `m`/`s` with its value scaled by the alias's
+ * metres-per-second factor. That collapses both inputs to one shape, so a
+ * single routine handles rate/rate and rate/alias without a second code path.
+ */
+function expandUnitToRate(value: number, unit: string): RateForm | null {
+  const slash = unit.indexOf("/");
+  if (slash >= 0) {
+    return { value, numerator: unit.slice(0, slash), denominator: unit.slice(slash + 1) };
+  }
+  const ext = EXTENDED_UNITS[unit];
+  if (ext !== undefined && ext.measure === "speed") {
+    // 1 alias == ext.toBase m/s, so `value alias` is `value * toBase` m/s.
+    return { value: value * ext.toBase, numerator: "m", denominator: "s" };
+  }
+  return null;
+}
+
+/**
+ * The factor that turns one `from` into `to` along a single rate axis, or
+ * `null` when the two cannot line up.
+ *
+ * Same spelling needs no conversion. A countless axis (`""`) only lines up with
+ * another countless one, never with a real unit. Otherwise both sides must name
+ * the same measure, which is what keeps a length numerator from pairing with a
+ * mass one.
+ */
+function rateAxisFactor(from: string, to: string): number | null {
+  if (from === to) return 1;
+  if (from === "" || to === "") return null;
+  const fromMeasure = getMeasure(from);
+  const toMeasure = getMeasure(to);
+  if (fromMeasure === undefined || toMeasure === undefined || fromMeasure !== toMeasure) {
+    return null;
+  }
+  return convertUnit(1, from, to);
+}
+
+/**
+ * Convert `value` from a rate/speed unit `from` to a rate/speed unit `to`,
+ * returning the converted magnitude, or `null` when the pair is not
+ * rate-convertible (so the caller falls back to its own incompatible-units
+ * handling).
+ *
+ * Handles rate to rate (`10 m/s in km/h`), rate to speed alias
+ * (`100 km/h in mph`) and speed alias to rate (`60 mph in km/h`). Plain
+ * same-measure pairs (`kph in mph`, `km in miles`) never reach here, they are
+ * resolved by {@link convertUnit} first.
+ *
+ * The rule is the ordinary one for a quotient of quantities: convert the
+ * numerator and the denominator each on their own, so `A/B -> C/D` scales by
+ * `(A->C) / (B->D)`.
+ */
+export function convertRate(value: number, from: string, to: string): number | null {
+  const source = expandUnitToRate(value, from);
+  if (source === null) return null;
+
+  // The target is either a rate spelling or a single-token speed alias. An
+  // alias expands to the base m/s pair, and `targetScale` is what the base-form
+  // magnitude is divided by to read out in the alias itself.
+  let targetNumerator: string;
+  let targetDenominator: string;
+  let targetScale: number;
+  const slash = to.indexOf("/");
+  if (slash >= 0) {
+    targetNumerator = to.slice(0, slash);
+    targetDenominator = to.slice(slash + 1);
+    targetScale = 1;
+  } else {
+    const ext = EXTENDED_UNITS[to];
+    if (ext === undefined || ext.measure !== "speed") return null;
+    targetNumerator = "m";
+    targetDenominator = "s";
+    targetScale = ext.toBase;
+  }
+
+  const numeratorFactor = rateAxisFactor(source.numerator, targetNumerator);
+  if (numeratorFactor === null) return null;
+  const denominatorFactor = rateAxisFactor(source.denominator, targetDenominator);
+  if (denominatorFactor === null) return null;
+
+  return (source.value * numeratorFactor) / denominatorFactor / targetScale;
+}

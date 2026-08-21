@@ -34,8 +34,16 @@ export class UomLiteralParselet implements InfixParselet {
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(unit);
 
+    // Swallow a trailing `to`/`in` inline ONLY when this unit literal is not the
+    // right operand of a tighter operator. As the RHS of `*` or `/`, the `in` in
+    // `120 km / 2 hours in kph` binds looser than the `/` and belongs to the
+    // whole quotient, so it is left for the outer conversion parselet (IN, bound
+    // at 35) rather than pulled onto `2 hours` here. See the parser's
+    // infixMinBindingPower doc comment.
+    const boundInsideProduct = parser.infixMinBindingPower >= BindingPower.Product;
+
     // Check if the next token is "to" or "in"
-    if (parser.peek()?.type === "TO" || parser.peek()?.type === "IN") {
+    if (!boundInsideProduct && (parser.peek()?.type === "TO" || parser.peek()?.type === "IN")) {
       parser.consume(); // consume TO or IN
       const targetToken = parser.peek();
       // Accept UNIT or IN (for cases like "3 ft in in" where

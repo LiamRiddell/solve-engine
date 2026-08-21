@@ -4,7 +4,7 @@ import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType } fro
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { rowMajorToColumnMajor, matrixMultiply, matrixPower, matrixCompare, matIndex, matAt, inBounds, collectionToValues, matrixEntryToValue } from "@solve-js/vm/MatrixOps";
 import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/vm/OpRegistry";
-import { convertUnit, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit } from "@solve-js/uom/UomConverter";
+import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
@@ -2631,7 +2631,16 @@ export function executeBytecode(
               stack.push(errorValue("CURRENCY_RATE_UNAVAILABLE", `No exchange rate available for ${fromUnit} to ${toUnit}`));
             }
           } else {
-            stack.push(incompatibleConversionError(fromUnit, toUnit));
+            // A rate or speed spelling ("km/h", "m/s", "mph") has no single
+            // measure, so the checks above cannot see it. "100 km/h in mph"
+            // and "10 m/s in km/h" reach conversion here, not through
+            // convertUnit(). A null means the pair really is incompatible.
+            const rate = convertRate(val, fromUnit, toUnit);
+            if (rate !== null) {
+              stack.push(uomValue(rate, toUnit));
+            } else {
+              stack.push(incompatibleConversionError(fromUnit, toUnit));
+            }
           }
           break;
         }
@@ -2680,7 +2689,14 @@ export function executeBytecode(
                 stack.push(errorValue("CURRENCY_RATE_UNAVAILABLE", `No exchange rate available for ${fromUnit} to ${toUnit}`));
               }
             } else {
-              stack.push(incompatibleConversionError(fromUnit, toUnit));
+              // Rate or speed conversion, "(120 km / 2 hours) in kph". See the
+              // matching branch in UOM_CONVERT_TO above.
+              const rate = convertRate(val, fromUnit, toUnit);
+              if (rate !== null) {
+                stack.push(uomValue(rate, toUnit));
+              } else {
+                stack.push(incompatibleConversionError(fromUnit, toUnit));
+              }
             }
           } else {
             stack.push(uomValue(left.toNumber(), toUnit));
