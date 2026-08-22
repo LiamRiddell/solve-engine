@@ -14,6 +14,7 @@
 import type { EngineConfig } from "@solve-js/constants/Configuration";
 import type { UnifiedParsingOptions } from "@solve-js/types/ParsingResult";
 import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
+import type { EngineError } from "@solve-js/errors";
 import {
 	deserializeEngineError,
 	workerCancelledError,
@@ -60,6 +61,28 @@ export interface WorkerCallOptions {
 }
 
 /**
+ * One line whose result changed after a live value resolved worker-side, carried
+ * as its freshly re-evaluated {@link SerializedValue}. The value the host renders
+ * against `lineNumber`, recovered worker-side so the main thread needs no further
+ * round-trip to display it.
+ */
+export interface WorkerAsyncUpdate {
+	lineNumber: number;
+	value: SerializedValue;
+}
+
+/**
+ * A live-data resolution that failed worker-side. `error` is the same structured
+ * {@link EngineError} an in-process resolver failure would surface, rebuilt from
+ * its transported form, so a host branches on `code`/`category` as it always has.
+ */
+export interface WorkerAsyncError {
+	queryKey: string;
+	packageId: string;
+	error: EngineError;
+}
+
+/**
  * An async proxy of {@link ExpressionEngine}'s core evaluate methods.
  *
  * Each method mirrors its synchronous counterpart but returns a Promise of the
@@ -72,6 +95,23 @@ export interface WorkerEngine {
 	evaluateLines(lines: string[], options?: WorkerCallOptions): Promise<SerializedParsedLine[]>;
 	/** Evaluate a single expression off-thread. Mirrors `ExpressionEngine.evaluateExpression`. */
 	evaluateExpression(expression: string, options?: WorkerCallOptions): Promise<SerializedValue[]>;
+	/**
+	 * Subscribe to live-data resolutions that land after a request already
+	 * answered.
+	 *
+	 * A currency, weather or historical-rate value resolves inside the worker some
+	 * time after `parseDocument` returned its pending result. When it does, the
+	 * affected lines are re-evaluated worker-side and their fresh values arrive
+	 * here as one batch. This is a subscription rather than a per-request promise
+	 * because a resolution is tied to no single request: it belongs to whichever
+	 * document is current when the value lands. Returns an unsubscribe function.
+	 */
+	onResolved(listener: (lines: WorkerAsyncUpdate[]) => void): () => void;
+	/**
+	 * Subscribe to live-data resolutions that failed. Returns an unsubscribe
+	 * function. See {@link onResolved}; this is its failure channel.
+	 */
+	onAsyncError(listener: (error: WorkerAsyncError) => void): () => void;
 	/** Reject every in-flight request and tear the transport down. Idempotent. */
 	terminate(): void;
 }
@@ -88,6 +128,11 @@ class WorkerEngineClient implements WorkerEngine {
 	private readonly transport: WorkerTransport;
 	private nextId = 1;
 	private readonly pending = new Map<number, PendingRequest>();
+	// Broadcast subscribers for async resolutions. Sets, not one callback each, so
+	// several views can watch the same worker; a resolution is not tied to a
+	// request id, so these live outside `pending`.
+	private readonly resolvedListeners = new Set<(lines: WorkerAsyncUpdate[]) => void>();
+	private readonly asyncErrorListeners = new Set<(error: WorkerAsyncError) => void>();
 	private terminated = false;
 
 	constructor(transport: WorkerTransport) {
@@ -131,6 +176,16 @@ class WorkerEngineClient implements WorkerEngine {
 		return this.call<SerializedValue[]>("evaluateExpression", [expression], options?.signal);
 	}
 
+	onResolved(listener: (lines: WorkerAsyncUpdate[]) => void): () => void {
+		this.resolvedListeners.add(listener);
+		return () => this.resolvedListeners.delete(listener);
+	}
+
+	onAsyncError(listener: (error: WorkerAsyncError) => void): () => void {
+		this.asyncErrorListeners.add(listener);
+		return () => this.asyncErrorListeners.delete(listener);
+	}
+
 	terminate(): void {
 		if (this.terminated) return;
 		this.terminated = true;
@@ -140,6 +195,10 @@ class WorkerEngineClient implements WorkerEngine {
 			entry.reject(error);
 		}
 		this.pending.clear();
+		// No more resolutions can arrive across a torn-down transport, so drop the
+		// subscribers rather than leaving them referenced for the client's lifetime.
+		this.resolvedListeners.clear();
+		this.asyncErrorListeners.clear();
 		this.transport.terminate();
 	}
 
@@ -182,6 +241,21 @@ class WorkerEngineClient implements WorkerEngine {
 			}
 			case "error":
 				this.settle(message.id, (entry) => entry.reject(deserializeEngineError(message.error)));
+				break;
+			case "async-update":
+				// A broadcast, not an answer to a request: fan it out to every
+				// subscriber. A copy of the listener set is iterated so a listener
+				// that unsubscribes itself mid-callback cannot disturb the walk.
+				for (const listener of [...this.resolvedListeners]) listener(message.lines);
+				break;
+			case "async-error":
+				for (const listener of [...this.asyncErrorListeners]) {
+					listener({
+						queryKey: message.queryKey,
+						packageId: message.packageId,
+						error: deserializeEngineError(message.error),
+					});
+				}
 				break;
 		}
 	}

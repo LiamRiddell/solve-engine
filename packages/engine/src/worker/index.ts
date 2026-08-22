@@ -17,6 +17,8 @@ export type {
 	WorkerEngine,
 	WorkerEngineOptions,
 	WorkerCallOptions,
+	WorkerAsyncUpdate,
+	WorkerAsyncError,
 } from "./client";
 
 export { startWorkerRuntime } from "./runtime";
@@ -54,4 +56,7 @@ export type {
 	ReadyMessage,
 	ResultMessage,
 	ErrorMessage,
+	AsyncResolvedLine,
+	AsyncUpdateMessage,
+	AsyncErrorMessage,
 } from "./protocol";

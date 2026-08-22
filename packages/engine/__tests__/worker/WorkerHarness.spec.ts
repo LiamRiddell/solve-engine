@@ -26,6 +26,8 @@ import {
 	type WorkerEngine,
 	type WorkerEngineOptions,
 	type SerializedValue,
+	type WorkerAsyncUpdate,
+	type WorkerAsyncError,
 } from "@solve-js/worker";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import {
@@ -37,9 +39,19 @@ import {
 	matrixValue,
 	rangeValue,
 	numberValue,
+	type Value,
 } from "@solve-js/vm/Value";
-import { EngineError, WorkerErrorCodes } from "@solve-js/errors";
+import { EngineError, ErrorFactory, WorkerErrorCodes } from "@solve-js/errors";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
+import { createQueryResolver } from "@solve-js/resolvers/QueryResolver";
+import type { IAsyncResolver, AsyncCheckResult } from "@solve-js/resolvers/ResolverRegistry";
+import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
+import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
+import type { PrefixParselet } from "@solve-js/parser/Parselet";
+import type { Parser } from "@solve-js/parser/Parser";
+import type { Token } from "@solve-js/lexer/Token";
+import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
+import { OpCode } from "@solve-js/parser/OpCode";
 
 // ── Test harness: a client and runtime linked on one thread ─────────────
 
@@ -338,5 +350,243 @@ describe("package selection", () => {
 		} finally {
 			stopRuntime();
 		}
+	});
+});
+
+// ── Async live-data resolutions stream across the boundary ──────────────
+//
+// The acid test for this feature: a value that resolves inside the worker AFTER
+// a request already answered (a currency rate, weather, a historical FX rate)
+// must reach the host. Everything below drives a stubbed async resolver to
+// completion over the in-process linked transport, so the whole path (pending
+// result home, resolution worker-side, re-evaluation, DTO back across, callback)
+// runs with no real timer or network.
+
+/**
+ * A package whose one async function, `live price of <symbol>`, resolves through
+ * a caller-supplied `fetchQuery`. Built on the same `createQueryResolver` +
+ * `CALL_PLUGIN` machinery the real weather and stocks packages use, so the value
+ * flows through the engine exactly as a production live-data value does: pending
+ * on first evaluation, cached by the resolver, read back on re-evaluation.
+ */
+function livePriceParselet(pluginFnIdx: number): PrefixParselet {
+	return {
+		category: "LivePrice",
+		parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
+			// Consume the symbol word(s) after the trigger phrase, the same greedy
+			// city-name consumption the weather parselet does.
+			const words: string[] = [];
+			while (parser.peek()?.type === "IDENT") words.push(parser.consume().value);
+			if (words.length === 0) {
+				throw ErrorFactory.parsing(
+					"LIVEPRICE_EXPECTED_SYMBOL",
+					`Expected a symbol after "${token.value}" (e.g. "${token.value} gold")`,
+				);
+			}
+			builder.emitOpcode(OpCode.PUSH_STRING);
+			builder.emitString(words.join(" "));
+			builder.emitOpcode(OpCode.CALL_PLUGIN);
+			builder.emitIndex(pluginFnIdx);
+			builder.emitIndex(1);
+		},
+	};
+}
+
+function createLivePricePackage(fetchQuery: (query: string, signal: AbortSignal) => Promise<Value>): IEnginePackage {
+	const fnIdx = allocatePluginFunctionIndex();
+	const { resolver, pluginFunction } = createQueryResolver({
+		namespace: "liveprice",
+		pluginFunctionIndex: fnIdx,
+		fetchQuery,
+	});
+	return {
+		name: "solve-liveprice-test",
+		phrases: { "live price of": "LIVE_PRICE_OF" },
+		prefixParselets: [{ tokenType: "LIVE_PRICE_OF", parselet: livePriceParselet(fnIdx) }],
+		pluginFunctions: [{ index: fnIdx, handler: pluginFunction }],
+		asyncResolvers: [resolver],
+	};
+}
+
+/**
+ * A low-level resolver that returns a caller-controlled result for every line,
+ * for the cases that need a resolver to REJECT (which `createQueryResolver`
+ * never does, it turns a failed fetch into an error Value instead). The returned
+ * `signal` is the engine's own preflight signal, so staleness works the way it
+ * does for a real resolver.
+ */
+function createRejectingResolverPackage(queryKey: string, packageId: string, rejection: Promise<Value>): IEnginePackage {
+	// Fire once, exactly as a real resolver does: it returns pending only while
+	// data is missing and null once the outcome (here, a failure) is settled. A
+	// resolver that returned pending on every preflight would make any re-evaluating
+	// host re-trigger it in a loop, which is not a shape the engine supports.
+	let fired = false;
+	const resolver: IAsyncResolver = {
+		namespace: "rejecting",
+		preflight(_tokens, _bytecode, _packageId, signal): AsyncCheckResult | null {
+			if (fired) return null;
+			fired = true;
+			return { queryKey, resolver: rejection, packageId, signal };
+		},
+		destroy() {},
+	};
+	return { name: "solve-rejecting-test", asyncResolvers: [resolver] };
+}
+
+/** Spin up a streaming worker over a linked transport with the given package registered. */
+async function streamingWorker(pkg: IEnginePackage): Promise<WorkerEngine> {
+	const { client, host } = createLinkedTransports();
+	const stopRuntime = startWorkerRuntime(host, { packages: [pkg] });
+	const engine = await createWorkerEngine({ transport: client });
+	disposers.push(() => {
+		engine.terminate();
+		stopRuntime();
+	});
+	return engine;
+}
+
+/** A synchronous engine registered with one extra package, tracked for cleanup. */
+function syncEngineWith(pkg: IEnginePackage): ExpressionEngine {
+	const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
+	syncEngines.push(engine);
+	return engine;
+}
+
+/** Flush the microtask queue a few times, enough for a whole resolution to settle. */
+async function flushMicrotasks(times = 8): Promise<void> {
+	for (let i = 0; i < times; i++) await new Promise<void>((resolve) => queueMicrotask(resolve));
+}
+
+describe("async live-data resolutions stream back", () => {
+	test("a resolved live value crosses the boundary through onResolved and matches the sync path", async () => {
+		const RESOLVED = numberValue(1975.5);
+		let release!: (value: Value) => void;
+		const gate = new Promise<Value>((resolve) => {
+			release = resolve;
+		});
+		const pkg = createLivePricePackage(() => gate);
+		const engine = await streamingWorker(pkg);
+
+		// The subscription is not tied to the parseDocument request that armed it.
+		const firstUpdate = new Promise<WorkerAsyncUpdate[]>((resolve) => engine.onResolved(resolve));
+
+		const doc = await engine.parseDocument("live price of gold");
+		// The synchronous answer is pending: the value has not resolved yet.
+		expect(doc.lines[0].result?.type).toBe(ValueType.Pending);
+
+		// Drive the resolver to completion; the value now lands worker-side.
+		release(RESOLVED);
+		const lines = await firstUpdate;
+
+		expect(lines).toHaveLength(1);
+		expect(lines[0].lineNumber).toBe(1);
+		expect(lines[0].value.number).toBe(1975.5);
+
+		// The update survives both boundaries a host might send it across.
+		expect(structuredClone(lines)).toEqual(lines);
+		expect(JSON.parse(JSON.stringify(lines))).toEqual(lines);
+
+		// It equals the value the synchronous path produces once the same data is
+		// cached: the boundary changed the representation, nothing else.
+		const sync = syncEngineWith(pkg);
+		sync.queryClient.setQueryData(["liveprice", "gold"], RESOLVED);
+		const [syncLine] = sync.evaluateLines(["live price of gold"]);
+		expect(lines[0].value).toEqual(serializeValue(syncLine.result!));
+	});
+
+	test("a resolution across evaluateExpression reaches its -1 line", async () => {
+		const RESOLVED = numberValue(42);
+		let release!: (value: Value) => void;
+		const gate = new Promise<Value>((resolve) => {
+			release = resolve;
+		});
+		const engine = await streamingWorker(createLivePricePackage(() => gate));
+
+		const firstUpdate = new Promise<WorkerAsyncUpdate[]>((resolve) => engine.onResolved(resolve));
+		const [pending] = await engine.evaluateExpression("live price of silver");
+		expect(pending.type).toBe(ValueType.Pending);
+
+		release(RESOLVED);
+		const lines = await firstUpdate;
+		expect(lines[0].lineNumber).toBe(-1);
+		expect(lines[0].value.number).toBe(42);
+	});
+
+	test("a failed live resolution crosses as a structured async-error", async () => {
+		const rejection = Promise.reject(new Error("upstream returned 503"));
+		// Swallow the top-level rejection; the engine awaits it and reports the
+		// failure through its own error channel.
+		rejection.catch(() => {});
+		const pkg = createRejectingResolverPackage("err:key", "test-errpkg", rejection as Promise<Value>);
+		const engine = await streamingWorker(pkg);
+
+		const failure = new Promise<WorkerAsyncError>((resolve) => engine.onAsyncError(resolve));
+		// Any line triggers this resolver's preflight; a bare number is enough.
+		await engine.evaluateExpression("50");
+
+		const error = await failure;
+		expect(error.queryKey).toBe("err:key");
+		expect(error.packageId).toBe("test-errpkg");
+		expect(error.error).toBeInstanceOf(EngineError);
+		expect(error.error.message).toContain("503");
+	});
+
+	test("a superseded document's stale resolution does not reach the host", async () => {
+		const RESOLVED = numberValue(1975.5);
+		let release!: (value: Value) => void;
+		const gate = new Promise<Value>((resolve) => {
+			release = resolve;
+		});
+		const engine = await streamingWorker(createLivePricePackage(() => gate));
+
+		let updates = 0;
+		engine.onResolved(() => {
+			updates++;
+		});
+
+		// Document A uses the live value and goes pending.
+		const docA = await engine.parseDocument("live price of gold");
+		expect(docA.lines[0].result?.type).toBe(ValueType.Pending);
+
+		// Document B supersedes A before A's value lands. B uses no live data.
+		await engine.parseDocument("42");
+
+		// A's fetch completes now, but A was superseded, so its resolution must be
+		// dropped rather than delivered against the current document.
+		release(RESOLVED);
+		await flushMicrotasks();
+
+		expect(updates).toBe(0);
+	});
+
+	test("a fresh document after a superseded one still streams its own resolution", async () => {
+		// The other side of staleness: superseding must not wedge the pump. On the
+		// SAME worker, document A is left pending when B supersedes it, and document
+		// B's own live value still has to arrive. One fetchQuery routes each symbol
+		// to its gate.
+		let releaseGold!: (value: Value) => void;
+		let releaseSilver!: (value: Value) => void;
+		const goldGate = new Promise<Value>((resolve) => {
+			releaseGold = resolve;
+		});
+		const silverGate = new Promise<Value>((resolve) => {
+			releaseSilver = resolve;
+		});
+		const gateFor = (query: string): Promise<Value> => (query === "silver" ? silverGate : goldGate);
+		const engine = await streamingWorker(createLivePricePackage((query) => gateFor(query)));
+
+		await engine.parseDocument("live price of gold"); // pending
+
+		const update = new Promise<WorkerAsyncUpdate[]>((resolve) => engine.onResolved(resolve));
+		const doc = await engine.parseDocument("live price of silver"); // supersedes A
+		expect(doc.lines[0].result?.type).toBe(ValueType.Pending);
+
+		// Gold resolves too, but its document was superseded, so it is dropped;
+		// silver belongs to the current document and comes through.
+		releaseGold(numberValue(999));
+		releaseSilver(numberValue(30.25));
+		const lines = await update;
+		expect(lines[0].lineNumber).toBe(1);
+		expect(lines[0].value.number).toBe(30.25);
 	});
 });

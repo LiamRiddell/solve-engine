@@ -14,6 +14,7 @@
  */
 
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import type { AsyncResolutionEvent } from "@solve-js/engine/AsyncResolutionBatcher";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
@@ -30,6 +31,7 @@ import type {
 	InitMessage,
 	RequestMessage,
 	WorkerToMainMessage,
+	AsyncResolvedLine,
 } from "./protocol";
 
 /** Options a host bakes into its own worker entry, chiefly its custom packages. */
@@ -84,10 +86,106 @@ export function startWorkerRuntime(transport: WorkerTransport, options: WorkerRu
 	// engine's keystroke signal for exactly the request the caller aborted.
 	const inFlight = new Map<number, AbortController>();
 
+	// The line texts of the current document, keyed by the line number the engine
+	// evaluates them under (1-based for a document, -1 for a lone expression). An
+	// async resolution names the lines whose result changed but not the new value,
+	// so this is what the event pump re-reads a line from to recover it.
+	let retainedLines = new Map<number, string>();
+
+	// The current document's abort controller, kept alive past the request that
+	// created it so this document's async resolutions can still land. Aborted when
+	// a new document supersedes it: aborting drops the old document's in-flight
+	// resolutions at the engine's own staleness guard (an aborted signal is
+	// discarded before it reaches the batcher), so a stale value never reaches the
+	// host as if it were current. See {@link handleRequest}.
+	let documentController: AbortController | null = null;
+
+	// Cancels the event-stream reader on teardown. Null until the pump starts.
+	let stopEventPump: (() => void) | null = null;
+
 	const post = (message: WorkerToMainMessage): void => transport.postMessage(message);
 
 	const fail = (id: number, error: unknown): void => {
 		post({ kind: "error", id, error: serializeEngineError(normalizeUnknownError(error)) });
+	};
+
+	/**
+	 * Record the line texts a request evaluates, so a later async resolution can
+	 * re-read exactly the lines it names. A whole document splits into 1-based
+	 * lines; a lone `evaluateExpression` maps onto the engine's `-1` sentinel, the
+	 * same line number the engine registers and later reports for it.
+	 */
+	const retainLines = (message: RequestMessage): Map<number, string> => {
+		const map = new Map<number, string>();
+		if (message.method === "parseDocument") {
+			(message.args[0] as string).split("\n").forEach((text, index) => map.set(index + 1, text));
+		} else if (message.method === "evaluateLines") {
+			(message.args[0] as string[]).forEach((text, index) => map.set(index + 1, text));
+		} else {
+			map.set(-1, message.args[0] as string);
+		}
+		return map;
+	};
+
+	/**
+	 * Turn one async resolution event into a message home.
+	 *
+	 * A `lines-updated` event names the lines whose result changed; the resolved
+	 * value lives in the engine's cache, so each named line is re-evaluated (which
+	 * now reads the settled value from that cache rather than starting a fresh
+	 * fetch) and serialised. A line the current document no longer retains belongs
+	 * to a superseded document and is skipped. An `error` event carries the failed
+	 * query straight across as a structured error.
+	 */
+	const handleAsyncEvent = (eng: ExpressionEngine, event: AsyncResolutionEvent): void => {
+		if (event.type === "error") {
+			post({
+				kind: "async-error",
+				queryKey: event.queryKey,
+				packageId: event.packageId,
+				error: serializeEngineError(normalizeUnknownError(event.error)),
+			});
+			return;
+		}
+
+		const lines: AsyncResolvedLine[] = [];
+		for (const lineNumber of event.lineNumbers) {
+			const text = retainedLines.get(lineNumber);
+			if (text === undefined) continue;
+			try {
+				const value = eng.evaluateLine(lineNumber, text)[0];
+				if (value) lines.push({ lineNumber, value: serializeValue(value, formatting) });
+			} catch {
+				// A line that resolved into an error re-throws on re-evaluation; the
+				// batcher's own `error` event is the channel for that, so this keeps
+				// the update to the lines that produced a value rather than posting a
+				// second, half-formed failure here.
+			}
+		}
+		if (lines.length > 0) post({ kind: "async-update", lines });
+	};
+
+	/**
+	 * Drain the engine's async-resolution event stream for the life of the
+	 * runtime, posting each event home. Started once the engine exists; the reader
+	 * loop ends when the stream closes (engine cleared) or the returned canceller
+	 * runs at teardown.
+	 */
+	const startEventPump = (eng: ExpressionEngine): void => {
+		stopEventPump?.();
+		const reader = eng.getEventStream().getReader();
+		stopEventPump = () => void reader.cancel();
+		void (async () => {
+			try {
+				for (;;) {
+					const { done, value } = await reader.read();
+					if (done) return;
+					handleAsyncEvent(eng, value);
+				}
+			} catch {
+				// The stream errored or was cancelled (teardown); the loop is done.
+			}
+		})();
 	};
 
 	const handleInit = (message: InitMessage): void => {
@@ -101,6 +199,10 @@ export function startWorkerRuntime(transport: WorkerTransport, options: WorkerRu
 				packages,
 			);
 			formatting = message.formatting;
+			// Drain live-data resolutions for the engine's whole lifetime, so a
+			// value that settles after a request already answered still reaches the
+			// host. Started here, after the engine exists, and torn down with it.
+			startEventPump(engine);
 			post({ kind: "ready", id: message.id });
 		} catch (error) {
 			// A build failure leaves no engine; the caller's `createWorkerEngine`
@@ -141,10 +243,21 @@ export function startWorkerRuntime(transport: WorkerTransport, options: WorkerRu
 			return;
 		}
 
-		// Wire this request's signal in as the keystroke signal so a later
-		// `cancel` aborts the async work this evaluation fires, the same
-		// mechanism a host uses on the main thread.
+		// Supersede the previous document: abort its controller so any resolution
+		// still in flight for it is dropped at the engine's staleness guard rather
+		// than posted home as if it belonged to this request's document. The old
+		// retained lines go with it. Every evaluate call shares one engine and one
+		// document context, so the most recent call is the live one.
+		documentController?.abort();
+
+		// This request's controller doubles as the document controller: wired in as
+		// the keystroke signal so a later `cancel` (or the next supersede) aborts
+		// the async work this evaluation fires, the same mechanism a host uses on
+		// the main thread. It is deliberately NOT aborted when the request settles,
+		// so this document's live values can still resolve and stream back.
 		const controller = new AbortController();
+		documentController = controller;
+		retainedLines = retainLines(message);
 		inFlight.set(message.id, controller);
 		eng.setKeystrokeSignal(controller.signal);
 
@@ -178,6 +291,11 @@ export function startWorkerRuntime(transport: WorkerTransport, options: WorkerRu
 	});
 
 	return () => {
+		stopEventPump?.();
+		stopEventPump = null;
+		documentController?.abort();
+		documentController = null;
+		retainedLines = new Map();
 		for (const controller of inFlight.values()) controller.abort();
 		inFlight.clear();
 		engine?.clear();
