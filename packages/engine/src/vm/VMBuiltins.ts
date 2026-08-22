@@ -1,7 +1,7 @@
 import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, type MatrixData } from "@solve-js/vm/Value";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom, power, describeMeasureMismatch } from "@solve-js/vm/VMConversion";
-import { scaleMoneyExact, scaleMoneyByPercent } from "@solve-js/vm/MoneyExact";
+import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact } from "@solve-js/vm/MoneyExact";
 import { transpose, determinant, inverse, matrixMultiply, matrixPower, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
 import { symbolicToValue, valueToSymbolic, solveEquationValues } from "@solve-js/vm/SymbolicOps";
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
@@ -578,9 +578,14 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         if (1 + rate <= 0) {
             return errorValue("INVALID_RATE", `taxRemove: rate ${rate} makes (1 + rate) non-positive`);
         }
-        return args[0].type === ValueType.Uom
-            ? uomValue(amount / (1 + rate), args[0].unit!)
-            : numberValue(amount / (1 + rate));
+        if (args[0].type === ValueType.Uom) {
+            // Money stays exact: `$X / (1 + R)` rounds the half-cent like a till
+            // (`tax off $0.09 at 20%` is `$0.08`, not the `$0.07` the float lands
+            // on). A non-currency Uom passes straight through the same helper to
+            // the float path. See MoneyExact.ts.
+            return removeTaxExact(args[0], args[0].unit!, rate) ?? uomValue(amount / (1 + rate), args[0].unit!);
+        }
+        return numberValue(amount / (1 + rate));
     },
 
     // inflationAdjust(amount, fromYear, toYear) -- CPI-based inflation
@@ -800,7 +805,14 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
             return errorValue("INVALID_RATE", `taxIn: rate ${rate} makes (1 + rate) non-positive`);
         }
         const tax = amount - amount / (1 + rate);
-        return args[0].type === ValueType.Uom ? uomValue(tax, args[0].unit!) : numberValue(tax);
+        if (args[0].type === ValueType.Uom) {
+            // Money stays exact: `$X - $X / (1 + R)` rounds the half-cent like a
+            // till (`tax in $0.09 at 20%` is `$0.02`, not `$0.01`), and stays the
+            // exact complement of `tax off` so the two sum back to the gross. A
+            // non-currency Uom keeps the float. See MoneyExact.ts.
+            return taxInExact(args[0], args[0].unit!, rate) ?? uomValue(tax, args[0].unit!);
+        }
+        return numberValue(tax);
     },
     // taxOn(amount, rate) -> amount * rate, the tax itself.
     //
