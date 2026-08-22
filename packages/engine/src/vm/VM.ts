@@ -965,36 +965,52 @@ function multiplyPercentWithUncertainty(l: Value, r: Value): Value | null {
 }
 
 /**
- * `p% of $X` and `$X * p%` are a scalar multiply of money, so like `$X + p%` they
- * must stay exact to the cent: `15% of $0.10` is `$0.015 -> $0.02`, not the
- * `$0.01` a bare double (`0.10 * 0.15 = 0.0149999...`) rounds down to. Fires only
- * when one operand is a Percentage and the other a currency Uom, routing through
- * the same base-ten scaling the `+`/`-` path uses (see MoneyExact.ts). Returns
- * null otherwise, so a non-currency `10% of 5 kg` and every other multiply keep
- * their existing path. (`of` compiles to `MUL`, so this covers both spellings.)
+ * Money times a scalar is a scalar multiply, so like `$X + p%` it must stay exact
+ * to the cent: `15% of $0.10` and `$0.10 * 15%` are `$0.015 -> $0.02`, not the
+ * `$0.01` a bare double rounds down to, and the same for a computed factor with
+ * no exact sidecar of its own, e.g. `50% of 1% of $3` (the inner `50% of 1%`
+ * reduces to a bare `0.005`). Fires when one operand is a currency Uom and the
+ * other a plain Number or a Percentage, routing through the same base-ten scaling
+ * the `+`/`-` path uses, which recovers the factor from its shortest decimal (see
+ * MoneyExact.ts). A rational scalar (`$3 * 2/7`) is left alone so the exact
+ * fraction is kept rather than flattened to a decimal, and a non-currency Uom
+ * (`10% of 5 kg`) and every other multiply keep their existing path. (`of`
+ * compiles to `MUL`, so this covers the `of` spellings too.)
  */
-function multiplyPercentOnMoney(l: Value, r: Value): Value | null {
-    const pct = l.type === ValueType.Percentage ? l : r.type === ValueType.Percentage ? r : null;
-    if (pct === null) return null;
-    const money = pct === l ? r : l;
+function multiplyMoneyByScalarExact(l: Value, r: Value): Value | null {
+    const money = l.type === ValueType.Uom ? l : r;
+    const scalar = l.type === ValueType.Uom ? r : l;
     if (money.type !== ValueType.Uom || money.unit === undefined || !sharedCurrencyExchange.isCurrency(money.unit)) return null;
-    return scaleMoneyExact(money, pct.toNumber(), money.unit);
+    if (scalar.type !== ValueType.Number && scalar.type !== ValueType.Percentage) return null;
+    if (scalar.rational !== undefined) return null;
+    return scaleMoneyExact(money, scalar.toNumber(), money.unit);
 }
 
 /**
- * `X / p%` is `X / factor`, a scalar divide, so a tolerance on `X` scales by
- * `1/factor`: `(100 +/- 5) / 10%` is `1000 ± 50`, the division analogue of the
- * `* 10%` case {@link multiplyPercentWithUncertainty} handles. Fires only when the
- * divisor is a Percentage and the dividend an uncertain Number; a `0%` divisor
- * returns null so the general path surfaces the divide-by-zero. Returns null
- * otherwise, so every other division keeps its own path.
+ * A division involving a Percentage and an uncertain Number carries the tolerance
+ * that {@link uncertainOp} drops for a Percentage operand, in both arrangements:
+ *
+ *   (100 +/- 5) / 10%     1000 ± 50       X / p% = X/factor, spread scales by 1/factor
+ *   10% / (2 +/- 0.1)     0.05 ± 0.0025   p% / (b ± e) = a/b, spread |a·e / b²|
+ *
+ * A zero divisor returns null so the general path surfaces the divide-by-zero,
+ * and every other division keeps its own path.
  */
 function dividePercentWithUncertainty(l: Value, r: Value): Value | null {
-    if (r.type !== ValueType.Percentage) return null;
-    if (l.type !== ValueType.Number || l.uncertainty === undefined) return null;
-    const factor = r.toNumber();
-    if (factor === 0) return null;
-    return numberValueUncertain(l.toNumber() / factor, Math.abs(l.uncertainty / factor));
+    // Uncertain Number over a Percentage divisor: a scalar divide by `factor`.
+    if (r.type === ValueType.Percentage && l.type === ValueType.Number && l.uncertainty !== undefined) {
+        const factor = r.toNumber();
+        if (factor === 0) return null;
+        return numberValueUncertain(l.toNumber() / factor, Math.abs(l.uncertainty / factor));
+    }
+    // Percentage over an uncertain Number divisor: the divisor's relative spread
+    // carries through the quotient (the dividend is exact, so only `b` varies).
+    if (l.type === ValueType.Percentage && r.type === ValueType.Number && r.uncertainty !== undefined) {
+        const b = r.toNumber();
+        if (b === 0) return null;
+        return numberValueUncertain(l.toNumber() / b, Math.abs((l.toNumber() * r.uncertainty) / (b * b)));
+    }
+    return null;
 }
 
 /** Extract milliseconds from a duration Value (UoM time unit or plain number).
@@ -1954,11 +1970,6 @@ export function executeBytecode(
           // ahead of uncertainOp, which declines for a Percentage operand.
           const pctUnc = multiplyPercentWithUncertainty(l, r);
           if (pctUnc) { stack.push(pctUnc); break; }
-          // A percentage OF money (or money times a percentage) stays exact to
-          // the cent, the same base-ten path as "$X + p%". Ahead of binaryOp,
-          // which would otherwise read both as bare doubles and drop the sidecar.
-          const pctMoney = multiplyPercentOnMoney(l, r);
-          if (pctMoney) { stack.push(pctMoney); break; }
           // Uncertainty first, so "(12.3 +/- 0.5) * 4" is "49.2 ± 2.0": a scalar
           // multiply scales the spread by |k|, which the general quadrature rule
           // gives when the plain operand is read as uncertainty 0. uncertainOp
@@ -1975,6 +1986,13 @@ export function executeBytecode(
             const ratMul = exactRationalOp(l, r, "mul");
             if (ratMul) { stack.push(ratMul); break; }
           }
+          // Money times a scalar (a percentage, or a plain/computed number) stays
+          // exact to the cent, the same base-ten path as "$X + p%". After the
+          // rational check so "$3 * 2/7" keeps its exact fraction; ahead of
+          // binaryOp, which would read both as bare doubles and drop the sidecar,
+          // so "50% of 1% of $3" (a computed 0.005 factor) rounds like a till.
+          const moneyScalar = multiplyMoneyByScalarExact(l, r);
+          if (moneyScalar) { stack.push(moneyScalar); break; }
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             stack.push(numberValue((l.value as number) * (r.value as number)));
           } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
