@@ -4,6 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
+import { parseTermAndRate } from "./TermRateClauses";
 
 /**
  * `[daily|monthly|annual|total] repayment on <principal> over <years> at
@@ -41,13 +42,15 @@ export class LoanRepaymentParselet implements PrefixParselet {
 
   parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
     parser.parseExpression(BindingPower.Lowest, builder); // principal
-    parser.consume("OVER");
-    parser.parseExpression(BindingPower.Lowest, builder); // years
-    if (!parser.match("RATE_AT")) parser.consume("AT");
-    parser.parseExpression(BindingPower.Lowest, builder); // rate
+    // The term (`over <years>`) and the rate (`at <rate>`) in either order, so
+    // `monthly repayment on 200000 at 4% over 25 years` reads as well as
+    // `... over 25 years at 4%` (#120).
+    const { swap } = parseTermAndRate(parser, builder, ["OVER"]);
 
-    // Stack: [principal, years, rate] -> SWAP -> [principal, rate, years]
-    builder.emitOpcode(OpCode.SWAP);
+    // The builtins take `(principal, rate, years, periodsPerYear)`; the term-first
+    // order reaches `[principal, rate, years]` only after a SWAP of the top two,
+    // the rate-first order is already there.
+    if (swap) builder.emitOpcode(OpCode.SWAP);
 
     builder.emitOpcode(OpCode.PUSH_NUMBER);
     builder.emitNumber(this.periodsPerYear);
