@@ -35,7 +35,7 @@ export interface MultiDocumentExample {
   documents: { title: string; content: string }[];
 }
 
-export const exampleData: ExampleCategory[] = [
+const rawExampleData: ExampleCategory[] = [
   {
     name: "Arithmetic",
     description: "Basic arithmetic operations and operators",
@@ -453,7 +453,19 @@ export const exampleData: ExampleCategory[] = [
   },
 ];
 
-export const fullDocumentExamples: FullDocumentExample[] = [
+/**
+ * The snippet gallery, ordered alphabetically for the Examples menu: categories
+ * by name, and the examples within each category by name. The raw list above
+ * stays grouped by topic for maintainers; this is the display order.
+ */
+export const exampleData: ExampleCategory[] = [...rawExampleData]
+  .map((category) => ({
+    ...category,
+    examples: [...category.examples].sort((a, b) => a.name.localeCompare(b.name)),
+  }))
+  .sort((a, b) => a.name.localeCompare(b.name));
+
+const rawFullDocumentExamples: FullDocumentExample[] = [
   {
     name: "Variables & Arithmetic",
     description: "Multi-line variable assignments with arithmetic",
@@ -540,7 +552,12 @@ export const fullDocumentExamples: FullDocumentExample[] = [
  * that is the point. Editing a global in one tab visibly re-computes the
  * others, which is the behaviour these exist to show off.
  */
-export const multiDocumentExamples: MultiDocumentExample[] = [
+/** The full-document examples, ordered alphabetically by name for the menu. */
+export const fullDocumentExamples: FullDocumentExample[] = [...rawFullDocumentExamples].sort((a, b) =>
+  a.name.localeCompare(b.name),
+);
+
+const rawMultiDocumentExamples: MultiDocumentExample[] = [
   {
     name: "Shared Rates",
     description: "One document owns the rates; another consumes them. Edit a rate and the invoice re-computes.",
@@ -606,3 +623,8 @@ export const multiDocumentExamples: MultiDocumentExample[] = [
     ]
   }
 ];
+
+/** The multi-document sets, ordered alphabetically by name (each set keeps its own document order). */
+export const multiDocumentExamples: MultiDocumentExample[] = [...rawMultiDocumentExamples].sort((a, b) =>
+  a.name.localeCompare(b.name),
+);
