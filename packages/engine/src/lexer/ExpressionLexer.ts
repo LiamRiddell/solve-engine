@@ -441,6 +441,14 @@ export class ExpressionLexer {
   private line: number = 1;
   private lineStartPos: number = 0;
 
+  // Open `(`/`[` nesting depth on the current line. A comma inside a call or a
+  // bracket (`rgb(255,255,255)`, `[100,200,300]`) is an argument/element
+  // separator, so the number scanner must NOT coalesce it into a thousands
+  // group there, only a top-level comma (`1,000,000`) groups thousands. Tracked
+  // here because the flat token stream carries no nesting otherwise. Reset per
+  // line, so an unbalanced bracket cannot bleed the suppression into the next.
+  private groupingDepth: number = 0;
+
   // Keyword map: lowercase identifier → token type (locale keywords only)
   private keywordMap: Map<string, string>;
 
@@ -1018,6 +1026,8 @@ export class ExpressionLexer {
     }
 
     const input = this.input;
+    // Fresh nesting count for this pass (see the field's doc).
+    this.groupingDepth = 0;
 
     // ── Main tokenization loop ──────────────────────────────────────────
     while (this.pos < len) {
@@ -1041,12 +1051,14 @@ export class ExpressionLexer {
           if (c0 === 10) {  // \n
             this.line++;
             this.lineStartPos = this.pos;
+            this.groupingDepth = 0;  // each line groups thousands on its own
           } else if (c0 === 13) {  // \r
             this.line++;
             if (this.pos < len && input.charCodeAt(this.pos) === 10) {
               this.pos++;  // skip \n in \r\n
             }
             this.lineStartPos = this.pos;
+            this.groupingDepth = 0;
           }
           break;
 
@@ -1293,6 +1305,12 @@ export class ExpressionLexer {
 
     // ── Thousands separators, coalesce with digits ────────────────────
     while (hasIntPart && pos < len && (input.charCodeAt(pos) === 44 || input.charCodeAt(pos) === 46)) {
+      // A comma inside a call or bracket is an argument/element separator, not a
+      // thousands group: `rgb(255,255,255)` is three numbers and `[100,200,300]`
+      // a three-element vector, not `255255255`/`100200300`. Only a top-level
+      // comma (`1,000,000`) groups thousands. The `.` grouping form is
+      // context-free and unaffected. See {@link groupingDepth}.
+      if (input.charCodeAt(pos) === 44 && this.groupingDepth > 0) break;
       if (pos + 4 <= len) {
         const d1 = input.charCodeAt(pos + 1);
         const d2 = input.charCodeAt(pos + 2);
@@ -1535,6 +1553,16 @@ export class ExpressionLexer {
 
     // ── Single-character operator ──────────────────────────────────────
     this.pos = pos + 1;
+    // Track `(`/`[` nesting so the number scanner can tell a thousands group
+    // from an argument/element separator (see {@link groupingDepth}). `(` and
+    // `[` open a group, `)` and `]` close one; the clamp keeps a stray closer
+    // (`)` with no opener) from driving the count negative and wrongly leaving
+    // a later comma ungrouped.
+    if (c0 === 40 || c0 === 91) {  // ( or [
+      this.groupingDepth++;
+    } else if (c0 === 41 || c0 === 93) {  // ) or ]
+      if (this.groupingDepth > 0) this.groupingDepth--;
+    }
     const opType = OP_MAP[c0];
     const text = input.charAt(pos);
     return new LexerToken(opType || 'ERROR', tokenTypeId(opType || 'ERROR'), text, text, pos, 0, this.line, col);
