@@ -1,6 +1,6 @@
 import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData } from "@solve-js/vm/Value";
-import { decimalFromLiteral, decimalFromNumberIfExact, decimalNegate, decimalToNumber, type DecimalData } from "@solve-js/decimal";
+import { decimalFromLiteral, decimalFromInteger, decimalFromNumberIfExact, decimalNegate, decimalToNumber, decimalAdd, decimalMultiply, type DecimalData } from "@solve-js/decimal";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { rowMajorToColumnMajor, matrixMultiply, matrixPower, matrixCompare, matIndex, matAt, inBounds, collectionToValues, matrixEntryToValue } from "@solve-js/vm/MatrixOps";
@@ -903,6 +903,47 @@ function moneyExactMagnitude(operand: Value, unit: string): DecimalData | null {
 }
 
 /**
+ * The exact base-ten value of a number that is exactly a short decimal (the
+ * proportion a percentage the user typed reduces to, e.g. `15%` -> `0.15`), via
+ * its shortest round-tripping string, or null for a value that is not (a computed
+ * irrational, or scientific-notation extreme). Wider than
+ * {@link decimalFromNumberIfExact} (integers only), and used only to recover a
+ * percentage's intended decimal, where the printed proportion is the meaning.
+ */
+function decimalFromShortDecimal(n: number): DecimalData | null {
+    if (!Number.isFinite(n)) return null;
+    if (Number.isInteger(n)) return decimalFromInteger(BigInt(n));
+    const s = String(n);
+    if (!/^-?\d+\.\d+$/.test(s)) return null;
+    return decimalFromLiteral(s);
+}
+
+/**
+ * Scale a money amount by `1 + sign * percent`, keeping it exact.
+ *
+ * `$X + p%` is `$X * (1 + p%)`, and money multiplication is exact wherever the
+ * inputs are, so the till answer for `$0.10 + 15%` is `$0.115 -> $0.12`, not the
+ * `$0.11` a bare double (`0.10 * 1.15 = 0.1149999...`) rounds down to. The
+ * one-plus-percent factor is formed in base ten so no double drift creeps in.
+ * Falls back to the float path only when an operand has no exact value (the same
+ * boundary {@link moneyExactMagnitude} draws), so nothing that was exact before
+ * loses exactness.
+ */
+function scaleMoneyByPercent(money: Value, unit: string, percent: number, sign: 1 | -1): Value {
+    const base = moneyExactMagnitude(money, unit);
+    const percentDecimal = decimalFromShortDecimal(percent);
+    if (base !== null && percentDecimal !== null) {
+        const factor = decimalAdd(ONE_DECIMAL, sign === 1 ? percentDecimal : decimalNegate(percentDecimal));
+        const result = decimalMultiply(base, factor);
+        return uomValueExact(decimalToNumber(result), unit, result);
+    }
+    return uomValue(money.toNumber() * (1 + sign * percent), unit);
+}
+
+/** Exact base-ten `1`, the constant term in a `1 + p%` scaling factor. */
+const ONE_DECIMAL: DecimalData = decimalFromInteger(1);
+
+/**
  * `X + 10%` and `X - 10%`, where the percentage is relative to X.
  *
  * A percentage on its own means nothing; it is a proportion *of* something.
@@ -931,7 +972,7 @@ function combinePercentage(l: Value, r: Value, sign: 1 | -1): Value | null {
         // Subtraction reads the same way round ("10% - $5" is $5 less a tenth,
         // $4.50), which keeps the rule one rule rather than two.
         if (r.type === ValueType.Uom && r.unit !== undefined) {
-            return uomValue(r.toNumber() * (1 + sign * l.toNumber()), r.unit);
+            return scaleMoneyByPercent(r, r.unit, l.toNumber(), sign);
         }
         // Otherwise a percentage on the left keeps the result a percentage,
         // because the thing being described is still a proportion. Only
@@ -946,11 +987,37 @@ function combinePercentage(l: Value, r: Value, sign: 1 | -1): Value | null {
     // money and every other unit, and the unit has to survive: "$300 + 15%"
     // is $345.00, not a bare 345.
     const factor = 1 + sign * r.toNumber();
-    if (l.type === ValueType.Number) return numberValue(l.toNumber() * factor);
+    if (l.type === ValueType.Number) {
+        // A scalar multiply scales a carried tolerance by the same factor, so a
+        // measurement keeps its uncertainty: "(100 +/- 5) + 10%" is "110 +/- 5.5",
+        // exactly what "(100 +/- 5) * 1.1" gives. Without this the tolerance was
+        // silently dropped.
+        const scaled = l.toNumber() * factor;
+        if (l.uncertainty !== undefined) return numberValueUncertain(scaled, Math.abs(l.uncertainty * factor));
+        return numberValue(scaled);
+    }
     // A Uom with no unit string is not something this can scale meaningfully,
-    // so it falls through to the ordinary path rather than inventing one.
-    if (l.type === ValueType.Uom && l.unit !== undefined) return uomValue(l.toNumber() * factor, l.unit);
+    // so it falls through to the ordinary path rather than inventing one. Money
+    // stays exact via the base-ten scaling factor.
+    if (l.type === ValueType.Uom && l.unit !== undefined) return scaleMoneyByPercent(l, l.unit, r.toNumber(), sign);
     return null;
+}
+
+/**
+ * `X * p%` and `p% of X` are a scalar multiply, so a tolerance on `X` scales by
+ * the factor: `(100 +/- 5) * 10%` and `10% of (100 +/- 5)` are `10 ± 0.5`. Only
+ * fires when one operand is a Percentage and the other is an uncertain Number, so
+ * every plain `100 * 10%` and every non-percentage multiply keeps its own path.
+ * (`of` compiles to `MUL`, so this covers both spellings.) Returns null
+ * otherwise, exactly as {@link combinePercentage} does for `+`/`-`.
+ */
+function multiplyPercentWithUncertainty(l: Value, r: Value): Value | null {
+    const pct = l.type === ValueType.Percentage ? l : r.type === ValueType.Percentage ? r : null;
+    if (pct === null) return null;
+    const other = pct === l ? r : l;
+    if (other.type !== ValueType.Number || other.uncertainty === undefined) return null;
+    const factor = pct.toNumber();
+    return numberValueUncertain(other.toNumber() * factor, Math.abs(other.uncertainty * factor));
 }
 
 /** Extract milliseconds from a duration Value (UoM time unit or plain number).
@@ -1905,6 +1972,11 @@ export function executeBytecode(
         }
         case OpCode.MUL: {
           const r = safePop(stack), l = safePop(stack);
+          // A percentage scaling an uncertain number carries the tolerance, so
+          // "(100 +/- 5) * 10%" and "10% of (100 +/- 5)" are "10 ± 0.5". This sits
+          // ahead of uncertainOp, which declines for a Percentage operand.
+          const pctUnc = multiplyPercentWithUncertainty(l, r);
+          if (pctUnc) { stack.push(pctUnc); break; }
           // Uncertainty first, so "(12.3 +/- 0.5) * 4" is "49.2 ± 2.0": a scalar
           // multiply scales the spread by |k|, which the general quadrature rule
           // gives when the plain operand is read as uncertainty 0. uncertainOp
