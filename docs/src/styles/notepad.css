@@ -124,6 +124,29 @@
   border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
 }
 
+/* A matrix answer is a grid, not a single line, so it is the one answer allowed
+   to grow past a row and break the strict one-line-per-answer alignment. It sits
+   flush right like every other answer, and the monospace `pre` keeps the columns
+   that `formatMatrixAligned` padded lined up. */
+.notepad__answer[data-matrix="true"] {
+  height: auto;
+  white-space: normal;
+  overflow: visible;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-block: 0.2rem;
+}
+
+.notepad__matrix {
+  margin: 0;
+  font-family: var(--sl-font-mono);
+  font-size: var(--sl-text-sm);
+  line-height: 1.35;
+  white-space: pre;
+  text-align: end;
+}
+
 /* The answer is the product's signature moment, so it gets the brand colour.
    With the surfaces flat, this is what separates the column from the
    expressions beside it. */

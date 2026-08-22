@@ -2,7 +2,7 @@ import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plate, PlateContent, usePlateEditor } from "platejs/react";
 import { ExpressionEngine } from "solve-engine";
-import { formatValue } from "solve-engine/format";
+import { formatValue, formatMatrixAligned } from "solve-engine/format";
 import { LanguageService, tokenClassName } from "solve-engine/language";
 import { ValueType } from "solve-engine/vm";
 
@@ -45,6 +45,8 @@ interface Answer {
   kind: "value" | "error" | "none";
   /** A CSS colour string, set when the result is a colour, to draw an inline swatch. */
   swatch?: string;
+  /** A stacked, column-aligned grid, set when the result is a matrix. */
+  matrix?: string;
 }
 
 const EMPTY: Answer = { text: "", kind: "none" };
@@ -119,6 +121,12 @@ function toValueAnswer(result: unknown): Answer {
   if (v.type === ValueType.Colour && v.value) {
     const c = v.value;
     return { text, kind: "value", swatch: `rgba(${c.r}, ${c.g}, ${c.b}, ${c.a})` };
+  }
+  // A matrix reads far better as a stacked, aligned grid than as one line, so the
+  // answer column shows the aligned form (`text` keeps the compact single line
+  // for the tooltip and for anything that wants one value per row).
+  if (v.type === ValueType.Matrix && v.value) {
+    return { text, kind: "value", matrix: formatMatrixAligned(v.value as never) };
   }
   const kind = v.type === ValueType.Error ? "error" : "value";
   return { text, kind };
@@ -373,6 +381,7 @@ export default function SolveNotepad({
               key={i}
               className="notepad__answer"
               data-kind={answer.kind}
+              data-matrix={answer.matrix ? "true" : undefined}
               /* A fully spelled out datetime is longer than any sane column
                  width, so the ellipsised ones stay readable on hover. Truncated
                  because some answers are much longer than that: a vector of
@@ -380,10 +389,18 @@ export default function SolveNotepad({
                  hint, not a document. */
               title={truncateForTooltip(answer.text)}
             >
-              {answer.swatch && (
-                <span className="notepad__swatch" style={{ background: answer.swatch }} aria-hidden="true" />
+              {answer.matrix ? (
+                /* A matrix is a block, so it is the one answer that breaks the
+                   one-row-per-line rule: the row grows to fit the grid. */
+                <pre className="notepad__matrix">{answer.matrix}</pre>
+              ) : (
+                <>
+                  {answer.swatch && (
+                    <span className="notepad__swatch" style={{ background: answer.swatch }} aria-hidden="true" />
+                  )}
+                  {answer.text}
+                </>
               )}
-              {answer.text}
             </div>
           );
         })}
