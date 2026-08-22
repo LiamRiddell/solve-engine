@@ -358,10 +358,16 @@ export class ExpressionEngine {
                 : undefined,
             goalSeekMaxIterations: this.config.vm.maxGoalSeekIterations,
             // Raw source text of a line, for features that read markdown the
-            // evaluator skipped (a table's rows). See the tables package. Wired
-            // only when a DocumentModel is present: the tables feature reads
-            // through the incremental evaluator, not the batch parseDocument path.
-            getLineText: doc ? (n: number) => doc.getLineAt(n)?.text : undefined,
+            // evaluator skipped (a table's rows). See the tables package. Reads
+            // from the document when evaluating incrementally, and from the scan
+            // in the batch parseDocument/evaluateLines path, so a table column
+            // aggregate resolves the same way through both, matching the other
+            // cross-line closures above.
+            getLineText: doc
+                ? (n: number) => doc.getLineAt(n)?.text
+                : scan
+                  ? (n: number) => scan[n - 1]?.text
+                  : undefined,
         };
     }
 
