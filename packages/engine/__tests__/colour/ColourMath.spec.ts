@@ -153,6 +153,33 @@ describe("operations", () => {
 	});
 });
 
+describe("HSV / HWB and helpers", () => {
+	test("hsvToRgb matches HSL for fully-saturated bright hues", () => {
+		expect(Colour.hsvToRgb(0, 1, 1)).toMatchObject({ r: 255, g: 0, b: 0 });
+		expect(Colour.hsvToRgb(240, 1, 1)).toMatchObject({ r: 0, g: 0, b: 255 });
+		expect(Colour.hsvToRgb(0, 0, 0)).toMatchObject({ r: 0, g: 0, b: 0 });
+	});
+
+	test("hwbToRgb starts from the pure hue and washes to grey", () => {
+		expect(Colour.hwbToRgb(0, 0, 0)).toMatchObject({ r: 255, g: 0, b: 0 });
+		expect(Colour.hwbToRgb(0, 0, 1)).toMatchObject({ r: 0, g: 0, b: 0 });
+		// whiteness + blackness >= 1 collapses to grey regardless of hue.
+		expect(Colour.hwbToRgb(120, 0.5, 0.5)).toMatchObject({ r: 128, g: 128, b: 128 });
+	});
+
+	test("tint/shade move toward white/black", () => {
+		expect(Colour.tint(Colour.parseHex("#ff0000")!, 1)).toMatchObject({ r: 255, g: 255, b: 255 });
+		expect(Colour.shade(Colour.parseHex("#ff0000")!, 1)).toMatchObject({ r: 0, g: 0, b: 0 });
+	});
+
+	test("isDark and readableColour agree on the readable text colour", () => {
+		expect(Colour.isDark(Colour.parseHex("#000000")!)).toBe(true);
+		expect(Colour.isDark(Colour.parseHex("#ffffff")!)).toBe(false);
+		expect(Colour.readableColour(Colour.parseHex("#111111")!)).toMatchObject({ r: 255, g: 255, b: 255 });
+		expect(Colour.readableColour(Colour.parseHex("#eeeeee")!)).toMatchObject({ r: 0, g: 0, b: 0 });
+	});
+});
+
 describe("display", () => {
 	test("hex renders lowercase and adds alpha only when < 1", () => {
 		expect(Colour.toHexString({ r: 255, g: 0, b: 0, a: 1, format: "hex" })).toBe("#ff0000");
