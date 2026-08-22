@@ -1,5 +1,656 @@
 # solve-engine
 
+## 1.1.0
+
+### Minor Changes
+
+- 1a2eb63: Business-day arithmetic. Deadlines count working days, and now the engine can say so.
+  
+  Date arithmetic counts calendar days, which is the wrong unit for an invoice term, an SLA or a notice period. `20/12/2024 + 5 workdays` already skipped weekends, but the deadline phrasing a person actually writes was not recognised, and there was no way to count the working days in a window:
+  
+  ```
+  5 working days after 20/12/2024              was not recognised, now 27/12/2024
+  3 business days from today                    was not recognised, now a working day
+  2 working days before 25/12/2024              was not recognised, now counts back
+  working days between 01/01/2024 and 31/01/2024   was not recognised, now 23
+  ```
+  
+  `working` and `business` days are synonyms, and either reads in the singular for a count of one. The offset walks to a working day the same way `<date> + N workdays` always has, so the two spellings can never disagree; the count is inclusive of both endpoints and independent of the order the dates are written.
+  
+  Weekends are decidable from a date, but public holidays are not: they depend on the region and change year to year. So holidays are excluded only when the host supplies a calendar, the same "bring your own data source" shape stocks and weather already use, and left unconfigured the arithmetic skips weekends only rather than guessing a holiday it was never told about:
+  
+  ```ts
+  new ExpressionEngine("en", false, {
+    date: { holidays: ["2024-12-25", "2024-12-26"] },
+    // or holidays: (date) => isPublicHoliday(date)
+  });
+  ```
+  
+  With that calendar, `1 working day after 24/12/2024` steps over Christmas and Boxing Day to the 27th, and `working days between ...` leaves them out of the count. The offset forms, `between`, and `<date> + N workdays` all consult it. `workdays in <span>` and the `is a workday` / `is a weekend` questions stay weekends-only by design: the first has no date to look a holiday up on, and the second reports the shape of the week, not whether a particular office is open.
+- 2606ee4: Colours are values now, the way numbers and dates already are.
+  
+  Write a colour and the engine treats it as a value you can compute with, not as text. All four CSS hex forms are literals (`#f00` expands to `#ff0000`, `#ff0000ff` carries alpha), alongside `rgb()`/`rgba()`/`hsl()`/`hsla()` and every CSS colour name through `color("...")` (including `transparent` and `rebeccapurple`):
+  
+  ```
+  #ff0000                     #ff0000
+  rgb(255, 128, 0)            rgb(255, 128, 0)
+  color("rebeccapurple")      rebeccapurple
+  ```
+  
+  A DevTools-style function set adjusts them: `lighten`/`darken`, `saturate`/`desaturate`, `rotate` (hue), `complement`, `mix`, `grayscale`, `invert`, and `alpha`. The amount reads the same whether written `0.2`, `20%` or `20`. `contrast` and `luminance` return the WCAG contrast ratio and relative luminance as plain numbers, so they compose with the rest of the engine. `as rgb`/`as hsl`/`as hex` re-print a colour without changing it, and two colours are equal when their channels match however each was written.
+  
+  ```
+  lighten(#3366cc, 20%)              #85a3e0
+  mix(#ff0000, #0000ff)              #800080
+  contrast(#ffffff, #767676)         4.54
+  #ff0000 == rgb(255, 0, 0)          true
+  ```
+  
+  Every colour result carries its channels, a hex string and a ready CSS string across the worker boundary, so a frontend can render an inline swatch beside the answer without recomputing anything.
+  
+  One behaviour to note: a bare `#` sequence that is exactly 3, 4, 6 or 8 hex digits now reads as a colour rather than as a markdown heading or tag, so `#face`, `#c0ffee` and `#deadbeef` evaluate to colours. A `#` followed by anything that is not one of those lengths, or by a non-hex character, is unchanged, so `# Heading` and `#todo` still behave as before. Colour arithmetic operators are deliberately out of scope; manipulate colours through the named functions.
+- 26d5601: Line references and table aggregates now resolve when a document is parsed in one pass, not only while it is edited.
+  
+  A cross-line expression, `total above`, `line 3`, `sum(line 1 : line 4)`, `prev`, and the table-column aggregates, reads the lines before it through a document model. Only the incremental path an editor drives set that model up, so those expressions worked live but answered a no-document error through `parseDocument` and `evaluateLines`, the batch calls a library reaches for. The same document read differently depending on which method was used.
+  
+  The batch pass now wires a document model for its own duration, fills each line's result in as it computes it so a backward reference reads a real value, and restores whatever model was there before, so an engine that an editor already drives is left untouched:
+  
+  ```
+  10
+  20
+  30
+  total above     was LINE_REF_NO_DOCUMENT, now 60
+  ```
+  
+  A document that uses no cross-line feature is unchanged in result, and pays only the cost of building the line index for the pass. A single-expression `evaluateExpression` still has no document, so a bare `total above` with nothing above it is still refused rather than reading a stale document.
+- 5c9e7a5: `defineFunction`, a declarative way to add a function.
+  
+  The package contract is the supported way to add syntax, and it always will be, but its floor asked too much for the simplest contribution. Adding `vat(x)` meant allocating a plugin function index, writing a parselet, and emitting `CALL_PLUGIN` by hand: the parser and the bytecode VM, learned in full, to add something the engine already knew how to call.
+  
+  `defineFunction` derives all of that from a declaration and returns a package you register like any other:
+  
+  ```ts
+  const vat = defineFunction({
+    name: "vat",
+    args: [{ name: "amount", type: "number" }],
+    returns: "number",
+    call: (amount) => amount * 1.2,
+  });
+  
+  engine.evaluateExpression("vat(100)"); // 120
+  ```
+  
+  From the spec alone it allocates the index, registers the name so it tokenises, builds the `name(args)` parselet, and wraps `call` in a handler that checks the call. `call` receives plain JavaScript values and returns one. Its parameters and return are typed from the declaration, so `(amount) => amount * 1.2` needs no annotations.
+  
+  The arity and type checks raise the engine's own structured errors, so a package gets the good messages for free rather than hand-rolling them:
+  
+  ```
+  vat()       vat() takes 1 argument, but was given none
+  vat("x")    vat() expects "amount" to be a number, but was given a string
+  ```
+  
+  This sits on top of the contract and changes none of it. Arguments are a fixed-length list of `number`, `string`, or `boolean`, and `call` is synchronous. Variadic or optional arguments, other value types, async work, and any syntax that is not `name(args)` keep using the low-level contract, whose parselets and async resolvers are exactly as before. `defineFunction` is the shortcut for the common case, not a replacement for the floor.
+- 95091df: Rates written in slash notation now convert.
+  
+  `100 kph in mph` answered **62.14 mph**, but `100 km/h in mph`, the same speed spelled the way it is read off a sign, answered **INCOMPATIBLE_UNITS**. The lexer split `km/h` into three tokens, so the compound was never one unit, and nothing could convert a rate once it was built.
+  
+  A slash between two units is now one unit whose spelling is the rate, and a rate converts to another rate, or to any single-word speed spelling, by converting the numerator and the denominator on their own:
+  
+  ```
+  100 km/h in mph            was INCOMPATIBLE_UNITS,  now 62.14 mph
+  10 m/s in km/h             was INCOMPATIBLE_UNITS,  now 36.00 km/h
+  60 mph in km/h             was INCOMPATIBLE_UNITS,  now 96.56 km/h
+  100 km/h to m/s            was 60.00 km/h (silent), now 27.78 m/s
+  120 km / 2 hours in kph    was INCOMPATIBLE_UNITS,  now 60.00 kph
+  ```
+  
+  The last one needed a second fix. A unit literal that is the right operand of `*` or `/` no longer swallows a trailing `in`/`to`, so `120 km / 2 hours in kph` groups as `(120 km / 2 hours) in kph` rather than dividing by an incompatible conversion. The same correction fixes negative quantities on offset scales, where the sign used to land on the converted number: **`-40 C in F` is now -40 F**, not -104.
+  
+  A numbered denominator is still a division, not a fused unit, so `90 km / 3 day` is unchanged, and rate arithmetic (`$50/hour * 3 hours` is `$150.00`) is untouched.
+  
+  Naming a compound derived unit on output, `9.81 m/s^2 * 70 kg` as `N` rather than `kg*m/s^2`, is deliberately left for a later slice: this change makes the rate a first-class value to hold and convert, which is what the written-out speeds needed.
+- 82a932c: Money is exact. A price is a decimal, not a binary fraction.
+  
+  A currency value was an IEEE double underneath, so representation error reached a user who had only typed two prices. `$0.10 + $0.20` carried `0.30000000000000004`, and `$1.005` displayed as `$1.00`, because the double handed to `toFixed` already sat below the value that was typed. That is the one class of wrong answer a calculator you can write money in cannot afford.
+  
+  Amounts in a currency now carry an exact base-ten decimal (a bigint coefficient and a scale) alongside the double. Same-currency `+`, `-`, `*`, `/` and comparison read it, so the arithmetic is exact and a half-cent rounds away from zero the way a till rounds it:
+  
+  ```
+  $0.10 + $0.20    was 0.30000000000000004, now $0.30
+  $19.99 * 3       was $59.97 over a drifting double, now exactly $59.97
+  $100 - $99.99    was 0.010000000000005116, now $0.01
+  $0.70 * 1.10     now exactly $0.77
+  $10 / 3          now $3.33
+  $1.005           was $1.00, now $1.01
+  $2.675           was $2.67, now $2.68
+  ```
+  
+  The boundary is deliberate. Exactness holds wherever a currency is involved, a currency against a plain number included. A bare decimal on its own is unchanged, so `0.1 + 0.2` is still `0.30000000000000004` and `sqrt(2)^2` is still float. A conversion between two currencies goes through a live rate, which is a double, so it is not exact.
+  
+  The double is still there: reading a money value as a number through `.value` or `toNumber()` is unchanged, except that the double is now the correctly-rounded image of the exact amount (`0.3` rather than the drifted sum). Money is still a unit-of-measurement value, so every existing currency path, conversion, formatting and rate arithmetic is untouched.
+- d0ab80c: Fractions are exact. A third written with `/` computes like a third.
+  
+  A quotient of two integers was an IEEE double from the moment it was written, so a chain of fractions drifted the way doubles do. `1/49 * 49` came back `0.9999999999999999`, `5/6 - 1/6 - 1/6 - 1/6 - 1/6 - 1/6` came back `1.6653345369377348e-16` instead of `0`, and `1/1000003 as fraction` answered `0/1`, because the continued-fraction guess ran past its ceiling and collapsed to zero. Those are the drifts a person who wrote a recipe, a split or a share notices.
+  
+  A fraction now carries an exact rational (a bigint numerator and denominator, always reduced) alongside the double. Integer division seeds it, `+`, `-`, `*`, `/`, unary minus and comparison keep it, and `as fraction` renders it exactly:
+  
+  ```
+  1/3 + 1/3 + 1/3    exactly 1
+  2/7 * 14           exactly 4
+  1/49 * 49          was 0.9999999999999999, now exactly 1
+  5/6 - 1/6*5        was 1.6e-16, now exactly 0
+  1/3 as fraction    1/3
+  10/4 as fraction   5/2
+  (1/3 + 1/7) as fraction   was approximated, now exactly 10/21
+  1/1000003 as fraction     was 0/1, now 1/1000003
+  ```
+  
+  The boundary is deliberate, and chosen so no existing float result flips. A fraction is shown as its decimal by default, so `10/4` is still `2.50` and `1/3` is still `0.33`; ask for `as fraction` to see the fraction and `as decimal` for the decimal. Only a fraction written with `/` is exact: a decimal literal is unchanged, so `0.1 + 0.2` is still `0.30000000000000004`, a plain integer sum keeps its float association, so `1e16 + 1 - 1e16` is still `0`, transcendental work (`sqrt`, `sin`, a non-integer power) stays float, and a bigint quotient (`100n / 3n`) stays exact integer division.
+  
+  The double is still there and is recomputed from the reduced rational, so reading a fraction as a number through `.value` or `toNumber()` is unchanged, except that a fraction that reduces to a whole number now reads back as that number exactly rather than the double it drifted to.
+- e62aff0: A line can now explain how it reached its answer.
+  
+  `explainLine(expression)` returns a readable derivation: the operations of a line
+  in the order the engine evaluates them, each with the value it arrives at. It is
+  for the person reading the note, not the developer diagnostic pipeline, which
+  reports stages, opcodes and timings.
+  
+  ```
+  (20% off 80) + 20%    76.80
+  
+    80 less 20%      64
+    64 plus 20%      76.80
+  ```
+  
+  The answer alone does not say whether the discount landed on the right side of
+  the sum; the derivation does. Each step carries the running value down into the
+  next, so a reader checks the engine's reading against their own without splitting
+  the expression across the document.
+  
+  It is an API rather than an `explain` keyword: a host puts the derivation behind
+  a hover or a disclosure, and a keyword would shadow a prose word in a document
+  that mixes notes and arithmetic. Every value in a derivation is the engine's own
+  answer for that piece of the line, re-evaluated rather than re-derived, so
+  `explanation.result` always equals what `evaluateExpression` returns and no step
+  can disagree with the answer.
+  
+  ```ts
+  const explanation = engine.explainLine("(20% off 80) + 20%");
+  explanation.steps.map((s) => `${s.description} = ${s.value.toNumber()}`);
+  // ["80 less 20% = 64", "64 plus 20% = 76.8"]
+  ```
+  
+  The derivation covers the common cases: arithmetic with its precedence and
+  associativity, parentheses, percentages (`+ 20%`, `20% off`, `20% on`, `20% of`)
+  and quantities in units and money. A bare literal, or a line built from a
+  construct that is not covered yet (function calls, dates, matrices, symbolic
+  algebra), reports its answer with an empty step list rather than a partial or
+  misleading breakdown. A line that does not evaluate at all throws an
+  `EngineError`, the same as `evaluateExpression`.
+- ce68828: Set the decimal places on a number, and it shows exactly that many.
+  
+  A number shows to two places by default. Rounding it to a different precision, with `<x> to N dp` or the two-argument `round(x, N)`, used to round the value but still display at the default, so `3.14159 to 4 dp` read `3.14` and `100 to 2 dp` read `100` — the precision you asked for was invisible.
+  
+  ```
+  3.14159 to 4 dp     was 3.14,  now 3.1416
+  100 to 2 dp         was 100,   now 100.00
+  round(1.5, 2)       new,       1.50
+  ```
+  
+  The place count is now a precision carried on the value, so it shows exactly that many places with trailing zeros kept, reads the way you asked, and travels into the next line rather than being a global display setting. The rounding is exact where the number has an exact decimal, so a half at the last place rounds away from zero the way money already does:
+  
+  ```
+  1.005 to 2 dp       was 1,     now 1.01
+  round(2.675, 2)     2.68
+  ```
+  
+  `round(x)` on its own is still the nearest whole number, and a number you did not ask to round is unchanged.
+- c3c9d13: Interest and repayment read the term and the rate in either order.
+  
+  The interest and mortgage-repayment forms accepted only the term before the rate, so `interest on 1000 over 3 years at 5%` worked but the equally natural reverse threw a parse error:
+  
+  ```
+  interest on 1000 at 5% over 3 years              was a parse error, now 157.63
+  monthly repayment on 200000 at 4% over 25 years  was a parse error, now 1,055.67
+  ```
+  
+  The two clauses are independent — `over` names the term, `at` names the rate — so a person has no way to know which order the grammar wants. Both orders now parse to the same result, for `interest on`, `compound interest on`, and every `daily`/`monthly`/`annual`/`total` repayment and loan-interest form, and a trailing `compounding monthly` still reads after either arrangement.
+- a6be074: Goal seek: invert a line against a target.
+  
+  The engine computes forwards, so every "what input gives me this answer" meant editing a number and re-reading the result until it looked right. `solve line 4 for rate = 900` now does that search, reading as "find the value of `rate` that makes line four equal 900". The variable named after `for` must be one the target line uses, since changing it is how the target moves.
+  
+  ```
+  :deposit = 100000
+  :rate = 4%
+  monthly repayment on deposit over 25 years at rate
+  solve line 3 for deposit = 900      the deposit that makes the repayment 900
+  ```
+  
+  Two mechanisms, chosen automatically. When the target line is closed form in the variable, the answer is inverted exactly, the same algebra the `solve(...)` verb already uses: `solve line 2 for x = 30` against `x*2+10` returns `10`, no search. When it is not (a finance formula, whose builtin has no symbolic reading), a bounded numeric search narrows in on it instead.
+  
+  The search is fenced in, so an untrusted document can never make it spin. It assumes the relationship rises or falls steadily and crosses the target once, looks for a positive input up to a billion, and stops after `vm.maxGoalSeekIterations` steps (a hundred by default). A target no input in range can reach, a relationship that jumps across the target rather than passing through it, and the step limit are each a structured error, never a guess and never a hang. Re-running the target line binds the variable in a call frame, so it shadows the document's own value for that one probe and leaves it untouched afterward, and a line that defines a variable is refused rather than have its definition overwritten.
+  
+  Scoped to line references for this first slice, since a line reference gives a well-defined target without inventing syntax for the relationship. The looser natural-language phrasing (`what deposit makes the repayment 900?`), solutions outside the positive search range, and relationships with several crossings are deliberately left for later.
+- 6cb9416: Currency conversion can now name the day it happened.
+  
+  `100 USD in GBP` converts at today's rate, which is right for a live figure and wrong for an expense or an invoice reconciled after the fact: a note that was correct when written quietly stops being correct as the market moves. There was no way to pin the rate to a date, and `100 USD in GBP on 2024-01-15` was not recognised.
+  
+  A conversion may now carry an `on <date>` suffix, in either spelling the date parser already reads:
+  
+  ```
+  100 USD in GBP on 2024-01-15     the rate on that day
+  100 USD in GBP on 15 Jan 2024    the same day, written differently
+  $100 in GBP on 2024-01-15        the symbol form works too
+  ```
+  
+  Historical rates are a **host-supplied provider**, the same shape as stocks and weather. There is no free, keyless historical-FX endpoint to bake in the way Frankfurter backs the live rate, so a host passes one to `createCurrencyPackage`:
+  
+  ```ts
+  import { createCurrencyPackage } from "solve-engine/packages";
+  
+  const currency = createCurrencyPackage({
+    historicalRateProvider: async (from, to, isoDate, signal) => {
+      const res = await fetch(`https://example.com/fx/${isoDate}?from=${from}&to=${to}`, { signal });
+      return (await res.json()).rate;
+    },
+  });
+  ```
+  
+  Unconfigured, a dated conversion reports `HISTORICAL_RATES_NOT_CONFIGURED` plainly rather than falling back to today's rate. Guessing a number the caller did not provide, and dressing a live rate as a historical one, is the failure mode the engine works hardest to avoid.
+  
+  A resolved historical rate is cached as **permanently fresh**: the rate on a fixed past date is immutable, so unlike a live rate the query cache never re-fetches it. The live `100 USD in GBP` conversion and existing date parsing are unchanged.
+- 671d1a2: Matrices can render as a stacked, column-aligned grid.
+  
+  A matrix's value is still returned as the compact one-line form (`[1, 2; 3, 4]`), which stays the stable text the API and the worker DTO use. Alongside it, a new `formatMatrixAligned(matrix)` export in `solve-engine/format` renders a matrix the way it reads best: one row per line, each column right-padded to its widest cell.
+  
+  ```
+  formatMatrixAligned  of  [1, 200; 300, 4]
+  
+  [   1  200 ]
+  [ 300    4 ]
+  ```
+  
+  The documentation notepad now uses this to show matrix answers as an aligned grid rather than a single line. Anything that wants the compact form (or one value per row) keeps reading `formatValue` as before.
+- 5c51d75: More colour functions: channel readouts, HSV/HWB, tints, and readable-text helpers.
+  
+  The colour package gains a wider set of functions:
+  
+  - **Read a channel** as a number: `red`, `green`, `blue`, `hue`, `saturation`, `lightness`, and `alpha` (with one argument `alpha` reads rather than sets).
+  - **More colour spaces**: `hsv` (also `hsb`) and `hwb` (CSS Color 4) join `rgb`/`hsl` as ways to build a colour.
+  - **Tints and shades**: `tint`, `shade` and `tone` mix a colour toward white, black and grey; `negate` is a full invert.
+  - **Accessible text**: `isDark`/`isLight` classify a background, and `readable` (also `contrastColor`) returns black or white, whichever has the better WCAG contrast on it.
+  - **WCAG compliance**: `isContrastCompliant(a, b)` tests whether two colours meet a contrast bar (AA normal text by default; a level name like `"AAA"` or `"AA large"`, or a plain ratio, overrides it), and `wcagLevel(a, b)` (also `wcag`) reports the best rating a pair reaches (`AAA`, `AA`, `AA Large` or `Fail`).
+  
+  ```
+  red(#3366cc)                             51
+  hue(#ff0000)                             0
+  hsv(120, 100, 100)                       #00ff00
+  tint(#ff0000, 50%)                       #ff8080
+  readable(#3366cc)                        #ffffff
+  wcagLevel(#ffffff, #767676)              AA
+  isContrastCompliant(#fff, #000, "AAA")   true
+  ```
+  
+  Function names are matched case-insensitively, so the multi-word ones can be written in camelCase (`isDark`, `isContrastCompliant`, `wcagLevel`).
+  
+  All of these sit alongside the existing constructors and adjusters and follow the same conventions (an amount reads the same as `0.2`, `20%` or `20`; a non-colour argument gives a clear error).
+- bf4ef9b: Evaluation can now run off the main thread.
+  
+  Parsing is synchronous and lands on whichever thread calls it. A 6,000-line document parses in roughly 50ms on a warm desktop, which is fine once and janky on every keystroke, and worse on a phone. The incremental path and viewport evaluation keep a re-parse small, but they do nothing for a first parse or a paste, which still block the caller.
+  
+  A new `solve-engine/worker` entry wraps the core evaluate methods behind a `postMessage` boundary, so a host can move that work to a Web Worker or a Node `worker_threads` thread without hand-rolling the protocol:
+  
+  ```ts
+  import { createWorkerEngine, eventTargetTransport } from "solve-engine/worker";
+  
+  const worker = new Worker(new URL("./engine.worker.ts", import.meta.url), { type: "module" });
+  const engine = await createWorkerEngine({ transport: eventTargetTransport(worker) });
+  
+  const result = await engine.parseDocument(text); // Promise<SerializedParsingResult>
+  ```
+  
+  The worker entry is two lines: `startWorkerRuntime(eventTargetTransport(self))`.
+  
+  Three things had to be settled to make this safe:
+  
+  - **A serialisable result.** A `Value` carries BigInt, matrix objects, symbolic trees and the exact-decimal and rational sidecars, and structured cloning reproduces none of them faithfully (BigInt alone breaks `JSON`). Results cross as a DTO instead: `SerializedParsingResult` / `SerializedParsedLine` / `SerializedValue`, where each value carries its formatted `text`, a numeric reading, and a clone-safe payload (a BigInt as a base-ten string, a matrix as shape plus cells, a range as its bounds). The DTO survives both `structuredClone` and `JSON`, so a host can cache or forward it. A raw `Value` is never posted.
+  
+  - **Cancellation.** An `AbortSignal` on a call rejects the promise and posts a `cancel` for the same request, which maps onto the engine's existing keystroke signal on the worker side, so a superseded keystroke does not race a stale result home rather than duplicating the mechanism.
+  
+  - **A structured failure.** A worker-side throw is caught, flattened into a structured error, posted, and rebuilt on the main side, so a caller's `catch` sees the same `EngineError` (code, category, message) it would have seen in-process, never a lost promise.
+  
+  Both threading targets are reached through one small transport interface. `createLinkedTransports()` runs the whole protocol on one thread for tests and for a host that wants the message-passing shape without a second thread; `eventTargetTransport` and `messagePortTransport` adapt a browser `Worker` and a Node `worker_threads` port onto the same interface.
+  
+  Packages cross as names rather than objects, since a package carries functions `postMessage` cannot clone: the worker bundles the built-ins and the main side selects among them by name, and a host with a custom package bakes it into its own worker entry. Deferred for a later slice: streaming the async resolver's follow-up live-data events across the boundary. A synchronous or pending result crosses today; a later update does not yet.
+  
+  Nothing about the synchronous API changes, and `solve-engine/worker` is a separate, side-effect-free entry point, so a bundle that never imports it pays nothing.
+- 63d53dc: A test kit for package authors, under `solve-engine/testing`.
+  
+  A package author had no supported way to test a package. The engine's own suites are thorough and internal, so anyone writing a package either reached into internals or asserted on whatever bytecode a parselet emitted, which pins the implementation rather than the behaviour: a refactor that keeps every answer correct still breaks the tests.
+  
+  The new entry point speaks in expressions. `createTestEngine` builds an engine with the built-ins and the package under test, and `expectExpression` evaluates a string and matches on the result or the failure code:
+  
+  ```ts
+  import { createTestEngine, expectExpression } from "solve-engine/testing";
+  
+  const engine = createTestEngine([myPackage]);
+  expectExpression(engine, "2 gp + 3 gp").toEqual(5, "gp");
+  expectExpression(engine, "gp").toFailWith("UNDEFINED_VARIABLE");
+  ```
+  
+  `toFailWith` reads the same error code whether the engine threw it or a plugin returned it, so a package's own codes are matched the way the built-in ones are. `toEvaluate`, `toBeError` and `toBePending` cover the coarser cases, and `.value` exposes the raw result for anything the matchers do not.
+  
+  `expectPackage` catches the three mistakes a package actually makes, from the descriptor alone, before an engine is built:
+  
+  ```ts
+  expectPackage(myPackage).notToShadow(["price", "in", "of"]);
+  expectPackage(myPackage).notToCollideWith(BUILTIN_PACKAGES);
+  expectPackage(myPackage).toDeclareCompatibleEngineVersion();
+  ```
+  
+  A trigger word that shadows ordinary prose, a keyword that collides with another package's vocabulary, and an `engineVersion` range that never resolves each had a documented failure mode and no way to test for it.
+  
+  The kit is framework-agnostic and runtime dependency-free: an assertion that fails throws an `ExpectationError`, one that passes returns, so it drops into any runner or a plain script. `createTestEngine` registers the package under test through `registerPackage`, so a version-incompatible or colliding package throws rather than being logged and skipped the way the `ExpressionEngine` constructor contains it.
+  
+  Resolving an async package result inside a matcher is left for a later slice: `toBePending` confirms the async path was taken, but the kit evaluates synchronously and does not drive a resolver to completion.
+- 83c984d: Successive percentage changes, written as a sentence.
+  
+  **`120 up 10% then down 10%` is 118.80, not 120.** This is the arithmetic people misread most often, and the person writing it out by hand is exactly the person who reaches for 120. The 10% down comes off the larger 132, not the original 120, so the changes do not cancel. A calculator that reads like a sentence is the right place for the correct answer to be visible.
+  
+  `up N%` and `down N%` apply a percentage change to a value, `then` chains them so each change lands on the running total, and `N times` repeats a step:
+  
+  ```
+  120 up 10% then down 10%   118.80   (the intuitive answer is 120)
+  50 up 20%                  60
+  80 down 15%                68
+  100 up 10% three times     133.10
+  ```
+  
+  Each step is `value * (1 ± N%)`, the same arithmetic as `increase value by N%`, so a chain is that step applied to the running total again and again. `then` is optional connective (`120 up 10% down 10%` reads the same), and the count in `N times` may be a digit or a word.
+  
+  The unit rides along, so `$300 up 10% then down 10%` is `$297.00`.
+  
+  `up` and `down` are ordinary English words, so they become operators only directly before a percentage, the one place `up 10%` can only mean a change. Prose that merely mentions them (`prices are up`, `scroll down`) and variables named after them are left alone, the same guard the `on`/`off` markup rule already relies on.
+- c3e4cdf: Markdown table columns can now be read as data.
+  
+  A markdown table was the one block the engine saw and skipped. A separator row was classified and ignored, and a data row was handed to the evaluator, which errored on the pipes, so a note could hold a table of numbers and none of them could be totalled from where they sat.
+  
+  A column can now be named and aggregated in place:
+  
+  ```
+  | item | cost |
+  | ---- | ---- |
+  | rent | 1200 |
+  | food |  300 |
+  | taxi |   12 |
+  
+  sum of column "cost" in table above       was an error, now 1,512
+  average of column "cost" above             was an error, now 504
+  ```
+  
+  `min`, `max`, `count`, and `median of column` read the same column, `total of column` and `mean of column` are accepted as synonyms of sum and average, and the result is an ordinary number, so `sum of column "cost" above + 100` adds to it.
+  
+  The decisions this slice makes, each surfaced as behaviour rather than left implicit:
+  
+  - **Addressing** is the nearest table above the query line. `sum of column "cost"`, `sum of column "cost" above`, and `sum of column "cost" in table above` all resolve the same way. An explicit table label is deferred.
+  - **Non-numeric cells** are skipped, not errored, so a label row or a blank cell does not break an otherwise-numeric column. A column with no numbers at all, or a name that is not one of the headers, is a clear coded error rather than a silent zero.
+  - **Currency and units in cells** are not read yet: a `$50` or `50 kg` cell is treated as non-numeric and skipped. Plain numbers first, on purpose, since reading the units is the larger, more useful version.
+  
+  Only tables whose rows begin with a pipe are recognised. The borderless form (`item | cost` with no leading pipe) is deferred, because a bare `a | b` line is ambiguous with a bitwise-or expression and needs cross-line context to tell the two apart. Existing per-line classification of table rows is unchanged.
+- f024778: A recurring schedule adds itself up.
+  
+  Subscriptions, salaries and instalments are the most common thing anyone adds up in a note, and there was no way to write the series. The total had to be worked out elsewhere and typed back in as a number, which is the part worth checking. `<amount> <period> for <duration>` now answers it:
+  
+  ```
+  450 monthly for 18 months        was 450 * 18 by hand, now 8,100
+  12.99 monthly for 2 years        now 311.76
+  2000 every 2 weeks for 6 months  now 26,000
+  ```
+  
+  The period is `daily`, `weekly`, `monthly`, `yearly` (also `annually`), or `every N days/weeks/months/years`. Money rides along, and where the per-payment amount is exact so is the total, through the same money-multiply path that makes `£12.99 * 24` exactly `£311.76`:
+  
+  ```
+  £450 monthly for 18 months   now £8100.00
+  $12.99 monthly for 2 years   now $311.76
+  ```
+  
+  The total is the primary result. The number of payments is the secondary detail that produced it (total is the amount times the count), and the count is a whole number: one payment per completed period, on a scheduling year where a month is one of twelve and a week one of fifty-two. That is what makes `every 2 weeks for 6 months` thirteen payments over half a year, rather than the twelve a thirty-day month would give. A final part-period has not come due and is not counted, so `every 2 weeks for 5 weeks` is two payments, not three.
+  
+  The word `for` is shared with the investment grammar (`$1,000 for 3 years at 7%`) and the rate grammar (`$24 a day for a year`). A schedule is claimed only when a period word sits before `for` and a plain duration follows it, so both of those keep working, and a bare `monthly` or `weekly` is still an ordinary variable name.
+- 27752a4: Snapshot and restore engine state. A session can be persisted and warm-started rather than re-evaluated.
+  
+  Everything a session builds up, its named variables, its user-defined functions, and its per-line result and bytecode caches, lived only in memory, so a host that wanted to persist a document, warm-start a process, or move a document between contexts had to re-evaluate the whole thing. That gets slower with the document, and it re-runs every async resolver as a side effect.
+  
+  `engine.toJSON()` now captures that state as a plain object, and `ExpressionEngine.fromJSON(state, { packages })` restores it onto a fresh engine that answers later expressions exactly as the one that evaluated the document would have:
+  
+  ```ts
+  const state = engine.toJSON();
+  const engine = ExpressionEngine.fromJSON(state, { packages });
+  ```
+  
+  The snapshot is plain JSON and survives `JSON.stringify`/`JSON.parse` unchanged: a `bigint` is written as a string, a non-finite number (`Infinity`, `NaN`) is named rather than turned into `null`, and the compiled bytecode is carried as ordinary arrays. Exact money and exact fractions keep their sidecars, so `$0.10 + $0.20` is still exactly `$0.30` and `1/3 + 1/3 + 1/3` is still exactly `1` after a restore.
+  
+  What is carried: variables, user-defined functions, the line cache (each line's result, bytecode, and the variables it reads and writes, so incremental re-evaluation still works), and the expression-keyed bytecode cache.
+  
+  What is deliberately not carried: **resolved async values**. Weather, stock and currency results are point-in-time and must be re-fetched, not restored stale, so every line backed by an async resolver is dropped from the snapshot, along with any variable whose most recent definition came from one. Package-contributed state is not carried either (core engine state only for now, a package opt-in is planned), and symbolic algebra values are deferred: a variable holding one makes `toJSON()` throw a clear, coded error rather than dropping it silently, and a cached line whose result is symbolic is skipped and re-evaluates on restore.
+  
+  Every snapshot carries a format version. `fromJSON` restores only the version it was built for and refuses anything else, or any object that is not a snapshot, with a coded `SNAPSHOT_VERSION_MISMATCH` error rather than restoring it wrongly. Restoring requires the same package set the snapshot was taken with, since the carried bytecode's plugin indices and operators line up against the packages that were present when it was written.
+- 6ae427b: Measurements carry a tolerance, and the tolerance travels through the arithmetic.
+  
+  A reading usually comes with an error term, and until now there was no way to carry it: you tracked it by hand on a second line, which stopped being practical after one operation. Write `12.3 ± 0.5`, or the ASCII `12.3 +/- 0.5` since the symbol is awkward to type, and the number carries a one-sigma uncertainty of `0.5`. `+`, `-`, `*` and `/` propagate it, combining independent errors in quadrature:
+  
+  ```
+  12.3 +/- 0.5              12.3 ± 0.5
+  (12.3 +/- 0.5) * 4        49.2 ± 2.0
+  (10 +/- 1) + (20 +/- 2)   30 ± 2.24
+  ```
+  
+  A sum or difference adds the spreads as `sqrt(a² + b²)`; a product or quotient adds the relative spreads the same way. A plain number counts as an exact operand, so a scalar multiply scales the spread by the factor. The `±` binds tighter than `+ - * /`, so `12.3 ± 0.5 * 4` is `(12.3 ± 0.5) * 4`; parenthesise to group otherwise.
+  
+  The boundary is deliberate. Uncertainty is a sidecar on an ordinary Number, so a value with no tolerance behaves exactly as a plain number always did, and everything other than the four arithmetic ops reads the centre and drops the tolerance: a comparison compares the centres, and `sqrt`, `sin` and the like work on the centre alone. Correlated errors are a much larger problem and out of scope, as is a tolerance on a value that also carries a unit.
+- 870a2cf: A document can now define its own units, the way it can already define a function.
+  
+  `f(x) = 2*x + 1` worked, but `1 sprint = 2 weeks` did not, so anyone working in a unit the engine does not ship had to keep the conversion factor in their head and write it out on every line. Now the name is taught once and used everywhere below it:
+  
+  ```
+  1 sprint = 2 weeks         was a parse error, now sprint defined
+  6 sprints in days          was Undefined variable,  now 84 days
+  1 story point = 4 hours    was a parse error, now story point defined
+  13 story points            was Undefined variable,  now 52 hours
+  ```
+  
+  A defined unit is an alias for a real unit, so it inherits that unit's dimension. `6 sprints in days` converts and `6 sprints in kg` is refused the same way `2 weeks in kg` is, reporting that a duration is not a mass. Plurals and multi-word names both work, and the value is reported in the base unit (`6 sprints` is `12 weeks`).
+  
+  The shape is deliberately narrow so it cannot swallow an equation. Only the natural `1 <name> = <quantity> <unit>` form defines a unit: the coefficient must be `1`, the name must not be a built-in unit, and the base must be a known unit. `2 x = 10` is still a scalar equation, `x = 5` is still an assignment, and a built-in unit still cannot be redefined.
+  
+  Definitions are document-scoped, the way a user-defined function is. They are rebuilt top-to-bottom on every pass, so a definition holds only for the document that wrote it, a later line redefining a name replaces the earlier one, and nothing leaks between documents. A defined name only activates after a quantity, so a bare word in prose, or a same-named variable, is never rewritten into arithmetic.
+  
+  Free-standing (dimensionless) units and a host-supplied definition table are deliberately left for a later slice: this change gives the document-scoped, dimensioned case, which is what planning, recipes and house units all wanted.
+- c2c6634: Live values now stream back from the worker.
+  
+  The off-main-thread harness shipped with one of its three points deferred: a value that resolves inside the worker AFTER a request already answered had no way home. A document parsed off-thread came back with its synchronous and pending results, but when a currency rate, a weather reading or a historical FX rate settled a moment later, that resolution stayed trapped in the worker and the host never saw it. Live data is a headline feature, and off-thread it did not arrive. This completes the async-streaming point deferred from the initial worker slice.
+  
+  `WorkerEngine` gains two subscriptions:
+  
+  ```ts
+  const stop = engine.onResolved((lines) => {
+    for (const { lineNumber, value } of lines) render(lineNumber, value.text);
+  });
+  
+  engine.onAsyncError(({ queryKey, packageId, error }) => {
+    console.warn(`${packageId} could not resolve ${queryKey}: ${error.message}`);
+  });
+  ```
+  
+  These are subscriptions rather than per-call promises because a resolution is tied to no single request: it belongs to whichever document is current when the value lands. `onResolved` delivers a batch, since the engine collapses every resolution that settles in one tick into one update, and each line arrives already re-evaluated as a `SerializedValue` the host can render without a further round-trip. `onAsyncError` carries the same structured `EngineError` an in-process resolver failure would surface. Both return an unsubscribe function.
+  
+  The worker holds one engine and one document context, so the most recent evaluate call is the live one. Parsing a new document supersedes the old one: a value still resolving for the superseded document is dropped at the engine's own staleness guard rather than delivered against the current document. That guard is the existing per-resolution `AbortSignal`, the same mechanism the cancellation point already leans on, so a stale resolution never reaches the host as if it were current.
+  
+  The other two points are unchanged and still hold: results cross as a serialisable DTO, never as a raw `Value`, and an `AbortSignal` on a call still maps onto a `cancel` message worker-side. `solve-engine/worker` remains a separate, side-effect-free entry point.
+
+### Patch Changes
+
+- e988885: A parenthesised thousands number reads as one number again: `(1,000)` is `1000`, not a vector.
+  
+  The comma-separator change suppressed the thousands-comma inside every paren, but `(` groups as well as calls. A bare grouping paren was wrongly treated like a function call, so `(1,000)` split into the two-element vector `[1, 0]` and silently corrupted the arithmetic around it:
+  
+  ```
+  (1,000)          was [1, 0],   now 1000
+  (1,000 + 500)    was a vector, now 1500
+  2 * (1,000)      was a vector, now 2000
+  ```
+  
+  The lexer now tells a call from a grouping by what precedes the `(`: an identifier or a closing bracket makes it a call (`rgb(255,255,255)`, `vec2(1,2)` — commas separate), while an operator or the line start makes it a grouping (`(1,000)`, `2 * (1,000)` — the comma still groups thousands). `[...]` stays a separator context, so `[100,200,300]` is unchanged, and `2(1,000)` reads as implicit multiplication over the grouping rather than a call.
+- 57d4116: A comma inside a call or bracket is read as a separator, so `rgb(255,255,255)` and `[100,200,300]` work without spaces.
+  
+  A comma followed by exactly three digits was always coalesced into the number as a thousands group, whatever surrounded it, so a comma-separated list written without a space after each comma fused into one number:
+  
+  ```
+  rgb(255,255,255)     was an arity error,       now white
+  hsl(0,100,50)        was an arity error,       now the colour
+  [100,200,300]        was [100200300] (1x1),    now a 1x3 vector
+  ```
+  
+  `255,255,255` reads identically to the thousands-grouped `255255255`, so nothing local to the number could tell them apart — only the surrounding `(` or `[` can. The lexer now tracks that nesting: a comma inside a call or a bracket is an argument or element separator and is not coalesced, while a top-level comma still groups thousands (`1,000,000` is unchanged). The space form (`rgb(255, 255, 255)`) already worked and still does, and `.`-grouping is untouched.
+- 52338f4: `explainLine` reports the answer alone when a line mixes arithmetic with an operator it does not break down, instead of a misleading step.
+  
+  The derivation explains arithmetic (`+ - * / ^`, `of`, a percentage on a quantity), and a line built from anything else, a comparison, a conversion, a logical operator, is meant to come back with the answer and an empty step list. `2 + 2 == 4` broke that: it emitted `["2 plus 2 == 4", 1]`, an arithmetic step whose text glued the comparison on and whose result was actually the Boolean the line evaluates to.
+  
+  ```
+  explainLine("2 + 2 == 4")     was [["2 plus 2 == 4", 1]], now []
+  explainLine("100 + 20 in kg") was [["100 plus 20 in kg", 120]], now []
+  explainLine("3 * 4 > 10")     was [["3 times 4 > 10", 1]], now []
+  ```
+  
+  The operand scan stopped only at the operators the derivation models, so an unmodelled one (`==`, `<`, `in`, `to`, `and`, a bitwise op) was swallowed into a leaf rather than ending the line. An operand run is now a span of value tokens, so any operator that is not modelled ends it and the line falls back to reporting its answer with no steps, the same as a bare comparison always did. Arithmetic that the derivation does model is unchanged, and the answer itself was always correct.
+- 70d2f2c: Implicit multiplication over a grouping keeps thousands: `(2)(1,000)` is `2,000`, not a vector.
+  
+  A `(` right after `)` or `]` was read as a function call, so a thousands number in the following grouping paren was split on its comma and `(2)(1,000)` became the vector `[2, 0]`:
+  
+  ```
+  (2)(1,000)     was [2, 0],      now 2000
+  (5)(2,500)     was [10, 2,500], now 12500
+  ```
+  
+  This grammar has no curried or first-class calls (`f(1000)(2000)` errors) and no index-application (`[1,2,3](0)` errors), so `)(` and `](` are implicit multiplication over a grouping, never a call. The lexer now treats only an identifier or a function keyword as a call target, so a `(` after a closing bracket is a grouping and its comma stays a thousands separator, matching the no-comma form `(2)(1000)` = `2000`.
+- 169a86b: A thousands number in a grouping paren survives a keyword operator too: `100 mod (1,000)` is `100`, not a vector.
+  
+  The grouping-vs-call rule told a function call from a grouping by the symbol before the paren, but a **keyword** operator (`mod`, `xor`, `and`, `or`, `to`) is a word, so it was mistaken for a function name and the thousands number inside the following paren was split on its comma:
+  
+  ```
+  100 mod (1,000)    was [0, NaN],  now 100
+  255 xor (1,000)    was 255,       now 791
+  1 and (1,000)      was [2, 1],    now 1001
+  ```
+  
+  The lexer now checks the word against its keyword table: a keyword that is not a function (an operator, connective, or constant like `mod`, `to`, `pi`) is not a call, so the `(...)` after it is a grouping and its comma stays a thousands separator, while a real function name (`rgb`, `sqrt`) or a variable still opens a call where the comma separates.
+- 0fadb0b: A dated currency conversion never fetches a rate the amount does not resolve to.
+  
+  When the source was a subexpression in which a foreign amount cancels out — `(100 USD * (5 JPY / 5 JPY)) in GBP on <date>` — the pre-fetch guessed the source from the nearest currency literal (the cancelled JPY) and fetched JPY→GBP, a wasted call that, against a real provider lacking that pair, fails. The converted value was already correct (the runtime read the true USD source), but the phantom fetch was not.
+  
+  The rate is now fetched ahead of evaluation only when the amount's operand strings name exactly one currency (an unambiguous source, as a plain `100 USD in GBP on <date>` does). A mixed-currency subexpression is left to the runtime, which reads the source off the computed amount, so a single correct fetch happens and no invented pair is ever requested.
+- cd6a52d: A dated currency conversion works when the amount is a variable, not only a literal.
+  
+  ```
+  x = 100 USD
+  x in GBP on 2024-01-15
+  ```
+  
+  With a `historicalRateProvider` configured, the second line returned an internal `HISTORICAL_RATE_NOT_PREFLIGHTED` error and the provider was never called. The rate is fetched ahead of evaluation by scanning the compiled line for its source currency, and a variable left operand carries no currency literal to find, so nothing was fetched and the conversion had no rate to apply.
+  
+  The source currency is known at evaluation time regardless — it is the amount's own unit — so the conversion now fetches the rate itself when the pre-scan could not, the same way any live-data lookup resolves: the line reads as pending, the rate arrives, and the line settles on the converted amount. A literal source (`100 USD in GBP on 2024-01-15`) is unchanged, and with no provider the honest `HISTORICAL_RATES_NOT_CONFIGURED` error is reported rather than an internal one.
+- e96500f: Percentage arithmetic stays exact and keeps uncertainty in two more spots: a chained percentage of money, and a percentage divided by an uncertain number.
+  
+  ```
+  50% of 1% of $3      was $0.01,  now $0.02
+  10% / (2 +/- 0.1)    was 0.05,   now 0.05 ± 0.0025
+  ```
+  
+  `50% of 1% of $3` reduces `50% of 1%` to a bare `0.005` before it multiplies the money, and the money multiply only stayed exact when an operand was literally a percentage — so the chained form drifted a cent while `$3 * 0.005` and `50% of (1% of $3)` did not, making the answer depend on grouping. Money times any scalar (a percentage, or a plain or computed number) now goes through the exact base-ten path, while a rational scalar like `$3 * 2/7` still keeps its exact fraction.
+  
+  `10% / (2 +/- 0.1)` is `0.1 / 2`, a plain number, so the divisor's spread carries through; the uncertainty handling was one-directional and dropped it. It now handles a percentage over an uncertain number as well as an uncertain number over a percentage, guarding a zero divisor either way.
+- 8dca760: Fix percentage arithmetic dropping exactness and uncertainty.
+  
+  Two related defects in `X ± N%` (and `X * N%` / `N% of X`):
+  
+  - **Money drifted a cent.** `$0.10 + 15%` answered `$0.11` instead of `$0.12`. The result was a bare double (`0.10 * 1.15 = 0.1149999...`) with no exact-decimal sidecar, so the half-cent rounded down, even though the identical `$0.10 * 1.15` was exact. Percentage scaling of money now goes through the same base-ten path, so `$0.10 + 15%` is `$0.12` and `$4.55 + 10%` is `$5.01`.
+  - **Uncertainty was silently lost.** `(100 ± 5) + 10%` answered `110` instead of `110 ± 5.5`. A percentage is a scalar multiply, so a carried tolerance now scales by the same factor across `+`, `-`, `*` and `of`.
+  
+  Non-money units, plain numbers, and percentages without a tolerance are unchanged.
+- 19253ed: Percentage arithmetic keeps money exact and uncertainty intact across `*` and `/` too, not only `+` and `-`.
+  
+  Two gaps remained after the percentage-on-money and percentage-on-uncertainty fixes:
+  
+  ```
+  15% of $0.10        was $0.01, now $0.02   (a percentage times money was not exact)
+  $0.10 * 15%         was $0.01, now $0.02
+  (100 +/- 5) / 10%   was 1000,  now 1000 ± 50   (division dropped the tolerance)
+  ```
+  
+  `15% of $0.10` is `$0.015`, which the half-cent rule rounds to `$0.02` — the same answer `$0.10 + 15%` and the exact multiply `$0.10 * 0.15` already give. And `X / 10%` is `X / 0.1`, a scalar multiply, so an uncertain `X` keeps its relative spread. Both now go through the same base-ten money scaling and the same percentage-uncertainty handling the `+`/`-` and `*` paths use (`of` compiles to a multiply, so both spellings are covered), making the guarantee that percentage arithmetic preserves money exactness and uncertainty true across all four operators.
+- e578a2e: Fix markdown table-column aggregates through `parseDocument` / `evaluateLines`.
+  
+  `sum of column "cost" above` (and the average/min/max/count/median siblings) resolved correctly while a document was edited but returned a `TABLE_NO_DOCUMENT` error when the same document was evaluated in one pass through the batch library APIs. The per-line context wired the raw-line reader only for the incremental path; it now also reads from the batch scan, so a table aggregate resolves the same way through both, as the other cross-line reads already do.
+- d1de194: `tax off` and `tax in` on money round the half-cent like a till, matching `tax on`.
+  
+  The exact-money rounding reached the multiply tax forms but not the divide forms, so extracting or removing tax drifted a cent while adding it did not:
+  
+  ```
+  tax off $0.09 at 20%   was $0.07, now $0.08   (true net $0.075)
+  tax in  $0.09 at 20%   was $0.01, now $0.02   (true $0.015)
+  ```
+  
+  The same $0.075 reached through `tax on` already displayed $0.08, so the engine showed two different cents for one amount depending on the operation, and `tax off` plus `tax in` no longer summed back to the gross. Both divide forms now go through exact decimal division — exact where the quotient terminates (the cases that can land on a half-cent, at 20%/25%/50%), and rounded far below the cent where it does not, so the displayed cent is right either way. A tax on a bare number or a non-currency unit is unchanged.
+- 0eb9957: Tax on money rounds the half-cent the way a till does.
+  
+  `tax on $0.10 at 15%` is fifteen percent of ten cents, exactly $0.015, and the money rules round a half-cent away from zero. It answered `$0.01`: the tax builtin multiplied `amount * rate` as a plain double (`0.10 * 0.15 = 0.0149999...`) with no exact-decimal sidecar, so the formatter rounded the drifted value down. The mathematically identical `$0.10 * 0.15` was already exact, which made the two disagree.
+  
+  ```
+  tax on $0.10 at 15%     was $0.01, now $0.02
+  tax on $10.10 at 15%    was $1.51, now $1.52
+  ```
+  
+  Tax on money now runs through the same base-ten scaling the `$X + p%` percentage already uses, so it is exact wherever the amount is. `taxAdd`, the tax-inclusive total, shares the mechanism and is fixed with it. A tax on a bare number, or on a non-currency unit, is unchanged.
+- 7f05be3: A matrix that contains a non-finite number survives the worker DTO's JSON round-trip.
+  
+  The scalar guard for `1/0` and `0/0` did not reach a non-finite number sitting inside a matrix cell, so a `[1/0, 2]` result serialised with a raw `Infinity` in its cells. `structuredClone` kept it but `JSON.stringify` turned it into `null`, so the two transport paths disagreed and the value could not be cached and reloaded — the same break the scalar fix removed, one container deeper.
+  
+  A non-finite matrix cell now carries the same `"Infinity"`/`"-Infinity"`/`"NaN"` string tag the scalar field uses (the cell type already allows strings, alongside the formatted-string form symbolic cells take), so both round-trips agree and a host recovers the value with `Number(cell)`. Finite numeric and boolean cells are unchanged.
+- 67deec0: Fix a non-finite worker result breaking the DTO's JSON round-trip.
+  
+  A value whose numeric reading is non-finite (`1/0` -> Infinity, `0/0` -> NaN, an overflow) put `Infinity`/`NaN` in the serialized `number` field. That survives `structuredClone` (postMessage) but `JSON.stringify` turns it into `null`, so a host that cached and reloaded the result got a different value, breaking the round-trip the worker DTO guarantees.
+  
+  `SerializedValue.number` is now always finite (0 when the reading is non-finite), and a new optional `nonFinite` field (`"Infinity"` / `"-Infinity"` / `"NaN"`) names the real value, so both `structuredClone` and `JSON` agree. Read `nonFinite ? Number(nonFinite) : number` to recover the reading.
+- 7751aea: Cross-line features in a batch parse no longer build a document model per pass.
+  
+  The support for line references and table columns in `parseDocument` and
+  `evaluateLines` was added by pointing the pass at a freshly built `DocumentModel`.
+  That allocated a line record and index for every line of every document, even
+  one that used no cross-line feature at all, adding a few milliseconds to a large
+  parse and needless heap churn. The batch cross-line source now reads earlier
+  lines straight from the scan and the results array the pass already holds, which
+  are references rather than new allocations, so a document that uses no such
+  feature pays nothing. Line references and table aggregates resolve exactly as
+  before.
+- d65f5ed: Unit mismatches now read as sentences instead of a bare code.
+  
+  `5 kg + 3 m` and `1 hour in metres` both surfaced the raw **INCOMPATIBLE_UNITS**, which told a reader nothing and was the same string whether they had added mass to length, their mistake, or asked for a conversion the engine cannot do, a different situation. Now that dimensions are tracked there is something specific to name, and the two causes read differently:
+  
+  ```
+  5 kg + 3 m           was INCOMPATIBLE_UNITS,  now "mass and length cannot be added"
+  5 kg - 3 m           was INCOMPATIBLE_UNITS,  now "mass and length cannot be subtracted"
+  1 hour in metres     was INCOMPATIBLE_UNITS,  now "a duration cannot be converted to a length"
+  5 kg in m            was INCOMPATIBLE_UNITS,  now "a mass cannot be converted to a length"
+  $100 in kg           was INCOMPATIBLE_UNITS,  now "money cannot be converted to a mass"
+  5 kg < 3 m           was INCOMPATIBLE_UNITS,  now "mass and length cannot be compared"
+  ```
+  
+  The dimension is named from the same measure table the converter already uses, so a quantity of time reads as a "duration" and a currency as "money". Combining, converting, comparing, and `min`/`max` across dimensions all read this way.
+  
+  The error **code is unchanged**: it is still `INCOMPATIBLE_UNITS`, so anything matching on the code keeps working. Only the human-readable message changed, and no expression that used to evaluate changed its result.
+  
+  A pair with no single dimension to name keeps the older message that names the units instead, so the sentence never trails off into "undefined". That covers a compound rate such as `km/h`, a currency code the exchange does not recognise, and two different currencies with no cached rate (both are money, a missing-rate case rather than a dimension mismatch), which still reports "Cannot combine incompatible units: BTC and ETH".
+
 ## 1.0.2
 
 ### Patch Changes
