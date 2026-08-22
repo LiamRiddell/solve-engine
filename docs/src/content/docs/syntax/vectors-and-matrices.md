@@ -10,6 +10,11 @@ Comma separates columns, semicolon separates rows.
 [1,2;3,4] // [1, 2; 3, 4]
 ```
 
+A matrix's compact value is written on one line, `columns, ...; next row, ...`,
+which is what the engine returns as text. In this notepad the answer column
+renders it as a stacked, column-aligned grid instead, one row per line, since a
+grid is easier to read; the two are the same matrix.
+
 ## Element-wise arithmetic
 
 ```solve

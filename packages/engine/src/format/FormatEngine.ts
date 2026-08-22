@@ -268,6 +268,43 @@ function formatMatrix(m: MatrixData, locale: ILocale, settings: FormattingSettin
   return `${locale.display.resultPrefix}[${rows.join("; ")}]`;
 }
 
+/**
+ * Render a matrix as a multi-line, column-aligned block: one row per line (the
+ * newline is where {@link formatValue}'s compact form writes `;`), each column
+ * right-padded to its widest cell, and every row wrapped in `[ ... ]`. For
+ * display where a grid reads better than a line, e.g. a docs notepad or a REPL:
+ *
+ * ```text
+ * [  1   2 ]
+ * [ 30   4 ]
+ * ```
+ *
+ * This is deliberately separate from {@link formatValue}, whose single-line
+ * matrix form stays the stable, assertable text the API and the worker DTO use.
+ * A 1xN row vector is one line; an Nx1 column vector is N lines.
+ */
+export function formatMatrixAligned(m: MatrixData, settings?: FormattingSettings): string {
+  const us = settings || DEFAULT_FORMATTING_SETTINGS;
+  const rowMajor = columnMajorToRowMajor(m);
+  const cells: string[][] = [];
+  for (let r = 0; r < m.rows; r++) {
+    const row: string[] = [];
+    for (let c = 0; c < m.cols; c++) {
+      row.push(formatMatrixEntry(rowMajor[r * m.cols + c], us));
+    }
+    cells.push(row);
+  }
+  const colWidth: number[] = [];
+  for (let c = 0; c < m.cols; c++) {
+    let width = 0;
+    for (let r = 0; r < m.rows; r++) width = Math.max(width, cells[r][c].length);
+    colWidth.push(width);
+  }
+  return cells
+    .map((row) => `[ ${row.map((cell, c) => cell.padStart(colWidth[c])).join("  ")} ]`)
+    .join("\n");
+}
+
 function formatRange(min: number, max: number, locale: ILocale): string {
   return `${locale.display.resultPrefix}${min}:${max}`;
 }
