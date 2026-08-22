@@ -52,6 +52,8 @@ export const exampleData: ExampleCategory[] = [
       { name: "Pi constant", expression: "pi", description: "Mathematical constant" },
       { name: "Addition keyword", expression: "1 plus 2", description: "Keyword-based addition" },
       { name: "Large number suffix", expression: "2.5k + 1000", description: "'k'/'M'/'G'/'B'/'T' magnitude suffixes (thousand/million/billion/trillion)" },
+      { name: "Exact fraction", expression: "2/7 + 1/7", description: "Fractions stay exact rationals -> 3/7, not 0.4285714..." },
+      { name: "Fraction sum", expression: "1/2 + 1/3", description: "Exact rational arithmetic -> 5/6" },
     ]
   },
   {
@@ -81,6 +83,8 @@ export const exampleData: ExampleCategory[] = [
       { name: "Duration", expression: "now + 20 days", description: "Date arithmetic" },
       { name: "Workdays in a period", expression: "workdays in 3 weeks", description: "Count of Mon-Fri business days (no public-holiday exclusion)" },
       { name: "Add workdays", expression: "now + 5 workdays", description: "Business-day-skip date arithmetic" },
+      { name: "Working days after a date", expression: "5 working days after 25/12/2024", description: "Lands N working days on from a date, skipping weekends" },
+      { name: "Working days between dates", expression: "working days between 01/01/2024 and 31/01/2024", description: "Counts the Mon-Fri days in a window, both ends inclusive" },
       { name: "Unix timestamp to date", expression: "1733823083000 to date", description: "Millisecond-magnitude Unix timestamp, auto-detected" },
       { name: "Date to timestamp", expression: "now to timestamp", description: "Convert a date to a Unix timestamp (seconds)" },
       { name: "Bare date literal (DD/MM/YYYY)", expression: "25/12/2023", description: "Slash-separated date, day first" },
@@ -137,13 +141,19 @@ export const exampleData: ExampleCategory[] = [
       { name: "Cooking: volume to mass", expression: "10 cups olive oil in grams", description: "Reverse direction — volume to mass" },
       { name: "Binary data units", expression: "1 GiB to MiB", description: "IEC binary-prefix units (1024-based) -> 1024" },
       { name: "Binary vs decimal prefix", expression: "1 GiB to GB", description: "GiB (1024-based) vs GB (1000-based) are NOT the same -> ~1.074" },
+      { name: "Compound unit", expression: "100 km/h in mph", description: "A speed written as a compound unit, converted" },
+      { name: "Derived unit", expression: "120 km / 2 hours in km/h", description: "Divide a distance by a time to derive a speed -> 60 km/h" },
+      { name: "Rate times duration", expression: "$50/hour * 3 hours", description: "A per-hour rate times a duration cancels the denominator -> $150.00" },
+      { name: "User-defined unit", expression: "1 sprint = 2 weeks\n6 sprints in days", description: "Define your own unit, then convert with it -> 84 days" },
     ]
   },
   {
     name: "Currency",
     description: "Currency conversion and arithmetic",
     examples: [
+      { name: "Exact money", expression: "$0.10 + $0.20", description: "Money is exact to the cent -> $0.30, not a binary-float residue" },
       { name: "USD to EUR", expression: "100 USD to EUR", description: "Convert US dollars to Euros" },
+      { name: "Historical rate (needs a provider)", expression: "100 USD in GBP on 2024-01-15", description: "Converts at a past day's rate; shows 'not configured' until a host wires up a historicalRateProvider" },
       { name: "USD to GBP", expression: "250 USD to GBP", description: "Convert US dollars to British pounds" },
       { name: "EUR to JPY", expression: "500 EUR to JPY", description: "Convert Euros to Japanese yen" },
       { name: "GBP to USD", expression: "75 GBP to USD", description: "Convert British pounds to US dollars" },
@@ -188,6 +198,7 @@ export const exampleData: ExampleCategory[] = [
       { name: "Square root", expression: "sqrt(16)", description: "Calculate square root" },
       { name: "Absolute value", expression: "abs(-10)", description: "Absolute value" },
       { name: "Round number", expression: "round(3.7)", description: "Round to nearest integer" },
+      { name: "Round to N places", expression: "round(3.14159, 2)", description: "A second argument rounds to that many decimal places -> 3.14" },
       { name: "Arcsine", expression: "arcsin(1)", description: "Inverse sine, in radians -> pi/2" },
       { name: "Arccosine", expression: "arccos(1)", description: "Inverse cosine, in radians -> 0" },
       { name: "Arctangent", expression: "arctan(1)", description: "Inverse tangent, in radians -> pi/4" },
@@ -196,14 +207,19 @@ export const exampleData: ExampleCategory[] = [
     ]
   },
   {
-    name: "Vectors",
-    description: "Vector operations using vec2/vec3/vec4 constructors",
+    name: "Vectors & Matrices",
+    description: "Vector constructors and matrix literals, products, transpose, determinant and inverse",
     examples: [
       { name: "vec2", expression: "vec2(1, 2)", description: "Create a 2D vector" },
       { name: "vec3", expression: "vec3(1, 2, 3)", description: "Create a 3D vector" },
       { name: "vec4", expression: "vec4(1, 2, 3, 4)", description: "Create a 4D vector" },
       { name: "vec2 addition", expression: "vec2(1, 2) + vec2(3, 4)", description: "Add two vectors" },
       { name: "vec2 subtraction", expression: "vec2(5, 6) - vec2(2, 3)", description: "Subtract vectors" },
+      { name: "Matrix literal", expression: "[1, 2; 3, 4]", description: "Rows split by ';', columns by ',' — a 2x2 matrix, rendered as an aligned grid" },
+      { name: "Matrix product", expression: "[1, 2; 3, 4] * [5, 6; 7, 8]", description: "Real matrix multiplication" },
+      { name: "Transpose", expression: "transpose([1, 2; 3, 4])", description: "Flip rows and columns" },
+      { name: "Determinant", expression: "det([1, 2; 3, 4])", description: "The determinant of a square matrix -> -2" },
+      { name: "Inverse", expression: "inv([1, 2; 3, 4])", description: "The matrix inverse" },
     ]
   },
   {
@@ -304,6 +320,7 @@ export const exampleData: ExampleCategory[] = [
       { name: "As percent", expression: "0.5 as percent", description: "Convert a decimal to a percentage" },
       { name: "As hex", expression: "255 as hex", description: "Base-16 display" },
       { name: "As fraction", expression: "0.5 as fraction", description: "Simplified fraction display" },
+      { name: "To N decimal places", expression: "3.14159 to 4 dp", description: "Round and display to an exact number of places -> 3.1416" },
       { name: "As scientific", expression: "1500000 as sci", description: "Scientific notation" },
       { name: "As binary", expression: "10 as binary", description: "Base-2 display" },
     ]
@@ -349,6 +366,8 @@ export const exampleData: ExampleCategory[] = [
       { name: "Compound interest", expression: "compound interest on 1000 over 3 years at 7%", description: "Future value of an investment" },
       { name: "Interest earned", expression: "interest on 1000 over 3 years at 7%", description: "Interest-only portion of compound growth" },
       { name: "Monthly repayment", expression: "monthly repayment on 10000 over 6 years at 6%", description: "Standard mortgage/loan amortization" },
+      { name: "Rate before term", expression: "interest on 1000 at 5% over 3 years", description: "The term and the rate read in either order" },
+      { name: "Recurring schedule", expression: "450 monthly for 18 months", description: "A repeated amount over a duration, summed -> 8,100" },
       { name: "Sales tax", expression: "tax on 300 at 20%", description: "Add sales tax/VAT at an explicit rate" },
       { name: "Remove tax", expression: "tax off 360 at 20%", description: "Extract the pre-tax amount from a tax-inclusive total" },
       { name: "Inflation-adjusted value", expression: "what is $500 from 1970", description: "Present-day value using a bundled US CPI-U table (1970-2026, approximate)" },
@@ -397,6 +416,39 @@ export const exampleData: ExampleCategory[] = [
       { name: "'ask:' synonym", expression: "ask: what is the tallest mountain", description: "'ask:'/'google:' are equivalent synonyms for 'search:'" },
       { name: "Phrased like a conversion", expression: "search: 10 km in miles", description: "The whole '10 km in miles' is sent to the provider VERBATIM as a question — this is not the engine's own unit-conversion syntax (that's '10 km to miles'), it just happens to read similarly" },
       { name: "Calca-style '= ?' (also supported)", expression: "distance to the moon = ?", description: "The original Calca syntax still works too, for compatibility — 'search:'/'ask:'/'google:' are just the clearer, more discoverable form" },
+    ]
+  },
+  {
+    name: "Colours",
+    description: "Colours are values: hex/rgb/hsl literals, DevTools-style adjusters, and WCAG contrast",
+    examples: [
+      { name: "Hex literal", expression: "#ff0000", description: "A CSS hex colour is a value, not a markdown heading" },
+      { name: "rgb()", expression: "rgb(255, 128, 0)", description: "Construct from red/green/blue channels (0-255)" },
+      { name: "hsl()", expression: "hsl(200, 60%, 50%)", description: "Construct from hue/saturation/lightness" },
+      { name: "Named colour", expression: "color(\"rebeccapurple\")", description: "Every CSS colour name, via color(\"...\")" },
+      { name: "Lighten", expression: "lighten(#3366cc, 20%)", description: "Raise the lightness by an amount" },
+      { name: "Darken", expression: "darken(#3366cc, 20%)", description: "Lower the lightness by an amount" },
+      { name: "Mix", expression: "mix(#ff0000, #0000ff)", description: "Blend two colours -> #800080" },
+      { name: "Rotate hue", expression: "rotate(#ff0000, 120)", description: "Spin the hue by a number of degrees" },
+      { name: "Complement", expression: "complement(#ff0000)", description: "The colour opposite on the wheel" },
+      { name: "Grayscale", expression: "grayscale(#ff8800)", description: "Drop a colour to a matching gray" },
+      { name: "Invert", expression: "invert(#ff0000)", description: "Invert each channel" },
+      { name: "Alpha", expression: "alpha(#ff0000, 50%)", description: "Set the opacity" },
+      { name: "WCAG contrast", expression: "contrast(#ffffff, #767676)", description: "The contrast ratio (1-21) as a plain number -> 4.54" },
+      { name: "Relative luminance", expression: "luminance(#ffffff)", description: "WCAG relative luminance (0-1) as a plain number" },
+      { name: "Convert format", expression: "#ff0000 as hsl", description: "Re-print a colour in another form" },
+      { name: "Read a channel", expression: "hue(#3366cc)", description: "hue/saturation/lightness read a single channel as a number" },
+    ]
+  },
+  {
+    name: "Uncertainty",
+    description: "Carry a ± tolerance through arithmetic (error propagation in quadrature)",
+    examples: [
+      { name: "A measurement", expression: "100 +/- 5", description: "A value with a one-sigma tolerance, shown as 100 ± 5" },
+      { name: "Scaled by a factor", expression: "(12.3 +/- 0.5) * 4", description: "A scalar multiply scales the spread -> 49.2 ± 2.0" },
+      { name: "Plus a percentage", expression: "(100 +/- 5) + 10%", description: "A percentage keeps the tolerance -> 110 ± 5.5" },
+      { name: "Divided by a number", expression: "(100 +/- 5) / 2", description: "Propagates through division too -> 50 ± 2.5" },
+      { name: "Divided by a percentage", expression: "(100 +/- 5) / 10%", description: "Dividing by a percentage carries it -> 1,000 ± 50" },
     ]
   },
 ];

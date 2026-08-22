@@ -150,6 +150,7 @@ class ResultWidget extends WidgetType {
     readonly type: string,
     readonly pending = false,
     readonly errorDetail?: ErrorDetail,
+    readonly colour?: string,
   ) {
     super()
   }
@@ -159,7 +160,8 @@ class ResultWidget extends WidgetType {
       this.type === other.type &&
       this.pending === other.pending &&
       this.errorDetail?.message === other.errorDetail?.message &&
-      this.errorDetail?.code === other.errorDetail?.code
+      this.errorDetail?.code === other.errorDetail?.code &&
+      this.colour === other.colour
     )
   }
 
@@ -219,6 +221,18 @@ class ResultWidget extends WidgetType {
     }
 
     span.className = "os-result-inline"
+    // A colour result gets a small swatch before the value, drawn from the
+    // engine-supplied CSS string, so a hex/rgb/hsl answer is visible at a glance.
+    if (this.colour) {
+      const swatch = document.createElement("span")
+      swatch.className = "os-result-swatch"
+      swatch.style.cssText =
+        "display:inline-block;width:0.75em;height:0.75em;border-radius:2px;margin-right:0.35em;vertical-align:baseline;border:1px solid rgba(128,128,128,0.45);"
+      swatch.style.background = this.colour
+      span.appendChild(swatch)
+      span.appendChild(document.createTextNode(this.text))
+      return span
+    }
     span.textContent = this.text
     return span
   }
@@ -470,7 +484,7 @@ function renderInlineResults(tabId: string, lineResults: LineResult[]): void {
     effects.push({
       from: line.to,
       to: line.to,
-      deco: Decoration.widget({ widget: new ResultWidget(text, lr.type, isPending, errorDetail), side: 1 }),
+      deco: Decoration.widget({ widget: new ResultWidget(text, lr.type, isPending, errorDetail, lr.colour), side: 1 }),
     })
   }
   // Always dispatch, even with an empty effects array: resultField's update()

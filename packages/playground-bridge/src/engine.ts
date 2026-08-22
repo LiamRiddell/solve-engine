@@ -35,6 +35,7 @@ import {
 	buildVmTrace,
 	buildDiagnosticEvents,
 	buildQueryCacheState,
+	colourCss,
 	formatLineResultValue,
 	isUnrecognizedBareWord,
 } from "./engineShared.js";
@@ -142,6 +143,8 @@ export interface LineResult {
 	wasCached: boolean;
 	/** Set when an async resolver timed out — the result is a 0-gp fallback, not real data. */
 	timedOut?: boolean;
+	/** Render-ready CSS for a colour result, so the UI can draw an inline swatch beside the answer. Absent for every other type. */
+	colour?: string;
 }
 
 export interface OpcodeInfo {
@@ -949,6 +952,7 @@ export function runEngineWithStreaming(
 							expression: trimmed,
 							result: formatLineResultValue(result.value),
 							type: formatType(result.value),
+							colour: colourCss(result.value),
 							parselet,
 							parseletCategories,
 							opcodeCount: perLineOpCount,
@@ -1316,6 +1320,7 @@ export function runEngine(expression: string): DebugResult {
 					expression: trimmed,
 					result: formatLineResultValue(result.value),
 					type: formatType(result.value),
+					colour: colourCss(result.value),
 					parselet,
 					parseletCategories,
 					opcodeCount: perLineOpCount,
