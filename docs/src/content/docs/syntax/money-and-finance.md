@@ -53,10 +53,12 @@ A half-cent rounds away from zero, the way a till rounds it, rather than the way
 ```solve
 $1.005 // $1.01
 $2.675 // $2.68
+$0.10 + 15% // $0.12
 ```
 
 Exactness holds wherever a currency is involved, a currency against a plain
-number included. A bare decimal on its own is an ordinary floating-point number,
+number included, and that includes adding a percentage: `$0.10 + 15%` is
+`$0.115`, which the half-cent rule rounds up. A bare decimal on its own is an ordinary floating-point number,
 and a conversion between two currencies goes through a live rate, which is not
 exact.
 
