@@ -1,7 +1,7 @@
 import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData } from "@solve-js/vm/Value";
 import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
-import { moneyExactMagnitude, scaleMoneyByPercent } from "@solve-js/vm/MoneyExact";
+import { moneyExactMagnitude, scaleMoneyByPercent, scaleMoneyExact } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { rowMajorToColumnMajor, matrixMultiply, matrixPower, matrixCompare, matIndex, matAt, inBounds, collectionToValues, matrixEntryToValue } from "@solve-js/vm/MatrixOps";
@@ -964,6 +964,39 @@ function multiplyPercentWithUncertainty(l: Value, r: Value): Value | null {
     return numberValueUncertain(other.toNumber() * factor, Math.abs(other.uncertainty * factor));
 }
 
+/**
+ * `p% of $X` and `$X * p%` are a scalar multiply of money, so like `$X + p%` they
+ * must stay exact to the cent: `15% of $0.10` is `$0.015 -> $0.02`, not the
+ * `$0.01` a bare double (`0.10 * 0.15 = 0.0149999...`) rounds down to. Fires only
+ * when one operand is a Percentage and the other a currency Uom, routing through
+ * the same base-ten scaling the `+`/`-` path uses (see MoneyExact.ts). Returns
+ * null otherwise, so a non-currency `10% of 5 kg` and every other multiply keep
+ * their existing path. (`of` compiles to `MUL`, so this covers both spellings.)
+ */
+function multiplyPercentOnMoney(l: Value, r: Value): Value | null {
+    const pct = l.type === ValueType.Percentage ? l : r.type === ValueType.Percentage ? r : null;
+    if (pct === null) return null;
+    const money = pct === l ? r : l;
+    if (money.type !== ValueType.Uom || money.unit === undefined || !sharedCurrencyExchange.isCurrency(money.unit)) return null;
+    return scaleMoneyExact(money, pct.toNumber(), money.unit);
+}
+
+/**
+ * `X / p%` is `X / factor`, a scalar divide, so a tolerance on `X` scales by
+ * `1/factor`: `(100 +/- 5) / 10%` is `1000 ± 50`, the division analogue of the
+ * `* 10%` case {@link multiplyPercentWithUncertainty} handles. Fires only when the
+ * divisor is a Percentage and the dividend an uncertain Number; a `0%` divisor
+ * returns null so the general path surfaces the divide-by-zero. Returns null
+ * otherwise, so every other division keeps its own path.
+ */
+function dividePercentWithUncertainty(l: Value, r: Value): Value | null {
+    if (r.type !== ValueType.Percentage) return null;
+    if (l.type !== ValueType.Number || l.uncertainty === undefined) return null;
+    const factor = r.toNumber();
+    if (factor === 0) return null;
+    return numberValueUncertain(l.toNumber() / factor, Math.abs(l.uncertainty / factor));
+}
+
 /** Extract milliseconds from a duration Value (UoM time unit or plain number).
  *  The linear half of {@link shiftDatetime}, and the whole of it for any unit
  *  shorter than a day. */
@@ -1921,6 +1954,11 @@ export function executeBytecode(
           // ahead of uncertainOp, which declines for a Percentage operand.
           const pctUnc = multiplyPercentWithUncertainty(l, r);
           if (pctUnc) { stack.push(pctUnc); break; }
+          // A percentage OF money (or money times a percentage) stays exact to
+          // the cent, the same base-ten path as "$X + p%". Ahead of binaryOp,
+          // which would otherwise read both as bare doubles and drop the sidecar.
+          const pctMoney = multiplyPercentOnMoney(l, r);
+          if (pctMoney) { stack.push(pctMoney); break; }
           // Uncertainty first, so "(12.3 +/- 0.5) * 4" is "49.2 ± 2.0": a scalar
           // multiply scales the spread by |k|, which the general quadrature rule
           // gives when the plain operand is read as uncertainty 0. uncertainOp
@@ -1974,6 +2012,11 @@ export function executeBytecode(
         }
         case OpCode.DIV: {
           const r = safePop(stack), l = safePop(stack);
+          // Dividing an uncertain number BY a percentage is a scalar divide, so
+          // it carries the tolerance: "(100 +/- 5) / 10%" is "1000 ± 50". This
+          // sits ahead of uncertainOp, which declines for a Percentage divisor.
+          const pctDivUnc = dividePercentWithUncertainty(l, r);
+          if (pctDivUnc) { stack.push(pctDivUnc); break; }
           // Uncertainty first, ahead of both the Uom ratio and the exact-fraction
           // paths below, so a carried tolerance is never dropped by either.
           // uncertainOp declines unless both operands are plain Numbers, so
