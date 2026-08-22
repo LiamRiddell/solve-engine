@@ -24,11 +24,11 @@
  * phrases share one `WEATHER_FN_IDX`. The source currency is read from the
  * amount Value at RUNTIME rather than baked into the opcode stream, because the
  * InParselet's left operand (`$100`, a variable, a subexpression) has no
- * compile-time unit. Preflight recovers the source currency from the nearest
- * preceding currency string, the same heuristic `uom/CurrencyResolver.ts`
- * already uses for the live `$100 in GBP` path, so the two agree for every
- * single-currency amount (which is every amount the grammar can actually
- * reach here).
+ * compile-time unit. Preflight fetches the rate ahead of the VM only when it can
+ * recover the source currency unambiguously (exactly one distinct currency among
+ * the amount's operand strings); a mixed-currency subexpression, where a foreign
+ * literal may cancel out, is left to the runtime read of the amount's own unit,
+ * so the two never disagree about, or double-fetch, a pair.
  */
 import type { QueryClient } from "@tanstack/query-core";
 import type { Token } from "@solve-js/lexer";
@@ -319,14 +319,14 @@ export const historicalCurrencyPluginFunction = createHistoricalCurrencyPluginFu
  * Build the async resolver that fetches historical rates through the host
  * `provider` before the VM runs.
  *
- * Scans compiled bytecode for the historical `CALL_PLUGIN` and reads the last
- * three string operands pushed before it as `[from, to, isoDate]`. `to` and
- * `isoDate` are always the two explicit strings this feature's parselets emit;
- * `from` is the string the amount's currency literal left earlier (see this
- * module's doc on the heuristic). A same-currency conversion needs no rate and
- * is skipped. A missing provider is discovered by the fetch, not here, so the
- * grammar still recognises `on <date>` and reports the not-configured error
- * plainly.
+ * Scans compiled bytecode for the historical `CALL_PLUGIN`. `to` and `isoDate`
+ * are the last two strings its parselets emit; the strings before them are the
+ * amount's operands. It fetches only when those name exactly one distinct
+ * currency (an unambiguous source), deferring a mixed-currency subexpression to
+ * the runtime plugin, so it never fetches a pair the amount does not resolve to.
+ * A same-currency conversion needs no rate and is skipped. A missing provider is
+ * discovered by the fetch, not here, so the grammar still recognises `on <date>`
+ * and reports the not-configured error plainly.
  */
 export function createHistoricalCurrencyResolver(provider?: HistoricalRateProvider): IAsyncResolver {
 	return {
@@ -343,40 +343,60 @@ export function createHistoricalCurrencyResolver(provider?: HistoricalRateProvid
 			const len = opcodes.length;
 			let i = 0;
 
-			// The three most recent PUSH_STRING pool indices, oldest to newest.
-			let fromIdx = -1;
-			let toIdx = -1;
-			let dateIdx = -1;
+			// Pool indices of the PUSH_STRINGs seen since the last CALL_PLUGIN, so
+			// each historical conversion is read from its own operand strings.
+			let stringIdxs: number[] = [];
 
 			while (i < len) {
 				const op = opcodes[i] as OpCode;
 
 				if (op === OpCode.PUSH_STRING) {
-					fromIdx = toIdx;
-					toIdx = dateIdx;
-					dateIdx = opcodes[i + 1];
+					stringIdxs.push(opcodes[i + 1]);
 				} else if (op === OpCode.CALL_PLUGIN) {
 					const fnIdx = opcodes[i + 1];
 					const argCount = opcodes[i + 2];
-					if (fnIdx === HISTORICAL_CURRENCY_FN_IDX && argCount === 3 && fromIdx >= 0 && toIdx >= 0 && dateIdx >= 0) {
-						const from = strings[fromIdx];
-						const to = strings[toIdx];
-						const isoDate = strings[dateIdx];
+					if (fnIdx === HISTORICAL_CURRENCY_FN_IDX && argCount === 3 && stringIdxs.length >= 3) {
+						// The parselet emits `to` then `isoDate` as the last two
+						// strings; everything before them is the amount's operands.
+						const isoDate = strings[stringIdxs[stringIdxs.length - 1]];
+						const to = strings[stringIdxs[stringIdxs.length - 2]];
 
-						// Same currency needs no rate, the plugin function converts
-						// it at 1 without ever reading the cache.
-						if (from.toUpperCase() !== to.toUpperCase()) {
-							const key = historicalRateQueryKey(from, to, isoDate);
-							if (queryClient.getQueryData(key) === undefined) {
-								const resolver = queryClient.fetchQuery({
-									queryKey: key,
-									queryFn: ({ signal: qSignal }) => fetchHistoricalRate(provider, from, to, isoDate, qSignal, queryClient),
-									staleTime: HISTORICAL_RATE_STALE_TIME_MS,
-								});
-								return { queryKey: key.join(":"), resolver, packageId, signal, metadata: { from, to, isoDate } };
+						// Fetch ahead of the VM only when the source currency is
+						// UNAMBIGUOUS: exactly one distinct currency among the operand
+						// strings. A single literal amount (`100 USD in GBP on
+						// <date>`) leaves exactly one, so its rate is fetched here. A
+						// mixed-currency subexpression (`(100 USD * (5 JPY / 5 JPY))
+						// in GBP on <date>`, where the JPY cancels) leaves more than
+						// one, and the bytecode cannot say which the result carries,
+						// so this defers to the runtime plugin, which reads the true
+						// source off the computed amount (see
+						// createHistoricalCurrencyPluginFunction). That keeps the fast
+						// literal path while never fetching a currency the amount does
+						// not actually resolve to.
+						const sources = new Set<string>();
+						for (let k = 0; k < stringIdxs.length - 2; k++) {
+							const s = strings[stringIdxs[k]];
+							if (sharedCurrencyExchange.isCurrency(s)) sources.add(s.toUpperCase());
+						}
+
+						if (sources.size === 1) {
+							const from = sources.values().next().value as string;
+							// Same currency needs no rate, the plugin function
+							// converts it at 1 without ever reading the cache.
+							if (from !== to.toUpperCase()) {
+								const key = historicalRateQueryKey(from, to, isoDate);
+								if (queryClient.getQueryData(key) === undefined) {
+									const resolver = queryClient.fetchQuery({
+										queryKey: key,
+										queryFn: ({ signal: qSignal }) => fetchHistoricalRate(provider, from, to, isoDate, qSignal, queryClient),
+										staleTime: HISTORICAL_RATE_STALE_TIME_MS,
+									});
+									return { queryKey: key.join(":"), resolver, packageId, signal, metadata: { from, to, isoDate } };
+								}
 							}
 						}
 					}
+					stringIdxs = []; // reset for the next conversion
 				}
 
 				// Step over this instruction and its operands via the shared width
