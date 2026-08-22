@@ -328,6 +328,11 @@ export class ExpressionEngine {
                         return sr.classification.skip || /^\s*#/.test(sr.text);
                     }
                   : undefined,
+            // Raw source text of a line, for features that read markdown the
+            // evaluator skipped (a table's rows). See the tables package. Wired
+            // only when a DocumentModel is present: the tables feature reads
+            // through the incremental evaluator, not the batch parseDocument path.
+            getLineText: doc ? (n: number) => doc.getLineAt(n)?.text : undefined,
         };
     }
 

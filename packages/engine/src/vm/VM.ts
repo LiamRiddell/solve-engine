@@ -268,6 +268,16 @@ export interface LineExecutionContext {
     getLineResult?: (lineNumber: number) => Value | undefined;
     /** Whether line `lineNumber` is a blank line or a `#` heading, the stopping condition for "total above"/"sum above"/"average above" aggregation. */
     isLineBoundary?: (lineNumber: number) => boolean;
+    /**
+     * The RAW markdown text of line `lineNumber` (1-based), or `undefined`
+     * when there is no real document or the line is out of range. Distinct
+     * from `getLineResult`, which returns a line's evaluated Value: a
+     * markdown table's rows are skipped by the evaluator and hold no result,
+     * so reading a column as data has to go back to the source text. Backs
+     * the tables package (`packages/tables/`), which walks upward from the
+     * current line to find the nearest table and read one of its columns.
+     */
+    getLineText?: (lineNumber: number) => string | undefined;
 }
 
 /**

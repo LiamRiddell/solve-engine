@@ -37,6 +37,7 @@ import { WEATHER_PACKAGE } from "./weather";
 import { createStocksPackage } from "./stocks";
 import { createKnowledgePackage } from "./knowledge";
 import { LINES_PACKAGE } from "./lines";
+import { TABLES_PACKAGE } from "./tables";
 
 export {
   ARITHMETIC_PACKAGE,
@@ -63,6 +64,7 @@ export {
   createCurrencyPackage,
   createKnowledgePackage,
   LINES_PACKAGE,
+  TABLES_PACKAGE,
 };
 
 // ── All built-in packages (registration order matters: arithmetic first) ──
@@ -115,4 +117,5 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   UNCERTAINTY_PACKAGE,
   WEATHER_PACKAGE,
   LINES_PACKAGE,
+  TABLES_PACKAGE,
 ];
