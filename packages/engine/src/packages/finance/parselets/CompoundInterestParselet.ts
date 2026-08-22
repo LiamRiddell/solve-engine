@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { readCompoundingInterval } from "./InvestmentParselets";
+import { parseTermAndRate } from "./TermRateClauses";
 
 /**
  * `compound interest on <principal> over <years> at <rate>%` -> future
@@ -67,20 +68,18 @@ export class CompoundInterestParselet implements PrefixParselet {
     // "after 3 years at 7%" tail as its own investment expression, and this
     // parselet would then run out of input looking for the connective.
     parser.parseExpression(BindingPower.Conditional, builder); // principal
-    // "over" was this package's own substitution for Soulver's "after"/"for"
-    // (see the DEVIATION note above). All three are accepted now, so
-    // `interest on $1,000 after 3 years at 7%` parses as documented while
-    // every expression that already used "over" keeps working.
-    if (!parser.match("AFTER") && !parser.match("FOR_DURATION")) {
-      parser.consume("OVER");
-    }
-    parser.parseExpression(BindingPower.Lowest, builder); // years
-    if (!parser.match("RATE_AT")) parser.consume("AT");
-    parser.parseExpression(BindingPower.Lowest, builder); // rate
+    // The term (`over`/`after`/`for <years>`) and the rate (`at <rate>`) in
+    // either order, so `interest on 1000 at 5% over 3 years` reads as naturally
+    // as `... over 3 years at 5%` (#120). "over" was this package's own
+    // substitution for Soulver's "after"/"for" (see the DEVIATION note above);
+    // all three are accepted.
+    const { swap } = parseTermAndRate(parser, builder, ["AFTER", "FOR_DURATION", "OVER"]);
     const periods = readCompoundingInterval(parser);
 
-    // Stack: [principal, years, rate] -> SWAP -> [principal, rate, years]
-    builder.emitOpcode(OpCode.SWAP);
+    // The builtins take `(principal, rate, years)`, which the term-first order
+    // reaches only after a SWAP of the top two; the rate-first order is already
+    // in that order.
+    if (swap) builder.emitOpcode(OpCode.SWAP);
 
     if (periods === 1) {
       builder.emitOpcode(OpCode.CALL_BUILTIN);
