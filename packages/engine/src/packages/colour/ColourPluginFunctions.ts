@@ -8,7 +8,9 @@
  * discipline the rest of the engine uses.
  *
  * The channel maths lives in the pure {@link ./ColourMath} module; these handlers
- * only marshal `Value`s in and out of it.
+ * only marshal `Value`s in and out of it. Only the plugin-function table, the
+ * name-to-index map and the hex-literal index are exported (the rest is internal
+ * wiring): the parselets and normalizer reach for those three alone.
  */
 import { Value, ValueType, colourValue, numberValue, errorValue, type ColourData } from "@solve-js/vm/Value";
 import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
@@ -52,9 +54,10 @@ function notAColour(fn: string): Value {
 
 // ── Constructors ────────────────────────────────────────────────────────
 
+/** Plugin index for `color(...)`, shared by the `#hex` literal parselet. */
 export const COLOUR_PARSE_FN_IDX = allocatePluginFunctionIndex();
 /** `color("#ff0000")` / `colour("red")`, and the backing handler for a `#hex` literal. */
-export function colourParseHandler(args: Value[]): Value {
+function colourParseHandler(args: Value[]): Value {
 	const arg = args[0];
 	if (!arg || arg.type !== ValueType.String || typeof arg.value !== "string") {
 		return badArgs("color", "a string, e.g. color(\"#ff0000\") or color(\"red\")");
@@ -69,8 +72,8 @@ export function colourParseHandler(args: Value[]): Value {
 	return colourValue(parsed);
 }
 
-export const COLOUR_RGB_FN_IDX = allocatePluginFunctionIndex();
-export function rgbHandler(args: Value[]): Value {
+const COLOUR_RGB_FN_IDX = allocatePluginFunctionIndex();
+function rgbHandler(args: Value[]): Value {
 	if (args.length !== 3) return badArgs("rgb", "three numbers: rgb(red, green, blue)");
 	return colourValue({
 		r: Colour.clamp255(args[0].toNumber()),
@@ -81,8 +84,8 @@ export function rgbHandler(args: Value[]): Value {
 	});
 }
 
-export const COLOUR_RGBA_FN_IDX = allocatePluginFunctionIndex();
-export function rgbaHandler(args: Value[]): Value {
+const COLOUR_RGBA_FN_IDX = allocatePluginFunctionIndex();
+function rgbaHandler(args: Value[]): Value {
 	if (args.length !== 4) return badArgs("rgba", "four numbers: rgba(red, green, blue, alpha)");
 	return colourValue({
 		r: Colour.clamp255(args[0].toNumber()),
@@ -93,15 +96,15 @@ export function rgbaHandler(args: Value[]): Value {
 	});
 }
 
-export const COLOUR_HSL_FN_IDX = allocatePluginFunctionIndex();
-export function hslHandler(args: Value[]): Value {
+const COLOUR_HSL_FN_IDX = allocatePluginFunctionIndex();
+function hslHandler(args: Value[]): Value {
 	if (args.length !== 3) return badArgs("hsl", "three values: hsl(hue, saturation%, lightness%)");
 	const { r, g, b } = Colour.hslToRgb(args[0].toNumber(), readAmount(args[1]), readAmount(args[2]));
 	return colourValue({ r, g, b, a: 1, format: "hsl" });
 }
 
-export const COLOUR_HSLA_FN_IDX = allocatePluginFunctionIndex();
-export function hslaHandler(args: Value[]): Value {
+const COLOUR_HSLA_FN_IDX = allocatePluginFunctionIndex();
+function hslaHandler(args: Value[]): Value {
 	if (args.length !== 4) return badArgs("hsla", "four values: hsla(hue, saturation%, lightness%, alpha)");
 	const { r, g, b } = Colour.hslToRgb(args[0].toNumber(), readAmount(args[1]), readAmount(args[2]));
 	return colourValue({ r, g, b, a: Colour.clamp01(readAmount(args[3])), format: "hsla" });
@@ -119,54 +122,54 @@ function adjuster(name: string, op: (c: ColourData, amount: number) => ColourDat
 	};
 }
 
-export const COLOUR_LIGHTEN_FN_IDX = allocatePluginFunctionIndex();
-export const lightenHandler = adjuster("lighten", Colour.lighten);
-export const COLOUR_DARKEN_FN_IDX = allocatePluginFunctionIndex();
-export const darkenHandler = adjuster("darken", Colour.darken);
-export const COLOUR_SATURATE_FN_IDX = allocatePluginFunctionIndex();
-export const saturateHandler = adjuster("saturate", Colour.saturate);
-export const COLOUR_DESATURATE_FN_IDX = allocatePluginFunctionIndex();
-export const desaturateHandler = adjuster("desaturate", Colour.desaturate);
+const COLOUR_LIGHTEN_FN_IDX = allocatePluginFunctionIndex();
+const lightenHandler = adjuster("lighten", Colour.lighten);
+const COLOUR_DARKEN_FN_IDX = allocatePluginFunctionIndex();
+const darkenHandler = adjuster("darken", Colour.darken);
+const COLOUR_SATURATE_FN_IDX = allocatePluginFunctionIndex();
+const saturateHandler = adjuster("saturate", Colour.saturate);
+const COLOUR_DESATURATE_FN_IDX = allocatePluginFunctionIndex();
+const desaturateHandler = adjuster("desaturate", Colour.desaturate);
 
-export const COLOUR_ROTATE_FN_IDX = allocatePluginFunctionIndex();
-export function rotateHandler(args: Value[]): Value {
+const COLOUR_ROTATE_FN_IDX = allocatePluginFunctionIndex();
+function rotateHandler(args: Value[]): Value {
 	const c = colourOf(args[0]);
 	if (!c) return notAColour("rotate");
 	if (args.length < 2) return badArgs("rotate", "a colour and a hue angle in degrees, e.g. rotate(#ff0000, 90)");
 	return colourValue(Colour.rotateHue(c, args[1].toNumber()));
 }
 
-export const COLOUR_COMPLEMENT_FN_IDX = allocatePluginFunctionIndex();
-export function complementHandler(args: Value[]): Value {
+const COLOUR_COMPLEMENT_FN_IDX = allocatePluginFunctionIndex();
+function complementHandler(args: Value[]): Value {
 	const c = colourOf(args[0]);
 	if (!c) return notAColour("complement");
 	return colourValue(Colour.complement(c));
 }
 
-export const COLOUR_GRAYSCALE_FN_IDX = allocatePluginFunctionIndex();
-export function grayscaleHandler(args: Value[]): Value {
+const COLOUR_GRAYSCALE_FN_IDX = allocatePluginFunctionIndex();
+function grayscaleHandler(args: Value[]): Value {
 	const c = colourOf(args[0]);
 	if (!c) return notAColour("grayscale");
 	return colourValue(Colour.grayscale(c));
 }
 
-export const COLOUR_INVERT_FN_IDX = allocatePluginFunctionIndex();
-export function invertHandler(args: Value[]): Value {
+const COLOUR_INVERT_FN_IDX = allocatePluginFunctionIndex();
+function invertHandler(args: Value[]): Value {
 	const c = colourOf(args[0]);
 	if (!c) return notAColour("invert");
 	return colourValue(Colour.invert(c, args.length > 1 ? readAmount(args[1]) : 1));
 }
 
-export const COLOUR_MIX_FN_IDX = allocatePluginFunctionIndex();
-export function mixHandler(args: Value[]): Value {
+const COLOUR_MIX_FN_IDX = allocatePluginFunctionIndex();
+function mixHandler(args: Value[]): Value {
 	const a = colourOf(args[0]);
 	const b = colourOf(args[1]);
 	if (!a || !b) return errorValue(ColourErrorCodes.COLOUR_EXPECTED_COLOUR, "mix(...) expects two colours to blend");
 	return colourValue(Colour.mix(a, b, args.length > 2 ? readAmount(args[2]) : 0.5));
 }
 
-export const COLOUR_ALPHA_FN_IDX = allocatePluginFunctionIndex();
-export function alphaHandler(args: Value[]): Value {
+const COLOUR_ALPHA_FN_IDX = allocatePluginFunctionIndex();
+function alphaHandler(args: Value[]): Value {
 	const c = colourOf(args[0]);
 	if (!c) return notAColour("alpha");
 	if (args.length < 2) return badArgs("alpha", "a colour and an alpha 0..1, e.g. alpha(#ff0000, 0.5)");
@@ -175,16 +178,16 @@ export function alphaHandler(args: Value[]): Value {
 
 // ── Measurements (return a Number) ──────────────────────────────────────
 
-export const COLOUR_CONTRAST_FN_IDX = allocatePluginFunctionIndex();
-export function contrastHandler(args: Value[]): Value {
+const COLOUR_CONTRAST_FN_IDX = allocatePluginFunctionIndex();
+function contrastHandler(args: Value[]): Value {
 	const a = colourOf(args[0]);
 	const b = colourOf(args[1]);
 	if (!a || !b) return errorValue(ColourErrorCodes.COLOUR_EXPECTED_COLOUR, "contrast(...) expects two colours");
 	return numberValue(Colour.contrastRatio(a, b));
 }
 
-export const COLOUR_LUMINANCE_FN_IDX = allocatePluginFunctionIndex();
-export function luminanceHandler(args: Value[]): Value {
+const COLOUR_LUMINANCE_FN_IDX = allocatePluginFunctionIndex();
+function luminanceHandler(args: Value[]): Value {
 	const c = colourOf(args[0]);
 	if (!c) return notAColour("luminance");
 	return numberValue(Colour.relativeLuminance(c));

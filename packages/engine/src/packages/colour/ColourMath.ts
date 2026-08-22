@@ -9,10 +9,12 @@
 import type { ColourData, ColourFormat } from "@solve-js/vm/Value";
 import { CSS_NAMED_COLOURS } from "./CssNamedColours";
 
+/** Round and clamp a value to a valid 0-255 sRGB channel. */
 export function clamp255(x: number): number {
 	return Math.min(255, Math.max(0, Math.round(x)));
 }
 
+/** Clamp a value to the 0-1 range used for alpha and normalised HSL. */
 export function clamp01(x: number): number {
 	return Math.min(1, Math.max(0, x));
 }
