@@ -65,6 +65,27 @@ describe("Issue #108: decimal-place precision on a number", () => {
     });
   });
 
+  describe("a negative rounds symmetrically with its positive twin (half away from zero)", () => {
+    // Unary minus keeps a decimal literal's exact sidecar, so a negative rounds
+    // the exact value away from zero, not the drifted double toward it.
+    test.each([
+      ["-1.005 to 2 dp", "= -1.01"],
+      ["-2.675 to 2 dp", "= -2.68"],
+      ["round(-1.005, 2)", "= -1.01"],
+      ["round(-2.5, 0)", "= -3"],
+      ["-2.5 to 0 dp", "= -3"],
+      ["-0.5 to 0 dp", "= -1"],
+      ["-0.125 to 2 dp", "= -0.13"],
+    ])("%s => %s", (source, expected) => {
+      expect(out(source)).toBe(expected);
+    });
+
+    test("the negative matches the negated positive result", () => {
+      expect(out("-1.005 to 2 dp")).toBe(`= -${out("1.005 to 2 dp").slice(2)}`);
+      expect(out("round(-2.5, 0)")).toBe(`= -${out("round(2.5, 0)").slice(2)}`);
+    });
+  });
+
   test("the value carries the display precision as metadata", () => {
     const r = val("3.14159 to 4 dp");
     expect(r.type).toBe(ValueType.Number);

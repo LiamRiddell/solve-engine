@@ -2188,6 +2188,11 @@ export function executeBytecode(
           // Negating a fraction keeps it exact: "-(1/3)" carries the rational
           // -1/3, so it still reads back exactly through "as fraction".
           else if (v.type === ValueType.Number && v.rational !== undefined) stack.push(numberValueRational(-v.toNumber(), rationalNeg(v.rational)));
+          // Negating a decimal literal keeps its exact decimal, the same way
+          // money above does, so "-1.005 to 2 dp" rounds the exact -1.005 half
+          // away from zero to -1.01 rather than dropping to the drifted double
+          // (-1.00499...) the float path rounds toward zero.
+          else if (v.type === ValueType.Number && v.exact !== undefined) stack.push(numberValueExact(-v.toNumber(), decimalNegate(v.exact)));
           else stack.push(numberValue(-v.toNumber()));
           break;
         }
@@ -2203,6 +2208,9 @@ export function executeBytecode(
           // A no-op keeps a fraction's exact rational, the same way it keeps
           // money's exact decimal above.
           else if (v.type === ValueType.Number && v.rational !== undefined) stack.push(numberValueRational(v.toNumber(), v.rational));
+          // And it keeps a decimal literal's exact decimal, so "+1.005" is still
+          // exactly 1.005 for a later "to 2 dp".
+          else if (v.type === ValueType.Number && v.exact !== undefined) stack.push(numberValueExact(v.toNumber(), v.exact));
           else stack.push(numberValue(v.toNumber()));
           break;
         }
