@@ -122,10 +122,13 @@ describe("Memory Leak Tests", () => {
 			const perIterationKB = ((afterMB - beforeMB) * 1024) / iterations;
 
 			// This is a characteristic of the package, not a passing grade. It is
-			// asserted so the number cannot drift silently: measured at roughly
-			// 128KB per engine, against 8.2KB for one that never parsed. If this
-			// ever drops to near the construction cost, the retention was fixed
-			// and both this test and the lifecycle docs should be revisited.
+			// asserted so the number cannot drift silently: roughly 200KB per
+			// engine, against 8.2KB for one that never parsed. The figure tracks
+			// the registered package set, so it climbs as features are added
+			// (~128KB when this test was written); the wide bound below pins the
+			// order of magnitude, not an exact byte count. If it ever drops to
+			// near the construction cost, the retention was fixed and both this
+			// test and the lifecycle docs should be revisited.
 			console.log(`[Memory:uncleared] ${perIterationKB.toFixed(1)}KB/engine retained`);
 			expect(perIterationKB).toBeGreaterThan(20);
 			expect(perIterationKB).toBeLessThan(400);
@@ -188,6 +191,15 @@ describe("Memory Leak Tests", () => {
 				const result = engine.parseDocument(`:x = ${i}\n42`);
 				expect(result).toBeDefined();
 				expect(result.errors).toHaveLength(0);
+				// Dispose through the documented primitive. An engine that has
+				// parsed stays reachable from the module-level data-query service
+				// until clear() releases it, so dropping the reference alone
+				// retains the whole engine. Without this call the loop measures
+				// 1000x the per-engine footprint, which grows with every package
+				// the build registers (~200KB and rising), rather than the leak
+				// this test is here to catch. With it, growth is the transient
+				// allocation the collector has not yet reclaimed.
+				engine.clear();
 			}
 
 			forceGc();
@@ -215,7 +227,13 @@ describe("Memory Leak Tests", () => {
 				doc.setDocument(`:x${i} = ${i}\n:x${i} + 5\n42`);
 				const evaluator = new ThreeTierEvaluator(doc, engine);
 				evaluator.evaluate({ startLine: 1, endLine: 3 });
+				// Full disposal: terminate the evaluator's worker and clear the
+				// engine. Without clear() the engine (and the document wired into
+				// it) stays reachable from the module-level data-query service, so
+				// this loop would otherwise measure 1000x a per-engine footprint
+				// that grows with the registered package set rather than a leak.
 				evaluator.terminateWorker();
+				engine.clear();
 			}
 
 			forceGc();

@@ -22,6 +22,7 @@ export {
 	createCurrencyPackage,
 	createKnowledgePackage,
 	LINES_PACKAGE,
+	TABLES_PACKAGE,
 	BUILTIN_PACKAGES,
 } from "./builtins";
 
