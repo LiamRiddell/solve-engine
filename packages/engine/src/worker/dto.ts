@@ -19,10 +19,14 @@ import type { DiagnosticReportJSON } from "@solve-js/diagnostics";
  * A matrix flattened for transport.
  *
  * `cells` is column-major, the same order as {@link MatrixData.data}, so a host
- * indexes it identically. Numeric and boolean cells pass through as themselves;
- * a symbolic cell (a free-variable algebraic entry) becomes its formatted
- * string, since a `SymbolicNode` is a class instance that would not survive the
- * clone.
+ * indexes it identically. Finite numeric and boolean cells pass through as
+ * themselves; a symbolic cell (a free-variable algebraic entry) becomes its
+ * formatted string, since a `SymbolicNode` is a class instance that would not
+ * survive the clone; and a non-finite numeric cell (`Infinity`/`-Infinity`/`NaN`,
+ * from e.g. a `[1/0, 2]`) becomes the same string tag the scalar
+ * {@link SerializedValue.nonFinite} uses, because a raw non-finite number does
+ * not survive `JSON` (it becomes `null`). A host reads a numeric string cell
+ * back with `Number(cell)`.
  */
 export interface SerializedMatrix {
 	rows: number;

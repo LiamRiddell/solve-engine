@@ -22,14 +22,29 @@ import type {
 	SerializedParsingResult,
 } from "./dto";
 
-/** Project a matrix onto clone-safe cells: primitives pass through, symbolic cells become their formatted string. */
+/**
+ * The JSON-safe string tag for a non-finite reading. `Infinity`/`-Infinity`/`NaN`
+ * cannot cross `JSON` (which turns each into `null`), so this one string form is
+ * what survives both `structuredClone` and `JSON`, and a host recovers the value
+ * with `Number(tag)`. Shared by the scalar `nonFinite` field and matrix cells.
+ */
+function nonFiniteTag(n: number): "Infinity" | "-Infinity" | "NaN" {
+	return n > 0 ? "Infinity" : n < 0 ? "-Infinity" : "NaN";
+}
+
+/** Project a matrix onto clone-safe cells: finite primitives pass through, symbolic cells and non-finite numbers become strings. */
 function serializeMatrix(m: MatrixData): SerializedMatrix {
-	const cells = m.data.map((cell: MatrixEntry): number | boolean | string =>
-		// A number or boolean is already clone-safe; only a `SymbolicNode` (the
-		// object-typed cell variant) needs flattening, and its display string is
-		// exactly what a host would render for it.
-		typeof cell === "object" && cell !== null ? formatSymbolic(cell) : cell,
-	);
+	const cells = m.data.map((cell: MatrixEntry): number | boolean | string => {
+		// A `SymbolicNode` (the object-typed cell variant) flattens to its display
+		// string. A non-finite number (a `[1/0, 2]` cell) cannot cross JSON any
+		// more than a scalar reading can, so it takes the same string tag rather
+		// than being passed through raw and turned into `null` by `JSON.stringify`
+		// (which would diverge from the `structuredClone` path). A finite number
+		// or a boolean is already clone-safe and passes through.
+		if (typeof cell === "object" && cell !== null) return formatSymbolic(cell);
+		if (typeof cell === "number" && !Number.isFinite(cell)) return nonFiniteTag(cell);
+		return cell;
+	});
 	return { rows: m.rows, cols: m.cols, cells, hasSymbolic: m.hasSymbolic };
 }
 
@@ -52,7 +67,7 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 		number: Number.isFinite(reading) ? reading : 0,
 	};
 	if (!Number.isFinite(reading)) {
-		dto.nonFinite = reading > 0 ? "Infinity" : reading < 0 ? "-Infinity" : "NaN";
+		dto.nonFinite = nonFiniteTag(reading);
 	}
 
 	if (value.unit !== undefined) dto.unit = value.unit;

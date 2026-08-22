@@ -441,13 +441,16 @@ export class ExpressionLexer {
   private line: number = 1;
   private lineStartPos: number = 0;
 
-  // Open `(`/`[` nesting depth on the current line. A comma inside a call or a
-  // bracket (`rgb(255,255,255)`, `[100,200,300]`) is an argument/element
-  // separator, so the number scanner must NOT coalesce it into a thousands
-  // group there, only a top-level comma (`1,000,000`) groups thousands. Tracked
-  // here because the flat token stream carries no nesting otherwise. Reset per
-  // line, so an unbalanced bracket cannot bleed the suppression into the next.
-  private groupingDepth: number = 0;
+  // Open-bracket context stack for the current line, one entry per unclosed
+  // `(`/`[`, `true` when a comma inside it is a separator rather than a
+  // thousands group. A `[` (vector/matrix) and a CALL `(` (`rgb(255,255,255)`,
+  // preceded by an identifier) are separator contexts; a bare GROUPING `(`
+  // (`(1,000)`, preceded by an operator or the line start) is not, so a
+  // parenthesised thousands number still reads as one scalar. The number scanner
+  // consults the innermost entry. Tracked here because the flat token stream
+  // carries no nesting otherwise; reset per line, so an unbalanced bracket
+  // cannot bleed the decision into the next.
+  private groupingStack: boolean[] = [];
 
   // Keyword map: lowercase identifier → token type (locale keywords only)
   private keywordMap: Map<string, string>;
@@ -1026,8 +1029,8 @@ export class ExpressionLexer {
     }
 
     const input = this.input;
-    // Fresh nesting count for this pass (see the field's doc).
-    this.groupingDepth = 0;
+    // Fresh nesting stack for this pass (see the field's doc).
+    this.groupingStack.length = 0;
 
     // ── Main tokenization loop ──────────────────────────────────────────
     while (this.pos < len) {
@@ -1051,14 +1054,14 @@ export class ExpressionLexer {
           if (c0 === 10) {  // \n
             this.line++;
             this.lineStartPos = this.pos;
-            this.groupingDepth = 0;  // each line groups thousands on its own
+            this.groupingStack.length = 0;  // each line groups thousands on its own
           } else if (c0 === 13) {  // \r
             this.line++;
             if (this.pos < len && input.charCodeAt(this.pos) === 10) {
               this.pos++;  // skip \n in \r\n
             }
             this.lineStartPos = this.pos;
-            this.groupingDepth = 0;
+            this.groupingStack.length = 0;
           }
           break;
 
@@ -1307,10 +1310,18 @@ export class ExpressionLexer {
     while (hasIntPart && pos < len && (input.charCodeAt(pos) === 44 || input.charCodeAt(pos) === 46)) {
       // A comma inside a call or bracket is an argument/element separator, not a
       // thousands group: `rgb(255,255,255)` is three numbers and `[100,200,300]`
-      // a three-element vector, not `255255255`/`100200300`. Only a top-level
-      // comma (`1,000,000`) groups thousands. The `.` grouping form is
-      // context-free and unaffected. See {@link groupingDepth}.
-      if (input.charCodeAt(pos) === 44 && this.groupingDepth > 0) break;
+      // a three-element vector, not `255255255`/`100200300`. A comma in a bare
+      // grouping paren (`(1,000)`) still groups thousands, and so does a
+      // top-level comma (`1,000,000`). The innermost bracket's context decides;
+      // the `.` grouping form is context-free and unaffected. See
+      // {@link groupingStack}.
+      if (
+        input.charCodeAt(pos) === 44 &&
+        this.groupingStack.length > 0 &&
+        this.groupingStack[this.groupingStack.length - 1]
+      ) {
+        break;
+      }
       if (pos + 4 <= len) {
         const d1 = input.charCodeAt(pos + 1);
         const d2 = input.charCodeAt(pos + 2);
@@ -1481,6 +1492,44 @@ export class ExpressionLexer {
 
   // ── Inline operator tokenizer ─────────────────────────────────────────
   /**
+   * Whether the `(` at `parenPos` opens a function call rather than a bare
+   * grouping, deciding whether a comma inside it is a separator or a thousands
+   * group (see {@link groupingStack}).
+   *
+   * It is a call when the nearest non-whitespace character before it belongs to
+   * the value the call applies to: a closing `)`/`]` (a call on a result), or an
+   * IDENTIFIER (`rgb(`, `vec2(`). A run of digits alone is a number, not an
+   * identifier, so `2(1,000)` is implicit multiplication over the grouping
+   * `(1,000)`, not a call, while `vec2(` and `atan2(` (identifiers that end in a
+   * digit) are calls. A `(` after an operator, a comma, or the line start is a
+   * grouping.
+   */
+  private precededByCallTarget(parenPos: number): boolean {
+    const input = this.input;
+    const start = this.lineStartPos;
+    let i = parenPos - 1;
+    while (i >= start && (input.charCodeAt(i) === 32 || input.charCodeAt(i) === 9)) i--;  // skip spaces/tabs
+    if (i < start) return false;  // line start (or only whitespace before): a grouping
+    const c = input.charCodeAt(i);
+    if (c === 41 || c === 93) return true;  // )/] : a call on a result
+    const isWord = (ch: number): boolean =>
+      (ch >= 48 && ch <= 57) || (ch >= 65 && ch <= 90) || (ch >= 97 && ch <= 122) || ch === 95;
+    const isAlpha = (ch: number): boolean =>
+      (ch >= 65 && ch <= 90) || (ch >= 97 && ch <= 122) || ch === 95;
+    if (!isWord(c)) return false;  // operator/comma/etc: a grouping
+    // Walk back over the whole word run: a call iff it is an identifier (has a
+    // letter or `_`), not a bare number.
+    let hasAlpha = false;
+    while (i >= start) {
+      const ch = input.charCodeAt(i);
+      if (!isWord(ch)) break;
+      if (isAlpha(ch)) hasAlpha = true;
+      i--;
+    }
+    return hasAlpha;
+  }
+
+  /**
    * Reads an operator/punctuation token.
    * Handles two-char operators (==, !=, >=, <=, **) and the special
    * cases << (LSHIFT) and >> (RSHIFT).
@@ -1554,14 +1603,18 @@ export class ExpressionLexer {
     // ── Single-character operator ──────────────────────────────────────
     this.pos = pos + 1;
     // Track `(`/`[` nesting so the number scanner can tell a thousands group
-    // from an argument/element separator (see {@link groupingDepth}). `(` and
-    // `[` open a group, `)` and `]` close one; the clamp keeps a stray closer
-    // (`)` with no opener) from driving the count negative and wrongly leaving
-    // a later comma ungrouped.
-    if (c0 === 40 || c0 === 91) {  // ( or [
-      this.groupingDepth++;
+    // from an argument/element separator (see {@link groupingStack}). `[` always
+    // opens a separator context (a vector/matrix). `(` opens a separator context
+    // only when it is a CALL, i.e. it directly follows a value the call applies
+    // to, an identifier/unit, or a closing `)`/`]`; a bare GROUPING `(`, after an
+    // operator or the line start, keeps thousands so `(1,000)` stays one number.
+    // `)`/`]` pop; a stray closer with an empty stack is ignored.
+    if (c0 === 91) {  // [
+      this.groupingStack.push(true);
+    } else if (c0 === 40) {  // (
+      this.groupingStack.push(this.precededByCallTarget(pos));
     } else if (c0 === 41 || c0 === 93) {  // ) or ]
-      if (this.groupingDepth > 0) this.groupingDepth--;
+      if (this.groupingStack.length > 0) this.groupingStack.pop();
     }
     const opType = OP_MAP[c0];
     const text = input.charAt(pos);
