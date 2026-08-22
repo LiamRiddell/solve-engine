@@ -76,6 +76,13 @@ twenty percent increase. Going the other way, `tax off` takes a tax-inclusive
 total back to the pre-tax amount and `tax in` (also `tax of`, `tax from`) pulls
 out the tax already inside it. `vat` is accepted everywhere `tax` is.
 
+On money the tax is exact, rounding the half-cent the same way the rest of the
+currency arithmetic does rather than the way a drifted double would.
+
+```solve
+tax on $0.10 at 15% // $0.02
+```
+
 No tax rate is ever assumed. You state it, because the correct rate depends on
 where you are and what you are buying.
 
