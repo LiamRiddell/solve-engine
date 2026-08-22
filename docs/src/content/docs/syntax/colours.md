@@ -53,9 +53,36 @@ alpha(#ff0000, 0.5) // #ff000080
 `rotate` turns the hue by an angle in degrees; `mix` blends two colours (a third
 argument weights the blend toward the second, defaulting to the midpoint);
 `alpha` (also `opacity`, `fade`) sets transparency; `saturate`/`desaturate`,
-`lighten`/`darken` and `grayscale`/`invert`/`complement` do what they say.
+`lighten`/`darken` and `grayscale`/`invert`/`complement` (and `negate`) do what
+they say. `tint`, `shade` and `tone` mix a colour toward white, black and grey:
+
+```solve
+tint(#ff0000, 50%) // #ff8080
+shade(#ff0000, 50%) // #800000
+tone(#ff0000, 50%) // #c04040
+```
+
+## More colour spaces
+
+Besides `rgb`/`hsl`, colours can be built with `hsv` (also `hsb`, the value/
+brightness wheel most pickers show) and `hwb` (CSS Color 4 hue/whiteness/
+blackness). The result is a colour like any other:
+
+```solve
+hsv(120, 100, 100) // #00ff00
+hwb(0, 50, 0) // #ff8080
+```
 
 ## Reading a colour
+
+Pull a channel out as a number with `red`, `green`, `blue`, `hue`, `saturation`,
+`lightness` or `alpha` (given one argument, `alpha` reads rather than sets):
+
+```solve
+red(#3366cc) // 51
+hue(#ff0000) // 0
+lightness(#ff0000) // 50
+```
 
 `contrast` returns the WCAG contrast ratio between two colours (1 to 21), and
 `luminance` returns a single colour's relative luminance (0 to 1). Both are plain
@@ -65,6 +92,15 @@ numbers, so they compose with the rest of the engine:
 contrast(#ffffff, #000000) // 21
 contrast(#ffffff, #767676) // 4.54
 luminance(#ffffff) // 1
+```
+
+For accessible text, `isdark`/`islight` classify a background, and `readable`
+(also `contrastcolor`) returns black or white, whichever reads better on it:
+
+```solve
+isdark(#000000) // true
+islight(#ffffff) // true
+readable(#3366cc) // #ffffff
 ```
 
 ## Converting between formats

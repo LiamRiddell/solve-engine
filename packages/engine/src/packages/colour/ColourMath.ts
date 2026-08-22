@@ -285,3 +285,79 @@ export function withAlpha(c: ColourData, alpha: number): ColourData {
 	}
 	return { r: c.r, g: c.g, b: c.b, a, format };
 }
+
+// ── Additional colour spaces and helpers ────────────────────────────────
+
+/** Opaque white and black, reused by the luminance-based helpers below. */
+const WHITE: ColourData = { r: 255, g: 255, b: 255, a: 1, format: "hex" };
+const BLACK: ColourData = { r: 0, g: 0, b: 0, a: 1, format: "hex" };
+const MID_GREY: ColourData = { r: 128, g: 128, b: 128, a: 1, format: "hex" };
+
+/**
+ * Convert HSV/HSB (hue in degrees, saturation and value in 0-1) to sRGB. HSV is
+ * the wheel most colour pickers present (DevTools included), distinct from HSL:
+ * `value` is how bright the colour is, where HSL's `lightness` is how close to
+ * white or black.
+ */
+export function hsvToRgb(h: number, s: number, v: number): { r: number; g: number; b: number } {
+	const hh = ((((h % 360) + 360) % 360)) / 60;
+	const c = v * s;
+	const x = c * (1 - Math.abs((hh % 2) - 1));
+	const m = v - c;
+	let r = 0;
+	let g = 0;
+	let b = 0;
+	if (hh < 1) [r, g, b] = [c, x, 0];
+	else if (hh < 2) [r, g, b] = [x, c, 0];
+	else if (hh < 3) [r, g, b] = [0, c, x];
+	else if (hh < 4) [r, g, b] = [0, x, c];
+	else if (hh < 5) [r, g, b] = [x, 0, c];
+	else [r, g, b] = [c, 0, x];
+	return { r: clamp255((r + m) * 255), g: clamp255((g + m) * 255), b: clamp255((b + m) * 255) };
+}
+
+/**
+ * Convert HWB (hue in degrees, whiteness and blackness in 0-1) to sRGB, the CSS
+ * Color 4 model: start from the pure hue and mix in white and black. When
+ * whiteness and blackness sum to 1 or more the hue washes out to grey.
+ */
+export function hwbToRgb(h: number, w: number, b: number): { r: number; g: number; b: number } {
+	const wh = clamp01(w);
+	const bl = clamp01(b);
+	if (wh + bl >= 1) {
+		const grey = clamp255((wh / (wh + bl)) * 255);
+		return { r: grey, g: grey, b: grey };
+	}
+	const base = hslToRgb(h, 1, 0.5);
+	const channel = (ch: number): number => clamp255(ch * (1 - wh - bl) + wh * 255);
+	return { r: channel(base.r), g: channel(base.g), b: channel(base.b) };
+}
+
+/** Mix toward white by `amount` (a tint). */
+export function tint(c: ColourData, amount: number): ColourData {
+	return mix(c, WHITE, amount);
+}
+
+/** Mix toward black by `amount` (a shade). */
+export function shade(c: ColourData, amount: number): ColourData {
+	return mix(c, BLACK, amount);
+}
+
+/** Mix toward mid-grey by `amount` (a tone). */
+export function tone(c: ColourData, amount: number): ColourData {
+	return mix(c, MID_GREY, amount);
+}
+
+/**
+ * Whether a colour reads as dark, meaning white text on it has at least as much
+ * WCAG contrast as black text does. Backs {@link readableColour} and the
+ * `isdark`/`islight` predicates.
+ */
+export function isDark(c: ColourData): boolean {
+	return contrastRatio(c, WHITE) >= contrastRatio(c, BLACK);
+}
+
+/** Black or white, whichever has the higher WCAG contrast against `background`. */
+export function readableColour(background: ColourData): ColourData {
+	return isDark(background) ? WHITE : BLACK;
+}

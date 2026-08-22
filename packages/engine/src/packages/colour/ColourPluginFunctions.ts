@@ -12,7 +12,7 @@
  * name-to-index map and the hex-literal index are exported (the rest is internal
  * wiring): the parselets and normalizer reach for those three alone.
  */
-import { Value, ValueType, colourValue, numberValue, errorValue, type ColourData } from "@solve-js/vm/Value";
+import { Value, ValueType, colourValue, numberValue, boolValue, errorValue, type ColourData } from "@solve-js/vm/Value";
 import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
 import * as Colour from "./ColourMath";
 
@@ -172,7 +172,9 @@ const COLOUR_ALPHA_FN_IDX = allocatePluginFunctionIndex();
 function alphaHandler(args: Value[]): Value {
 	const c = colourOf(args[0]);
 	if (!c) return notAColour("alpha");
-	if (args.length < 2) return badArgs("alpha", "a colour and an alpha 0..1, e.g. alpha(#ff0000, 0.5)");
+	// One argument reads the alpha, two set it: `alpha(c)` is 0..1, `alpha(c, 0.5)`
+	// returns the colour at that alpha.
+	if (args.length < 2) return numberValue(c.a);
 	return colourValue(Colour.withAlpha(c, readAmount(args[1])));
 }
 
@@ -191,6 +193,85 @@ function luminanceHandler(args: Value[]): Value {
 	const c = colourOf(args[0]);
 	if (!c) return notAColour("luminance");
 	return numberValue(Colour.relativeLuminance(c));
+}
+
+// ── Channel extractors (return a Number) ────────────────────────────────
+
+/** Build a one-colour extractor that returns a channel as a Number. */
+function extractor(name: string, get: (c: ColourData) => number): (args: Value[]) => Value {
+	return (args: Value[]): Value => {
+		const c = colourOf(args[0]);
+		if (!c) return notAColour(name);
+		return numberValue(get(c));
+	};
+}
+
+const COLOUR_RED_FN_IDX = allocatePluginFunctionIndex();
+const redHandler = extractor("red", (c) => c.r);
+const COLOUR_GREEN_FN_IDX = allocatePluginFunctionIndex();
+const greenHandler = extractor("green", (c) => c.g);
+const COLOUR_BLUE_FN_IDX = allocatePluginFunctionIndex();
+const blueHandler = extractor("blue", (c) => c.b);
+const COLOUR_HUE_FN_IDX = allocatePluginFunctionIndex();
+const hueHandler = extractor("hue", (c) => Colour.rgbToHsl(c.r, c.g, c.b).h);
+const COLOUR_SATURATION_FN_IDX = allocatePluginFunctionIndex();
+const saturationHandler = extractor("saturation", (c) => Colour.rgbToHsl(c.r, c.g, c.b).s * 100);
+const COLOUR_LIGHTNESS_FN_IDX = allocatePluginFunctionIndex();
+const lightnessHandler = extractor("lightness", (c) => Colour.rgbToHsl(c.r, c.g, c.b).l * 100);
+
+// ── Extra colour-space constructors ─────────────────────────────────────
+
+const COLOUR_HSV_FN_IDX = allocatePluginFunctionIndex();
+function hsvHandler(args: Value[]): Value {
+	if (args.length !== 3) return badArgs("hsv", "three values: hsv(hue, saturation%, value%)");
+	const { r, g, b } = Colour.hsvToRgb(args[0].toNumber(), readAmount(args[1]), readAmount(args[2]));
+	return colourValue({ r, g, b, a: 1, format: "hex" });
+}
+
+const COLOUR_HSVA_FN_IDX = allocatePluginFunctionIndex();
+function hsvaHandler(args: Value[]): Value {
+	if (args.length !== 4) return badArgs("hsva", "four values: hsva(hue, saturation%, value%, alpha)");
+	const { r, g, b } = Colour.hsvToRgb(args[0].toNumber(), readAmount(args[1]), readAmount(args[2]));
+	return colourValue({ r, g, b, a: Colour.clamp01(readAmount(args[3])), format: "hex" });
+}
+
+const COLOUR_HWB_FN_IDX = allocatePluginFunctionIndex();
+function hwbHandler(args: Value[]): Value {
+	if (args.length !== 3) return badArgs("hwb", "three values: hwb(hue, whiteness%, blackness%)");
+	const { r, g, b } = Colour.hwbToRgb(args[0].toNumber(), readAmount(args[1]), readAmount(args[2]));
+	return colourValue({ r, g, b, a: 1, format: "hex" });
+}
+
+// ── Tint / shade / tone (mix toward white / black / grey) ────────────────
+
+const COLOUR_TINT_FN_IDX = allocatePluginFunctionIndex();
+const tintHandler = adjuster("tint", Colour.tint);
+const COLOUR_SHADE_FN_IDX = allocatePluginFunctionIndex();
+const shadeHandler = adjuster("shade", Colour.shade);
+const COLOUR_TONE_FN_IDX = allocatePluginFunctionIndex();
+const toneHandler = adjuster("tone", Colour.tone);
+
+// ── Accessibility helpers ───────────────────────────────────────────────
+
+const COLOUR_ISDARK_FN_IDX = allocatePluginFunctionIndex();
+function isdarkHandler(args: Value[]): Value {
+	const c = colourOf(args[0]);
+	if (!c) return notAColour("isdark");
+	return boolValue(Colour.isDark(c));
+}
+
+const COLOUR_ISLIGHT_FN_IDX = allocatePluginFunctionIndex();
+function islightHandler(args: Value[]): Value {
+	const c = colourOf(args[0]);
+	if (!c) return notAColour("islight");
+	return boolValue(!Colour.isDark(c));
+}
+
+const COLOUR_READABLE_FN_IDX = allocatePluginFunctionIndex();
+function readableHandler(args: Value[]): Value {
+	const c = colourOf(args[0]);
+	if (!c) return notAColour("readable");
+	return colourValue(Colour.readableColour(c));
 }
 
 /**
@@ -223,6 +304,25 @@ export const COLOUR_FUNCTION_INDEX: Readonly<Record<string, number>> = {
 	fade: COLOUR_ALPHA_FN_IDX,
 	contrast: COLOUR_CONTRAST_FN_IDX,
 	luminance: COLOUR_LUMINANCE_FN_IDX,
+	red: COLOUR_RED_FN_IDX,
+	green: COLOUR_GREEN_FN_IDX,
+	blue: COLOUR_BLUE_FN_IDX,
+	hue: COLOUR_HUE_FN_IDX,
+	saturation: COLOUR_SATURATION_FN_IDX,
+	lightness: COLOUR_LIGHTNESS_FN_IDX,
+	hsv: COLOUR_HSV_FN_IDX,
+	hsb: COLOUR_HSV_FN_IDX,
+	hsva: COLOUR_HSVA_FN_IDX,
+	hwb: COLOUR_HWB_FN_IDX,
+	tint: COLOUR_TINT_FN_IDX,
+	shade: COLOUR_SHADE_FN_IDX,
+	tone: COLOUR_TONE_FN_IDX,
+	negate: COLOUR_INVERT_FN_IDX,
+	isdark: COLOUR_ISDARK_FN_IDX,
+	islight: COLOUR_ISLIGHT_FN_IDX,
+	readable: COLOUR_READABLE_FN_IDX,
+	contrastcolor: COLOUR_READABLE_FN_IDX,
+	contrastcolour: COLOUR_READABLE_FN_IDX,
 };
 
 /** Every `{ index, handler }` this package registers as `pluginFunctions`. */
@@ -244,4 +344,19 @@ export const COLOUR_PLUGIN_FUNCTIONS: ReadonlyArray<{ index: number; handler: (a
 	{ index: COLOUR_ALPHA_FN_IDX, handler: alphaHandler },
 	{ index: COLOUR_CONTRAST_FN_IDX, handler: contrastHandler },
 	{ index: COLOUR_LUMINANCE_FN_IDX, handler: luminanceHandler },
+	{ index: COLOUR_RED_FN_IDX, handler: redHandler },
+	{ index: COLOUR_GREEN_FN_IDX, handler: greenHandler },
+	{ index: COLOUR_BLUE_FN_IDX, handler: blueHandler },
+	{ index: COLOUR_HUE_FN_IDX, handler: hueHandler },
+	{ index: COLOUR_SATURATION_FN_IDX, handler: saturationHandler },
+	{ index: COLOUR_LIGHTNESS_FN_IDX, handler: lightnessHandler },
+	{ index: COLOUR_HSV_FN_IDX, handler: hsvHandler },
+	{ index: COLOUR_HSVA_FN_IDX, handler: hsvaHandler },
+	{ index: COLOUR_HWB_FN_IDX, handler: hwbHandler },
+	{ index: COLOUR_TINT_FN_IDX, handler: tintHandler },
+	{ index: COLOUR_SHADE_FN_IDX, handler: shadeHandler },
+	{ index: COLOUR_TONE_FN_IDX, handler: toneHandler },
+	{ index: COLOUR_ISDARK_FN_IDX, handler: isdarkHandler },
+	{ index: COLOUR_ISLIGHT_FN_IDX, handler: islightHandler },
+	{ index: COLOUR_READABLE_FN_IDX, handler: readableHandler },
 ];
