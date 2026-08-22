@@ -77,10 +77,13 @@ total back to the pre-tax amount and `tax in` (also `tax of`, `tax from`) pulls
 out the tax already inside it. `vat` is accepted everywhere `tax` is.
 
 On money the tax is exact, rounding the half-cent the same way the rest of the
-currency arithmetic does rather than the way a drifted double would.
+currency arithmetic does rather than the way a drifted double would, and that
+holds whether the tax is added, taken off, or pulled out.
 
 ```solve
 tax on $0.10 at 15% // $0.02
+tax off $0.09 at 20% // $0.08
+tax in $0.09 at 20% // $0.02
 ```
 
 No tax rate is ever assumed. You state it, because the correct rate depends on

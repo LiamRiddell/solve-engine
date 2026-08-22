@@ -20,7 +20,10 @@ import {
 	decimalNegate,
 	decimalToNumber,
 	decimalAdd,
+	decimalSubtract,
 	decimalMultiply,
+	decimalDivide,
+	decimalIsZero,
 	type DecimalData,
 } from "@solve-js/decimal";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
@@ -101,4 +104,51 @@ export function scaleMoneyByPercent(money: Value, unit: string, percent: number,
 		return uomValueExact(decimalToNumber(result), unit, result);
 	}
 	return uomValue(money.toNumber() * (1 + sign * percent), unit);
+}
+
+/**
+ * The exact base-ten `1 + rate` divisor of a tax-inclusive total, or null when
+ * the rate has no short decimal. Formed in base ten (not as the double `1 +
+ * rate`) so the tax-inclusive divisor carries no drift, the same reason
+ * {@link scaleMoneyByPercent} builds its factor this way.
+ */
+function onePlusRateDecimal(rate: number): DecimalData | null {
+	const rateDecimal = decimalFromShortDecimal(rate);
+	return rateDecimal === null ? null : decimalAdd(ONE_DECIMAL, rateDecimal);
+}
+
+/**
+ * `$X / (1 + rate)`, the pre-tax amount inside a tax-inclusive total, kept exact.
+ *
+ * `tax off $0.09 at 20%` is `$0.09 / 1.2 = $0.075`, which the half-cent rule
+ * rounds to `$0.08`, not the `$0.07` a bare double (`0.09 / 1.2 = 0.0749999...`)
+ * rounds down to. {@link decimalDivide} carries the quotient exactly where it
+ * terminates (the cases that can land on a half-cent, at 20%/25%/50%) and rounds
+ * it far below the cent where it does not, so the displayed cent is right either
+ * way. Falls back (returns null) only when an operand has no exact value or the
+ * divisor is zero, leaving the caller's float path, the same boundary the other
+ * MoneyExact helpers draw.
+ */
+export function removeTaxExact(money: Value, unit: string, rate: number): Value | null {
+	const base = moneyExactMagnitude(money, unit);
+	const divisor = onePlusRateDecimal(rate);
+	if (base === null || divisor === null || decimalIsZero(divisor)) return null;
+	const quotient = decimalDivide(base, divisor);
+	return uomValueExact(decimalToNumber(quotient), unit, quotient);
+}
+
+/**
+ * `$X - $X / (1 + rate)`, the tax already inside a tax-inclusive total, kept
+ * exact. The complement of {@link removeTaxExact}: the two sum back to `$X`.
+ *
+ * `tax in $0.09 at 20%` is `$0.09 - $0.075 = $0.015`, which rounds to `$0.02`,
+ * not the `$0.01` the drifted double rounds down to. The subtraction is done in
+ * base ten so the tax and the net a matching `tax off` reports stay consistent.
+ */
+export function taxInExact(money: Value, unit: string, rate: number): Value | null {
+	const base = moneyExactMagnitude(money, unit);
+	const divisor = onePlusRateDecimal(rate);
+	if (base === null || divisor === null || decimalIsZero(divisor)) return null;
+	const tax = decimalSubtract(base, decimalDivide(base, divisor));
+	return uomValueExact(decimalToNumber(tax), unit, tax);
 }
