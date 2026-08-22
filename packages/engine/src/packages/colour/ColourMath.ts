@@ -361,3 +361,25 @@ export function isDark(c: ColourData): boolean {
 export function readableColour(background: ColourData): ColourData {
 	return isDark(background) ? WHITE : BLACK;
 }
+
+/**
+ * WCAG 2.x minimum contrast ratios. Normal text needs 4.5 (AA) or 7 (AAA); large
+ * text (>= 18pt, or >= 14pt bold) and UI components need 3 (AA) or 4.5 (AAA).
+ */
+export const WCAG_THRESHOLDS = { aa: 4.5, aaa: 7, aaLarge: 3, aaaLarge: 4.5 } as const;
+
+/** The four WCAG ratings this package reports, best first. */
+export type WcagLevel = "AAA" | "AA" | "AA Large" | "Fail";
+
+/**
+ * The best WCAG 2.x rating two colours pass for normal-size text: `AAA` (ratio
+ * >= 7), `AA` (>= 4.5), `AA Large` (>= 3, which meets AA only for large text or
+ * UI), or `Fail` (< 3). This is the badge a contrast checker shows.
+ */
+export function wcagLevel(a: ColourData, b: ColourData): WcagLevel {
+	const ratio = contrastRatio(a, b);
+	if (ratio >= WCAG_THRESHOLDS.aaa) return "AAA";
+	if (ratio >= WCAG_THRESHOLDS.aa) return "AA";
+	if (ratio >= WCAG_THRESHOLDS.aaLarge) return "AA Large";
+	return "Fail";
+}

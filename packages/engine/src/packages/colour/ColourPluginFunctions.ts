@@ -12,7 +12,7 @@
  * name-to-index map and the hex-literal index are exported (the rest is internal
  * wiring): the parselets and normalizer reach for those three alone.
  */
-import { Value, ValueType, colourValue, numberValue, boolValue, errorValue, type ColourData } from "@solve-js/vm/Value";
+import { Value, ValueType, colourValue, numberValue, boolValue, stringValue, errorValue, type ColourData } from "@solve-js/vm/Value";
 import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
 import * as Colour from "./ColourMath";
 
@@ -275,6 +275,41 @@ function readableHandler(args: Value[]): Value {
 }
 
 /**
+ * The minimum contrast ratio to test against. A number is used as the ratio
+ * directly; a level name maps to the WCAG threshold (`AA` = 4.5, `AAA` = 7,
+ * `AA large` = 3, `AAA large` = 4.5); anything else, or absent, defaults to AA.
+ */
+function readWcagThreshold(v: Value | undefined): number {
+	if (!v) return Colour.WCAG_THRESHOLDS.aa;
+	if (v.type === ValueType.Number) return v.toNumber();
+	if (v.type === ValueType.String) {
+		const key = (v.value as string).trim().toLowerCase();
+		if (key === "aaa") return Colour.WCAG_THRESHOLDS.aaa;
+		if (key === "aa large" || key === "aa-large" || key === "large") return Colour.WCAG_THRESHOLDS.aaLarge;
+		if (key === "aaa large" || key === "aaa-large") return Colour.WCAG_THRESHOLDS.aaaLarge;
+	}
+	return Colour.WCAG_THRESHOLDS.aa;
+}
+
+const COLOUR_CONTRAST_COMPLIANT_FN_IDX = allocatePluginFunctionIndex();
+function contrastCompliantHandler(args: Value[]): Value {
+	const a = colourOf(args[0]);
+	const b = colourOf(args[1]);
+	if (!a || !b) {
+		return errorValue(ColourErrorCodes.COLOUR_EXPECTED_COLOUR, "iscontrastcompliant(...) expects two colours");
+	}
+	return boolValue(Colour.contrastRatio(a, b) >= readWcagThreshold(args[2]));
+}
+
+const COLOUR_WCAG_LEVEL_FN_IDX = allocatePluginFunctionIndex();
+function wcagLevelHandler(args: Value[]): Value {
+	const a = colourOf(args[0]);
+	const b = colourOf(args[1]);
+	if (!a || !b) return errorValue(ColourErrorCodes.COLOUR_EXPECTED_COLOUR, "wcaglevel(...) expects two colours");
+	return stringValue(Colour.wcagLevel(a, b));
+}
+
+/**
  * The call-name grammar: every function name (and alias) a `COLOUR_CALL` token
  * can carry, mapped to the plugin index that runs it. Also the source of truth
  * for the normalizer (which names to fuse) and completions.
@@ -323,6 +358,9 @@ export const COLOUR_FUNCTION_INDEX: Readonly<Record<string, number>> = {
 	readable: COLOUR_READABLE_FN_IDX,
 	contrastcolor: COLOUR_READABLE_FN_IDX,
 	contrastcolour: COLOUR_READABLE_FN_IDX,
+	iscontrastcompliant: COLOUR_CONTRAST_COMPLIANT_FN_IDX,
+	wcaglevel: COLOUR_WCAG_LEVEL_FN_IDX,
+	wcag: COLOUR_WCAG_LEVEL_FN_IDX,
 };
 
 /** Every `{ index, handler }` this package registers as `pluginFunctions`. */
@@ -359,4 +397,6 @@ export const COLOUR_PLUGIN_FUNCTIONS: ReadonlyArray<{ index: number; handler: (a
 	{ index: COLOUR_ISDARK_FN_IDX, handler: isdarkHandler },
 	{ index: COLOUR_ISLIGHT_FN_IDX, handler: islightHandler },
 	{ index: COLOUR_READABLE_FN_IDX, handler: readableHandler },
+	{ index: COLOUR_CONTRAST_COMPLIANT_FN_IDX, handler: contrastCompliantHandler },
+	{ index: COLOUR_WCAG_LEVEL_FN_IDX, handler: wcagLevelHandler },
 ];

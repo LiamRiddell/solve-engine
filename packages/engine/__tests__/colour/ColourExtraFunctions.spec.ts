@@ -89,3 +89,36 @@ describe("accessibility helpers", () => {
 test("negate is a full invert", () => {
 	expect(colour("negate(#ff0000)")).toMatchObject({ r: 0, g: 255, b: 255 });
 });
+
+describe("WCAG contrast compliance", () => {
+	function evalBool(source: string): boolean {
+		const v = evalValue(source);
+		expect(v.type).toBe(ValueType.Boolean);
+		return v.value === true;
+	}
+	function evalString(source: string): string {
+		const v = evalValue(source);
+		expect(v.type).toBe(ValueType.String);
+		return v.value as string;
+	}
+
+	test("iscontrastcompliant defaults to AA (4.5:1) for normal text", () => {
+		expect(evalBool("iscontrastcompliant(#ffffff, #000000)")).toBe(true);
+		expect(evalBool("iscontrastcompliant(#ffffff, #767676)")).toBe(true);
+		expect(evalBool("iscontrastcompliant(#ffffff, #777777)")).toBe(false);
+	});
+
+	test("a level name or a numeric threshold overrides the default", () => {
+		expect(evalBool('iscontrastcompliant(#ffffff, #767676, "AAA")')).toBe(false);
+		expect(evalBool('iscontrastcompliant(#ffffff, #949494, "AA large")')).toBe(true);
+		expect(evalBool("iscontrastcompliant(#ffffff, #949494, 3)")).toBe(true);
+	});
+
+	test("wcaglevel reports the best rating two colours pass", () => {
+		expect(evalString("wcaglevel(#ffffff, #000000)")).toBe("AAA");
+		expect(evalString("wcaglevel(#ffffff, #767676)")).toBe("AA");
+		expect(evalString("wcaglevel(#ffffff, #949494)")).toBe("AA Large");
+		expect(evalString("wcaglevel(#ffffff, #cccccc)")).toBe("Fail");
+		expect(evalString("wcag(#000000, #ffffff)")).toBe("AAA");
+	});
+});
