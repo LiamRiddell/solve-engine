@@ -276,6 +276,18 @@ export class ExpressionEngine {
     private documentModel: DocumentModel | null = null;
 
     /**
+     * How deep goal seek is currently re-entering line evaluation, so a goal
+     * seek whose target line is itself a goal seek is refused rather than
+     * multiplying the search cost. One goal-seek line already re-runs its
+     * target up to `maxGoalSeekIterations` times; allowing a nested one would
+     * make that a product. See {@link makeLineContext}'s `evaluateLineWithBinding`.
+     */
+    private goalSeekDepth = 0;
+
+    /** The most nesting {@link makeLineContext}'s `evaluateLineWithBinding` allows before refusing, so the bisection re-runs can never compound. */
+    private static readonly GOAL_SEEK_MAX_NESTING_DEPTH = 1;
+
+    /**
      * Batch cross-line source, set only for the duration of a
      * `parseDocument`/`evaluateLines` pass (see {@link processScanResults}).
      * The incremental path uses {@link documentModel}; the batch path has no
@@ -328,12 +340,102 @@ export class ExpressionEngine {
                         return sr.classification.skip || /^\s*#/.test(sr.text);
                     }
                   : undefined,
+            getLineReads: doc
+                ? (n: number) => {
+                      const state = doc.getLineAt(n);
+                      // A line with no compiled bytecode has nothing to solve
+                      // against yet (forward reference, out of range, or
+                      // markdown), reported as undefined rather than an empty
+                      // read set so goal seek can tell "reads nothing" from
+                      // "not ready".
+                      if (!state || state.bytecodes.length === 0) return undefined;
+                      return state.reads;
+                  }
+                : undefined,
+            evaluateLineWithBinding: doc
+                ? (n: number, variable: string, bound: Value, symbolicTolerant: boolean) =>
+                      this.evaluateLineWithBinding(n, variable, bound, symbolicTolerant)
+                : undefined,
+            goalSeekMaxIterations: this.config.vm.maxGoalSeekIterations,
             // Raw source text of a line, for features that read markdown the
             // evaluator skipped (a table's rows). See the tables package. Wired
             // only when a DocumentModel is present: the tables feature reads
             // through the incremental evaluator, not the batch parseDocument path.
             getLineText: doc ? (n: number) => doc.getLineAt(n)?.text : undefined,
         };
+    }
+
+    /**
+     * Re-evaluate line `targetLine`'s compiled expression with `variable` bound
+     * to `bound` for that one run, the primitive goal seek drives while
+     * narrowing in on an input. See {@link LineExecutionContext.evaluateLineWithBinding}.
+     *
+     * The binding is a call frame, so `LOAD_VAR` reads it in preference to the
+     * document's own value and the document's value is untouched once the frame
+     * is popped, the same shadowing a function parameter gets. The target's
+     * bytecode is run as-is, so a line that defines a variable is refused: its
+     * `STORE_VAR` would write the probe's candidate into the real variable store
+     * as a side effect. The re-entry is bounded three ways, by
+     * {@link goalSeekDepth} against nesting, by the VM's own per-run instruction
+     * limit, and by the caller's iteration cap.
+     *
+     * @param targetLine - 1-based line whose expression is re-evaluated.
+     * @param variable - The unknown to bind for this run.
+     * @param bound - The value to bind it to (a number to probe, a symbolic node to read the relationship in closed form).
+     * @param symbolicTolerant - Whether an otherwise-undefined variable reads as a symbolic placeholder, needed for the closed-form read.
+     * @returns The line's re-evaluated Value, or an error Value when it cannot be probed.
+     */
+    private evaluateLineWithBinding(
+        targetLine: number,
+        variable: string,
+        bound: Value,
+        symbolicTolerant: boolean,
+    ): Value {
+        const doc = this.documentModel;
+        if (!doc) {
+            return errorValue("GOAL_SEEK_NO_DOCUMENT", "Goal seek needs a document to solve against, which the single-expression entry point does not have.");
+        }
+        if (this.goalSeekDepth >= ExpressionEngine.GOAL_SEEK_MAX_NESTING_DEPTH) {
+            return errorValue("GOAL_SEEK_NESTED", `A goal-seek line cannot target another goal-seek line, since each already re-runs its target many times.`);
+        }
+        const state = doc.getLineAt(targetLine);
+        if (!state || state.bytecodes.length === 0) {
+            return errorValue("GOAL_SEEK_LINE_NOT_READY", `Line ${targetLine} has no evaluated expression to solve (forward reference, out of range, or not an expression).`);
+        }
+        if (state.isVariableDef) {
+            return errorValue("GOAL_SEEK_TARGET_IS_DEFINITION", `Line ${targetLine} defines a variable, so re-running it would overwrite that variable. Target the line that uses ${variable}, not the one that sets a value.`);
+        }
+
+        const program = state.bytecodes[0];
+        this.goalSeekDepth++;
+        try {
+            const frame = new Map<string, Value>([[variable, bound]]);
+            const stackBefore = this.vm.getStack().length;
+            this.vm.pushCallFrame(frame);
+            try {
+                const result = executeBytecode(program, this.vm, undefined, undefined, this.makeLineContext(targetLine), symbolicTolerant);
+                if (result.type === 'pending') {
+                    return errorValue("GOAL_SEEK_ASYNC_UNSUPPORTED", `Line ${targetLine} depends on an async value (weather, stocks, currency, ...), which goal seek cannot re-run.`);
+                }
+                if (result.type === 'error') {
+                    return errorValue(result.error.code ?? "GOAL_SEEK_TARGET_ERROR", result.error.message);
+                }
+                return result.value;
+            } finally {
+                this.vm.popCallFrame();
+                // Restore the shared stack to exactly what the outer evaluation
+                // left, mirroring executeAndStore()'s own post-run cleanup, so a
+                // probe leaves nothing behind for the next one.
+                while (this.vm.getStack().length > stackBefore) this.vm.pop();
+            }
+        } catch (e) {
+            // A safety-limit throw from the re-run (instruction/stack/recursion
+            // limit) surfaces as a structured error Value rather than escaping
+            // the search loop.
+            return errorValue("GOAL_SEEK_TARGET_ERROR", normalizeUnknownError(e).message);
+        } finally {
+            this.goalSeekDepth--;
+        }
     }
 
     /**
@@ -1704,6 +1806,14 @@ export class ExpressionEngine {
         // Already the colon-prefixed (`:name = value`) or `global :name`
         // grammar, completely untouched, don't even attempt to match.
         if (normalizedTokens[0].type === 'COLON' || normalizedTokens[0].type === 'GLOBAL') return null;
+
+        // A goal-seek line (`solve line N for <var> = <target>`) owns its own
+        // `=`: the `= <target>` is part of that grammar, not an equation to
+        // store. Declining here lets GoalSeekParselet parse the whole line,
+        // rather than the scalar-equation detector below splitting on the `=`
+        // and handing `solve line N for <var>` to a parselet that expects the
+        // `=` to follow.
+        if (normalizedTokens[0].type === 'GOAL_SEEK') return null;
 
         const eqIdx = normalizedTokens.findIndex(t => t.type === 'EQUALS');
         if (eqIdx === -1) return null;

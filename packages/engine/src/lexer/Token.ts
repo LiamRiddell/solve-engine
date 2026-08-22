@@ -450,6 +450,12 @@ export const TokenTypes = {
   TOTAL_ABOVE: "TOTAL_ABOVE",
   SUM_ABOVE: "SUM_ABOVE",
   AVERAGE_ABOVE: "AVERAGE_ABOVE",
+  // ── Goal seek (packages/goalseek/) ──
+  // "solve line 4 for rate = 900" -- fused by GoalSeekNormalizerRule when the
+  // bare word "solve" is immediately followed by a LINE_REF (never a bare
+  // lexer keyword, so ":solve = 2" and the existing "solve(...)" call form
+  // both stay untouched, since neither is "solve" directly before a LINE_REF).
+  GOAL_SEEK: "GOAL_SEEK",
 } as const;
 
 /**

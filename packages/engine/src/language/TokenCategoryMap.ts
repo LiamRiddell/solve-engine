@@ -250,6 +250,9 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	SUM_ABOVE: "keyword",
 	AVERAGE_ABOVE: "keyword",
 
+	// Goal seek (packages/goalseek/)
+	GOAL_SEEK: "keyword",
+
 	// Datetime literals/durations
 	DATETIME_LITERAL: "datetime",
 	DURATION: "datetime",

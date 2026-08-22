@@ -37,6 +37,7 @@ import { WEATHER_PACKAGE } from "./weather";
 import { createStocksPackage } from "./stocks";
 import { createKnowledgePackage } from "./knowledge";
 import { LINES_PACKAGE } from "./lines";
+import { GOALSEEK_PACKAGE } from "./goalseek";
 import { TABLES_PACKAGE } from "./tables";
 
 export {
@@ -64,6 +65,7 @@ export {
   createCurrencyPackage,
   createKnowledgePackage,
   LINES_PACKAGE,
+  GOALSEEK_PACKAGE,
   TABLES_PACKAGE,
 };
 
@@ -88,7 +90,7 @@ export {
 /**
  * The packages an engine registers when the caller names none.
  *
- * Twenty-one of the twenty-three. Stocks and knowledge are excluded because
+ * Twenty-three of the twenty-five. Stocks and knowledge are excluded because
  * both need a host-supplied data source and do nothing useful without one, so
  * registering them by default would only produce NOT_CONFIGURED results.
  *
@@ -117,5 +119,8 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   UNCERTAINTY_PACKAGE,
   WEATHER_PACKAGE,
   LINES_PACKAGE,
+  // After LINES_PACKAGE: goal seek's normalizer reads a LINE_REF the lines
+  // rule mints, and its parselet targets a line reference.
+  GOALSEEK_PACKAGE,
   TABLES_PACKAGE,
 ];
