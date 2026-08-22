@@ -53,6 +53,8 @@ increase 100 by 10% // 110.00
 sqrt(16) // 4
 max(3, 7) // 7
 round(3.7) // 4
+round(3.14159, 2) // 3.14
+3.14159 to 4 dp // 3.1416
 gcd(12, 18) // 6
 hex(255) // 0xFF
 bin(5) // 0b101
@@ -203,7 +205,12 @@ jacobian(x*y, x+y) // [y, x; 1, 1]
 $100 + $50 // $150.00
 10 dollars // $10.00
 tax on 100 at 20% // 20
+interest on 1000 over 3 years at 5% // 157.63
+monthly repayment on 200000 at 4% over 25 years // 1,055.67
 ```
+
+The term and the rate read in either order, so `at 4% over 25 years` and
+`over 25 years at 4%` are the same.
 
 Currency conversion such as `10 USD to GBP` reaches the network, so it resolves
 asynchronously rather than returning a value immediately. See
