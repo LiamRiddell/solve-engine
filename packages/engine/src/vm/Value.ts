@@ -354,6 +354,22 @@ export class Value {
 	 * Cleared by {@link recycle} alongside the other two sidecars.
 	 */
 	public uncertainty?: number;
+	/**
+	 * The number of decimal places this value should DISPLAY at, when it has been
+	 * given an explicit precision.
+	 *
+	 * A display sidecar, not a value one: `value` is unchanged, so every
+	 * `.value`/`toNumber()` reader and all arithmetic behave exactly as before,
+	 * and a value with no `decimalPlaces` formats the way it always did (the
+	 * global two-place default with trailing zeros trimmed). It is set only by an
+	 * explicit precision request, `<x> to N dp` and `round(x, N)`, so that
+	 * `3.14159 to 4 dp` shows `3.1416` and `1.5 to 2 dp` shows `1.50` rather than
+	 * the value being rounded but then displayed at the default two places. It is
+	 * NOT propagated through arithmetic (a later `+ 1` re-decides precision),
+	 * which is why nothing that did not ask for a precision is affected. Cleared
+	 * by {@link recycle} alongside the other sidecars.
+	 */
+	public decimalPlaces?: number;
 
 	constructor(
 		type: ValueType,
@@ -392,6 +408,9 @@ export class Value {
 		// The uncertainty sidecar clears the same way: a reused Value that once
 		// carried a tolerance must not lend it to a plain number.
 		this.uncertainty = undefined;
+		// The display-precision sidecar clears too: a reused Value that once had
+		// an explicit `to N dp` must not display a plain number at that precision.
+		this.decimalPlaces = undefined;
 	}
 
 	isNumber(): this is Value & { value: number } {

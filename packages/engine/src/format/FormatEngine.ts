@@ -8,10 +8,23 @@ import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { columnMajorToRowMajor } from "@solve-js/vm/MatrixOps";
 import { formatSymbolic, type SymbolicNode } from "@solve-js/symbolic";
 
-function formatNumber(value: number, locale: ILocale, settings: FormattingSettings): string {
-  const dp = settings.floatResult.decimalPlaces;
+function formatNumber(value: number, locale: ILocale, settings: FormattingSettings, decimalPlaces?: number): string {
   const sep = settings.floatResult.enableSeperator;
   const loc = settings.numberResult.decimalSeparatorLocale;
+  // An explicit precision (`3.14159 to 4 dp`, `round(1.5, 2)`) shows EXACTLY that
+  // many places with trailing zeros kept, where the default trims them and shows
+  // an integer with none. The value was already rounded to this precision when
+  // it was set (see VMBuiltins' roundToPlaces, exact where an exact decimal was
+  // there), so rendering it to the same place count reproduces that rounding.
+  if (decimalPlaces !== undefined && Number.isFinite(value)) {
+    const formatted = value.toLocaleString(loc || "en-US", {
+      minimumFractionDigits: decimalPlaces,
+      maximumFractionDigits: decimalPlaces,
+      useGrouping: sep,
+    });
+    return `${locale.display.resultPrefix}${formatted}`;
+  }
+  const dp = settings.floatResult.decimalPlaces;
   const formatted = autoFormatIntegerOrFloat(value, dp, sep, loc);
   return `${locale.display.resultPrefix}${formatted}`;
 }
@@ -355,7 +368,7 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
       if (value.uncertainty !== undefined) {
         return formatUncertain(value.value as number, value.uncertainty, locale, us);
       }
-      return formatNumber(value.value as number, locale, us);
+      return formatNumber(value.value as number, locale, us, value.decimalPlaces);
     case ValueType.Hex:
       return formatHex(value.value as number | bigint, us, value.unit);
     case ValueType.BigInt:

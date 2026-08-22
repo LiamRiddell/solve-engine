@@ -1,4 +1,5 @@
 import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, type MatrixData } from "@solve-js/vm/Value";
+import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom, power, describeMeasureMismatch } from "@solve-js/vm/VMConversion";
 import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact } from "@solve-js/vm/MoneyExact";
@@ -140,6 +141,41 @@ function keepUnit(operand: Value, magnitude: number): Value {
 }
 
 /**
+ * Round a value to an explicit number of decimal places, recording that place
+ * count so the result DISPLAYS at it (see Value's `decimalPlaces`).
+ *
+ * Backs both spellings of the same idea: the phrase `<x> to N dp` (builtin 97)
+ * and the function `round(x, N)` (builtin 8's two-argument form). Rounds from the
+ * exact decimal where the value carries one, so `1.005 to 2 dp` and
+ * `round(1.005, 2)` are `1.01`, half away from zero, not the `1.00` a double
+ * (1.00499...) rounds down to. Without an exact decimal it rounds the double,
+ * guarding the point past 2^53 where a double has no fractional digits left to
+ * round (scaling further only adds error, so `1e21 to 2 dp` is `1e21`). The
+ * unit, if any, rides along.
+ */
+function roundToPlaces(source: Value, places: number): Value {
+    const p = Number.isFinite(places) ? Math.min(100, Math.max(0, Math.trunc(places))) : 0;
+    if (source.exact !== undefined) {
+        const rounded = decimalRound(source.exact, p);
+        return withPlaces(source, decimalToNumber(rounded), p, rounded);
+    }
+    const value = source.toNumber();
+    if (!Number.isFinite(value)) return withPlaces(source, value, p);
+    const scale = Math.pow(10, p);
+    const scaled = value * scale;
+    if (!Number.isFinite(scaled) || Math.abs(scaled) > Number.MAX_SAFE_INTEGER) return withPlaces(source, value, p);
+    return withPlaces(source, Math.round(scaled) / scale, p);
+}
+
+/** Carry `source`'s unit onto `magnitude` and stamp its display precision (and exact decimal, when the rounding was exact). */
+function withPlaces(source: Value, magnitude: number, places: number, exact?: DecimalData): Value {
+    const result = source.type === ValueType.Uom && source.unit !== undefined ? uomValue(magnitude, source.unit) : numberValue(magnitude);
+    result.decimalPlaces = places;
+    if (exact !== undefined) result.exact = exact;
+    return result;
+}
+
+/**
  * Refuses a `gcd`/`lcm` operand that the Euclidean loop cannot terminate on.
  *
  * `while (b !== 0) { [a, b] = [b, a % b] }` relies on the remainder shrinking
@@ -216,7 +252,12 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // round/ceil/floor keep a unit for the same reason abs does; see keepUnit().
     6: (args) => keepUnit(args[0], Math.ceil(args[0].toNumber())),
     7: (args) => keepUnit(args[0], Math.floor(args[0].toNumber())),
-    8: (args) => keepUnit(args[0], Math.round(args[0].toNumber())),
+    8: (args) =>
+        args.length >= 2
+            ? // round(x, n): round to n decimal places and display at that precision.
+              roundToPlaces(args[0], args[1].toNumber())
+            : // round(x): nearest whole number, the way it always was.
+              keepUnit(args[0], Math.round(args[0].toNumber())),
     // min/max: see extremum() for why the winner is carried around as a Value
     // rather than as a running number.
     9: (args) => extremum(args, false),
@@ -1040,18 +1081,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // fractional part to round at all, and the round trip through 1e23 was
     // pure loss. Asking for fewer decimal places than a number has cannot
     // change it, so a value that is already whole is returned untouched.
-    97: (args) => {
-        const source = args[0];
-        const value = source.toNumber();
-        const places = args[1].toNumber();
-        if (!Number.isFinite(value) || Number.isInteger(value)) return keepUnit(source, value);
-        const scale = Math.pow(10, places);
-        const scaled = value * scale;
-        // Past 2^53 a double has no fractional digits left to round, so scaling
-        // any further only adds error. `1.5 to 100 dp` is 1.5.
-        if (!Number.isFinite(scaled) || Math.abs(scaled) > Number.MAX_SAFE_INTEGER) return keepUnit(source, value);
-        return keepUnit(source, Math.round(scaled) / scale);
-    },
+    97: (args) => roundToPlaces(args[0], args[1].toNumber()),
 };
 
 /**
