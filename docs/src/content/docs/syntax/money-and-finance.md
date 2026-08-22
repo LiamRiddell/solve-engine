@@ -120,12 +120,20 @@ year. A final part-period has not come due, so it is not counted.
 
 ## Interest and inflation
 
-Interest compounds annually. The principal comes first, then the term, then the
+Interest compounds annually. The principal comes first, then the term and the
 rate, and a mortgage repayment reads the same way.
 
 ```solve
 interest on 1000 over 3 years at 5% // 157.63
 monthly repayment on 200000 over 25 years at 4% // 1,055.67
+```
+
+The term and the rate read in either order, so `at 5% over 3 years` says the same
+thing as `over 3 years at 5%`.
+
+```solve
+interest on 1000 at 5% over 3 years // 157.63
+monthly repayment on 200000 at 4% over 25 years // 1,055.67
 ```
 
 Inflation adjusts an amount into another year's money, from a bundled consumer
