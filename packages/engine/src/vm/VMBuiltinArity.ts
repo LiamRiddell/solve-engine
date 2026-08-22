@@ -44,7 +44,7 @@ const BUILTIN_ARITY: Record<number, BuiltinArity> = {
   5:  { name: "log",      min: 1, max: 1 },
   6:  { name: "ceil",     min: 1, max: 1 },
   7:  { name: "floor",    min: 1, max: 1 },
-  8:  { name: "round",    min: 1, max: 1 },
+  8:  { name: "round",    min: 1, max: 2 },
   // min/max compare as many operands as they are given.
   9:  { name: "min",      min: 1, max: Infinity },
   10: { name: "max",      min: 1, max: Infinity },
