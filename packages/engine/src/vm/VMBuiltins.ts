@@ -1,6 +1,7 @@
 import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, type MatrixData } from "@solve-js/vm/Value";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom, power, describeMeasureMismatch } from "@solve-js/vm/VMConversion";
+import { scaleMoneyExact, scaleMoneyByPercent } from "@solve-js/vm/MoneyExact";
 import { transpose, determinant, inverse, matrixMultiply, matrixPower, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
 import { symbolicToValue, valueToSymbolic, solveEquationValues } from "@solve-js/vm/SymbolicOps";
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
@@ -562,8 +563,11 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     58: (args) => {
         const amount = args[0].toNumber();
         const rate = args[1].toNumber();
-        const result = amount * (1 + rate);
-        return args[0].type === ValueType.Uom ? uomValue(result, args[0].unit!) : numberValue(result);
+        // Money stays exact: `$X * (1 + R)` is formed in base ten so the
+        // tax-inclusive total does not drift a half-cent (see MoneyExact.ts). A
+        // non-currency Uom and a bare number keep their existing float result.
+        if (args[0].type === ValueType.Uom) return scaleMoneyByPercent(args[0], args[0].unit!, rate, 1);
+        return numberValue(amount * (1 + rate));
     },
     // taxRemove(amount, rate) -> amount / (1 + rate), extracts the
     // pre-tax amount from a tax-INCLUSIVE total. Backs "tax off $X at R%" /
@@ -808,8 +812,12 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     86: (args) => {
         const amount = args[0].toNumber();
         const rate = args[1].toNumber();
-        const tax = amount * rate;
-        return args[0].type === ValueType.Uom ? uomValue(tax, args[0].unit!) : numberValue(tax);
+        // Money stays exact: `$X * R` is formed in base ten so the tax rounds
+        // like a till (`tax on $10.10 at 15%` is `$1.52`, not the `$1.51` a
+        // double lands on). See MoneyExact.ts. A non-currency Uom passes
+        // straight through the same helper; a bare number keeps its float.
+        if (args[0].type === ValueType.Uom) return scaleMoneyExact(args[0], rate, args[0].unit!);
+        return numberValue(amount * rate);
     },
     // ── Degree-taking trig (sind/cosd/tand and the inverses) ──────────────
     // The "d" spellings take and return degrees rather than radians, which is

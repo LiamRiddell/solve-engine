@@ -1,6 +1,7 @@
 import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData } from "@solve-js/vm/Value";
-import { decimalFromLiteral, decimalFromInteger, decimalFromNumberIfExact, decimalNegate, decimalToNumber, decimalAdd, decimalMultiply, type DecimalData } from "@solve-js/decimal";
+import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
+import { moneyExactMagnitude, scaleMoneyByPercent } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { rowMajorToColumnMajor, matrixMultiply, matrixPower, matrixCompare, matIndex, matAt, inBounds, collectionToValues, matrixEntryToValue } from "@solve-js/vm/MatrixOps";
@@ -885,63 +886,6 @@ function moneyTimesQuantity(l: Value, r: Value): Value | null {
 
     return uomValue(l.toNumber() * r.toNumber(), leftIsMoney ? leftUnit : rightUnit);
 }
-
-/**
- * The exact decimal a currency amount should carry, or null when it has none.
- *
- * Gated on the unit being a currency, so the exact-decimal machinery is money's
- * and money's alone in this slice, every other Uom (km, kg, minutes) is left
- * exactly as it was. The amount's exact value is either the sidecar a decimal
- * literal already set, or, for a whole-number amount, the integer itself. A
- * fractional double with no sidecar (`$sqrt(2)`, `$ (1/3) `) returns null and
- * stays a float, which is the deliberate boundary: exactness only where an
- * exact value actually exists.
- */
-function moneyExactMagnitude(operand: Value, unit: string): DecimalData | null {
-    if (!sharedCurrencyExchange.isCurrency(unit)) return null;
-    return operand.exact ?? decimalFromNumberIfExact(operand.toNumber());
-}
-
-/**
- * The exact base-ten value of a number that is exactly a short decimal (the
- * proportion a percentage the user typed reduces to, e.g. `15%` -> `0.15`), via
- * its shortest round-tripping string, or null for a value that is not (a computed
- * irrational, or scientific-notation extreme). Wider than
- * {@link decimalFromNumberIfExact} (integers only), and used only to recover a
- * percentage's intended decimal, where the printed proportion is the meaning.
- */
-function decimalFromShortDecimal(n: number): DecimalData | null {
-    if (!Number.isFinite(n)) return null;
-    if (Number.isInteger(n)) return decimalFromInteger(BigInt(n));
-    const s = String(n);
-    if (!/^-?\d+\.\d+$/.test(s)) return null;
-    return decimalFromLiteral(s);
-}
-
-/**
- * Scale a money amount by `1 + sign * percent`, keeping it exact.
- *
- * `$X + p%` is `$X * (1 + p%)`, and money multiplication is exact wherever the
- * inputs are, so the till answer for `$0.10 + 15%` is `$0.115 -> $0.12`, not the
- * `$0.11` a bare double (`0.10 * 1.15 = 0.1149999...`) rounds down to. The
- * one-plus-percent factor is formed in base ten so no double drift creeps in.
- * Falls back to the float path only when an operand has no exact value (the same
- * boundary {@link moneyExactMagnitude} draws), so nothing that was exact before
- * loses exactness.
- */
-function scaleMoneyByPercent(money: Value, unit: string, percent: number, sign: 1 | -1): Value {
-    const base = moneyExactMagnitude(money, unit);
-    const percentDecimal = decimalFromShortDecimal(percent);
-    if (base !== null && percentDecimal !== null) {
-        const factor = decimalAdd(ONE_DECIMAL, sign === 1 ? percentDecimal : decimalNegate(percentDecimal));
-        const result = decimalMultiply(base, factor);
-        return uomValueExact(decimalToNumber(result), unit, result);
-    }
-    return uomValue(money.toNumber() * (1 + sign * percent), unit);
-}
-
-/** Exact base-ten `1`, the constant term in a `1 + p%` scaling factor. */
-const ONE_DECIMAL: DecimalData = decimalFromInteger(1);
 
 /**
  * `X + 10%` and `X - 10%`, where the percentage is relative to X.
