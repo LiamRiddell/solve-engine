@@ -42,11 +42,18 @@ function serializeMatrix(m: MatrixData): SerializedMatrix {
  * side left `undefined`.
  */
 export function serializeValue(value: Value, settings?: FormattingSettings): SerializedValue {
+	const reading = value.toNumber();
 	const dto: SerializedValue = {
 		type: value.type,
 		text: formatValue(value, settings),
-		number: value.toNumber(),
+		// A non-finite reading (1/0, 0/0, an overflow) cannot cross JSON, which
+		// turns it into null and breaks the round-trip the DTO guarantees. Keep
+		// `number` finite and name the real value in `nonFinite` instead.
+		number: Number.isFinite(reading) ? reading : 0,
 	};
+	if (!Number.isFinite(reading)) {
+		dto.nonFinite = reading > 0 ? "Infinity" : reading < 0 ? "-Infinity" : "NaN";
+	}
 
 	if (value.unit !== undefined) dto.unit = value.unit;
 	if (value.timedOut !== undefined) dto.timedOut = value.timedOut;
