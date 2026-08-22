@@ -11,7 +11,8 @@
 
 import type { ExpressionEngine } from '@solve-js/engine/ExpressionEngine';
 import { formatValue } from '@solve-js/format/FormatEngine';
-import { Value, ValueType } from '@solve-js/vm/Value';
+import { Value, ValueType, type ColourData } from '@solve-js/vm/Value';
+import { formatColour } from '@solve-js/packages/colour/ColourMath';
 import type {
 	PerformanceStats,
 	LineStats,
@@ -240,6 +241,17 @@ export function extractLineTimings(
 export function formatLineResultValue(value: Value): string {
 	if (value.type === ValueType.Pending) return '';
 	return formatValue(value);
+}
+
+/**
+ * The render-ready CSS string for a colour result, or `undefined` for anything
+ * that is not a colour, so a host can draw an inline swatch beside the answer
+ * (`background: <css>`) with no recomputation. The same string the worker DTO's
+ * `colour.css` carries, from the colour package's own formatter.
+ */
+export function colourCss(value: Value): string | undefined {
+	if (value.type !== ValueType.Colour) return undefined;
+	return formatColour(value.value as ColourData);
 }
 
 /** Aggregate stage timings, or zeros when no diagnostic events exist. */
