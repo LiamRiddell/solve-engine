@@ -46,8 +46,20 @@ export interface SerializedValue {
 	type: ValueType;
 	/** The formatted display string, what a host renders against the line. */
 	text: string;
-	/** The numeric reading via {@link Value.toNumber}: 0 for non-numeric types. */
+	/**
+	 * The numeric reading via {@link Value.toNumber}: 0 for non-numeric types.
+	 * Always finite so the DTO survives `JSON` (which turns `Infinity`/`NaN` into
+	 * `null`): when the true reading is non-finite this is 0 and {@link nonFinite}
+	 * names the real value. Read `nonFinite ? Number(nonFinite) : number` to
+	 * recover it.
+	 */
 	number: number;
+	/**
+	 * Set only when the numeric reading is non-finite (`1/0`, `0/0`, an overflow),
+	 * to a string a host turns back into the value with `Number(...)`. Carried
+	 * separately because a non-finite number cannot cross `JSON`; see {@link number}.
+	 */
+	nonFinite?: "Infinity" | "-Infinity" | "NaN";
 	/** Unit annotation for unit-of-measurement and non-decimal-base values, when present. */
 	unit?: string;
 	/** Base-ten string for a `bigint` payload, so no `BigInt` ever crosses `JSON`. */
