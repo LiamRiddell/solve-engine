@@ -1,5 +1,5 @@
 import { OpCode } from "@solve-js/parser/OpCode";
-import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData } from "@solve-js/vm/Value";
 import { decimalFromLiteral, decimalFromNumberIfExact, decimalNegate, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
@@ -2285,6 +2285,18 @@ export function executeBytecode(
             stack.push(boolValue(sameMeasure && equal));
           } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
             stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a === b));
+          } else if (l.type === ValueType.Colour || r.type === ValueType.Colour) {
+            // A colour equals only another colour with the same canonical
+            // channels, so `#ff0000 == rgb(255,0,0)` is true regardless of
+            // format. A colour and a non-colour are never equal: NOT via
+            // toNumber() (0 for a colour), which would make `#000000 == 0` true,
+            // exactly the coercion fault this repo guards against.
+            if (l.type === ValueType.Colour && r.type === ValueType.Colour) {
+              const a = l.value as ColourData, b = r.value as ColourData;
+              stack.push(boolValue(a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a));
+            } else {
+              stack.push(boolValue(false));
+            }
           } else {
             stack.push(boolValue(l.toNumber() === r.toNumber()));
           }
@@ -2312,6 +2324,15 @@ export function executeBytecode(
             stack.push(boolValue(!sameMeasure || !equal));
           } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
             stack.push(matrixCompare(l.value as MatrixData, r.value as MatrixData, (a, b) => a !== b));
+          } else if (l.type === ValueType.Colour || r.type === ValueType.Colour) {
+            // The negation of EQ's colour branch: two colours differ by channel,
+            // and a colour and a non-colour are always unequal.
+            if (l.type === ValueType.Colour && r.type === ValueType.Colour) {
+              const a = l.value as ColourData, b = r.value as ColourData;
+              stack.push(boolValue(!(a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a)));
+            } else {
+              stack.push(boolValue(true));
+            }
           } else {
             stack.push(boolValue(l.toNumber() !== r.toNumber()));
           }
@@ -2743,6 +2764,14 @@ export function executeBytecode(
           const v = safePop(stack);
           const toHexFault = faultedOperand(v);
           if (toHexFault) { stack.push(toHexFault); break; }
+          // A colour already has a hex reading, so `#3366cc as rgb as hex` should
+          // round-trip rather than collapse through toNumber() (which is 0 for a
+          // colour). Re-tag its display format to hex, leaving channels intact.
+          if (v.type === ValueType.Colour) {
+            const c = v.value as ColourData;
+            stack.push(colourValue({ r: c.r, g: c.g, b: c.b, a: c.a, format: "hex" }));
+            break;
+          }
           // A bigint keeps its bigint, exactly as ADD/SUB/MUL/DIV do:
           // `12345678901234567890n as hex` rendered 0xAB54A98CEB1F0800 while
           // the value ends 0AD2, because toNumber() rounded it first.

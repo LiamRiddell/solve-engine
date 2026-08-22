@@ -110,6 +110,20 @@
   text-overflow: ellipsis;
 }
 
+/* An inline swatch shown beside a colour answer, so `#ff0000` renders the actual
+   red next to its text. The answer column is right-aligned, so the swatch sits
+   just left of the text. The border keeps a white or very light colour visible
+   against the surface. */
+.notepad__swatch {
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-inline-end: 0.4em;
+  vertical-align: -0.12em;
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+}
+
 /* The answer is the product's signature moment, so it gets the brand colour.
    With the surfaces flat, this is what separates the column from the
    expressions beside it. */

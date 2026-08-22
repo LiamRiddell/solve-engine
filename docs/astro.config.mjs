@@ -204,6 +204,7 @@ export default defineConfig({
             { slug: "syntax/percentages" },
             { slug: "syntax/units-and-conversions" },
             { slug: "syntax/programmer-math" },
+            { slug: "syntax/colours" },
             { slug: "syntax/unit-reference" },
             { slug: "syntax/money-and-finance" },
             { slug: "syntax/dates" },

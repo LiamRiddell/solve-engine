@@ -8,8 +8,9 @@
  * byte-for-byte the same DTO.
  */
 
-import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData } from "@solve-js/vm/Value";
+import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
+import { toHexString, formatColour } from "@solve-js/packages/colour/ColourMath";
 import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
 import { formatSymbolic } from "@solve-js/symbolic";
 import type { ParsedLine, InlineSolvePosition, ParsingResult } from "@solve-js/types/ParsingResult";
@@ -61,6 +62,9 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 	} else if (value.type === ValueType.Range) {
 		const r = raw as RangeData;
 		dto.range = { min: r.min, max: r.max };
+	} else if (value.type === ValueType.Colour) {
+		const c = raw as ColourData;
+		dto.colour = { hex: toHexString(c), r: c.r, g: c.g, b: c.b, a: c.a, format: c.format, css: formatColour(c) };
 	}
 
 	return dto;

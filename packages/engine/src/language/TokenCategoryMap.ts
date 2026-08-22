@@ -253,6 +253,12 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	// Goal seek (packages/goalseek/)
 	GOAL_SEEK: "keyword",
 
+	// Colour (packages/colour/). HEX_COLOUR gets its own "colour" category so a
+	// host can render an inline swatch on the literal; the call token highlights
+	// like any function.
+	HEX_COLOUR: "colour",
+	COLOUR_CALL: "function",
+
 	// Datetime literals/durations
 	DATETIME_LITERAL: "datetime",
 	DURATION: "datetime",

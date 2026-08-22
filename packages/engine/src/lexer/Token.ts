@@ -283,6 +283,13 @@ export const TokenTypes = {
   // for discoverability even though tokenTypeId() would lazily register
   // it anyway on first use.
   COMMENT: "COMMENT",
+  // A `#hex` colour literal (`#ff0000`), recognised by the lexer where `#`
+  // would otherwise be a heading/comment; the colour package's parselet turns
+  // it into a colour value. See ExpressionLexer.matchHexColourEnd().
+  HEX_COLOUR: "HEX_COLOUR",
+  // A colour function call fused by the colour package's normalizer, e.g.
+  // `rgb(`/`lighten(`. Carries the function name; see ColourCallParselet.
+  COLOUR_CALL: "COLOUR_CALL",
   // Vector types (referenced in locale keywordMap as vec2→VEC2, etc.)
   VEC2: "VEC2",
   VEC3: "VEC3",

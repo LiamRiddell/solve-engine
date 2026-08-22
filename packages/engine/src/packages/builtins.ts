@@ -39,6 +39,7 @@ import { createKnowledgePackage } from "./knowledge";
 import { LINES_PACKAGE } from "./lines";
 import { GOALSEEK_PACKAGE } from "./goalseek";
 import { TABLES_PACKAGE } from "./tables";
+import { COLOUR_PACKAGE } from "./colour";
 
 export {
   ARITHMETIC_PACKAGE,
@@ -67,6 +68,7 @@ export {
   LINES_PACKAGE,
   GOALSEEK_PACKAGE,
   TABLES_PACKAGE,
+  COLOUR_PACKAGE,
 };
 
 // ── All built-in packages (registration order matters: arithmetic first) ──
@@ -90,7 +92,7 @@ export {
 /**
  * The packages an engine registers when the caller names none.
  *
- * Twenty-three of the twenty-five. Stocks and knowledge are excluded because
+ * Twenty-four of the twenty-six. Stocks and knowledge are excluded because
  * both need a host-supplied data source and do nothing useful without one, so
  * registering them by default would only produce NOT_CONFIGURED results.
  *
@@ -123,4 +125,5 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   // rule mints, and its parselet targets a line reference.
   GOALSEEK_PACKAGE,
   TABLES_PACKAGE,
+  COLOUR_PACKAGE,
 ];

@@ -1,4 +1,5 @@
-import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData } from "@solve-js/vm/Value";
+import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData } from "@solve-js/vm/Value";
+import { formatColour } from "@solve-js/packages/colour/ColourMath";
 import { decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
 import { autoFormatIntegerOrFloat } from "@solve-js/utilities/Number";
@@ -336,6 +337,8 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
       const r = value.value as RangeData;
       return formatRange(r.min, r.max, locale);
     }
+    case ValueType.Colour:
+      return `${locale.display.resultPrefix}${formatColour(value.value as ColourData)}`;
     case ValueType.Symbolic:
       return formatSymbolic(value.value as SymbolicNode);
     case ValueType.Percentage:
