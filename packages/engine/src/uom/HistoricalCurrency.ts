@@ -212,62 +212,108 @@ async function fetchHistoricalRate(
 }
 
 /**
- * The plugin function every historical conversion dispatches to at runtime.
+ * Build the plugin function every historical conversion dispatches to at runtime.
  *
  * Args are `[amount, toUnit, isoDate]` (CALL_PLUGIN hands them back in push
  * order). The source currency is the amount's own unit, read here rather than
  * passed as an operand so the `$100 in GBP on <date>` form, whose left operand
- * has no compile-time unit, works through the same path. Reads the rate
- * preflight cached and applies it, so the whole conversion, including a
- * computed amount, resolves synchronously once the rate is in.
+ * has no compile-time unit, works through the same path.
+ *
+ * **Two ways the rate arrives, one reader.** For a literal-source conversion
+ * (`100 USD in GBP on <date>`, `$100 in GBP on <date>`) preflight recovers the
+ * source currency from the bytecode and caches the rate before the VM runs, so
+ * this reads it and applies it synchronously. But a source known only at RUNTIME
+ * (a variable or subexpression left operand, `x in GBP on <date>`) carries no
+ * currency literal for preflight's scan to find, so preflight could not have
+ * fetched anything. On that cache miss this fetches the rate itself and returns
+ * the Promise: the VM yields a pending result (see EngineContext's
+ * PluginFunctionHandler), the engine awaits it, re-evaluates, and this same
+ * reader then reads the freshly cached rate. The fetch shares the resolver's
+ * query key and function, so a literal and a variable form of the same
+ * conversion never fetch twice.
+ *
+ * @param provider - the host historical-rate provider, closed over so the
+ * runtime fetch can reach it; `undefined` surfaces `NOT_CONFIGURED` through the
+ * same fetch, never a fall back to today's rate.
  */
-export function historicalCurrencyPluginFunction(args: Value[]): Value {
-	const amount = args[0];
-	const toArg = args[1];
-	const dateArg = args[2];
+export function createHistoricalCurrencyPluginFunction(
+	provider?: HistoricalRateProvider,
+): (args: Value[]) => Value | Promise<Value> {
+	return (args: Value[]): Value | Promise<Value> => {
+		const amount = args[0];
+		const toArg = args[1];
+		const dateArg = args[2];
 
-	// CALL_PLUGIN already refuses a faulted argument before dispatch; this is
-	// the same guard in this function's own terms, in case it is ever called
-	// directly (tests, a future call site).
-	const fault = faultedOperand(amount);
-	if (fault) return fault;
+		// CALL_PLUGIN already refuses a faulted argument before dispatch; this is
+		// the same guard in this function's own terms, in case it is ever called
+		// directly (tests, a future call site).
+		const fault = faultedOperand(amount);
+		if (fault) return fault;
 
-	if (amount.type !== ValueType.Uom || amount.unit === undefined || !sharedCurrencyExchange.isCurrency(amount.unit)) {
-		return errorValue(
-			HistoricalCurrencyErrorCodes.INVALID_OPERAND,
-			`Historical conversion needs an amount in a currency, for example "100 USD in GBP on 2024-01-15".`,
-		);
-	}
+		if (amount.type !== ValueType.Uom || amount.unit === undefined || !sharedCurrencyExchange.isCurrency(amount.unit)) {
+			return errorValue(
+				HistoricalCurrencyErrorCodes.INVALID_OPERAND,
+				`Historical conversion needs an amount in a currency, for example "100 USD in GBP on 2024-01-15".`,
+			);
+		}
 
-	const from = amount.unit;
-	const to = String(toArg.value);
-	const isoDate = String(dateArg.value);
+		const from = amount.unit;
+		const to = String(toArg.value);
+		const isoDate = String(dateArg.value);
 
-	// A currency converts to itself at 1 on any date, no rate lookup needed.
-	if (from.toUpperCase() === to.toUpperCase()) {
-		return uomValue(amount.toNumber(), to);
-	}
+		// A currency converts to itself at 1 on any date, no rate lookup needed.
+		if (from.toUpperCase() === to.toUpperCase()) {
+			return uomValue(amount.toNumber(), to);
+		}
 
-	const cached = getActiveQueryClient()?.getQueryData(historicalRateQueryKey(from, to, isoDate)) as Value | undefined;
-	if (cached === undefined) {
-		// preflight() caches the rate (or its error) before the VM runs this
-		// conversion, so reaching here with nothing cached is an invariant
-		// break, not a real path (mirrors QueryResolver's _NOT_PREFLIGHTED).
-		return errorValue(
-			HistoricalCurrencyErrorCodes.NOT_PREFLIGHTED,
-			`No historical rate resolved for ${from.toUpperCase()} to ${to.toUpperCase()} on ${isoDate}.`,
-		);
-	}
-	// A not-configured or failed fetch resolved to an Error Value: surface it
-	// as-is rather than converting against a rate that is not there.
-	if (cached.type === ValueType.Error) return cached;
+		const queryClient = getActiveQueryClient();
+		const key = historicalRateQueryKey(from, to, isoDate);
+		const cached = queryClient?.getQueryData(key) as Value | undefined;
 
-	const rate = cached.value as number;
-	// A cross-currency rate is a double, so the result is an ordinary float Uom,
-	// the same as the live path (exact-decimal money holds only within one
-	// currency, see vm/VMConversion.ts's exactMoneyOp).
-	return uomValue(amount.toNumber() * rate, to);
+		if (cached === undefined) {
+			// Preflight caches the rate before the VM for a literal-source
+			// conversion, but a source currency known only at runtime (a
+			// variable/subexpression left operand) leaves no literal for its scan,
+			// so nothing was cached. Fetch it here and return the Promise: the VM
+			// makes the line pending, the engine awaits and re-evaluates, and the
+			// re-run reads the now-cached rate below. Same query key and function
+			// as the resolver, so the two never double-fetch.
+			if (!queryClient) {
+				// No active query client at all (not the engine's normal path):
+				// nothing can fetch or cache, so this stays the invariant-break
+				// error it was (mirrors QueryResolver's _NOT_PREFLIGHTED).
+				return errorValue(
+					HistoricalCurrencyErrorCodes.NOT_PREFLIGHTED,
+					`No historical rate resolved for ${from.toUpperCase()} to ${to.toUpperCase()} on ${isoDate}.`,
+				);
+			}
+			return queryClient.fetchQuery({
+				queryKey: key,
+				queryFn: ({ signal }) => fetchHistoricalRate(provider, from, to, isoDate, signal, queryClient),
+				staleTime: HISTORICAL_RATE_STALE_TIME_MS,
+			});
+		}
+		// A not-configured or failed fetch resolved to an Error Value: surface it
+		// as-is rather than converting against a rate that is not there.
+		if (cached.type === ValueType.Error) return cached;
+
+		const rate = cached.value as number;
+		// A cross-currency rate is a double, so the result is an ordinary float Uom,
+		// the same as the live path (exact-decimal money holds only within one
+		// currency, see vm/VMConversion.ts's exactMoneyOp).
+		return uomValue(amount.toNumber() * rate, to);
+	};
 }
+
+/**
+ * The provider-less historical plugin function: reads a rate preflight (or a
+ * test) has already cached and applies it, and on a miss resolves to
+ * `NOT_CONFIGURED` through the shared fetch rather than a made-up rate. Kept as a
+ * standalone export for direct callers; the currency package wires a
+ * provider-backed instance through {@link createHistoricalCurrencyPluginFunction}
+ * so a runtime-only source currency can still fetch.
+ */
+export const historicalCurrencyPluginFunction = createHistoricalCurrencyPluginFunction();
 
 /**
  * Build the async resolver that fetches historical rates through the host
