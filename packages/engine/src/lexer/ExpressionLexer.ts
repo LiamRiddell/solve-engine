@@ -1511,12 +1511,16 @@ export class ExpressionLexer {
     while (i >= start && (input.charCodeAt(i) === 32 || input.charCodeAt(i) === 9)) i--;  // skip spaces/tabs
     if (i < start) return false;  // line start (or only whitespace before): a grouping
     const c = input.charCodeAt(i);
-    if (c === 41 || c === 93) return true;  // )/] : a call on a result
     const isWord = (ch: number): boolean =>
       (ch >= 48 && ch <= 57) || (ch >= 65 && ch <= 90) || (ch >= 97 && ch <= 122) || ch === 95;
     const isAlpha = (ch: number): boolean =>
       (ch >= 65 && ch <= 90) || (ch >= 97 && ch <= 122) || ch === 95;
-    if (!isWord(c)) return false;  // operator/comma/etc: a grouping
+    // A non-word char before "(" (an operator, a comma, a `)`/`]`, or the line
+    // start) is a grouping. There is no curried/first-class call or index-
+    // application in this grammar, so `)(` and `](` are implicit multiplication
+    // over a grouping (`(2)(1,000)` is `2 * 1000`), not a call. The only call
+    // targets are an identifier or a FUNC keyword, handled below.
+    if (!isWord(c)) return false;
     // Walk back over the whole word run. A bare number run (`2(1,000)`) is
     // implicit multiplication over a grouping, not a call.
     const wordEnd = i + 1;
