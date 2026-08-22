@@ -268,6 +268,49 @@ export interface LineExecutionContext {
     getLineResult?: (lineNumber: number) => Value | undefined;
     /** Whether line `lineNumber` is a blank line or a `#` heading, the stopping condition for "total above"/"sum above"/"average above" aggregation. */
     isLineBoundary?: (lineNumber: number) => boolean;
+    /**
+     * The variables another line's expression reads, by 1-based line number, or
+     * `undefined` when the line has no evaluated expression (forward reference,
+     * out of range, or markdown). Goal seek (`packages/goalseek/`) uses it to
+     * refuse up front when the variable it was asked to vary is one the target
+     * line never reads, rather than searching a relationship that cannot move.
+     */
+    getLineReads?: (lineNumber: number) => string[] | undefined;
+    /**
+     * Re-evaluate another line's already-compiled expression with `variable`
+     * bound to `bound` for that one evaluation, without disturbing the
+     * document's own value for it. This is the primitive goal seek
+     * (`packages/goalseek/`) drives: binding a numeric candidate probes the
+     * relationship, binding a symbolic placeholder (with `symbolicTolerant`)
+     * reads it back in closed form. Returns an error Value when there is no
+     * document, the line is not a plain expression ready to run, or its
+     * re-evaluation itself faults. The binding is a call frame, so it shadows
+     * the document's value exactly the way a function parameter does and is
+     * gone the moment the probe returns.
+     */
+    evaluateLineWithBinding?: (
+        lineNumber: number,
+        variable: string,
+        bound: Value,
+        symbolicTolerant: boolean,
+    ) => Value;
+    /**
+     * The hard ceiling on goal seek's bisection steps, from
+     * `config.vm.maxGoalSeekIterations`. Carried on the context so the search,
+     * which runs as a plugin function with no other view of engine config, is
+     * bounded by the host's configured limit rather than a hardcoded one.
+     */
+    goalSeekMaxIterations?: number;
+    /**
+     * The RAW markdown text of line `lineNumber` (1-based), or `undefined`
+     * when there is no real document or the line is out of range. Distinct
+     * from `getLineResult`, which returns a line's evaluated Value: a
+     * markdown table's rows are skipped by the evaluator and hold no result,
+     * so reading a column as data has to go back to the source text. Backs
+     * the tables package (`packages/tables/`), which walks upward from the
+     * current line to find the nearest table and read one of its columns.
+     */
+    getLineText?: (lineNumber: number) => string | undefined;
 }
 
 /**

@@ -77,6 +77,8 @@ import { solveEquationValues } from "@solve-js/vm/SymbolicOps";
 import { abortLogger } from "@solve-js/utilities/AbortControllerLogger";
 import { TokenNormalizer, BUILTIN_PHRASES, implicitMultiplyRule } from "@solve-js/normalizer";
 import type { TokenFusion } from "@solve-js/normalizer";
+import { UserUnitTable } from "@solve-js/packages/uom/UserUnitTable";
+import { userUnitExpansionRule } from "@solve-js/packages/uom/normalizer/UserUnitNormalizerRule";
 import { buildExplanation } from "@solve-js/explain";
 import type { Explanation } from "@solve-js/explain";
 import {
@@ -274,6 +276,18 @@ export class ExpressionEngine {
     private documentModel: DocumentModel | null = null;
 
     /**
+     * How deep goal seek is currently re-entering line evaluation, so a goal
+     * seek whose target line is itself a goal seek is refused rather than
+     * multiplying the search cost. One goal-seek line already re-runs its
+     * target up to `maxGoalSeekIterations` times; allowing a nested one would
+     * make that a product. See {@link makeLineContext}'s `evaluateLineWithBinding`.
+     */
+    private goalSeekDepth = 0;
+
+    /** The most nesting {@link makeLineContext}'s `evaluateLineWithBinding` allows before refusing, so the bisection re-runs can never compound. */
+    private static readonly GOAL_SEEK_MAX_NESTING_DEPTH = 1;
+
+    /**
      * Batch cross-line source, set only for the duration of a
      * `parseDocument`/`evaluateLines` pass (see {@link processScanResults}).
      * The incremental path uses {@link documentModel}; the batch path has no
@@ -326,7 +340,102 @@ export class ExpressionEngine {
                         return sr.classification.skip || /^\s*#/.test(sr.text);
                     }
                   : undefined,
+            getLineReads: doc
+                ? (n: number) => {
+                      const state = doc.getLineAt(n);
+                      // A line with no compiled bytecode has nothing to solve
+                      // against yet (forward reference, out of range, or
+                      // markdown), reported as undefined rather than an empty
+                      // read set so goal seek can tell "reads nothing" from
+                      // "not ready".
+                      if (!state || state.bytecodes.length === 0) return undefined;
+                      return state.reads;
+                  }
+                : undefined,
+            evaluateLineWithBinding: doc
+                ? (n: number, variable: string, bound: Value, symbolicTolerant: boolean) =>
+                      this.evaluateLineWithBinding(n, variable, bound, symbolicTolerant)
+                : undefined,
+            goalSeekMaxIterations: this.config.vm.maxGoalSeekIterations,
+            // Raw source text of a line, for features that read markdown the
+            // evaluator skipped (a table's rows). See the tables package. Wired
+            // only when a DocumentModel is present: the tables feature reads
+            // through the incremental evaluator, not the batch parseDocument path.
+            getLineText: doc ? (n: number) => doc.getLineAt(n)?.text : undefined,
         };
+    }
+
+    /**
+     * Re-evaluate line `targetLine`'s compiled expression with `variable` bound
+     * to `bound` for that one run, the primitive goal seek drives while
+     * narrowing in on an input. See {@link LineExecutionContext.evaluateLineWithBinding}.
+     *
+     * The binding is a call frame, so `LOAD_VAR` reads it in preference to the
+     * document's own value and the document's value is untouched once the frame
+     * is popped, the same shadowing a function parameter gets. The target's
+     * bytecode is run as-is, so a line that defines a variable is refused: its
+     * `STORE_VAR` would write the probe's candidate into the real variable store
+     * as a side effect. The re-entry is bounded three ways, by
+     * {@link goalSeekDepth} against nesting, by the VM's own per-run instruction
+     * limit, and by the caller's iteration cap.
+     *
+     * @param targetLine - 1-based line whose expression is re-evaluated.
+     * @param variable - The unknown to bind for this run.
+     * @param bound - The value to bind it to (a number to probe, a symbolic node to read the relationship in closed form).
+     * @param symbolicTolerant - Whether an otherwise-undefined variable reads as a symbolic placeholder, needed for the closed-form read.
+     * @returns The line's re-evaluated Value, or an error Value when it cannot be probed.
+     */
+    private evaluateLineWithBinding(
+        targetLine: number,
+        variable: string,
+        bound: Value,
+        symbolicTolerant: boolean,
+    ): Value {
+        const doc = this.documentModel;
+        if (!doc) {
+            return errorValue("GOAL_SEEK_NO_DOCUMENT", "Goal seek needs a document to solve against, which the single-expression entry point does not have.");
+        }
+        if (this.goalSeekDepth >= ExpressionEngine.GOAL_SEEK_MAX_NESTING_DEPTH) {
+            return errorValue("GOAL_SEEK_NESTED", `A goal-seek line cannot target another goal-seek line, since each already re-runs its target many times.`);
+        }
+        const state = doc.getLineAt(targetLine);
+        if (!state || state.bytecodes.length === 0) {
+            return errorValue("GOAL_SEEK_LINE_NOT_READY", `Line ${targetLine} has no evaluated expression to solve (forward reference, out of range, or not an expression).`);
+        }
+        if (state.isVariableDef) {
+            return errorValue("GOAL_SEEK_TARGET_IS_DEFINITION", `Line ${targetLine} defines a variable, so re-running it would overwrite that variable. Target the line that uses ${variable}, not the one that sets a value.`);
+        }
+
+        const program = state.bytecodes[0];
+        this.goalSeekDepth++;
+        try {
+            const frame = new Map<string, Value>([[variable, bound]]);
+            const stackBefore = this.vm.getStack().length;
+            this.vm.pushCallFrame(frame);
+            try {
+                const result = executeBytecode(program, this.vm, undefined, undefined, this.makeLineContext(targetLine), symbolicTolerant);
+                if (result.type === 'pending') {
+                    return errorValue("GOAL_SEEK_ASYNC_UNSUPPORTED", `Line ${targetLine} depends on an async value (weather, stocks, currency, ...), which goal seek cannot re-run.`);
+                }
+                if (result.type === 'error') {
+                    return errorValue(result.error.code ?? "GOAL_SEEK_TARGET_ERROR", result.error.message);
+                }
+                return result.value;
+            } finally {
+                this.vm.popCallFrame();
+                // Restore the shared stack to exactly what the outer evaluation
+                // left, mirroring executeAndStore()'s own post-run cleanup, so a
+                // probe leaves nothing behind for the next one.
+                while (this.vm.getStack().length > stackBefore) this.vm.pop();
+            }
+        } catch (e) {
+            // A safety-limit throw from the re-run (instruction/stack/recursion
+            // limit) surfaces as a structured error Value rather than escaping
+            // the search loop.
+            return errorValue("GOAL_SEEK_TARGET_ERROR", normalizeUnknownError(e).message);
+        } finally {
+            this.goalSeekDepth--;
+        }
     }
 
     /**
@@ -357,6 +466,14 @@ export class ExpressionEngine {
     private batcher: AsyncResolutionBatcher;
     /** Post-lexer token normalizer for phrase fusion, implicit multiply, etc. */
     private normalizer: TokenNormalizer;
+    /**
+     * Units defined by the current document (`1 sprint = 2 weeks`). Read by the
+     * user-unit normalizer rule to expand a name back to its definition, written
+     * by {@link tryDefineUserUnit} on a definition line. Document-scoped: cleared
+     * at the start of every {@link parseDocument} pass, so definitions never
+     * cross between documents.
+     */
+    private readonly userUnits = new UserUnitTable();
     /** TanStack Query client, injected into resolvers for cache reads/writes. */
     readonly queryClient: QueryClient;
     // Bytecode cache, avoids re-parsing identical expressions.
@@ -458,6 +575,14 @@ export class ExpressionEngine {
             50,
             (word) => this.normalizer.canStartPhrase(word),
         ));
+
+        // User-defined units (`1 sprint = 2 weeks`). Registered here rather than
+        // through the UOM package descriptor because it closes over this
+        // engine's own per-document unit table, and a package descriptor is
+        // shared across every engine in the process. Priority is above implicit
+        // multiply so a defined name is expanded whole (`6 * 2 weeks`) instead
+        // of first split into `6 * sprints` with the name stranded as a variable.
+        this.normalizer.register(userUnitExpansionRule(this.userUnits));
 
         const pkgList = packages ?? BUILTIN_PACKAGES;
         for (const pkg of pkgList) {
@@ -1037,6 +1162,14 @@ export class ExpressionEngine {
                 { maxLines },
             );
         }
+        // Fresh unit definitions for this pass. A host re-parses the whole
+        // document on each keystroke, so rebuilding the table top-to-bottom is
+        // what keeps a renamed or deleted definition from lingering. Only drop
+        // the bytecode cache when the previous pass actually defined a unit,
+        // since its cached programs may have expanded one, a document that never
+        // uses the feature keeps its cache and pays nothing here.
+        if (!this.userUnits.isEmpty) this.bytecodeCache.clear();
+        this.userUnits.clear();
         // Scan the entire document in a single pass, bypasses the old
         // split('\n') → evaluateLines() → join('\n') → scanDocument()
         // roundtrip. scanDocument() classifies and tokenizes all lines
@@ -1092,6 +1225,9 @@ export class ExpressionEngine {
      * bypassing the split→join roundtrip that this method performs.
      */
     evaluateLines(lines: string[]): ParsedLine[] {
+        // A whole-document pass, so definitions start empty (see parseDocument).
+        if (!this.userUnits.isEmpty) this.bytecodeCache.clear();
+        this.userUnits.clear();
         // Rejoin lines and scan in a single pass, scanDocument() handles
         // classification + tokenization for all lines in one character walk.
         const documentText = lines.join('\n');
@@ -1557,6 +1693,69 @@ export class ExpressionEngine {
      * session's own Phase H.2 scope decision (full symbolic MATRICES, not
      * a general CAS).
      */
+    /**
+     * Registers a document-scoped user unit from a `1 <name> = <n> <unit>` line
+     * and returns the `<name> defined` confirmation, or `null` when the line is
+     * not a unit definition (so ordinary processing continues unchanged).
+     *
+     * Like the symbolic-grammar shapes it sits beside, this has an effect (a
+     * stored definition) that no cached bytecode program could represent, so it
+     * short-circuits compilation the same way. See {@link UserUnitTable}.
+     *
+     * The pattern is kept deliberately narrow so it cannot swallow an equation:
+     *
+     * - The coefficient must be exactly `1`. `2 x = 10` stays a scalar equation
+     *   (`x =>` solves it); only the natural `1 sprint = 2 weeks` shape is a
+     *   definition.
+     * - The name is one or more identifiers, never a built-in unit (those lex as
+     *   UNIT, not IDENT), so a built-in unit cannot be redefined.
+     * - The base must be a recognized unit (a UNIT token). A non-unit right side
+     *   declines here and is left to whatever handled it before, so a defined
+     *   unit is always dimensioned, never free-standing.
+     *
+     * `tokens` are already normalized, so the implicit-multiply pass has usually
+     * inserted a STAR between the coefficient and the name (`1 * sprint`); it is
+     * tolerated and skipped.
+     */
+    private tryDefineUserUnit(tokens: Token[]): Value | null {
+        // Shortest definition is NUMBER IDENT EQUALS NUMBER UNIT.
+        if (tokens.length < 5) return null;
+        if (tokens[0].type !== 'NUMBER' || Number(tokens[0].value) !== 1) return null;
+
+        let i = 1;
+        // The implicit-multiply STAR between the coefficient and the name.
+        if (tokens[i].type === 'STAR') i++;
+
+        const nameWords: string[] = [];
+        while (i < tokens.length && tokens[i].type === 'IDENT') {
+            nameWords.push(tokens[i].value);
+            i++;
+        }
+        if (nameWords.length === 0) return null;
+
+        if (tokens[i]?.type !== 'EQUALS') return null;
+        i++;
+        if (tokens[i]?.type !== 'NUMBER') return null;
+        const ratioToken = tokens[i];
+        i++;
+        if (tokens[i]?.type !== 'UNIT') return null;
+        const baseToken = tokens[i];
+        i++;
+        // A definition is the whole line: anything trailing means this is some
+        // other construct that merely starts the same way.
+        if (i !== tokens.length) return null;
+
+        this.userUnits.define(nameWords, ratioToken.value, baseToken.value);
+        // A user unit is expanded at parse time, so the compiled bytecode for
+        // any line using one depends on the definitions in scope, which the
+        // cache key (the raw expression text) does not capture. A new or changed
+        // definition therefore invalidates every cached program, so a later
+        // `6 sprints` recompiles against this definition rather than a stale one.
+        // Definition lines are rare, so this clear is not on any hot path.
+        this.bytecodeCache.clear();
+        return stringValue(`${nameWords.join(' ')} defined`);
+    }
+
     private trySymbolicGrammar(normalizedTokens: Token[], lineNumber: number = -1): Value | null {
         if (normalizedTokens.length === 0) return null;
 
@@ -1607,6 +1806,14 @@ export class ExpressionEngine {
         // Already the colon-prefixed (`:name = value`) or `global :name`
         // grammar, completely untouched, don't even attempt to match.
         if (normalizedTokens[0].type === 'COLON' || normalizedTokens[0].type === 'GLOBAL') return null;
+
+        // A goal-seek line (`solve line N for <var> = <target>`) owns its own
+        // `=`: the `= <target>` is part of that grammar, not an equation to
+        // store. Declining here lets GoalSeekParselet parse the whole line,
+        // rather than the scalar-equation detector below splitting on the `=`
+        // and handing `solve line N for <var>` to a parselet that expects the
+        // `=` to follow.
+        if (normalizedTokens[0].type === 'GOAL_SEEK') return null;
 
         const eqIdx = normalizedTokens.findIndex(t => t.type === 'EQUALS');
         if (eqIdx === -1) return null;
@@ -1853,7 +2060,12 @@ export class ExpressionEngine {
         // the way to `total = 5`, and it took the editor down.
         let symbolicResult: Value | null;
         try {
-            symbolicResult = this.trySymbolicGrammar(normalizedTokens, lineNumber);
+            // A user-unit definition (`1 sprint = 2 weeks`) is an effectful line
+            // like the symbolic shapes below, so it rides the same non-bytecode
+            // channel. Checked first, so it claims its narrow pattern before the
+            // scalar-equation grammar sees the bare `=`.
+            symbolicResult = this.tryDefineUserUnit(normalizedTokens)
+                ?? this.trySymbolicGrammar(normalizedTokens, lineNumber);
         } catch (e) {
             // reads/writes supplied for the same reason the main parse's catch
             // supplies them: the line names variables even though it does not
@@ -3618,8 +3830,9 @@ export class ExpressionEngine {
         // stale re-evaluations from in-flight promises that resolve after clear.
 		// This call is what actually releases per-document state. The batcher is
 		// reachable from the module-level data-query service, so an engine that
-		// goes out of scope without clear() stays retained: measured at 46.9KB
-		// per engine against 8.2KB for one that never parsed. See the class doc.
+		// goes out of scope without clear() stays retained: on the order of
+		// 200KB per engine against 8.2KB for one that never parsed, a figure
+		// that grows with the registered package set. See the class doc.
 		this.batcher.clearAll();
 
 		// The query cache holds a garbage-collection timer per cached query,
@@ -3645,6 +3858,7 @@ export class ExpressionEngine {
          this.scopeManager.clear();
          this.bytecodeCache.clear();
          this.vm.reset();
+         this.userUnits.clear();
          this.lastTelemetry = null;
      }
 

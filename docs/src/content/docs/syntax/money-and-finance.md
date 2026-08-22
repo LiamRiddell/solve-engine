@@ -18,6 +18,20 @@ network and resolves asynchronously. See
 | --- | --- |
 | `10 USD in GBP` | converted at the current rate |
 | `100 euros to dollars` | the same, in words |
+| `100 USD in GBP on 2024-01-15` | converted at that day's rate |
+| `100 USD in GBP on 15 Jan 2024` | the same day, written differently |
+
+An `on <date>` suffix converts at the rate for the day it names rather than
+today's, which is what an expense or an invoice reconciled after the fact needs:
+a note that was right when written should not drift as the market moves. Both
+date spellings above are read by the same parser used everywhere else. Like the
+live conversion, the first result is a pending value and the real answer arrives
+later.
+
+Historical rates come from a data source you supply, so nothing is assumed and
+no live rate is passed off as a historical one. Without a provider a dated
+conversion reports that historical rates are not configured rather than falling
+back to today's rate. See [live data](/syntax/live-data/) for wiring one up.
 
 ## Exact decimals
 
