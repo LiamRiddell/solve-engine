@@ -102,13 +102,50 @@ function tokenEnd(t: Token): number {
 	return t.sourceEnd ?? t.offset + t.value.length;
 }
 
-/** True for a token that cannot start or continue an operand run. */
+/**
+ * Token types that make up an operand atom: a value literal or a reference to one
+ * (a number, a unit or currency amount, a percentage, a variable, a constant, a
+ * boolean). An operand run is the maximal span of these.
+ *
+ * The set is defined as what an operand *is*, not as what stops one, so anything
+ * that is not operand material ends the run: every parenthesis, and every
+ * operator, modelled or not. That is the point. An operator the derivation does
+ * not model (`==`, `<`, `in`, `to`, `and`, a bitwise or conversion op) is left
+ * unconsumed, {@link Parser.parseAll} then sees the leftover token and throws,
+ * and the line falls back to reporting its answer with no steps, rather than
+ * gluing the operator into a leaf and emitting a misleading arithmetic step whose
+ * result is not even the arithmetic kind. Preferring no derivation to a wrong one
+ * is the rule the whole slice obeys, so this errs toward the empty fallback: an
+ * exotic operand kind left out here loses its breakdown, never its answer.
+ */
+const OPERAND_TOKEN_TYPES: ReadonlySet<string> = new Set([
+	TokenTypes.NUMBER,
+	TokenTypes.BIGINT,
+	TokenTypes.IDENT,
+	TokenTypes.UNIT,
+	TokenTypes.PERCENT,
+	TokenTypes.PI,
+	TokenTypes.E,
+	TokenTypes.TRUE,
+	TokenTypes.FALSE,
+	TokenTypes.DOLLAR,
+	TokenTypes.POUND,
+	TokenTypes.EURO,
+	TokenTypes.YEN,
+	TokenTypes.RUBLE,
+	TokenTypes.WON,
+	TokenTypes.CURRENCY_SYMBOL,
+]);
+
+/**
+ * True for a token that cannot start or continue an operand run: any token that
+ * is not operand material ({@link OPERAND_TOKEN_TYPES}). The modelled infix
+ * operators and parentheses are boundaries under this rule, and so is every
+ * operator the derivation does not model, which is what keeps an unmodelled tail
+ * (`== 4`, `in kg`) out of a leaf instead of gluing it into a misleading step.
+ */
 function isBoundary(type: string): boolean {
-	return (
-		infixBindingPower(type) > 0 ||
-		type === TokenTypes.LPAREN ||
-		type === TokenTypes.RPAREN
-	);
+	return !OPERAND_TOKEN_TYPES.has(type);
 }
 
 /**
