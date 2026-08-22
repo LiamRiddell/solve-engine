@@ -40,6 +40,35 @@ export interface RangeData {
 }
 
 /**
+ * How a colour was authored, and therefore how it should display. It never
+ * changes the channels: a colour is always stored as canonical sRGB (`r`,`g`,`b`
+ * integers 0-255, `a` in 0-1), and `format` only decides whether `formatValue`
+ * renders it as `#rrggbb`, `rgb(...)`, `hsl(...)` or a named keyword.
+ */
+export type ColourFormat = "hex" | "rgb" | "rgba" | "hsl" | "hsla" | "named";
+
+/**
+ * A colour value. Canonical channels are sRGB (`r`,`g`,`b` are integers 0-255,
+ * `a` is 0-1); HSL is never stored, it is derived on demand for display and for
+ * hue/saturation/lightness operations, then re-quantised back to RGBA. A
+ * `lighten` followed by an equal `darken` returns to within one rounding step of
+ * the original (integer channels re-quantise each way), and does not drift on
+ * repetition, rather than storing both HSL and RGB and letting them disagree.
+ * `format`
+ * records the authored/display form; `name` carries the CSS keyword only when
+ * `format === "named"` (e.g. `"rebeccapurple"`). Lives in a {@link Value}'s
+ * `value` slot exactly as {@link MatrixData}/{@link RangeData} do.
+ */
+export interface ColourData {
+	readonly r: number;
+	readonly g: number;
+	readonly b: number;
+	readonly a: number;
+	readonly format: ColourFormat;
+	readonly name?: string;
+}
+
+/**
  * Discriminated union tag for {@link Value} objects.
  *
  * Determines the runtime type of a Value and how its `value` field should
@@ -69,6 +98,8 @@ export enum ValueType {
 	Pending = 12,
 	/** Plugin-raised error propagated through the DAG. Value stores error code, unit stores message. */
 	Error = 13,
+	/** A colour (hex/rgb/hsl/named). Value is {@link ColourData}. */
+	Colour = 14,
 }
 
 // ── ValueArena ────────────────────────────────────────────────────────────
@@ -126,7 +157,7 @@ export class ValueArena {
 	}
 
 	/** Bump-allocate a recycled Value. Falls back to allocation only for overflow. */
-	acquire(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | SymbolicNode, unit?: string): Value {
+	acquire(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SymbolicNode, unit?: string): Value {
 		if (this.index < this.arena.length) {
 			const v = this.arena[this.index++];
 			v.recycle(type, value, unit);
@@ -270,7 +301,7 @@ export class Value {
 	// recycle() which overwrites all fields. External code should treat Values
 	// as immutable after construction (arena handles mutation internally).
 	public type: ValueType;
-	public value: number | bigint | string | boolean | MatrixData | RangeData | SymbolicNode;
+	public value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SymbolicNode;
 	public unit?: string;
 	/** Set by async resolvers when a fetch timed out, the result is a fallback (typically 0). */
 	public timedOut?: boolean;
@@ -326,7 +357,7 @@ export class Value {
 
 	constructor(
 		type: ValueType,
-		value: number | bigint | string | boolean | MatrixData | RangeData | SymbolicNode,
+		value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SymbolicNode,
 		unit?: string
 	) {
 		this.type = type;
@@ -343,7 +374,7 @@ export class Value {
 	 * Phase 5.3: Reset all fields for arena reuse.
 	 * Called by ValueArena.acquire(), zero allocation, just field assignment.
 	 */
-	recycle(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | SymbolicNode, unit?: string): void {
+	recycle(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SymbolicNode, unit?: string): void {
 		this.type = type;
 		this.value = value;
 		this.unit = unit;
@@ -394,6 +425,10 @@ export class Value {
 		return this.type === ValueType.Range;
 	}
 
+	isColour(): this is Value & { value: ColourData } {
+		return this.type === ValueType.Colour;
+	}
+
 	isSymbolic(): this is Value & { value: SymbolicNode } {
 		return this.type === ValueType.Symbolic;
 	}
@@ -416,6 +451,9 @@ export class Value {
 			return 0;
 		}
 		if (this.type === ValueType.Range) return 0;
+		// A colour is a struct of channels, not a scalar; like Matrix/Range it has
+		// no single numeric reading. Callers branch on `.isColour()` first.
+		if (this.type === ValueType.Colour) return 0;
 		// A symbolic expression has no single concrete numeric value by
 		// definition (it's a free-variable formula), 0, matching the
 		// Pending/Error/Range convention. Real callers branch on
@@ -451,6 +489,7 @@ export class Value {
 			return false;
 		}
 		if (this.type === ValueType.Range) return false;
+		if (this.type === ValueType.Colour) return false;
 		if (this.type === ValueType.Symbolic) return false;
 		// Matches toNumber()'s boolean reading above. Without this a Boolean
 		// reached the string branch at the bottom and `parseFloat(true)` made
@@ -714,6 +753,17 @@ export function rangeValue(min: number, max: number): Value {
 	const r: RangeData = { min, max };
 	if (_arenaActive && _arena) return _arena.acquire(ValueType.Range, r);
 	return new Value(ValueType.Range, r);
+}
+
+/**
+ * Create a Colour value from canonical sRGB channels plus a display format.
+ * Arena-backed like the other synchronous factories; the `ColourData` struct in
+ * the `value` slot is immutable, so arena recycle is safe with no extra clearing
+ * (matching {@link matrixValue}/{@link rangeValue}).
+ */
+export function colourValue(c: ColourData): Value {
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.Colour, c);
+	return new Value(ValueType.Colour, c);
 }
 
 /** Create a Symbolic value, a free-variable algebraic expression tree (`symbolic/SymbolicNode.ts`'s `SymbolicNode`), not a concrete number. */

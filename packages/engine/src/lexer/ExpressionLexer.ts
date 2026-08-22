@@ -1663,6 +1663,37 @@ export class ExpressionLexer {
     return pos;
   }
 
+  /**
+   * The end offset (exclusive) of a `#hex` colour literal starting at `hashPos`,
+   * or -1 if the run there is not one. A colour is `#` followed by EXACTLY 3, 4,
+   * 6 or 8 hex digits (the CSS forms `#rgb`/`#rgba`/`#rrggbb`/`#rrggbbaa`) and
+   * then a boundary, not a longer word or number. This is the one predicate that
+   * carves colours out of the two things `#` otherwise means, a markdown heading
+   * at line start and a comment mid-line, and it is pure character logic so line
+   * classification stays vocabulary-independent. Examples: `#f00`, `#ff0000`,
+   * `#deadbeef` match; `# Heading` (space), `#tag`/`#todo` (non-hex letter),
+   * `#12345` (length 5), `#ff0000zz` (trailing word) do not.
+   */
+  private matchHexColourEnd(hashPos: number, end: number): number {
+    const input = this.input;
+    let p = hashPos + 1;
+    let n = 0;
+    while (p < end) {
+      const c = input.charCodeAt(p);
+      const isHex = (c >= 48 && c <= 57) || (c >= 65 && c <= 70) || (c >= 97 && c <= 102);
+      if (!isHex) break;
+      n++;
+      p++;
+    }
+    if (n !== 3 && n !== 4 && n !== 6 && n !== 8) return -1;
+    if (p < end) {
+      const c = input.charCodeAt(p);
+      const isWord = (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95;
+      if (isWord) return -1;
+    }
+    return p;
+  }
+
   private classifyFromPositions(start: number, end: number): LineClassification {
     const len = end;
 
@@ -1688,6 +1719,16 @@ export class ExpressionLexer {
 
     // ── Heading: #{1,6} ' ' ──────────────────────────────────────────
     if (c0 === 35) {
+      // A bare #hex colour is a value, not a heading. A real heading has a space
+      // after its #(s), so the colour shape (# + 3/4/6/8 hex digits) never
+      // collides with one. This line is tokenized like any expression.
+      if (this.matchHexColourEnd(pos, len) !== -1) {
+        if (hasInline === undefined) {
+          const idx = input.indexOf('s`', pos);
+          hasInline = idx !== -1 && idx < len;
+        }
+        return { type: 'expression', skip: false, hasInlineSolve: hasInline };
+      }
       let hashCount = 1;
       while (pos + hashCount < len && input.charCodeAt(pos + hashCount) === 35) {
         hashCount++;
@@ -1914,6 +1955,20 @@ export class ExpressionLexer {
     const len = this.len;
     const start = this.pos;
     const startCol = start - this.lineStartPos + 1;
+
+    // A `#hex` colour literal is not a comment. Recognised here (the single
+    // choke-point both `#` call sites reach) so `#ff0000` becomes a HEX_COLOUR
+    // token while `# comment`, `#tag`, `#face` (length 4 all-hex still counts as a
+    // colour) and `// c` stay comments. Only fires when the char is `#`, never `/`.
+    if (input.charCodeAt(start) === 35) {
+      const hexEnd = this.matchHexColourEnd(start, len);
+      if (hexEnd !== -1) {
+        const text = input.slice(start, hexEnd);
+        this.pos = hexEnd;
+        return new LexerToken('HEX_COLOUR', tokenTypeId('HEX_COLOUR'), text, text, start, 0, this.line, startCol);
+      }
+    }
+
     let pos = this.pos;
 
     if (pos + 1 < len && input.charCodeAt(pos + 1) === 47) {

@@ -35,6 +35,14 @@ describe("line classification does not depend on registered vocabulary", () => {
 		"an escaped \\` backtick",
 		"> a quote",
 		"- a list item",
+		// Colour literals: the `#hex` shape is classified by character, never by
+		// vocabulary, so a bare lexer and a colour-aware one must still agree.
+		"#ff0000",
+		"#f00",
+		"#deadbeef",
+		"#tag",
+		"#face",
+		"color = #3366cc",
 	];
 
 	/** A package-style vocabulary claiming words the built-ins do not. */

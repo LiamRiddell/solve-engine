@@ -12,7 +12,7 @@
  * property `worker/serialize.ts` is built to guarantee.
  */
 
-import type { ValueType } from "@solve-js/vm/Value";
+import type { ValueType, ColourFormat } from "@solve-js/vm/Value";
 import type { DiagnosticReportJSON } from "@solve-js/diagnostics";
 
 /**
@@ -56,6 +56,21 @@ export interface SerializedValue {
 	matrix?: SerializedMatrix;
 	/** Inclusive integer range bounds, present only for {@link ValueType.Range}. */
 	range?: { min: number; max: number };
+	/**
+	 * Colour payload, present only for {@link ValueType.Colour}. `hex` is the
+	 * canonical `#rrggbb`/`#rrggbbaa`; `r`,`g`,`b` are 0-255, `a` is 0-1;
+	 * `format` is the authored form; `css` is a render-ready CSS string, so a
+	 * host draws a swatch (e.g. `background: css`) with no recomputation.
+	 */
+	colour?: {
+		hex: string;
+		r: number;
+		g: number;
+		b: number;
+		a: number;
+		format: ColourFormat;
+		css: string;
+	};
 	/** Whether an async fallback timed out, carried through when the engine set it. */
 	timedOut?: boolean;
 }

@@ -43,6 +43,8 @@ interface Answer {
   text: string;
   /** Drives the colour. `none` renders nothing at all. */
   kind: "value" | "error" | "none";
+  /** A CSS colour string, set when the result is a colour, to draw an inline swatch. */
+  swatch?: string;
 }
 
 const EMPTY: Answer = { text: "", kind: "none" };
@@ -110,7 +112,15 @@ function truncateForTooltip(text: string): string | undefined {
  */
 function toValueAnswer(result: unknown): Answer {
   const text = stripMarker(formatValue(result as never));
-  const kind = (result as { type?: number }).type === ValueType.Error ? "error" : "value";
+  const v = result as { type?: number; value?: { r: number; g: number; b: number; a: number } };
+  // A colour result carries its channels on the live Value, so the answer column
+  // can draw the actual colour beside its text (e.g. a red square next to
+  // "#ff0000"). rgba() is always valid CSS, so no conversion is needed.
+  if (v.type === ValueType.Colour && v.value) {
+    const c = v.value;
+    return { text, kind: "value", swatch: `rgba(${c.r}, ${c.g}, ${c.b}, ${c.a})` };
+  }
+  const kind = v.type === ValueType.Error ? "error" : "value";
   return { text, kind };
 }
 
@@ -370,6 +380,9 @@ export default function SolveNotepad({
                  hint, not a document. */
               title={truncateForTooltip(answer.text)}
             >
+              {answer.swatch && (
+                <span className="notepad__swatch" style={{ background: answer.swatch }} aria-hidden="true" />
+              )}
               {answer.text}
             </div>
           );

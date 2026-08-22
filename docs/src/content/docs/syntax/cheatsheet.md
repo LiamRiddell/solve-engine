@@ -90,6 +90,18 @@ clamp 15 between 1 and 10 // 10
 1 KiB in bytes // 1024.00 bytes
 ```
 
+## Colours
+
+```solve
+#ff0000 // #ff0000
+rgb(255, 128, 0) // rgb(255, 128, 0)
+color("rebeccapurple") // rebeccapurple
+lighten(#3366cc, 20%) // #85a3e0
+mix(#ff0000, #0000ff) // #800080
+contrast(#ffffff, #000000) // 21
+#ff0000 as hsl // hsl(0, 100%, 50%)
+```
+
 ## Conditionals
 
 ```solve
