@@ -1517,8 +1517,9 @@ export class ExpressionLexer {
     const isAlpha = (ch: number): boolean =>
       (ch >= 65 && ch <= 90) || (ch >= 97 && ch <= 122) || ch === 95;
     if (!isWord(c)) return false;  // operator/comma/etc: a grouping
-    // Walk back over the whole word run: a call iff it is an identifier (has a
-    // letter or `_`), not a bare number.
+    // Walk back over the whole word run. A bare number run (`2(1,000)`) is
+    // implicit multiplication over a grouping, not a call.
+    const wordEnd = i + 1;
     let hasAlpha = false;
     while (i >= start) {
       const ch = input.charCodeAt(i);
@@ -1526,7 +1527,16 @@ export class ExpressionLexer {
       if (isAlpha(ch)) hasAlpha = true;
       i--;
     }
-    return hasAlpha;
+    if (!hasAlpha) return false;
+    // The word is an identifier. A KEYWORD that is not a function name is a
+    // word-operator or connective (`mod`, `xor`, `and`, `to`, `in`) or a
+    // constant (`pi`, `e`), and the `(...)` after it is a grouped operand, so
+    // its comma still groups thousands (`100 mod (1,000)` is `100 mod 1000`).
+    // A plain identifier (a function like `rgb`, or a variable) or a function
+    // keyword (`sqrt`, `max`) is a real call target, where the comma separates.
+    const word = input.slice(i + 1, wordEnd).toLowerCase();
+    const keywordType = this.mergedKeywords.get(word);
+    return keywordType === undefined || keywordType === "FUNC";
   }
 
   /**
