@@ -1,5 +1,5 @@
 ---
-title: Trigger words and prose safety
+title: Trigger words
 description: Why ordinary English words are not keywords, and what that means for your notes.
 ---
 

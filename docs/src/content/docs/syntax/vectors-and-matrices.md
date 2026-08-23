@@ -1,5 +1,5 @@
 ---
-title: Vectors and matrices
+title: "Vectors & matrices"
 description: Literals, element-wise arithmetic, matrix products, indexing and linear algebra.
 ---
 
@@ -55,4 +55,4 @@ entries carry exact rational coefficients rather than floating-point ones. That
 removes a class of wrong answer: a pivot that is structurally zero could
 previously arrive as a value like `0.0000000000000000555` after elimination and
 be treated as non-zero, so a singular matrix was reported as invertible. See
-[Symbolic evaluation](/syntax/symbolic/).
+[Symbolic](/syntax/symbolic/).

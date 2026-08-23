@@ -1,5 +1,5 @@
 ---
-title: Symbolic evaluation
+title: Symbolic
 description: Keeping an unknown as an unknown, and solving a linear system.
 ---
 

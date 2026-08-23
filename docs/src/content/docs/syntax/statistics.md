@@ -1,5 +1,5 @@
 ---
-title: Statistics and phrasing
+title: Statistics
 description: Averages, comparisons, proportions and other natural phrasings.
 ---
 
