@@ -1960,6 +1960,32 @@ export class ExpressionLexer {
       hasInline = idx !== -1 && idx < len;
     }
 
+    // A line built only from characters the tokenizer discards produces no
+    // tokens, so it has nothing to evaluate. Whitespace-only lines already
+    // classify as empty above; the gap was an unknown ASCII character like a
+    // backslash, which the lexer skips (it falls through to CharClass.SKIP)
+    // rather than tokenising. A run of them ("\\", "\\\\") reached the
+    // expression path, lexed to an empty token stream, and the engine reported
+    // that stream as the number 0: a result on screen for a line that holds no
+    // expression at all. Classify it as empty, the same as a blank line, so
+    // every surface (the batch parse, the incremental evaluator, and the
+    // playground's shouldEvaluateLine) skips it rather than answering 0. A
+    // non-ASCII code point is real content (it lexes as an IDENT for forward
+    // compatibility), so only ASCII whitespace and skip characters count here.
+    if (!hasInline) {
+      let onlySkippable = true;
+      for (let i = pos; i < len; i++) {
+        const code = input.charCodeAt(i);
+        if (code >= 128 || ExpressionLexer.CHAR_CLASS[code] > CharClass.WHITESPACE) {
+          onlySkippable = false;
+          break;
+        }
+      }
+      if (onlySkippable) {
+        return { type: 'empty', skip: true, hasInlineSolve: false };
+      }
+    }
+
     // Return expression, all non-markdown-structure lines are tokenized.
     // (L1 prose gating removed: it incorrectly skipped keyword-only lines
     // like "pi", single identifiers like "hello", and any line without
