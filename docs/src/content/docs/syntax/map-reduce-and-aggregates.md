@@ -1,5 +1,5 @@
 ---
-title: Map, reduce and aggregates
+title: "Map, reduce & aggregates"
 description: Ranges, mapping an expression over a collection, and folding one down.
 ---
 

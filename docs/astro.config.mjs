@@ -195,33 +195,37 @@ export default defineConfig({
           ],
         },
         {
-          // Roughly the order someone meets these things: the arithmetic
-          // everybody uses first, the specialist syntax last.
+          // The syntax reference doubles as a lookup, so unlike the other
+          // groups, which are reading orders, it uses a short on-ramp and then
+          // an alphabetical list: the cheatsheet and the arithmetic everyone
+          // starts with come first, then the rest ordered by title, the way the
+          // playground's example gallery is, so a reader scanning for a page
+          // finds it by name.
           label: "Syntax reference",
           items: [
             { slug: "syntax/cheatsheet" },
             { slug: "syntax/numbers-and-math" },
             { slug: "syntax/percentages" },
-            { slug: "syntax/units-and-conversions" },
-            { slug: "syntax/programmer-math" },
-            { slug: "syntax/colours" },
-            { slug: "syntax/unit-reference" },
-            { slug: "syntax/money-and-finance" },
-            { slug: "syntax/dates" },
-            { slug: "syntax/time" },
-            { slug: "syntax/variables" },
-            { slug: "syntax/line-references" },
-            { slug: "syntax/conditionals" },
-            { slug: "syntax/statistics" },
-            { slug: "syntax/map-reduce-and-aggregates" },
-            { slug: "syntax/vectors-and-matrices" },
-            { slug: "syntax/symbolic" },
             { slug: "syntax/algebra" },
             { slug: "syntax/calculus" },
+            { slug: "syntax/colours" },
             { slug: "syntax/complex" },
+            { slug: "syntax/conditionals" },
+            { slug: "syntax/dates" },
             { slug: "syntax/dice" },
+            { slug: "syntax/line-references" },
             { slug: "syntax/live-data" },
+            { slug: "syntax/map-reduce-and-aggregates" },
+            { slug: "syntax/money-and-finance" },
+            { slug: "syntax/programmer-math" },
+            { slug: "syntax/statistics" },
+            { slug: "syntax/symbolic" },
+            { slug: "syntax/time" },
             { slug: "syntax/trigger-words" },
+            { slug: "syntax/unit-reference" },
+            { slug: "syntax/units-and-conversions" },
+            { slug: "syntax/variables" },
+            { slug: "syntax/vectors-and-matrices" },
           ],
         },
         {

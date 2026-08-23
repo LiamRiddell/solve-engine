@@ -1,5 +1,5 @@
 ---
-title: Money and finance
+title: "Money & finance"
 description: Currency, tax, interest and inflation.
 ---
 

@@ -1,5 +1,5 @@
 ---
-title: Numbers and maths
+title: "Numbers & maths"
 description: Arithmetic, operators, functions, big integers and number suffixes.
 ---
 
