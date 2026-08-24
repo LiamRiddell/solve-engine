@@ -3,6 +3,8 @@ title: "Map, reduce & aggregates"
 description: Ranges, mapping an expression over a collection, and folding one down.
 ---
 
+> **Package:** `MAPREDUCE_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
+
 ## Ranges
 
 A range is `start:end`, inclusive at both ends. It is recognised inside brackets

@@ -3,6 +3,8 @@ title: "Money & finance"
 description: Currency, tax, interest and inflation.
 ---
 
+> **Packages:** `FINANCE_PACKAGE`, `CURRENCY_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register them explicitly (see [choosing packages](/getting-started/installation/)).
+
 ## Currency
 
 ```solve

@@ -3,6 +3,8 @@ title: Conditionals
 description: Comparisons, booleans, and the conditional expression.
 ---
 
+> **Package:** `CONDITIONALS_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
+
 ```solve
 5 > 3 // true
 10 == 10 // true

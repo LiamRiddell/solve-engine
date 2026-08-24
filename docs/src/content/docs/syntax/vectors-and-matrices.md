@@ -3,6 +3,8 @@ title: "Vectors & matrices"
 description: Literals, element-wise arithmetic, matrix products, indexing and linear algebra.
 ---
 
+> **Package:** `MATRIX_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
+
 Comma separates columns, semicolon separates rows.
 
 ```solve

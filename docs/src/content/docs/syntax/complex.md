@@ -3,6 +3,8 @@ title: Complex numbers
 description: Exact complex arithmetic, and the roots that need it.
 ---
 
+> **Package:** `SYMBOLIC_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
+
 Writing a number flush against `i` makes it imaginary.
 
 ```solve

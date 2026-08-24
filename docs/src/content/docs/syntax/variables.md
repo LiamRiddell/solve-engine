@@ -3,6 +3,8 @@ title: Variables
 description: Defining values, reading them back, and user-defined functions.
 ---
 
+> **Package:** `VARIABLES_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
+
 A colon prefix marks a definition explicitly.
 
 ```solve

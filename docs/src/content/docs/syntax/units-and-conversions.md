@@ -3,6 +3,8 @@ title: "Units & conversions"
 description: Units of measurement, arithmetic across units, and the general as-type conversion.
 ---
 
+> **Packages:** `UOM_PACKAGE`, `CONVERTERS_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register them explicitly (see [choosing packages](/getting-started/installation/)).
+
 Units are case-sensitive and are never remapped, which is deliberate. `m` is
 metres and `M` is the millions suffix, and guessing between them would produce
 confidently wrong answers.

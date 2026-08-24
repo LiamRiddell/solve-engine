@@ -3,6 +3,8 @@ title: Programmer math
 description: Hexadecimal, binary and octal literals, base conversion, bit shifts and bitwise operators.
 ---
 
+> **Packages:** `ARITHMETIC_PACKAGE`, `FUNCTION_PACKAGE`, `CONVERTERS_PACKAGE`, `UOM_PACKAGE`, `BIGINT_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register them explicitly (see [choosing packages](/getting-started/installation/)).
+
 Numbers can be written in hexadecimal, binary or octal, mixed freely with
 ordinary decimals, and shown back in whichever base you want.
 

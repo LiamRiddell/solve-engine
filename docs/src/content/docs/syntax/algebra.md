@@ -3,6 +3,8 @@ title: Algebra
 description: Multiplying out an expression, and working with exact coefficients.
 ---
 
+> **Package:** `SYMBOLIC_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
+
 Algebra works on expressions containing unknowns. Unlike
 [symbolic evaluation](/syntax/symbolic/), these do not need a trailing arrow:
 asking to expand something already says its unknowns are meant to stay unknown.

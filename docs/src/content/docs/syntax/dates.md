@@ -3,6 +3,8 @@ title: Dates
 description: Date literals, arithmetic, relative dates and calendar questions.
 ---
 
+> **Package:** `DATETIME_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
+
 Results depend on the current date, so these are shown rather than asserted by
 the documentation test suite.
 

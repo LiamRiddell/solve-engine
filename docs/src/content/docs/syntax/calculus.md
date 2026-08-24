@@ -3,6 +3,8 @@ title: Calculus
 description: Derivatives, integrals, Taylor series and Jacobians of symbolic expressions.
 ---
 
+> **Package:** `SYMBOLIC_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
+
 Calculus here is genuinely symbolic: the rules are applied to the expression
 itself, so the answers are exact rather than numerical approximations.
 

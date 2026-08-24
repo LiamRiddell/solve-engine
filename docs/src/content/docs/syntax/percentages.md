@@ -3,6 +3,8 @@ title: Percentages
 description: Percent of, increase and decrease, change between values, and solving for the base.
 ---
 
+> **Package:** `PERCENTAGE_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
+
 ```solve
 50% of 200 // 100
 10% of 250 // 25

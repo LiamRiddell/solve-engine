@@ -3,6 +3,8 @@ title: Statistics
 description: Averages, comparisons, proportions and other natural phrasings.
 ---
 
+> **Package:** `MATHPHRASES_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
+
 ```solve
 average of 10, 20, 30 // 20
 median of 1, 5, 3 // 3

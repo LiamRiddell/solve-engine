@@ -37,9 +37,9 @@ which lines changed, and you re-evaluate them.
 with `await`:
 
 ```ts
-import { ExpressionEngine } from "solve-engine";
+import { createEngine } from "solve-engine";
 
-const engine = new ExpressionEngine("en");
+const engine = createEngine("en");
 const reader = engine.getEventStream().getReader();
 
 // First evaluation: pending, no rate yet.

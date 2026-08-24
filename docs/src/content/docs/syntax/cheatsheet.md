@@ -5,6 +5,8 @@ sidebar:
   order: 1
 ---
 
+> **Packages:** this page spans every built-in. `createEngine()` registers them all; for a slimmer engine, register just the packages the features you use need (each syntax page names its own, see [choosing packages](/getting-started/installation/)).
+
 One page covering everything, for scanning or bookmarking. Each area has its own
 page with the full detail.
 

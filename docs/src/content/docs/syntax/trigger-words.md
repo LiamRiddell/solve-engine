@@ -3,6 +3,8 @@ title: Trigger words
 description: Why ordinary English words are not keywords, and what that means for your notes.
 ---
 
+> **Packages:** `MATHPHRASES_PACKAGE`, `MAPREDUCE_PACKAGE`, `FINANCE_PACKAGE`, `TAGS_PACKAGE`, `LINES_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register them explicitly (see [choosing packages](/getting-started/installation/)).
+
 The most common worry about a calculator that reads prose is that it will start
 mangling the prose. This page explains why that mostly does not happen.
 

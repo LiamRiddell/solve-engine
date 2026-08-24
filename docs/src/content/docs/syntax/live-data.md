@@ -3,6 +3,8 @@ title: Live data
 description: Weather, stocks and knowledge lookups, and how configuration works.
 ---
 
+> **Packages:** `WEATHER_PACKAGE`, `CURRENCY_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register them explicitly (see [choosing packages](/getting-started/installation/)).
+
 Three packages reach outside the process. They differ from the rest of the
 engine in one important way: the first result is a pending value, and the real
 answer arrives later.

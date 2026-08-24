@@ -4,9 +4,9 @@ description: Creating an engine, configuring it, and reading results.
 ---
 
 ```ts
-import { ExpressionEngine } from "solve-engine";
+import { createEngine } from "solve-engine";
 
-const engine = new ExpressionEngine("en");
+const engine = createEngine("en");
 ```
 
 The first argument is the locale, which decides decimal and thousands
@@ -18,7 +18,7 @@ The second and third arguments enable diagnostics and override configuration.
 Both are optional.
 
 ```ts
-const engine = new ExpressionEngine("en", false, {
+const engine = createEngine("en", false, {
   validation: {
     maxExpressionLength: 1000,
     maxComplexity: 500,
@@ -63,9 +63,9 @@ host can persist a session, warm-start a process, or move a document between
 contexts without re-evaluating the whole thing from scratch.
 
 ```ts
-import { ExpressionEngine } from "solve-engine";
+import { createEngine } from "solve-engine";
 
-const engine = new ExpressionEngine("en");
+const engine = createEngine("en");
 engine.parseDocument(":price = 100\ndouble(x) = x * 2\n:total = double(price)");
 
 const state = engine.toJSON(); // a plain, JSON-safe object

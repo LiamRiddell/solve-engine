@@ -3,6 +3,8 @@ title: Line references
 description: Referring to previous lines and aggregating over them.
 ---
 
+> **Packages:** `LINES_PACKAGE`, `GOALSEEK_PACKAGE`, `TABLES_PACKAGE`, `TAGS_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register them explicitly (see [choosing packages](/getting-started/installation/)).
+
 These forms only work inside a document, since they refer to other lines. They
 return an error through the single-expression entry point, which has no document
 to refer to.

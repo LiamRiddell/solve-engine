@@ -3,6 +3,8 @@ title: Time
 description: Clock times, intervals, frame rates and timezones.
 ---
 
+> **Package:** `TIME_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
+
 ## Clock times
 
 | Expression | Result |

@@ -3,6 +3,8 @@ title: "Numbers & maths"
 description: Arithmetic, operators, functions, big integers and number suffixes.
 ---
 
+> **Packages:** `ARITHMETIC_PACKAGE`, `FUNCTION_PACKAGE`, `CONVERTERS_PACKAGE`, `UNCERTAINTY_PACKAGE`, `BIGINT_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register them explicitly (see [choosing packages](/getting-started/installation/)).
+
 ## Operators
 
 ```solve

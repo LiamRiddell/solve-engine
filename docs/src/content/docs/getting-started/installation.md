@@ -51,6 +51,37 @@ A further set of entries exposes the pipeline internals for advanced use, listed
 in [subpath exports](/guide/subpath-exports/). Anything not documented there is
 internal and can change between releases without a major version.
 
+## Choosing packages
+
+Every feature in this reference comes from a package: money and tax from
+`FINANCE_PACKAGE`, colours from `COLOUR_PACKAGE`, dates from `DATETIME_PACKAGE`,
+and so on. An engine registers exactly the packages you give it and nothing
+else, so your bundler drops the built-ins you never use.
+
+For the common case, `createEngine()` is batteries-included: it registers the
+full built-in set in one call.
+
+```ts
+import { createEngine } from "solve-engine";
+const engine = createEngine(); // every built-in package
+```
+
+For a smaller bundle, construct the engine with only the packages you need.
+Importing them from `solve-engine/packages` lets the bundler tree-shake the
+rest away.
+
+```ts
+import { ExpressionEngine } from "solve-engine";
+import { ARITHMETIC_PACKAGE, UOM_PACKAGE } from "solve-engine/packages";
+
+// Only arithmetic and units reach the bundle.
+const engine = new ExpressionEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE, UOM_PACKAGE]);
+```
+
+Each syntax page names the package (or packages) its grammar needs, so you can
+add just those: the **Package** note near the top of a page lists what to
+register for that feature.
+
 ## A note on live data
 
 Currency conversion, weather and stock lookups reach the network. Currency and

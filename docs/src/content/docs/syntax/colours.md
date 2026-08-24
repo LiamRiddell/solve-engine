@@ -3,6 +3,8 @@ title: Colours
 description: Hex, rgb, hsl and named colours as values, with functions to build, adjust, read and check them.
 ---
 
+> **Package:** `COLOUR_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
+
 Colours are values. Write one as a hex literal, an `rgb()`/`hsl()` call, or a CSS
 name, then lighten it, rotate its hue, mix two together, read a channel out as a
 number, or check a contrast ratio against WCAG. Every colour result carries its

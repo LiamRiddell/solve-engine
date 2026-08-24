@@ -3,6 +3,8 @@ title: Dice
 description: Random integers in a range.
 ---
 
+> **Package:** `DICE_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
+
 Returns a random integer between the bounds, inclusive of both. The result
 changes on every evaluation, so it is shown rather than asserted here.
 
