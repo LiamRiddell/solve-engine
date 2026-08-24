@@ -63,7 +63,7 @@ function parseAndExecute(input: string): Value {
 
 function evalReal(expr: string): Value {
   const engine = newTrackedEngine();
-  const [value] = engine.evaluateExpression(expr);
+  const value = engine.evaluateExpression(expr);
   return value;
 }
 
@@ -165,7 +165,7 @@ describe("FINANCE_PACKAGE inflation — regression guards (bare variable names m
     engine.evaluateExpression(":was = 2");
     engine.evaluateExpression(":value = 3");
     engine.evaluateExpression(":worth = 4");
-    const [value] = engine.evaluateExpression(":what + :was + :value + :worth");
+    const value = engine.evaluateExpression(":what + :was + :value + :worth");
     expect(value.toNumber()).toBe(10);
   });
 

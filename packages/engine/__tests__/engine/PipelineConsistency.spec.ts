@@ -31,7 +31,7 @@ function compareLastLine(lines: string[]): { diagnostic: string; lean: string } 
   const diagEngine = newTrackedEngine();
   let diagResult = "";
   lines.forEach((line, i) => {
-    const [v] = diagEngine.evaluateLine(i + 1, line);
+    const v = diagEngine.evaluateLine(i + 1, line);
     diagResult = formatValue(v);
   });
 

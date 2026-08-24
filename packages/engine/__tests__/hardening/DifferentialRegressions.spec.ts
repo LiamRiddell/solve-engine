@@ -35,7 +35,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 /** One line through a real engine. */
 function evaluate(source: string): Value {
 	const engine = newTrackedEngine();
-	return engine.evaluateExpression(source)[0];
+	return engine.evaluateExpression(source);
 }
 
 /** The formatted result with the leading "= " stripped, as a reader would see it. */

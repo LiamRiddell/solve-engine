@@ -93,7 +93,7 @@ function invertibleMatrix(random: () => number, size: number): Rows {
 
 /** Evaluates one expression on a throwaway engine and returns the raw Value. */
 function evaluate(engine: ExpressionEngine, source: string) {
-	const [value] = engine.evaluateLine(1, source);
+	const value = engine.evaluateLine(1, source);
 	return value;
 }
 
@@ -387,7 +387,7 @@ describe("a matrix of unknowns inverts to something that really is its inverse",
 		const random = seededRandom(0xa11ce6);
 		const engine = newTrackedEngine();
 		engine.evaluateLine(1, "m = [a, b; c, d]");
-		const value = engine.evaluateLine(2, "inv(m)")[0];
+		const value = engine.evaluateLine(2, "inv(m)");
 		expect(value.type).toBe(ValueType.Matrix);
 		const matrix = value.value as MatrixData;
 		expect(matrix.hasSymbolic).toBe(true);
@@ -415,7 +415,7 @@ describe("a matrix of unknowns inverts to something that really is its inverse",
 		// answered here would be a fiction.
 		const engine = newTrackedEngine();
 		engine.evaluateLine(1, "m = [a, a; a, a]");
-		const value = engine.evaluateLine(2, "inv(m)")[0];
+		const value = engine.evaluateLine(2, "inv(m)");
 		expect(value.type).toBe(ValueType.Error);
 		expect(String(value.value)).toBe("SYMBOLIC_SINGULAR_OR_UNSUPPORTED_PIVOT");
 		engine.clear();
@@ -430,20 +430,20 @@ describe("a matrix of unknowns inverts to something that really is its inverse",
 		// the elimination to actually reach zero rather than to `b-a*b/a`.
 		const engine = newTrackedEngine();
 		engine.evaluateLine(1, "m = [a, b; a, b]");
-		const value = engine.evaluateLine(2, "inv(m)")[0];
+		const value = engine.evaluateLine(2, "inv(m)");
 		expect(value.type).toBe(ValueType.Error);
 		expect(String(value.value)).toBe("SYMBOLIC_SINGULAR_OR_UNSUPPORTED_PIVOT");
 		// And one whose singularity is a scaling rather than a repetition:
 		// det([2a,b;a,b/2]) is 2a*(b/2) - b*a = 0 as well.
 		engine.evaluateLine(3, "n = [2*a, b; a, b/2]");
-		expect(String(engine.evaluateLine(4, "inv(n)")[0].value)).toBe("SYMBOLIC_SINGULAR_OR_UNSUPPORTED_PIVOT");
+		expect(String(engine.evaluateLine(4, "inv(n)").value)).toBe("SYMBOLIC_SINGULAR_OR_UNSUPPORTED_PIVOT");
 		engine.clear();
 	});
 
 	test("the printed cells of a symbolic inverse re-read as the same numbers", () => {
 		const engine = newTrackedEngine();
 		engine.evaluateLine(1, "m = [a, b; c, d]");
-		const matrix = engine.evaluateLine(2, "inv(m)")[0].value as MatrixData;
+		const matrix = engine.evaluateLine(2, "inv(m)").value as MatrixData;
 		const environment = { a: 1.7, b: -2.3, c: 0.9, d: 3.1 };
 		for (let r = 0; r < 2; r++) {
 			for (let c = 0; c < 2; c++) {
@@ -453,7 +453,7 @@ describe("a matrix of unknowns inverts to something that really is its inverse",
 				rereader.evaluateLine(2, ":b = -2.3");
 				rereader.evaluateLine(3, ":c = 0.9");
 				rereader.evaluateLine(4, ":d = 3.1");
-				const reread = rereader.evaluateLine(5, printed)[0];
+				const reread = rereader.evaluateLine(5, printed);
 				expect(reread.type).toBe(ValueType.Number);
 				expect(reread.toNumber()).toBeCloseTo(cellAt(matrix.data[r + c * 2], environment), 9);
 				rereader.clear();

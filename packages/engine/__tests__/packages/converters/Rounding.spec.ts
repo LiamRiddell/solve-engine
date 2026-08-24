@@ -16,7 +16,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 
 function num(source: string): number {
 	const engine = newTrackedEngine();
-	const [value] = engine.evaluateExpression(source);
+	const value = engine.evaluateExpression(source);
 	return value.toNumber();
 }
 

@@ -60,7 +60,7 @@ describe("cross-line reference on a bare assignment's RHS", () => {
 
   test("outside a document, a reference on an assignment RHS still errors cleanly", () => {
     const engine = newTrackedEngine();
-    const [value] = engine.evaluateExpression("total = prev");
+    const value = engine.evaluateExpression("total = prev");
     expect(value.type).toBe(ValueType.Error);
   });
 });

@@ -47,7 +47,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 /** The first Value a source evaluates to, or the thrown error turned into one. */
 function evaluate(engine: ExpressionEngine, source: string): Value {
 	try {
-		return engine.evaluateExpression(source)[0];
+		return engine.evaluateExpression(source);
 	} catch (thrown) {
 		// A safety limit may report either way round: `maxCollectionSize` comes
 		// back as an Error Value while `maxInstructions` throws. Both are a
@@ -400,10 +400,10 @@ describe("rejecting a line is not allowed to cost more than running one", () => 
 		// parse, and the fragment after a colon does.
 		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		try {
-			expect(engine.evaluateExpression("pi approximation: 355/113")[0].toNumber()).toBeCloseTo(3.14159, 4);
+			expect(engine.evaluateExpression("pi approximation: 355/113").toNumber()).toBeCloseTo(3.14159, 4);
 			// The leftward retry: the rightmost colon here belongs to ":x = 5",
 			// and slicing after it would strip the colon the definition needs.
-			expect(engine.evaluateExpression("input value: :x = 5")[0].toNumber()).toBe(5);
+			expect(engine.evaluateExpression("input value: :x = 5").toNumber()).toBe(5);
 		} finally {
 			engine.clear();
 		}
@@ -429,7 +429,7 @@ describe("gcd and lcm terminate on every operand", () => {
 	function evaluate(source: string): Value {
 		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		try {
-			return engine.evaluateExpression(source)[0];
+			return engine.evaluateExpression(source);
 		} finally {
 			engine.clear();
 		}

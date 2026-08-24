@@ -21,22 +21,22 @@ describe("GlobalVariableAsyncResolver — wired into the real ExpressionEngine",
 	test("reading an undeclared global returns a Pending value, not a throw", () => {
 		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		const result = engine.evaluateLine(1, "global :undeclaredThing");
-		expect(result[0].type).toBe(ValueType.Pending);
+		expect(result.type).toBe(ValueType.Pending);
 		engine.clear();
 	});
 
 	test("the pending value's queryKey identifies the missing global by name", () => {
 		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		const result = engine.evaluateLine(1, "global :widgetPrice");
-		expect(result[0].type).toBe(ValueType.Pending);
-		expect(result[0].value).toBe("global:widgetPrice");
+		expect(result.type).toBe(ValueType.Pending);
+		expect(result.value).toBe("global:widgetPrice");
 		engine.clear();
 	});
 
 	test("once declared, a fresh evaluation of the same expression succeeds synchronously (no longer pending)", () => {
 		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		const pending = engine.evaluateLine(1, "global :widgetPrice + 1");
-		expect(pending[0].type).toBe(ValueType.Pending);
+		expect(pending.type).toBe(ValueType.Pending);
 
 		// Declare it — standing in for "a different document" via a second,
 		// independent engine writing the same process-wide global.
@@ -45,8 +45,8 @@ describe("GlobalVariableAsyncResolver — wired into the real ExpressionEngine",
 		otherDocEngine.clear();
 
 		const resolved = engine.evaluateLine(2, "global :widgetPrice + 1");
-		expect(resolved[0].type).not.toBe(ValueType.Pending);
-		expect(resolved[0].toNumber()).toBe(100);
+		expect(resolved.type).not.toBe(ValueType.Pending);
+		expect(resolved.toNumber()).toBe(100);
 		engine.clear();
 	});
 

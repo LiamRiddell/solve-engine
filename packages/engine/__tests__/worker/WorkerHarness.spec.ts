@@ -220,12 +220,12 @@ describe("the worker proxy matches the synchronous path", () => {
 		expect(result.errors.some((message) => message.includes("Line 14"))).toBe(true);
 	});
 
-	test("evaluateExpression returns a one-element DTO array", async () => {
+	test("evaluateExpression returns the result DTO", async () => {
 		const engine = await worker();
-		const [value] = await engine.evaluateExpression("2 + 2 * 10");
+		const value = await engine.evaluateExpression("2 + 2 * 10");
 		expect(value.number).toBe(22);
 
-		const [expected] = syncEngine().evaluateExpression("2 + 2 * 10");
+		const expected = syncEngine().evaluateExpression("2 + 2 * 10");
 		expect(value).toEqual(serializeValue(expected));
 	});
 
@@ -265,7 +265,7 @@ describe("cancellation", () => {
 	test("an un-aborted signal lets the request complete normally", async () => {
 		const engine = await worker();
 		const controller = new AbortController();
-		const [value] = await engine.evaluateExpression("6 * 7", { signal: controller.signal });
+		const value = await engine.evaluateExpression("6 * 7", { signal: controller.signal });
 		expect(value.number).toBe(42);
 	});
 });
@@ -303,8 +303,8 @@ describe("request correlation", () => {
 			engine.parseDocument("7 + 1"),
 		]);
 
-		expect(a[0].number).toBe(4);
-		expect(b[0].number).toBe(100);
+		expect(a.number).toBe(4);
+		expect(b.number).toBe(100);
 		expect(doc.lines[0].result?.number).toBe(8);
 	});
 });
@@ -336,7 +336,7 @@ describe("package selection", () => {
 	test("selecting every built-in by name evaluates identically", async () => {
 		const names = BUILTIN_PACKAGES.map((pkg) => pkg.name);
 		const engine = await worker({ packages: names });
-		const [value] = await engine.evaluateExpression("2 + 2 * 10");
+		const value = await engine.evaluateExpression("2 + 2 * 10");
 		expect(value.number).toBe(22);
 	});
 
@@ -503,7 +503,7 @@ describe("async live-data resolutions stream back", () => {
 		const engine = await streamingWorker(createLivePricePackage(() => gate));
 
 		const firstUpdate = new Promise<WorkerAsyncUpdate[]>((resolve) => engine.onResolved(resolve));
-		const [pending] = await engine.evaluateExpression("live price of silver");
+		const pending = await engine.evaluateExpression("live price of silver");
 		expect(pending.type).toBe(ValueType.Pending);
 
 		release(RESOLVED);

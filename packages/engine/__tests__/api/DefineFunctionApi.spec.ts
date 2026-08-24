@@ -33,7 +33,7 @@ function engineWith(...packages: IEnginePackage[]): ExpressionEngine {
 
 /** The first result Value of an expression. */
 function evaluate(engine: ExpressionEngine, expression: string): Value {
-  return engine.evaluateExpression(expression)[0];
+  return engine.evaluateExpression(expression);
 }
 
 /** Evaluate expecting a throw, and return the structured error it threw. */

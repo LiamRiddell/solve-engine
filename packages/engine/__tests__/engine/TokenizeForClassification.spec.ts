@@ -68,7 +68,7 @@ describe("ExpressionEngine.tokenizeForClassification", () => {
     // A real evaluation of an unrelated expression afterwards must still
     // work correctly — proves the classification preview didn't leave the
     // lexer/normalizer in a bad state.
-    const [value] = engine.evaluateExpression("10 + 5");
+    const value = engine.evaluateExpression("10 + 5");
     expect(value.toNumber()).toBe(15);
   });
 

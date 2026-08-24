@@ -54,7 +54,7 @@ describe("Issue #175: a line of only skipped characters is empty, not 0", () => 
 
   describe("a backslash next to real content is unchanged", () => {
     test("`\\1` still evaluates to 1 (the backslash is skipped)", () => {
-      expect(engine.evaluateExpression("\\1")[0].toNumber()).toBe(1);
+      expect(engine.evaluateExpression("\\1").toNumber()).toBe(1);
     });
 
     test("`1 \\ 2` still errors on the trailing token", () => {

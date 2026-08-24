@@ -106,8 +106,8 @@ describe("allocatePluginFunctionIndex", () => {
 		engine.registerPackage(packageAround("firsthandler", () => numberValue(11)));
 		engine.registerPackage(packageAround("secondhandler", () => numberValue(22)));
 
-		expect(engine.evaluateExpression("firsthandler")[0].toNumber()).toBe(11);
-		expect(engine.evaluateExpression("secondhandler")[0].toNumber()).toBe(22);
+		expect(engine.evaluateExpression("firsthandler").toNumber()).toBe(11);
+		expect(engine.evaluateExpression("secondhandler").toNumber()).toBe(22);
 	});
 });
 
@@ -147,7 +147,7 @@ describe("the allocation guard from inside a plugin function", () => {
 
 		// Recoverable means the next line still evaluates. A guard that left
 		// the engine unusable would be a worse outcome than the allocation.
-		expect(engine.evaluateExpression("2 + 2")[0].toNumber()).toBe(4);
+		expect(engine.evaluateExpression("2 + 2").toNumber()).toBe(4);
 	});
 
 	test("a plugin asking for what it can afford is allowed through", () => {
@@ -158,7 +158,7 @@ describe("the allocation guard from inside a plugin function", () => {
 			packageAround("modest", () => numberValue(checkedArray<number>(100, "modest elements").length)),
 		);
 
-		expect(engine.evaluateExpression("modest")[0].toNumber()).toBe(100);
+		expect(engine.evaluateExpression("modest").toNumber()).toBe(100);
 	});
 
 	test("checkAllocation refuses without spending, so a later charge still fits", () => {
@@ -179,7 +179,7 @@ describe("the allocation guard from inside a plugin function", () => {
 			}),
 		);
 
-		expect(engine.evaluateExpression("checkthenchargea")[0].toNumber()).toBe(1);
+		expect(engine.evaluateExpression("checkthenchargea").toNumber()).toBe(1);
 	});
 
 	test("charges accumulate across one evaluation, so two affordable asks can still be refused together", () => {
@@ -215,9 +215,9 @@ describe("the allocation guard from inside a plugin function", () => {
 			}),
 		);
 
-		expect(engine.evaluateExpression("spendmost")[0].toNumber()).toBe(1);
-		expect(engine.evaluateExpression("spendmost")[0].toNumber()).toBe(1);
-		expect(engine.evaluateExpression("spendmost")[0].toNumber()).toBe(1);
+		expect(engine.evaluateExpression("spendmost").toNumber()).toBe(1);
+		expect(engine.evaluateExpression("spendmost").toNumber()).toBe(1);
+		expect(engine.evaluateExpression("spendmost").toNumber()).toBe(1);
 	});
 });
 

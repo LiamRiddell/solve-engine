@@ -94,7 +94,7 @@ export interface WorkerEngine {
 	/** Evaluate an array of lines off-thread. Mirrors `ExpressionEngine.evaluateLines`. */
 	evaluateLines(lines: string[], options?: WorkerCallOptions): Promise<SerializedParsedLine[]>;
 	/** Evaluate a single expression off-thread. Mirrors `ExpressionEngine.evaluateExpression`. */
-	evaluateExpression(expression: string, options?: WorkerCallOptions): Promise<SerializedValue[]>;
+	evaluateExpression(expression: string, options?: WorkerCallOptions): Promise<SerializedValue>;
 	/**
 	 * Subscribe to live-data resolutions that land after a request already
 	 * answered.
@@ -172,8 +172,8 @@ class WorkerEngineClient implements WorkerEngine {
 		return this.call<SerializedParsedLine[]>("evaluateLines", [lines], options?.signal);
 	}
 
-	evaluateExpression(expression: string, options?: WorkerCallOptions): Promise<SerializedValue[]> {
-		return this.call<SerializedValue[]>("evaluateExpression", [expression], options?.signal);
+	evaluateExpression(expression: string, options?: WorkerCallOptions): Promise<SerializedValue> {
+		return this.call<SerializedValue>("evaluateExpression", [expression], options?.signal);
 	}
 
 	onResolved(listener: (lines: WorkerAsyncUpdate[]) => void): () => void {

@@ -21,7 +21,7 @@ import { convertUnit, canConvert } from "@solve-js/uom/UomConverter";
 function evaluate(source: string): string {
 	const engine = newTrackedEngine();
 	try {
-		return formatValue(engine.evaluateExpression(source)[0]).replace(/^=\s*/, "");
+		return formatValue(engine.evaluateExpression(source)).replace(/^=\s*/, "");
 	} finally {
 		engine.clear();
 	}

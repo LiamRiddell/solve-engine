@@ -292,7 +292,7 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 		diagnosticEngine.setKeystrokeSignal(controller.signal);
 
 		// Should not throw — preflight controller handles already-aborted signal
-		const [result] = diagnosticEngine.evaluateLine(1, "10 + 2");
+		const result = diagnosticEngine.evaluateLine(1, "10 + 2");
 
 		// Result should be correct even with aborted keystroke signal
 		expect(result.toNumber()).toBe(12);

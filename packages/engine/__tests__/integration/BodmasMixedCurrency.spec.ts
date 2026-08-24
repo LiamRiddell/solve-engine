@@ -49,7 +49,7 @@ function evalNum(expression: string): number {
 
 function evalExpr(expression: string): { value: number; unit?: string; type: string } {
   const engine = newTrackedEngine();
-  const [result] = engine.evaluateExpression(expression);
+  const result = engine.evaluateExpression(expression);
   return {
     value: result.toNumber(),
     unit: result.unit,

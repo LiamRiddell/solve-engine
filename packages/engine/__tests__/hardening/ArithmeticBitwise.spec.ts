@@ -27,7 +27,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 
 function evaluate(source: string) {
 	const engine = newTrackedEngine();
-	const [value] = engine.evaluateExpression(source);
+	const value = engine.evaluateExpression(source);
 	return value;
 }
 

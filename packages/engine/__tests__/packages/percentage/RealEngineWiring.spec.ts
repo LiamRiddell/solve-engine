@@ -25,50 +25,50 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 describe("PERCENTAGE_PACKAGE — real engine wiring", () => {
   test("100 increase by 10% = 110 (infix form, via the real engine)", () => {
     const engine = newTrackedEngine();
-    const [value] = engine.evaluateExpression("100 increase by 10%");
+    const value = engine.evaluateExpression("100 increase by 10%");
     expect(value.toNumber()).toBeCloseTo(110);
   });
 
   test("100 decrease by 10% = 90 (infix form, via the real engine)", () => {
     const engine = newTrackedEngine();
-    const [value] = engine.evaluateExpression("100 decrease by 10%");
+    const value = engine.evaluateExpression("100 decrease by 10%");
     expect(value.toNumber()).toBeCloseTo(90);
   });
 
   test("increase 100 by 10% = 110 (prefix form, via the real engine)", () => {
     const engine = newTrackedEngine();
-    const [value] = engine.evaluateExpression("increase 100 by 10%");
+    const value = engine.evaluateExpression("increase 100 by 10%");
     expect(value.toNumber()).toBeCloseTo(110);
   });
 
   test("decrease 100 by 10% = 90 (prefix form, via the real engine)", () => {
     const engine = newTrackedEngine();
-    const [value] = engine.evaluateExpression("decrease 100 by 10%");
+    const value = engine.evaluateExpression("decrease 100 by 10%");
     expect(value.toNumber()).toBeCloseTo(90);
   });
 
   test("50% of 200 = 100 (via the real engine)", () => {
     const engine = newTrackedEngine();
-    const [value] = engine.evaluateExpression("50% of 200");
+    const value = engine.evaluateExpression("50% of 200");
     expect(value.toNumber()).toBe(100);
   });
 
   test("800 to 1000 = 25% increase (via the real engine)", () => {
     const engine = newTrackedEngine();
-    const [value] = engine.evaluateExpression("800 to 1000");
+    const value = engine.evaluateExpression("800 to 1000");
     expect(value.toNumber()).toBeCloseTo(0.25, 10);
   });
 
   // "N% of what is X" — solve for the base value, the inverse of "N% of X".
   test("5% of what is 6 = 120 (solve-for-unknown form, via the real engine)", () => {
     const engine = newTrackedEngine();
-    const [value] = engine.evaluateExpression("5% of what is 6");
+    const value = engine.evaluateExpression("5% of what is 6");
     expect(value.toNumber()).toBeCloseTo(120);
   });
 
   test("50% of what is 100 = 200 (via the real engine)", () => {
     const engine = newTrackedEngine();
-    const [value] = engine.evaluateExpression("50% of what is 100");
+    const value = engine.evaluateExpression("50% of what is 100");
     expect(value.toNumber()).toBeCloseTo(200);
   });
 
@@ -76,13 +76,13 @@ describe("PERCENTAGE_PACKAGE — real engine wiring", () => {
   // increase/decrease RESULT (Numpad's documented syntax reference).
   test("5% on what is 210 = 200 (base increased by 5% gives 210)", () => {
     const engine = newTrackedEngine();
-    const [value] = engine.evaluateExpression("5% on what is 210");
+    const value = engine.evaluateExpression("5% on what is 210");
     expect(value.toNumber()).toBeCloseTo(200);
   });
 
   test("5% off what is 190 = 200 (base decreased by 5% gives 190)", () => {
     const engine = newTrackedEngine();
-    const [value] = engine.evaluateExpression("5% off what is 190");
+    const value = engine.evaluateExpression("5% off what is 190");
     expect(value.toNumber()).toBeCloseTo(200);
   });
 
@@ -92,7 +92,7 @@ describe("PERCENTAGE_PACKAGE — real engine wiring", () => {
   test(":what stays usable as a variable name", () => {
     const engine = newTrackedEngine();
     engine.evaluateExpression(":what = 42");
-    const [value] = engine.evaluateExpression(":what + 1");
+    const value = engine.evaluateExpression(":what + 1");
     expect(value.toNumber()).toBe(43);
   });
 });

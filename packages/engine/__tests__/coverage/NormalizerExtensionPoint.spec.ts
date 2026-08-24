@@ -247,9 +247,9 @@ describe("a package's normalizerRules, end to end through an engine", () => {
 		const engine = newTrackedEngine();
 		engine.registerPackage(sixpackPackage);
 
-		expect(engine.evaluateExpression("2 sixpack")[0].toNumber()).toBe(12);
-		expect(engine.evaluateExpression("2 sixpack + 1")[0].toNumber()).toBe(13);
-		expect(engine.evaluateExpression("2 sixpack * 3")[0].toNumber()).toBe(36);
+		expect(engine.evaluateExpression("2 sixpack").toNumber()).toBe(12);
+		expect(engine.evaluateExpression("2 sixpack + 1").toNumber()).toBe(13);
+		expect(engine.evaluateExpression("2 sixpack * 3").toNumber()).toBe(36);
 	});
 
 	test("an engine without the package is unaffected", () => {
@@ -264,7 +264,7 @@ describe("a package's normalizerRules, end to end through an engine", () => {
 		withPackage.registerPackage(sixpackPackage);
 		const without = newTrackedEngine();
 
-		expect(withPackage.evaluateExpression("2 sixpack")[0].toNumber()).toBe(12);
+		expect(withPackage.evaluateExpression("2 sixpack").toNumber()).toBe(12);
 
 		// Without the rule, "sixpack" is an undefined identifier rather than
 		// a quantity, so the line has no value at all.
@@ -293,7 +293,7 @@ describe("a package's normalizerRules, end to end through an engine", () => {
 	test("unregistering the package takes the rule back out", () => {
 		const engine = newTrackedEngine();
 		engine.registerPackage(sixpackPackage);
-		expect(engine.evaluateExpression("2 sixpack")[0].toNumber()).toBe(12);
+		expect(engine.evaluateExpression("2 sixpack").toNumber()).toBe(12);
 
 		engine.unregisterPackage("sixpack-test-package");
 

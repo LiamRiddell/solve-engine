@@ -159,27 +159,16 @@ type Outcome =
 /** Evaluate `expression` on `engine` and collapse both failure shapes to one outcome. */
 function evaluate(engine: ExpressionEngine, expression: string): Outcome {
 	try {
-		const [value] = engine.evaluateExpression(expression);
-		if (value === undefined) {
-			// evaluateExpression() always returns a single-element array; an
-			// empty one would be an engine invariant break, reported as such
-			// rather than as a silent pass.
+		const value = engine.evaluateExpression(expression);
+		if (value.isError()) {
 			return {
 				status: "error",
-				code: "NO_RESULT",
-				message: "Evaluation returned no value.",
-				source: new Value(ValueType.Error, "NO_RESULT", "Evaluation returned no value."),
-			};
-		}
-		if (value.type === ValueType.Error) {
-			return {
-				status: "error",
-				code: String(value.value),
-				message: typeof value.unit === "string" ? value.unit : "",
+				code: value.errorCode ?? "",
+				message: value.errorMessage ?? "",
 				source: value,
 			};
 		}
-		if (value.type === ValueType.Pending) {
+		if (value.isPending()) {
 			return { status: "pending", value };
 		}
 		return { status: "value", value };

@@ -10,7 +10,7 @@ import { ValueType, type ColourData } from "@solve-js/vm/Value";
 
 function evalValue(source: string) {
 	const engine = newTrackedEngine();
-	return engine.evaluateExpression(source)[0];
+	return engine.evaluateExpression(source);
 }
 
 function colour(source: string): ColourData {

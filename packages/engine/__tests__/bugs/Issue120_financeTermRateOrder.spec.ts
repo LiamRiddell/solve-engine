@@ -20,7 +20,7 @@ describe("Issue #120: interest and repayment accept term and rate in either orde
     engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
-  const num = (source: string): number => engine.evaluateExpression(source)[0].toNumber();
+  const num = (source: string): number => engine.evaluateExpression(source).toNumber();
 
   test.each([
     // [term-first (already worked), rate-first (was a parse error)]

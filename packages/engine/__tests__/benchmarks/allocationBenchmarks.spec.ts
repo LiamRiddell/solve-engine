@@ -266,7 +266,7 @@ describe("Allocation Benchmarks", () => {
 
     settle();
     const start = process.memoryUsage().heapUsed;
-    const [result] = e.evaluateLine(1, "1 + 2");
+    const result = e.evaluateLine(1, "1 + 2");
     const end = process.memoryUsage().heapUsed;
 
     expect(result?.value).toBe(3);

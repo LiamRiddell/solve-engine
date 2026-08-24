@@ -47,13 +47,13 @@ describe("Bug: trailing tokens after a complete expression were silently dropped
 
   test("well-formed expressions are unaffected", () => {
     const engine = newTrackedEngine();
-    const [result] = engine.evaluateLine(1, "5 + 3");
+    const result = engine.evaluateLine(1, "5 + 3");
     expect(result.toNumber()).toBe(8);
   });
 
   test("genuine thousands-grouped numbers are unaffected", () => {
     const engine = newTrackedEngine();
-    const [result] = engine.evaluateLine(1, "1,234");
+    const result = engine.evaluateLine(1, "1,234");
     expect(result.toNumber()).toBe(1234);
   });
 

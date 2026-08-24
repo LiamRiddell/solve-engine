@@ -177,7 +177,7 @@ describe("addressing and errors", () => {
 
   test("reading a table column outside a document errors cleanly, not a silent zero", () => {
     const engine = newTrackedEngine();
-    const [value] = engine.evaluateExpression('sum of column "cost" above');
+    const value = engine.evaluateExpression('sum of column "cost" above');
     expect(value.type).toBe(ValueType.Error);
   });
 });
@@ -207,7 +207,7 @@ describe("what must keep working", () => {
 
   test("a bitwise-or expression between numbers is untouched", () => {
     const engine = newTrackedEngine();
-    const [value] = engine.evaluateExpression("6 | 1");
+    const value = engine.evaluateExpression("6 | 1");
     expect(value.toNumber()).toBe(7);
   });
 });

@@ -22,7 +22,7 @@ describe("Issue #71: Toggle Off Refresh", () => {
     expect(entryAfter).toBeUndefined();
 
     engine.evaluateLine(1, ":x = 20");
-    const [result] = engine.evaluateLine(2, "s`x + 5`");
+    const result = engine.evaluateLine(2, "s`x + 5`");
     expect(result.toNumber()).toBe(25);
   });
 
@@ -58,7 +58,7 @@ describe("Issue #71: Toggle Off Refresh", () => {
     engine.evaluateLine(2, ":val2 = 200");
     engine.evaluateLine(3, "s`val1 + val2`");
 
-    const [result] = engine.evaluateLine(3, "s`val1 + val2`");
+    const result = engine.evaluateLine(3, "s`val1 + val2`");
     expect(result.toNumber()).toBe(300);
   });
 });

@@ -185,7 +185,7 @@ describe("createKnowledgePackage — ExpressionEngine integration (real lexer/pa
 	test("regression guard: a real ':search = 5' variable is unaffected — 'search + 3' still reads the variable, not a knowledge query", () => {
 		const { engine } = createEngine();
 		engine.evaluateExpression(":search = 5");
-		const [value] = engine.evaluateExpression("search + 3");
+		const value = engine.evaluateExpression("search + 3");
 
 		expect(value.type).toBe(ValueType.Number);
 		expect(value.toNumber()).toBe(8);

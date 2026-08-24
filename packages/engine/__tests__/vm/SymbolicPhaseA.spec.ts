@@ -15,7 +15,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 function evaluate(line: string): string {
 	const engine = newTrackedEngine();
 	try {
-		const [value] = engine.evaluateLine(1, line);
+		const value = engine.evaluateLine(1, line);
 		if (value.type === ValueType.Symbolic) return formatSymbolic(value.value as SymbolicNode);
 		if (value.type === ValueType.Error) return String(value.value);
 		return String(value.toNumber());
@@ -78,7 +78,7 @@ describe("Phase A: every public entry point agrees", () => {
 	test("evaluateLine", () => {
 		const engine = newTrackedEngine();
 		try {
-			expect(render(engine.evaluateLine(1, LINE)[0])).toBe(EXPECTED);
+			expect(render(engine.evaluateLine(1, LINE))).toBe(EXPECTED);
 		} finally {
 			engine.clear();
 		}

@@ -33,14 +33,14 @@ import { ValueType } from "@solve-js/vm/Value";
 /** The formatted, user-facing result of a single expression. */
 function display(expr: string): string {
 	const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
-	const [value] = engine.evaluateExpression(expr);
+	const value = engine.evaluateExpression(expr);
 	return formatValue(value);
 }
 
 /** The evaluated Value, for asserting its number, type and rational sidecar directly. */
 function evaluate(expr: string) {
 	const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
-	const [value] = engine.evaluateExpression(expr);
+	const value = engine.evaluateExpression(expr);
 	return value;
 }
 

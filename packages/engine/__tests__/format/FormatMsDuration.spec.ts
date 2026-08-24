@@ -42,7 +42,7 @@ describe("FormatEngine — ms-unit duration formatting", () => {
 describe("real engine — clock-time subtraction now displays as a duration, not raw ms", () => {
 	test("9:30 - 8:30 displays as '= 1:00'", () => {
 		const engine = newTrackedEngine();
-		const [value] = engine.evaluateExpression("9:30 - 8:30");
+		const value = engine.evaluateExpression("9:30 - 8:30");
 		expect(formatValue(value)).toBe("= 1:00");
 	});
 

@@ -55,10 +55,10 @@ describe("a batch parse does not leak its document model", () => {
 		// which has no document, would read stale lines from the previous parse.
 		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		engine.parseDocument("1\n2\n3\ntotal above", { inputType: "markdown" });
-		const [value] = engine.evaluateExpression("2 + 2");
+		const value = engine.evaluateExpression("2 + 2");
 		expect(value?.value).toBe(4);
 		// A bare line reference with no document is still refused.
-		const [ref] = engine.evaluateExpression("total above");
+		const ref = engine.evaluateExpression("total above");
 		expect(ref?.value).not.toBe(6);
 	});
 

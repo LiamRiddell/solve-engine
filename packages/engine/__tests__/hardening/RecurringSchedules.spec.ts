@@ -37,14 +37,14 @@ import { ValueType } from "@solve-js/vm/Value";
 /** The formatted, user-facing result of a single expression. */
 function display(expr: string): string {
   const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
-  const [value] = engine.evaluateExpression(expr);
+  const value = engine.evaluateExpression(expr);
   return formatValue(value);
 }
 
 /** The evaluated Value, for asserting its type, number and exact sidecar directly. */
 function evaluate(expr: string) {
   const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
-  const [value] = engine.evaluateExpression(expr);
+  const value = engine.evaluateExpression(expr);
   return value;
 }
 
@@ -177,14 +177,14 @@ describe("what must keep working", () => {
     engine.evaluateExpression(":daily = 3");
     engine.evaluateExpression(":yearly = 2");
     engine.evaluateExpression(":every = 9");
-    const [value] = engine.evaluateExpression(":monthly + :weekly + :daily + :yearly + :every");
+    const value = engine.evaluateExpression(":monthly + :weekly + :daily + :yearly + :every");
     expect(value.toNumber()).toBe(26);
   });
 
   test("the amount may be a variable or a grouped expression", () => {
     const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     engine.evaluateExpression(":rent = 1200");
-    expect(engine.evaluateExpression(":rent monthly for 12 months")[0].toNumber()).toBe(14400);
+    expect(engine.evaluateExpression(":rent monthly for 12 months").toNumber()).toBe(14400);
     expect(evaluate("(20 + 5) monthly for 2 years").toNumber()).toBe(600);
   });
 

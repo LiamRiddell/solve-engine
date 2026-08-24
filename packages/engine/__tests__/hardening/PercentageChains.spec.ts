@@ -25,7 +25,7 @@ import { ValueType } from "@solve-js/vm/Value";
 
 function evaluate(source: string) {
 	const engine = newTrackedEngine();
-	const [value] = engine.evaluateExpression(source);
+	const value = engine.evaluateExpression(source);
 	return value;
 }
 
@@ -138,14 +138,14 @@ describe("what must keep working", () => {
 	test("a variable can still be named `up`", () => {
 		const engine = newTrackedEngine();
 		engine.evaluateExpression(":up = 5");
-		const [value] = engine.evaluateExpression("up + 2");
+		const value = engine.evaluateExpression("up + 2");
 		expect(value.toNumber()).toBe(7);
 	});
 
 	test("a variable can still be named `down`", () => {
 		const engine = newTrackedEngine();
 		engine.evaluateExpression(":down = 10");
-		const [value] = engine.evaluateExpression("down * 3");
+		const value = engine.evaluateExpression("down * 3");
 		expect(value.toNumber()).toBe(30);
 	});
 

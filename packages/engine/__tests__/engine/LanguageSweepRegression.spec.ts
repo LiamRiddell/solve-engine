@@ -30,7 +30,7 @@ function sameValue(a: Value, b: Value): boolean {
 
 function evalOnce(expr: string): Value {
 	const engine = newTrackedEngine();
-	const [v] = engine.evaluateExpression(expr);
+	const v = engine.evaluateExpression(expr);
 	return v;
 }
 
@@ -111,29 +111,29 @@ describe("colon-consuming packages remain unaffected (the exact collision class 
 
 	test("A label before a ':name = value' definition keeps the definition intact (the colon-priority regression this file exists to lock in)", () => {
 		const engine = newTrackedEngine();
-		const [defResult] = engine.evaluateExpression("input value: :x = 5");
+		const defResult = engine.evaluateExpression("input value: :x = 5");
 		expect(defResult.toNumber()).toBe(5);
-		const [readResult] = engine.evaluateExpression(":x + 1");
+		const readResult = engine.evaluateExpression(":x + 1");
 		expect(readResult.toNumber()).toBe(6);
 	});
 
 	test("A label before a definition also tolerates a trailing '='", () => {
 		const engine = newTrackedEngine();
-		const [value] = engine.evaluateExpression("note: :y = 10=");
+		const value = engine.evaluateExpression("note: :y = 10=");
 		expect(value.toNumber()).toBe(10);
 	});
 
 	test("A user-defined function definition and call are both unaffected", () => {
 		const engine = newTrackedEngine();
 		engine.evaluateExpression("f(x) = 2*x");
-		const [value] = engine.evaluateExpression("f(5)");
+		const value = engine.evaluateExpression("f(5)");
 		expect(value.toNumber()).toBe(10);
 	});
 
 	test("A labeled user-defined function call still works", () => {
 		const engine = newTrackedEngine();
 		engine.evaluateExpression("f(x) = 2*x");
-		const [value] = engine.evaluateExpression("result: f(5)");
+		const value = engine.evaluateExpression("result: f(5)");
 		expect(value.toNumber()).toBe(10);
 	});
 });

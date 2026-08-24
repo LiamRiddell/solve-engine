@@ -39,44 +39,44 @@ describe("Bug: BigInt arithmetic silently truncated to Number precision", () => 
   });
 
   test("adding zero must not corrupt a BigInt beyond Number.MAX_SAFE_INTEGER", () => {
-    const [result] = engine.evaluateLine(1, "12345678901234567890n + 0");
+    const result = engine.evaluateLine(1, "12345678901234567890n + 0");
     expect(result.type).toBe(ValueType.BigInt);
     expect(result.value).toBe(12345678901234567890n);
   });
 
   test("BigInt + BigInt addition preserves exact precision", () => {
-    const [result] = engine.evaluateLine(1, "12345678901234567890n + 1n");
+    const result = engine.evaluateLine(1, "12345678901234567890n + 1n");
     expect(result.value).toBe(12345678901234567891n);
   });
 
   test("BigInt - BigInt subtraction preserves exact precision", () => {
-    const [result] = engine.evaluateLine(1, "12345678901234567890n - 1n");
+    const result = engine.evaluateLine(1, "12345678901234567890n - 1n");
     expect(result.value).toBe(12345678901234567889n);
   });
 
   test("BigInt * BigInt multiplication preserves exact precision", () => {
-    const [result] = engine.evaluateLine(1, "12345678901234567890n * 2n");
+    const result = engine.evaluateLine(1, "12345678901234567890n * 2n");
     expect(result.value).toBe(24691357802469135780n);
   });
 
   test("classic overflow torture case: 99999999999999999999n + 1n = 100000000000000000000n", () => {
-    const [result] = engine.evaluateLine(1, "99999999999999999999n + 1n");
+    const result = engine.evaluateLine(1, "99999999999999999999n + 1n");
     expect(result.value).toBe(100000000000000000000n);
   });
 
   test("mixing BigInt with a plain Number literal still works (Number side has no extra precision to preserve)", () => {
-    const [result] = engine.evaluateLine(1, "12345678901234567890n + 1");
+    const result = engine.evaluateLine(1, "12345678901234567890n + 1");
     expect(result.type).toBe(ValueType.BigInt);
     expect(result.value).toBe(12345678901234567891n);
   });
 
   test("regression guard: small BigInt values unaffected", () => {
-    const [result] = engine.evaluateLine(1, "50n + 30n");
+    const result = engine.evaluateLine(1, "50n + 30n");
     expect(result.value).toBe(80n);
   });
 
   test("regression guard: a bare integer literal without the 'n' suffix is still a plain Number (by design, matches JS's own BigInt literal syntax)", () => {
-    const [result] = engine.evaluateLine(1, "12345678901234567890");
+    const result = engine.evaluateLine(1, "12345678901234567890");
     expect(result.type).toBe(ValueType.Number);
   });
 });

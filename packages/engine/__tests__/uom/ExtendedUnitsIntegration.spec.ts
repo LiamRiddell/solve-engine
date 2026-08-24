@@ -38,38 +38,38 @@ describe("Extended UoM categories: end-to-end", () => {
     "ppm", "ppb", "ppt", "permille",
   ])("%s lexes as a UoM unit, not an undefined variable", (unit) => {
     expect(() => engine.evaluateLine(1, `1 ${unit}`)).not.toThrow();
-    const [result] = engine.evaluateLine(1, `1 ${unit}`);
+    const result = engine.evaluateLine(1, `1 ${unit}`);
     expect(result.type).toBe(ValueType.Uom);
     expect(result.unit).toBe(unit);
   });
 
   test("convert 60 mph to kph", () => {
-    const [result] = engine.evaluateLine(1, "convert 60 mph to kph");
+    const result = engine.evaluateLine(1, "convert 60 mph to kph");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.unit).toBe("kph");
     expect(result.toNumber()).toBeCloseTo(96.56064, 5);
   });
 
   test("direct conversion shorthand: 1 kV to mV", () => {
-    const [result] = engine.evaluateLine(1, "1 kV to mV");
+    const result = engine.evaluateLine(1, "1 kV to mV");
     expect(result.toNumber()).toBeCloseTo(1_000_000, 6);
   });
 
   test("implicit-conversion arithmetic within the same extended measure", () => {
-    const [result] = engine.evaluateLine(1, "500 mV + 1 kV");
+    const result = engine.evaluateLine(1, "500 mV + 1 kV");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.unit).toBe("mV");
     expect(result.toNumber()).toBeCloseTo(1_000_500, 6);
   });
 
   test("arithmetic across incompatible extended measures surfaces an error, not a bare number", () => {
-    const [result] = engine.evaluateLine(1, "1 kV + 1 A");
+    const result = engine.evaluateLine(1, "1 kV + 1 A");
     expect(result.type).toBe(ValueType.Error);
   });
 
   test("apparent power, reactive power, and real power stay distinct measures", () => {
     expect(() => engine.evaluateLine(1, "1 VA to kW")).not.toThrow();
-    const [result] = engine.evaluateLine(1, "1 VA to kW");
+    const result = engine.evaluateLine(1, "1 VA to kW");
     // This used to assert that the unit came back as "VA", pinning the
     // cross-measure no-op UOM_CONVERT_TO performed for any incompatible pair.
     // Handing the input back is indistinguishable from a conversion that
@@ -79,12 +79,12 @@ describe("Extended UoM categories: end-to-end", () => {
   });
 
   test("volume flow rate: convert 1 cfs to lps", () => {
-    const [result] = engine.evaluateLine(1, "convert 1 cfs to lps");
+    const result = engine.evaluateLine(1, "convert 1 cfs to lps");
     expect(result.toNumber()).toBeCloseTo(28.3168466, 5);
   });
 
   test("parts-per: convert 1 permille to ppm", () => {
-    const [result] = engine.evaluateLine(1, "convert 1 permille to ppm");
+    const result = engine.evaluateLine(1, "convert 1 permille to ppm");
     expect(result.toNumber()).toBeCloseTo(1000, 10);
   });
 });

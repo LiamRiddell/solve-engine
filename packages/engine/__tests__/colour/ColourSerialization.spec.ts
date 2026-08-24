@@ -11,7 +11,7 @@ import { serializeValue } from "@solve-js/worker/serialize";
 
 function evalValue(source: string) {
 	const engine = newTrackedEngine();
-	return engine.evaluateExpression(source)[0];
+	return engine.evaluateExpression(source);
 }
 
 test("the colour DTO carries hex, channels, format and a render-ready css string", () => {

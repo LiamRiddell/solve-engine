@@ -362,7 +362,7 @@ describe("Cache Coherence", () => {
 			engine.evaluateIncremental("x", 7);
 
 			// :x should now be 7 (direct variable lookup via evaluateLine)
-			const [result] = engine.evaluateLine(3, ":x");
+			const result = engine.evaluateLine(3, ":x");
 			expect(result.toNumber()).toBe(7);
 		});
 	});

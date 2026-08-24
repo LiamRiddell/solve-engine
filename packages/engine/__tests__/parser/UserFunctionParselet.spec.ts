@@ -13,56 +13,56 @@ describe("User-defined functions — via a real, default-constructed ExpressionE
   test("f(x) = 2*x + 1, then f(5) = 11", () => {
     const engine = newTrackedEngine();
     engine.evaluateExpression("f(x) = 2*x + 1");
-    const [value] = engine.evaluateExpression("f(5)");
+    const value = engine.evaluateExpression("f(5)");
     expect(value.toNumber()).toBe(11);
   });
 
   test("f(10) = 21 -- calling the same function again with a different argument", () => {
     const engine = newTrackedEngine();
     engine.evaluateExpression("f(x) = 2*x + 1");
-    const [value] = engine.evaluateExpression("f(10)");
+    const value = engine.evaluateExpression("f(10)");
     expect(value.toNumber()).toBe(21);
   });
 
   test("multi-parameter: area(w, h) = w * h, then area(3, 4) = 12", () => {
     const engine = newTrackedEngine();
     engine.evaluateExpression("area(w, h) = w * h");
-    const [value] = engine.evaluateExpression("area(3, 4)");
+    const value = engine.evaluateExpression("area(3, 4)");
     expect(value.toNumber()).toBe(12);
   });
 
   test("three parameters: vol(l, w, h) = l * w * h, then vol(2, 3, 4) = 24", () => {
     const engine = newTrackedEngine();
     engine.evaluateExpression("vol(l, w, h) = l * w * h");
-    const [value] = engine.evaluateExpression("vol(2, 3, 4)");
+    const value = engine.evaluateExpression("vol(2, 3, 4)");
     expect(value.toNumber()).toBe(24);
   });
 
   test("composed calls: double(x) = 2 * x, then double(5) + 1 = 11", () => {
     const engine = newTrackedEngine();
     engine.evaluateExpression("double(x) = 2 * x");
-    const [value] = engine.evaluateExpression("double(5) + 1");
+    const value = engine.evaluateExpression("double(5) + 1");
     expect(value.toNumber()).toBe(11);
   });
 
   test("nested/recursive-shaped calls: double(double(5)) = 20", () => {
     const engine = newTrackedEngine();
     engine.evaluateExpression("double(x) = 2 * x");
-    const [value] = engine.evaluateExpression("double(double(5))");
+    const value = engine.evaluateExpression("double(double(5))");
     expect(value.toNumber()).toBe(20);
   });
 
   test("using a built-in function inside the body: hyp(a, b) = sqrt(a*a + b*b)", () => {
     const engine = newTrackedEngine();
     engine.evaluateExpression("hyp(a, b) = sqrt(a*a + b*b)");
-    const [value] = engine.evaluateExpression("hyp(3, 4)");
+    const value = engine.evaluateExpression("hyp(3, 4)");
     expect(value.toNumber()).toBe(5);
   });
 
   test("using a constant inside the body: circle(r) = pi * r * r", () => {
     const engine = newTrackedEngine();
     engine.evaluateExpression("circle(r) = pi * r * r");
-    const [value] = engine.evaluateExpression("circle(2)");
+    const value = engine.evaluateExpression("circle(2)");
     expect(value.toNumber()).toBeCloseTo(Math.PI * 4);
   });
 
@@ -70,7 +70,7 @@ describe("User-defined functions — via a real, default-constructed ExpressionE
     const engine = newTrackedEngine();
     engine.evaluateExpression("f(x) = x + 1");
     engine.evaluateExpression("f(x) = x * 10");
-    const [value] = engine.evaluateExpression("f(5)");
+    const value = engine.evaluateExpression("f(5)");
     expect(value.toNumber()).toBe(50);
   });
 
@@ -105,7 +105,7 @@ describe("User-defined functions — via a real, default-constructed ExpressionE
   test("a parameter name that collides with a unit abbreviation (h = hour) still works", () => {
     const engine = newTrackedEngine();
     engine.evaluateExpression("area(w, h) = w * h");
-    const [value] = engine.evaluateExpression("area(3, 4)");
+    const value = engine.evaluateExpression("area(3, 4)");
     expect(value.toNumber()).toBe(12);
   });
 
@@ -115,9 +115,9 @@ describe("User-defined functions — via a real, default-constructed ExpressionE
     const engine = newTrackedEngine();
     engine.evaluateExpression(":x = 100");
     engine.evaluateExpression("f(x) = x * 2");
-    const [callResult] = engine.evaluateExpression("f(5)");
+    const callResult = engine.evaluateExpression("f(5)");
     expect(callResult.toNumber()).toBe(10);
-    const [outerX] = engine.evaluateExpression(":x + 1");
+    const outerX = engine.evaluateExpression(":x + 1");
     expect(outerX.toNumber()).toBe(101); // the outer :x = 100 must be unaffected by f's own param x
   });
 });

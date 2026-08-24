@@ -96,14 +96,14 @@ describe("getConvertiblePossibilities — unrecognized unit", () => {
 describe("UOM_PACKAGE — real engine wiring", () => {
   test("cm to ? works via the real, default-constructed ExpressionEngine", () => {
     const engine = newTrackedEngine();
-    const [value] = engine.evaluateExpression("cm to ?");
+    const value = engine.evaluateExpression("cm to ?");
     expect(value.type).toBe(ValueType.String);
     expect(value.value as string).toContain("mm");
   });
 
   test("10 cm to m still converts normally (no regression from the ? handling)", () => {
     const engine = newTrackedEngine();
-    const [value] = engine.evaluateExpression("10 cm to m");
+    const value = engine.evaluateExpression("10 cm to m");
     expect(value.type).toBe(ValueType.Uom);
     expect(value.toNumber()).toBeCloseTo(0.1);
   });

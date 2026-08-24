@@ -127,7 +127,7 @@ describe("an operator declared in both tiers is declared the same way in both", 
 describe("the shifts group the same way as each other", () => {
 	const num = (source: string) => {
 		const engine = newTrackedEngine();
-		return engine.evaluateExpression(source)[0].toNumber();
+		return engine.evaluateExpression(source).toNumber();
 	};
 
 	test("on their own the two right shifts agree, as they must for a positive operand", () => {

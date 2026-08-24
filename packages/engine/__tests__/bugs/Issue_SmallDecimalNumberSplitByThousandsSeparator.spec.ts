@@ -40,7 +40,7 @@ describe("Bug: '0.0001 BTC to USD' evaluated to a bare 0 instead of a real quant
   test("0.0001 BTC to USD converts correctly", () => {
     sharedCurrencyExchange.primeRates("BTC", { USD: 60000 });
     const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
-    const [result] = engine.evaluateLine(1, "0.0001 BTC to USD");
+    const result = engine.evaluateLine(1, "0.0001 BTC to USD");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.unit).toBe("USD");
     expect(result.toNumber()).toBeCloseTo(6, 10);
@@ -50,7 +50,7 @@ describe("Bug: '0.0001 BTC to USD' evaluated to a bare 0 instead of a real quant
 
   test("small decimals with 4+ fractional digits evaluate as a single number in plain arithmetic too", () => {
     const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
-    const [result] = engine.evaluateLine(1, "0.0001 + 1");
+    const result = engine.evaluateLine(1, "0.0001 + 1");
     expect(result.type).toBe(ValueType.Number);
     expect(result.toNumber()).toBeCloseTo(1.0001, 10);
     engine.clear();
@@ -58,7 +58,7 @@ describe("Bug: '0.0001 BTC to USD' evaluated to a bare 0 instead of a real quant
 
   test("chained dot thousands-groups (2+) evaluate to the real grouped integer, not a truncated decimal", () => {
     const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
-    const [result] = engine.evaluateLine(1, "1.234.567");
+    const result = engine.evaluateLine(1, "1.234.567");
     expect(result.type).toBe(ValueType.Number);
     expect(result.toNumber()).toBe(1234567);
     engine.clear();
@@ -69,7 +69,7 @@ describe("Bug: '0.0001 BTC to USD' evaluated to a bare 0 instead of a real quant
     // fraction) — this fix intentionally only targets the unambiguous
     // 2+-group case above; existing behavior here is unchanged.
     const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
-    const [result] = engine.evaluateLine(1, "1.234");
+    const result = engine.evaluateLine(1, "1.234");
     expect(result.type).toBe(ValueType.Number);
     expect(result.toNumber()).toBeCloseTo(1.234, 10);
     engine.clear();

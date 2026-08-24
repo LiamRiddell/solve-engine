@@ -53,7 +53,7 @@ import { isConvertibleUnit } from "@solve-js/uom/UomConverter";
 function evaluate(source: string): Value {
 	const engine = newTrackedEngine();
 	try {
-		return engine.evaluateExpression(source)[0];
+		return engine.evaluateExpression(source);
 	} finally {
 		engine.clear();
 	}

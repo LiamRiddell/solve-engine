@@ -82,8 +82,8 @@ describe("the allocation a single opcode performs", () => {
 			expect(error?.recoverable).toBe(true);
 			expect(error?.isFatal()).toBe(false);
 
-			expect(engine.evaluateLine(4, "2+2")[0].toNumber()).toBe(4);
-			expect(engine.evaluateLine(5, "sum(x, 1:1000)")[0].toNumber()).toBe((1000 * 1001) / 2);
+			expect(engine.evaluateLine(4, "2+2").toNumber()).toBe(4);
+			expect(engine.evaluateLine(5, "sum(x, 1:1000)").toNumber()).toBe((1000 * 1001) / 2);
 		} finally {
 			engine.clear();
 		}
@@ -100,7 +100,7 @@ describe("the allocation a single opcode performs", () => {
 		// four cells for the result. Twelve buys it and eleven does not.
 		const affordable = new ExpressionEngine({ config: { vm: { maxAllocatedElements: 12 } }, packages: BUILTIN_PACKAGES });
 		try {
-			expect(affordable.evaluateExpression("map(x*2, [1,2,3,4])")[0].type).toBe(ValueType.Matrix);
+			expect(affordable.evaluateExpression("map(x*2, [1,2,3,4])").type).toBe(ValueType.Matrix);
 		} finally {
 			affordable.clear();
 		}
@@ -121,7 +121,7 @@ describe("the allocation a single opcode performs", () => {
 		try {
 			expect(errorFrom(engine, "[1,2;3,4]^1000000")?.code).toBe("ALLOCATION_LIMIT_EXCEEDED");
 			// The same matrix to a small power stays affordable.
-			expect(engine.evaluateLine(2, "[1,2;3,4]^2")[0].type).toBe(ValueType.Matrix);
+			expect(engine.evaluateLine(2, "[1,2;3,4]^2").type).toBe(ValueType.Matrix);
 		} finally {
 			engine.clear();
 		}
@@ -138,7 +138,7 @@ describe("the budget is a total, which is what makes it compose", () => {
 			vm: { maxCollectionSize: 1000, maxAllocatedElements: 2500 },
 		}, packages: BUILTIN_PACKAGES });
 		try {
-			expect(engine.evaluateLine(1, "sum(x, 1:1000)")[0].toNumber()).toBe((1000 * 1001) / 2);
+			expect(engine.evaluateLine(1, "sum(x, 1:1000)").toNumber()).toBe((1000 * 1001) / 2);
 			expect(errorFrom(engine, "sum(x, 1:1000) + sum(x, 1:1000) + sum(x, 1:1000)", 2)?.code)
 				.toBe("ALLOCATION_LIMIT_EXCEEDED");
 		} finally {
@@ -157,7 +157,7 @@ describe("the budget is a total, which is what makes it compose", () => {
 		}, packages: BUILTIN_PACKAGES });
 		try {
 			engine.evaluateLine(1, "f(n) = sum(x, 1:1000) + n");
-			expect(engine.evaluateLine(2, "f(0)")[0].toNumber()).toBe((1000 * 1001) / 2);
+			expect(engine.evaluateLine(2, "f(0)").toNumber()).toBe((1000 * 1001) / 2);
 			expect(errorFrom(engine, "f(0) + f(0) + f(0)", 3)?.code).toBe("ALLOCATION_LIMIT_EXCEEDED");
 		} finally {
 			engine.clear();
@@ -170,7 +170,7 @@ describe("the budget is a total, which is what makes it compose", () => {
 		const engine = newTrackedEngine();
 		try {
 			for (let line = 1; line <= 40; line++) {
-				expect(engine.evaluateLine(line, "sum(x, 1:100000)")[0].toNumber()).toBe((100000 * 100001) / 2);
+				expect(engine.evaluateLine(line, "sum(x, 1:100000)").toNumber()).toBe((100000 * 100001) / 2);
 			}
 		} finally {
 			engine.clear();
@@ -185,7 +185,7 @@ describe("the budget is a total, which is what makes it compose", () => {
 			for (let i = 0; i < 20; i++) {
 				expect(errorFrom(engine, "sum(x, 1:1000) + sum(x, 1:1000) + sum(x, 1:1000)", 1)?.code)
 					.toBe("ALLOCATION_LIMIT_EXCEEDED");
-				expect(engine.evaluateLine(2, "sum(x, 1:1000)")[0].toNumber()).toBe((1000 * 1001) / 2);
+				expect(engine.evaluateLine(2, "sum(x, 1:1000)").toNumber()).toBe((1000 * 1001) / 2);
 			}
 		} finally {
 			engine.clear();
@@ -199,7 +199,7 @@ describe("the ceiling belongs to the host", () => {
 		try {
 			expect(errorFrom(engine, "map(1*x, 0:500)")?.code).toBe("ALLOCATION_LIMIT_EXCEEDED");
 			// And is a ceiling rather than a refusal of collections as such.
-			expect(engine.evaluateLine(2, "sum(x, 1:40)")[0].toNumber()).toBe((40 * 41) / 2);
+			expect(engine.evaluateLine(2, "sum(x, 1:40)").toNumber()).toBe((40 * 41) / 2);
 		} finally {
 			engine.clear();
 		}
@@ -210,7 +210,7 @@ describe("the ceiling belongs to the host", () => {
 		try {
 			const lines = [":a = map(1*x, 0:2000)", ":b = transpose(a)", "b * a"];
 			lines.forEach((line, index) => engine.evaluateLine(index + 1, line));
-			expect(engine.evaluateLine(3, "b * a")[0].type).toBe(ValueType.Matrix);
+			expect(engine.evaluateLine(3, "b * a").type).toBe(ValueType.Matrix);
 		} finally {
 			engine.clear();
 		}
@@ -220,22 +220,22 @@ describe("the ceiling belongs to the host", () => {
 describe("ordinary expressions are untouched", () => {
 	test("the arithmetic, units and dates a document is actually made of", () => {
 		const engine = newTrackedEngine();
-		expect(engine.evaluateExpression("2 + 2 * 10")[0].toNumber()).toBe(22);
-		expect(engine.evaluateExpression("(1+2)*(3+4)")[0].toNumber()).toBe(21);
-		expect(engine.evaluateExpression("100 cm to m")[0].toNumber()).toBe(1);
-		expect(engine.evaluateExpression("15% of 200")[0].toNumber()).toBe(30);
-		expect(engine.evaluateExpression("sqrt(sqrt(sqrt(sqrt(65536))))")[0].toNumber()).toBe(2);
+		expect(engine.evaluateExpression("2 + 2 * 10").toNumber()).toBe(22);
+		expect(engine.evaluateExpression("(1+2)*(3+4)").toNumber()).toBe(21);
+		expect(engine.evaluateExpression("100 cm to m").toNumber()).toBe(1);
+		expect(engine.evaluateExpression("15% of 200").toNumber()).toBe(30);
+		expect(engine.evaluateExpression("sqrt(sqrt(sqrt(sqrt(65536))))").toNumber()).toBe(2);
 	});
 
 	test("matrices, ranges, map and reduce at the sizes people write", () => {
 		const engine = newTrackedEngine();
-		expect(engine.evaluateExpression("[1,2;3,4] * [5,6;7,8]")[0].type).toBe(ValueType.Matrix);
-		expect(engine.evaluateExpression("map(x*2, [1,2,3,4])")[0].type).toBe(ValueType.Matrix);
-		expect(engine.evaluateExpression("reduce(acc+x, [1,2,3,4,5])")[0].toNumber()).toBe(15);
-		expect(engine.evaluateExpression("sum(x, 1:100)")[0].toNumber()).toBe((100 * 101) / 2);
+		expect(engine.evaluateExpression("[1,2;3,4] * [5,6;7,8]").type).toBe(ValueType.Matrix);
+		expect(engine.evaluateExpression("map(x*2, [1,2,3,4])").type).toBe(ValueType.Matrix);
+		expect(engine.evaluateExpression("reduce(acc+x, [1,2,3,4,5])").toNumber()).toBe(15);
+		expect(engine.evaluateExpression("sum(x, 1:100)").toNumber()).toBe((100 * 101) / 2);
 		// The largest collection the default configuration allows, expanded and
 		// folded as before.
-		expect(engine.evaluateExpression("sum(x, 1:100000)")[0].toNumber()).toBe((100000 * 100001) / 2);
+		expect(engine.evaluateExpression("sum(x, 1:100000)").toNumber()).toBe((100000 * 100001) / 2);
 		engine.clear();
 	});
 
@@ -243,7 +243,7 @@ describe("ordinary expressions are untouched", () => {
 		const engine = newTrackedEngine();
 		try {
 			for (let line = 1; line <= 1000; line++) {
-				expect(engine.evaluateLine(line, `${line} * 3 + 1`)[0].toNumber()).toBe(line * 3 + 1);
+				expect(engine.evaluateLine(line, `${line} * 3 + 1`).toNumber()).toBe(line * 3 + 1);
 			}
 		} finally {
 			engine.clear();

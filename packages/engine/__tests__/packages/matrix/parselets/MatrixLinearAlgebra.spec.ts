@@ -21,7 +21,7 @@ function engine() {
 
 function evalOne(expr: string) {
   const e = engine();
-  const [v] = e.evaluateExpression(expr);
+  const v = e.evaluateExpression(expr);
   return v;
 }
 
@@ -45,8 +45,8 @@ describe("Matrix transpose", () => {
   test("transpose(a) function-call form matches ^T", () => {
     const e = engine();
     e.evaluateLine(1, ":a = [1,2;3,4]");
-    const [caretResult] = e.evaluateLine(2, "a^T");
-    const [fnResult] = e.evaluateLine(3, "transpose(a)");
+    const caretResult = e.evaluateLine(2, "a^T");
+    const fnResult = e.evaluateLine(3, "transpose(a)");
     expect(rowMajor(fnResult.value as MatrixData)).toEqual(rowMajor(caretResult.value as MatrixData));
   });
 
@@ -63,8 +63,8 @@ describe("Matrix determinant", () => {
   test("|a| (abs alias) matches det(a)", () => {
     const e = engine();
     e.evaluateLine(1, ":a = [1,2;3,4]");
-    const [detResult] = e.evaluateLine(2, "det(a)");
-    const [absResult] = e.evaluateLine(3, "abs(a)");
+    const detResult = e.evaluateLine(2, "det(a)");
+    const absResult = e.evaluateLine(3, "abs(a)");
     expect(absResult.toNumber()).toBe(detResult.toNumber());
   });
 
@@ -88,7 +88,7 @@ describe("Matrix inverse", () => {
     const e = engine();
     e.evaluateLine(1, ":a = [1, 2; 3, 4]");
     e.evaluateLine(2, ":ainv = a^-1");
-    const [identity] = e.evaluateLine(3, "a * ainv");
+    const identity = e.evaluateLine(3, "a * ainv");
     const m = identity.value as MatrixData;
     const rm = rowMajor(m).map((n) => Math.round((n as number) * 1e10) / 1e10 + 0);
     expect(rm).toEqual([1, 0, 0, 1]);
@@ -97,8 +97,8 @@ describe("Matrix inverse", () => {
   test("inv(a) function-call form matches a^-1", () => {
     const e = engine();
     e.evaluateLine(1, ":a = [1,2;3,4]");
-    const [caretResult] = e.evaluateLine(2, "a^-1");
-    const [fnResult] = e.evaluateLine(3, "inv(a)");
+    const caretResult = e.evaluateLine(2, "a^-1");
+    const fnResult = e.evaluateLine(3, "inv(a)");
     expect(rowMajor(fnResult.value as MatrixData)).toEqual(rowMajor(caretResult.value as MatrixData));
   });
 
@@ -138,8 +138,8 @@ describe("Matrix dot()", () => {
     const e = engine();
     e.evaluateLine(1, ":a = [1,2,3]");
     e.evaluateLine(2, ":b = [1;2;3]");
-    const [mulResult] = e.evaluateLine(3, "a * b");
-    const [dotResult] = e.evaluateLine(4, "dot(a, b)");
+    const mulResult = e.evaluateLine(3, "a * b");
+    const dotResult = e.evaluateLine(4, "dot(a, b)");
     expect(dotResult.toNumber()).toBe(mulResult.toNumber());
   });
 

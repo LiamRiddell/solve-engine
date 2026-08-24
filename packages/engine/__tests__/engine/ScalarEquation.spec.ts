@@ -17,7 +17,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 function run(lines: string[]): string[] {
 	const engine = newTrackedEngine();
 	try {
-		return lines.map((line, i) => formatValue(engine.evaluateLine(i + 1, line)[0]));
+		return lines.map((line, i) => formatValue(engine.evaluateLine(i + 1, line)));
 	} finally {
 		engine.clear();
 	}
@@ -99,7 +99,7 @@ describe("what the scalar-equation match must NOT swallow", () => {
 		try {
 			engine.evaluateLine(1, "a = [1, 2; 3, 4]");
 			engine.evaluateLine(2, "a*x = [60; 70]");
-			const [result] = engine.evaluateLine(3, "x =>");
+			const result = engine.evaluateLine(3, "x =>");
 			expect(result.type).toBe(ValueType.Matrix);
 			const matrix = result.value as MatrixData;
 			expect(matrix.rows).toBe(2);
@@ -154,10 +154,10 @@ describe("the matrix and scalar equation kinds coexist", () => {
 			engine.evaluateLine(2, "a*m = [60; 70]");
 			engine.evaluateLine(3, "s^2-9 = 0");
 
-			const [matrixResult] = engine.evaluateLine(4, "m =>");
+			const matrixResult = engine.evaluateLine(4, "m =>");
 			expect(matrixResult.type).toBe(ValueType.Matrix);
 
-			const [scalarResult] = engine.evaluateLine(5, "s =>");
+			const scalarResult = engine.evaluateLine(5, "s =>");
 			expect(formatValue(scalarResult)).toBe("= [-3, 3]");
 		} finally {
 			engine.clear();
@@ -181,7 +181,7 @@ describe("the matrix and scalar equation kinds coexist", () => {
 		try {
 			engine.evaluateLine(1, "a = [1, 2; 3, 4]");
 			engine.evaluateLine(2, "a*x = [60; 70]");
-			const [result] = engine.evaluateLine(3, "x =>");
+			const result = engine.evaluateLine(3, "x =>");
 			// A scalar fallback would have produced a number or a string here.
 			expect(result.type).toBe(ValueType.Matrix);
 		} finally {
@@ -195,7 +195,7 @@ describe("the matrix and scalar equation kinds coexist", () => {
 		const engine = newTrackedEngine();
 		try {
 			engine.evaluateLine(1, "undefinedFactor*z = [1; 2]");
-			const [result] = engine.evaluateLine(2, "z =>");
+			const result = engine.evaluateLine(2, "z =>");
 			expect(result.type).toBe(ValueType.Error);
 			expect(String(result.value)).toBe("EQUATION_FACTOR_UNDEFINED");
 		} finally {

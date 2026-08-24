@@ -18,7 +18,7 @@ describe("Issue #152: divide-by-percentage carries the uncertainty", () => {
     engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
-  const val = (source: string) => engine.evaluateExpression(source)[0];
+  const val = (source: string) => engine.evaluateExpression(source);
 
   test.each([
     ["(100 +/- 5) / 10%", 1000, 50],

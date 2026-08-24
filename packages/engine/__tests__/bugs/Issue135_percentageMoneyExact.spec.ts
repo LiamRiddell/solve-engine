@@ -18,7 +18,7 @@ describe("Issue #135: percentage on money stays exact", () => {
     engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
-  const money = (source: string): string => formatValue(engine.evaluateExpression(source)[0]);
+  const money = (source: string): string => formatValue(engine.evaluateExpression(source));
 
   test.each([
     ["$0.10 + 15%", "= $0.12"],

@@ -345,7 +345,7 @@ function validateSpec(spec: FunctionSpec): void {
  *
  * @example
  * ```ts
- * const engine = new ExpressionEngine("en", false, undefined, undefined, [
+ * const engine = new ExpressionEngine({ packages: [
  *   ...BUILTIN_PACKAGES,
  *   defineFunction({
  *     name: "vat",
@@ -353,7 +353,7 @@ function validateSpec(spec: FunctionSpec): void {
  *     returns: "number",
  *     call: (amount) => amount * 1.2,
  *   }),
- * ]);
+ * ] });
  * engine.evaluateExpression("vat(100)"); // 120
  * ```
  *

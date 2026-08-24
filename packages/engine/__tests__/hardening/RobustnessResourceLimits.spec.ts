@@ -95,10 +95,10 @@ describe("the default configuration bounds every input shape that recurses", () 
 		// The other half of a limit test, and the half that catches a limit set
 		// too low: everything here is well within what a real document holds.
 		const engine = newTrackedEngine();
-		expect(engine.evaluateExpression("(".repeat(30) + "1" + ")".repeat(30))[0].toNumber()).toBe(1);
-		expect(engine.evaluateExpression("1" + "+1".repeat(100))[0].toNumber()).toBe(101);
+		expect(engine.evaluateExpression("(".repeat(30) + "1" + ")".repeat(30)).toNumber()).toBe(1);
+		expect(engine.evaluateExpression("1" + "+1".repeat(100)).toNumber()).toBe(101);
 		// 65536 is 2^16, so four square roots take it to 2.
-		expect(engine.evaluateExpression("sqrt(sqrt(sqrt(sqrt(65536))))")[0].toNumber()).toBe(2);
+		expect(engine.evaluateExpression("sqrt(sqrt(sqrt(sqrt(65536))))").toNumber()).toBe(2);
 	});
 });
 
@@ -142,7 +142,7 @@ describe("the nesting-depth guard, once the limits in front of it are lifted", (
 		// mysterious depth error on a long invoice line.
 		const engine = deepParseEngine();
 		try {
-			expect(engine.evaluateExpression("1" + "+1".repeat(200))[0].toNumber()).toBe(201);
+			expect(engine.evaluateExpression("1" + "+1".repeat(200)).toNumber()).toBe(201);
 		} finally {
 			engine.clear();
 		}
@@ -169,7 +169,7 @@ describe("the nesting-depth guard, once the limits in front of it are lifted", (
 			expect(error).toBeInstanceOf(EngineError);
 			// And the engine is still usable afterwards, which is the part a
 			// host depends on when a single line blows up mid-document.
-			expect(engine.evaluateExpression("2+2")[0].toNumber()).toBe(4);
+			expect(engine.evaluateExpression("2+2").toNumber()).toBe(4);
 		} finally {
 			engine.clear();
 		}
@@ -185,7 +185,7 @@ describe("the VM's own execution limits", () => {
 			expect(error?.category).toBe("EXECUTION");
 			// Under the limit still runs, so the guard is a ceiling and not a
 			// blanket refusal.
-			expect(engine.evaluateExpression("1+1")[0].toNumber()).toBe(2);
+			expect(engine.evaluateExpression("1+1").toNumber()).toBe(2);
 		} finally {
 			engine.clear();
 		}
@@ -239,17 +239,17 @@ describe("recursion through user-defined functions", () => {
 	test("ordinary nesting well inside the limit still works", () => {
 		const engine = newTrackedEngine();
 		engine.evaluateLine(1, "double(x) = x*2");
-		expect(engine.evaluateLine(2, "double(double(double(double(1))))")[0].toNumber()).toBe(16);
+		expect(engine.evaluateLine(2, "double(double(double(double(1))))").toNumber()).toBe(16);
 	});
 });
 
 describe("a range is expanded one value per element, with nothing asking how many", () => {
 	test("the guards RANGE_NEW does have still fire", () => {
 		const engine = newTrackedEngine();
-		expect(engine.evaluateExpression("map(10*x, 1.5:3)")[0].type).toBe(ValueType.Error);
-		expect(engine.evaluateExpression("map(10*x, 10:1)")[0].type).toBe(ValueType.Error);
+		expect(engine.evaluateExpression("map(10*x, 1.5:3)").type).toBe(ValueType.Error);
+		expect(engine.evaluateExpression("map(10*x, 10:1)").type).toBe(ValueType.Error);
 		// And a range of a sane size maps normally.
-		const mapped = engine.evaluateExpression("map(10*x, 0:3)")[0];
+		const mapped = engine.evaluateExpression("map(10*x, 0:3)");
 		expect(mapped.type).toBe(ValueType.Matrix);
 	});
 
@@ -267,7 +267,7 @@ describe("a range is expanded one value per element, with nothing asking how man
 		// for it here, still ten times past the `vm.maxCollectionSize` ceiling
 		// and small enough that the counted refusal is all that happens.
 		const engine = newTrackedEngine();
-		const [value] = engine.evaluateExpression("reduce(acc+x, 0:1000000)");
+		const value = engine.evaluateExpression("reduce(acc+x, 0:1000000)");
 		expect(value.type).toBe(ValueType.Error);
 		expect(String(value.value)).toBe("COLLECTION_TOO_LARGE");
 		engine.clear();
@@ -278,11 +278,11 @@ describe("a range is expanded one value per element, with nothing asking how man
 		// is a ceiling rather than a blanket refusal of large collections.
 		const engine = new ExpressionEngine({ config: { vm: { maxStackDepth: 200, maxInstructions: 50_000, maxCollectionSize: 10 } }, packages: BUILTIN_PACKAGES });
 		try {
-			const [refused] = engine.evaluateExpression("sum(x, 1:11)");
+			const refused = engine.evaluateExpression("sum(x, 1:11)");
 			expect(refused.type).toBe(ValueType.Error);
 			expect(String(refused.value)).toBe("COLLECTION_TOO_LARGE");
 			// 1..10 is exactly the limit, so it folds: 10*11/2.
-			expect(engine.evaluateExpression("sum(x, 1:10)")[0].toNumber()).toBe(55);
+			expect(engine.evaluateExpression("sum(x, 1:10)").toNumber()).toBe(55);
 		} finally {
 			engine.clear();
 		}
@@ -292,7 +292,7 @@ describe("a range is expanded one value per element, with nothing asking how man
 		const engine = newTrackedEngine();
 		// 1..100000 by the closed form n(n+1)/2, which is not how the engine
 		// gets there.
-		expect(engine.evaluateExpression("sum(x, 1:100000)")[0].toNumber()).toBe((100000 * 100001) / 2);
+		expect(engine.evaluateExpression("sum(x, 1:100000)").toNumber()).toBe((100000 * 100001) / 2);
 		engine.clear();
 	});
 });

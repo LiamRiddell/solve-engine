@@ -41,9 +41,9 @@ export function evalWithTelemetry(
     expression: string,
     lineNumber = 1
 ): { value: number; telemetry: PipelineTelemetry | null } {
-    const values = engine.evaluateLine(lineNumber, expression);
+    const value = engine.evaluateLine(lineNumber, expression);
     return {
-        value: values[0].toNumber(),
+        value: value.toNumber(),
         telemetry: engine.getLastTelemetry(),
     };
 }

@@ -20,7 +20,7 @@ describe("Issue #162: a percentage over an uncertain number carries the uncertai
     engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
-  const val = (source: string) => engine.evaluateExpression(source)[0];
+  const val = (source: string) => engine.evaluateExpression(source);
 
   test("`10% / (2 +/- 0.1)` is 0.05 ± 0.0025, like its bare-number twin", () => {
     const r = val("10% / (2 +/- 0.1)");

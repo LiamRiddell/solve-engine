@@ -187,7 +187,7 @@ describe("documented examples evaluate as documented", () => {
     test(`[${gi}] ${label.slice(0, 110)}`, () => {
       const engine = newTrackedEngine();
       group.forEach((ex, i) => {
-        const [value] = engine.evaluateLine(i + 1, ex.expression);
+        const value = engine.evaluateLine(i + 1, ex.expression);
         if (ex.expected === null) return;
 
         // formatValue prefixes results with a display marker that belongs to

@@ -241,7 +241,7 @@ describe("a spelling the lexer claims can actually be typed", () => {
 		for (const spelling of LEXABLE_TABLE_SPELLINGS) {
 			const engine = newTrackedEngine();
 			try {
-				const [value] = engine.evaluateExpression(`1 ${spelling}`);
+				const value = engine.evaluateExpression(`1 ${spelling}`);
 				if (value.type !== ValueType.Uom || value.unit !== spelling) {
 					broken.push(`1 ${spelling} is ${ValueType[value.type]} ${String(value.unit)}`);
 				}
@@ -267,7 +267,7 @@ describe("a spelling the lexer claims can actually be typed", () => {
 				["1 MN", 1_000_000],
 				["1 TN", 1e12],
 			] as const) {
-				const [value] = engine.evaluateExpression(source);
+				const value = engine.evaluateExpression(source);
 				expect(value.type).toBe(ValueType.Uom);
 				expect(convertUnit(value.toNumber(), value.unit!, "newton")).toBeCloseTo(expectedNewtons, 9);
 			}
@@ -300,8 +300,8 @@ describe("a spelling the lexer claims can actually be typed", () => {
 			if (base === undefined) continue;
 			const engine = newTrackedEngine();
 			try {
-				const [there] = engine.evaluateExpression(`1 ${spelling} in ${base}`);
-				const [back] = engine.evaluateExpression(`${there.toNumber()} ${base} in ${spelling}`);
+				const there = engine.evaluateExpression(`1 ${spelling} in ${base}`);
+				const back = engine.evaluateExpression(`${there.toNumber()} ${base} in ${spelling}`);
 				if (!Number.isFinite(back.toNumber()) || Math.abs(back.toNumber() - 1) > 1e-6) {
 					broken.push(`1 ${spelling} <-> ${base} came back as ${back.toNumber()}`);
 				}
@@ -354,8 +354,8 @@ describe("what the table holds that cannot be typed", () => {
 		// the two measures that use it.
 		const engine = newTrackedEngine();
 		try {
-			expect(engine.evaluateExpression("90°")[0].type).toBe(ValueType.Uom);
-			expect(engine.evaluateExpression("90° in rad")[0].toNumber()).toBeCloseTo(Math.PI / 2, 9);
+			expect(engine.evaluateExpression("90°").type).toBe(ValueType.Uom);
+			expect(engine.evaluateExpression("90° in rad").toNumber()).toBeCloseTo(Math.PI / 2, 9);
 		} finally {
 			engine.clear();
 		}
@@ -376,7 +376,7 @@ describe("what the table holds that cannot be typed", () => {
 		test.failing(`and for temperatures: ${source}`, () => {
 			const engine = newTrackedEngine();
 			try {
-				expect(engine.evaluateExpression(source)[0].toNumber()).toBeCloseTo(expected, 6);
+				expect(engine.evaluateExpression(source).toNumber()).toBeCloseTo(expected, 6);
 			} finally {
 				engine.clear();
 			}
@@ -395,7 +395,7 @@ describe("what the table holds that cannot be typed", () => {
 		test.failing(`and "${unit} to ?" only offers units that can be typed`, () => {
 			const engine = newTrackedEngine();
 			try {
-				const answer = engine.evaluateExpression(`${unit} to ?`)[0].value as string;
+				const answer = engine.evaluateExpression(`${unit} to ?`).value as string;
 				const untypeable = answer.split(", ").filter((symbol) => !knownUnits.has(symbol));
 				expect(untypeable).toEqual([]);
 			} finally {
@@ -407,7 +407,7 @@ describe("what the table holds that cannot be typed", () => {
 	test("the possibilities list is at least populated and mostly usable", () => {
 		const engine = newTrackedEngine();
 		try {
-			const answer = engine.evaluateExpression("kg to ?")[0].value as string;
+			const answer = engine.evaluateExpression("kg to ?").value as string;
 			const symbols = answer.split(", ");
 			expect(symbols.length).toBeGreaterThan(20);
 			expect(symbols.filter((symbol) => knownUnits.has(symbol)).length).toBeGreaterThan(20);

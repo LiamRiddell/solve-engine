@@ -163,20 +163,6 @@ export interface EngineOptions {
     diagnostics?: boolean;
 }
 
-/**
- * Return type of {@link evaluateLine} and {@link evaluateExpression}.
- *
- * A single-element `Value[]`, kept as an array (rather than a bare
- * `Value`) for API stability.
- */
-export interface EvalResults extends Array<Value> {}
-
-/** Explicit result of {@link ExpressionEngine.evaluateLineDetailed}. */
-export interface LineEvaluation {
-    /** The evaluated value, wrapped in a single-element array. */
-    values: Value[];
-}
-
 //#endregion
 
 /**
@@ -227,7 +213,7 @@ export interface LineEvaluation {
  * ```typescript
  * import { createEngine } from "solve-engine";
  * const engine = createEngine(); // every built-in package
- * const [value] = engine.evaluateExpression("2 + 2 * 10");
+ * const value = engine.evaluateExpression("2 + 2 * 10");
  * console.log(value.toNumber()); // 22
  * ```
  * @example
@@ -235,7 +221,7 @@ export interface LineEvaluation {
  * // A slimmer engine: only arithmetic and units reach the bundle.
  * import { ExpressionEngine } from "solve-engine";
  * import { ARITHMETIC_PACKAGE, UOM_PACKAGE } from "solve-engine/packages";
- * const engine = new ExpressionEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE, UOM_PACKAGE]);
+ * const engine = new ExpressionEngine({ packages: [ARITHMETIC_PACKAGE, UOM_PACKAGE] });
  * ```
  */
 //#region Class: ExpressionEngine
@@ -1353,8 +1339,7 @@ export class ExpressionEngine {
                 if (hasInlineSolves && !isVariableAssignment) {
                     for (const solve of inlineSolves) {
                         try {
-                            const values = this.evaluateLine(lineNumber, solve.expression);
-                            solve.result = values[0];
+                            solve.result = this.evaluateLine(lineNumber, solve.expression);
                         } catch (error) {
                             const errorMessage = error instanceof Error ? error.message : String(error);
                             solve.error = errorMessage;
@@ -2378,8 +2363,8 @@ export class ExpressionEngine {
      * compile-only callers. NOT used by `evaluateLine()`/
      * `evaluateExpression()`, those route through
      * {@link evaluateExpressionWithDiagnostic} instead (evaluateLine ->
-     * evaluateLineDetailed -> evaluateLineWithDebug ->
-     * evaluateExpressionWithDiagnostic), which does its own lexing and its
+     * evaluateLineWithDebug -> evaluateExpressionWithDiagnostic), which does
+     * its own lexing and its
      * own diagnostic-instrumented front-half, delegating to the SAME
      * {@link prepareExpression} this method calls. Delegates the front-half
      * to {@link prepareExpression}, then runs async preflight (via
@@ -2442,23 +2427,13 @@ export class ExpressionEngine {
 	 *
 	 * @param lineNumber - 1-based line position in the document.
 	 * @param lineText - The raw line text.
-	 * @returns The evaluated Value, wrapped in a single-element array.
+	 * @returns The evaluated {@link Value}.
 	 * @throws {EngineError} On evaluation failure.
 	 */
 	evaluateLine(
         lineNumber: number,
         lineText: string
-    ): EvalResults {
-        const detailed = this.evaluateLineDetailed(lineNumber, lineText);
-        return detailed.values.slice() as EvalResults;
-    }
-
-    /**
-     * Evaluate a line and return an explicit `{ values }` object.
-     *
-     * @throws {EngineError} On evaluation failure.
-     */
-    evaluateLineDetailed(lineNumber: number, lineText: string): LineEvaluation {
+    ): Value {
         const result = this.evaluateLineWithDebug(lineNumber, lineText);
         if (result.error) {
             // Re-throw the original error (its own specific code/category/
@@ -2477,7 +2452,7 @@ export class ExpressionEngine {
                 { lineNumber }
             );
         }
-        return { values: [freezeIfDev(result.value)] };
+        return freezeIfDev(result.value);
     }
 
     /**
@@ -3703,9 +3678,9 @@ export class ExpressionEngine {
 
     /**
      * Evaluate a raw expression string without line-number context.
-     * Returns the Value result. Throws on error.
+     * Returns the {@link Value} result. Throws on error.
      */
-    evaluateExpression(expression: string): EvalResults {
+    evaluateExpression(expression: string): Value {
         return this.evaluateLine(-1, expression);
     }
 
@@ -3997,12 +3972,11 @@ export class ExpressionEngine {
          }
 
          try {
-             const results = this.evaluateLine(-1, expression);
-             const value = results[0];
+             const value = this.evaluateLine(-1, expression);
              // A faulted result has no numeric meaning: toNumber() would read it
              // as 0, indistinguishable from a real zero. Surface it as NaN, the
              // same signal the bare-undefined-variable pre-check above returns.
-             if (value === undefined || value.isFault()) return NaN;
+             if (value.isFault()) return NaN;
              return value.toNumber();
          } catch {
              return NaN;

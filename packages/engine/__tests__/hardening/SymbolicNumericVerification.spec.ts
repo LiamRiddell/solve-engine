@@ -166,7 +166,7 @@ function smallInt(random: () => number, limit = 5): number {
  * legitimately answers 1.
  */
 function symbolicResult(engine: ExpressionEngine, source: string): SymbolicNode {
-	const [value] = engine.evaluateLine(1, source);
+	const value = engine.evaluateLine(1, source);
 	if (value.type === ValueType.Symbolic) return value.value as SymbolicNode;
 	if (value.type === ValueType.Number) return { kind: "const", value: { n: BigInt(Math.round(value.toNumber() * 1e9)), d: 1000000000n } };
 	throw new Error(`"${source}" produced ${ValueType[value.type]} rather than an algebraic result: ${String(value.value)}`);
@@ -183,7 +183,7 @@ function matrixCells(matrix: MatrixData): (number | boolean | SymbolicNode)[] {
 
 /** The roots `solve` returned, as complex numbers, whether it answered with one root or a row of them. */
 function solvedRoots(engine: ExpressionEngine, equation: string): Cpx[] {
-	const [value] = engine.evaluateLine(1, equation);
+	const value = engine.evaluateLine(1, equation);
 	if (value.type === ValueType.Matrix) {
 		return matrixCells(value.value as MatrixData).map(cell => (typeof cell === "number" ? cpx(cell) : evaluateSymbolic(cell as SymbolicNode, {})));
 	}
@@ -514,7 +514,7 @@ describe("every root solve returns satisfies the equation it came from", () => {
 			// A quartic whose roots have no exact closed form answers with a
 			// sentence rather than a row of roots, so the property under test is
 			// "whatever roots do come back are genuine", not "roots come back".
-			const [value] = engine.evaluateLine(1, source);
+			const value = engine.evaluateLine(1, source);
 			if (value.type === ValueType.String) continue;
 			answered++;
 			for (const root of solvedRoots(engine, source)) {
@@ -553,10 +553,10 @@ describe("every root solve returns satisfies the equation it came from", () => {
 
 	test("an equation with no solution and one true for every x are told apart", () => {
 		const engine = newTrackedEngine();
-		const [impossible] = engine.evaluateLine(1, "solve(0*x=1, x)");
+		const impossible = engine.evaluateLine(1, "solve(0*x=1, x)");
 		expect(impossible.type).toBe(ValueType.String);
 		expect(String(impossible.value)).toMatch(/no solution/i);
-		const [always] = engine.evaluateLine(2, "solve(0*x=0, x)");
+		const always = engine.evaluateLine(2, "solve(0*x=0, x)");
 		expect(always.type).toBe(ValueType.String);
 		expect(String(always.value)).toMatch(/every value/i);
 		engine.clear();
@@ -567,7 +567,7 @@ describe("every root solve returns satisfies the equation it came from", () => {
 		// declining is the only safe answer for a shape the solver has no method for.
 		const engine = newTrackedEngine();
 		for (const source of ["solve(sin(x)=0, x)", "solve(exp(x)=1, x)", "solve(1/x=2, x)"]) {
-			const [value] = engine.evaluateLine(1, source);
+			const value = engine.evaluateLine(1, source);
 			expect(value.type).toBe(ValueType.Error);
 			expect(String(value.value)).toBe("SYMBOLIC_SOLVE_UNSUPPORTED");
 		}
@@ -722,10 +722,10 @@ describe("solve accounts for every root, not just the ones it finds easily", () 
 		// An integer matrix has an integer determinant, so anything else is the
 		// method showing through the answer.
 		const engine = newTrackedEngine();
-		expect(engine.evaluateLine(1, "det([1,2,3;4,5,6;7,8,9])")[0].toNumber()).toBe(0);
-		expect(engine.evaluateLine(2, "det([2,0;0,3])")[0].toNumber()).toBe(6);
-		expect(engine.evaluateLine(3, "det([1,2,3;4,5,7;7,8,9])")[0].toNumber()).toBe(6);
-		expect(engine.evaluateLine(4, "det([0,1;1,0])")[0].toNumber()).toBe(-1);
+		expect(engine.evaluateLine(1, "det([1,2,3;4,5,6;7,8,9])").toNumber()).toBe(0);
+		expect(engine.evaluateLine(2, "det([2,0;0,3])").toNumber()).toBe(6);
+		expect(engine.evaluateLine(3, "det([1,2,3;4,5,7;7,8,9])").toNumber()).toBe(6);
+		expect(engine.evaluateLine(4, "det([0,1;1,0])").toNumber()).toBe(-1);
 		engine.clear();
 	});
 
@@ -760,7 +760,7 @@ describe("solve accounts for every root, not just the ones it finds easily", () 
 		// fixed: searching for higher-degree rational factors is a different
 		// algorithm (Zassenhaus or LLL), not a refinement of this one.
 		const engine = newTrackedEngine();
-		const [value] = engine.evaluateLine(1, "solve(x^5+x+1=0, x)");
+		const value = engine.evaluateLine(1, "solve(x^5+x+1=0, x)");
 		const cells = value.type === ValueType.Matrix ? matrixCells(value.value as MatrixData) : [];
 		const printed = cells.map(cell => (typeof cell === "object" ? formatSymbolic(cell) : String(cell))).join(", ");
 		expect(printed).toContain("sqrt(3)");
@@ -825,8 +825,8 @@ describe("der agrees with numerical differentiation", () => {
 
 	test("differentiating a constant, and with respect to an absent variable, gives zero", () => {
 		const engine = newTrackedEngine();
-		expect(engine.evaluateLine(1, "der(5, x)")[0].toNumber()).toBe(0);
-		expect(engine.evaluateLine(2, "der(y^2, x)")[0].toNumber()).toBe(0);
+		expect(engine.evaluateLine(1, "der(5, x)").toNumber()).toBe(0);
+		expect(engine.evaluateLine(2, "der(y^2, x)").toNumber()).toBe(0);
 		engine.clear();
 	});
 
@@ -895,7 +895,7 @@ describe("integral, differentiated again, returns the integrand", () => {
 	test("an integrand with no elementary antiderivative is refused rather than approximated", () => {
 		const engine = newTrackedEngine();
 		for (const source of ["integral(exp(x^2), x)", "integral(sin(x)/x, x)", "integral(exp(x)/x, x)"]) {
-			const [value] = engine.evaluateLine(1, source);
+			const value = engine.evaluateLine(1, source);
 			expect(value.type).toBe(ValueType.Error);
 			expect(String(value.value)).toBe("SYMBOLIC_INTEGRAL_UNSUPPORTED");
 		}
@@ -940,11 +940,11 @@ describe("naming a variable as a verb's unknown shadows the value the document g
 	 * the whole point: a notepad is a document, and the line above is very
 	 * often `:x = 5`.
 	 */
-	function onAPageDefining(source: string): ReturnType<ExpressionEngine["evaluateLine"]>[0] {
+	function onAPageDefining(source: string): ReturnType<ExpressionEngine["evaluateLine"]> {
 		const engine = newTrackedEngine();
 		engine.evaluateLine(1, ":x = 5");
 		engine.evaluateLine(2, ":y = 2");
-		const [value] = engine.evaluateLine(3, source);
+		const value = engine.evaluateLine(3, source);
 		engine.clear();
 		return value;
 	}
@@ -995,7 +995,7 @@ describe("naming a variable as a verb's unknown shadows the value the document g
 		const engine = newTrackedEngine();
 		engine.evaluateLine(1, ":x = 5");
 		engine.evaluateLine(2, "der(x^2, x)");
-		expect(engine.evaluateLine(3, "x + 1")[0].toNumber()).toBe(6);
+		expect(engine.evaluateLine(3, "x + 1").toNumber()).toBe(6);
 		engine.clear();
 	});
 
@@ -1003,8 +1003,8 @@ describe("naming a variable as a verb's unknown shadows the value the document g
 		// The shadow must not change the case that already worked.
 		const engine = newTrackedEngine();
 		expect(formatSymbolic(symbolicResult(engine, "der(x^2, x)"))).toBe("2x");
-		expect(engine.evaluateLine(2, "der(5, x)")[0].toNumber()).toBe(0);
-		expect(engine.evaluateLine(3, "der(y^2, x)")[0].toNumber()).toBe(0);
+		expect(engine.evaluateLine(2, "der(5, x)").toNumber()).toBe(0);
+		expect(engine.evaluateLine(3, "der(y^2, x)").toNumber()).toBe(0);
 		engine.clear();
 	});
 });
@@ -1056,7 +1056,7 @@ describe("a printed algebraic answer re-reads as the value it printed", () => {
 		const rereader = newTrackedEngine();
 		rereader.evaluateLine(1, `:x = ${x}`);
 		rereader.evaluateLine(2, `:y = ${y}`);
-		const [reread] = rereader.evaluateLine(3, printed);
+		const reread = rereader.evaluateLine(3, printed);
 		expect(reread.type).toBe(ValueType.Number);
 		expectAgreement(reread.toNumber(), truth.re, `${source} printed as "${printed}"`);
 		rereader.clear();

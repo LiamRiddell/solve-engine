@@ -48,7 +48,7 @@ describe("recursion-depth guard", () => {
     const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     engine.evaluateExpression("inc(x) = x + 1");
     const nestedCall = "inc(".repeat(10) + "0" + ")".repeat(10);
-    const [value] = engine.evaluateExpression(nestedCall);
+    const value = engine.evaluateExpression(nestedCall);
     expect(value.toNumber()).toBe(10);
   });
 });
@@ -95,9 +95,9 @@ describe("DAG parameter-shadowing exclusion", () => {
     const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     engine.evaluateExpression(":x = 100");
     engine.evaluateExpression("f(x) = x * 2");
-    const [callResult] = engine.evaluateExpression("f(5)");
+    const callResult = engine.evaluateExpression("f(5)");
     expect(callResult.toNumber()).toBe(10);
-    const [outerX] = engine.evaluateExpression(":x + 1");
+    const outerX = engine.evaluateExpression(":x + 1");
     expect(outerX.toNumber()).toBe(101);
   });
 });
@@ -117,7 +117,7 @@ describe("v1 scope restriction: async function bodies are rejected at definition
   test("a synchronous body defines and calls normally (no false positive)", () => {
     const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     engine.evaluateExpression("f(x) = x + 1");
-    const [value] = engine.evaluateExpression("f(4)");
+    const value = engine.evaluateExpression("f(4)");
     expect(value.toNumber()).toBe(5);
   });
 });

@@ -24,7 +24,7 @@ describe("Issue #136: a comma in a call or bracket is a separator, not a thousan
     engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
-  const evalOne = (source: string) => engine.evaluateExpression(source)[0];
+  const evalOne = (source: string) => engine.evaluateExpression(source);
 
   describe("bracketed vectors split on the comma", () => {
     test("`[100,200,300]` is a 1x3 row vector, not the number 100200300", () => {

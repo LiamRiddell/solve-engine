@@ -33,7 +33,7 @@ import { ValueType } from "@solve-js/vm/Value";
 
 function evaluate(source: string) {
 	const engine = newTrackedEngine();
-	const [value] = engine.evaluateExpression(source);
+	const value = engine.evaluateExpression(source);
 	return value;
 }
 
@@ -146,7 +146,7 @@ describe("a string operand", () => {
 		// here, only that arithmetic on a string must not answer as though the
 		// string were absent.
 		const engine = newTrackedEngine();
-		const sum = engine.evaluateExpression("\"abc\" + 1")[0];
+		const sum = engine.evaluateExpression("\"abc\" + 1");
 		expect(sum.type).not.toBe(ValueType.Number);
 	});
 

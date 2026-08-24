@@ -10,7 +10,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 
 function num(source: string): number {
 	const engine = newTrackedEngine();
-	const [value] = engine.evaluateExpression(source);
+	const value = engine.evaluateExpression(source);
 	return value.toNumber();
 }
 
@@ -45,7 +45,7 @@ describe("what `on` and `off` must not steal", () => {
 		// suite outright; this checks the word is still free.
 		const engine = newTrackedEngine();
 		engine.evaluateExpression(":on = 5");
-		const [value] = engine.evaluateExpression(":on + 1");
+		const value = engine.evaluateExpression(":on + 1");
 		expect(value.toNumber()).toBe(6);
 	});
 

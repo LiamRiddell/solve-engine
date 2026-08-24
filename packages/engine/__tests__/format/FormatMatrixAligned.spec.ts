@@ -11,7 +11,7 @@ import { ValueType, type MatrixData } from "@solve-js/vm/Value";
 
 function matrixOf(source: string): MatrixData {
 	const engine = newTrackedEngine();
-	const v = engine.evaluateExpression(source)[0];
+	const v = engine.evaluateExpression(source);
 	expect(v.type).toBe(ValueType.Matrix);
 	return v.value as MatrixData;
 }
@@ -36,6 +36,6 @@ test("the compact formatValue form is unchanged (still single line)", () => {
 	// The grid is a display extra; the canonical text an assertion or DTO reads
 	// must not move.
 	const engine = newTrackedEngine();
-	const v = engine.evaluateExpression("[1, 2; 3, 4]")[0];
+	const v = engine.evaluateExpression("[1, 2; 3, 4]");
 	expect(formatValue(v)).toBe("= [1, 2; 3, 4]");
 });

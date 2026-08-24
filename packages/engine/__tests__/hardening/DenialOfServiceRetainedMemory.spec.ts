@@ -41,7 +41,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 /** The error code a source reports, or `"no error"` when it evaluated. */
 function codeFrom(engine: ExpressionEngine, source: string): string {
 	try {
-		const [value] = engine.evaluateExpression(source);
+		const value = engine.evaluateExpression(source);
 		return value.type === 13 ? String(value.value) : "no error";
 	} catch (thrown) {
 		return (thrown as { code?: string }).code ?? "THREW";
@@ -109,8 +109,8 @@ describe("a matrix product is refused before it is built", () => {
 		// Pinned so the guard above is a ceiling rather than a removal, and so
 		// the two spellings keep agreeing on the answer as well as on the refusal.
 		const engine = newTrackedEngine();
-		const viaOperator = engine.evaluateExpression("[1,2;3,4] * [5,6;7,8]")[0];
-		const viaFunction = engine.evaluateExpression("dot([1,2;3,4], [5,6;7,8])")[0];
+		const viaOperator = engine.evaluateExpression("[1,2;3,4] * [5,6;7,8]");
+		const viaFunction = engine.evaluateExpression("dot([1,2;3,4], [5,6;7,8])");
 		expect(viaFunction.value).toEqual(viaOperator.value);
 	});
 });

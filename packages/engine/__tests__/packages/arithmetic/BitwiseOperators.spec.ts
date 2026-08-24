@@ -16,7 +16,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 function evaluate(source: string): number {
 	const engine = newTrackedEngine();
 	try {
-		return engine.evaluateExpression(source)[0].toNumber();
+		return engine.evaluateExpression(source).toNumber();
 	} finally {
 		engine.clear();
 	}
@@ -26,7 +26,7 @@ function evaluate(source: string): number {
 function evaluateRaw(source: string): unknown {
 	const engine = newTrackedEngine();
 	try {
-		return engine.evaluateExpression(source)[0].value;
+		return engine.evaluateExpression(source).value;
 	} finally {
 		engine.clear();
 	}

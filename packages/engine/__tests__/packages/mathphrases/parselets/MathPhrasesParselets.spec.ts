@@ -61,7 +61,7 @@ function parseAndExecute(input: string): Value {
 
 function evalReal(expr: string): Value {
   const engine = newTrackedEngine();
-  const [value] = engine.evaluateExpression(expr);
+  const value = engine.evaluateExpression(expr);
   return value;
 }
 
@@ -217,7 +217,7 @@ describe("MATHPHRASES_PACKAGE — real engine wiring", () => {
     const engine = newTrackedEngine();
     engine.evaluateExpression(":subtotal = 100");
     engine.evaluateExpression(":tax = 8");
-    const [value] = engine.evaluateExpression(":total = :subtotal + :tax");
+    const value = engine.evaluateExpression(":total = :subtotal + :tax");
     expect(value.toNumber()).toBe(108);
   });
 
@@ -226,7 +226,7 @@ describe("MATHPHRASES_PACKAGE — real engine wiring", () => {
     engine.evaluateExpression(":average = 42");
     engine.evaluateExpression(":half = 21");
     engine.evaluateExpression(":count = 3");
-    const [value] = engine.evaluateExpression(":average + :half + :count");
+    const value = engine.evaluateExpression(":average + :half + :count");
     expect(value.toNumber()).toBe(66);
   });
 });

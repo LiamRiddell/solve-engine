@@ -37,7 +37,7 @@ describe("Phase 1: Safety Limits", () => {
     const engine = newTrackedEngine({ config: {
       validation: { maxExpressionLength: 10, maxComplexity: 500, maxNestingDepth: 50, autoBalanceParens: false },
     } });
-    expect(engine.evaluateLine(1, "1 + 2")[0].toNumber()).toBe(3);
+    expect(engine.evaluateLine(1, "1 + 2").toNumber()).toBe(3);
   });
 
   test("rejects expression through compileExpression when too long", () => {
@@ -74,7 +74,7 @@ describe("Phase 1: Safety Limits", () => {
 
   test("accepts expression within complexity limit", () => {
     const engine = newTrackedEngine();
-    const [result] = engine.evaluateLine(1, "1 + 2 * 3");
+    const result = engine.evaluateLine(1, "1 + 2 * 3");
     expect(result.toNumber()).toBe(7);
   });
 
@@ -103,13 +103,13 @@ describe("Phase 1: Safety Limits", () => {
       validation: { maxExpressionLength: 2000, maxComplexity: 500, maxNestingDepth: 10, autoBalanceParens: false },
     } });
     // ((1 + 2) * 3) — depth 3, under 10
-    const [result] = engine.evaluateLine(1, "((1 + 2) * 3)");
+    const result = engine.evaluateLine(1, "((1 + 2) * 3)");
     expect(result.toNumber()).toBe(9);
   });
 
   test("default nesting depth allows reasonable expressions", () => {
     const engine = newTrackedEngine();
-    const [result] = engine.evaluateLine(1, "((1 + 2) * (3 + 4))");
+    const result = engine.evaluateLine(1, "((1 + 2) * (3 + 4))");
     expect(result.toNumber()).toBe(21);
   });
 
@@ -125,7 +125,7 @@ describe("Phase 1: Safety Limits", () => {
 
   test("evaluateLine returns correct result for valid expression", () => {
     const engine = newTrackedEngine();
-    const [result] = engine.evaluateLine(1, "10 + 20");
+    const result = engine.evaluateLine(1, "10 + 20");
     expect(result.toNumber()).toBe(30);
   });
 
@@ -192,7 +192,7 @@ describe("Phase 1: Safety Limits", () => {
       validation: { maxExpressionLength: 100, maxComplexity: 500, maxNestingDepth: 50, autoBalanceParens: false },
     } });
     // Expression within 100-char limit should pass
-    expect(engine.evaluateLine(1, "42 + 1")[0].toNumber()).toBe(43);
+    expect(engine.evaluateLine(1, "42 + 1").toNumber()).toBe(43);
     // Expression exceeding 100 chars should fail
     expect(() => engine.evaluateLine(1, "1".repeat(150))).toThrow(/max length/i);
   });
@@ -201,7 +201,7 @@ describe("Phase 1: Safety Limits", () => {
     const engine = newTrackedEngine();
     // Default maxExpressionLength is 2000 — a normal expression should pass
     expect(() => engine.evaluateLine(1, "1 + 2 * 3")).not.toThrow();
-    expect(engine.evaluateLine(1, "1 + 2 * 3")[0].toNumber()).toBe(7);
+    expect(engine.evaluateLine(1, "1 + 2 * 3").toNumber()).toBe(7);
   });
 
   // ── compileExpression safety path ─────────────────────────────────────
@@ -254,7 +254,7 @@ describe("Phase 1: Safety Limits", () => {
     const nums = Array.from({ length: 256 }, (_, i) => i + 1); // 1..256, all distinct
     const expr = nums.join("+");
     const expectedSum = nums.reduce((a, b) => a + b, 0);
-    const [value] = engine.evaluateExpression(expr);
+    const value = engine.evaluateExpression(expr);
     expect(value.toNumber()).toBe(expectedSum);
   });
 });

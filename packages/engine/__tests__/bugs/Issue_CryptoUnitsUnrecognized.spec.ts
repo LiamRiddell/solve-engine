@@ -32,7 +32,7 @@ describe("Bug: cryptocurrency codes not recognized as units", () => {
     "%s lexes as a currency unit, not an undefined variable",
     (code) => {
       expect(() => engine.evaluateLine(1, `1 ${code}`)).not.toThrow();
-      const [result] = engine.evaluateLine(1, `1 ${code}`);
+      const result = engine.evaluateLine(1, `1 ${code}`);
       expect(result.type).toBe(ValueType.Uom);
       expect(result.unit).toBe(code);
     }

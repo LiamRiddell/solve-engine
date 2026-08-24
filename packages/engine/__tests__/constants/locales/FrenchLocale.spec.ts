@@ -21,37 +21,37 @@ function displaySettings(localeCode: string) {
 describe("formatDatetime — locale-aware weekday/month display", () => {
 	test("English: spelled-out weekday and month", () => {
 		const engine = newTrackedEngine();
-		const [value] = engine.evaluateExpression("17/11/2025");
+		const value = engine.evaluateExpression("17/11/2025");
 		expect(formatValue(value, displaySettings("en"))).toBe("= Monday, November 17, 2025");
 	});
 
 	test("German: locale.code is now actually used (previously always fell through to English)", () => {
 		const engine = newTrackedEngine();
-		const [value] = engine.evaluateExpression("17/11/2025");
+		const value = engine.evaluateExpression("17/11/2025");
 		expect(formatValue(value, displaySettings("de"))).toBe("= Montag, 17. November 2025");
 	});
 
 	test("French: 'lundi' not 'Monday' — the exact bug from issue #77", () => {
 		const engine = newTrackedEngine();
-		const [value] = engine.evaluateExpression("17/11/2025");
+		const value = engine.evaluateExpression("17/11/2025");
 		expect(formatValue(value, displaySettings("fr"))).toBe("= lundi 17 novembre 2025");
 	});
 
 	test("an unregistered locale code falls back to English, not a crash", () => {
 		const engine = newTrackedEngine();
-		const [value] = engine.evaluateExpression("17/11/2025");
+		const value = engine.evaluateExpression("17/11/2025");
 		expect(formatValue(value, displaySettings("xx"))).toBe("= Monday, November 17, 2025");
 	});
 
 	test("bare date literals (anchored to local midnight) show no time component", () => {
 		const engine = newTrackedEngine();
-		const [value] = engine.evaluateExpression("25/12/2023");
+		const value = engine.evaluateExpression("25/12/2023");
 		expect(formatValue(value, displaySettings("fr"))).not.toMatch(/\d\d:\d\d:\d\d/);
 	});
 
 	test("'now' (a genuine timestamp, not midnight) DOES show a time component", () => {
 		const engine = newTrackedEngine();
-		const [value] = engine.evaluateExpression("now");
+		const value = engine.evaluateExpression("now");
 		expect(formatValue(value, displaySettings("en"))).toMatch(/\d{1,2}:\d\d:\d\d/);
 	});
 });
@@ -59,23 +59,23 @@ describe("formatDatetime — locale-aware weekday/month display", () => {
 describe("French locale — input keywords", () => {
 	test("basic arithmetic words", () => {
 		const engine = newTrackedEngine({ locale: "fr" });
-		expect(engine.evaluateExpression("5 plus 3")[0].toNumber()).toBe(8);
-		expect(engine.evaluateExpression("5 fois 3")[0].toNumber()).toBe(15);
-		expect(engine.evaluateExpression("10 moins 3")[0].toNumber()).toBe(7);
-		expect(engine.evaluateExpression("10 diviser 2")[0].toNumber()).toBe(5);
+		expect(engine.evaluateExpression("5 plus 3").toNumber()).toBe(8);
+		expect(engine.evaluateExpression("5 fois 3").toNumber()).toBe(15);
+		expect(engine.evaluateExpression("10 moins 3").toNumber()).toBe(7);
+		expect(engine.evaluateExpression("10 diviser 2").toNumber()).toBe(5);
 	});
 
 	test("date keywords, including 'aujourdhui' (today, deliberately unapostrophed)", () => {
 		const engine = newTrackedEngine({ locale: "fr" });
-		expect(engine.evaluateExpression("maintenant")[0].type).toBe(4); // Datetime
-		expect(engine.evaluateExpression("aujourdhui")[0].type).toBe(4);
-		expect(engine.evaluateExpression("demain")[0].type).toBe(4);
-		expect(engine.evaluateExpression("hier")[0].type).toBe(4);
+		expect(engine.evaluateExpression("maintenant").type).toBe(4); // Datetime
+		expect(engine.evaluateExpression("aujourdhui").type).toBe(4);
+		expect(engine.evaluateExpression("demain").type).toBe(4);
+		expect(engine.evaluateExpression("hier").type).toBe(4);
 	});
 
 	test("weekday names work in context ('prochain lundi', matching English 'next monday')", () => {
 		const engine = newTrackedEngine({ locale: "fr" });
-		const [value] = engine.evaluateExpression("prochain lundi");
+		const value = engine.evaluateExpression("prochain lundi");
 		expect(value.type).toBe(4); // Datetime
 	});
 
@@ -88,8 +88,8 @@ describe("French locale — input keywords", () => {
 
 	test("functions with identical French/English spelling work (sin, cos, abs, min, max)", () => {
 		const engine = newTrackedEngine({ locale: "fr" });
-		expect(engine.evaluateExpression("sin(0)")[0].toNumber()).toBe(0);
-		expect(engine.evaluateExpression("abs(-5)")[0].toNumber()).toBe(5);
+		expect(engine.evaluateExpression("sin(0)").toNumber()).toBe(0);
+		expect(engine.evaluateExpression("abs(-5)").toNumber()).toBe(5);
 	});
 
 	test("regression guard: a French-only function name is NOT silently broken — it errors clearly rather than returning a wrong number (builtinNameToIndex is a separate, locale-independent dispatch table)", () => {
@@ -99,14 +99,14 @@ describe("French locale — input keywords", () => {
 
 	test("booleans and conditionals", () => {
 		const engine = newTrackedEngine({ locale: "fr" });
-		expect(engine.evaluateExpression("vrai")[0].value).toBe(true);
-		expect(engine.evaluateExpression("faux")[0].value).toBe(false);
-		expect(engine.evaluateExpression("si 5 alors 1 sinon 0")[0].toNumber()).toBe(1);
+		expect(engine.evaluateExpression("vrai").value).toBe(true);
+		expect(engine.evaluateExpression("faux").value).toBe(false);
+		expect(engine.evaluateExpression("si 5 alors 1 sinon 0").toNumber()).toBe(1);
 	});
 
 	test("vec2/vec3/vec4 use the same spelling as English", () => {
 		const engine = newTrackedEngine({ locale: "fr" });
-		const [value] = engine.evaluateExpression("vec2(1, 2)");
+		const value = engine.evaluateExpression("vec2(1, 2)");
 		expect((value.value as MatrixData).data).toEqual([1, 2]);
 	});
 

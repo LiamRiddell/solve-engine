@@ -71,7 +71,7 @@ function parseAndExecute(input: string): Value {
 
 function evalReal(expr: string): Value {
   const engine = newTrackedEngine();
-  const [value] = engine.evaluateExpression(expr);
+  const value = engine.evaluateExpression(expr);
   return value;
 }
 
@@ -280,7 +280,7 @@ describe("FINANCE_PACKAGE — real engine wiring", () => {
     const engine = newTrackedEngine();
     engine.evaluateExpression(":subtotal = 100");
     engine.evaluateExpression(":tax = 8");
-    const [value] = engine.evaluateExpression(":total = :subtotal + :tax");
+    const value = engine.evaluateExpression(":total = :subtotal + :tax");
     expect(value.toNumber()).toBe(108);
   });
 
@@ -291,7 +291,7 @@ describe("FINANCE_PACKAGE — real engine wiring", () => {
     engine.evaluateExpression(":interest = 50");
     engine.evaluateExpression(":payment = 25");
     engine.evaluateExpression(":vat = 20");
-    const [value] = engine.evaluateExpression(":principal + :rate + :interest + :payment + :vat");
+    const value = engine.evaluateExpression(":principal + :rate + :interest + :payment + :vat");
     expect(value.toNumber()).toBeCloseTo(1000 + 0.07 + 50 + 25 + 20, 6);
   });
 

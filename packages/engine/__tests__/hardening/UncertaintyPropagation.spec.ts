@@ -24,14 +24,14 @@ import { formatValue } from "@solve-js/format/FormatEngine";
 /** The formatted, user-facing result of a single expression. */
 function display(expr: string): string {
 	const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
-	const [value] = engine.evaluateExpression(expr);
+	const value = engine.evaluateExpression(expr);
 	return formatValue(value);
 }
 
 /** The evaluated Value, for asserting its center and uncertainty sidecar directly. */
 function evaluate(expr: string) {
 	const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
-	const [value] = engine.evaluateExpression(expr);
+	const value = engine.evaluateExpression(expr);
 	return value;
 }
 
@@ -115,7 +115,7 @@ describe("the tolerance travels across a stored variable", () => {
 	test("a measurement assigned to a variable still propagates", () => {
 		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		engine.evaluateLine(1, ":a = 12.3 +/- 0.5");
-		const [value] = engine.evaluateLine(2, "a * 4");
+		const value = engine.evaluateLine(2, "a * 4");
 		expect(formatValue(value)).toBe("= 49.2 ± 2.0");
 	});
 });

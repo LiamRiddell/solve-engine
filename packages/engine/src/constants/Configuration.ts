@@ -84,7 +84,7 @@ export interface DateConfig {
    *
    * Optional and unset by default: with no calendar, working-day arithmetic
    * skips weekends only. A host that wants holidays excluded too supplies one
-   * here (`new ExpressionEngine("en", false, { date: { holidays } })`), the
+   * here (`new ExpressionEngine({ config: { date: { holidays } } })`), the
    * same way stocks and weather take a host data source. Threaded into the VM
    * by `engine/ExpressionEngine.ts` exactly as {@link maxOffsetYears} is,
    * because working-day math is a VM operation several grammar forms share, so
@@ -271,13 +271,13 @@ export interface WorkerConfig {
  * ```typescript
  * import { ExpressionEngine } from "solve-js";
  *
- * const engine = new ExpressionEngine("en", false, {
+ * const engine = new ExpressionEngine({ config: {
  *   validation: {
  *     maxExpressionLength: 1000,
  *     maxComplexity: 200,
  *   },
  *   // date, performance, vm, worker, diagnostic all use defaults
- * });
+ * } });
  * ```
  */
 export interface EngineConfig {

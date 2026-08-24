@@ -108,7 +108,6 @@ function entryPoints(engine: ReturnType<typeof newTrackedEngine>, source: string
 	return [
 		["evaluateExpression", () => engine.evaluateExpression(source)],
 		["evaluateLine", () => engine.evaluateLine(7, source)],
-		["evaluateLineDetailed", () => engine.evaluateLineDetailed(7, source)],
 		["evaluateLineWithDebug", () => engine.evaluateLineWithDebug(7, source)],
 		["evaluateLines", () => engine.evaluateLines([source])],
 		["parseDocument", () => engine.parseDocument(source)],
@@ -187,10 +186,10 @@ describe("malformed input reaches an answer or an EngineError, never a JS error"
 				/* every one of these is allowed to fail; only the aftermath matters */
 			}
 		}
-		expect(engine.evaluateExpression("2+2")[0].toNumber()).toBe(4);
-		expect(engine.evaluateExpression("(1+2)*(3+4)")[0].toNumber()).toBe(21);
+		expect(engine.evaluateExpression("2+2").toNumber()).toBe(4);
+		expect(engine.evaluateExpression("(1+2)*(3+4)").toNumber()).toBe(21);
 		engine.evaluateLine(1, ":x = 5");
-		expect(engine.evaluateLine(2, ":x * 3")[0].toNumber()).toBe(15);
+		expect(engine.evaluateLine(2, ":x * 3").toNumber()).toBe(15);
 	});
 
 	test("interleaving malformed lines with good ones does not corrupt the good ones", () => {
@@ -206,7 +205,7 @@ describe("malformed input reaches an answer or an EngineError, never a JS error"
 				/* expected for most of the corpus */
 			}
 		}
-		expect(engine.evaluateLine(3, ":total + 5")[0].toNumber()).toBe(15);
+		expect(engine.evaluateLine(3, ":total + 5").toNumber()).toBe(15);
 	});
 });
 
@@ -288,8 +287,8 @@ describe("a builtin called with the wrong number of arguments", () => {
 		const engine = newTrackedEngine();
 		expect(() => engine.evaluateExpression("sqrt(1,2,3)")).toThrow(EngineError);
 		expect(() => engine.evaluateExpression("gcd(4,6,8)")).toThrow(EngineError);
-		expect(engine.evaluateExpression("max(1,2,3,4)")[0].toNumber()).toBe(4);
-		expect(engine.evaluateExpression("hypot(3,4)")[0].toNumber()).toBe(5);
+		expect(engine.evaluateExpression("max(1,2,3,4)").toNumber()).toBe(4);
+		expect(engine.evaluateExpression("hypot(3,4)").toNumber()).toBe(5);
 	});
 
 	test("is a recoverable user error, not a fatal engine fault", () => {

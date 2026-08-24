@@ -12,7 +12,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 
 function num(source: string): number {
 	const engine = newTrackedEngine();
-	const [value] = engine.evaluateExpression(source);
+	const value = engine.evaluateExpression(source);
 	return value.toNumber();
 }
 
@@ -79,14 +79,14 @@ describe("what the words must not break", () => {
 		// letter table's own doc comment has always guarded against, and adding
 		// spaced words must not reopen it.
 		const engine = newTrackedEngine();
-		const [value] = engine.evaluateExpression("5 m in cm");
+		const value = engine.evaluateExpression("5 m in cm");
 		expect(value.toNumber()).toBeCloseTo(500, 6);
 	});
 
 	test("`million` is still usable as a variable name", () => {
 		const engine = newTrackedEngine();
 		engine.evaluateExpression(":million = 7");
-		const [value] = engine.evaluateExpression(":million + 1");
+		const value = engine.evaluateExpression(":million + 1");
 		expect(value.toNumber()).toBe(8);
 	});
 });

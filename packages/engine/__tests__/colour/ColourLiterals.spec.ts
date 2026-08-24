@@ -19,7 +19,7 @@ function lineColour(line: string): ColourData | null {
 
 function evalValue(source: string) {
 	const engine = newTrackedEngine();
-	return engine.evaluateExpression(source)[0];
+	return engine.evaluateExpression(source);
 }
 
 describe("hex literals are colours", () => {

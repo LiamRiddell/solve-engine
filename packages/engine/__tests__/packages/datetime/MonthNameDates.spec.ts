@@ -21,7 +21,7 @@ import { ValueType } from "@solve-js/vm/Value";
 
 function evaluate(source: string) {
 	const engine = newTrackedEngine();
-	const [value] = engine.evaluateExpression(source);
+	const value = engine.evaluateExpression(source);
 	return value;
 }
 
@@ -124,7 +124,7 @@ describe("what must not be swallowed", () => {
 	test("`may` as an ordinary word is untouched when no number follows", () => {
 		const engine = newTrackedEngine();
 		engine.evaluateExpression(":may = 5");
-		expect(engine.evaluateExpression(":may + 1")[0].toNumber()).toBe(6);
+		expect(engine.evaluateExpression(":may + 1").toNumber()).toBe(6);
 	});
 
 	test("all-numeric literals still belong to the numeric rule", () => {

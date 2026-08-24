@@ -71,7 +71,7 @@ describe("what must keep working", () => {
 
 	test("a matrix literal is not mistaken for a checkbox", () => {
 		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
-		const [value] = engine.evaluateExpression("[1,2] + [3,4]");
+		const value = engine.evaluateExpression("[1,2] + [3,4]");
 		expect((value.value as { data: number[] }).data).toEqual([4, 6]);
 	});
 

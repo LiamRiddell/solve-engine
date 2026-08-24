@@ -34,7 +34,7 @@ describe("Issue #155: an ambiguous subexpression source defers to a single runti
     const engine = engineWithProvider(provider);
 
     const first = engine.evaluateLine(1, "(100 USD * (5 JPY / 5 JPY)) in GBP on 2024-01-15");
-    expect(first[0].type).toBe(ValueType.Pending);
+    expect(first.type).toBe(ValueType.Pending);
 
     for (let i = 0; i < 8; i++) await new Promise((r) => setTimeout(r, 0));
 

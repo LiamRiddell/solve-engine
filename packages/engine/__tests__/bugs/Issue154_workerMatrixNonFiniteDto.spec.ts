@@ -22,7 +22,7 @@ describe("Issue #154: a non-finite matrix cell survives the DTO's JSON round-tri
     engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
-  const dtoOf = (source: string): SerializedValue => serializeValue(engine.evaluateExpression(source)[0]);
+  const dtoOf = (source: string): SerializedValue => serializeValue(engine.evaluateExpression(source));
 
   function expectPortable(dto: SerializedValue): void {
     expect(structuredClone(dto)).toEqual(dto);

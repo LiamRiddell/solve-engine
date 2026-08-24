@@ -22,7 +22,7 @@ describe("Issue #150: a grouping paren keeps thousands; a call paren stays a sep
     engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
-  const val = (s: string) => engine.evaluateExpression(s)[0];
+  const val = (s: string) => engine.evaluateExpression(s);
 
   describe("bare grouping parens group thousands (the regression)", () => {
     test.each([

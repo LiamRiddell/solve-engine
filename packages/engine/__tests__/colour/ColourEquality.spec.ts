@@ -10,7 +10,7 @@ import { ValueType } from "@solve-js/vm/Value";
 
 function evalBool(source: string): boolean {
 	const engine = newTrackedEngine();
-	const v = engine.evaluateExpression(source)[0];
+	const v = engine.evaluateExpression(source);
 	expect(v.type).toBe(ValueType.Boolean);
 	return v.value === true;
 }

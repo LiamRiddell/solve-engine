@@ -168,7 +168,7 @@ describe("AsyncPipeline — end-to-end async resolution", () => {
 		const { events, stop } = captureEngineEvents(engine);
 
 		// Evaluate an expression — the preflight should trigger async path
-		const [result] = engine.evaluateLine(1, "dummy");
+		const result = engine.evaluateLine(1, "dummy");
 
 		// Should return Pending immediately
 		expect(result.type).toBe(ValueType.Pending);
@@ -227,7 +227,7 @@ describe("AsyncPipeline — end-to-end async resolution", () => {
 		const engine = new ExpressionEngine({ packages: [pkg] });
 
 		// Simple numeric expression — should execute synchronously
-		const [result] = engine.evaluateLine(1, "42");
+		const result = engine.evaluateLine(1, "42");
 
 		expect(result.type).toBe(ValueType.Number);
 		expect(result.value).toBe(42);
@@ -249,7 +249,7 @@ describe("AsyncPipeline — end-to-end async resolution", () => {
 		const { events, stop } = captureEngineEvents(engine);
 
 		// Evaluate a simple numeric expression — preflight triggers async
-		const [result] = engine.evaluateLine(1, "50");
+		const result = engine.evaluateLine(1, "50");
 
 		expect(result.type).toBe(ValueType.Pending);
 
@@ -1146,7 +1146,7 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 		const { events, stop } = captureEngineEvents(engine);
 
 		// Step 1: Evaluate — returns Pending
-		const [pending] = engine.evaluateLine(1, "100");
+		const pending = engine.evaluateLine(1, "100");
 		expect(pending.type).toBe(ValueType.Pending);
 		expect(pending.value).toBe("fullcycle:data");
 
@@ -1186,7 +1186,7 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 		const engine = new ExpressionEngine({ packages: [pkg] });
 		const { events, stop } = captureEngineEvents(engine);
 
-		const [result] = engine.evaluateLine(1, "50");
+		const result = engine.evaluateLine(1, "50");
 		expect(result.type).toBe(ValueType.Pending);
 
 		await tick();
@@ -1226,14 +1226,14 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 		const pkg = buildResolverPackage("multieval", resolver);
 		const engine = new ExpressionEngine({ packages: [pkg] });
 
-		const [r1] = engine.evaluateLine(1, "10");
+		const r1 = engine.evaluateLine(1, "10");
 		expect(r1.type).toBe(ValueType.Pending);
 
 		await resolvePromise1;
 		await tick();
 		await tick();
 
-		const [r2] = engine.evaluateLine(2, "20");
+		const r2 = engine.evaluateLine(2, "20");
 		expect(r2.type).toBe(ValueType.Number);
 		expect(r2.value).toBe(20);
 

@@ -26,7 +26,7 @@ describe("clear releases the per-document state", () => {
 	test("local variables are gone", () => {
 		const engine = newTrackedEngine();
 		engine.evaluateLine(1, ":x = 41");
-		expect(engine.evaluateLine(2, ":x + 1")[0].toNumber()).toBe(42);
+		expect(engine.evaluateLine(2, ":x + 1").toNumber()).toBe(42);
 
 		engine.clear();
 		expect(() => engine.evaluateLine(2, ":x + 1")).toThrow(EngineError);
@@ -35,7 +35,7 @@ describe("clear releases the per-document state", () => {
 	test("user-defined functions are gone", () => {
 		const engine = newTrackedEngine();
 		engine.evaluateLine(1, "double(x) = x*2");
-		expect(engine.evaluateLine(2, "double(4)")[0].toNumber()).toBe(8);
+		expect(engine.evaluateLine(2, "double(4)").toNumber()).toBe(8);
 
 		engine.clear();
 		expect(() => engine.evaluateLine(2, "double(4)")).toThrow(EngineError);
@@ -69,8 +69,8 @@ describe("an engine is fully usable after clear", () => {
 		const engine = newTrackedEngine();
 		engine.evaluateLine(1, ":x = 5");
 		engine.clear();
-		expect(engine.evaluateExpression("2+2")[0].toNumber()).toBe(4);
-		expect(engine.evaluateExpression("(1+2)*(3+4)")[0].toNumber()).toBe(21);
+		expect(engine.evaluateExpression("2+2").toNumber()).toBe(4);
+		expect(engine.evaluateExpression("(1+2)*(3+4)").toNumber()).toBe(21);
 	});
 
 	test("the same variable name can be defined again with a different value", () => {
@@ -81,7 +81,7 @@ describe("an engine is fully usable after clear", () => {
 		engine.evaluateLine(2, ":x * 2");
 		engine.clear();
 		engine.evaluateLine(1, ":x = 100");
-		expect(engine.evaluateLine(2, ":x * 2")[0].toNumber()).toBe(200);
+		expect(engine.evaluateLine(2, ":x * 2").toNumber()).toBe(200);
 	});
 
 	test("clearing twice in a row is harmless", () => {
@@ -92,14 +92,14 @@ describe("an engine is fully usable after clear", () => {
 		engine.evaluateLine(1, ":x = 5");
 		engine.clear();
 		engine.clear();
-		expect(engine.evaluateExpression("1+1")[0].toNumber()).toBe(2);
+		expect(engine.evaluateExpression("1+1").toNumber()).toBe(2);
 	});
 
 	test("clearing right after a failed line works too", () => {
 		const engine = newTrackedEngine();
 		expect(() => engine.evaluateLine(1, "1 + * 2")).toThrow(EngineError);
 		engine.clear();
-		expect(engine.evaluateExpression("1+1")[0].toNumber()).toBe(2);
+		expect(engine.evaluateExpression("1+1").toNumber()).toBe(2);
 	});
 });
 
@@ -114,7 +114,7 @@ describe("the one store that deliberately outlives a document", () => {
 		const engine = newTrackedEngine();
 		engine.evaluateLine(1, "global :robustnessLifecycleProbe = 7");
 		engine.clear();
-		expect(engine.evaluateLine(1, "global :robustnessLifecycleProbe")[0].toNumber()).toBe(7);
+		expect(engine.evaluateLine(1, "global :robustnessLifecycleProbe").toNumber()).toBe(7);
 	});
 });
 
@@ -127,14 +127,14 @@ describe("one engine reused the way a document reuses it", () => {
 		// that collides.
 		const engine = newTrackedEngine();
 		for (let line = 1; line <= 2000; line++) {
-			expect(engine.evaluateLine(line, `${line} + ${line}`)[0].toNumber()).toBe(line * 2);
+			expect(engine.evaluateLine(line, `${line} + ${line}`).toNumber()).toBe(line * 2);
 		}
 	});
 
 	test("the same line re-evaluated a thousand times gives the same answer", () => {
 		const engine = newTrackedEngine();
 		for (let i = 0; i < 1000; i++) {
-			expect(engine.evaluateLine(1, "(2+3)*(4+5)")[0].toNumber()).toBe(45);
+			expect(engine.evaluateLine(1, "(2+3)*(4+5)").toNumber()).toBe(45);
 		}
 	});
 
@@ -142,7 +142,7 @@ describe("one engine reused the way a document reuses it", () => {
 		const engine = newTrackedEngine();
 		for (let value = 1; value <= 200; value++) {
 			engine.evaluateLine(1, `:price = ${value}`);
-			expect(engine.evaluateLine(2, ":price * 3")[0].toNumber()).toBe(value * 3);
+			expect(engine.evaluateLine(2, ":price * 3").toNumber()).toBe(value * 3);
 		}
 	});
 
@@ -153,7 +153,7 @@ describe("one engine reused the way a document reuses it", () => {
 		const engine = newTrackedEngine();
 		for (let i = 0; i < 500; i++) {
 			expect(() => engine.evaluateLine(1, "1 + * 2")).toThrow(EngineError);
-			expect(engine.evaluateLine(2, "6*7")[0].toNumber()).toBe(42);
+			expect(engine.evaluateLine(2, "6*7").toNumber()).toBe(42);
 		}
 	});
 });

@@ -30,7 +30,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 
 function evalReal(expr: string) {
   const engine = newTrackedEngine();
-  const [value] = engine.evaluateExpression(expr);
+  const value = engine.evaluateExpression(expr);
   return value;
 }
 

@@ -19,7 +19,7 @@ describe("Issue #141: a non-finite reading survives the DTO's JSON round-trip", 
     engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
-  const dtoOf = (source: string): SerializedValue => serializeValue(engine.evaluateExpression(source)[0]);
+  const dtoOf = (source: string): SerializedValue => serializeValue(engine.evaluateExpression(source));
 
   function expectPortable(dto: SerializedValue): void {
     expect(structuredClone(dto)).toEqual(dto);

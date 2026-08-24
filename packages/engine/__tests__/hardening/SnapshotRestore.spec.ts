@@ -150,8 +150,8 @@ describe("a restored engine behaves like the one that evaluated the document", (
 		const restored = roundTrip(engine);
 
 		for (const expr of [":price + 1", "double(21)", ":subtotal", "double(price) + qty"]) {
-			const before = engine.evaluateExpression(expr)[0];
-			const after = restored.evaluateExpression(expr)[0];
+			const before = engine.evaluateExpression(expr);
+			const after = restored.evaluateExpression(expr);
 			expect(after.toNumber()).toBe(before.toNumber());
 			expect(after.type).toBe(before.type);
 		}
@@ -161,8 +161,8 @@ describe("a restored engine behaves like the one that evaluated the document", (
 		const engine = track(new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
 		engine.parseDocument("cube(n) = n * n * n\n:seed = 4");
 		const restored = roundTrip(engine);
-		expect(restored.evaluateExpression("cube(3)")[0].toNumber()).toBe(27);
-		expect(restored.evaluateExpression("cube(seed)")[0].toNumber()).toBe(64);
+		expect(restored.evaluateExpression("cube(3)").toNumber()).toBe(27);
+		expect(restored.evaluateExpression("cube(seed)").toNumber()).toBe(64);
 	});
 
 	test("the restore uses the snapshot's own locale by default", () => {
@@ -172,7 +172,7 @@ describe("a restored engine behaves like the one that evaluated the document", (
 		expect(snapshot.locale).toBe("en");
 		const restored = track(ExpressionEngine.fromJSON(snapshot, { packages: BUILTIN_PACKAGES }));
 		expect(restored.getConfig()).toBeDefined();
-		expect(restored.evaluateExpression(":x + 1")[0].toNumber()).toBe(8);
+		expect(restored.evaluateExpression(":x + 1").toNumber()).toBe(8);
 	});
 });
 
@@ -211,8 +211,8 @@ describe("every supported value kind survives the round trip", () => {
 		engine.parseDocument(":a = $0.10\n:b = $0.20");
 		const restored = roundTrip(engine);
 
-		const before = engine.evaluateExpression("a + b")[0];
-		const after = restored.evaluateExpression("a + b")[0];
+		const before = engine.evaluateExpression("a + b");
+		const after = restored.evaluateExpression("a + b");
 		expect(after.exact).toBeDefined();
 		expect(after.exact?.coef.toString()).toBe(before.exact?.coef.toString());
 		expect(after.exact?.scale).toBe(before.exact?.scale);
@@ -223,7 +223,7 @@ describe("every supported value kind survives the round trip", () => {
 		const engine = track(new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
 		engine.parseDocument(":third = 1/3");
 		const restored = roundTrip(engine);
-		const [sum] = restored.evaluateExpression("third + third + third");
+		const sum = restored.evaluateExpression("third + third + third");
 		expect(sum.toNumber()).toBe(1);
 	});
 
@@ -258,8 +258,8 @@ describe("a snapshot is plain JSON", () => {
 		expect(throughJson).toEqual(snapshot);
 
 		const restored = track(ExpressionEngine.fromJSON(throughJson, { packages: BUILTIN_PACKAGES }));
-		expect(restored.evaluateExpression("f(41)")[0].toNumber()).toBe(42);
-		expect(restored.evaluateExpression(":y")[0].toNumber()).toBe(11);
+		expect(restored.evaluateExpression("f(41)").toNumber()).toBe(42);
+		expect(restored.evaluateExpression(":y").toNumber()).toBe(11);
 	});
 
 	test("the snapshot carries the format envelope and engine version", () => {
@@ -315,7 +315,7 @@ describe("resolved and in-flight async values are not restored stale", () => {
 		// the in-flight fetch settling later does not warn about a missing hook.
 		engine.getBatcher().onLineResult = () => {};
 
-		const [pending] = engine.evaluateLine(1, "asyncprice FOO");
+		const pending = engine.evaluateLine(1, "asyncprice FOO");
 		expect(pending.type).toBe(ValueType.Pending);
 
 		// The snapshot is taken while the line is still in flight. The engine kept
@@ -336,7 +336,7 @@ describe("resolved and in-flight async values are not restored stale", () => {
 		// the test controls, no batcher flush or real network involved.
 		engine.queryClient.setQueryData(["testasync", "FOO"], numberValue(50000));
 
-		const [resolved] = engine.evaluateLine(1, ":p = asyncprice FOO");
+		const resolved = engine.evaluateLine(1, ":p = asyncprice FOO");
 		expect(resolved.toNumber()).toBe(50000);
 		expect(engine.getVM().getVar("p")?.toNumber()).toBe(50000);
 
@@ -421,6 +421,6 @@ describe("symbolic (algebra) values are deferred with a clear error", () => {
 		expect(snapshot.lineCache.some((e) => e.line === 2)).toBe(false);
 
 		const restored = roundTrip(engine);
-		expect(restored.evaluateExpression(":x + 1")[0].toNumber()).toBe(6);
+		expect(restored.evaluateExpression(":x + 1").toNumber()).toBe(6);
 	});
 });

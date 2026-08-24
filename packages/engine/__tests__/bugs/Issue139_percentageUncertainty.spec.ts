@@ -18,7 +18,7 @@ describe("Issue #139: percentage arithmetic carries the uncertainty", () => {
   });
 
   function measured(source: string): { center: number; spread: number } {
-    const v = engine.evaluateExpression(source)[0];
+    const v = engine.evaluateExpression(source);
     expect(v.type).toBe(ValueType.Number);
     expect(v.uncertainty).toBeDefined();
     return { center: v.toNumber(), spread: v.uncertainty as number };
@@ -43,13 +43,13 @@ describe("Issue #139: percentage arithmetic carries the uncertainty", () => {
   });
 
   test("a plain number without a tolerance is unchanged", () => {
-    const v = engine.evaluateExpression("200 + 10%")[0];
+    const v = engine.evaluateExpression("200 + 10%");
     expect(v.uncertainty).toBeUndefined();
     expect(v.toNumber()).toBeCloseTo(220, 6);
   });
 
   test("a non-uncertain percentage multiply is unchanged", () => {
-    const v = engine.evaluateExpression("100 * 10%")[0];
+    const v = engine.evaluateExpression("100 * 10%");
     expect(v.uncertainty).toBeUndefined();
     expect(v.toNumber()).toBeCloseTo(10, 6);
   });

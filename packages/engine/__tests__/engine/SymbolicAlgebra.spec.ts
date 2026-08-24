@@ -33,13 +33,13 @@ describe("bare (colon-less) assignment", () => {
   test("a = [1,2;3,4] assigns like :a = [1,2;3,4]", () => {
     const e = engine();
     e.evaluateLine(1, "a = [1, 2; 3, 4]");
-    const [v] = e.evaluateLine(2, "a[0,0] + a[1,1]");
+    const v = e.evaluateLine(2, "a[0,0] + a[1,1]");
     expect(v.toNumber()).toBe(5);
   });
 
   test("a matrix literal with an unassigned cell (sx) assigns successfully, carrying a real symbolic cell", () => {
     const e = engine();
-    const [result] = e.evaluateLine(1, "s = [sx, 0, 0; 0, sy, 0; 0, 0, 1]");
+    const result = e.evaluateLine(1, "s = [sx, 0, 0; 0, sy, 0; 0, 0, 1]");
     expect(result.type).toBe(ValueType.Matrix);
     const m = result.value as MatrixData;
     expect(m.hasSymbolic).toBe(true);
@@ -53,9 +53,9 @@ describe("bare (colon-less) assignment", () => {
 
   test("regression guard: the existing colon-prefixed form still works exactly as before", () => {
     const e = engine();
-    const [v] = e.evaluateLine(1, ":x = 5");
+    const v = e.evaluateLine(1, ":x = 5");
     expect(v.toNumber()).toBe(5);
-    const [v2] = e.evaluateLine(2, ":x + 1");
+    const v2 = e.evaluateLine(2, ":x + 1");
     expect(v2.toNumber()).toBe(6);
   });
 
@@ -71,26 +71,26 @@ describe("bare (colon-less) assignment", () => {
     const e = engine();
     e.evaluateLine(1, "map = 10");
     e.evaluateLine(2, "sum = 20");
-    const [v] = e.evaluateLine(3, "map + sum");
+    const v = e.evaluateLine(3, "map + sum");
     expect(v.toNumber()).toBe(30);
   });
 });
 
 describe("=> general simplify mode (no stored equation)", () => {
   test("a bare undefined variable simplifies to itself", () => {
-    const [v] = engine().evaluateExpression("thisVarIsNeverDefined =>");
+    const v = engine().evaluateExpression("thisVarIsNeverDefined =>");
     expect(v.type).toBe(ValueType.Symbolic);
     expect(formatSymbolic(v.value as SymbolicNode)).toBe("thisVarIsNeverDefined");
   });
 
   test("an expression with a free variable simplifies via the bounded rules (1+2+b+3+b => 2b+6)", () => {
-    const [v] = engine().evaluateExpression("1+2+b+3+b =>");
+    const v = engine().evaluateExpression("1+2+b+3+b =>");
     expect(v.type).toBe(ValueType.Symbolic);
     expect(formatSymbolic(v.value as SymbolicNode)).toBe("2b+6");
   });
 
   test("a fully-concrete expression simplifies to a plain number, not a Symbolic wrapper", () => {
-    const [v] = engine().evaluateExpression("2+3 =>");
+    const v = engine().evaluateExpression("2+3 =>");
     expect(v.type).toBe(ValueType.Number);
     expect(v.toNumber()).toBe(5);
   });
@@ -111,7 +111,7 @@ describe("bare product-chain equation: a*x = rhs, then x =>", () => {
     const e = engine();
     e.evaluateLine(1, "a = [1, 2; 3, 4]");
     e.evaluateLine(2, "a*x = [60; 70]");
-    const [x] = e.evaluateLine(3, "x =>");
+    const x = e.evaluateLine(3, "x =>");
     expect(x.type).toBe(ValueType.Matrix);
     const m = x.value as MatrixData;
     // Independently verified: inv([[1,2],[3,4]]) = [[-2,1],[1.5,-0.5]]
@@ -128,17 +128,17 @@ describe("bare product-chain equation: a*x = rhs, then x =>", () => {
     const e = engine();
     e.evaluateLine(1, "a = [1, 2; 3, 4]");
     e.evaluateLine(2, "a*x = [60; 70]");
-    const [x] = e.evaluateLine(3, "x =>");
+    const x = e.evaluateLine(3, "x =>");
     // a*x should reconstruct the original rhs, [60;70].
     e.evaluateLine(4, ":xVal = " + formatMatrixLiteral(x.value as MatrixData));
-    const [reconstructed] = e.evaluateLine(5, "a*xVal");
+    const reconstructed = e.evaluateLine(5, "a*xVal");
     const rm = rowMajor(reconstructed.value as MatrixData) as number[];
     expect(rm[0]).toBeCloseTo(60, 6);
     expect(rm[1]).toBeCloseTo(70, 6);
   });
 
   test("solving for an undefined variable with no stored equation falls back to simplify mode", () => {
-    const [v] = engine().evaluateExpression("thisIsNotAnEquation =>");
+    const v = engine().evaluateExpression("thisIsNotAnEquation =>");
     expect(v.type).toBe(ValueType.Symbolic);
   });
 });
@@ -161,7 +161,7 @@ describe("full symbolic pipeline: s*t*v = rhs with symbolic factors", () => {
     e.evaluateLine(1, "s = [sx, 0, 0; 0, sy, 0; 0, 0, 1]");
     e.evaluateLine(2, "t = [1, 0, tx; 0, 1, ty; 0, 0, 1]");
     e.evaluateLine(3, "s*t*v = [vx; vy; 1]");
-    const [v] = e.evaluateLine(4, "v =>");
+    const v = e.evaluateLine(4, "v =>");
     expect(v.type).toBe(ValueType.Matrix);
     const m = v.value as MatrixData;
     expect(m.rows).toBe(3);
@@ -177,7 +177,7 @@ describe("full symbolic pipeline: s*t*v = rhs with symbolic factors", () => {
 
 describe("Phase H.3: map/reduce symbolic integration", () => {
   test("reduce(acc+x+b,[1,2,3]) => simplifies to 2b+6, the free variable b surviving through the reduce", () => {
-    const [v] = engine().evaluateExpression("reduce(acc+x+b,[1,2,3]) =>");
+    const v = engine().evaluateExpression("reduce(acc+x+b,[1,2,3]) =>");
     expect(v.type).toBe(ValueType.Symbolic);
     expect(formatSymbolic(v.value as SymbolicNode)).toBe("2b+6");
   });
@@ -188,15 +188,15 @@ describe("Phase H.3: map/reduce symbolic integration", () => {
 
   test("regression guard: ordinary (non-=>) purely-numeric reduce/map are unaffected", () => {
     const e = engine();
-    const [r] = e.evaluateLine(1, "reduce(acc+x,[1,2,3])");
+    const r = e.evaluateLine(1, "reduce(acc+x,[1,2,3])");
     expect(r.toNumber()).toBe(6);
-    const [m] = e.evaluateLine(2, "map(10*x,[1,2,3])");
+    const m = e.evaluateLine(2, "map(10*x,[1,2,3])");
     const cells = rowMajor(m.value as MatrixData) as number[];
     expect(cells).toEqual([10, 20, 30]);
   });
 
   test("map(x+b,[1,2,3]) => carries the free variable b through into each symbolic cell", () => {
-    const [v] = engine().evaluateExpression("map(x+b,[1,2,3]) =>");
+    const v = engine().evaluateExpression("map(x+b,[1,2,3]) =>");
     expect(v.type).toBe(ValueType.Matrix);
     const m = v.value as MatrixData;
     expect(m.hasSymbolic).toBe(true);

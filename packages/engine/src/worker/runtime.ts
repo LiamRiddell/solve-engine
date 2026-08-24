@@ -153,7 +153,7 @@ export function startWorkerRuntime(transport: WorkerTransport, options: WorkerRu
 			const text = retainedLines.get(lineNumber);
 			if (text === undefined) continue;
 			try {
-				const value = eng.evaluateLine(lineNumber, text)[0];
+				const value = eng.evaluateLine(lineNumber, text);
 				if (value) lines.push({ lineNumber, value: serializeValue(value, formatting) });
 			} catch {
 				// A line that resolved into an error re-throws on re-evaluation; the
@@ -219,7 +219,9 @@ export function startWorkerRuntime(transport: WorkerTransport, options: WorkerRu
 			case "evaluateLines":
 				return eng.evaluateLines(args[0] as string[]).map((line) => serializeParsedLine(line, formatting));
 			case "evaluateExpression":
-				return eng.evaluateExpression(args[0] as string).map((value) => serializeValue(value, formatting));
+				// Mirrors ExpressionEngine.evaluateExpression: a single Value in,
+				// a single serialized Value out.
+				return serializeValue(eng.evaluateExpression(args[0] as string), formatting);
 			default:
 				throw ErrorFactory.execution(
 					WorkerErrorCodes.WORKER_UNKNOWN_METHOD,

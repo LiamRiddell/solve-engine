@@ -72,7 +72,7 @@ function runTierTwo(
 /** What the real, Tier-1 evaluation path answers for the same source. */
 function tierOne(source: string, locale = "en") {
 	const engine = newTrackedEngine({ locale });
-	const [value] = engine.evaluateExpression(source);
+	const value = engine.evaluateExpression(source);
 	return value;
 }
 

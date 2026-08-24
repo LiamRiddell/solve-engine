@@ -26,14 +26,14 @@ import type { HolidayCalendar } from "@solve-js/constants/Configuration";
 
 function evaluate(source: string) {
 	const engine = newTrackedEngine();
-	const [value] = engine.evaluateExpression(source);
+	const value = engine.evaluateExpression(source);
 	return value;
 }
 
 /** Evaluate against an engine that has a host holiday calendar configured. */
 function evaluateWithHolidays(source: string, holidays: HolidayCalendar) {
 	const engine = newTrackedEngine({ config: { date: { holidays } } as never });
-	const [value] = engine.evaluateExpression(source);
+	const value = engine.evaluateExpression(source);
 	return value;
 }
 

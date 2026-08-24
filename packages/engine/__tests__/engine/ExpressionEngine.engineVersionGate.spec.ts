@@ -58,7 +58,7 @@ describe("ExpressionEngine.registerPackage() — engine-version gate", () => {
     expect(() => engine.evaluateLine(1, "gadget")).toThrow();
 
     // Everything else on this engine is unaffected by the rejected attempt.
-    expect(engine.evaluateLine(2, "1 + 2")[0].toNumber()).toBe(3);
+    expect(engine.evaluateLine(2, "1 + 2").toNumber()).toBe(3);
   });
 
   test("existing packages without engineVersion keep registering fine (backward compatible default)", () => {
@@ -94,7 +94,7 @@ describe("ExpressionEngine.registerPackage() — engine-version gate", () => {
     };
 
     engine.registerPackage(working);
-    expect(engine.evaluateLine(1, "stableword")[0].toNumber()).toBe(42);
+    expect(engine.evaluateLine(1, "stableword").toNumber()).toBe(42);
 
     const incompatibleReplacement: IEnginePackage = {
       name: "ReplaceableStablePackage",
@@ -106,7 +106,7 @@ describe("ExpressionEngine.registerPackage() — engine-version gate", () => {
     // The original registration is still fully intact -- it was never
     // unregistered, because the version gate rejected the replacement
     // before the duplicate-name guard ever ran.
-    expect(engine.evaluateLine(2, "stableword")[0].toNumber()).toBe(42);
+    expect(engine.evaluateLine(2, "stableword").toNumber()).toBe(42);
   });
 
   test("PACKAGE_ENGINE_VERSION_MISMATCH is thrown for a range requiring a NEWER engine than what's running (opposite direction)", () => {

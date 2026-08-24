@@ -23,8 +23,8 @@ describe("Issue #153: tax off / tax in on money round the half-cent exactly", ()
     engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
-  const money = (source: string): string => formatValue(engine.evaluateExpression(source)[0]);
-  const num = (source: string): number => engine.evaluateExpression(source)[0].toNumber();
+  const money = (source: string): string => formatValue(engine.evaluateExpression(source));
+  const num = (source: string): number => engine.evaluateExpression(source).toNumber();
 
   describe("tax off $X at R% (the pre-tax amount)", () => {
     test.each([

@@ -21,7 +21,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 
 function evalReal(expr: string) {
   const engine = newTrackedEngine();
-  const [value] = engine.evaluateExpression(expr);
+  const value = engine.evaluateExpression(expr);
   return value;
 }
 
@@ -93,7 +93,7 @@ describe("UOM_PACKAGE cooking conversion — regression guards (bare variable na
     engine.evaluateExpression(":sugar = 2");
     engine.evaluateExpression(":flour = 3");
     engine.evaluateExpression(":milk = 4");
-    const [value] = engine.evaluateExpression(":butter + :sugar + :flour + :milk");
+    const value = engine.evaluateExpression(":butter + :sugar + :flour + :milk");
     expect(value.toNumber()).toBe(10);
   });
 

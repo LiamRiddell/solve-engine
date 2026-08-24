@@ -127,7 +127,7 @@ describe("non-ASCII identifiers behave like identifiers", () => {
 		for (const name of ["café", "日本語", "Ω", "наименование", "ñ"]) {
 			const engine = newTrackedEngine();
 			engine.evaluateLine(1, `:${name} = 6`);
-			expect(engine.evaluateLine(2, `:${name} * 7`)[0].toNumber()).toBe(42);
+			expect(engine.evaluateLine(2, `:${name} * 7`).toNumber()).toBe(42);
 		}
 	});
 
@@ -182,9 +182,9 @@ const UNICODE_SPACES: Array<[string, string]> = [
 describe("whitespace that is not ASCII whitespace", () => {
 	test("ASCII spacing works, which is what the test below compares against", () => {
 		const engine = newTrackedEngine();
-		expect(engine.evaluateExpression("1 + 1")[0].toNumber()).toBe(2);
-		expect(engine.evaluateExpression("1\t+\t1")[0].toNumber()).toBe(2);
-		expect(engine.evaluateExpression("1+1")[0].toNumber()).toBe(2);
+		expect(engine.evaluateExpression("1 + 1").toNumber()).toBe(2);
+		expect(engine.evaluateExpression("1\t+\t1").toNumber()).toBe(2);
+		expect(engine.evaluateExpression("1+1").toNumber()).toBe(2);
 	});
 
 	test("separates operands the same way an ordinary space does", () => {
@@ -205,7 +205,7 @@ describe("whitespace that is not ASCII whitespace", () => {
 		const broken: string[] = [];
 		for (const [space, name] of UNICODE_SPACES) {
 			try {
-				const answer = engine.evaluateExpression(`1${space}+${space}1`)[0].toNumber();
+				const answer = engine.evaluateExpression(`1${space}+${space}1`).toNumber();
 				if (answer !== 2) broken.push(`${name}: answered ${answer}`);
 			} catch (thrown) {
 				broken.push(`${name}: ${(thrown as EngineError).code}`);
@@ -219,6 +219,6 @@ describe("whitespace that is not ASCII whitespace", () => {
 		// without doing anything unusual, and because a fix might reasonably
 		// special-case it before handling the general set above.
 		const engine = newTrackedEngine();
-		expect(engine.evaluateExpression("﻿1+1")[0].toNumber()).toBe(2);
+		expect(engine.evaluateExpression("﻿1+1").toNumber()).toBe(2);
 	});
 });

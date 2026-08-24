@@ -225,7 +225,7 @@ describe("the answer and the derivation never disagree", () => {
 	])("`%s`: result matches evaluateExpression, and equals the last step", (line) => {
 		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		const explanation = engine.explainLine(line);
-		const [direct] = engine.evaluateExpression(line);
+		const direct = engine.evaluateExpression(line);
 
 		expect(explanation.result.toNumber()).toBeCloseTo(direct.toNumber(), 10);
 

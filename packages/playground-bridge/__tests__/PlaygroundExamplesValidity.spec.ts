@@ -87,7 +87,7 @@ describe("Playground example content is valid against the real engine", () => {
           if (!trimmed) continue;
           const lineNum = i + 1;
           try {
-            const [result] = engine.evaluateLine(lineNum, trimmed);
+            const result = engine.evaluateLine(lineNum, trimmed);
             const lineState = doc.getLineAt(lineNum);
             if (lineState) lineState.result = result;
             if (result.type === ValueType.Error) {
@@ -152,7 +152,7 @@ describe("Playground example content is valid against the real engine", () => {
         if (!trimmed) continue;
         const lineNum = i + 1;
         try {
-          const [result] = engine.evaluateLine(lineNum, trimmed);
+          const result = engine.evaluateLine(lineNum, trimmed);
           const lineState = documentModel.getLineAt(lineNum);
           if (lineState) lineState.result = result;
           if (result.type === ValueType.Error) {
@@ -199,7 +199,7 @@ describe("Playground example content is valid against the real engine", () => {
           const lineNum = i + 1;
           const where = `[${example.name} / ${document.title}] line ${lineNum} "${trimmed}"`;
           try {
-            const [result] = engine.evaluateLine(lineNum, trimmed);
+            const result = engine.evaluateLine(lineNum, trimmed);
             const lineState = documentModel.getLineAt(lineNum);
             if (lineState) lineState.result = result;
             if (result.type === ValueType.Error) {

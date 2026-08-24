@@ -15,7 +15,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 
 function num(source: string): number {
 	const engine = newTrackedEngine();
-	const [value] = engine.evaluateExpression(source);
+	const value = engine.evaluateExpression(source);
 	return value.toNumber();
 }
 
@@ -102,7 +102,7 @@ describe("what the new phrases must not claim", () => {
 		const engine = newTrackedEngine();
 		engine.evaluateExpression(":greater = 9");
 		engine.evaluateExpression(":lesser = 4");
-		const [value] = engine.evaluateExpression(":greater + :lesser");
+		const value = engine.evaluateExpression(":greater + :lesser");
 		expect(value.toNumber()).toBe(13);
 	});
 
