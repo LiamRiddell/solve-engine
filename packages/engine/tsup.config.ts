@@ -40,6 +40,12 @@ export default defineConfig({
 	 */
 	noExternal: ["semver"],
 	dts: true,
+	// Minified, but with source maps kept on. The shipped ESM/CJS otherwise
+	// parses at full identifier length and whitespace, which a consumer without
+	// their own bundler (Node, Deno, a CDN) pays in full on every load: minifying
+	// roughly halves that parsed size. Source maps stay on so a production stack
+	// trace still points at real source; the two must never be dropped together.
+	minify: true,
 	sourcemap: true,
 	clean: true,
 	splitting: true,

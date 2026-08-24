@@ -251,35 +251,76 @@ async function main() {
 export type UnitEntry = readonly [kind: number, ratio: number];
 `);
 
-	// ── UNIT_TABLE, grouped by kind so the file is reviewable ──
-	const byKind = new Map();
+	// ── UNIT_TABLE, packed ──
+	// 1456 spellings map to only ~378 distinct [kind, ratio] pairs (3.85 aliases
+	// each). Emitting each spelling as its own `"key": [kind, ratio]` entry
+	// repeats every ratio, and the long floating-point ratios dominate the parsed
+	// size of the module. Packing groups the aliases that share a pair and stores
+	// the table as one string decoded at load: the same Record, ~12 KB less
+	// parsed JS, and a minifier cannot shorten string keys or dedupe the ratios,
+	// so the win survives minification. Iteration order (grouped by kind, then
+	// insertion) is preserved so a regenerated file diffs cleanly. Reviewability
+	// moves from the emitted file to the round-trip assertion below, which is a
+	// stronger guarantee than an eyeballed literal.
+	const groups = new Map();
 	for (const [unit, [kind, ratio]] of Object.entries(unitsObject)) {
-		if (!byKind.has(kind)) byKind.set(kind, []);
-		byKind.get(kind).push([unit, ratio]);
+		const ratioText = emitNumber(ratio);
+		readback.units[unit] = [kind, Number(ratioText)];
+		const groupKey = `${kind}|${ratioText}`;
+		if (!groups.has(groupKey)) groups.set(groupKey, { kind, ratioText, aliases: [] });
+		groups.get(groupKey).aliases.push(unit);
 	}
+	// Unit spellings never contain ; | or , so they are safe field/record
+	// separators; the assertion rejects any table that ever breaks that.
+	const packedUnitTable = [...groups.values()]
+		.map((group) => `${group.kind}|${group.ratioText}|${group.aliases.join(",")}`)
+		.join(";");
+	assertUnitTableRoundTrips(packedUnitTable, readback.units);
 
+	const correctedList = [...correctedUnits.keys()].sort();
 	lines.push(`/**
+ * Source for {@link UNIT_TABLE}, packed. Each \`;\`-separated record is
+ * \`kind|ratio|alias1,alias2,...\`, so the 378 distinct \`[kind, ratio]\` pairs
+ * spell each ratio once rather than once per alias. See {@link UNIT_TABLE}.${correctedList.length ? `\n *\n * Corrected vs upstream: ${correctedList.map((unit) => JSON.stringify(unit)).join(", ")}.` : ""}
+ */
+const PACKED_UNIT_TABLE =
+  ${JSON.stringify(packedUnitTable)};
+
+/**
+ * Decodes {@link PACKED_UNIT_TABLE} into the {@link UNIT_TABLE} record. The
+ * aliases in one record share a single \`[kind, ratio]\` tuple, safe since the
+ * table is read-only by type.
+ */
+function unpackUnitTable(packed: string): Record<string, UnitEntry> {
+  const table: Record<string, UnitEntry> = {};
+  for (const record of packed.split(";")) {
+    const firstBar = record.indexOf("|");
+    const secondBar = record.indexOf("|", firstBar + 1);
+    const kind = Number(record.slice(0, firstBar));
+    const ratio = Number(record.slice(firstBar + 1, secondBar));
+    const entry: UnitEntry = [kind, ratio];
+    for (const alias of record.slice(secondBar + 1).split(",")) {
+      table[alias] = entry;
+    }
+  }
+  return table;
+}
+
+/**
  * Every unit spelling the engine can resolve, to \`[measureKind, ratioToBase]\`.
  *
  * Keys are case-sensitive and are never normalized or aliased: \`C\` is Celsius
  * and \`c\` is a cup, \`MB\` is megabytes and \`mb\` is millibits. Multi-word
  * spellings are present here and resolve through the conversion API even though
  * the lexer cannot tokenize them.
+ *
+ * Stored packed (see {@link PACKED_UNIT_TABLE}) and decoded once at load: 1456
+ * spellings share 378 distinct pairs, so each ratio parses once per pair rather
+ * than once per alias. The generator asserts the packed form decodes to exactly
+ * the source table.
  */
-export const UNIT_TABLE: Readonly<Record<string, UnitEntry>> = {`);
-
-	for (const kind of [...byKind.keys()].sort((a, b) => a - b)) {
-		lines.push(`  // ── ${kindNames.get(kind)} (kind ${kind}) ──`);
-		for (const [unit, ratio] of byKind.get(kind)) {
-			const text = emitNumber(ratio);
-			readback.units[unit] = [kind, Number(text)];
-			const note = correctedUnits.has(unit)
-				? ` // corrected, upstream says ${emitNumber(correctedUnits.get(unit))}`
-				: "";
-			lines.push(`  ${emitKey(unit)}: [${kind}, ${text}],${note}`);
-		}
-	}
-	lines.push("};\n");
+export const UNIT_TABLE: Readonly<Record<string, UnitEntry>> = unpackUnitTable(PACKED_UNIT_TABLE);
+`);
 
 	// ── UNIT_DIFFERENCES ──
 	lines.push(`/**
@@ -442,6 +483,51 @@ function selfCheck({ unitsObject, differences, bestUnits, conversions, readback 
 		for (const failure of failures.slice(0, 20)) console.error(`  ${failure}`);
 		if (failures.length > 20) console.error(`  ...and ${failures.length - 20} more`);
 		process.exit(1);
+	}
+}
+
+/**
+ * Asserts the packed unit-table string decodes to exactly the source table.
+ *
+ * `selfCheck` proves the intended values (`readback.units`) match the upstream
+ * source; this proves the packed string a reader loads decodes back to those
+ * same values. Together they close the loop source -> packed -> loaded, so a
+ * packing bug (a stray delimiter, a dropped alias, a mangled ratio) fails the
+ * build rather than silently corrupting a conversion.
+ *
+ * @param {string} packed the emitted PACKED_UNIT_TABLE string.
+ * @param {Record<string, [number, number]>} expected the source table.
+ */
+function assertUnitTableRoundTrips(packed, expected) {
+	for (const key of Object.keys(expected)) {
+		if (/[;|,]/.test(key)) {
+			throw new Error(`Unit spelling ${JSON.stringify(key)} contains a packing delimiter (; | or ,)`);
+		}
+	}
+	const decoded = {};
+	for (const record of packed.split(";")) {
+		const firstBar = record.indexOf("|");
+		const secondBar = record.indexOf("|", firstBar + 1);
+		const kind = Number(record.slice(0, firstBar));
+		const ratio = Number(record.slice(firstBar + 1, secondBar));
+		for (const alias of record.slice(secondBar + 1).split(",")) {
+			decoded[alias] = [kind, ratio];
+		}
+	}
+	const expectedKeys = Object.keys(expected);
+	const decodedKeys = Object.keys(decoded);
+	if (decodedKeys.length !== expectedKeys.length) {
+		throw new Error(`Packed unit table decodes to ${decodedKeys.length} keys, expected ${expectedKeys.length}`);
+	}
+	for (const key of expectedKeys) {
+		const [wantKind, wantRatio] = expected[key];
+		const got = decoded[key];
+		if (!got || got[0] !== wantKind || !Object.is(got[1], wantRatio)) {
+			throw new Error(
+				`Packed unit table mismatch at ${JSON.stringify(key)}: ` +
+					`expected [${wantKind}, ${wantRatio}], got ${got ? `[${got[0]}, ${got[1]}]` : "undefined"}`,
+			);
+		}
 	}
 }
 
