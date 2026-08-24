@@ -1,4 +1,4 @@
-import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData } from "@solve-js/vm/Value";
+import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type SplitData, type SplitShare } from "@solve-js/vm/Value";
 import { formatColour } from "@solve-js/packages/colour/ColourMath";
 import { decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
@@ -338,6 +338,33 @@ function formatUnit(value: number, unit: string | undefined): string {
 }
 
 /**
+ * Renders a per-person bill split: "= $45.00 each", or, when the division is
+ * uneven, "= $33.33 each, with 1 share paying $33.34". Each share's amount is
+ * rendered through the ordinary value formatter (a throwaway {@link Value}), so
+ * a currency share honours the same symbol placement, decimal places and locale
+ * as any other money and a bare share trims trailing zeros the way a plain
+ * number does; the "= " prefix is added once, around the whole sentence, not
+ * per share.
+ */
+function formatSplit(data: SplitData, locale: ILocale, settings: FormattingSettings): string {
+  const prefix = locale.display.resultPrefix;
+  const render = (share: SplitShare): string => {
+    const v = data.unit !== undefined
+      ? new Value(ValueType.Uom, share.value, data.unit)
+      : new Value(ValueType.Number, share.value);
+    v.exact = share.exact;
+    const text = formatValue(v, settings);
+    return text.startsWith(prefix) ? text.slice(prefix.length) : text;
+  };
+
+  const [base, high] = data.shares;
+  const each = `${render(base)} each`;
+  if (high === undefined) return `${prefix}${each}`;
+  const shareWord = high.count === 1 ? "share" : "shares";
+  return `${prefix}${each}, with ${high.count} ${shareWord} paying ${render(high)}`;
+}
+
+/**
  * Render an evaluated {@link Value} as a display string, dispatching on
  * `value.type` to the type-specific formatter (number, hex, datetime, unit
  * of measurement, matrix, range, percentage, ...).
@@ -389,6 +416,8 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
     }
     case ValueType.Colour:
       return `${locale.display.resultPrefix}${formatColour(value.value as ColourData)}`;
+    case ValueType.Split:
+      return formatSplit(value.value as SplitData, locale, us);
     case ValueType.Symbolic:
       return formatSymbolic(value.value as SymbolicNode);
     case ValueType.Percentage:

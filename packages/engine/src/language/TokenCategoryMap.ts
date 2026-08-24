@@ -44,6 +44,12 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	UNTIL: "keyword",
 	SINCE: "keyword",
 	BETWEEN: "keyword",
+	// Bill split (finance): the split verb, its two spellings, and the trailing
+	// words the normalizer retypes only inside the full split shape.
+	SPLIT: "keyword",
+	SPLIT_WAYS: "keyword",
+	WAYS: "keyword",
+	PEOPLE: "keyword",
 	FROM: "keyword",
 	BEST: "keyword",
 	KEYWORD: "keyword",

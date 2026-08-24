@@ -12,7 +12,7 @@
  * exact before loses exactness.
  */
 
-import { Value, uomValue, uomValueExact } from "@solve-js/vm/Value";
+import { Value, uomValue, uomValueExact, type SplitData, type SplitShare } from "@solve-js/vm/Value";
 import {
 	decimalFromLiteral,
 	decimalFromInteger,
@@ -24,6 +24,8 @@ import {
 	decimalMultiply,
 	decimalDivide,
 	decimalIsZero,
+	decimalRound,
+	makeDecimal,
 	type DecimalData,
 } from "@solve-js/decimal";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
@@ -151,4 +153,57 @@ export function taxInExact(money: Value, unit: string, rate: number): Value | nu
 	if (base === null || divisor === null || decimalIsZero(divisor)) return null;
 	const tax = decimalSubtract(base, decimalDivide(base, divisor));
 	return uomValueExact(decimalToNumber(tax), unit, tax);
+}
+
+/**
+ * Allocate a bill split into whole-cent shares that add back to the exact
+ * total. `split $100 between 3` is $33.34 once and $33.33 twice: 2 × $33.33 +
+ * 1 × $33.34 is $100.00 to the cent, not the bare $33.33 each that loses a
+ * penny. Largest-remainder allocation on the amount's exact decimal cents, so
+ * the reconciliation is exact wherever the amount is (a money literal, or a
+ * percentage-scaled one like `$120 + 18%`). A non-currency amount (a bare
+ * number, or a unit such as km) divides evenly into a single share, carrying
+ * its unit for display; money with no exact magnitude (a live-rate conversion)
+ * falls back to a float even split, the same boundary the other helpers draw.
+ *
+ * `n` is assumed a positive integer, the split builtin validates it first.
+ * Shares are ordered base-first: the "each" amount, then, on an uneven split,
+ * the slightly larger amount the odd penny falls on.
+ */
+export function splitEachExact(amount: Value, n: number): SplitData {
+	const unit = amount.unit;
+	const cents = unit !== undefined && sharedCurrencyExchange.isCurrency(unit)
+		? centsOfMoney(amount, unit)
+		: null;
+	if (cents === null) {
+		return { unit, shares: [{ value: amount.toNumber() / n, count: n }] };
+	}
+
+	const divisor = BigInt(n);
+	const baseCents = cents / divisor; // truncates toward zero
+	const remainder = cents - baseCents * divisor; // sign follows `cents`
+	const extraShares = Number(remainder < 0n ? -remainder : remainder);
+	// A refund (negative total) puts the extra cent on the more-negative share.
+	const step = cents < 0n ? -1n : 1n;
+
+	const base = centShare(baseCents, n - extraShares);
+	if (extraShares === 0) return { unit, shares: [base] };
+	return { unit, shares: [base, centShare(baseCents + step, extraShares)] };
+}
+
+/** A currency share built from its whole-cent coefficient. */
+function centShare(cents: bigint, count: number): SplitShare {
+	const exact = makeDecimal(cents, 2);
+	return { value: decimalToNumber(exact), exact, count };
+}
+
+/**
+ * The exact whole-cent coefficient of a money amount, or null when it has no
+ * exact magnitude (a live-rate conversion), so the caller falls back to a float
+ * even split. Rounds to two places half-away-from-zero, the till rule the rest
+ * of the money arithmetic uses.
+ */
+function centsOfMoney(amount: Value, unit: string): bigint | null {
+	const base = moneyExactMagnitude(amount, unit);
+	return base === null ? null : decimalRound(base, 2).coef;
 }

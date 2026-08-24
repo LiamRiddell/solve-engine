@@ -145,6 +145,7 @@ const BUILTIN_ARITY: Record<number, BuiltinArity> = {
   // Not reachable by name, only through `<value> to <n> dp`; see
   // converters/parselets/RoundingParselets.ts.
   97: { name: "roundToPlaces", min: 2, max: 2 },
+  98: { name: "splitEach", min: 2, max: 2 },
 };
 
 /** "1 argument" / "2 arguments", so the message reads as English either way. */

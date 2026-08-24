@@ -2,6 +2,7 @@ import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { InvestmentGrowthParselet, PresentValueParselet, ReturnOnInvestmentParselet, AnnualReturnParselet } from "./parselets/InvestmentParselets";
 import { CompoundInterestParselet } from "./parselets/CompoundInterestParselet";
 import { LoanRepaymentParselet } from "./parselets/LoanRepaymentParselet";
+import { SplitBetweenParselet, SplitWaysParselet } from "./parselets/BillSplitParselets";
 import { SalesTaxParselet } from "./parselets/SalesTaxParselet";
 import { InflationQueryParselet } from "./parselets/InflationQueryParselet";
 import { InflationFutureValueParselet } from "./parselets/InflationFutureValueParselet";
@@ -12,6 +13,7 @@ import {
 } from "./parselets/InflationPluginFunctions";
 import { inYearDollarsNormalizerRule } from "./normalizer/InYearDollarsNormalizerRule";
 import { recurringScheduleNormalizerRule } from "./normalizer/RecurringScheduleNormalizerRule";
+import { billSplitNormalizerRule } from "./normalizer/BillSplitNormalizerRule";
 
 // CALL_BUILTIN indices. See VMBuiltins.ts for the handler implementations.
 const COMPOUND_FV = 51, COMPOUND_INTEREST = 52;
@@ -22,6 +24,8 @@ const PRESENT_VALUE = 82, ROI = 83, ANNUAL_RETURN = 84;
 // 58 (taxAdd) is not referenced here: it backs the taxAdd() function-call
 // form via the builtin-name registry, not a phrase in this package.
 const TAX_REMOVE = 59, TAX_IN = 85, TAX_ON = 86;
+// Bill split: `split $180 between 4` / `$120 + 18% split 3 ways`.
+const SPLIT_EACH = 98;
 // 60 = inflationAdjust(amount, fromYear, toYear). See InflationQueryParselet.ts
 // and VMBuiltins.ts. The other three inflation calculations (present-year
 // forms + the flat-rate future-value projection) are collision-safe
@@ -54,6 +58,12 @@ const TAX_REMOVE = 59, TAX_IN = 85, TAX_ON = 86;
  *    variable name, the same accepted-risk category as this codebase's
  *    existing bare "between"/"from"/"next"/"last"/"best" keywords (see
  *    Token.ts's OVER/RATE_AT doc comment).
+ *
+ * "split", "ways" and "people" (the bill-split grammar) are likewise ordinary
+ * words and never bare keywords: BillSplitNormalizerRule claims them
+ * contextually, retyping to SPLIT/WAYS/PEOPLE only inside the full split shape,
+ * so `:split`, a variable named `split`, and prose are untouched. "between"
+ * reuses the pre-existing bare BETWEEN token (the accepted-risk category above).
  *
  * Inflation-adjusted value (extends this package, see
  * `parselets/InflationQueryParselet.ts`/`InflationFutureValueParselet.ts`/
@@ -115,6 +125,8 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     { tokenType: "TAX_OFF", parselet: new SalesTaxParselet(TAX_REMOVE) },
     { tokenType: "TAX_IN_PHRASE", parselet: new SalesTaxParselet(TAX_IN) },
 
+    { tokenType: "SPLIT", parselet: new SplitBetweenParselet(SPLIT_EACH) },
+
     { tokenType: "WHAT_IS", parselet: new InflationQueryParselet("what-is") },
     { tokenType: "WHAT_WAS", parselet: new InflationQueryParselet("what-was") },
     { tokenType: "VALUE_OF", parselet: new InflationFutureValueParselet() },
@@ -127,6 +139,10 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     { tokenType: "FOR_DURATION", parselet: new InvestmentGrowthParselet(COMPOUND_FV, COMPOUND_FV_EVERY) },
     { tokenType: "INVESTED", parselet: new ReturnOnInvestmentParselet(ROI) },
     { tokenType: "IN_YEAR_DOLLARS", parselet: new InYearDollarsParselet() },
+    // The amount-first split spelling, `<amount> split N ways`. Infix so the
+    // amount (which may be `$120 + 18%`) is the left operand. See
+    // BillSplitParselets.ts.
+    { tokenType: "SPLIT_WAYS", parselet: new SplitWaysParselet(SPLIT_EACH) },
   ],
   normalizerRules: [
     inYearDollarsNormalizerRule(),
@@ -134,6 +150,10 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     // as a plain multiplication, so a currency amount stays currency and an
     // exact one stays exact. See RecurringScheduleNormalizerRule.ts.
     recurringScheduleNormalizerRule(),
+    // `split $180 between 4` / `$120 + 18% split 3 ways`. Retypes split/ways/
+    // people contextually so those words stay ordinary names everywhere else.
+    // See BillSplitNormalizerRule.ts.
+    billSplitNormalizerRule(),
   ],
   pluginFunctions: [
     { index: INFLATION_FROM_YEAR_TO_PRESENT_IDX, handler: inflationFromYearToPresentHandler },

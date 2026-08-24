@@ -1,8 +1,8 @@
-import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, type MatrixData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, splitValue, type MatrixData } from "@solve-js/vm/Value";
 import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom, power, describeMeasureMismatch } from "@solve-js/vm/VMConversion";
-import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact } from "@solve-js/vm/MoneyExact";
+import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact } from "@solve-js/vm/MoneyExact";
 import { transpose, determinant, inverse, matrixMultiply, matrixPower, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
 import { symbolicToValue, valueToSymbolic, solveEquationValues } from "@solve-js/vm/SymbolicOps";
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
@@ -1082,6 +1082,18 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // pure loss. Asking for fewer decimal places than a number has cannot
     // change it, so a value that is already whole is returned untouched.
     97: (args) => roundToPlaces(args[0], args[1].toNumber()),
+    // splitEach(amount, n): a per-person bill split, `split $180 between 4` and
+    // `$120 + 18% split 3 ways`. Backs both split spellings (see
+    // BillSplitParselets.ts). Money stays exact and the shares add back to the
+    // total to the cent (see splitEachExact in MoneyExact.ts). A bare number
+    // splits to a bare number; the odd penny is named, not rounded away.
+    98: (args) => {
+        const n = args[1].toNumber();
+        if (!Number.isInteger(n) || n < 1) {
+            return errorValue("INVALID_RANGE", `split: the number of shares must be a whole number of at least 1, not ${args[1].toNumber()}.`);
+        }
+        return splitValue(splitEachExact(args[0], n));
+    },
 };
 
 /**

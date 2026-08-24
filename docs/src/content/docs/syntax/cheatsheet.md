@@ -207,6 +207,9 @@ $100 + $50 // $150.00
 tax on 100 at 20% // 20
 interest on 1000 over 3 years at 5% // 157.63
 monthly repayment on 200000 at 4% over 25 years // 1,055.67
+split $120 between 3 // $40.00 each
+$120 + 18% split 3 ways // $47.20 each
+split $100 between 3 // $33.33 each, with 1 share paying $33.34
 ```
 
 The term and the rate read in either order, so `at 4% over 25 years` and
