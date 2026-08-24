@@ -141,6 +141,19 @@ export const TokenTypes = {
   UNTIL: "UNTIL",
   SINCE: "SINCE",
   BETWEEN: "BETWEEN",
+  // Bill split (finance package). Retyped from the ordinary words "split",
+  // "ways" and "people" by BillSplitNormalizerRule, but only inside the full
+  // split shape, so those words stay usable as variable names and prose
+  // everywhere else (the same contextual-claim discipline as the recurring
+  // schedule and at-rate rules).
+  // The verb-first `split <amount> between N` form (prefix).
+  SPLIT: "SPLIT",
+  // The amount-first `<amount> split N ways` form (infix). A separate,
+  // infix-only token so implicit multiplication does not read it as the start
+  // of a new value and insert a `*` before it, which the dual-role SPLIT would.
+  SPLIT_WAYS: "SPLIT_WAYS",
+  WAYS: "WAYS",
+  PEOPLE: "PEOPLE",
   FROM: "FROM",
   INCREASE: "INCREASE",
   DECREASE: "DECREASE",

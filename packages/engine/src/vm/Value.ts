@@ -69,6 +69,33 @@ export interface ColourData {
 }
 
 /**
+ * One tier of a bill split: an amount and how many people pay it. An even
+ * split is a single share; the odd-penny case is two shares (the base amount
+ * most people pay, then the base plus a cent that the remaining `count` pay),
+ * so the shares always add back to the exact total. `exact` carries the
+ * base-ten cents of a currency share so display rounds from the decimal rather
+ * than a drifted double, exactly as money does everywhere else.
+ */
+export interface SplitShare {
+	readonly value: number;
+	readonly exact?: DecimalData;
+	readonly count: number;
+}
+
+/**
+ * The result of a per-person bill split (`split $180 between 4`). `unit` is the
+ * currency code when the amount was money, undefined for a bare number.
+ * `shares` is ordered base-first: `shares[0]` is the "each" amount, and a
+ * second share, when present, is the slightly larger amount the odd penny falls
+ * on. Lives in a {@link Value}'s `value` slot exactly as {@link ColourData} and
+ * {@link RangeData} do, a display-only payload the formatter renders.
+ */
+export interface SplitData {
+	readonly unit?: string;
+	readonly shares: readonly SplitShare[];
+}
+
+/**
  * Discriminated union tag for {@link Value} objects.
  *
  * Determines the runtime type of a Value and how its `value` field should
@@ -100,6 +127,8 @@ export enum ValueType {
 	Error = 13,
 	/** A colour (hex/rgb/hsl/named). Value is {@link ColourData}. */
 	Colour = 14,
+	/** A per-person bill split (`split $180 between 4`). Value is {@link SplitData}. */
+	Split = 15,
 }
 
 // ── ValueArena ────────────────────────────────────────────────────────────
@@ -157,7 +186,7 @@ export class ValueArena {
 	}
 
 	/** Bump-allocate a recycled Value. Falls back to allocation only for overflow. */
-	acquire(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SymbolicNode, unit?: string): Value {
+	acquire(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | SymbolicNode, unit?: string): Value {
 		if (this.index < this.arena.length) {
 			const v = this.arena[this.index++];
 			v.recycle(type, value, unit);
@@ -301,7 +330,7 @@ export class Value {
 	// recycle() which overwrites all fields. External code should treat Values
 	// as immutable after construction (arena handles mutation internally).
 	public type: ValueType;
-	public value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SymbolicNode;
+	public value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | SymbolicNode;
 	public unit?: string;
 	/** Set by async resolvers when a fetch timed out, the result is a fallback (typically 0). */
 	public timedOut?: boolean;
@@ -373,7 +402,7 @@ export class Value {
 
 	constructor(
 		type: ValueType,
-		value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SymbolicNode,
+		value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | SymbolicNode,
 		unit?: string
 	) {
 		this.type = type;
@@ -390,7 +419,7 @@ export class Value {
 	 * Phase 5.3: Reset all fields for arena reuse.
 	 * Called by ValueArena.acquire(), zero allocation, just field assignment.
 	 */
-	recycle(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SymbolicNode, unit?: string): void {
+	recycle(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | SymbolicNode, unit?: string): void {
 		this.type = type;
 		this.value = value;
 		this.unit = unit;
@@ -473,6 +502,10 @@ export class Value {
 		// A colour is a struct of channels, not a scalar; like Matrix/Range it has
 		// no single numeric reading. Callers branch on `.isColour()` first.
 		if (this.type === ValueType.Colour) return 0;
+		// A split is a structured multi-share result; its scalar reading is the
+		// "each" (base) share, so a numeric consumer or the worker DTO's number
+		// field still gets a sensible value where a caller does not branch first.
+		if (this.type === ValueType.Split) return (this.value as SplitData).shares[0].value;
 		// A symbolic expression has no single concrete numeric value by
 		// definition (it's a free-variable formula), 0, matching the
 		// Pending/Error/Range convention. Real callers branch on
@@ -509,6 +542,7 @@ export class Value {
 		}
 		if (this.type === ValueType.Range) return false;
 		if (this.type === ValueType.Colour) return false;
+		if (this.type === ValueType.Split) return false;
 		if (this.type === ValueType.Symbolic) return false;
 		// Matches toNumber()'s boolean reading above. Without this a Boolean
 		// reached the string branch at the bottom and `parseFloat(true)` made
@@ -783,6 +817,17 @@ export function rangeValue(min: number, max: number): Value {
 export function colourValue(c: ColourData): Value {
 	if (_arenaActive && _arena) return _arena.acquire(ValueType.Colour, c);
 	return new Value(ValueType.Colour, c);
+}
+
+/**
+ * Create a Split value from its structured per-share payload. Arena-backed like
+ * the other synchronous factories; the {@link SplitData} struct in the `value`
+ * slot is immutable, so arena recycle is safe with no extra clearing (matching
+ * {@link colourValue}/{@link rangeValue}).
+ */
+export function splitValue(data: SplitData): Value {
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.Split, data);
+	return new Value(ValueType.Split, data);
 }
 
 /** Create a Symbolic value, a free-variable algebraic expression tree (`symbolic/SymbolicNode.ts`'s `SymbolicNode`), not a concrete number. */

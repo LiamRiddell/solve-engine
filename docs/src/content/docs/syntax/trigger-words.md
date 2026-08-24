@@ -17,6 +17,11 @@ So they are not keywords. They are recognised only as part of a longer phrase,
 and only where that phrase forms a complete expression. `average of 1, 2, 3` is
 recognised. A bare `average` is a name.
 
+The same holds for the bill-split words: `split`, `ways` and `people` are read
+as the split grammar only inside the full `split <amount> between <N>` or
+`<amount> split <N> ways` shape, so `:split = 5` and a variable named `split`
+keep working.
+
 That is why this works:
 
 ```solve
