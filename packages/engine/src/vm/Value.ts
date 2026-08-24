@@ -481,6 +481,61 @@ export class Value {
 		return this.type === ValueType.Symbolic;
 	}
 
+	/**
+	 * An Error value: a fault carrying a code and message, propagated through the
+	 * DAG when a plugin or opcode cannot produce a quantity.
+	 *
+	 * An Error reads as the number 0 through {@link toNumber}, so a numeric
+	 * consumer that does not check this first cannot tell the fault apart from a
+	 * real zero: exactly the silently-wrong result the engine guards against
+	 * internally with {@link faultedOperand}. A host reading a live {@link Value}
+	 * off a result should branch on this (or {@link isFault}) before trusting the
+	 * number, and read {@link errorCode}/{@link errorMessage} for the detail.
+	 */
+	isError(): boolean {
+		return this.type === ValueType.Error;
+	}
+
+	/**
+	 * A Pending value: an async result that has not yet resolved, holding the
+	 * query key it is waiting on. Reads as 0 through {@link toNumber}, the same
+	 * caveat as {@link isError}: a settled value arrives on a later evaluation.
+	 */
+	isPending(): boolean {
+		return this.type === ValueType.Pending;
+	}
+
+	/**
+	 * Either fault, an Error or a Pending: the single predicate to check before
+	 * trusting {@link toNumber}. It mirrors the internal {@link faultedOperand}
+	 * rule that every opcode applies to its operands, so a host reading a result
+	 * makes the same distinction the engine does rather than computing with a
+	 * zero it cannot tell from a real one.
+	 */
+	isFault(): boolean {
+		return this.type === ValueType.Error || this.type === ValueType.Pending;
+	}
+
+	/**
+	 * The stable {@link ErrorFactory} code of an Error value, else `undefined`.
+	 *
+	 * The code is the machine-branchable identifier (the message is the
+	 * human-facing text, {@link errorMessage}). It reads from the same slot
+	 * {@link errorValue} writes, so it is defined for exactly the values
+	 * {@link isError} accepts and `undefined` for every other type.
+	 */
+	get errorCode(): string | undefined {
+		return this.type === ValueType.Error ? (this.value as string) : undefined;
+	}
+
+	/**
+	 * The human-facing message of an Error value, else `undefined`. Paired with
+	 * {@link errorCode}, which carries the branchable identifier.
+	 */
+	get errorMessage(): string | undefined {
+		return this.type === ValueType.Error ? this.unit : undefined;
+	}
+
 	toNumber(): number {
 		// Pending/Error have no numeric representation at all, 0 (established
 		// convention). A genuinely multi-cell Matrix has no single numeric

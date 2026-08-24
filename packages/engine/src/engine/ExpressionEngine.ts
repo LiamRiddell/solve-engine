@@ -3964,15 +3964,25 @@ export class ExpressionEngine {
      * Fast path: evaluate an expression and return a number directly.
      *
      * Skips Value object allocation when only a numeric result is needed.
-     * Returns NaN on error or for bare undefined variable references.
+     * Returns NaN whenever the expression has no numeric answer: a thrown
+     * error, a bare undefined variable reference, or a faulted result (an
+     * Error or a Pending value).
      *
      * Performs a pre-check for bare identifiers (single-token variable
      * references). If the identifier is not a known variable, returns NaN
      * immediately without attempting evaluation, avoids the ambiguity of
      * "result === 0" when a variable might legitimately store the value 0.
      *
+     * A faulted result is treated the same way, and for the same reason: an
+     * Error or Pending reads as 0 through {@link Value.toNumber}, so returning
+     * that 0 would be indistinguishable from a real zero. NaN is this fast
+     * path's established "no value" signal, so `evaluateNumber("5 kg to m")`
+     * (an impossible conversion) is NaN rather than a silent `0`. A caller that
+     * needs the fault's detail should use {@link evaluateExpression} and read
+     * {@link Value.errorCode}/{@link Value.isPending} off the result.
+     *
      * @param expression - The raw expression string to evaluate.
-     * @returns The numeric result, or NaN on error/undefined variable.
+     * @returns The numeric result, or NaN on error / undefined variable / fault.
      */
     evaluateNumber(expression: string): number {
          const trimmed = expression.trim();
@@ -3988,7 +3998,12 @@ export class ExpressionEngine {
 
          try {
              const results = this.evaluateLine(-1, expression);
-             return results[0].toNumber();
+             const value = results[0];
+             // A faulted result has no numeric meaning: toNumber() would read it
+             // as 0, indistinguishable from a real zero. Surface it as NaN, the
+             // same signal the bare-undefined-variable pre-check above returns.
+             if (value === undefined || value.isFault()) return NaN;
+             return value.toNumber();
          } catch {
              return NaN;
          }

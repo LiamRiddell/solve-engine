@@ -1,5 +1,5 @@
 import { describe, expect, test } from "@jest/globals";
-import { ValueType, numberValue, stringValue, bigIntValue, hexValue, rowVectorValue, uomValue, type MatrixData } from "@solve-js/vm/Value";
+import { ValueType, numberValue, stringValue, bigIntValue, hexValue, rowVectorValue, uomValue, errorValue, pendingValue, type MatrixData } from "@solve-js/vm/Value";
 
 describe("Value", () => {
   test("numberValue creates number type", () => {
@@ -70,4 +70,45 @@ test("toNumber returns 0 for non-numeric string", () => {
      const v = stringValue("hello");
      expect(v.toNumber()).toBe(0);
    });
+
+  describe("fault guards", () => {
+    test("isError / errorCode / errorMessage on an Error value", () => {
+      const v = errorValue("UNIT_MISMATCH", "cannot convert kg to seconds");
+      expect(v.isError()).toBe(true);
+      expect(v.isPending()).toBe(false);
+      expect(v.isFault()).toBe(true);
+      expect(v.errorCode).toBe("UNIT_MISMATCH");
+      expect(v.errorMessage).toBe("cannot convert kg to seconds");
+      // The fault still reads as 0 numerically: the whole point of the guard.
+      expect(v.toNumber()).toBe(0);
+    });
+
+    test("isPending on a Pending value", () => {
+      const v = pendingValue("query:btc-usd");
+      expect(v.isPending()).toBe(true);
+      expect(v.isError()).toBe(false);
+      expect(v.isFault()).toBe(true);
+      // A Pending is not an Error, so the error accessors stay undefined.
+      expect(v.errorCode).toBeUndefined();
+      expect(v.errorMessage).toBeUndefined();
+      expect(v.toNumber()).toBe(0);
+    });
+
+    test("a plain value carries no fault", () => {
+      const v = numberValue(0);
+      expect(v.isError()).toBe(false);
+      expect(v.isPending()).toBe(false);
+      expect(v.isFault()).toBe(false);
+      // A real zero must be indistinguishable from a fault ONLY by the number,
+      // never by the guard: this is the distinction the guard restores.
+      expect(v.toNumber()).toBe(0);
+      expect(v.errorCode).toBeUndefined();
+      expect(v.errorMessage).toBeUndefined();
+    });
+
+    test("errorCode is undefined for non-error types", () => {
+      expect(stringValue("hello").errorCode).toBeUndefined();
+      expect(numberValue(42).errorMessage).toBeUndefined();
+    });
+  });
 });

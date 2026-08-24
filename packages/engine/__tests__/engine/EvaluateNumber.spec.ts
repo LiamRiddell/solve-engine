@@ -25,6 +25,14 @@ describe("Phase 5: evaluateNumber fast path", () => {
       expect(typeof result).toBe("number");
       expect(result).toBe(5);
     });
+
+    test("evaluateNumber returns NaN for a faulted result, not a silent 0", () => {
+      // An impossible conversion produces an Error value that reads as 0 through
+      // toNumber(). Pre-2.0 that 0 leaked out here, indistinguishable from a
+      // real zero; now the fault surfaces as NaN.
+      const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
+      expect(engine.evaluateNumber("5 kg to m")).toBeNaN();
+    });
   });
 
   describe("Bare identifier handling (regression: distinguish zero from undefined)", () => {
