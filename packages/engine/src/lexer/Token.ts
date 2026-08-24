@@ -371,6 +371,11 @@ export const TokenTypes = {
   WHAT_WAS: "WHAT_WAS",
   VALUE_OF: "VALUE_OF",
   WORTH_IN: "WORTH_IN",
+  // Savings goals (finance). Fused whole-phrase triggers, so "how", "much",
+  // "save" and "reach" stay ordinary variable names, the same reason as the
+  // other finance phrases above.
+  SAVINGS_HOW_LONG: "SAVINGS_HOW_LONG",
+  SAVINGS_HOW_MUCH: "SAVINGS_HOW_MUCH",
   // Bare single-word keyword (not phrase-fused) -- "assuming" has
   // near-zero plausibility as a variable name, the same accepted-risk
   // category as this codebase's existing bare "over"/"at" keywords

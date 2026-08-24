@@ -1094,7 +1094,75 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         }
         return splitValue(splitEachExact(args[0], n));
     },
+    // ── Savings goals ──────────────────────────────────────────────
+    // savingsGoalPayment(target, duration, annualRate): the level contribution
+    // per month that reaches `target` over `duration` (months or years), at an
+    // optional annual rate compounded monthly. Backs "how much per month to
+    // save/reach <target> in <duration> [at <rate>]".
+    99: (args) => {
+        const target = args[0].toNumber();
+        const months = monthsOfDuration(args[1]);
+        const annualRate = args[2].toNumber();
+        if (months === null) return errorValue("INVALID_RANGE", `savings goal: the duration must be in months or years, e.g. "in 2 years".`);
+        if (target <= 0) return errorValue("INVALID_RANGE", `savings goal: the target must be positive.`);
+        if (months <= 0) return errorValue("INVALID_RANGE", `savings goal: the duration must be positive.`);
+        if (annualRate < 0) return errorValue("INVALID_RATE", `savings goal: the rate must not be negative.`);
+        const payment = annuityPayment(target, annualRate / 12, months);
+        return args[0].type === ValueType.Uom ? uomValue(payment, args[0].unit!) : numberValue(payment);
+    },
+    // savingsGoalPeriods(target, contribution, periodsPerYear, annualRate,
+    // periodUnit): how many whole periods of `contribution` reach `target`,
+    // rounded UP, since a part period has not yet reached the goal. Backs
+    // "how long to save <target> at <amount> <period> [at <rate>]".
+    100: (args) => {
+        const target = args[0].toNumber();
+        const contribution = args[1].toNumber();
+        const periodsPerYear = args[2].toNumber();
+        const annualRate = args[3].toNumber();
+        const unit = typeof args[4]?.value === "string" ? (args[4].value as string) : "periods";
+        if (target <= 0) return errorValue("INVALID_RANGE", `savings goal: the target must be positive.`);
+        if (contribution <= 0) return errorValue("INVALID_RANGE", `savings goal: the contribution must be positive.`);
+        if (annualRate < 0) return errorValue("INVALID_RATE", `savings goal: the rate must not be negative.`);
+        const periods = annuityPeriods(target, contribution, annualRate / periodsPerYear);
+        return uomValue(periods, unit);
+    },
 };
+
+/**
+ * The months a savings-goal duration stands for: a Uom in `months` is its own
+ * count, a Uom in `years` is twelve to the year. Any other or absent time unit
+ * has no clean month count, so the builtin reports it rather than guessing.
+ */
+function monthsOfDuration(duration: Value): number | null {
+    if (duration.type !== ValueType.Uom) return null;
+    const unit = duration.unit;
+    if (unit === "months" || unit === "month") return duration.toNumber();
+    if (unit === "years" || unit === "year") return duration.toNumber() * 12;
+    return null;
+}
+
+/**
+ * The level contribution whose annuity future value reaches `target` after
+ * `months` at monthly rate `i`, the sinking-fund payment. A zero rate is the
+ * plain `target / months`, avoiding the 0/0 the closed form would produce, the
+ * same special case {@link amortizeLoan} draws.
+ */
+function annuityPayment(target: number, i: number, months: number): number {
+    return i === 0 ? target / months : (target * i) / (Math.pow(1 + i, months) - 1);
+}
+
+/**
+ * The number of periods of `contribution` whose annuity future value reaches
+ * `target` at per-period rate `i`, the inverse of {@link annuityPayment},
+ * rounded UP: a part period has not yet reached the goal, the deliberate inverse
+ * of the recurring-schedule rule that floors a part period. A tiny snap before
+ * the ceiling keeps a clean whole result (a `20.0000001` float) at 20. A zero
+ * rate is the plain `target / contribution`.
+ */
+function annuityPeriods(target: number, contribution: number, i: number): number {
+    const raw = i === 0 ? target / contribution : Math.log(1 + (target * i) / contribution) / Math.log(1 + i);
+    return Math.ceil(raw - 1e-9);
+}
 
 /**
  * Applies one of the complex accessors to a value.

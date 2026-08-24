@@ -217,6 +217,8 @@ monthly repayment on 200000 at 4% over 25 years // 1,055.67
 split $120 between 3 // $40.00 each
 $120 + 18% split 3 ways // $47.20 each
 split $100 between 3 // $33.33 each, with 1 share paying $33.34
+how long to save $10,000 at $500 monthly // 20 months
+how much per month to save $12,000 in 2 years // $500.00
 ```
 
 The term and the rate read in either order, so `at 4% over 25 years` and
