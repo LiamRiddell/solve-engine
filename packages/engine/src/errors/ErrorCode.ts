@@ -174,6 +174,10 @@ export const CoreErrorCodes = {
   THEREFORE_REQUIRES_EXPRESSION: "THEREFORE_REQUIRES_EXPRESSION",
   /** A `"=>"`-triggered expression called an async plugin (weather/stocks/currency). Same v1 scope restriction as user-function/map-reduce bodies. */
   THEREFORE_ASYNC_UNSUPPORTED: "THEREFORE_ASYNC_UNSUPPORTED",
+  /** A compound assignment (`name += expr` / `name -= expr`) with nothing on the right, a line half-typed on the way to `total += 5`. */
+  COMPOUND_ASSIGN_REQUIRES_EXPRESSION: "COMPOUND_ASSIGN_REQUIRES_EXPRESSION",
+  /** A running total (`+= / -=`) whose right-hand side calls an async plugin (weather/stocks/currency). The same v1 scope restriction as the `"=>"` and user-function bodies. */
+  COMPOUND_ASSIGN_ASYNC_UNSUPPORTED: "COMPOUND_ASSIGN_ASYNC_UNSUPPORTED",
   /** Colon-separated numbers that are not a time any clock can show ("24:00", "9:60", "100:5"). Raised by the labeled-line fallback, which used to answer them with whatever stood after the colon. */
   INVALID_TIME_LITERAL: "INVALID_TIME_LITERAL",
 

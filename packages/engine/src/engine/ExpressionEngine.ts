@@ -76,6 +76,7 @@ import { containsSymbolicCall } from "@solve-js/packages/symbolic";
 import { solveEquationValues } from "@solve-js/vm/SymbolicOps";
 import { abortLogger } from "@solve-js/utilities/AbortControllerLogger";
 import { TokenNormalizer, BUILTIN_PHRASES, implicitMultiplyRule } from "@solve-js/normalizer";
+import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import type { TokenFusion } from "@solve-js/normalizer";
 import { UserUnitTable } from "@solve-js/packages/uom/UserUnitTable";
 import { userUnitExpansionRule } from "@solve-js/packages/uom/normalizer/UserUnitNormalizerRule";
@@ -1762,6 +1763,78 @@ export class ExpressionEngine {
         return stringValue(`${nameWords.join(' ')} defined`);
     }
 
+    /**
+     * `name += expr` / `name -= expr`, a running total. The accumulator reads
+     * its current value, adds or subtracts the right-hand side, stores the
+     * result, and answers with the new value, so a note becomes a live ledger
+     * where each line adjusts a balance in place. Returns null to decline
+     * anything that is not the compound shape.
+     *
+     * Handled here, in the same effectful, cache-bypassing channel as
+     * {@link tryDefineUserUnit} and the bare `count = 10` assignment (see
+     * {@link trySymbolicGrammar}), rather than as a parselet: a bare identifier
+     * is a Tier-1 prefix that emits `LOAD_VAR name` before any infix parselet on
+     * `+=` could run, and that pre-emitted load throws UNDEFINED_VARIABLE for a
+     * first-use accumulator. Seeding 0 for a first `+=`/`-=` is a one-line
+     * `getVar`/`setVar` here where it cannot be from a parselet, a deliberate
+     * departure from a plain reference, which still reports the undefined name.
+     *
+     * The right-hand side is parenthesised and run through the ORDINARY (not
+     * symbolic-tolerant) path, so `bal += 3 * 4` is `bal + 12`, a genuine typo in
+     * it (`total += nope`) is a real UNDEFINED_VARIABLE, and the accumulation
+     * goes through the VM's own ADD/SUB: money stays money, a unit stays its
+     * unit, and the seed 0 added to a typed right-hand side takes that type on
+     * first use. The colon (`:name`) and `global :name` grammars are untouched:
+     * they lex their own leading token, never IDENT/UNIT, so they decline here.
+     */
+    private tryCompoundAssignment(tokens: Token[], lineNumber: number = -1): Value | null {
+        if (tokens.length < 2) return null;
+        const nameTok = tokens[0];
+        const opTok = tokens[1];
+        const isName = nameTok.type === 'IDENT' || nameTok.type === 'UNIT';
+        const isCompound = opTok.type === 'PLUS_EQUALS' || opTok.type === 'MINUS_EQUALS';
+        if (!isName || !isCompound) return null;
+
+        const rhs = tokens.slice(2);
+        if (rhs.length === 0) {
+            throw ErrorFactory.parsing(
+                'COMPOUND_ASSIGN_REQUIRES_EXPRESSION',
+                `"${nameTok.value} ${opTok.value}" needs an expression on the right, e.g. "${nameTok.value} ${opTok.value} 10".`,
+            );
+        }
+
+        const name = nameTok.value;
+        // A first `+=`/`-=` on an unknown name seeds 0, so a ledger can open
+        // straight into `spent += 10` without an UNDEFINED_VARIABLE.
+        if (this.vm.getVar(name) === undefined) this.vm.setVar(name, numberValue(0));
+
+        const op = opTok.type === 'PLUS_EQUALS' ? { type: 'PLUS', text: '+' } : { type: 'MINUS', text: '-' };
+        // `name <op> ( rhs )`: the accumulator is read as an ordinary IDENT so a
+        // unit-letter name (`b`, `s`) loads its variable rather than a unit, and
+        // the parentheses give the right-hand side its own precedence (`bal += 3
+        // * 4` is bal + 12, `bal -= 1 + 2` is bal - 3).
+        const accTokens: Token[] = [
+            createFusedToken('IDENT', name, [nameTok]),
+            createFusedToken(op.type, op.text, [opTok]),
+            createFusedToken('LPAREN', '(', [opTok]),
+            ...rhs,
+            createFusedToken('RPAREN', ')', [opTok]),
+        ];
+
+        const result = executeBytecode(
+            this.compileAdHoc(accTokens), this.vm, undefined, undefined, this.makeLineContext(lineNumber), false,
+        );
+        if (result.type === 'error') throw result.error;
+        if (result.type === 'pending') {
+            throw ErrorFactory.execution(
+                'COMPOUND_ASSIGN_ASYNC_UNSUPPORTED',
+                `A running total (+= / -=) cannot use an async operation (weather/stocks/currency) on its right-hand side.`,
+            );
+        }
+        this.vm.setVar(name, result.value);
+        return result.value;
+    }
+
     private trySymbolicGrammar(normalizedTokens: Token[], lineNumber: number = -1): Value | null {
         if (normalizedTokens.length === 0) return null;
 
@@ -2071,6 +2144,7 @@ export class ExpressionEngine {
             // channel. Checked first, so it claims its narrow pattern before the
             // scalar-equation grammar sees the bare `=`.
             symbolicResult = this.tryDefineUserUnit(normalizedTokens)
+                ?? this.tryCompoundAssignment(normalizedTokens, lineNumber)
                 ?? this.trySymbolicGrammar(normalizedTokens, lineNumber);
         } catch (e) {
             // reads/writes supplied for the same reason the main parse's catch

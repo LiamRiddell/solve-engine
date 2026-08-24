@@ -115,12 +115,19 @@ if 5 > 3 then 100 else 200 // 100
 
 ## Variables and functions
 
-Colon-prefixed names are explicit. A bare name works too.
+Colon-prefixed names are explicit. A bare name works too, and `+=`/`-=` keep a
+running total.
 
 ```solve
 :a = 10
 :b = 20
 :a + :b // 30
+```
+
+```solve
+:budget = 500
+budget -= 120 // 380
+budget -= 63 // 317
 ```
 
 ```solve

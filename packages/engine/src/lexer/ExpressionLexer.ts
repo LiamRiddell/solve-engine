@@ -257,6 +257,8 @@ const TWO_CHAR_OPS: TwoCharOpMap = {
   60: { 61: 'LTE' },       // <=
   38: { 38: 'LOGICAL_AND' }, // &&
   124: { 124: 'LOGICAL_OR' }, // ||
+  43: { 61: 'PLUS_EQUALS' },  // +=  (compound assignment, running totals)
+  45: { 61: 'MINUS_EQUALS' }, // -=  (neither + nor - had a two-char op before)
   // Note: ** is NOT a single token, the existing moo lexer emits two
   // separate STAR tokens, and the parser consumes them that way.
   // 42: { 42: 'EXPONENT' },  // **, disabled for moo compatibility
