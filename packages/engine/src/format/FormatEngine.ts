@@ -199,7 +199,7 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   const dp = settings.unitOfMeasurementResult.decimalPlaces;
 
   // For TimeSpan values (days, weeks, hours, etc.), format as integer if the value is a whole number
-  const timeSpanUnits = ["days", "weeks", "hours", "minutes", "seconds", "day", "week", "hour", "minute", "second"];
+  const timeSpanUnits = ["days", "weeks", "months", "years", "hours", "minutes", "seconds", "day", "week", "month", "year", "hour", "minute", "second"];
   const isTimeSpan = unit && timeSpanUnits.includes(unit);
 
   let formatted: string;

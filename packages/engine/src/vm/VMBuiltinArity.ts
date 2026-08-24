@@ -146,6 +146,8 @@ const BUILTIN_ARITY: Record<number, BuiltinArity> = {
   // converters/parselets/RoundingParselets.ts.
   97: { name: "roundToPlaces", min: 2, max: 2 },
   98: { name: "splitEach", min: 2, max: 2 },
+  99: { name: "savingsGoalPayment", min: 3, max: 3 },
+  100: { name: "savingsGoalPeriods", min: 5, max: 5 },
 };
 
 /** "1 argument" / "2 arguments", so the message reads as English either way. */

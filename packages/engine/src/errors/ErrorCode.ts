@@ -178,6 +178,8 @@ export const CoreErrorCodes = {
   COMPOUND_ASSIGN_REQUIRES_EXPRESSION: "COMPOUND_ASSIGN_REQUIRES_EXPRESSION",
   /** A running total (`+= / -=`) whose right-hand side calls an async plugin (weather/stocks/currency). The same v1 scope restriction as the `"=>"` and user-function bodies. */
   COMPOUND_ASSIGN_ASYNC_UNSUPPORTED: "COMPOUND_ASSIGN_ASYNC_UNSUPPORTED",
+  /** A savings-goal contribution period that is not one of daily/weekly/monthly/yearly (`how long to save $X at $Y <period>`). Names the accepted set. */
+  UNKNOWN_SAVINGS_PERIOD: "UNKNOWN_SAVINGS_PERIOD",
   /** Colon-separated numbers that are not a time any clock can show ("24:00", "9:60", "100:5"). Raised by the labeled-line fallback, which used to answer them with whatever stood after the colon. */
   INVALID_TIME_LITERAL: "INVALID_TIME_LITERAL",
 

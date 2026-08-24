@@ -3,6 +3,7 @@ import { InvestmentGrowthParselet, PresentValueParselet, ReturnOnInvestmentParse
 import { CompoundInterestParselet } from "./parselets/CompoundInterestParselet";
 import { LoanRepaymentParselet } from "./parselets/LoanRepaymentParselet";
 import { SplitBetweenParselet, SplitWaysParselet } from "./parselets/BillSplitParselets";
+import { SavingsDurationParselet, SavingsContributionParselet } from "./parselets/SavingsGoalParselets";
 import { SalesTaxParselet } from "./parselets/SalesTaxParselet";
 import { InflationQueryParselet } from "./parselets/InflationQueryParselet";
 import { InflationFutureValueParselet } from "./parselets/InflationFutureValueParselet";
@@ -26,6 +27,8 @@ const PRESENT_VALUE = 82, ROI = 83, ANNUAL_RETURN = 84;
 const TAX_REMOVE = 59, TAX_IN = 85, TAX_ON = 86;
 // Bill split: `split $180 between 4` / `$120 + 18% split 3 ways`.
 const SPLIT_EACH = 98;
+// Savings goals: `how much per month to save ...` and `how long to save ...`.
+const SAVINGS_PAYMENT = 99, SAVINGS_PERIODS = 100;
 // 60 = inflationAdjust(amount, fromYear, toYear). See InflationQueryParselet.ts
 // and VMBuiltins.ts. The other three inflation calculations (present-year
 // forms + the flat-rate future-value projection) are collision-safe
@@ -65,6 +68,10 @@ const SPLIT_EACH = 98;
  * so `:split`, a variable named `split`, and prose are untouched. "between"
  * reuses the pre-existing bare BETWEEN token (the accepted-risk category above).
  *
+ * "how", "much", "save" and "reach" (the savings-goal phrases) are fused whole,
+ * "how long to save" and "how much per month to save"/"to reach", so none of
+ * those words becomes a bare keyword and `:save`/`:reach`/`:how` stay usable.
+ *
  * Inflation-adjusted value (extends this package, see
  * `parselets/InflationQueryParselet.ts`/`InflationFutureValueParselet.ts`/
  * `InYearDollarsParselet.ts` and `data/CpiTable.ts` for the bundled,
@@ -103,6 +110,9 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     "annual return on": "ANNUAL_RETURN_ON",
     "value of": "VALUE_OF",
     "worth in": "WORTH_IN",
+    "how long to save": "SAVINGS_HOW_LONG",
+    "how much per month to save": "SAVINGS_HOW_MUCH",
+    "how much per month to reach": "SAVINGS_HOW_MUCH",
     "assuming": "ASSUMING",
   },
   prefixParselets: [
@@ -130,6 +140,8 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     { tokenType: "WHAT_IS", parselet: new InflationQueryParselet("what-is") },
     { tokenType: "WHAT_WAS", parselet: new InflationQueryParselet("what-was") },
     { tokenType: "VALUE_OF", parselet: new InflationFutureValueParselet() },
+    { tokenType: "SAVINGS_HOW_LONG", parselet: new SavingsDurationParselet(SAVINGS_PERIODS) },
+    { tokenType: "SAVINGS_HOW_MUCH", parselet: new SavingsContributionParselet(SAVINGS_PAYMENT) },
   ],
   infixParselets: [
     // The documented bare forms: "$1,000 after 3 years at 7%" and the "for
