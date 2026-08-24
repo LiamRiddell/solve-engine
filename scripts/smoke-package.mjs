@@ -45,14 +45,14 @@ check("ESM: root entry exports ExpressionEngine", () => {
 });
 
 check("ESM: evaluates an expression", () => {
-  const engine = new esm.ExpressionEngine();
+  const engine = esm.createEngine();
   const [value] = engine.evaluateExpression("2 + 2 * 10");
   const actual = value.toNumber();
   if (actual !== 22) throw new Error(`2 + 2 * 10 gave ${actual}, expected 22`);
 });
 
 check("ESM: units survive the bundle", () => {
-  const engine = new esm.ExpressionEngine();
+  const engine = esm.createEngine();
   const [value] = engine.evaluateLine(1, "100 cm + 2 m");
   if (value === undefined) throw new Error("no value returned");
 });
@@ -64,7 +64,7 @@ check("CJS: root entry requires and evaluates", () => {
   if (typeof cjs.ExpressionEngine !== "function") {
     throw new Error(`ExpressionEngine is ${typeof cjs.ExpressionEngine}, expected function`);
   }
-  const engine = new cjs.ExpressionEngine();
+  const engine = cjs.createEngine();
   const [value] = engine.evaluateExpression("6 * 7");
   const actual = value.toNumber();
   if (actual !== 42) throw new Error(`6 * 7 gave ${actual}, expected 42`);
