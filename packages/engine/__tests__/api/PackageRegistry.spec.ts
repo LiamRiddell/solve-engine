@@ -22,7 +22,6 @@ describe("PackageRegistry IEnginePackage", () => {
     const api: IPackageRegistry = packageRegistry;
     expect(api.registerPrefixParselet).toBeDefined();
     expect(api.registerInfixParselet).toBeDefined();
-    expect(api.registerVariableSource).toBeDefined();
     expect(api.registerPackage).toBeDefined();
   });
 
@@ -47,19 +46,6 @@ it("supports registerPackage with prefix parselets", () => {
     const pkg: IEnginePackage = {
       name: "test-package",
       infixParselets: [{ tokenType: "TEST_INFIX", parselet: testParselet }],
-    };
-    expect(() => packageRegistry.registerPackage(pkg)).not.toThrow();
-  });
-
-  it("supports registerPackage with variable sources", () => {
-    const pkg: IEnginePackage = {
-      name: "test-package",
-      variableSources: [{
-        name: "test-source",
-        priority: 1,
-        get: async () => 42,
-        set: async () => {},
-      }],
     };
     expect(() => packageRegistry.registerPackage(pkg)).not.toThrow();
   });

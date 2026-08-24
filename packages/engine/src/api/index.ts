@@ -3,8 +3,8 @@
 // @solve-js/vm, @solve-js/parser, @solve-js/language, @solve-js/format,
 // @solve-js/packages, @solve-js/constants (all public), plus the
 // advanced-public escape hatches (@solve-js/lexer, @solve-js/normalizer,
-// @solve-js/variables, @solve-js/resolvers, @solve-js/errors,
-// @solve-js/utilities, @solve-js/uom) for authoring custom packages.
+// @solve-js/resolvers, @solve-js/errors, @solve-js/utilities,
+// @solve-js/uom) for authoring custom packages.
 
 export { PackageRegistry, packageRegistry } from "./PackageRegistry";
 export type { IPackageRegistry, IEnginePackage } from "./PackageRegistry";

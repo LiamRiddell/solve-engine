@@ -266,13 +266,12 @@ export class ExpressionEngine {
     private resolverRegistry = new ResolverRegistry();
 
     /**
-     * Per-package record of contributions made to the SHARED registries
-     * (this engine's variable resolver / resolver namespaces), so
+     * Per-package record of contributions made to the engine's registries
+     * (plugin functions, resolver namespaces, token categories), so
      * {@link unregisterPackage} can reverse them. Keyed by package name.
      */
     private packageContributions = new Map<string, {
         pluginFunctionIndices: number[];
-        variableSources: import("@solve-js/variables/IVariableSource").IVariableSource[];
         resolverNamespaces: string[];
         tokenCategories: string[];
         lexerVocabulary: LexerVocabulary | undefined;
@@ -710,7 +709,6 @@ export class ExpressionEngine {
      * - `lexerVocabulary` → engine's isolated lexer (via this.lexer.registerVocabulary)
      * - `prefixParselets` → engine's isolated ParseletRegistry
      * - `infixParselets` → engine's isolated ParseletRegistry
-     * - `variableSources` → this engine's own variable resolver
      *
      * Built-in packages (ARITHMETIC, FUNCTION, UOM, etc.) are registered
      * via this method during construction. External user packages can also
@@ -782,7 +780,6 @@ export class ExpressionEngine {
         // engine's life.
         const contribution = {
             pluginFunctionIndices: [] as number[],
-            variableSources: [] as import("@solve-js/variables/IVariableSource").IVariableSource[],
             resolverNamespaces: [] as string[],
             tokenCategories: [] as string[],
             lexerVocabulary: pkg.lexerVocabulary,
@@ -818,12 +815,6 @@ export class ExpressionEngine {
                 this.context.pluginFunctions[pf.index] = pf.handler;
                 this.context.pluginFunctionOwners[pf.index] = pkg.name;
                 contribution.pluginFunctionIndices.push(pf.index);
-            }
-        }
-        if (pkg.variableSources) {
-            for (const vs of pkg.variableSources) {
-                this.context.variableResolver.registerSource(vs);
-                contribution.variableSources.push(vs);
             }
         }
         if (pkg.asyncResolvers) {
@@ -906,9 +897,6 @@ export class ExpressionEngine {
         for (const index of contribution.pluginFunctionIndices) {
             delete this.context.pluginFunctions[index];
             delete this.context.pluginFunctionOwners[index];
-        }
-        for (const vs of contribution.variableSources) {
-            this.context.variableResolver.unregisterSource(vs);
         }
         for (const namespace of contribution.resolverNamespaces) {
             this.resolverRegistry.unregister(namespace);

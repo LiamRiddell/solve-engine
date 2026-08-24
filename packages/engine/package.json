@@ -138,16 +138,6 @@
         "default": "./dist/normalizer.cjs"
       }
     },
-    "./variables": {
-      "import": {
-        "types": "./dist/variables.d.ts",
-        "default": "./dist/variables.js"
-      },
-      "require": {
-        "types": "./dist/variables.d.cts",
-        "default": "./dist/variables.cjs"
-      }
-    },
     "./resolvers": {
       "import": {
         "types": "./dist/resolvers.d.ts",

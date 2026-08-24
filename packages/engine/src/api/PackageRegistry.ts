@@ -1,8 +1,6 @@
 import { sharedParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { PrefixParselet, InfixParselet } from "@solve-js/parser/Parselet";
 import { Value } from "@solve-js/vm/Value";
-import { IVariableSource } from "@solve-js/variables/IVariableSource";
-import { sharedVariableResolver } from "@solve-js/variables/VariableResolver";
 import { sharedLexer } from "@solve-js/lexer/Lexer";
 import type { LexerVocabulary } from "@solve-js/lexer/ExpressionLexer";
 import type { IAsyncResolver } from "@solve-js/resolvers/ResolverRegistry";
@@ -30,9 +28,7 @@ export interface IPackageRegistry {
   registerPrefixParselet(tokenType: string, parselet: PrefixParselet): void;
   /** Register an infix parselet (e.g., `+`, `in`, `to`). */
   registerInfixParselet(tokenType: string, parselet: InfixParselet): void;
-  /** @deprecated Has no effect. See {@link IEnginePackage.variableSources}. */
-  registerVariableSource(source: IVariableSource): void;
-  /** Register a complete package (parselets + variable sources). */
+  /** Register a complete package (parselets, plugin functions, vocabulary). */
   registerPackage(pkg: IEnginePackage): void;
   /** Convenience reference to the Value class for creating typed values. */
   Value: typeof Value;
@@ -110,23 +106,6 @@ export interface IEnginePackage {
    * ```
    */
   pluginFunctions?: Array<{ index: number; handler: (args: Value[], context?: LineExecutionContext) => Value | Promise<Value> }>;
-  /**
-   * Named-variable sources.
-   *
-   * @deprecated Currently has no effect. Sources declared here are registered
-   * into the engine's {@link EngineContext} and unregistered again on package
-   * removal, but no evaluation path ever calls `VariableResolver.resolve()`, so
-   * a variable a source provides is never found. Verified by searching every
-   * use of `IVariableSource` outside its own declaration: they are all
-   * registration bookkeeping.
-   *
-   * Declared here rather than deleted because removing a public field is a
-   * breaking change and the intended behaviour is worth keeping. Documented as
-   * dead so a package author does not spend an afternoon working out why their
-   * variables resolve to nothing. To expose a value today, contribute a plugin
-   * function through {@link IEnginePackage.pluginFunctions}.
-   */
-  variableSources?: IVariableSource[];
   /**
    * Async resolvers for this package's domain.
    * When set, the ExpressionEngine runs preflight() before VM execution
@@ -264,10 +243,6 @@ export class PackageRegistry implements IPackageRegistry {
     sharedParseletRegistry.registerInfix(tokenType, parselet);
   }
 
-  registerVariableSource(source: IVariableSource): void {
-    sharedVariableResolver.registerSource(source);
-  }
-
   registerPackage(pkg: IEnginePackage): void {
     // Same hard engine-version gate ExpressionEngine.registerPackage() uses
     // (see its own comment and ARCHITECTURE.md §5.3). This weaker
@@ -287,11 +262,6 @@ export class PackageRegistry implements IPackageRegistry {
     if (pkg.infixParselets) {
       for (const ip of pkg.infixParselets) {
         this.registerInfixParselet(ip.tokenType, ip.parselet);
-      }
-    }
-    if (pkg.variableSources) {
-      for (const vs of pkg.variableSources) {
-        this.registerVariableSource(vs);
       }
     }
     // Note: asyncResolvers are NOT registered here, the shared PackageRegistry singleton
