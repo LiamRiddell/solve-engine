@@ -233,10 +233,8 @@
   "devDependencies": {
     "@jest/globals": "^30.4.1",
     "@types/node": "^26.2.0",
-    "@types/semver": "^7.5.0",
     "convert": "^7.0.0",
     "jest": "^30.4.2",
-    "semver": "^7.6.0",
     "ts-jest": "^29.4.12",
     "tsup": "8.5.1",
     "typescript": "5.9.3"
