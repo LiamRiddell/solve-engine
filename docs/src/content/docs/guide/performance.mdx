@@ -106,6 +106,29 @@ engine.onAsyncError(({ queryKey, packageId, error }) => {
 Nothing about the synchronous API changes. `solve-engine/worker` is a separate,
 side-effect-free entry point, so a host that never imports it pays nothing.
 
+## Bundle size, and tree-shaking
+
+Load-time performance is parse time, and parse time is bytes. The engine ships
+minified with `sideEffects: false`, and, since it registers only the packages
+you give it, a bundler drops the built-ins you never import.
+
+That last part is the lever. An engine constructed with the full set carries all
+26 built-in packages; one constructed with a handful carries only those. The
+difference is real parsed JavaScript, not just transfer size:
+
+| Import | Parsed (minified) |
+| --- | --- |
+| `createEngine()`, every built-in | ~475 KB |
+| `new ExpressionEngine(…, [ARITHMETIC_PACKAGE])`, arithmetic only | ~352 KB |
+
+The tree-shaking is what makes the second row possible: because nothing in the
+engine's own module graph references a package you did not import, the bundler is
+free to delete finance, colour, weather and the rest. `createEngine` is the
+opposite trade, one call that pulls everything, for when bundle size is not the
+concern. Each [syntax page](/syntax/cheatsheet/) names the package its feature
+needs, so a slim build registers exactly what it uses. See
+[choosing packages](/getting-started/installation/).
+
 ## What to avoid
 
 Constructing a new engine per evaluation throws away every cache and re-registers
