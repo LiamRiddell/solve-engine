@@ -27,7 +27,7 @@ For a slimmer engine, pass the packages you want. Importing them from `solve-eng
 ```typescript
 import { ExpressionEngine } from "solve-engine";
 import { ARITHMETIC_PACKAGE, UOM_PACKAGE } from "solve-engine/packages";
-const engine = new ExpressionEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE, UOM_PACKAGE]);
+const engine = new ExpressionEngine({ packages: [ARITHMETIC_PACKAGE, UOM_PACKAGE] });
 ```
 
 The `fromJSON` restore path takes the same `packages` argument, and must be given the same set the snapshot was taken with, since a snapshot's compiled bytecode only lines up against the packages present when it was written.

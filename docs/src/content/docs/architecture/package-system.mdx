@@ -68,7 +68,7 @@ particular package can filter it out.
 
 ```ts
 const packages = BUILTIN_PACKAGES.filter(p => p.name !== "solve-symbolic");
-const engine = new ExpressionEngine("en", false, undefined, undefined, packages);
+const engine = new ExpressionEngine({ packages: packages });
 ```
 
 Do this to change **behaviour**, not to chase speed. Dropping a package removes

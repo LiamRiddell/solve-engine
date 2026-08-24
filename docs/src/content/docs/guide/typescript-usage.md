@@ -14,7 +14,7 @@ objects, not a single number. One expression usually produces one value, so dest
 first element is the common case.
 
 ```ts
-const [value] = engine.evaluateExpression("10% of 200 + 3 km in m");
+const value = engine.evaluateExpression("10% of 200 + 3 km in m");
 value.type;       // ValueType.Uom
 value.toNumber(); // 3020
 value.unit;       // "m"
@@ -33,7 +33,7 @@ rest of the value before you assume it is a plain number.
 ```ts
 import { ValueType } from "solve-engine/vm";
 
-const [value] = engine.evaluateExpression("50%");
+const value = engine.evaluateExpression("50%");
 
 switch (value.type) {
   case ValueType.Number:
@@ -59,7 +59,7 @@ type `Error`, so a bad line in a document never takes the rest of the document
 down with it.
 
 ```ts
-const [value] = engine.evaluateExpression("1 +");
+const value = engine.evaluateExpression("1 +");
 value.type === ValueType.Error; // true
 ```
 

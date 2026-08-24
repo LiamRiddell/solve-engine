@@ -25,7 +25,7 @@ TypeScript is optional. If you use it, everything is typed and no separate
 import { createEngine } from "solve-engine";
 
 const engine = createEngine("en");
-const [result] = engine.evaluateExpression("2 + 2 * 10");
+const result = engine.evaluateExpression("2 + 2 * 10");
 
 console.log(result.toNumber()); // 22
 ```
@@ -75,7 +75,7 @@ import { ExpressionEngine } from "solve-engine";
 import { ARITHMETIC_PACKAGE, UOM_PACKAGE } from "solve-engine/packages";
 
 // Only arithmetic and units reach the bundle.
-const engine = new ExpressionEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE, UOM_PACKAGE]);
+const engine = new ExpressionEngine({ packages: [ARITHMETIC_PACKAGE, UOM_PACKAGE] });
 ```
 
 Each syntax page names the package (or packages) its grammar needs, so you can

@@ -12,7 +12,7 @@ evaluates a document, which is what you want when lines refer to each other.
 import { createEngine } from "solve-engine";
 
 const engine = createEngine("en");
-const [result] = engine.evaluateExpression("50% of 200");
+const result = engine.evaluateExpression("50% of 200");
 
 result.toNumber(); // 100
 ```
@@ -29,7 +29,7 @@ own presentation.
 ```ts
 import { formatValue } from "solve-engine/format";
 
-const [value] = engine.evaluateExpression("100cm + 2m");
+const value = engine.evaluateExpression("100cm + 2m");
 formatValue(value); // "= 300.00 cm"
 ```
 
@@ -46,7 +46,7 @@ const engine = createEngine("en");
 
 engine.evaluateLine(1, ":subtotal = 100");
 engine.evaluateLine(2, ":tax = 20% of :subtotal");
-const [total] = engine.evaluateLine(3, ":subtotal + :tax");
+const total = engine.evaluateLine(3, ":subtotal + :tax");
 
 total.toNumber(); // 120
 ```
@@ -63,7 +63,7 @@ is being typed one character at a time and is invalid most of the way.
 ```ts
 import { ValueType } from "solve-engine/vm";
 
-const [value] = engine.evaluateExpression("10 +");
+const value = engine.evaluateExpression("10 +");
 value.type === ValueType.Error;
 ```
 

@@ -38,7 +38,7 @@ of memory). Each produces a clear error rather than hanging.
 ```ts
 import { ValueType } from "solve-engine/vm";
 
-const [value] = engine.evaluateExpression("2 + 2");
+const value = engine.evaluateExpression("2 + 2");
 
 value.type;        // ValueType.Number
 value.toNumber();  // 4

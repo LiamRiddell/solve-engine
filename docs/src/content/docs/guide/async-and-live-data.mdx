@@ -17,7 +17,7 @@ whose type is `Pending`. It carries the key of the query it is waiting on.
 ```ts
 import { ValueType } from "solve-engine/vm";
 
-const [value] = engine.evaluateExpression("10 USD to GBP");
+const value = engine.evaluateExpression("10 USD to GBP");
 value.type === ValueType.Pending; // true, on the first evaluation
 value.value;                      // "currency:USD:GBP", the query key
 ```

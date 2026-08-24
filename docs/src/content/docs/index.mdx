@@ -88,10 +88,10 @@ safe to call on every keystroke.
       <div>
 
 ```ts
-import { ExpressionEngine } from "solve-engine";
+import { createEngine } from "solve-engine";
 import { formatValue } from "solve-engine/format";
 
-const engine = new ExpressionEngine("en");
+const engine = createEngine();
 
 const { lines } = engine.parseDocument(document, {
   inputType: "markdown",
@@ -394,10 +394,10 @@ export const gamePackage: IEnginePackage = {
 ```ts
 import { ExpressionEngine } from "solve-engine";
 
-const engine = new ExpressionEngine("en", false, undefined, undefined, [
+const engine = new ExpressionEngine({ packages: [
   ...BUILTIN_PACKAGES,
   gamePackage,
-]);
+] });
 ```
 
       </div>
