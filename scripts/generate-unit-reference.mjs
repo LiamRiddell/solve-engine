@@ -110,8 +110,11 @@ async function keepTypable(entries) {
 		console.error("packages/engine/dist is missing. Run `npm run build` first.");
 		process.exit(1);
 	}
-	const { ExpressionEngine } = await import(pathToFileURL(ENGINE).href);
-	const engine = new ExpressionEngine("en");
+	// createEngine registers every built-in (the bare constructor now registers
+	// none, so the lexer would recognise no unit and every spelling would be
+	// filtered out). The unit vocabulary is what this tokenizability check needs.
+	const { createEngine } = await import(pathToFileURL(ENGINE).href);
+	const engine = createEngine("en");
 
 	const kept = [];
 	for (const entry of entries) {

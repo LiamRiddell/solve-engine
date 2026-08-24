@@ -1,4 +1,5 @@
 import { describe, expect, test, afterEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { extractReadsAndWrites } from "@solve-js/engine/ExpressionEngineSafety";
 import { sharedGlobalVariableStore, globalDagKey } from "@solve-js/vm/GlobalVariableStore";
@@ -28,7 +29,7 @@ describe("extractReadsAndWrites — global variable tracking", () => {
 
   /** Tokenizes via the real engine pipeline, matching what extractReadsAndWrites receives in production. */
   function tokensFor(expr: string): Token[] {
-    const engine = new ExpressionEngine("en", true);
+    const engine = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
     const result = engine.evaluateLineWithDebug(1, expr);
     const tokens = result.diagnostic!.tokens;
     engine.clear();

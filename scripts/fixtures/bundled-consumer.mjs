@@ -26,7 +26,7 @@
  * expression that could not be made deterministic does not belong in it.
  */
 
-import { ExpressionEngine, ENGINE_VERSION } from "solve-engine";
+import { ExpressionEngine, createEngine, ENGINE_VERSION } from "solve-engine";
 import { sharedParseletRegistry } from "solve-engine/parser";
 import { tokenTypeId, tokenTypeName, TokenTypes } from "solve-engine/lexer";
 import { formatValue, DEFAULT_FORMATTING_SETTINGS } from "solve-engine/format";
@@ -94,7 +94,11 @@ const EXPRESSIONS = [
 	"90 days as week",                  // converters
 ];
 
-const engine = new ExpressionEngine();
+// The bare ExpressionEngine constructor is still exported (verified here), but
+// registers no packages by default so a consumer can tree-shake; createEngine
+// is the batteries-included convenience these expressions need.
+if (typeof ExpressionEngine !== "function") throw new Error("ExpressionEngine export missing");
+const engine = createEngine();
 
 for (const source of EXPRESSIONS) {
 	try {

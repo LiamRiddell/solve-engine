@@ -1,4 +1,5 @@
 import { describe, expect, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
@@ -14,7 +15,7 @@ import { pendingValue } from "@solve-js/vm/Value";
  */
 describe("a pending line is not marked clean", () => {
 	test("a line resolving to Pending stays dirty", () => {
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		const doc = new DocumentModel();
 		doc.setDocument("1 + 2");
 		const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -39,7 +40,7 @@ describe("a pending line is not marked clean", () => {
 		// The guard against over-correcting. If this also stayed dirty, every
 		// line would re-evaluate forever and the fix would be worse than the
 		// defect it replaced.
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		const doc = new DocumentModel();
 		doc.setDocument("1 + 2\n3 * 4");
 		const evaluator = new ThreeTierEvaluator(doc, engine);

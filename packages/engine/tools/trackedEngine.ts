@@ -19,17 +19,30 @@
  */
 import { afterEach } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 
 const live: ExpressionEngine[] = [];
 
 /**
  * Drop-in for `new ExpressionEngine(...)`. Same arguments, same instance, but
  * the engine is released when the test finishes.
+ *
+ * A spec that passes no `packages` argument gets the full built-in set. The
+ * engine itself registers only what it is given (so it can tree-shake), but a
+ * test that just says `newTrackedEngine("en")` means "an ordinary engine", so
+ * this injects `BUILTIN_PACKAGES` unless the spec chose its own package list.
  */
 export function newTrackedEngine(
 	...args: ConstructorParameters<typeof ExpressionEngine>
 ): ExpressionEngine {
-	const engine = new ExpressionEngine(...args);
+	const [localeCode = "en", diagnosticMode = false, config, diagnosticPipeline, packages] = args;
+	const engine = new ExpressionEngine(
+		localeCode,
+		diagnosticMode,
+		config,
+		diagnosticPipeline,
+		packages ?? BUILTIN_PACKAGES,
+	);
 	live.push(engine);
 	return engine;
 }

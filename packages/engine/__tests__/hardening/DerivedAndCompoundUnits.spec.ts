@@ -23,11 +23,12 @@
  */
 
 import { describe, expect, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { formatValue } from "@solve-js/format/FormatEngine";
 
 function evaluate(source: string) {
-	const engine = new ExpressionEngine("en");
+	const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
 	const [value] = engine.evaluateExpression(source);
 	engine.clear();
 	return value;

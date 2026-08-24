@@ -22,9 +22,9 @@ TypeScript is optional. If you use it, everything is typed and no separate
 ## Verifying the install
 
 ```ts
-import { ExpressionEngine } from "solve-engine";
+import { createEngine } from "solve-engine";
 
-const engine = new ExpressionEngine("en");
+const engine = createEngine("en");
 const [result] = engine.evaluateExpression("2 + 2 * 10");
 
 console.log(result.toNumber()); // 22

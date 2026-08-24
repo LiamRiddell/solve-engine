@@ -23,6 +23,7 @@
  */
 
 import { describe, expect, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { formatValue } from "@solve-js/format/FormatEngine";
 
@@ -32,7 +33,7 @@ import { formatValue } from "@solve-js/format/FormatEngine";
  * so a test can assert on the failure without a separate code path.
  */
 function runDocument(source: string): string[] {
-	const engine = new ExpressionEngine("en", false);
+	const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 	return engine
 		.parseDocument(source, { inputType: "markdown" })
 		.lines.filter((line) => !line.isEmpty)
@@ -113,7 +114,7 @@ describe("definitions are document-scoped", () => {
 	});
 
 	test("definitions do not survive into the next document on the same engine", () => {
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		const read = (source: string): string[] =>
 			engine
 				.parseDocument(source, { inputType: "markdown" })

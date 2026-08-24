@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
@@ -44,7 +45,7 @@ describe("Bug: crypto currency arithmetic silently produced a wrong unitless num
   let engine: ExpressionEngine;
 
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false);
+    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
   });
 
   afterEach(() => {
@@ -136,7 +137,7 @@ describe("Bug: preflight never detected currency arithmetic, only explicit to/in
   let queryClient: { getQueryData: () => undefined; fetchQuery: () => Promise<unknown> };
 
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false);
+    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
     resolver = new CurrencyAsyncResolver();
     // preflight() only needs fetchQuery's SYNCHRONOUS return shape (a
     // thenable to stash as AsyncCheckResult.resolver) — it never awaits

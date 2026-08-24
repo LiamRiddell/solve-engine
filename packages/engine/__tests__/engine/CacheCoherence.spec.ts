@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
@@ -16,7 +17,7 @@ describe("Cache Coherence", () => {
 		let engine: ExpressionEngine;
 
 		beforeEach(() => {
-			engine = new ExpressionEngine();
+			engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 		});
 
 		// Releases the engine's query client and async batcher. Without it the
@@ -100,7 +101,7 @@ describe("Cache Coherence", () => {
 
 	describe("DocumentModel ↔ LineCache consistency", () => {
 		test("Tier 1 evaluation syncs bytecode from LineCache to DocumentModel", () => {
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 			const doc = new DocumentModel();
 			doc.setDocument(":x = 42\n:x + 8");
 
@@ -129,7 +130,7 @@ describe("Cache Coherence", () => {
 		});
 
 		test("LineCache entry result matches DocumentModel result after Tier 1", () => {
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 			const doc = new DocumentModel();
 			doc.setDocument(":x = 42");
 
@@ -146,7 +147,7 @@ describe("Cache Coherence", () => {
 		});
 
 		test("LineCache has same reads/writes as DocumentModel", () => {
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 			const doc = new DocumentModel();
 			doc.setDocument(":x = 5\n:x + 3");
 
@@ -173,7 +174,7 @@ describe("Cache Coherence", () => {
 
 	describe("DocumentModel → DAG coherence", () => {
 		test("dirty state is consistent: clean lines have valid bytecode", () => {
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 			const doc = new DocumentModel();
 			doc.setDocument(":x = 10\n42");
 
@@ -190,7 +191,7 @@ describe("Cache Coherence", () => {
 		});
 
 		test("editing a line clears its bytecode and marks it dirty", () => {
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 			const doc = new DocumentModel();
 			doc.setDocument(":x = 10\n:x + 5");
 
@@ -208,7 +209,7 @@ describe("Cache Coherence", () => {
 
 		test("applyTransaction correctly dirties downstream consumers via DAG", () => {
 			// This tests the REAL production code path, not a manual simulation.
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 			const doc = new DocumentModel();
 			doc.setDocument(":x = 10\n:x + 5\n42");
 
@@ -237,7 +238,7 @@ describe("Cache Coherence", () => {
 
 	describe("applyTransaction coherence", () => {
 		test("inserting lines shifts existing content to correct positions", () => {
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 			const doc = new DocumentModel();
 			doc.setDocument("old line 1\nold line 2");
 
@@ -267,7 +268,7 @@ describe("Cache Coherence", () => {
 		});
 
 		test("deleting lines reduces document length and removes content", () => {
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 			const doc = new DocumentModel();
 			doc.setDocument("line 1\nline 2\nline 3\nline 4");
 
@@ -287,7 +288,7 @@ describe("Cache Coherence", () => {
 		});
 
 		test("multiple non-overlapping changes in one batch are processed correctly", () => {
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 			const doc = new DocumentModel();
 			doc.setDocument("line 1\nline 2\nline 3\nline 4\nline 5");
 
@@ -318,7 +319,7 @@ describe("Cache Coherence", () => {
 
 	describe("evaluateIncremental coherence", () => {
 		test("only affected lines are re-evaluated, result stored in cache", () => {
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 			engine.evaluateLine(1, ":x = 5");
 			engine.evaluateLine(2, ":x + 3");
 			engine.evaluateLine(3, ":y = 10");
@@ -341,7 +342,7 @@ describe("Cache Coherence", () => {
 		});
 
 		test("re-evaluated result is stored in LineCache", () => {
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 			engine.evaluateLine(1, ":x = 5");
 			engine.evaluateLine(2, ":x + 10");
 
@@ -354,7 +355,7 @@ describe("Cache Coherence", () => {
 		});
 
 		test("VM variable state is updated after evaluateIncremental", () => {
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 			engine.evaluateLine(1, ":x = 5");
 			engine.evaluateLine(2, ":x + 10");
 
@@ -370,7 +371,7 @@ describe("Cache Coherence", () => {
 
 	describe("bytecode cache consistency", () => {
 		test("bytecode cached in LineCache is reused for same expression", () => {
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 
 			// First evaluation compiles and caches
 			engine.evaluateLine(1, "5 + 5");
@@ -388,7 +389,7 @@ describe("Cache Coherence", () => {
 		});
 
 		test("bytecodeCache is cleared on package unregister", () => {
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 			engine.evaluateLine(1, "5 + 5");
 
 			// Get initial bytecode
@@ -405,7 +406,7 @@ describe("Cache Coherence", () => {
 		});
 
 		test("compileExpression produces bytecode that executeCached can run", () => {
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 
 			const { program, reads, writes } = engine.compileExpression("3 * 7");
 			expect(program.opcodes.length).toBeGreaterThan(0);
@@ -417,7 +418,7 @@ describe("Cache Coherence", () => {
 		});
 
 		test("compileExpression for variable def writes the variable", () => {
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 
 			const { program, reads, writes } = engine.compileExpression(":foo = 42");
 
@@ -431,33 +432,33 @@ describe("Cache Coherence", () => {
 
 		describe("tryCompileExpression — non-throwing compile check", () => {
 			test("returns true for a well-formed expression, without throwing", () => {
-				const engine = new ExpressionEngine();
+				const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 				expect(() => engine.tryCompileExpression("3 * 7")).not.toThrow();
 				expect(engine.tryCompileExpression("3 * 7")).toBe(true);
 			});
 
 			test("returns false for text that doesn't parse as an expression, without throwing", () => {
-				const engine = new ExpressionEngine();
+				const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 				expect(() => engine.tryCompileExpression("My name is dave")).not.toThrow();
 				expect(engine.tryCompileExpression("My name is dave")).toBe(false);
 			});
 
 			test("returns false (not throw) for an expression that's too long", () => {
-				const engine = new ExpressionEngine();
+				const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 				const longExpr = Array(2000).fill("1").join("+");
 				expect(() => engine.tryCompileExpression(longExpr)).not.toThrow();
 				expect(engine.tryCompileExpression(longExpr)).toBe(false);
 			});
 
 			test("returns false (not throw) for an expression that's too complex", () => {
-				const engine = new ExpressionEngine();
+				const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 				const complexExpr = Array(600).fill("1 + 1").join(" + ");
 				expect(() => engine.tryCompileExpression(complexExpr)).not.toThrow();
 				expect(engine.tryCompileExpression(complexExpr)).toBe(false);
 			});
 
 			test("agrees with compileExpression: true iff compileExpression doesn't throw", () => {
-				const engine = new ExpressionEngine();
+				const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 				const cases = ["3 * 7", ":foo = 42", "My name is dave", "sqrt(144)", "1 2 3", ""];
 				for (const expr of cases) {
 					let compileSucceeded = true;
@@ -471,7 +472,7 @@ describe("Cache Coherence", () => {
 			});
 
 			test("a successful tryCompileExpression populates the bytecode cache, so a subsequent compileExpression is a cache hit", () => {
-				const engine = new ExpressionEngine();
+				const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 				expect(engine.tryCompileExpression("9 * 9")).toBe(true);
 
 				const { program } = engine.compileExpression("9 * 9");
@@ -490,7 +491,7 @@ describe("Cache Coherence", () => {
 		test("cache never grows past the configured limit — oldest entries are evicted", () => {
 			const engine = new ExpressionEngine("en", false, {
 				performance: { defaultCacheSize: 3, maxDocumentLines: 10000 },
-			});
+			}, undefined, BUILTIN_PACKAGES);
 
 			// 5 distinct expressions against a cache capped at 3 entries.
 			for (const expr of ["1 + 1", "2 + 2", "3 + 3", "4 + 4", "5 + 5"]) {
@@ -503,7 +504,7 @@ describe("Cache Coherence", () => {
 		test("a larger configured limit actually retains more entries than the old hardcoded default would have allowed", () => {
 			const engine = new ExpressionEngine("en", false, {
 				performance: { defaultCacheSize: 10, maxDocumentLines: 10000 },
-			});
+			}, undefined, BUILTIN_PACKAGES);
 
 			for (let i = 0; i < 10; i++) {
 				engine.compileExpression(`${i} + ${i}`);

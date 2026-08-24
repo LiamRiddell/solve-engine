@@ -73,7 +73,7 @@ describe("Issue #155: an ambiguous subexpression source defers to a single runti
 
     // Build "100 USD in GBP on <date>" through the engine's own compiler, then a
     // mixed-currency subexpression, and check which one preflight acts on.
-    const compileEngine = new ExpressionEngine("en", false);
+    const compileEngine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
     const single = compileEngine.evaluateLineWithDebug(1, "100 USD in GBP on 2024-01-15").program;
     const mixed = compileEngine.evaluateLineWithDebug(2, "(100 USD * (5 JPY / 5 JPY)) in GBP on 2024-01-15").program;
 

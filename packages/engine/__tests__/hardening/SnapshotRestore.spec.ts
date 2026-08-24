@@ -58,11 +58,11 @@ afterEach(() => {
 	}
 });
 
-/** Snapshot, force it through a real JSON round trip, and restore, so every test also proves the snapshot survives `JSON.stringify`/`JSON.parse`. */
-function roundTrip(engine: ExpressionEngine, packages?: IEnginePackage[]): ExpressionEngine {
+/** Snapshot, force it through a real JSON round trip, and restore, so every test also proves the snapshot survives `JSON.stringify`/`JSON.parse`. Restores the full built-in set by default, since a snapshot must be restored against the packages it was taken with (the engine no longer registers any by default). */
+function roundTrip(engine: ExpressionEngine, packages: IEnginePackage[] = BUILTIN_PACKAGES): ExpressionEngine {
 	const snapshot = engine.toJSON();
 	const throughJson = JSON.parse(JSON.stringify(snapshot)) as EngineSnapshot;
-	return track(ExpressionEngine.fromJSON(throughJson, packages ? { packages } : {}));
+	return track(ExpressionEngine.fromJSON(throughJson, { packages }));
 }
 
 /** Assert two Values are equal in every field the engine reads, including the exact-money and exact-fraction sidecars. */
@@ -137,7 +137,7 @@ const ASYNC_PACKAGES = [...BUILTIN_PACKAGES, TEST_ASYNC_PACKAGE];
 
 describe("a restored engine behaves like the one that evaluated the document", () => {
 	test("variables and a user function resolve identically after a round trip", () => {
-		const engine = track(new ExpressionEngine("en", false));
+		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
 		engine.parseDocument(
 			[
 				":price = 100",
@@ -158,7 +158,7 @@ describe("a restored engine behaves like the one that evaluated the document", (
 	});
 
 	test("a function defined before the snapshot is callable after restore", () => {
-		const engine = track(new ExpressionEngine("en", false));
+		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
 		engine.parseDocument("cube(n) = n * n * n\n:seed = 4");
 		const restored = roundTrip(engine);
 		expect(restored.evaluateExpression("cube(3)")[0].toNumber()).toBe(27);
@@ -166,11 +166,11 @@ describe("a restored engine behaves like the one that evaluated the document", (
 	});
 
 	test("the restore uses the snapshot's own locale by default", () => {
-		const engine = track(new ExpressionEngine("en", false));
+		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
 		engine.parseDocument(":x = 7");
 		const snapshot = engine.toJSON();
 		expect(snapshot.locale).toBe("en");
-		const restored = track(ExpressionEngine.fromJSON(snapshot));
+		const restored = track(ExpressionEngine.fromJSON(snapshot, { packages: BUILTIN_PACKAGES }));
 		expect(restored.getConfig()).toBeDefined();
 		expect(restored.evaluateExpression(":x + 1")[0].toNumber()).toBe(8);
 	});
@@ -180,7 +180,7 @@ describe("a restored engine behaves like the one that evaluated the document", (
 
 describe("every supported value kind survives the round trip", () => {
 	test("scalars, units, money, fractions, bigints, and vectors restore identically", () => {
-		const engine = track(new ExpressionEngine("en", false));
+		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
 		engine.parseDocument(
 			[
 				":n = 42.5",
@@ -207,7 +207,7 @@ describe("every supported value kind survives the round trip", () => {
 	});
 
 	test("money stays exact across a restore, not the drifted double", () => {
-		const engine = track(new ExpressionEngine("en", false));
+		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
 		engine.parseDocument(":a = $0.10\n:b = $0.20");
 		const restored = roundTrip(engine);
 
@@ -220,7 +220,7 @@ describe("every supported value kind survives the round trip", () => {
 	});
 
 	test("an exact fraction keeps its rational sidecar, so 1/3 + 1/3 + 1/3 is exactly 1", () => {
-		const engine = track(new ExpressionEngine("en", false));
+		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
 		engine.parseDocument(":third = 1/3");
 		const restored = roundTrip(engine);
 		const [sum] = restored.evaluateExpression("third + third + third");
@@ -248,7 +248,7 @@ describe("every supported value kind survives the round trip", () => {
 
 describe("a snapshot is plain JSON", () => {
 	test("stringify then parse leaves the snapshot structurally identical", () => {
-		const engine = track(new ExpressionEngine("en", false));
+		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
 		engine.parseDocument(":x = 10\nf(k) = k + 1\n:huge = 123456789012345678901234567890n\n:y = f(x)");
 		const snapshot = engine.toJSON();
 		// The snapshot is already JSON-safe (bigints are strings, no NaN/Infinity
@@ -257,13 +257,13 @@ describe("a snapshot is plain JSON", () => {
 		const throughJson = JSON.parse(JSON.stringify(snapshot));
 		expect(throughJson).toEqual(snapshot);
 
-		const restored = track(ExpressionEngine.fromJSON(throughJson));
+		const restored = track(ExpressionEngine.fromJSON(throughJson, { packages: BUILTIN_PACKAGES }));
 		expect(restored.evaluateExpression("f(41)")[0].toNumber()).toBe(42);
 		expect(restored.evaluateExpression(":y")[0].toNumber()).toBe(11);
 	});
 
 	test("the snapshot carries the format envelope and engine version", () => {
-		const engine = track(new ExpressionEngine("en", false));
+		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
 		engine.parseDocument(":x = 1");
 		const snapshot = engine.toJSON();
 		expect(snapshot.format).toBe("solve-engine/snapshot");
@@ -285,7 +285,7 @@ describe("an incompatible snapshot is refused clearly", () => {
 	}
 
 	test("a mismatched serialised-shape version is a coded rejection, not a wrong restore", () => {
-		const engine = track(new ExpressionEngine("en", false));
+		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
 		engine.parseDocument(":x = 1");
 		const snapshot = engine.toJSON();
 		const fromFuture = { ...snapshot, version: snapshot.version + 1 };
@@ -298,7 +298,7 @@ describe("an incompatible snapshot is refused clearly", () => {
 	});
 
 	test("a wrong format string is rejected even when a version is present", () => {
-		const engine = track(new ExpressionEngine("en", false));
+		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
 		engine.parseDocument(":x = 1");
 		const snapshot = engine.toJSON();
 		const wrongFormat = { ...snapshot, format: "some-other-tool/export" };
@@ -368,7 +368,7 @@ describe("resolved and in-flight async values are not restored stale", () => {
 
 describe("the line and bytecode caches are carried", () => {
 	test("restored line-cache entries match by result, reads, and write variable", () => {
-		const engine = track(new ExpressionEngine("en", false));
+		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
 		engine.parseDocument(":x = 10\n:y = x * 2\n:z = y + 5");
 		const restored = roundTrip(engine);
 
@@ -386,7 +386,7 @@ describe("the line and bytecode caches are carried", () => {
 	});
 
 	test("incremental re-evaluation works after a restore, so the dependency graph was rebuilt", () => {
-		const engine = track(new ExpressionEngine("en", false));
+		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
 		engine.parseDocument(":base = 10\n:scaled = base * 2");
 		const restored = roundTrip(engine);
 
@@ -413,7 +413,7 @@ describe("symbolic (algebra) values are deferred with a clear error", () => {
 	});
 
 	test("a cached line whose result is symbolic is skipped, and the rest of the snapshot still succeeds", () => {
-		const engine = track(new ExpressionEngine("en", false));
+		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
 		engine.parseDocument(":x = 5\nexpand((a + 1) * (a + 2))");
 		// toJSON must not throw just because one line produced a symbolic result.
 		const snapshot = engine.toJSON();

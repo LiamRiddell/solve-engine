@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { CompilationWorkerManager, CompileRequestItem } from "@solve-js/engine/CompilationWorkerManager";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
@@ -57,7 +58,7 @@ describe("Worker Integration", () => {
 		beforeEach(() => {
 			doc = new DocumentModel();
 			doc.setDocument(":x = 42\n:x + 8\n99");
-			engine = new ExpressionEngine();
+			engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 			// Evaluate to populate initial state (get lineIds and textHashes)
 			engine.parseDocument(":x = 42\n:x + 8\n99");
 		});

@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType, type MatrixData } from "@solve-js/vm/Value";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
@@ -7,7 +8,7 @@ describe("Provider Breakage Tests - Comprehensive Provider Validation", () => {
   let engine: ExpressionEngine;
 
   beforeEach(() => {
-    engine = new ExpressionEngine("en");
+    engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
   });
 
   // Releases the engine's query client and async batcher. Without it the

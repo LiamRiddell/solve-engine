@@ -27,6 +27,7 @@
  */
 
 import { afterEach, describe, expect, jest, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { newTrackedEngine } from "@tools/trackedEngine";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
@@ -88,7 +89,7 @@ describe("a day is a calendar day, not 86,400,000 milliseconds", () => {
 		// The sweep is the point: whichever two days of the year the host zone
 		// changes its offset on, this walks over them. One engine for all 366
 		// lines, the per-line work is a single expression.
-		const engine = new ExpressionEngine("en");
+		const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
 		try {
 			const cursor = new Date(2024, 0, 1);
 			let checked = 0;

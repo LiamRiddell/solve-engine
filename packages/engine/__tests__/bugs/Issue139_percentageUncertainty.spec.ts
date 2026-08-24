@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
 
@@ -13,7 +14,7 @@ import { ValueType } from "@solve-js/vm/Value";
 describe("Issue #139: percentage arithmetic carries the uncertainty", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false);
+    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
   });
 
   function measured(source: string): { center: number; spread: number } {

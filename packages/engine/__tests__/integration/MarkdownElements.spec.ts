@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 
 import { ExpressionLexer } from "@solve-js/lexer/ExpressionLexer";
 import { Lexer } from "@solve-js/lexer/Lexer";
@@ -235,7 +236,7 @@ describe("Markdown Elements and Multi-line Documents", () => {
     let service: LanguageService;
 
     beforeEach(() => {
-      engine = new ExpressionEngine("en", false);
+      engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
       service = new LanguageService(engine);
     });
 

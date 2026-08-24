@@ -19,6 +19,7 @@
  */
 
 import { describe, expect, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
 import { lookupUnit, convertRaw, convertResolved, convertToBestMetric } from "@solve-js/uom/UnitConversion";
@@ -222,7 +223,7 @@ describe("the throw contract VM.ts depends on", () => {
     //
     // A fixed date literal, not `today`: `today` resolves to the current
     // instant on every evaluation, so comparing two of them races the clock.
-    const engine = new ExpressionEngine("en", false);
+    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
     const base = engine.evaluateExpression("25/12/2026")[0].toNumber();
 
     for (const nonDuration of ["5 m", "5 kg", "5 l", "5 C", "5 mph"]) {

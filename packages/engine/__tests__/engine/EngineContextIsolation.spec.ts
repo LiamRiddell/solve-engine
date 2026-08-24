@@ -1,4 +1,5 @@
 import { describe, expect, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { numberValue, type Value } from "@solve-js/vm/Value";
 import { createEngineContext, defaultEngineContext } from "@solve-js/engine/EngineContext";
@@ -40,8 +41,8 @@ describe("engine context isolation", () => {
 	}
 
 	test("two engines registering the same index do not see each other's handler", () => {
-		const a = new ExpressionEngine("en", false);
-		const b = new ExpressionEngine("en", false);
+		const a = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		const b = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 
 		// Deliberately the same index. Under a shared registry the second
 		// registration overwrote the first, and both engines then returned 20.
@@ -62,8 +63,8 @@ describe("engine context isolation", () => {
 	});
 
 	test("unregistering on one engine leaves the other working", () => {
-		const a = new ExpressionEngine("en", false);
-		const b = new ExpressionEngine("en", false);
+		const a = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		const b = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 
 		a.registerPackage({
 			name: "iso-shared-name",
@@ -86,7 +87,7 @@ describe("engine context isolation", () => {
 	});
 
 	test("registering on an engine does not write into the shared default context", () => {
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		engine.registerPackage({
 			name: "iso-not-global",
 			pluginFunctions: [{ index: 242, handler: (): Value => numberValue(5) }],

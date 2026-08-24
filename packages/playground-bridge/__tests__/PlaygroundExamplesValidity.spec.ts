@@ -1,4 +1,5 @@
 import { describe, expect, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
@@ -140,7 +141,7 @@ describe("Playground example content is valid against the real engine", () => {
     primeAllRates();
     const failures: string[] = [];
     for (const example of fullDocumentExamples) {
-      const engine = new ExpressionEngine("en", false);
+      const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
       // See the single-line test above for why a DocumentModel is wired in.
       const documentModel = new DocumentModel();
       documentModel.setDocument(example.content);
@@ -187,7 +188,7 @@ describe("Playground example content is valid against the real engine", () => {
       // what makes this one appear to work.
       sharedGlobalVariableStore.clear();
       for (const document of example.documents) {
-        const engine = new ExpressionEngine("en", false);
+        const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
         const documentModel = new DocumentModel();
         documentModel.setDocument(document.content);
         engine.setDocumentModel(documentModel);

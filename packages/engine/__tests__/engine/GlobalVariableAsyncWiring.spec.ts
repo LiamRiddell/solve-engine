@@ -1,4 +1,5 @@
 import { describe, expect, test, afterEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
@@ -18,14 +19,14 @@ describe("GlobalVariableAsyncResolver — wired into the real ExpressionEngine",
 	});
 
 	test("reading an undeclared global returns a Pending value, not a throw", () => {
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		const result = engine.evaluateLine(1, "global :undeclaredThing");
 		expect(result[0].type).toBe(ValueType.Pending);
 		engine.clear();
 	});
 
 	test("the pending value's queryKey identifies the missing global by name", () => {
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		const result = engine.evaluateLine(1, "global :widgetPrice");
 		expect(result[0].type).toBe(ValueType.Pending);
 		expect(result[0].value).toBe("global:widgetPrice");
@@ -33,13 +34,13 @@ describe("GlobalVariableAsyncResolver — wired into the real ExpressionEngine",
 	});
 
 	test("once declared, a fresh evaluation of the same expression succeeds synchronously (no longer pending)", () => {
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		const pending = engine.evaluateLine(1, "global :widgetPrice + 1");
 		expect(pending[0].type).toBe(ValueType.Pending);
 
 		// Declare it — standing in for "a different document" via a second,
 		// independent engine writing the same process-wide global.
-		const otherDocEngine = new ExpressionEngine("en", false);
+		const otherDocEngine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		otherDocEngine.evaluateLine(1, "global :widgetPrice = 99");
 		otherDocEngine.clear();
 
@@ -50,7 +51,7 @@ describe("GlobalVariableAsyncResolver — wired into the real ExpressionEngine",
 	});
 
 	test("the engine's async event stream fires when a pending global resolves in the background", async () => {
-		const engine = new ExpressionEngine("en", true);
+		const engine = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
 		const events: AsyncResolutionEvent[] = [];
 		const reader = engine.getEventStream().getReader();
 		const readLoop = (async () => {
@@ -67,7 +68,7 @@ describe("GlobalVariableAsyncResolver — wired into the real ExpressionEngine",
 
 		engine.evaluateLine(1, "global :streamedGlobal");
 
-		const otherDocEngine = new ExpressionEngine("en", false);
+		const otherDocEngine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		otherDocEngine.evaluateLine(1, "global :streamedGlobal = 7");
 		otherDocEngine.clear();
 

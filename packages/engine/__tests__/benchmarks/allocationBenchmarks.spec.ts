@@ -59,6 +59,7 @@
  */
 
 import { appendFileSync } from "fs";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { describe, expect, test, beforeAll } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 
@@ -111,7 +112,7 @@ function trackRetained<T>(fn: () => T): { result: T; bytes: number } {
 
 /** Create a fresh engine (cold — no caches). */
 function createEngine(): ExpressionEngine {
-  return new ExpressionEngine("en", false);
+  return new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 }
 
 /** Build a document of `n` assignment lines. */

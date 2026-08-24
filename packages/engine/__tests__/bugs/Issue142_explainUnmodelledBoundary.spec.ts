@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 
 /**
@@ -19,7 +20,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 describe("Issue #142: an unmodelled operator after arithmetic falls back to no steps", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false);
+    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
   });
 
   const steps = (line: string): Array<[string, number]> =>

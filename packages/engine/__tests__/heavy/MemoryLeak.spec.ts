@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
@@ -85,7 +86,7 @@ describe("Memory Leak Tests", () => {
 			const beforeMB = getHeapMB();
 
 			for (let i = 0; i < 10000; i++) {
-				const engine = new ExpressionEngine();
+				const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 				engine.parseDocument(`:x${i} = ${i}\n:x${i} + 5`);
 				// The documented contract. Without it the batcher stays reachable
 				// from the module-level data-query service and takes this engine's
@@ -113,7 +114,7 @@ describe("Memory Leak Tests", () => {
 
 			const iterations = 2000;
 			for (let i = 0; i < iterations; i++) {
-				const engine = new ExpressionEngine();
+				const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 				engine.parseDocument(`:x${i} = ${i}\n:x${i} + 5`);
 			}
 
@@ -143,7 +144,7 @@ describe("Memory Leak Tests", () => {
 			forceGc();
 			const beforeMB = getHeapMB();
 
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 			for (let i = 0; i < 10000; i++) {
 				engine.evaluateLine(i + 1, `${(i % 100) + 1} + ${(i % 50) + 1}`);
 			}
@@ -165,7 +166,7 @@ describe("Memory Leak Tests", () => {
 			forceGc();
 			const beforeMB = getHeapMB();
 
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 			for (let i = 0; i < 10000; i++) {
 				const result = engine.evaluateNumber(`${(i % 100) + 1} * ${(i % 10) + 1}`);
 				expect(typeof result).toBe("number");
@@ -187,7 +188,7 @@ describe("Memory Leak Tests", () => {
 			const beforeMB = getHeapMB();
 
 			for (let i = 0; i < 1000; i++) {
-				const engine = new ExpressionEngine();
+				const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 				const result = engine.parseDocument(`:x = ${i}\n42`);
 				expect(result).toBeDefined();
 				expect(result.errors).toHaveLength(0);
@@ -222,7 +223,7 @@ describe("Memory Leak Tests", () => {
 			const beforeMB = getHeapMB();
 
 			for (let i = 0; i < 1000; i++) {
-				const engine = new ExpressionEngine();
+				const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 				const doc = new DocumentModel();
 				doc.setDocument(`:x${i} = ${i}\n:x${i} + 5\n42`);
 				const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -248,7 +249,7 @@ describe("Memory Leak Tests", () => {
 				return;
 			}
 
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 
 			forceGc();
 			const beforeMB = getHeapMB();
@@ -273,7 +274,7 @@ describe("Memory Leak Tests", () => {
 				return;
 			}
 
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 
 			// Fill cache with 5000 entries
 			for (let i = 0; i < 5000; i++) {
@@ -328,7 +329,7 @@ describe("Memory Leak Tests", () => {
 
 	describe("stress: rapid engine operations", () => {
 		test("engine handles 5K alternating parseDocument + evaluateNumber without crash", () => {
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 
 			for (let i = 0; i < 5000; i++) {
 				if (i % 2 === 0) {
@@ -341,7 +342,7 @@ describe("Memory Leak Tests", () => {
 		});
 
 		test("ThreeTierEvaluator handles 1K alternating evaluate + setViewport without crash", () => {
-			const engine = new ExpressionEngine();
+			const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
 			const doc = new DocumentModel();
 			doc.setDocument(":x = 1\n:x + 2\n:x * 3\n:x + 4\n:x * 5\n42\n:y = 10\n:y + 1\n:y + 2\n:y + 3");
 			const evaluator = new ThreeTierEvaluator(doc, engine);

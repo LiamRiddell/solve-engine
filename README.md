@@ -49,12 +49,24 @@ npm install solve-engine
 ```
 
 ```typescript
-import { ExpressionEngine } from "solve-engine";
+import { createEngine } from "solve-engine";
 
-const engine = new ExpressionEngine();
+const engine = createEngine(); // every built-in package
 const [value] = engine.evaluateExpression("2 + 2 * 10");
 
 console.log(value.toNumber()); // 22
+```
+
+`createEngine` is batteries-included. The `ExpressionEngine` constructor
+registers only the packages you pass it, so your bundler can drop the built-ins
+you never use:
+
+```typescript
+import { ExpressionEngine } from "solve-engine";
+import { ARITHMETIC_PACKAGE, UOM_PACKAGE } from "solve-engine/packages";
+
+// Only arithmetic and units reach the bundle.
+const engine = new ExpressionEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE, UOM_PACKAGE]);
 ```
 
 No dependencies on a UI framework, a DOM, or an editor. It runs in Node, in a
@@ -203,7 +215,7 @@ import { BUILTIN_PACKAGES, CURRENCY_PACKAGE, WEATHER_PACKAGE } from "solve-engin
 const offline = BUILTIN_PACKAGES.filter(
   (p) => p !== CURRENCY_PACKAGE && p !== WEATHER_PACKAGE,
 );
-const engine = new ExpressionEngine("en", false, { packages: offline });
+const engine = new ExpressionEngine("en", false, undefined, undefined, offline);
 ```
 
 **One runtime dependency.** `@tanstack/query-core`, for caching async

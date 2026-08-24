@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { PageManager, PAGE_SIZE } from "@solve-js/engine/PageManager";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
@@ -8,7 +9,7 @@ import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 function createEngine(): ExpressionEngine {
-	return new ExpressionEngine("en", false);
+	return new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 }
 
 function createDoc(lines: string[]): DocumentModel {

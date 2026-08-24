@@ -16,6 +16,7 @@
  */
 
 import * as fs from "node:fs";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { buildVocabulary, type Vocabulary } from "@tools/fuzz/Vocabulary";
 import { generateExpressionCase, generateSeedExpressions } from "@tools/fuzz/ExpressionFuzzer";
@@ -198,7 +199,7 @@ interface RunContext {
  * @returns The context.
  */
 export function buildRunContext(generator: Generator, slowMs: number, needsGenerators = true): RunContext {
-	const engine = new ExpressionEngine("en");
+	const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
 	const empty = { programs: [], origins: [] };
 	if (!needsGenerators) {
 		return { engine, vocabulary: null, mutationPool: empty, oracle: { slowMs } };

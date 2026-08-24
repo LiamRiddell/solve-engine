@@ -26,6 +26,7 @@
  */
 
 import { afterEach, describe, expect, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { EngineError, ErrorCategory } from "@solve-js/errors/EngineError";
 import { allocationUsed, beginEvaluation, chargeAllocation, endEvaluation, resetAllocationTracking } from "@solve-js/vm/AllocationBudget";
@@ -97,14 +98,14 @@ describe("the allocation a single opcode performs", () => {
 		// literal, four `Value`s for the collection it is read into (which exist
 		// at the same time as the cells, so they are not the same four), and
 		// four cells for the result. Twelve buys it and eleven does not.
-		const affordable = new ExpressionEngine("en", false, { vm: { maxAllocatedElements: 12 } });
+		const affordable = new ExpressionEngine("en", false, { vm: { maxAllocatedElements: 12 } }, undefined, BUILTIN_PACKAGES);
 		try {
 			expect(affordable.evaluateExpression("map(x*2, [1,2,3,4])")[0].type).toBe(ValueType.Matrix);
 		} finally {
 			affordable.clear();
 		}
 
-		const short = new ExpressionEngine("en", false, { vm: { maxAllocatedElements: 11 } });
+		const short = new ExpressionEngine("en", false, { vm: { maxAllocatedElements: 11 } }, undefined, BUILTIN_PACKAGES);
 		try {
 			expect(errorFrom(short, "map(x*2, [1,2,3,4])")?.code).toBe("ALLOCATION_LIMIT_EXCEEDED");
 		} finally {
@@ -116,7 +117,7 @@ describe("the allocation a single opcode performs", () => {
 		// `a^k` is repeated multiplication, so it materialises a full matrix per
 		// step. Counting only the result would report a fraction of what it
 		// actually allocates.
-		const engine = new ExpressionEngine("en", false, { vm: { maxAllocatedElements: 100 } });
+		const engine = new ExpressionEngine("en", false, { vm: { maxAllocatedElements: 100 } }, undefined, BUILTIN_PACKAGES);
 		try {
 			expect(errorFrom(engine, "[1,2;3,4]^1000000")?.code).toBe("ALLOCATION_LIMIT_EXCEEDED");
 			// The same matrix to a small power stays affordable.
@@ -135,7 +136,7 @@ describe("the budget is a total, which is what makes it compose", () => {
 		// them.
 		const engine = new ExpressionEngine("en", false, {
 			vm: { maxCollectionSize: 1000, maxAllocatedElements: 2500 },
-		});
+		}, undefined, BUILTIN_PACKAGES);
 		try {
 			expect(engine.evaluateLine(1, "sum(x, 1:1000)")[0].toNumber()).toBe((1000 * 1001) / 2);
 			expect(errorFrom(engine, "sum(x, 1:1000) + sum(x, 1:1000) + sum(x, 1:1000)", 2)?.code)
@@ -153,7 +154,7 @@ describe("the budget is a total, which is what makes it compose", () => {
 		// refresh its own budget three times.
 		const engine = new ExpressionEngine("en", false, {
 			vm: { maxCollectionSize: 1000, maxAllocatedElements: 2500 },
-		});
+		}, undefined, BUILTIN_PACKAGES);
 		try {
 			engine.evaluateLine(1, "f(n) = sum(x, 1:1000) + n");
 			expect(engine.evaluateLine(2, "f(0)")[0].toNumber()).toBe((1000 * 1001) / 2);
@@ -179,7 +180,7 @@ describe("the budget is a total, which is what makes it compose", () => {
 	test("a refused line does not leave the tally behind it", () => {
 		const engine = new ExpressionEngine("en", false, {
 			vm: { maxCollectionSize: 1000, maxAllocatedElements: 2500 },
-		});
+		}, undefined, BUILTIN_PACKAGES);
 		try {
 			for (let i = 0; i < 20; i++) {
 				expect(errorFrom(engine, "sum(x, 1:1000) + sum(x, 1:1000) + sum(x, 1:1000)", 1)?.code)
@@ -194,7 +195,7 @@ describe("the budget is a total, which is what makes it compose", () => {
 
 describe("the ceiling belongs to the host", () => {
 	test("a lower limit refuses what the default allows", () => {
-		const engine = new ExpressionEngine("en", false, { vm: { maxAllocatedElements: 100 } });
+		const engine = new ExpressionEngine("en", false, { vm: { maxAllocatedElements: 100 } }, undefined, BUILTIN_PACKAGES);
 		try {
 			expect(errorFrom(engine, "map(1*x, 0:500)")?.code).toBe("ALLOCATION_LIMIT_EXCEEDED");
 			// And is a ceiling rather than a refusal of collections as such.
@@ -205,7 +206,7 @@ describe("the ceiling belongs to the host", () => {
 	});
 
 	test("a higher limit allows what the default refuses", () => {
-		const engine = new ExpressionEngine("en", false, { vm: { maxAllocatedElements: 20000000 } });
+		const engine = new ExpressionEngine("en", false, { vm: { maxAllocatedElements: 20000000 } }, undefined, BUILTIN_PACKAGES);
 		try {
 			const lines = [":a = map(1*x, 0:2000)", ":b = transpose(a)", "b * a"];
 			lines.forEach((line, index) => engine.evaluateLine(index + 1, line));

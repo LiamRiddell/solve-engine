@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType, type MatrixData, type ColourData } from "@solve-js/vm/Value";
 
@@ -18,7 +19,7 @@ import { ValueType, type MatrixData, type ColourData } from "@solve-js/vm/Value"
 describe("Issue #150: a grouping paren keeps thousands; a call paren stays a separator", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false);
+    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
   });
 
   const val = (s: string) => engine.evaluateExpression(s)[0];

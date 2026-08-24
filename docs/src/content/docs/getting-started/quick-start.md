@@ -9,9 +9,9 @@ evaluates a document, which is what you want when lines refer to each other.
 ## A single expression
 
 ```ts
-import { ExpressionEngine } from "solve-engine";
+import { createEngine } from "solve-engine";
 
-const engine = new ExpressionEngine("en");
+const engine = createEngine("en");
 const [result] = engine.evaluateExpression("50% of 200");
 
 result.toNumber(); // 100
@@ -42,7 +42,7 @@ Variables, line references and aggregates only mean something in the context of
 a document, so those need `evaluateLine` with real line numbers.
 
 ```ts
-const engine = new ExpressionEngine("en");
+const engine = createEngine("en");
 
 engine.evaluateLine(1, ":subtotal = 100");
 engine.evaluateLine(2, ":tax = 20% of :subtotal");

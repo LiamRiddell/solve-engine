@@ -99,10 +99,10 @@ run("npm", ["install", "--no-audit", "--no-fund", "--silent", specifier], scratc
 // consumer's would rather than through this repository.
 fs.writeFileSync(
 	path.join(scratch, "probe.mjs"),
-	`import { ExpressionEngine } from "solve-engine";\n` +
+	`import { createEngine } from "solve-engine";\n` +
 		`import { formatValue } from "solve-engine/format";\n` +
 		`const cases = ${JSON.stringify(CASES)};\n` +
-		`const engine = new ExpressionEngine("en");\n` +
+		`const engine = createEngine("en");\n` +
 		`const results = cases.map(([source]) => {\n` +
 		`  try { return formatValue(engine.evaluateLine(1, source)[0]).replace(/^=\\s*/, ""); }\n` +
 		`  catch (error) { return "threw: " + error.message; }\n` +
@@ -113,9 +113,9 @@ fs.writeFileSync(
 
 fs.writeFileSync(
 	path.join(scratch, "probe.cjs"),
-	`const { ExpressionEngine } = require("solve-engine");\n` +
+	`const { createEngine } = require("solve-engine");\n` +
 		`const { formatValue } = require("solve-engine/format");\n` +
-		`const engine = new ExpressionEngine("en");\n` +
+		`const engine = createEngine("en");\n` +
 		`process.stdout.write(formatValue(engine.evaluateLine(1, "2 + 2")[0]).replace(/^=\\s*/, ""));\n` +
 		`engine.clear();\n`,
 );
@@ -180,13 +180,13 @@ fs.writeFileSync(path.join(scratch, "corpus.json"), JSON.stringify(groups));
 fs.writeFileSync(
 	path.join(scratch, "probe-docs.mjs"),
 	[
-		'import { ExpressionEngine } from "solve-engine";',
+		'import { createEngine } from "solve-engine";',
 		'import { formatValue } from "solve-engine/format";',
 		'import { readFileSync } from "node:fs";',
 		'const groups = JSON.parse(readFileSync("corpus.json", "utf8"));',
 		"const results = [];",
 		"for (const group of groups) {",
-		'  const engine = new ExpressionEngine("en");',
+		'  const engine = createEngine("en");',
 		"  group.forEach((example, index) => {",
 		"    let actual = null;",
 		"    try {",

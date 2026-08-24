@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { formatValue } from "@solve-js/format/FormatEngine";
 
@@ -16,7 +17,7 @@ import { formatValue } from "@solve-js/format/FormatEngine";
 describe("Issue #178: bill split and tip", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false);
+    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
   });
 
   const out = (source: string): string => formatValue(engine.evaluateExpression(source)[0]);

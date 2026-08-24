@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach, jest } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
@@ -11,7 +12,7 @@ import { registerTestPluginFunction } from "@tools/testUtils";
  * Helper: create a fresh engine (no diagnostic mode).
  */
 function createEngine(): ExpressionEngine {
-	return new ExpressionEngine("en", false);
+	return new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 }
 
 /**
@@ -254,7 +255,7 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 		//   2. VM controller — linked to keystrokeSignal before VM execution
 		// This test verifies that aborting the keystroke signal propagates
 		// through the preflight controller to the VM controller.
-		const diagnosticEngine = new ExpressionEngine("en", true);
+		const diagnosticEngine = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
 
 		const controller = new AbortController();
 		diagnosticEngine.setKeystrokeSignal(controller.signal);
@@ -284,7 +285,7 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 		// the preflight controller's addEventListener('abort', ...) on an
 		// already-aborted signal should not crash and evaluation should still
 		// produce a correct result (the preflight passes, VM executes).
-		const diagnosticEngine = new ExpressionEngine("en", true);
+		const diagnosticEngine = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
 
 		const controller = new AbortController();
 		controller.abort("Pre-aborted");

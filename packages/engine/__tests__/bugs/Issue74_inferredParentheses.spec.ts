@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 
 describe("Feature #74: Inferred Parentheses", () => {
@@ -7,7 +8,7 @@ describe("Feature #74: Inferred Parentheses", () => {
   beforeEach(() => {
     engine = new ExpressionEngine("en", false, {
       validation: { maxExpressionLength: 2000, maxComplexity: 500, maxNestingDepth: 50, autoBalanceParens: true },
-    });
+    }, undefined, BUILTIN_PACKAGES);
   });
 
   // Releases the engine's query client and async batcher. Without it the

@@ -17,19 +17,20 @@
  */
 
 import { describe, expect, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { EngineError } from "@solve-js/errors";
 import { ValueType } from "@solve-js/vm/Value";
 
 /** The (description, rounded number) pairs of a line's derivation. */
 function steps(line: string): Array<[string, number]> {
-	const engine = new ExpressionEngine("en", false);
+	const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 	return engine.explainLine(line).steps.map((s) => [s.description, s.value.toNumber()]);
 }
 
 /** Just the step descriptions, for the cases where wording is the point. */
 function descriptions(line: string): string[] {
-	const engine = new ExpressionEngine("en", false);
+	const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 	return engine.explainLine(line).steps.map((s) => s.description);
 }
 
@@ -144,7 +145,7 @@ describe("percentages", () => {
 
 describe("money and units carry through the derivation", () => {
 	test("a sum of money stays money, to the cent", () => {
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		const explanation = engine.explainLine("$0.10 + $0.20");
 		expect(explanation.steps.map((s) => s.description)).toEqual(["$0.10 plus $0.20"]);
 		expect(explanation.result.type).toBe(ValueType.Uom);
@@ -153,7 +154,7 @@ describe("money and units carry through the derivation", () => {
 	});
 
 	test("a markup on money stays money", () => {
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		const explanation = engine.explainLine("$80 + 20%");
 		expect(explanation.steps.map((s) => s.description)).toEqual(["$80 plus 20%"]);
 		expect(explanation.result.unit).toBe("USD");
@@ -161,7 +162,7 @@ describe("money and units carry through the derivation", () => {
 	});
 
 	test("a sum of lengths is one step in the first unit", () => {
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		const explanation = engine.explainLine("5 km + 300 m");
 		expect(explanation.steps.map((s) => s.description)).toEqual(["5 km plus 300 m"]);
 		expect(explanation.result.unit).toBe("km");
@@ -181,14 +182,14 @@ describe("signs belong to the operand they precede, not the derivation", () => {
 
 describe("a line with nothing to break down returns the answer without steps", () => {
 	test("a bare number has no derivation", () => {
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		const explanation = engine.explainLine("42");
 		expect(explanation.steps).toEqual([]);
 		expect(explanation.result.toNumber()).toBe(42);
 	});
 
 	test("a bare quantity has no derivation", () => {
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		const explanation = engine.explainLine("5 km");
 		expect(explanation.steps).toEqual([]);
 		expect(explanation.result.unit).toBe("km");
@@ -197,14 +198,14 @@ describe("a line with nothing to break down returns the answer without steps", (
 	test("an unmodelled construct still reports its answer, without steps", () => {
 		// Function calls are deferred: the derivation cannot break `sqrt(16)`
 		// down, so it reports the answer alone rather than a partial account.
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		const explanation = engine.explainLine("sqrt(16) + 2");
 		expect(explanation.steps).toEqual([]);
 		expect(explanation.result.toNumber()).toBe(6);
 	});
 
 	test("a conversion is deferred the same way", () => {
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		const explanation = engine.explainLine("3 kg in g");
 		expect(explanation.steps).toEqual([]);
 		expect(explanation.result.toNumber()).toBeCloseTo(3000, 6);
@@ -222,7 +223,7 @@ describe("the answer and the derivation never disagree", () => {
 		"5 km + 300 m",
 		"sqrt(16) + 2",
 	])("`%s`: result matches evaluateExpression, and equals the last step", (line) => {
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		const explanation = engine.explainLine(line);
 		const [direct] = engine.evaluateExpression(line);
 
@@ -237,7 +238,7 @@ describe("the answer and the derivation never disagree", () => {
 
 describe("a line that does not evaluate is a structured error", () => {
 	test("explainLine throws an EngineError, not a bare one", () => {
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		expect(() => engine.explainLine("2 +")).toThrow(EngineError);
 	});
 });

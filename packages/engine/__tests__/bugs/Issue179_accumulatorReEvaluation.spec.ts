@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
@@ -22,7 +23,7 @@ describe("Issue #179: accumulator re-evaluation is idempotent", () => {
   describe("batch document path (parseDocument)", () => {
     let engine: ExpressionEngine;
     beforeEach(() => {
-      engine = new ExpressionEngine("en", false);
+      engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
     });
 
     const read = (doc: string): string[] =>

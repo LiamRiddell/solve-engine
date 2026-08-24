@@ -5,13 +5,14 @@
  * returns a structured `diagnostic` field with properly populated pipeline stages.
  */
 import { ExpressionEngine } from '@solve-js/engine/ExpressionEngine';
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import type { DiagnosticPipelineResult, PipelineStageResult } from '@solve-js/types/DiagnosticPipelineResult';
 
 describe('DiagnosticPipelineResult', () => {
     let engine: ExpressionEngine;
 
     beforeEach(() => {
-        engine = new ExpressionEngine('en', true);
+        engine = new ExpressionEngine('en', true, undefined, undefined, BUILTIN_PACKAGES);
     });
 
     afterEach(() => {

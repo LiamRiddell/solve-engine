@@ -1,10 +1,11 @@
 import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 
 describe("Phase 6: Incremental Evaluation", () => {
   describe("Basic API", () => {
     test("evaluateIncremental method exists and accepts parameters", () => {
-      const engine = new ExpressionEngine();
+      const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
       // Parse a document first to establish state
       engine.parseDocument(":x = 5\ny = 10");
 
@@ -14,7 +15,7 @@ describe("Phase 6: Incremental Evaluation", () => {
     });
 
     test("getDag returns dependency graph with correct methods", () => {
-      const engine = new ExpressionEngine();
+      const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
       engine.parseDocument(":x = 5\nx + 3");
       const dag = engine.getDag();
       expect(dag).toBeDefined();
@@ -23,7 +24,7 @@ describe("Phase 6: Incremental Evaluation", () => {
     });
 
     test("getLineCache returns line cache instance with correct methods", () => {
-      const engine = new ExpressionEngine();
+      const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
       const lc = engine.getLineCache();
       expect(lc).toBeDefined();
       expect(typeof lc.get).toBe("function");
@@ -37,7 +38,7 @@ describe("Phase 6: Incremental Evaluation", () => {
     let engine: ExpressionEngine;
 
     beforeEach(() => {
-      engine = new ExpressionEngine();
+      engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
     });
 
     // Releases the engine's query client and async batcher. Without it the

@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, test, afterAll } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { benchmarkFn } from "@tools/testUtils";
 import { recordSample, writeBenchmarkResults, BenchmarkResults } from "@tools/benchmarkIO";
@@ -34,7 +35,7 @@ describe("Pipeline Benchmarks", () => {
 
   test("evaluates cold (no cache) in < 2ms", async () => {
     const r = await benchmarkFn(() => {
-      const e = new ExpressionEngine("en", false);
+      const e = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
       e.evaluateLine(1, "1 + 2 * 3");
     }, 5000, 100);
     recordSample(results, "single_eval_cold", r);
@@ -42,7 +43,7 @@ describe("Pipeline Benchmarks", () => {
   });
 
   test("evaluates warm (cached) in < 0.5ms", async () => {
-    const engine = new ExpressionEngine("en", false);
+    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
     // Warm cache
     engine.evaluateLine(1, "10 + 20");
     const r = await benchmarkFn(() => {
@@ -55,7 +56,7 @@ describe("Pipeline Benchmarks", () => {
   test("parses 50-line doc in < 20ms", async () => {
     const input = generateDoc(50);
     const r = await benchmarkFn(() => {
-      const e = new ExpressionEngine("en", false);
+      const e = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
       e.parseDocument(input);
     }, 200, 10);
     recordSample(results, "50_line_doc", r);
@@ -65,7 +66,7 @@ describe("Pipeline Benchmarks", () => {
   test("parses 200-line doc in < 100ms", async () => {
     const input = generateDoc(200);
     const r = await benchmarkFn(() => {
-      const e = new ExpressionEngine("en", false);
+      const e = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
       e.parseDocument(input);
     }, 50, 5);
     recordSample(results, "200_line_doc", r);
@@ -74,7 +75,7 @@ describe("Pipeline Benchmarks", () => {
 
   test("handles variable chain in < 1ms", async () => {
     const r = await benchmarkFn(() => {
-      const e = new ExpressionEngine("en", false);
+      const e = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
       e.parseDocument(":x = 1\n:x + 1\n:x + 2\n:x + 3\n:x + 4");
     }, 5000, 100);
     recordSample(results, "variable_chain", r);
@@ -84,7 +85,7 @@ describe("Pipeline Benchmarks", () => {
   test("handles 20 inline solves in < 5ms", async () => {
     const input = generateInlineDoc(20);
     const r = await benchmarkFn(() => {
-      const e = new ExpressionEngine("en", false);
+      const e = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
       e.parseDocument(input);
     }, 2000, 50);
     recordSample(results, "20_inline_solves", r);
@@ -93,7 +94,7 @@ describe("Pipeline Benchmarks", () => {
 
   test("re-evaluates dirty line in < 1ms", async () => {
     const r = await benchmarkFn(() => {
-      const e = new ExpressionEngine("en", false);
+      const e = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
       e.parseDocument(":x = 1\n:x + 1\n:x + 2");
       e.reEvaluateLine(2, ":x + 1");
       e.reEvaluateLine(3, ":x + 2");
@@ -104,7 +105,7 @@ describe("Pipeline Benchmarks", () => {
 
   test("mixed expression ($ + % + units) in < 2ms", async () => {
     const r = await benchmarkFn(() => {
-      const e = new ExpressionEngine("en", false);
+      const e = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
       e.evaluateLine(1, "$10 + 50% of 200 - 3 kg");
     }, 10000, 200);
     recordSample(results, "mixed_complex", r);
@@ -113,7 +114,7 @@ describe("Pipeline Benchmarks", () => {
 
   test("full FunctionCall sqrt(144) + 5 in < 1ms", async () => {
     const r = await benchmarkFn(() => {
-      const e = new ExpressionEngine("en", false);
+      const e = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
       e.evaluateLine(1, "sqrt(144) + 5");
     }, 20000, 500);
     recordSample(results, "function_plus_literal", r);

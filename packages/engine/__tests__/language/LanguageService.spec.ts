@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, jest, test, afterEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { LanguageService } from "@solve-js/language/LanguageService";
 import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage";
@@ -8,7 +9,7 @@ describe("LanguageService", () => {
   let service: LanguageService;
 
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false);
+    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
     service = new LanguageService(engine);
   });
 

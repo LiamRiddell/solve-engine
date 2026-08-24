@@ -17,7 +17,6 @@ import { registerAsConverter, unregisterAsConverter } from "@solve-js/vm/VMBuilt
 import { createEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { Value, ValueType, numberValue, stringValue, pendingValue, freezeIfDev, errorValue, type MatrixData } from "@solve-js/vm/Value";
-import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { checkPackageCompatibility } from "@solve-js/api/PackageCompatibility";
 import { assertEngineVersionCompatible } from "@solve-js/api/EngineVersionCompatibility";
@@ -126,9 +125,10 @@ export interface EngineRestoreOptions {
      * Packages to register on the restored engine. This MUST be the same set
      * the snapshot was taken with: a snapshot carries compiled bytecode whose
      * plugin-function indices and parselet-produced opcodes only line up
-     * against the packages that were present when it was written. Defaults to
-     * {@link BUILTIN_PACKAGES}, exactly like the constructor's own `packages`
-     * parameter, so a host using the default package set needs to pass nothing.
+     * against the packages that were present when it was written. Registers no
+     * packages when omitted, exactly like the constructor's own `packages`
+     * parameter, so a host that snapshotted a full engine passes the same
+     * `BUILTIN_PACKAGES` here that it constructed with.
      */
     packages?: IEnginePackage[];
     /** Config overrides, merged over `DEFAULT_CONFIG`, as in the constructor. */
@@ -197,12 +197,25 @@ export interface LineEvaluation {
  * is the intended usage. Reusing a single engine across documents is also fine:
  * `clear()` resets it for the next one rather than consuming it.
  *
+ * The constructor registers only the packages it is given, so a consumer's
+ * bundler can tree-shake away every built-in they do not use. For the common
+ * "I want everything" case, {@link createEngine} registers the full built-in
+ * set in one call; pass an explicit package list to the constructor when
+ * bundle size matters.
+ *
  * @example
  * ```typescript
- * import { ExpressionEngine } from "solve-engine";
- * const engine = new ExpressionEngine("en");
+ * import { createEngine } from "solve-engine";
+ * const engine = createEngine(); // every built-in package
  * const [value] = engine.evaluateExpression("2 + 2 * 10");
  * console.log(value.toNumber()); // 22
+ * ```
+ * @example
+ * ```typescript
+ * // A slimmer engine: only arithmetic and units reach the bundle.
+ * import { ExpressionEngine } from "solve-engine";
+ * import { ARITHMETIC_PACKAGE, UOM_PACKAGE } from "solve-engine/packages";
+ * const engine = new ExpressionEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE, UOM_PACKAGE]);
  * ```
  */
 //#region Class: ExpressionEngine
@@ -564,10 +577,11 @@ export class ExpressionEngine {
          }
 
         // Register providers via IEnginePackage data.
-        // Defaults to BUILTIN_PACKAGES (all built-in providers). Callers can
-        // pass a filtered subset via the `packages` constructor parameter to
-        // selectively include/exclude specific providers (e.g., omit dice or
-        // vector support for a calculator-only engine).
+        // Packages are explicit: an engine registers exactly what the caller
+        // passes and nothing more, so a consumer's bundler can tree-shake away
+        // every built-in package they do not import. Pass `BUILTIN_PACKAGES`
+        // (from `solve-engine/packages`) for the full set, or a subset for a
+        // slimmer engine; omitting `packages` registers none.
         // Each package's parselets go into the engine's isolated registry
         // (not sharedParseletRegistry), lexer plugins into the engine's
         // isolated lexer, and opcode/variable handlers into shared registries.
@@ -599,7 +613,7 @@ export class ExpressionEngine {
         // of first split into `6 * sprints` with the name stranded as a variable.
         this.normalizer.register(userUnitExpansionRule(this.userUnits));
 
-        const pkgList = packages ?? BUILTIN_PACKAGES;
+        const pkgList = packages ?? [];
         for (const pkg of pkgList) {
             // Per-package containment: registerPackage() can throw (a
             // lexerVocabulary keyword/operator/unit colliding with a

@@ -10,13 +10,14 @@
  */
 
 import { describe, expect, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { knownUnits, isKnownUnit, excludedUnitSpellings } from "@solve-js/lexer/units";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
 
 function evaluate(expression: string) {
-  return new ExpressionEngine("en", false).evaluateExpression(expression)[0];
+  return new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES).evaluateExpression(expression)[0];
 }
 
 describe("the vocabulary is derived from the conversion tables", () => {

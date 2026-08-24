@@ -23,6 +23,10 @@ export type {
 export { checkEngineVersionCompatibility, assertEngineVersionCompatible } from "./EngineVersionCompatibility";
 export type { EngineVersionCheckResult } from "./EngineVersionCompatibility";
 
+// A batteries-included engine (every built-in package) for the common case;
+// the constructor stays bring-your-own-packages so a consumer can tree-shake.
+export { createEngine } from "./createEngine";
+
 export { ExpressionEngine, SNAPSHOT_FORMAT, SNAPSHOT_VERSION, SnapshotErrorCodes } from "@solve-js/engine";
 export type { LineEvaluation, EvalResults, Explanation, ExplanationStep } from "@solve-js/engine";
 export type {

@@ -32,6 +32,7 @@
  */
 
 import * as path from "node:path";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { failureSignature, knownOpenSignatures, loadCorpus } from "@tools/fuzz/Corpus";
@@ -156,7 +157,7 @@ describe("fuzz corpus", () => {
 		test.each(replayable.map((entry) => [`${entry.generator}/${entry.outcome}/${entry.id}`, entry] as const))(
 			"replays %s without crashing, hanging or throwing outside the contract",
 			(_name, entry) => {
-				const engine = entry.input.kind === "expression" ? new ExpressionEngine("en") : null;
+				const engine = entry.input.kind === "expression" ? new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES) : null;
 				try {
 					const outcome = runCase(entry.input, engine, BOUNDED_LIMITS);
 
@@ -183,7 +184,7 @@ describe("fuzz corpus", () => {
 
 describe("bounded bytecode fuzz", () => {
 	test("no vetted seed crashes, hangs or breaks the return contract", () => {
-		const engine = new ExpressionEngine("en");
+		const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
 		try {
 			// Only the shape anchors, no generated seed expressions: compiling is
 			// the expensive part, and the mutation strategies find what they find
@@ -214,7 +215,7 @@ describe("bounded bytecode fuzz", () => {
 
 describe("bounded expression fuzz", () => {
 	test("no vetted seed crashes, hangs or breaks the return contract", () => {
-		const engine = new ExpressionEngine("en");
+		const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
 		try {
 			const vocabulary = buildVocabulary(engine);
 			const deadline = Date.now() + BLOCK_BUDGET_MS;
@@ -247,7 +248,7 @@ describe("the generators stay deterministic", () => {
 	});
 
 	test("the same seed produces the same expression", () => {
-		const engine = new ExpressionEngine("en");
+		const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
 		try {
 			const vocabulary = buildVocabulary(engine);
 			expect(generateExpressionCase(4242, vocabulary).source).toBe(generateExpressionCase(4242, vocabulary).source);
@@ -257,7 +258,7 @@ describe("the generators stay deterministic", () => {
 	});
 
 	test("the vocabulary is read from the engine rather than hard-coded", () => {
-		const engine = new ExpressionEngine("en");
+		const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
 		try {
 			const vocabulary = buildVocabulary(engine);
 			// Numbers rather than exact contents: the point is that the tables

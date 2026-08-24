@@ -37,6 +37,7 @@
  */
 
 import { describe, expect, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
@@ -336,7 +337,7 @@ describe("how much a document of user-defined functions may run", () => {
 describe("rejecting a line is not allowed to cost more than running one", () => {
 	/** How long a line takes to be accepted or refused, whichever it is. */
 	function millisecondsToSettle(source: string): number {
-		const engine = new ExpressionEngine("en");
+		const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
 		const started = performance.now();
 		try {
 			engine.evaluateExpression(source);
@@ -397,7 +398,7 @@ describe("rejecting a line is not allowed to cost more than running one", () => 
 		// The fallback's actual job, which the fix must not have cut away with
 		// the redundant retries. Both of these reach it: the whole line does not
 		// parse, and the fragment after a colon does.
-		const engine = new ExpressionEngine("en");
+		const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
 		try {
 			expect(engine.evaluateExpression("pi approximation: 355/113")[0].toNumber()).toBeCloseTo(3.14159, 4);
 			// The leftward retry: the rightmost colon here belongs to ":x = 5",
@@ -426,7 +427,7 @@ describe("rejecting a line is not allowed to cost more than running one", () => 
 describe("gcd and lcm terminate on every operand", () => {
 	/** Evaluates a source line, returning the Value. */
 	function evaluate(source: string): Value {
-		const engine = new ExpressionEngine("en");
+		const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
 		try {
 			return engine.evaluateExpression(source)[0];
 		} finally {

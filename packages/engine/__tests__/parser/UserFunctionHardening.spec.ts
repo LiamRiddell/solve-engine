@@ -12,6 +12,7 @@
  * full reasoning behind each fix.
  */
 import { describe, expect, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { extractReadsAndWrites } from "@solve-js/engine/ExpressionEngineSafety";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
@@ -28,7 +29,7 @@ import type { Token } from "@solve-js/lexer/Token";
  * execution, and calling an undefined function throws before that point.
  */
 function tokensFor(expr: string, predefine?: string): Token[] {
-  const engine = new ExpressionEngine("en", true);
+  const engine = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
   if (predefine) engine.evaluateExpression(predefine);
   const result = engine.evaluateLineWithDebug(1, expr);
   const tokens = result.diagnostic!.tokens;
@@ -38,13 +39,13 @@ function tokensFor(expr: string, predefine?: string): Token[] {
 
 describe("recursion-depth guard", () => {
   test("self-recursion throws a clean, controlled error, not a native stack overflow or hang", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
     engine.evaluateExpression("f(x) = f(x)");
     expect(() => engine.evaluateExpression("f(1)")).toThrow(/recursion|depth/i);
   });
 
   test("nested (non-recursive) calls well under the limit still succeed", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
     engine.evaluateExpression("inc(x) = x + 1");
     const nestedCall = "inc(".repeat(10) + "0" + ")".repeat(10);
     const [value] = engine.evaluateExpression(nestedCall);
@@ -91,7 +92,7 @@ describe("DAG parameter-shadowing exclusion", () => {
   });
 
   test("end-to-end: an unrelated :x is unaffected by a same-named function parameter (no spurious DAG re-evaluation)", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
     engine.evaluateExpression(":x = 100");
     engine.evaluateExpression("f(x) = x * 2");
     const [callResult] = engine.evaluateExpression("f(5)");
@@ -109,12 +110,12 @@ describe("v1 scope restriction: async function bodies are rejected at definition
     // elsewhere (e.g. skipping the O(n) resolver preflight for purely
     // synchronous expressions). A body that trips it is rejected rather than
     // silently risking the async-body gap the plan explicitly scoped out.
-    const engine = new ExpressionEngine("en");
+    const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
     expect(() => engine.evaluateExpression("f(x) = x + prev")).toThrow(/synchronous/i);
   });
 
   test("a synchronous body defines and calls normally (no false positive)", () => {
-    const engine = new ExpressionEngine("en");
+    const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
     engine.evaluateExpression("f(x) = x + 1");
     const [value] = engine.evaluateExpression("f(4)");
     expect(value.toNumber()).toBe(5);
@@ -137,7 +138,7 @@ describe("VMCheckpointer scroll survival", () => {
       "4",                  // line 5
       "double(10)",         // line 6: call, scrolled away from the definition
     ]);
-    const engine = new ExpressionEngine("en");
+    const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
     const checkpointer = new VMCheckpointer(engine.getVM());
     const evaluator = new ThreeTierEvaluator(doc, engine, checkpointer);
 
@@ -163,7 +164,7 @@ describe("VMCheckpointer scroll survival", () => {
       "0",             // line 5
       "f(5)",          // line 6
     ]);
-    const engine = new ExpressionEngine("en");
+    const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
     const checkpointer = new VMCheckpointer(engine.getVM());
     const evaluator = new ThreeTierEvaluator(doc, engine, checkpointer);
 

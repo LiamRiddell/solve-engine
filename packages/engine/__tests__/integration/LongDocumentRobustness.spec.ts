@@ -1,11 +1,12 @@
 import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 
 describe("ExpressionEngine - Long Documents and Robustness Tests", () => {
   let engine: ExpressionEngine;
 
   beforeEach(() => {
-    engine = new ExpressionEngine("en");
+    engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
   });
 
   // Releases the engine's query client and async batcher. Without it the

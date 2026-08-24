@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { OpCode, getOpCodeName } from "@solve-js/parser/OpCode";
 import {
 	OPERAND_BYTES,
@@ -250,7 +251,7 @@ function compileCorpus(): RecordedProgram[] {
 	try {
 		for (const source of COMPILED_CORPUS) {
 			currentSource = source;
-			const engine = new ExpressionEngine("en");
+			const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
 			try {
 				engine.evaluateExpression(source);
 			} catch {

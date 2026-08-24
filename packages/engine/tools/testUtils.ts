@@ -8,6 +8,7 @@
  */
 
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import { Token } from "@solve-js/lexer/Token";
 import { Value } from "@solve-js/vm/Value";
@@ -19,7 +20,7 @@ import type { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistr
  * Create a fresh ExpressionEngine instance for testing.
  */
 export function createEngine(locale = "en", diagnostic = false): ExpressionEngine {
-  return new ExpressionEngine(locale, diagnostic);
+  return new ExpressionEngine(locale, diagnostic, undefined, undefined, BUILTIN_PACKAGES);
 }
 
 /**

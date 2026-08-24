@@ -7,6 +7,7 @@
 declare let __WORKER_URL__: string | undefined;
 
 import { describe, expect, test, afterAll } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { benchmarkFn } from "@tools/testUtils";
 import { TimelineDiagnosticCollector } from "@solve-js/diagnostics";
@@ -31,7 +32,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
 
   test("[PROD] single eval cold in < 2ms", async () => {
     const r = await benchmarkFn(() => {
-      const e = new ExpressionEngine("en", false);
+      const e = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
       e.evaluateLine(1, "1 + 2 * 3");
     }, 5000, 100);
     recordSample(results, "PROD_single_eval_cold", r);
@@ -39,7 +40,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
   });
 
   test("[PROD] single eval warm (cached) in < 0.5ms", async () => {
-    const engine = new ExpressionEngine("en", false);
+    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
     engine.evaluateLine(1, "10 + 20");
     const r = await benchmarkFn(() => {
       engine.evaluateLine(1, "10 + 20");
@@ -51,7 +52,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
   test("[PROD] parses 50-line doc in < 20ms", async () => {
     const input = generateDoc(50);
     const r = await benchmarkFn(() => {
-      const e = new ExpressionEngine("en", false);
+      const e = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
       e.parseDocument(input);
     }, 200, 10);
     recordSample(results, "PROD_50_line_doc", r);
@@ -60,7 +61,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
 
   test("[PROD] variable chain in < 1ms", async () => {
     const r = await benchmarkFn(() => {
-      const e = new ExpressionEngine("en", false);
+      const e = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
       e.parseDocument(":x = 1\n:x + 1\n:x + 2\n:x + 3\n:x + 4");
     }, 5000, 100);
     recordSample(results, "PROD_variable_chain", r);
@@ -69,7 +70,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
 
   test("[PROD] full pipeline sqrt(144) + 5 in < 1ms", async () => {
     const r = await benchmarkFn(() => {
-      const e = new ExpressionEngine("en", false);
+      const e = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
       e.evaluateLine(1, "sqrt(144) + 5");
     }, 20000, 500);
     recordSample(results, "PROD_function_plus_literal", r);
@@ -77,7 +78,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
   });
 
   test("[PROD] 10k warm evaluations in < 100ms", async () => {
-    const engine = new ExpressionEngine("en", false);
+    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
     engine.evaluateLine(1, "42"); // warmup
     const r = await benchmarkFn(() => {
       engine.evaluateLine(1, "1 + 2 * 3 - 4 / 5");
@@ -90,7 +91,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
 
   test("[DIAG] single eval cold in < 5ms", async () => {
     const r = await benchmarkFn(() => {
-      const e = new ExpressionEngine("en", true);
+      const e = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
       e.evaluateLine(1, "1 + 2 * 3");
     }, 5000, 100);
     recordSample(results, "DIAG_single_eval_cold", r);
@@ -98,7 +99,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
   });
 
   test("[DIAG] single eval warm (cached) in < 1ms", async () => {
-    const engine = new ExpressionEngine("en", true);
+    const engine = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
     engine.evaluateLine(1, "10 + 20");
     const r = await benchmarkFn(() => {
       engine.evaluateLine(1, "10 + 20");
@@ -114,7 +115,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
   test("[DIAG] parses 50-line doc in < 50ms", async () => {
     const input = generateDoc(50);
     const r = await benchmarkFn(() => {
-      const e = new ExpressionEngine("en", true);
+      const e = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
       e.parseDocument(input);
     }, 200, 10);
     recordSample(results, "DIAG_50_line_doc", r);
@@ -123,7 +124,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
 
   test("[DIAG] variable chain in < 2ms", async () => {
     const r = await benchmarkFn(() => {
-      const e = new ExpressionEngine("en", true);
+      const e = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
       e.parseDocument(":x = 1\n:x + 1\n:x + 2\n:x + 3\n:x + 4");
     }, 5000, 100);
     recordSample(results, "DIAG_variable_chain", r);
@@ -131,7 +132,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
   });
 
   test("[DIAG] 10k warm evaluations in < 200ms", async () => {
-    const engine = new ExpressionEngine("en", true);
+    const engine = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
     engine.evaluateLine(1, "42"); // warmup
     const r = await benchmarkFn(() => {
       engine.evaluateLine(1, "1 + 2 * 3 - 4 / 5");
@@ -143,7 +144,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
   // === DIAGNOSTIC REPORT VALIDATION ===
 
 test("diagnostic report has correct structure", () => {
-     const engine = new ExpressionEngine("en", true);
+     const engine = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
      // Use an expression with sqrt() to exercise Tier 2 FunctionParselet
      const result = engine.evaluateLineWithDebug(1, "sqrt(144) + 5");
 
@@ -180,7 +181,7 @@ test("diagnostic report has correct structure", () => {
    });
 
   test("cached evaluation reports cache hit", () => {
-    const engine = new ExpressionEngine("en", true);
+    const engine = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
 
     // First eval — cache miss
     const result1 = engine.evaluateLineWithDebug(1, "100 + 200");
@@ -194,7 +195,7 @@ test("diagnostic report has correct structure", () => {
 test("vm trace mode emits per-opcode events", () => {
      const engine = new ExpressionEngine("en", true, {
        diagnostic: { enabled: true, vmTraceEnabled: true }
-     });
+     }, undefined, BUILTIN_PACKAGES);
      const traceCollector = new TimelineDiagnosticCollector();
      const pipeline = engine.getDiagnosticPipeline();
      pipeline.clear();
@@ -217,9 +218,9 @@ test("vm trace mode emits per-opcode events", () => {
 
   test("null collector has zero overhead vs direct call", async () => {
     // Production engine
-    const prodEngine = new ExpressionEngine("en", false);
+    const prodEngine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
     // Engine with null collector explicitly
-    const nullEngine = new ExpressionEngine("en", false);
+    const nullEngine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 
     const prodTime = await benchmarkFn(() => {
       prodEngine.evaluateLine(1, "1 + 2 * 3");

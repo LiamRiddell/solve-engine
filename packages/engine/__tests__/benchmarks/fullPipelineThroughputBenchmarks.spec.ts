@@ -22,6 +22,7 @@
  */
 
 import { registerPackageForTesting } from "@tools/testUtils";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ARITHMETIC_PACKAGE, BIGINT_PACKAGE, DATETIME_PACKAGE, DICE_PACKAGE, FUNCTION_PACKAGE, PERCENTAGE_PACKAGE, UOM_PACKAGE, VARIABLES_PACKAGE, VECTOR_PACKAGE } from "@solve-js/packages";
 import { describe, expect, test, afterAll } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
@@ -380,12 +381,12 @@ describe("Full Pipeline Throughput Benchmarks", () => {
 
       // ── Cold: fresh engine, first parse ──
       const coldMs = timeMs(() => {
-        const engine = new ExpressionEngine("en", false);
+        const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
         engine.parseDocument(doc);
       }, Math.min(20, tier.iterations));
 
       // ── Warm: engine with cached bytecode ──
-      const warmEngine = new ExpressionEngine("en", false);
+      const warmEngine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
       warmEngine.parseDocument(doc); // prime the cache
       const warmMs = timeMs(() => {
         warmEngine.parseDocument(doc);

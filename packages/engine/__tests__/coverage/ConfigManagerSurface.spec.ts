@@ -12,6 +12,7 @@
  */
 
 import { afterEach, describe, expect, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ConfigManager, DEFAULT_CONFIG } from "@solve-js/constants/Configuration";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { EngineError, ErrorCategory } from "@solve-js/errors/EngineError";
@@ -215,7 +216,7 @@ describe("reset", () => {
 		manager.reset();
 		manager.set("performance.maxDocumentLines", 42);
 
-		const engine = new ExpressionEngine("en");
+		const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
 		try {
 			expect(engine.getConfig().performance.maxDocumentLines).toBe(PRISTINE_MAX_LINES);
 		} finally {

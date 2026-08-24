@@ -8,6 +8,7 @@
  */
 
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { AllocationTracker } from "@solve-js/telemetry";
 import type { PipelineTelemetry, StageAllocation, StageAggregate } from "@solve-js/telemetry";
 
@@ -20,7 +21,7 @@ export function createTrackedEngine(locale = "en", diagnostic = false): {
     cleanup: () => void;
 } {
     AllocationTracker.enable();
-    const engine = new ExpressionEngine(locale, diagnostic);
+    const engine = new ExpressionEngine(locale, diagnostic, undefined, undefined, BUILTIN_PACKAGES);
     return {
         engine,
         cleanup: () => {

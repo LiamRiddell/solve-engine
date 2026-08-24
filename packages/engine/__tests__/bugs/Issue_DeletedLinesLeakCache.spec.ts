@@ -1,4 +1,5 @@
 import { describe, expect, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
@@ -14,7 +15,7 @@ import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
  */
 describe("deleting lines releases their cache entries", () => {
 	test("the cache shrinks when lines are deleted", () => {
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		const doc = new DocumentModel();
 		const evaluator = new ThreeTierEvaluator(doc, engine);
 
@@ -36,7 +37,7 @@ describe("deleting lines releases their cache entries", () => {
 		// One deletion could pass by accident. This checks the cache falls again
 		// on a second deletion within the same document, without setDocument in
 		// between, since that resets state and would mask an accumulation.
-		const engine = new ExpressionEngine("en", false);
+		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 		const doc = new DocumentModel();
 		const evaluator = new ThreeTierEvaluator(doc, engine);
 

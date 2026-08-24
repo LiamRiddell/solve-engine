@@ -9,6 +9,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { QueryClient } from "@tanstack/query-core";
 import { ValueType, Value, numberValue, stringValue, pendingValue } from "@solve-js/vm/Value";
 import { createVM, executeBytecode, unwrapEvalResult, type EvalResult } from "@solve-js/vm/VM";
@@ -290,7 +291,7 @@ describe("ExpressionEngine EvalResult handling", () => {
     let engine: ExpressionEngine;
 
     beforeEach(() => {
-        engine = new ExpressionEngine("en", false);
+        engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
     });
 
     afterEach(() => {
@@ -456,7 +457,7 @@ describe("ExpressionEngine evaluateExpression with async plugin", () => {
     let engine: ExpressionEngine;
 
     beforeEach(() => {
-        engine = new ExpressionEngine("en", false);
+        engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
     });
 
     afterEach(() => {

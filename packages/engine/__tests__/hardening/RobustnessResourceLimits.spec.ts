@@ -35,6 +35,7 @@
  */
 
 import { describe, expect, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { EngineError } from "@solve-js/errors/EngineError";
@@ -111,7 +112,7 @@ describe("the nesting-depth guard, once the limits in front of it are lifted", (
 				maxNestingDepth: 50,
 				autoBalanceParens: false,
 			},
-		});
+		}, undefined, BUILTIN_PACKAGES);
 	}
 
 	test("parentheses past the depth report NESTING_DEPTH_EXCEEDED", () => {
@@ -162,7 +163,7 @@ describe("the nesting-depth guard, once the limits in front of it are lifted", (
 				maxNestingDepth: 1_000_000,
 				autoBalanceParens: false,
 			},
-		});
+		}, undefined, BUILTIN_PACKAGES);
 		try {
 			const error = errorFrom(engine, "-".repeat(5000) + "1");
 			expect(error).toBeInstanceOf(EngineError);
@@ -177,7 +178,7 @@ describe("the nesting-depth guard, once the limits in front of it are lifted", (
 
 describe("the VM's own execution limits", () => {
 	test("maxInstructions halts a program that runs too long", () => {
-		const engine = new ExpressionEngine("en", false, { vm: { maxStackDepth: 200, maxInstructions: 20 } });
+		const engine = new ExpressionEngine("en", false, { vm: { maxStackDepth: 200, maxInstructions: 20 } }, undefined, BUILTIN_PACKAGES);
 		try {
 			const error = errorFrom(engine, "1" + "+1".repeat(12));
 			expect(error?.code).toBe("INSTRUCTION_LIMIT_EXCEEDED");
@@ -191,7 +192,7 @@ describe("the VM's own execution limits", () => {
 	});
 
 	test("maxStackDepth halts a program that pushes too much", () => {
-		const engine = new ExpressionEngine("en", false, { vm: { maxStackDepth: 5, maxInstructions: 50_000 } });
+		const engine = new ExpressionEngine("en", false, { vm: { maxStackDepth: 5, maxInstructions: 50_000 } }, undefined, BUILTIN_PACKAGES);
 		try {
 			expect(errorFrom(engine, "[1,2,3,4,5,6,7,8,9,10]")?.code).toBe("STACK_LIMIT_EXCEEDED");
 			expect(errorFrom(engine, "(1+(2+(3+(4+(5+6)))))")?.code).toBe("STACK_LIMIT_EXCEEDED");
@@ -275,7 +276,7 @@ describe("a range is expanded one value per element, with nothing asking how man
 	test("the ceiling is the configured one, and a collection under it still folds", () => {
 		// A host that wants a tighter (or looser) bound gets one, and the guard
 		// is a ceiling rather than a blanket refusal of large collections.
-		const engine = new ExpressionEngine("en", false, { vm: { maxStackDepth: 200, maxInstructions: 50_000, maxCollectionSize: 10 } });
+		const engine = new ExpressionEngine("en", false, { vm: { maxStackDepth: 200, maxInstructions: 50_000, maxCollectionSize: 10 } }, undefined, BUILTIN_PACKAGES);
 		try {
 			const [refused] = engine.evaluateExpression("sum(x, 1:11)");
 			expect(refused.type).toBe(ValueType.Error);
@@ -313,7 +314,7 @@ describe("how many lines a document may have, which no per-line limit can see", 
 		// A tightened limit is used rather than the default 100,000, so this test
 		// costs a few kilobytes rather than a megabyte and still exercises the
 		// same check.
-		const engine = new ExpressionEngine("en", false, { performance: { defaultCacheSize: 2000, maxDocumentLines: 500 } as any });
+		const engine = new ExpressionEngine("en", false, { performance: { defaultCacheSize: 2000, maxDocumentLines: 500 } as any }, undefined, BUILTIN_PACKAGES);
 		try {
 			const error = (() => {
 				try { engine.parseDocument(document(501)); return null; } catch (thrown) { return thrown as EngineError; }
@@ -328,7 +329,7 @@ describe("how many lines a document may have, which no per-line limit can see", 
 
 	test("a document at the ceiling is processed normally", () => {
 		// The guard has to be a ceiling rather than a refusal of long documents.
-		const engine = new ExpressionEngine("en", false, { performance: { defaultCacheSize: 2000, maxDocumentLines: 500 } as any });
+		const engine = new ExpressionEngine("en", false, { performance: { defaultCacheSize: 2000, maxDocumentLines: 500 } as any }, undefined, BUILTIN_PACKAGES);
 		try {
 			expect(engine.parseDocument(document(500)).totalLines).toBe(500);
 		} finally {

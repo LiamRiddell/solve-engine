@@ -1,4 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { DocumentModel, ViewportRange } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator, EvalTier } from "@solve-js/engine/ThreeTierEvaluator";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
@@ -29,7 +30,7 @@ import { sharedGlobalVariableStore, globalDagKey } from "@solve-js/vm/GlobalVari
  */
 
 function createEngine(): ExpressionEngine {
-	return new ExpressionEngine("en", false);
+	return new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 }
 
 function fullViewport(doc: DocumentModel): ViewportRange {

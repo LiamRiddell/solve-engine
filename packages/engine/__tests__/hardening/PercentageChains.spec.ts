@@ -18,6 +18,7 @@
  */
 
 import { describe, expect, test } from "@jest/globals";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { newTrackedEngine } from "@tools/trackedEngine";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
@@ -32,7 +33,7 @@ const num = (source: string) => evaluate(source).toNumber();
 
 /** The first line's result through the markdown document path. */
 function evaluateMarkdown(line: string): unknown {
-	const engine = new ExpressionEngine("en", false);
+	const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
 	const [parsed] = engine.parseDocument(line, { inputType: "markdown" }).lines;
 	return parsed.result?.value ?? parsed.error;
 }
