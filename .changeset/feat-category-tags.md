@@ -22,7 +22,7 @@ average of #grocery   33.75
 count of #grocery      2
 ```
 
-The boundaries are deliberate. A tag that is a line's first token is a heading, not a tagged figure, so `#grocery list` at the top of a note is a title. The match is on the whole tag, so `#housing` does not gather `#housingcost`, and tag names are matched case-insensitively. Money and units carry through: a tag whose lines are all in dollars totals to dollars, while mixing units under one tag, or tagging a line that is not a number, is a clear error rather than a silent figure. No tagged lines at all is an error for `total` and `average`, and zero for `count`.
+The boundaries are deliberate. A tag that is a line's first token is a heading, not a tagged figure, so `#grocery list` at the top of a note is a title. The match is on the whole tag, so `#housing` does not gather `#housingcost`, and tag names are matched case-insensitively. Money and units carry through: a tag whose lines are all in dollars totals to dollars, while mixing units under one tag is a clear error rather than a silent figure. `total` and `average` need numbers, so a non-numeric tagged line under them is an error; `count` is about presence, "how many lines carry the tag", so it counts a non-numeric line too. No tagged lines at all is an error for `total` and `average`, and zero for `count`.
 
 Like line references, these forms only work inside a document, since they read other lines. They return an error through the single-expression entry point, which has no document to gather from. Only one aggregate line per tag per note: an aggregate line carries the tag it sums, so a second would try to include the first, which is left out of scope rather than guessed at.
 
@@ -30,5 +30,5 @@ A tag name starts with a letter, which keeps it clear of the colour literals: `#
 
 ## Verification
 
-- A regression spec (18 cases) covers the mid-line strip, the four aggregates across non-adjacent lines, money and mixed-unit handling, the heading and prefix-collision boundaries, the empty and outside-a-document errors, and the bounded lexer change. A separate unit spec (7 cases) pins the pure `#tag` scanner.
-- 7,775 tests across 342 suites, no failures. `npm run verify` green.
+- A regression spec (21 cases) covers the mid-line strip, the four aggregates across non-adjacent lines, money and mixed-unit handling, count-of-presence for a non-numeric line, the heading and prefix-collision boundaries, the empty and outside-a-document errors, `word of #tag` as prose, and the bounded lexer change. A separate unit spec (7 cases) pins the pure `#tag` scanner.
+- 7,784 tests across 343 suites, no failures. `npm run verify` green.

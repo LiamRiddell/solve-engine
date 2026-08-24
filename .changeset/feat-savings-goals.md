@@ -23,4 +23,4 @@ The duration answers in the contribution's own unit (`weekly` reads in weeks), a
 ## Verification
 
 - A regression spec covers both directions, the interest-free and annuity cases (hand-derived and cited), the period unit, the round-up, the bare-number target, the unknown-period and unsupported-duration errors, and the untouched variable names.
-- 7,750 tests across 340 suites, no failures. `npm run verify` green.
+- 7,784 tests across 343 suites, no failures. `npm run verify` green.

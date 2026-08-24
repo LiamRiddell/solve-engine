@@ -63,10 +63,12 @@ function aggregateTagged(context: LineExecutionContext, tag: string, mode: TagMo
     const v = getResult(n);
     const err = checkLineValue(v, n);
     if (err) return err;
-    if (v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
-      return errorValue("TAG_NON_NUMERIC", `Line ${n}, tagged #${tag}, is not a plain number or unit value.`);
-    }
     if (mode !== "count") {
+      // `count of #tag` is "how many lines carry the tag", so a non-numeric
+      // tagged line still counts; only sum and average need a number to add.
+      if (v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
+        return errorValue("TAG_NON_NUMERIC", `Line ${n}, tagged #${tag}, is not a plain number or unit value.`);
+      }
       if (v!.type === ValueType.Uom) {
         sawUom = true;
         if (commonUnit === undefined) commonUnit = v!.unit;

@@ -27,4 +27,4 @@ split $100 between 3         $33.33 each, with 1 share paying $33.34
 ## Verification
 
 - A regression spec (16 cases) covers both spellings, the tip composition, the odd-penny reconciliation, the bare-number case, the arity error, and the collision safety.
-- 7,713 tests across 337 suites, no failures. `npm run verify` green.
+- 7,784 tests across 343 suites, no failures. `npm run verify` green.

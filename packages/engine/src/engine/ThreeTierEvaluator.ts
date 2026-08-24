@@ -188,6 +188,14 @@ export class ThreeTierEvaluator {
 		// ── Phase 5.3: Enable arena for zero-allocation Value reuse ──
 		enableValueArena();
 		try {
+			// Re-seed running-total accumulators before the from-line-1 pass. A
+			// `total += 5` line reads its own running value, so re-running it in
+			// place would read the previous evaluation's total and double-count.
+			// Reset each accumulator variable and mark every line that touches
+			// it dirty, so the loop below recomputes the total from its seed,
+			// top to bottom. (No-op when the document has no accumulators.)
+			this.reseedAccumulators();
+
 			const lines: EvalLineResult[] = [];
 			const resultMap = new Map<number, Value[]>();
 			const tierCounts = { tier1: 0, tier2: 0, tier3: 0, skipped: 0 };
@@ -513,6 +521,37 @@ export class ThreeTierEvaluator {
 	}
 
 	// ── Private helpers ─────────────────────────────────────────────────
+
+	/**
+	 * Reset running-total accumulators and mark the lines that touch them
+	 * dirty, so the from-line-1 pass in {@link evaluate} recomputes each total
+	 * from its seed instead of reading its own previous evaluation's value.
+	 *
+	 * A `total += 5` line compiles to no bytecode (it rides the symbolic
+	 * channel), so a clean one would be skipped by the tier dispatch rather
+	 * than re-run. It must re-run to re-apply its delta over the freshly-reset
+	 * base, so every line that WRITES an accumulator name is forced dirty (the
+	 * DAG drops a self-writing line from its own variable's consumers, so
+	 * getAffectedLines can't surface them). Pure readers of the total keep
+	 * their real bytecode and re-run via Tier 2 once the total is correct, so
+	 * they need no special handling. Cheap: a no-op unless the document
+	 * actually uses `+=`/`-=`, and accumulators are rare.
+	 */
+	private reseedAccumulators(): void {
+		const names = this.engine.resetAccumulators();
+		if (names.size === 0) return;
+		const docEnd = this.doc.lineCount;
+		for (let pos = 1; pos <= docEnd; pos++) {
+			const writes = this.dag.getWrites(pos);
+			if (writes.size === 0) continue;
+			for (const w of writes) {
+				if (names.has(w)) {
+					this.doc.markDirtyByLineNumber(pos);
+					break;
+				}
+			}
+		}
+	}
 
 	/**
 	 * Collect evaluation results for a contiguous range of lines.

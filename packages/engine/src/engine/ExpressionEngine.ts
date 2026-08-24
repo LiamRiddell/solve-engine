@@ -211,6 +211,14 @@ export class ExpressionEngine {
     //#region Private Properties
     private dag = new DependencyGraph();
     private lineCache = new LineCache();
+    /**
+     * Names ever used as a running-total target (`total += 5`). A document is
+     * re-parsed top-to-bottom on every keystroke, so each accumulator is reset
+     * to undefined at the start of a batch pass and re-seeds from its opening
+     * `+=`/`-=` this pass, rather than reading its own previous pass's value
+     * (which grew the total without bound). See {@link tryCompoundAssignment}.
+     */
+    private accumulatorNames = new Set<string>();
     private scopeManager = new ScopeManager();
     private lexer: Lexer;
     private registry: ParseletRegistry;
@@ -1177,6 +1185,13 @@ export class ExpressionEngine {
         // uses the feature keeps its cache and pays nothing here.
         if (!this.userUnits.isEmpty) this.bytecodeCache.clear();
         this.userUnits.clear();
+        // Reset running-total accumulators for the same reason units are
+        // rebuilt top-to-bottom: a full re-parse must reproduce the first
+        // parse. `total += 5` seeds 0 only while the name is undefined, so
+        // without this the total reads its own previous pass's value and
+        // grows on every keystroke. Cleared here, re-seeded by the line's
+        // own `+=`/`-=` as the pass replays it. See resetAccumulators.
+        this.resetAccumulators();
         // Scan the entire document in a single pass, bypasses the old
         // split('\n') → evaluateLines() → join('\n') → scanDocument()
         // roundtrip. scanDocument() classifies and tokenizes all lines
@@ -1235,6 +1250,13 @@ export class ExpressionEngine {
         // A whole-document pass, so definitions start empty (see parseDocument).
         if (!this.userUnits.isEmpty) this.bytecodeCache.clear();
         this.userUnits.clear();
+        // Reset running-total accumulators for the same reason units are
+        // rebuilt top-to-bottom: a full re-parse must reproduce the first
+        // parse. `total += 5` seeds 0 only while the name is undefined, so
+        // without this the total reads its own previous pass's value and
+        // grows on every keystroke. Cleared here, re-seeded by the line's
+        // own `+=`/`-=` as the pass replays it. See resetAccumulators.
+        this.resetAccumulators();
         // Rejoin lines and scan in a single pass, scanDocument() handles
         // classification + tokenization for all lines in one character walk.
         const documentText = lines.join('\n');
@@ -1804,6 +1826,12 @@ export class ExpressionEngine {
         }
 
         const name = nameTok.value;
+        // Remember this name is an accumulator, so a batch document pass can
+        // reset it before re-evaluating (see parseDocument): the seed below
+        // only fires when the name is undefined, which after the first pass it
+        // no longer is, so without the reset the total would read its own
+        // previous pass's value and double-count on every keystroke.
+        this.accumulatorNames.add(name);
         // A first `+=`/`-=` on an unknown name seeds 0, so a ledger can open
         // straight into `spent += 10` without an UNDEFINED_VARIABLE.
         if (this.vm.getVar(name) === undefined) this.vm.setVar(name, numberValue(0));
@@ -1833,6 +1861,24 @@ export class ExpressionEngine {
         }
         this.vm.setVar(name, result.value);
         return result.value;
+    }
+
+    /**
+     * Reset every running-total accumulator (`total += 5`) to undefined, and
+     * return their names.
+     *
+     * An accumulator seeds 0 only while its name is undefined, then reads that
+     * value on each `+=`/`-=`. A document is re-evaluated top-to-bottom on
+     * every keystroke, so unless the name is cleared first the total reads its
+     * own previous evaluation's value and grows without bound. The batch
+     * document pass (`parseDocument`/`evaluateLines`) calls this at the start
+     * of each pass; the incremental {@link ThreeTierEvaluator} calls it and
+     * then marks the lines that touch each name dirty, since it re-runs lines
+     * selectively rather than replaying the whole document.
+     */
+    resetAccumulators(): ReadonlySet<string> {
+        for (const name of this.accumulatorNames) this.vm.deleteVar(name);
+        return this.accumulatorNames;
     }
 
     private trySymbolicGrammar(normalizedTokens: Token[], lineNumber: number = -1): Value | null {
@@ -2101,7 +2147,7 @@ export class ExpressionEngine {
         | { kind: 'empty' }
         | { kind: 'error'; stage: 'length' | 'complexity' | 'parse'; error: EngineError; reads?: string[]; writes?: string[]; normalizedTokens?: Token[] }
         | { kind: 'ready'; normalizedTokens: Token[]; reads: string[]; writes: string[]; program: BytecodeProgram; cached: boolean; parserAlloc?: StageAllocation | null }
-        | { kind: 'symbolic-solve'; normalizedTokens: Token[]; value: Value } {
+        | { kind: 'symbolic-solve'; normalizedTokens: Token[]; value: Value; reads?: string[]; writes?: string[] } {
         // ══ SAFETY CHECK 1: Expression length limit ══
         const lengthCheck = checkExpressionLength(expression, this.config.validation);
         if (!lengthCheck.passed) {
@@ -2138,14 +2184,29 @@ export class ExpressionEngine {
         // visible line on every keystroke. `total =` is a line half-typed on
         // the way to `total = 5`, and it took the editor down.
         let symbolicResult: Value | null;
+        // A compound assignment (`total += 5`) reads and writes its own name,
+        // unlike the other symbolic shapes whose effect the DAG deliberately
+        // cannot track. It MUST surface those reads/writes: without a write
+        // registered, the incremental evaluator never checkpoints the line, so
+        // its own value is never reset before a re-run and the running total
+        // double-counts on every edit; and dependent lines never re-evaluate.
+        let compoundReadsWrites: { reads: string[]; writes: string[] } | null = null;
         try {
             // A user-unit definition (`1 sprint = 2 weeks`) is an effectful line
             // like the symbolic shapes below, so it rides the same non-bytecode
             // channel. Checked first, so it claims its narrow pattern before the
             // scalar-equation grammar sees the bare `=`.
-            symbolicResult = this.tryDefineUserUnit(normalizedTokens)
-                ?? this.tryCompoundAssignment(normalizedTokens, lineNumber)
-                ?? this.trySymbolicGrammar(normalizedTokens, lineNumber);
+            symbolicResult = this.tryDefineUserUnit(normalizedTokens);
+            if (symbolicResult === null) {
+                const compound = this.tryCompoundAssignment(normalizedTokens, lineNumber);
+                if (compound !== null) {
+                    symbolicResult = compound;
+                    compoundReadsWrites = extractReadsAndWrites(normalizedTokens);
+                }
+            }
+            if (symbolicResult === null) {
+                symbolicResult = this.trySymbolicGrammar(normalizedTokens, lineNumber);
+            }
         } catch (e) {
             // reads/writes supplied for the same reason the main parse's catch
             // supplies them: the line names variables even though it does not
@@ -2155,7 +2216,7 @@ export class ExpressionEngine {
             return { kind: 'error', stage: 'parse', error: normalizeUnknownError(e), reads, writes, normalizedTokens };
         }
         if (symbolicResult !== null) {
-            return { kind: 'symbolic-solve', normalizedTokens, value: symbolicResult };
+            return { kind: 'symbolic-solve', normalizedTokens, value: symbolicResult, reads: compoundReadsWrites?.reads, writes: compoundReadsWrites?.writes };
         }
 
         const { reads, writes } = extractReadsAndWrites(normalizedTokens);
@@ -2318,14 +2379,16 @@ export class ExpressionEngine {
             throw prep.error;
         }
         if (prep.kind === 'symbolic-solve') {
-            // No DAG registration, a stored equation/bare-assignment's
-            // effect (vm.equations, vm.setVar) isn't reads/writes-trackable
-            // the same way ordinary bytecode is, so this line won't
-            // auto-re-evaluate if some unrelated line later changes one of
-            // its factor variables. A disclosed limitation of this
-            // narrow, bounded grammar (see trySymbolicGrammar()'s own doc
-            // comment), not an oversight.
-            this.storeLineResult(lineNumber, prep.value, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, [], [], expression);
+            // Most symbolic shapes carry no DAG registration: a stored
+            // equation/bare-assignment's effect (vm.equations, vm.setVar) isn't
+            // reads/writes-trackable the same way ordinary bytecode is, so the
+            // line won't auto-re-evaluate if some unrelated line later changes
+            // one of its factor variables. A disclosed limitation of that
+            // narrow grammar (see trySymbolicGrammar()'s own doc comment). The
+            // exception is a compound assignment, which surfaces real
+            // reads/writes (see prepareExpression) so its running total is
+            // checkpointed and its dependents re-evaluate.
+            this.storeLineResult(lineNumber, prep.value, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, prep.reads ?? [], prep.writes ?? [], expression);
             return prep.value;
         }
 
@@ -2881,7 +2944,7 @@ export class ExpressionEngine {
                 });
             }
             const emptyProgram: BytecodeProgram = { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false };
-            this.storeLineResult(lineNumber, prep.value, emptyProgram, [], [], expression);
+            this.storeLineResult(lineNumber, prep.value, emptyProgram, prep.reads ?? [], prep.writes ?? [], expression);
             return {
                 value: prep.value,
                 tokens: normalizedTokens,
@@ -3758,12 +3821,14 @@ export class ExpressionEngine {
 			// same "nothing to compile" shape as the 'empty' case above.
 			// External tooling asking for the compiled program of a `=>`
 			// line gets an empty one; a disclosed limitation of this
-			// narrow grammar, not an oversight.
+			// narrow grammar, not an oversight. A compound assignment is the
+			// exception: it carries real reads/writes so the incremental
+			// evaluator checkpoints its running total and re-runs dependents.
 			return {
 				program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
 				tokens: prep.normalizedTokens,
-				reads: [],
-				writes: [],
+				reads: prep.reads ?? [],
+				writes: prep.writes ?? [],
 			};
 		}
 
@@ -3939,6 +4004,7 @@ export class ExpressionEngine {
          this.bytecodeCache.clear();
          this.vm.reset();
          this.userUnits.clear();
+         this.accumulatorNames.clear();
          this.lastTelemetry = null;
      }
 
@@ -4012,7 +4078,17 @@ export class ExpressionEngine {
         for (const [name, value] of this.vm.getVariableEntries()) {
             if (value.type === ValueType.Pending) continue; // in-flight async, not restorable
             if (latestWriter.get(name)?.async) continue; // most recently written by an async line
-            variables[name] = serializeValue(value, `variable "${name}"`);
+            try {
+                variables[name] = serializeValue(value, `variable "${name}"`);
+            } catch (e) {
+                // A value kind this v1 format defers (a symbolic result, or a
+                // split/colour value held in a variable) is skipped rather than
+                // aborting the whole snapshot, exactly as the line cache below
+                // does. The variable re-establishes when its line re-evaluates
+                // on restore; only that one binding is left out of the snapshot.
+                if (e instanceof EngineError && e.code === SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE) continue;
+                throw e;
+            }
         }
 
         // A user-defined function body that calls an async plugin is refused at

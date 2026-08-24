@@ -178,6 +178,13 @@ export interface VM {
 	getVar(key: string): Value | undefined;
 	setVar(key: string, value: Value): void;
 	/**
+	 * Remove a top-level variable binding. Used at the start of each document
+	 * pass to re-seed accumulators (`total += 5`): a running total must reset
+	 * to its seed each full re-parse, otherwise it reads its own previous
+	 * pass's value and grows without bound on every keystroke.
+	 */
+	deleteVar(key: string): void;
+	/**
 	 * User-defined-function call frame, a name-keyed `Map` of this call's
 	 * bound arguments, PUSHED before `CALL_USER_FUNCTION` executes the
 	 * callee's body and POPPED immediately after (even if the body throws),
