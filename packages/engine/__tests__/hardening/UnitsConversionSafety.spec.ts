@@ -27,7 +27,7 @@ import type { Value } from "@solve-js/vm/Value";
 
 /** One line through a real engine. */
 function evaluate(source: string): Value {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	try {
 		return engine.evaluateExpression(source)[0];
 	} finally {

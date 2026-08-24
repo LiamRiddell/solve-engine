@@ -51,21 +51,21 @@ const HALF_TYPED = [
 
 describe("tryCompileExpression() returns rather than throws", () => {
 	test.each(HALF_TYPED)("%j returns a boolean", (source) => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(typeof engine.tryCompileExpression(source)).toBe("boolean");
 	});
 
 	test("an assignment with an empty right-hand side does not compile", () => {
 		// The reported crash. `false` rather than a throw is the whole fix: the
 		// line genuinely does not compile, and saying so is the correct answer.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(engine.tryCompileExpression("hello =")).toBe(false);
 	});
 
 	test("the same line still compiles once it is finished", () => {
 		// Guards against fixing the crash by making the grammar decline the
 		// shape outright, which would stop assignments working.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(engine.tryCompileExpression("hello = 5")).toBe(true);
 	});
 });
@@ -74,7 +74,7 @@ describe("the throwing contract is unchanged", () => {
 	test("evaluateExpression() still throws on the same input", () => {
 		// Documented `@throws {EngineError}`, and the plugin's own tests rely
 		// on it. Only the boolean probe was wrong.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(() => engine.evaluateExpression("hello =")).toThrow();
 	});
 });

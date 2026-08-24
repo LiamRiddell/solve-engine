@@ -106,7 +106,7 @@ function evaluateMatrix(engine: ExpressionEngine, source: string): Rows {
 
 /** Runs a whole document through the real DocumentModel/ThreeTierEvaluator pair, which is the only way cross-line access works. */
 function evaluateDocument(lines: string[]): DocumentModel {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	const document = new DocumentModel();
 	document.setDocument(lines.join("\n"));
 	new ThreeTierEvaluator(document, engine).evaluate({ startLine: 1, endLine: lines.length });
@@ -118,7 +118,7 @@ function evaluateDocument(lines: string[]): DocumentModel {
 describe("matrix inversion satisfies the identity that defines it", () => {
 	test("A*inv(A) and inv(A)*A are both the identity, for 60 random 2x2 and 3x3 matrices", () => {
 		const random = seededRandom(0xa11ce1);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 60; trial++) {
 			const size = trial % 2 === 0 ? 2 : 3;
 			const source = toSource(invertibleMatrix(random, size));
@@ -139,7 +139,7 @@ describe("matrix inversion satisfies the identity that defines it", () => {
 	test("a singular matrix is refused rather than inverted into nonsense", () => {
 		// Every one of these has a zero determinant by construction: a repeated
 		// row, a zero row, a scaled row, and the all-zero matrix.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (const source of ["[1,2;2,4]", "[1,2;0,0]", "[0,0;0,0]", "[3,6;1,2]", "[1,2,3;4,5,6;7,8,9]", "[1,1,1;1,1,1;2,2,2]"]) {
 			const value = evaluate(engine, `inv(${source})`);
 			expect(value.type).toBe(ValueType.Error);
@@ -149,7 +149,7 @@ describe("matrix inversion satisfies the identity that defines it", () => {
 	});
 
 	test("inverting a non-square matrix is refused", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (const source of ["[1,2,3;4,5,6]", "[1,2;3,4;5,6]", "[1,2,3]"]) {
 			const value = evaluate(engine, `inv(${source})`);
 			expect(value.type).toBe(ValueType.Error);
@@ -162,7 +162,7 @@ describe("matrix inversion satisfies the identity that defines it", () => {
 describe("determinant identities", () => {
 	test("det(A*B) equals det(A)*det(B) for 40 random pairs", () => {
 		const random = seededRandom(0xa11ce2);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 40; trial++) {
 			const size = trial % 2 === 0 ? 2 : 3;
 			const a = invertibleMatrix(random, size);
@@ -177,7 +177,7 @@ describe("determinant identities", () => {
 
 	test("the engine's determinant agrees with a Laplace expansion computed here", () => {
 		const random = seededRandom(0xa11ce3);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 40; trial++) {
 			const rows = invertibleMatrix(random, trial % 2 === 0 ? 2 : 3);
 			const expected = determinant(rows);
@@ -188,7 +188,7 @@ describe("determinant identities", () => {
 	});
 
 	test("det of a non-square matrix is refused", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (const source of ["[1,2,3;4,5,6]", "[1,2;3,4;5,6]"]) {
 			const value = evaluate(engine, `det(${source})`);
 			expect(value.type).toBe(ValueType.Error);
@@ -201,7 +201,7 @@ describe("determinant identities", () => {
 describe("transpose identities", () => {
 	test("transposing twice returns the original, and (A*B)^T equals B^T*A^T", () => {
 		const random = seededRandom(0xa11ce4);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 30; trial++) {
 			const a = invertibleMatrix(random, 2);
 			const b = invertibleMatrix(random, 2);
@@ -216,7 +216,7 @@ describe("transpose identities", () => {
 	});
 
 	test("a non-square transpose swaps the shape rather than erroring", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(evaluateMatrix(engine, "transpose([1,2,3;4,5,6])")).toEqual([
 			[1, 4],
 			[2, 5],
@@ -228,7 +228,7 @@ describe("transpose identities", () => {
 
 describe("shapes that cannot combine are refused rather than guessed at", () => {
 	test("adding and subtracting matrices of different shapes errors", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (const source of ["[1,2;3,4] + [1,2,3;4,5,6]", "[1,2;3,4] - [1,2,3]", "[1,2,3] + [1,2]"]) {
 			const value = evaluate(engine, source);
 			expect(value.type).toBe(ValueType.Error);
@@ -238,7 +238,7 @@ describe("shapes that cannot combine are refused rather than guessed at", () => 
 	});
 
 	test("multiplying matrices whose inner dimensions disagree errors", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (const source of ["[1,2,3]*[1,2,3]", "[1,2;3,4]*[1,2,3;4,5,6;7,8,9]", "[1,2;3,4;5,6]*[1,2;3,4;5,6]"]) {
 			const value = evaluate(engine, source);
 			expect(value.type).toBe(ValueType.Error);
@@ -249,7 +249,7 @@ describe("shapes that cannot combine are refused rather than guessed at", () => 
 
 	test("a product whose inner dimensions do agree is a real matrix product, not element-wise", () => {
 		const random = seededRandom(0xa11ce5);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 30; trial++) {
 			const a = invertibleMatrix(random, 2);
 			const b = invertibleMatrix(random, 2);
@@ -260,7 +260,7 @@ describe("shapes that cannot combine are refused rather than guessed at", () => 
 
 	test("a matrix raised to a whole power is that many matrix products", () => {
 		const random = seededRandom(0xa11ce7);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 20; trial++) {
 			// The reference is built here by multiplying the matrix by itself,
 			// with the same `multiply` the product test above uses. `^` on a
@@ -282,7 +282,7 @@ describe("shapes that cannot combine are refused rather than guessed at", () => 
 
 	test("the first power is the matrix and the zeroth is the identity", () => {
 		// a^0 = I is what makes a^0 * a^n = a^n hold, the same reason 2^0 is 1.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(evaluateMatrix(engine, "[1,2;3,4]^1")).toEqual([
 			[1, 2],
 			[3, 4],
@@ -300,7 +300,7 @@ describe("shapes that cannot combine are refused rather than guessed at", () => 
 	});
 
 	test("pow() spells the same operation as ^", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		// [[1,2],[3,4]] squared, worked out by hand: [[1+6,2+8],[3+12,6+16]].
 		expect(evaluateMatrix(engine, "pow([1,2;3,4], 2)")).toEqual([
 			[7, 10],
@@ -313,7 +313,7 @@ describe("shapes that cannot combine are refused rather than guessed at", () => 
 	test("a power a matrix does not have is refused rather than answered with a number", () => {
 		// Each of these once produced a bare number, which is the worst
 		// available outcome: it flows into the next line as if it meant something.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (const [source, code] of [
 			["[1,2,3]^2", "MATRIX_POWER_REQUIRES_SQUARE_MATRIX"],
 			["[1,2;3,4;5,6]^2", "MATRIX_POWER_REQUIRES_SQUARE_MATRIX"],
@@ -337,7 +337,7 @@ describe("shapes that cannot combine are refused rather than guessed at", () => 
 	});
 
 	test("an index outside the matrix errors instead of reading past the end", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (const source of ["[1,2,3][3]", "[1,2,3][-1]", "[1,2;3,4][2,0]", "[1,2;3,4][0,5]", "[1,2;3,4][-1,-1]"]) {
 			const value = evaluate(engine, source);
 			expect(value.type).toBe(ValueType.Error);
@@ -349,7 +349,7 @@ describe("shapes that cannot combine are refused rather than guessed at", () => 
 	test("an empty matrix literal is rejected at parse time", () => {
 		// There is no shape that `[]` could have, and inventing 0x0 would let it
 		// slip into a product where it would silently produce nothing.
-		expect(() => newTrackedEngine("en").evaluateExpression("[]")).toThrow();
+		expect(() => newTrackedEngine().evaluateExpression("[]")).toThrow();
 	});
 });
 
@@ -385,7 +385,7 @@ describe("a matrix of unknowns inverts to something that really is its inverse",
 
 	test("inv([a,b;c,d]) evaluated at 30 random points is the true 2x2 inverse", () => {
 		const random = seededRandom(0xa11ce6);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateLine(1, "m = [a, b; c, d]");
 		const value = engine.evaluateLine(2, "inv(m)")[0];
 		expect(value.type).toBe(ValueType.Matrix);
@@ -413,7 +413,7 @@ describe("a matrix of unknowns inverts to something that really is its inverse",
 	test("a symbolic matrix whose rows are literally identical is refused", () => {
 		// [a,a;a,a] has determinant a*a - a*a = 0 whatever a is, so any matrix
 		// answered here would be a fiction.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateLine(1, "m = [a, a; a, a]");
 		const value = engine.evaluateLine(2, "inv(m)")[0];
 		expect(value.type).toBe(ValueType.Error);
@@ -428,7 +428,7 @@ describe("a matrix of unknowns inverts to something that really is its inverse",
 		// by an expression that is identically zero. The rows are not literally
 		// identical here, which is what the case above covers; this one needs
 		// the elimination to actually reach zero rather than to `b-a*b/a`.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateLine(1, "m = [a, b; a, b]");
 		const value = engine.evaluateLine(2, "inv(m)")[0];
 		expect(value.type).toBe(ValueType.Error);
@@ -441,14 +441,14 @@ describe("a matrix of unknowns inverts to something that really is its inverse",
 	});
 
 	test("the printed cells of a symbolic inverse re-read as the same numbers", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateLine(1, "m = [a, b; c, d]");
 		const matrix = engine.evaluateLine(2, "inv(m)")[0].value as MatrixData;
 		const environment = { a: 1.7, b: -2.3, c: 0.9, d: 3.1 };
 		for (let r = 0; r < 2; r++) {
 			for (let c = 0; c < 2; c++) {
 				const printed = formatSymbolic(matrix.data[r + c * 2] as SymbolicNode);
-				const rereader = newTrackedEngine("en");
+				const rereader = newTrackedEngine();
 				rereader.evaluateLine(1, ":a = 1.7");
 				rereader.evaluateLine(2, ":b = -2.3");
 				rereader.evaluateLine(3, ":c = 0.9");
@@ -468,7 +468,7 @@ describe("a matrix of unknowns inverts to something that really is its inverse",
 describe("sum and prod apply the element expression to every element", () => {
 	test("sum agrees with the same fold computed here, over 60 random collections", () => {
 		const random = seededRandom(0xc0ffee1);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 60; trial++) {
 			const length = 1 + Math.floor(random() * 5);
 			const elements: number[] = [];
@@ -493,7 +493,7 @@ describe("sum and prod apply the element expression to every element", () => {
 
 	test("prod agrees with the same fold computed here, over 40 random collections", () => {
 		const random = seededRandom(0xc0ffee2);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 40; trial++) {
 			const length = 1 + Math.floor(random() * 4);
 			const elements: number[] = [];
@@ -512,7 +512,7 @@ describe("sum and prod apply the element expression to every element", () => {
 	});
 
 	test("a single-element collection still applies the expression", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(evaluate(engine, "sum(x*10, [5])").toNumber()).toBe(50);
 		expect(evaluate(engine, "prod(x*2, [5])").toNumber()).toBe(10);
 		expect(evaluate(engine, "sum(x+1, [0])").toNumber()).toBe(1);
@@ -520,7 +520,7 @@ describe("sum and prod apply the element expression to every element", () => {
 	});
 
 	test("summing a range matches the closed form for the arithmetic series", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (const n of [1, 2, 5, 10, 100, 1000]) {
 			// n(n+1)/2, which is not how the engine gets there.
 			expect(evaluate(engine, `sum(x, 1:${n})`).toNumber()).toBe((n * (n + 1)) / 2);
@@ -534,7 +534,7 @@ describe("sum and prod apply the element expression to every element", () => {
 	});
 
 	test("a range whose ends coincide is one element, and a descending one is refused", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(evaluate(engine, "sum(x, 3:3)").toNumber()).toBe(3);
 		expect(evaluate(engine, "sum(x*2, 3:3)").toNumber()).toBe(6);
 		expect(evaluateMatrix(engine, "map(x*2, 3:3)")).toEqual([[6]]);
@@ -548,7 +548,7 @@ describe("sum and prod apply the element expression to every element", () => {
 describe("reduce folds the way its documentation says it does", () => {
 	test("without an initial value the first element seeds the accumulator", () => {
 		const random = seededRandom(0xc0ffee3);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 40; trial++) {
 			const length = 1 + Math.floor(random() * 5);
 			const elements: number[] = [];
@@ -563,7 +563,7 @@ describe("reduce folds the way its documentation says it does", () => {
 	});
 
 	test("with an initial value the fold starts there and touches every element", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(evaluate(engine, "reduce(acc+x, [1,2,3], 100)").toNumber()).toBe(106);
 		expect(evaluate(engine, "reduce(acc*x, [1,2,3], 0)").toNumber()).toBe(0);
 		expect(evaluate(engine, "reduce(acc*x, [2,3,4], 1)").toNumber()).toBe(24);
@@ -574,7 +574,7 @@ describe("reduce folds the way its documentation says it does", () => {
 	});
 
 	test("the accumulator may change type across the fold", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		// max()/min() over a fold is the ordinary way a reduce is used for
 		// something other than arithmetic, and it exercises a body that calls a
 		// builtin on the accumulator rather than combining it arithmetically.
@@ -584,7 +584,7 @@ describe("reduce folds the way its documentation says it does", () => {
 	});
 
 	test("a reduce nested inside another reduce's body evaluates the inner fold once per step", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		// inner = reduce(acc+x,[1,2]) = 3. The outer fold seeds from 1 and then
 		// adds 3 twice, for 1+3+3 = 7.
 		expect(evaluate(engine, "reduce(acc+reduce(acc+x,[1,2]), [1,2,3])").toNumber()).toBe(7);
@@ -595,7 +595,7 @@ describe("reduce folds the way its documentation says it does", () => {
 	});
 
 	test("a bare function name folds and maps as that function", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(evaluateMatrix(engine, "map(sqrt, [1,4,9,16])")).toEqual([[1, 2, 3, 4]]);
 		expect(evaluate(engine, "reduce(gcd, [12, 18, 24])").toNumber()).toBe(6);
 		engine.clear();
@@ -616,7 +616,7 @@ describe("reduce folds the way its documentation says it does", () => {
 	});
 
 	test("map over a range produces one element per step", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(evaluateMatrix(engine, "map(10*x, 0:3)")).toEqual([[0, 10, 20, 30]]);
 		expect(evaluateMatrix(engine, "map(x*x, 1:5)")).toEqual([[1, 4, 9, 16, 25]]);
 		engine.clear();
@@ -627,7 +627,7 @@ describe("reduce folds the way its documentation says it does", () => {
 		// it sits in. It used to come back as the 1x4 row [2, 6, 4, 8], which
 		// is not merely flattened: 6 is the image of 3, the cell BELOW 1, so
 		// the column-major storage order was on display in the answer.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(evaluateMatrix(engine, "map(x*2, [1,2;3,4])")).toEqual([
 			[2, 4],
 			[6, 8],
@@ -671,7 +671,7 @@ describe("variables", () => {
 	});
 
 	test("reading an undefined variable is an error rather than zero", () => {
-		expect(() => newTrackedEngine("en").evaluateExpression("neverDefinedAnywhere + 1")).toThrow();
+		expect(() => newTrackedEngine().evaluateExpression("neverDefinedAnywhere + 1")).toThrow();
 	});
 
 	test("a function parameter shadows a document variable of the same name", () => {
@@ -688,7 +688,7 @@ describe("variables", () => {
 	});
 
 	test("calling a function with the wrong number of arguments errors rather than filling in zeros", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateLine(1, "f(n) = n + 1");
 		expect(() => engine.evaluateLine(2, "f(1, 2)")).toThrow();
 		engine.evaluateLine(3, "g(n, m) = n + m");
@@ -697,7 +697,7 @@ describe("variables", () => {
 	});
 
 	test("a directly self-calling function is stopped rather than run until the stack dies", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateLine(1, "f(n) = f(n)");
 		expect(() => engine.evaluateLine(2, "f(3)")).toThrow(/nesting|recursion/i);
 		engine.clear();

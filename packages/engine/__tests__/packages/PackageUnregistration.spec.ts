@@ -37,7 +37,7 @@ function makeTestPackage(source: IVariableSource): IEnginePackage {
 
 describe("ExpressionEngine.unregisterPackage — shared registry cleanup", () => {
 	test("variable source no longer resolves after unregistration", async () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const source = makeVariableSource({ unregTestVar: 42 });
 		const pkg = makeTestPackage(source);
 
@@ -49,12 +49,12 @@ describe("ExpressionEngine.unregisterPackage — shared registry cleanup", () =>
 	});
 
 	test("unregistering an unknown package returns false and changes nothing", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(engine.unregisterPackage("never-registered")).toBe(false);
 	});
 
 	test("re-registering after unregistration works cleanly", async () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const source = makeVariableSource({ unregTestVar: 7 });
 		const pkg = makeTestPackage(source);
 
@@ -68,7 +68,7 @@ describe("ExpressionEngine.unregisterPackage — shared registry cleanup", () =>
 	});
 
 	test("unregistration clears the bytecode cache", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const pkg = makeTestPackage(makeVariableSource({}));
 		engine.registerPackage(pkg);
 
@@ -90,7 +90,7 @@ describe("ExpressionEngine.registerPackage — duplicate-name guard", () => {
 	// second registration, and the first's contributions were unreachable
 	// for the rest of the process's lifetime.
 	test("re-registering the same package name unregisters the previous registration first (no orphaned variable source)", async () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const firstSource = makeVariableSource({ dupTestVar: 1 });
 		const secondSource = makeVariableSource({ dupTestVar: 2 });
 
@@ -109,7 +109,7 @@ describe("ExpressionEngine.registerPackage — duplicate-name guard", () => {
 	});
 
 	test("warns on the console when re-registering the same package name", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
 
 		engine.registerPackage({ name: "dup-warn-pkg" });
@@ -136,12 +136,12 @@ describe("ExpressionEngine.unregisterPackage — token highlight category cleanu
 
 	afterEach(() => {
 		// Safety net: never leak the test category into other suites.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.unregisterPackage("test-highlight-unregistration-pkg");
 	});
 
 	test("registerPackage makes the category resolvable via getTokenCategory", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(getTokenCategory(TEST_TOKEN_TYPE)).toBeUndefined();
 
 		engine.registerPackage(makeHighlightPackage());
@@ -149,7 +149,7 @@ describe("ExpressionEngine.unregisterPackage — token highlight category cleanu
 	});
 
 	test("unregisterPackage removes the category again", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.registerPackage(makeHighlightPackage());
 		expect(getTokenCategory(TEST_TOKEN_TYPE)).toBe("keyword");
 
@@ -158,7 +158,7 @@ describe("ExpressionEngine.unregisterPackage — token highlight category cleanu
 	});
 
 	test("re-registering after unregistration works cleanly", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const pkg = makeHighlightPackage();
 
 		engine.registerPackage(pkg);
@@ -176,7 +176,7 @@ describe("ExpressionEngine.unregisterPackage — lexer plugin cleanup (OSRS)", (
 		// OSRS is a builtin-adjacent but opt-in package (not in
 		// BUILTIN_PACKAGES) — register it explicitly rather than assuming
 		// default construction includes it.
-		const engine = newTrackedEngine("en", false, undefined, undefined, []);
+		const engine = newTrackedEngine({ packages: [] });
 		engine.registerPackage(OSRS_PACKAGE);
 
 		expect(getTokenCategory("OSRS_KEYWORD")).toBe("keyword");
@@ -197,7 +197,7 @@ describe("ExpressionEngine.unregisterPackage — completionItems cleanup", () =>
 	}
 
 	test("registerPackage makes the item queryable via getPackageCompletionItems, gone after unregister", () => {
-		const engine = newTrackedEngine("en", false, undefined, undefined, []);
+		const engine = newTrackedEngine({ packages: [] });
 		expect(engine.getPackageCompletionItems()).toEqual([]);
 
 		engine.registerPackage(makeCompletionPackage());
@@ -208,7 +208,7 @@ describe("ExpressionEngine.unregisterPackage — completionItems cleanup", () =>
 	});
 
 	test("OSRS's real completionItems (item names) are queryable while active, gone after unregister", () => {
-		const engine = newTrackedEngine("en", false, undefined, undefined, []);
+		const engine = newTrackedEngine({ packages: [] });
 		engine.registerPackage(OSRS_PACKAGE);
 		expect(engine.getPackageCompletionItems().some(i => i.label === "Iron Axe" && i.category === "osrs-item")).toBe(true);
 

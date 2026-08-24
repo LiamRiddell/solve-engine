@@ -97,7 +97,7 @@ describe("createKnowledgePackage — working path with a test-provided mock answ
 describe("createKnowledgePackage — ExpressionEngine integration (real lexer/parser/VM pipeline)", () => {
 	function createEngine(config: Parameters<typeof createKnowledgePackage>[0] = {}) {
 		const pkg = createKnowledgePackage(config);
-		const engine = new ExpressionEngine("en", false, undefined, undefined, [...BUILTIN_PACKAGES, pkg]);
+		const engine = new ExpressionEngine({ packages: [...BUILTIN_PACKAGES, pkg] });
 		return { engine, pkg };
 	}
 

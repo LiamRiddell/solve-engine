@@ -9,7 +9,7 @@ import { describe, expect, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
 
 function num(source: string): number {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	const [value] = engine.evaluateExpression(source);
 	return value.toNumber();
 }
@@ -43,7 +43,7 @@ describe("what `on` and `off` must not steal", () => {
 		// The stocks package uses it ("stock(AAPL) on April 12, 2005") and so
 		// does the datetime grammar. Claiming the bare word broke the stocks
 		// suite outright; this checks the word is still free.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateExpression(":on = 5");
 		const [value] = engine.evaluateExpression(":on + 1");
 		expect(value.toNumber()).toBe(6);

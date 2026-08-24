@@ -134,7 +134,7 @@ describe("the binding-power fast path and custom token types", () => {
 	test("multiplication binds tighter than addition, which is what the table encodes", () => {
 		// The table is only meaningful through the answers it produces.
 		// 2 + 3 * 4 is 14, not 20.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(engine.evaluateExpression("2 + 3 * 4")[0].toNumber()).toBe(14);
 		// And exponentiation binds tighter still, right-associatively:
 		// 2 ^ 3 ^ 2 is 2 ^ 9, which is 512, not 64.

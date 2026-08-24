@@ -112,7 +112,7 @@ function trackRetained<T>(fn: () => T): { result: T; bytes: number } {
 
 /** Create a fresh engine (cold — no caches). */
 function createEngine(): ExpressionEngine {
-  return new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+  return new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 }
 
 /** Build a document of `n` assignment lines. */

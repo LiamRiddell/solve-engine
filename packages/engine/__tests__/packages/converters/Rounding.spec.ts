@@ -15,7 +15,7 @@ import { describe, expect, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
 
 function num(source: string): number {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	const [value] = engine.evaluateExpression(source);
 	return value.toNumber();
 }
@@ -111,7 +111,7 @@ describe("what rounding must not break", () => {
 	test("`:rounded` is not a usable variable name, and that is the accepted cost", () => {
 		// Recorded rather than hidden. "rounded" is a bare keyword, the same
 		// accepted risk as "between"/"from"/"over" elsewhere in the engine.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(() => engine.evaluateExpression(":rounded = 5")).toThrow();
 	});
 });

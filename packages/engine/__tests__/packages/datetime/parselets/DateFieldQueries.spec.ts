@@ -17,7 +17,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
  * DateLiteralNormalizerRule); those two anchor most of the cases below.
  */
 function evaluate(expression: string) {
-	return newTrackedEngine("en", false).evaluateExpression(expression)[0];
+	return newTrackedEngine().evaluateExpression(expression)[0];
 }
 
 describe("date field questions", () => {
@@ -137,7 +137,7 @@ describe("date field questions", () => {
 		});
 
 		test("day/week/month are still usable as variable names", () => {
-			const engine = newTrackedEngine("en", false);
+			const engine = newTrackedEngine();
 			expect(engine.evaluateExpression(":day = 5")[0].toNumber()).toBe(5);
 			expect(engine.evaluateExpression(":week = 3")[0].toNumber()).toBe(3);
 			expect(engine.evaluateExpression(":day + :week")[0].toNumber()).toBe(8);

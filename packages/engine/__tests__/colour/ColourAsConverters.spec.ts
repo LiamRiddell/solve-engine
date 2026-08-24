@@ -8,7 +8,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 import { ValueType, type ColourData } from "@solve-js/vm/Value";
 
 function evalValue(source: string) {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	return engine.evaluateExpression(source)[0];
 }
 

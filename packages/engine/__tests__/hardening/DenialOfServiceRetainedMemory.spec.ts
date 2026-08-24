@@ -50,7 +50,7 @@ function codeFrom(engine: ExpressionEngine, source: string): string {
 
 /** Evaluates `lines` as one document, which is the path that enables the arena. */
 function runDocument(lines: string[]): void {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	const document = new DocumentModel();
 	document.setDocument(lines.join("\n"));
 	new ThreeTierEvaluator(document, engine).evaluate({ startLine: 1, endLine: lines.length });
@@ -79,7 +79,7 @@ describe("a matrix product is refused before it is built", () => {
 		// under `maxCollectionSize`, whose product is 10^10 cells. `OpCode.MUL`
 		// works that number out from the two shapes and charges it, so the answer
 		// is the budget's own refusal and not one cell is allocated.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(codeFrom(engine, "transpose(map(x*1, 1:100000)) * map(x*1, 1:100000)")).toBe("ALLOCATION_LIMIT_EXCEEDED");
 	});
 
@@ -101,14 +101,14 @@ describe("a matrix product is refused before it is built", () => {
 		// `1:20000` the array length is perfectly valid, so V8 obliges, and 400
 		// million cells aborts the process in 1.3 seconds. `abs()`, `det()`,
 		// `inv()` and `pow()` all reach `matrixMultiply()` the same way.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(codeFrom(engine, "dot(transpose(map(x*1, 1:100000)), map(x*1, 1:100000))")).toBe("ALLOCATION_LIMIT_EXCEEDED");
 	});
 
 	test("a product at the size people write is unaffected either way", () => {
 		// Pinned so the guard above is a ceiling rather than a removal, and so
 		// the two spellings keep agreeing on the answer as well as on the refusal.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const viaOperator = engine.evaluateExpression("[1,2;3,4] * [5,6;7,8]")[0];
 		const viaFunction = engine.evaluateExpression("dot([1,2;3,4], [5,6;7,8])")[0];
 		expect(viaFunction.value).toEqual(viaOperator.value);

@@ -17,7 +17,7 @@ import { formatValue } from "@solve-js/format/FormatEngine";
 describe("Issue #178: bill split and tip", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   const out = (source: string): string => formatValue(engine.evaluateExpression(source)[0]);

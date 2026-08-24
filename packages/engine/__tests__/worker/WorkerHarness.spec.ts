@@ -79,7 +79,7 @@ async function makeWorker(options: Partial<WorkerEngineOptions> = {}): Promise<H
 /** Track the synchronous engines a test builds so they are all cleared afterwards. */
 const syncEngines: ExpressionEngine[] = [];
 function syncEngine(): ExpressionEngine {
-	const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+	const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	syncEngines.push(engine);
 	return engine;
 }
@@ -447,7 +447,7 @@ async function streamingWorker(pkg: IEnginePackage): Promise<WorkerEngine> {
 
 /** A synchronous engine registered with one extra package, tracked for cleanup. */
 function syncEngineWith(pkg: IEnginePackage): ExpressionEngine {
-	const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
+	const engine = new ExpressionEngine({ packages: [pkg] });
 	syncEngines.push(engine);
 	return engine;
 }

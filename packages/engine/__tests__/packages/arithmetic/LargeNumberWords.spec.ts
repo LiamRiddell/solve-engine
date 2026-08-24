@@ -11,7 +11,7 @@ import { describe, expect, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
 
 function num(source: string): number {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	const [value] = engine.evaluateExpression(source);
 	return value.toNumber();
 }
@@ -78,13 +78,13 @@ describe("what the words must not break", () => {
 		// "m" is deliberately not a word magnitude. This is the collision the
 		// letter table's own doc comment has always guarded against, and adding
 		// spaced words must not reopen it.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const [value] = engine.evaluateExpression("5 m in cm");
 		expect(value.toNumber()).toBeCloseTo(500, 6);
 	});
 
 	test("`million` is still usable as a variable name", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateExpression(":million = 7");
 		const [value] = engine.evaluateExpression(":million + 1");
 		expect(value.toNumber()).toBe(8);

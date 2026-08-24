@@ -19,7 +19,7 @@ import { convertUnit, canConvert } from "@solve-js/uom/UomConverter";
 
 /** Evaluates one line through a real engine and returns the formatted result. */
 function evaluate(source: string): string {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	try {
 		return formatValue(engine.evaluateExpression(source)[0]).replace(/^=\s*/, "");
 	} finally {

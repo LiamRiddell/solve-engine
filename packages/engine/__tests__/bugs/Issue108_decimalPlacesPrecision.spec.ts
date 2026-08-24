@@ -17,7 +17,7 @@ import { ValueType } from "@solve-js/vm/Value";
 describe("Issue #108: decimal-place precision on a number", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   const out = (source: string): string => formatValue(engine.evaluateExpression(source)[0]);

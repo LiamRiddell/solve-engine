@@ -32,7 +32,7 @@ describe("Bug: unit/currency conversion of a variable via 'to'", () => {
   let engine: ExpressionEngine;
 
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   // Releases the engine's query client and async batcher. Without it the

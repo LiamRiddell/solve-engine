@@ -7,7 +7,7 @@ describe("Issue #75: Numbers with millions separator commas (locale-aware)", () 
     let engine: ExpressionEngine;
 
     beforeEach(() => {
-      engine = newTrackedEngine("en", false);
+      engine = newTrackedEngine();
     });
 
     test("comma-separated number parses as full number: 1,000 = 1000", () => {
@@ -49,7 +49,7 @@ describe("Issue #75: Numbers with millions separator commas (locale-aware)", () 
     let engine: ExpressionEngine;
 
     beforeEach(() => {
-      engine = newTrackedEngine("de", false);
+      engine = newTrackedEngine({ locale: "de" });
     });
 
     test("dot-separated number parses: 1.000 = 1000", () => {

@@ -164,7 +164,7 @@ describe("AsyncPipeline — end-to-end async resolution", () => {
 		}));
 
 		const pkg = buildResolverPackage("test", resolver);
-		const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
+		const engine = new ExpressionEngine({ packages: [pkg] });
 		const { events, stop } = captureEngineEvents(engine);
 
 		// Evaluate an expression — the preflight should trigger async path
@@ -201,7 +201,7 @@ describe("AsyncPipeline — end-to-end async resolution", () => {
 		}));
 
 		const pkg = buildResolverPackage("cache", resolver);
-		const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
+		const engine = new ExpressionEngine({ packages: [pkg] });
 
 		// Evaluate
 		engine.evaluateLine(1, "100");
@@ -224,7 +224,7 @@ describe("AsyncPipeline — end-to-end async resolution", () => {
 		const resolver = createMockResolver("cached", () => null);
 
 		const pkg = buildResolverPackage("cached", resolver);
-		const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
+		const engine = new ExpressionEngine({ packages: [pkg] });
 
 		// Simple numeric expression — should execute synchronously
 		const [result] = engine.evaluateLine(1, "42");
@@ -245,7 +245,7 @@ describe("AsyncPipeline — end-to-end async resolution", () => {
 		}));
 
 		const pkg = buildResolverPackage("real", resolver);
-		const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
+		const engine = new ExpressionEngine({ packages: [pkg] });
 		const { events, stop } = captureEngineEvents(engine);
 
 		// Evaluate a simple numeric expression — preflight triggers async
@@ -282,7 +282,7 @@ describe("AsyncPipeline — end-to-end async resolution", () => {
 		});
 
 		const pkg = buildResolverPackage("dedup", resolver);
-		const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
+		const engine = new ExpressionEngine({ packages: [pkg] });
 
 		// Evaluate the same expression twice
 		engine.evaluateLine(1, "42");
@@ -1142,7 +1142,7 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 		}));
 
 		const pkg = buildResolverPackage("fullcycle", resolver);
-		const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
+		const engine = new ExpressionEngine({ packages: [pkg] });
 		const { events, stop } = captureEngineEvents(engine);
 
 		// Step 1: Evaluate — returns Pending
@@ -1183,7 +1183,7 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 		}));
 
 		const pkg = buildResolverPackage("errflow", resolver);
-		const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
+		const engine = new ExpressionEngine({ packages: [pkg] });
 		const { events, stop } = captureEngineEvents(engine);
 
 		const [result] = engine.evaluateLine(1, "50");
@@ -1224,7 +1224,7 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 		});
 
 		const pkg = buildResolverPackage("multieval", resolver);
-		const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
+		const engine = new ExpressionEngine({ packages: [pkg] });
 
 		const [r1] = engine.evaluateLine(1, "10");
 		expect(r1.type).toBe(ValueType.Pending);
@@ -1252,7 +1252,7 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 		}));
 
 		const pkg = buildResolverPackage("clearflow", resolver);
-		const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
+		const engine = new ExpressionEngine({ packages: [pkg] });
 		const { events, stop } = captureEngineEvents(engine);
 
 		engine.evaluateLine(1, "100");
@@ -1277,7 +1277,7 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 		}));
 
 		const pkg = buildResolverPackage("recycle", resolver);
-		const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
+		const engine = new ExpressionEngine({ packages: [pkg] });
 
 		engine.evaluateLine(1, "100");
 		engine.clear();
@@ -1294,7 +1294,7 @@ describe("AsyncPipeline — full ExpressionEngine pipeline", () => {
 		}));
 
 		const pkg2 = buildResolverPackage("recycle2", resolver2);
-		const engine2 = new ExpressionEngine("en", false, undefined, undefined, [pkg2]);
+		const engine2 = new ExpressionEngine({ packages: [pkg2] });
 		const { events, stop } = captureEngineEvents(engine2);
 
 		engine2.evaluateLine(1, "200");

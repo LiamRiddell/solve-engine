@@ -8,7 +8,7 @@ describe("Provider Breakage Tests - Comprehensive Provider Validation", () => {
   let engine: ExpressionEngine;
 
   beforeEach(() => {
-    engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   // Releases the engine's query client and async batcher. Without it the

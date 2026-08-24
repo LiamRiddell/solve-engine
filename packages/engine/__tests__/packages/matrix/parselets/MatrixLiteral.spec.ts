@@ -12,7 +12,7 @@ import { formatValue } from "@solve-js/format/FormatEngine";
 import { newTrackedEngine } from "@tools/trackedEngine";
 
 function engine() {
-  return newTrackedEngine("en");
+  return newTrackedEngine();
 }
 
 function evalOne(expr: string) {

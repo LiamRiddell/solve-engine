@@ -6,9 +6,9 @@ describe("Feature #74: Inferred Parentheses", () => {
   let engine: ExpressionEngine;
 
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, {
+    engine = new ExpressionEngine({ config: {
       validation: { maxExpressionLength: 2000, maxComplexity: 500, maxNestingDepth: 50, autoBalanceParens: true },
-    }, undefined, BUILTIN_PACKAGES);
+    }, packages: BUILTIN_PACKAGES });
   });
 
   // Releases the engine's query client and async batcher. Without it the

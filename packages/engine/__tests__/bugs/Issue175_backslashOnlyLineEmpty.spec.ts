@@ -20,7 +20,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 describe("Issue #175: a line of only skipped characters is empty, not 0", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   describe("classifyLine marks an all-skippable line as empty", () => {

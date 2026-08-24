@@ -42,7 +42,7 @@ beforeAll(() => {
 });
 
 function createEngine(locale = "en", diagnosticMode = false): ExpressionEngine {
-  return newTrackedEngine(locale, diagnosticMode);
+  return newTrackedEngine({ locale, diagnostics: diagnosticMode });
 }
 
 function createDoc(lines: string[]): DocumentModel {

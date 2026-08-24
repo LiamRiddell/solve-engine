@@ -32,7 +32,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 import { ValueType } from "@solve-js/vm/Value";
 
 function evaluate(source: string) {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	const [value] = engine.evaluateExpression(source);
 	return value;
 }
@@ -145,7 +145,7 @@ describe("a string operand", () => {
 		// or "55", and 5 is neither. Concatenation is not the claim being made
 		// here, only that arithmetic on a string must not answer as though the
 		// string were absent.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const sum = engine.evaluateExpression("\"abc\" + 1")[0];
 		expect(sum.type).not.toBe(ValueType.Number);
 	});
@@ -157,7 +157,7 @@ describe("a string operand", () => {
 		// above, an unterminated literal was indistinguishable from a
 		// terminated one by payload shape, which is why the two were fixed
 		// together. It now raises UNTERMINATED_STRING.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		let threw = false;
 		try {
 			engine.evaluateExpression("\"abc");

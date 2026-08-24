@@ -29,7 +29,7 @@ describe("extractReadsAndWrites — global variable tracking", () => {
 
   /** Tokenizes via the real engine pipeline, matching what extractReadsAndWrites receives in production. */
   function tokensFor(expr: string): Token[] {
-    const engine = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ diagnostics: true, packages: BUILTIN_PACKAGES });
     const result = engine.evaluateLineWithDebug(1, expr);
     const tokens = result.diagnostic!.tokens;
     engine.clear();

@@ -37,7 +37,7 @@ describe("ExpressionEngine constructor — packages parameter", () => {
 
   test("default constructor is equivalent to BUILTIN_PACKAGES", () => {
     const engineDefault = newTrackedEngine();
-    const engineExplicit = newTrackedEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const engineExplicit = newTrackedEngine({ packages: BUILTIN_PACKAGES });
 
     expect(engineDefault.evaluateLine(1, "2 + 3")[0].toNumber()).toBe(5);
     expect(engineExplicit.evaluateLine(1, "2 + 3")[0].toNumber()).toBe(5);
@@ -49,7 +49,7 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   // ── Empty packages ────────────────────────────────────────────────
 
   test("empty packages array creates engine with only Tier 1 inline operations (no parselets)", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, []);
+    const engine = newTrackedEngine({ packages: [] });
     // Tier 1 inline: NUMBER, PLUS, MINUS etc. work without packages
     expect(engine.evaluateLine(1, "1 + 2")[0].toNumber()).toBe(3);
     // But parselet-requiring operations (FUNC tokens, variables, etc.) fail
@@ -58,11 +58,11 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   });
 
   test("empty packages still allows engine instantiation without error", () => {
-    expect(() => newTrackedEngine("en", false, undefined, undefined, [])).not.toThrow();
+    expect(() => newTrackedEngine({ packages: [] })).not.toThrow();
   });
 
   test("empty packages engine can still be used for parsing empty input", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, []);
+    const engine = newTrackedEngine({ packages: [] });
     // parseDocument with no expressions should not crash
     const result = engine.parseDocument("Hello world");
     expect(result.lines.length).toBeGreaterThan(0);
@@ -71,7 +71,7 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   // ── Single package: ARITHMETIC only ───────────────────────────────
 
   test("ARITHMETIC_PACKAGE only: supports basic arithmetic", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
+    const engine = newTrackedEngine({ packages: [ARITHMETIC_PACKAGE] });
 
     // Basic operations work
     expect(engine.evaluateLine(1, "1 + 2")[0].toNumber()).toBe(3);
@@ -89,30 +89,30 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   });
 
   test("ARITHMETIC_PACKAGE only: functions are NOT available", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
+    const engine = newTrackedEngine({ packages: [ARITHMETIC_PACKAGE] });
     expect(() => engine.evaluateLine(1, "sqrt(144)")).toThrow();
   });
 
   test("ARITHMETIC_PACKAGE only: dice are NOT available", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
+    const engine = newTrackedEngine({ packages: [ARITHMETIC_PACKAGE] });
     expect(() => engine.evaluateLine(1, "roll(1, 20)")).toThrow();
   });
 
   test("ARITHMETIC_PACKAGE only: PERCENT token handled inline (Tier 1 infix)", () => {
     // PERCENT is a Tier 1 inline infix operator — always available regardless of packages.
     // "50% of 200" → 50 / 100 * 200 = 100
-    const engine = newTrackedEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
+    const engine = newTrackedEngine({ packages: [ARITHMETIC_PACKAGE] });
     const [result] = engine.evaluateLine(1, "50% of 200");
     expect(result.toNumber()).toBe(100);
   });
 
   test("ARITHMETIC_PACKAGE only: variables are NOT available", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
+    const engine = newTrackedEngine({ packages: [ARITHMETIC_PACKAGE] });
     expect(() => engine.evaluateLine(1, ":x = 100")).toThrow();
   });
 
   test("ARITHMETIC_PACKAGE only: constants (PI, E) work", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
+    const engine = newTrackedEngine({ packages: [ARITHMETIC_PACKAGE] });
     const [pi] = engine.evaluateLine(1, "PI");
     expect(pi.toNumber()).toBeCloseTo(Math.PI, 5);
     const [e] = engine.evaluateLine(2, "E");
@@ -124,14 +124,14 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   // is in ARITHMETIC. This tests the dependency chain correctly.
 
   test("FUNCTION_PACKAGE only: functions work (NUMBER is Tier 1 inline)", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [FUNCTION_PACKAGE]);
+    const engine = newTrackedEngine({ packages: [FUNCTION_PACKAGE] });
     // FUNCTION_PACKAGE provides FUNC prefix parselet; NUMBER 144 is Tier 1 inline
     const [result] = engine.evaluateLine(1, "sqrt(144)");
     expect(result.toNumber()).toBe(12);
   });
 
   test("FUNCTION_PACKAGE only: basic arithmetic works (Tier 1 inline)", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [FUNCTION_PACKAGE]);
+    const engine = newTrackedEngine({ packages: [FUNCTION_PACKAGE] });
     // NUMBER and PLUS are Tier 1 inline — always available
     expect(engine.evaluateLine(1, "1 + 2")[0].toNumber()).toBe(3);
   });
@@ -139,10 +139,10 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   // ── Multiple packages (subset) ────────────────────────────────────
 
   test("ARITHMETIC + FUNCTION packages: both work, others don't", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [
+    const engine = newTrackedEngine({ packages: [
       ARITHMETIC_PACKAGE,
       FUNCTION_PACKAGE,
-    ]);
+    ] });
 
     // Arithmetic works
     expect(engine.evaluateLine(1, "1 + 2")[0].toNumber()).toBe(3);
@@ -156,10 +156,10 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   });
 
   test("ARITHMETIC + PERCENTAGE packages only", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [
+    const engine = newTrackedEngine({ packages: [
       ARITHMETIC_PACKAGE,
       PERCENTAGE_PACKAGE,
-    ]);
+    ] });
 
     // Arithmetic works
     expect(engine.evaluateLine(1, "1 + 2")[0].toNumber()).toBe(3);
@@ -171,10 +171,10 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   });
 
   test("ARITHMETIC + VARIABLES packages only", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [
+    const engine = newTrackedEngine({ packages: [
       ARITHMETIC_PACKAGE,
       VARIABLES_PACKAGE,
-    ]);
+    ] });
 
     // Variables work
     engine.evaluateLine(1, ":x = 100");
@@ -184,10 +184,10 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   });
 
   test("ARITHMETIC + DICE packages only", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [
+    const engine = newTrackedEngine({ packages: [
       ARITHMETIC_PACKAGE,
       DICE_PACKAGE,
-    ]);
+    ] });
 
     // Arithmetic works
     expect(engine.evaluateLine(1, "1 + 2")[0].toNumber()).toBe(3);
@@ -200,10 +200,10 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   });
 
   test("ARITHMETIC + DATETIME packages only", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [
+    const engine = newTrackedEngine({ packages: [
       ARITHMETIC_PACKAGE,
       DATETIME_PACKAGE,
-    ]);
+    ] });
 
     // Arithmetic works
     expect(engine.evaluateLine(1, "1 + 2")[0].toNumber()).toBe(3);
@@ -213,10 +213,10 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   });
 
   test("ARITHMETIC + UOM packages only", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [
+    const engine = newTrackedEngine({ packages: [
       ARITHMETIC_PACKAGE,
       UOM_PACKAGE,
-    ]);
+    ] });
 
     // Arithmetic works
     expect(engine.evaluateLine(1, "1 + 2")[0].toNumber()).toBe(3);
@@ -226,10 +226,10 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   });
 
   test("ARITHMETIC + BIGINT packages only", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [
+    const engine = newTrackedEngine({ packages: [
       ARITHMETIC_PACKAGE,
       BIGINT_PACKAGE,
-    ]);
+    ] });
 
     // Arithmetic works
     expect(engine.evaluateLine(1, "1 + 2")[0].toNumber()).toBe(3);
@@ -241,11 +241,11 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   // ── Three packages ────────────────────────────────────────────────
 
   test("ARITHMETIC + FUNCTION + PERCENTAGE — only these three work", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [
+    const engine = newTrackedEngine({ packages: [
       ARITHMETIC_PACKAGE,
       FUNCTION_PACKAGE,
       PERCENTAGE_PACKAGE,
-    ]);
+    ] });
 
     // Arithmetic works
     expect(engine.evaluateLine(1, "1 + 2")[0].toNumber()).toBe(3);
@@ -266,9 +266,9 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   // ── All built-in packages listed explicitly ───────────────────────
 
   test("explicitly passing all BUILTIN_PACKAGES works the same as default", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [
+    const engine = newTrackedEngine({ packages: [
       ...BUILTIN_PACKAGES,
-    ]);
+    ] });
 
     expect(engine.evaluateLine(1, "1 + 2 * 3")[0].toNumber()).toBe(7);
     expect(engine.evaluateLine(2, "sqrt(144)")[0].toNumber()).toBe(12);
@@ -281,8 +281,8 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   // ── Cross-contamination between engines ───────────────────────────
 
   test("multiple engines with different package sets do not interfere", () => {
-    const fullEngine = newTrackedEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
-    const arithmeticOnly = newTrackedEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
+    const fullEngine = newTrackedEngine({ packages: BUILTIN_PACKAGES });
+    const arithmeticOnly = newTrackedEngine({ packages: [ARITHMETIC_PACKAGE] });
 
     // Full engine has all features
     expect(fullEngine.evaluateLine(1, "sqrt(144)")[0].toNumber()).toBe(12);
@@ -299,20 +299,20 @@ describe("ExpressionEngine constructor — packages parameter", () => {
 
   test("creating engines with different subsets sequentially does not leak state", () => {
     // Engine 1: ARITHMETIC only
-    const e1 = newTrackedEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
+    const e1 = newTrackedEngine({ packages: [ARITHMETIC_PACKAGE] });
     expect(e1.evaluateLine(1, "1 + 2")[0].toNumber()).toBe(3);
     expect(() => e1.evaluateLine(2, "sqrt(144)")).toThrow();
 
     // Engine 2: ARITHMETIC + FUNCTION — functions work because numbers are available
-    const e2 = newTrackedEngine("en", false, undefined, undefined, [
+    const e2 = newTrackedEngine({ packages: [
       ARITHMETIC_PACKAGE,
       FUNCTION_PACKAGE,
-    ]);
+    ] });
     expect(e2.evaluateLine(1, "sqrt(144)")[0].toNumber()).toBe(12);
     expect(e2.evaluateLine(2, "1 + 2")[0].toNumber()).toBe(3);
 
     // Engine 3: Full — still works
-    const e3 = newTrackedEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const e3 = newTrackedEngine({ packages: BUILTIN_PACKAGES });
     expect(e3.evaluateLine(1, "sqrt(144) + 5")[0].toNumber()).toBe(17);
     expect(e3.evaluateLine(2, "1 + 2")[0].toNumber()).toBe(3);
   });
@@ -320,14 +320,14 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   // ── Edge cases ────────────────────────────────────────────────────
 
   test("nullish coalescing: undefined packages defaults to BUILTIN_PACKAGES", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, undefined);
+    const engine = newTrackedEngine();
     expect(engine.evaluateLine(1, "1 + 2")[0].toNumber()).toBe(3);
     expect(engine.evaluateLine(2, "sqrt(144)")[0].toNumber()).toBe(12);
   });
 
   test("multiple engines with same package subset get independent registries", () => {
-    const e1 = newTrackedEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
-    const e2 = newTrackedEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
+    const e1 = newTrackedEngine({ packages: [ARITHMETIC_PACKAGE] });
+    const e2 = newTrackedEngine({ packages: [ARITHMETIC_PACKAGE] });
 
     // Both work independently
     expect(e1.evaluateLine(1, "1 + 2")[0].toNumber()).toBe(3);
@@ -339,27 +339,27 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   });
 
   test("engine with only VARIABLES but no ARITHMETIC: variable assignments work (NUMBER inline)", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [VARIABLES_PACKAGE]);
+    const engine = newTrackedEngine({ packages: [VARIABLES_PACKAGE] });
     // NUMBER 100 is Tier 1 inline — always available for RHS
     engine.evaluateLine(1, ":x = 100");
     expect(engine.evaluateLine(2, ":x + 50")[0].toNumber()).toBe(150);
   });
 
   test("engine with VARIABLES + ARITHMETIC can assign and read variables", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [
+    const engine = newTrackedEngine({ packages: [
       ARITHMETIC_PACKAGE,
       VARIABLES_PACKAGE,
-    ]);
+    ] });
 
     engine.evaluateLine(1, ":x = 100");
     expect(engine.evaluateLine(2, ":x + 50")[0].toNumber()).toBe(150);
   });
 
   test("parseDocument works with subset packages", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [
+    const engine = newTrackedEngine({ packages: [
       ARITHMETIC_PACKAGE,
       VARIABLES_PACKAGE,
-    ]);
+    ] });
 
     const doc = ":x = 10\n:x + 5\n:x * 2";
     const result = engine.parseDocument(doc);
@@ -368,7 +368,7 @@ describe("ExpressionEngine constructor — packages parameter", () => {
   });
 
   test("parseDocument with empty packages skips expression lines gracefully", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, []);
+    const engine = newTrackedEngine({ packages: [] });
     const doc = "1 + 2\n3 + 4";
     const result = engine.parseDocument(doc);
     // Lines are classified but evaluation will fail — should have errors
@@ -402,11 +402,11 @@ describe("ExpressionEngine constructor — packages parameter", () => {
 
     let engine!: ExpressionEngine;
     expect(() => {
-      engine = newTrackedEngine("en", false, undefined, undefined, [
+      engine = newTrackedEngine({ packages: [
         ARITHMETIC_PACKAGE,
         collidingPackage,
         VARIABLES_PACKAGE,
-      ]);
+      ] });
     }).not.toThrow();
 
     // Packages registered before AND after the offender in the list still
@@ -421,10 +421,10 @@ describe("ExpressionEngine constructor — packages parameter", () => {
       name: "CollidingTestPackage2",
       lexerVocabulary: { keywords: { pi: "COLLIDING_PI_TOKEN_2" } },
     };
-    const engine = newTrackedEngine("en", false, undefined, undefined, [
+    const engine = newTrackedEngine({ packages: [
       ARITHMETIC_PACKAGE,
       collidingPackage,
-    ]);
+    ] });
 
     // Since it never actually registered, re-registering it directly
     // (registerPackage() itself still throws for a single bad package —

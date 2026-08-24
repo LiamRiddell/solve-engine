@@ -15,7 +15,7 @@ import { describe, expect, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
 
 function num(source: string): number {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	const [value] = engine.evaluateExpression(source);
 	return value.toNumber();
 }

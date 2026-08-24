@@ -29,14 +29,14 @@ import { ValueType } from "@solve-js/vm/Value";
 
 /** The formatted, user-facing result of a single expression. */
 function display(expr: string): string {
-	const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+	const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	const [value] = engine.evaluateExpression(expr);
 	return formatValue(value);
 }
 
 /** The evaluated Value, for asserting its type and exact sidecar directly. */
 function evaluate(expr: string) {
-	const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+	const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	const [value] = engine.evaluateExpression(expr);
 	return value;
 }
@@ -117,7 +117,7 @@ describe("the money value carries an exact decimal, and stays a Uom", () => {
 	});
 
 	test("exactness survives a variable reference", () => {
-		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		const doc = engine.parseDocument("a = $0.10\nb = $0.20\na + b", { inputType: "plaintext" });
 		const last = doc.lines[doc.lines.length - 1];
 		expect(formatValue(last.result!)).toBe("= $0.30");

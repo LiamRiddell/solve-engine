@@ -128,7 +128,7 @@ export function createTestEngine(
 	// Built-ins go through the constructor (their own containment applies);
 	// the packages under test go through registerPackage() afterwards so their
 	// failures surface as thrown errors instead of being logged and skipped.
-	const engine = new ExpressionEngine(locale, false, undefined, undefined, includeBuiltins ? BUILTIN_PACKAGES : []);
+	const engine = new ExpressionEngine({ locale, packages: includeBuiltins ? BUILTIN_PACKAGES : [] });
 	for (const pkg of packages) {
 		engine.registerPackage(pkg);
 	}

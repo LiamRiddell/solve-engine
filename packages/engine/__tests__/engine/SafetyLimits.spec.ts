@@ -26,17 +26,17 @@ describe("Phase 1: Safety Limits", () => {
   });
 
   test("rejects expression exceeding custom max length via config", () => {
-    const engine = newTrackedEngine("en", false, {
+    const engine = newTrackedEngine({ config: {
       validation: { maxExpressionLength: 5, maxComplexity: 500, maxNestingDepth: 50, autoBalanceParens: false },
-    });
+    } });
     // "123456" is 6 chars, exceeds limit of 5
     expect(() => engine.evaluateLine(1, "123456")).toThrow(/max length/i);
   });
 
   test("allows expression within custom max length via config", () => {
-    const engine = newTrackedEngine("en", false, {
+    const engine = newTrackedEngine({ config: {
       validation: { maxExpressionLength: 10, maxComplexity: 500, maxNestingDepth: 50, autoBalanceParens: false },
-    });
+    } });
     expect(engine.evaluateLine(1, "1 + 2")[0].toNumber()).toBe(3);
   });
 
@@ -79,9 +79,9 @@ describe("Phase 1: Safety Limits", () => {
   });
 
   test("rejects expression exceeding custom complexity via config", () => {
-    const engine = newTrackedEngine("en", false, {
+    const engine = newTrackedEngine({ config: {
       validation: { maxExpressionLength: 2000, maxComplexity: 10, maxNestingDepth: 50, autoBalanceParens: false },
-    });
+    } });
     // "1 + 2" has ~3 tokens → complexity 3 (under 10), but "1 + 2 + 3 + 4" has 7 tokens → complexity 7 (under 10 too)
     // Let's use a longer expression: "a + b + c + d + e" = 9 tokens → complexity 9 (under 10)
     // "a + b + c + d + e + f" = 11 tokens → complexity 11 (over 10)
@@ -91,17 +91,17 @@ describe("Phase 1: Safety Limits", () => {
   // ── Nesting depth ─────────────────────────────────────────────────────
 
   test("rejects expression with excessive nesting depth", () => {
-    const engine = newTrackedEngine("en", false, {
+    const engine = newTrackedEngine({ config: {
       validation: { maxExpressionLength: 2000, maxComplexity: 500, maxNestingDepth: 3, autoBalanceParens: false },
-    });
+    } });
     // ((((1)))) — depth 4, exceeds max of 3
     expect(() => engine.evaluateLine(1, "((((1))))")).toThrow(/nesting depth/i);
   });
 
   test("allows expression within nesting depth limit", () => {
-    const engine = newTrackedEngine("en", false, {
+    const engine = newTrackedEngine({ config: {
       validation: { maxExpressionLength: 2000, maxComplexity: 500, maxNestingDepth: 10, autoBalanceParens: false },
-    });
+    } });
     // ((1 + 2) * 3) — depth 3, under 10
     const [result] = engine.evaluateLine(1, "((1 + 2) * 3)");
     expect(result.toNumber()).toBe(9);
@@ -114,9 +114,9 @@ describe("Phase 1: Safety Limits", () => {
   });
 
   test("nesting depth limit is enforced by parser", () => {
-    const engine = newTrackedEngine("en", false, {
+    const engine = newTrackedEngine({ config: {
       validation: { maxExpressionLength: 2000, maxComplexity: 500, maxNestingDepth: 1, autoBalanceParens: false },
-    });
+    } });
     // (1) — depth 2, exceeds 1
     expect(() => engine.evaluateLine(1, "(1)")).toThrow(/nesting depth/i);
   });
@@ -188,9 +188,9 @@ describe("Phase 1: Safety Limits", () => {
   // ── Config integration ─────────────────────────────────────────────────
 
   test("constructor accepts partial validation config", () => {
-    const engine = newTrackedEngine("en", false, {
+    const engine = newTrackedEngine({ config: {
       validation: { maxExpressionLength: 100, maxComplexity: 500, maxNestingDepth: 50, autoBalanceParens: false },
-    });
+    } });
     // Expression within 100-char limit should pass
     expect(engine.evaluateLine(1, "42 + 1")[0].toNumber()).toBe(43);
     // Expression exceeding 100 chars should fail
@@ -239,18 +239,18 @@ describe("Phase 1: Safety Limits", () => {
   // maxComplexity for legitimately larger expressions. BytecodeBuilder now
   // throws instead of wrapping; this pins that behavior at the engine level.
   test("expression with >256 distinct numeric literals throws instead of silently computing the wrong answer", () => {
-    const engine = newTrackedEngine("en", false, {
+    const engine = newTrackedEngine({ config: {
       validation: { maxExpressionLength: 100000, maxComplexity: 100000, maxNestingDepth: 50, autoBalanceParens: false },
-    });
+    } });
     const nums = Array.from({ length: 300 }, (_, i) => i + 1); // 1..300, all distinct
     const expr = nums.join("+");
     expect(() => engine.evaluateExpression(expr)).toThrow(/numeric literals/i);
   });
 
   test("expression with exactly 256 distinct numeric literals still evaluates correctly", () => {
-    const engine = newTrackedEngine("en", false, {
+    const engine = newTrackedEngine({ config: {
       validation: { maxExpressionLength: 100000, maxComplexity: 100000, maxNestingDepth: 50, autoBalanceParens: false },
-    });
+    } });
     const nums = Array.from({ length: 256 }, (_, i) => i + 1); // 1..256, all distinct
     const expr = nums.join("+");
     const expectedSum = nums.reduce((a, b) => a + b, 0);

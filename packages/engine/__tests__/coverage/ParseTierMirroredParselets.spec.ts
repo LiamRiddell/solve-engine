@@ -71,7 +71,7 @@ function runTierTwo(
 
 /** What the real, Tier-1 evaluation path answers for the same source. */
 function tierOne(source: string, locale = "en") {
-	const engine = newTrackedEngine(locale);
+	const engine = newTrackedEngine({ locale });
 	const [value] = engine.evaluateExpression(source);
 	return value;
 }
@@ -213,7 +213,7 @@ describe("BigIntNumberParselet mirrors the Tier-1 BIGINT case", () => {
 		// which is what this used to be and what reached the host labelled as
 		// an engine bug. See `RobustnessMalformedInput.spec.ts` for why
 		// EngineError specifically is the bar.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(() => engine.evaluateExpression("1.000n")).toThrow(EngineError);
 		expect(() => engine.evaluateExpression("1.000n")).toThrow(/not a whole number/);
 	});

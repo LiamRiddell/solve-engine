@@ -120,7 +120,7 @@ function entryPoints(engine: ReturnType<typeof newTrackedEngine>, source: string
 
 describe("malformed input reaches an answer or an EngineError, never a JS error", () => {
 	test("every entry point, over the whole corpus", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const escaped: string[] = [];
 		for (const source of MALFORMED) {
 			for (const [name, call] of entryPoints(engine, source)) {
@@ -140,7 +140,7 @@ describe("malformed input reaches an answer or an EngineError, never a JS error"
 		// A structured error with an empty `.message` is worse than a raw one:
 		// hosts print `.message` and would show a blank line where the reason
 		// should be. Cheap to assert over the whole corpus, so assert it.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const silent: string[] = [];
 		for (const source of MALFORMED) {
 			try {
@@ -158,7 +158,7 @@ describe("malformed input reaches an answer or an EngineError, never a JS error"
 	test("an EngineError always carries a code from the catalog shape", () => {
 		// `.code` is what a host groups and localises on. An empty or
 		// non-string code means the throw site skipped ErrorFactory entirely.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const uncoded: string[] = [];
 		for (const source of MALFORMED) {
 			try {
@@ -179,7 +179,7 @@ describe("malformed input reaches an answer or an EngineError, never a JS error"
 		// re-evaluated on every keystroke, so a failed line must leave nothing
 		// behind. If a half-finished parse left the parser's token cursor or
 		// the VM stack dirty, the arithmetic at the end would drift.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (const source of MALFORMED) {
 			try {
 				engine.evaluateExpression(source);
@@ -197,7 +197,7 @@ describe("malformed input reaches an answer or an EngineError, never a JS error"
 		// Same property, but with the failures happening BETWEEN two lines that
 		// depend on each other rather than all up front, which is what a
 		// half-typed line in the middle of a document actually looks like.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateLine(1, ":total = 10");
 		for (const source of MALFORMED) {
 			try {
@@ -230,7 +230,7 @@ describe("a builtin called with the wrong number of arguments", () => {
 		// The weak half of the property, and it does hold: nothing crashes the
 		// process and nothing escapes as a raw TypeError. Kept green so the
 		// containment stays pinned independently of the message quality below.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (const source of wrongArityCalls()) {
 			try {
 				engine.evaluateExpression(source);
@@ -256,7 +256,7 @@ describe("a builtin called with the wrong number of arguments", () => {
 		// one place that knows both the function index and the argument count,
 		// reading the table in `vm/VMBuiltinArity.ts`, not in each of the ~90
 		// implementations.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const raw: string[] = [];
 		for (const source of wrongArityCalls()) {
 			try {
@@ -274,7 +274,7 @@ describe("a builtin called with the wrong number of arguments", () => {
 	test("names the function and the count it wanted", () => {
 		// The positive half of the test above: not merely "not a V8 message"
 		// but the specific thing a reader needs, which is which call was wrong.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(() => engine.evaluateExpression("sqrt()")).toThrow(/sqrt/);
 		expect(() => engine.evaluateExpression("sqrt()")).toThrow(/1 argument/);
 		expect(() => engine.evaluateExpression("atan2(1)")).toThrow(/atan2/);
@@ -285,7 +285,7 @@ describe("a builtin called with the wrong number of arguments", () => {
 		// `sqrt(1,2,3)` answered 1: the two arguments past the first were popped
 		// and dropped, so a reader who meant something by them was never told
 		// that nothing was done with them. The variadic builtins stay variadic.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(() => engine.evaluateExpression("sqrt(1,2,3)")).toThrow(EngineError);
 		expect(() => engine.evaluateExpression("gcd(4,6,8)")).toThrow(EngineError);
 		expect(engine.evaluateExpression("max(1,2,3,4)")[0].toNumber()).toBe(4);
@@ -297,7 +297,7 @@ describe("a builtin called with the wrong number of arguments", () => {
 		// honours `isFatal()` would tear a document down over one typed line if
 		// this regressed, and the previous behaviour did exactly that: the raw
 		// TypeError arrived as category INTERNAL with `recoverable: false`.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (const source of ["sqrt()", "atan2(1)", "pow(1)", "gcd(1)", "det()", "inv()", "sqrt(1,2,3)"]) {
 			try {
 				engine.evaluateExpression(source);

@@ -33,7 +33,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
 
 function evaluate(source: string) {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	const [value] = engine.evaluateExpression(source);
 	return value;
 }
@@ -89,7 +89,7 @@ describe("a day is a calendar day, not 86,400,000 milliseconds", () => {
 		// The sweep is the point: whichever two days of the year the host zone
 		// changes its offset on, this walks over them. One engine for all 366
 		// lines, the per-line work is a single expression.
-		const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		try {
 			const cursor = new Date(2024, 0, 1);
 			let checked = 0;
@@ -234,7 +234,7 @@ describe("`tomorrow`, `yesterday` and `next <weekday>` move by the calendar too"
 	function at(instant: string): ExpressionEngine {
 		jest.useFakeTimers();
 		jest.setSystemTime(new Date(instant));
-		return newTrackedEngine("en");
+		return newTrackedEngine();
 	}
 
 	test.each(TRANSITION_INSTANTS)("tomorrow is the next date at the same time (%s)", (_label, instant) => {
@@ -335,7 +335,7 @@ describe("colon-separated numbers that are not a time", () => {
 		// The guard only fires when there is nothing BUT numbers in front of
 		// the colon, so a label with a word in it is untouched even when a
 		// clock time follows.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const [labelled] = engine.evaluateExpression("meeting notes: 9:30 + 5");
 		const [plain] = engine.evaluateExpression("9:30 + 5");
 		expect(labelled.value).toBe(plain.value);

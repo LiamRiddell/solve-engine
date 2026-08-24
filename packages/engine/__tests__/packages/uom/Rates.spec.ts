@@ -17,7 +17,7 @@ import { describe, expect, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
 
 function evaluate(source: string) {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	const [value] = engine.evaluateExpression(source);
 	return value;
 }
@@ -91,7 +91,7 @@ describe("rates in arithmetic", () => {
 
 describe("what the rate rule must not claim", () => {
 	test("`per` away from a unit is an ordinary word", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateExpression(":per = 5");
 		expect(engine.evaluateExpression(":per + 1")[0].toNumber()).toBe(6);
 	});
@@ -244,7 +244,7 @@ describe("a count noun as the numerator", () => {
 		// Stated rather than hidden. `bottles` here holds 5, and the rate reads
 		// the word instead of the value. The denominator requirement keeps this
 		// narrow, but it is a real trade and this is what it looks like.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateExpression(":bottles = 5");
 		const [value] = engine.evaluateExpression("30 bottles / week");
 		expect(value.unit).toBe("bottles/week");

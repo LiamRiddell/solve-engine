@@ -13,7 +13,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 
 /** Evaluates one line on a fresh engine and formats the result. */
 function evaluate(line: string): string {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	try {
 		return formatValue(engine.evaluateLine(1, line)[0]);
 	} finally {
@@ -23,7 +23,7 @@ function evaluate(line: string): string {
 
 /** Evaluates one line and returns its raw Value, for inspecting error codes. */
 function rawValue(line: string) {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	try {
 		return engine.evaluateLine(1, line)[0];
 	} finally {
@@ -44,7 +44,7 @@ describe("spelling aliases", () => {
 	});
 
 	test("derivative also stays usable as an ordinary variable name", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
 			expect(engine.evaluateLine(1, ":derivative = 2.5")[0].toNumber()).toBe(2.5);
 			expect(engine.evaluateLine(2, ":derivative * 2")[0].toNumber()).toBe(5);

@@ -12,7 +12,7 @@ describe('DiagnosticPipelineResult', () => {
     let engine: ExpressionEngine;
 
     beforeEach(() => {
-        engine = new ExpressionEngine('en', true, undefined, undefined, BUILTIN_PACKAGES);
+        engine = new ExpressionEngine({ diagnostics: true, packages: BUILTIN_PACKAGES });
     });
 
     afterEach(() => {

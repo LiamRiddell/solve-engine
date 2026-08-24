@@ -25,10 +25,10 @@ import { numberValue, type Value } from "@solve-js/vm/Value";
 
 /** A fresh engine carrying the built-ins plus whatever packages a test adds. */
 function engineWith(...packages: IEnginePackage[]): ExpressionEngine {
-  return new ExpressionEngine("en", false, undefined, undefined, [
+  return new ExpressionEngine({ packages: [
     ...BUILTIN_PACKAGES,
     ...packages,
-  ]);
+  ] });
 }
 
 /** The first result Value of an expression. */

@@ -242,7 +242,7 @@ describe("WEATHER_PACKAGE resolver — REAL end-to-end preflight + cache read-ba
 
 describe("WEATHER_PACKAGE — ExpressionEngine integration (seeded cache, synchronous)", () => {
 	function createEngine(): ExpressionEngine {
-		return new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		return new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	}
 
 	test("'weather in London' fuses the phrase and produces CALL_PLUGIN bytecode", () => {

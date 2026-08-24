@@ -296,6 +296,20 @@ export interface EngineConfig {
   }
 
 /**
+ * A partial {@link EngineConfig} override, one section at a time.
+ *
+ * Overrides are merged per section over {@link DEFAULT_CONFIG}, so you can set a
+ * single field of one section (`{ validation: { maxExpressionLength: 1000 } }`)
+ * and keep every other default in that section. A plain `Partial<EngineConfig>`
+ * cannot express that, it demands a whole section object, which is why the
+ * documented overrides never typechecked against it. This is the type the
+ * constructor and {@link createEngine} accept.
+ */
+export type EngineConfigOverride = {
+  readonly [K in keyof EngineConfig]?: Partial<EngineConfig[K]>;
+};
+
+/**
  * Default configuration values
  */
 export const DEFAULT_CONFIG: EngineConfig = {
@@ -386,7 +400,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
  */
 export function mergeEngineConfig(
   base: EngineConfig,
-  override: Partial<EngineConfig>
+  override: EngineConfigOverride
 ): EngineConfig {
   return {
     date: { ...base.date, ...override.date },

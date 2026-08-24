@@ -32,14 +32,14 @@ import { ValueType } from "@solve-js/vm/Value";
 
 /** The formatted, user-facing result of a single expression. */
 function display(expr: string): string {
-	const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+	const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	const [value] = engine.evaluateExpression(expr);
 	return formatValue(value);
 }
 
 /** The evaluated Value, for asserting its number, type and rational sidecar directly. */
 function evaluate(expr: string) {
-	const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+	const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	const [value] = engine.evaluateExpression(expr);
 	return value;
 }
@@ -149,7 +149,7 @@ describe("the fraction value carries an exact rational and stays a Number", () =
 	});
 
 	test("exactness survives a variable reference", () => {
-		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		const doc = engine.parseDocument("a = 1/3\na + a + a", { inputType: "plaintext" });
 		const last = doc.lines[doc.lines.length - 1];
 		expect(last.result!.toNumber()).toBe(1);

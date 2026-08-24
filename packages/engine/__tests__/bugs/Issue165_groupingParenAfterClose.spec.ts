@@ -18,7 +18,7 @@ import { ValueType } from "@solve-js/vm/Value";
 describe("Issue #165: `)(` is implicit multiplication over a grouping, not a call", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   const num = (source: string): number => engine.evaluateExpression(source)[0].toNumber();

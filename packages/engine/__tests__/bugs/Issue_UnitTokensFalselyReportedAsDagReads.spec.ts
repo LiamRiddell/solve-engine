@@ -33,7 +33,7 @@ import type { Token } from "@solve-js/lexer/Token";
 describe("Bug: unit tokens in quantity/conversion position falsely reported as DAG reads", () => {
   /** Tokenizes via the real engine pipeline (lexer + normalizer), matching exactly what extractReadsAndWrites receives in production. */
   function tokensFor(expr: string): Token[] {
-    const engine = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ diagnostics: true, packages: BUILTIN_PACKAGES });
     const result = engine.evaluateLineWithDebug(1, expr);
     const tokens = result.diagnostic!.tokens;
     engine.clear();
@@ -63,7 +63,7 @@ describe("Bug: unit tokens in quantity/conversion position falsely reported as D
     // first via ":b = 5" so evaluating the bare reference afterward doesn't
     // throw "Undefined variable: b" (which would short-circuit before the
     // diagnostic pipeline reaches the readwrite/dag_registration stages).
-    const engine = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ diagnostics: true, packages: BUILTIN_PACKAGES });
     engine.evaluateLineWithDebug(1, ":b = 5");
     const { reads } = extractReadsAndWrites(engine.evaluateLineWithDebug(2, "b + 1").diagnostic!.tokens);
     engine.clear();
@@ -84,7 +84,7 @@ describe("Bug: unit tokens in quantity/conversion position falsely reported as D
   // UNIT-token code path in extractReadsAndWrites without any async hop.
 
   test("end-to-end: DAG Registration stage reports no reads/writes for '500 km to mi'", () => {
-    const engine = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ diagnostics: true, packages: BUILTIN_PACKAGES });
     const result = engine.evaluateLineWithDebug(1, "500 km to mi");
     const dagStage = result.diagnostic!.stages.find((s) => s.stage === "dag_registration");
     expect(dagStage).toBeDefined();
@@ -95,7 +95,7 @@ describe("Bug: unit tokens in quantity/conversion position falsely reported as D
   });
 
   test("end-to-end: Read/Write stage reports no reads/writes for '500 km to mi'", () => {
-    const engine = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ diagnostics: true, packages: BUILTIN_PACKAGES });
     const result = engine.evaluateLineWithDebug(1, "500 km to mi");
     const rwStage = result.diagnostic!.stages.find((s) => s.stage === "readwrite");
     expect(rwStage).toBeDefined();

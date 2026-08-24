@@ -5,22 +5,22 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 describe("Phase 5: evaluateNumber fast path", () => {
   describe("Basic arithmetic", () => {
     test("evaluateNumber returns numeric result for valid expression", () => {
-      const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
+      const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       expect(engine.evaluateNumber("42 + 8")).toBe(50);
     });
 
     test("evaluateNumber returns NaN for invalid expression", () => {
-      const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
+      const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       expect(engine.evaluateNumber("hello")).toBeNaN();
     });
 
     test("evaluateNumber handles division", () => {
-      const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
+      const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       expect(engine.evaluateNumber("100 / 4")).toBe(25);
     });
 
     test("evaluateNumber skips Value allocation", () => {
-      const engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
+      const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       const result = engine.evaluateNumber("2 + 3");
       expect(typeof result).toBe("number");
       expect(result).toBe(5);
@@ -31,7 +31,7 @@ describe("Phase 5: evaluateNumber fast path", () => {
     let engine: ExpressionEngine;
 
     beforeEach(() => {
-      engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
+      engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     });
 
     // Releases the engine's query client and async batcher. Without it the

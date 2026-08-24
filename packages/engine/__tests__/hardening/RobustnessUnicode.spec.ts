@@ -70,7 +70,7 @@ describe("token positions index the source the way JavaScript does", () => {
 		// The property that makes `offset` usable for an underline at all. It
 		// is asserted by slicing rather than by comparing lengths, so a token
 		// whose offset drifted by one but whose length is right still fails.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const wrong: string[] = [];
 		for (const source of UNICODE_SOURCES) {
 			for (const token of lex(engine, source)) {
@@ -84,7 +84,7 @@ describe("token positions index the source the way JavaScript does", () => {
 	});
 
 	test("offsets advance and no token runs past the end of the source", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const wrong: string[] = [];
 		for (const source of UNICODE_SOURCES) {
 			let previousEnd = -1;
@@ -103,7 +103,7 @@ describe("token positions index the source the way JavaScript does", () => {
 
 	test("the sweep is actually looking at something", () => {
 		// Guard on the guard: an empty token stream would pass both loops.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (const source of UNICODE_SOURCES) {
 			expect(lex(engine, source).length).toBeGreaterThan(1);
 		}
@@ -112,7 +112,7 @@ describe("token positions index the source the way JavaScript does", () => {
 	test("an emoji is two positions wide and the operator after it knows that", () => {
 		// The single case spelled out, so a failure of the sweep above has a
 		// worked example to compare against.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const tokens = lex(engine, "🙂 + 2");
 		expect(tokens[0].text).toBe("🙂");
 		expect(tokens[0].offset).toBe(0);
@@ -125,7 +125,7 @@ describe("token positions index the source the way JavaScript does", () => {
 describe("non-ASCII identifiers behave like identifiers", () => {
 	test("a name in any script can hold a value and be read back", () => {
 		for (const name of ["café", "日本語", "Ω", "наименование", "ñ"]) {
-			const engine = newTrackedEngine("en");
+			const engine = newTrackedEngine();
 			engine.evaluateLine(1, `:${name} = 6`);
 			expect(engine.evaluateLine(2, `:${name} * 7`)[0].toNumber()).toBe(42);
 		}
@@ -135,7 +135,7 @@ describe("non-ASCII identifiers behave like identifiers", () => {
 		// The message is what the reader sees, so a name mangled on the way
 		// into the error is a real defect even though the evaluation was going
 		// to fail either way.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (const name of ["café", "日本語", "🙂", "مرحبا", "𝛼"]) {
 			try {
 				engine.evaluateExpression(`${name} + 1`);
@@ -152,7 +152,7 @@ describe("non-ASCII identifiers behave like identifiers", () => {
 		// truncated paste or a byte-sliced string produces. The lexer's
 		// identifier loop advances one code unit at a time, so the risk here is
 		// a loop that never advances rather than a wrong answer.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (const source of ["\uD83D", "\uDE00", "\uD83D1+1", "1+1\uDE00", "\uD83D\uD83D\uD83D"]) {
 			try {
 				engine.evaluateExpression(source);
@@ -181,7 +181,7 @@ const UNICODE_SPACES: Array<[string, string]> = [
 
 describe("whitespace that is not ASCII whitespace", () => {
 	test("ASCII spacing works, which is what the test below compares against", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(engine.evaluateExpression("1 + 1")[0].toNumber()).toBe(2);
 		expect(engine.evaluateExpression("1\t+\t1")[0].toNumber()).toBe(2);
 		expect(engine.evaluateExpression("1+1")[0].toNumber()).toBe(2);
@@ -201,7 +201,7 @@ describe("whitespace that is not ASCII whitespace", () => {
 		// The fix is in the lexer's non-ASCII fallback rather than in the
 		// 128-byte table, which cannot hold these code points at all. See
 		// `isUnicodeSpace()`.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const broken: string[] = [];
 		for (const [space, name] of UNICODE_SPACES) {
 			try {
@@ -218,7 +218,7 @@ describe("whitespace that is not ASCII whitespace", () => {
 		// Stated separately from the sweep because it is the one a user meets
 		// without doing anything unusual, and because a fix might reasonably
 		// special-case it before handling the general set above.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(engine.evaluateExpression("﻿1+1")[0].toNumber()).toBe(2);
 	});
 });

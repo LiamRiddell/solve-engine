@@ -225,7 +225,7 @@ describe("historical plugin function — applies the cached rate to the amount",
 
 describe("historical currency — ExpressionEngine integration (seeded cache, synchronous)", () => {
 	function createEngine(): ExpressionEngine {
-		return new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		return new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	}
 
 	test("'100 USD in GBP on 2024-01-15' compiles to the historical CALL_PLUGIN and applies the seeded rate", () => {
@@ -294,7 +294,7 @@ describe("historical currency — ExpressionEngine integration (seeded cache, sy
 
 describe("historical currency — does not regress live conversion or date parsing", () => {
 	function createEngine(): ExpressionEngine {
-		return new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		return new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	}
 
 	test("dateless '100 USD in GBP' still compiles to the live UOM_CONVERT_TO path, not the historical call", () => {
@@ -335,7 +335,7 @@ describe("historical currency — does not regress live conversion or date parsi
 
 describe("historical currency — unconfigured end to end (default engine)", () => {
 	test("the default engine recognises the syntax and reports not-configured after the pending flash", async () => {
-		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 
 		// First evaluation: nothing cached, so the line is Pending while the
 		// (provider-less) resolver resolves its not-configured error.

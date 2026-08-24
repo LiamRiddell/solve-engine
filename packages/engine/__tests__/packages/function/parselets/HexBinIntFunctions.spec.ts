@@ -157,32 +157,32 @@ describe("hex()/bin()/int() — lightweight parselet-registry harness (call synt
 
 describe("hex()/bin()/int() — real engine wiring (newTrackedEngine(\"en\"))", () => {
   test("hex(255) -> 0xFF via the real, default-constructed ExpressionEngine", () => {
-    const engine = newTrackedEngine("en");
+    const engine = newTrackedEngine();
     const [value] = engine.evaluateExpression("hex(255)");
     expect(value.type).toBe(ValueType.Hex);
     expect(formatValue(value)).toBe("= 0xFF");
   });
 
   test("a hex result still does arithmetic, which is the whole reason for the type", () => {
-    const engine = newTrackedEngine("en");
+    const engine = newTrackedEngine();
     // The bug this replaced: a String operand read as zero, so this was 1.
     expect(engine.evaluateExpression("hex(255) + 1")[0].toNumber()).toBe(256);
     expect(engine.evaluateExpression("bin(5) + 1")[0].toNumber()).toBe(6);
   });
 
   test("bin(10) -> 0b1010 via the real engine", () => {
-    const engine = newTrackedEngine("en");
+    const engine = newTrackedEngine();
     expect(formatValue(engine.evaluateExpression("bin(10)")[0])).toBe("= 0b1010");
   });
 
   test("int(5.7) -> 5 via the real engine", () => {
-    const engine = newTrackedEngine("en");
+    const engine = newTrackedEngine();
     const [value] = engine.evaluateExpression("int(5.7)");
     expect(value.toNumber()).toBe(5);
   });
 
   test("int(-5.7) -> -5 via the real engine", () => {
-    const engine = newTrackedEngine("en");
+    const engine = newTrackedEngine();
     const [value] = engine.evaluateExpression("int(-5.7)");
     expect(value.toNumber()).toBe(-5);
   });
@@ -202,7 +202,7 @@ describe("regression guard: 'as hex' / 'as bin' still work after hex/bin became 
   });
 
   test("255 as hex via the real engine, end to end", () => {
-    const engine = newTrackedEngine("en");
+    const engine = newTrackedEngine();
     const [value] = engine.evaluateExpression("255 as hex");
     expect(value.type).toBe(ValueType.Hex);
     expect(value.value).toBe(255);

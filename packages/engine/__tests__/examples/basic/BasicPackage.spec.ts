@@ -6,7 +6,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 
 /** BASIC_PACKAGE is example code, not a built-in — register it explicitly alongside the built-ins. */
 function createEngineWithBasicExample(): ExpressionEngine {
-  return newTrackedEngine("en", false, undefined, undefined, [...BUILTIN_PACKAGES, BASIC_PACKAGE]);
+  return newTrackedEngine({ packages: [...BUILTIN_PACKAGES, BASIC_PACKAGE] });
 }
 
 describe("BASIC_PACKAGE — minimal IEnginePackage example", () => {

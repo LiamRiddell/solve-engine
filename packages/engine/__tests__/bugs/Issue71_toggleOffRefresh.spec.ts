@@ -6,7 +6,7 @@ describe("Issue #71: Toggle Off Refresh", () => {
   let engine: ExpressionEngine;
 
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   test("clear() removes all cached state and allows fresh evaluation", () => {

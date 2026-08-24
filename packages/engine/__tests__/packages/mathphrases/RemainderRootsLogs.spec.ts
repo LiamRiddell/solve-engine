@@ -16,14 +16,14 @@ import { formatValue } from "@solve-js/format/FormatEngine";
 import { DEFAULT_FORMATTING_SETTINGS } from "@solve-js/format/FormattingSettings";
 
 function num(source: string): number {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	const [value] = engine.evaluateExpression(source);
 	return value.toNumber();
 }
 
 /** The rendered answer, which is where a base or a multiplier suffix appears. */
 function text(source: string): string {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	const [value] = engine.evaluateExpression(source);
 	const rendered = formatValue(value, DEFAULT_FORMATTING_SETTINGS) ?? String(value.value);
 	return rendered.replace(/^=/, "").trim();

@@ -26,7 +26,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
  * explicitly register it alongside the built-ins.
  */
 function createEngineWithOsrs(): ExpressionEngine {
-  return newTrackedEngine("en", false, undefined, undefined, [...BUILTIN_PACKAGES, OSRS_PACKAGE]);
+  return newTrackedEngine({ packages: [...BUILTIN_PACKAGES, OSRS_PACKAGE] });
 }
 
 describe("Bug: bare 'osrs' keyword silently evaluated to 0 instead of erroring", () => {

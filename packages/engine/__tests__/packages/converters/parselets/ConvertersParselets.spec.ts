@@ -193,7 +193,7 @@ describe("custom asConverters (SDK extension point)", () => {
 
 describe("CONVERTERS_PACKAGE — real engine wiring", () => {
   test("as hex works via the real, default-constructed ExpressionEngine", () => {
-    const engine = newTrackedEngine("en");
+    const engine = newTrackedEngine();
     const [value] = engine.evaluateExpression("255 as hex");
     expect(value.type).toBe(ValueType.Hex);
     expect(value.value).toBe(255);
@@ -206,10 +206,10 @@ describe("CONVERTERS_PACKAGE — real engine wiring", () => {
         triple: (v: Value) => numberValue(v.toNumber() * 3),
       },
     };
-    const engine = newTrackedEngine("en", false, undefined, undefined, [
+    const engine = newTrackedEngine({ packages: [
       ...BUILTIN_PACKAGES,
       customPackage,
-    ]);
+    ] });
     const [value] = engine.evaluateExpression("7 as triple");
     expect(value.toNumber()).toBe(21);
   });

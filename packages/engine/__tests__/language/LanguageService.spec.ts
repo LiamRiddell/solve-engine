@@ -9,7 +9,7 @@ describe("LanguageService", () => {
   let service: LanguageService;
 
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     service = new LanguageService(engine);
   });
 
@@ -362,7 +362,7 @@ describe("LanguageService", () => {
       // from beforeEach) — construct a package-free engine here so
       // register/unregister is a clean, isolated before/after, matching
       // PackageUnregistration.spec.ts's existing pattern for this.
-      const isolatedEngine = new ExpressionEngine("en", false, undefined, undefined, []);
+      const isolatedEngine = new ExpressionEngine({ packages: [] });
       const isolatedService = new LanguageService(isolatedEngine);
       expect(isolatedService.getCompletions("os", 2).some(i => i.label === "osrs")).toBe(false);
 
@@ -373,7 +373,7 @@ describe("LanguageService", () => {
     });
 
     test("OSRS's completionItems (item names) appear once registered and vanish after unregisterPackage", () => {
-      const isolatedEngine = new ExpressionEngine("en", false, undefined, undefined, []);
+      const isolatedEngine = new ExpressionEngine({ packages: [] });
       const isolatedService = new LanguageService(isolatedEngine);
 
       isolatedEngine.registerPackage(OSRS_PACKAGE);

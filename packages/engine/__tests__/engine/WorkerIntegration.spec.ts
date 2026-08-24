@@ -58,7 +58,7 @@ describe("Worker Integration", () => {
 		beforeEach(() => {
 			doc = new DocumentModel();
 			doc.setDocument(":x = 42\n:x + 8\n99");
-			engine = new ExpressionEngine(undefined, undefined, undefined, undefined, BUILTIN_PACKAGES);
+			engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 			// Evaluate to populate initial state (get lineIds and textHashes)
 			engine.parseDocument(":x = 42\n:x + 8\n99");
 		});

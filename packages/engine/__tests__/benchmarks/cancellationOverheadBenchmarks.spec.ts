@@ -174,7 +174,7 @@ describe("Cancellation Overhead Benchmarks", () => {
 		// bypassing lex/parse/compile variance to isolate the
 		// pure cancellation overhead of executeRaw's per-call
 		// AbortController create + link + unlink cycle.
-		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 
 		// Compile once to populate the bytecode cache
 		const compiled = engine.compileExpression("1 + 2");
@@ -259,7 +259,7 @@ describe("Cancellation Overhead Benchmarks", () => {
 		// pipeline (lex → parse → compile → execute). Less precise
 		// than executeCached due to pipeline variance, but confirms
 		// the overhead holds up in the production code path.
-		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 
 		// Warm the bytecode cache + VM
 		engine.evaluateLine(1, "1 + 2");
@@ -317,7 +317,7 @@ describe("Cancellation Overhead Benchmarks", () => {
 		// keystroke controller, set signal on engine, evaluate,
 		// clear signal, abort (which cleans up { once: true }
 		// listeners). This is the most realistic benchmark.
-		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 
 		// Warm
 		engine.evaluateLine(1, "1 + 2");

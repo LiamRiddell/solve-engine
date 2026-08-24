@@ -18,7 +18,7 @@ import { ValueType } from "@solve-js/vm/Value";
 describe("Issue #180: category tag sums", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   /** Evaluate a document and read the display of a 1-based line. */

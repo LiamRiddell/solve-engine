@@ -19,7 +19,7 @@ import { ValueType, type MatrixData } from "@solve-js/vm/Value";
 import { newTrackedEngine } from "@tools/trackedEngine";
 
 function engine() {
-  return newTrackedEngine("en");
+  return newTrackedEngine();
 }
 
 function evalOne(expr: string) {

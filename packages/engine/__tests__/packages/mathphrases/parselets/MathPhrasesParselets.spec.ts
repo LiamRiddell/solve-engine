@@ -60,7 +60,7 @@ function parseAndExecute(input: string): Value {
 }
 
 function evalReal(expr: string): Value {
-  const engine = newTrackedEngine("en");
+  const engine = newTrackedEngine();
   const [value] = engine.evaluateExpression(expr);
   return value;
 }
@@ -214,7 +214,7 @@ describe("MATHPHRASES_PACKAGE — real engine wiring", () => {
   });
 
   test("regression guard: ':total = ...' still works as a variable — phrase fusion for MathPhrases must not claim bare 'total' as a keyword (see MathPhrasesPackage.ts's design note)", () => {
-    const engine = newTrackedEngine("en");
+    const engine = newTrackedEngine();
     engine.evaluateExpression(":subtotal = 100");
     engine.evaluateExpression(":tax = 8");
     const [value] = engine.evaluateExpression(":total = :subtotal + :tax");
@@ -222,7 +222,7 @@ describe("MATHPHRASES_PACKAGE — real engine wiring", () => {
   });
 
   test("regression guard: bare 'average'/'half'/'count' still work as variable names too", () => {
-    const engine = newTrackedEngine("en");
+    const engine = newTrackedEngine();
     engine.evaluateExpression(":average = 42");
     engine.evaluateExpression(":half = 21");
     engine.evaluateExpression(":count = 3");

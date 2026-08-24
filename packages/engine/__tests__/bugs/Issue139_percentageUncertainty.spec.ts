@@ -14,7 +14,7 @@ import { ValueType } from "@solve-js/vm/Value";
 describe("Issue #139: percentage arithmetic carries the uncertainty", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   function measured(source: string): { center: number; spread: number } {

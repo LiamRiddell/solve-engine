@@ -88,7 +88,7 @@ describe("the active-query-client hand-off", () => {
 		 * uncached one.
 		 */
 		const seen: Array<QueryClient | null> = [];
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.registerPackage(probePackage(seen));
 
 		engine.evaluateExpression("whichclient");
@@ -105,8 +105,8 @@ describe("the active-query-client hand-off", () => {
 		 * data leak rather than a performance detail.
 		 */
 		const seen: Array<QueryClient | null> = [];
-		const first = newTrackedEngine("en");
-		const second = newTrackedEngine("en");
+		const first = newTrackedEngine();
+		const second = newTrackedEngine();
 		first.registerPackage(probePackage(seen));
 		second.registerPackage(probePackage(seen));
 
@@ -123,7 +123,7 @@ describe("the active-query-client hand-off", () => {
 	test("clear() unpublishes the engine's own client", () => {
 		// Leaving a cleared engine's client published would let a later
 		// execution read a cache nobody owns any more.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateExpression("1 + 1");
 		expect(getActiveQueryClient()).toBe(engine.queryClient);
 
@@ -140,8 +140,8 @@ describe("the active-query-client hand-off", () => {
 		 * blank the slot out from under another document's in-flight
 		 * evaluation.
 		 */
-		const running = newTrackedEngine("en");
-		const other = newTrackedEngine("en");
+		const running = newTrackedEngine();
+		const other = newTrackedEngine();
 		running.evaluateExpression("1 + 1");
 		expect(getActiveQueryClient()).toBe(running.queryClient);
 

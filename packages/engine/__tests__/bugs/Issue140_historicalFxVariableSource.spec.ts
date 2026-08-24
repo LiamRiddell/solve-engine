@@ -76,7 +76,7 @@ describe("Issue #140: a variable source currency resolves a historical conversio
 		function engineWithProvider(provider: (from: string, to: string, isoDate: string) => Promise<number>): ExpressionEngine {
 			const currency = createCurrencyPackage({ historicalRateProvider: provider });
 			const packages = [...BUILTIN_PACKAGES.filter((p) => p.name !== "solve-currency"), currency];
-			return new ExpressionEngine("en", false, undefined, undefined, packages);
+			return new ExpressionEngine({ packages });
 		}
 
 		test("`x in GBP on 2024-01-15` for `x = 100 USD` is pending, then resolves through the provider", async () => {

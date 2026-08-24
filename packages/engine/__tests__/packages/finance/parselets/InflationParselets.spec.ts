@@ -62,7 +62,7 @@ function parseAndExecute(input: string): Value {
 }
 
 function evalReal(expr: string): Value {
-  const engine = newTrackedEngine("en");
+  const engine = newTrackedEngine();
   const [value] = engine.evaluateExpression(expr);
   return value;
 }
@@ -160,7 +160,7 @@ describe("value of $X in FUTURE_YEAR assuming N% inflation -> flat-rate projecti
 
 describe("FINANCE_PACKAGE inflation — regression guards (bare variable names must still work)", () => {
   test("':what', ':was', ':value', ':worth' all still work as variable names — only the full two-word phrases (\"what is\", \"what was\", \"value of\", \"worth in\") are claimed as keywords, never the bare leading word", () => {
-    const engine = newTrackedEngine("en");
+    const engine = newTrackedEngine();
     engine.evaluateExpression(":what = 1");
     engine.evaluateExpression(":was = 2");
     engine.evaluateExpression(":value = 3");

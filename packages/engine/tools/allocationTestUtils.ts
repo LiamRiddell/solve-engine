@@ -21,7 +21,7 @@ export function createTrackedEngine(locale = "en", diagnostic = false): {
     cleanup: () => void;
 } {
     AllocationTracker.enable();
-    const engine = new ExpressionEngine(locale, diagnostic, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ locale, diagnostics: diagnostic, packages: BUILTIN_PACKAGES });
     return {
         engine,
         cleanup: () => {

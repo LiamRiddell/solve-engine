@@ -185,7 +185,7 @@ describe("Dice Parselets", () => {
 
 describe("DICE_PACKAGE — real engine wiring", () => {
   test("roll 4-8 works via the real, default-constructed ExpressionEngine", () => {
-    const engine = newTrackedEngine("en");
+    const engine = newTrackedEngine();
     for (let i = 0; i < 10; i++) {
       const [value] = engine.evaluateExpression("roll 4-8");
       const val = value.toNumber();
@@ -195,7 +195,7 @@ describe("DICE_PACKAGE — real engine wiring", () => {
   });
 
   test("roll(1, 6) and roll between 1 and 6 still work via the real engine", () => {
-    const engine = newTrackedEngine("en");
+    const engine = newTrackedEngine();
     const [a] = engine.evaluateExpression("roll(1, 6)");
     expect(a.toNumber()).toBeGreaterThanOrEqual(1);
     expect(a.toNumber()).toBeLessThanOrEqual(6);

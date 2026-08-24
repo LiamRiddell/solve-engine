@@ -27,7 +27,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 
 /** Evaluate a whole document and return it, so a test can read any line's result. */
 function solveDoc(lines: string[], config?: ConstructorParameters<typeof ExpressionEngine>[2]): DocumentModel {
-	const engine = newTrackedEngine("en", false, config);
+	const engine = newTrackedEngine({ config });
 	const doc = new DocumentModel();
 	doc.setDocument(lines.join("\n"));
 	const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -42,7 +42,7 @@ function lineResult(doc: DocumentModel, n: number): Value {
 
 /** The monthly repayment the forward formula gives for a rate, used to check goal seek's answer round-trips. */
 function repaymentAt(rate: number): number {
-	const engine = newTrackedEngine("en", false);
+	const engine = newTrackedEngine();
 	const [value] = engine.evaluateExpression(`monthly repayment on 200000 over 25 years at ${rate}`);
 	return value.toNumber();
 }
@@ -100,7 +100,7 @@ describe("numeric goal seek over a formula with no closed form", () => {
 		const deposit = solved.toNumber();
 		expect(deposit).toBeGreaterThan(0);
 
-		const engine = newTrackedEngine("en", false);
+		const engine = newTrackedEngine();
 		const [check] = engine.evaluateExpression(`monthly repayment on ${deposit} over 25 years at 4%`);
 		expect(check.toNumber()).toBeCloseTo(900, 3);
 	});
@@ -150,7 +150,7 @@ describe("bounded execution — a search can never spin", () => {
 
 describe("guards", () => {
 	test("goal seek outside a document errors cleanly rather than crashing", () => {
-		const engine = newTrackedEngine("en", false);
+		const engine = newTrackedEngine();
 		const [value] = engine.evaluateExpression("solve line 2 for x = 30");
 		expect(value.type).toBe(ValueType.Error);
 		expect(value.value).toBe("GOAL_SEEK_NO_DOCUMENT");
@@ -186,12 +186,12 @@ describe("what must keep working", () => {
 	test("the existing solve(...) algebra verb still inverts a closed-form equation", () => {
 		// `solve` before a `(` is still the symbolic solver, untouched by the
 		// goal-seek rule, which only fires on `solve` before a line reference.
-		const engine = newTrackedEngine("en", false);
+		const engine = newTrackedEngine();
 		expect(engine.evaluateExpression("solve(2x+6=0, x)")[0].toNumber()).toBe(-3);
 	});
 
 	test("solve(...) returning several roots is unaffected", () => {
-		const engine = newTrackedEngine("en", false);
+		const engine = newTrackedEngine();
 		const [value] = engine.evaluateExpression("solve(x^2-4=0, x)");
 		expect(value.type).not.toBe(ValueType.Error);
 	});

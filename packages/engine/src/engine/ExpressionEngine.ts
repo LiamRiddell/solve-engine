@@ -59,7 +59,7 @@ import {
 } from "@solve-js/types/ParsingResult";
 import { DiagnosticReportJSON } from "@solve-js/diagnostics";
 import type { Token, ScanLineResult } from "@solve-js/lexer";
-import { DEFAULT_CONFIG, mergeEngineConfig, type EngineConfig } from "@solve-js/constants/Configuration";
+import { DEFAULT_CONFIG, mergeEngineConfig, type EngineConfig, type EngineConfigOverride } from "@solve-js/constants/Configuration";
 import {
     DiagnosticPipeline,
     TimelineDiagnosticCollector,
@@ -132,15 +132,35 @@ export interface EngineRestoreOptions {
      */
     packages?: IEnginePackage[];
     /** Config overrides, merged over `DEFAULT_CONFIG`, as in the constructor. */
-    config?: Partial<typeof DEFAULT_CONFIG>;
-    /** Turn on the diagnostic pipeline, as in the constructor's `diagnosticMode`. */
-    diagnosticMode?: boolean;
+    config?: EngineConfigOverride;
+    /** Turn on the diagnostic pipeline, as in the constructor's `diagnostics`. */
+    diagnostics?: boolean;
     /**
      * Override the locale the snapshot recorded. Rarely needed: the snapshot's
      * own {@link EngineSnapshot.locale} is used by default, so a restored engine
      * lexes the way the one that produced it did.
      */
     locale?: string;
+}
+
+/**
+ * Options for constructing an {@link ExpressionEngine}. Every field is optional.
+ *
+ * An engine registers exactly the {@link EngineOptions.packages} it is given, so
+ * a bundler can tree-shake away every built-in a consumer never imports; pass
+ * `BUILTIN_PACKAGES` (from `solve-engine/packages`) for the full set, a subset
+ * for a slimmer engine, or use {@link createEngine} for the batteries-included
+ * convenience.
+ */
+export interface EngineOptions {
+    /** BCP-47 locale. Defaults to `"en"`. */
+    locale?: string;
+    /** Packages to register. None when omitted, so nothing but what you pass is bundled. */
+    packages?: IEnginePackage[];
+    /** Config overrides, merged per section over {@link DEFAULT_CONFIG}. */
+    config?: EngineConfigOverride;
+    /** Turn on the diagnostic pipeline (per-stage timing and detail). Defaults to `false`. */
+    diagnostics?: boolean;
 }
 
 /**
@@ -546,35 +566,29 @@ export class ExpressionEngine {
     //#endregion
 
     //#region Constructor
-    constructor(
-        localeCode = "en",
-        diagnosticMode = false,
-        config?: Partial<typeof DEFAULT_CONFIG>,
-        diagnosticPipeline?: DiagnosticPipeline,
-        packages?: IEnginePackage[]
-    ) {
-        this.localeCode = localeCode;
+    constructor(options: EngineOptions = {}) {
+        const { locale = "en", diagnostics = false, config, packages } = options;
+        this.localeCode = locale;
         // Per-section merge, not a top-level shallow spread, overriding one
         // field of a section (e.g. `{ performance: { defaultCacheSize: 500 } }`)
         // used to silently replace the WHOLE section, dropping every other
         // field in it back to `undefined` instead of keeping its default.
         this.config = mergeEngineConfig(DEFAULT_CONFIG, config ?? {});
-        this.lexer = new Lexer(localeCode, buildTokenLookup(localeCode));
+        this.lexer = new Lexer(locale, buildTokenLookup(locale));
         this.registry = new ParseletRegistry();
         // Before the package loop below, which registers plugin functions into it.
         this.context = createEngineContext();
 
-// Wire diagnostic pipeline: use provided, create timeline if enabled, or leave empty for production
-         if (diagnosticPipeline) {
-             this.diagnosticPipeline = diagnosticPipeline;
-         } else if (diagnosticMode) {
-             this.diagnosticPipeline = new DiagnosticPipeline();
-             this.timelineCollector = new TimelineDiagnosticCollector();
-             this.diagnosticPipeline.register(this.timelineCollector);
-         } else {
-             this.diagnosticPipeline = new DiagnosticPipeline();
-             // Production: no collectors, pipeline length-check exits immediately with zero overhead
-         }
+        // Wire the diagnostic pipeline: collect per-stage detail when diagnostics
+        // are on, otherwise an empty pipeline whose length check exits with zero
+        // overhead in production.
+        if (diagnostics) {
+            this.diagnosticPipeline = new DiagnosticPipeline();
+            this.timelineCollector = new TimelineDiagnosticCollector();
+            this.diagnosticPipeline.register(this.timelineCollector);
+        } else {
+            this.diagnosticPipeline = new DiagnosticPipeline();
+        }
 
         // Register providers via IEnginePackage data.
         // Packages are explicit: an engine registers exactly what the caller
@@ -644,7 +658,7 @@ export class ExpressionEngine {
             }
         }
 
-        this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, localeCode);
+        this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, locale);
         this.vm = createVM(
             this.context.opRegistry,
             this.config.vm.maxStackDepth,
@@ -4180,7 +4194,7 @@ export class ExpressionEngine {
         // Refuse an incompatible or non-snapshot object before building anything.
         assertRestorable(snapshot);
         const locale = options.locale ?? snapshot.locale ?? "en";
-        const engine = new ExpressionEngine(locale, options.diagnosticMode ?? false, options.config, undefined, options.packages);
+        const engine = new ExpressionEngine({ locale, diagnostics: options.diagnostics ?? false, config: options.config, packages: options.packages });
         engine.restoreSnapshot(snapshot);
         return engine;
     }

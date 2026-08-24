@@ -18,7 +18,7 @@ import { formatSymbolic, type SymbolicNode } from "@solve-js/symbolic";
 import { newTrackedEngine } from "@tools/trackedEngine";
 
 function engine() {
-  return newTrackedEngine("en");
+  return newTrackedEngine();
 }
 
 function rowMajor(m: MatrixData): (number | boolean | SymbolicNode)[] {

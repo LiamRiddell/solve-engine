@@ -291,7 +291,7 @@ describe("ExpressionEngine EvalResult handling", () => {
     let engine: ExpressionEngine;
 
     beforeEach(() => {
-        engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+        engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     });
 
     afterEach(() => {
@@ -457,7 +457,7 @@ describe("ExpressionEngine evaluateExpression with async plugin", () => {
     let engine: ExpressionEngine;
 
     beforeEach(() => {
-        engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+        engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     });
 
     afterEach(() => {

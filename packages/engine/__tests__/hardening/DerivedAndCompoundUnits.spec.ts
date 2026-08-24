@@ -28,7 +28,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { formatValue } from "@solve-js/format/FormatEngine";
 
 function evaluate(source: string) {
-	const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
+	const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	const [value] = engine.evaluateExpression(source);
 	engine.clear();
 	return value;

@@ -236,7 +236,7 @@ describe("Markdown Elements and Multi-line Documents", () => {
     let service: LanguageService;
 
     beforeEach(() => {
-      engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+      engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       service = new LanguageService(engine);
     });
 

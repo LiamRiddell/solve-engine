@@ -307,7 +307,7 @@ function matches(got: string, soulver: string): boolean {
 
 /** Evaluates one line, returning the formatted answer or the thrown message. */
 function evaluate(expression: string): string {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	try {
 		const values = engine.evaluateExpression(expression);
 		const list = Array.isArray(values) ? values : [values];

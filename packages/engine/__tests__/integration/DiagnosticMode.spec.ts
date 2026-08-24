@@ -4,17 +4,17 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 
 describe("ExpressionEngine Diagnostic Mode Tests", () => {
   test("diagnostic mode disabled by default", () => {
-    const engine = newTrackedEngine("en");
+    const engine = newTrackedEngine();
     expect(engine.isDiagnosticMode()).toBe(false);
   });
 
   test("diagnostic mode can be enabled", () => {
-    const engine = newTrackedEngine("en", true);
+    const engine = newTrackedEngine({ diagnostics: true });
     expect(engine.isDiagnosticMode()).toBe(true);
   });
 
 test("evaluateLineWithDebug returns debug info when diagnostic mode is enabled", () => {
-     const engine = newTrackedEngine("en", true);
+     const engine = newTrackedEngine({ diagnostics: true });
      const result = engine.evaluateLineWithDebug(1, "1 + 2");
 
      expect(result.debug).toBeDefined();
@@ -33,15 +33,15 @@ test("evaluateLineWithDebug returns debug info when diagnostic mode is enabled",
    });
 
   test("evaluateLineWithDebug returns no debug info when diagnostic mode is disabled", () => {
-    const engine = newTrackedEngine("en", false);
+    const engine = newTrackedEngine();
     const result = engine.evaluateLineWithDebug(1, "1 + 2");
     
     expect(result.debug).toBeUndefined();
   });
 
   test("diagnostic mode does not affect evaluation results", () => {
-    const engineEnabled = newTrackedEngine("en", true);
-    const engineDisabled = newTrackedEngine("en", false);
+    const engineEnabled = newTrackedEngine({ diagnostics: true });
+    const engineDisabled = newTrackedEngine();
     
     const resultEnabled = engineEnabled.evaluateLineWithDebug(1, "1 + 2");
     const resultDisabled = engineDisabled.evaluateLineWithDebug(1, "1 + 2");
@@ -52,7 +52,7 @@ test("evaluateLineWithDebug returns debug info when diagnostic mode is enabled",
   });
 
   test("parseDocument returns debug info when diagnostic mode is enabled", () => {
-    const engine = newTrackedEngine("en", true);
+    const engine = newTrackedEngine({ diagnostics: true });
     const result = engine.parseDocument("1 + 2", { inputType: 'markdown' });
     
     // Note: parseDocument doesn't currently return debug info, but we can verify
@@ -62,7 +62,7 @@ test("evaluateLineWithDebug returns debug info when diagnostic mode is enabled",
   });
 
   test("parseDocument works correctly when diagnostic mode is disabled", () => {
-    const engine = newTrackedEngine("en", false);
+    const engine = newTrackedEngine();
     const result = engine.parseDocument("1 + 2", { inputType: 'markdown' });
     
     expect(result.lines).toHaveLength(1);

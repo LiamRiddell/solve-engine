@@ -36,7 +36,7 @@ import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage";
 
 /** OSRS is an example package, not a built-in — register it explicitly alongside the built-ins. */
 function createEngineWithOsrs(): ExpressionEngine {
-  return new ExpressionEngine("en", false, undefined, undefined, [...BUILTIN_PACKAGES, OSRS_PACKAGE]);
+  return new ExpressionEngine({ packages: [...BUILTIN_PACKAGES, OSRS_PACKAGE] });
 }
 
 // ── Token helpers ──────────────────────────────────────────────────────────

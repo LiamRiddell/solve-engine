@@ -19,7 +19,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 
 describe("ExpressionEngine.registerPackage() — engine-version gate", () => {
   test("throws PACKAGE_ENGINE_VERSION_MISMATCH for a package declaring an unsatisfiable range", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
+    const engine = newTrackedEngine({ packages: [ARITHMETIC_PACKAGE] });
     const tooOld: IEnginePackage = { name: "TooOldPackage", engineVersion: "^99.0.0" };
 
     expect.assertions(1);
@@ -31,7 +31,7 @@ describe("ExpressionEngine.registerPackage() — engine-version gate", () => {
   });
 
   test("throws PACKAGE_ENGINE_VERSION_INVALID_RANGE for a malformed range string", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
+    const engine = newTrackedEngine({ packages: [ARITHMETIC_PACKAGE] });
     const malformed: IEnginePackage = { name: "MalformedRangePackage", engineVersion: "not-a-real-range" };
 
     expect.assertions(1);
@@ -43,7 +43,7 @@ describe("ExpressionEngine.registerPackage() — engine-version gate", () => {
   });
 
   test("a rejected package leaves no partial state — its keyword never becomes reachable", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
+    const engine = newTrackedEngine({ packages: [ARITHMETIC_PACKAGE] });
     const incompatible: IEnginePackage = {
       name: "IncompatibleKeywordPackage",
       engineVersion: "^99.0.0",
@@ -66,7 +66,7 @@ describe("ExpressionEngine.registerPackage() — engine-version gate", () => {
       name: "NoVersionDeclaredPackage",
       pluginFunctions: [],
     };
-    const engine = newTrackedEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
+    const engine = newTrackedEngine({ packages: [ARITHMETIC_PACKAGE] });
     expect(() => engine.registerPackage(noVersionDeclared)).not.toThrow();
   });
 
@@ -75,7 +75,7 @@ describe("ExpressionEngine.registerPackage() — engine-version gate", () => {
   // incompatible "upgrade" for an already-working package never tears down
   // the working original first.
   test("replacement safety: rejecting an incompatible re-registration leaves the original, working package untouched", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
+    const engine = newTrackedEngine({ packages: [ARITHMETIC_PACKAGE] });
     const working: IEnginePackage = {
       name: "ReplaceableStablePackage",
       lexerVocabulary: { keywords: { stableword: "STABLE_TOKEN" } },
@@ -110,7 +110,7 @@ describe("ExpressionEngine.registerPackage() — engine-version gate", () => {
   });
 
   test("PACKAGE_ENGINE_VERSION_MISMATCH is thrown for a range requiring a NEWER engine than what's running (opposite direction)", () => {
-    const engine = newTrackedEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
+    const engine = newTrackedEngine({ packages: [ARITHMETIC_PACKAGE] });
     const tooNew: IEnginePackage = { name: "TooNewPackage", engineVersion: "^999.0.0" };
 
     expect.assertions(1);
@@ -124,9 +124,9 @@ describe("ExpressionEngine.registerPackage() — engine-version gate", () => {
   test("engine construction still succeeds normally when no built-in declares engineVersion", () => {
     // Sanity check that BUILTIN_PACKAGES-based construction is completely
     // unaffected by this feature (none of them declare the field).
-    expect(() => newTrackedEngine("en", false, undefined, undefined, [
+    expect(() => newTrackedEngine({ packages: [
       ARITHMETIC_PACKAGE,
       VARIABLES_PACKAGE,
-    ])).not.toThrow();
+    ] })).not.toThrow();
   });
 });

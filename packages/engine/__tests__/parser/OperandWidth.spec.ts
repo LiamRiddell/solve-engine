@@ -251,7 +251,7 @@ function compileCorpus(): RecordedProgram[] {
 	try {
 		for (const source of COMPILED_CORPUS) {
 			currentSource = source;
-			const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
+			const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 			try {
 				engine.evaluateExpression(source);
 			} catch {

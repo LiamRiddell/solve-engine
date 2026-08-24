@@ -18,7 +18,7 @@ describe("Issue #137: table-column aggregates work through the batch APIs", () =
 
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   test("parseDocument resolves a column sum", () => {

@@ -15,7 +15,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 
 /** Runs a document line by line and returns each formatted result. */
 function run(lines: string[]): string[] {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	try {
 		return lines.map((line, i) => formatValue(engine.evaluateLine(i + 1, line)[0]));
 	} finally {
@@ -95,7 +95,7 @@ describe("what the scalar-equation match must NOT swallow", () => {
 	});
 
 	test("the matrix product-chain equation still solves through its own path", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
 			engine.evaluateLine(1, "a = [1, 2; 3, 4]");
 			engine.evaluateLine(2, "a*x = [60; 70]");
@@ -112,7 +112,7 @@ describe("what the scalar-equation match must NOT swallow", () => {
 		// `2+2 = 4` was the ordinary "unexpected token" parse error and stays
 		// one. Turning it into an identity would change an unrelated line's
 		// behaviour, which is not this feature's business.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
 			expect(() => engine.evaluateLine(1, "2+2 = 4")).toThrow(/Unexpected token/);
 		} finally {
@@ -129,7 +129,7 @@ describe("what the scalar-equation match must NOT swallow", () => {
 		// Declining means falling through to the pre-existing parse error, not
 		// picking one of the two names arbitrarily. `solve(x+y=5, x)` remains
 		// the way to say which unknown is meant.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
 			expect(() => engine.evaluateLine(1, "x+y = 5")).toThrow(/Unexpected token/);
 		} finally {
@@ -148,7 +148,7 @@ describe("what the scalar-equation match must NOT swallow", () => {
 
 describe("the matrix and scalar equation kinds coexist", () => {
 	test("both can be stored at once, each solving through its own machinery", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
 			engine.evaluateLine(1, "a = [1, 2; 3, 4]");
 			engine.evaluateLine(2, "a*m = [60; 70]");
@@ -177,7 +177,7 @@ describe("the matrix and scalar equation kinds coexist", () => {
 	});
 
 	test("the matrix path still wins when the factors really are matrices", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
 			engine.evaluateLine(1, "a = [1, 2; 3, 4]");
 			engine.evaluateLine(2, "a*x = [60; 70]");
@@ -192,7 +192,7 @@ describe("the matrix and scalar equation kinds coexist", () => {
 	test("a genuinely missing factor still reports that, rather than falling through", () => {
 		// EQUATION_FACTOR_UNDEFINED is not the not-a-matrix case, so the
 		// fallback must not swallow it into a vaguer message.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
 			engine.evaluateLine(1, "undefinedFactor*z = [1; 2]");
 			const [result] = engine.evaluateLine(2, "z =>");

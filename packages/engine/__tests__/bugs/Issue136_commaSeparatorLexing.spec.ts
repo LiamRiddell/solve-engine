@@ -21,7 +21,7 @@ import { ValueType, type MatrixData, type ColourData } from "@solve-js/vm/Value"
 describe("Issue #136: a comma in a call or bracket is a separator, not a thousands group", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   const evalOne = (source: string) => engine.evaluateExpression(source)[0];

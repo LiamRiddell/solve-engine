@@ -58,7 +58,7 @@ function lastErrorOver(engine: ExpressionEngine, lines: string[]): EngineError |
 
 describe("the allocation a single opcode performs", () => {
 	test("a matrix product larger than the budget is refused before it is built", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
 			const error = lastErrorOver(engine, [":a = map(1*x, 0:2000)", ":b = transpose(a)", "b * a"]);
 			expect(error?.code).toBe("ALLOCATION_LIMIT_EXCEEDED");
@@ -76,7 +76,7 @@ describe("the allocation a single opcode performs", () => {
 		// The property a host depends on. An allocation it cannot afford is a
 		// statement about one line, not about the engine, and a host honouring
 		// `isFatal()` must not be told to tear the document down over it.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
 			const error = lastErrorOver(engine, [":a = map(1*x, 0:2000)", ":b = transpose(a)", "b * a"]);
 			expect(error?.recoverable).toBe(true);
@@ -98,14 +98,14 @@ describe("the allocation a single opcode performs", () => {
 		// literal, four `Value`s for the collection it is read into (which exist
 		// at the same time as the cells, so they are not the same four), and
 		// four cells for the result. Twelve buys it and eleven does not.
-		const affordable = new ExpressionEngine("en", false, { vm: { maxAllocatedElements: 12 } }, undefined, BUILTIN_PACKAGES);
+		const affordable = new ExpressionEngine({ config: { vm: { maxAllocatedElements: 12 } }, packages: BUILTIN_PACKAGES });
 		try {
 			expect(affordable.evaluateExpression("map(x*2, [1,2,3,4])")[0].type).toBe(ValueType.Matrix);
 		} finally {
 			affordable.clear();
 		}
 
-		const short = new ExpressionEngine("en", false, { vm: { maxAllocatedElements: 11 } }, undefined, BUILTIN_PACKAGES);
+		const short = new ExpressionEngine({ config: { vm: { maxAllocatedElements: 11 } }, packages: BUILTIN_PACKAGES });
 		try {
 			expect(errorFrom(short, "map(x*2, [1,2,3,4])")?.code).toBe("ALLOCATION_LIMIT_EXCEEDED");
 		} finally {
@@ -117,7 +117,7 @@ describe("the allocation a single opcode performs", () => {
 		// `a^k` is repeated multiplication, so it materialises a full matrix per
 		// step. Counting only the result would report a fraction of what it
 		// actually allocates.
-		const engine = new ExpressionEngine("en", false, { vm: { maxAllocatedElements: 100 } }, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ config: { vm: { maxAllocatedElements: 100 } }, packages: BUILTIN_PACKAGES });
 		try {
 			expect(errorFrom(engine, "[1,2;3,4]^1000000")?.code).toBe("ALLOCATION_LIMIT_EXCEEDED");
 			// The same matrix to a small power stays affordable.
@@ -134,9 +134,9 @@ describe("the budget is a total, which is what makes it compose", () => {
 		// `maxCollectionSize`, so a per-collection ceiling passes all three and
 		// the expression still materialises three times as much as any one of
 		// them.
-		const engine = new ExpressionEngine("en", false, {
+		const engine = new ExpressionEngine({ config: {
 			vm: { maxCollectionSize: 1000, maxAllocatedElements: 2500 },
-		}, undefined, BUILTIN_PACKAGES);
+		}, packages: BUILTIN_PACKAGES });
 		try {
 			expect(engine.evaluateLine(1, "sum(x, 1:1000)")[0].toNumber()).toBe((1000 * 1001) / 2);
 			expect(errorFrom(engine, "sum(x, 1:1000) + sum(x, 1:1000) + sum(x, 1:1000)", 2)?.code)
@@ -152,9 +152,9 @@ describe("the budget is a total, which is what makes it compose", () => {
 		// recursion needed a guard of its own. The allocation tally is reset
 		// only by the OUTERMOST entry, so a body called three times cannot
 		// refresh its own budget three times.
-		const engine = new ExpressionEngine("en", false, {
+		const engine = new ExpressionEngine({ config: {
 			vm: { maxCollectionSize: 1000, maxAllocatedElements: 2500 },
-		}, undefined, BUILTIN_PACKAGES);
+		}, packages: BUILTIN_PACKAGES });
 		try {
 			engine.evaluateLine(1, "f(n) = sum(x, 1:1000) + n");
 			expect(engine.evaluateLine(2, "f(0)")[0].toNumber()).toBe((1000 * 1001) / 2);
@@ -167,7 +167,7 @@ describe("the budget is a total, which is what makes it compose", () => {
 	test("each evaluation starts from zero, so a long document does not run itself out", () => {
 		// The other half of "it is a total": a total that never reset would fail
 		// the fortieth line of a perfectly ordinary document.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
 			for (let line = 1; line <= 40; line++) {
 				expect(engine.evaluateLine(line, "sum(x, 1:100000)")[0].toNumber()).toBe((100000 * 100001) / 2);
@@ -178,9 +178,9 @@ describe("the budget is a total, which is what makes it compose", () => {
 	});
 
 	test("a refused line does not leave the tally behind it", () => {
-		const engine = new ExpressionEngine("en", false, {
+		const engine = new ExpressionEngine({ config: {
 			vm: { maxCollectionSize: 1000, maxAllocatedElements: 2500 },
-		}, undefined, BUILTIN_PACKAGES);
+		}, packages: BUILTIN_PACKAGES });
 		try {
 			for (let i = 0; i < 20; i++) {
 				expect(errorFrom(engine, "sum(x, 1:1000) + sum(x, 1:1000) + sum(x, 1:1000)", 1)?.code)
@@ -195,7 +195,7 @@ describe("the budget is a total, which is what makes it compose", () => {
 
 describe("the ceiling belongs to the host", () => {
 	test("a lower limit refuses what the default allows", () => {
-		const engine = new ExpressionEngine("en", false, { vm: { maxAllocatedElements: 100 } }, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ config: { vm: { maxAllocatedElements: 100 } }, packages: BUILTIN_PACKAGES });
 		try {
 			expect(errorFrom(engine, "map(1*x, 0:500)")?.code).toBe("ALLOCATION_LIMIT_EXCEEDED");
 			// And is a ceiling rather than a refusal of collections as such.
@@ -206,7 +206,7 @@ describe("the ceiling belongs to the host", () => {
 	});
 
 	test("a higher limit allows what the default refuses", () => {
-		const engine = new ExpressionEngine("en", false, { vm: { maxAllocatedElements: 20000000 } }, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ config: { vm: { maxAllocatedElements: 20000000 } }, packages: BUILTIN_PACKAGES });
 		try {
 			const lines = [":a = map(1*x, 0:2000)", ":b = transpose(a)", "b * a"];
 			lines.forEach((line, index) => engine.evaluateLine(index + 1, line));
@@ -219,7 +219,7 @@ describe("the ceiling belongs to the host", () => {
 
 describe("ordinary expressions are untouched", () => {
 	test("the arithmetic, units and dates a document is actually made of", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(engine.evaluateExpression("2 + 2 * 10")[0].toNumber()).toBe(22);
 		expect(engine.evaluateExpression("(1+2)*(3+4)")[0].toNumber()).toBe(21);
 		expect(engine.evaluateExpression("100 cm to m")[0].toNumber()).toBe(1);
@@ -228,7 +228,7 @@ describe("ordinary expressions are untouched", () => {
 	});
 
 	test("matrices, ranges, map and reduce at the sizes people write", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(engine.evaluateExpression("[1,2;3,4] * [5,6;7,8]")[0].type).toBe(ValueType.Matrix);
 		expect(engine.evaluateExpression("map(x*2, [1,2,3,4])")[0].type).toBe(ValueType.Matrix);
 		expect(engine.evaluateExpression("reduce(acc+x, [1,2,3,4,5])")[0].toNumber()).toBe(15);
@@ -240,7 +240,7 @@ describe("ordinary expressions are untouched", () => {
 	});
 
 	test("a document of a thousand ordinary lines never meets the guard", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
 			for (let line = 1; line <= 1000; line++) {
 				expect(engine.evaluateLine(line, `${line} * 3 + 1`)[0].toNumber()).toBe(line * 3 + 1);

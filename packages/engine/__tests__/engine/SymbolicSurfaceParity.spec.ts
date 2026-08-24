@@ -49,7 +49,7 @@ describe.each(SYMBOLIC_FUNCTIONS.map(fn => [fn.word, fn] as const))("algebra ver
 	});
 
 	test("stays an ordinary identifier when not called, so it works as a variable name", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
 			const [assigned] = engine.evaluateLine(1, `:${fn.word} = 1.5`);
 			expect(assigned.toNumber()).toBe(1.5);
@@ -61,9 +61,9 @@ describe.each(SYMBOLIC_FUNCTIONS.map(fn => [fn.word, fn] as const))("algebra ver
 	});
 
 	test("produces identical output through every public entry point", () => {
-		const viaLine = newTrackedEngine("en");
-		const viaDebug = newTrackedEngine("en");
-		const viaLean = newTrackedEngine("en");
+		const viaLine = newTrackedEngine();
+		const viaDebug = newTrackedEngine();
+		const viaLean = newTrackedEngine();
 		try {
 			const line = formatValue(viaLine.evaluateLine(1, fn.example)[0]);
 			const debug = formatValue(viaDebug.evaluateLineWithDebug(1, fn.example).value);

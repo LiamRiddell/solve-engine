@@ -4,13 +4,13 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 
 describe("evaluateLines (batch API)", () => {
   test("empty array returns empty result", () => {
-    const engine = newTrackedEngine("en", false);
+    const engine = newTrackedEngine();
     const result = engine.evaluateLines([]);
     expect(result).toEqual([]);
   });
 
   test("single expression line evaluates correctly", () => {
-    const engine = newTrackedEngine("en", false);
+    const engine = newTrackedEngine();
     const result = engine.evaluateLines(["1 + 2"]);
     expect(result).toHaveLength(1);
     expect(result[0].expression).toBe("1 + 2");
@@ -20,7 +20,7 @@ describe("evaluateLines (batch API)", () => {
   });
 
   test("multiple expression lines evaluate independently", () => {
-    const engine = newTrackedEngine("en", false);
+    const engine = newTrackedEngine();
     const result = engine.evaluateLines(["10 + 5", "20 * 3", "100 / 4"]);
     expect(result).toHaveLength(3);
     expect(result[0].result?.toNumber()).toBe(15);
@@ -29,7 +29,7 @@ describe("evaluateLines (batch API)", () => {
   });
 
   test("empty lines are marked as isEmpty", () => {
-    const engine = newTrackedEngine("en", false);
+    const engine = newTrackedEngine();
     const result = engine.evaluateLines(["", "   ", "# ", "> "]);
     expect(result).toHaveLength(4);
     expect(result[0].isEmpty).toBe(true);
@@ -39,7 +39,7 @@ describe("evaluateLines (batch API)", () => {
   });
 
   test("inline solves are detected and evaluated", () => {
-    const engine = newTrackedEngine("en", false);
+    const engine = newTrackedEngine();
     const result = engine.evaluateLines(["Result: s`1 + 2`"]);
     expect(result).toHaveLength(1);
     expect(result[0].hasInlineSolves).toBe(true);
@@ -49,7 +49,7 @@ describe("evaluateLines (batch API)", () => {
   });
 
   test("multiple inline solves in one line", () => {
-    const engine = newTrackedEngine("en", false);
+    const engine = newTrackedEngine();
     const result = engine.evaluateLines(["s`1 + 2` and s`3 + 4`"]);
     expect(result).toHaveLength(1);
     expect(result[0].hasInlineSolves).toBe(true);
@@ -59,7 +59,7 @@ describe("evaluateLines (batch API)", () => {
   });
 
   test("variable assignments are recognized", () => {
-    const engine = newTrackedEngine("en", false);
+    const engine = newTrackedEngine();
     const result = engine.evaluateLines([":x = 5", "x + 3"]);
     expect(result).toHaveLength(2);
     expect(result[0].expression).toBe(":x = 5");
@@ -67,7 +67,7 @@ describe("evaluateLines (batch API)", () => {
   });
 
   test("errors are captured on lines", () => {
-    const engine = newTrackedEngine("en", false);
+    const engine = newTrackedEngine();
     const result = engine.evaluateLines(["1 / 0", "foo + bar"]);
     expect(result).toHaveLength(2);
     // Division by zero may produce Infinity (not an error in JS semantics)
@@ -76,12 +76,12 @@ describe("evaluateLines (batch API)", () => {
   });
 
   test("batch evaluation produces same results as parseDocument equivalent", () => {
-    const engine = newTrackedEngine("en", false);
+    const engine = newTrackedEngine();
     const lines = ["5 + 10", "20 - 7", "s`3 * 4`"];
     const batchResult = engine.evaluateLines(lines);
 
     // Use a fresh engine for parseDocument to get independent results
-    const engine2 = newTrackedEngine("en", false);
+    const engine2 = newTrackedEngine();
     const docText = lines.join("\n");
     const docResult = engine2.parseDocument(docText, { inputType: "markdown" });
 
@@ -98,7 +98,7 @@ describe("evaluateLines (batch API)", () => {
   });
 
   test("mixed empty and expression lines", () => {
-    const engine = newTrackedEngine("en", false);
+    const engine = newTrackedEngine();
     const result = engine.evaluateLines(["1 + 1", "", "2 + 2", "# ", "3 + 3"]);
     expect(result).toHaveLength(5);
     expect(result[0].result?.toNumber()).toBe(2);
@@ -109,7 +109,7 @@ describe("evaluateLines (batch API)", () => {
   });
 
   test("position tracking is correct for batch lines", () => {
-    const engine = newTrackedEngine("en", false);
+    const engine = newTrackedEngine();
     const lines = ["hello world", "abc"];
     const result = engine.evaluateLines(lines);
     expect(result).toHaveLength(2);

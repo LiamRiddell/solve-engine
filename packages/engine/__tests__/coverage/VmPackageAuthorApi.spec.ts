@@ -102,7 +102,7 @@ describe("allocatePluginFunctionIndex", () => {
 		 * both register on one engine, and each keyword must still reach the
 		 * handler it was declared with.
 		 */
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.registerPackage(packageAround("firsthandler", () => numberValue(11)));
 		engine.registerPackage(packageAround("secondhandler", () => numberValue(22)));
 
@@ -135,7 +135,7 @@ describe("the allocation guard from inside a plugin function", () => {
 		 * the test asks for something modest and the assertion is about the
 		 * guard rather than about how much memory the machine has.
 		 */
-		const engine = newTrackedEngine("en", false, { vm: { maxAllocatedElements: 1000 } });
+		const engine = newTrackedEngine({ config: { vm: { maxAllocatedElements: 1000 } } });
 		engine.registerPackage(
 			packageAround("greedy", () => {
 				const room = checkedArray<number>(5000, "greedy elements");
@@ -153,7 +153,7 @@ describe("the allocation guard from inside a plugin function", () => {
 	test("a plugin asking for what it can afford is allowed through", () => {
 		// The other half: the guard must not refuse ordinary sizes, or every
 		// package that allocates anything becomes unusable.
-		const engine = newTrackedEngine("en", false, { vm: { maxAllocatedElements: 1000 } });
+		const engine = newTrackedEngine({ config: { vm: { maxAllocatedElements: 1000 } } });
 		engine.registerPackage(
 			packageAround("modest", () => numberValue(checkedArray<number>(100, "modest elements").length)),
 		);
@@ -169,7 +169,7 @@ describe("the allocation guard from inside a plugin function", () => {
 		 * host asked for. So a check of 600 against a budget of 1000 must
 		 * leave the full 1000 available to charge afterwards.
 		 */
-		const engine = newTrackedEngine("en", false, { vm: { maxAllocatedElements: 1000 } });
+		const engine = newTrackedEngine({ config: { vm: { maxAllocatedElements: 1000 } } });
 		engine.registerPackage(
 			packageAround("checkthenchargea", () => {
 				checkAllocation(600, "planned elements");
@@ -188,7 +188,7 @@ describe("the allocation guard from inside a plugin function", () => {
 		 * requests of 600 are each under a 1000 ceiling and must not both be
 		 * granted.
 		 */
-		const engine = newTrackedEngine("en", false, { vm: { maxAllocatedElements: 1000 } });
+		const engine = newTrackedEngine({ config: { vm: { maxAllocatedElements: 1000 } } });
 		engine.registerPackage(
 			packageAround("twice", () => {
 				chargeAllocation(600, "first batch");
@@ -207,7 +207,7 @@ describe("the allocation guard from inside a plugin function", () => {
 		 * partway down and start refusing lines that are individually
 		 * trivial.
 		 */
-		const engine = newTrackedEngine("en", false, { vm: { maxAllocatedElements: 1000 } });
+		const engine = newTrackedEngine({ config: { vm: { maxAllocatedElements: 1000 } } });
 		engine.registerPackage(
 			packageAround("spendmost", () => {
 				chargeAllocation(900, "elements");

@@ -19,12 +19,12 @@ describe("createEngine", () => {
 
   test("a bare-constructor engine registers nothing unless given packages", () => {
     // The tree-shaking contract: no packages passed means no vocabulary.
-    const bare = new ExpressionEngine("en", false);
+    const bare = new ExpressionEngine();
     expect(() => bare.evaluateExpression("sin(0)")).toThrow();
   });
 
   test("accepts a locale and extra packages on top of the built-ins", () => {
-    const engine = createEngine("en", false, undefined, []);
+    const engine = createEngine();
     expect(engine.evaluateExpression("10 dollars")[0].toNumber()).toBe(10);
   });
 });

@@ -13,7 +13,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 
 /** Evaluates one line and renders the result the way a user would see it. */
 function evaluate(line: string): string {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	try {
 		const [value] = engine.evaluateLine(1, line);
 		if (value.type === ValueType.Symbolic) return formatSymbolic(value.value as SymbolicNode);
@@ -76,7 +76,7 @@ describe("Phase A: every public entry point agrees", () => {
 	}
 
 	test("evaluateLine", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
 			expect(render(engine.evaluateLine(1, LINE)[0])).toBe(EXPECTED);
 		} finally {
@@ -85,7 +85,7 @@ describe("Phase A: every public entry point agrees", () => {
 	});
 
 	test("evaluateLineWithDebug, the path the playground uses", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
 			expect(render(engine.evaluateLineWithDebug(1, LINE).value)).toBe(EXPECTED);
 		} finally {
@@ -94,7 +94,7 @@ describe("Phase A: every public entry point agrees", () => {
 	});
 
 	test("evaluateLines, the lean pre-tokenized path", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
 			const parsed = engine.evaluateLines([LINE]);
 			expect(render(parsed[0].result!)).toBe(EXPECTED);

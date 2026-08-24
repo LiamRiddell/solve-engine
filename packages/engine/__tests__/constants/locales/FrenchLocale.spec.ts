@@ -58,7 +58,7 @@ describe("formatDatetime — locale-aware weekday/month display", () => {
 
 describe("French locale — input keywords", () => {
 	test("basic arithmetic words", () => {
-		const engine = newTrackedEngine("fr");
+		const engine = newTrackedEngine({ locale: "fr" });
 		expect(engine.evaluateExpression("5 plus 3")[0].toNumber()).toBe(8);
 		expect(engine.evaluateExpression("5 fois 3")[0].toNumber()).toBe(15);
 		expect(engine.evaluateExpression("10 moins 3")[0].toNumber()).toBe(7);
@@ -66,7 +66,7 @@ describe("French locale — input keywords", () => {
 	});
 
 	test("date keywords, including 'aujourdhui' (today, deliberately unapostrophed)", () => {
-		const engine = newTrackedEngine("fr");
+		const engine = newTrackedEngine({ locale: "fr" });
 		expect(engine.evaluateExpression("maintenant")[0].type).toBe(4); // Datetime
 		expect(engine.evaluateExpression("aujourdhui")[0].type).toBe(4);
 		expect(engine.evaluateExpression("demain")[0].type).toBe(4);
@@ -74,44 +74,44 @@ describe("French locale — input keywords", () => {
 	});
 
 	test("weekday names work in context ('prochain lundi', matching English 'next monday')", () => {
-		const engine = newTrackedEngine("fr");
+		const engine = newTrackedEngine({ locale: "fr" });
 		const [value] = engine.evaluateExpression("prochain lundi");
 		expect(value.type).toBe(4); // Datetime
 	});
 
 	test("regression guard: a bare weekday word alone throws in BOTH locales symmetrically (not a French-specific gap)", () => {
-		const en = newTrackedEngine("en");
-		const fr = newTrackedEngine("fr");
+		const en = newTrackedEngine();
+		const fr = newTrackedEngine({ locale: "fr" });
 		expect(() => en.evaluateExpression("monday")).toThrow();
 		expect(() => fr.evaluateExpression("lundi")).toThrow();
 	});
 
 	test("functions with identical French/English spelling work (sin, cos, abs, min, max)", () => {
-		const engine = newTrackedEngine("fr");
+		const engine = newTrackedEngine({ locale: "fr" });
 		expect(engine.evaluateExpression("sin(0)")[0].toNumber()).toBe(0);
 		expect(engine.evaluateExpression("abs(-5)")[0].toNumber()).toBe(5);
 	});
 
 	test("regression guard: a French-only function name is NOT silently broken — it errors clearly rather than returning a wrong number (builtinNameToIndex is a separate, locale-independent dispatch table)", () => {
-		const engine = newTrackedEngine("fr");
+		const engine = newTrackedEngine({ locale: "fr" });
 		expect(() => engine.evaluateExpression("racine(16)")).toThrow(/undefined function|unknown function/i);
 	});
 
 	test("booleans and conditionals", () => {
-		const engine = newTrackedEngine("fr");
+		const engine = newTrackedEngine({ locale: "fr" });
 		expect(engine.evaluateExpression("vrai")[0].value).toBe(true);
 		expect(engine.evaluateExpression("faux")[0].value).toBe(false);
 		expect(engine.evaluateExpression("si 5 alors 1 sinon 0")[0].toNumber()).toBe(1);
 	});
 
 	test("vec2/vec3/vec4 use the same spelling as English", () => {
-		const engine = newTrackedEngine("fr");
+		const engine = newTrackedEngine({ locale: "fr" });
 		const [value] = engine.evaluateExpression("vec2(1, 2)");
 		expect((value.value as MatrixData).data).toEqual([1, 2]);
 	});
 
 	test("regression guard: German's pre-existing analogous gap (wurzel/root) is unaffected by this change, confirming it's a pre-existing architectural limitation, not something newly introduced", () => {
-		const engine = newTrackedEngine("de");
+		const engine = newTrackedEngine({ locale: "de" });
 		expect(() => engine.evaluateExpression("wurzel(16)")).toThrow(/undefined function|unknown function/i);
 	});
 });

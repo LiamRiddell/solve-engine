@@ -19,7 +19,7 @@ import { ValueType, type MatrixData } from "@solve-js/vm/Value";
 describe("Issue #160: a grouping paren after a keyword operator keeps thousands", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   const num = (source: string): number => engine.evaluateExpression(source)[0].toNumber();

@@ -24,7 +24,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
  */
 describe("Bug: built-in (Tier 1) parselets never appeared in the matched-parselets diagnostic report", () => {
   test("arithmetic built-ins (NUMBER, LPAREN, MINUS, STAR) are reported as matched", () => {
-    const engine = newTrackedEngine("en", true);
+    const engine = newTrackedEngine({ diagnostics: true });
     const result = engine.evaluateLineWithDebug(1, "4 * (11 - 2) / sqrt(9)");
 
     const matchedTokenTypes = new Set((result.debug?.parselets ?? []).map(p => p.tokenType));
@@ -38,7 +38,7 @@ describe("Bug: built-in (Tier 1) parselets never appeared in the matched-parsele
   });
 
   test("only tokens actually present in the expression are reported as matched", () => {
-    const engine = newTrackedEngine("en", true);
+    const engine = newTrackedEngine({ diagnostics: true });
     const result = engine.evaluateLineWithDebug(1, "4 * (11 - 2) / sqrt(9)");
 
     const matchedTokenTypes = new Set((result.debug?.parselets ?? []).map(p => p.tokenType));
@@ -46,7 +46,7 @@ describe("Bug: built-in (Tier 1) parselets never appeared in the matched-parsele
   });
 
   test("plain arithmetic with no plugin calls still reports every operator used", () => {
-    const engine = newTrackedEngine("en", true);
+    const engine = newTrackedEngine({ diagnostics: true });
     const result = engine.evaluateLineWithDebug(1, "1 + 2 - 3 * 4 / 5");
 
     const matchedTokenTypes = new Set((result.debug?.parselets ?? []).map(p => p.tokenType));
@@ -58,7 +58,7 @@ describe("Bug: built-in (Tier 1) parselets never appeared in the matched-parsele
   });
 
   test("diagnostic mode off (default) produces no parselet events at all (no overhead regression)", () => {
-    const engine = newTrackedEngine("en", false);
+    const engine = newTrackedEngine();
     const result = engine.evaluateLineWithDebug(1, "4 * (11 - 2) / sqrt(9)");
     expect(result.debug).toBeUndefined();
   });

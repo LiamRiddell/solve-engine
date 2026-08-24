@@ -223,7 +223,7 @@ describe("the throw contract VM.ts depends on", () => {
     //
     // A fixed date literal, not `today`: `today` resolves to the current
     // instant on every evaluation, so comparing two of them races the clock.
-    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     const base = engine.evaluateExpression("25/12/2026")[0].toNumber();
 
     for (const nonDuration of ["5 m", "5 kg", "5 l", "5 C", "5 mph"]) {

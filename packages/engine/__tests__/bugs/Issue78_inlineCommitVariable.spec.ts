@@ -6,7 +6,7 @@ describe("Issue #78: Committing Inline w/ Variable Fails", () => {
   let engine: ExpressionEngine;
 
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   test("inline solve with pre-defined variable resolves correctly", () => {

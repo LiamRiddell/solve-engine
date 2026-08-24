@@ -169,7 +169,7 @@ describe("createStocksPackage — working path with a test-provided mock fetch f
 describe("createStocksPackage — ExpressionEngine integration (seeded cache, synchronous)", () => {
 	function createEngine(config: Parameters<typeof createStocksPackage>[0] = {}) {
 		const pkg = createStocksPackage(config);
-		const engine = new ExpressionEngine("en", false, undefined, undefined, [...BUILTIN_PACKAGES, pkg]);
+		const engine = new ExpressionEngine({ packages: [...BUILTIN_PACKAGES, pkg] });
 		return { engine, pkg };
 	}
 

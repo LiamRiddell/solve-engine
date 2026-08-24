@@ -19,7 +19,7 @@ describe("Bugs: plausible-but-silently-wrong results found via adversarial probi
     // "90 km / 3 day" -> "30 km/day"), so DIV between genuinely different
     // measures now correctly constructs "kg/m" rather than either
     // mislabeling or refusing to compute at all.
-    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     const [result] = engine.evaluateLine(1, "5kg / 3m");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.unit).toBe("kg/m");
@@ -35,7 +35,7 @@ describe("Bugs: plausible-but-silently-wrong results found via adversarial probi
   // different layer than the DIV opcode logic this file is about.
 
   test("DIV between the same unit dimension still works (regression guard)", () => {
-    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     const [result] = engine.evaluateLine(1, "10kg / 2kg");
     expect(result.type).toBe(ValueType.Number);
     expect(result.toNumber()).toBe(5);
@@ -44,13 +44,13 @@ describe("Bugs: plausible-but-silently-wrong results found via adversarial probi
   test("vector addition with mismatched dimensions errors instead of truncating", () => {
     // "vec2(1,2) + vec3(1,2,3)" used to silently drop the third component
     // via Math.min(lv.length, rv.length), returning "[2,4]".
-    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     const [result] = engine.evaluateLine(1, "vec2(1,2) + vec3(1,2,3)");
     expect(result.type).toBe(ValueType.Error);
   });
 
   test("vector addition with matching dimensions still works (regression guard)", () => {
-    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     const [result] = engine.evaluateLine(1, "vec2(1,2) + vec2(3,4)");
     expect(result.type).toBe(ValueType.Matrix);
     expect((result.value as MatrixData).data).toEqual([4, 6]);
@@ -61,13 +61,13 @@ describe("Bugs: plausible-but-silently-wrong results found via adversarial probi
     // negative spread, silently producing values like 2-5 — plausible
     // small integers, but never 1 or 6, and not the [1,6] range implied
     // by the call.
-    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     const [result] = engine.evaluateLine(1, "roll(6, 1)");
     expect(result.type).toBe(ValueType.Error);
   });
 
   test("roll() with a normal range still works (regression guard)", () => {
-    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     for (let i = 0; i < 20; i++) {
       const [result] = engine.evaluateLine(1, "roll(1, 6)");
       expect(result.toNumber()).toBeGreaterThanOrEqual(1);
@@ -79,7 +79,7 @@ describe("Bugs: plausible-but-silently-wrong results found via adversarial probi
     // "now - now" used to unconditionally re-wrap the difference as ANOTHER
     // Datetime (e.g. "01/01/1970, 01:00:00" for a near-zero difference)
     // instead of a duration.
-    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     const [result] = engine.evaluateLine(1, "now - now");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.unit).toBe("ms");
@@ -87,7 +87,7 @@ describe("Bugs: plausible-but-silently-wrong results found via adversarial probi
   });
 
   test("adding two datetimes errors instead of producing a nonsense far-future datetime", () => {
-    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     const [result] = engine.evaluateLine(1, "now + now");
     expect(result.type).toBe(ValueType.Error);
   });
@@ -95,13 +95,13 @@ describe("Bugs: plausible-but-silently-wrong results found via adversarial probi
   test.each([["0x"], ["0b"], ["0X"], ["0B"]])(
     "%s (hex/binary prefix with no digits) throws instead of silently evaluating to NaN",
     (literal) => {
-      const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+      const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       expect(() => engine.evaluateLine(1, literal)).toThrow();
     }
   );
 
   test("well-formed hex/binary literals still work (regression guard)", () => {
-    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     expect(engine.evaluateLine(1, "0xFF")[0].toNumber()).toBe(255);
     engine.clear();
     expect(engine.evaluateLine(1, "0b101")[0].toNumber()).toBe(5);

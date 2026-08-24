@@ -23,7 +23,7 @@ import { ValueType } from "@solve-js/vm/Value";
 import { newTrackedEngine } from "@tools/trackedEngine";
 
 function evalReal(expr: string) {
-  const engine = newTrackedEngine("en");
+  const engine = newTrackedEngine();
   const [value] = engine.evaluateExpression(expr);
   return value;
 }

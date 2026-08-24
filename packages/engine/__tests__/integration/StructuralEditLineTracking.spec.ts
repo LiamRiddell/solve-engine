@@ -24,7 +24,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
  */
 
 function createEngine(): ExpressionEngine {
-	return new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+	return new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 }
 
 function createDoc(lines: string[]): DocumentModel {

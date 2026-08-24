@@ -63,7 +63,7 @@ describe("Playground example content is valid against the real engine", () => {
     for (const category of exampleData) {
       for (const ex of category.examples) {
         if (KNOWN_STATEFUL_SNIPPETS.has(ex.name)) continue;
-        const engine = new ExpressionEngine("en", false, undefined, undefined, PLAYGROUND_PACKAGES);
+        const engine = new ExpressionEngine({ packages: PLAYGROUND_PACKAGES });
         // Example content may itself be multi-line (e.g. a variable defined
         // on one line and used on the next, to stay self-contained when
         // insertExample() replaces the whole editor) — evaluate line by
@@ -141,7 +141,7 @@ describe("Playground example content is valid against the real engine", () => {
     primeAllRates();
     const failures: string[] = [];
     for (const example of fullDocumentExamples) {
-      const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+      const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       // See the single-line test above for why a DocumentModel is wired in.
       const documentModel = new DocumentModel();
       documentModel.setDocument(example.content);
@@ -188,7 +188,7 @@ describe("Playground example content is valid against the real engine", () => {
       // what makes this one appear to work.
       sharedGlobalVariableStore.clear();
       for (const document of example.documents) {
-        const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+        const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
         const documentModel = new DocumentModel();
         documentModel.setDocument(document.content);
         engine.setDocumentModel(documentModel);

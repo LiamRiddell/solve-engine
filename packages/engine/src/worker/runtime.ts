@@ -191,13 +191,12 @@ export function startWorkerRuntime(transport: WorkerTransport, options: WorkerRu
 	const handleInit = (message: InitMessage): void => {
 		try {
 			const packages = resolvePackages(available, message.packages);
-			engine = new ExpressionEngine(
-				message.localeCode ?? "en",
-				message.diagnosticMode ?? false,
-				message.config,
-				undefined,
+			engine = new ExpressionEngine({
+				locale: message.localeCode ?? "en",
+				diagnostics: message.diagnosticMode ?? false,
+				config: message.config,
 				packages,
-			);
+			});
 			formatting = message.formatting;
 			// Drain live-data resolutions for the engine's whole lifetime, so a
 			// value that settles after a request already answered still reaches the
