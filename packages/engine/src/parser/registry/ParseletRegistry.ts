@@ -203,7 +203,8 @@ export class ParseletRegistry {
  * A process-wide parselet registry.
  *
  * @deprecated An engine builds its own registry and does not read this one, so
- * registering here reaches nothing that evaluates. It survives for the
- * deprecated {@link PackageRegistry} path only.
+ * registering here reaches nothing that evaluates. Nothing writes to it now
+ * that the global package-registration path is gone; it remains only so the
+ * `@solve-js/parser` escape hatch keeps a stable shape.
  */
 export const sharedParseletRegistry = new ParseletRegistry();

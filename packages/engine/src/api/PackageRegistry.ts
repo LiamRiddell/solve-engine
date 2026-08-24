@@ -1,38 +1,11 @@
-import { sharedParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { PrefixParselet, InfixParselet } from "@solve-js/parser/Parselet";
 import { Value } from "@solve-js/vm/Value";
-import { sharedLexer } from "@solve-js/lexer/Lexer";
 import type { LexerVocabulary } from "@solve-js/lexer/ExpressionLexer";
 import type { IAsyncResolver } from "@solve-js/resolvers/ResolverRegistry";
 import type { NormalizerRule } from "@solve-js/normalizer/NormalizerRule";
 import type { TokenCategory } from "@solve-js/language/TokenCategory";
 import type { CompletionItem } from "@solve-js/language/LanguageService";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
-import { assertEngineVersionCompatible } from "./EngineVersionCompatibility";
-
-/**
- * Public API for registering plugins with the solve-js engine.
- *
- * All registration goes through this interface, parselets, variable
- * sources, and full packages. The default implementation is
- * {@link PackageRegistry} (singleton via {@link packageRegistry}).
- *
- * @example
- * ```typescript
- * import { packageRegistry } from "solve-engine";
- * packageRegistry.registerPackage(myCustomPackage);
- * ```
- */
-export interface IPackageRegistry {
-  /** Register a prefix parselet (e.g., `GE`, `NOW`, `floor`). */
-  registerPrefixParselet(tokenType: string, parselet: PrefixParselet): void;
-  /** Register an infix parselet (e.g., `+`, `in`, `to`). */
-  registerInfixParselet(tokenType: string, parselet: InfixParselet): void;
-  /** Register a complete package (parselets, plugin functions, vocabulary). */
-  registerPackage(pkg: IEnginePackage): void;
-  /** Convenience reference to the Value class for creating typed values. */
-  Value: typeof Value;
-}
 
 /**
  * Package descriptor for registering a complete provider with the engine.
@@ -198,82 +171,3 @@ export interface IEnginePackage {
   asConverters?: Record<string, (value: Value) => Value>;
 }
 
-/**
- * Default implementation of {@link IPackageRegistry}, the plugin registration API.
- *
- * All registrations delegate to shared singletons (parselet registry,
- * variable resolver, lexer). This ensures that packages registered through
- * any PackageRegistry instance are visible engine-wide.
- *
- * @example
- * ```typescript
- * import { packageRegistry } from "solve-engine";
- *
- * // Register a complete provider package
- * packageRegistry.registerPackage({
- *   name: "MyProvider",
- *   prefixParselets: [{ tokenType: "MY_FUNC", parselet: new MyParselet() }],
- * });
- * ```
- *
- * @deprecated Register on an engine instead:
- * `engine.registerPackage(pkg)`.
- *
- * This class writes into process-wide singletons, which is incompatible with an
- * engine owning its own registries. Since the introduction of
- * {@link EngineContext}, an engine reads plugin functions, opcode handlers and
- * variable sources from its own context, so a package registered here is not
- * visible to any engine. Parselets and lexer vocabulary registered here reach
- * the shared registries, which an engine also does not read: it builds its own
- * `ParseletRegistry` and its own `Lexer`.
- *
- * In other words this path registers into state nothing evaluates against. It
- * remains exported because removing it is a breaking change, and it is where
- * the singletons that survive are still written from, but it should not be used
- * in new code and will be removed before 1.0 proper.
- */
-export class PackageRegistry implements IPackageRegistry {
-  Value = Value;
-
-  registerPrefixParselet(tokenType: string, parselet: PrefixParselet): void {
-    sharedParseletRegistry.registerPrefix(tokenType, parselet);
-  }
-
-  registerInfixParselet(tokenType: string, parselet: InfixParselet): void {
-    sharedParseletRegistry.registerInfix(tokenType, parselet);
-  }
-
-  registerPackage(pkg: IEnginePackage): void {
-    // Same hard engine-version gate ExpressionEngine.registerPackage() uses
-    // (see its own comment and ARCHITECTURE.md §5.3). This weaker
-    // shared-singleton path had no compatibility checking of any kind
-    // before this, so without this call the version gate would be
-    // trivially bypassable through this entry point.
-    assertEngineVersionCompatible(pkg);
-
-    if (pkg.lexerVocabulary) {
-      sharedLexer.registerVocabulary(pkg.lexerVocabulary);
-    }
-    if (pkg.prefixParselets) {
-      for (const pp of pkg.prefixParselets) {
-        this.registerPrefixParselet(pp.tokenType, pp.parselet);
-      }
-    }
-    if (pkg.infixParselets) {
-      for (const ip of pkg.infixParselets) {
-        this.registerInfixParselet(ip.tokenType, ip.parselet);
-      }
-    }
-    // Note: asyncResolvers are NOT registered here, the shared PackageRegistry singleton
-    // doesn't have a ResolverRegistry (that lives inside ExpressionEngine).
-    // Use ExpressionEngine.registerPackage() directly if you need async resolvers.
-  }
-}
-
-/**
- * Singleton PackageRegistry instance, the default plugin registration API.
- *
- * All packages should register through this instance. The underlying registries
- * are shared singletons, so multiple PackageRegistry instances would be redundant.
- */
-export const packageRegistry = new PackageRegistry();

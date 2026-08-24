@@ -27,9 +27,9 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
  * `checkPackageCompatibility()`'s "return a result, caller decides" shape,
  * and this codebase's own testing convention of asserting against plain
  * result objects rather than `toThrow()` for a pure function).
- * `assertEngineVersionCompatible()` is the thin throwing wrapper both
- * `ExpressionEngine.registerPackage()` and the `PackageRegistry` singleton
- * call as the very first thing they do. See `ARCHITECTURE.md` §5.3.
+ * `assertEngineVersionCompatible()` is the thin throwing wrapper
+ * `ExpressionEngine.registerPackage()` calls as the very first thing it
+ * does. See `ARCHITECTURE.md` §5.3.
  */
 
 export type EngineVersionCheckResult =

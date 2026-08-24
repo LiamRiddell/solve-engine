@@ -4,10 +4,10 @@
  * binding power against the current expression's to decide whether to
  * consume the next operator (higher power binds tighter, e.g. `*` over `+`).
  *
- * Package authors reference these when registering an infix parselet via
- * `IPackageRegistry.registerInfixParselet`. See the built-in packages for
- * examples of picking an appropriate level (e.g. arithmetic `+`/`-` use
- * `Sum`, `*`/`/` use `Product`).
+ * Package authors reference these when declaring an infix parselet in a
+ * package's `infixParselets`. See the built-in packages for examples of
+ * picking an appropriate level (e.g. arithmetic `+`/`-` use `Sum`, `*`/`/`
+ * use `Product`).
  */
 export const BindingPower = {
   Lowest: 0,

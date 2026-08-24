@@ -6,8 +6,7 @@
 // @solve-js/resolvers, @solve-js/errors, @solve-js/utilities,
 // @solve-js/uom) for authoring custom packages.
 
-export { PackageRegistry, packageRegistry } from "./PackageRegistry";
-export type { IPackageRegistry, IEnginePackage } from "./PackageRegistry";
+export type { IEnginePackage } from "./PackageRegistry";
 
 export { defineFunction, DefineFunctionErrorCodes } from "./defineFunction";
 export type { FunctionSpec, FunctionArg, FunctionValueType } from "./defineFunction";
