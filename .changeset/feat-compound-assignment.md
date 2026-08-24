@@ -17,7 +17,9 @@ A first `+=` or `-=` on a name that has not been set yet starts it at zero, so a
 
 The boundary: the compound forms apply to bare names, not the colon `:name` or `global :name` grammars, and a genuine typo on the right (`total += nope`) is still a real undefined-variable error. `+=` and `-=` are punctuation, so they never shadow an ordinary word.
 
+A running total is re-seeded on every re-evaluation, so a note that opens `spent += 10` reads the same total no matter how many times the document is re-parsed (a host re-parses on each keystroke) or the line is edited. The total is reset to its seed at the start of each pass and rebuilt from the ledger, rather than reading its own previous value and growing without bound.
+
 ## Verification
 
-- A regression spec covers the seed-zero first use, a running balance down a document, typed (money) accumulation, right-hand-side precedence, the undefined-name and half-typed errors, and the untouched colon grammar; a lexer spec pins `+=`/`-=` and that `=+`, `=-`, `++`, `= -5` and the ASCII uncertainty `+/-` are unchanged.
-- 7,736 tests across 339 suites, no failures. `npm run verify` green.
+- A regression spec covers the seed-zero first use, a running balance down a document, typed (money) accumulation, right-hand-side precedence, the undefined-name and half-typed errors, and the untouched colon grammar; a lexer spec pins `+=`/`-=` and that `=+`, `=-`, `++`, `= -5` and the ASCII uncertainty `+/-` are unchanged. A further spec pins re-evaluation stability across repeated re-parses and an in-place edit, on both the batch and the incremental evaluators.
+- 7,784 tests across 343 suites, no failures. `npm run verify` green.

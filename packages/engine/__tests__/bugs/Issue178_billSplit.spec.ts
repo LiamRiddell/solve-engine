@@ -83,4 +83,17 @@ describe("Issue #178: bill split and tip", () => {
       expect(engine.evaluateExpression("ways + people")[0].toNumber()).toBe(7);
     });
   });
+
+  describe("a split value in a variable does not break a snapshot", () => {
+    test("toJSON skips a split-valued variable rather than aborting the whole snapshot", () => {
+      engine.evaluateExpression(":shares = split $120 between 3");
+      engine.evaluateExpression(":n = 42");
+      // The split value cannot serialise in the v1 snapshot format, but it must
+      // be skipped, not throw and lose every other variable and line result.
+      expect(() => engine.toJSON()).not.toThrow();
+      const snapshot = engine.toJSON();
+      expect(snapshot.variables.n).toBeDefined();
+      expect(snapshot.variables.shares).toBeUndefined();
+    });
+  });
 });

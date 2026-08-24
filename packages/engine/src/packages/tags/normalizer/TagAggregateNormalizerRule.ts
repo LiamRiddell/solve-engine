@@ -15,6 +15,9 @@ const AGGREGATE_TOKEN: Record<string, string> = {
   AVERAGE_OF: "TAG_AVERAGE",
 };
 
+/** The words that open an `... of #tag` aggregate, before the phrase fuses. */
+const AGGREGATE_WORDS: ReadonlySet<string> = new Set(["total", "sum", "count", "average"]);
+
 /**
  * `total of #tag` / `count of #tag` / `average of #tag` / `sum of #tag`, the
  * category tag aggregates. Fuses the trigger and the following TAG into one
@@ -82,11 +85,15 @@ export function tagStripNormalizerRule(priority = 40): NormalizerRule {
     match(tokens, pos): NormalizerMatch | null {
       if (tokens[pos]?.type !== "TAG") return null;
       const before = tokens[pos - 1];
-      // Never strip a TAG that an aggregate wants: one that directly follows
-      // the word "of" (the standalone `OF` keyword, or an IDENT before the
-      // "total of"/"count of" phrase has fused) or a fused aggregate trigger.
-      if (before !== undefined && (wordOf(before) === "of" || AGGREGATE_TOKEN[before.type] !== undefined)) {
-        return null;
+      if (before !== undefined) {
+        // A TAG right after a fused aggregate trigger (`total of`/`count of`/
+        // `average of`) is claimed by the aggregate rule on the next pass.
+        if (AGGREGATE_TOKEN[before.type] !== undefined) return null;
+        // A TAG after the bare word "of" is only part of an aggregate when the
+        // "of" completes one of the aggregate phrases (`total`/`sum`/`count`/
+        // `average` of). `cost of #living` is ordinary prose, so its tag is a
+        // data-line annotation to strip, not a stray TAG left to error.
+        if (wordOf(before) === "of" && AGGREGATE_WORDS.has(wordOf(tokens[pos - 2]))) return null;
       }
       return { consumed: 1, replacement: [], ruleName: "tags:strip" };
     },

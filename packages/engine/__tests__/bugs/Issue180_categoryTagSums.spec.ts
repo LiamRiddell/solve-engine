@@ -118,4 +118,22 @@ describe("Issue #180: category tag sums", () => {
       expect(engine.evaluateExpression("total + 1")[0].toNumber()).toBe(6);
     });
   });
+
+  describe("count is about presence, and a non-aggregate `of` is prose", () => {
+    test("count of #tag counts a tagged line whose value is not a number", () => {
+      // A count is "how many lines carry the tag", so a non-numeric tagged
+      // line (here a date) still counts; only sum and average need a number.
+      expect(resultAt(["25/12/2025 #trip", "40 #trip", "count of #trip"], 3)).toBe("= 2");
+    });
+    test("total of a non-numeric tagged line is still a clear error", () => {
+      expect(resultAt(["25/12/2025 #trip", "40 #trip", "total of #trip"], 3)).toMatch(/not a plain number/i);
+    });
+    test("`cost of #living` is ordinary prose, not a stray-tag internals error", () => {
+      // The tag is stripped as a data-line annotation; `word of #tag` only
+      // holds the tag when the word opens an aggregate (total/sum/count/average).
+      const out = resultAt(["cost of #living"], 1);
+      expect(out).not.toMatch(/prefix parselet/i);
+      expect(out).not.toMatch(/\bTAG\b/);
+    });
+  });
 });

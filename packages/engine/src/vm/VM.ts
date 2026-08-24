@@ -165,6 +165,7 @@ export function createVM(
         return variables.get(key);
       },
       setVar(key: string, val: Value) { variables.set(key, val); },
+      deleteVar(key: string) { variables.delete(key); },
       pushCallFrame(frame: Map<string, Value>) {
         if (callFrames.length >= maxFunctionRecursionDepth) {
           throw ErrorFactory.execution(
