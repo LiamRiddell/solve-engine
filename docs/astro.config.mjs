@@ -270,6 +270,7 @@ export default defineConfig({
             { slug: "contributing/development-setup" },
             { slug: "contributing/coding-standards" },
             { slug: "contributing/testing" },
+            { slug: "contributing/releasing" },
           ],
         },
         {
