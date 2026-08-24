@@ -190,6 +190,8 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	LSHIFT: "operator",
 	RSHIFT: "operator",
 	EQUALS: "operator",
+	PLUS_EQUALS: "operator",
+	MINUS_EQUALS: "operator",
 	THEREFORE: "operator",
 	INCREASE_BY: "operator",
 	DECREASE_BY: "operator",

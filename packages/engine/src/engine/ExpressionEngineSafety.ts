@@ -265,8 +265,11 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
                 // any other bare identifier read.
             }
             reads.push(t.value);
-            // Check if next token is EQUALS -> this is a write
-            if (i + 1 < tokens.length && tokens[i + 1].type === "EQUALS") {
+            // Check if next token is EQUALS -> this is a write. A compound
+            // assignment (`total += 5` / `total -= 5`) both reads and writes its
+            // own name, so the read above stands and the write is added here too.
+            const next = tokens[i + 1]?.type;
+            if (next === "EQUALS" || next === "PLUS_EQUALS" || next === "MINUS_EQUALS") {
                 writes.push(t.value);
             }
         }

@@ -47,6 +47,10 @@ export const TokenTypes = {
   IDENT: "IDENT",
   PLUS: "PLUS",
   MINUS: "MINUS",
+  // Compound assignment for running totals: `total += 100`, `total -= 40`.
+  // Handled by the engine's compound-assignment interception, not a parselet.
+  PLUS_EQUALS: "PLUS_EQUALS",
+  MINUS_EQUALS: "MINUS_EQUALS",
   STAR: "STAR",
   SLASH: "SLASH",
   // The uncertainty operator, `±` (U+00B1) or the ASCII `+/-`. The symbol is

@@ -17,6 +17,30 @@ count = 10
 count + 5 // 15
 ```
 
+## Running totals
+
+`+=` and `-=` update a named total in place, so a note becomes a running balance
+where each line adjusts the last.
+
+```solve
+:budget = 500
+budget -= 120 // 380
+budget -= 63 // 317
+budget // 317
+```
+
+A first `+=` or `-=` on a name that has not been set yet starts it at zero, so a
+ledger can open straight into a spend.
+
+```solve
+spent += 40 // 40
+spent += 12 // 52
+```
+
+The compound forms apply to bare names, not the colon `:name` or `global :name`
+grammars, and the right-hand side keeps its own precedence, so `budget -= 1 + 2`
+subtracts three.
+
 ## Functions
 
 ```solve
