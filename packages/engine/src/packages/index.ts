@@ -23,6 +23,7 @@ export {
 	createKnowledgePackage,
 	LINES_PACKAGE,
 	TABLES_PACKAGE,
+	TAGS_PACKAGE,
 	BUILTIN_PACKAGES,
 } from "./builtins";
 

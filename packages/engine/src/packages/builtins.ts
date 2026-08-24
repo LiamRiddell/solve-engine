@@ -40,6 +40,7 @@ import { LINES_PACKAGE } from "./lines";
 import { GOALSEEK_PACKAGE } from "./goalseek";
 import { TABLES_PACKAGE } from "./tables";
 import { COLOUR_PACKAGE } from "./colour";
+import { TAGS_PACKAGE } from "./tags";
 
 export {
   ARITHMETIC_PACKAGE,
@@ -69,6 +70,7 @@ export {
   GOALSEEK_PACKAGE,
   TABLES_PACKAGE,
   COLOUR_PACKAGE,
+  TAGS_PACKAGE,
 };
 
 // ── All built-in packages (registration order matters: arithmetic first) ──
@@ -92,7 +94,7 @@ export {
 /**
  * The packages an engine registers when the caller names none.
  *
- * Twenty-four of the twenty-six. Stocks and knowledge are excluded because
+ * Twenty-five of the twenty-seven. Stocks and knowledge are excluded because
  * both need a host-supplied data source and do nothing useful without one, so
  * registering them by default would only produce NOT_CONFIGURED results.
  *
@@ -126,4 +128,8 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   GOALSEEK_PACKAGE,
   TABLES_PACKAGE,
   COLOUR_PACKAGE,
+  // After MATHPHRASES_PACKAGE and LINES_PACKAGE: tag aggregates reuse the
+  // `total of`/`count of`/`average of` fusions and walk the document the same
+  // way the lines cross-line reads do.
+  TAGS_PACKAGE,
 ];

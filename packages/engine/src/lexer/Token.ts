@@ -304,6 +304,11 @@ export const TokenTypes = {
   // would otherwise be a heading/comment; the colour package's parselet turns
   // it into a colour value. See ExpressionLexer.matchHexColourEnd().
   HEX_COLOUR: "HEX_COLOUR",
+  // A bounded mid-line `#tag` annotation (`1200 #housing`). Stripped from
+  // evaluation by the tags package's strip rule, or consumed by its aggregate
+  // rule (`total of #housing`). A line-start `#` is a heading, and `# ` (space)
+  // or `//` is still a free-text comment.
+  TAG: "TAG",
   // A colour function call fused by the colour package's normalizer, e.g.
   // `rgb(`/`lighten(`. Carries the function name; see ColourCallParselet.
   COLOUR_CALL: "COLOUR_CALL",

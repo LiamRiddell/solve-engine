@@ -308,6 +308,10 @@ export const UNCATEGORIZED_TOKEN_TYPES: ReadonlySet<string> = new Set([
 	"BACKTICK_OPEN",
 	"INLINE_SOLVE_START",
 	"COMMENT",
+	// A mid-line `#tag` reaches the highlight stream like COMMENT but has no
+	// evaluation role of its own (it is stripped or folded into an aggregate),
+	// so it is deliberately unstyled rather than categorised.
+	"TAG",
 ]);
 
 /**

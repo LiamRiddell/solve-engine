@@ -260,3 +260,21 @@ A label followed by a colon is kept, and the expression after it is evaluated.
 ```solve
 total: 5 + 3 // 8
 ```
+
+## Category tags
+
+A mid-line `#tag` labels a line's category and is dropped from that line's own
+result; the aggregates gather every line carrying the tag. These read the whole
+document, so they are shown rather than asserted. See
+[category tags](/syntax/line-references/#category-tags).
+
+| Expression | Meaning |
+| --- | --- |
+| `40 + 15 #grocery` | a tagged data line, still calculates to `55` |
+| `total of #grocery` | the sum of every line tagged `#grocery` |
+| `sum of #grocery` | a synonym for `total of` |
+| `average of #grocery` | the mean of the tagged lines |
+| `count of #grocery` | how many lines carry the tag |
+
+A tag name starts with a letter, keeping it clear of `#c0ffee` and other
+[colour](/syntax/colours/) literals.
