@@ -60,16 +60,23 @@ function readTable() {
 	const source = fs.readFileSync(TABLE, "utf8");
 
 	const entries = [];
-	const entryPattern = /^\s+"((?:[^"\\]|\\.)+)":\s*\[(\d+),\s*([^\]]+)\],/gm;
-	const tableStart = source.indexOf("export const UNIT_TABLE");
-	const tableEnd = source.indexOf("export const UNIT_DIFFERENCES");
-	const tableBody = source.slice(tableStart, tableEnd);
-	for (const match of tableBody.matchAll(entryPattern)) {
-		entries.push({
-			spelling: match[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\"),
-			kind: Number(match[2]),
-			ratio: Number(match[3]),
-		});
+	// UNIT_TABLE ships packed as `const PACKED_UNIT_TABLE = "kind|ratio|a1,a2;..."`
+	// decoded at load, rather than one `"key": [kind, ratio]` line per spelling.
+	// Read and unpack the string the same way the engine does. `JSON.parse` on
+	// the string literal handles the escaping (a few spellings contain `"`), so
+	// the aliases come out already unescaped.
+	const packedMatch = source.match(/const PACKED_UNIT_TABLE\s*=\s*("(?:[^"\\]|\\.)*")/);
+	if (packedMatch) {
+		const packed = JSON.parse(packedMatch[1]);
+		for (const record of packed.split(";")) {
+			const firstBar = record.indexOf("|");
+			const secondBar = record.indexOf("|", firstBar + 1);
+			const kind = Number(record.slice(0, firstBar));
+			const ratio = Number(record.slice(firstBar + 1, secondBar));
+			for (const spelling of record.slice(secondBar + 1).split(",")) {
+				entries.push({ spelling, kind, ratio });
+			}
+		}
 	}
 
 	const differences = {};
