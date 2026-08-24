@@ -1,7 +1,7 @@
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Plate, PlateContent, usePlateEditor } from "platejs/react";
-import { ExpressionEngine } from "solve-engine";
+import { createEngine } from "solve-engine";
 import { formatValue, formatMatrixAligned } from "solve-engine/format";
 import { LanguageService, tokenClassName } from "solve-engine/language";
 import { ValueType } from "solve-engine/vm";
@@ -274,7 +274,10 @@ export default function SolveNotepad({
   // language service would leave that pass with nothing to classify, and
   // Slate caches decorations, so the whole notepad would render unhighlighted
   // and stay that way.
-  const [engine] = useState(() => new ExpressionEngine("en"));
+  // createEngine registers every built-in package; the notepad renders any
+  // solve expression, so it needs the full vocabulary (the bare constructor
+  // now registers none, so an engine built with it would show no results).
+  const [engine] = useState(() => createEngine("en"));
   // The language service reads the engine's dependency graph to decide whether
   // a lone bare word is a known variable, so it has to be the same engine that
   // evaluates the document, not a second one.
