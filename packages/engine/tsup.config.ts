@@ -22,23 +22,6 @@ export default defineConfig({
 		testing: "src/testing/index.ts",
 	},
 	format: ["esm", "cjs"],
-	/*
-	 * `semver` is bundled rather than installed alongside.
-	 *
-	 * Three functions are used from it, in one file, and none of them reach the
-	 * public type surface: it appears in the shipped declarations only inside
-	 * doc comments. That makes it an implementation detail, and an
-	 * implementation detail has no business in a consumer's lockfile.
-	 *
-	 * Bundling is also less code, not more. Installed, a consumer gets the whole
-	 * package. Bundled, `treeshake` below keeps only what `satisfies`,
-	 * `validRange` and `coerce` actually reach, which measures a few kilobytes.
-	 *
-	 * `@tanstack/query-core` is deliberately NOT here. Its types are part of what
-	 * this package ships, so inlining it would leave sixteen declaration files
-	 * pointing at a package the consumer no longer has.
-	 */
-	noExternal: ["semver"],
 	dts: true,
 	// Minified, but with source maps kept on. The shipped ESM/CJS otherwise
 	// parses at full identifier length and whitespace, which a consumer without
