@@ -40,6 +40,23 @@ names.
 :sum + 8 // 50
 ```
 
+## A mid-line `#word` is a category tag
+
+A `#` followed by a letter, in the middle of a line, is read as a
+[category tag](/syntax/line-references/#category-tags): `40 #grocery` tags that
+line and still calculates to `40`. The boundaries keep it out of ordinary prose
+and out of the other things `#` already means:
+
+- A `#` at the very start of a line is a **heading**, not a tag, so a note's
+  `#grocery list` title is left alone.
+- A `#` followed by a space is a heading or comment as before: `5 # a note`.
+- An all-hex run like `#c0ffee` is a [colour](/syntax/colours/), and a tag name
+  must start with a letter, so `#12a` is a colour too, not a tag.
+
+The words `total`, `sum`, `count` and `average` in `total of #grocery` are, as
+above, recognised only as part of that whole phrase, so a variable named `total`
+and the prose "the total of the day" keep working.
+
 ## Labels are preserved
 
 A line starting with a label keeps the label and evaluates the rest.

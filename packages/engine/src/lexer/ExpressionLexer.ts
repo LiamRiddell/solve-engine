@@ -2090,6 +2090,29 @@ export class ExpressionLexer {
         this.pos = hexEnd;
         return new LexerToken('HEX_COLOUR', tokenTypeId('HEX_COLOUR'), text, text, start, 0, this.line, startCol);
       }
+
+      // A bounded `#tag` annotation: `#` then a letter then a run of
+      // `[A-Za-z0-9_-]`, consuming only the tag, not the rest of the line. So
+      // `1200 #housing // note` keeps the `// note` comment, and a mid-line tag
+      // no longer swallows the line. `# ` (space) and `#123` (leading digit)
+      // still fall through to a comment; a line-start `#` is a heading
+      // (classified elsewhere); a `#hex` colour is caught above.
+      const first = input.charCodeAt(start + 1);
+      const isLetter = (first >= 65 && first <= 90) || (first >= 97 && first <= 122);
+      if (isLetter) {
+        let tagEnd = start + 2;
+        while (tagEnd < len) {
+          const c = input.charCodeAt(tagEnd);
+          const isTagChar = (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95 || c === 45;
+          if (!isTagChar) break;
+          tagEnd++;
+        }
+        // Store the name without the `#`, matching how LINE_REF keeps the bare
+        // number.
+        const name = input.slice(start + 1, tagEnd);
+        this.pos = tagEnd;
+        return new LexerToken('TAG', tokenTypeId('TAG'), name, name, start, 0, this.line, startCol);
+      }
     }
 
     let pos = this.pos;
