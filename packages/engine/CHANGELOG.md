@@ -31,7 +31,7 @@
   
   The trie now skips a `TAG` token: a typed `#tag` never starts or completes a phrase, so a category can be named after a word wherever that word appears in the grammar.
   
-  The boundary: aggregating a tag whose name is a package keyword (`total of #assuming`) is a separate, deeper collision, tracked as a follow-up rather than fixed here.
+  The boundary: aggregating a tag whose name is a package keyword (`total of #assuming`) is a separate, deeper collision through a different mechanism, fixed alongside this one in the same release (see the patch change below).
   
   ## Verification
   
