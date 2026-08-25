@@ -1,5 +1,5 @@
 import type React from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Plate, PlateContent, usePlateEditor } from "platejs/react";
 import { createEngine } from "solve-engine";
 import { formatValue, formatMatrixAligned } from "solve-engine/format";
@@ -347,6 +347,38 @@ export default function SolveNotepad({
     [],
   );
 
+  // The one place the strict one-row-per-line layout has to give. A matrix
+  // answer is a stacked grid taller than a row (see notepad.css), and the two
+  // columns are independent flows kept in step only by every row being the same
+  // height on both sides. Left to itself a tall matrix answer grows only the
+  // answer column, so every answer below it slides down out of step with the
+  // line that produced it.
+  //
+  // So after each evaluation, give each editor line the height of its own
+  // answer whenever that answer outgrew a row. The heights are read from the
+  // answers, which re-render on every result change, which is exactly why the
+  // answers live outside the editor in the first place: driving this from a
+  // custom Slate element would miss the case where only an upstream variable
+  // changed and a matrix's shape with it, because Slate would not re-render the
+  // unchanged line. A layout effect writes the height before the browser
+  // paints, so a row never flashes at the wrong size.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const lineEls = root.querySelectorAll<HTMLElement>(".notepad__content > *");
+    const answerEls = root.querySelectorAll<HTMLElement>(".notepad__answer");
+    for (let i = 0; i < lineEls.length; i++) {
+      const answer = answers[i];
+      const answerEl = answerEls[i];
+      // A matrix answer is the one that can outgrow a row; match the line to it.
+      // Everything else reverts to the CSS row height rather than keeping a
+      // stale inline one from when the line last held a matrix.
+      lineEls[i].style.height =
+        answer?.matrix && answerEl ? `${answerEl.offsetHeight}px` : "";
+    }
+  }, [answers]);
+
   const handleChange = useCallback(
     ({ value }: { value: Array<{ children?: Array<{ text?: string }> }> }) => {
       const lines = value.map((block) =>
@@ -361,7 +393,7 @@ export default function SolveNotepad({
   const rows = Math.max(answers.length, minRows);
 
   return (
-    <div className={showErrors ? "notepad notepad--errors" : "notepad"}>
+    <div ref={rootRef} className={showErrors ? "notepad notepad--errors" : "notepad"}>
       <div className="notepad__lines">
         <Plate
           editor={editor}

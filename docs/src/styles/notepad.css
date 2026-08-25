@@ -9,6 +9,12 @@
  *   2. lines never wrap (`white-space: pre`); a long line scrolls sideways
  * Together those guarantee row N of the editor sits on row N of the answers
  * without measuring anything.
+ *
+ * The one exception is a matrix answer, which is a grid taller than a row. It
+ * does not break the rule so much as widen it: the component measures the
+ * matrix and grows the editor line opposite it to the same height, so that row
+ * is taller on BOTH sides and rule 1 still holds for every row below it. That
+ * is the only place a height is measured rather than fixed.
  */
 
 .notepad-host {
@@ -99,6 +105,11 @@
 }
 
 .notepad__answer {
+  /* Zeroed for the same reason the line blocks are (`.notepad__content > *`):
+     an answer rendered inside Starlight's markdown content would otherwise pick
+     up the sibling top-margin Starlight gives flow content, and since the lines
+     are already immune, only the answers would drift, by that margin per row. */
+  margin: 0;
   height: var(--np-row);
   line-height: var(--np-row);
   padding-inline: 1rem;
@@ -125,17 +136,21 @@
 }
 
 /* A matrix answer is a grid, not a single line, so it is the one answer allowed
-   to grow past a row and break the strict one-line-per-answer alignment. It sits
-   flush right like every other answer, and the monospace `pre` keeps the columns
-   that `formatMatrixAligned` padded lined up. */
+   to grow past a row. It does not break alignment: the component measures this
+   answer and grows the editor line opposite it to the same height (see
+   SolveNotepad's layout effect), so the row is simply taller on both sides and
+   every row below it stays in step. The grid sits at the top of that taller row,
+   flush against the expression that produced it, flush right like every other
+   answer, and the monospace `pre` keeps the columns `formatMatrixAligned` padded
+   lined up. */
 .notepad__answer[data-matrix="true"] {
   height: auto;
   white-space: normal;
   overflow: visible;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-end;
-  padding-block: 0.2rem;
+  padding-block: 0;
 }
 
 .notepad__matrix {
