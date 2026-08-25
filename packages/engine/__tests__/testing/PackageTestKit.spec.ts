@@ -34,7 +34,7 @@ import { OSRS_PACKAGE } from "@solve-js-examples/osrs/index";
 /** The smallest useful subject: a package that teaches the lexer one unit word. */
 const gpPackage: IEnginePackage = {
 	name: "gp-currency",
-	engineVersion: "^1.0.0",
+	engineVersion: "^2.0.0",
 	lexerVocabulary: { units: ["gp"] },
 };
 

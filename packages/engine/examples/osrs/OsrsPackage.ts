@@ -10,10 +10,12 @@ export const OSRS_PACKAGE: IEnginePackage = {
   name: OSRS_PACKAGE_NAME,
 
   // Demonstrates IEnginePackage.engineVersion for third-party package
-  // authors reading this example — not because OSRS itself needs a real
-  // floor. See PackageRegistry.ts's engineVersion doc comment and
+  // authors reading this example. It tracks the engine's current major:
+  // the example uses 2.0's name-keyed pluginFunctions and emitPluginCall,
+  // so it genuinely needs 2.x, and a future major is expected to revisit
+  // this line. See PackageRegistry.ts's engineVersion doc comment and
   // ARCHITECTURE.md §5.3.
-  engineVersion: "^1.0.0",
+  engineVersion: "^2.0.0",
 
   lexerVocabulary: osrsLexerVocabulary,
 
