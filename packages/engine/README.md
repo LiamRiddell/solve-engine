@@ -44,10 +44,10 @@ npm install solve-engine
 ## Quick start
 
 ```typescript
-import { ExpressionEngine } from "solve-engine";
+import { createEngine } from "solve-engine";
 
-const engine = new ExpressionEngine("en");
-const [value] = engine.evaluateExpression("2 + 2 * 10");
+const engine = createEngine();
+const value = engine.evaluateExpression("2 + 2 * 10");
 
 console.log(value.toNumber()); // 22
 ```
@@ -67,7 +67,7 @@ reachable from the module-level data query service, so a parsed engine stays
 retained until `clear()` releases it.
 
 ```typescript
-const engine = new ExpressionEngine();
+const engine = createEngine();
 engine.parseDocument(text);
 // ... read results ...
 engine.clear();
@@ -93,7 +93,7 @@ call to remember.
 ```typescript
 import { formatValue } from "solve-engine/format";
 
-const [value] = engine.evaluateExpression("10 USD to GBP");
+const value = engine.evaluateExpression("10 USD to GBP");
 console.log(formatValue(value)); // uses DEFAULT_FORMATTING_SETTINGS if no settings passed
 ```
 
@@ -104,8 +104,8 @@ they are:
 
 | Subpath | Purpose |
 |---|---|
-| `solve-engine` | Start here, `ExpressionEngine`, `PackageRegistry`/`packageRegistry`, `IEnginePackage`. |
-| `solve-engine/engine` | `ExpressionEngine` and its supporting types (`LineEvaluation`, `EvalResults`, etc.) directly, without the package-registration wrapper. |
+| `solve-engine` | Start here, `ExpressionEngine`, `createEngine`, `IEnginePackage`. |
+| `solve-engine/engine` | `ExpressionEngine` and its supporting types (`Explanation`, `EngineSnapshot`, etc.) directly, without the package-registration wrapper. |
 | `solve-engine/vm` | The bytecode VM: `Value`/`ValueType`, opcode dispatch, `allocatePluginFunctionIndex`. |
 | `solve-engine/format` | Turning a `Value` into a display string (numbers, dates, units, vectors, ...). |
 | `solve-engine/language` | Editor-agnostic language service: token categories, completions, highlighting. |
@@ -122,7 +122,6 @@ depend on):
 | `solve-engine/lexer` | Tokenizer, `LexerVocabulary` for registering custom keywords/operators/units. |
 | `solve-engine/parser` | Pratt parser, `BytecodeBuilder`, `OpCode`. |
 | `solve-engine/normalizer` | Post-lexer token transforms (phrase fusion, implicit multiply). |
-| `solve-engine/variables` | Variable resolution (`IVariableSource`). |
 | `solve-engine/resolvers` | Async resolvers (`IAsyncResolver`) for data that loads asynchronously. |
 | `solve-engine/errors` | `EngineError` and the error factory. |
 | `solve-engine/utilities` | Small stateless helpers (e.g. `stripQuotes`). |
@@ -136,8 +135,8 @@ minor versions without notice.
 ## Authoring a package
 
 A **package** (`IEnginePackage`) is a plain data descriptor bundling everything needed to
-extend the engine with a new domain: custom tokens, parselets, VM opcode handlers, variable
-sources, and optional async resolvers. See
+extend the engine with a new domain: custom tokens, parselets, VM opcode handlers, and
+optional async resolvers. See
 [`solve-engine/api`'s `IEnginePackage`](https://github.com/LiamRiddell/solve-engine/blob/main/packages/engine/src/api/PackageRegistry.ts) for the full field list
 with inline documentation and examples for each field.
 
@@ -211,16 +210,12 @@ published package, see `files` in `package.json`, only `dist/` ships):
 
 ## Known limitations
 
-**Cross-instance isolation is partial.** Plugin functions, the opcode registry and
-variable sources are now owned per `ExpressionEngine`, so two engines with different
-package sets no longer interfere across those. The lexer and the currency exchange rates
+**Cross-instance isolation is partial.** Plugin functions and the opcode registry are
+now owned per `ExpressionEngine`, so two engines with different package sets no longer
+interfere across those. The lexer and the currency exchange rates
 are still module-level singletons, so full isolation between two engines in one process
 cannot yet be assumed. Tracked as "L1, EngineContext"; three of its five migrations have
 landed and the remaining two are a prerequisite for 1.0.0 proper.
-
-**`variableSources` does nothing.** A package can declare them, the engine registers and
-unregisters them, and no evaluation path ever consults them. Treat the extension point as
-absent until that changes.
 
 **Async results need a host hook.** `AsyncResolutionBatcher.onLineResult` is the only
 mechanism that patches a resolved async value back into the document model, and it is not

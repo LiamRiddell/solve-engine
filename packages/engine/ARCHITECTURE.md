@@ -46,9 +46,10 @@ Format       — formatValue()                        → display string
 `ExpressionEngine` (`src/engine/ExpressionEngine.ts`) is the orchestrator that owns one
 instance of each pipeline stage's state (lexer, parser registry, VM, normalizer) plus the
 supporting machinery described in sections 4-6 below (bytecode cache, DAG, async
-resolution). Constructing `new ExpressionEngine(locale, diagnosticMode, config, ...,
-packages)` builds this whole pipeline and registers the given packages (defaulting to
-`BUILTIN_PACKAGES`) into it.
+resolution). Constructing `new ExpressionEngine({ locale, packages, config, diagnostics })`
+builds this whole pipeline and registers exactly the `packages` it is given — none
+when omitted, so use `createEngine()` for the full built-in set. `config` is an
+`EngineConfigOverride`, merged per section over `DEFAULT_CONFIG`.
 
 Two entry points sit on top of "evaluate one expression":
 - `evaluateExpression(text)` / `evaluateLine(lineNumber, text)` — single-expression,
@@ -66,14 +67,13 @@ tier table and what "advanced-public" vs. "internal" means for semver purposes. 
 
 | Directory | Owns |
 |---|---|
-| `api/` | `PackageRegistry`/`IEnginePackage` — the plugin-registration facade. |
+| `api/` | `IEnginePackage`, `createEngine`, `defineFunction` — the plugin-registration facade. |
 | `engine/` | `ExpressionEngine` (orchestrator), `DocumentModel`, `ThreeTierEvaluator`, `AsyncResolutionBatcher`, `ExpressionEngineSafety` (validation). |
 | `vm/` | `Value`/`ValueType`, `OpRegistry`, `VM.ts` (dispatch loop), `VMBuiltins` (plugin-function registry), `MatrixOps`, `SymbolicOps` (the `Value` ↔ `SymbolicNode` bridge), `DependencyGraph`, `GlobalVariableStore`, `ScopeManager`. |
 | `symbolic/` | The computer-algebra core: `Rational` (exact bigint arithmetic), `SymbolicNode` (the expression tree), `Simplify`, `SymbolicFormat`. Pure mathematics, importing nothing from `lexer/`, `parser/`, `vm/` or `engine/`. It sits below `vm/` rather than inside `packages/` because `vm/Value.ts` embeds a `SymbolicNode` in its own value union and in `MatrixEntry`, so the tree is core VM data; a package may import from `parser/`, never the reverse. |
 | `lexer/` | `ExpressionLexer` (scanner), `Lexer` (streaming wrapper), `Token`/`TokenTypes`. |
 | `parser/` | `PrecedenceParser`, `ParseletRegistry`, `BytecodeBuilder`, `OpCode`, `BindingPower`, `PhrasePattern` (declarative phrase-grammar builder). |
 | `normalizer/` | `TokenNormalizer`, `PhraseTrie` (multi-word phrase fusion), implicit-multiply rule. |
-| `variables/` | `VariableResolver`, `IVariableSource`. |
 | `resolvers/` | `ResolverRegistry`, `IAsyncResolver` contract, `createQueryResolver` (generic single-query async resolver factory). |
 | `format/` | `formatValue()` and per-type formatters. |
 | `language/` | Editor-agnostic language service: token categories, completions, highlighting. |
@@ -135,9 +135,9 @@ same throw-on-exhaustion behavior) and a handler registered via
 ## 5. The package (extension) system
 
 A **package** is a plain data descriptor, `IEnginePackage` (`api/PackageRegistry.ts`):
-lexer vocabulary, prefix/infix parselets, plugin functions, variable sources, async
-resolvers, phrases, normalizer rules, token categories, completion items — every field is
-optional, so a package can be as small as one parselet (see `examples/basic`).
+lexer vocabulary, prefix/infix parselets, plugin functions, async resolvers, phrases,
+normalizer rules, token categories, completion items — every field is optional, so a
+package can be as small as one parselet (see `examples/basic`).
 
 `ExpressionEngine.registerPackage(pkg)` / `unregisterPackage(name)` process every field
 declaratively and track exactly what was contributed to *shared* registries (per-engine
@@ -279,8 +279,8 @@ check into §5.2's "always advisory" contract would mislead a future reader who'
 
 `checkEngineVersionCompatibility(pkg, engineVersion?)` is the pure predicate (mirrors §5.2's
 "return a result, caller decides" shape); `assertEngineVersionCompatible(pkg, engineVersion?)`
-is the thin throwing wrapper both `ExpressionEngine.registerPackage()` and the `PackageRegistry`
-singleton call as the literal first thing they do — before §5.2's checker, and before the
+is the thin throwing wrapper `ExpressionEngine.registerPackage()` calls as the literal
+first thing it does — before §5.2's checker, and before the
 duplicate-name/unregister guard, so re-registering an incompatible "upgrade" for an
 already-working package never tears down the working original first. `engineVersion` is
 optional on `IEnginePackage`; omitting it means "no declared constraint," so every package
@@ -375,15 +375,13 @@ functionCalls×5 + nestingDepth×10` bound (`maxComplexity`) reject pathological
 before it reaches the parser; the VM itself separately bounds `maxStackDepth` and
 `maxInstructions` to stop runaway/malformed bytecode.
 
-**Known footgun, not yet fixed** (tracked as a follow-up): `ExpressionEngine`'s
-constructor merges a caller's config with `{ ...DEFAULT_CONFIG, ...config }` — a
-**shallow, top-level-only merge**. Passing a partial section (e.g. `{ performance: {
-defaultCacheSize: 3 } }`) silently drops every *other* field of that section rather than
-merging it with defaults, unlike `ConfigManager.mergeConfig()` (same file) which does
-merge per-section. Every test that overrides a config section already works around this
-by supplying the section in full. This should be fixed to match `ConfigManager`'s
-behavior, with a full-suite re-run afterward (some tests may be incidentally relying on
-today's drop-the-rest-of-the-section behavior).
+**Config merges per section** (fixed 2026-07-31, see §12 item 5): `ExpressionEngine`'s
+constructor merges a caller's config with `mergeEngineConfig(DEFAULT_CONFIG, config)` — a
+**per-section deep merge**. Passing a partial section (e.g. `{ performance: {
+defaultCacheSize: 3 } }`) overrides only that field and keeps every other field of the
+section at its default, the same way `ConfigManager.mergeConfig()` (same file) does. A
+caller's `config` is an `EngineConfigOverride`, a per-section deep partial, so it never
+needs a whole section restated.
 
 ## 9. Caching layers
 
@@ -417,9 +415,9 @@ one leaves the other working, and registering on an engine does not write into t
 default context.
 
 The `shared*` exports remain as deprecated aliases bound to a default context so
-unmigrated callers keep working. `PackageRegistry`, the global singleton registration
-path, is deprecated outright: it writes into state no engine reads, so a package
-registered through it is invisible to every engine.
+unmigrated callers keep working. The global singleton registration path
+(`PackageRegistry`/`packageRegistry`) was removed in 2.0; register on an engine via
+`engine.registerPackage()` or `createEngine({ extraPackages })` instead.
 
 Two singletons were deliberately left shared, which is a departure from the original spec
 and is recorded in the code at each site.
@@ -583,7 +581,7 @@ resiliency fix — see "Done since the last pass" below for both.
 7. ~~**`registerPackage()` has no duplicate-name guard.**~~ **FIXED 2026-07-30.** Calling
    it twice with the same `pkg.name` used to silently overwrite the tracked contribution
    record, permanently orphaning the first registration's shared-registry entries
-   (plugin-function indices, variable sources, resolver namespaces, token categories) —
+   (plugin-function indices, resolver namespaces, token categories) —
    unreachable/unreversible for the process's lifetime, since these are the same module
    globals as L1. Fixed by reusing `ResolverRegistry.register()`'s existing "destroy old,
    warn, replace" pattern: `registerPackage()` now calls `unregisterPackage(pkg.name)`

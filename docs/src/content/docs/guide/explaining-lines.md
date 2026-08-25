@@ -16,7 +16,7 @@ the number alone does not tell you which. `explainLine` returns the derivation,
 so a host can put it behind a hover or a disclosure next to the result.
 
 ```ts
-const engine = createEngine("en");
+const engine = createEngine({ locale: "en" });
 const explanation = engine.explainLine("(20% off 80) + 20%");
 
 for (const step of explanation.steps) {

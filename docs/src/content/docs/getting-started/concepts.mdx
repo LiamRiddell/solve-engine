@@ -30,8 +30,9 @@ Every piece of syntax comes from a package, including arithmetic. A package can
 contribute vocabulary to the lexer, parsing rules, functions the virtual machine
 can call, normalisation rules, and conversion targets.
 
-Nineteen packages are registered by default. Two more, stocks and knowledge, are
-opt-in because they need you to supply how to fetch the data.
+`createEngine()` registers twenty-five packages; two more, stocks and knowledge,
+are opt-in because they need you to supply how to fetch the data. A bare
+`new ExpressionEngine()` registers none, so you pass exactly the packages you want.
 
 ## The pipeline
 

@@ -11,14 +11,14 @@ evaluates a document, which is what you want when lines refer to each other.
 ```ts
 import { createEngine } from "solve-engine";
 
-const engine = createEngine("en");
+const engine = createEngine({ locale: "en" });
 const result = engine.evaluateExpression("50% of 200");
 
 result.toNumber(); // 100
 ```
 
-`evaluateExpression` returns an array because one line can contain several
-inline results. For a plain expression you want the first entry.
+`evaluateExpression` returns a single `Value`. Call `toNumber()` on it, or read
+its `type` and `unit`, directly.
 
 ## Formatting the result
 
@@ -42,7 +42,7 @@ Variables, line references and aggregates only mean something in the context of
 a document, so those need `evaluateLine` with real line numbers.
 
 ```ts
-const engine = createEngine("en");
+const engine = createEngine({ locale: "en" });
 
 engine.evaluateLine(1, ":subtotal = 100");
 engine.evaluateLine(2, ":tax = 20% of :subtotal");

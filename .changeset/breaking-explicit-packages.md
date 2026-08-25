@@ -10,7 +10,7 @@ Parsed JavaScript, a consumer importing the engine and constructing it:
 
 | | parsed |
 | --- | --- |
-| before | 475 KB (all 26 packages, always) |
+| before | 475 KB (all 25 packages, always) |
 | now, arithmetic only | 352 KB |
 
 **This is a breaking change.** `new ExpressionEngine()` with no `packages` argument now registers nothing, so `2 + 2` on a bare engine is an undefined-token parse error rather than `4`. Two ways to adopt it:

@@ -6,25 +6,30 @@ description: Creating an engine, configuring it, and reading results.
 ```ts
 import { createEngine } from "solve-engine";
 
-const engine = createEngine("en");
+const engine = createEngine({ locale: "en" });
 ```
 
-The first argument is the locale, which decides decimal and thousands
-separators and the ambiguous date order.
+The `locale` option decides decimal and thousands separators and the ambiguous
+date order.
 
 ## Configuration
 
-The second and third arguments enable diagnostics and override configuration.
-Both are optional.
+The `diagnostics` and `config` options enable diagnostics and override
+configuration. Both are optional.
 
 ```ts
-const engine = createEngine("en", false, {
-  validation: {
-    maxExpressionLength: 1000,
-    maxComplexity: 500,
+const engine = createEngine({
+  config: {
+    validation: {
+      maxExpressionLength: 1000,
+      maxComplexity: 500,
+    },
   },
 });
 ```
+
+`config` is an `EngineConfigOverride`, merged per section over the defaults: name
+only the fields you change and every other field keeps its default.
 
 Safety limits exist because the engine is designed to run on untrusted input as
 someone types. They bound expression length, parse complexity, instruction
@@ -63,16 +68,17 @@ host can persist a session, warm-start a process, or move a document between
 contexts without re-evaluating the whole thing from scratch.
 
 ```ts
-import { createEngine } from "solve-engine";
+import { createEngine, ExpressionEngine } from "solve-engine";
+import { BUILTIN_PACKAGES } from "solve-engine/packages";
 
-const engine = createEngine("en");
+const engine = createEngine({ locale: "en" });
 engine.parseDocument(":price = 100\ndouble(x) = x * 2\n:total = double(price)");
 
 const state = engine.toJSON(); // a plain, JSON-safe object
 const json = JSON.stringify(state); // store it anywhere
 
 // Later, in another process:
-const restored = ExpressionEngine.fromJSON(JSON.parse(json));
+const restored = ExpressionEngine.fromJSON(JSON.parse(json), { packages: BUILTIN_PACKAGES });
 restored.evaluateExpression("double(total)"); // 400, with no re-evaluation
 ```
 
@@ -83,17 +89,17 @@ carried as ordinary arrays.
 
 ### Passing the same packages back
 
-`fromJSON` rebuilds the engine with the snapshot's own locale and, by default,
-the built-in packages. If the engine that produced the snapshot was constructed
-with a custom `packages` set, pass the **same** set when restoring: a snapshot
-carries compiled bytecode whose plugin indices and operators only line up
-against the packages that were present when it was written.
+`fromJSON` rebuilds the engine with the snapshot's own locale but, by default,
+no packages, exactly as the constructor does. Always pass the **same** `packages`
+set the snapshot was taken with (`BUILTIN_PACKAGES` for a full engine): a snapshot
+carries compiled bytecode whose plugin indices and operators only line up against
+the packages that were present when it was written.
 
 ```ts
 const restored = ExpressionEngine.fromJSON(state, { packages: myPackages });
 ```
 
-`fromJSON` also accepts `config`, `diagnosticMode`, and a `locale` override, all
+`fromJSON` also accepts `config`, `diagnostics`, and a `locale` override, all
 matching the constructor.
 
 ### What is and is not carried

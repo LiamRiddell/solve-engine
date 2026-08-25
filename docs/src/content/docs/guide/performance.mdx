@@ -113,13 +113,13 @@ minified with `sideEffects: false`, and, since it registers only the packages
 you give it, a bundler drops the built-ins you never import.
 
 That last part is the lever. An engine constructed with the full set carries all
-26 built-in packages; one constructed with a handful carries only those. The
+25 built-in packages; one constructed with a handful carries only those. The
 difference is real parsed JavaScript, not just transfer size:
 
 | Import | Parsed (minified) |
 | --- | --- |
 | `createEngine()`, every built-in | ~475 KB |
-| `new ExpressionEngine(…, [ARITHMETIC_PACKAGE])`, arithmetic only | ~352 KB |
+| `new ExpressionEngine({ packages: [ARITHMETIC_PACKAGE] })`, arithmetic only | ~352 KB |
 
 The tree-shaking is what makes the second row possible: because nothing in the
 engine's own module graph references a package you did not import, the bundler is

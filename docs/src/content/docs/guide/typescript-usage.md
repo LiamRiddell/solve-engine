@@ -7,11 +7,10 @@ description: Evaluating expressions and documents in code, and reading the value
 engine. This page is about what you do with it: evaluating a line or a whole
 document, and reading the values that come back.
 
-## A result is an array of values
+## A result is a value
 
-`evaluateExpression` returns an **array** of [`Value`](/api/vm/classes/value/)
-objects, not a single number. One expression usually produces one value, so destructuring the
-first element is the common case.
+`evaluateExpression` returns a single [`Value`](/api/vm/classes/value/)
+object, not a plain number. Read its type and payload directly.
 
 ```ts
 const value = engine.evaluateExpression("10% of 200 + 3 km in m");
@@ -20,10 +19,9 @@ value.toNumber(); // 3020
 value.unit;       // "m"
 ```
 
-An array rather than a scalar because a line can hold more than one result, and
-because a value carries a type and a unit alongside its number. Reaching for
-`toNumber()` too early throws away the unit and the type, which is usually the
-information you wanted.
+A `Value` rather than a plain number because it carries a type and a unit
+alongside its number. Reaching for `toNumber()` too early throws away the unit
+and the type, which is usually the information you wanted.
 
 ## Values are typed
 

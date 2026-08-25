@@ -12,7 +12,7 @@ Stable. Changes follow semantic versioning.
 
 | Entry | Contains |
 | --- | --- |
-| `solve-engine` | `ExpressionEngine`, the package registry, common types |
+| `solve-engine` | `ExpressionEngine`, `createEngine`, `IEnginePackage`, common types |
 | `solve-engine/engine` | Engine internals for host integration |
 | `solve-engine/vm` | `Value`, `ValueType`, value construction |
 | `solve-engine/format` | `formatValue` and formatting settings |
@@ -32,7 +32,6 @@ package or building tooling.
 | `solve-engine/lexer` | Tokeniser and vocabulary types |
 | `solve-engine/parser` | Parselets, binding powers, bytecode builder |
 | `solve-engine/normalizer` | Phrase fusion and normalisation rules |
-| `solve-engine/variables` | Variable resolution |
 | `solve-engine/resolvers` | Async resolver contracts |
 | `solve-engine/errors` | Structured errors and the result type |
 | `solve-engine/utilities` | Shared helpers |

@@ -24,7 +24,7 @@ TypeScript is optional. If you use it, everything is typed and no separate
 ```ts
 import { createEngine } from "solve-engine";
 
-const engine = createEngine("en");
+const engine = createEngine({ locale: "en" });
 const result = engine.evaluateExpression("2 + 2 * 10");
 
 console.log(result.toNumber()); // 22
@@ -39,7 +39,7 @@ subpath entries, so a bundler only pulls in the part you actually use.
 
 | Import | Contains |
 | --- | --- |
-| `solve-engine` | `ExpressionEngine`, the package registry, common types |
+| `solve-engine` | `ExpressionEngine`, `createEngine`, `IEnginePackage`, common types |
 | `solve-engine/vm` | `Value`, `ValueType`, and value construction helpers |
 | `solve-engine/format` | `formatValue` and formatting settings |
 | `solve-engine/language` | Editor support: completions, token categories, highlighting |
