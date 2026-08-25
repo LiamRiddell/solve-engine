@@ -274,7 +274,10 @@ export default function SolveNotepad({
   // language service would leave that pass with nothing to classify, and
   // Slate caches decorations, so the whole notepad would render unhighlighted
   // and stay that way.
-  const [engine] = useState(() => createEngine("en"));
+  // createEngine registers every built-in package; the notepad renders any
+  // solve expression, so it needs the full vocabulary (the bare constructor
+  // now registers none, so an engine built with it would show no results).
+  const [engine] = useState(() => createEngine());
   // The language service reads the engine's dependency graph to decide whether
   // a lone bare word is a known variable, so it has to be the same engine that
   // evaluates the document, not a second one.
