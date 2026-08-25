@@ -2099,7 +2099,20 @@ export class ExpressionLexer {
       // (classified elsewhere); a `#hex` colour is caught above.
       const first = input.charCodeAt(start + 1);
       const isLetter = (first >= 65 && first <= 90) || (first >= 97 && first <= 122);
-      if (isLetter) {
+      // #198: a `#` glued to the end of a word or number is not a tag. The
+      // category-tag scanner (packages/tags/TagScanner.ts) only counts a tag at
+      // a non-word boundary (`(?:^|[^0-9A-Za-z_])#...`), so `100#food`, `$100#food`
+      // and `a#b` are excluded there; the lexer must agree, or a line renders
+      // tagged but is silently left out of the totals. A line-first `#` never
+      // reaches here (the classifier makes it a heading), so a mid-line tag only
+      // needs its preceding character to be a non-word char.
+      const prevCode = start > this.lineStartPos ? input.charCodeAt(start - 1) : -1;
+      const prevIsWordChar =
+        (prevCode >= 48 && prevCode <= 57) ||
+        (prevCode >= 65 && prevCode <= 90) ||
+        (prevCode >= 97 && prevCode <= 122) ||
+        prevCode === 95;
+      if (isLetter && !prevIsWordChar) {
         let tagEnd = start + 2;
         while (tagEnd < len) {
           const c = input.charCodeAt(tagEnd);

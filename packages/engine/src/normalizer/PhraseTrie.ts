@@ -162,6 +162,14 @@ export class PhraseTrie {
 		// ── Bounds guard ──
 		if (pos >= tokens.length) return null;
 
+		// ── A TAG never takes part in phrase fusion (#197) ──
+		// A `#tag` is a typed token, not a bare word, so it must not start or
+		// complete a phrase. The trie matches on written value alone, so without
+		// this guard a tag whose name equals a phrase or a phrase-continuation
+		// word (`1200 #assuming`, `total of #column`) is fused into that grammar
+		// before the category-tag rules ever run, and the tag is lost.
+		if (tokens[pos].type === "TAG") return null;
+
 		// ── O(1) quick-reject: first word not a phrase starter ──
 		const firstWord = tokens[pos].value.toLowerCase();
 		if (!this.startWords.has(firstWord)) return null;
@@ -185,6 +193,7 @@ export class PhraseTrie {
 
 		// Walk deeper for multi-word phrases
 		for (let i = pos + 1; i < tokens.length && node?.children; i++) {
+			if (tokens[i].type === "TAG") break; // a tag can't continue a phrase (#197)
 			const word = tokens[i].value.toLowerCase();
 			node = node.children.get(word);
 			if (!node) break; // dead end
