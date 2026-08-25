@@ -162,13 +162,21 @@ export class PhraseTrie {
 		// ── Bounds guard ──
 		if (pos >= tokens.length) return null;
 
-		// ── A TAG never takes part in phrase fusion (#197) ──
+		// ── A tag token never takes part in phrase fusion (#197, #213) ──
 		// A `#tag` is a typed token, not a bare word, so it must not start or
 		// complete a phrase. The trie matches on written value alone, so without
 		// this guard a tag whose name equals a phrase or a phrase-continuation
 		// word (`1200 #assuming`, `total of #column`) is fused into that grammar
 		// before the category-tag rules ever run, and the tag is lost.
-		if (tokens[pos].type === "TAG") return null;
+		//
+		// The guard also covers the fused aggregate tokens the tags package emits
+		// (`TAG_SUM` / `TAG_COUNT` / `TAG_AVERAGE`), whose value is the tag NAME:
+		// otherwise `total of #assuming` fuses correctly to TAG_SUM("assuming"),
+		// then the trie re-reads that value on the next pass and turns it back
+		// into the finance ASSUMING keyword (#213). The whole `TAG` / `TAG_*`
+		// namespace belongs to the tags package.
+		const startType = tokens[pos].type;
+		if (startType === "TAG" || startType.startsWith("TAG_")) return null;
 
 		// ── O(1) quick-reject: first word not a phrase starter ──
 		const firstWord = tokens[pos].value.toLowerCase();
@@ -193,7 +201,8 @@ export class PhraseTrie {
 
 		// Walk deeper for multi-word phrases
 		for (let i = pos + 1; i < tokens.length && node?.children; i++) {
-			if (tokens[i].type === "TAG") break; // a tag can't continue a phrase (#197)
+			const contType = tokens[i].type;
+			if (contType === "TAG" || contType.startsWith("TAG_")) break; // a tag token can't continue a phrase (#197, #213)
 			const word = tokens[i].value.toLowerCase();
 			node = node.children.get(word);
 			if (!node) break; // dead end

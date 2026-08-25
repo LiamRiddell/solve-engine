@@ -41,8 +41,8 @@ describe("Issue #197: a tag named after a phrase-word is not swallowed", () => {
   test("a tag whose name is a package keyword does not error on a data line", () => {
     // `#assuming` (a finance lexer keyword) fused into the ASSUMING token before
     // the fix, leaving an "unexpected token" error on an ordinary tagged line.
-    // Aggregating a keyword-named tag (`total of #assuming`) is a separate,
-    // pre-existing bug via a different mechanism, tracked as #213.
+    // Aggregating a keyword-named tag (`total of #assuming`) was a separate bug
+    // via a different mechanism, fixed alongside this one (see Issue213 spec).
     expect(resultAt(["1200 #assuming"], 1)).toBe("= 1,200");
     expect(resultAt(["500 #assuming"], 1)).toBe("= 500");
   });
