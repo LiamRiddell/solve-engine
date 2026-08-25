@@ -60,6 +60,6 @@ The `IEnginePackage` descriptor type is unchanged apart from the dropped `variab
 
 ## Verification
 
-- The whole engine suite runs against the new API: 7,783 tests in 345 suites, including the options-object construction, the bare-value return (its `Value[]` shape assertions inverted to assert a bare `Value`), the fault guards, and the package-unregistration lifecycle moved off the removed `variableSources` onto `completionItems`.
+- The whole engine suite runs against the new API: 7,787 tests in 342 suites, including the options-object construction, the bare-value return (its `Value[]` shape assertions inverted to assert a bare `Value`), the fault guards, and the package-unregistration lifecycle moved off the removed `variableSources` onto `completionItems`.
 - Every construction and call site across the suite, the tools, the worker runtimes, the package smoke checks and the consumer-e2e probe was migrated; the destructures and `[0]` unwraps were verified type-clean before the runtime run.
 - `npm run verify` (typecheck, `test:ci`, build, smoke, the bundled-consumer contract), plus `lint`, `lint:docs`, `lint:comments` and `lint:size`, all pass. Tree-shaking still holds: importing the engine plus one package bundles well under the full built-in set.
