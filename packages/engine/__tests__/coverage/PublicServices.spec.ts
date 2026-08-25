@@ -22,7 +22,7 @@ import {
 	getActiveQueryClient,
 	setActiveQueryClient,
 } from "@solve-js/services/DataQueryService";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { numberValue, type Value } from "@solve-js/vm/Value";
 import { OpCode } from "@solve-js/parser/OpCode";
 import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
@@ -46,7 +46,11 @@ afterEach(() => {
  * documents, reached the way an integrator would reach it.
  */
 function probePackage(seen: Array<QueryClient | null>): IEnginePackage {
-	const index = allocatePluginFunctionIndex();
+	// The engine files each plugin function under `${pkg.name}:${nameKey}` and
+	// assigns its CALL_PLUGIN index from that qualified name. Resolving the same
+	// index here lets the hand-emitted bytecode below call the very handler the
+	// engine registered under the `probe` key.
+	const index = pluginFunctionIndexFor("query-client-probe:probe");
 
 	const parselet: PrefixParselet = {
 		category: "Probe",
@@ -60,16 +64,13 @@ function probePackage(seen: Array<QueryClient | null>): IEnginePackage {
 	return {
 		name: "query-client-probe",
 		lexerVocabulary: { keywords: { whichclient: "PROBE_CLIENT" } },
-		prefixParselets: [{ tokenType: "PROBE_CLIENT", parselet }],
-		pluginFunctions: [
-			{
-				index,
-				handler: (_args: Value[]): Value => {
-					seen.push(getActiveQueryClient());
-					return numberValue(1);
-				},
+		prefixParselets: { PROBE_CLIENT: parselet },
+		pluginFunctions: {
+			probe: (_args: Value[]): Value => {
+				seen.push(getActiveQueryClient());
+				return numberValue(1);
 			},
-		],
+		},
 	};
 }
 

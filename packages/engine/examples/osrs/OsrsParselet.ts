@@ -3,13 +3,28 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { GAME_ITEM_TYPE } from "./OsrsItemNormalizer";
 import { stripQuotes } from "@solve-js/utilities/Strings";
 
-/** Index in pluginFunctionRegistry for the OSRS resolveGameItem function. */
-export const OSRS_PLUGIN_FN_IDX: number = allocatePluginFunctionIndex();
+/** This package's registered name, used to qualify its plugin-function names. */
+export const OSRS_PACKAGE_NAME = "osrs";
+
+/**
+ * The package-local name of the game-item price plugin function. A parselet
+ * emits a call to it by this name (`builder.emitPluginCall(OSRS_GAME_ITEM_FN, 1)`);
+ * the engine assigns and resolves the numeric CALL_PLUGIN index at registration,
+ * so the parselet never touches a hand-allocated index.
+ */
+export const OSRS_GAME_ITEM_FN = "gameitem";
+
+/**
+ * The qualified name the engine files this package's plugin-function index
+ * under (`${packageName}:${functionName}`). An async resolver that scans
+ * compiled bytecode (see {@link OsrsAsyncResolver}) looks the runtime index up
+ * by this name via `pluginFunctionIndexFor`, rather than owning the index.
+ */
+export const OSRS_GAME_ITEM_QUALIFIED = `${OSRS_PACKAGE_NAME}:${OSRS_GAME_ITEM_FN}`;
 
 /** Prefix parselet for GAME_ITEM tokens. The token parameter IS the consumed GAME_ITEM token. */
 export class GameItemParselet implements PrefixParselet {
@@ -18,9 +33,7 @@ export class GameItemParselet implements PrefixParselet {
   parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(token.value);
-    builder.emitOpcode(OpCode.CALL_PLUGIN);
-    builder.emitIndex(OSRS_PLUGIN_FN_IDX);
-    builder.emitIndex(1); // argCount = 1 (the item name string)
+    builder.emitPluginCall(OSRS_GAME_ITEM_FN, 1); // argCount = 1 (the item name string)
   }
 }
 
@@ -68,9 +81,7 @@ export class OsrsKeywordParselet implements PrefixParselet {
       parser.consume("RPAREN");
       builder.emitOpcode(OpCode.PUSH_STRING);
       builder.emitString(itemName);
-      builder.emitOpcode(OpCode.CALL_PLUGIN);
-      builder.emitIndex(OSRS_PLUGIN_FN_IDX);
-      builder.emitIndex(1);
+      builder.emitPluginCall(OSRS_GAME_ITEM_FN, 1);
       return;
     }
 
@@ -84,9 +95,7 @@ export class OsrsKeywordParselet implements PrefixParselet {
 
       builder.emitOpcode(OpCode.PUSH_STRING);
       builder.emitString(itemName);
-      builder.emitOpcode(OpCode.CALL_PLUGIN);
-      builder.emitIndex(OSRS_PLUGIN_FN_IDX);
-      builder.emitIndex(1);
+      builder.emitPluginCall(OSRS_GAME_ITEM_FN, 1);
       return;
     }
 
@@ -125,8 +134,6 @@ export class OsrsKeywordParselet implements PrefixParselet {
     parser.consume(GAME_ITEM_TYPE);
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(itemToken.value);
-    builder.emitOpcode(OpCode.CALL_PLUGIN);
-    builder.emitIndex(OSRS_PLUGIN_FN_IDX);
-    builder.emitIndex(1);
+    builder.emitPluginCall(OSRS_GAME_ITEM_FN, 1);
   }
 }

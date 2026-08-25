@@ -2,9 +2,6 @@ import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { TagAggregateParselet } from "./parselets/TagAggregateParselet";
 import { tagAggregateNormalizerRule, tagStripNormalizerRule } from "./normalizer/TagAggregateNormalizerRule";
 import {
-  TAG_SUM_FN_IDX,
-  TAG_AVERAGE_FN_IDX,
-  TAG_COUNT_FN_IDX,
   tagSumHandler,
   tagAverageHandler,
   tagCountHandler,
@@ -27,14 +24,14 @@ import {
 export const TAGS_PACKAGE: IEnginePackage = {
   name: "solve-tags",
   normalizerRules: [tagAggregateNormalizerRule(), tagStripNormalizerRule()],
-  prefixParselets: [
-    { tokenType: "TAG_SUM", parselet: new TagAggregateParselet(TAG_SUM_FN_IDX) },
-    { tokenType: "TAG_AVERAGE", parselet: new TagAggregateParselet(TAG_AVERAGE_FN_IDX) },
-    { tokenType: "TAG_COUNT", parselet: new TagAggregateParselet(TAG_COUNT_FN_IDX) },
-  ],
-  pluginFunctions: [
-    { index: TAG_SUM_FN_IDX, handler: tagSumHandler },
-    { index: TAG_AVERAGE_FN_IDX, handler: tagAverageHandler },
-    { index: TAG_COUNT_FN_IDX, handler: tagCountHandler },
-  ],
+  prefixParselets: {
+    TAG_SUM: new TagAggregateParselet("sum"),
+    TAG_AVERAGE: new TagAggregateParselet("average"),
+    TAG_COUNT: new TagAggregateParselet("count"),
+  },
+  pluginFunctions: {
+    sum: tagSumHandler,
+    average: tagAverageHandler,
+    count: tagCountHandler,
+  },
 };

@@ -16,10 +16,10 @@ import { MatrixIndexParselet } from "./parselets/MatrixIndexParselet";
  */
 export const MATRIX_PACKAGE: IEnginePackage = {
   name: "solve-matrix",
-  prefixParselets: [
-    { tokenType: "LBRACKET", parselet: new MatrixLiteralParselet() },
-  ],
-  infixParselets: [
-    { tokenType: "LBRACKET", parselet: new MatrixIndexParselet() },
-  ],
+  prefixParselets: {
+    LBRACKET: new MatrixLiteralParselet(),
+  },
+  infixParselets: {
+    LBRACKET: new MatrixIndexParselet(),
+  },
 };

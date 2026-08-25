@@ -34,12 +34,12 @@ export const CONVERTERS_PACKAGE: IEnginePackage = {
     "to nearest": "TO_NEAREST",
     "to the nearest": "TO_NEAREST",
   },
-  infixParselets: [
-    { tokenType: "AS", parselet: new AsConverterParselet() },
-    { tokenType: "ROUNDED", parselet: new RoundedParselet() },
-    { tokenType: "TO_NEAREST", parselet: new ToNearestParselet() },
-    { tokenType: "DECIMAL_PLACES", parselet: new DecimalPlacesParselet() },
-  ],
+  infixParselets: {
+    AS: new AsConverterParselet(),
+    ROUNDED: new RoundedParselet(),
+    TO_NEAREST: new ToNearestParselet(),
+    DECIMAL_PLACES: new DecimalPlacesParselet(),
+  },
   normalizerRules: [
     decimalPlacesNormalizerRule(),
     converterPrepositionNormalizerRule(),

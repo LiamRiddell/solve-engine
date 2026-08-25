@@ -5,8 +5,6 @@ import { RangeAggregateParselet } from "./parselets/RangeAggregateParselet";
 import { AboveAggregateParselet } from "./parselets/AboveAggregateParselet";
 import { lineRefNormalizerRule, rangeCallNormalizerRule } from "./normalizer/LineRefNormalizerRule";
 import {
-  PREV_FN_IDX, LINE_REF_FN_IDX, SUM_RANGE_FN_IDX, AVERAGE_RANGE_FN_IDX,
-  TOTAL_ABOVE_FN_IDX, AVERAGE_ABOVE_FN_IDX,
   prevHandler, lineRefHandler, sumRangeHandler, averageRangeHandler,
   totalAboveHandler, averageAboveHandler,
 } from "./LinesPluginFunctions";
@@ -55,21 +53,21 @@ export const LINES_PACKAGE: IEnginePackage = {
     "average above": "AVERAGE_ABOVE",
   },
   normalizerRules: [lineRefNormalizerRule(), rangeCallNormalizerRule()],
-  prefixParselets: [
-    { tokenType: "PREV", parselet: new PrevParselet() },
-    { tokenType: "LINE_REF", parselet: new LineRefParselet() },
-    { tokenType: "SUM_RANGE_CALL", parselet: new RangeAggregateParselet(false) },
-    { tokenType: "AVERAGE_RANGE_CALL", parselet: new RangeAggregateParselet(true) },
-    { tokenType: "TOTAL_ABOVE", parselet: new AboveAggregateParselet(false) },
-    { tokenType: "SUM_ABOVE", parselet: new AboveAggregateParselet(false) },
-    { tokenType: "AVERAGE_ABOVE", parselet: new AboveAggregateParselet(true) },
-  ],
-  pluginFunctions: [
-    { index: PREV_FN_IDX, handler: prevHandler },
-    { index: LINE_REF_FN_IDX, handler: lineRefHandler },
-    { index: SUM_RANGE_FN_IDX, handler: sumRangeHandler },
-    { index: AVERAGE_RANGE_FN_IDX, handler: averageRangeHandler },
-    { index: TOTAL_ABOVE_FN_IDX, handler: totalAboveHandler },
-    { index: AVERAGE_ABOVE_FN_IDX, handler: averageAboveHandler },
-  ],
+  prefixParselets: {
+    PREV: new PrevParselet(),
+    LINE_REF: new LineRefParselet(),
+    SUM_RANGE_CALL: new RangeAggregateParselet(false),
+    AVERAGE_RANGE_CALL: new RangeAggregateParselet(true),
+    TOTAL_ABOVE: new AboveAggregateParselet(false),
+    SUM_ABOVE: new AboveAggregateParselet(false),
+    AVERAGE_ABOVE: new AboveAggregateParselet(true),
+  },
+  pluginFunctions: {
+    prev: prevHandler,
+    lineRef: lineRefHandler,
+    sumRange: sumRangeHandler,
+    averageRange: averageRangeHandler,
+    totalAbove: totalAboveHandler,
+    averageAbove: averageAboveHandler,
+  },
 };

@@ -3,7 +3,7 @@ import { CurrencySymbolParselet } from "./parselets/CurrencySymbolParselet";
 import { InParselet } from "./parselets/InParselet";
 import { CurrencyAsyncResolver } from "@solve-js/uom/CurrencyResolver";
 import {
-  HISTORICAL_CURRENCY_FN_IDX,
+  HISTORICAL_CURRENCY_FN,
   createHistoricalCurrencyResolver,
   createHistoricalCurrencyPluginFunction,
 } from "@solve-js/uom/HistoricalCurrency";
@@ -37,29 +37,29 @@ export function createCurrencyPackage(config: CurrencyPackageConfig = {}): IEngi
       new CurrencyAsyncResolver(),
       createHistoricalCurrencyResolver(config.historicalRateProvider),
     ],
-    prefixParselets: [
-      { tokenType: "DOLLAR", parselet: new CurrencySymbolParselet() },
-      { tokenType: "POUND", parselet: new CurrencySymbolParselet() },
-      { tokenType: "EURO", parselet: new CurrencySymbolParselet() },
-      { tokenType: "YEN", parselet: new CurrencySymbolParselet() },
-      { tokenType: "RUBLE", parselet: new CurrencySymbolParselet() },
-      { tokenType: "WON", parselet: new CurrencySymbolParselet() },
+    prefixParselets: {
+      DOLLAR: new CurrencySymbolParselet(),
+      POUND: new CurrencySymbolParselet(),
+      EURO: new CurrencySymbolParselet(),
+      YEN: new CurrencySymbolParselet(),
+      RUBLE: new CurrencySymbolParselet(),
+      WON: new CurrencySymbolParselet(),
       // Every currency symbol added after the original six above shares this
       // one generic token type. See Token.ts's CURRENCY_SYMBOL doc comment.
-      { tokenType: "CURRENCY_SYMBOL", parselet: new CurrencySymbolParselet() },
-    ],
-    infixParselets: [
-      { tokenType: "IN", parselet: new InParselet() },
-    ],
-    pluginFunctions: [
+      CURRENCY_SYMBOL: new CurrencySymbolParselet(),
+    },
+    infixParselets: {
+      IN: new InParselet(),
+    },
+    pluginFunctions: {
       // Historical conversions (`<money> in <currency> on <date>`) compile to a
       // CALL_PLUGIN at this shared index (see uom/HistoricalCurrency.ts). One
       // index serves every pair and date, the query is the amount plus the
       // target and date strings. The handler carries the same provider as the
       // resolver, so a source currency known only at runtime (`x in GBP on
       // <date>`) can fetch the rate the bytecode scan could not preflight.
-      { index: HISTORICAL_CURRENCY_FN_IDX, handler: createHistoricalCurrencyPluginFunction(config.historicalRateProvider) },
-    ],
+      [HISTORICAL_CURRENCY_FN]: createHistoricalCurrencyPluginFunction(config.historicalRateProvider),
+    },
   };
 }
 

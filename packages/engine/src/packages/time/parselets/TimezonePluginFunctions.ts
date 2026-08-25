@@ -1,5 +1,4 @@
 import { Value, stringValue } from "@solve-js/vm/Value";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
 import {
   zonedWallClockToUtcMs, formatTimeInZone, formatDateInZone,
   dayShiftBetweenZones, resolveOffsetMinutes,
@@ -10,19 +9,19 @@ import {
  * `VMBuiltins.ts`'s shared `builtinFunctions` registry), since this logic
  * is genuinely Time-package-specific (city/IANA-zone lookups), unlike the
  * generic math functions (`gcd`, `sqrt`, ...) that belong in the shared
- * registry. Matches `examples/osrs`'s `OsrsParselet.ts` pattern:
- * `allocatePluginFunctionIndex()` once at module scope per function,
- * `CALL_PLUGIN` + the allocated index in the parselet, the actual handler
- * registered in `TimePackage.ts`'s `pluginFunctions` field.
+ * registry. Matches `examples/osrs`'s `OsrsParselet.ts` pattern: a stable
+ * package-local name per function, `CALL_PLUGIN` emitted by that name
+ * (`builder.emitPluginCall(name, argCount)`) in the parselet, the actual
+ * handler registered in `TimePackage.ts`'s `pluginFunctions` field.
  */
 
-export const ZONE_CONVERT_FN_IDX = allocatePluginFunctionIndex();
-/** Plugin index for `time in <zone>`, the current wall clock there. */
-export const TIME_IN_ZONE_FN_IDX = allocatePluginFunctionIndex();
-/** Plugin index for `date in <zone>`, which can differ from the local date. */
-export const DATE_IN_ZONE_FN_IDX = allocatePluginFunctionIndex();
-/** Plugin index for the offset between two zones, as a duration. */
-export const TIME_DIFFERENCE_FN_IDX = allocatePluginFunctionIndex();
+export const ZONE_CONVERT_FN = "zoneConvert";
+/** Plugin name for `time in <zone>`, the current wall clock there. */
+export const TIME_IN_ZONE_FN = "timeInZone";
+/** Plugin name for `date in <zone>`, which can differ from the local date. */
+export const DATE_IN_ZONE_FN = "dateInZone";
+/** Plugin name for the offset between two zones, as a duration. */
+export const TIME_DIFFERENCE_FN = "timeDifference";
 
 /**
  * `<clock-time> <sourceZone> in <targetZone>` -> targetZone's wall-clock

@@ -58,6 +58,40 @@ Three exports that registered into state nothing evaluated against are removed:
 
 The `IEnginePackage` descriptor type is unchanged apart from the dropped `variableSources` field.
 
+## Package descriptors are keyed, not lists
+
+A package's parselets and plugin functions were declared as arrays of little wrapper objects, and every plugin function carried a hand-allocated numeric index the author had to mint and thread through to the parselet that emitted it. Both are now keyed records, and the index is gone from the author's hands.
+
+`prefixParselets` and `infixParselets` move from an array of `{ tokenType, parselet }` to a record keyed by token type:
+
+```typescript
+// before
+prefixParselets: [{ tokenType: "COLOUR_CALL", parselet: new ColourCallParselet() }],
+// now
+prefixParselets: { COLOUR_CALL: new ColourCallParselet() },
+```
+
+`pluginFunctions` moves from an array of `{ index, handler }` to a record keyed by a package-local name. The engine assigns each name a `CALL_PLUGIN` index at registration, and a parselet emits the call by that name through the new `builder.emitPluginCall(name, argCount)`, never touching a numeric index:
+
+```typescript
+// before
+const LIGHTEN_FN_IDX = allocatePluginFunctionIndex();
+pluginFunctions: [{ index: LIGHTEN_FN_IDX, handler: lightenHandler }],
+// in the parselet:
+builder.emitOpcode(OpCode.CALL_PLUGIN);
+builder.emitIndex(LIGHTEN_FN_IDX);
+builder.emitIndex(argCount);
+
+// now
+pluginFunctions: { lighten: lightenHandler },
+// in the parselet:
+builder.emitPluginCall("lighten", argCount);
+```
+
+The old shape leaked an engine-internal detail, a process-global index counter, into every package author's code, and made a whole class of mistakes possible: two functions sharing an index, a parselet emitting an index its descriptor never registered, an index registered but never emitted. Naming the function once and letting the engine own the index removes all of them; a name a parselet emits but no descriptor declares is now a registration-time error, not a silent mis-dispatch. Two packages naming a function the same is a `checkPackageCompatibility` warning, resolved by the later registration, exactly as the other cross-package collisions already are.
+
+The boundary: an async resolver that scans *compiled* bytecode still works in numeric indices, because that is what bytecode is. Such a resolver looks its own function's index up by the qualified name the engine files it under (`pluginFunctionIndexFor("<package>:<name>")`) rather than owning a constant, so it reads the same index the engine assigned. The `examples/osrs` Grand Exchange resolver is the worked example.
+
 ## Verification
 
 - The whole engine suite runs against the new API: 7,787 tests in 342 suites, including the options-object construction, the bare-value return (its `Value[]` shape assertions inverted to assert a bare `Value`), the fault guards, and the package-unregistration lifecycle moved off the removed `variableSources` onto `completionItems`.

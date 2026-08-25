@@ -3,7 +3,6 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { SUM_RANGE_FN_IDX, AVERAGE_RANGE_FN_IDX } from "../LinesPluginFunctions";
 
 /**
  * `sum(line 1 : line 4)` / `total(line 1 : line 4)` / `average(line 1 :
@@ -48,8 +47,6 @@ export class RangeAggregateParselet implements PrefixParselet {
     builder.emitNumber(from);
     builder.emitOpcode(OpCode.PUSH_NUMBER);
     builder.emitNumber(to);
-    builder.emitOpcode(OpCode.CALL_PLUGIN);
-    builder.emitIndex(this.isAverage ? AVERAGE_RANGE_FN_IDX : SUM_RANGE_FN_IDX);
-    builder.emitIndex(2);
+    builder.emitPluginCall(this.isAverage ? "averageRange" : "sumRange", 2);
   }
 }

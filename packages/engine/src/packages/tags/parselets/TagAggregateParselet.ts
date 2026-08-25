@@ -15,13 +15,11 @@ import { OpCode } from "@solve-js/parser/OpCode";
 export class TagAggregateParselet implements PrefixParselet {
   readonly category = "Tags";
 
-  constructor(private readonly pluginFnIndex: number) {}
+  constructor(private readonly pluginFnName: string) {}
 
   parse(_parser: Parser, token: Token, builder: BytecodeBuilder): void {
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(token.value);
-    builder.emitOpcode(OpCode.CALL_PLUGIN);
-    builder.emitIndex(this.pluginFnIndex);
-    builder.emitIndex(1);
+    builder.emitPluginCall(this.pluginFnName, 1);
   }
 }

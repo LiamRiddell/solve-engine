@@ -5,7 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { tryConsumeZoneReference } from "./shared/ZoneReference";
-import { ZONE_CONVERT_FN_IDX } from "./TimezonePluginFunctions";
+import { ZONE_CONVERT_FN } from "./TimezonePluginFunctions";
 
 /**
  * `9:00am` / `16:00` / `4pm`, a clock-time-of-day literal, anchored to
@@ -52,9 +52,7 @@ export class ClockTimeParselet implements PrefixParselet {
       builder.emitString(sourceZoneRef.zoneRef);
       builder.emitOpcode(OpCode.PUSH_STRING);
       builder.emitString(target.zoneRef);
-      builder.emitOpcode(OpCode.CALL_PLUGIN);
-      builder.emitIndex(ZONE_CONVERT_FN_IDX);
-      builder.emitIndex(3);
+      builder.emitPluginCall(ZONE_CONVERT_FN, 3);
       return;
     }
 

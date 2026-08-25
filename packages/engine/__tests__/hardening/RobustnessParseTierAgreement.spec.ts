@@ -46,8 +46,8 @@ function builtinInfixRegistrations(): Array<{ tokenType: string; bindingPower: n
 	const packages: IEnginePackage[] = [ARITHMETIC_PACKAGE, PERCENTAGE_PACKAGE];
 	const found: Array<{ tokenType: string; bindingPower: number }> = [];
 	for (const pkg of packages) {
-		for (const entry of pkg.infixParselets ?? []) {
-			found.push({ tokenType: entry.tokenType, bindingPower: entry.parselet.bindingPower });
+		for (const [tokenType, parselet] of Object.entries(pkg.infixParselets ?? {})) {
+			found.push({ tokenType, bindingPower: parselet.bindingPower });
 		}
 	}
 	return found;

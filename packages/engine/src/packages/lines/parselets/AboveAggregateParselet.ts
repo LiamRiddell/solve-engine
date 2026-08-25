@@ -2,8 +2,6 @@ import { PrefixParselet } from "@solve-js/parser/Parselet";
 import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
-import { OpCode } from "@solve-js/parser/OpCode";
-import { TOTAL_ABOVE_FN_IDX, AVERAGE_ABOVE_FN_IDX } from "../LinesPluginFunctions";
 
 /**
  * `total above` / `sum above` / `average above` -- aggregate every line's
@@ -25,8 +23,6 @@ export class AboveAggregateParselet implements PrefixParselet {
   constructor(private readonly isAverage: boolean) {}
 
   parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
-    builder.emitOpcode(OpCode.CALL_PLUGIN);
-    builder.emitIndex(this.isAverage ? AVERAGE_ABOVE_FN_IDX : TOTAL_ABOVE_FN_IDX);
-    builder.emitIndex(0);
+    builder.emitPluginCall(this.isAverage ? "averageAbove" : "totalAbove", 0);
   }
 }

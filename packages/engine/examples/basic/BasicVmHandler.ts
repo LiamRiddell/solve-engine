@@ -1,8 +1,8 @@
 import { stringValue, type Value } from "@solve-js/vm/Value";
 
 /**
- * Handler registered at {@link REVERSE_PLUGIN_FN_IDX} — receives the
- * arguments pushed by {@link ReverseKeywordParselet}'s bytecode (here, a
+ * Handler registered under the package's {@link REVERSE_FN} name — receives
+ * the arguments pushed by {@link ReverseKeywordParselet}'s bytecode (here, a
  * single string) and returns a new {@link Value}.
  *
  * A plugin function may return synchronously (as here) or a `Promise<Value>`

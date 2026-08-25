@@ -28,7 +28,7 @@ const DOC_DIR = join(__dirname, "..", "..", "..", "..", "docs", "src", "content"
 
 describe.each(SYMBOLIC_FUNCTIONS.map(fn => [fn.word, fn] as const))("algebra verb: %s", (_word, fn) => {
 	test("has a parselet registered for the token type the normalizer mints", () => {
-		const registered = (SYMBOLIC_PACKAGE.prefixParselets ?? []).map(entry => entry.tokenType);
+		const registered = Object.keys(SYMBOLIC_PACKAGE.prefixParselets ?? {});
 		expect(registered).toContain(fn.tokenType);
 	});
 

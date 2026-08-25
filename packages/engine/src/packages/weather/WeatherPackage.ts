@@ -1,10 +1,27 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { createQueryResolver } from "@solve-js/resolvers/QueryResolver";
 import { stringValue, uomValue, type Value } from "@solve-js/vm/Value";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { weatherQueryParselet } from "./parselets/WeatherQueryParselet";
 import { fetchCityWeather, WeatherErrorCodes } from "./OpenMeteoClient";
+
+/**
+ * This package's descriptor name. The engine derives each plugin function's
+ * `CALL_PLUGIN` registry index from `${package name}:${function name}` at
+ * registration (see `pluginFunctionIndexFor` / `ExpressionEngine.registerPackage`),
+ * so the same string has to serve both the `name` field and the index
+ * derivation below, or the async resolver would watch a different index than
+ * the parselets emit.
+ */
+const WEATHER_PACKAGE_NAME = "solve-weather";
+
+/**
+ * The single package-local plugin-function name every weather form emits. All
+ * 5 forms fold their kind into the pushed query string (see the module doc
+ * below), so one name, one handler, and one registry index serve them all.
+ */
+const WEATHER_FN_NAME = "weather";
 
 /**
  * Live weather data, `weather in <city>`, `temperature in <city>`
@@ -44,7 +61,7 @@ import { fetchCityWeather, WeatherErrorCodes } from "./OpenMeteoClient";
  * ground that feels "live" in an interactive notepad without re-querying
  * Open-Meteo on every keystroke re-evaluation.
  */
-const WEATHER_FN_IDX = allocatePluginFunctionIndex();
+const WEATHER_FN_IDX = pluginFunctionIndexFor(`${WEATHER_PACKAGE_NAME}:${WEATHER_FN_NAME}`);
 
 const { resolver: weatherResolver, pluginFunction: weatherPluginFunction } = createQueryResolver({
 	namespace: "weather",
@@ -90,7 +107,7 @@ const { resolver: weatherResolver, pluginFunction: weatherPluginFunction } = cre
  * than using {@link BUILTIN_PACKAGES}.
  */
 export const WEATHER_PACKAGE: IEnginePackage = {
-	name: "solve-weather",
+	name: WEATHER_PACKAGE_NAME,
 
 	phrases: {
 		"weather in": "WEATHER_IN",
@@ -100,17 +117,17 @@ export const WEATHER_PACKAGE: IEnginePackage = {
 		"low in": "LOW_IN",
 	},
 
-	prefixParselets: [
-		{ tokenType: "WEATHER_IN", parselet: weatherQueryParselet("current", WEATHER_FN_IDX) },
-		{ tokenType: "TEMPERATURE_IN", parselet: weatherQueryParselet("temperature", WEATHER_FN_IDX) },
-		{ tokenType: "FEELS_LIKE_IN", parselet: weatherQueryParselet("feelslike", WEATHER_FN_IDX) },
-		{ tokenType: "HIGH_IN", parselet: weatherQueryParselet("high", WEATHER_FN_IDX) },
-		{ tokenType: "LOW_IN", parselet: weatherQueryParselet("low", WEATHER_FN_IDX) },
-	],
+	prefixParselets: {
+		WEATHER_IN: weatherQueryParselet("current", WEATHER_FN_NAME),
+		TEMPERATURE_IN: weatherQueryParselet("temperature", WEATHER_FN_NAME),
+		FEELS_LIKE_IN: weatherQueryParselet("feelslike", WEATHER_FN_NAME),
+		HIGH_IN: weatherQueryParselet("high", WEATHER_FN_NAME),
+		LOW_IN: weatherQueryParselet("low", WEATHER_FN_NAME),
+	},
 
-	pluginFunctions: [
-		{ index: WEATHER_FN_IDX, handler: weatherPluginFunction },
-	],
+	pluginFunctions: {
+		[WEATHER_FN_NAME]: weatherPluginFunction,
+	},
 
 	asyncResolvers: [weatherResolver],
 };

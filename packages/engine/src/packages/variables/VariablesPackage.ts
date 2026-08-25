@@ -12,17 +12,17 @@ export const VARIABLES_PACKAGE: IEnginePackage = {
   // instant some document declares it, via the same async pipeline
   // the currency package uses for currency rates.
   asyncResolvers: [new GlobalVariableAsyncResolver()],
-  prefixParselets: [
-    { tokenType: "COLON", parselet: new VariableParselet() },
-    { tokenType: "IDENT", parselet: new IdentifierParselet() },
+  prefixParselets: {
+    COLON: new VariableParselet(),
+    IDENT: new IdentifierParselet(),
     // UNIT tokens in prefix position (standalone or after operators) are
     // resolved as variable references via LOAD_VAR, same as IDENT tokens.
     // This handles cases like `a + b` where "b" is classified as UNIT
     // because it collides with a known unit (e.g., "b" = bits).
-    { tokenType: "UNIT", parselet: new IdentifierParselet() },
+    UNIT: new IdentifierParselet(),
     // `global :name` (read) / `global :name = expr` (write), a document-
     // spanning variable backed by GlobalVariableStore instead of this VM's
     // own local scope.
-    { tokenType: "GLOBAL", parselet: new GlobalVariableParselet() },
-  ],
+    GLOBAL: new GlobalVariableParselet(),
+  },
 };

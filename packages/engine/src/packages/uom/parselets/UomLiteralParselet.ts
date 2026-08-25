@@ -6,7 +6,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { isKnownUnit } from "@solve-js/lexer/units";
 import { resolveCurrencyAlias } from "@solve-js/uom/CurrencyAliases";
-import { tryConsumeCurrencyOnDate, HISTORICAL_CURRENCY_FN_IDX } from "@solve-js/uom/HistoricalCurrency";
+import { tryConsumeCurrencyOnDate, HISTORICAL_CURRENCY_FN } from "@solve-js/uom/HistoricalCurrency";
 
 /**
  * Resolve `rawUnit` to its canonical ISO 4217 code if it's a recognized
@@ -68,9 +68,7 @@ export class UomLiteralParselet implements InfixParselet {
           builder.emitString(targetUnit);
           builder.emitOpcode(OpCode.PUSH_STRING);
           builder.emitString(isoDate);
-          builder.emitOpcode(OpCode.CALL_PLUGIN);
-          builder.emitIndex(HISTORICAL_CURRENCY_FN_IDX);
-          builder.emitIndex(3);
+          builder.emitPluginCall(HISTORICAL_CURRENCY_FN, 3);
           return;
         }
 

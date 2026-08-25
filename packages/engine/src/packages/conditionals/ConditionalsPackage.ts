@@ -39,20 +39,20 @@ import { IfThenElseParselet } from "./parselets/IfThenElseParselet";
  */
 export const CONDITIONALS_PACKAGE: IEnginePackage = {
   name: "solve-conditionals",
-  prefixParselets: [
-    { tokenType: "TRUE", parselet: new BooleanLiteralParselet(true) },
-    { tokenType: "FALSE", parselet: new BooleanLiteralParselet(false) },
-    { tokenType: "IF", parselet: new IfThenElseParselet() },
-  ],
-  infixParselets: [
-    { tokenType: "EQUALITY", parselet: new ComparisonParselet(OpCode.EQ) },
-    { tokenType: "NEQ", parselet: new ComparisonParselet(OpCode.NEQ) },
-    { tokenType: "LT", parselet: new ComparisonParselet(OpCode.LT) },
-    { tokenType: "GT", parselet: new ComparisonParselet(OpCode.GT) },
-    { tokenType: "LTE", parselet: new ComparisonParselet(OpCode.LTE) },
-    { tokenType: "GTE", parselet: new ComparisonParselet(OpCode.GTE) },
-    { tokenType: "OR", parselet: new LogicalParselet(OpCode.LOGICAL_OR, BindingPower.LogicalOr) },
-    { tokenType: "LOGICAL_AND", parselet: new LogicalParselet(OpCode.LOGICAL_AND, BindingPower.LogicalAnd) },
-    { tokenType: "LOGICAL_OR", parselet: new LogicalParselet(OpCode.LOGICAL_OR, BindingPower.LogicalOr) },
-  ],
+  prefixParselets: {
+    TRUE: new BooleanLiteralParselet(true),
+    FALSE: new BooleanLiteralParselet(false),
+    IF: new IfThenElseParselet(),
+  },
+  infixParselets: {
+    EQUALITY: new ComparisonParselet(OpCode.EQ),
+    NEQ: new ComparisonParselet(OpCode.NEQ),
+    LT: new ComparisonParselet(OpCode.LT),
+    GT: new ComparisonParselet(OpCode.GT),
+    LTE: new ComparisonParselet(OpCode.LTE),
+    GTE: new ComparisonParselet(OpCode.GTE),
+    OR: new LogicalParselet(OpCode.LOGICAL_OR, BindingPower.LogicalOr),
+    LOGICAL_AND: new LogicalParselet(OpCode.LOGICAL_AND, BindingPower.LogicalAnd),
+    LOGICAL_OR: new LogicalParselet(OpCode.LOGICAL_OR, BindingPower.LogicalOr),
+  },
 };

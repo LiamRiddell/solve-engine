@@ -20,7 +20,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { numberValue, type Value } from "@solve-js/vm/Value";
 
 /** A fresh engine carrying the built-ins plus whatever packages a test adds. */
@@ -300,11 +300,12 @@ describe("the low-level contract still works unchanged", () => {
   });
 
   test("a hand-written CALL_PLUGIN package coexists with a generated one", () => {
-    // A package written the old way: allocate an index, write a parselet that
-    // emits CALL_PLUGIN by hand, register the plugin function. This is exactly
-    // what defineFunction generates, kept here in longhand to prove the floor
-    // is untouched.
-    const rawIndex = allocatePluginFunctionIndex();
+    // A package written the low-level way: take the engine-assigned index for
+    // its named function, write a parselet that emits CALL_PLUGIN by hand at
+    // that index, register the handler by name. This is exactly what
+    // defineFunction generates, kept here in longhand to prove the floor is
+    // untouched.
+    const rawIndex = pluginFunctionIndexFor("test-raw-lowlevel:rawtriple");
 
     class RawTripleParselet implements PrefixParselet {
       readonly category = "Test";
@@ -321,10 +322,10 @@ describe("the low-level contract still works unchanged", () => {
     const rawPackage: IEnginePackage = {
       name: "test-raw-lowlevel",
       lexerVocabulary: { keywords: { rawtriple: "RAW_TRIPLE_FN" } },
-      prefixParselets: [{ tokenType: "RAW_TRIPLE_FN", parselet: new RawTripleParselet() }],
-      pluginFunctions: [
-        { index: rawIndex, handler: (args: Value[]) => numberValue(args[0].toNumber() * 3) },
-      ],
+      prefixParselets: { RAW_TRIPLE_FN: new RawTripleParselet() },
+      pluginFunctions: {
+        rawtriple: (args: Value[]) => numberValue(args[0].toNumber() * 3),
+      },
     };
 
     const generated = defineFunction({

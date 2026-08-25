@@ -375,13 +375,15 @@ export const gamePackage: IEnginePackage = {
   lexerVocabulary: osrsVocabulary,
   normalizerRules: [osrsItemNormalizerRule()],
 
-  prefixParselets: [
-    { tokenType: "GAME_ITEM", parselet: new GameItemParselet() },
-  ],
+  prefixParselets: {
+    GAME_ITEM: new GameItemParselet(),
+  },
 
-  pluginFunctions: [
-    { index: OSRS_PLUGIN_FN_IDX, handler: resolveGameItem },
-  ],
+  // Named, not indexed: the engine assigns the CALL_PLUGIN index, and the
+  // parselet emits the call by name (`builder.emitPluginCall("gameitem", 1)`).
+  pluginFunctions: {
+    gameitem: resolveGameItem,
+  },
 
   asyncResolvers: [new OsrsAsyncResolver()],
 

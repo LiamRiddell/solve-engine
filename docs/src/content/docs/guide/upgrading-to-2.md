@@ -150,12 +150,60 @@ engine.registerPackage(myPackage);
 const engine = createEngine({ extraPackages: [myPackage] });
 ```
 
-The `IEnginePackage` descriptor type is unchanged apart from the dropped
-`variableSources` field, so a package that used only the other fields needs no
-change.
+`IEnginePackage` drops `variableSources`, and its parselet and plugin-function
+fields change shape (covered under *Package descriptors are keyed*, below).
 
 **`symbolToCurrency`.** This backward-compatibility re-export of the currency
 symbol alias table is removed; the table lives in `uom/CurrencyAliases.ts`.
+
+## Package descriptors are keyed
+
+If you author a package, two descriptor fields change from lists to records, and
+plugin functions stop carrying a hand-allocated index.
+
+`prefixParselets` and `infixParselets` are keyed by token type:
+
+```typescript
+// before
+prefixParselets: [{ tokenType: "MY_FUNC", parselet: new MyParselet() }],
+// now
+prefixParselets: { MY_FUNC: new MyParselet() },
+```
+
+`pluginFunctions` is keyed by a package-local name. The engine assigns the
+`CALL_PLUGIN` index at registration, and a parselet emits the call by that name
+through the new `builder.emitPluginCall(name, argCount)`:
+
+```typescript
+// before
+const MY_FN_IDX = allocatePluginFunctionIndex();
+pluginFunctions: [{ index: MY_FN_IDX, handler: myHandler }],
+// in the parselet:
+builder.emitOpcode(OpCode.CALL_PLUGIN);
+builder.emitIndex(MY_FN_IDX);
+builder.emitIndex(argCount);
+
+// now
+pluginFunctions: { myFn: myHandler },
+// in the parselet:
+builder.emitPluginCall("myFn", argCount);
+```
+
+The name you emit must be one your descriptor's `pluginFunctions` declares, or
+registration is an error rather than a silent mis-dispatch. Two packages naming a
+function the same is a `checkPackageCompatibility` warning, the later
+registration winning, exactly as the other cross-package collisions already are.
+
+The boundary: an async resolver that scans *compiled* bytecode still works in
+numeric indices, because that is what bytecode is. Recover your function's index
+by the qualified name the engine files it under rather than owning a constant:
+
+```typescript
+import { pluginFunctionIndexFor } from "solve-engine/vm";
+const idx = pluginFunctionIndexFor(`${packageName}:myFn`);
+```
+
+The `examples/osrs` Grand Exchange resolver is the worked example.
 
 ## Snapshots carry their packages
 
@@ -179,5 +227,6 @@ old `diagnosticMode`).
 - [ ] Drop the `DEFAULT_CONFIG` spread from `config` overrides
 - [ ] Replace `packageRegistry.registerPackage(...)` with `engine.registerPackage(...)`
 - [ ] Remove any `variableSources` from your packages; expose values via `pluginFunctions`
+- [ ] Convert `prefixParselets`/`infixParselets` to token-keyed records, and `pluginFunctions` to a name-keyed record; emit plugin calls with `builder.emitPluginCall(name, argCount)`
 - [ ] Pass `packages` to `fromJSON` when restoring a snapshot
 - [ ] Check faults with `isError()`/`isFault()`, and expect `NaN` (not `0`) from `evaluateNumber` on a failure

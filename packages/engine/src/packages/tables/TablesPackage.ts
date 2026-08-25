@@ -1,12 +1,6 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { ColumnAggregateParselet } from "./parselets/ColumnAggregateParselet";
 import {
-  TABLE_COLUMN_SUM_FN_IDX,
-  TABLE_COLUMN_AVERAGE_FN_IDX,
-  TABLE_COLUMN_MIN_FN_IDX,
-  TABLE_COLUMN_MAX_FN_IDX,
-  TABLE_COLUMN_COUNT_FN_IDX,
-  TABLE_COLUMN_MEDIAN_FN_IDX,
   tableColumnSumHandler,
   tableColumnAverageHandler,
   tableColumnMinHandler,
@@ -59,20 +53,20 @@ export const TABLES_PACKAGE: IEnginePackage = {
     "count of column": "TABLE_COLUMN_COUNT",
     "median of column": "TABLE_COLUMN_MEDIAN",
   },
-  prefixParselets: [
-    { tokenType: "TABLE_COLUMN_SUM", parselet: new ColumnAggregateParselet(TABLE_COLUMN_SUM_FN_IDX) },
-    { tokenType: "TABLE_COLUMN_AVERAGE", parselet: new ColumnAggregateParselet(TABLE_COLUMN_AVERAGE_FN_IDX) },
-    { tokenType: "TABLE_COLUMN_MIN", parselet: new ColumnAggregateParselet(TABLE_COLUMN_MIN_FN_IDX) },
-    { tokenType: "TABLE_COLUMN_MAX", parselet: new ColumnAggregateParselet(TABLE_COLUMN_MAX_FN_IDX) },
-    { tokenType: "TABLE_COLUMN_COUNT", parselet: new ColumnAggregateParselet(TABLE_COLUMN_COUNT_FN_IDX) },
-    { tokenType: "TABLE_COLUMN_MEDIAN", parselet: new ColumnAggregateParselet(TABLE_COLUMN_MEDIAN_FN_IDX) },
-  ],
-  pluginFunctions: [
-    { index: TABLE_COLUMN_SUM_FN_IDX, handler: tableColumnSumHandler },
-    { index: TABLE_COLUMN_AVERAGE_FN_IDX, handler: tableColumnAverageHandler },
-    { index: TABLE_COLUMN_MIN_FN_IDX, handler: tableColumnMinHandler },
-    { index: TABLE_COLUMN_MAX_FN_IDX, handler: tableColumnMaxHandler },
-    { index: TABLE_COLUMN_COUNT_FN_IDX, handler: tableColumnCountHandler },
-    { index: TABLE_COLUMN_MEDIAN_FN_IDX, handler: tableColumnMedianHandler },
-  ],
+  prefixParselets: {
+    TABLE_COLUMN_SUM: new ColumnAggregateParselet("TABLE_COLUMN_SUM"),
+    TABLE_COLUMN_AVERAGE: new ColumnAggregateParselet("TABLE_COLUMN_AVERAGE"),
+    TABLE_COLUMN_MIN: new ColumnAggregateParselet("TABLE_COLUMN_MIN"),
+    TABLE_COLUMN_MAX: new ColumnAggregateParselet("TABLE_COLUMN_MAX"),
+    TABLE_COLUMN_COUNT: new ColumnAggregateParselet("TABLE_COLUMN_COUNT"),
+    TABLE_COLUMN_MEDIAN: new ColumnAggregateParselet("TABLE_COLUMN_MEDIAN"),
+  },
+  pluginFunctions: {
+    TABLE_COLUMN_SUM: tableColumnSumHandler,
+    TABLE_COLUMN_AVERAGE: tableColumnAverageHandler,
+    TABLE_COLUMN_MIN: tableColumnMinHandler,
+    TABLE_COLUMN_MAX: tableColumnMaxHandler,
+    TABLE_COLUMN_COUNT: tableColumnCountHandler,
+    TABLE_COLUMN_MEDIAN: tableColumnMedianHandler,
+  },
 };

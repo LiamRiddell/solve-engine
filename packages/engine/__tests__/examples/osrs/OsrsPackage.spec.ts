@@ -2,7 +2,7 @@ import { describe, expect, test, beforeEach, afterEach, beforeAll } from "@jest/
 import { QueryClient } from "@tanstack/query-core";
 import { OsrsItemTrie } from "@solve-js-examples/osrs/OsrsItemTrie";
 import { osrsItemNormalizerRule, GAME_ITEM_TYPE } from "@solve-js-examples/osrs/OsrsItemNormalizer";
-import { GameItemParselet, OsrsKeywordParselet, OSRS_PLUGIN_FN_IDX } from "@solve-js-examples/osrs/OsrsParselet";
+import { GameItemParselet, OsrsKeywordParselet, OSRS_GAME_ITEM_FN, OSRS_GAME_ITEM_QUALIFIED } from "@solve-js-examples/osrs/OsrsParselet";
 import { registerOsrsPluginFunction, unregisterOsrsPluginFunction } from "@solve-js-examples/osrs/OsrsVmHandler";
 import { setActiveQueryClient } from "@solve-js/services/DataQueryService";
 import { uomValue } from "@solve-js/vm/Value";
@@ -33,6 +33,22 @@ import { TokenNormalizer } from "@solve-js/normalizer/TokenNormalizer";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
+
+/**
+ * The engine assigns OSRS's `gameitem` plugin function a runtime CALL_PLUGIN
+ * index under its qualified name. Both a real engine (via registerPackage) and
+ * a hand-built parselet test resolve to the same index through this call, so
+ * the two paths agree on the bytecode a parselet emits.
+ */
+const OSRS_PLUGIN_FN_IDX = pluginFunctionIndexFor(OSRS_GAME_ITEM_QUALIFIED);
+
+/**
+ * A parselet driven directly in a unit test builds its own {@link BytecodeBuilder}
+ * without an engine, so it needs this name→index map for `emitPluginCall` to
+ * resolve OSRS's function the way the engine's own map does at registration.
+ */
+const OSRS_INDEX_MAP = new Map<string, number>([[OSRS_GAME_ITEM_FN, OSRS_PLUGIN_FN_IDX]]);
 
 /** OSRS is an example package, not a built-in — register it explicitly alongside the built-ins. */
 function createEngineWithOsrs(): ExpressionEngine {
@@ -226,7 +242,7 @@ describe("OsrsItemNormalizer", () => {
 describe("GameItemParselet", () => {
   test("compiles GAME_ITEM token to PUSH_STRING + CALL_PLUGIN", () => {
     const parselet = new GameItemParselet();
-    const builder = new BytecodeBuilder();
+    const builder = new BytecodeBuilder(OSRS_INDEX_MAP);
     const itemToken = new LexerToken(
       GAME_ITEM_TYPE, tokenTypeId(GAME_ITEM_TYPE),
       "Iron Axe", "Iron Axe", 0, 0, 1, 1,
@@ -258,7 +274,7 @@ describe("GameItemParselet", () => {
 describe("OsrsKeywordParselet", () => {
   test("compiles osrs keyword + GAME_ITEM to CALL_PLUGIN bytecode", () => {
     const parselet = new OsrsKeywordParselet();
-    const builder = new BytecodeBuilder();
+    const builder = new BytecodeBuilder(OSRS_INDEX_MAP);
 
     const gameItemToken = new LexerToken(
       GAME_ITEM_TYPE, tokenTypeId(GAME_ITEM_TYPE),
@@ -291,7 +307,7 @@ describe("OsrsKeywordParselet", () => {
     // indistinguishable from a genuine "0 gp" result. It must now surface
     // as a parse error instead.
     const parselet = new OsrsKeywordParselet();
-    const builder = new BytecodeBuilder();
+    const builder = new BytecodeBuilder(OSRS_INDEX_MAP);
 
     const mockParser = {
       peek: () => null,
@@ -302,7 +318,7 @@ describe("OsrsKeywordParselet", () => {
 
   test("compiles keyword + GAME_ITEM to bytecode (no 'price'/'of' filler words)", () => {
     const parselet = new OsrsKeywordParselet();
-    const builder = new BytecodeBuilder();
+    const builder = new BytecodeBuilder(OSRS_INDEX_MAP);
 
     const gameItemToken = new LexerToken(
       GAME_ITEM_TYPE, tokenTypeId(GAME_ITEM_TYPE),
@@ -333,7 +349,7 @@ describe("OsrsKeywordParselet", () => {
 
   test("consumes 'price'/'of' filler words when present before GAME_ITEM", () => {
     const parselet = new OsrsKeywordParselet();
-    const builder = new BytecodeBuilder();
+    const builder = new BytecodeBuilder(OSRS_INDEX_MAP);
 
     const priceToken = new LexerToken("IDENT", tokenTypeId("IDENT"), "price", "price", 0, 0, 1, 1);
     const ofToken = new LexerToken("OF", tokenTypeId("OF"), "of", "of", 0, 0, 1, 1);
@@ -482,7 +498,7 @@ describe("OSRS keyword prefix path (end-to-end)", () => {
     expect(normalized[1].value).toBe("Abyssal Whip");
 
     // Step 3: Parse
-    const builder = new BytecodeBuilder();
+    const builder = new BytecodeBuilder(OSRS_INDEX_MAP);
     parser.load(normalized);
     parser.setBuilder(builder);
     parser.parseExpression(0);
@@ -515,7 +531,7 @@ describe("OSRS keyword prefix path (end-to-end)", () => {
     expect(normalized[0].value).toBe("Iron Axe");
 
     // Step 3: Parse
-    const builder = new BytecodeBuilder();
+    const builder = new BytecodeBuilder(OSRS_INDEX_MAP);
     parser.load(normalized);
     parser.setBuilder(builder);
     parser.parseExpression(0);
@@ -550,7 +566,7 @@ describe("OSRS keyword prefix path (end-to-end)", () => {
     expect(normalized[1].value).toBe("Dragon Hide");
 
     // Step 3: Parse
-    const builder = new BytecodeBuilder();
+    const builder = new BytecodeBuilder(OSRS_INDEX_MAP);
     parser.load(normalized);
     parser.setBuilder(builder);
     parser.parseExpression(0);
@@ -581,7 +597,7 @@ describe("OSRS keyword prefix path (end-to-end)", () => {
 
     // Parse — OsrsKeywordParselet sees IDENT, not GAME_ITEM → must throw,
     // not silently push 0 (which was indistinguishable from a real 0 gp result).
-    const builder = new BytecodeBuilder();
+    const builder = new BytecodeBuilder(OSRS_INDEX_MAP);
     parser.load(normalized);
     parser.setBuilder(builder);
     expect(() => parser.parseExpression(0)).toThrow(/Expected an OSRS item name/);

@@ -13,7 +13,7 @@ import { createVM, executeBytecode } from "@solve-js/vm/VM";
 import { resolveHolidayPredicate } from "@solve-js/vm/HolidayCalendar";
 import type { EvalResult, LineExecutionContext } from "@solve-js/vm/VM";
 import type { DocumentModel } from "@solve-js/engine/DocumentModel";
-import { registerAsConverter, unregisterAsConverter } from "@solve-js/vm/VMBuiltins";
+import { registerAsConverter, unregisterAsConverter, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { createEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { Value, ValueType, numberValue, stringValue, pendingValue, freezeIfDev, errorValue, type MatrixData } from "@solve-js/vm/Value";
@@ -272,6 +272,7 @@ export class ExpressionEngine {
      */
     private packageContributions = new Map<string, {
         pluginFunctionIndices: number[];
+        pluginFunctionNames: string[];
         resolverNamespaces: string[];
         tokenCategories: string[];
         lexerVocabulary: LexerVocabulary | undefined;
@@ -536,12 +537,17 @@ export class ExpressionEngine {
         }
         this.bytecodeCache.set(expression, program);
     }
+    // Maps each registered plugin function's name to the index its handler sits
+    // at in this engine's context. Populated by registerPackage, shared by
+    // reference with every BytecodeBuilder and the parser so a parselet emits a
+    // plugin call by name (builder.emitPluginCall) and never sees the index.
+    private pluginFunctionIndexByName = new Map<string, number>();
     // Pre-allocated BytecodeBuilder pool
     private builderPool: BytecodeBuilder[] = [
-        new BytecodeBuilder(),
-        new BytecodeBuilder(),
-        new BytecodeBuilder(),
-        new BytecodeBuilder(),
+        new BytecodeBuilder(this.pluginFunctionIndexByName),
+        new BytecodeBuilder(this.pluginFunctionIndexByName),
+        new BytecodeBuilder(this.pluginFunctionIndexByName),
+        new BytecodeBuilder(this.pluginFunctionIndexByName),
     ];
     // Index into the builder pool, incremented modulo pool size.
     private builderPoolIndex = 0;
@@ -643,7 +649,7 @@ export class ExpressionEngine {
             }
         }
 
-        this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, locale);
+        this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, locale, this.pluginFunctionIndexByName);
         this.vm = createVM(
             this.context.opRegistry,
             this.config.vm.maxStackDepth,
@@ -780,6 +786,7 @@ export class ExpressionEngine {
         // engine's life.
         const contribution = {
             pluginFunctionIndices: [] as number[],
+            pluginFunctionNames: [] as string[],
             resolverNamespaces: [] as string[],
             tokenCategories: [] as string[],
             lexerVocabulary: pkg.lexerVocabulary,
@@ -801,20 +808,25 @@ export class ExpressionEngine {
             this.lexer.registerVocabulary(pkg.lexerVocabulary);
         }
         if (pkg.prefixParselets) {
-            for (const pp of pkg.prefixParselets) {
-                this.registry.registerPrefix(pp.tokenType, pp.parselet);
+            for (const [tokenType, parselet] of Object.entries(pkg.prefixParselets)) {
+                this.registry.registerPrefix(tokenType, parselet);
             }
         }
         if (pkg.infixParselets) {
-            for (const ip of pkg.infixParselets) {
-                this.registry.registerInfix(ip.tokenType, ip.parselet);
+            for (const [tokenType, parselet] of Object.entries(pkg.infixParselets)) {
+                this.registry.registerInfix(tokenType, parselet);
             }
         }
         if (pkg.pluginFunctions) {
-            for (const pf of pkg.pluginFunctions) {
-                this.context.pluginFunctions[pf.index] = pf.handler;
-                this.context.pluginFunctionOwners[pf.index] = pkg.name;
-                contribution.pluginFunctionIndices.push(pf.index);
+            for (const [name, handler] of Object.entries(pkg.pluginFunctions)) {
+                // The engine assigns the registry index (stable per pkg:name), so
+                // the author names the function and the parselet emits by name.
+                const index = pluginFunctionIndexFor(`${pkg.name}:${name}`);
+                this.context.pluginFunctions[index] = handler;
+                this.context.pluginFunctionOwners[index] = pkg.name;
+                this.pluginFunctionIndexByName.set(name, index);
+                contribution.pluginFunctionIndices.push(index);
+                contribution.pluginFunctionNames.push(name);
             }
         }
         if (pkg.asyncResolvers) {
@@ -897,6 +909,9 @@ export class ExpressionEngine {
         for (const index of contribution.pluginFunctionIndices) {
             delete this.context.pluginFunctions[index];
             delete this.context.pluginFunctionOwners[index];
+        }
+        for (const name of contribution.pluginFunctionNames) {
+            this.pluginFunctionIndexByName.delete(name);
         }
         for (const namespace of contribution.resolverNamespaces) {
             this.resolverRegistry.unregister(namespace);
@@ -1568,7 +1583,7 @@ export class ExpressionEngine {
      * (this grammar is rare, a per-call allocation here is a non-issue).
      */
     private compileAdHoc(tokens: Token[]): BytecodeProgram {
-        const builder = new BytecodeBuilder();
+        const builder = new BytecodeBuilder(this.pluginFunctionIndexByName);
         this.parseExpression(builder, tokens);
         return builder.build();
     }

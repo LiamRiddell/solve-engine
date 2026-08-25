@@ -3,7 +3,6 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { INFLATION_TO_YEAR_FROM_PRESENT_IDX } from "./InflationPluginFunctions";
 
 /**
  * Infix parselet for the fused `IN_YEAR_DOLLARS` token (see
@@ -29,8 +28,6 @@ export class InYearDollarsParselet implements InfixParselet {
     const year = Number(token.value);
     builder.emitOpcode(OpCode.PUSH_NUMBER);
     builder.emitNumber(year);
-    builder.emitOpcode(OpCode.CALL_PLUGIN);
-    builder.emitIndex(INFLATION_TO_YEAR_FROM_PRESENT_IDX);
-    builder.emitIndex(2);
+    builder.emitPluginCall("inflationToYearFromPresent", 2);
   }
 }

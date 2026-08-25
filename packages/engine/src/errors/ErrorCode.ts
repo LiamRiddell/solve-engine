@@ -54,6 +54,8 @@ export const CoreErrorCodes = {
   TOO_MANY_FUNCTION_DEFINITIONS: "TOO_MANY_FUNCTION_DEFINITIONS",
   /** `BytecodeBuilder`'s `anonymousBodies` side-table (map/reduce inline transform bodies) exceeding its capacity. Same class as `TOO_MANY_FUNCTION_DEFINITIONS` above. */
   TOO_MANY_ANONYMOUS_BODIES: "TOO_MANY_ANONYMOUS_BODIES",
+  /** New with the 2.0 descriptor redesign: a parselet emits a plugin call by NAME (`BytecodeBuilder.emitPluginCall(name, argCount)`) and the engine resolves that name to the index it assigned at registration. This fires when the name is absent from the builder's name->index map: the package used a `pluginFunctions` name it never declared, or the expression was parsed before that package registered. Not a user-input error; a package-authoring/registration fault. See `parser/BytecodeBuilder.ts`'s `emitPluginCall()`. */
+  UNKNOWN_PLUGIN_FUNCTION: "UNKNOWN_PLUGIN_FUNCTION",
 
   // ── VM (vm/VM.ts, vm/OpRegistry.ts, vm/VMBuiltins.ts) ──
   EVALUATION_ERROR: "EVALUATION_ERROR",

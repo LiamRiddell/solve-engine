@@ -46,7 +46,7 @@ import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { createQueryResolver } from "@solve-js/resolvers/QueryResolver";
 import type { IAsyncResolver, AsyncCheckResult } from "@solve-js/resolvers/ResolverRegistry";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import type { PrefixParselet } from "@solve-js/parser/Parselet";
 import type { Parser } from "@solve-js/parser/Parser";
 import type { Token } from "@solve-js/lexer/Token";
@@ -369,7 +369,7 @@ describe("package selection", () => {
  * flows through the engine exactly as a production live-data value does: pending
  * on first evaluation, cached by the resolver, read back on re-evaluation.
  */
-function livePriceParselet(pluginFnIdx: number): PrefixParselet {
+function livePriceParselet(pluginFnName: string): PrefixParselet {
 	return {
 		category: "LivePrice",
 		parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
@@ -385,25 +385,32 @@ function livePriceParselet(pluginFnIdx: number): PrefixParselet {
 			}
 			builder.emitOpcode(OpCode.PUSH_STRING);
 			builder.emitString(words.join(" "));
-			builder.emitOpcode(OpCode.CALL_PLUGIN);
-			builder.emitIndex(pluginFnIdx);
-			builder.emitIndex(1);
+			// Emit the plugin call by name; the engine's builder resolves it to the
+			// index it assigned this package's function, the same index the
+			// resolver watches for (the PUSH_STRING + CALL_PLUGIN pair).
+			builder.emitPluginCall(pluginFnName, 1);
 		},
 	};
 }
 
+// The engine files this package's function under `${pkg.name}:${name}` and
+// assigns the CALL_PLUGIN index; computing it here from the same qualified name
+// gives the resolver the exact index the parselet will emit.
+const LIVE_PRICE_PKG_NAME = "solve-liveprice-test";
+const LIVE_PRICE_FN_NAME = "livePrice";
+
 function createLivePricePackage(fetchQuery: (query: string, signal: AbortSignal) => Promise<Value>): IEnginePackage {
-	const fnIdx = allocatePluginFunctionIndex();
+	const fnIdx = pluginFunctionIndexFor(`${LIVE_PRICE_PKG_NAME}:${LIVE_PRICE_FN_NAME}`);
 	const { resolver, pluginFunction } = createQueryResolver({
 		namespace: "liveprice",
 		pluginFunctionIndex: fnIdx,
 		fetchQuery,
 	});
 	return {
-		name: "solve-liveprice-test",
+		name: LIVE_PRICE_PKG_NAME,
 		phrases: { "live price of": "LIVE_PRICE_OF" },
-		prefixParselets: [{ tokenType: "LIVE_PRICE_OF", parselet: livePriceParselet(fnIdx) }],
-		pluginFunctions: [{ index: fnIdx, handler: pluginFunction }],
+		prefixParselets: { LIVE_PRICE_OF: livePriceParselet(LIVE_PRICE_FN_NAME) },
+		pluginFunctions: { [LIVE_PRICE_FN_NAME]: pluginFunction },
 		asyncResolvers: [resolver],
 	};
 }

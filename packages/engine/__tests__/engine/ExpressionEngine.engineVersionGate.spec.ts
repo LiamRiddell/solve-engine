@@ -64,7 +64,7 @@ describe("ExpressionEngine.registerPackage() — engine-version gate", () => {
   test("existing packages without engineVersion keep registering fine (backward compatible default)", () => {
     const noVersionDeclared: IEnginePackage = {
       name: "NoVersionDeclaredPackage",
-      pluginFunctions: [],
+      pluginFunctions: {},
     };
     const engine = newTrackedEngine({ packages: [ARITHMETIC_PACKAGE] });
     expect(() => engine.registerPackage(noVersionDeclared)).not.toThrow();
@@ -79,18 +79,15 @@ describe("ExpressionEngine.registerPackage() — engine-version gate", () => {
     const working: IEnginePackage = {
       name: "ReplaceableStablePackage",
       lexerVocabulary: { keywords: { stableword: "STABLE_TOKEN" } },
-      prefixParselets: [
-        {
-          tokenType: "STABLE_TOKEN",
-          parselet: {
-            category: "Test",
-            parse(_parser, _token, builder) {
-              builder.emitOpcode(OpCode.PUSH_NUMBER);
-              builder.emitNumber(42);
-            },
-          } as any,
-        },
-      ],
+      prefixParselets: {
+        STABLE_TOKEN: {
+          category: "Test",
+          parse(_parser, _token, builder) {
+            builder.emitOpcode(OpCode.PUSH_NUMBER);
+            builder.emitNumber(42);
+          },
+        } as any,
+      },
     };
 
     engine.registerPackage(working);

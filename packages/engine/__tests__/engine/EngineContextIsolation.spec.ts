@@ -5,6 +5,7 @@ import { numberValue, type Value } from "@solve-js/vm/Value";
 import { createEngineContext, defaultEngineContext } from "@solve-js/engine/EngineContext";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { registerTestPluginFunction } from "@tools/testUtils";
 
 /**
  * Two engines in one process must not share package registrations.
@@ -44,16 +45,11 @@ describe("engine context isolation", () => {
 		const a = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		const b = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 
-		// Deliberately the same index. Under a shared registry the second
-		// registration overwrote the first, and both engines then returned 20.
-		a.registerPackage({
-			name: "iso-a",
-			pluginFunctions: [{ index: 240, handler: (): Value => numberValue(10) }],
-		});
-		b.registerPackage({
-			name: "iso-b",
-			pluginFunctions: [{ index: 240, handler: (): Value => numberValue(20) }],
-		});
+		// Deliberately the same index, written straight into each engine's own
+		// context. Under a shared registry the second write overwrote the first,
+		// and both engines then returned 20.
+		registerTestPluginFunction(a, 240, (): Value => numberValue(10));
+		registerTestPluginFunction(b, 240, (): Value => numberValue(20));
 
 		expect(runPlugin(a, 240)).toBe(10);
 		expect(runPlugin(b, 240)).toBe(20);
@@ -66,16 +62,12 @@ describe("engine context isolation", () => {
 		const a = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		const b = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 
-		a.registerPackage({
-			name: "iso-shared-name",
-			pluginFunctions: [{ index: 241, handler: (): Value => numberValue(7) }],
-		});
-		b.registerPackage({
-			name: "iso-shared-name",
-			pluginFunctions: [{ index: 241, handler: (): Value => numberValue(9) }],
-		});
+		const disposeA = registerTestPluginFunction(a, 241, (): Value => numberValue(7));
+		registerTestPluginFunction(b, 241, (): Value => numberValue(9));
 
-		a.unregisterPackage("iso-shared-name");
+		// Remove the handler on `a` only. What this proves is unchanged:
+		// tearing down one engine's registration must not disturb the other's.
+		disposeA();
 
 		// A missing handler pushes 0 rather than throwing, so this distinguishes
 		// "unregistered on a only" from "unregistered on both".
@@ -88,10 +80,7 @@ describe("engine context isolation", () => {
 
 	test("registering on an engine does not write into the shared default context", () => {
 		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
-		engine.registerPackage({
-			name: "iso-not-global",
-			pluginFunctions: [{ index: 242, handler: (): Value => numberValue(5) }],
-		});
+		registerTestPluginFunction(engine, 242, (): Value => numberValue(5));
 
 		// The deprecated module-level `pluginFunctionRegistry` is this object.
 		// An engine writing through it would defeat the whole arrangement.

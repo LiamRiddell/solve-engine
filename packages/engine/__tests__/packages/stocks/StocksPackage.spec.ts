@@ -13,11 +13,23 @@ import { describe, expect, test } from "@jest/globals";
 import { QueryClient } from "@tanstack/query-core";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { ValueType, stringValue, uomValue, numberValue } from "@solve-js/vm/Value";
 import { setActiveQueryClient } from "@solve-js/services/DataQueryService";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { createStocksPackage } from "@solve-js/packages/stocks";
+
+// StocksPackage.ts keys its two pluginFunctions by these names under the package
+// name "solve-stocks", and the parselets emit their plugin calls by the same
+// names. The engine assigns each an index at registration under the qualified
+// `${PACKAGE_NAME}:${name}`; recover the same indices here (deterministic and
+// cached) so hand-built bytecode and descriptor assertions match the engine.
+const PACKAGE_NAME = "solve-stocks";
+const CURRENT_FN = "stock";
+const HISTORICAL_FN = "stockhistorical";
+const CURRENT_FN_IDX = pluginFunctionIndexFor(`${PACKAGE_NAME}:${CURRENT_FN}`);
+const HISTORICAL_FN_IDX = pluginFunctionIndexFor(`${PACKAGE_NAME}:${HISTORICAL_FN}`);
 
 function buildQueryBytecode(query: string, fnIdx: number) {
 	const builder = new BytecodeBuilder();
@@ -39,30 +51,40 @@ describe("createStocksPackage — descriptor shape", () => {
 
 	test("bare-ticker grammar is OFF by default — no STOCK_TICKER parselet, no normalizer rule", () => {
 		const pkg = createStocksPackage();
-		expect(pkg.prefixParselets!.some((p) => p.tokenType === "STOCK_TICKER")).toBe(false);
+		expect(Object.keys(pkg.prefixParselets!).includes("STOCK_TICKER")).toBe(false);
 		expect(pkg.normalizerRules).toHaveLength(0);
 	});
 
 	test("enableBareTickerRecognition:true registers the STOCK_TICKER parselet + normalizer rule", () => {
 		const pkg = createStocksPackage({ enableBareTickerRecognition: true });
-		expect(pkg.prefixParselets!.some((p) => p.tokenType === "STOCK_TICKER")).toBe(true);
+		expect(Object.keys(pkg.prefixParselets!).includes("STOCK_TICKER")).toBe(true);
 		expect(pkg.normalizerRules).toHaveLength(1);
 	});
 
 	test("two independent CALL_PLUGIN indices (current vs. historical) and two async resolvers", () => {
 		const pkg = createStocksPackage();
-		expect(pkg.pluginFunctions).toHaveLength(2);
+		expect(Object.keys(pkg.pluginFunctions!)).toHaveLength(2);
 		expect(pkg.asyncResolvers).toHaveLength(2);
-		const [currentIdx, historicalIdx] = pkg.pluginFunctions!.map((p) => p.index);
+		const [currentName, historicalName] = Object.keys(pkg.pluginFunctions!);
+		const currentIdx = pluginFunctionIndexFor(`${PACKAGE_NAME}:${currentName}`);
+		const historicalIdx = pluginFunctionIndexFor(`${PACKAGE_NAME}:${historicalName}`);
 		expect(currentIdx).not.toBe(historicalIdx);
 	});
 
-	test("each createStocksPackage() call allocates fresh plugin-function indices (no cross-instance collision)", () => {
+	test("plugin-function identity is by name: independent createStocksPackage() instances expose the same two distinct names, each resolving to its own engine index", () => {
+		// Under the descriptor API the engine assigns a function's CALL_PLUGIN
+		// index at registration, keyed by `${package}:${name}`, so identity is
+		// by NAME, not a per-instance allocation. Two instances therefore expose
+		// the same two named functions, and the two functions never share an
+		// index (no self-collision), which is the invariant the dispatch relies on.
 		const pkgA = createStocksPackage();
 		const pkgB = createStocksPackage();
-		const idxA = pkgA.pluginFunctions!.map((p) => p.index);
-		const idxB = pkgB.pluginFunctions!.map((p) => p.index);
-		expect(idxA.some((i) => idxB.includes(i))).toBe(false);
+		const namesA = Object.keys(pkgA.pluginFunctions!);
+		const namesB = Object.keys(pkgB.pluginFunctions!);
+		expect(namesA).toEqual([CURRENT_FN, HISTORICAL_FN]);
+		expect(namesB).toEqual([CURRENT_FN, HISTORICAL_FN]);
+		const [currentIdx, historicalIdx] = namesA.map((n) => pluginFunctionIndexFor(`${PACKAGE_NAME}:${n}`));
+		expect(currentIdx).not.toBe(historicalIdx);
 	});
 });
 
@@ -70,7 +92,7 @@ describe("createStocksPackage — honest 'not configured' error (no fetch functi
 	test("current-price query resolves to a STOCKS_NOT_CONFIGURED error Value, never a fake price", async () => {
 		const pkg = createStocksPackage(); // no config at all
 		const qc = new QueryClient();
-		const currentFnIdx = pkg.pluginFunctions![0].index;
+		const currentFnIdx = CURRENT_FN_IDX;
 		const resolver = pkg.asyncResolvers![0]; // "stocks-current"
 
 		const bytecode = buildQueryBytecode("AAPL", currentFnIdx);
@@ -89,7 +111,7 @@ describe("createStocksPackage — honest 'not configured' error (no fetch functi
 	test("historical query resolves to a STOCKS_NOT_CONFIGURED error Value", async () => {
 		const pkg = createStocksPackage();
 		const qc = new QueryClient();
-		const historicalFnIdx = pkg.pluginFunctions![1].index;
+		const historicalFnIdx = HISTORICAL_FN_IDX;
 		const resolver = pkg.asyncResolvers![1]; // "stocks-historical"
 
 		const bytecode = buildQueryBytecode("close:AAPL:2005-04-12", historicalFnIdx);
@@ -111,7 +133,7 @@ describe("createStocksPackage — working path with a test-provided mock fetch f
 		});
 		const pkg = createStocksPackage({ fetchQuote });
 		const qc = new QueryClient();
-		const currentFnIdx = pkg.pluginFunctions![0].index;
+		const currentFnIdx = CURRENT_FN_IDX;
 		const resolver = pkg.asyncResolvers![0];
 
 		const bytecode = buildQueryBytecode("AAPL", currentFnIdx);
@@ -134,7 +156,7 @@ describe("createStocksPackage — working path with a test-provided mock fetch f
 		});
 		const pkg = createStocksPackage({ fetchHistoricalQuote });
 		const qc = new QueryClient();
-		const historicalFnIdx = pkg.pluginFunctions![1].index;
+		const historicalFnIdx = HISTORICAL_FN_IDX;
 		const resolver = pkg.asyncResolvers![1];
 
 		const bytecode = buildQueryBytecode("close:AAPL:2005-04-12", historicalFnIdx);
@@ -152,7 +174,7 @@ describe("createStocksPackage — working path with a test-provided mock fetch f
 		const fetchHistoricalQuote = jest.fn(async () => ({ close: 1.42, volume: 123_456_789 }));
 		const pkg = createStocksPackage({ fetchHistoricalQuote });
 		const qc = new QueryClient();
-		const historicalFnIdx = pkg.pluginFunctions![1].index;
+		const historicalFnIdx = HISTORICAL_FN_IDX;
 		const resolver = pkg.asyncResolvers![1];
 
 		const bytecode = buildQueryBytecode("volume:AAPL:2005-04-12", historicalFnIdx);
@@ -174,8 +196,8 @@ describe("createStocksPackage — ExpressionEngine integration (seeded cache, sy
 	}
 
 	test("'stock(AAPL)' produces PUSH_STRING(AAPL) + CALL_PLUGIN(currentFnIdx) bytecode", () => {
-		const { engine, pkg } = createEngine();
-		const currentFnIdx = pkg.pluginFunctions![0].index;
+		const { engine } = createEngine();
+		const currentFnIdx = CURRENT_FN_IDX;
 		engine.queryClient.setQueryData(["stocks-current", "AAPL"], uomValue(192.53, "USD"));
 
 		const result = engine.evaluateLineWithDebug(1, "stock(AAPL)");
@@ -224,8 +246,8 @@ describe("createStocksPackage — ExpressionEngine integration (seeded cache, sy
 	});
 
 	test("'stock(AAPL) on April 12, 2005' routes to the historical resolver with the parsed ISO date", () => {
-		const { engine, pkg } = createEngine();
-		const historicalFnIdx = pkg.pluginFunctions![1].index;
+		const { engine } = createEngine();
+		const historicalFnIdx = HISTORICAL_FN_IDX;
 		engine.queryClient.setQueryData(["stocks-historical", "close:AAPL:2005-04-12"], uomValue(1.42, "USD"));
 
 		const result = engine.evaluateLineWithDebug(1, "stock(AAPL) on April 12, 2005");

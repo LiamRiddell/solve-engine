@@ -1,5 +1,4 @@
 import { Value, ValueType, uomValue, errorValue } from "@solve-js/vm/Value";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { getIngredientDensity } from "../data/IngredientDensities";
 
@@ -25,7 +24,7 @@ import { getIngredientDensity } from "../data/IngredientDensities";
  * separate, larger feature and is NOT implemented here; an Imperial or
  * Metric-cup reading of "cup" is simply not available yet.
  */
-export const COOKING_CONVERT_IDX = allocatePluginFunctionIndex();
+export const COOKING_CONVERT_FN = "cookingConvert";
 
 /**
  * `amount` carries the source unit (e.g. Uom(300, "g")); `ingredientName`/

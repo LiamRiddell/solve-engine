@@ -19,10 +19,10 @@ import { mapReduceCallNormalizerRule } from "./normalizer/MapReduceCallNormalize
 export const MAPREDUCE_PACKAGE: IEnginePackage = {
   name: "solve-mapreduce",
   normalizerRules: [mapReduceCallNormalizerRule()],
-  prefixParselets: [
-    { tokenType: "MAP", parselet: new MapParselet() },
-    { tokenType: "REDUCE", parselet: new ReduceParselet() },
-    { tokenType: "SUM_FN", parselet: new SumParselet() },
-    { tokenType: "PROD_FN", parselet: new ProdParselet() },
-  ],
+  prefixParselets: {
+    MAP: new MapParselet(),
+    REDUCE: new ReduceParselet(),
+    SUM_FN: new SumParselet(),
+    PROD_FN: new ProdParselet(),
+  },
 };

@@ -2,8 +2,6 @@ import { PrefixParselet } from "@solve-js/parser/Parselet";
 import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
-import { OpCode } from "@solve-js/parser/OpCode";
-import { WORKDAYS_IN_FN_IDX } from "./DatetimeTimestampPluginFunctions";
 
 /**
  * `workdays in <duration>` (e.g. "workdays in 3 weeks") -> the number of
@@ -35,8 +33,6 @@ export class WorkdaysInParselet implements PrefixParselet {
 
   parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     parser.parseExpression(0, builder); // the duration expression, e.g. "3 weeks"
-    builder.emitOpcode(OpCode.CALL_PLUGIN);
-    builder.emitIndex(WORKDAYS_IN_FN_IDX);
-    builder.emitIndex(1);
+    builder.emitPluginCall("workdaysInDuration", 1);
   }
 }

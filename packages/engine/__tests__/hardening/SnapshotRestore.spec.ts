@@ -35,7 +35,7 @@ import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import type { PrefixParselet } from "@solve-js/parser/Parselet";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { createQueryResolver } from "@solve-js/resolvers/QueryResolver";
 
 // ── Engine lifecycle ────────────────────────────────────────────────────────
@@ -102,7 +102,13 @@ function assertValueEquals(after: Value, before: Value): void {
 // test never races a real network or a batcher flush. `asyncprice <symbol>`
 // compiles to the PUSH_STRING(symbol) + CALL_PLUGIN pair the resolver scans for.
 
-const ASYNC_FN_IDX = allocatePluginFunctionIndex();
+// The engine files this package's async function under `${pkg.name}:${name}`
+// and assigns it a stable CALL_PLUGIN index. Computing the index here from that
+// same qualified name gives the resolver the exact index the engine will emit,
+// and the parselet emits the call by name (below), so all three agree.
+const TEST_ASYNC_PKG_NAME = "test-async";
+const ASYNC_FN_NAME = "asyncPrice";
+const ASYNC_FN_IDX = pluginFunctionIndexFor(`${TEST_ASYNC_PKG_NAME}:${ASYNC_FN_NAME}`);
 
 const { resolver: asyncResolver, pluginFunction: asyncPluginFunction } = createQueryResolver({
 	namespace: "testasync",
@@ -117,17 +123,18 @@ const asyncPriceParselet: PrefixParselet = {
 		const symbol = parser.consume().value;
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(symbol);
-		builder.emitOpcode(OpCode.CALL_PLUGIN);
-		builder.emitIndex(ASYNC_FN_IDX);
-		builder.emitIndex(1);
+		// Emit the plugin call by name; the engine's builder resolves it to the
+		// same index the resolver watches, so the compiled bytecode is the
+		// PUSH_STRING(symbol) + CALL_PLUGIN pair the resolver scans for.
+		builder.emitPluginCall(ASYNC_FN_NAME, 1);
 	},
 };
 
 const TEST_ASYNC_PACKAGE: IEnginePackage = {
-	name: "test-async",
+	name: TEST_ASYNC_PKG_NAME,
 	lexerVocabulary: { keywords: { asyncprice: "ASYNC_PRICE" } },
-	prefixParselets: [{ tokenType: "ASYNC_PRICE", parselet: asyncPriceParselet }],
-	pluginFunctions: [{ index: ASYNC_FN_IDX, handler: asyncPluginFunction }],
+	prefixParselets: { ASYNC_PRICE: asyncPriceParselet },
+	pluginFunctions: { [ASYNC_FN_NAME]: asyncPluginFunction },
 	asyncResolvers: [asyncResolver],
 };
 

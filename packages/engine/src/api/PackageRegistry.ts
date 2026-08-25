@@ -5,7 +5,7 @@ import type { IAsyncResolver } from "@solve-js/resolvers/ResolverRegistry";
 import type { NormalizerRule } from "@solve-js/normalizer/NormalizerRule";
 import type { TokenCategory } from "@solve-js/language/TokenCategory";
 import type { CompletionItem } from "@solve-js/language/LanguageService";
-import type { LineExecutionContext } from "@solve-js/vm/VM";
+import type { PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 
 /**
  * Package descriptor for registering a complete provider with the engine.
@@ -21,8 +21,8 @@ import type { LineExecutionContext } from "@solve-js/vm/VM";
  * const myPackage: IEnginePackage = {
  *   name: "MyProvider",
  *   lexerVocabulary: myLexerVocabulary,
- *   prefixParselets: [{ tokenType: "MY_FUNC", parselet: new MyParselet() }],
- *   pluginFunctions: [{ index: MY_FN_IDX, handler: myHandler }],
+ *   prefixParselets: { MY_FUNC: new MyParselet() },
+ *   pluginFunctions: { myFn: myHandler },
  *   asyncResolvers: [myAsyncResolver],
  * };
  * const engine = createEngine({ extraPackages: [myPackage] });
@@ -52,33 +52,30 @@ export interface IEnginePackage {
   engineVersion?: string;
   /** Optional lexer vocabulary (keywords/operators/units) for recognizing custom tokens (e.g., `GE`, `£`). */
   lexerVocabulary?: LexerVocabulary;
-  /** Prefix parselets for this package's custom functions/operators. */
-  prefixParselets?: Array<{ tokenType: string; parselet: PrefixParselet }>;
-  /** Infix parselets for this package's custom binary operators. */
-  infixParselets?: Array<{ tokenType: string; parselet: InfixParselet }>;
+  /** Prefix parselets for this package's custom functions/operators, keyed by token type. */
+  prefixParselets?: Record<string, PrefixParselet>;
+  /** Infix parselets for this package's custom binary operators, keyed by token type. */
+  infixParselets?: Record<string, InfixParselet>;
   /**
-   * Functions dispatched via CALL_PLUGIN bytecode (emitted by this package's
-   * parselets with `builder.emitIndex(index)`).
+   * Functions dispatched via `CALL_PLUGIN` bytecode, keyed by a package-local
+   * name. The engine assigns each a registry index at registration, so a
+   * parselet emits the call by that name (`builder.emitPluginCall(name, argCount)`)
+   * and never touches a numeric index. Two packages naming a function the same
+   * is a `checkPackageCompatibility` warning, the later registration wins.
    *
-   * Each entry's `index` MUST come from {@link allocatePluginFunctionIndex}
-   * (`@solve-js/vm/VMBuiltins`), never hardcode a number. Two packages
-   * independently picking the same index would silently overwrite each
-   * other's handler in the shared registry.
-   *
-   * The handler's optional second parameter, `context`, carries the
-   * current line's {@link LineExecutionContext} (line number, and, only
-   * inside a real document, never `evaluateExpression()`'s single-shot
-   * path, closures for reading another line's cached result). Every
-   * handler that doesn't need cross-line data can ignore it entirely.
+   * The handler's optional second parameter, `context`, carries the current
+   * line's `LineExecutionContext` (line number, and, only inside a real
+   * document, never `evaluateExpression()`'s single-shot path, closures for
+   * reading another line's cached result). Every handler that doesn't need
+   * cross-line data can ignore it entirely.
    *
    * @example
    * ```ts
-   * const MY_FN_IDX = allocatePluginFunctionIndex();
-   * // In a parselet's parse(): builder.emitOpcode(OpCode.CALL_PLUGIN); builder.emitIndex(MY_FN_IDX); builder.emitIndex(argCount);
-   * pluginFunctions: [{ index: MY_FN_IDX, handler: myHandler }]
+   * // In a parselet's parse(): builder.emitPluginCall("myFn", argCount);
+   * pluginFunctions: { myFn: myHandler }
    * ```
    */
-  pluginFunctions?: Array<{ index: number; handler: (args: Value[], context?: LineExecutionContext) => Value | Promise<Value> }>;
+  pluginFunctions?: Record<string, PluginFunctionHandler>;
   /**
    * Async resolvers for this package's domain.
    * When set, the ExpressionEngine runs preflight() before VM execution

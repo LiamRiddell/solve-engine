@@ -2,9 +2,7 @@ import { InfixParselet } from "@solve-js/parser/Parselet";
 import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
-import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
-import { TO_TIMESTAMP_FN_IDX } from "./DatetimeTimestampPluginFunctions";
 
 /**
  * `<date/time> to timestamp` -> a Unix timestamp in seconds, as a plain
@@ -21,8 +19,6 @@ export class ToTimestampParselet implements InfixParselet {
   readonly bindingPower = BindingPower.Conditional;
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
-    builder.emitOpcode(OpCode.CALL_PLUGIN);
-    builder.emitIndex(TO_TIMESTAMP_FN_IDX);
-    builder.emitIndex(1);
+    builder.emitPluginCall("toTimestampFromAny", 1);
   }
 }

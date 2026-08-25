@@ -72,20 +72,16 @@ function emitStockQuery(
 	builder: BytecodeBuilder,
 	ticker: string,
 	suffix: DateSuffix | null,
-	currentFnIdx: number,
-	historicalFnIdx: number,
+	currentFn: string,
+	historicalFn: string,
 ): void {
 	builder.emitOpcode(OpCode.PUSH_STRING);
 	if (!suffix) {
 		builder.emitString(ticker);
-		builder.emitOpcode(OpCode.CALL_PLUGIN);
-		builder.emitIndex(currentFnIdx);
-		builder.emitIndex(1);
+		builder.emitPluginCall(currentFn, 1);
 	} else {
 		builder.emitString(`${suffix.field}:${ticker}:${suffix.date.isoDate}`);
-		builder.emitOpcode(OpCode.CALL_PLUGIN);
-		builder.emitIndex(historicalFnIdx);
-		builder.emitIndex(1);
+		builder.emitPluginCall(historicalFn, 1);
 	}
 }
 
@@ -117,8 +113,8 @@ function finishStockExpression(
 	parser: Parser,
 	builder: BytecodeBuilder,
 	ticker: string,
-	currentFnIdx: number,
-	historicalFnIdx: number,
+	currentFn: string,
+	historicalFn: string,
 ): void {
 	let sawStar = false;
 	if (parser.peek()?.type === "STAR") {
@@ -131,13 +127,13 @@ function finishStockExpression(
 	if (sawStar && !suffix) {
 		// Real multiplication, not our suffix, finish it here since the
 		// STAR is already consumed and can't go back to the outer loop.
-		emitStockQuery(builder, ticker, null, currentFnIdx, historicalFnIdx);
+		emitStockQuery(builder, ticker, null, currentFn, historicalFn);
 		parser.parseExpression(BindingPower.Product, builder);
 		builder.emitOpcode(OpCode.MUL);
 		return;
 	}
 
-	emitStockQuery(builder, ticker, suffix, currentFnIdx, historicalFnIdx);
+	emitStockQuery(builder, ticker, suffix, currentFn, historicalFn);
 }
 
 /**
@@ -153,7 +149,7 @@ function finishStockExpression(
  * (mirrors `examples/osrs/OsrsParselet.ts`'s `ge("Iron Axe")` /
  * `osrs.ge(Iron Axe)` dual acceptance for the same reason).
  */
-export function stockFnParselet(currentFnIdx: number, historicalFnIdx: number): PrefixParselet {
+export function stockFnParselet(currentFn: string, historicalFn: string): PrefixParselet {
 	return {
 		category: "Stocks",
 		parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
@@ -172,7 +168,7 @@ export function stockFnParselet(currentFnIdx: number, historicalFnIdx: number): 
 			}
 			parser.consume("RPAREN");
 
-			finishStockExpression(parser, builder, ticker, currentFnIdx, historicalFnIdx);
+			finishStockExpression(parser, builder, ticker, currentFn, historicalFn);
 		},
 	};
 }
@@ -185,12 +181,12 @@ export function stockFnParselet(currentFnIdx: number, historicalFnIdx: number): 
  * "any uppercase word" rule) into a `STOCK_TICKER` token; this parselet
  * handles that fused token.
  */
-export function bareStockTickerParselet(currentFnIdx: number, historicalFnIdx: number): PrefixParselet {
+export function bareStockTickerParselet(currentFn: string, historicalFn: string): PrefixParselet {
 	return {
 		category: "Stocks",
 		parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
 			const ticker = token.value.toUpperCase();
-			finishStockExpression(parser, builder, ticker, currentFnIdx, historicalFnIdx);
+			finishStockExpression(parser, builder, ticker, currentFn, historicalFn);
 		},
 	};
 }

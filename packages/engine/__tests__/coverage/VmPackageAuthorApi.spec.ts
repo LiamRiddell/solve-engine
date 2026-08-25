@@ -20,7 +20,7 @@
 
 import { describe, expect, test } from "@jest/globals";
 import { checkAllocation, checkedArray, chargeAllocation } from "@solve-js/vm/AllocationBudget";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
+import { allocatePluginFunctionIndex, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import {
 	colVectorValue,
 	matrixValue,
@@ -52,7 +52,11 @@ function packageAround(
 	keyword: string,
 	handler: (args: Value[]) => Value,
 ): IEnginePackage {
-	const index = allocatePluginFunctionIndex();
+	const name = `guard-test-${keyword}`;
+	// The engine files this handler under `${name}:${keyword}` and assigns its
+	// CALL_PLUGIN index from that qualified name. Resolving the same index here
+	// keeps the hand-emitted bytecode below pointed at the registered handler.
+	const index = pluginFunctionIndexFor(`${name}:${keyword}`);
 	const tokenType = `PKG_${keyword.toUpperCase()}`;
 
 	const parselet: PrefixParselet = {
@@ -65,10 +69,10 @@ function packageAround(
 	};
 
 	return {
-		name: `guard-test-${keyword}`,
+		name,
 		lexerVocabulary: { keywords: { [keyword]: tokenType } },
-		prefixParselets: [{ tokenType, parselet }],
-		pluginFunctions: [{ index, handler }],
+		prefixParselets: { [tokenType]: parselet },
+		pluginFunctions: { [keyword]: handler },
 	};
 }
 

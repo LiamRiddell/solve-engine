@@ -5,7 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { tryConsumeZoneReference } from "./shared/ZoneReference";
-import { TIME_DIFFERENCE_FN_IDX } from "./TimezonePluginFunctions";
+import { TIME_DIFFERENCE_FN } from "./TimezonePluginFunctions";
 
 /**
  * `time difference between <city1> and <city2>` -> a directional,
@@ -53,8 +53,6 @@ export class TimeDifferenceParselet implements PrefixParselet {
     builder.emitString(zone1.displayName);
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(zone2.displayName);
-    builder.emitOpcode(OpCode.CALL_PLUGIN);
-    builder.emitIndex(TIME_DIFFERENCE_FN_IDX);
-    builder.emitIndex(4);
+    builder.emitPluginCall(TIME_DIFFERENCE_FN, 4);
   }
 }

@@ -1,5 +1,4 @@
 import { Value, ValueType, numberValue, errorValue, symbolicValue } from "@solve-js/vm/Value";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import {
 	type SymbolicNode,
@@ -63,8 +62,8 @@ const INTERVAL_COLLAPSE_WIDTH = 1e-12;
 /** Largest imaginary part a numerically-found root may carry and still count as real. */
 const REAL_ROOT_IMAGINARY_TOLERANCE = 1e-9;
 
-/** `solve line N for <var> = <target>`. */
-export const GOAL_SEEK_FN_IDX = allocatePluginFunctionIndex();
+/** The package-local name the goal-seek plugin function is registered and emitted under (`solve line N for <var> = <target>`). */
+export const GOAL_SEEK_FN_NAME = "goalseek";
 
 /**
  * Solve for the variable that makes a line equal a target.

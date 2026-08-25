@@ -127,10 +127,14 @@ export class PrecedenceParser {
     [tokenTypeId(TokenTypes.OF)]:      OpCode.MUL,
   };
 
-  constructor(parseletRegistry: ParseletRegistry, maxDepth = 50, localeCode = "en") {
+  /** Shared with every BytecodeBuilder so a nested-body builder resolves plugin calls by name. */
+  private pluginFunctionIndex?: ReadonlyMap<string, number>;
+
+  constructor(parseletRegistry: ParseletRegistry, maxDepth = 50, localeCode = "en", pluginFunctionIndex?: ReadonlyMap<string, number>) {
     this.registry = parseletRegistry;
     this.maxDepth = maxDepth;
     this.localeCode = localeCode;
+    this.pluginFunctionIndex = pluginFunctionIndex;
   }
 
   /** Get locale code for NumberParselet to normalize separators */
@@ -767,7 +771,7 @@ export class PrecedenceParser {
     // whatever parses next (in this same expression, or, via
     // ExpressionEngine's builder pool, a LATER, unrelated line) into a
     // stale, already-.build()'d body builder.
-    const bodyBuilder = new BytecodeBuilder();
+    const bodyBuilder = new BytecodeBuilder(this.pluginFunctionIndex);
     this.parseExpression(BindingPower.Lowest, bodyBuilder);
     this.setBuilder(builder);
 

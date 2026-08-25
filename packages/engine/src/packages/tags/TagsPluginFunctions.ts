@@ -1,5 +1,4 @@
 import { Value, ValueType, numberValue, uomValue, errorValue } from "@solve-js/vm/Value";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { lineCarriesTag } from "./TagScanner";
 
@@ -88,7 +87,6 @@ function aggregateTagged(context: LineExecutionContext, tag: string, mode: TagMo
 }
 
 /** `total of #tag` / `sum of #tag`, the sum of every line carrying the tag. */
-export const TAG_SUM_FN_IDX = allocatePluginFunctionIndex();
 /** Sum of every tagged line's result. @param args A String holding the tag name. */
 export function tagSumHandler(args: Value[], context?: LineExecutionContext): Value {
   const ctxError = requireContext(context);
@@ -97,7 +95,6 @@ export function tagSumHandler(args: Value[], context?: LineExecutionContext): Va
 }
 
 /** `average of #tag`, the mean of every line carrying the tag. */
-export const TAG_AVERAGE_FN_IDX = allocatePluginFunctionIndex();
 /** Mean of every tagged line's result. @param args A String holding the tag name. */
 export function tagAverageHandler(args: Value[], context?: LineExecutionContext): Value {
   const ctxError = requireContext(context);
@@ -106,7 +103,6 @@ export function tagAverageHandler(args: Value[], context?: LineExecutionContext)
 }
 
 /** `count of #tag`, how many lines carry the tag. */
-export const TAG_COUNT_FN_IDX = allocatePluginFunctionIndex();
 /** Count of the lines carrying the tag. @param args A String holding the tag name. */
 export function tagCountHandler(args: Value[], context?: LineExecutionContext): Value {
   const ctxError = requireContext(context);

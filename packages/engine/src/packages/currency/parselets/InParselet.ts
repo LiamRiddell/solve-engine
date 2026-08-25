@@ -4,7 +4,7 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { resolveCurrencyAlias } from "@solve-js/uom/CurrencyAliases";
-import { tryConsumeCurrencyOnDate, HISTORICAL_CURRENCY_FN_IDX } from "@solve-js/uom/HistoricalCurrency";
+import { tryConsumeCurrencyOnDate, HISTORICAL_CURRENCY_FN } from "@solve-js/uom/HistoricalCurrency";
 
 /**
  * InParselet, handles the standalone `IN` keyword as a postfix conversion.
@@ -60,9 +60,7 @@ export class InParselet implements InfixParselet {
 				builder.emitString(targetUnit);
 				builder.emitOpcode(OpCode.PUSH_STRING);
 				builder.emitString(isoDate);
-				builder.emitOpcode(OpCode.CALL_PLUGIN);
-				builder.emitIndex(HISTORICAL_CURRENCY_FN_IDX);
-				builder.emitIndex(3);
+				builder.emitPluginCall(HISTORICAL_CURRENCY_FN, 3);
 				return;
 			}
 
