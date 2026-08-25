@@ -58,7 +58,7 @@
   - The `PackageRegistry` class, its `packageRegistry` singleton and the `IPackageRegistry` interface: they wrote into process-wide singletons an engine does not read, since an engine builds its own parselet registry and its own lexer and classifies lines vocabulary-independently. Register on an engine instead, with `engine.registerPackage(pkg)` or `createEngine({ extraPackages })`.
   - `symbolToCurrency`: a backward-compatibility re-export of the currency-symbol alias table, which has lived in `uom/CurrencyAliases.ts` since.
   
-  The `IEnginePackage` descriptor type is unchanged apart from the dropped `variableSources` field.
+  `IEnginePackage` also drops `variableSources`; its parselet and plugin-function fields change shape, covered next.
   
   ## Package descriptors are keyed, not lists
   
