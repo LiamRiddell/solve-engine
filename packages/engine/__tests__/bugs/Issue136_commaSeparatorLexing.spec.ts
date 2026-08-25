@@ -21,10 +21,10 @@ import { ValueType, type MatrixData, type ColourData } from "@solve-js/vm/Value"
 describe("Issue #136: a comma in a call or bracket is a separator, not a thousands group", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
-  const evalOne = (source: string) => engine.evaluateExpression(source)[0];
+  const evalOne = (source: string) => engine.evaluateExpression(source);
 
   describe("bracketed vectors split on the comma", () => {
     test("`[100,200,300]` is a 1x3 row vector, not the number 100200300", () => {

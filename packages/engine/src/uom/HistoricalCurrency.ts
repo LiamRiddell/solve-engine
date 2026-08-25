@@ -17,11 +17,11 @@
  * and `uom/CurrencyExchange.ts`'s getRateSync doc for why a made-up number
  * dressed as a real one is worse than an honest failure).
  *
- * **Why one shared plugin index, read at runtime**: both the general
+ * **Why one shared plugin function, read at runtime**: both the general
  * UomLiteralParselet (`100 USD in GBP on <date>`) and the currency
- * InParselet (`$100 in GBP on <date>`) emit the SAME `CALL_PLUGIN` at the
- * module-level {@link HISTORICAL_CURRENCY_FN_IDX}, exactly as Weather's five
- * phrases share one `WEATHER_FN_IDX`. The source currency is read from the
+ * InParselet (`$100 in GBP on <date>`) emit the SAME `CALL_PLUGIN` by the
+ * module-level name {@link HISTORICAL_CURRENCY_FN}, the same way Weather's five
+ * phrases share one plugin function. The source currency is read from the
  * amount Value at RUNTIME rather than baked into the opcode stream, because the
  * InParselet's left operand (`$100`, a variable, a subexpression) has no
  * compile-time unit. Preflight fetches the rate ahead of the VM only when it can
@@ -36,7 +36,7 @@ import type { Parser } from "@solve-js/parser/Parser";
 import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { nextInstruction } from "@solve-js/parser/OperandWidth";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { getActiveQueryClient } from "@solve-js/services/DataQueryService";
 import { ValueType, numberValue, uomValue, errorValue, faultedOperand, type Value } from "@solve-js/vm/Value";
 import type { IAsyncResolver, AsyncCheckResult } from "@solve-js/resolvers/ResolverRegistry";
@@ -65,11 +65,23 @@ export type HistoricalRateProvider = (
 export const HISTORICAL_CURRENCY_NS = "currency-historical";
 
 /**
- * The single `CALL_PLUGIN` index every historical conversion is compiled to.
- * Module level (allocated once), so the general UOM parselets can emit it
- * without importing a per-package instance's index. See this module's doc.
+ * The package-local name every historical conversion is compiled to. Both the
+ * general UOM parselet and the currency InParselet emit a `CALL_PLUGIN` to it by
+ * this name (`builder.emitPluginCall(HISTORICAL_CURRENCY_FN, 3)`); the engine
+ * assigns the numeric index at registration. Module level, so the general UOM
+ * parselets can emit it without importing a per-package instance. See this
+ * module's doc.
  */
-export const HISTORICAL_CURRENCY_FN_IDX = allocatePluginFunctionIndex();
+export const HISTORICAL_CURRENCY_FN = "historicalCurrency";
+
+/**
+ * The qualified name the engine files this function's index under. It is
+ * registered by the currency package (`name: "solve-currency"`, see
+ * CurrencyPackage.ts), so the bytecode-scanning resolver below recovers the
+ * runtime index by this name via {@link pluginFunctionIndexFor} rather than
+ * owning a hand-allocated one.
+ */
+const HISTORICAL_CURRENCY_QUALIFIED = `solve-currency:${HISTORICAL_CURRENCY_FN}`;
 
 /** Structured error codes this feature produces, co-located per the `errors/ErrorCode.ts` per-package pattern. */
 export const HistoricalCurrencyErrorCodes = {
@@ -341,6 +353,9 @@ export function createHistoricalCurrencyResolver(provider?: HistoricalRateProvid
 		): AsyncCheckResult | null {
 			const { opcodes, strings } = bytecode;
 			const len = opcodes.length;
+			// The engine assigns this function's CALL_PLUGIN index at registration;
+			// recover it by the same qualified name to scan the compiled bytecode.
+			const historicalFnIdx = pluginFunctionIndexFor(HISTORICAL_CURRENCY_QUALIFIED);
 			let i = 0;
 
 			// Pool indices of the PUSH_STRINGs seen since the last CALL_PLUGIN, so
@@ -355,7 +370,7 @@ export function createHistoricalCurrencyResolver(provider?: HistoricalRateProvid
 				} else if (op === OpCode.CALL_PLUGIN) {
 					const fnIdx = opcodes[i + 1];
 					const argCount = opcodes[i + 2];
-					if (fnIdx === HISTORICAL_CURRENCY_FN_IDX && argCount === 3 && stringIdxs.length >= 3) {
+					if (fnIdx === historicalFnIdx && argCount === 3 && stringIdxs.length >= 3) {
 						// The parselet emits `to` then `isoDate` as the last two
 						// strings; everything before them is the amount's operands.
 						const isoDate = strings[stringIdxs[stringIdxs.length - 1]];

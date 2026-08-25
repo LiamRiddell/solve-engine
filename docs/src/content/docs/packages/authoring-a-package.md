@@ -24,10 +24,10 @@ const vat = defineFunction({
   call: (amount) => amount * 1.2,
 });
 
-const engine = new ExpressionEngine("en", false, undefined, undefined, [
+const engine = new ExpressionEngine({ packages: [
   ...BUILTIN_PACKAGES,
   vat,
-]);
+] });
 
 engine.evaluateExpression("vat(100)"); // 120
 ```
@@ -100,7 +100,6 @@ a clear message rather than failing mysteriously later.
 | `pluginFunctions` | Functions the virtual machine can call |
 | `normalizerRules` | Token-stream rewrites, including phrase fusion |
 | `asConverters` | Targets for the `as` conversion form |
-| `variableSources` | Providers of variable values |
 | `asyncResolvers` | External data sources |
 | `tokenCategories` | Highlighting categories for new tokens |
 | `completionItems` | Editor completion candidates |
@@ -110,10 +109,10 @@ a clear message rather than failing mysteriously later.
 ```ts
 import { ExpressionEngine } from "solve-engine";
 
-const engine = new ExpressionEngine("en", false, undefined, undefined, [
+const engine = new ExpressionEngine({ packages: [
   ...BUILTIN_PACKAGES,
   myPackage,
-]);
+] });
 ```
 
 Order matters. Arithmetic registers first so its operators are in place before

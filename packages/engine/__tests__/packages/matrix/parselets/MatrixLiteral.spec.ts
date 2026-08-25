@@ -12,12 +12,12 @@ import { formatValue } from "@solve-js/format/FormatEngine";
 import { newTrackedEngine } from "@tools/trackedEngine";
 
 function engine() {
-  return newTrackedEngine("en");
+  return newTrackedEngine();
 }
 
 function evalOne(expr: string) {
   const e = engine();
-  const [v] = e.evaluateExpression(expr);
+  const v = e.evaluateExpression(expr);
   return v;
 }
 
@@ -52,7 +52,7 @@ describe("Matrix literal", () => {
     const e = engine();
     e.evaluateLine(1, ":foo = 2");
     e.evaluateLine(2, ":bar = 3");
-    const [v] = e.evaluateLine(3, "[foo, bar] * 2");
+    const v = e.evaluateLine(3, "[foo, bar] * 2");
     const m = v.value as MatrixData;
     expect(m.data).toEqual([4, 6]);
   });

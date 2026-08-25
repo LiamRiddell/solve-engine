@@ -35,7 +35,7 @@ import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import type { PrefixParselet } from "@solve-js/parser/Parselet";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { createQueryResolver } from "@solve-js/resolvers/QueryResolver";
 
 // ── Engine lifecycle ────────────────────────────────────────────────────────
@@ -102,7 +102,13 @@ function assertValueEquals(after: Value, before: Value): void {
 // test never races a real network or a batcher flush. `asyncprice <symbol>`
 // compiles to the PUSH_STRING(symbol) + CALL_PLUGIN pair the resolver scans for.
 
-const ASYNC_FN_IDX = allocatePluginFunctionIndex();
+// The engine files this package's async function under `${pkg.name}:${name}`
+// and assigns it a stable CALL_PLUGIN index. Computing the index here from that
+// same qualified name gives the resolver the exact index the engine will emit,
+// and the parselet emits the call by name (below), so all three agree.
+const TEST_ASYNC_PKG_NAME = "test-async";
+const ASYNC_FN_NAME = "asyncPrice";
+const ASYNC_FN_IDX = pluginFunctionIndexFor(`${TEST_ASYNC_PKG_NAME}:${ASYNC_FN_NAME}`);
 
 const { resolver: asyncResolver, pluginFunction: asyncPluginFunction } = createQueryResolver({
 	namespace: "testasync",
@@ -117,17 +123,18 @@ const asyncPriceParselet: PrefixParselet = {
 		const symbol = parser.consume().value;
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(symbol);
-		builder.emitOpcode(OpCode.CALL_PLUGIN);
-		builder.emitIndex(ASYNC_FN_IDX);
-		builder.emitIndex(1);
+		// Emit the plugin call by name; the engine's builder resolves it to the
+		// same index the resolver watches, so the compiled bytecode is the
+		// PUSH_STRING(symbol) + CALL_PLUGIN pair the resolver scans for.
+		builder.emitPluginCall(ASYNC_FN_NAME, 1);
 	},
 };
 
 const TEST_ASYNC_PACKAGE: IEnginePackage = {
-	name: "test-async",
+	name: TEST_ASYNC_PKG_NAME,
 	lexerVocabulary: { keywords: { asyncprice: "ASYNC_PRICE" } },
-	prefixParselets: [{ tokenType: "ASYNC_PRICE", parselet: asyncPriceParselet }],
-	pluginFunctions: [{ index: ASYNC_FN_IDX, handler: asyncPluginFunction }],
+	prefixParselets: { ASYNC_PRICE: asyncPriceParselet },
+	pluginFunctions: { [ASYNC_FN_NAME]: asyncPluginFunction },
 	asyncResolvers: [asyncResolver],
 };
 
@@ -137,7 +144,7 @@ const ASYNC_PACKAGES = [...BUILTIN_PACKAGES, TEST_ASYNC_PACKAGE];
 
 describe("a restored engine behaves like the one that evaluated the document", () => {
 	test("variables and a user function resolve identically after a round trip", () => {
-		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
+		const engine = track(new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
 		engine.parseDocument(
 			[
 				":price = 100",
@@ -150,29 +157,29 @@ describe("a restored engine behaves like the one that evaluated the document", (
 		const restored = roundTrip(engine);
 
 		for (const expr of [":price + 1", "double(21)", ":subtotal", "double(price) + qty"]) {
-			const before = engine.evaluateExpression(expr)[0];
-			const after = restored.evaluateExpression(expr)[0];
+			const before = engine.evaluateExpression(expr);
+			const after = restored.evaluateExpression(expr);
 			expect(after.toNumber()).toBe(before.toNumber());
 			expect(after.type).toBe(before.type);
 		}
 	});
 
 	test("a function defined before the snapshot is callable after restore", () => {
-		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
+		const engine = track(new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
 		engine.parseDocument("cube(n) = n * n * n\n:seed = 4");
 		const restored = roundTrip(engine);
-		expect(restored.evaluateExpression("cube(3)")[0].toNumber()).toBe(27);
-		expect(restored.evaluateExpression("cube(seed)")[0].toNumber()).toBe(64);
+		expect(restored.evaluateExpression("cube(3)").toNumber()).toBe(27);
+		expect(restored.evaluateExpression("cube(seed)").toNumber()).toBe(64);
 	});
 
 	test("the restore uses the snapshot's own locale by default", () => {
-		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
+		const engine = track(new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
 		engine.parseDocument(":x = 7");
 		const snapshot = engine.toJSON();
 		expect(snapshot.locale).toBe("en");
 		const restored = track(ExpressionEngine.fromJSON(snapshot, { packages: BUILTIN_PACKAGES }));
 		expect(restored.getConfig()).toBeDefined();
-		expect(restored.evaluateExpression(":x + 1")[0].toNumber()).toBe(8);
+		expect(restored.evaluateExpression(":x + 1").toNumber()).toBe(8);
 	});
 });
 
@@ -180,7 +187,7 @@ describe("a restored engine behaves like the one that evaluated the document", (
 
 describe("every supported value kind survives the round trip", () => {
 	test("scalars, units, money, fractions, bigints, and vectors restore identically", () => {
-		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
+		const engine = track(new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
 		engine.parseDocument(
 			[
 				":n = 42.5",
@@ -207,12 +214,12 @@ describe("every supported value kind survives the round trip", () => {
 	});
 
 	test("money stays exact across a restore, not the drifted double", () => {
-		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
+		const engine = track(new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
 		engine.parseDocument(":a = $0.10\n:b = $0.20");
 		const restored = roundTrip(engine);
 
-		const before = engine.evaluateExpression("a + b")[0];
-		const after = restored.evaluateExpression("a + b")[0];
+		const before = engine.evaluateExpression("a + b");
+		const after = restored.evaluateExpression("a + b");
 		expect(after.exact).toBeDefined();
 		expect(after.exact?.coef.toString()).toBe(before.exact?.coef.toString());
 		expect(after.exact?.scale).toBe(before.exact?.scale);
@@ -220,10 +227,10 @@ describe("every supported value kind survives the round trip", () => {
 	});
 
 	test("an exact fraction keeps its rational sidecar, so 1/3 + 1/3 + 1/3 is exactly 1", () => {
-		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
+		const engine = track(new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
 		engine.parseDocument(":third = 1/3");
 		const restored = roundTrip(engine);
-		const [sum] = restored.evaluateExpression("third + third + third");
+		const sum = restored.evaluateExpression("third + third + third");
 		expect(sum.toNumber()).toBe(1);
 	});
 
@@ -248,7 +255,7 @@ describe("every supported value kind survives the round trip", () => {
 
 describe("a snapshot is plain JSON", () => {
 	test("stringify then parse leaves the snapshot structurally identical", () => {
-		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
+		const engine = track(new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
 		engine.parseDocument(":x = 10\nf(k) = k + 1\n:huge = 123456789012345678901234567890n\n:y = f(x)");
 		const snapshot = engine.toJSON();
 		// The snapshot is already JSON-safe (bigints are strings, no NaN/Infinity
@@ -258,12 +265,12 @@ describe("a snapshot is plain JSON", () => {
 		expect(throughJson).toEqual(snapshot);
 
 		const restored = track(ExpressionEngine.fromJSON(throughJson, { packages: BUILTIN_PACKAGES }));
-		expect(restored.evaluateExpression("f(41)")[0].toNumber()).toBe(42);
-		expect(restored.evaluateExpression(":y")[0].toNumber()).toBe(11);
+		expect(restored.evaluateExpression("f(41)").toNumber()).toBe(42);
+		expect(restored.evaluateExpression(":y").toNumber()).toBe(11);
 	});
 
 	test("the snapshot carries the format envelope and engine version", () => {
-		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
+		const engine = track(new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
 		engine.parseDocument(":x = 1");
 		const snapshot = engine.toJSON();
 		expect(snapshot.format).toBe("solve-engine/snapshot");
@@ -285,7 +292,7 @@ describe("an incompatible snapshot is refused clearly", () => {
 	}
 
 	test("a mismatched serialised-shape version is a coded rejection, not a wrong restore", () => {
-		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
+		const engine = track(new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
 		engine.parseDocument(":x = 1");
 		const snapshot = engine.toJSON();
 		const fromFuture = { ...snapshot, version: snapshot.version + 1 };
@@ -298,7 +305,7 @@ describe("an incompatible snapshot is refused clearly", () => {
 	});
 
 	test("a wrong format string is rejected even when a version is present", () => {
-		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
+		const engine = track(new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
 		engine.parseDocument(":x = 1");
 		const snapshot = engine.toJSON();
 		const wrongFormat = { ...snapshot, format: "some-other-tool/export" };
@@ -310,12 +317,12 @@ describe("an incompatible snapshot is refused clearly", () => {
 
 describe("resolved and in-flight async values are not restored stale", () => {
 	test("an in-flight (pending) async line is present in the live cache but omitted from the snapshot", async () => {
-		const engine = track(new ExpressionEngine("en", false, undefined, undefined, ASYNC_PACKAGES));
+		const engine = track(new ExpressionEngine({ packages: ASYNC_PACKAGES }));
 		// A bare engine has no host to mirror resolved values into; sink them so
 		// the in-flight fetch settling later does not warn about a missing hook.
 		engine.getBatcher().onLineResult = () => {};
 
-		const [pending] = engine.evaluateLine(1, "asyncprice FOO");
+		const pending = engine.evaluateLine(1, "asyncprice FOO");
 		expect(pending.type).toBe(ValueType.Pending);
 
 		// The snapshot is taken while the line is still in flight. The engine kept
@@ -331,12 +338,12 @@ describe("resolved and in-flight async values are not restored stale", () => {
 	});
 
 	test("a resolved async variable is dropped, so a restored engine re-fetches rather than serving a stale value", () => {
-		const engine = track(new ExpressionEngine("en", false, undefined, undefined, ASYNC_PACKAGES));
+		const engine = track(new ExpressionEngine({ packages: ASYNC_PACKAGES }));
 		// Seed the query cache so the async op resolves synchronously to a value
 		// the test controls, no batcher flush or real network involved.
 		engine.queryClient.setQueryData(["testasync", "FOO"], numberValue(50000));
 
-		const [resolved] = engine.evaluateLine(1, ":p = asyncprice FOO");
+		const resolved = engine.evaluateLine(1, ":p = asyncprice FOO");
 		expect(resolved.toNumber()).toBe(50000);
 		expect(engine.getVM().getVar("p")?.toNumber()).toBe(50000);
 
@@ -351,7 +358,7 @@ describe("resolved and in-flight async values are not restored stale", () => {
 	});
 
 	test("a plain variable defined after an async one of the same name is still carried", () => {
-		const engine = track(new ExpressionEngine("en", false, undefined, undefined, ASYNC_PACKAGES));
+		const engine = track(new ExpressionEngine({ packages: ASYNC_PACKAGES }));
 		engine.queryClient.setQueryData(["testasync", "FOO"], numberValue(1));
 		engine.evaluateLine(1, ":p = asyncprice FOO"); // async writer, line 1
 		engine.evaluateLine(2, ":p = 500"); // plain writer, line 2, the current value
@@ -368,7 +375,7 @@ describe("resolved and in-flight async values are not restored stale", () => {
 
 describe("the line and bytecode caches are carried", () => {
 	test("restored line-cache entries match by result, reads, and write variable", () => {
-		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
+		const engine = track(new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
 		engine.parseDocument(":x = 10\n:y = x * 2\n:z = y + 5");
 		const restored = roundTrip(engine);
 
@@ -386,7 +393,7 @@ describe("the line and bytecode caches are carried", () => {
 	});
 
 	test("incremental re-evaluation works after a restore, so the dependency graph was rebuilt", () => {
-		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
+		const engine = track(new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
 		engine.parseDocument(":base = 10\n:scaled = base * 2");
 		const restored = roundTrip(engine);
 
@@ -413,7 +420,7 @@ describe("symbolic (algebra) values are deferred with a clear error", () => {
 	});
 
 	test("a cached line whose result is symbolic is skipped, and the rest of the snapshot still succeeds", () => {
-		const engine = track(new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES));
+		const engine = track(new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
 		engine.parseDocument(":x = 5\nexpand((a + 1) * (a + 2))");
 		// toJSON must not throw just because one line produced a symbolic result.
 		const snapshot = engine.toJSON();
@@ -421,6 +428,6 @@ describe("symbolic (algebra) values are deferred with a clear error", () => {
 		expect(snapshot.lineCache.some((e) => e.line === 2)).toBe(false);
 
 		const restored = roundTrip(engine);
-		expect(restored.evaluateExpression(":x + 1")[0].toNumber()).toBe(6);
+		expect(restored.evaluateExpression(":x + 1").toNumber()).toBe(6);
 	});
 });

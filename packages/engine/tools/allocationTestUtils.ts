@@ -21,7 +21,7 @@ export function createTrackedEngine(locale = "en", diagnostic = false): {
     cleanup: () => void;
 } {
     AllocationTracker.enable();
-    const engine = new ExpressionEngine(locale, diagnostic, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ locale, diagnostics: diagnostic, packages: BUILTIN_PACKAGES });
     return {
         engine,
         cleanup: () => {
@@ -41,9 +41,9 @@ export function evalWithTelemetry(
     expression: string,
     lineNumber = 1
 ): { value: number; telemetry: PipelineTelemetry | null } {
-    const values = engine.evaluateLine(lineNumber, expression);
+    const value = engine.evaluateLine(lineNumber, expression);
     return {
-        value: values[0].toNumber(),
+        value: value.toNumber(),
         telemetry: engine.getLastTelemetry(),
     };
 }

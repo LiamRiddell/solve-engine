@@ -17,7 +17,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
 
 function evaluate(expression: string) {
-  return new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES).evaluateExpression(expression)[0];
+  return new ExpressionEngine({ packages: BUILTIN_PACKAGES }).evaluateExpression(expression);
 }
 
 describe("the vocabulary is derived from the conversion tables", () => {

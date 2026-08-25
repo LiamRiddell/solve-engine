@@ -29,7 +29,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 export class ColumnAggregateParselet implements PrefixParselet {
   readonly category = "Tables";
 
-  constructor(private readonly pluginFnIndex: number) {}
+  constructor(private readonly pluginFnName: string) {}
 
   parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
     const next = parser.peek();
@@ -60,9 +60,7 @@ export class ColumnAggregateParselet implements PrefixParselet {
 
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(nameToken.value);
-    builder.emitOpcode(OpCode.CALL_PLUGIN);
-    builder.emitIndex(this.pluginFnIndex);
-    builder.emitIndex(1);
+    builder.emitPluginCall(this.pluginFnName, 1);
   }
 }
 

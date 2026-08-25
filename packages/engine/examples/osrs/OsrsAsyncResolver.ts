@@ -5,7 +5,8 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { uomValue, type Value } from "@solve-js/vm/Value";
 import type { IAsyncResolver, AsyncCheckResult } from "@solve-js/resolvers/ResolverRegistry";
 import { OSRS_ITEM_NAME_TO_ID, osrsItemQueryKey } from "./OsrsItemVocabulary";
-import { OSRS_PLUGIN_FN_IDX } from "./OsrsParselet";
+import { OSRS_GAME_ITEM_QUALIFIED } from "./OsrsParselet";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { createTimeoutSignal } from "@solve-js/utilities/TimeoutSignal";
 
 const OSRS_BULK_KEY = ["osrs", "bulk"];
@@ -34,6 +35,12 @@ export class OsrsAsyncResolver implements IAsyncResolver {
     const { opcodes, strings } = bytecode;
     const len = opcodes.length;
 
+    // The engine assigns this package's plugin-function a numeric CALL_PLUGIN
+    // index at registration; a bytecode scanner needs that runtime index to
+    // recognise its own calls. Look it up by the same qualified name the
+    // engine files it under, rather than owning a hand-allocated constant.
+    const osrsFnIdx = pluginFunctionIndexFor(OSRS_GAME_ITEM_QUALIFIED);
+
     // ── Collect all OSRS item IDs referenced in this bytecode ──
     const itemIds: number[] = [];
     let i = 0;
@@ -46,7 +53,7 @@ export class OsrsAsyncResolver implements IAsyncResolver {
           const fnIdx = opcodes[i + 1];
           const argCount = opcodes[i + 2];
 
-          if (fnIdx === OSRS_PLUGIN_FN_IDX && argCount >= 1 && i >= 2 && opcodes[i - 2] === OpCode.PUSH_STRING) {
+          if (fnIdx === osrsFnIdx && argCount >= 1 && i >= 2 && opcodes[i - 2] === OpCode.PUSH_STRING) {
             const stringIdx = opcodes[i - 1];
             const itemName = strings[stringIdx];
             const itemId = OSRS_ITEM_NAME_TO_ID.get(itemName.toLowerCase());

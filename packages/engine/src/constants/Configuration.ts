@@ -84,7 +84,7 @@ export interface DateConfig {
    *
    * Optional and unset by default: with no calendar, working-day arithmetic
    * skips weekends only. A host that wants holidays excluded too supplies one
-   * here (`new ExpressionEngine("en", false, { date: { holidays } })`), the
+   * here (`new ExpressionEngine({ config: { date: { holidays } } })`), the
    * same way stocks and weather take a host data source. Threaded into the VM
    * by `engine/ExpressionEngine.ts` exactly as {@link maxOffsetYears} is,
    * because working-day math is a VM operation several grammar forms share, so
@@ -271,13 +271,13 @@ export interface WorkerConfig {
  * ```typescript
  * import { ExpressionEngine } from "solve-js";
  *
- * const engine = new ExpressionEngine("en", false, {
+ * const engine = new ExpressionEngine({ config: {
  *   validation: {
  *     maxExpressionLength: 1000,
  *     maxComplexity: 200,
  *   },
  *   // date, performance, vm, worker, diagnostic all use defaults
- * });
+ * } });
  * ```
  */
 export interface EngineConfig {
@@ -294,6 +294,20 @@ export interface EngineConfig {
     /** Diagnostic pipeline configuration */
     readonly diagnostic: DiagnosticConfig;
   }
+
+/**
+ * A partial {@link EngineConfig} override, one section at a time.
+ *
+ * Overrides are merged per section over {@link DEFAULT_CONFIG}, so you can set a
+ * single field of one section (`{ validation: { maxExpressionLength: 1000 } }`)
+ * and keep every other default in that section. A plain `Partial<EngineConfig>`
+ * cannot express that, it demands a whole section object, which is why the
+ * documented overrides never typechecked against it. This is the type the
+ * constructor and {@link createEngine} accept.
+ */
+export type EngineConfigOverride = {
+  readonly [K in keyof EngineConfig]?: Partial<EngineConfig[K]>;
+};
 
 /**
  * Default configuration values
@@ -386,7 +400,7 @@ export const DEFAULT_CONFIG: EngineConfig = {
  */
 export function mergeEngineConfig(
   base: EngineConfig,
-  override: Partial<EngineConfig>
+  override: EngineConfigOverride
 ): EngineConfig {
   return {
     date: { ...base.date, ...override.date },

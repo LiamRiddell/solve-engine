@@ -381,12 +381,12 @@ describe("Full Pipeline Throughput Benchmarks", () => {
 
       // ── Cold: fresh engine, first parse ──
       const coldMs = timeMs(() => {
-        const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+        const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
         engine.parseDocument(doc);
       }, Math.min(20, tier.iterations));
 
       // ── Warm: engine with cached bytecode ──
-      const warmEngine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+      const warmEngine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       warmEngine.parseDocument(doc); // prime the cache
       const warmMs = timeMs(() => {
         warmEngine.parseDocument(doc);

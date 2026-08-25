@@ -13,7 +13,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
  * Use diagnosticMode=false for production-like behavior.
  */
 function createEngine(): ExpressionEngine {
-	return newTrackedEngine("en", false);
+	return newTrackedEngine();
 }
 
 /**

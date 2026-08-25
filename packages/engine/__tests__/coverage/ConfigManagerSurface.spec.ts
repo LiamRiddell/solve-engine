@@ -216,7 +216,7 @@ describe("reset", () => {
 		manager.reset();
 		manager.set("performance.maxDocumentLines", 42);
 
-		const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		try {
 			expect(engine.getConfig().performance.maxDocumentLines).toBe(PRISTINE_MAX_LINES);
 		} finally {

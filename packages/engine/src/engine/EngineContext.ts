@@ -14,16 +14,14 @@
  *
  * Runtime imports here are restricted to leaf modules of `vm/`. This file is
  * imported by `vm/`, which `engine/` imports in turn, so pulling in anything
- * that reaches back into `engine/` would close a cycle. `OpRegistry` and
- * `VariableResolver` are safe because they import only types plus the error
- * factory. Everything else arrives
+ * that reaches back into `engine/` would close a cycle. `OpRegistry` is safe
+ * because it imports only types plus the error factory. Everything else arrives
  * through `import type`, which is erased before the code runs.
  */
 
 import type { Value } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { OpRegistry } from "@solve-js/vm/OpRegistry";
-import { VariableResolver } from "@solve-js/variables/VariableResolver";
 
 /**
  * A function a package contributes to the VM, reachable from bytecode through
@@ -82,14 +80,6 @@ export interface EngineContext {
 	readonly opRegistry: OpRegistry;
 
 	/**
-	 * Named-variable sources a package contributed.
-	 *
-	 * A package registering a source used to make its variables visible to
-	 * every engine in the process, including ones that never registered it.
-	 */
-	readonly variableResolver: VariableResolver;
-
-	/**
 	 * Which package registered each plugin function index.
 	 *
 	 * The VM emits a pending result when a plugin function returns a promise,
@@ -110,7 +100,6 @@ export function createEngineContext(): EngineContext {
 	return {
 		pluginFunctions: {},
 		opRegistry: new OpRegistry(),
-		variableResolver: new VariableResolver(),
 		pluginFunctionOwners: {},
 	};
 }

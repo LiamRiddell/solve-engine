@@ -223,20 +223,20 @@ describe("the throw contract VM.ts depends on", () => {
     //
     // A fixed date literal, not `today`: `today` resolves to the current
     // instant on every evaluation, so comparing two of them races the clock.
-    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
-    const base = engine.evaluateExpression("25/12/2026")[0].toNumber();
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
+    const base = engine.evaluateExpression("25/12/2026").toNumber();
 
     for (const nonDuration of ["5 m", "5 kg", "5 l", "5 C", "5 mph"]) {
-      const result = engine.evaluateExpression(`25/12/2026 + ${nonDuration}`)[0];
+      const result = engine.evaluateExpression(`25/12/2026 + ${nonDuration}`);
       expect(result.type).toBe(ValueType.Datetime);
       expect(Number.isNaN(result.toNumber())).toBe(false);
       expect(result.toNumber()).toBe(base);
     }
 
     // Real durations still move the date.
-    expect(engine.evaluateExpression("25/12/2026 + 5 min")[0].toNumber()).toBe(base + 5 * 60_000);
-    expect(engine.evaluateExpression("25/12/2026 + 5 minutes")[0].toNumber()).toBe(base + 5 * 60_000);
-    expect(engine.evaluateExpression("25/12/2026 + 2 days")[0].toNumber()).toBe(base + 2 * 86_400_000);
+    expect(engine.evaluateExpression("25/12/2026 + 5 min").toNumber()).toBe(base + 5 * 60_000);
+    expect(engine.evaluateExpression("25/12/2026 + 5 minutes").toNumber()).toBe(base + 5 * 60_000);
+    expect(engine.evaluateExpression("25/12/2026 + 2 days").toNumber()).toBe(base + 2 * 86_400_000);
   });
 });
 

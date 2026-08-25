@@ -2,7 +2,7 @@
  * MultiResult — Comprehensive Unit Tests
  *
  * Covers:
- * - evaluateLine returning Value[] (single-element)
+ * - evaluateLine/evaluateExpression returning a bare Value
  * - ThreeTierEvaluator multi-result GROUP handling — a line can carry
  *   multiple independent expressions (inline solves, e.g.
  *   `s`1+1` text s`2+2``), each contributing its own Value[] group to
@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, test, beforeEach, afterEach, beforeAll } from "@jest/globals";
-import { ExpressionEngine, type EvalResults } from "@solve-js/engine/ExpressionEngine";
+import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { Value, ValueType } from "@solve-js/vm/Value";
 import { ThreeTierEvaluator, EvalTier } from "@solve-js/engine/ThreeTierEvaluator";
@@ -42,7 +42,7 @@ beforeAll(() => {
 });
 
 function createEngine(locale = "en", diagnosticMode = false): ExpressionEngine {
-  return newTrackedEngine(locale, diagnosticMode);
+  return newTrackedEngine({ locale, diagnostics: diagnosticMode });
 }
 
 function createDoc(lines: string[]): DocumentModel {
@@ -74,60 +74,52 @@ describe("evaluateLine — Basic evaluation", () => {
     engine = createEngine();
   });
 
-  test("simple arithmetic returns single-element Value[]", () => {
-    const results = engine.evaluateLine(1, "1 + 2");
-    expect(results.length).toBe(1);
-    expectNumber(results[0], 3);
+  test("simple arithmetic returns a Value", () => {
+    const result = engine.evaluateLine(1, "1 + 2");
+    expectNumber(result, 3);
   });
 
-  test("variable definition returns single-element Value[]", () => {
-    const results = engine.evaluateLine(1, ":x = 5 + 3");
-    expect(results.length).toBe(1);
-    expectNumber(results[0], 8);
+  test("variable definition returns a Value", () => {
+    const result = engine.evaluateLine(1, ":x = 5 + 3");
+    expectNumber(result, 8);
   });
 
-  test("plain number returns single-element Value[]", () => {
-    const results = engine.evaluateLine(1, "42");
-    expect(results.length).toBe(1);
-    expectNumber(results[0], 42);
+  test("plain number returns a Value", () => {
+    const result = engine.evaluateLine(1, "42");
+    expectNumber(result, 42);
   });
 
-  test("expression with parens returns single-element Value[]", () => {
-    const results = engine.evaluateLine(1, "(2 + 3) * 4");
-    expect(results.length).toBe(1);
-    expectNumber(results[0], 20);
+  test("expression with parens returns a Value", () => {
+    const result = engine.evaluateLine(1, "(2 + 3) * 4");
+    expectNumber(result, 20);
   });
 
-  test("return type is always Value[] even for trivial expressions", () => {
-    const results = engine.evaluateLine(1, "0");
-    expect(Array.isArray(results)).toBe(true);
-    expect(results.length).toBe(1);
+  test("return type is a bare Value, not an array, even for trivial expressions", () => {
+    const result = engine.evaluateLine(1, "0");
+    expect(Array.isArray(result)).toBe(false);
+    expect(result).toBeInstanceOf(Value);
   });
 
   test("single-target 'in' conversion (no comma) returns a single UOM value", () => {
-    const results = engine.evaluateLine(1, "10 USD in EUR");
-    expect(results.length).toBe(1);
-    expect(results[0].type).toBe(ValueType.Uom);
+    const result = engine.evaluateLine(1, "10 USD in EUR");
+    expect(result.type).toBe(ValueType.Uom);
   });
 
-  test("no 'in' keyword: single-element Value[]", () => {
-    const results = engine.evaluateLine(1, "10 + 5");
-    expect(results.length).toBe(1);
-    expectNumber(results[0], 15);
+  test("no 'in' keyword: a plain arithmetic Value", () => {
+    const result = engine.evaluateLine(1, "10 + 5");
+    expectNumber(result, 15);
   });
 
   test("no currency: arithmetic has no 'in' keyword", () => {
-    const results = engine.evaluateLine(1, "100 * 2 + 30");
-    expect(results.length).toBe(1);
-    expectNumber(results[0], 230);
+    const result = engine.evaluateLine(1, "100 * 2 + 30");
+    expectNumber(result, 230);
   });
 
   test(":x = 10 USD in EUR evaluates to a single UOM value", () => {
-    const results = engine.evaluateLine(1, ":x = 10 USD in EUR");
-    expect(results.length).toBe(1);
-    expect(results[0].type).toBe(ValueType.Uom);
-    expect(results[0].unit).toBe("EUR");
-    expect(results[0].toNumber()).toBeGreaterThan(0);
+    const result = engine.evaluateLine(1, ":x = 10 USD in EUR");
+    expect(result.type).toBe(ValueType.Uom);
+    expect(result.unit).toBe("EUR");
+    expect(result.toNumber()).toBeGreaterThan(0);
   });
 });
 
@@ -315,17 +307,16 @@ describe("ThreeTierEvaluator — Variable-def single-result invariant", () => {
     // a known limitation unrelated to this test — the key assertion is that
     // it's a single result either way.
     try {
-      const results = engine.evaluateLine(1, ":price = 10 USD in EUR");
-      expect(results.length).toBe(1);
+      const result = engine.evaluateLine(1, ":price = 10 USD in EUR");
+      expect(result).toBeInstanceOf(Value);
     } catch (e: any) {
       expect(e.message).toMatch(/colon|identifier|unit/i);
     }
   });
 
   test("variable def without colon but evaluated through ThreeTierEvaluator has exactly 1 Value group", () => {
-    const results = engine.evaluateLine(1, ":rate = 100");
-    expect(results.length).toBe(1);
-    expectNumber(results[0], 100);
+    const result = engine.evaluateLine(1, ":rate = 100");
+    expectNumber(result, 100);
   });
 });
 
@@ -342,21 +333,20 @@ describe("Engine isolation — evaluateLine direct", () => {
 
   test("sequential evaluateLine calls: VM state persists across calls", () => {
     const v1 = engine.evaluateLine(1, ":a = 5");
-    expect(v1[0].toNumber()).toBe(5);
+    expect(v1.toNumber()).toBe(5);
 
     const v2 = engine.evaluateLine(2, "a + 3");
-    expect(v2[0].toNumber()).toBe(8);
+    expect(v2.toNumber()).toBe(8);
   });
 
-  test("evaluateLine returns Value[] (not Value)", () => {
-    const results = engine.evaluateLine(1, "42");
-    expect(Array.isArray(results)).toBe(true);
-    expect(results.length).toBeGreaterThanOrEqual(1);
-    expect(results[0]).toBeInstanceOf(Object);
-    expect(typeof results[0].toNumber).toBe("function");
+  test("evaluateLine returns a bare Value (not an array)", () => {
+    const result = engine.evaluateLine(1, "42");
+    expect(Array.isArray(result)).toBe(false);
+    expect(result).toBeInstanceOf(Value);
+    expect(typeof result.toNumber).toBe("function");
   });
 
-  test("evaluateNumber still works with Value[] return", () => {
+  test("evaluateNumber still works with the bare-Value return", () => {
     const result = engine.evaluateNumber("10 + 5");
     expect(result).toBe(15);
   });
@@ -366,10 +356,9 @@ describe("Engine isolation — evaluateLine direct", () => {
     expect(result).toBeNaN();
   });
 
-  test("evaluateExpression returns Value[]", () => {
-    const results = engine.evaluateExpression("100 / 4");
-    expect(results.length).toBe(1);
-    expectNumber(results[0], 25);
+  test("evaluateExpression returns a Value", () => {
+    const result = engine.evaluateExpression("100 / 4");
+    expectNumber(result, 25);
   });
 
   test("reEvaluateLine still works (returns single Value)", () => {
@@ -405,9 +394,8 @@ describe("Engine isolation — evaluateLine direct", () => {
   });
 
   test("evaluateExpression single call integrates correctly", () => {
-    const results = engine.evaluateExpression("50 * 2");
-    expect(results.length).toBe(1);
-    expectNumber(results[0], 100);
+    const result = engine.evaluateExpression("50 * 2");
+    expectNumber(result, 100);
   });
 });
 
@@ -574,16 +562,16 @@ describe("MultiResult — Error handling", () => {
     expect(() => engine.evaluateLine(1, "(((")).toThrow();
   });
 
-  test("evaluateLine still returns Value[] on success after previous error", () => {
+  test("evaluateLine still returns a Value on success after previous error", () => {
     const engine = createEngine();
 
     // First call succeeds
-    const results = engine.evaluateLine(1, "42");
-    expect(results.length).toBe(1);
+    const result = engine.evaluateLine(1, "42");
+    expectNumber(result, 42);
 
     // Subsequent call also works
     const r2 = engine.evaluateLine(2, "24");
-    expect(r2.length).toBe(1);
+    expectNumber(r2, 24);
   });
 
   test("ThreeTierEvaluator marks line dirty on error (retry possible)", () => {
@@ -616,37 +604,40 @@ describe("MultiResult — Error handling", () => {
 describe("MultiResult — Value type correctness", () => {
   test("single number expression returns Number Value type", () => {
     const engine = createEngine();
-    const results = engine.evaluateLine(1, "42");
-    expect(results[0].type).toBe(ValueType.Number);
+    const result = engine.evaluateLine(1, "42");
+    expect(result.type).toBe(ValueType.Number);
   });
 
   test("hex literal returns Hex or Number Value type", () => {
     const engine = createEngine();
-    const results = engine.evaluateLine(1, "0xFF");
+    const result = engine.evaluateLine(1, "0xFF");
     // Engine may normalize hex literals to Number type after arithmetic.
     // Accept either Hex (1) or Number (0).
-    expect([ValueType.Number, ValueType.Hex]).toContain(results[0].type);
-    expect(results[0].toNumber()).toBe(255);
+    expect([ValueType.Number, ValueType.Hex]).toContain(result.type);
+    expect(result.toNumber()).toBe(255);
   });
 
-  test("result array is always Array.isArray()", () => {
+  test("evaluateLine always returns a bare Value, never an array", () => {
     const engine = createEngine();
     const r1 = engine.evaluateLine(1, "1");
     const r2 = engine.evaluateLine(1, "1 + 1");
     const r3 = engine.evaluateLine(1, "sin(1)");
 
-    expect(Array.isArray(r1)).toBe(true);
-    expect(Array.isArray(r2)).toBe(true);
-    expect(Array.isArray(r3)).toBe(true);
+    expect(Array.isArray(r1)).toBe(false);
+    expect(Array.isArray(r2)).toBe(false);
+    expect(Array.isArray(r3)).toBe(false);
+    expect(r1).toBeInstanceOf(Value);
+    expect(r2).toBeInstanceOf(Value);
+    expect(r3).toBeInstanceOf(Value);
   });
 
   test("UOM value has both toNumber and unit", () => {
     const engine = createEngine();
-    const results = engine.evaluateLine(1, "10 USD in EUR");
-    expect(results[0].type).toBe(ValueType.Uom);
-    expect(typeof results[0].toNumber()).toBe("number");
-    expect(typeof results[0].unit).toBe("string");
-    expect(results[0].unit!.length).toBeGreaterThan(0);
+    const result = engine.evaluateLine(1, "10 USD in EUR");
+    expect(result.type).toBe(ValueType.Uom);
+    expect(typeof result.toNumber()).toBe("number");
+    expect(typeof result.unit).toBe("string");
+    expect(result.unit!.length).toBeGreaterThan(0);
   });
 });
 
@@ -660,8 +651,7 @@ describe("MultiResult — Repeatability", () => {
     const r1 = engine.evaluateLine(1, "10 + 5");
     const r2 = engine.evaluateLine(1, "10 + 5");
 
-    expect(r1.length).toBe(r2.length);
-    expectNumber(r1[0], r2[0].toNumber());
+    expectNumber(r1, r2.toNumber());
   });
 
   test("ThreeTierEvaluator repeatability: same results on second evaluation", () => {

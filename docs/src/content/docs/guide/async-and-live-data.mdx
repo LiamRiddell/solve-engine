@@ -17,7 +17,7 @@ whose type is `Pending`. It carries the key of the query it is waiting on.
 ```ts
 import { ValueType } from "solve-engine/vm";
 
-const [value] = engine.evaluateExpression("10 USD to GBP");
+const value = engine.evaluateExpression("10 USD to GBP");
 value.type === ValueType.Pending; // true, on the first evaluation
 value.value;                      // "currency:USD:GBP", the query key
 ```
@@ -39,16 +39,16 @@ with `await`:
 ```ts
 import { createEngine } from "solve-engine";
 
-const engine = createEngine("en");
+const engine = createEngine({ locale: "en" });
 const reader = engine.getEventStream().getReader();
 
 // First evaluation: pending, no rate yet.
-let [value] = engine.evaluateExpression("10 USD to GBP");
+let value = engine.evaluateExpression("10 USD to GBP");
 
 // Wait for the fetch to land, then evaluate the same line again.
 const { value: event } = await reader.read();
 if (event?.type === "lines-updated") {
-  [value] = engine.evaluateExpression("10 USD to GBP");
+  value = engine.evaluateExpression("10 USD to GBP");
   value.type;       // ValueType.Uom now, not Pending
   value.toNumber(); // the converted amount
 }

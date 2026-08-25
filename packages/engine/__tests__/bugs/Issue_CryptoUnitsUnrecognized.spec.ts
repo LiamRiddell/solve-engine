@@ -18,7 +18,7 @@ describe("Bug: cryptocurrency codes not recognized as units", () => {
   let engine: ExpressionEngine;
 
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   // Releases the engine's query client and async batcher. Without it the
@@ -32,7 +32,7 @@ describe("Bug: cryptocurrency codes not recognized as units", () => {
     "%s lexes as a currency unit, not an undefined variable",
     (code) => {
       expect(() => engine.evaluateLine(1, `1 ${code}`)).not.toThrow();
-      const [result] = engine.evaluateLine(1, `1 ${code}`);
+      const result = engine.evaluateLine(1, `1 ${code}`);
       expect(result.type).toBe(ValueType.Uom);
       expect(result.unit).toBe(code);
     }

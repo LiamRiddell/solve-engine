@@ -68,7 +68,7 @@ particular package can filter it out.
 
 ```ts
 const packages = BUILTIN_PACKAGES.filter(p => p.name !== "solve-symbolic");
-const engine = new ExpressionEngine("en", false, undefined, undefined, packages);
+const engine = new ExpressionEngine({ packages: packages });
 ```
 
 Do this to change **behaviour**, not to chase speed. Dropping a package removes
@@ -83,9 +83,12 @@ roughly one percent, which is inside the noise of the measurement. A package
 contributes a few registry entries and, at most, one normalizer rule that
 declines quickly on tokens it does not claim.
 
-It saves no bundle size at all. Registration happens at runtime, while what ends
-up in your bundle is decided by imports, and those are static. The symbolic
-package's grammar is about eight kilobytes of the engine's brotli-compressed
-total, and that code ships whether you register it or not, because the virtual
-machine's builtin table imports the algebra functions directly. Filtering the
-array changes which words parse, not which code loads.
+Filtering `BUILTIN_PACKAGES` this way saves no bundle size either, because
+importing the array pulls every built-in into your bundle whether you register it
+or not. Bundle size is decided by imports, and those are static: to ship less
+code, import the packages you want individually (`import { ARITHMETIC_PACKAGE }
+from "solve-engine/packages"`) and pass those, so the bundler tree-shakes the rest
+away, since nothing in the engine's own module graph references a package you did
+not import. `createEngine()` is the opposite trade, every built-in for the
+convenience of one call. See the [performance guide](/guide/performance/) for the
+parsed-size figures.

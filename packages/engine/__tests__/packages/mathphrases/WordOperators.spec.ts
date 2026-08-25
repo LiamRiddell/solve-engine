@@ -14,8 +14,8 @@ import { describe, expect, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
 
 function num(source: string): number {
-	const engine = newTrackedEngine("en");
-	const [value] = engine.evaluateExpression(source);
+	const engine = newTrackedEngine();
+	const value = engine.evaluateExpression(source);
 	return value.toNumber();
 }
 
@@ -99,10 +99,10 @@ describe("what the new phrases must not claim", () => {
 	test("`:greater` and `:lesser` are still usable variable names", () => {
 		// The whole reason these are fused two-word phrases rather than bare
 		// keywords: only "greater of" is claimed, never "greater".
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateExpression(":greater = 9");
 		engine.evaluateExpression(":lesser = 4");
-		const [value] = engine.evaluateExpression(":greater + :lesser");
+		const value = engine.evaluateExpression(":greater + :lesser");
 		expect(value.toNumber()).toBe(13);
 	});
 
@@ -110,7 +110,7 @@ describe("what the new phrases must not claim", () => {
 		// Not this change's doing: both are function names (gcd(), root via
 		// sqrt's family), so the colon form has always been rejected. Recorded
 		// so "we claimed this word" stays distinguishable from "already taken".
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(() => engine.evaluateExpression(":gcd = 4")).toThrow(/after colon/i);
 		expect(() => engine.evaluateExpression(":root = 9")).toThrow(/after colon/i);
 	});

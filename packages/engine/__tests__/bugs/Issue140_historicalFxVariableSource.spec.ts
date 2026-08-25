@@ -76,7 +76,7 @@ describe("Issue #140: a variable source currency resolves a historical conversio
 		function engineWithProvider(provider: (from: string, to: string, isoDate: string) => Promise<number>): ExpressionEngine {
 			const currency = createCurrencyPackage({ historicalRateProvider: provider });
 			const packages = [...BUILTIN_PACKAGES.filter((p) => p.name !== "solve-currency"), currency];
-			return new ExpressionEngine("en", false, undefined, undefined, packages);
+			return new ExpressionEngine({ packages });
 		}
 
 		test("`x in GBP on 2024-01-15` for `x = 100 USD` is pending, then resolves through the provider", async () => {
@@ -86,7 +86,7 @@ describe("Issue #140: a variable source currency resolves a historical conversio
 			engine.evaluateLine(1, "x = 100 USD");
 			const first = engine.evaluateLine(2, "x in GBP on 2024-01-15");
 			// Was HISTORICAL_RATE_NOT_PREFLIGHTED (an Error) before the fix.
-			expect(first[0].type).toBe(ValueType.Pending);
+			expect(first.type).toBe(ValueType.Pending);
 
 			// resolveAsync awaits the fetch and the batcher re-evaluates on a
 			// microtask; give the pipeline a few ticks.
@@ -108,7 +108,7 @@ describe("Issue #140: a variable source currency resolves a historical conversio
 			const engine = engineWithProvider(provider);
 
 			const first = engine.evaluateLine(1, "100 USD in GBP on 2024-01-15");
-			expect(first[0].type).toBe(ValueType.Pending);
+			expect(first.type).toBe(ValueType.Pending);
 
 			for (let i = 0; i < 4; i++) await new Promise((r) => setTimeout(r, 0));
 

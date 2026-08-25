@@ -3,9 +3,7 @@ import type { PrefixParselet } from "@solve-js/parser/Parselet";
 import type { Parser } from "@solve-js/parser/Parser";
 import type { Token } from "@solve-js/lexer/Token";
 import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
-import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
 import {
   Value,
   ValueType,
@@ -220,7 +218,6 @@ class DefinedFunctionParselet implements PrefixParselet {
   readonly category = "Function";
 
   constructor(
-    private readonly fnIndex: number,
     private readonly fnName: string,
   ) {}
 
@@ -239,9 +236,7 @@ class DefinedFunctionParselet implements PrefixParselet {
 
     parser.consume("RPAREN");
 
-    builder.emitOpcode(OpCode.CALL_PLUGIN);
-    builder.emitIndex(this.fnIndex);
-    builder.emitIndex(argCount);
+    builder.emitPluginCall(this.fnName, argCount);
   }
 }
 
@@ -336,16 +331,16 @@ function validateSpec(spec: FunctionSpec): void {
  *
  * This is the higher-level API from issue #102. It derives, from the
  * declaration alone, everything the low-level contract asks an author to write
- * by hand: a plugin function index ({@link allocatePluginFunctionIndex}), a
- * lexer keyword so the name tokenises, a call-syntax parselet emitting
- * `CALL_PLUGIN`, and a handler that checks arity and argument types (yielding
+ * by hand: a named plugin function (the engine assigns its `CALL_PLUGIN`
+ * index), a lexer keyword so the name tokenises, a call-syntax parselet emitting
+ * that call by name, and a handler that checks arity and argument types (yielding
  * the engine's own structured errors) before invoking `call` and wrapping its
  * result. Anything needing custom parsing keeps writing a raw parselet exactly
  * as before, this sits on top of that contract and does not change it.
  *
  * @example
  * ```ts
- * const engine = new ExpressionEngine("en", false, undefined, undefined, [
+ * const engine = new ExpressionEngine({ packages: [
  *   ...BUILTIN_PACKAGES,
  *   defineFunction({
  *     name: "vat",
@@ -353,7 +348,7 @@ function validateSpec(spec: FunctionSpec): void {
  *     returns: "number",
  *     call: (amount) => amount * 1.2,
  *   }),
- * ]);
+ * ] });
  * engine.evaluateExpression("vat(100)"); // 120
  * ```
  *
@@ -381,9 +376,6 @@ export function defineFunction<
   // type; the name pattern guarantees it forms one. Distinct from the
   // built-in FUNC type, so this never routes through the builtin name map.
   const tokenType = `DEFINE_FN_${name.toUpperCase()}`;
-  // Allocated at definition time (not module load), so importing this module
-  // consumes no index and the export stays side-effect free.
-  const index = allocatePluginFunctionIndex();
 
   return {
     name: `solve-fn-${name}`,
@@ -392,11 +384,11 @@ export function defineFunction<
       // call is matched case-insensitively.
       keywords: { [name.toLowerCase()]: tokenType },
     },
-    prefixParselets: [
-      { tokenType, parselet: new DefinedFunctionParselet(index, name) },
-    ],
-    pluginFunctions: [
-      { index, handler: makeHandler(spec as FunctionSpec) },
-    ],
+    prefixParselets: {
+      [tokenType]: new DefinedFunctionParselet(name),
+    },
+    pluginFunctions: {
+      [name]: makeHandler(spec as FunctionSpec),
+    },
   };
 }

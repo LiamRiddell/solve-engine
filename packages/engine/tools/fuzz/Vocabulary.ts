@@ -28,7 +28,7 @@ import { enLocale } from "@solve-js/constants/locales/en";
 import { knownUnits } from "@solve-js/lexer/units";
 import { BUILTIN_PHRASES } from "@solve-js/normalizer";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
-import { builtinFunctions } from "@solve-js/vm/VMBuiltins";
+import { builtinFunctions, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { builtinArityError } from "@solve-js/vm/VMBuiltinArity";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 
@@ -157,7 +157,13 @@ export function buildVocabulary(engine: ExpressionEngine): Vocabulary {
 		for (const [word, tokenType] of Object.entries(pkg.lexerVocabulary?.keywords ?? {})) addWord(tokenType, word);
 		for (const chars of Object.keys(pkg.lexerVocabulary?.operators ?? {})) operators.add(chars);
 		for (const unit of pkg.lexerVocabulary?.units ?? []) extraUnits.add(unit);
-		for (const fn of pkg.pluginFunctions ?? []) pluginFunctionIndices.add(fn.index);
+		// A package now names its plugin functions and the engine assigns each a
+		// stable index under `${pkg.name}:${name}`; pluginFunctionIndexFor returns
+		// that same (cached) index, so the CALL_PLUGIN operands stay in step with
+		// what the engine registered.
+		for (const name of Object.keys(pkg.pluginFunctions ?? {})) {
+			pluginFunctionIndices.add(pluginFunctionIndexFor(`${pkg.name}:${name}`));
+		}
 	}
 
 	const units = [...knownUnits, ...extraUnits];

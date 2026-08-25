@@ -48,11 +48,12 @@ export type CompatibilityConflictKind =
   | "infixParseletTokenType"
   | "phrase"
   | "converterName"
-  | "pluginFunctionIndex"
+  | "pluginFunctionName"
   | "lexerKeyword"
   | "lexerOperator"
   | "asyncResolverNamespace"
-  | "tokenCategory";
+  | "tokenCategory"
+  | "normalizerRuleName";
 
 /** One way two packages collide, for example claiming the same keyword. */
 export interface CompatibilityConflict {
@@ -81,9 +82,9 @@ function collectParseletConflicts(
   const existingEntries = existingPkg[fieldName];
   const candidateEntries = candidate[fieldName];
   if (!existingEntries || !candidateEntries) return;
-  const existingTypes = new Set(existingEntries.map((e) => e.tokenType));
-  for (const entry of candidateEntries) {
-    if (existingTypes.has(entry.tokenType)) {
+  const existingTypes = new Set(Object.keys(existingEntries));
+  for (const tokenType of Object.keys(candidateEntries)) {
+    if (existingTypes.has(tokenType)) {
       out.push({
         kind,
         // A different parselet INSTANCE silently wins at registration time
@@ -93,7 +94,7 @@ function collectParseletConflicts(
         // since deliberate override is sometimes the intended use (a
         // package explicitly built to replace a built-in's grammar).
         severity: "warning",
-        detail: `Both "${existingPkg.name}" and "${candidate.name}" register a ${fieldName === "prefixParselets" ? "prefix" : "infix"} parselet for token type "${entry.tokenType}" — the later-registered one silently wins.`,
+        detail: `Both "${existingPkg.name}" and "${candidate.name}" register a ${fieldName === "prefixParselets" ? "prefix" : "infix"} parselet for token type "${tokenType}" — the later-registered one silently wins.`,
         packages: [existingPkg.name, candidate.name],
       });
     }
@@ -138,22 +139,39 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
     }
   }
 
-  // pluginFunctions, index collisions are ALWAYS a real bug (unlike
-  // parselet/converter overrides, there's no legitimate "intentional
-  // replacement" use case for two packages sharing a CALL_PLUGIN index;
-  // allocatePluginFunctionIndex() exists specifically to make this
-  // unreachable when used correctly, so a collision here means one side
-  // hardcoded a number instead). This is the exact bug class that hit
-  // THREE separate parallel background agents in one session before
-  // this checker existed.
+  // pluginFunctions are keyed by a package-local name; the engine assigns the
+  // registry index at registration (pluginFunctionIndexFor), so two packages
+  // can no longer collide on a hardcoded index, so the old error class is gone.
+  // They CAN name a function the same, and the engine's name->index map is
+  // last-registration-wins, so warn (as with the parselet/converter overrides).
   if (existingPkg.pluginFunctions && candidate.pluginFunctions) {
-    const existingIndices = new Set(existingPkg.pluginFunctions.map((f) => f.index));
-    for (const fn of candidate.pluginFunctions) {
-      if (existingIndices.has(fn.index)) {
+    const existingNames = new Set(Object.keys(existingPkg.pluginFunctions));
+    for (const name of Object.keys(candidate.pluginFunctions)) {
+      if (existingNames.has(name)) {
         conflicts.push({
-          kind: "pluginFunctionIndex",
-          severity: "error",
-          detail: `Both "${existingPkg.name}" and "${candidate.name}" register a pluginFunctions handler at index ${fn.index} — one of them almost certainly hardcoded this index instead of calling allocatePluginFunctionIndex(). Whichever registers second silently overwrites the first's handler in pluginFunctionRegistry.`,
+          kind: "pluginFunctionName",
+          severity: "warning",
+          detail: `Both "${existingPkg.name}" and "${candidate.name}" register a plugin function named "${name}" — the later registration wins in the engine's name-to-index map. Give each package's functions package-unique names.`,
+          packages: [existingPkg.name, candidate.name],
+        });
+      }
+    }
+  }
+
+  // normalizerRules, keyed by `name`. TokenNormalizer.unregister() removes
+  // EVERY rule whose name matches, so two packages sharing a rule name means
+  // unregistering one silently drops the other's rule too. (Rule ORDER is not
+  // checked: rules compose by their explicit `priority` and the normalizer's
+  // multi-pass loop, not by registration order, so distinct names + distinct
+  // priorities is the contract, not list position.)
+  if (existingPkg.normalizerRules && candidate.normalizerRules) {
+    const existingNames = new Set(existingPkg.normalizerRules.map((r) => r.name));
+    for (const rule of candidate.normalizerRules) {
+      if (existingNames.has(rule.name)) {
+        conflicts.push({
+          kind: "normalizerRuleName",
+          severity: "warning",
+          detail: `Both "${existingPkg.name}" and "${candidate.name}" register a normalizer rule named "${rule.name}" — the normalizer unregisters rules by name, so removing either package would drop both rules. Give each package's rules a package-unique name.`,
           packages: [existingPkg.name, candidate.name],
         });
       }

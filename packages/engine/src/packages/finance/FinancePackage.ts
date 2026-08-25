@@ -9,7 +9,6 @@ import { InflationQueryParselet } from "./parselets/InflationQueryParselet";
 import { InflationFutureValueParselet } from "./parselets/InflationFutureValueParselet";
 import { InYearDollarsParselet } from "./parselets/InYearDollarsParselet";
 import {
-  INFLATION_FROM_YEAR_TO_PRESENT_IDX, INFLATION_TO_YEAR_FROM_PRESENT_IDX, INFLATION_FUTURE_VALUE_IDX,
   inflationFromYearToPresentHandler, inflationToYearFromPresentHandler, inflationFutureValueHandler,
 } from "./parselets/InflationPluginFunctions";
 import { inYearDollarsNormalizerRule } from "./normalizer/InYearDollarsNormalizerRule";
@@ -115,47 +114,47 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     "how much per month to reach": "SAVINGS_HOW_MUCH",
     "assuming": "ASSUMING",
   },
-  prefixParselets: [
-    { tokenType: "PRESENT_VALUE_OF", parselet: new PresentValueParselet(PRESENT_VALUE) },
-    { tokenType: "ANNUAL_RETURN_ON", parselet: new AnnualReturnParselet(ANNUAL_RETURN) },
-    { tokenType: "COMPOUND_INTEREST_ON", parselet: new CompoundInterestParselet(COMPOUND_FV, COMPOUND_FV_EVERY) },
-    { tokenType: "INTEREST_ON", parselet: new CompoundInterestParselet(COMPOUND_INTEREST, COMPOUND_INTEREST_EVERY) },
+  prefixParselets: {
+    PRESENT_VALUE_OF: new PresentValueParselet(PRESENT_VALUE),
+    ANNUAL_RETURN_ON: new AnnualReturnParselet(ANNUAL_RETURN),
+    COMPOUND_INTEREST_ON: new CompoundInterestParselet(COMPOUND_FV, COMPOUND_FV_EVERY),
+    INTEREST_ON: new CompoundInterestParselet(COMPOUND_INTEREST, COMPOUND_INTEREST_EVERY),
 
-    { tokenType: "DAILY_REPAYMENT_ON", parselet: new LoanRepaymentParselet(LOAN_REPAYMENT, 365) },
-    { tokenType: "MONTHLY_REPAYMENT_ON", parselet: new LoanRepaymentParselet(LOAN_REPAYMENT, 12) },
-    { tokenType: "ANNUAL_REPAYMENT_ON", parselet: new LoanRepaymentParselet(LOAN_REPAYMENT, 1) },
-    { tokenType: "TOTAL_REPAYMENT_ON", parselet: new LoanRepaymentParselet(LOAN_REPAYMENT, 0) },
+    DAILY_REPAYMENT_ON: new LoanRepaymentParselet(LOAN_REPAYMENT, 365),
+    MONTHLY_REPAYMENT_ON: new LoanRepaymentParselet(LOAN_REPAYMENT, 12),
+    ANNUAL_REPAYMENT_ON: new LoanRepaymentParselet(LOAN_REPAYMENT, 1),
+    TOTAL_REPAYMENT_ON: new LoanRepaymentParselet(LOAN_REPAYMENT, 0),
 
-    { tokenType: "DAILY_LOAN_INTEREST_ON", parselet: new LoanRepaymentParselet(LOAN_INTEREST, 365) },
-    { tokenType: "MONTHLY_LOAN_INTEREST_ON", parselet: new LoanRepaymentParselet(LOAN_INTEREST, 12) },
-    { tokenType: "ANNUAL_LOAN_INTEREST_ON", parselet: new LoanRepaymentParselet(LOAN_INTEREST, 1) },
-    { tokenType: "TOTAL_LOAN_INTEREST_ON", parselet: new LoanRepaymentParselet(LOAN_INTEREST, 0) },
+    DAILY_LOAN_INTEREST_ON: new LoanRepaymentParselet(LOAN_INTEREST, 365),
+    MONTHLY_LOAN_INTEREST_ON: new LoanRepaymentParselet(LOAN_INTEREST, 12),
+    ANNUAL_LOAN_INTEREST_ON: new LoanRepaymentParselet(LOAN_INTEREST, 1),
+    TOTAL_LOAN_INTEREST_ON: new LoanRepaymentParselet(LOAN_INTEREST, 0),
 
-    { tokenType: "TAX_ON", parselet: new SalesTaxParselet(TAX_ON) },
-    { tokenType: "TAX_OFF", parselet: new SalesTaxParselet(TAX_REMOVE) },
-    { tokenType: "TAX_IN_PHRASE", parselet: new SalesTaxParselet(TAX_IN) },
+    TAX_ON: new SalesTaxParselet(TAX_ON),
+    TAX_OFF: new SalesTaxParselet(TAX_REMOVE),
+    TAX_IN_PHRASE: new SalesTaxParselet(TAX_IN),
 
-    { tokenType: "SPLIT", parselet: new SplitBetweenParselet(SPLIT_EACH) },
+    SPLIT: new SplitBetweenParselet(SPLIT_EACH),
 
-    { tokenType: "WHAT_IS", parselet: new InflationQueryParselet("what-is") },
-    { tokenType: "WHAT_WAS", parselet: new InflationQueryParselet("what-was") },
-    { tokenType: "VALUE_OF", parselet: new InflationFutureValueParselet() },
-    { tokenType: "SAVINGS_HOW_LONG", parselet: new SavingsDurationParselet(SAVINGS_PERIODS) },
-    { tokenType: "SAVINGS_HOW_MUCH", parselet: new SavingsContributionParselet(SAVINGS_PAYMENT) },
-  ],
-  infixParselets: [
+    WHAT_IS: new InflationQueryParselet("what-is"),
+    WHAT_WAS: new InflationQueryParselet("what-was"),
+    VALUE_OF: new InflationFutureValueParselet(),
+    SAVINGS_HOW_LONG: new SavingsDurationParselet(SAVINGS_PERIODS),
+    SAVINGS_HOW_MUCH: new SavingsContributionParselet(SAVINGS_PAYMENT),
+  },
+  infixParselets: {
     // The documented bare forms: "$1,000 after 3 years at 7%" and the "for
     // ... compounding monthly" variant. Both pivot words behave identically;
     // Soulver uses "after" for the annual form and "for" with an interval.
-    { tokenType: "AFTER", parselet: new InvestmentGrowthParselet(COMPOUND_FV, COMPOUND_FV_EVERY) },
-    { tokenType: "FOR_DURATION", parselet: new InvestmentGrowthParselet(COMPOUND_FV, COMPOUND_FV_EVERY) },
-    { tokenType: "INVESTED", parselet: new ReturnOnInvestmentParselet(ROI) },
-    { tokenType: "IN_YEAR_DOLLARS", parselet: new InYearDollarsParselet() },
+    AFTER: new InvestmentGrowthParselet(COMPOUND_FV, COMPOUND_FV_EVERY),
+    FOR_DURATION: new InvestmentGrowthParselet(COMPOUND_FV, COMPOUND_FV_EVERY),
+    INVESTED: new ReturnOnInvestmentParselet(ROI),
+    IN_YEAR_DOLLARS: new InYearDollarsParselet(),
     // The amount-first split spelling, `<amount> split N ways`. Infix so the
     // amount (which may be `$120 + 18%`) is the left operand. See
     // BillSplitParselets.ts.
-    { tokenType: "SPLIT_WAYS", parselet: new SplitWaysParselet(SPLIT_EACH) },
-  ],
+    SPLIT_WAYS: new SplitWaysParselet(SPLIT_EACH),
+  },
   normalizerRules: [
     inYearDollarsNormalizerRule(),
     // `450 monthly for 18 months` -> `450 * 18`. A recurring schedule totalled
@@ -167,9 +166,11 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     // See BillSplitNormalizerRule.ts.
     billSplitNormalizerRule(),
   ],
-  pluginFunctions: [
-    { index: INFLATION_FROM_YEAR_TO_PRESENT_IDX, handler: inflationFromYearToPresentHandler },
-    { index: INFLATION_TO_YEAR_FROM_PRESENT_IDX, handler: inflationToYearFromPresentHandler },
-    { index: INFLATION_FUTURE_VALUE_IDX, handler: inflationFutureValueHandler },
-  ],
+  pluginFunctions: {
+    inflationFromYearToPresent: inflationFromYearToPresentHandler,
+    /** Plugin index for `<amount> in <year>`, today's money valued in a past year. */
+    inflationToYearFromPresent: inflationToYearFromPresentHandler,
+    /** Plugin index for projecting an amount forward at an assumed rate. */
+    inflationFutureValue: inflationFutureValueHandler,
+  },
 };

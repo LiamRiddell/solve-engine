@@ -5,7 +5,6 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { INFLATION_FROM_YEAR_TO_PRESENT_IDX, INFLATION_TO_YEAR_FROM_PRESENT_IDX } from "./InflationPluginFunctions";
 
 // CALL_BUILTIN index. See VMBuiltins.ts for the inflationAdjust(amount
 // fromYear, toYear) handler. Also reachable via the function-call form
@@ -94,9 +93,7 @@ export class InflationQueryParselet implements PrefixParselet {
     if (this.variant === "what-was") {
       parser.consume("WORTH_IN");
       parser.parseExpression(BindingPower.Lowest, builder); // toYear
-      builder.emitOpcode(OpCode.CALL_PLUGIN);
-      builder.emitIndex(INFLATION_TO_YEAR_FROM_PRESENT_IDX);
-      builder.emitIndex(2);
+      builder.emitPluginCall("inflationToYearFromPresent", 2);
       return;
     }
 
@@ -104,9 +101,7 @@ export class InflationQueryParselet implements PrefixParselet {
     if (next?.type === "FROM") {
       parser.consume();
       parser.parseExpression(BindingPower.Lowest, builder); // fromYear
-      builder.emitOpcode(OpCode.CALL_PLUGIN);
-      builder.emitIndex(INFLATION_FROM_YEAR_TO_PRESENT_IDX);
-      builder.emitIndex(2);
+      builder.emitPluginCall("inflationFromYearToPresent", 2);
       return;
     }
     if (next?.type === "IN") {

@@ -2,10 +2,8 @@ import { PrefixParselet } from "@solve-js/parser/Parselet";
 import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
-import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { INFLATION_FUTURE_VALUE_IDX } from "./InflationPluginFunctions";
 
 /**
  * `value of $X in <futureYear> assuming N% inflation` -> a simple flat-rate
@@ -56,8 +54,6 @@ export class InflationFutureValueParselet implements PrefixParselet {
     }
     parser.consume();
 
-    builder.emitOpcode(OpCode.CALL_PLUGIN);
-    builder.emitIndex(INFLATION_FUTURE_VALUE_IDX);
-    builder.emitIndex(3);
+    builder.emitPluginCall("inflationFutureValue", 3);
   }
 }

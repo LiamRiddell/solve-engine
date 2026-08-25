@@ -1,13 +1,13 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { osrsLexerVocabulary } from "./OsrsLexerVocabulary";
 import { osrsItemNormalizerRule } from "./OsrsItemNormalizer";
-import { GameItemParselet, OsrsKeywordParselet, OSRS_PLUGIN_FN_IDX } from "./OsrsParselet";
+import { GameItemParselet, OsrsKeywordParselet, OSRS_PACKAGE_NAME, OSRS_GAME_ITEM_FN } from "./OsrsParselet";
 import { resolveGameItem } from "./OsrsVmHandler";
 import { OsrsAsyncResolver } from "./OsrsAsyncResolver";
 import { OSRS_ITEMS } from "./OsrsItemVocabulary";
 
 export const OSRS_PACKAGE: IEnginePackage = {
-  name: "osrs",
+  name: OSRS_PACKAGE_NAME,
 
   // Demonstrates IEnginePackage.engineVersion for third-party package
   // authors reading this example — not because OSRS itself needs a real
@@ -21,18 +21,19 @@ export const OSRS_PACKAGE: IEnginePackage = {
     osrsItemNormalizerRule(),
   ],
 
-  prefixParselets: [
-    { tokenType: "GAME_ITEM", parselet: new GameItemParselet() },
-    { tokenType: "OSRS_KEYWORD", parselet: new OsrsKeywordParselet() },
-  ],
+  prefixParselets: {
+    GAME_ITEM: new GameItemParselet(),
+    OSRS_KEYWORD: new OsrsKeywordParselet(),
+  },
 
   // Dispatched via CALL_PLUGIN bytecode (see OsrsParselet.ts) — registered
   // and unregistered by ExpressionEngine alongside this package's other
   // shared-registry contributions, instead of a standalone module-level
-  // side effect.
-  pluginFunctions: [
-    { index: OSRS_PLUGIN_FN_IDX, handler: resolveGameItem },
-  ],
+  // side effect. The engine assigns the numeric index; a parselet emits the
+  // call by name (`emitPluginCall(OSRS_GAME_ITEM_FN, ...)`).
+  pluginFunctions: {
+    [OSRS_GAME_ITEM_FN]: resolveGameItem,
+  },
 
   asyncResolvers: [
     new OsrsAsyncResolver(),

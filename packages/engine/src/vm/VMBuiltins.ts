@@ -1260,6 +1260,29 @@ export function allocatePluginFunctionIndex(): number {
     return nextPluginFunctionIndex++;
 }
 
+const pluginFunctionIndexByQualifiedName = new Map<string, number>();
+
+/**
+ * The stable index for a package's named plugin function, allocated once per
+ * `${packageName}:${functionName}` and cached process-wide, so the same function
+ * always maps to the same {@link pluginFunctionRegistry} slot no matter which
+ * engine registers it or in what order: the property compiled bytecode, and so
+ * a snapshot, relies on.
+ *
+ * The engine calls this at {@link ExpressionEngine.registerPackage} time for each
+ * entry of a package's `pluginFunctions` record, so a package author names the
+ * function and never sees an index. {@link allocatePluginFunctionIndex} remains
+ * for a host that needs a raw index directly.
+ */
+export function pluginFunctionIndexFor(qualifiedName: string): number {
+    let index = pluginFunctionIndexByQualifiedName.get(qualifiedName);
+    if (index === undefined) {
+        index = allocatePluginFunctionIndex();
+        pluginFunctionIndexByQualifiedName.set(qualifiedName, index);
+    }
+    return index;
+}
+
 /**
  * Registry of package-registered `as <name>` converters, the SDK extension
  * point for `IEnginePackage.asConverters` (see ExpressionEngine.registerPackage()).

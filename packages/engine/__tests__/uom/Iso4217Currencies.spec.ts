@@ -101,8 +101,8 @@ describe("the table itself", () => {
 describe("through the engine", () => {
 	/** The evaluated Value for one line. */
 	function evaluate(source: string) {
-		const engine = newTrackedEngine("en");
-		const [value] = engine.evaluateExpression(source);
+		const engine = newTrackedEngine();
+		const value = engine.evaluateExpression(source);
 		return value;
 	}
 

@@ -654,9 +654,11 @@ export function runEngineWithStreaming(
 			}
 
 			try {
-				engine = new ExpressionEngine("en", true, {
-					diagnostic: { enabled: true, vmTraceEnabled: true },
-				}, undefined, PLAYGROUND_PACKAGES);
+				engine = new ExpressionEngine({
+					diagnostics: true,
+					config: { diagnostic: { enabled: true, vmTraceEnabled: true } },
+					packages: PLAYGROUND_PACKAGES,
+				});
 				// Cross-line data access (packages/lines: prev, line<N>, sum/
 				// total/average ranges, total above) needs a DocumentModel
 				// wired in — see runEngine()'s matching fix above for the
@@ -1163,9 +1165,9 @@ export function runEngine(expression: string): DebugResult {
 		// ── Enable Value Arena for zero-allocation Value reuse ──
 		const arena = enableValueArena(512);
 
-		const engine = new ExpressionEngine("en", true, {
+		const engine = new ExpressionEngine({ diagnostics: true, config: {
 			diagnostic: { enabled: true, vmTraceEnabled: true },
-		}, undefined, PLAYGROUND_PACKAGES);
+		}, packages: PLAYGROUND_PACKAGES });
 
 		// Cross-line data access (packages/lines: prev, line<N>, sum/total/
 		// average(line X : line Y), total above) reads another line's cached

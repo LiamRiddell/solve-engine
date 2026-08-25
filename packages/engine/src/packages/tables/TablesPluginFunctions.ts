@@ -1,5 +1,4 @@
 import { Value, ValueType, numberValue, errorValue } from "@solve-js/vm/Value";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { findTableAbove, columnIndex, numericColumn } from "./TableReader";
 
@@ -114,7 +113,6 @@ function columnName(args: Value[]): string {
 }
 
 /** `sum of column "name" [in table] above` / `total of column ...`. */
-export const TABLE_COLUMN_SUM_FN_IDX = allocatePluginFunctionIndex();
 /**
  * Total of a named column's numeric cells in the nearest table above.
  *
@@ -129,7 +127,6 @@ export function tableColumnSumHandler(args: Value[], context?: LineExecutionCont
 }
 
 /** `average of column "name" [in table] above` / `mean of column ...`. */
-export const TABLE_COLUMN_AVERAGE_FN_IDX = allocatePluginFunctionIndex();
 /**
  * Mean of a named column's numeric cells in the nearest table above.
  *
@@ -142,7 +139,6 @@ export function tableColumnAverageHandler(args: Value[], context?: LineExecution
 }
 
 /** `min of column "name" [in table] above`. */
-export const TABLE_COLUMN_MIN_FN_IDX = allocatePluginFunctionIndex();
 /**
  * Smallest numeric cell of a named column in the nearest table above.
  *
@@ -155,7 +151,6 @@ export function tableColumnMinHandler(args: Value[], context?: LineExecutionCont
 }
 
 /** `max of column "name" [in table] above`. */
-export const TABLE_COLUMN_MAX_FN_IDX = allocatePluginFunctionIndex();
 /**
  * Largest numeric cell of a named column in the nearest table above.
  *
@@ -168,7 +163,6 @@ export function tableColumnMaxHandler(args: Value[], context?: LineExecutionCont
 }
 
 /** `count of column "name" [in table] above`. */
-export const TABLE_COLUMN_COUNT_FN_IDX = allocatePluginFunctionIndex();
 /**
  * How many numeric cells a named column holds in the nearest table above.
  *
@@ -181,7 +175,6 @@ export function tableColumnCountHandler(args: Value[], context?: LineExecutionCo
 }
 
 /** `median of column "name" [in table] above`. */
-export const TABLE_COLUMN_MEDIAN_FN_IDX = allocatePluginFunctionIndex();
 /**
  * Middle numeric cell of a named column in the nearest table above.
  *

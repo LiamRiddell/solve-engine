@@ -112,7 +112,7 @@ function trackRetained<T>(fn: () => T): { result: T; bytes: number } {
 
 /** Create a fresh engine (cold — no caches). */
 function createEngine(): ExpressionEngine {
-  return new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+  return new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 }
 
 /** Build a document of `n` assignment lines. */
@@ -266,7 +266,7 @@ describe("Allocation Benchmarks", () => {
 
     settle();
     const start = process.memoryUsage().heapUsed;
-    const [result] = e.evaluateLine(1, "1 + 2");
+    const result = e.evaluateLine(1, "1 + 2");
     const end = process.memoryUsage().heapUsed;
 
     expect(result?.value).toBe(3);

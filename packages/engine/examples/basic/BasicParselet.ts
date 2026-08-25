@@ -3,15 +3,15 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
 import { stripQuotes } from "@solve-js/utilities/Strings";
 
 /**
- * Every package that dispatches custom logic via CALL_PLUGIN needs its own
- * unique index — never hardcode a number, always call
- * {@link allocatePluginFunctionIndex}. See `IEnginePackage.pluginFunctions`.
+ * The package-local name of this example's plugin function. A parselet emits a
+ * call to it by this name (`builder.emitPluginCall(REVERSE_FN, ...)`) — never a
+ * hardcoded index — and the engine assigns and resolves the numeric CALL_PLUGIN
+ * index when the package registers. See `IEnginePackage.pluginFunctions`.
  */
-export const REVERSE_PLUGIN_FN_IDX: number = allocatePluginFunctionIndex();
+export const REVERSE_FN = "reverse";
 
 /**
  * Prefix parselet for the `reverse` keyword — the whole example in one
@@ -31,8 +31,6 @@ export class ReverseKeywordParselet implements PrefixParselet {
 
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(text);
-    builder.emitOpcode(OpCode.CALL_PLUGIN);
-    builder.emitIndex(REVERSE_PLUGIN_FN_IDX);
-    builder.emitIndex(1); // argCount
+    builder.emitPluginCall(REVERSE_FN, 1); // argCount = 1 (the text string)
   }
 }

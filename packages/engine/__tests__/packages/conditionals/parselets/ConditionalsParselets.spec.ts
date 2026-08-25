@@ -163,21 +163,21 @@ describe("if/then/else", () => {
 
 describe("CONDITIONALS_PACKAGE — real engine wiring", () => {
   test("comparisons work via the real, default-constructed ExpressionEngine", () => {
-    const engine = newTrackedEngine("en");
-    const [value] = engine.evaluateExpression("5 > 3");
+    const engine = newTrackedEngine();
+    const value = engine.evaluateExpression("5 > 3");
     expect(value.type).toBe(ValueType.Boolean);
     expect(value.value).toBe(true);
   });
 
   test("if/then/else works via the real engine", () => {
-    const engine = newTrackedEngine("en");
-    const [value] = engine.evaluateExpression("if 10 > 5 then 1 else 0");
+    const engine = newTrackedEngine();
+    const value = engine.evaluateExpression("if 10 > 5 then 1 else 0");
     expect(value.toNumber()).toBe(1);
   });
 
   test("&& works via the real engine", () => {
-    const engine = newTrackedEngine("en");
-    const [value] = engine.evaluateExpression("1 < 2 && 3 < 4");
+    const engine = newTrackedEngine();
+    const value = engine.evaluateExpression("1 < 2 && 3 < 4");
     expect(value.value).toBe(true);
   });
 

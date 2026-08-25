@@ -9,8 +9,8 @@ import { describe, expect, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
 
 function num(source: string): number {
-	const engine = newTrackedEngine("en");
-	const [value] = engine.evaluateExpression(source);
+	const engine = newTrackedEngine();
+	const value = engine.evaluateExpression(source);
 	return value.toNumber();
 }
 
@@ -83,8 +83,8 @@ describe("what `is` must not break", () => {
 	});
 
 	test("comparisons are untouched", () => {
-		const engine = newTrackedEngine("en");
-		const [value] = engine.evaluateExpression("20km == 20,000 m");
+		const engine = newTrackedEngine();
+		const value = engine.evaluateExpression("20km == 20,000 m");
 		expect(value.value).toBe(true);
 	});
 });

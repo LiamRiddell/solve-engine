@@ -58,7 +58,7 @@ describe("the default configuration bounds every input shape that recurses", () 
 		// 200 levels is four times the default maxNestingDepth of 50. What
 		// matters is not which of the two guards answers but that one of them
 		// does, before the recursive descent reaches a native stack overflow.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const error = errorFrom(engine, "(".repeat(200) + "1" + ")".repeat(200));
 		expect(error).not.toBeNull();
 		expect(["EXPRESSION_TOO_COMPLEX", "NESTING_DEPTH_EXCEEDED"]).toContain(error!.code);
@@ -69,14 +69,14 @@ describe("the default configuration bounds every input shape that recurses", () 
 		// Unary minus recurses through parseExpression exactly like a paren
 		// does, but contributes nothing to the paren-depth term of the
 		// complexity score, so it is the shape most likely to slip past.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const error = errorFrom(engine, "-".repeat(500) + "1");
 		expect(error).not.toBeNull();
 		expect(error!.message).not.toMatch(/call stack/i);
 	});
 
 	test("an expression longer than the character limit is refused before lexing", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const error = errorFrom(engine, "1+".repeat(2000) + "1");
 		expect(error?.code).toBe("EXPRESSION_TOO_LONG");
 		expect(error?.category).toBe("VALIDATION");
@@ -86,7 +86,7 @@ describe("the default configuration bounds every input shape that recurses", () 
 		// Under 2000 characters, so the length check passes and the complexity
 		// score is what answers. Pinned because the two limits are easy to
 		// conflate and only one of them counts tokens.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const error = errorFrom(engine, "1" + "+1".repeat(400));
 		expect(error?.code).toBe("EXPRESSION_TOO_COMPLEX");
 	});
@@ -94,25 +94,25 @@ describe("the default configuration bounds every input shape that recurses", () 
 	test("the limits leave ordinary expressions alone", () => {
 		// The other half of a limit test, and the half that catches a limit set
 		// too low: everything here is well within what a real document holds.
-		const engine = newTrackedEngine("en");
-		expect(engine.evaluateExpression("(".repeat(30) + "1" + ")".repeat(30))[0].toNumber()).toBe(1);
-		expect(engine.evaluateExpression("1" + "+1".repeat(100))[0].toNumber()).toBe(101);
+		const engine = newTrackedEngine();
+		expect(engine.evaluateExpression("(".repeat(30) + "1" + ")".repeat(30)).toNumber()).toBe(1);
+		expect(engine.evaluateExpression("1" + "+1".repeat(100)).toNumber()).toBe(101);
 		// 65536 is 2^16, so four square roots take it to 2.
-		expect(engine.evaluateExpression("sqrt(sqrt(sqrt(sqrt(65536))))")[0].toNumber()).toBe(2);
+		expect(engine.evaluateExpression("sqrt(sqrt(sqrt(sqrt(65536))))").toNumber()).toBe(2);
 	});
 });
 
 describe("the nesting-depth guard, once the limits in front of it are lifted", () => {
 	/** Length and complexity raised out of the way; nesting depth left at its default 50. */
 	function deepParseEngine(): ExpressionEngine {
-		return new ExpressionEngine("en", false, {
+		return new ExpressionEngine({ config: {
 			validation: {
 				maxExpressionLength: 1_000_000,
 				maxComplexity: 100_000_000,
 				maxNestingDepth: 50,
 				autoBalanceParens: false,
 			},
-		}, undefined, BUILTIN_PACKAGES);
+		}, packages: BUILTIN_PACKAGES });
 	}
 
 	test("parentheses past the depth report NESTING_DEPTH_EXCEEDED", () => {
@@ -142,7 +142,7 @@ describe("the nesting-depth guard, once the limits in front of it are lifted", (
 		// mysterious depth error on a long invoice line.
 		const engine = deepParseEngine();
 		try {
-			expect(engine.evaluateExpression("1" + "+1".repeat(200))[0].toNumber()).toBe(201);
+			expect(engine.evaluateExpression("1" + "+1".repeat(200)).toNumber()).toBe(201);
 		} finally {
 			engine.clear();
 		}
@@ -156,20 +156,20 @@ describe("the nesting-depth guard, once the limits in front of it are lifted", (
 		// the generic UNEXPECTED_ERROR rather than a depth-specific one, which
 		// is a message-quality issue rather than a containment one, so this
 		// asserts only the containment.
-		const engine = new ExpressionEngine("en", false, {
+		const engine = new ExpressionEngine({ config: {
 			validation: {
 				maxExpressionLength: 1_000_000,
 				maxComplexity: 100_000_000,
 				maxNestingDepth: 1_000_000,
 				autoBalanceParens: false,
 			},
-		}, undefined, BUILTIN_PACKAGES);
+		}, packages: BUILTIN_PACKAGES });
 		try {
 			const error = errorFrom(engine, "-".repeat(5000) + "1");
 			expect(error).toBeInstanceOf(EngineError);
 			// And the engine is still usable afterwards, which is the part a
 			// host depends on when a single line blows up mid-document.
-			expect(engine.evaluateExpression("2+2")[0].toNumber()).toBe(4);
+			expect(engine.evaluateExpression("2+2").toNumber()).toBe(4);
 		} finally {
 			engine.clear();
 		}
@@ -178,21 +178,21 @@ describe("the nesting-depth guard, once the limits in front of it are lifted", (
 
 describe("the VM's own execution limits", () => {
 	test("maxInstructions halts a program that runs too long", () => {
-		const engine = new ExpressionEngine("en", false, { vm: { maxStackDepth: 200, maxInstructions: 20 } }, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ config: { vm: { maxStackDepth: 200, maxInstructions: 20 } }, packages: BUILTIN_PACKAGES });
 		try {
 			const error = errorFrom(engine, "1" + "+1".repeat(12));
 			expect(error?.code).toBe("INSTRUCTION_LIMIT_EXCEEDED");
 			expect(error?.category).toBe("EXECUTION");
 			// Under the limit still runs, so the guard is a ceiling and not a
 			// blanket refusal.
-			expect(engine.evaluateExpression("1+1")[0].toNumber()).toBe(2);
+			expect(engine.evaluateExpression("1+1").toNumber()).toBe(2);
 		} finally {
 			engine.clear();
 		}
 	});
 
 	test("maxStackDepth halts a program that pushes too much", () => {
-		const engine = new ExpressionEngine("en", false, { vm: { maxStackDepth: 5, maxInstructions: 50_000 } }, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ config: { vm: { maxStackDepth: 5, maxInstructions: 50_000 } }, packages: BUILTIN_PACKAGES });
 		try {
 			expect(errorFrom(engine, "[1,2,3,4,5,6,7,8,9,10]")?.code).toBe("STACK_LIMIT_EXCEEDED");
 			expect(errorFrom(engine, "(1+(2+(3+(4+(5+6)))))")?.code).toBe("STACK_LIMIT_EXCEEDED");
@@ -205,7 +205,7 @@ describe("the VM's own execution limits", () => {
 describe("recursion through user-defined functions", () => {
 	/** Evaluates each line in order on one engine and returns the last error, if any. */
 	function lastError(lines: string[]): EngineError | null {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		let error: EngineError | null = null;
 		lines.forEach((line, index) => {
 			try {
@@ -237,19 +237,19 @@ describe("recursion through user-defined functions", () => {
 	});
 
 	test("ordinary nesting well inside the limit still works", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateLine(1, "double(x) = x*2");
-		expect(engine.evaluateLine(2, "double(double(double(double(1))))")[0].toNumber()).toBe(16);
+		expect(engine.evaluateLine(2, "double(double(double(double(1))))").toNumber()).toBe(16);
 	});
 });
 
 describe("a range is expanded one value per element, with nothing asking how many", () => {
 	test("the guards RANGE_NEW does have still fire", () => {
-		const engine = newTrackedEngine("en");
-		expect(engine.evaluateExpression("map(10*x, 1.5:3)")[0].type).toBe(ValueType.Error);
-		expect(engine.evaluateExpression("map(10*x, 10:1)")[0].type).toBe(ValueType.Error);
+		const engine = newTrackedEngine();
+		expect(engine.evaluateExpression("map(10*x, 1.5:3)").type).toBe(ValueType.Error);
+		expect(engine.evaluateExpression("map(10*x, 10:1)").type).toBe(ValueType.Error);
 		// And a range of a sane size maps normally.
-		const mapped = engine.evaluateExpression("map(10*x, 0:3)")[0];
+		const mapped = engine.evaluateExpression("map(10*x, 0:3)");
 		expect(mapped.type).toBe(ValueType.Matrix);
 	});
 
@@ -266,8 +266,8 @@ describe("a range is expanded one value per element, with nothing asking how man
 		// the Jest worker down instead of failing. A million elements stands in
 		// for it here, still ten times past the `vm.maxCollectionSize` ceiling
 		// and small enough that the counted refusal is all that happens.
-		const engine = newTrackedEngine("en");
-		const [value] = engine.evaluateExpression("reduce(acc+x, 0:1000000)");
+		const engine = newTrackedEngine();
+		const value = engine.evaluateExpression("reduce(acc+x, 0:1000000)");
 		expect(value.type).toBe(ValueType.Error);
 		expect(String(value.value)).toBe("COLLECTION_TOO_LARGE");
 		engine.clear();
@@ -276,23 +276,23 @@ describe("a range is expanded one value per element, with nothing asking how man
 	test("the ceiling is the configured one, and a collection under it still folds", () => {
 		// A host that wants a tighter (or looser) bound gets one, and the guard
 		// is a ceiling rather than a blanket refusal of large collections.
-		const engine = new ExpressionEngine("en", false, { vm: { maxStackDepth: 200, maxInstructions: 50_000, maxCollectionSize: 10 } }, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ config: { vm: { maxStackDepth: 200, maxInstructions: 50_000, maxCollectionSize: 10 } }, packages: BUILTIN_PACKAGES });
 		try {
-			const [refused] = engine.evaluateExpression("sum(x, 1:11)");
+			const refused = engine.evaluateExpression("sum(x, 1:11)");
 			expect(refused.type).toBe(ValueType.Error);
 			expect(String(refused.value)).toBe("COLLECTION_TOO_LARGE");
 			// 1..10 is exactly the limit, so it folds: 10*11/2.
-			expect(engine.evaluateExpression("sum(x, 1:10)")[0].toNumber()).toBe(55);
+			expect(engine.evaluateExpression("sum(x, 1:10)").toNumber()).toBe(55);
 		} finally {
 			engine.clear();
 		}
 	});
 
 	test("a range the default configuration does allow is expanded as before", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		// 1..100000 by the closed form n(n+1)/2, which is not how the engine
 		// gets there.
-		expect(engine.evaluateExpression("sum(x, 1:100000)")[0].toNumber()).toBe((100000 * 100001) / 2);
+		expect(engine.evaluateExpression("sum(x, 1:100000)").toNumber()).toBe((100000 * 100001) / 2);
 		engine.clear();
 	});
 });
@@ -314,7 +314,7 @@ describe("how many lines a document may have, which no per-line limit can see", 
 		// A tightened limit is used rather than the default 100,000, so this test
 		// costs a few kilobytes rather than a megabyte and still exercises the
 		// same check.
-		const engine = new ExpressionEngine("en", false, { performance: { defaultCacheSize: 2000, maxDocumentLines: 500 } as any }, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ config: { performance: { defaultCacheSize: 2000, maxDocumentLines: 500 } as any }, packages: BUILTIN_PACKAGES });
 		try {
 			const error = (() => {
 				try { engine.parseDocument(document(501)); return null; } catch (thrown) { return thrown as EngineError; }
@@ -329,7 +329,7 @@ describe("how many lines a document may have, which no per-line limit can see", 
 
 	test("a document at the ceiling is processed normally", () => {
 		// The guard has to be a ceiling rather than a refusal of long documents.
-		const engine = new ExpressionEngine("en", false, { performance: { defaultCacheSize: 2000, maxDocumentLines: 500 } as any }, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ config: { performance: { defaultCacheSize: 2000, maxDocumentLines: 500 } as any }, packages: BUILTIN_PACKAGES });
 		try {
 			expect(engine.parseDocument(document(500)).totalLines).toBe(500);
 		} finally {

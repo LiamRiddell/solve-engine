@@ -15,15 +15,13 @@ import { OpCode } from "@solve-js/parser/OpCode";
  * the only thing architecturally unusual about this package is how the
  * token got made, not how it's parsed.
  */
-export function knowledgeQueryParselet(pluginFnIdx: number): PrefixParselet {
+export function knowledgeQueryParselet(pluginFnName: string): PrefixParselet {
 	return {
 		category: "Knowledge",
 		parse(_parser: Parser, token: Token, builder: BytecodeBuilder): void {
 			builder.emitOpcode(OpCode.PUSH_STRING);
 			builder.emitString(token.value);
-			builder.emitOpcode(OpCode.CALL_PLUGIN);
-			builder.emitIndex(pluginFnIdx);
-			builder.emitIndex(1);
+			builder.emitPluginCall(pluginFnName, 1);
 		},
 	};
 }

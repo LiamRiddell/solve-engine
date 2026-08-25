@@ -123,7 +123,7 @@ export default (() => {
 let compileEngine: ExpressionEngine | null = null;
 function getCompileEngine(): ExpressionEngine {
 	if (!compileEngine) {
-		compileEngine = new ExpressionEngine("en", false);
+		compileEngine = new ExpressionEngine();
 	}
 	return compileEngine;
 }

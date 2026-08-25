@@ -4,7 +4,7 @@ import { DiceRollParselet } from "./parselets/DiceRollParselet";
 /** `roll(min, max)`, returns a random integer in the inclusive `[min, max]` range. */
 export const DICE_PACKAGE: IEnginePackage = {
   name: "solve-dice",
-  prefixParselets: [
-    { tokenType: "ROLL", parselet: new DiceRollParselet() },
-  ],
+  prefixParselets: {
+    ROLL: new DiceRollParselet(),
+  },
 };

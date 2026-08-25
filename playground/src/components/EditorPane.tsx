@@ -373,7 +373,7 @@ function createTabEditor(tabId: string, container: HTMLElement, initialDoc: stri
   // OSRS is an example package, not a built-in — registered explicitly
   // alongside BUILTIN_PACKAGES so "osrs"/game-item tokens still highlight
   // correctly. Keep this in sync with engine.ts's PLAYGROUND_PACKAGES.
-  const highlightEngine = new ExpressionEngine("en", false, undefined, undefined, [...BUILTIN_PACKAGES, OSRS_PACKAGE])
+  const highlightEngine = new ExpressionEngine({ packages: [...BUILTIN_PACKAGES, OSRS_PACKAGE] })
   // highlightEngine never evaluates anything, so its own DAG is always
   // empty — read variable names from the real evaluation engine's
   // already-computed DAG snapshot instead (the ACTIVE tab's snapshot).

@@ -19,8 +19,8 @@ import type { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistr
 /**
  * Create a fresh ExpressionEngine instance for testing.
  */
-export function createEngine(locale = "en", diagnostic = false): ExpressionEngine {
-  return new ExpressionEngine(locale, diagnostic, undefined, undefined, BUILTIN_PACKAGES);
+export function createEngine({ locale: locale = "en", diagnostics: diagnostic = false }): ExpressionEngine {
+  return new ExpressionEngine({ locale, diagnostics: diagnostic, packages: BUILTIN_PACKAGES });
 }
 
 /**
@@ -28,7 +28,7 @@ export function createEngine(locale = "en", diagnostic = false): ExpressionEngin
  * Convenience wrapper around engine.evaluateLine().
  */
 export function evalExpr(engine: ExpressionEngine, expr: string, lineNum = 1): Value {
-  return engine.evaluateLine(lineNum, expr)[0];
+  return engine.evaluateLine(lineNum, expr);
 }
 
 /**
@@ -238,12 +238,12 @@ export async function benchmarkFn(
  */
 export function registerPackageForTesting(pkg: IEnginePackage, registry: ParseletRegistry): void {
   if (pkg.prefixParselets) {
-    for (const { tokenType, parselet } of pkg.prefixParselets) {
+    for (const [tokenType, parselet] of Object.entries(pkg.prefixParselets)) {
       registry.registerPrefix(tokenType, parselet);
     }
   }
   if (pkg.infixParselets) {
-    for (const { tokenType, parselet } of pkg.infixParselets) {
+    for (const [tokenType, parselet] of Object.entries(pkg.infixParselets)) {
       registry.registerInfix(tokenType, parselet);
     }
   }
@@ -260,27 +260,30 @@ export function expectNumberValue(value: Value, expected: number, epsilon = 0.00
   expectApproximately(value.toNumber(), expected, epsilon);
 }
 /**
- * Register a plugin function on one specific engine, for tests.
+ * Install a plugin function at a specific index on one engine, for tests that
+ * hand-build `CALL_PLUGIN <index>` bytecode to exercise the VM's dispatch.
  *
- * Tests used to assign into the module-level `pluginFunctionRegistry` and rely
- * on an engine picking it up. That worked only because every engine shared one
- * registry, which is the coupling {@link EngineContext} exists to remove, so it
- * silently stops working once an engine owns its own. This goes through
- * `registerPackage`, the same path a real package uses.
+ * A real package now names its plugin functions and lets the engine assign the
+ * index (`pluginFunctions: { name: handler }`), so it cannot pin the number a
+ * test's bytecode already hard-codes. These tests want the opposite: a KNOWN
+ * index they emit by hand. So this writes the handler straight into the engine's
+ * own {@link EngineContext} at that index, the same slot the VM reads at
+ * `context.pluginFunctions[fnIdx]`. It stays on this engine's context rather than
+ * any shared registry, which is exactly the isolation the context exists to give.
  *
- * @param engine - The engine to register on.
+ * @param engine - The engine to install on.
  * @param index - Plugin function index the test's bytecode calls.
  * @param handler - The function to install.
- * @returns A disposer that unregisters it again.
+ * @returns A disposer that removes it again.
  */
 export function registerTestPluginFunction(
-	engine: { registerPackage: (pkg: never) => unknown; unregisterPackage: (name: string) => boolean },
+	engine: { getContext(): { pluginFunctions: Record<number, unknown> } },
 	index: number,
 	handler: unknown,
 ): () => void {
-	const name = `test-plugin-fn-${index}`;
-	engine.registerPackage({ name, pluginFunctions: [{ index, handler }] } as never);
+	const registry = engine.getContext().pluginFunctions;
+	registry[index] = handler;
 	return () => {
-		engine.unregisterPackage(name);
+		delete registry[index];
 	};
 }

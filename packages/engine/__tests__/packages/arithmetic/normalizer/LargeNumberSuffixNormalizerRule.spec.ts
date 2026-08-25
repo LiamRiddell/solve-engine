@@ -176,29 +176,29 @@ describe("large-number suffixes — negative controls (must NOT be affected)", (
 
 describe("ARITHMETIC_PACKAGE — real engine wiring", () => {
   test("2.5k works via the real, default-constructed ExpressionEngine", () => {
-    const engine = newTrackedEngine("en");
-    const [value] = engine.evaluateExpression("2.5k");
+    const engine = newTrackedEngine();
+    const value = engine.evaluateExpression("2.5k");
     expect(value.type).toBe(ValueType.Number);
     expect(value.toNumber()).toBe(2500);
   });
 
   test("2.5k + 1000 -> 3500 via the real engine", () => {
-    const engine = newTrackedEngine("en");
-    const [value] = engine.evaluateExpression("2.5k + 1000");
+    const engine = newTrackedEngine();
+    const value = engine.evaluateExpression("2.5k + 1000");
     expect(value.toNumber()).toBe(3500);
   });
 
   test("5M / 10G / 10B / 20T via the real engine", () => {
-    const engine = newTrackedEngine("en");
-    expect(engine.evaluateExpression("5M")[0].toNumber()).toBe(5000000);
-    expect(engine.evaluateExpression("10G")[0].toNumber()).toBe(10000000000);
-    expect(engine.evaluateExpression("10B")[0].toNumber()).toBe(10000000000);
-    expect(engine.evaluateExpression("20T")[0].toNumber()).toBe(20000000000000);
+    const engine = newTrackedEngine();
+    expect(engine.evaluateExpression("5M").toNumber()).toBe(5000000);
+    expect(engine.evaluateExpression("10G").toNumber()).toBe(10000000000);
+    expect(engine.evaluateExpression("10B").toNumber()).toBe(10000000000);
+    expect(engine.evaluateExpression("20T").toNumber()).toBe(20000000000000);
   });
 
   test("negative control: 5 km still resolves as a real unit via the real engine", () => {
-    const engine = newTrackedEngine("en");
-    const [value] = engine.evaluateExpression("5 km");
+    const engine = newTrackedEngine();
+    const value = engine.evaluateExpression("5 km");
     expect(value.type).toBe(ValueType.Uom);
     expect(value.unit).toBe("km");
     expect(value.toNumber()).toBe(5);

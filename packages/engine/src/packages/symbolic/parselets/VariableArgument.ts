@@ -74,7 +74,7 @@ export function emitVariableName(builder: BytecodeBuilder, name: string): void {
  * @returns The compiled expression, to be handed to {@link emitBoundExpression}.
  */
 export function parseBoundExpression(parser: Parser, builder: BytecodeBuilder, verb: string): BytecodeProgram {
-	const inner = new BytecodeBuilder();
+	const inner = new BytecodeBuilder(builder.pluginIndexMap);
 	parser.parseExpression(BindingPower.Lowest, inner);
 	parser.setBuilder(builder);
 	const program = inner.build();

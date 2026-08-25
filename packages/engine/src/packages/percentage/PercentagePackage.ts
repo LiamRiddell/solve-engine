@@ -43,28 +43,28 @@ export const PERCENTAGE_PACKAGE: IEnginePackage = {
     "on what is": "ON_WHAT_IS",
     "off what is": "OFF_WHAT_IS",
   },
-  infixParselets: [
-    { tokenType: "PERCENT", parselet: new PercentParselet() },
-    { tokenType: "IS", parselet: new IsWhatParselet() },
+  infixParselets: {
+    PERCENT: new PercentParselet(),
+    IS: new IsWhatParselet(),
     // "10% on 200" is 220 and "10% off 200" is 180: the percentage comes
     // first, the base second. The reverse of "200 + 10%".
-    { tokenType: "PCT_ON", parselet: new OnOffBaseParselet(1) },
-    { tokenType: "PCT_OFF", parselet: new OnOffBaseParselet(-1) },
-    { tokenType: "OF", parselet: new OfParselet() },
-    { tokenType: "OF_WHAT_IS", parselet: new OfWhatIsParselet() },
-    { tokenType: "ON_WHAT_IS", parselet: new OnOffWhatIsParselet(1) },
-    { tokenType: "OFF_WHAT_IS", parselet: new OnOffWhatIsParselet(-1) },
-    { tokenType: "TO", parselet: new PercentageChangeParselet() },
-    { tokenType: "INCREASE_BY", parselet: new IncreaseByParselet(1) },
-    { tokenType: "DECREASE_BY", parselet: new IncreaseByParselet(-1) },
+    PCT_ON: new OnOffBaseParselet(1),
+    PCT_OFF: new OnOffBaseParselet(-1),
+    OF: new OfParselet(),
+    OF_WHAT_IS: new OfWhatIsParselet(),
+    ON_WHAT_IS: new OnOffWhatIsParselet(1),
+    OFF_WHAT_IS: new OnOffWhatIsParselet(-1),
+    TO: new PercentageChangeParselet(),
+    INCREASE_BY: new IncreaseByParselet(1),
+    DECREASE_BY: new IncreaseByParselet(-1),
     // Successive change: "120 up 10% then down 10%" is 118.80, not 120.
-    { tokenType: "PCT_UP", parselet: new UpDownParselet(1) },
-    { tokenType: "PCT_DOWN", parselet: new UpDownParselet(-1) },
-  ],
-  prefixParselets: [
-    { tokenType: "INCREASE", parselet: new IncreaseDecreaseParselet(1) },
-    { tokenType: "DECREASE", parselet: new IncreaseDecreaseParselet(-1) },
-  ],
+    PCT_UP: new UpDownParselet(1),
+    PCT_DOWN: new UpDownParselet(-1),
+  },
+  prefixParselets: {
+    INCREASE: new IncreaseDecreaseParselet(1),
+    DECREASE: new IncreaseDecreaseParselet(-1),
+  },
   normalizerRules: [
     percentOnOffNormalizerRule(),
     percentUpDownNormalizerRule(),

@@ -51,8 +51,8 @@ describe("registerPackageForTesting parity — no drift between a package's real
       const registeredPrefix = new Set(registry.getAllPrefix().map((p) => p.tokenType));
       const registeredInfix = new Set(registry.getAllInfix().map((p) => p.tokenType));
 
-      const declaredPrefix = new Set((pkg.prefixParselets ?? []).map((p) => p.tokenType));
-      const declaredInfix = new Set((pkg.infixParselets ?? []).map((p) => p.tokenType));
+      const declaredPrefix = new Set(Object.keys(pkg.prefixParselets ?? {}));
+      const declaredInfix = new Set(Object.keys(pkg.infixParselets ?? {}));
 
       expect(registeredPrefix).toEqual(declaredPrefix);
       expect(registeredInfix).toEqual(declaredInfix);

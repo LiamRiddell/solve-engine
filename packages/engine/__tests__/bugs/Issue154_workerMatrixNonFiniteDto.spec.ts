@@ -19,10 +19,10 @@ import type { SerializedValue } from "@solve-js/worker/dto";
 describe("Issue #154: a non-finite matrix cell survives the DTO's JSON round-trip", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
-  const dtoOf = (source: string): SerializedValue => serializeValue(engine.evaluateExpression(source)[0]);
+  const dtoOf = (source: string): SerializedValue => serializeValue(engine.evaluateExpression(source));
 
   function expectPortable(dto: SerializedValue): void {
     expect(structuredClone(dto)).toEqual(dto);

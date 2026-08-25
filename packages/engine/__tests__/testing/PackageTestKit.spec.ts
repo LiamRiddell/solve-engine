@@ -21,8 +21,6 @@ import type { PrefixParselet } from "@solve-js/parser/Parselet";
 import type { Parser } from "@solve-js/parser/Parser";
 import type { Token } from "@solve-js/lexer/Token";
 import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
-import { OpCode } from "@solve-js/parser/OpCode";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
 import { pendingValue, type Value } from "@solve-js/vm/Value";
 import {
 	createTestEngine,
@@ -40,16 +38,14 @@ const gpPackage: IEnginePackage = {
 	lexerVocabulary: { units: ["gp"] },
 };
 
-/** A plugin index for the pending demo below, allocated the supported way. */
-const PEND_FN_IDX = allocatePluginFunctionIndex();
+/** The pending demo's plugin-function name; the engine assigns its index when the package registers. */
+const PEND_FN = "pend";
 
 /** A parselet whose only job is to call a plugin function that returns a pending value. */
 class PendParselet implements PrefixParselet {
 	readonly category = "Pending Demo";
 	parse(_parser: Parser, _token: Token, builder: BytecodeBuilder): void {
-		builder.emitOpcode(OpCode.CALL_PLUGIN);
-		builder.emitIndex(PEND_FN_IDX);
-		builder.emitIndex(0);
+		builder.emitPluginCall(PEND_FN, 0);
 	}
 }
 
@@ -62,8 +58,8 @@ class PendParselet implements PrefixParselet {
 const pendingPackage: IEnginePackage = {
 	name: "pending-demo",
 	lexerVocabulary: { keywords: { pend: "PEND_KEYWORD" } },
-	prefixParselets: [{ tokenType: "PEND_KEYWORD", parselet: new PendParselet() }],
-	pluginFunctions: [{ index: PEND_FN_IDX, handler: (): Value => pendingValue("test:pending") }],
+	prefixParselets: { PEND_KEYWORD: new PendParselet() },
+	pluginFunctions: { [PEND_FN]: (): Value => pendingValue("test:pending") },
 };
 
 /** Run a kit assertion and return the ExpectationError it throws, failing the test if it does not throw. */
@@ -316,11 +312,11 @@ describe("expectPackage.notToCollideWith", () => {
 		// packages registering a prefix parselet for the same token type.
 		const parseletA: IEnginePackage = {
 			name: "parselet-a",
-			prefixParselets: [{ tokenType: "SHARED", parselet: {} as never }],
+			prefixParselets: { SHARED: {} as never },
 		};
 		const parseletB: IEnginePackage = {
 			name: "parselet-b",
-			prefixParselets: [{ tokenType: "SHARED", parselet: {} as never }],
+			prefixParselets: { SHARED: {} as never },
 		};
 		// Default strictness "error" lets the warning through.
 		const report = expectPackage(parseletB).notToCollideWith([parseletA]);

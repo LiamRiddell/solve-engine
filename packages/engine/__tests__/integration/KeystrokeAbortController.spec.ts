@@ -12,7 +12,7 @@ import { registerTestPluginFunction } from "@tools/testUtils";
  * Helper: create a fresh engine (no diagnostic mode).
  */
 function createEngine(): ExpressionEngine {
-	return new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+	return new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 }
 
 /**
@@ -255,7 +255,7 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 		//   2. VM controller — linked to keystrokeSignal before VM execution
 		// This test verifies that aborting the keystroke signal propagates
 		// through the preflight controller to the VM controller.
-		const diagnosticEngine = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
+		const diagnosticEngine = new ExpressionEngine({ diagnostics: true, packages: BUILTIN_PACKAGES });
 
 		const controller = new AbortController();
 		diagnosticEngine.setKeystrokeSignal(controller.signal);
@@ -285,14 +285,14 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 		// the preflight controller's addEventListener('abort', ...) on an
 		// already-aborted signal should not crash and evaluation should still
 		// produce a correct result (the preflight passes, VM executes).
-		const diagnosticEngine = new ExpressionEngine("en", true, undefined, undefined, BUILTIN_PACKAGES);
+		const diagnosticEngine = new ExpressionEngine({ diagnostics: true, packages: BUILTIN_PACKAGES });
 
 		const controller = new AbortController();
 		controller.abort("Pre-aborted");
 		diagnosticEngine.setKeystrokeSignal(controller.signal);
 
 		// Should not throw — preflight controller handles already-aborted signal
-		const [result] = diagnosticEngine.evaluateLine(1, "10 + 2");
+		const result = diagnosticEngine.evaluateLine(1, "10 + 2");
 
 		// Result should be correct even with aborted keystroke signal
 		expect(result.toNumber()).toBe(12);

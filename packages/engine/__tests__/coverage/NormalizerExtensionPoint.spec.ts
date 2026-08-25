@@ -244,12 +244,12 @@ describe("a package's normalizerRules, end to end through an engine", () => {
 		 * actually parses with. Two sixpacks is twelve, so "2 sixpack + 1"
 		 * is thirteen.
 		 */
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.registerPackage(sixpackPackage);
 
-		expect(engine.evaluateExpression("2 sixpack")[0].toNumber()).toBe(12);
-		expect(engine.evaluateExpression("2 sixpack + 1")[0].toNumber()).toBe(13);
-		expect(engine.evaluateExpression("2 sixpack * 3")[0].toNumber()).toBe(36);
+		expect(engine.evaluateExpression("2 sixpack").toNumber()).toBe(12);
+		expect(engine.evaluateExpression("2 sixpack + 1").toNumber()).toBe(13);
+		expect(engine.evaluateExpression("2 sixpack * 3").toNumber()).toBe(36);
 	});
 
 	test("an engine without the package is unaffected", () => {
@@ -260,11 +260,11 @@ describe("a package's normalizerRules, end to end through an engine", () => {
 		 * leaking between them would change answers in a document nobody
 		 * configured.
 		 */
-		const withPackage = newTrackedEngine("en");
+		const withPackage = newTrackedEngine();
 		withPackage.registerPackage(sixpackPackage);
-		const without = newTrackedEngine("en");
+		const without = newTrackedEngine();
 
-		expect(withPackage.evaluateExpression("2 sixpack")[0].toNumber()).toBe(12);
+		expect(withPackage.evaluateExpression("2 sixpack").toNumber()).toBe(12);
 
 		// Without the rule, "sixpack" is an undefined identifier rather than
 		// a quantity, so the line has no value at all.
@@ -291,9 +291,9 @@ describe("a package's normalizerRules, end to end through an engine", () => {
 	 * what the second test below measures.
 	 */
 	test("unregistering the package takes the rule back out", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.registerPackage(sixpackPackage);
-		expect(engine.evaluateExpression("2 sixpack")[0].toNumber()).toBe(12);
+		expect(engine.evaluateExpression("2 sixpack").toNumber()).toBe(12);
 
 		engine.unregisterPackage("sixpack-test-package");
 
@@ -330,7 +330,7 @@ describe("a package's normalizerRules, end to end through an engine", () => {
 			normalizerRules: [countingRule],
 		};
 
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.registerPackage(countingPackage);
 		engine.evaluateExpression("1 + 1");
 		const afterFirst = attempts;

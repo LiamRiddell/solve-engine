@@ -8,7 +8,7 @@ import { TimeDifferenceParselet } from "./parselets/TimeDifferenceParselet";
 import { VideoTimecodeParselet } from "./parselets/VideoTimecodeParselet";
 import { FrameCountParselet } from "./parselets/FrameCountParselet";
 import {
-  ZONE_CONVERT_FN_IDX, TIME_IN_ZONE_FN_IDX, DATE_IN_ZONE_FN_IDX, TIME_DIFFERENCE_FN_IDX,
+  ZONE_CONVERT_FN, TIME_IN_ZONE_FN, DATE_IN_ZONE_FN, TIME_DIFFERENCE_FN,
   zoneConvertHandler, timeInZoneHandler, dateInZoneHandler, timeDifferenceHandler,
 } from "./parselets/TimezonePluginFunctions";
 import { clockTimeNormalizerRule } from "./normalizer/ClockTimeNormalizerRule";
@@ -77,17 +77,17 @@ export const TIME_PACKAGE: IEnginePackage = {
     "time difference between": "TIME_DIFFERENCE_BETWEEN",
     ...Object.fromEntries(Object.keys(MULTI_WORD_CITY_ZONES).map((phrase) => [phrase, "CITY_NAME"])),
   },
-  prefixParselets: [
-    { tokenType: "CLOCK_TIME", parselet: new ClockTimeParselet() },
-    { tokenType: "CLOCK_TIME_INTERVAL", parselet: new ClockTimeIntervalParselet() },
-    { tokenType: "FPS_RATE", parselet: new FpsRateParselet() },
-    { tokenType: "LAPTIME", parselet: new LaptimeParselet() },
-    { tokenType: "TIME_IN", parselet: timeOrDateInZoneParselet(TIME_IN_ZONE_FN_IDX) },
-    { tokenType: "DATE_IN", parselet: timeOrDateInZoneParselet(DATE_IN_ZONE_FN_IDX) },
-    { tokenType: "TIME_DIFFERENCE_BETWEEN", parselet: new TimeDifferenceParselet() },
-    { tokenType: "VIDEO_TIMECODE", parselet: new VideoTimecodeParselet() },
-    { tokenType: "FRAME_COUNT", parselet: new FrameCountParselet() },
-  ],
+  prefixParselets: {
+    CLOCK_TIME: new ClockTimeParselet(),
+    CLOCK_TIME_INTERVAL: new ClockTimeIntervalParselet(),
+    FPS_RATE: new FpsRateParselet(),
+    LAPTIME: new LaptimeParselet(),
+    TIME_IN: timeOrDateInZoneParselet(TIME_IN_ZONE_FN),
+    DATE_IN: timeOrDateInZoneParselet(DATE_IN_ZONE_FN),
+    TIME_DIFFERENCE_BETWEEN: new TimeDifferenceParselet(),
+    VIDEO_TIMECODE: new VideoTimecodeParselet(),
+    FRAME_COUNT: new FrameCountParselet(),
+  },
   normalizerRules: [
     clockTimeNormalizerRule(),
     clockTimeIntervalNormalizerRule(),
@@ -96,10 +96,10 @@ export const TIME_PACKAGE: IEnginePackage = {
     videoTimecodeNormalizerRule(),
     frameCountNormalizerRule(),
   ],
-  pluginFunctions: [
-    { index: ZONE_CONVERT_FN_IDX, handler: zoneConvertHandler },
-    { index: TIME_IN_ZONE_FN_IDX, handler: timeInZoneHandler },
-    { index: DATE_IN_ZONE_FN_IDX, handler: dateInZoneHandler },
-    { index: TIME_DIFFERENCE_FN_IDX, handler: timeDifferenceHandler },
-  ],
+  pluginFunctions: {
+    [ZONE_CONVERT_FN]: zoneConvertHandler,
+    [TIME_IN_ZONE_FN]: timeInZoneHandler,
+    [DATE_IN_ZONE_FN]: dateInZoneHandler,
+    [TIME_DIFFERENCE_FN]: timeDifferenceHandler,
+  },
 };

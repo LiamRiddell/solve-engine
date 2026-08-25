@@ -46,7 +46,7 @@ import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { createQueryResolver } from "@solve-js/resolvers/QueryResolver";
 import type { IAsyncResolver, AsyncCheckResult } from "@solve-js/resolvers/ResolverRegistry";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import type { PrefixParselet } from "@solve-js/parser/Parselet";
 import type { Parser } from "@solve-js/parser/Parser";
 import type { Token } from "@solve-js/lexer/Token";
@@ -79,7 +79,7 @@ async function makeWorker(options: Partial<WorkerEngineOptions> = {}): Promise<H
 /** Track the synchronous engines a test builds so they are all cleared afterwards. */
 const syncEngines: ExpressionEngine[] = [];
 function syncEngine(): ExpressionEngine {
-	const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+	const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	syncEngines.push(engine);
 	return engine;
 }
@@ -220,12 +220,12 @@ describe("the worker proxy matches the synchronous path", () => {
 		expect(result.errors.some((message) => message.includes("Line 14"))).toBe(true);
 	});
 
-	test("evaluateExpression returns a one-element DTO array", async () => {
+	test("evaluateExpression returns the result DTO", async () => {
 		const engine = await worker();
-		const [value] = await engine.evaluateExpression("2 + 2 * 10");
+		const value = await engine.evaluateExpression("2 + 2 * 10");
 		expect(value.number).toBe(22);
 
-		const [expected] = syncEngine().evaluateExpression("2 + 2 * 10");
+		const expected = syncEngine().evaluateExpression("2 + 2 * 10");
 		expect(value).toEqual(serializeValue(expected));
 	});
 
@@ -265,7 +265,7 @@ describe("cancellation", () => {
 	test("an un-aborted signal lets the request complete normally", async () => {
 		const engine = await worker();
 		const controller = new AbortController();
-		const [value] = await engine.evaluateExpression("6 * 7", { signal: controller.signal });
+		const value = await engine.evaluateExpression("6 * 7", { signal: controller.signal });
 		expect(value.number).toBe(42);
 	});
 });
@@ -303,8 +303,8 @@ describe("request correlation", () => {
 			engine.parseDocument("7 + 1"),
 		]);
 
-		expect(a[0].number).toBe(4);
-		expect(b[0].number).toBe(100);
+		expect(a.number).toBe(4);
+		expect(b.number).toBe(100);
 		expect(doc.lines[0].result?.number).toBe(8);
 	});
 });
@@ -336,7 +336,7 @@ describe("package selection", () => {
 	test("selecting every built-in by name evaluates identically", async () => {
 		const names = BUILTIN_PACKAGES.map((pkg) => pkg.name);
 		const engine = await worker({ packages: names });
-		const [value] = await engine.evaluateExpression("2 + 2 * 10");
+		const value = await engine.evaluateExpression("2 + 2 * 10");
 		expect(value.number).toBe(22);
 	});
 
@@ -369,7 +369,7 @@ describe("package selection", () => {
  * flows through the engine exactly as a production live-data value does: pending
  * on first evaluation, cached by the resolver, read back on re-evaluation.
  */
-function livePriceParselet(pluginFnIdx: number): PrefixParselet {
+function livePriceParselet(pluginFnName: string): PrefixParselet {
 	return {
 		category: "LivePrice",
 		parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
@@ -385,25 +385,32 @@ function livePriceParselet(pluginFnIdx: number): PrefixParselet {
 			}
 			builder.emitOpcode(OpCode.PUSH_STRING);
 			builder.emitString(words.join(" "));
-			builder.emitOpcode(OpCode.CALL_PLUGIN);
-			builder.emitIndex(pluginFnIdx);
-			builder.emitIndex(1);
+			// Emit the plugin call by name; the engine's builder resolves it to the
+			// index it assigned this package's function, the same index the
+			// resolver watches for (the PUSH_STRING + CALL_PLUGIN pair).
+			builder.emitPluginCall(pluginFnName, 1);
 		},
 	};
 }
 
+// The engine files this package's function under `${pkg.name}:${name}` and
+// assigns the CALL_PLUGIN index; computing it here from the same qualified name
+// gives the resolver the exact index the parselet will emit.
+const LIVE_PRICE_PKG_NAME = "solve-liveprice-test";
+const LIVE_PRICE_FN_NAME = "livePrice";
+
 function createLivePricePackage(fetchQuery: (query: string, signal: AbortSignal) => Promise<Value>): IEnginePackage {
-	const fnIdx = allocatePluginFunctionIndex();
+	const fnIdx = pluginFunctionIndexFor(`${LIVE_PRICE_PKG_NAME}:${LIVE_PRICE_FN_NAME}`);
 	const { resolver, pluginFunction } = createQueryResolver({
 		namespace: "liveprice",
 		pluginFunctionIndex: fnIdx,
 		fetchQuery,
 	});
 	return {
-		name: "solve-liveprice-test",
+		name: LIVE_PRICE_PKG_NAME,
 		phrases: { "live price of": "LIVE_PRICE_OF" },
-		prefixParselets: [{ tokenType: "LIVE_PRICE_OF", parselet: livePriceParselet(fnIdx) }],
-		pluginFunctions: [{ index: fnIdx, handler: pluginFunction }],
+		prefixParselets: { LIVE_PRICE_OF: livePriceParselet(LIVE_PRICE_FN_NAME) },
+		pluginFunctions: { [LIVE_PRICE_FN_NAME]: pluginFunction },
 		asyncResolvers: [resolver],
 	};
 }
@@ -447,7 +454,7 @@ async function streamingWorker(pkg: IEnginePackage): Promise<WorkerEngine> {
 
 /** A synchronous engine registered with one extra package, tracked for cleanup. */
 function syncEngineWith(pkg: IEnginePackage): ExpressionEngine {
-	const engine = new ExpressionEngine("en", false, undefined, undefined, [pkg]);
+	const engine = new ExpressionEngine({ packages: [pkg] });
 	syncEngines.push(engine);
 	return engine;
 }
@@ -503,7 +510,7 @@ describe("async live-data resolutions stream back", () => {
 		const engine = await streamingWorker(createLivePricePackage(() => gate));
 
 		const firstUpdate = new Promise<WorkerAsyncUpdate[]>((resolve) => engine.onResolved(resolve));
-		const [pending] = await engine.evaluateExpression("live price of silver");
+		const pending = await engine.evaluateExpression("live price of silver");
 		expect(pending.type).toBe(ValueType.Pending);
 
 		release(RESOLVED);

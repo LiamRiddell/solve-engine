@@ -28,7 +28,7 @@ const DOC_DIR = join(__dirname, "..", "..", "..", "..", "docs", "src", "content"
 
 describe.each(SYMBOLIC_FUNCTIONS.map(fn => [fn.word, fn] as const))("algebra verb: %s", (_word, fn) => {
 	test("has a parselet registered for the token type the normalizer mints", () => {
-		const registered = (SYMBOLIC_PACKAGE.prefixParselets ?? []).map(entry => entry.tokenType);
+		const registered = Object.keys(SYMBOLIC_PACKAGE.prefixParselets ?? {});
 		expect(registered).toContain(fn.tokenType);
 	});
 
@@ -49,11 +49,11 @@ describe.each(SYMBOLIC_FUNCTIONS.map(fn => [fn.word, fn] as const))("algebra ver
 	});
 
 	test("stays an ordinary identifier when not called, so it works as a variable name", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
-			const [assigned] = engine.evaluateLine(1, `:${fn.word} = 1.5`);
+			const assigned = engine.evaluateLine(1, `:${fn.word} = 1.5`);
 			expect(assigned.toNumber()).toBe(1.5);
-			const [read] = engine.evaluateLine(2, `:${fn.word} + 1`);
+			const read = engine.evaluateLine(2, `:${fn.word} + 1`);
 			expect(read.toNumber()).toBe(2.5);
 		} finally {
 			engine.clear();
@@ -61,11 +61,11 @@ describe.each(SYMBOLIC_FUNCTIONS.map(fn => [fn.word, fn] as const))("algebra ver
 	});
 
 	test("produces identical output through every public entry point", () => {
-		const viaLine = newTrackedEngine("en");
-		const viaDebug = newTrackedEngine("en");
-		const viaLean = newTrackedEngine("en");
+		const viaLine = newTrackedEngine();
+		const viaDebug = newTrackedEngine();
+		const viaLean = newTrackedEngine();
 		try {
-			const line = formatValue(viaLine.evaluateLine(1, fn.example)[0]);
+			const line = formatValue(viaLine.evaluateLine(1, fn.example));
 			const debug = formatValue(viaDebug.evaluateLineWithDebug(1, fn.example).value);
 			const parsed = viaLean.evaluateLines([fn.example]);
 			const lean = formatValue(parsed[0].result!);

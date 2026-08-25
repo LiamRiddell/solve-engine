@@ -30,7 +30,7 @@ export class DateFieldQueryParselet implements PrefixParselet {
   readonly category = "Date/Time";
 
   constructor(
-    private readonly functionIndex: number,
+    private readonly functionName: string,
     private readonly mode: "on" | "in",
   ) {}
 
@@ -45,8 +45,6 @@ export class DateFieldQueryParselet implements PrefixParselet {
       builder.emitOpcode(OpCode.DATE_NOW); // bare form — "what day is it"
     }
 
-    builder.emitOpcode(OpCode.CALL_PLUGIN);
-    builder.emitIndex(this.functionIndex);
-    builder.emitIndex(1);
+    builder.emitPluginCall(this.functionName, 1);
   }
 }

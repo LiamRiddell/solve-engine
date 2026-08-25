@@ -21,7 +21,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 
 /** The first line's result, through the markdown document path. */
 function evaluateMarkdown(line: string): unknown {
-	const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+	const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	const [parsed] = engine.parseDocument(line, { inputType: "markdown" }).lines;
 	return parsed.result?.value ?? parsed.error;
 }
@@ -70,8 +70,8 @@ describe("what must keep working", () => {
 	});
 
 	test("a matrix literal is not mistaken for a checkbox", () => {
-		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
-		const [value] = engine.evaluateExpression("[1,2] + [3,4]");
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
+		const value = engine.evaluateExpression("[1,2] + [3,4]");
 		expect((value.value as { data: number[] }).data).toEqual([4, 6]);
 	});
 
@@ -80,7 +80,7 @@ describe("what must keep working", () => {
 	});
 
 	test("a horizontal rule is still skipped", () => {
-		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		const [parsed] = engine.parseDocument("---", { inputType: "markdown" }).lines;
 		expect(parsed.isEmpty).toBe(true);
 	});

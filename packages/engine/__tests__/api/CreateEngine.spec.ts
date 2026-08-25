@@ -12,19 +12,19 @@ describe("createEngine", () => {
   test("registers the full built-in vocabulary", () => {
     const engine = createEngine();
     // Arithmetic, units, and finance are all built-ins, so all three resolve.
-    expect(engine.evaluateExpression("2 + 2 * 10")[0].toNumber()).toBe(22);
-    expect(engine.evaluateExpression("1 km + 500 m")[0].toNumber()).toBe(1.5);
-    expect(engine.evaluateExpression("split $120 between 3")[0].toNumber()).toBeCloseTo(40);
+    expect(engine.evaluateExpression("2 + 2 * 10").toNumber()).toBe(22);
+    expect(engine.evaluateExpression("1 km + 500 m").toNumber()).toBe(1.5);
+    expect(engine.evaluateExpression("split $120 between 3").toNumber()).toBeCloseTo(40);
   });
 
   test("a bare-constructor engine registers nothing unless given packages", () => {
     // The tree-shaking contract: no packages passed means no vocabulary.
-    const bare = new ExpressionEngine("en", false);
+    const bare = new ExpressionEngine();
     expect(() => bare.evaluateExpression("sin(0)")).toThrow();
   });
 
   test("accepts a locale and extra packages on top of the built-ins", () => {
-    const engine = createEngine("en", false, undefined, []);
-    expect(engine.evaluateExpression("10 dollars")[0].toNumber()).toBe(10);
+    const engine = createEngine();
+    expect(engine.evaluateExpression("10 dollars").toNumber()).toBe(10);
   });
 });

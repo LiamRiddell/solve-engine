@@ -88,10 +88,10 @@ safe to call on every keystroke.
       <div>
 
 ```ts
-import { ExpressionEngine } from "solve-engine";
+import { createEngine } from "solve-engine";
 import { formatValue } from "solve-engine/format";
 
-const engine = new ExpressionEngine("en");
+const engine = createEngine();
 
 const { lines } = engine.parseDocument(document, {
   inputType: "markdown",
@@ -351,8 +351,8 @@ className("number"); // "cm-solve-number"
       <div>
 
 A package can contribute vocabulary to the lexer, parsing rules, functions the
-virtual machine can call, token rewrites, conversion targets, variable sources,
-async resolvers, highlighting categories and completions.
+virtual machine can call, token rewrites, conversion targets, async resolvers,
+highlighting categories and completions.
 
 `engineVersion` is checked when you register, so a package built against an
 incompatible engine is refused with a clear message instead of failing
@@ -375,13 +375,15 @@ export const gamePackage: IEnginePackage = {
   lexerVocabulary: osrsVocabulary,
   normalizerRules: [osrsItemNormalizerRule()],
 
-  prefixParselets: [
-    { tokenType: "GAME_ITEM", parselet: new GameItemParselet() },
-  ],
+  prefixParselets: {
+    GAME_ITEM: new GameItemParselet(),
+  },
 
-  pluginFunctions: [
-    { index: OSRS_PLUGIN_FN_IDX, handler: resolveGameItem },
-  ],
+  // Named, not indexed: the engine assigns the CALL_PLUGIN index, and the
+  // parselet emits the call by name (`builder.emitPluginCall("gameitem", 1)`).
+  pluginFunctions: {
+    gameitem: resolveGameItem,
+  },
 
   asyncResolvers: [new OsrsAsyncResolver()],
 
@@ -394,10 +396,10 @@ export const gamePackage: IEnginePackage = {
 ```ts
 import { ExpressionEngine } from "solve-engine";
 
-const engine = new ExpressionEngine("en", false, undefined, undefined, [
+const engine = new ExpressionEngine({ packages: [
   ...BUILTIN_PACKAGES,
   gamePackage,
-]);
+] });
 ```
 
       </div>

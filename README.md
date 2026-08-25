@@ -52,7 +52,7 @@ npm install solve-engine
 import { createEngine } from "solve-engine";
 
 const engine = createEngine(); // every built-in package
-const [value] = engine.evaluateExpression("2 + 2 * 10");
+const value = engine.evaluateExpression("2 + 2 * 10");
 
 console.log(value.toNumber()); // 22
 ```
@@ -66,7 +66,7 @@ import { ExpressionEngine } from "solve-engine";
 import { ARITHMETIC_PACKAGE, UOM_PACKAGE } from "solve-engine/packages";
 
 // Only arithmetic and units reach the bundle.
-const engine = new ExpressionEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE, UOM_PACKAGE]);
+const engine = new ExpressionEngine({ packages: [ARITHMETIC_PACKAGE, UOM_PACKAGE] });
 ```
 
 No dependencies on a UI framework, a DOM, or an editor. It runs in Node, in a
@@ -141,9 +141,10 @@ that did should not cost a full re-evaluation of the rest.
 Everything above the pipeline is a package. All 22 of them, arithmetic
 included, register through the same public interface: token vocabulary,
 normaliser rules, parselets, and VM functions. There is no privileged built-in
-tier, which means an extension can do anything the built-ins can. Twenty
-register by default; stocks and knowledge stay out until a host supplies a data
-source.
+tier, which means an extension can do anything the built-ins can. `createEngine()`
+registers twenty-five of them; stocks and knowledge stay out until a host supplies a
+data source, and a bare `new ExpressionEngine()` registers none until you pass the
+packages you want.
 
 [Architecture](https://liamriddell.github.io/solve-engine/architecture/overview/)
 covers this properly, including a candid list of what is not finished.
@@ -215,7 +216,7 @@ import { BUILTIN_PACKAGES, CURRENCY_PACKAGE, WEATHER_PACKAGE } from "solve-engin
 const offline = BUILTIN_PACKAGES.filter(
   (p) => p !== CURRENCY_PACKAGE && p !== WEATHER_PACKAGE,
 );
-const engine = new ExpressionEngine("en", false, undefined, undefined, offline);
+const engine = new ExpressionEngine({ packages: offline });
 ```
 
 **One runtime dependency.** `@tanstack/query-core`, for caching async

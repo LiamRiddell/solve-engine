@@ -10,7 +10,7 @@ Parsed JavaScript, a consumer importing the engine and constructing it:
 
 | | parsed |
 | --- | --- |
-| before | 475 KB (all 26 packages, always) |
+| before | 475 KB (all 25 packages, always) |
 | now, arithmetic only | 352 KB |
 
 **This is a breaking change.** `new ExpressionEngine()` with no `packages` argument now registers nothing, so `2 + 2` on a bare engine is an undefined-token parse error rather than `4`. Two ways to adopt it:
@@ -27,7 +27,7 @@ For a slimmer engine, pass the packages you want. Importing them from `solve-eng
 ```typescript
 import { ExpressionEngine } from "solve-engine";
 import { ARITHMETIC_PACKAGE, UOM_PACKAGE } from "solve-engine/packages";
-const engine = new ExpressionEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE, UOM_PACKAGE]);
+const engine = new ExpressionEngine({ packages: [ARITHMETIC_PACKAGE, UOM_PACKAGE] });
 ```
 
 The `fromJSON` restore path takes the same `packages` argument, and must be given the same set the snapshot was taken with, since a snapshot's compiled bytecode only lines up against the packages present when it was written.

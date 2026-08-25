@@ -20,11 +20,11 @@ import { formatValue } from "@solve-js/format/FormatEngine";
 describe("Issue #153: tax off / tax in on money round the half-cent exactly", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
-  const money = (source: string): string => formatValue(engine.evaluateExpression(source)[0]);
-  const num = (source: string): number => engine.evaluateExpression(source)[0].toNumber();
+  const money = (source: string): string => formatValue(engine.evaluateExpression(source));
+  const num = (source: string): number => engine.evaluateExpression(source).toNumber();
 
   describe("tax off $X at R% (the pre-tax amount)", () => {
     test.each([

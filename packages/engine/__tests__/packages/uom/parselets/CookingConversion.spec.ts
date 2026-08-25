@@ -20,8 +20,8 @@ import { convertUnit } from "@solve-js/uom/UomConverter";
 import { newTrackedEngine } from "@tools/trackedEngine";
 
 function evalReal(expr: string) {
-  const engine = newTrackedEngine("en");
-  const [value] = engine.evaluateExpression(expr);
+  const engine = newTrackedEngine();
+  const value = engine.evaluateExpression(expr);
   return value;
 }
 
@@ -88,12 +88,12 @@ describe("errors and edge cases", () => {
 
 describe("UOM_PACKAGE cooking conversion — regression guards (bare variable names must still work)", () => {
   test("':butter', ':sugar', ':flour', ':milk' all still work as variable names -- the ingredient-name fusion only fires immediately after a real UNIT token AND immediately before \"in <unit>\", so a bare colon-prefixed variable definition is never intercepted", () => {
-    const engine = newTrackedEngine("en");
+    const engine = newTrackedEngine();
     engine.evaluateExpression(":butter = 1");
     engine.evaluateExpression(":sugar = 2");
     engine.evaluateExpression(":flour = 3");
     engine.evaluateExpression(":milk = 4");
-    const [value] = engine.evaluateExpression(":butter + :sugar + :flour + :milk");
+    const value = engine.evaluateExpression(":butter + :sugar + :flour + :milk");
     expect(value.toNumber()).toBe(10);
   });
 

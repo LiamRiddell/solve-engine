@@ -1,10 +1,23 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { createQueryResolver } from "@solve-js/resolvers/QueryResolver";
 import { errorValue, numberValue, uomValue, type Value } from "@solve-js/vm/Value";
 import { stockFnParselet, bareStockTickerParselet } from "./parselets/StockParselet";
 import { stockTickerNormalizerRule, STOCK_TICKER_TYPE } from "./normalizer/StockTickerNormalizerRule";
 import type { StocksPackageConfig } from "./types";
+
+/** Package name, the qualifier for every `${PACKAGE_NAME}:${fn}` registry lookup below. */
+const PACKAGE_NAME = "solve-stocks";
+
+/**
+ * Package-local plugin-function names, the identity each parselet emits
+ * (`builder.emitPluginCall`) and this descriptor keys `pluginFunctions` by.
+ * `stock` is the live current-price lookup; `stockhistorical` the dated
+ * close/volume lookup, two functions with two resolvers (see the module doc
+ * below for why they are kept separate).
+ */
+const CURRENT_FN = "stock";
+const HISTORICAL_FN = "stockhistorical";
 
 /**
  * Live stock prices, `stock(TICKER)`, `stock(TICKER) on <date>`
@@ -52,9 +65,6 @@ import type { StocksPackageConfig } from "./types";
  * resolver instance, not the per-call query.
  */
 export function createStocksPackage(config: StocksPackageConfig = {}): IEnginePackage {
-	const currentFnIdx = allocatePluginFunctionIndex();
-	const historicalFnIdx = allocatePluginFunctionIndex();
-
 	function notConfigured(what: string): Value {
 		return errorValue(
 			"STOCKS_NOT_CONFIGURED",
@@ -64,7 +74,10 @@ export function createStocksPackage(config: StocksPackageConfig = {}): IEnginePa
 
 	const { resolver: currentResolver, pluginFunction: currentPluginFunction } = createQueryResolver({
 		namespace: "stocks-current",
-		pluginFunctionIndex: currentFnIdx,
+		// The engine assigns `stock` its registry index at registration; the
+		// resolver's preflight still matches CALL_PLUGIN by that numeric index,
+		// so watch the same engine-assigned slot the emit-by-name path produces.
+		pluginFunctionIndex: pluginFunctionIndexFor(`${PACKAGE_NAME}:${CURRENT_FN}`),
 		staleTimeMs: config.staleTimeMs ?? 60_000, // 1 min — intraday quotes move continuously
 		fetchQuery: async (ticker: string, signal: AbortSignal): Promise<Value> => {
 			if (!config.fetchQuote) return notConfigured("fetchQuote");
@@ -75,7 +88,9 @@ export function createStocksPackage(config: StocksPackageConfig = {}): IEnginePa
 
 	const { resolver: historicalResolver, pluginFunction: historicalPluginFunction } = createQueryResolver({
 		namespace: "stocks-historical",
-		pluginFunctionIndex: historicalFnIdx,
+		// Same bridge as the current-price resolver above: watch the engine-
+		// assigned index for `stockhistorical` so preflight matches the bytecode.
+		pluginFunctionIndex: pluginFunctionIndexFor(`${PACKAGE_NAME}:${HISTORICAL_FN}`),
 		staleTimeMs: config.historicalStaleTimeMs ?? 30 * 24 * 60 * 60 * 1000, // 30 days — a past close never changes
 		fetchQuery: async (query: string, signal: AbortSignal): Promise<Value> => {
 			const [field, ticker, isoDate] = query.split(":");
@@ -87,7 +102,7 @@ export function createStocksPackage(config: StocksPackageConfig = {}): IEnginePa
 	});
 
 	const pkg: IEnginePackage = {
-		name: "solve-stocks",
+		name: PACKAGE_NAME,
 
 		lexerVocabulary: {
 			// "stock" is claimed as a bare keyword (unlike Weather's phrase-
@@ -102,19 +117,19 @@ export function createStocksPackage(config: StocksPackageConfig = {}): IEnginePa
 			keywords: { stock: "STOCK_FN" },
 		},
 
-		prefixParselets: [
-			{ tokenType: "STOCK_FN", parselet: stockFnParselet(currentFnIdx, historicalFnIdx) },
+		prefixParselets: {
+			STOCK_FN: stockFnParselet(CURRENT_FN, HISTORICAL_FN),
 			...(config.enableBareTickerRecognition
-				? [{ tokenType: STOCK_TICKER_TYPE, parselet: bareStockTickerParselet(currentFnIdx, historicalFnIdx) }]
-				: []),
-		],
+				? { [STOCK_TICKER_TYPE]: bareStockTickerParselet(CURRENT_FN, HISTORICAL_FN) }
+				: {}),
+		},
 
 		normalizerRules: config.enableBareTickerRecognition ? [stockTickerNormalizerRule()] : [],
 
-		pluginFunctions: [
-			{ index: currentFnIdx, handler: currentPluginFunction },
-			{ index: historicalFnIdx, handler: historicalPluginFunction },
-		],
+		pluginFunctions: {
+			[CURRENT_FN]: currentPluginFunction,
+			[HISTORICAL_FN]: historicalPluginFunction,
+		},
 
 		asyncResolvers: [currentResolver, historicalResolver],
 	};

@@ -104,6 +104,40 @@ export class BytecodeBuilder {
 	private userFunctionBodies: UserFunctionDef[] = [];
 	private anonymousBodies: AnonymousBodyDef[] = [];
 
+	/**
+	 * The per-engine `plugin function name -> registry index` map, wired in by
+	 * the engine so {@link emitPluginCall} can resolve a name at emit time. The
+	 * same object reference is shared with every builder in an engine (the pool
+	 * and each ad-hoc nested-body builder), and the engine populates it as
+	 * packages register, so a parselet never sees the numeric index.
+	 */
+	constructor(private readonly pluginFunctionIndex?: ReadonlyMap<string, number>) {}
+
+	/** The name->index map, so a nested-body builder inherits the same resolution. */
+	get pluginIndexMap(): ReadonlyMap<string, number> | undefined {
+		return this.pluginFunctionIndex;
+	}
+
+	/**
+	 * Emit a plugin-function call by NAME. The engine assigns each registered
+	 * `pluginFunctions` entry an index at registration; this resolves the name to
+	 * that index and emits `CALL_PLUGIN` + index + argCount. Package authors emit
+	 * through this rather than a hand-allocated index.
+	 */
+	emitPluginCall(name: string, argCount: number): void {
+		const index = this.pluginFunctionIndex?.get(name);
+		if (index === undefined) {
+			throw ErrorFactory.execution(
+				"UNKNOWN_PLUGIN_FUNCTION",
+				`No registered plugin function named "${name}". A package must declare it in its pluginFunctions record and be registered before an expression using it is parsed.`,
+				{ functionName: name },
+			);
+		}
+		this.emitOpcode(OpCode.CALL_PLUGIN);
+		this.emitIndex(index);
+		this.emitIndex(argCount);
+	}
+
 	/** Emit an {@link OpCode} instruction. */
 	emitOpcode(op: OpCode): void {
 		this.opcodes.push(op);

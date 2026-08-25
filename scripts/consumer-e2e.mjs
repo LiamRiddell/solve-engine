@@ -104,7 +104,7 @@ fs.writeFileSync(
 		`const cases = ${JSON.stringify(CASES)};\n` +
 		`const engine = createEngine("en");\n` +
 		`const results = cases.map(([source]) => {\n` +
-		`  try { return formatValue(engine.evaluateLine(1, source)[0]).replace(/^=\\s*/, ""); }\n` +
+		`  try { return formatValue(engine.evaluateLine(1, source)).replace(/^=\\s*/, ""); }\n` +
 		`  catch (error) { return "threw: " + error.message; }\n` +
 		`});\n` +
 		`engine.clear();\n` +
@@ -116,7 +116,7 @@ fs.writeFileSync(
 	`const { createEngine } = require("solve-engine");\n` +
 		`const { formatValue } = require("solve-engine/format");\n` +
 		`const engine = createEngine("en");\n` +
-		`process.stdout.write(formatValue(engine.evaluateLine(1, "2 + 2")[0]).replace(/^=\\s*/, ""));\n` +
+		`process.stdout.write(formatValue(engine.evaluateLine(1, "2 + 2")).replace(/^=\\s*/, ""));\n` +
 		`engine.clear();\n`,
 );
 
@@ -190,7 +190,7 @@ fs.writeFileSync(
 		"  group.forEach((example, index) => {",
 		"    let actual = null;",
 		"    try {",
-		"      const [value] = engine.evaluateLine(index + 1, example.expression);",
+		"      const value = engine.evaluateLine(index + 1, example.expression);",
 		// Double backslash: this string is source that gets written to a file, so
 		// the regex needs to survive one round of escaping to reach the probe as
 		// `\s`. Written singly it reaches the probe as `s`, which matches the

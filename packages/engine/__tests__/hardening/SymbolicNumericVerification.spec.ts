@@ -166,7 +166,7 @@ function smallInt(random: () => number, limit = 5): number {
  * legitimately answers 1.
  */
 function symbolicResult(engine: ExpressionEngine, source: string): SymbolicNode {
-	const [value] = engine.evaluateLine(1, source);
+	const value = engine.evaluateLine(1, source);
 	if (value.type === ValueType.Symbolic) return value.value as SymbolicNode;
 	if (value.type === ValueType.Number) return { kind: "const", value: { n: BigInt(Math.round(value.toNumber() * 1e9)), d: 1000000000n } };
 	throw new Error(`"${source}" produced ${ValueType[value.type]} rather than an algebraic result: ${String(value.value)}`);
@@ -183,7 +183,7 @@ function matrixCells(matrix: MatrixData): (number | boolean | SymbolicNode)[] {
 
 /** The roots `solve` returned, as complex numbers, whether it answered with one root or a row of them. */
 function solvedRoots(engine: ExpressionEngine, equation: string): Cpx[] {
-	const [value] = engine.evaluateLine(1, equation);
+	const value = engine.evaluateLine(1, equation);
 	if (value.type === ValueType.Matrix) {
 		return matrixCells(value.value as MatrixData).map(cell => (typeof cell === "number" ? cpx(cell) : evaluateSymbolic(cell as SymbolicNode, {})));
 	}
@@ -241,7 +241,7 @@ function expectAgreement(actual: number, expected: number, context: string): voi
 describe("expand agrees numerically with the product it was given", () => {
 	test("100 random products of linear and quadratic factors", () => {
 		const random = seededRandom(0x5eed01);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 100; trial++) {
 			// Built from factors this test chose, so the product's value at any
 			// point is known here without asking the engine anything.
@@ -263,7 +263,7 @@ describe("expand agrees numerically with the product it was given", () => {
 
 	test("expanding a power agrees with repeated multiplication", () => {
 		const random = seededRandom(0x5eed02);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 40; trial++) {
 			const base = [smallInt(random, 3), smallInt(random, 6)];
 			const exponent = 2 + Math.floor(random() * 5);
@@ -281,7 +281,7 @@ describe("expand agrees numerically with the product it was given", () => {
 
 	test("a two-variable product expands to the same surface", () => {
 		const random = seededRandom(0x5eed03);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 30; trial++) {
 			const a = smallInt(random);
 			const b = smallInt(random);
@@ -303,7 +303,7 @@ describe("expand agrees numerically with the product it was given", () => {
 describe("factor agrees numerically with the polynomial it was given", () => {
 	test("100 random polynomials built from known roots", () => {
 		const random = seededRandom(0x5eed11);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 100; trial++) {
 			// Building from roots guarantees the input really does factor over the
 			// rationals, so a failure here is the factoriser being wrong rather
@@ -323,7 +323,7 @@ describe("factor agrees numerically with the polynomial it was given", () => {
 
 	test("a polynomial with an integer content and a leading coefficient still factors to itself", () => {
 		const random = seededRandom(0x5eed12);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 40; trial++) {
 			const scale = smallInt(random, 6);
 			let coefficients = [scale];
@@ -342,7 +342,7 @@ describe("factor agrees numerically with the polynomial it was given", () => {
 		// would be false. Numeric agreement alone cannot catch that, since a wrong
 		// factorisation would still have to agree at every point to fool it, but
 		// asserting the shape is unchanged pins the decline itself.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(formatSymbolic(symbolicResult(engine, "factor(x^2+1)"))).toBe("x^2+1");
 		expect(formatSymbolic(symbolicResult(engine, "factor(x^2+x+1)"))).toBe("x^2+x+1");
 		engine.clear();
@@ -354,7 +354,7 @@ describe("factor agrees numerically with the polynomial it was given", () => {
 describe("cancel preserves the value of the quotient", () => {
 	test("60 quotients built as (quotient x divisor) over divisor", () => {
 		const random = seededRandom(0x5eed21);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 60; trial++) {
 			// The numerator is manufactured as divisor*quotient, so the reduced form
 			// is known here: it is `quotient`, and the test can check the engine
@@ -373,7 +373,7 @@ describe("cancel preserves the value of the quotient", () => {
 
 	test("a quotient that does not divide evenly keeps its value at every point", () => {
 		const random = seededRandom(0x5eed22);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 40; trial++) {
 			const numerator = [smallInt(random, 3), smallInt(random, 5), smallInt(random, 5)];
 			const denominator = [1, smallInt(random, 4), smallInt(random, 4)];
@@ -395,7 +395,7 @@ describe("cancel preserves the value of the quotient", () => {
 describe("apart preserves the value of the rational function", () => {
 	test("60 proper and improper rational functions with distinct linear poles", () => {
 		const random = seededRandom(0x5eed31);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 60; trial++) {
 			// Distinct roots keep the denominator square-free, which is the family
 			// the partial-fraction rules are stated for. The identity being checked
@@ -419,7 +419,7 @@ describe("apart preserves the value of the rational function", () => {
 
 	test("a repeated linear pole decomposes without changing the value", () => {
 		const random = seededRandom(0x5eed32);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 30; trial++) {
 			const root = smallInt(random, 4);
 			const denominator = polynomialMultiply([1, root], [1, root]);
@@ -445,7 +445,7 @@ describe("apart preserves the value of the rational function", () => {
 describe("every root solve returns satisfies the equation it came from", () => {
 	test("120 random quadratics, real and complex discriminant alike", () => {
 		const random = seededRandom(0x5eed41);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 120; trial++) {
 			const coefficients = [smallInt(random, 4), smallInt(random, 8), smallInt(random, 8)];
 			const source = `solve(${polynomialSource(coefficients)}=0, x)`;
@@ -462,7 +462,7 @@ describe("every root solve returns satisfies the equation it came from", () => {
 
 	test("80 cubics built from known integer roots return exactly those roots", () => {
 		const random = seededRandom(0x5eed42);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 80; trial++) {
 			// Distinct roots, so the expected set is unambiguous and a dropped or
 			// duplicated root is visible rather than being written off as a
@@ -489,7 +489,7 @@ describe("every root solve returns satisfies the equation it came from", () => {
 
 	test("a linear equation solves to the one value that satisfies it", () => {
 		const random = seededRandom(0x5eed43);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (let trial = 0; trial < 60; trial++) {
 			const slope = smallInt(random, 9);
 			const intercept = smallInt(random, 9);
@@ -504,7 +504,7 @@ describe("every root solve returns satisfies the equation it came from", () => {
 
 	test("every root a biquadratic yields satisfies it, across 40 random ones", () => {
 		const random = seededRandom(0x5eed44);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		let answered = 0;
 		for (let trial = 0; trial < 40; trial++) {
 			const p = smallInt(random, 6);
@@ -514,7 +514,7 @@ describe("every root solve returns satisfies the equation it came from", () => {
 			// A quartic whose roots have no exact closed form answers with a
 			// sentence rather than a row of roots, so the property under test is
 			// "whatever roots do come back are genuine", not "roots come back".
-			const [value] = engine.evaluateLine(1, source);
+			const value = engine.evaluateLine(1, source);
 			if (value.type === ValueType.String) continue;
 			answered++;
 			for (const root of solvedRoots(engine, source)) {
@@ -533,7 +533,7 @@ describe("every root solve returns satisfies the equation it came from", () => {
 		// x^4+4 is the Sophie Germain identity, (x^2-2x+2)*(x^2+2x+2), so the four
 		// roots are exactly (+/-1) +/- i. Re-derived here rather than read off the
 		// engine: x^2 = -2i gives x = 1-i and -1+i, and x^2 = 2i gives 1+i, -1-i.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const roots = solvedRoots(engine, "solve(x^4+4=0, x)");
 		expect(roots.length).toBe(4);
 		const asText = roots.map(root => `${Math.round(root.re)},${Math.round(root.im)}`).sort();
@@ -542,7 +542,7 @@ describe("every root solve returns satisfies the equation it came from", () => {
 	});
 
 	test("a repeated root is reported once rather than twice", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		// (x-3)^2 has the single distinct root 3. Reporting it once is the
 		// convention; what must never happen is two slightly different values.
 		const roots = solvedRoots(engine, "solve(x^2-6x+9=0, x)");
@@ -552,11 +552,11 @@ describe("every root solve returns satisfies the equation it came from", () => {
 	});
 
 	test("an equation with no solution and one true for every x are told apart", () => {
-		const engine = newTrackedEngine("en");
-		const [impossible] = engine.evaluateLine(1, "solve(0*x=1, x)");
+		const engine = newTrackedEngine();
+		const impossible = engine.evaluateLine(1, "solve(0*x=1, x)");
 		expect(impossible.type).toBe(ValueType.String);
 		expect(String(impossible.value)).toMatch(/no solution/i);
-		const [always] = engine.evaluateLine(2, "solve(0*x=0, x)");
+		const always = engine.evaluateLine(2, "solve(0*x=0, x)");
 		expect(always.type).toBe(ValueType.String);
 		expect(String(always.value)).toMatch(/every value/i);
 		engine.clear();
@@ -565,9 +565,9 @@ describe("every root solve returns satisfies the equation it came from", () => {
 	test("a non-polynomial equation is declined rather than answered approximately", () => {
 		// A wrong root is indistinguishable from a right one once it is used, so
 		// declining is the only safe answer for a shape the solver has no method for.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (const source of ["solve(sin(x)=0, x)", "solve(exp(x)=1, x)", "solve(1/x=2, x)"]) {
-			const [value] = engine.evaluateLine(1, source);
+			const value = engine.evaluateLine(1, source);
 			expect(value.type).toBe(ValueType.Error);
 			expect(String(value.value)).toBe("SYMBOLIC_SOLVE_UNSUPPORTED");
 		}
@@ -679,19 +679,19 @@ describe("solve accounts for every root, not just the ones it finds easily", () 
 	];
 
 	test.each(cases)("$source returns roots that all satisfy it", ({ source, coefficients }) => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (const root of solvedRoots(engine, source)) expectRootSatisfies(coefficients, root, source);
 		engine.clear();
 	});
 
 	test.each(cases)("$source reports $distinct distinct roots", ({ source, distinct }) => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(solvedRoots(engine, source)).toHaveLength(distinct);
 		engine.clear();
 	});
 
 	test.each(cases)("$source returns roots that multiply back up to it", ({ source, coefficients }) => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const roots = solvedRoots(engine, source);
 		if (!rootsRebuild(coefficients, roots)) {
 			throw new Error(`${source}: ${roots.length} roots do not reconstruct a degree-${coefficients.length - 1} polynomial`);
@@ -703,7 +703,7 @@ describe("solve accounts for every root, not just the ones it finds easily", () 
 		// Every root of x(x-1)(x+1)(x^2+1) is exact, so nothing here may arrive as
 		// a decimal that is nearly right. Compared without tolerance on purpose:
 		// -1.0000000000004656 is what the defect looked like.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const roots = solvedRoots(engine, "solve(x^5-x=0, x)");
 		const asText = roots.map(root => `${root.re},${root.im}`).sort();
 		expect(asText).toEqual(["-1,0", "0,-1", "0,1", "0,0", "1,0"].sort());
@@ -711,7 +711,7 @@ describe("solve accounts for every root, not just the ones it finds easily", () 
 	});
 
 	test("x^3-x is answered exactly too, rather than losing the zero to rounding", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(solvedRoots(engine, "solve(x^3-x=0, x)").map(root => root.re).sort((a, b) => a - b)).toEqual([-1, 0, 1]);
 		engine.clear();
 	});
@@ -721,17 +721,17 @@ describe("solve accounts for every root, not just the ones it finds easily", () 
 		// singular, and elimination in doubles answered 6.661338147750939e-16.
 		// An integer matrix has an integer determinant, so anything else is the
 		// method showing through the answer.
-		const engine = newTrackedEngine("en");
-		expect(engine.evaluateLine(1, "det([1,2,3;4,5,6;7,8,9])")[0].toNumber()).toBe(0);
-		expect(engine.evaluateLine(2, "det([2,0;0,3])")[0].toNumber()).toBe(6);
-		expect(engine.evaluateLine(3, "det([1,2,3;4,5,7;7,8,9])")[0].toNumber()).toBe(6);
-		expect(engine.evaluateLine(4, "det([0,1;1,0])")[0].toNumber()).toBe(-1);
+		const engine = newTrackedEngine();
+		expect(engine.evaluateLine(1, "det([1,2,3;4,5,6;7,8,9])").toNumber()).toBe(0);
+		expect(engine.evaluateLine(2, "det([2,0;0,3])").toNumber()).toBe(6);
+		expect(engine.evaluateLine(3, "det([1,2,3;4,5,7;7,8,9])").toNumber()).toBe(6);
+		expect(engine.evaluateLine(4, "det([0,1;1,0])").toNumber()).toBe(-1);
 		engine.clear();
 	});
 
 	test("120 random integer polynomials of degree 2 to 6 are solved completely", () => {
 		const random = seededRandom(0x5eed45);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		let checked = 0;
 		for (let trial = 0; trial < 120; trial++) {
 			const degree = 2 + Math.floor(random() * 5);
@@ -759,8 +759,8 @@ describe("solve accounts for every root, not just the ones it finds easily", () 
 		// one and answers the whole equation with decimals. Recorded rather than
 		// fixed: searching for higher-degree rational factors is a different
 		// algorithm (Zassenhaus or LLL), not a refinement of this one.
-		const engine = newTrackedEngine("en");
-		const [value] = engine.evaluateLine(1, "solve(x^5+x+1=0, x)");
+		const engine = newTrackedEngine();
+		const value = engine.evaluateLine(1, "solve(x^5+x+1=0, x)");
 		const cells = value.type === ValueType.Matrix ? matrixCells(value.value as MatrixData) : [];
 		const printed = cells.map(cell => (typeof cell === "object" ? formatSymbolic(cell) : String(cell))).join(", ");
 		expect(printed).toContain("sqrt(3)");
@@ -801,7 +801,7 @@ describe("der agrees with numerical differentiation", () => {
 
 	test.each(cases)("der($source, x) matches a five-point central difference", ({ source, f, domain }) => {
 		const random = seededRandom(0x5eed51);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const derivative = symbolicResult(engine, `der(${source}, x)`);
 		for (let sample = 0; sample < 8; sample++) {
 			const at = domain[0] + random() * (domain[1] - domain[0]);
@@ -816,7 +816,7 @@ describe("der agrees with numerical differentiation", () => {
 	});
 
 	test("a second derivative matches differentiating twice", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const once = formatSymbolic(symbolicResult(engine, "der(der(x^5-3x^3+2x, x), x)"));
 		const directly = formatSymbolic(symbolicResult(engine, "der(x^5-3x^3+2x, x, 2)"));
 		expect(directly).toBe(once);
@@ -824,15 +824,15 @@ describe("der agrees with numerical differentiation", () => {
 	});
 
 	test("differentiating a constant, and with respect to an absent variable, gives zero", () => {
-		const engine = newTrackedEngine("en");
-		expect(engine.evaluateLine(1, "der(5, x)")[0].toNumber()).toBe(0);
-		expect(engine.evaluateLine(2, "der(y^2, x)")[0].toNumber()).toBe(0);
+		const engine = newTrackedEngine();
+		expect(engine.evaluateLine(1, "der(5, x)").toNumber()).toBe(0);
+		expect(engine.evaluateLine(2, "der(y^2, x)").toNumber()).toBe(0);
 		engine.clear();
 	});
 
 	test("a partial derivative differentiates only the named variable", () => {
 		const random = seededRandom(0x5eed52);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const byX = symbolicResult(engine, "der(x^2*y+y^3*x, x)");
 		const byY = symbolicResult(engine, "der(x^2*y+y^3*x, y)");
 		for (let sample = 0; sample < 6; sample++) {
@@ -848,7 +848,7 @@ describe("der agrees with numerical differentiation", () => {
 	test("a function with no known derivative is left unevaluated rather than guessed", () => {
 		// Answering something plausible here would be worse than answering nothing:
 		// x^x has a derivative, just not one this table knows.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(formatSymbolic(symbolicResult(engine, "der(x^x, x)"))).toBe("der(x^x, x)");
 		engine.clear();
 	});
@@ -875,7 +875,7 @@ describe("integral, differentiated again, returns the integrand", () => {
 
 	test.each(integrands)("d/dx of integral(%s, x) is %s again", integrand => {
 		const random = seededRandom(0x5eed61);
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		// Differentiating the engine's own antiderivative and comparing it back to
 		// the integrand closes the loop: the derivative rules are checked
 		// independently against numerical differentiation above, so an agreement
@@ -893,9 +893,9 @@ describe("integral, differentiated again, returns the integrand", () => {
 	});
 
 	test("an integrand with no elementary antiderivative is refused rather than approximated", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		for (const source of ["integral(exp(x^2), x)", "integral(sin(x)/x, x)", "integral(exp(x)/x, x)"]) {
-			const [value] = engine.evaluateLine(1, source);
+			const value = engine.evaluateLine(1, source);
 			expect(value.type).toBe(ValueType.Error);
 			expect(String(value.value)).toBe("SYMBOLIC_INTEGRAL_UNSUPPORTED");
 		}
@@ -915,7 +915,7 @@ describe("taylor approximates the function it expands", () => {
 	];
 
 	test.each(cases)("taylor($source, x=$at, $degree) tracks the function nearby", ({ source, f, at, degree }) => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const series = symbolicResult(engine, `taylor(${source}, x=${at}, ${degree})`);
 		// Close to the expansion point a degree-n truncation is accurate to
 		// O(offset^(n+1)), so a small offset is where a wrong coefficient shows up
@@ -940,11 +940,11 @@ describe("naming a variable as a verb's unknown shadows the value the document g
 	 * the whole point: a notepad is a document, and the line above is very
 	 * often `:x = 5`.
 	 */
-	function onAPageDefining(source: string): ReturnType<ExpressionEngine["evaluateLine"]>[0] {
-		const engine = newTrackedEngine("en");
+	function onAPageDefining(source: string): ReturnType<ExpressionEngine["evaluateLine"]> {
+		const engine = newTrackedEngine();
 		engine.evaluateLine(1, ":x = 5");
 		engine.evaluateLine(2, ":y = 2");
-		const [value] = engine.evaluateLine(3, source);
+		const value = engine.evaluateLine(3, source);
 		engine.clear();
 		return value;
 	}
@@ -992,19 +992,19 @@ describe("naming a variable as a verb's unknown shadows the value the document g
 		expect(formatSymbolic(partial.value as SymbolicNode)).toBe("4x");
 		// And the document variable itself is untouched by having been
 		// shadowed, exactly as a function parameter leaves it untouched.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateLine(1, ":x = 5");
 		engine.evaluateLine(2, "der(x^2, x)");
-		expect(engine.evaluateLine(3, "x + 1")[0].toNumber()).toBe(6);
+		expect(engine.evaluateLine(3, "x + 1").toNumber()).toBe(6);
 		engine.clear();
 	});
 
 	test("a verb on a page that defines nothing is unaffected", () => {
 		// The shadow must not change the case that already worked.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(formatSymbolic(symbolicResult(engine, "der(x^2, x)"))).toBe("2x");
-		expect(engine.evaluateLine(2, "der(5, x)")[0].toNumber()).toBe(0);
-		expect(engine.evaluateLine(3, "der(y^2, x)")[0].toNumber()).toBe(0);
+		expect(engine.evaluateLine(2, "der(5, x)").toNumber()).toBe(0);
+		expect(engine.evaluateLine(3, "der(y^2, x)").toNumber()).toBe(0);
 		engine.clear();
 	});
 });
@@ -1046,17 +1046,17 @@ describe("a printed algebraic answer re-reads as the value it printed", () => {
 	];
 
 	test.each(sources)("%s prints text that evaluates to the same number", source => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const tree = symbolicResult(engine, source);
 		const printed = formatSymbolic(tree);
 		const x = 1.7371;
 		const y = 2.3313;
 		const truth = evaluateSymbolic(tree, { x: cpx(x), y: cpx(y) });
 
-		const rereader = newTrackedEngine("en");
+		const rereader = newTrackedEngine();
 		rereader.evaluateLine(1, `:x = ${x}`);
 		rereader.evaluateLine(2, `:y = ${y}`);
-		const [reread] = rereader.evaluateLine(3, printed);
+		const reread = rereader.evaluateLine(3, printed);
 		expect(reread.type).toBe(ValueType.Number);
 		expectAgreement(reread.toNumber(), truth.re, `${source} printed as "${printed}"`);
 		rereader.clear();
@@ -1067,7 +1067,7 @@ describe("a printed algebraic answer re-reads as the value it printed", () => {
 		// The regression this pins: `1/(2*sqrt(x))` once printed as `1/2*sqrt(x)`,
 		// which reads back as `(1/2)*sqrt(x)`. At x=9 the tree is 1/6 and the text
 		// said 1.5, a ninefold error in the only thing the user ever sees.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(formatSymbolic(symbolicResult(engine, "der(sqrt(x), x)"))).toBe("1/(2*sqrt(x))");
 		expect(formatSymbolic(symbolicResult(engine, "1/(2x) =>"))).toBe("1/(2x)");
 		expect(formatSymbolic(symbolicResult(engine, "1/(x*y) =>"))).toBe("1/(x*y)");

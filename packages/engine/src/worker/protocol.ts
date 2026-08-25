@@ -10,7 +10,7 @@
  * survives `postMessage`.
  */
 
-import type { EngineConfig } from "@solve-js/constants/Configuration";
+import type { EngineConfigOverride } from "@solve-js/constants/Configuration";
 import type { UnifiedParsingOptions } from "@solve-js/types/ParsingResult";
 import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
 import type { SerializedEngineError } from "@solve-js/errors/WorkerError";
@@ -26,9 +26,9 @@ export interface InitMessage {
 	/** Locale for keywords and number formatting; defaults to English worker-side. */
 	localeCode?: string;
 	/** Whether to build the engine with its diagnostic pipeline enabled. */
-	diagnosticMode?: boolean;
-	/** Partial engine configuration, merged with the defaults worker-side. */
-	config?: Partial<EngineConfig>;
+	diagnostics?: boolean;
+	/** Config overrides, merged per section over the defaults worker-side. */
+	config?: EngineConfigOverride;
 	/**
 	 * Names of built-in packages to register, resolved against the runtime's
 	 * available set. Omitted registers them all. Names rather than the packages

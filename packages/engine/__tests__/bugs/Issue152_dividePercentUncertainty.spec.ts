@@ -15,10 +15,10 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 describe("Issue #152: divide-by-percentage carries the uncertainty", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
-  const val = (source: string) => engine.evaluateExpression(source)[0];
+  const val = (source: string) => engine.evaluateExpression(source);
 
   test.each([
     ["(100 +/- 5) / 10%", 1000, 50],

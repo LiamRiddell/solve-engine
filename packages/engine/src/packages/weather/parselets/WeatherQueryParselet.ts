@@ -51,16 +51,14 @@ function consumeCityName(parser: Parser, triggerText: string): string {
  * `time/parselets/TimeInZoneParselet.ts`'s identical reasoning for
  * "time in"/"date in".
  */
-export function weatherQueryParselet(kind: WeatherQueryKind, pluginFnIdx: number): PrefixParselet {
+export function weatherQueryParselet(kind: WeatherQueryKind, pluginFnName: string): PrefixParselet {
 	return {
 		category: "Weather",
 		parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
 			const city = consumeCityName(parser, token.value);
 			builder.emitOpcode(OpCode.PUSH_STRING);
 			builder.emitString(`${kind}:${city}`);
-			builder.emitOpcode(OpCode.CALL_PLUGIN);
-			builder.emitIndex(pluginFnIdx);
-			builder.emitIndex(1);
+			builder.emitPluginCall(pluginFnName, 1);
 		},
 	};
 }

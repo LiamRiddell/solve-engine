@@ -5,7 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { GOAL_SEEK_FN_IDX } from "../GoalSeekPluginFunctions";
+import { GOAL_SEEK_FN_NAME } from "../GoalSeekPluginFunctions";
 
 /**
  * `solve line M for <var> = <target>`, goal seek over a line reference.
@@ -83,8 +83,6 @@ export class GoalSeekParselet implements PrefixParselet {
 		// The target value, an ordinary expression (usually a literal).
 		parser.parseExpression(BindingPower.Lowest, builder);
 
-		builder.emitOpcode(OpCode.CALL_PLUGIN);
-		builder.emitIndex(GOAL_SEEK_FN_IDX);
-		builder.emitIndex(3);
+		builder.emitPluginCall(GOAL_SEEK_FN_NAME, 3);
 	}
 }

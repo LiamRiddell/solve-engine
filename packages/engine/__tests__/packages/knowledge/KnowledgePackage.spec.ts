@@ -12,9 +12,20 @@ import { QueryClient } from "@tanstack/query-core";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ValueType, stringValue } from "@solve-js/vm/Value";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { createKnowledgePackage } from "@solve-js/packages/knowledge";
+
+/**
+ * The engine files each package plugin function under `${pkg.name}:${name}` and
+ * assigns its CALL_PLUGIN index by that qualified name at registration.
+ * Knowledge's single function is `solve-knowledge:knowledge` (see
+ * KnowledgePackage.ts). Resolving it here yields exactly the index the engine
+ * assigns — stable and cached per qualified name — so hand-built bytecode and
+ * compiled bytecode agree on the same slot the async resolver watches.
+ */
+const KNOWLEDGE_FN_IDX = pluginFunctionIndexFor("solve-knowledge:knowledge");
 
 function buildQueryBytecode(query: string, fnIdx: number) {
 	const builder = new BytecodeBuilder();
@@ -43,10 +54,19 @@ describe("createKnowledgePackage — descriptor shape", () => {
 		expect("distance to the moon = ?".match(rules[1].pattern)?.[1].trim()).toBe("distance to the moon");
 	});
 
-	test("each createKnowledgePackage() call allocates a fresh plugin-function index", () => {
+	test("exposes its plugin function under a stable name key; the engine index is assigned by qualified name", () => {
 		const pkgA = createKnowledgePackage();
 		const pkgB = createKnowledgePackage();
-		expect(pkgA.pluginFunctions![0].index).not.toBe(pkgB.pluginFunctions![0].index);
+		// 2.0: pluginFunctions is a name-keyed record, not an index-carrying
+		// array. The descriptor no longer allocates an index per call — every
+		// instance declares the same single "knowledge" function...
+		expect(Object.keys(pkgA.pluginFunctions!)).toEqual(["knowledge"]);
+		expect(Object.keys(pkgB.pluginFunctions!)).toEqual(Object.keys(pkgA.pluginFunctions!));
+		expect(typeof pkgA.pluginFunctions!.knowledge).toBe("function");
+		// ...and the CALL_PLUGIN index is now assigned by the engine from the
+		// qualified name `${pkg.name}:knowledge`, deterministic and cached, so
+		// it resolves to one stable slot rather than a freshly-allocated one.
+		expect(pluginFunctionIndexFor("solve-knowledge:knowledge")).toBe(KNOWLEDGE_FN_IDX);
 	});
 });
 
@@ -54,7 +74,7 @@ describe("createKnowledgePackage — honest 'not configured' error (no answerQue
 	test("resolves to a KNOWLEDGE_NOT_CONFIGURED error Value, never a hallucinated answer", async () => {
 		const pkg = createKnowledgePackage();
 		const qc = new QueryClient();
-		const fnIdx = pkg.pluginFunctions![0].index;
+		const fnIdx = KNOWLEDGE_FN_IDX;
 		const resolver = pkg.asyncResolvers![0];
 
 		const bytecode = buildQueryBytecode("distance to the moon", fnIdx);
@@ -79,7 +99,7 @@ describe("createKnowledgePackage — working path with a test-provided mock answ
 		});
 		const pkg = createKnowledgePackage({ answerQuery });
 		const qc = new QueryClient();
-		const fnIdx = pkg.pluginFunctions![0].index;
+		const fnIdx = KNOWLEDGE_FN_IDX;
 		const resolver = pkg.asyncResolvers![0];
 
 		const bytecode = buildQueryBytecode("distance to the moon", fnIdx);
@@ -97,13 +117,13 @@ describe("createKnowledgePackage — working path with a test-provided mock answ
 describe("createKnowledgePackage — ExpressionEngine integration (real lexer/parser/VM pipeline)", () => {
 	function createEngine(config: Parameters<typeof createKnowledgePackage>[0] = {}) {
 		const pkg = createKnowledgePackage(config);
-		const engine = new ExpressionEngine("en", false, undefined, undefined, [...BUILTIN_PACKAGES, pkg]);
+		const engine = new ExpressionEngine({ packages: [...BUILTIN_PACKAGES, pkg] });
 		return { engine, pkg };
 	}
 
 	test("'distance to the moon = ?' lexes to ONE KNOWLEDGE_QUERY token and compiles to CALL_PLUGIN bytecode", () => {
-		const { engine, pkg } = createEngine();
-		const fnIdx = pkg.pluginFunctions![0].index;
+		const { engine } = createEngine();
+		const fnIdx = KNOWLEDGE_FN_IDX;
 		engine.queryClient.setQueryData(["knowledge", "distance to the moon"], stringValue("approximately 384,400 km"));
 
 		const result = engine.evaluateLineWithDebug(1, "distance to the moon = ?");
@@ -185,7 +205,7 @@ describe("createKnowledgePackage — ExpressionEngine integration (real lexer/pa
 	test("regression guard: a real ':search = 5' variable is unaffected — 'search + 3' still reads the variable, not a knowledge query", () => {
 		const { engine } = createEngine();
 		engine.evaluateExpression(":search = 5");
-		const [value] = engine.evaluateExpression("search + 3");
+		const value = engine.evaluateExpression("search + 3");
 
 		expect(value.type).toBe(ValueType.Number);
 		expect(value.toNumber()).toBe(8);

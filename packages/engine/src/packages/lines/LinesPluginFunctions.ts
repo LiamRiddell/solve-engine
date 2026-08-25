@@ -1,5 +1,4 @@
 import { Value, ValueType, numberValue, uomValue, errorValue } from "@solve-js/vm/Value";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 
 /**
@@ -40,7 +39,6 @@ function requireContext(context: LineExecutionContext | undefined): Value | null
 }
 
 /** `prev`, the immediately-preceding line's cached result. */
-export const PREV_FN_IDX = allocatePluginFunctionIndex();
 /**
  * The immediately preceding line's cached result.
  *
@@ -62,7 +60,6 @@ export function prevHandler(_args: Value[], context?: LineExecutionContext): Val
 }
 
 /** `line<N>` / `line N`, an arbitrary line's cached result by 1-based number. */
-export const LINE_REF_FN_IDX = allocatePluginFunctionIndex();
 /**
  * An arbitrary line's cached result, by one-based line number.
  *
@@ -118,7 +115,6 @@ function aggregateRange(from: number, to: number, context: LineExecutionContext,
 }
 
 /** `sum(line X : line Y)` / `total(line X : line Y)`. */
-export const SUM_RANGE_FN_IDX = allocatePluginFunctionIndex();
 /**
  * Sum of the numeric results across an inclusive line range.
  *
@@ -137,7 +133,6 @@ export function sumRangeHandler(args: Value[], context?: LineExecutionContext): 
 }
 
 /** `average(line X : line Y)`. */
-export const AVERAGE_RANGE_FN_IDX = allocatePluginFunctionIndex();
 /**
  * Mean of the numeric results across an inclusive line range.
  *
@@ -193,7 +188,6 @@ function aggregateAbove(context: LineExecutionContext, isAverage: boolean): Valu
 }
 
 /** `total above`, every numeric result on lines before this one. */
-export const TOTAL_ABOVE_FN_IDX = allocatePluginFunctionIndex();
 /**
  * Sum of every numeric result on lines above this one.
  *
@@ -212,7 +206,6 @@ export function totalAboveHandler(_args: Value[], context?: LineExecutionContext
 }
 
 /** `average above`, the mean of every numeric result before this line. */
-export const AVERAGE_ABOVE_FN_IDX = allocatePluginFunctionIndex();
 /**
  * Mean of every numeric result on lines above this one.
  *

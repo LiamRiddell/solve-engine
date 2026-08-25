@@ -7,7 +7,7 @@ describe("ExpressionEngine - Line Tracking and Position Tracking", () => {
   let engine: ExpressionEngine;
 
   beforeEach(() => {
-    engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   // Releases the engine's query client and async batcher. Without it the
@@ -289,7 +289,7 @@ s\`10% of $200\``;
       const expressions = ["1 + 2", "10 * 5", "100 / 4", "5 - 3"];
       
       expressions.forEach(expr => {
-        const [directResult] = engine.evaluateLine(1, expr);
+        const directResult = engine.evaluateLine(1, expr);
         const documentResult = engine.parseDocument(expr, { inputType: 'markdown' });
         
         expect(documentResult.lines[0].result?.toNumber()).toBe(directResult.toNumber());

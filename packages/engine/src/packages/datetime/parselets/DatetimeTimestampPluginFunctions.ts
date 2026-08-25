@@ -1,6 +1,5 @@
 import { Value, ValueType, numberValue, stringValue, boolValue, uomValue, datetimeValue, errorValue } from "@solve-js/vm/Value";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
 import { parseIso8601, unixTimestampToEpochMs } from "../Iso8601";
 
 /**
@@ -9,33 +8,7 @@ import { parseIso8601, unixTimestampToEpochMs } from "../Iso8601";
  * they're all small, single-purpose Value -> Value functions with no
  * shared state, mirrors `time/parselets/TimezonePluginFunctions.ts`'s
  * organization for the same kind of grouping.
- *
- * Each index is allocated via {@link allocatePluginFunctionIndex} (never
- * hardcoded). See that function's doc comment for why: two packages
- * independently picking the same arbitrary CALL_BUILTIN-style number would
- * silently collide. The actual numeric values are whatever the allocator
- * hands out at module-load time (order-dependent across the whole engine);
- * do not depend on specific numbers anywhere outside this module.
  */
-
-/** Plugin index for `workdays in <duration>`. */
-export const WORKDAYS_IN_FN_IDX = allocatePluginFunctionIndex();
-/** Plugin index for `weekday on <date>`, the day-of-week name. */
-export const WEEKDAY_ON_FN_IDX = allocatePluginFunctionIndex();
-/** Plugin index for `<value> to date`, coercing a timestamp or string to a Datetime. */
-export const TO_DATE_FN_IDX = allocatePluginFunctionIndex();
-/** Plugin index for `<value> to timestamp`, the inverse of `to date`. */
-export const TO_TIMESTAMP_FN_IDX = allocatePluginFunctionIndex();
-/** Plugin index for `month on <date>`, the month name. */
-export const MONTH_ON_FN_IDX = allocatePluginFunctionIndex();
-/** Plugin index for `week on <date>`, the ISO week number. */
-export const WEEK_ON_FN_IDX = allocatePluginFunctionIndex();
-/** Plugin index for `is weekend on <date>`. */
-export const IS_WEEKEND_FN_IDX = allocatePluginFunctionIndex();
-/** Plugin index for `is workday on <date>`, the complement of the weekend check. */
-export const IS_WORKDAY_FN_IDX = allocatePluginFunctionIndex();
-/** Plugin index for `span between <date> and <date>`, as a duration. */
-export const SPAN_BETWEEN_FN_IDX = allocatePluginFunctionIndex();
 
 /**
  * `workdays in <duration>` -> the number of Mon-Fri workdays in that span,

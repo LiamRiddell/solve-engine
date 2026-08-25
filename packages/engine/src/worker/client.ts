@@ -11,7 +11,7 @@
  * re-inventing it.
  */
 
-import type { EngineConfig } from "@solve-js/constants/Configuration";
+import type { EngineConfigOverride } from "@solve-js/constants/Configuration";
 import type { UnifiedParsingOptions } from "@solve-js/types/ParsingResult";
 import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
 import type { EngineError } from "@solve-js/errors";
@@ -39,9 +39,9 @@ export interface WorkerEngineOptions {
 	/** Locale for keywords and number formatting; defaults to English worker-side. */
 	localeCode?: string;
 	/** Whether the worker builds its engine with diagnostics enabled. */
-	diagnosticMode?: boolean;
-	/** Partial engine configuration, merged with the defaults worker-side. */
-	config?: Partial<EngineConfig>;
+	diagnostics?: boolean;
+	/** Config overrides, merged per section over the defaults worker-side. */
+	config?: EngineConfigOverride;
 	/**
 	 * Names of built-in packages the worker should register. Omitted registers
 	 * them all. Names rather than the packages themselves, since a package
@@ -94,7 +94,7 @@ export interface WorkerEngine {
 	/** Evaluate an array of lines off-thread. Mirrors `ExpressionEngine.evaluateLines`. */
 	evaluateLines(lines: string[], options?: WorkerCallOptions): Promise<SerializedParsedLine[]>;
 	/** Evaluate a single expression off-thread. Mirrors `ExpressionEngine.evaluateExpression`. */
-	evaluateExpression(expression: string, options?: WorkerCallOptions): Promise<SerializedValue[]>;
+	evaluateExpression(expression: string, options?: WorkerCallOptions): Promise<SerializedValue>;
 	/**
 	 * Subscribe to live-data resolutions that land after a request already
 	 * answered.
@@ -149,7 +149,7 @@ class WorkerEngineClient implements WorkerEngine {
 				kind: "init",
 				id,
 				localeCode: options.localeCode,
-				diagnosticMode: options.diagnosticMode,
+				diagnostics: options.diagnostics,
 				config: options.config,
 				packages: options.packages,
 				formatting: options.formatting,
@@ -172,8 +172,8 @@ class WorkerEngineClient implements WorkerEngine {
 		return this.call<SerializedParsedLine[]>("evaluateLines", [lines], options?.signal);
 	}
 
-	evaluateExpression(expression: string, options?: WorkerCallOptions): Promise<SerializedValue[]> {
-		return this.call<SerializedValue[]>("evaluateExpression", [expression], options?.signal);
+	evaluateExpression(expression: string, options?: WorkerCallOptions): Promise<SerializedValue> {
+		return this.call<SerializedValue>("evaluateExpression", [expression], options?.signal);
 	}
 
 	onResolved(listener: (lines: WorkerAsyncUpdate[]) => void): () => void {

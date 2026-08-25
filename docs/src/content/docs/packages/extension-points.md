@@ -25,6 +25,25 @@ words, by fusing them only when the very next token is an opening parenthesis.
 had to be given up for the other. Prefer this over a lexer keyword whenever the
 word is one a person might reasonably assign to.
 
+### Priority, not registration order
+
+Each rule declares a `priority`. Rules are tried highest-first at every token
+position, and the normalizer runs the stream through **multiple passes**. This
+is the ordering contract, and it is why the order you register packages in does
+not decide composition: a rule that reads a token another rule mints just needs
+a **lower** priority than that rule, and a later pass sees the minted token. The
+goal-seek package reads a `LINE_REF` the lines package fuses precisely this way,
+and the two work in either registration order.
+
+So to control ordering, set priorities, not list position. Give a long phrase a
+higher priority than a shorter fragment of it, and give a rule that consumes
+another's output a lower one.
+
+Name each rule uniquely, prefixed with your package name (`mypackage:my-rule`),
+the way the built-ins do (`uom:compound-unit`, `lines:line-ref`). The normalizer
+unregisters rules by name, so two packages sharing a rule name means removing
+one drops both; `checkPackageCompatibility` warns when it sees a shared name.
+
 ## Parselets
 
 Parsing rules, registered per token type. A prefix parselet handles a token that

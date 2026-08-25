@@ -13,7 +13,7 @@ import { createVM, executeBytecode } from "@solve-js/vm/VM";
 import { resolveHolidayPredicate } from "@solve-js/vm/HolidayCalendar";
 import type { EvalResult, LineExecutionContext } from "@solve-js/vm/VM";
 import type { DocumentModel } from "@solve-js/engine/DocumentModel";
-import { registerAsConverter, unregisterAsConverter } from "@solve-js/vm/VMBuiltins";
+import { registerAsConverter, unregisterAsConverter, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { createEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { Value, ValueType, numberValue, stringValue, pendingValue, freezeIfDev, errorValue, type MatrixData } from "@solve-js/vm/Value";
@@ -59,7 +59,7 @@ import {
 } from "@solve-js/types/ParsingResult";
 import { DiagnosticReportJSON } from "@solve-js/diagnostics";
 import type { Token, ScanLineResult } from "@solve-js/lexer";
-import { DEFAULT_CONFIG, mergeEngineConfig, type EngineConfig } from "@solve-js/constants/Configuration";
+import { DEFAULT_CONFIG, mergeEngineConfig, type EngineConfig, type EngineConfigOverride } from "@solve-js/constants/Configuration";
 import {
     DiagnosticPipeline,
     TimelineDiagnosticCollector,
@@ -132,9 +132,9 @@ export interface EngineRestoreOptions {
      */
     packages?: IEnginePackage[];
     /** Config overrides, merged over `DEFAULT_CONFIG`, as in the constructor. */
-    config?: Partial<typeof DEFAULT_CONFIG>;
-    /** Turn on the diagnostic pipeline, as in the constructor's `diagnosticMode`. */
-    diagnosticMode?: boolean;
+    config?: EngineConfigOverride;
+    /** Turn on the diagnostic pipeline, as in the constructor's `diagnostics`. */
+    diagnostics?: boolean;
     /**
      * Override the locale the snapshot recorded. Rarely needed: the snapshot's
      * own {@link EngineSnapshot.locale} is used by default, so a restored engine
@@ -144,17 +144,23 @@ export interface EngineRestoreOptions {
 }
 
 /**
- * Return type of {@link evaluateLine} and {@link evaluateExpression}.
+ * Options for constructing an {@link ExpressionEngine}. Every field is optional.
  *
- * A single-element `Value[]`, kept as an array (rather than a bare
- * `Value`) for API stability.
+ * An engine registers exactly the {@link EngineOptions.packages} it is given, so
+ * a bundler can tree-shake away every built-in a consumer never imports; pass
+ * `BUILTIN_PACKAGES` (from `solve-engine/packages`) for the full set, a subset
+ * for a slimmer engine, or use {@link createEngine} for the batteries-included
+ * convenience.
  */
-export interface EvalResults extends Array<Value> {}
-
-/** Explicit result of {@link ExpressionEngine.evaluateLineDetailed}. */
-export interface LineEvaluation {
-    /** The evaluated value, wrapped in a single-element array. */
-    values: Value[];
+export interface EngineOptions {
+    /** BCP-47 locale. Defaults to `"en"`. */
+    locale?: string;
+    /** Packages to register. None when omitted, so nothing but what you pass is bundled. */
+    packages?: IEnginePackage[];
+    /** Config overrides, merged per section over {@link DEFAULT_CONFIG}. */
+    config?: EngineConfigOverride;
+    /** Turn on the diagnostic pipeline (per-stage timing and detail). Defaults to `false`. */
+    diagnostics?: boolean;
 }
 
 //#endregion
@@ -207,7 +213,7 @@ export interface LineEvaluation {
  * ```typescript
  * import { createEngine } from "solve-engine";
  * const engine = createEngine(); // every built-in package
- * const [value] = engine.evaluateExpression("2 + 2 * 10");
+ * const value = engine.evaluateExpression("2 + 2 * 10");
  * console.log(value.toNumber()); // 22
  * ```
  * @example
@@ -215,7 +221,7 @@ export interface LineEvaluation {
  * // A slimmer engine: only arithmetic and units reach the bundle.
  * import { ExpressionEngine } from "solve-engine";
  * import { ARITHMETIC_PACKAGE, UOM_PACKAGE } from "solve-engine/packages";
- * const engine = new ExpressionEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE, UOM_PACKAGE]);
+ * const engine = new ExpressionEngine({ packages: [ARITHMETIC_PACKAGE, UOM_PACKAGE] });
  * ```
  */
 //#region Class: ExpressionEngine
@@ -260,13 +266,13 @@ export class ExpressionEngine {
     private resolverRegistry = new ResolverRegistry();
 
     /**
-     * Per-package record of contributions made to the SHARED registries
-     * (this engine's variable resolver / resolver namespaces), so
+     * Per-package record of contributions made to the engine's registries
+     * (plugin functions, resolver namespaces, token categories), so
      * {@link unregisterPackage} can reverse them. Keyed by package name.
      */
     private packageContributions = new Map<string, {
         pluginFunctionIndices: number[];
-        variableSources: import("@solve-js/variables/IVariableSource").IVariableSource[];
+        pluginFunctionNames: string[];
         resolverNamespaces: string[];
         tokenCategories: string[];
         lexerVocabulary: LexerVocabulary | undefined;
@@ -531,12 +537,17 @@ export class ExpressionEngine {
         }
         this.bytecodeCache.set(expression, program);
     }
+    // Maps each registered plugin function's name to the index its handler sits
+    // at in this engine's context. Populated by registerPackage, shared by
+    // reference with every BytecodeBuilder and the parser so a parselet emits a
+    // plugin call by name (builder.emitPluginCall) and never sees the index.
+    private pluginFunctionIndexByName = new Map<string, number>();
     // Pre-allocated BytecodeBuilder pool
     private builderPool: BytecodeBuilder[] = [
-        new BytecodeBuilder(),
-        new BytecodeBuilder(),
-        new BytecodeBuilder(),
-        new BytecodeBuilder(),
+        new BytecodeBuilder(this.pluginFunctionIndexByName),
+        new BytecodeBuilder(this.pluginFunctionIndexByName),
+        new BytecodeBuilder(this.pluginFunctionIndexByName),
+        new BytecodeBuilder(this.pluginFunctionIndexByName),
     ];
     // Index into the builder pool, incremented modulo pool size.
     private builderPoolIndex = 0;
@@ -546,35 +557,29 @@ export class ExpressionEngine {
     //#endregion
 
     //#region Constructor
-    constructor(
-        localeCode = "en",
-        diagnosticMode = false,
-        config?: Partial<typeof DEFAULT_CONFIG>,
-        diagnosticPipeline?: DiagnosticPipeline,
-        packages?: IEnginePackage[]
-    ) {
-        this.localeCode = localeCode;
+    constructor(options: EngineOptions = {}) {
+        const { locale = "en", diagnostics = false, config, packages } = options;
+        this.localeCode = locale;
         // Per-section merge, not a top-level shallow spread, overriding one
         // field of a section (e.g. `{ performance: { defaultCacheSize: 500 } }`)
         // used to silently replace the WHOLE section, dropping every other
         // field in it back to `undefined` instead of keeping its default.
         this.config = mergeEngineConfig(DEFAULT_CONFIG, config ?? {});
-        this.lexer = new Lexer(localeCode, buildTokenLookup(localeCode));
+        this.lexer = new Lexer(locale, buildTokenLookup(locale));
         this.registry = new ParseletRegistry();
         // Before the package loop below, which registers plugin functions into it.
         this.context = createEngineContext();
 
-// Wire diagnostic pipeline: use provided, create timeline if enabled, or leave empty for production
-         if (diagnosticPipeline) {
-             this.diagnosticPipeline = diagnosticPipeline;
-         } else if (diagnosticMode) {
-             this.diagnosticPipeline = new DiagnosticPipeline();
-             this.timelineCollector = new TimelineDiagnosticCollector();
-             this.diagnosticPipeline.register(this.timelineCollector);
-         } else {
-             this.diagnosticPipeline = new DiagnosticPipeline();
-             // Production: no collectors, pipeline length-check exits immediately with zero overhead
-         }
+        // Wire the diagnostic pipeline: collect per-stage detail when diagnostics
+        // are on, otherwise an empty pipeline whose length check exits with zero
+        // overhead in production.
+        if (diagnostics) {
+            this.diagnosticPipeline = new DiagnosticPipeline();
+            this.timelineCollector = new TimelineDiagnosticCollector();
+            this.diagnosticPipeline.register(this.timelineCollector);
+        } else {
+            this.diagnosticPipeline = new DiagnosticPipeline();
+        }
 
         // Register providers via IEnginePackage data.
         // Packages are explicit: an engine registers exactly what the caller
@@ -644,7 +649,7 @@ export class ExpressionEngine {
             }
         }
 
-        this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, localeCode);
+        this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, locale, this.pluginFunctionIndexByName);
         this.vm = createVM(
             this.context.opRegistry,
             this.config.vm.maxStackDepth,
@@ -710,7 +715,6 @@ export class ExpressionEngine {
      * - `lexerVocabulary` → engine's isolated lexer (via this.lexer.registerVocabulary)
      * - `prefixParselets` → engine's isolated ParseletRegistry
      * - `infixParselets` → engine's isolated ParseletRegistry
-     * - `variableSources` → this engine's own variable resolver
      *
      * Built-in packages (ARITHMETIC, FUNCTION, UOM, etc.) are registered
      * via this method during construction. External user packages can also
@@ -782,7 +786,7 @@ export class ExpressionEngine {
         // engine's life.
         const contribution = {
             pluginFunctionIndices: [] as number[],
-            variableSources: [] as import("@solve-js/variables/IVariableSource").IVariableSource[],
+            pluginFunctionNames: [] as string[],
             resolverNamespaces: [] as string[],
             tokenCategories: [] as string[],
             lexerVocabulary: pkg.lexerVocabulary,
@@ -804,26 +808,25 @@ export class ExpressionEngine {
             this.lexer.registerVocabulary(pkg.lexerVocabulary);
         }
         if (pkg.prefixParselets) {
-            for (const pp of pkg.prefixParselets) {
-                this.registry.registerPrefix(pp.tokenType, pp.parselet);
+            for (const [tokenType, parselet] of Object.entries(pkg.prefixParselets)) {
+                this.registry.registerPrefix(tokenType, parselet);
             }
         }
         if (pkg.infixParselets) {
-            for (const ip of pkg.infixParselets) {
-                this.registry.registerInfix(ip.tokenType, ip.parselet);
+            for (const [tokenType, parselet] of Object.entries(pkg.infixParselets)) {
+                this.registry.registerInfix(tokenType, parselet);
             }
         }
         if (pkg.pluginFunctions) {
-            for (const pf of pkg.pluginFunctions) {
-                this.context.pluginFunctions[pf.index] = pf.handler;
-                this.context.pluginFunctionOwners[pf.index] = pkg.name;
-                contribution.pluginFunctionIndices.push(pf.index);
-            }
-        }
-        if (pkg.variableSources) {
-            for (const vs of pkg.variableSources) {
-                this.context.variableResolver.registerSource(vs);
-                contribution.variableSources.push(vs);
+            for (const [name, handler] of Object.entries(pkg.pluginFunctions)) {
+                // The engine assigns the registry index (stable per pkg:name), so
+                // the author names the function and the parselet emits by name.
+                const index = pluginFunctionIndexFor(`${pkg.name}:${name}`);
+                this.context.pluginFunctions[index] = handler;
+                this.context.pluginFunctionOwners[index] = pkg.name;
+                this.pluginFunctionIndexByName.set(name, index);
+                contribution.pluginFunctionIndices.push(index);
+                contribution.pluginFunctionNames.push(name);
             }
         }
         if (pkg.asyncResolvers) {
@@ -907,8 +910,8 @@ export class ExpressionEngine {
             delete this.context.pluginFunctions[index];
             delete this.context.pluginFunctionOwners[index];
         }
-        for (const vs of contribution.variableSources) {
-            this.context.variableResolver.unregisterSource(vs);
+        for (const name of contribution.pluginFunctionNames) {
+            this.pluginFunctionIndexByName.delete(name);
         }
         for (const namespace of contribution.resolverNamespaces) {
             this.resolverRegistry.unregister(namespace);
@@ -1339,8 +1342,7 @@ export class ExpressionEngine {
                 if (hasInlineSolves && !isVariableAssignment) {
                     for (const solve of inlineSolves) {
                         try {
-                            const values = this.evaluateLine(lineNumber, solve.expression);
-                            solve.result = values[0];
+                            solve.result = this.evaluateLine(lineNumber, solve.expression);
                         } catch (error) {
                             const errorMessage = error instanceof Error ? error.message : String(error);
                             solve.error = errorMessage;
@@ -1581,7 +1583,7 @@ export class ExpressionEngine {
      * (this grammar is rare, a per-call allocation here is a non-issue).
      */
     private compileAdHoc(tokens: Token[]): BytecodeProgram {
-        const builder = new BytecodeBuilder();
+        const builder = new BytecodeBuilder(this.pluginFunctionIndexByName);
         this.parseExpression(builder, tokens);
         return builder.build();
     }
@@ -2364,8 +2366,8 @@ export class ExpressionEngine {
      * compile-only callers. NOT used by `evaluateLine()`/
      * `evaluateExpression()`, those route through
      * {@link evaluateExpressionWithDiagnostic} instead (evaluateLine ->
-     * evaluateLineDetailed -> evaluateLineWithDebug ->
-     * evaluateExpressionWithDiagnostic), which does its own lexing and its
+     * evaluateLineWithDebug -> evaluateExpressionWithDiagnostic), which does
+     * its own lexing and its
      * own diagnostic-instrumented front-half, delegating to the SAME
      * {@link prepareExpression} this method calls. Delegates the front-half
      * to {@link prepareExpression}, then runs async preflight (via
@@ -2428,23 +2430,13 @@ export class ExpressionEngine {
 	 *
 	 * @param lineNumber - 1-based line position in the document.
 	 * @param lineText - The raw line text.
-	 * @returns The evaluated Value, wrapped in a single-element array.
+	 * @returns The evaluated {@link Value}.
 	 * @throws {EngineError} On evaluation failure.
 	 */
 	evaluateLine(
         lineNumber: number,
         lineText: string
-    ): EvalResults {
-        const detailed = this.evaluateLineDetailed(lineNumber, lineText);
-        return detailed.values.slice() as EvalResults;
-    }
-
-    /**
-     * Evaluate a line and return an explicit `{ values }` object.
-     *
-     * @throws {EngineError} On evaluation failure.
-     */
-    evaluateLineDetailed(lineNumber: number, lineText: string): LineEvaluation {
+    ): Value {
         const result = this.evaluateLineWithDebug(lineNumber, lineText);
         if (result.error) {
             // Re-throw the original error (its own specific code/category/
@@ -2463,7 +2455,7 @@ export class ExpressionEngine {
                 { lineNumber }
             );
         }
-        return { values: [freezeIfDev(result.value)] };
+        return freezeIfDev(result.value);
     }
 
     /**
@@ -3689,9 +3681,9 @@ export class ExpressionEngine {
 
     /**
      * Evaluate a raw expression string without line-number context.
-     * Returns the Value result. Throws on error.
+     * Returns the {@link Value} result. Throws on error.
      */
-    evaluateExpression(expression: string): EvalResults {
+    evaluateExpression(expression: string): Value {
         return this.evaluateLine(-1, expression);
     }
 
@@ -3950,15 +3942,25 @@ export class ExpressionEngine {
      * Fast path: evaluate an expression and return a number directly.
      *
      * Skips Value object allocation when only a numeric result is needed.
-     * Returns NaN on error or for bare undefined variable references.
+     * Returns NaN whenever the expression has no numeric answer: a thrown
+     * error, a bare undefined variable reference, or a faulted result (an
+     * Error or a Pending value).
      *
      * Performs a pre-check for bare identifiers (single-token variable
      * references). If the identifier is not a known variable, returns NaN
      * immediately without attempting evaluation, avoids the ambiguity of
      * "result === 0" when a variable might legitimately store the value 0.
      *
+     * A faulted result is treated the same way, and for the same reason: an
+     * Error or Pending reads as 0 through {@link Value.toNumber}, so returning
+     * that 0 would be indistinguishable from a real zero. NaN is this fast
+     * path's established "no value" signal, so `evaluateNumber("5 kg to m")`
+     * (an impossible conversion) is NaN rather than a silent `0`. A caller that
+     * needs the fault's detail should use {@link evaluateExpression} and read
+     * {@link Value.errorCode}/{@link Value.isPending} off the result.
+     *
      * @param expression - The raw expression string to evaluate.
-     * @returns The numeric result, or NaN on error/undefined variable.
+     * @returns The numeric result, or NaN on error / undefined variable / fault.
      */
     evaluateNumber(expression: string): number {
          const trimmed = expression.trim();
@@ -3973,8 +3975,12 @@ export class ExpressionEngine {
          }
 
          try {
-             const results = this.evaluateLine(-1, expression);
-             return results[0].toNumber();
+             const value = this.evaluateLine(-1, expression);
+             // A faulted result has no numeric meaning: toNumber() would read it
+             // as 0, indistinguishable from a real zero. Surface it as NaN, the
+             // same signal the bare-undefined-variable pre-check above returns.
+             if (value.isFault()) return NaN;
+             return value.toNumber();
          } catch {
              return NaN;
          }
@@ -4180,7 +4186,7 @@ export class ExpressionEngine {
         // Refuse an incompatible or non-snapshot object before building anything.
         assertRestorable(snapshot);
         const locale = options.locale ?? snapshot.locale ?? "en";
-        const engine = new ExpressionEngine(locale, options.diagnosticMode ?? false, options.config, undefined, options.packages);
+        const engine = new ExpressionEngine({ locale, diagnostics: options.diagnostics ?? false, config: options.config, packages: options.packages });
         engine.restoreSnapshot(snapshot);
         return engine;
     }

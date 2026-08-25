@@ -23,7 +23,7 @@ describe("Issue #179: accumulator re-evaluation is idempotent", () => {
   describe("batch document path (parseDocument)", () => {
     let engine: ExpressionEngine;
     beforeEach(() => {
-      engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+      engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     });
 
     const read = (doc: string): string[] =>

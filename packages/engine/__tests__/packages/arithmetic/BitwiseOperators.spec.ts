@@ -14,9 +14,9 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 
 /** Evaluates one line through a real engine and returns the number. */
 function evaluate(source: string): number {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	try {
-		return engine.evaluateExpression(source)[0].toNumber();
+		return engine.evaluateExpression(source).toNumber();
 	} finally {
 		engine.clear();
 	}
@@ -24,9 +24,9 @@ function evaluate(source: string): number {
 
 /** Evaluates one line and returns the raw value, for results that are not numbers. */
 function evaluateRaw(source: string): unknown {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	try {
-		return engine.evaluateExpression(source)[0].value;
+		return engine.evaluateExpression(source).value;
 	} finally {
 		engine.clear();
 	}

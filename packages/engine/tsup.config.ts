@@ -12,7 +12,6 @@ export default defineConfig({
 		lexer: "src/lexer/index.ts",
 		parser: "src/parser/index.ts",
 		normalizer: "src/normalizer/index.ts",
-		variables: "src/variables/index.ts",
 		resolvers: "src/resolvers/index.ts",
 		errors: "src/errors/index.ts",
 		utilities: "src/utilities/index.ts",

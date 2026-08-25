@@ -33,8 +33,8 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
 
 function evaluate(source: string) {
-	const engine = newTrackedEngine("en");
-	const [value] = engine.evaluateExpression(source);
+	const engine = newTrackedEngine();
+	const value = engine.evaluateExpression(source);
 	return value;
 }
 
@@ -89,7 +89,7 @@ describe("a day is a calendar day, not 86,400,000 milliseconds", () => {
 		// The sweep is the point: whichever two days of the year the host zone
 		// changes its offset on, this walks over them. One engine for all 366
 		// lines, the per-line work is a single expression.
-		const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		try {
 			const cursor = new Date(2024, 0, 1);
 			let checked = 0;
@@ -99,7 +99,7 @@ describe("a day is a calendar day, not 86,400,000 milliseconds", () => {
 				const next = new Date(cursor);
 				next.setDate(next.getDate() + 1);
 
-				const [value] = engine.evaluateExpression(`${iso} + 1 day`);
+				const value = engine.evaluateExpression(`${iso} + 1 day`);
 				expect([iso, value.toNumber()]).toEqual([iso, next.getTime()]);
 
 				cursor.setDate(cursor.getDate() + 1);
@@ -234,7 +234,7 @@ describe("`tomorrow`, `yesterday` and `next <weekday>` move by the calendar too"
 	function at(instant: string): ExpressionEngine {
 		jest.useFakeTimers();
 		jest.setSystemTime(new Date(instant));
-		return newTrackedEngine("en");
+		return newTrackedEngine();
 	}
 
 	test.each(TRANSITION_INSTANTS)("tomorrow is the next date at the same time (%s)", (_label, instant) => {
@@ -243,7 +243,7 @@ describe("`tomorrow`, `yesterday` and `next <weekday>` move by the calendar too"
 		const expected = new Date(now);
 		expected.setDate(expected.getDate() + 1);
 
-		const [value] = engine.evaluateExpression("tomorrow");
+		const value = engine.evaluateExpression("tomorrow");
 		expect(value.type).toBe(ValueType.Datetime);
 		expect(value.toNumber()).toBe(expected.getTime());
 		expect(localFields(value.toNumber()).slice(0, 3)).toEqual(localFields(expected.getTime()).slice(0, 3));
@@ -255,7 +255,7 @@ describe("`tomorrow`, `yesterday` and `next <weekday>` move by the calendar too"
 		const expected = new Date(now);
 		expected.setDate(expected.getDate() - 1);
 
-		const [value] = engine.evaluateExpression("yesterday");
+		const value = engine.evaluateExpression("yesterday");
 		expect(value.toNumber()).toBe(expected.getTime());
 	});
 
@@ -266,7 +266,7 @@ describe("`tomorrow`, `yesterday` and `next <weekday>` move by the calendar too"
 		const engine = at("2024-10-28T07:30:00Z");
 		const now = Date.now();
 
-		const [value] = engine.evaluateExpression("next monday");
+		const value = engine.evaluateExpression("next monday");
 		const landed = new Date(value.toNumber());
 		expect(landed.getDay()).toBe(1); // Monday
 		expect(value.toNumber()).toBeGreaterThan(now);
@@ -278,7 +278,7 @@ describe("`tomorrow`, `yesterday` and `next <weekday>` move by the calendar too"
 		const engine = at("2024-11-04T08:30:00Z");
 		const now = Date.now();
 
-		const [value] = engine.evaluateExpression("last monday");
+		const value = engine.evaluateExpression("last monday");
 		const landed = new Date(value.toNumber());
 		expect(landed.getDay()).toBe(1);
 		expect(value.toNumber()).toBeLessThan(now);
@@ -335,9 +335,9 @@ describe("colon-separated numbers that are not a time", () => {
 		// The guard only fires when there is nothing BUT numbers in front of
 		// the colon, so a label with a word in it is untouched even when a
 		// clock time follows.
-		const engine = newTrackedEngine("en");
-		const [labelled] = engine.evaluateExpression("meeting notes: 9:30 + 5");
-		const [plain] = engine.evaluateExpression("9:30 + 5");
+		const engine = newTrackedEngine();
+		const labelled = engine.evaluateExpression("meeting notes: 9:30 + 5");
+		const plain = engine.evaluateExpression("9:30 + 5");
 		expect(labelled.value).toBe(plain.value);
 	});
 });

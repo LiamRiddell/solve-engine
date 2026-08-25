@@ -35,7 +35,7 @@ beforeAll(async () => {
   (global as any).fetch = mockFetch;
 
   // Trigger rate pre-population
-  const e = newTrackedEngine("en", false);
+  const e = newTrackedEngine();
   try {
     e.evaluateExpression("convert 1 USD to GBP");
   } catch { /* ignore */ }
@@ -43,13 +43,13 @@ beforeAll(async () => {
 });
 
 function evalNum(expression: string): number {
-  const engine = newTrackedEngine("en", false);
+  const engine = newTrackedEngine();
   return engine.evaluateNumber(expression);
 }
 
 function evalExpr(expression: string): { value: number; unit?: string; type: string } {
-  const engine = newTrackedEngine("en", false);
-  const [result] = engine.evaluateExpression(expression);
+  const engine = newTrackedEngine();
+  const result = engine.evaluateExpression(expression);
   return {
     value: result.toNumber(),
     unit: result.unit,

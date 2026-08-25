@@ -20,6 +20,7 @@ import { describe, expect, test, jest } from "@jest/globals";
 import { QueryClient } from "@tanstack/query-core";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { ValueType, numberValue, uomValue, errorValue, stringValue, type Value } from "@solve-js/vm/Value";
 import { setActiveQueryClient } from "@solve-js/services/DataQueryService";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
@@ -27,7 +28,7 @@ import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { createCurrencyPackage, CURRENCY_PACKAGE } from "@solve-js/packages/currency";
 import {
-	HISTORICAL_CURRENCY_FN_IDX,
+	HISTORICAL_CURRENCY_FN,
 	HISTORICAL_CURRENCY_NS,
 	HISTORICAL_RATE_STALE_TIME_MS,
 	HistoricalCurrencyErrorCodes,
@@ -37,6 +38,16 @@ import {
 } from "@solve-js/uom/HistoricalCurrency";
 
 const NO_SIGNAL = new AbortController().signal;
+
+/**
+ * The engine assigns the historical plugin function its CALL_PLUGIN index at
+ * registration, filed under the currency package's qualified name
+ * (`solve-currency:historicalCurrency`). Recover that same index here so the
+ * hand-built bytecode below emits the operand the engine's own compiled output
+ * carries, and the scan for the historical call matches. Deterministic and
+ * cached, so it agrees with the index the engine assigned.
+ */
+const HISTORICAL_CURRENCY_FN_IDX = pluginFunctionIndexFor(`solve-currency:${HISTORICAL_CURRENCY_FN}`);
 
 /** Build the bytecode a `<money> in <currency> on <date>` line compiles to: amount Uom, then [target, date] strings, then the historical CALL_PLUGIN. */
 function buildHistoricalBytecode(amount: number, from: string, to: string, isoDate: string) {
@@ -78,9 +89,9 @@ describe("createCurrencyPackage — descriptor shape", () => {
 		expect(namespaces).toContain(HISTORICAL_CURRENCY_NS);
 	});
 
-	test("registers the historical plugin function at the shared module-level index", () => {
+	test("registers the historical plugin function under the shared module-level name", () => {
 		const pkg = createCurrencyPackage();
-		const fn = (pkg.pluginFunctions ?? []).find((p) => p.index === HISTORICAL_CURRENCY_FN_IDX);
+		const fn = (pkg.pluginFunctions ?? {})[HISTORICAL_CURRENCY_FN];
 		expect(fn).toBeDefined();
 	});
 
@@ -225,7 +236,7 @@ describe("historical plugin function — applies the cached rate to the amount",
 
 describe("historical currency — ExpressionEngine integration (seeded cache, synchronous)", () => {
 	function createEngine(): ExpressionEngine {
-		return new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		return new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	}
 
 	test("'100 USD in GBP on 2024-01-15' compiles to the historical CALL_PLUGIN and applies the seeded rate", () => {
@@ -294,7 +305,7 @@ describe("historical currency — ExpressionEngine integration (seeded cache, sy
 
 describe("historical currency — does not regress live conversion or date parsing", () => {
 	function createEngine(): ExpressionEngine {
-		return new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		return new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	}
 
 	test("dateless '100 USD in GBP' still compiles to the live UOM_CONVERT_TO path, not the historical call", () => {
@@ -335,7 +346,7 @@ describe("historical currency — does not regress live conversion or date parsi
 
 describe("historical currency — unconfigured end to end (default engine)", () => {
 	test("the default engine recognises the syntax and reports not-configured after the pending flash", async () => {
-		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 
 		// First evaluation: nothing cached, so the line is Pending while the
 		// (provider-less) resolver resolves its not-configured error.

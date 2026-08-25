@@ -24,8 +24,8 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ValueType } from "@solve-js/vm/Value";
 
 function evaluate(source: string) {
-	const engine = newTrackedEngine("en");
-	const [value] = engine.evaluateExpression(source);
+	const engine = newTrackedEngine();
+	const value = engine.evaluateExpression(source);
 	return value;
 }
 
@@ -33,7 +33,7 @@ const num = (source: string) => evaluate(source).toNumber();
 
 /** The first line's result through the markdown document path. */
 function evaluateMarkdown(line: string): unknown {
-	const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+	const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	const [parsed] = engine.parseDocument(line, { inputType: "markdown" }).lines;
 	return parsed.result?.value ?? parsed.error;
 }
@@ -136,16 +136,16 @@ describe("the unit rides along", () => {
 
 describe("what must keep working", () => {
 	test("a variable can still be named `up`", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateExpression(":up = 5");
-		const [value] = engine.evaluateExpression("up + 2");
+		const value = engine.evaluateExpression("up + 2");
 		expect(value.toNumber()).toBe(7);
 	});
 
 	test("a variable can still be named `down`", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateExpression(":down = 10");
-		const [value] = engine.evaluateExpression("down * 3");
+		const value = engine.evaluateExpression("down * 3");
 		expect(value.toNumber()).toBe(30);
 	});
 

@@ -15,13 +15,13 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 describe("ExpressionEngine", () => {
   test("evaluateLine returns correct value for simple arithmetic", () => {
     const engine = newTrackedEngine();
-    const [result] = engine.evaluateLine(1, "1 + 2");
+    const result = engine.evaluateLine(1, "1 + 2");
     expect(result.toNumber()).toBe(3);
   });
 
   test("evaluateLine caches bytecode and result", () => {
     const engine = newTrackedEngine();
-    const [result] = engine.evaluateLine(1, "42");
+    const result = engine.evaluateLine(1, "42");
     expect(result.toNumber()).toBe(42);
 
     const cached = engine.getLineCache().get(1, "42");
@@ -38,7 +38,7 @@ describe("ExpressionEngine", () => {
 
   test("DAG tracks variable assignments in expression engine", () => {
     const engine = newTrackedEngine();
-    const [v] = engine.evaluateLine(10, ":myVar = 5 + 3");
+    const v = engine.evaluateLine(10, ":myVar = 5 + 3");
     expect(v.toNumber()).toBe(8);
   });
 

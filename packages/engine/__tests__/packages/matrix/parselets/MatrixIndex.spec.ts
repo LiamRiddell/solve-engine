@@ -11,12 +11,12 @@ import { ValueType } from "@solve-js/vm/Value";
 import { newTrackedEngine } from "@tools/trackedEngine";
 
 function engine() {
-  return newTrackedEngine("en");
+  return newTrackedEngine();
 }
 
 function evalOne(expr: string) {
   const e = engine();
-  const [v] = e.evaluateExpression(expr);
+  const v = e.evaluateExpression(expr);
   return v;
 }
 
@@ -24,19 +24,19 @@ describe("Matrix indexing", () => {
   test("a=[0,1;2,3]; a[0,0]=>0, a[1,1]=>3, a[1,0]=>2 (row, col)", () => {
     const e = engine();
     e.evaluateLine(1, ":a = [0, 1; 2, 3]");
-    expect(e.evaluateLine(2, "a[0, 0]")[0].toNumber()).toBe(0);
-    expect(e.evaluateLine(3, "a[1, 1]")[0].toNumber()).toBe(3);
-    expect(e.evaluateLine(4, "a[1, 0]")[0].toNumber()).toBe(2);
-    expect(e.evaluateLine(5, "a[0, 1]")[0].toNumber()).toBe(1);
+    expect(e.evaluateLine(2, "a[0, 0]").toNumber()).toBe(0);
+    expect(e.evaluateLine(3, "a[1, 1]").toNumber()).toBe(3);
+    expect(e.evaluateLine(4, "a[1, 0]").toNumber()).toBe(2);
+    expect(e.evaluateLine(5, "a[0, 1]").toNumber()).toBe(1);
   });
 
   test("a=[0,1;2,3]; a[0]=>0, a[1]=>2, a[2]=>1 (column-major single index)", () => {
     const e = engine();
     e.evaluateLine(1, ":a = [0, 1; 2, 3]");
-    expect(e.evaluateLine(2, "a[0]")[0].toNumber()).toBe(0);
-    expect(e.evaluateLine(3, "a[1]")[0].toNumber()).toBe(2);
-    expect(e.evaluateLine(4, "a[2]")[0].toNumber()).toBe(1);
-    expect(e.evaluateLine(5, "a[3]")[0].toNumber()).toBe(3);
+    expect(e.evaluateLine(2, "a[0]").toNumber()).toBe(0);
+    expect(e.evaluateLine(3, "a[1]").toNumber()).toBe(2);
+    expect(e.evaluateLine(4, "a[2]").toNumber()).toBe(1);
+    expect(e.evaluateLine(5, "a[3]").toNumber()).toBe(3);
   });
 
   test("indexing a row vector: [10,20,30][1]=>20", () => {
@@ -47,13 +47,13 @@ describe("Matrix indexing", () => {
   test("indexing supports arbitrary index expressions: a[1+1]", () => {
     const e = engine();
     e.evaluateLine(1, ":a = [10, 20, 30]");
-    expect(e.evaluateLine(2, "a[1 + 1]")[0].toNumber()).toBe(30);
+    expect(e.evaluateLine(2, "a[1 + 1]").toNumber()).toBe(30);
   });
 
   test("indexing a boolean-comparison matrix returns a real boolean cell", () => {
     const e = engine();
     e.evaluateLine(1, ":a = [1, 6; 3, 8] < [5, 2; 7, 4]");
-    const v = e.evaluateLine(2, "a[0, 0]")[0];
+    const v = e.evaluateLine(2, "a[0, 0]");
     expect(v.type).toBe(ValueType.Boolean);
     expect(v.value).toBe(true);
   });

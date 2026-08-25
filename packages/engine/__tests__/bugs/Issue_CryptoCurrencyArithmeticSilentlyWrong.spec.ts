@@ -45,7 +45,7 @@ describe("Bug: crypto currency arithmetic silently produced a wrong unitless num
   let engine: ExpressionEngine;
 
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   afterEach(() => {
@@ -57,7 +57,7 @@ describe("Bug: crypto currency arithmetic silently produced a wrong unitless num
     // Simulates the state *after* a successful async fetch — the fix's
     // happy path once CoinGecko has answered.
     sharedCurrencyExchange.primeRates("BTC", { ETH: 20 }); // 1 BTC = 20 ETH
-    const [result] = engine.evaluateLine(1, "0.01 BTC + 1 ETH");
+    const result = engine.evaluateLine(1, "0.01 BTC + 1 ETH");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.unit).toBe("BTC");
     // 0.01 BTC + (1 ETH -> BTC at 1/20) = 0.01 + 0.05 = 0.06 BTC — NOT 1.01.
@@ -65,7 +65,7 @@ describe("Bug: crypto currency arithmetic silently produced a wrong unitless num
   });
 
   test("same-measure units still combine normally (regression guard)", () => {
-    const [result] = engine.evaluateLine(1, "1 kg + 500 g");
+    const result = engine.evaluateLine(1, "1 kg + 500 g");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.toNumber()).toBeCloseTo(1.5, 5);
   });
@@ -137,7 +137,7 @@ describe("Bug: preflight never detected currency arithmetic, only explicit to/in
   let queryClient: { getQueryData: () => undefined; fetchQuery: () => Promise<unknown> };
 
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     resolver = new CurrencyAsyncResolver();
     // preflight() only needs fetchQuery's SYNCHRONOUS return shape (a
     // thenable to stash as AsyncCheckResult.resolver) — it never awaits

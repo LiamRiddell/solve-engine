@@ -24,8 +24,8 @@ TypeScript is optional. If you use it, everything is typed and no separate
 ```ts
 import { createEngine } from "solve-engine";
 
-const engine = createEngine("en");
-const [result] = engine.evaluateExpression("2 + 2 * 10");
+const engine = createEngine({ locale: "en" });
+const result = engine.evaluateExpression("2 + 2 * 10");
 
 console.log(result.toNumber()); // 22
 ```
@@ -39,7 +39,7 @@ subpath entries, so a bundler only pulls in the part you actually use.
 
 | Import | Contains |
 | --- | --- |
-| `solve-engine` | `ExpressionEngine`, the package registry, common types |
+| `solve-engine` | `ExpressionEngine`, `createEngine`, `IEnginePackage`, common types |
 | `solve-engine/vm` | `Value`, `ValueType`, and value construction helpers |
 | `solve-engine/format` | `formatValue` and formatting settings |
 | `solve-engine/language` | Editor support: completions, token categories, highlighting |
@@ -75,7 +75,7 @@ import { ExpressionEngine } from "solve-engine";
 import { ARITHMETIC_PACKAGE, UOM_PACKAGE } from "solve-engine/packages";
 
 // Only arithmetic and units reach the bundle.
-const engine = new ExpressionEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE, UOM_PACKAGE]);
+const engine = new ExpressionEngine({ packages: [ARITHMETIC_PACKAGE, UOM_PACKAGE] });
 ```
 
 Each syntax page names the package (or packages) its grammar needs, so you can

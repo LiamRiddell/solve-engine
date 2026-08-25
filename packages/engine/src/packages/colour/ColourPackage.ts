@@ -4,7 +4,7 @@ import { Value, ValueType, colourValue, type ColourData, type ColourFormat } fro
 import { HexColourParselet } from "./parselets/HexColourParselet";
 import { ColourCallParselet } from "./parselets/ColourCallParselet";
 import { colourCallNormalizerRule } from "./normalizer/ColourCallNormalizerRule";
-import { COLOUR_PLUGIN_FUNCTIONS, COLOUR_FUNCTION_INDEX } from "./ColourPluginFunctions";
+import { COLOUR_FUNCTION_HANDLERS } from "./ColourPluginFunctions";
 
 /**
  * Re-tag a colour's display format for `<colour> as rgb|rgba|hsl|hsla`. The
@@ -20,7 +20,7 @@ const retag = (format: ColourFormat) => (v: Value): Value => {
 };
 
 /** One completion candidate per distinct colour function name. */
-const completionItems: CompletionItem[] = Object.keys(COLOUR_FUNCTION_INDEX).map((label) => ({
+const completionItems: CompletionItem[] = Object.keys(COLOUR_FUNCTION_HANDLERS).map((label) => ({
 	label,
 	category: "function",
 	detail: "colour",
@@ -40,12 +40,12 @@ const completionItems: CompletionItem[] = Object.keys(COLOUR_FUNCTION_INDEX).map
  */
 export const COLOUR_PACKAGE: IEnginePackage = {
 	name: "solve-colour",
-	prefixParselets: [
-		{ tokenType: "HEX_COLOUR", parselet: new HexColourParselet() },
-		{ tokenType: "COLOUR_CALL", parselet: new ColourCallParselet() },
-	],
+	prefixParselets: {
+		HEX_COLOUR: new HexColourParselet(),
+		COLOUR_CALL: new ColourCallParselet(),
+	},
 	normalizerRules: [colourCallNormalizerRule()],
-	pluginFunctions: COLOUR_PLUGIN_FUNCTIONS.map((f) => ({ index: f.index, handler: f.handler })),
+	pluginFunctions: COLOUR_FUNCTION_HANDLERS,
 	asConverters: {
 		rgb: retag("rgb"),
 		rgba: retag("rgba"),

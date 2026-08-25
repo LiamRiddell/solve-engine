@@ -14,7 +14,7 @@ import { atRateNormalizerRule } from "./normalizer/AtRateNormalizerRule";
 import { forDurationNormalizerRule } from "./normalizer/ForDurationNormalizerRule";
 import { reversedConversionNormalizerRule } from "./normalizer/ReversedConversionNormalizerRule";
 import { CookingConversionParselet } from "./parselets/CookingConversionParselet";
-import { COOKING_CONVERT_IDX, cookingConvertHandler } from "./parselets/CookingPluginFunctions";
+import { COOKING_CONVERT_FN, cookingConvertHandler } from "./parselets/CookingPluginFunctions";
 import { ingredientNameNormalizerRule } from "./normalizer/IngredientNameNormalizerRule";
 import { multiWordUnitNormalizerRule } from "./normalizer/MultiWordUnitNormalizerRule";
 import { compoundUnitNormalizerRule } from "./normalizer/CompoundUnitNormalizerRule";
@@ -35,17 +35,17 @@ import { compoundUnitNormalizerRule } from "./normalizer/CompoundUnitNormalizerR
  */
 export const UOM_PACKAGE: IEnginePackage = {
   name: "solve-uom",
-  prefixParselets: [
-    { tokenType: "CONVERT", parselet: new ConvertParselet() },
-    { tokenType: "UOM_POSSIBILITIES_QUERY", parselet: new PossibilitiesParselet() },
-  ],
-  infixParselets: [
-    { tokenType: "IN_TWO_UNITS", parselet: new TwoUnitConversionParselet(94) },
-    { tokenType: "PER_UNIT", parselet: new PerUnitParselet(95) },
-    { tokenType: "AT_RATE", parselet: new AtRateParselet(96) },
-    { tokenType: "UNIT", parselet: new UomLiteralParselet() },
-    { tokenType: "INGREDIENT_NAME", parselet: new CookingConversionParselet() },
-  ],
+  prefixParselets: {
+    CONVERT: new ConvertParselet(),
+    UOM_POSSIBILITIES_QUERY: new PossibilitiesParselet(),
+  },
+  infixParselets: {
+    IN_TWO_UNITS: new TwoUnitConversionParselet(94),
+    PER_UNIT: new PerUnitParselet(95),
+    AT_RATE: new AtRateParselet(96),
+    UNIT: new UomLiteralParselet(),
+    INGREDIENT_NAME: new CookingConversionParselet(),
+  },
   normalizerRules: [
     // Highest priority of the unit rules: a two-word spelling has to become one
     // token before anything else reads the first word as a unit on its own.
@@ -63,7 +63,7 @@ export const UOM_PACKAGE: IEnginePackage = {
     reversedConversionNormalizerRule(),
     ingredientNameNormalizerRule(),
   ],
-  pluginFunctions: [
-    { index: COOKING_CONVERT_IDX, handler: cookingConvertHandler },
-  ],
+  pluginFunctions: {
+    [COOKING_CONVERT_FN]: cookingConvertHandler,
+  },
 };

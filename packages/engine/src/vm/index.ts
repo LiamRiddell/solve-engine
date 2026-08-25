@@ -13,7 +13,7 @@ export { chargeAllocation, checkAllocation, checkedArray } from "./AllocationBud
 export type { Bytecode } from "./VM";
 export { VMCheckpointer } from "./VMCheckpoints";
 export type { VMCheckpoint } from "./VMCheckpoints";
-export { builtinFunctions, pluginFunctionRegistry, allocatePluginFunctionIndex } from "./VMBuiltins";
+export { builtinFunctions, pluginFunctionRegistry, allocatePluginFunctionIndex, pluginFunctionIndexFor } from "./VMBuiltins";
 export { unifyUom, binaryOp } from "./VMConversion";
 export { OpRegistry, sharedOpRegistry } from "./OpRegistry";
 export type { VM } from "./OpRegistry";

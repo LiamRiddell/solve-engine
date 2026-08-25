@@ -11,23 +11,23 @@ class NoopParselet implements PrefixParselet {
 
 describe("checkPackageCompatibility", () => {
   test("two unrelated packages produce no conflicts", () => {
-    const a: IEnginePackage = { name: "pkg-a", prefixParselets: [{ tokenType: "FOO", parselet: new NoopParselet() }] };
-    const b: IEnginePackage = { name: "pkg-b", prefixParselets: [{ tokenType: "BAR", parselet: new NoopParselet() }] };
+    const a: IEnginePackage = { name: "pkg-a", prefixParselets: { FOO: new NoopParselet() } };
+    const b: IEnginePackage = { name: "pkg-b", prefixParselets: { BAR: new NoopParselet() } };
     const report = checkPackageCompatibility(b, [a]);
     expect(report.compatible).toBe(true);
     expect(report.conflicts).toHaveLength(0);
   });
 
   test("a package is never flagged against itself (by identity or by name)", () => {
-    const a: IEnginePackage = { name: "pkg-a", prefixParselets: [{ tokenType: "FOO", parselet: new NoopParselet() }] };
+    const a: IEnginePackage = { name: "pkg-a", prefixParselets: { FOO: new NoopParselet() } };
     expect(checkPackageCompatibility(a, [a]).conflicts).toHaveLength(0);
-    const aAgain: IEnginePackage = { name: "pkg-a", prefixParselets: [{ tokenType: "FOO", parselet: new NoopParselet() }] };
+    const aAgain: IEnginePackage = { name: "pkg-a", prefixParselets: { FOO: new NoopParselet() } };
     expect(checkPackageCompatibility(aAgain, [a]).conflicts).toHaveLength(0);
   });
 
   test("colliding prefixParselets token type -> warning, still compatible", () => {
-    const a: IEnginePackage = { name: "pkg-a", prefixParselets: [{ tokenType: "FOO", parselet: new NoopParselet() }] };
-    const b: IEnginePackage = { name: "pkg-b", prefixParselets: [{ tokenType: "FOO", parselet: new NoopParselet() }] };
+    const a: IEnginePackage = { name: "pkg-a", prefixParselets: { FOO: new NoopParselet() } };
+    const b: IEnginePackage = { name: "pkg-b", prefixParselets: { FOO: new NoopParselet() } };
     const report = checkPackageCompatibility(b, [a]);
     expect(report.compatible).toBe(true);
     expect(report.conflicts).toEqual([
@@ -36,8 +36,8 @@ describe("checkPackageCompatibility", () => {
   });
 
   test("colliding infixParselets token type -> warning", () => {
-    const a: IEnginePackage = { name: "pkg-a", infixParselets: [{ tokenType: "FOO", parselet: new NoopParselet() as any }] };
-    const b: IEnginePackage = { name: "pkg-b", infixParselets: [{ tokenType: "FOO", parselet: new NoopParselet() as any }] };
+    const a: IEnginePackage = { name: "pkg-a", infixParselets: { FOO: new NoopParselet() as any } };
+    const b: IEnginePackage = { name: "pkg-b", infixParselets: { FOO: new NoopParselet() as any } };
     const report = checkPackageCompatibility(b, [a]);
     expect(report.conflicts[0]).toMatchObject({ kind: "infixParseletTokenType", severity: "warning" });
   });
@@ -62,12 +62,12 @@ describe("checkPackageCompatibility", () => {
     expect(report.conflicts[0]).toMatchObject({ kind: "converterName", severity: "warning" });
   });
 
-  test("colliding pluginFunctions index -> error, NOT compatible", () => {
-    const a: IEnginePackage = { name: "pkg-a", pluginFunctions: [{ index: 200, handler: (args) => args[0] }] };
-    const b: IEnginePackage = { name: "pkg-b", pluginFunctions: [{ index: 200, handler: (args) => args[0] }] };
+  test("colliding pluginFunctions name -> warning, still compatible", () => {
+    const a: IEnginePackage = { name: "pkg-a", pluginFunctions: { historicalCurrency: (args) => args[0] } };
+    const b: IEnginePackage = { name: "pkg-b", pluginFunctions: { historicalCurrency: (args) => args[0] } };
     const report = checkPackageCompatibility(b, [a]);
-    expect(report.compatible).toBe(false);
-    expect(report.conflicts[0]).toMatchObject({ kind: "pluginFunctionIndex", severity: "error" });
+    expect(report.compatible).toBe(true);
+    expect(report.conflicts[0]).toMatchObject({ kind: "pluginFunctionName", severity: "warning" });
   });
 
   test("colliding lexer keyword mapped to different token types -> error, NOT compatible", () => {
@@ -108,6 +108,20 @@ describe("checkPackageCompatibility", () => {
     expect(report.conflicts[0]).toMatchObject({ kind: "tokenCategory", severity: "info" });
   });
 
+  test("two packages sharing a normalizer rule name -> warning (unregister is by name)", () => {
+    const a: IEnginePackage = { name: "pkg-a", normalizerRules: [{ name: "fuse-thing", priority: 50, match: () => null }] };
+    const b: IEnginePackage = { name: "pkg-b", normalizerRules: [{ name: "fuse-thing", priority: 50, match: () => null }] };
+    const report = checkPackageCompatibility(b, [a]);
+    expect(report.compatible).toBe(true);
+    expect(report.conflicts[0]).toMatchObject({ kind: "normalizerRuleName", severity: "warning", packages: ["pkg-a", "pkg-b"] });
+  });
+
+  test("distinct normalizer rule names are not a conflict, even at the same priority", () => {
+    const a: IEnginePackage = { name: "pkg-a", normalizerRules: [{ name: "a:fuse", priority: 50, match: () => null }] };
+    const b: IEnginePackage = { name: "pkg-b", normalizerRules: [{ name: "b:fuse", priority: 50, match: () => null }] };
+    expect(checkPackageCompatibility(b, [a]).conflicts).toHaveLength(0);
+  });
+
   // Regression guard against the REAL shipped package set — if two actual
   // built-in packages ever started colliding, this test catches it
   // immediately rather than relying on someone noticing a console.warn.
@@ -118,6 +132,19 @@ describe("checkPackageCompatibility", () => {
       const report = checkPackageCompatibility(candidate, others);
       const errors = report.conflicts.filter((c) => c.severity === "error");
       expect(errors).toEqual([]);
+    }
+  });
+
+  // The new rule-name check must not false-fire on the shipped set: built-in
+  // normalizer rules are package-prefixed (`uom:...`, `lines:...`), so
+  // createEngine() must stay warning-free on this axis.
+  test("BUILTIN_PACKAGES have no normalizer rule-name collisions", () => {
+    for (let i = 0; i < BUILTIN_PACKAGES.length; i++) {
+      const candidate = BUILTIN_PACKAGES[i];
+      const others = BUILTIN_PACKAGES.filter((_, j) => j !== i);
+      const ruleNameConflicts = checkPackageCompatibility(candidate, others)
+        .conflicts.filter((c) => c.kind === "normalizerRuleName");
+      expect(ruleNameConflicts).toEqual([]);
     }
   });
 });

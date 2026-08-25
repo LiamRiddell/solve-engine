@@ -54,7 +54,7 @@ export function parseTransform(parser: Parser, builder: BytecodeBuilder): Transf
   // (PrecedenceParser.ts's parseUserFunctionDefinition): parseExpression()
   // sets `this.builder` to the isolated builder with NO automatic
   // restore, so setBuilder(builder) explicitly restores it afterward.
-  const transformBuilder = new BytecodeBuilder();
+  const transformBuilder = new BytecodeBuilder(builder.pluginIndexMap);
   parser.parseExpression(BindingPower.Lowest, transformBuilder);
   parser.setBuilder(builder);
   const program = transformBuilder.build();

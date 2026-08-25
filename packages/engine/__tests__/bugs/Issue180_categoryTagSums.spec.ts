@@ -18,7 +18,7 @@ import { ValueType } from "@solve-js/vm/Value";
 describe("Issue #180: category tag sums", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   /** Evaluate a document and read the display of a 1-based line. */
@@ -70,7 +70,7 @@ describe("Issue #180: category tag sums", () => {
       expect(resultAt(["count of #none"], 1)).toBe("= 0");
     });
     test("a tag aggregate outside a document errors cleanly", () => {
-      const [value] = engine.evaluateExpression("total of #grocery");
+      const value = engine.evaluateExpression("total of #grocery");
       expect(value.type).toBe(ValueType.Error);
       expect(formatValue(value)).toMatch(/document/i);
     });
@@ -116,7 +116,7 @@ describe("Issue #180: category tag sums", () => {
     });
     test(":total = 5 is untouched", () => {
       engine.evaluateExpression(":total = 5");
-      expect(engine.evaluateExpression("total + 1")[0].toNumber()).toBe(6);
+      expect(engine.evaluateExpression("total + 1").toNumber()).toBe(6);
     });
   });
 

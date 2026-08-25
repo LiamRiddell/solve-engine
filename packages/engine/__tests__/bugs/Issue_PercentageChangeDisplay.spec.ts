@@ -18,16 +18,16 @@ import { newTrackedEngine } from "@tools/trackedEngine";
  */
 describe("Bug: percentage-change value displayed as fraction instead of percent", () => {
   test("800 to 1000 displays as 25.00%, not 0.25%", () => {
-    const engine = newTrackedEngine("en", false);
-    const [result] = engine.evaluateLine(1, "800 to 1000");
+    const engine = newTrackedEngine();
+    const result = engine.evaluateLine(1, "800 to 1000");
     const formatted = formatValue(result);
     expect(formatted).toContain("25");
     expect(formatted).not.toContain("0.25");
   });
 
   test("1000 to 800 (a decrease) displays as -20.00%, not -0.20%", () => {
-    const engine = newTrackedEngine("en", false);
-    const [result] = engine.evaluateLine(1, "1000 to 800");
+    const engine = newTrackedEngine();
+    const result = engine.evaluateLine(1, "1000 to 800");
     const formatted = formatValue(result);
     expect(formatted).toContain("-20");
     expect(formatted).not.toContain("-0.2");

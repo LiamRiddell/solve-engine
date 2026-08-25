@@ -46,8 +46,8 @@ function builtinInfixRegistrations(): Array<{ tokenType: string; bindingPower: n
 	const packages: IEnginePackage[] = [ARITHMETIC_PACKAGE, PERCENTAGE_PACKAGE];
 	const found: Array<{ tokenType: string; bindingPower: number }> = [];
 	for (const pkg of packages) {
-		for (const entry of pkg.infixParselets ?? []) {
-			found.push({ tokenType: entry.tokenType, bindingPower: entry.parselet.bindingPower });
+		for (const [tokenType, parselet] of Object.entries(pkg.infixParselets ?? {})) {
+			found.push({ tokenType, bindingPower: parselet.bindingPower });
 		}
 	}
 	return found;
@@ -126,8 +126,8 @@ describe("an operator declared in both tiers is declared the same way in both", 
 
 describe("the shifts group the same way as each other", () => {
 	const num = (source: string) => {
-		const engine = newTrackedEngine("en");
-		return engine.evaluateExpression(source)[0].toNumber();
+		const engine = newTrackedEngine();
+		return engine.evaluateExpression(source).toNumber();
 	};
 
 	test("on their own the two right shifts agree, as they must for a positive operand", () => {
@@ -170,7 +170,7 @@ describe("the shifts group the same way as each other", () => {
 
 describe("the registry introspection a host reads to draw an operator table", () => {
 	test("it reports every parselet it holds", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const registry = engine.getParseletRegistry();
 		expect(registry.infix.length).toBeGreaterThan(20);
 		expect(registry.prefix.length).toBeGreaterThan(20);
@@ -196,7 +196,7 @@ describe("the registry introspection a host reads to draw an operator table", ()
 		// is the encoding a left-associative operator has and the same `bp + 1`
 		// the parser itself uses for the right operand. A parselet that is
 		// right-associative can still say so by declaring `rightBindingPower`.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const registry = engine.getParseletRegistry();
 		const plus = registry.infix.find((i) => i.tokenType === "PLUS");
 		const star = registry.infix.find((i) => i.tokenType === "STAR");
@@ -209,7 +209,7 @@ describe("the registry introspection a host reads to draw an operator table", ()
 		// correctly rather than merely in the right order. Pinned separately
 		// from the ordering above so a change to the convention has to be
 		// deliberate.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const registry = engine.getParseletRegistry();
 		for (const tokenType of ["PLUS", "MINUS", "STAR", "SLASH"]) {
 			const entry = registry.infix.find((i) => i.tokenType === tokenType);
@@ -222,7 +222,7 @@ describe("the registry introspection a host reads to draw an operator table", ()
 		// Zero means "not an operator" on this side too, and every prefix
 		// parselet reported it. They have no per-parselet power to report, so
 		// the level they all bind at is what comes back.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const registry = engine.getParseletRegistry();
 		const zeroed = registry.prefix.filter((p) => p.bindingPower === 0);
 		expect(zeroed).toEqual([]);

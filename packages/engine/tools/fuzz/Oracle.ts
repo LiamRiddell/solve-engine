@@ -206,15 +206,12 @@ export function runExpressionCase(source: string, engine: ExpressionEngine, opti
 	const started = performance.now();
 	let outcome: Outcome;
 	try {
-		const values = engine.evaluateExpression(source);
+		const value = engine.evaluateExpression(source);
 		const elapsedMs = performance.now() - started;
 		outcome = classifyDuration({ kind: "ok", elapsedMs, detail: "value" }, options);
-		for (const value of values) {
-			const malformed = contractViolation(value);
-			if (malformed) {
-				outcome = { kind: "contract", elapsedMs, detail: malformed };
-				break;
-			}
+		const malformed = contractViolation(value);
+		if (malformed) {
+			outcome = { kind: "contract", elapsedMs, detail: malformed };
 		}
 	} catch (thrown) {
 		const elapsedMs = performance.now() - started;

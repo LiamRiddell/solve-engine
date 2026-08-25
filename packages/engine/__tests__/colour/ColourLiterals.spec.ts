@@ -11,15 +11,15 @@ import { ValueType, type ColourData } from "@solve-js/vm/Value";
 
 /** The colour a whole line evaluates to, or null if the line is not a colour. */
 function lineColour(line: string): ColourData | null {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	const result = engine.parseDocument(line);
 	const v = result.lines[0]?.result;
 	return v && v.type === ValueType.Colour ? (v.value as ColourData) : null;
 }
 
 function evalValue(source: string) {
-	const engine = newTrackedEngine("en");
-	return engine.evaluateExpression(source)[0];
+	const engine = newTrackedEngine();
+	return engine.evaluateExpression(source);
 }
 
 describe("hex literals are colours", () => {

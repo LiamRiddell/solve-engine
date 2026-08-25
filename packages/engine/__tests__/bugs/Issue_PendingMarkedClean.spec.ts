@@ -15,7 +15,7 @@ import { pendingValue } from "@solve-js/vm/Value";
  */
 describe("a pending line is not marked clean", () => {
 	test("a line resolving to Pending stays dirty", () => {
-		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		const doc = new DocumentModel();
 		doc.setDocument("1 + 2");
 		const evaluator = new ThreeTierEvaluator(doc, engine);
@@ -24,15 +24,14 @@ describe("a pending line is not marked clean", () => {
 		// with a Pending, not how one comes to exist, and driving a real
 		// unresolved resolver through the batcher would test three things at
 		// once.
-		const original = engine.evaluateLineDetailed.bind(engine);
-		(engine as unknown as { evaluateLineDetailed: unknown }).evaluateLineDetailed = () => ({
-			values: [pendingValue("plugin:230:test")],
-		});
+		const original = engine.evaluateLine.bind(engine);
+		(engine as unknown as { evaluateLine: unknown }).evaluateLine = () =>
+			pendingValue("plugin:230:test");
 
 		evaluator.evaluate({ startLine: 1, endLine: 1 });
 		expect(doc.dirtyCount).toBe(1);
 
-		(engine as unknown as { evaluateLineDetailed: unknown }).evaluateLineDetailed = original;
+		(engine as unknown as { evaluateLine: unknown }).evaluateLine = original;
 		engine.clear();
 	});
 
@@ -40,7 +39,7 @@ describe("a pending line is not marked clean", () => {
 		// The guard against over-correcting. If this also stayed dirty, every
 		// line would re-evaluate forever and the fix would be worse than the
 		// defect it replaced.
-		const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		const doc = new DocumentModel();
 		doc.setDocument("1 + 2\n3 * 4");
 		const evaluator = new ThreeTierEvaluator(doc, engine);

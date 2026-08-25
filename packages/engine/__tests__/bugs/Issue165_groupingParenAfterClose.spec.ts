@@ -18,10 +18,10 @@ import { ValueType } from "@solve-js/vm/Value";
 describe("Issue #165: `)(` is implicit multiplication over a grouping, not a call", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
-  const num = (source: string): number => engine.evaluateExpression(source)[0].toNumber();
+  const num = (source: string): number => engine.evaluateExpression(source).toNumber();
 
   describe("a grouped thousands number after a closing paren keeps its value", () => {
     // Invariant: `(a)(1,000)` == `(a)(1000)` == a * 1000, a scalar.
@@ -31,7 +31,7 @@ describe("Issue #165: `)(` is implicit multiplication over a grouping, not a cal
       ["(5)(2,500)", 12500],
       ["(3)(1,000)(1)", 3000],
     ])("`%s` is the scalar %d", (source, expected) => {
-      const r = engine.evaluateExpression(source)[0];
+      const r = engine.evaluateExpression(source);
       expect(r.type).toBe(ValueType.Number);
       expect(r.toNumber()).toBe(expected);
       expect(r.toNumber()).toBe(num(source.replace(/,/g, "")));
@@ -44,7 +44,7 @@ describe("Issue #165: `)(` is implicit multiplication over a grouping, not a cal
   });
 
   test("calls, brackets and groupings elsewhere still behave", () => {
-    expect(engine.evaluateExpression("rgb(255,255,255)")[0].type).toBe(ValueType.Colour);
+    expect(engine.evaluateExpression("rgb(255,255,255)").type).toBe(ValueType.Colour);
     expect(num("max(100,200)")).toBe(200);
     expect(num("(1,000)")).toBe(1000);
     expect(num("2 * (1,000)")).toBe(2000);

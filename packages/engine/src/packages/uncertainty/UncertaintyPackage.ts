@@ -15,9 +15,9 @@ import { asciiPlusMinusNormalizerRule } from "./normalizer/AsciiPlusMinusNormali
  */
 export const UNCERTAINTY_PACKAGE: IEnginePackage = {
   name: "solve-uncertainty",
-  infixParselets: [
-    { tokenType: "PLUS_MINUS", parselet: new UncertaintyParselet() },
-  ],
+  infixParselets: {
+    PLUS_MINUS: new UncertaintyParselet(),
+  },
   normalizerRules: [asciiPlusMinusNormalizerRule()],
   // PLUS_MINUS is a core lexer token, so its highlight category lives in the
   // built-in language/TokenCategoryMap.ts rather than being contributed here.

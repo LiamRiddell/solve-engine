@@ -15,19 +15,19 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 describe("trailing bare '=' tolerance", () => {
 	test("a plain expression with a trailing '=' evaluates normally", () => {
 		const engine = newTrackedEngine();
-		const [value] = engine.evaluateExpression("355/113=");
+		const value = engine.evaluateExpression("355/113=");
 		expect(value.toNumber()).toBeCloseTo(Math.PI, 4);
 	});
 
 	test("a space before the trailing '=' is also tolerated", () => {
 		const engine = newTrackedEngine();
-		const [value] = engine.evaluateExpression("5 + 3 =");
+		const value = engine.evaluateExpression("5 + 3 =");
 		expect(value.toNumber()).toBe(8);
 	});
 
 	test("a variable assignment with a trailing '=' still works", () => {
 		const engine = newTrackedEngine();
-		const [value] = engine.evaluateExpression(":x = 5=");
+		const value = engine.evaluateExpression(":x = 5=");
 		expect(value.toNumber()).toBe(5);
 	});
 
@@ -48,7 +48,7 @@ describe("trailing bare '=' tolerance", () => {
 
 	test("regression guard: a user-defined function definition's own '=' is unaffected (not treated as a trailing marker)", () => {
 		const engine = newTrackedEngine();
-		const [value] = engine.evaluateExpression("f(x) = 2*x");
+		const value = engine.evaluateExpression("f(x) = 2*x");
 		expect(String(value.value)).toMatch(/defined/i);
 	});
 });

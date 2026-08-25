@@ -19,11 +19,11 @@ import { ValueType, type MatrixData } from "@solve-js/vm/Value";
 describe("Issue #160: a grouping paren after a keyword operator keeps thousands", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
-  const num = (source: string): number => engine.evaluateExpression(source)[0].toNumber();
-  const type = (source: string): ValueType => engine.evaluateExpression(source)[0].type;
+  const num = (source: string): number => engine.evaluateExpression(source).toNumber();
+  const type = (source: string): ValueType => engine.evaluateExpression(source).type;
 
   describe("a keyword operator before (1,000) reads it as the scalar 1000", () => {
     // The invariant: the grouped, comma-formatted number must equal the plain
@@ -36,7 +36,7 @@ describe("Issue #160: a grouping paren after a keyword operator keeps thousands"
       "1 and (1,000)",
     ])("`%s` matches its plain form and is a scalar", (grouped) => {
       const plain = grouped.replace("(1,000)", "1000");
-      const r = engine.evaluateExpression(grouped)[0];
+      const r = engine.evaluateExpression(grouped);
       expect(r.type).toBe(ValueType.Number);
       expect(r.toNumber()).toBe(num(plain));
     });
@@ -55,7 +55,7 @@ describe("Issue #160: a grouping paren after a keyword operator keeps thousands"
     });
 
     test("a bracket vector still splits elements", () => {
-      const m = engine.evaluateExpression("[100,200,300]")[0].value as MatrixData;
+      const m = engine.evaluateExpression("[100,200,300]").value as MatrixData;
       expect([m.rows, m.cols]).toEqual([1, 3]);
     });
 

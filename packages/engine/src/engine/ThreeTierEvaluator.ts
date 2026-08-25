@@ -736,9 +736,12 @@ export class ThreeTierEvaluator {
 			let entry: { bytecode: BytecodeProgram; readVariables: string[]; writeVariable: string | null } | undefined;
 
 			try {
-				const evaluation = this.engine.evaluateLineDetailed(lineNumber, expression);
-				value = evaluation.values;
-				lastValue = value[0];
+				// evaluateLine returns the single evaluated Value; this evaluator
+				// keeps its results grouped as Value[] per expression (allResults
+				// is Value[][]), so wrap the one value into its group here.
+				const evaluated = this.engine.evaluateLine(lineNumber, expression);
+				value = [evaluated];
+				lastValue = evaluated;
 				// Sync the DocumentModel from the LineCache.
 				// Use get(lineNumber, expression) instead of getEntryForLine(lineNumber)
 				// because multiple expressions on the same line share the same lineNumber

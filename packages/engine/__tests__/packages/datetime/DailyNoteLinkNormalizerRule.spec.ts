@@ -11,23 +11,23 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 describe("daily note link — [[date]] unwrapping", () => {
 	test("a bare bracketed date evaluates to the same Datetime as the unwrapped literal", () => {
 		const engine = newTrackedEngine();
-		const [wrapped] = engine.evaluateExpression("[[2024-01-15]]");
-		const [bare] = engine.evaluateExpression("2024-01-15");
+		const wrapped = engine.evaluateExpression("[[2024-01-15]]");
+		const bare = engine.evaluateExpression("2024-01-15");
 		expect(wrapped.type).toBe(ValueType.Datetime);
 		expect(wrapped.value).toBe(bare.value);
 	});
 
 	test("works inside a larger expression, not just standalone", () => {
 		const engine = newTrackedEngine();
-		const [wrapped] = engine.evaluateExpression("[[2024-01-15]] + 5 days");
-		const [bare] = engine.evaluateExpression("2024-01-15 + 5 days");
+		const wrapped = engine.evaluateExpression("[[2024-01-15]] + 5 days");
+		const bare = engine.evaluateExpression("2024-01-15 + 5 days");
 		expect(wrapped.value).toBe(bare.value);
 	});
 
 	test("works on the right-hand side of an operator too", () => {
 		const engine = newTrackedEngine();
-		const [wrapped] = engine.evaluateExpression("now - [[2024-01-15]]");
-		const [bare] = engine.evaluateExpression("now - 2024-01-15");
+		const wrapped = engine.evaluateExpression("now - [[2024-01-15]]");
+		const bare = engine.evaluateExpression("now - 2024-01-15");
 		// Both computed within the same test run, a few ms apart at most —
 		// "now" drifts by less than a millisecond between the two calls, so
 		// compare the whole-day count rather than the exact duration.
@@ -36,8 +36,8 @@ describe("daily note link — [[date]] unwrapping", () => {
 
 	test("other date formats (slash, dot) also unwrap correctly", () => {
 		const engine = newTrackedEngine();
-		const [wrapped] = engine.evaluateExpression("[[25/12/2023]]");
-		const [bare] = engine.evaluateExpression("25/12/2023");
+		const wrapped = engine.evaluateExpression("[[25/12/2023]]");
+		const bare = engine.evaluateExpression("25/12/2023");
 		expect(wrapped.value).toBe(bare.value);
 	});
 

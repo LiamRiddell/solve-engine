@@ -1,7 +1,7 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { GoalSeekParselet } from "./parselets/GoalSeekParselet";
 import { goalSeekNormalizerRule } from "./normalizer/GoalSeekNormalizerRule";
-import { GOAL_SEEK_FN_IDX, goalSeekHandler } from "./GoalSeekPluginFunctions";
+import { GOAL_SEEK_FN_NAME, goalSeekHandler } from "./GoalSeekPluginFunctions";
 
 /**
  * Goal seek, inverting a line against a target.
@@ -33,8 +33,8 @@ import { GOAL_SEEK_FN_IDX, goalSeekHandler } from "./GoalSeekPluginFunctions";
 export const GOALSEEK_PACKAGE: IEnginePackage = {
 	name: "solve-goalseek",
 	normalizerRules: [goalSeekNormalizerRule()],
-	prefixParselets: [{ tokenType: "GOAL_SEEK", parselet: new GoalSeekParselet() }],
-	pluginFunctions: [{ index: GOAL_SEEK_FN_IDX, handler: goalSeekHandler }],
+	prefixParselets: { GOAL_SEEK: new GoalSeekParselet() },
+	pluginFunctions: { [GOAL_SEEK_FN_NAME]: goalSeekHandler },
 	// GOAL_SEEK's highlight category lives in the static TokenCategoryMap
 	// alongside every other token declared in Token.ts's TokenTypes (the same
 	// place the lines package's LINE_REF etc. are categorized), so it is not

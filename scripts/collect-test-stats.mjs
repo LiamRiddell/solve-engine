@@ -111,7 +111,12 @@ function countBuiltinPackages() {
 		console.error("Could not find BUILTIN_PACKAGES in builtins.ts.");
 		process.exit(1);
 	}
+	// Strip comments first: the array carries inline `//` notes whose own commas
+	// would otherwise be counted as extra entries (they made the figure read 26
+	// for a 25-package array).
 	return list[1]
+		.replace(/\/\*[\s\S]*?\*\//g, "")
+		.replace(/\/\/[^\n]*/g, "")
 		.split(",")
 		.map((entry) => entry.trim())
 		.filter((entry) => entry.length > 0).length;

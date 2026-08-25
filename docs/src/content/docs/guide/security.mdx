@@ -146,10 +146,10 @@ const offline = BUILTIN_PACKAGES.filter(
   (pkg) => pkg !== CURRENCY_PACKAGE && pkg !== WEATHER_PACKAGE,
 );
 
-const engine = new ExpressionEngine("en", false, undefined, undefined, offline);
+const engine = new ExpressionEngine({ packages: offline });
 ```
 
-Eighteen packages instead of twenty, and no code path that can reach the
+Twenty-three packages instead of twenty-five, and no code path that can reach the
 network. A currency conversion then answers *No exchange rate available for USD
 to GBP*, which is the behaviour the engine aims for everywhere: an error, never
 a guess.
@@ -206,21 +206,20 @@ itself.
 
 ### Changing them
 
-Pass a partial config to the constructor. Overrides are merged section by
-section, so a section you do not mention keeps its defaults:
+Pass a config override to the constructor. It is merged field by field over
+the defaults, so a field you do not mention keeps its default:
 
 ```ts
 import { ExpressionEngine } from "solve-engine";
-import { DEFAULT_CONFIG } from "solve-engine/constants";
 
-const engine = new ExpressionEngine("en", false, {
-  vm: { ...DEFAULT_CONFIG.vm, maxCollectionSize: 1_000 },
+const engine = new ExpressionEngine({
+  config: { vm: { maxCollectionSize: 1_000 } },
 });
 ```
 
-The spread is not decoration. `Partial<EngineConfig>` is shallow, so a section
-you do supply has to be complete, and spreading the defaults into it is how you
-change one field without writing the other four out by hand.
+The `config` field is an `EngineConfigOverride`, a per-section deep partial: you
+name only the one field you are changing, and the other four in `vm` (and every
+other section) keep their defaults. No spread of `DEFAULT_CONFIG` is needed.
 
 The ceiling you set is the one that appears in the refusal, so `sum(x, 1:5000)`
 on that engine answers *This collection has 5000 elements, past the limit of

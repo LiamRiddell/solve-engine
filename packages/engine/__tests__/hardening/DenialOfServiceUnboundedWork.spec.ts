@@ -47,7 +47,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 /** The first Value a source evaluates to, or the thrown error turned into one. */
 function evaluate(engine: ExpressionEngine, source: string): Value {
 	try {
-		return engine.evaluateExpression(source)[0];
+		return engine.evaluateExpression(source);
 	} catch (thrown) {
 		// A safety limit may report either way round: `maxCollectionSize` comes
 		// back as an Error Value while `maxInstructions` throws. Both are a
@@ -64,7 +64,7 @@ function refused(engine: ExpressionEngine, source: string): boolean {
 
 /** Runs `lines` as one document and returns the last line's result. */
 function lastLineOf(lines: string[]): Value | null {
-	const engine = newTrackedEngine("en");
+	const engine = newTrackedEngine();
 	const document = new DocumentModel();
 	document.setDocument(lines.join("\n"));
 	new ThreeTierEvaluator(document, engine).evaluate({ startLine: 1, endLine: lines.length });
@@ -78,7 +78,7 @@ describe("an exact bigint is bounded by how many bits it may reach", () => {
 		// Establishes that the ceiling exists and works, so the next case is
 		// about one operator having been missed rather than about the limit
 		// being wrong. 100,000 bits is above MAX_EXACT_POW_BITS (65,536).
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(refused(engine, "2n ^ 100000")).toBe(true);
 	});
 
@@ -94,7 +94,7 @@ describe("an exact bigint is bounded by how many bits it may reach", () => {
 		// reason: `1 / 0` is Infinity and `1n / 0n` is refused, because exact
 		// integer arithmetic does not hand back approximations. The double
 		// spellings are untouched, so `2 ^ 100000` is still Infinity.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(evaluate(engine, "2n ^ 100000").value).toBe("BIGINT_POW_LIMIT_EXCEEDED");
 		expect(evaluate(engine, "1n << 100000").value).toBe("BIGINT_SHIFT_LIMIT_EXCEEDED");
 		// The double path keeps IEEE 754's answer, which is the whole reason
@@ -109,7 +109,7 @@ describe("an exact bigint is bounded by how many bits it may reach", () => {
 		// exponent, so the bases whose powers stay one bit wide are answered
 		// however absurd the exponent is. Without this the guard would refuse
 		// `1n ^ 1000000`, whose answer is 1.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(evaluate(engine, "1n ^ 1000000").value).toBe(BigInt(1));
 		expect(evaluate(engine, "0n << 10000000").value).toBe(BigInt(0));
 		// A fractional or negative exponent has no exact answer to bound, so
@@ -125,7 +125,7 @@ describe("an exact bigint is bounded by how many bits it may reach", () => {
 		// Written through `BigInt()` rather than as a `1099511627776n` literal:
 		// the test tsconfig compiles below ES2020, where the literal form is a
 		// compile error even though the runtime handles it fine.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(evaluate(engine, "1n << 40").value).toBe(evaluate(engine, "2n ^ 40").value);
 		expect(evaluate(engine, "1n << 40").value).toBe(BigInt("1099511627776"));
 	});
@@ -147,7 +147,7 @@ describe("an exact bigint is bounded by how many bits it may reach", () => {
 		//
 		// Fixing the shift fixes the formatter, since the formatter is only ever
 		// as slow as the largest bigint the VM will hand it.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(refused(engine, "1n << 100000")).toBe(true);
 	});
 
@@ -161,7 +161,7 @@ describe("an exact bigint is bounded by how many bits it may reach", () => {
 		// past the ceiling is the case that decided it: `1n << 66000` is an
 		// ordinary 19,870-digit integer, and it used to come back as Infinity,
 		// with nothing on screen to say a limit had been reached.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(refused(engine, "1 << 100000n")).toBe(true);
 		expect(refused(engine, "1n << 66000")).toBe(true);
 		expect(refused(engine, "1n >> -100000")).toBe(true);
@@ -177,7 +177,7 @@ describe("a date offset costs the same whatever it is", () => {
 		// so a hundred thousand days costs exactly what one day costs. This is
 		// the control: the next case uses the same magnitude in a unit that is
 		// handled by a loop instead, and that is the only difference between them.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(evaluate(engine, "today + 100000 days").type).toBe(ValueType.Datetime);
 	});
 
@@ -203,14 +203,14 @@ describe("a date offset costs the same whatever it is", () => {
 		// Which refusal is right is the guard author's call: rejecting an offset
 		// past `date.maxOffsetYears` and rejecting one whose target date is not
 		// representable both work. Walking it is what must not happen.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(refused(engine, "today + 100000 workdays")).toBe(true);
 	});
 
 	test("an offset a person would actually type still works", () => {
 		// Pinned so a guard on the case above cannot be written by refusing
 		// workday arithmetic outright.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		const near = evaluate(engine, "today + 100 workdays");
 		expect(near.type).toBe(ValueType.Datetime);
 		expect(Number.isFinite(near.value as number)).toBe(true);
@@ -225,7 +225,7 @@ describe("a combinatorial function refuses what it cannot answer", () => {
 		// rather than merely unguarded. `fact` knows that 171! is not a
 		// representable double and says so instead of multiplying its way to
 		// Infinity.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(evaluate(engine, "fact(171)").value).toBe("FACTORIAL_OVERFLOW");
 		expect(evaluate(engine, "fact(170)").value).toBe(7.257415615307994e306);
 	});
@@ -245,7 +245,7 @@ describe("a combinatorial function refuses what it cannot answer", () => {
 		//
 		// The correct answer is the one `fact` already gives: an argument whose
 		// factorial-family product cannot be represented is refused up front.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(evaluate(engine, "permutation(1000000, 1000000)").type).toBe(ValueType.Error);
 	});
 
@@ -253,14 +253,14 @@ describe("a combinatorial function refuses what it cannot answer", () => {
 		// BUG, same shape, index 41. `k = min(r, n-r)` halves the trip count and
 		// bounds nothing: the loop still runs five hundred thousand times here
 		// and five hundred billion times for `combination(1e12, 5e11)`.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(evaluate(engine, "combination(1000000, 500000)").type).toBe(ValueType.Error);
 	});
 
 	test("the sizes these functions are actually for are untouched", () => {
 		// Pinned for the same reason as the workday case above: the guard has to
 		// be a ceiling, not a removal.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		expect(evaluate(engine, "permutation(10, 3)").value).toBe(720);
 		expect(evaluate(engine, "combination(10, 3)").value).toBe(120);
 	});
@@ -337,7 +337,7 @@ describe("how much a document of user-defined functions may run", () => {
 describe("rejecting a line is not allowed to cost more than running one", () => {
 	/** How long a line takes to be accepted or refused, whichever it is. */
 	function millisecondsToSettle(source: string): number {
-		const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		const started = performance.now();
 		try {
 			engine.evaluateExpression(source);
@@ -398,12 +398,12 @@ describe("rejecting a line is not allowed to cost more than running one", () => 
 		// The fallback's actual job, which the fix must not have cut away with
 		// the redundant retries. Both of these reach it: the whole line does not
 		// parse, and the fragment after a colon does.
-		const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		try {
-			expect(engine.evaluateExpression("pi approximation: 355/113")[0].toNumber()).toBeCloseTo(3.14159, 4);
+			expect(engine.evaluateExpression("pi approximation: 355/113").toNumber()).toBeCloseTo(3.14159, 4);
 			// The leftward retry: the rightmost colon here belongs to ":x = 5",
 			// and slicing after it would strip the colon the definition needs.
-			expect(engine.evaluateExpression("input value: :x = 5")[0].toNumber()).toBe(5);
+			expect(engine.evaluateExpression("input value: :x = 5").toNumber()).toBe(5);
 		} finally {
 			engine.clear();
 		}
@@ -427,9 +427,9 @@ describe("rejecting a line is not allowed to cost more than running one", () => 
 describe("gcd and lcm terminate on every operand", () => {
 	/** Evaluates a source line, returning the Value. */
 	function evaluate(source: string): Value {
-		const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		try {
-			return engine.evaluateExpression(source)[0];
+			return engine.evaluateExpression(source);
 		} finally {
 			engine.clear();
 		}

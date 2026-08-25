@@ -23,8 +23,8 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 
 /** The evaluated number for a single line. */
 function evaluate(source: string): number {
-	const engine = newTrackedEngine("en");
-	const [value] = engine.evaluateExpression(source);
+	const engine = newTrackedEngine();
+	const value = engine.evaluateExpression(source);
 	return value.toNumber();
 }
 
@@ -75,9 +75,9 @@ describe("`and` still adds", () => {
 		// "5 > (3 and 2) > 1" and answer false. Any future move of the level
 		// has to keep both this and the list tests above passing, which puts
 		// it strictly between the comparisons and `+`.
-		const engine = newTrackedEngine("en");
-		expect(engine.evaluateExpression("5 > 3 and 2 > 1")[0].value).toBe(true);
-		expect(engine.evaluateExpression("5 > 3 and 2 < 1")[0].value).toBe(false);
+		const engine = newTrackedEngine();
+		expect(engine.evaluateExpression("5 > 3 and 2 > 1").value).toBe(true);
+		expect(engine.evaluateExpression("5 > 3 and 2 < 1").value).toBe(false);
 	});
 });
 

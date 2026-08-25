@@ -379,7 +379,7 @@ function formatSplit(data: SplitData, locale: ILocale, settings: FormattingSetti
  *   {@link DEFAULT_FORMATTING_SETTINGS} when omitted.
  * @example
  * ```typescript
- * const [value] = engine.evaluateExpression("10 USD to GBP");
+ * const value = engine.evaluateExpression("10 USD to GBP");
  * formatValue(value); // "= £7.85" (exact output depends on live exchange rates)
  * ```
  */

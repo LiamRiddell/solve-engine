@@ -32,7 +32,7 @@ describe("Bug: unit/currency conversion of a variable via 'to'", () => {
   let engine: ExpressionEngine;
 
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   // Releases the engine's query client and async batcher. Without it the
@@ -44,7 +44,7 @@ describe("Bug: unit/currency conversion of a variable via 'to'", () => {
 
   test(":x = 100cm then :x to m converts (not 'Undefined variable: m')", () => {
     engine.evaluateLine(1, ":x = 100cm");
-    const [result] = engine.evaluateLine(2, ":x to m");
+    const result = engine.evaluateLine(2, ":x to m");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.unit).toBe("m");
     expect(result.toNumber()).toBeCloseTo(1, 10);
@@ -52,8 +52,8 @@ describe("Bug: unit/currency conversion of a variable via 'to'", () => {
 
   test(":x to m matches :x in m for the same variable", () => {
     engine.evaluateLine(1, ":x = 100cm");
-    const [viaTo] = engine.evaluateLine(2, ":x to m");
-    const [viaIn] = engine.evaluateLine(3, ":x in m");
+    const viaTo = engine.evaluateLine(2, ":x to m");
+    const viaIn = engine.evaluateLine(3, ":x in m");
     expect(viaTo.toNumber()).toBeCloseTo(viaIn.toNumber(), 10);
     expect(viaTo.unit).toBe(viaIn.unit);
   });
@@ -61,7 +61,7 @@ describe("Bug: unit/currency conversion of a variable via 'to'", () => {
   test("parenthesized expression to unit: (:x + :y) to m", () => {
     engine.evaluateLine(1, ":x = 50cm");
     engine.evaluateLine(2, ":y = 50cm");
-    const [result] = engine.evaluateLine(3, "(:x + :y) to m");
+    const result = engine.evaluateLine(3, "(:x + :y) to m");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.unit).toBe("m");
     expect(result.toNumber()).toBeCloseTo(1, 10);
@@ -70,7 +70,7 @@ describe("Bug: unit/currency conversion of a variable via 'to'", () => {
   test("currency: variable to a known ISO code does not throw", () => {
     sharedCurrencyExchange.primeRates("EUR", { USD: 1.08 });
     engine.evaluateLine(1, ":total = 100 EUR");
-    const [result] = engine.evaluateLine(2, ":total to USD");
+    const result = engine.evaluateLine(2, ":total to USD");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.unit).toBe("USD");
     expect(result.toNumber()).toBeCloseTo(108, 5);
@@ -99,13 +99,13 @@ describe("Bug: unit/currency conversion of a variable via 'to'", () => {
   });
 
   test("regression guard: percentage-change 'to' still works (numeric right side)", () => {
-    const [result] = engine.evaluateLine(1, "800 to 1000");
+    const result = engine.evaluateLine(1, "800 to 1000");
     expect(result.type).toBe(ValueType.Percentage);
     expect(result.toNumber()).toBeCloseTo(0.25, 10);
   });
 
   test("regression guard: literal unit conversion still works (100cm to m)", () => {
-    const [result] = engine.evaluateLine(1, "100cm to m");
+    const result = engine.evaluateLine(1, "100cm to m");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.unit).toBe("m");
     expect(result.toNumber()).toBeCloseTo(1, 10);
@@ -118,7 +118,7 @@ describe("Bug: unit/currency conversion of a variable via 'to'", () => {
     // token type IN unconditionally, matching ConvertParselet/
     // UomLiteralParselet's existing handling of the same collision.
     engine.evaluateLine(1, ":x = 100cm");
-    const [result] = engine.evaluateLine(2, ":x to in");
+    const result = engine.evaluateLine(2, ":x to in");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.unit).toBe("in");
     expect(result.toNumber()).toBeCloseTo(39.37, 1);
@@ -129,7 +129,7 @@ describe("Bug: unit/currency conversion of a variable via 'to'", () => {
     // directly to knownUnits: the lexer's keyword-vs-unit priority for the
     // OPERATOR "in" got confused with the TARGET "in", silently dropping
     // the conversion (regressed to 3, not 36).
-    const [result] = engine.evaluateLine(1, "3 ft in in");
+    const result = engine.evaluateLine(1, "3 ft in in");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.unit).toBe("in");
     expect(result.toNumber()).toBeCloseTo(36, 5);

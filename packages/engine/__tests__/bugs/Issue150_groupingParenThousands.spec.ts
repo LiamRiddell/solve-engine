@@ -19,10 +19,10 @@ import { ValueType, type MatrixData, type ColourData } from "@solve-js/vm/Value"
 describe("Issue #150: a grouping paren keeps thousands; a call paren stays a separator", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
-  const val = (s: string) => engine.evaluateExpression(s)[0];
+  const val = (s: string) => engine.evaluateExpression(s);
 
   describe("bare grouping parens group thousands (the regression)", () => {
     test.each([

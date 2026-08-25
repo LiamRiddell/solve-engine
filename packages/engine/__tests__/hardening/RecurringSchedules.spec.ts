@@ -36,15 +36,15 @@ import { ValueType } from "@solve-js/vm/Value";
 
 /** The formatted, user-facing result of a single expression. */
 function display(expr: string): string {
-  const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
-  const [value] = engine.evaluateExpression(expr);
+  const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
+  const value = engine.evaluateExpression(expr);
   return formatValue(value);
 }
 
 /** The evaluated Value, for asserting its type, number and exact sidecar directly. */
 function evaluate(expr: string) {
-  const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
-  const [value] = engine.evaluateExpression(expr);
+  const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
+  const value = engine.evaluateExpression(expr);
   return value;
 }
 
@@ -143,7 +143,7 @@ describe("a schedule that cannot be counted says so, and the engine goes on", ()
   });
 
   test("the error is contained to its line, the next line still evaluates", () => {
-    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     const { lines } = engine.parseDocument("100 every 0 weeks for 6 months\n2 + 2", {
       inputType: "markdown",
     });
@@ -171,20 +171,20 @@ describe("what must keep working", () => {
   });
 
   test("the period words are still ordinary variable names", () => {
-    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     engine.evaluateExpression(":monthly = 5");
     engine.evaluateExpression(":weekly = 7");
     engine.evaluateExpression(":daily = 3");
     engine.evaluateExpression(":yearly = 2");
     engine.evaluateExpression(":every = 9");
-    const [value] = engine.evaluateExpression(":monthly + :weekly + :daily + :yearly + :every");
+    const value = engine.evaluateExpression(":monthly + :weekly + :daily + :yearly + :every");
     expect(value.toNumber()).toBe(26);
   });
 
   test("the amount may be a variable or a grouped expression", () => {
-    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     engine.evaluateExpression(":rent = 1200");
-    expect(engine.evaluateExpression(":rent monthly for 12 months")[0].toNumber()).toBe(14400);
+    expect(engine.evaluateExpression(":rent monthly for 12 months").toNumber()).toBe(14400);
     expect(evaluate("(20 + 5) monthly for 2 years").toNumber()).toBe(600);
   });
 

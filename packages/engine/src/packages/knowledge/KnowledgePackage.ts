@@ -1,5 +1,5 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { createQueryResolver } from "@solve-js/resolvers/QueryResolver";
 import { errorValue, stringValue, type Value } from "@solve-js/vm/Value";
 import { knowledgeQueryParselet } from "./parselets/KnowledgeQueryParselet";
@@ -72,7 +72,16 @@ import type { KnowledgePackageConfig } from "./types";
  * lines a host has opted into via this package in the first place.
  */
 export function createKnowledgePackage(config: KnowledgePackageConfig = {}): IEnginePackage {
-	const fnIdx = allocatePluginFunctionIndex();
+	const packageName = "solve-knowledge";
+	// This package's single plugin function. The parselet emits its CALL_PLUGIN by
+	// this name, and the engine assigns the registry index at registration (keyed
+	// by `${packageName}:${name}`). The async resolver below scans compiled
+	// bytecode, which carries that numeric index rather than the name, so it must
+	// watch the same slot: pluginFunctionIndexFor is stable and cached per
+	// qualified name, so resolving it here yields exactly the index the engine
+	// will later assign, in any registration order.
+	const fnName = "knowledge";
+	const fnIdx = pluginFunctionIndexFor(`${packageName}:${fnName}`);
 
 	const { resolver, pluginFunction } = createQueryResolver({
 		namespace: "knowledge",
@@ -91,7 +100,7 @@ export function createKnowledgePackage(config: KnowledgePackageConfig = {}): IEn
 	});
 
 	return {
-		name: "solve-knowledge",
+		name: packageName,
 
 		lexerVocabulary: {
 			rawLinePatterns: [
@@ -103,13 +112,13 @@ export function createKnowledgePackage(config: KnowledgePackageConfig = {}): IEn
 			],
 		},
 
-		prefixParselets: [
-			{ tokenType: "KNOWLEDGE_QUERY", parselet: knowledgeQueryParselet(fnIdx) },
-		],
+		prefixParselets: {
+			KNOWLEDGE_QUERY: knowledgeQueryParselet(fnName),
+		},
 
-		pluginFunctions: [
-			{ index: fnIdx, handler: pluginFunction },
-		],
+		pluginFunctions: {
+			[fnName]: pluginFunction,
+		},
 
 		asyncResolvers: [resolver],
 	};

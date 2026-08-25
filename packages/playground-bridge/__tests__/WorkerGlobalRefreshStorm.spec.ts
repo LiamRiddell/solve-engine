@@ -144,7 +144,13 @@ describe("engine.worker cross-tab global refresh", () => {
 
 		send({ tabId: writer, close: true });
 		send({ tabId: reader, close: true });
-	});
+		// The assertion is about the RESULT COUNT staying linear, not latency:
+		// 25 edits each build a full diagnostic engine for the write and one
+		// more for the reader's refresh (fifty PLAYGROUND_PACKAGES engines with
+		// the VM trace on), which runs to a few seconds on a slow machine. The
+		// default five-second per-test budget has no margin for that, so give
+		// the bounded work room rather than let a fast box flake on the clock.
+	}, 30000);
 
 	it("stops refreshing a tab once it is closed", async () => {
 		const writer = "tab-writer-2";

@@ -20,7 +20,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 describe("Issue #142: an unmodelled operator after arithmetic falls back to no steps", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
   const steps = (line: string): Array<[string, number]> =>

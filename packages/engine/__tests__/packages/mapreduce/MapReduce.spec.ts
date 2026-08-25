@@ -19,12 +19,12 @@ import { ValueType, type MatrixData } from "@solve-js/vm/Value";
 import { newTrackedEngine } from "@tools/trackedEngine";
 
 function engine() {
-  return newTrackedEngine("en");
+  return newTrackedEngine();
 }
 
 function evalOne(expr: string) {
   const e = engine();
-  const [v] = e.evaluateExpression(expr);
+  const v = e.evaluateExpression(expr);
   return v;
 }
 
@@ -59,7 +59,7 @@ describe("map", () => {
   test("f(x)=10x; map(f, 0:3) => [0,10,20,30] (user-function name + bare Range collection)", () => {
     const e = engine();
     e.evaluateLine(1, "f(x)=10x");
-    const v = e.evaluateLine(2, "map(f, 0:3)")[0];
+    const v = e.evaluateLine(2, "map(f, 0:3)");
     expect(rowMajor(v.value as MatrixData)).toEqual([0, 10, 20, 30]);
   });
 
@@ -92,16 +92,16 @@ describe("reduce", () => {
   test("reduce(f, [1,2,3]) equals f(f(1,2),3) for a bare 2-arg user function", () => {
     const e = engine();
     e.evaluateLine(1, "f(a,b)=a+b");
-    const [reduceResult] = e.evaluateLine(2, "reduce(f, [1,2,3])");
-    const [expected] = e.evaluateLine(3, "f(f(1,2),3)");
+    const reduceResult = e.evaluateLine(2, "reduce(f, [1,2,3])");
+    const expected = e.evaluateLine(3, "f(f(1,2),3)");
     expect(reduceResult.toNumber()).toBe(expected.toNumber());
   });
 
   test("reduce(f, [1,2,3], 1000) equals f(f(f(1000,1),2),3) with an explicit initial", () => {
     const e = engine();
     e.evaluateLine(1, "f(a,b)=a+b");
-    const [reduceResult] = e.evaluateLine(2, "reduce(f, [1,2,3], 1000)");
-    const [expected] = e.evaluateLine(3, "f(f(f(1000,1),2),3)");
+    const reduceResult = e.evaluateLine(2, "reduce(f, [1,2,3], 1000)");
+    const expected = e.evaluateLine(3, "f(f(f(1000,1),2),3)");
     expect(reduceResult.toNumber()).toBe(expected.toNumber());
     expect(reduceResult.toNumber()).toBe(1006);
   });
@@ -119,15 +119,15 @@ describe("sum/prod sugar", () => {
   test("sum(x, c) => 60 for c=[10,20,30]", () => {
     const e = engine();
     e.evaluateLine(1, ":c = [10, 20, 30]");
-    const v = e.evaluateLine(2, "sum(x, c)")[0];
+    const v = e.evaluateLine(2, "sum(x, c)");
     expect(v.toNumber()).toBe(60);
   });
 
   test("sum(x,c) matches reduce(acc+x,c)", () => {
     const e = engine();
     e.evaluateLine(1, ":c = [10, 20, 30]");
-    const [sumResult] = e.evaluateLine(2, "sum(x, c)");
-    const [reduceResult] = e.evaluateLine(3, "reduce(acc+x, c)");
+    const sumResult = e.evaluateLine(2, "sum(x, c)");
+    const reduceResult = e.evaluateLine(3, "reduce(acc+x, c)");
     expect(sumResult.toNumber()).toBe(reduceResult.toNumber());
   });
 
@@ -138,8 +138,8 @@ describe("sum/prod sugar", () => {
   test("prod(x,c) matches reduce(acc*x,c)", () => {
     const e = engine();
     e.evaluateLine(1, ":c = [10, 20, 30]");
-    const [prodResult] = e.evaluateLine(2, "prod(x, c)");
-    const [reduceResult] = e.evaluateLine(3, "reduce(acc*x, c)");
+    const prodResult = e.evaluateLine(2, "prod(x, c)");
+    const reduceResult = e.evaluateLine(3, "reduce(acc*x, c)");
     expect(prodResult.toNumber()).toBe(reduceResult.toNumber());
     expect(prodResult.toNumber()).toBe(6000);
   });
@@ -151,8 +151,8 @@ describe("regression guards", () => {
     // against the identical unparenthesized expression rather than a
     // magic number (same convention as LabeledLine.spec.ts's own
     // "produces the identical result with or without a label" guards).
-    const [parenthesized] = engine().evaluateExpression("(9:00) + 5");
-    const [plain] = engine().evaluateExpression("9:00 + 5");
+    const parenthesized = engine().evaluateExpression("(9:00) + 5");
+    const plain = engine().evaluateExpression("9:00 + 5");
     expect(parenthesized.value).toBe(plain.value);
     expect(parenthesized.type).toBe(ValueType.Datetime);
   });
@@ -162,7 +162,7 @@ describe("regression guards", () => {
   });
 
   test("the labeled-line fallback is unaffected", () => {
-    const [value] = engine().evaluateExpression("total: 5 + 3");
+    const value = engine().evaluateExpression("total: 5 + 3");
     expect(value.toNumber()).toBe(8);
   });
 });

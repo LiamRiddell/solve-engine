@@ -38,7 +38,7 @@ describe("LanguageService Benchmarks", () => {
 
   for (const c of highlightCases) {
     test(`getSemanticTokens cold: "${c.name}" (${c.iters.toLocaleString()} iter)`, async () => {
-      const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+      const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       const service = new LanguageService(engine);
       let line = 1;
       const r = await benchmarkFn(() => {
@@ -62,7 +62,7 @@ describe("LanguageService Benchmarks", () => {
 
   for (const c of highlightCases) {
     test(`getSemanticTokens cold, normalized: "${c.name}" (${c.iters.toLocaleString()} iter)`, async () => {
-      const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+      const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       const service = new LanguageService(engine, { normalizeForHighlighting: true });
       let line = 1;
       const r = await benchmarkFn(() => {
@@ -76,7 +76,7 @@ describe("LanguageService Benchmarks", () => {
   test("getSemanticTokens cold, normalized: a line that actually fuses", async () => {
     // Every case above is one the normalizer finds nothing to do on, which
     // measures the overhead of asking. This one measures the work itself.
-    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     const service = new LanguageService(engine, { normalizeForHighlighting: true });
     let line = 1;
     const r = await benchmarkFn(() => {
@@ -87,7 +87,7 @@ describe("LanguageService Benchmarks", () => {
   });
 
   test("getSemanticTokens warm (cache hit — same line, same text, repeated)", async () => {
-    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     const service = new LanguageService(engine);
     const input = "$10 + 50% of 200 - 3 kg";
     service.getSemanticTokens(input, 1); // prime the cache
@@ -102,7 +102,7 @@ describe("LanguageService Benchmarks", () => {
 
   test("getCompletions cold (first call — builds keyword/unit/package candidate list)", async () => {
     const r = await benchmarkFn(() => {
-      const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+      const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       const service = new LanguageService(engine);
       service.getCompletions("sq", 2);
     }, 500, 20);
@@ -119,7 +119,7 @@ describe("LanguageService Benchmarks", () => {
 
   for (const c of completionCases) {
     test(`getCompletions warm: "${c.name}" (${c.iters.toLocaleString()} iter)`, async () => {
-      const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+      const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       const service = new LanguageService(engine);
       service.getCompletions(c.prefix, c.prefix.length); // prime the static cache
       const r = await benchmarkFn(() => {
@@ -131,7 +131,7 @@ describe("LanguageService Benchmarks", () => {
   }
 
   test("getCompletions warm with a large document-variable pool (500 variables)", async () => {
-    const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     const varNames = Array.from({ length: 500 }, (_, i) => `variable${i}`);
     const service = new LanguageService(engine, { variableNameSource: () => varNames });
     service.getCompletions("var", 3);
@@ -153,7 +153,7 @@ describe("LanguageService Benchmarks", () => {
   const viewportSizes = [50, 100, 200];
   for (const size of viewportSizes) {
     test(`highlighting a ${size}-line viewport (cold, one getSemanticTokens call per line)`, async () => {
-      const engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+      const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       const service = new LanguageService(engine);
       const lines = Array.from({ length: size }, (_, i) => `${i} + ${i + 1} * 2`);
       let generation = 0;

@@ -4,7 +4,6 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
-import { SPAN_BETWEEN_FN_IDX } from "./DatetimeTimestampPluginFunctions";
 
 /**
  * `<TimeUnit> between <Datetime> and <Datetime>`, the span between two
@@ -36,9 +35,7 @@ export class DurationBetweenParselet implements PrefixParselet {
 
     // An unsigned Uom("ms") span, a plugin function rather than SUB, since
     // there is no ABS opcode and "between" must not depend on write order.
-    builder.emitOpcode(OpCode.CALL_PLUGIN);
-    builder.emitIndex(SPAN_BETWEEN_FN_IDX);
-    builder.emitIndex(2);
+    builder.emitPluginCall("spanBetweenDates", 2);
 
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(unit);

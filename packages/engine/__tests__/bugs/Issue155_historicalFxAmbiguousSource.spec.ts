@@ -24,7 +24,7 @@ describe("Issue #155: an ambiguous subexpression source defers to a single runti
   function engineWithProvider(provider: (from: string, to: string, isoDate: string) => Promise<number>): ExpressionEngine {
     const currency = createCurrencyPackage({ historicalRateProvider: provider });
     const packages = [...BUILTIN_PACKAGES.filter((p) => p.name !== "solve-currency"), currency];
-    return new ExpressionEngine("en", false, undefined, undefined, packages);
+    return new ExpressionEngine({ packages });
   }
 
   test("`(100 USD * (5 JPY / 5 JPY)) in GBP on <date>` fetches once, for USD only", async () => {
@@ -34,7 +34,7 @@ describe("Issue #155: an ambiguous subexpression source defers to a single runti
     const engine = engineWithProvider(provider);
 
     const first = engine.evaluateLine(1, "(100 USD * (5 JPY / 5 JPY)) in GBP on 2024-01-15");
-    expect(first[0].type).toBe(ValueType.Pending);
+    expect(first.type).toBe(ValueType.Pending);
 
     for (let i = 0; i < 8; i++) await new Promise((r) => setTimeout(r, 0));
 
@@ -73,7 +73,7 @@ describe("Issue #155: an ambiguous subexpression source defers to a single runti
 
     // Build "100 USD in GBP on <date>" through the engine's own compiler, then a
     // mixed-currency subexpression, and check which one preflight acts on.
-    const compileEngine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    const compileEngine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     const single = compileEngine.evaluateLineWithDebug(1, "100 USD in GBP on 2024-01-15").program;
     const mixed = compileEngine.evaluateLineWithDebug(2, "(100 USD * (5 JPY / 5 JPY)) in GBP on 2024-01-15").program;
 

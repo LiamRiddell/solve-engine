@@ -78,8 +78,8 @@ only, and says as much rather than guessing a holiday it was never told about.
 A host passes the calendar as a list of dates or a predicate function:
 
 ```ts
-new ExpressionEngine("en", false, {
-  date: { holidays: ["2024-12-25", "2024-12-26"] },
+new ExpressionEngine({
+  config: { date: { holidays: ["2024-12-25", "2024-12-26"] } },
 });
 // or: { date: { holidays: (date) => isPublicHoliday(date) } }
 ```

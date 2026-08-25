@@ -528,8 +528,8 @@ describe("ConvertParselet with currency", () => {
 
   // ¥ symbol — new lexer support (see the "YEN token" tests above) routes
   // through the exact same CurrencySymbolParselet -> UOM_CONVERT path as
-  // $/£/€, just mapped to JPY (see symbolToCurrency's doc comment on why
-  // JPY was chosen over CNY for the ambiguous ¥ glyph).
+  // $/£/€, just mapped to JPY (see uom/CurrencyAliases.ts on why JPY was
+  // chosen over CNY for the ambiguous ¥ glyph).
   test("¥1000 to USD works the same as '1000 JPY to USD'", () => {
     const result = parseNum("¥1000 to USD");
     expect(result).toBeGreaterThan(5);

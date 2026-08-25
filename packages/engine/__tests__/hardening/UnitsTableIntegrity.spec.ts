@@ -239,9 +239,9 @@ describe("a spelling the lexer claims can actually be typed", () => {
 		// by the magnitude-suffix rule; they are back in it now.
 		const broken: string[] = [];
 		for (const spelling of LEXABLE_TABLE_SPELLINGS) {
-			const engine = newTrackedEngine("en");
+			const engine = newTrackedEngine();
 			try {
-				const [value] = engine.evaluateExpression(`1 ${spelling}`);
+				const value = engine.evaluateExpression(`1 ${spelling}`);
 				if (value.type !== ValueType.Uom || value.unit !== spelling) {
 					broken.push(`1 ${spelling} is ${ValueType[value.type]} ${String(value.unit)}`);
 				}
@@ -260,14 +260,14 @@ describe("a spelling the lexer claims can actually be typed", () => {
 		// five million before the unit system ever saw it, and the same ate `MN`
 		// and `TN`. A word magnitude no longer accepts a token the lexer typed as
 		// a UNIT.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
 			for (const [source, expectedNewtons] of [
 				["5 mN", 0.005],
 				["1 MN", 1_000_000],
 				["1 TN", 1e12],
 			] as const) {
-				const [value] = engine.evaluateExpression(source);
+				const value = engine.evaluateExpression(source);
 				expect(value.type).toBe(ValueType.Uom);
 				expect(convertUnit(value.toNumber(), value.unit!, "newton")).toBeCloseTo(expectedNewtons, 9);
 			}
@@ -298,10 +298,10 @@ describe("a spelling the lexer claims can actually be typed", () => {
 					&& UNIT_TABLE[other][1] === 1 && knownUnits.has(other),
 			);
 			if (base === undefined) continue;
-			const engine = newTrackedEngine("en");
+			const engine = newTrackedEngine();
 			try {
-				const [there] = engine.evaluateExpression(`1 ${spelling} in ${base}`);
-				const [back] = engine.evaluateExpression(`${there.toNumber()} ${base} in ${spelling}`);
+				const there = engine.evaluateExpression(`1 ${spelling} in ${base}`);
+				const back = engine.evaluateExpression(`${there.toNumber()} ${base} in ${spelling}`);
 				if (!Number.isFinite(back.toNumber()) || Math.abs(back.toNumber() - 1) > 1e-6) {
 					broken.push(`1 ${spelling} <-> ${base} came back as ${back.toNumber()}`);
 				}
@@ -352,10 +352,10 @@ describe("what the table holds that cannot be typed", () => {
 		// Which is what makes the temperature case below a gap rather than a
 		// policy: there is a normalizer rule for the symbol and it covers one of
 		// the two measures that use it.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
-			expect(engine.evaluateExpression("90°")[0].type).toBe(ValueType.Uom);
-			expect(engine.evaluateExpression("90° in rad")[0].toNumber()).toBeCloseTo(Math.PI / 2, 9);
+			expect(engine.evaluateExpression("90°").type).toBe(ValueType.Uom);
+			expect(engine.evaluateExpression("90° in rad").toNumber()).toBeCloseTo(Math.PI / 2, 9);
 		} finally {
 			engine.clear();
 		}
@@ -374,9 +374,9 @@ describe("what the table holds that cannot be typed", () => {
 		["68°F in C", 20],
 	] as const) {
 		test.failing(`and for temperatures: ${source}`, () => {
-			const engine = newTrackedEngine("en");
+			const engine = newTrackedEngine();
 			try {
-				expect(engine.evaluateExpression(source)[0].toNumber()).toBeCloseTo(expected, 6);
+				expect(engine.evaluateExpression(source).toNumber()).toBeCloseTo(expected, 6);
 			} finally {
 				engine.clear();
 			}
@@ -393,9 +393,9 @@ describe("what the table holds that cannot be typed", () => {
 	// or broken further, with nothing reported either way.
 	for (const unit of ["C", "kg", "lux", "m"]) {
 		test.failing(`and "${unit} to ?" only offers units that can be typed`, () => {
-			const engine = newTrackedEngine("en");
+			const engine = newTrackedEngine();
 			try {
-				const answer = engine.evaluateExpression(`${unit} to ?`)[0].value as string;
+				const answer = engine.evaluateExpression(`${unit} to ?`).value as string;
 				const untypeable = answer.split(", ").filter((symbol) => !knownUnits.has(symbol));
 				expect(untypeable).toEqual([]);
 			} finally {
@@ -405,9 +405,9 @@ describe("what the table holds that cannot be typed", () => {
 	}
 
 	test("the possibilities list is at least populated and mostly usable", () => {
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		try {
-			const answer = engine.evaluateExpression("kg to ?")[0].value as string;
+			const answer = engine.evaluateExpression("kg to ?").value as string;
 			const symbols = answer.split(", ");
 			expect(symbols.length).toBeGreaterThan(20);
 			expect(symbols.filter((symbol) => knownUnits.has(symbol)).length).toBeGreaterThan(20);

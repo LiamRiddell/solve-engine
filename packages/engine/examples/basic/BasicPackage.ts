@@ -1,6 +1,6 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { basicLexerVocabulary } from "./BasicLexerVocabulary";
-import { ReverseKeywordParselet, REVERSE_PLUGIN_FN_IDX } from "./BasicParselet";
+import { ReverseKeywordParselet, REVERSE_FN } from "./BasicParselet";
 import { reverseString } from "./BasicVmHandler";
 
 /**
@@ -14,11 +14,14 @@ export const BASIC_PACKAGE: IEnginePackage = {
 
   lexerVocabulary: basicLexerVocabulary,
 
-  prefixParselets: [
-    { tokenType: "REVERSE_KEYWORD", parselet: new ReverseKeywordParselet() },
-  ],
+  prefixParselets: {
+    REVERSE_KEYWORD: new ReverseKeywordParselet(),
+  },
 
-  pluginFunctions: [
-    { index: REVERSE_PLUGIN_FN_IDX, handler: reverseString },
-  ],
+  // The engine assigns the numeric CALL_PLUGIN index; a parselet emits the
+  // call by name (`emitPluginCall(REVERSE_FN, ...)`), so the author names the
+  // function and never touches an index.
+  pluginFunctions: {
+    [REVERSE_FN]: reverseString,
+  },
 };

@@ -17,10 +17,10 @@ import { formatValue } from "@solve-js/format/FormatEngine";
 describe("Issue #178: bill split and tip", () => {
   let engine: ExpressionEngine;
   beforeEach(() => {
-    engine = new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+    engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
   });
 
-  const out = (source: string): string => formatValue(engine.evaluateExpression(source)[0]);
+  const out = (source: string): string => formatValue(engine.evaluateExpression(source));
 
   describe("an even split answers 'X each', both spellings", () => {
     test.each([
@@ -75,13 +75,13 @@ describe("Issue #178: bill split and tip", () => {
   describe("split, ways and people stay ordinary words everywhere else", () => {
     test(":split keeps working as a variable", () => {
       engine.evaluateExpression(":split = 5");
-      expect(engine.evaluateExpression("split")[0].toNumber()).toBe(5);
+      expect(engine.evaluateExpression("split").toNumber()).toBe(5);
     });
 
     test("ways and people are usable as variable names", () => {
       engine.evaluateExpression(":ways = 3");
       engine.evaluateExpression(":people = 4");
-      expect(engine.evaluateExpression("ways + people")[0].toNumber()).toBe(7);
+      expect(engine.evaluateExpression("ways + people").toNumber()).toBe(7);
     });
   });
 

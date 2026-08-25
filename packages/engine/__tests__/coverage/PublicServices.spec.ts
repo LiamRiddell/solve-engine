@@ -22,7 +22,7 @@ import {
 	getActiveQueryClient,
 	setActiveQueryClient,
 } from "@solve-js/services/DataQueryService";
-import { allocatePluginFunctionIndex } from "@solve-js/vm/VMBuiltins";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { numberValue, type Value } from "@solve-js/vm/Value";
 import { OpCode } from "@solve-js/parser/OpCode";
 import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
@@ -46,7 +46,11 @@ afterEach(() => {
  * documents, reached the way an integrator would reach it.
  */
 function probePackage(seen: Array<QueryClient | null>): IEnginePackage {
-	const index = allocatePluginFunctionIndex();
+	// The engine files each plugin function under `${pkg.name}:${nameKey}` and
+	// assigns its CALL_PLUGIN index from that qualified name. Resolving the same
+	// index here lets the hand-emitted bytecode below call the very handler the
+	// engine registered under the `probe` key.
+	const index = pluginFunctionIndexFor("query-client-probe:probe");
 
 	const parselet: PrefixParselet = {
 		category: "Probe",
@@ -60,16 +64,13 @@ function probePackage(seen: Array<QueryClient | null>): IEnginePackage {
 	return {
 		name: "query-client-probe",
 		lexerVocabulary: { keywords: { whichclient: "PROBE_CLIENT" } },
-		prefixParselets: [{ tokenType: "PROBE_CLIENT", parselet }],
-		pluginFunctions: [
-			{
-				index,
-				handler: (_args: Value[]): Value => {
-					seen.push(getActiveQueryClient());
-					return numberValue(1);
-				},
+		prefixParselets: { PROBE_CLIENT: parselet },
+		pluginFunctions: {
+			probe: (_args: Value[]): Value => {
+				seen.push(getActiveQueryClient());
+				return numberValue(1);
 			},
-		],
+		},
 	};
 }
 
@@ -88,7 +89,7 @@ describe("the active-query-client hand-off", () => {
 		 * uncached one.
 		 */
 		const seen: Array<QueryClient | null> = [];
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.registerPackage(probePackage(seen));
 
 		engine.evaluateExpression("whichclient");
@@ -105,8 +106,8 @@ describe("the active-query-client hand-off", () => {
 		 * data leak rather than a performance detail.
 		 */
 		const seen: Array<QueryClient | null> = [];
-		const first = newTrackedEngine("en");
-		const second = newTrackedEngine("en");
+		const first = newTrackedEngine();
+		const second = newTrackedEngine();
 		first.registerPackage(probePackage(seen));
 		second.registerPackage(probePackage(seen));
 
@@ -123,7 +124,7 @@ describe("the active-query-client hand-off", () => {
 	test("clear() unpublishes the engine's own client", () => {
 		// Leaving a cleared engine's client published would let a later
 		// execution read a cache nobody owns any more.
-		const engine = newTrackedEngine("en");
+		const engine = newTrackedEngine();
 		engine.evaluateExpression("1 + 1");
 		expect(getActiveQueryClient()).toBe(engine.queryClient);
 
@@ -140,8 +141,8 @@ describe("the active-query-client hand-off", () => {
 		 * blank the slot out from under another document's in-flight
 		 * evaluation.
 		 */
-		const running = newTrackedEngine("en");
-		const other = newTrackedEngine("en");
+		const running = newTrackedEngine();
+		const other = newTrackedEngine();
 		running.evaluateExpression("1 + 1");
 		expect(getActiveQueryClient()).toBe(running.queryClient);
 

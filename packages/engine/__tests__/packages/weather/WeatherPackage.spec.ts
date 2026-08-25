@@ -41,8 +41,16 @@ import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { WEATHER_PACKAGE, fetchCityWeather } from "@solve-js/packages/weather";
 import { WeatherErrorCodes } from "@solve-js/packages/weather/OpenMeteoClient";
 import { EngineError } from "@solve-js/errors/UnifiedErrorFramework";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 
-const WEATHER_FN_IDX = WEATHER_PACKAGE.pluginFunctions![0].index;
+/**
+ * The engine files the weather package's single plugin function under
+ * `${package name}:${function name}` and derives its CALL_PLUGIN index from
+ * that qualified name (see WeatherPackage.ts). `pluginFunctionIndexFor` returns
+ * the same index the engine assigned, so bytecode hand-built here dispatches to
+ * the same resolver the descriptor's parselets emit for.
+ */
+const WEATHER_FN_IDX = pluginFunctionIndexFor("solve-weather:weather");
 
 /**
  * Whether Open-Meteo can actually be reached, probed once per run.
@@ -133,9 +141,10 @@ describe("WEATHER_PACKAGE — descriptor shape", () => {
 	});
 
 	test("all 5 prefix parselets share the SAME CALL_PLUGIN index (one resolver, kind folded into the query string)", () => {
-		const idx = WEATHER_PACKAGE.pluginFunctions![0].index;
-		expect(WEATHER_PACKAGE.pluginFunctions).toHaveLength(1);
-		expect(WEATHER_PACKAGE.prefixParselets).toHaveLength(5);
+		const fnNames = Object.keys(WEATHER_PACKAGE.pluginFunctions ?? {});
+		expect(fnNames).toHaveLength(1);
+		const idx = pluginFunctionIndexFor(`${WEATHER_PACKAGE.name}:${fnNames[0]}`);
+		expect(Object.keys(WEATHER_PACKAGE.prefixParselets ?? {})).toHaveLength(5);
 		expect(idx).toBe(WEATHER_FN_IDX);
 	});
 });
@@ -215,7 +224,7 @@ describe("WEATHER_PACKAGE resolver — REAL end-to-end preflight + cache read-ba
 			const qc = new QueryClient();
 			setActiveQueryClient(qc);
 			const resolver = WEATHER_PACKAGE.asyncResolvers![0];
-			const pluginFunction = WEATHER_PACKAGE.pluginFunctions![0].handler;
+			const pluginFunction = WEATHER_PACKAGE.pluginFunctions!.weather;
 
 			const bytecode = buildQueryBytecode("current:Paris", WEATHER_FN_IDX);
 			const result = resolver.preflight!([], bytecode, "test-pkg", new AbortController().signal, qc);
@@ -242,7 +251,7 @@ describe("WEATHER_PACKAGE resolver — REAL end-to-end preflight + cache read-ba
 
 describe("WEATHER_PACKAGE — ExpressionEngine integration (seeded cache, synchronous)", () => {
 	function createEngine(): ExpressionEngine {
-		return new ExpressionEngine("en", false, undefined, undefined, BUILTIN_PACKAGES);
+		return new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	}
 
 	test("'weather in London' fuses the phrase and produces CALL_PLUGIN bytecode", () => {

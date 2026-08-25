@@ -12,10 +12,10 @@ import { FloatParselet } from "./parselets/FloatParselet";
  */
 export const VECTOR_PACKAGE: IEnginePackage = {
   name: "solve-vector",
-  prefixParselets: [
-    { tokenType: "VEC2", parselet: new VectorParselet(2) },
-    { tokenType: "VEC3", parselet: new VectorParselet(3) },
-    { tokenType: "VEC4", parselet: new VectorParselet(4) },
-    { tokenType: "FLOAT", parselet: new FloatParselet() },
-  ],
+  prefixParselets: {
+    VEC2: new VectorParselet(2),
+    VEC3: new VectorParselet(3),
+    VEC4: new VectorParselet(4),
+    FLOAT: new FloatParselet(),
+  },
 };

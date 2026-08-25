@@ -119,7 +119,7 @@ async function keepTypable(entries) {
 	const kept = [];
 	for (const entry of entries) {
 		try {
-			const [value] = engine.evaluateLine(1, `1 ${entry.spelling}`);
+			const value = engine.evaluateLine(1, `1 ${entry.spelling}`);
 			// The unit has to come back as the same text that went in. A spelling
 			// that parses into a *different* unit is the dangerous case, not the
 			// harmless one.

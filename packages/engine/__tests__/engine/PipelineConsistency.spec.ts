@@ -28,14 +28,14 @@ import { newTrackedEngine } from "@tools/trackedEngine";
  * LAST line from each, for comparison.
  */
 function compareLastLine(lines: string[]): { diagnostic: string; lean: string } {
-  const diagEngine = newTrackedEngine("en");
+  const diagEngine = newTrackedEngine();
   let diagResult = "";
   lines.forEach((line, i) => {
-    const [v] = diagEngine.evaluateLine(i + 1, line);
+    const v = diagEngine.evaluateLine(i + 1, line);
     diagResult = formatValue(v);
   });
 
-  const leanEngine = newTrackedEngine("en");
+  const leanEngine = newTrackedEngine();
   const parsed = leanEngine.evaluateLines(lines);
   const lastResult = parsed[parsed.length - 1].result;
   const leanResult = lastResult ? formatValue(lastResult) : "";

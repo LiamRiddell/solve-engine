@@ -16,7 +16,7 @@ import { tryConsumeZoneReference } from "./shared/ZoneReference";
  * pattern: fusing the phrase means the bare word stays a plain,
  * still-usable `IDENT`).
  */
-export function timeOrDateInZoneParselet(pluginFnIdx: number): PrefixParselet {
+export function timeOrDateInZoneParselet(pluginFnName: string): PrefixParselet {
   return {
     category: "Time",
     parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
@@ -29,9 +29,7 @@ export function timeOrDateInZoneParselet(pluginFnIdx: number): PrefixParselet {
       }
       builder.emitOpcode(OpCode.PUSH_STRING);
       builder.emitString(zone.zoneRef);
-      builder.emitOpcode(OpCode.CALL_PLUGIN);
-      builder.emitIndex(pluginFnIdx);
-      builder.emitIndex(1);
+      builder.emitPluginCall(pluginFnName, 1);
     },
   };
 }

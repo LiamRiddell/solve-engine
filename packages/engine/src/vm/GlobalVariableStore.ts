@@ -7,10 +7,9 @@ import { Value } from "@solve-js/vm/Value";
  * VM stays fully isolated for local variables; this is the one deliberate
  * exception, shared across every ExpressionEngine in the same JS realm.
  *
- * Also distinct from `sharedVariableResolver` (variables/VariableResolver.ts)
- *, that mechanism is for package-contributed async data sources (currency
- * rates, OSRS prices) and is never queried by LOAD_VAR/STORE_VAR today. This
- * store backs a completely separate opcode pair (LOAD_GLOBAL_VAR/
+ * Distinct from the package-contributed async data sources (currency rates,
+ * OSRS prices) reached through the ResolverRegistry: this store backs a
+ * completely separate opcode pair (LOAD_GLOBAL_VAR/
  * STORE_GLOBAL_VAR) and is the synchronous fast-path cache underneath
  * GlobalVariableAsyncResolver, which handles the "not yet declared by any
  * loaded document" case via the engine's existing async-resolution pipeline
@@ -135,7 +134,7 @@ function sameValue(a: Value, b: Value): boolean {
 /** Called when a cross-document global changes, so dependents can re-evaluate. */
 export type GlobalVariableListener = (name: string, value: Value) => void;
 
-/** Process-wide singleton. Same sharing pattern as sharedVariableResolver. */
+/** Process-wide singleton, shared across every engine in the same JS realm. */
 export const sharedGlobalVariableStore = new GlobalVariableStore();
 
 /**

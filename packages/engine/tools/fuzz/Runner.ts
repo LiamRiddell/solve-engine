@@ -199,7 +199,7 @@ interface RunContext {
  * @returns The context.
  */
 export function buildRunContext(generator: Generator, slowMs: number, needsGenerators = true): RunContext {
-	const engine = new ExpressionEngine("en", undefined, undefined, undefined, BUILTIN_PACKAGES);
+	const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	const empty = { programs: [], origins: [] };
 	if (!needsGenerators) {
 		return { engine, vocabulary: null, mutationPool: empty, oracle: { slowMs } };

@@ -3,7 +3,6 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { TO_TIMESTAMP_FN_IDX } from "./DatetimeTimestampPluginFunctions";
 
 /**
  * `current timestamp` -> the current Unix timestamp in seconds, as a
@@ -27,8 +26,6 @@ export class CurrentTimestampParselet implements PrefixParselet {
 
   parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     builder.emitOpcode(OpCode.DATE_NOW);
-    builder.emitOpcode(OpCode.CALL_PLUGIN);
-    builder.emitIndex(TO_TIMESTAMP_FN_IDX);
-    builder.emitIndex(1);
+    builder.emitPluginCall("toTimestampFromAny", 1);
   }
 }

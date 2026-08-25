@@ -13,5 +13,6 @@ export type {
 	DiagnosticConfig,
 	VMConfig,
 	EngineConfig,
+	EngineConfigOverride,
 	ValidationResult,
 } from "./Configuration";

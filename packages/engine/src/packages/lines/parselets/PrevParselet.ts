@@ -2,8 +2,6 @@ import { PrefixParselet } from "@solve-js/parser/Parselet";
 import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
-import { OpCode } from "@solve-js/parser/OpCode";
-import { PREV_FN_IDX } from "../LinesPluginFunctions";
 
 /**
  * `prev` -- the immediately-preceding line's cached result (Numi). Bare
@@ -17,8 +15,6 @@ export class PrevParselet implements PrefixParselet {
   readonly category = "Lines";
 
   parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
-    builder.emitOpcode(OpCode.CALL_PLUGIN);
-    builder.emitIndex(PREV_FN_IDX);
-    builder.emitIndex(0);
+    builder.emitPluginCall("prev", 0);
   }
 }

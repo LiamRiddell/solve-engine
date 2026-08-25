@@ -26,7 +26,7 @@ export class SumParselet implements PrefixParselet {
   parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
     parser.consume("LPAREN");
 
-    const bodyBuilder = new BytecodeBuilder();
+    const bodyBuilder = new BytecodeBuilder(builder.pluginIndexMap);
     bodyBuilder.emitOpcode(OpCode.LOAD_VAR);
     bodyBuilder.emitString("acc");
     parser.parseExpression(BindingPower.Lowest, bodyBuilder);

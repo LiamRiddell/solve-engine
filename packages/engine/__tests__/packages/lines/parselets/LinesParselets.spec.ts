@@ -45,7 +45,7 @@ describe("prev", () => {
 
   test("prev outside a document (evaluateExpression) errors cleanly, not a crash or silent 0", () => {
     const engine = newTrackedEngine();
-    const [value] = engine.evaluateExpression("prev");
+    const value = engine.evaluateExpression("prev");
     expect(value.type).toBe(ValueType.Error);
   });
 });
@@ -78,14 +78,14 @@ describe("line<N>", () => {
   test("regression guard: :line1 stays usable as a variable name", () => {
     const engine = newTrackedEngine();
     engine.evaluateExpression(":line1 = 42");
-    const [value] = engine.evaluateExpression(":line1 + 1");
+    const value = engine.evaluateExpression(":line1 + 1");
     expect(value.toNumber()).toBe(43);
   });
 
   test("regression guard: :line stays usable as a variable name", () => {
     const engine = newTrackedEngine();
     engine.evaluateExpression(":line = 7");
-    const [value] = engine.evaluateExpression(":line + 1");
+    const value = engine.evaluateExpression(":line + 1");
     expect(value.toNumber()).toBe(8);
   });
 });
@@ -114,13 +114,13 @@ describe("sum/total/average range aggregation", () => {
   test("regression guard: :sum stays usable as a variable name (no paren follows)", () => {
     const engine = newTrackedEngine();
     engine.evaluateExpression(":sum = 5");
-    const [value] = engine.evaluateExpression(":sum + 1");
+    const value = engine.evaluateExpression(":sum + 1");
     expect(value.toNumber()).toBe(6);
   });
 
   test("regression guard: MathPhrases' 'total of X, Y' is unaffected by the sum( fusion", () => {
     const engine = newTrackedEngine();
-    const [value] = engine.evaluateExpression("total of 1, 2, 3");
+    const value = engine.evaluateExpression("total of 1, 2, 3");
     expect(value.toNumber()).toBe(6);
   });
 });
