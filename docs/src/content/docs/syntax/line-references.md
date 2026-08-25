@@ -147,6 +147,13 @@ A few boundaries, each deliberate:
   `#grocery list` at the top of a note is a title rather than a tagged figure.
 - The match is on the whole tag, so a prefix does not collide: `#housing` does
   not gather `#housingcost`. Tag names are matched case-insensitively.
+- The `#` must sit at a boundary. A `#` glued to the end of a word or number is
+  not a tag: `100#food` and `a#food` are left whole and the `#` reads as an
+  ordinary comment; only `100 #food`, with a space, tags the line. This keeps the
+  tag the reader sees and the tag the totals count the same one.
+- A tag may be named after an ordinary word, even one the grammar uses elsewhere:
+  `#column` or `#assuming` on a data line is still a tag, not swallowed by a
+  phrase built from the same words.
 - Only one aggregate line per tag per note. An aggregate line carries the tag it
   sums, so a second one would try to include the first, and each would wait on
   the other. The query line always skips itself; a second query is left out of
