@@ -52,18 +52,30 @@ in the [API reference](/api/vm/enumerations/valuetype/).
 
 ## Errors are values, not exceptions
 
-A line the engine cannot make sense of does not throw. It returns a value of
-type `Error`, so a bad line in a document never takes the rest of the document
-down with it.
+Most failures the engine meets while a document is being written come back as
+_values_, not exceptions. An impossible unit conversion, or a live value that has
+not resolved yet, is a `Value` you can inspect, so one bad line never takes the
+rest of the document down with it.
 
 ```ts
-const value = engine.evaluateExpression("1 +");
-value.type === ValueType.Error; // true
+const value = engine.evaluateExpression("5 kg to m");
+value.isError();     // true
+value.errorCode;     // "INCOMPATIBLE_UNITS"
+value.errorMessage;  // "a mass cannot be converted to a length"
 ```
 
+`isPending()` marks a value still waiting on async data, and `isFault()` covers
+either. Check one before `toNumber()`: an `Error` or a `Pending` reads as `0`
+through it, indistinguishable from a real zero. `evaluateNumber` makes the same
+distinction, returning `NaN` for a faulted expression rather than that silent `0`.
+
+A genuinely malformed line, one the parser cannot build an expression from at
+all (`1 +`), is the exception: `evaluateExpression` throws an `EngineError` for
+it. A host wraps the call to catch those, and reads the fault guards on the
+value it gets back for everything else.
+
 This is deliberate. The engine is built to run on half-typed input as someone is
-still writing it, where most lines are briefly invalid on the way to being
-valid.
+still writing it, where most lines are briefly invalid on the way to being valid.
 
 ## Evaluating a document
 
