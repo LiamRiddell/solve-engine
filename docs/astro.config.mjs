@@ -233,6 +233,7 @@ export default defineConfig({
           label: "Embedding guide",
           items: [
             { slug: "guide/embedding" },
+            { slug: "guide/upgrading-to-2" },
             { slug: "guide/typescript-usage" },
             { slug: "guide/explaining-lines" },
             { slug: "guide/formatting" },
