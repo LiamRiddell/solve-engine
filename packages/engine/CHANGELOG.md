@@ -1,5 +1,179 @@
 # solve-engine
 
+## 2.0.0
+
+### Major Changes
+
+- e6edb4d: The public API is redesigned for 2.0: an options-object constructor, a bare-value return, first-class fault detection, and the removal of long-dead surface.
+  
+  ## The constructor takes an options object
+  
+  `ExpressionEngine` had five positional parameters, so a call that only wanted to pass a package list still had to spell out every slot before it. It now takes a single `EngineOptions` object, and every field is optional.
+  
+  ```typescript
+  // before
+  new ExpressionEngine("en", false, undefined, undefined, [ARITHMETIC_PACKAGE]);
+  // now
+  new ExpressionEngine({ packages: [ARITHMETIC_PACKAGE] });
+  ```
+  
+  The fields are `locale`, `packages`, `config` and `diagnostics`. `config` takes an `EngineConfigOverride`, a per-section partial merged over the defaults, so overriding one validation limit no longer means restating a whole config section. The fourth positional slot, an internal diagnostic-pipeline injection point no consumer set, is gone. `createEngine`, `fromJSON` and the worker runtime take the same shape.
+  
+  ## `evaluateLine` and `evaluateExpression` return a Value
+  
+  Both methods returned a single-element `Value[]`, an array kept only for API stability. They now return the `Value` itself.
+  
+  ```typescript
+  // before
+  const [value] = engine.evaluateExpression("2 + 2 * 10");
+  // now
+  const value = engine.evaluateExpression("2 + 2 * 10");
+  value.toNumber(); // 22
+  ```
+  
+  `evaluateLineDetailed`, the `LineEvaluation` and `EvalResults` types are removed. The off-thread worker client's `evaluateExpression` collapses the same way, from `Promise<SerializedValue[]>` to `Promise<SerializedValue>`, so the two surfaces mirror each other.
+  
+  ## Faults are detectable, and no longer read as a silent zero
+  
+  An `Error` or a `Pending` value reads as the number `0` through `toNumber()`, so a caller that reached for the number without checking the type could not tell a fault apart from a real zero. `Value` now carries the guards the engine already used internally:
+  
+  ```
+  expression            result
+  5 kg to m             isError() → true, errorCode → the conversion error
+  live price of silver  isPending() → true
+  2 + 2                 isFault() → false
+  ```
+  
+  `isError()`, `isPending()`, `isFault()` and the `errorCode` / `errorMessage` accessors make the distinction the engine makes. `evaluateNumber` applies it too: an impossible conversion returns `NaN` rather than the `0` that `toNumber()` would have handed back.
+  
+  | expression | evaluateNumber, before | now |
+  | --- | --- | --- |
+  | `5 kg to m` | `0` | `NaN` |
+  
+  ## Removed long-dead surface
+  
+  Three exports that registered into state nothing evaluated against are removed:
+  
+  - `IEnginePackage.variableSources` (with `IVariableSource`, `VariableResolver`, `IPackageRegistry.registerVariableSource` and the `solve-engine/variables` subpath): a package's named-variable sources were registered into a resolver no evaluation path ever queried, so a variable a source declared was never found. A package that needs to expose a value contributes a `pluginFunctions` entry instead.
+  - The `PackageRegistry` class, its `packageRegistry` singleton and the `IPackageRegistry` interface: they wrote into process-wide singletons an engine does not read, since an engine builds its own parselet registry and its own lexer and classifies lines vocabulary-independently. Register on an engine instead, with `engine.registerPackage(pkg)` or `createEngine({ extraPackages })`.
+  - `symbolToCurrency`: a backward-compatibility re-export of the currency-symbol alias table, which has lived in `uom/CurrencyAliases.ts` since.
+  
+  The `IEnginePackage` descriptor type is unchanged apart from the dropped `variableSources` field.
+  
+  ## Package descriptors are keyed, not lists
+  
+  A package's parselets and plugin functions were declared as arrays of little wrapper objects, and every plugin function carried a hand-allocated numeric index the author had to mint and thread through to the parselet that emitted it. Both are now keyed records, and the index is gone from the author's hands.
+  
+  `prefixParselets` and `infixParselets` move from an array of `{ tokenType, parselet }` to a record keyed by token type:
+  
+  ```typescript
+  // before
+  prefixParselets: [{ tokenType: "COLOUR_CALL", parselet: new ColourCallParselet() }],
+  // now
+  prefixParselets: { COLOUR_CALL: new ColourCallParselet() },
+  ```
+  
+  `pluginFunctions` moves from an array of `{ index, handler }` to a record keyed by a package-local name. The engine assigns each name a `CALL_PLUGIN` index at registration, and a parselet emits the call by that name through the new `builder.emitPluginCall(name, argCount)`, never touching a numeric index:
+  
+  ```typescript
+  // before
+  const LIGHTEN_FN_IDX = allocatePluginFunctionIndex();
+  pluginFunctions: [{ index: LIGHTEN_FN_IDX, handler: lightenHandler }],
+  // in the parselet:
+  builder.emitOpcode(OpCode.CALL_PLUGIN);
+  builder.emitIndex(LIGHTEN_FN_IDX);
+  builder.emitIndex(argCount);
+  
+  // now
+  pluginFunctions: { lighten: lightenHandler },
+  // in the parselet:
+  builder.emitPluginCall("lighten", argCount);
+  ```
+  
+  The old shape leaked an engine-internal detail, a process-global index counter, into every package author's code, and made a whole class of mistakes possible: two functions sharing an index, a parselet emitting an index its descriptor never registered, an index registered but never emitted. Naming the function once and letting the engine own the index removes all of them; a name a parselet emits but no descriptor declares is now a registration-time error, not a silent mis-dispatch. Two packages naming a function the same is a `checkPackageCompatibility` warning, resolved by the later registration, exactly as the other cross-package collisions already are.
+  
+  The boundary: an async resolver that scans *compiled* bytecode still works in numeric indices, because that is what bytecode is. Such a resolver looks its own function's index up by the qualified name the engine files it under (`pluginFunctionIndexFor("<package>:<name>")`) rather than owning a constant, so it reads the same index the engine assigned. The `examples/osrs` Grand Exchange resolver is the worked example.
+  
+  ## Verification
+  
+  - The whole engine suite runs against the new API: 7,790 tests in 342 suites, including the options-object construction, the bare-value return (its `Value[]` shape assertions inverted to assert a bare `Value`), the fault guards, the package-unregistration lifecycle moved off the removed `variableSources` onto `completionItems`, and every built-in package's descriptor and parselet-emit migrated to the keyed-record shape.
+  - Every construction and call site across the suite, the tools, the worker runtimes, the package smoke checks and the consumer-e2e probe was migrated; the destructures and `[0]` unwraps were verified type-clean before the runtime run.
+  - `npm run verify` (typecheck, `test:ci`, build, smoke, the bundled-consumer contract), plus `lint`, `lint:docs`, `lint:comments` and `lint:size`, all pass. Tree-shaking still holds: importing the engine plus one package bundles well under the full built-in set.
+- 8439f10: Packages are explicit now, so the engine tree-shakes.
+  
+  The `ExpressionEngine` constructor registered all built-in packages by default, which meant importing the engine pulled every package into a consumer's bundle whether they used it or not: finance, colour, weather and the rest were unconditionally in the parse path. The constructor now registers only the packages it is given, so a consumer's bundler drops every built-in they never import.
+  
+  Parsed JavaScript, a consumer importing the engine and constructing it:
+  
+  | | parsed |
+  | --- | --- |
+  | before | 475 KB (all 25 packages, always) |
+  | now, arithmetic only | 352 KB |
+  
+  **This is a breaking change.** `new ExpressionEngine()` with no `packages` argument now registers nothing, so `2 + 2` on a bare engine is an undefined-token parse error rather than `4`. Two ways to adopt it:
+  
+  For the common "I want everything" case, `createEngine()` is batteries-included: it registers the full built-in set in one call.
+  
+  ```typescript
+  import { createEngine } from "solve-engine";
+  const engine = createEngine();
+  ```
+  
+  For a slimmer engine, pass the packages you want. Importing them from `solve-engine/packages` tree-shakes the rest away.
+  
+  ```typescript
+  import { ExpressionEngine } from "solve-engine";
+  import { ARITHMETIC_PACKAGE, UOM_PACKAGE } from "solve-engine/packages";
+  const engine = new ExpressionEngine({ packages: [ARITHMETIC_PACKAGE, UOM_PACKAGE] });
+  ```
+  
+  The `fromJSON` restore path takes the same `packages` argument, and must be given the same set the snapshot was taken with, since a snapshot's compiled bytecode only lines up against the packages present when it was written.
+  
+  The boundary: the built-in workers' offloaded compilation runs with a reduced vocabulary in a host that inlines them, since a package cannot cross the worker boundary. It falls back to main-thread compilation, so results are unaffected; giving those workers the full vocabulary without pulling the packages back into the main bundle is a separate change.
+  
+  ## Verification
+  
+  - The engine's whole test suite runs against explicit packages: the tree-shaking contract (a bare engine registers nothing) is pinned, and `createEngine` is covered by its own spec. Every construction site across the suite, the tools, the workers, and the bundled-consumer contract was migrated.
+  - Tree-shaking is measured directly: a consumer importing `ExpressionEngine` plus one package bundles 123 KB smaller than one importing `BUILTIN_PACKAGES`.
+  - 7,815 tests across 345 suites, no failures. `npm run verify` green, including the bundled-consumer `sideEffects` smoke test.
+
+### Patch Changes
+
+- 9f42488: Drop the bundled `semver`: about 25 KB less JavaScript to parse.
+  
+  `semver` was bundled for a single engine-version compatibility check, and its named-import slice pulled essentially the whole library in. That check now runs on a small internal range checker covering the grammar a package's declared `engineVersion` actually uses, and nothing more: exact, caret (with node-semver's documented `0.x` narrowing), tilde, the `>= <= > < =` comparators, whitespace for AND and `||` for OR, and the `*` wildcard.
+  
+  Parsed JavaScript, importing the whole engine:
+  
+  | | before | now |
+  | --- | --- | --- |
+  | minified | 505 KB | 480 KB |
+  
+  Package gating is unchanged: a prerelease engine still accepts a package written for the release it is a prerelease of, a `0.x` caret still narrows to the minor (`^0.1.0` accepts `0.1.5`, rejects `0.2.0`), and a malformed range is still reported as a distinct invalid-range error rather than a version mismatch.
+  
+  ## Verification
+  
+  - The engine-version-gate specs (25 cases) pass unchanged, and a new `SemverRange` spec (28 cases) pins the range grammar directly: caret across a major and the `0.x`/`0.0.x` narrowings, tilde, AND/OR clauses, wildcards, and the invalid-range forms.
+  - The bundled-consumer contract confirms no `semver` identifier reaches the shipped bundle.
+  - 7,812 tests across 344 suites, no failures. `npm run verify` green.
+- 6dba292: Ship the engine minified, and pack the unit table: about 60% less JavaScript to parse.
+  
+  The build shipped unminified, so a consumer without their own bundler (Node, Deno, a CDN) parsed the full source, whitespace and all, on every load. The build now minifies, and the unit table is stored packed and decoded once at load rather than as 1,456 object entries that repeat 378 distinct ratios.
+  
+  Parsed JavaScript, importing the whole engine:
+  
+  | | before | now |
+  | --- | --- | --- |
+  | minified | 1,263 KB | 505 KB |
+  
+  Nothing a consumer computes changes. Source maps stay on, so a production stack trace still points at real source; the two are never dropped together. The unit table's packed form is asserted at generation time to decode to exactly the source table, so a packing bug fails the build rather than silently altering a conversion. A consumer who already runs their own bundler was minifying this code anyway and sees only the unit table's few kilobytes; the parse saving lands for everyone who does not.
+  
+  ## Verification
+  
+  - The generator asserts the packed unit table round-trips to its source over all 1,456 spellings; `UnitsTableIntegrity` and the conversion specs (115 cases) pass unchanged.
+  - The bundled-consumer contract runs `verify` and `test:consumer` against the packed, minified tarball before publish: 21 checks, including 502 documented examples, on both the ESM and CJS builds.
+  - 7,784 tests across 343 suites, no failures. `npm run verify` green.
+
 ## 1.2.0
 
 ### Minor Changes
