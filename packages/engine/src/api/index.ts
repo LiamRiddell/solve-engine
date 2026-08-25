@@ -25,10 +25,13 @@ export type { EngineVersionCheckResult } from "./EngineVersionCompatibility";
 // A batteries-included engine (every built-in package) for the common case;
 // the constructor stays bring-your-own-packages so a consumer can tree-shake.
 export { createEngine } from "./createEngine";
+export type { CreateEngineOptions } from "./createEngine";
+export type { EngineConfigOverride } from "@solve-js/constants/Configuration";
 
 export { ExpressionEngine, SNAPSHOT_FORMAT, SNAPSHOT_VERSION, SnapshotErrorCodes } from "@solve-js/engine";
 export type { Explanation, ExplanationStep } from "@solve-js/engine";
 export type {
+  EngineOptions,
   EngineRestoreOptions,
   EngineSnapshot,
   SerializedValue,

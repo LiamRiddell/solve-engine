@@ -12,6 +12,7 @@ export type {
 	LineCacheEntryInfo,
 	AsyncCachePackageInfo,
 	DagSnapshot,
+	EngineOptions,
 	EngineRestoreOptions,
 	EngineSnapshot,
 	SerializedValue,

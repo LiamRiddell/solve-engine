@@ -193,7 +193,7 @@ export function startWorkerRuntime(transport: WorkerTransport, options: WorkerRu
 			const packages = resolvePackages(available, message.packages);
 			engine = new ExpressionEngine({
 				locale: message.localeCode ?? "en",
-				diagnostics: message.diagnosticMode ?? false,
+				diagnostics: message.diagnostics ?? false,
 				config: message.config,
 				packages,
 			});

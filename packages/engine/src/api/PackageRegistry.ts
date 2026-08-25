@@ -12,9 +12,9 @@ import type { LineExecutionContext } from "@solve-js/vm/VM";
  *
  * A package bundles all the pieces needed for a domain-specific provider:
  * lexer plugins for custom token recognition, parselets for Pratt parsing,
- * plugin functions dispatched via CALL_PLUGIN bytecode, variable sources,
- * and optional async resolvers for data that loads asynchronously (e.g.,
- * exchange rates, game prices).
+ * plugin functions dispatched via CALL_PLUGIN bytecode, and optional async
+ * resolvers for data that loads asynchronously (e.g., exchange rates, game
+ * prices).
  *
  * @example
  * ```typescript
@@ -25,7 +25,7 @@ import type { LineExecutionContext } from "@solve-js/vm/VM";
  *   pluginFunctions: [{ index: MY_FN_IDX, handler: myHandler }],
  *   asyncResolvers: [myAsyncResolver],
  * };
- * packageRegistry.registerPackage(myPackage);
+ * const engine = createEngine({ extraPackages: [myPackage] });
  * ```
  */
 export interface IEnginePackage {

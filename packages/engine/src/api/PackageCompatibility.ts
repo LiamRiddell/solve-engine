@@ -52,7 +52,8 @@ export type CompatibilityConflictKind =
   | "lexerKeyword"
   | "lexerOperator"
   | "asyncResolverNamespace"
-  | "tokenCategory";
+  | "tokenCategory"
+  | "normalizerRuleName";
 
 /** One way two packages collide, for example claiming the same keyword. */
 export interface CompatibilityConflict {
@@ -154,6 +155,26 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
           kind: "pluginFunctionIndex",
           severity: "error",
           detail: `Both "${existingPkg.name}" and "${candidate.name}" register a pluginFunctions handler at index ${fn.index} — one of them almost certainly hardcoded this index instead of calling allocatePluginFunctionIndex(). Whichever registers second silently overwrites the first's handler in pluginFunctionRegistry.`,
+          packages: [existingPkg.name, candidate.name],
+        });
+      }
+    }
+  }
+
+  // normalizerRules, keyed by `name`. TokenNormalizer.unregister() removes
+  // EVERY rule whose name matches, so two packages sharing a rule name means
+  // unregistering one silently drops the other's rule too. (Rule ORDER is not
+  // checked: rules compose by their explicit `priority` and the normalizer's
+  // multi-pass loop, not by registration order, so distinct names + distinct
+  // priorities is the contract, not list position.)
+  if (existingPkg.normalizerRules && candidate.normalizerRules) {
+    const existingNames = new Set(existingPkg.normalizerRules.map((r) => r.name));
+    for (const rule of candidate.normalizerRules) {
+      if (existingNames.has(rule.name)) {
+        conflicts.push({
+          kind: "normalizerRuleName",
+          severity: "warning",
+          detail: `Both "${existingPkg.name}" and "${candidate.name}" register a normalizer rule named "${rule.name}" — the normalizer unregisters rules by name, so removing either package would drop both rules. Give each package's rules a package-unique name.`,
           packages: [existingPkg.name, candidate.name],
         });
       }

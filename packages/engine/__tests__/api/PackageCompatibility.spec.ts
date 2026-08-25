@@ -108,6 +108,20 @@ describe("checkPackageCompatibility", () => {
     expect(report.conflicts[0]).toMatchObject({ kind: "tokenCategory", severity: "info" });
   });
 
+  test("two packages sharing a normalizer rule name -> warning (unregister is by name)", () => {
+    const a: IEnginePackage = { name: "pkg-a", normalizerRules: [{ name: "fuse-thing", priority: 50, match: () => null }] };
+    const b: IEnginePackage = { name: "pkg-b", normalizerRules: [{ name: "fuse-thing", priority: 50, match: () => null }] };
+    const report = checkPackageCompatibility(b, [a]);
+    expect(report.compatible).toBe(true);
+    expect(report.conflicts[0]).toMatchObject({ kind: "normalizerRuleName", severity: "warning", packages: ["pkg-a", "pkg-b"] });
+  });
+
+  test("distinct normalizer rule names are not a conflict, even at the same priority", () => {
+    const a: IEnginePackage = { name: "pkg-a", normalizerRules: [{ name: "a:fuse", priority: 50, match: () => null }] };
+    const b: IEnginePackage = { name: "pkg-b", normalizerRules: [{ name: "b:fuse", priority: 50, match: () => null }] };
+    expect(checkPackageCompatibility(b, [a]).conflicts).toHaveLength(0);
+  });
+
   // Regression guard against the REAL shipped package set — if two actual
   // built-in packages ever started colliding, this test catches it
   // immediately rather than relying on someone noticing a console.warn.
@@ -118,6 +132,19 @@ describe("checkPackageCompatibility", () => {
       const report = checkPackageCompatibility(candidate, others);
       const errors = report.conflicts.filter((c) => c.severity === "error");
       expect(errors).toEqual([]);
+    }
+  });
+
+  // The new rule-name check must not false-fire on the shipped set: built-in
+  // normalizer rules are package-prefixed (`uom:...`, `lines:...`), so
+  // createEngine() must stay warning-free on this axis.
+  test("BUILTIN_PACKAGES have no normalizer rule-name collisions", () => {
+    for (let i = 0; i < BUILTIN_PACKAGES.length; i++) {
+      const candidate = BUILTIN_PACKAGES[i];
+      const others = BUILTIN_PACKAGES.filter((_, j) => j !== i);
+      const ruleNameConflicts = checkPackageCompatibility(candidate, others)
+        .conflicts.filter((c) => c.kind === "normalizerRuleName");
+      expect(ruleNameConflicts).toEqual([]);
     }
   });
 });
