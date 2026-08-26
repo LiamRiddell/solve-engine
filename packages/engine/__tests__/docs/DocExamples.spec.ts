@@ -199,7 +199,9 @@ describe("documented examples evaluate as documented", () => {
     // either be a lie or a flake. Each needs a reason, not just an entry.
     const unprovable = new Map([
       ["dice.md", "rolls are random, so no output is reproducible"],
-      ["live-data.md", "results come from live network queries"],
+      ["weather.md", "conditions come from a live network service"],
+      ["stocks.md", "prices come from a host-supplied network provider"],
+      ["knowledge.md", "answers come from a host-supplied provider"],
       ["dates.md", "relative dates resolve against the current date"],
     ]);
 
