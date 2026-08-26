@@ -47,6 +47,16 @@ export interface QueryResolverOptions {
 	fetchQuery: (query: string, signal: AbortSignal) => Promise<Value>;
 	/** TanStack Query staleTime in ms, how long a resolved value stays cached before a re-evaluation refetches it. Default 5 minutes. */
 	staleTimeMs?: number;
+	/**
+	 * Cadence, in ms, for proactive background refresh: how often a value that
+	 * is on screen refetches on its own, without the reader re-evaluating.
+	 * Omit (the default) for a value that should never refresh in the background
+	 * (an immutable historical close), or that should refresh only on the next
+	 * pull. It has effect only when the host has enabled background refresh
+	 * (`backgroundRefresh.enabled`); otherwise every value stays pull-only. This
+	 * is independent of `staleTimeMs`, which continues to govern the pull path.
+	 */
+	refetchIntervalMs?: number;
 	/** Hard timeout for `fetchQuery`, an unresponsive API must not block re-evaluation indefinitely. Default 10s. */
 	timeoutMs?: number;
 	/**
@@ -169,7 +179,28 @@ export function createQueryResolver(opts: QueryResolverOptions): QueryResolverPa
 								queryFn: ({ signal: qSignal }) => fetchAndCache(query, qSignal, queryClient),
 								staleTime: staleTimeMs,
 							});
-							return { queryKey: key.join(":"), resolver: resolverPromise, packageId, signal, metadata: { query } };
+							const result: AsyncCheckResult = {
+								queryKey: key.join(":"),
+								resolver: resolverPromise,
+								packageId,
+								signal,
+								metadata: { query },
+							};
+							// A resolver that declares a cadence also hands the engine a way
+							// to refetch this exact query on its own (staleTime 0, so each
+							// background tick genuinely refetches rather than reading the
+							// cache). query-core dedupes an already-in-flight fetch, which is
+							// the back-pressure a slow source needs.
+							if (opts.refetchIntervalMs !== undefined) {
+								result.refetchIntervalMs = opts.refetchIntervalMs;
+								result.refetch = () =>
+									queryClient.fetchQuery({
+										queryKey: key,
+										queryFn: ({ signal: qSignal }) => fetchAndCache(query, qSignal, queryClient),
+										staleTime: 0,
+									});
+							}
+							return result;
 						}
 					}
 					i += 3;

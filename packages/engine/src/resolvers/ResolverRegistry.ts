@@ -19,6 +19,20 @@ export interface AsyncCheckResult {
 	signal: AbortSignal;
 	/** Optional metadata for diagnostics */
 	metadata?: Record<string, unknown>;
+	/**
+	 * Cadence, in ms, at which this value wants proactive background refresh
+	 * (a live quote every minute, an FX rate every few minutes). Absent, or
+	 * paired with no {@link refetch}, means pull-only: the value refreshes on
+	 * re-evaluation, never on its own. Only acted on when the host has enabled
+	 * background refresh; see {@link BackgroundRefreshConfig}.
+	 */
+	refetchIntervalMs?: number;
+	/**
+	 * Force a fresh fetch of this exact query, bypassing `staleTime`, and return
+	 * the new value. Supplied alongside {@link refetchIntervalMs} so the engine
+	 * can drive the background refresh without re-scanning bytecode.
+	 */
+	refetch?: () => Promise<Value>;
 }
 
 /**

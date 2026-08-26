@@ -181,6 +181,22 @@ export interface WorkerConfig {
   }
 
   /**
+   * Proactive background refresh of live async values.
+   *
+   * Off by default. When a live value (a stock quote, an FX rate) has gone
+   * stale, today it only refetches on the next re-evaluation (a keystroke), so a
+   * note left open silently ages. With this enabled, the engine drives a refetch
+   * on each such value's own cadence (the resolver's `refetchIntervalMs`) for the
+   * values currently on screen, and pushes the fresh result to the host through
+   * the same event stream the pull path uses. It needs timers and a live editor
+   * consuming that stream, so a headless or batch host leaves it off.
+   */
+  export interface BackgroundRefreshConfig {
+    /** Master switch. When false, no timers run and every value refreshes only on re-evaluation. */
+    readonly enabled: boolean;
+  }
+
+  /**
    * Virtual Machine configuration.
    * Controls the internal bytecode VM that executes compiled expressions.
    */
@@ -293,6 +309,8 @@ export interface EngineConfig {
     readonly worker: WorkerConfig;
     /** Diagnostic pipeline configuration */
     readonly diagnostic: DiagnosticConfig;
+    /** Proactive background refresh of live async values */
+    readonly backgroundRefresh: BackgroundRefreshConfig;
   }
 
 /**
@@ -381,6 +399,9 @@ export const DEFAULT_CONFIG: EngineConfig = {
       enabled: false,
       vmTraceEnabled: false,
     },
+    backgroundRefresh: {
+      enabled: false,
+    },
   };
 
 /**
@@ -409,6 +430,7 @@ export function mergeEngineConfig(
     vm: { ...base.vm, ...override.vm },
     worker: { ...base.worker, ...override.worker },
     diagnostic: { ...base.diagnostic, ...override.diagnostic },
+    backgroundRefresh: { ...base.backgroundRefresh, ...override.backgroundRefresh },
   };
 }
 

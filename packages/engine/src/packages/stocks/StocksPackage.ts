@@ -79,6 +79,9 @@ export function createStocksPackage(config: StocksPackageConfig = {}): IEnginePa
 		// so watch the same engine-assigned slot the emit-by-name path produces.
 		pluginFunctionIndex: pluginFunctionIndexFor(`${PACKAGE_NAME}:${CURRENT_FN}`),
 		staleTimeMs: config.staleTimeMs ?? 60_000, // 1 min — intraday quotes move continuously
+		// Only the live current quote refreshes in the background, and only when
+		// the host asked for it; a historical close (below) never does.
+		refetchIntervalMs: config.refetchIntervalMs,
 		fetchQuery: async (ticker: string, signal: AbortSignal): Promise<Value> => {
 			if (!config.fetchQuote) return notConfigured("fetchQuote");
 			const quote = await config.fetchQuote(ticker, signal);

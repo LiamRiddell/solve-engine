@@ -13,6 +13,7 @@ import { createVM, executeBytecode } from "@solve-js/vm/VM";
 import { resolveHolidayPredicate } from "@solve-js/vm/HolidayCalendar";
 import type { EvalResult, LineExecutionContext } from "@solve-js/vm/VM";
 import type { DocumentModel } from "@solve-js/engine/DocumentModel";
+import { BackgroundRefreshManager } from "@solve-js/engine/BackgroundRefreshManager";
 import { registerAsConverter, unregisterAsConverter, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { createEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
@@ -45,6 +46,7 @@ import { ErrorFactory, EngineError, normalizeUnknownError } from "@solve-js/erro
 import { countLines } from "@solve-js/utilities/Strings";
 import {
 	ResolverRegistry,
+	type AsyncCheckResult,
 } from "@solve-js/resolvers/ResolverRegistry";
 import {
 	AsyncResolutionBatcher,
@@ -508,6 +510,17 @@ export class ExpressionEngine {
      * DAG walk + re-evaluation pass. Replaces the old single-callback pattern.
      */
     private batcher: AsyncResolutionBatcher;
+    /**
+     * Drives proactive background refresh of live values, or `null` when the
+     * host has not enabled it (the default). See {@link BackgroundRefreshManager}.
+     */
+    private readonly backgroundRefresh: BackgroundRefreshManager | null;
+    /**
+     * The signal a background re-evaluation is dispatched under. Never aborted
+     * (a background refetch is not tied to a keystroke), so the batcher treats
+     * its results as current; the manager's own timers are what stop the work.
+     */
+    private readonly backgroundRefreshSignal = new AbortController().signal;
     /** Post-lexer token normalizer for phrase fusion, implicit multiply, etc. */
     private normalizer: TokenNormalizer;
     /**
@@ -678,6 +691,16 @@ export class ExpressionEngine {
         );
         this.queryClient = createQueryClient();
         this.batcher = new AsyncResolutionBatcher(this.dag, this.lineCache, this.vm);
+        // Only stand up the background refresher when the host asked for it: a
+        // headless or batch host wants no timers. When null, every value stays
+        // pull-only, exactly as before. It feeds the same batcher the pull path
+        // does, so a resolved background value reaches the host over the existing
+        // event stream with no extra wiring.
+        this.backgroundRefresh = this.config.backgroundRefresh.enabled
+            ? new BackgroundRefreshManager(this.dag, (packageId, queryKey) =>
+                  this.batcher.add({ queryKey, packageId, signal: this.backgroundRefreshSignal, isError: false }),
+              )
+            : null;
 	}
 
     //#endregion
@@ -1179,6 +1202,31 @@ export class ExpressionEngine {
                 error,
             });
         }
+    }
+
+    /**
+     * Start refreshing a value in the background if it declared a cadence and the
+     * host enabled background refresh. A no-op otherwise, so the pull path is
+     * unchanged for a headless host or a value that never wants it.
+     */
+    private registerBackgroundRefresh(asyncCheck: AsyncCheckResult): void {
+        if (!this.backgroundRefresh) return;
+        if (asyncCheck.refetchIntervalMs === undefined || !asyncCheck.refetch) return;
+        this.backgroundRefresh.register({
+            packageId: asyncCheck.packageId || '_engine',
+            queryKey: asyncCheck.queryKey,
+            intervalMs: asyncCheck.refetchIntervalMs,
+            refetch: asyncCheck.refetch,
+        });
+    }
+
+    /**
+     * How many live values are currently being refreshed in the background.
+     * Zero when the host has not enabled background refresh. For hosts that want
+     * to surface it, and for tests.
+     */
+    getBackgroundRefreshCount(): number {
+        return this.backgroundRefresh?.size ?? 0;
     }
 
     //#endregion
@@ -2357,6 +2405,8 @@ export class ExpressionEngine {
                 [asyncCheck.queryKey]
             );
 
+            this.registerBackgroundRefresh(asyncCheck);
+
             const pending = pendingValue(asyncCheck.queryKey);
             this.storeLineResult(lineNumber, pending, program, reads, writes, expression);
             return { kind: 'pending', value: pending };
@@ -3396,6 +3446,7 @@ export class ExpressionEngine {
                 packageId: asyncCheck.packageId || '_engine',
                 signal: asyncCheck.signal,
             });
+            this.registerBackgroundRefresh(asyncCheck);
             return pendingValue(asyncCheck.queryKey);
         }
         // Sync path, unhook the inert preflight controller's keystroke listener.
@@ -4009,6 +4060,12 @@ export class ExpressionEngine {
 		// 200KB per engine against 8.2KB for one that never parsed, a figure
 		// that grows with the registered package set. See the class doc.
 		this.batcher.clearAll();
+
+		// Stop every background-refresh timer before the query cache is emptied
+		// below, so no in-flight tick refetches into a cache that is about to be
+		// cleared. The manager itself outlives clear() and is reused for the next
+		// document.
+		this.backgroundRefresh?.clearAll();
 
 		// The query cache holds a garbage-collection timer per cached query,
 		// armed for `gcTime` (ten minutes). Those timers keep a Node process
