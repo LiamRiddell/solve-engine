@@ -31,7 +31,19 @@ export const TablesErrorCodes = {
 } as const;
 
 /** The reductions a column aggregate can apply to its numeric cells. */
-export type ColumnAggregateOp = "sum" | "average" | "min" | "max" | "count" | "median";
+export type ColumnAggregateOp =
+  | "sum" | "average" | "min" | "max" | "count" | "median"
+  | "stdev" | "sampleStdev" | "variance" | "sampleVariance" | "spread" | "mode";
+
+/** Variance of a column's cells, population (divide by n) or sample (n-1). */
+function columnVariance(cells: number[], sample: boolean): number {
+  const n = cells.length;
+  if (n === 0) return 0;
+  const denom = sample ? n - 1 : n;
+  if (denom <= 0) return 0;
+  const mean = cells.reduce((acc, x) => acc + x, 0) / n;
+  return cells.reduce((acc, x) => acc + (x - mean) * (x - mean), 0) / denom;
+}
 
 function reduce(op: ColumnAggregateOp, cells: number[]): number {
   switch (op) {
@@ -49,6 +61,27 @@ function reduce(op: ColumnAggregateOp, cells: number[]): number {
       const sorted = [...cells].sort((a, b) => a - b);
       const mid = Math.floor(sorted.length / 2);
       return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+    }
+    case "stdev":
+      return Math.sqrt(columnVariance(cells, false));
+    case "sampleStdev":
+      return Math.sqrt(columnVariance(cells, true));
+    case "variance":
+      return columnVariance(cells, false);
+    case "sampleVariance":
+      return columnVariance(cells, true);
+    case "spread":
+      return Math.max(...cells) - Math.min(...cells);
+    case "mode": {
+      const counts = new Map<number, number>();
+      let best = cells[0];
+      let bestCount = 0;
+      for (const n of cells) {
+        const c = (counts.get(n) ?? 0) + 1;
+        counts.set(n, c);
+        if (c > bestCount) { bestCount = c; best = n; }
+      }
+      return best;
     }
   }
 }
@@ -184,4 +217,34 @@ export function tableColumnCountHandler(args: Value[], context?: LineExecutionCo
  */
 export function tableColumnMedianHandler(args: Value[], context?: LineExecutionContext): Value {
   return aggregateColumn("median", columnName(args), context);
+}
+
+/** `standard deviation of column "name" above` (population form). */
+export function tableColumnStdevHandler(args: Value[], context?: LineExecutionContext): Value {
+  return aggregateColumn("stdev", columnName(args), context);
+}
+
+/** `sample standard deviation of column "name" above`. */
+export function tableColumnSampleStdevHandler(args: Value[], context?: LineExecutionContext): Value {
+  return aggregateColumn("sampleStdev", columnName(args), context);
+}
+
+/** `variance of column "name" above` (population form). */
+export function tableColumnVarianceHandler(args: Value[], context?: LineExecutionContext): Value {
+  return aggregateColumn("variance", columnName(args), context);
+}
+
+/** `sample variance of column "name" above`. */
+export function tableColumnSampleVarianceHandler(args: Value[], context?: LineExecutionContext): Value {
+  return aggregateColumn("sampleVariance", columnName(args), context);
+}
+
+/** `spread of column "name" above`, largest minus smallest. */
+export function tableColumnSpreadHandler(args: Value[], context?: LineExecutionContext): Value {
+  return aggregateColumn("spread", columnName(args), context);
+}
+
+/** `mode of column "name" above`, the most frequent cell. */
+export function tableColumnModeHandler(args: Value[], context?: LineExecutionContext): Value {
+  return aggregateColumn("mode", columnName(args), context);
 }

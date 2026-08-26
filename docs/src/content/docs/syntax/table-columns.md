@@ -17,6 +17,10 @@ read as data instead:
 | `max of column "cost" above` | the largest cell |
 | `count of column "cost" above` | how many numeric cells it has |
 | `median of column "cost" above` | the middle cell |
+| `standard deviation of column "cost" above` | how spread out it is |
+| `variance of column "cost" above` | the squared spread |
+| `spread of column "cost" above` | largest minus smallest |
+| `mode of column "cost" above` | the most frequent cell |
 
 `total of column` and `mean of column` are accepted as synonyms of `sum` and
 `average`. The address is optional: with only the nearest table to read from,
@@ -40,6 +44,27 @@ min of column "cost" above              // 12
 max of column "cost" above              // 1,200
 count of column "cost" above            // 3
 median of column "cost" above           // 300
+```
+
+The [spread and shape](/syntax/statistics/) aggregates read a column too, so a
+table of readings can be summarised where it sits:
+
+```solve-doc
+| reading | score |
+| ------- | ----- |
+| a       |     2 |
+| b       |     4 |
+| c       |     4 |
+| d       |     4 |
+| e       |     5 |
+| f       |     5 |
+| g       |     7 |
+| h       |     9 |
+
+standard deviation of column "score" above  // 2
+variance of column "score" above            // 4
+spread of column "score" above              // 7
+mode of column "score" above                // 4
 ```
 
 The column name is matched case-insensitively. A cell that is not a plain
