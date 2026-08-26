@@ -53,7 +53,29 @@ export type HolidayCalendar = HolidayPredicate | Iterable<string | number | Date
  * Controls the bounds and formatting for date/time expression evaluation
  * (e.g., `today + 20 days`, `last monday`).
  */
+/**
+ * How an ambiguous all-numeric date literal is read.
+ *
+ * - `'auto'`: by separator, the historic behaviour. A slash date is
+ *   day-first (`25/12/2023`), a hyphen date is month-first (`12-25-2023`)
+ *   unless its first group is four digits, which makes it ISO (`2023-12-25`).
+ * - `'DMY'` / `'MDY'` / `'YMD'`: a fixed order for every numeric separator, so
+ *   a host can match its readers' locale. `'MDY'` is what lets a US reader's
+ *   `12/25/2023` parse, which `'auto'` refuses because the slash defaults to
+ *   day-first.
+ *
+ * Only the all-numeric literals are affected. A spelled-out month (`March 9,
+ * 2024`) is never ambiguous, and an ISO timestamp is always read as ISO.
+ */
+export type DateInputOrder = 'auto' | 'DMY' | 'MDY' | 'YMD';
+
+/** Date-related engine configuration: offset limits, input order, holidays. */
 export interface DateConfig {
+  /**
+   * The order an ambiguous all-numeric date literal is read in. Defaults to
+   * `'auto'` (by separator, the historic behaviour). See {@link DateInputOrder}.
+   */
+  readonly inputOrder: DateInputOrder;
   /**
    * How far forward a date offset whose COST grows with the offset may reach,
    * in years. Enforced by `vm/VM.ts`'s `addBusinessDays()`.
@@ -337,7 +359,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
      // DateConfig above for why no other date offset needs a ceiling.
      maxOffsetYears: 100,
      minOffsetYears: -100,
-     defaultFormat: 'YYYY-MM-DD'
+     defaultFormat: 'YYYY-MM-DD',
+     inputOrder: 'auto',
    },
    performance: {
      // Preserves the effective cache size the hardcoded (now-removed)
