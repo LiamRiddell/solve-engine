@@ -9,11 +9,16 @@ import SolveNotepad from "../components/SolveNotepad";
  * keeps React, Plate and the engine out of the initial bundle for every
  * reference page.
  */
-export function mountNotepad(host: HTMLElement, source: string): void {
+export function mountNotepad(
+  host: HTMLElement,
+  source: string,
+  options: { incremental?: boolean } = {},
+): void {
   createRoot(host).render(
     createElement(SolveNotepad, {
       initial: source,
       label: "Editable example",
+      incremental: options.incremental ?? false,
     }),
   );
 }

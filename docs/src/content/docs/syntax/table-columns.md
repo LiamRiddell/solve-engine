@@ -24,17 +24,22 @@ read as data instead:
 `sum of column "cost" in table above` all mean the same thing.
 
 The table's rows must start with a pipe, and the header needs a `|---|`
-separator under it, as in:
+separator under it. Every summary form the table above names, read from the same
+column:
 
-```
+```solve-doc
 | item | cost |
 | ---- | ---- |
 | rent | 1200 |
 | food |  300 |
 | taxi |   12 |
 
-sum of column "cost" in table above       1,512
-average of column "cost" above               504
+sum of column "cost" in table above     // 1,512
+average of column "cost" above          // 504
+min of column "cost" above              // 12
+max of column "cost" above              // 1,200
+count of column "cost" above            // 3
+median of column "cost" above           // 300
 ```
 
 The column name is matched case-insensitively. A cell that is not a plain

@@ -8,10 +8,7 @@
  * what actually parses, and the documentation test suite is what proves the
  * examples are correct.
  */
-export const solveGrammar = {
-  name: "solve",
-  scopeName: "source.solve",
-  patterns: [
+const solvePatterns = [
     // Expected-result annotations and ordinary comments share one marker.
     { match: "//.*$", name: "comment.line.double-slash.solve" },
 
@@ -60,5 +57,26 @@ export const solveGrammar = {
 
     // Structure.
     { match: "[\\[\\]();,]", name: "punctuation.separator.solve" },
-  ],
+];
+
+export const solveGrammar = {
+  name: "solve",
+  scopeName: "source.solve",
+  patterns: solvePatterns,
+};
+
+/**
+ * The same grammar under a second language name, for ```solve-doc blocks.
+ *
+ * A `solve-doc` block is a whole-document example: its lines are evaluated
+ * together, not one at a time, which is what the cross-line forms (line
+ * references, category tags, table columns, goal seek) need. The distinct
+ * language name is what lets `solve-embeds.ts` tell the two apart in the
+ * rendered page (one notepad over the whole block, rather than one per
+ * blank-line group), while the shared patterns keep the highlighting identical.
+ */
+export const solveDocGrammar = {
+  name: "solve-doc",
+  scopeName: "source.solve-doc",
+  patterns: solvePatterns,
 };

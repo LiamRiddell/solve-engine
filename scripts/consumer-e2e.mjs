@@ -23,7 +23,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { collectExamples, groupExamples } from "../tools/docExampleCorpus.mjs";
+import { collectExamples, collectDocBlocks, groupExamples } from "../tools/docExampleCorpus.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENGINE = path.join(ROOT, "packages/engine");
@@ -159,9 +159,20 @@ check('require("solve-engine") evaluates 2 + 2 -> 4', cjsResult === "4", `got ${
 // built from.
 console.log("\nDocumented examples, against the installed package");
 
-const corpus = collectExamples(path.join(ROOT, "docs/src/content/docs"), [path.join(ROOT, "README.md")]);
+const docsDir = path.join(ROOT, "docs/src/content/docs");
+const readme = path.join(ROOT, "README.md");
+const corpus = collectExamples(docsDir, [readme]);
 const groups = groupExamples(corpus);
-const asserted = corpus.filter(example => example.expected !== null);
+const docBlocks = collectDocBlocks(docsDir, [readme]);
+
+// Asserted lines come from both kinds: a per-line ```solve line with a `//`, and
+// a ```solve-doc row with one. The consumer must prove both, through the entry
+// point each is written for.
+const assertedLine = corpus.filter(example => example.expected !== null);
+const assertedDocRows = docBlocks.flatMap(block =>
+	block.rows.filter(row => row.expected !== null).map(row => ({ ...row, file: block.file })),
+);
+const asserted = [...assertedLine, ...assertedDocRows];
 
 // A third implementation of the same parsing rule lives in
 // collect-test-stats.mjs, and its result is committed. If any of the three
@@ -176,6 +187,7 @@ check(
 	`collected ${assertedInDocs}`,
 );
 
+// ── Per-line ```solve blocks, through the single-expression path ──────────
 fs.writeFileSync(path.join(scratch, "corpus.json"), JSON.stringify(groups));
 fs.writeFileSync(
 	path.join(scratch, "probe-docs.mjs"),
@@ -205,18 +217,67 @@ fs.writeFileSync(
 	].join("\n"),
 );
 
+// ── Whole-document ```solve-doc blocks, as one document ───────────────────
+// The same routing the docs harness and the live notepad use: a table stays on
+// the batch pass (which skips its rows), everything else goes through
+// evaluateDocument, the only path that can re-run a line for goal seek. Both are
+// public API on the installed package, which is the point of proving them here.
+fs.writeFileSync(path.join(scratch, "docblocks.json"), JSON.stringify(docBlocks));
+fs.writeFileSync(
+	path.join(scratch, "probe-docblocks.mjs"),
+	[
+		'import { createEngine } from "solve-engine";',
+		'import { evaluateDocument } from "solve-engine/engine";',
+		'import { formatValue } from "solve-engine/format";',
+		'import { readFileSync } from "node:fs";',
+		'const blocks = JSON.parse(readFileSync("docblocks.json", "utf8"));',
+		"const results = [];",
+		"for (const block of blocks) {",
+		'  const engine = createEngine("en");',
+		'  const source = block.rows.map(row => row.expression).join("\\n");',
+		'  const hasTable = block.rows.some(row => row.expression.startsWith("|"));',
+		"  let parsed = null;",
+		"  try {",
+		'    parsed = hasTable ? engine.parseDocument(source, { inputType: "markdown" }) : evaluateDocument(engine, source, { inputType: "markdown" });',
+		"  } catch (error) {",
+		"    for (const row of block.rows) if (row.expected !== null) results.push({ file: block.file, line: row.line, expression: row.expression, expected: row.expected, actual: \"threw: \" + error.message });",
+		"    engine.clear();",
+		"    continue;",
+		"  }",
+		"  block.rows.forEach((row, index) => {",
+		"    if (row.expected === null) return;",
+		"    const parsedLine = parsed.lines[index];",
+		"    let actual;",
+		'    if (parsedLine && parsedLine.error) actual = "ERROR: " + parsedLine.error;',
+		'    else if (parsedLine && parsedLine.result) actual = formatValue(parsedLine.result).replace(/^=\\s*/, "");',
+		'    else actual = "(no result)";',
+		"    results.push({ file: block.file, line: row.line, expression: row.expression, expected: row.expected, actual });",
+		"  });",
+		"  engine.clear();",
+		"}",
+		"process.stdout.write(JSON.stringify(results));",
+	].join("\n"),
+);
+
 let docResults = [];
 try {
 	docResults = JSON.parse(run("node", ["probe-docs.mjs"], scratch));
 } catch (error) {
-	console.error(`  the documentation probe did not run: ${error.message}`);
+	console.error(`  the per-line documentation probe did not run: ${error.message}`);
 }
+let docBlockResults = [];
+try {
+	docBlockResults = JSON.parse(run("node", ["probe-docblocks.mjs"], scratch));
+} catch (error) {
+	console.error(`  the whole-document probe did not run: ${error.message}`);
+}
+const allDocResults = [...docResults, ...docBlockResults];
 
-const mismatches = docResults.filter(result => result.actual !== result.expected);
+const mismatches = allDocResults.filter(result => result.actual !== result.expected);
 check(
-	`${docResults.length} documented examples evaluate as documented`,
-	docResults.length === asserted.length && mismatches.length === 0,
-	mismatches.length > 0 ? `${mismatches.length} mismatched` : `ran ${docResults.length} of ${asserted.length}`,
+	`${allDocResults.length} documented examples evaluate as documented`,
+	allDocResults.length === asserted.length && mismatches.length === 0,
+	mismatches.length > 0 ? `${mismatches.length} mismatched` : `ran ${allDocResults.length} of ${asserted.length}`,
 );
 for (const bad of mismatches.slice(0, 12)) {
 	console.log(`        ${path.relative(ROOT, bad.file)}:${bad.line}  ${bad.expression}`);

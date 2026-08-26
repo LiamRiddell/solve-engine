@@ -21,42 +21,42 @@ updates when that line changes.
 `prev` reads the line immediately above, and `line N` reads any earlier line by
 its number:
 
-```solve
+```solve-doc
 120
 80
-prev
-line 1
+prev     // 80
+line 1   // 120
 ```
 
 `total above` and `average above` gather every line above them:
 
-```solve
+```solve-doc
 10
 20
 30
-total above
+total above   // 60
 ```
 
 A blank line or a heading acts as a boundary, so `total above` sums the current
 block rather than the whole document:
 
-```solve
+```solve-doc
 10
 20
 
 100
-total above
+total above   // 100
 ```
 
 A `sum(...)` or `average(...)` over an explicit span reads exactly the lines it
 names, so it can reach across a boundary a bare `above` would stop at:
 
-```solve
+```solve-doc
 10
 20
 30
-sum(line 1 : line 3)
-average(line 1 : line 3)
+sum(line 1 : line 3)       // 60
+average(line 1 : line 3)   // 20
 ```
 
 These forms only work inside a document, since they refer to other lines. They

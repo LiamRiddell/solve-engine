@@ -18,13 +18,14 @@ uses, since changing it is how the target moves. The result is that value.
 | `solve line 4 for rate = 900` | the `rate` that makes line four equal 900 |
 | `solve line 2 for deposit = 1,200` | the `deposit` that makes line two equal 1,200 |
 
-A worked document. Line three reads `deposit`, and the last line solves for it:
+A worked document. Line three works the repayment forward at the starting
+deposit; the last line solves backward for the deposit that makes it 900:
 
-```
+```solve-doc
 :deposit = 100000
 :rate = 4%
-monthly repayment on deposit over 25 years at rate
-solve line 3 for deposit = 900
+monthly repayment on deposit over 25 years at rate   // 527.84
+solve line 3 for deposit = 900                        // 170,507.23
 ```
 
 There are two mechanisms, chosen automatically. When the target line is closed

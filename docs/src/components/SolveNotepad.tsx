@@ -2,6 +2,7 @@ import type React from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Plate, PlateContent, usePlateEditor } from "platejs/react";
 import { createEngine } from "solve-engine";
+import { evaluateDocument } from "solve-engine/engine";
 import { formatValue, formatMatrixAligned } from "solve-engine/format";
 import { LanguageService, tokenClassName } from "solve-engine/language";
 import { ValueType } from "solve-engine/vm";
@@ -88,6 +89,19 @@ interface Props {
    * showing sentences rather than figures.
    */
   showErrors?: boolean;
+  /**
+   * Evaluate the whole block as one document through the incremental engine
+   * rather than the batch `parseDocument` pass.
+   *
+   * The two differ in one way that matters to a reader: only the incremental
+   * path can re-run an earlier line, which is what goal seek
+   * (`solve line N for x = target`) is. A `#tag` total or a `line N` reference
+   * resolves either way, but goal seek returns a "needs a document" error
+   * through the batch path, so a page that shows it opts into this. A markdown
+   * table is the opposite case and stays on the batch path, which skips its
+   * rows; this path would try to evaluate them. See `evaluateDocument`.
+   */
+  incremental?: boolean;
 }
 
 function toLines(text: string): string[] {
@@ -254,6 +268,7 @@ export default function SolveNotepad({
   minRows = 0,
   label,
   showErrors = false,
+  incremental = false,
 }: Props) {
   const seed = useMemo(() => toLines(initial), [initial]);
 
@@ -298,9 +313,10 @@ export default function SolveNotepad({
       language.invalidateCache();
 
       try {
-        const parsed = engine.parseDocument(lines.join("\n"), {
-          inputType: "markdown",
-        });
+        const text = lines.join("\n");
+        const parsed = incremental
+          ? evaluateDocument(engine, text, { inputType: "markdown" })
+          : engine.parseDocument(text, { inputType: "markdown" });
         // Pinned to the editor's line count, not the parser's. A document that
         // ends in a newline comes back one line short, which would leave the
         // final editor row with no answer row opposite it and quietly break
@@ -317,7 +333,7 @@ export default function SolveNotepad({
       }
       setRevision((n) => n + 1);
     },
-    [engine, language, showErrors],
+    [engine, language, showErrors, incremental],
   );
 
   useEffect(() => {

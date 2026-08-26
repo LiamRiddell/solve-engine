@@ -45,6 +45,11 @@ export type {
 	AsyncResolutionEvent,
 } from "./AsyncResolutionBatcher";
 
+export { evaluateDocument } from "./evaluateDocument";
+// The return shape of evaluateDocument() above, and of ExpressionEngine's own
+// parseDocument(), so a host can type either result.
+export type { ParsedLine, ParsingResult, UnifiedParsingOptions } from "@solve-js/types/ParsingResult";
+
 export {
 	checkExpressionLength,
 	checkExpressionComplexity,

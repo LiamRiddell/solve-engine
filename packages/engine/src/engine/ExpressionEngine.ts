@@ -337,6 +337,16 @@ export class ExpressionEngine {
     }
 
     /**
+     * The `DocumentModel` this engine is currently wired to, or `null` when it
+     * is not driving one. Lets a caller that borrows the engine for a one-off
+     * incremental pass (see {@link evaluateDocument}) put back whatever a host
+     * had set, rather than assuming it was `null`.
+     */
+    getDocumentModel(): DocumentModel | null {
+        return this.documentModel;
+    }
+
+    /**
      * Build the {@link LineExecutionContext} passed to `executeBytecode()`
      * for a given line. `lineNumber = -1` (the existing sentinel
      * `evaluateExpression()`/`evaluateLine(-1, ...)` already use for "no
