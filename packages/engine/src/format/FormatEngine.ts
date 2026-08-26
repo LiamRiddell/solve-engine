@@ -165,12 +165,33 @@ function formatBoolean(value: boolean): string {
  * always anchor to local midnight, and showing "00:00:00" on every one of
  * those would be noise, not information.
  */
-function formatDatetime(value: number, locale: ILocale): string {
+function formatDatetime(value: number, locale: ILocale, settings: FormattingSettings): string {
   const d = new Date(value);
-  const dateStr = d.toLocaleDateString(locale.code, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const format = settings.dateResult?.format ?? "long";
   const isMidnight = d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0 && d.getMilliseconds() === 0;
-  if (isMidnight) return `= ${dateStr}`;
-  return `= ${dateStr}, ${d.toLocaleTimeString(locale.code)}`;
+
+  // The spelled-out default, localised through the locale's own names.
+  if (format === "long") {
+    const dateStr = d.toLocaleDateString(locale.code, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    if (isMidnight) return `= ${dateStr}`;
+    return `= ${dateStr}, ${d.toLocaleTimeString(locale.code)}`;
+  }
+
+  // The numeric forms, built from the local calendar fields so they read the
+  // same regardless of the JS runtime's own default locale.
+  const p2 = (n: number) => String(n).padStart(2, "0");
+  const year = d.getFullYear();
+  const month = p2(d.getMonth() + 1);
+  const day = p2(d.getDate());
+  let datePart: string;
+  if (format === "iso") datePart = `${year}-${month}-${day}`;
+  else if (format === "dmy") datePart = `${day}/${month}/${year}`;
+  else datePart = `${month}/${day}/${year}`; // mdy
+
+  if (isMidnight) return `= ${datePart}`;
+  const time = `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+  // ISO joins date and time with `T`; the slash forms with a space.
+  return format === "iso" ? `= ${datePart}T${time}` : `= ${datePart} ${time}`;
 }
 
 /**
@@ -405,7 +426,7 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
     case ValueType.Boolean:
       return formatBoolean(value.value as boolean);
     case ValueType.Datetime:
-      return formatDatetime(value.value as number, locale);
+      return formatDatetime(value.value as number, locale, us);
     case ValueType.Uom:
       return formatUom(value.value as number, value.unit, locale, us, value.exact);
     case ValueType.Matrix:

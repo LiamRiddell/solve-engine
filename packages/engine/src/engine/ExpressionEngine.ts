@@ -81,6 +81,7 @@ import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import type { TokenFusion } from "@solve-js/normalizer";
 import { UserUnitTable } from "@solve-js/packages/uom/UserUnitTable";
 import { userUnitExpansionRule } from "@solve-js/packages/uom/normalizer/UserUnitNormalizerRule";
+import { dateLiteralNormalizerRule } from "@solve-js/packages/datetime/normalizer/DateLiteralNormalizerRule";
 import { buildExplanation } from "@solve-js/explain";
 import type { Explanation } from "@solve-js/explain";
 import {
@@ -670,6 +671,17 @@ export class ExpressionEngine {
                     `construction with the remaining packages: ${engineError.format()}`
                 );
             }
+        }
+
+        // Numeric date literals (`25/12/2023`). Registered here rather than
+        // through the datetime package descriptor because the rule reads this
+        // engine's own `date.inputOrder` (DMY/MDY/YMD) to resolve an ambiguous
+        // ordering, and a descriptor is shared across every engine, the same
+        // reason user units are registered above. Gated on the datetime package
+        // actually being loaded (it owns the DATETIME_LITERAL parselet), so an
+        // engine without it does not fuse a date literal it has no way to read.
+        if (this.registry.hasPrefix("DATETIME_LITERAL")) {
+            this.normalizer.register(dateLiteralNormalizerRule(() => this.config.date.inputOrder));
         }
 
         this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, locale, this.pluginFunctionIndexByName);

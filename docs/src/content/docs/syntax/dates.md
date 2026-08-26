@@ -10,7 +10,7 @@ the documentation test suite.
 
 ## Literals
 
-Several orders are recognised, resolved by the active locale where ambiguous.
+Several orders are recognised.
 
 | Expression | Meaning |
 | --- | --- |
@@ -18,12 +18,82 @@ Several orders are recognised, resolved by the active locale where ambiguous.
 | `2023-12-25` | ISO order |
 | `2024-5-3` | ISO order, unpadded |
 | `25.12.2023` | dot separated |
+| `March 9, 2024`, `9 March 2024` | the month spelled out |
 
 Write a literal as one run of characters, with no spaces around its
 separators. That is what tells a date from the arithmetic it is spelled
 identically to: `2024-5-3` is a date, and `2024 - 5 - 3` is 2016. Spacing
 decides it on its own, so a padded chain like `2024 - 05 - 03` is subtraction
 too.
+
+### Choosing the input order
+
+By default a slash date is read day first (`25/12/2023`) and a hyphen date
+month first unless it starts with a four-digit year, which makes it ISO. A US
+reader's `12/25/2023` therefore does not parse, because day 25 of month 12 is
+read as month 25. Fix the order for every numeric separator with the
+`date.inputOrder` setting:
+
+```ts
+new ExpressionEngine({ config: { date: { inputOrder: "MDY" } } });
+```
+
+| `inputOrder` | `12/25/2023` | `25/12/2023` | `2023/12/25` |
+| --- | --- | --- | --- |
+| `"auto"` (default) | not a date | 25 December 2023 | not a date |
+| `"MDY"` | 25 December 2023 | not a date | not a date |
+| `"DMY"` | not a date | 25 December 2023 | not a date |
+| `"YMD"` | not a date | not a date | 25 December 2023 |
+
+Only the all-numeric literals are affected. A spelled-out month (`March 9,
+2024`) is never ambiguous, and a full ISO timestamp is always read as ISO.
+
+## Relative months
+
+Each resolves to the first of its month, the same anchor `March 2026` gives, so
+it drops in wherever a month is wanted.
+
+| Expression | Result |
+| --- | --- |
+| `this month` | the first of the current month |
+| `next month` | the first of next month |
+| `last month` | the first of the previous month |
+
+## The nth weekday of a month
+
+The date of the nth, or last, occurrence of a weekday in a month. The month is
+a fixed anchor (`March 2026`) or a relative one (`next month`), and the result
+is an ordinary date that composes further (`... as weekday`, `... + 1 week`).
+
+| Expression | Result |
+| --- | --- |
+| `2nd Tuesday of March 2026` | `Tuesday, March 10, 2026` |
+| `4th Thursday of November 2026` | `Thursday, November 26, 2026` |
+| `last Friday of November 2026` | `Friday, November 27, 2026` |
+| `1st Monday of next month` | the first Monday of next month |
+
+An occurrence the month does not have is refused, never wrapped into the next
+month: April 2026 has four Fridays, so `5th Friday of April 2026` is an error
+rather than the first Friday of May. The bare `next Friday` and `last Monday`
+above are untouched: only an ordinal weekday followed by `of` is read this way.
+
+## Age
+
+Whole calendar years from a birth date, reckoned at now unless an `on <date>`
+gives another reference. `in years, months and days` asks for the full
+breakdown instead of a single count.
+
+| Expression | Result |
+| --- | --- |
+| `age of 15/06/1990` | the age today, in years |
+| `age of 15/06/1990 on 25/12/2030` | `40 years` |
+| `age of 15/06/1990 on 26/08/2026 in years, months and days` | `36 years, 2 months, 11 days` |
+
+The count walks the calendar rather than dividing a fixed-length span, so the
+leap cases are right: a 29 February birth is a year older on 1 March in a
+non-leap year, where a 365-day division would drift. This is the calendar-aware
+counterpart of `years between`, which divides and is the right tool for a rough
+span.
 
 ## Arithmetic
 
@@ -92,3 +162,23 @@ The offset forms, `between`, and `<date> + N workdays` all consult it.
 weekends-only either way: the first has no date to look a holiday up on, and the
 second reports the shape of the week (is this a weekday), not whether a
 particular office is open.
+
+## Displaying dates
+
+A date shows spelled out by default (`Tuesday, March 10, 2026`). A host chooses
+another form with the `dateResult.format` formatting setting:
+
+```ts
+formatValue(value, { ...settings, dateResult: { format: "iso" } });
+```
+
+| `format` | `25/12/2023` shows as |
+| --- | --- |
+| `"long"` (default) | `Monday, December 25, 2023` |
+| `"iso"` | `2023-12-25` |
+| `"dmy"` | `25/12/2023` |
+| `"mdy"` | `12/25/2023` |
+
+The long form localises its weekday and month names through the configured
+locale; the numeric forms are locale-neutral. A time of day is appended only
+when the value carries one, so a bare date is never padded with `00:00:00`.

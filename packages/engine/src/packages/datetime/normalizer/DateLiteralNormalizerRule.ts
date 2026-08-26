@@ -3,6 +3,7 @@ import { tokenTypeId } from "@solve-js/lexer/Token";
 import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { parseIso8601 } from "@solve-js/packages/datetime/Iso8601";
+import type { DateInputOrder } from "@solve-js/constants/Configuration";
 
 /**
  * Token type a fused date literal is rewritten to.
@@ -277,6 +278,32 @@ function fuseIsoTimestamp(tokens: Token[], pos: number, ruleName: string): Norma
 }
 
 /**
+ * Maps the three numeric groups of a slash- or hyphen-separated literal to a
+ * (day, month, year) triple under an explicit {@link DateInputOrder}, or null
+ * when a group is the wrong shape for its role (a non-4-digit year in `YMD`, a
+ * year group that is neither two nor four digits in `DMY`/`MDY`).
+ *
+ * Only reached when the host has fixed an order; `'auto'` keeps the historic
+ * per-separator reading in the rule below and never calls this.
+ */
+function resolveOrderedGroups(
+  g0: string, g1: string, g2: string, order: Exclude<DateInputOrder, "auto">,
+): { day: number; month: number; year: number } | null {
+  if (order === "YMD") {
+    if (g0.length !== 4) return null;
+    if (!DAY_OR_MONTH.test(g1) || !DAY_OR_MONTH.test(g2)) return null;
+    return { year: Number(g0), month: Number(g1), day: Number(g2) };
+  }
+  // DMY and MDY: two 1-2 digit groups and a trailing 2- or 4-digit year.
+  if (!DAY_OR_MONTH.test(g0) || !DAY_OR_MONTH.test(g1)) return null;
+  const year = resolveYear(g2);
+  if (year === null) return null;
+  return order === "DMY"
+    ? { day: Number(g0), month: Number(g1), year }
+    : { day: Number(g1), month: Number(g0), year };
+}
+
+/**
  * NormalizerRule that fuses numeric date literals into a single
  * DATETIME_LITERAL token, per the documented "Datetime Formats":
  * - European: DD/MM/YYYY  (5 tokens: NUMBER SLASH NUMBER SLASH NUMBER)
@@ -322,7 +349,9 @@ function fuseIsoTimestamp(tokens: Token[], pos: number, ruleName: string): Norma
  * bare SLASH dates, 4-digit-year-only) scoped to stock-history queries
  * neither of those needed to change for this to land.
  */
-export function dateLiteralNormalizerRule(): NormalizerRule {
+export function dateLiteralNormalizerRule(
+  getInputOrder: () => DateInputOrder = () => "auto",
+): NormalizerRule {
   return {
     name: "datetime:date-literal",
     priority: 70,
@@ -372,6 +401,19 @@ export function dateLiteralNormalizerRule(): NormalizerRule {
       // it is spelled identically to, and the only one that applies to all
       // three equally. See writtenAsOneRun.
       if (!writtenAsOneRun(sourceTokens)) return null;
+
+      // A host-fixed order (DMY/MDY/YMD) reads slash and hyphen dates the same
+      // way, so a US reader's `12/25/2023` and an ISO `2023/12/25` both parse.
+      // `'auto'` falls through to the historic per-separator reading below.
+      const order = getInputOrder();
+      if (order !== "auto") {
+        const resolved = resolveOrderedGroups(t0.value, t1.value, t2.value, order);
+        if (resolved === null) return null;
+        return buildDateToken(
+          resolved.day, resolved.month, resolved.year, sourceTokens,
+          `datetime:date-literal:${order.toLowerCase()}`,
+        );
+      }
 
       if (sep1.type === "SLASH") {
         // European: DD/MM/YYYY (always, no ISO-slash variant is documented)

@@ -13,14 +13,20 @@ import { CurrentTimestampParselet } from "./parselets/CurrentTimestampParselet";
 import { ToDateParselet } from "./parselets/ToDateParselet";
 import { ToTimestampParselet } from "./parselets/ToTimestampParselet";
 import { DateLiteralParselet } from "./parselets/DateLiteralParselet";
+import { NthWeekdayParselet } from "./parselets/NthWeekdayParselet";
+import { RelativeMonthParselet } from "./parselets/RelativeMonthParselet";
+import { AgeParselet } from "./parselets/AgeParselet";
 import {
   workdaysInDuration, weekdayOnDate, toDateFromAny, toTimestampFromAny,
   monthOnDate, weekOnDate, isWeekendOnDate, isWorkdayOnDate, spanBetweenDates,
 } from "./parselets/DatetimeTimestampPluginFunctions";
+import {
+  nthWeekdayOfMonthFn, monthAnchorShift, ageBetween,
+} from "./parselets/DatetimeCalendarPluginFunctions";
+import { nthWeekdayNormalizerRule } from "./normalizer/NthWeekdayNormalizerRule";
 import { untilSinceNormalizerRule } from "./normalizer/UntilSinceNormalizerRule";
 import { betweenUnitNormalizerRule } from "./normalizer/BetweenUnitNormalizerRule";
 import { workdayRateDenominatorNormalizerRule } from "./normalizer/WorkdayRateDenominatorNormalizerRule";
-import { dateLiteralNormalizerRule } from "./normalizer/DateLiteralNormalizerRule";
 import { monthNameDateNormalizerRule } from "./normalizer/MonthNameDateNormalizerRule";
 import { DaysInPeriodParselet } from "./parselets/DaysInPeriodParselet";
 import { daysInPeriodNormalizerRule } from "./normalizer/DaysInPeriodNormalizerRule";
@@ -170,6 +176,16 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     "is a workday": "IS_WORKDAY",
     "is a weekday": "IS_WORKDAY",
     "is a business day": "IS_WORKDAY",
+    // Age from a birth date. "of" is fused in so a bare "age" stays an
+    // ordinary variable name (`:age = 30`).
+    "age of": "AGE_OF",
+    // Relative month anchors, each the first of its month, matching what
+    // `March 2026` resolves to. `next`/`last` are otherwise weekday keywords
+    // and `this` an ordinary word; fusing the whole phrase claims none of them
+    // on their own.
+    "next month": "MONTH_ANCHOR_NEXT",
+    "this month": "MONTH_ANCHOR_THIS",
+    "last month": "MONTH_ANCHOR_LAST",
   },
   prefixParselets: {
     DAYS_IN_PERIOD: new DaysInPeriodParselet(),
@@ -192,6 +208,11 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     BETWEEN_UNIT: new DurationBetweenParselet(),
     CURRENT_TIMESTAMP: new CurrentTimestampParselet(),
     DATETIME_LITERAL: new DateLiteralParselet(),
+    NTH_WEEKDAY: new NthWeekdayParselet(),
+    AGE_OF: new AgeParselet(),
+    MONTH_ANCHOR_NEXT: new RelativeMonthParselet(1),
+    MONTH_ANCHOR_THIS: new RelativeMonthParselet(0),
+    MONTH_ANCHOR_LAST: new RelativeMonthParselet(-1),
   },
   infixParselets: {
     WORKDAYS_AFTER: new WorkdayOffsetParselet("forward"),
@@ -205,11 +226,20 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     untilSinceNormalizerRule(),
     betweenUnitNormalizerRule(),
     workdayRateDenominatorNormalizerRule(),
-    dateLiteralNormalizerRule(),
+    // The numeric date-literal rule (`dateLiteralNormalizerRule`) is NOT here:
+    // it reads the per-engine `date.inputOrder` config to choose DMY/MDY/YMD,
+    // and a package descriptor is shared across every engine in the process, so
+    // it is registered in `ExpressionEngine`'s constructor closing over that
+    // engine's config instead, the same reason user-defined units are (see the
+    // constructor's comment). Priority 70 still orders it above the rules here.
     // Dates with the month spelled out ("March 9, 2024"). Priority 64, just
     // under the numeric rule, so an all-numeric literal is still claimed by
     // the rule that has always claimed it.
     monthNameDateNormalizerRule(),
+    // `<ordinal> <weekday> of <month>`. Priority 66, above the month-name rule
+    // so the ordinal head is claimed before the anchor is fused, and it reads
+    // the ordinal from the tokens the lexer already produced.
+    nthWeekdayNormalizerRule(),
     daysInPeriodNormalizerRule(),
     dailyNoteLinkNormalizerRule(),
   ],
@@ -223,6 +253,9 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     isWeekendOnDate,
     isWorkdayOnDate,
     spanBetweenDates,
+    nthWeekdayOfMonth: nthWeekdayOfMonthFn,
+    monthAnchorShift,
+    ageBetween,
   },
   asConverters: {
     iso8601: (value) => stringValue(formatIso8601Local(value.toNumber())),
@@ -235,5 +268,13 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     weekday: (value) => weekdayOnDate([value]),
     month: (value) => monthOnDate([value]),
     week: (value) => weekOnDate([value]),
+  },
+  tokenCategories: {
+    // The 2.4.0 forms: an editor colours the fused tokens as datetime syntax.
+    NTH_WEEKDAY: "datetime",
+    MONTH_ANCHOR_NEXT: "datetime",
+    MONTH_ANCHOR_THIS: "datetime",
+    MONTH_ANCHOR_LAST: "datetime",
+    AGE_OF: "keyword",
   },
 };
