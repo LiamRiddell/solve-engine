@@ -5,26 +5,33 @@ description: Date literals, arithmetic, relative dates and calendar questions.
 
 > **Package:** `DATETIME_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
 
-Results depend on the current date, so these are shown rather than asserted by
-the documentation test suite.
+Every example below is live: edit it and the answer follows. The forms anchored
+to a fixed date are proven by the documentation test suite; the ones relative to
+now (`next friday`, `age of` today) resolve against the current date, so they
+compute here rather than being asserted.
 
 ## Literals
 
 Several orders are recognised.
 
-| Expression | Meaning |
-| --- | --- |
-| `25/12/2023` | day, month, year |
-| `2023-12-25` | ISO order |
-| `2024-5-3` | ISO order, unpadded |
-| `25.12.2023` | dot separated |
-| `March 9, 2024`, `9 March 2024` | the month spelled out |
+```solve
+25/12/2023 // Monday, December 25, 2023
+2023-12-25 // Monday, December 25, 2023
+2024-5-3 // Friday, May 3, 2024
+March 9, 2024 // Saturday, March 9, 2024
+```
 
 Write a literal as one run of characters, with no spaces around its
 separators. That is what tells a date from the arithmetic it is spelled
-identically to: `2024-5-3` is a date, and `2024 - 5 - 3` is 2016. Spacing
-decides it on its own, so a padded chain like `2024 - 05 - 03` is subtraction
-too.
+identically to: `2024-5-3` is a date, and the same digits spaced out are
+subtraction.
+
+```solve
+2024 - 5 - 3 // 2,016
+```
+
+Spacing decides it on its own, so a padded chain like `2024 - 05 - 03` is
+subtraction too.
 
 ### Choosing the input order
 
@@ -48,29 +55,57 @@ new ExpressionEngine({ config: { date: { inputOrder: "MDY" } } });
 Only the all-numeric literals are affected. A spelled-out month (`March 9,
 2024`) is never ambiguous, and a full ISO timestamp is always read as ISO.
 
+## Arithmetic
+
+A day count crosses month and year boundaries; the relative forms resolve
+against now.
+
+```solve
+25/12/2023 + 20 days // Sunday, January 14, 2024
+```
+
+```solve
+now + 3 hours
+today - 1 week
+```
+
+## Relative dates
+
+```solve
+now
+today
+tomorrow
+yesterday
+next friday
+last monday
+```
+
 ## Relative months
 
 Each resolves to the first of its month, the same anchor `March 2026` gives, so
 it drops in wherever a month is wanted.
 
-| Expression | Result |
-| --- | --- |
-| `this month` | the first of the current month |
-| `next month` | the first of next month |
-| `last month` | the first of the previous month |
+```solve
+this month
+next month
+last month
+```
 
 ## The nth weekday of a month
 
 The date of the nth, or last, occurrence of a weekday in a month. The month is
 a fixed anchor (`March 2026`) or a relative one (`next month`), and the result
-is an ordinary date that composes further (`... as weekday`, `... + 1 week`).
+is an ordinary date that composes further.
 
-| Expression | Result |
-| --- | --- |
-| `2nd Tuesday of March 2026` | `Tuesday, March 10, 2026` |
-| `4th Thursday of November 2026` | `Thursday, November 26, 2026` |
-| `last Friday of November 2026` | `Friday, November 27, 2026` |
-| `1st Monday of next month` | the first Monday of next month |
+```solve
+2nd Tuesday of March 2026 // Tuesday, March 10, 2026
+4th Thursday of November 2026 // Thursday, November 26, 2026
+last Friday of November 2026 // Friday, November 27, 2026
+```
+
+```solve
+1st Monday of next month
+```
 
 An occurrence the month does not have is refused, never wrapped into the next
 month: April 2026 has four Fridays, so `5th Friday of April 2026` is an error
@@ -83,11 +118,14 @@ Whole calendar years from a birth date, reckoned at now unless an `on <date>`
 gives another reference. `in years, months and days` asks for the full
 breakdown instead of a single count.
 
-| Expression | Result |
-| --- | --- |
-| `age of 15/06/1990` | the age today, in years |
-| `age of 15/06/1990 on 25/12/2030` | `40 years` |
-| `age of 15/06/1990 on 26/08/2026 in years, months and days` | `36 years, 2 months, 11 days` |
+```solve
+age of 15/06/1990 on 25/12/2030 // 40 years
+age of 15/06/1990 on 26/08/2026 in years, months and days // 36 years, 2 months, 11 days
+```
+
+```solve
+age of 15/06/1990
+```
 
 The count walks the calendar rather than dividing a fixed-length span, so the
 leap cases are right: a 29 February birth is a year older on 1 March in a
@@ -95,29 +133,19 @@ non-leap year, where a 365-day division would drift. This is the calendar-aware
 counterpart of `years between`, which divides and is the right tool for a rough
 span.
 
-## Arithmetic
-
-| Expression | Result |
-| --- | --- |
-| `25/12/2023 + 20 days` | `Sunday, January 14, 2024` |
-| `now + 3 hours` | three hours from now |
-| `today - 1 week` | this day last week |
-
-## Relative dates
-
-| Expression | Result |
-| --- | --- |
-| `now`, `today`, `tomorrow`, `yesterday` | the obvious thing |
-| `next friday` | the coming Friday |
-| `last monday` | the previous Monday |
-
 ## Differences
 
-| Expression | Result |
-| --- | --- |
-| `days until 25/12/2026` | a duration in days |
-| `days since 01/01/2023` | a duration in days |
-| `weeks between 01/01/2024 and 01/06/2024` | a duration in weeks |
+A `between` of two fixed dates is proven; a duration to or from now moves with
+the day.
+
+```solve
+weeks between 01/01/2024 and 01/06/2024 // 21.71 weeks
+```
+
+```solve
+days until 25/12/2026
+days since 01/01/2023
+```
 
 ## Working days
 
@@ -125,14 +153,15 @@ Deadlines count working days, not calendar days. Weekends are always skipped.
 An offset counts forward or back to a working day, and `between` counts the
 working days in a window, both ends included.
 
-| Expression | Result |
-| --- | --- |
-| `25/12/2023 + 5 workdays` | five working days later |
-| `5 working days after 20/12/2024` | the same offset, in words |
-| `3 business days from today` | three working days ahead |
-| `2 working days before 25/12/2024` | counts backwards |
-| `working days between 01/01/2024 and 31/01/2024` | `23`, every weekday in January |
-| `workdays in 3 weeks` | `15`, the count in a span |
+```solve
+25/12/2023 + 5 workdays // Monday, January 1, 2024
+working days between 01/01/2024 and 31/01/2024 // 23
+workdays in 3 weeks // 15
+```
+
+```solve
+3 business days from today
+```
 
 `working` and `business` days mean the same thing, and either reads in the
 singular for a count of one (`1 working day after ...`).
