@@ -42,8 +42,8 @@ import { ValueType } from "solve-engine/vm";
 /** What to show in the answer column for one line. */
 interface Answer {
   text: string;
-  /** Drives the colour. `none` renders nothing at all. */
-  kind: "value" | "error" | "none";
+  /** Drives the colour. `none` renders nothing at all; `pending` is a value still resolving over the network. */
+  kind: "value" | "error" | "none" | "pending";
   /** A CSS colour string, set when the result is a colour, to draw an inline swatch. */
   swatch?: string;
   /** A stacked, column-aligned grid, set when the result is a matrix. */
@@ -129,6 +129,10 @@ function truncateForTooltip(text: string): string | undefined {
 function toValueAnswer(result: unknown): Answer {
   const text = stripMarker(formatValue(result as never));
   const v = result as { type?: number; value?: { r: number; g: number; b: number; a: number } };
+  // A pending value is a network lookup (weather, currency) that has not
+  // returned yet. Show a quiet marker rather than its internal query key, and
+  // let the async watcher below fill in the real answer once it arrives.
+  if (v.type === ValueType.Pending) return { text: "…", kind: "pending" };
   // A colour result carries its channels on the live Value, so the answer column
   // can draw the actual colour beside its text (e.g. a red square next to
   // "#ff0000"). rgba() is always valid CSS, so no conversion is needed.
@@ -304,8 +308,13 @@ export default function SolveNotepad({
   // document state (a bare word becoming a known variable) would never update.
   const [revision, setRevision] = useState(0);
 
+  // The lines currently on screen, so the async watcher below re-evaluates the
+  // document as it stands now rather than the one it first mounted with.
+  const linesRef = useRef<string[]>(seed);
+
   const evaluate = useCallback(
     (lines: string[]) => {
+      linesRef.current = lines;
       // Variables live in the scope manager across evaluations, so deleting
       // the line that defined one would otherwise leave it resolvable forever.
       // A full re-parse starts from a clean scope.
@@ -339,6 +348,35 @@ export default function SolveNotepad({
   useEffect(() => {
     evaluate(seed);
   }, [evaluate, seed]);
+
+  // Async resolution. A weather or currency line returns a pending value first,
+  // and the real one arrives over the network a moment later. The engine
+  // announces each arrival on its event stream, so read that stream for the
+  // life of the notepad and re-evaluate the current document whenever a line
+  // resolves, which is what fills the "…" in with a temperature. This is the
+  // same getEventStream() loop a host integration uses (see the async guide),
+  // scoped to this notepad's own engine. A block with no network line never
+  // emits, so a page of pure arithmetic pays nothing for this.
+  useEffect(() => {
+    let cancelled = false;
+    const reader = engine.getEventStream().getReader();
+    (async () => {
+      try {
+        while (!cancelled) {
+          const { value: event, done } = await reader.read();
+          if (done || cancelled) break;
+          if (event?.type === "lines-updated") evaluate(linesRef.current);
+        }
+      } catch {
+        // Cancelling the reader on unmount rejects its in-flight read; there is
+        // nothing to recover, the notepad is going away.
+      }
+    })();
+    return () => {
+      cancelled = true;
+      reader.cancel().catch(() => {});
+    };
+  }, [engine, evaluate]);
 
   const decorate = useCallback(
     ({ entry }: { entry: [{ text?: string }, number[]] }) => {
