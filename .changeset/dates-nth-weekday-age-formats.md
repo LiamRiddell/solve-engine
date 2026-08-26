@@ -99,7 +99,7 @@ that built a `FormattingSettings` before it existed keeps the long form.
 
 ## Verification
 
-`npm run verify` (typecheck, 7,783 tests across 345 suites, build, the package
+`npm run verify` (typecheck, 7,890 tests across 350 suites, build, the package
 smoke script and the bundled-consumer tree-shaking contract) passes, along with
 `npm run lint`, the comment-style and doc-coverage checks, and the docs example
 suite. The calendar arithmetic is proven on its own in `DateArithmetic.spec.ts`,
