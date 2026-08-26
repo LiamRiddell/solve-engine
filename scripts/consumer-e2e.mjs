@@ -213,7 +213,11 @@ fs.writeFileSync(
 		"  });",
 		"  engine.clear();",
 		"}",
-		"process.stdout.write(JSON.stringify(results));",
+		// Exit once the results are flushed rather than waiting for the event
+		// loop to drain. A live line (weather) leaves an in-flight fetch and the
+		// engine's batcher timers open, which would otherwise keep this probe
+		// process alive long after it has produced its answer.
+		"process.stdout.write(JSON.stringify(results), () => process.exit(0));",
 	].join("\n"),
 );
 
@@ -255,7 +259,9 @@ fs.writeFileSync(
 		"  });",
 		"  engine.clear();",
 		"}",
-		"process.stdout.write(JSON.stringify(results));",
+		// Force-exit after flushing, as the per-line probe does: a live weather
+		// line leaves a fetch and batcher timers open that would hold the process.
+		"process.stdout.write(JSON.stringify(results), () => process.exit(0));",
 	].join("\n"),
 );
 

@@ -176,6 +176,24 @@
   color: var(--warning-text);
 }
 
+/* A value still resolving over the network (weather, currency): a muted
+   placeholder, not an answer yet, replaced the moment the real value arrives. */
+.notepad__answer[data-kind="pending"] {
+  color: var(--sl-color-gray-3);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .notepad__answer[data-kind="pending"] {
+    animation: notepad-pending 1.2s ease-in-out infinite;
+  }
+
+  @keyframes notepad-pending {
+    50% {
+      opacity: 0.4;
+    }
+  }
+}
+
 /* A notepad in `showErrors` mode. The column is showing sentences now instead
    of figures, so it takes more of the width and is set from the left, where a
    sentence starts. It still clips rather than wraps, because one editor row to
