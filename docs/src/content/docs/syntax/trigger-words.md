@@ -45,7 +45,7 @@ names.
 ## A mid-line `#word` is a category tag
 
 A `#` followed by a letter, in the middle of a line, is read as a
-[category tag](/syntax/line-references/#category-tags): `40 #grocery` tags that
+[category tag](/syntax/category-tags/): `40 #grocery` tags that
 line and still calculates to `40`. The boundaries keep it out of ordinary prose
 and out of the other things `#` already means:
 

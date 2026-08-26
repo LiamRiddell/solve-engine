@@ -146,6 +146,9 @@ describe("documented examples evaluate as documented", () => {
       ["live-data.md", "results come from live network queries"],
       ["dates.md", "relative dates resolve against the current date"],
       ["line-references.md", "examples are whole documents, not single lines"],
+      ["category-tags.md", "examples are whole documents, not single lines"],
+      ["goal-seek.md", "examples are whole documents, not single lines"],
+      ["table-columns.md", "examples are whole documents, not single lines"],
     ]);
 
     const syntaxDir = path.join(DOCS_ROOT, "syntax");
