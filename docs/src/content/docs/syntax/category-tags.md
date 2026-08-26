@@ -13,8 +13,8 @@ that tag, wherever they sit in the document.
 The tag itself is dropped from the line it annotates, so a tagged line still
 calculates to its own number:
 
-```solve
-40 + 15 #grocery
+```solve-doc
+40 + 15 #grocery   // 55
 ```
 
 ## The aggregates
@@ -32,31 +32,31 @@ reads the same set; they differ only in what they do with it.
 A worked note. The tagged lines need not be adjacent; lines carrying other tags,
 untagged lines, and blank lines between them are all ignored:
 
-```solve
+```solve-doc
 40 + 15 #grocery
 30 #transport
 
 12.50 #grocery
-total of #grocery
+total of #grocery   // 67.50
 ```
 
 `count` answers presence rather than value: it counts every line that carries the
 tag, and a non-numeric tagged line (a note to yourself) counts too, where `total`
 and `average` would reject it.
 
-```solve
+```solve-doc
 40 #grocery
 12.50 #grocery
-count of #grocery
+count of #grocery   // 2
 ```
 
 Money and units carry through. A tag whose lines are all in dollars totals to
 dollars:
 
-```solve
+```solve-doc
 $40 #food
 $25 #food
-total of #food
+total of #food   // $65.00
 ```
 
 ## Boundaries
@@ -75,10 +75,10 @@ A few boundaries, each deliberate:
   elsewhere. `#column` or `#assuming` is a category like any other, on a data
   line and in an aggregate alike:
 
-```solve
+```solve-doc
 1200 #assuming
 800 #assuming
-total of #assuming
+total of #assuming   // 2,000
 ```
 
 - **One aggregate line per tag per note.** An aggregate line carries the tag it

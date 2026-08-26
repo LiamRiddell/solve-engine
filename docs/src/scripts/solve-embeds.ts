@@ -66,8 +66,25 @@ function toGroups(source: string): string[] {
     .filter((group) => group.trim().length > 0);
 }
 
-type Mounter = (host: HTMLElement, source: string) => void;
+type Mounter = (
+  host: HTMLElement,
+  source: string,
+  options?: { incremental?: boolean },
+) => void;
 let mounterPromise: Promise<Mounter> | null = null;
+
+/**
+ * Whether a block holds a markdown table.
+ *
+ * A table is the one whole-document form that stays on the batch engine: that
+ * pass skips a table's own rows, where the incremental engine would try to
+ * evaluate them. Everything else in a `solve-doc` block (a `#tag` total, a
+ * `line N` reference, goal seek) goes through the incremental engine, which is
+ * the only one that can re-run a line for goal seek. See `evaluateDocument`.
+ */
+function hasTable(source: string): boolean {
+  return /^\s*\|/m.test(source);
+}
 
 /**
  * Installs Vite's React Fast Refresh preamble, in development only.
@@ -103,8 +120,19 @@ function loadMounter(): Promise<Mounter> {
   return mounterPromise;
 }
 
-async function upgrade(block: HTMLElement, pre: HTMLElement): Promise<void> {
-  const groups = toGroups(readSource(pre));
+async function upgrade(
+  block: HTMLElement,
+  pre: HTMLElement,
+  whole: boolean,
+): Promise<void> {
+  const source = readSource(pre);
+  // A `solve-doc` block is one document end to end: a blank line inside it is a
+  // boundary the aggregates read, not a break between two unrelated examples, so
+  // it stays whole. A plain `solve` block splits on blank lines the way the test
+  // suite does, one notepad per group.
+  const groups = whole
+    ? [source.replace(/\s+$/, "")].filter((g) => g.trim().length > 0)
+    : toGroups(source);
   if (groups.length === 0) return;
 
   let mount: Mounter;
@@ -125,7 +153,10 @@ async function upgrade(block: HTMLElement, pre: HTMLElement): Promise<void> {
     const host = document.createElement("div");
     host.className = "solve-embed__notepad";
     live.append(host);
-    mount(host, stripExpectations(group));
+    // Route a whole-document block by content: a table on the batch engine,
+    // everything else on the incremental one that goal seek needs.
+    const incremental = whole && !hasTable(group);
+    mount(host, stripExpectations(group), { incremental });
   }
 
   block.append(live);
@@ -137,17 +168,23 @@ function init(): void {
     ".sl-markdown-content .expressive-code",
   );
 
-  const pending: Array<[HTMLElement, HTMLElement]> = [];
+  const pending: Array<[HTMLElement, HTMLElement, boolean]> = [];
   for (const block of blocks) {
-    const pre = block.querySelector<HTMLElement>('pre[data-language="solve"]');
+    // A `solve-doc` block is a whole-document example; a `solve` block is the
+    // per-line kind. Both become live notepads, they differ only in how the
+    // block is grouped and which engine pass runs it (see upgrade()).
+    const pre = block.querySelector<HTMLElement>(
+      'pre[data-language="solve"], pre[data-language="solve-doc"]',
+    );
     if (!pre) continue;
+    const whole = pre.dataset.language === "solve-doc";
     block.classList.add("solve-embed");
-    pending.push([block, pre]);
+    pending.push([block, pre, whole]);
   }
   if (pending.length === 0) return;
 
   if (typeof IntersectionObserver !== "function") {
-    for (const [block, pre] of pending) void upgrade(block, pre);
+    for (const [block, pre, whole] of pending) void upgrade(block, pre, whole);
     return;
   }
 
@@ -157,7 +194,7 @@ function init(): void {
         if (!entry.isIntersecting) continue;
         observer.unobserve(entry.target);
         const found = pending.find(([block]) => block === entry.target);
-        if (found) void upgrade(found[0], found[1]);
+        if (found) void upgrade(found[0], found[1], found[2]);
       }
     },
     { rootMargin: "300px" },

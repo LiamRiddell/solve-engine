@@ -2,7 +2,7 @@ import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import react from "@astrojs/react";
 import { createStarlightTypeDocPlugin } from "starlight-typedoc";
-import { solveGrammar } from "./src/solve-grammar.js";
+import { solveGrammar, solveDocGrammar } from "./src/solve-grammar.js";
 import { remarkMermaid } from "./src/plugins/remark-mermaid.mjs";
 import { rehypeBaseLinks } from "./src/plugins/rehype-base-links.mjs";
 
@@ -147,9 +147,10 @@ export default defineConfig({
         "./src/styles/landing.css",
       ],
       expressiveCode: {
-        // Registers the ```solve language. Without it every example in the
+        // Registers the ```solve language, and ```solve-doc for whole-document
+        // examples (see solve-grammar.js). Without them every example in the
         // syntax reference falls back to unhighlighted plain text.
-        shiki: { langs: [solveGrammar] },
+        shiki: { langs: [solveGrammar, solveDocGrammar] },
         // One Dark is the palette the playground's CodeMirror editor uses, so
         // an expression looks the same in the docs as it does when the reader
         // pastes it into the playground.
