@@ -227,6 +227,30 @@ function euclidGcd(a: number, b: number): number {
 }
 
 /**
+ * Sum of squared deviations from the mean, the numerator both variance forms
+ * share. Zero for an empty list.
+ */
+function sumOfSquares(nums: number[]): number {
+    const n = nums.length;
+    if (n === 0) return 0;
+    const mean = nums.reduce((acc, x) => acc + x, 0) / n;
+    return nums.reduce((acc, x) => acc + (x - mean) * (x - mean), 0);
+}
+
+/**
+ * Variance in the population form (divide by n) or the sample form (divide by
+ * n-1). Returns 0 for an empty list, and for a one-element sample, whose
+ * n-1 = 0 has no defined spread, rather than a NaN.
+ */
+function variance(nums: number[], sample: boolean): number {
+    const n = nums.length;
+    if (n === 0) return 0;
+    const denom = sample ? n - 1 : n;
+    if (denom <= 0) return 0;
+    return sumOfSquares(nums) / denom;
+}
+
+/**
  * Registry of built-in mathematical functions.
  * Indexed by the number pushed as an operand of OpCode.CALL_BUILTIN.
  */
@@ -1125,6 +1149,60 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         if (annualRate < 0) return errorValue("INVALID_RATE", `savings goal: the rate must not be negative.`);
         const periods = annuityPeriods(target, contribution, annualRate / periodsPerYear);
         return uomValue(periods, unit);
+    },
+    // ── Spread and shape aggregates (MathPhrases "standard deviation of X, Y",
+    // "variance of ...", "spread of ...", "mode of ..."). Population form is the
+    // default; the sample form is a separate index. See issue #184. ──
+    // standard deviation (population): the spread in the same units as the data.
+    101: (args) => numberValue(Math.sqrt(variance(args.map((a) => a.toNumber()), false))),
+    // sample standard deviation (divide by n-1).
+    102: (args) => numberValue(Math.sqrt(variance(args.map((a) => a.toNumber()), true))),
+    // variance (population): the mean squared deviation.
+    103: (args) => numberValue(variance(args.map((a) => a.toNumber()), false)),
+    // sample variance (divide by n-1).
+    104: (args) => numberValue(variance(args.map((a) => a.toNumber()), true)),
+    // spread: largest minus smallest. Named "spread" because "range" already
+    // means a start:end interval elsewhere in the engine.
+    105: (args) => {
+        if (args.length === 0) return numberValue(0);
+        const nums = args.map((a) => a.toNumber());
+        return numberValue(Math.max(...nums) - Math.min(...nums));
+    },
+    // mode: the most frequent value. A tie is broken by first appearance, so the
+    // result is deterministic for the same list.
+    106: (args) => {
+        if (args.length === 0) return numberValue(0);
+        const counts = new Map<number, number>();
+        let best = args[0].toNumber();
+        let bestCount = 0;
+        for (const a of args) {
+            const n = a.toNumber();
+            const c = (counts.get(n) ?? 0) + 1;
+            counts.set(n, c);
+            if (c > bestCount) {
+                bestCount = c;
+                best = n;
+            }
+        }
+        return numberValue(best);
+    },
+    // weighted average: the arguments arrive interleaved [v1, w1, v2, w2, ...]
+    // from WeightedAverageParselet, which has already rejected any value with no
+    // weight. Weights are normalised by their own total, so they need not sum to
+    // 1 or 100%. See issue #185.
+    107: (args) => {
+        let weightedSum = 0;
+        let weightTotal = 0;
+        for (let i = 0; i + 1 < args.length; i += 2) {
+            const value = args[i].toNumber();
+            const weight = args[i + 1].toNumber();
+            weightedSum += value * weight;
+            weightTotal += weight;
+        }
+        if (weightTotal === 0) {
+            return errorValue("WEIGHTED_AVERAGE_ZERO_WEIGHT", "weighted average: the weights sum to zero, so there is nothing to divide by");
+        }
+        return numberValue(weightedSum / weightTotal);
     },
 };
 

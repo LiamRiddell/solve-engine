@@ -1,5 +1,6 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { VariadicAggregateParselet } from "./parselets/VariadicAggregateParselet";
+import { WeightedAverageParselet } from "./parselets/WeightedAverageParselet";
 import { unaryPhraseParselet } from "./parselets/UnaryPhraseParselet";
 import { remainderOfParselet, nthRootParselet, logBaseParselet } from "./parselets/RemainderRootParselets";
 import { functionPhraseNormalizerRule } from "./normalizer/FunctionPhraseNormalizerRule";
@@ -13,6 +14,11 @@ import { ProportionParselet } from "./parselets/ProportionParselet";
 // CALL_BUILTIN indices. See VMBuiltins.ts for the handler implementations.
 const AVERAGE = 42, MEDIAN = 43, TOTAL = 44, COUNT = 45;
 const MIN = 9, MAX = 10;
+// Spread/shape aggregates (#184) and weighted average (#185). Population form
+// is the default; the sample form is its own index.
+const STANDARD_DEVIATION = 101, SAMPLE_STANDARD_DEVIATION = 102;
+const VARIANCE = 103, SAMPLE_VARIANCE = 104;
+const SPREAD = 105, MODE = 106, WEIGHTED_AVERAGE = 107;
 // Reused builtins: gcd/lcm and the two roots already exist as functions.
 const GCD = 38, LCM = 39, SQRT = 0, CBRT = 21;
 
@@ -77,6 +83,20 @@ export const MATHPHRASES_PACKAGE: IEnginePackage = {
     // sqrt/cbrt spelled the way they are said.
     "square root of": "SQUARE_ROOT_OF",
     "cube root of": "CUBE_ROOT_OF",
+    // Spread and shape of a list (#184). Population form by default, the sample
+    // form named. "spread" is largest minus smallest, spelled that way because
+    // "range" already means a start:end interval elsewhere.
+    "standard deviation of": "STANDARD_DEVIATION_OF",
+    "stdev of": "STANDARD_DEVIATION_OF",
+    "sample standard deviation of": "SAMPLE_STANDARD_DEVIATION_OF",
+    "sample stdev of": "SAMPLE_STANDARD_DEVIATION_OF",
+    "variance of": "VARIANCE_OF",
+    "sample variance of": "SAMPLE_VARIANCE_OF",
+    "spread of": "SPREAD_OF",
+    "mode of": "MODE_OF",
+    // Weighted average (#185): each value pairs with its weight via "at".
+    "weighted average of": "WEIGHTED_AVERAGE_OF",
+    "weighted mean of": "WEIGHTED_AVERAGE_OF",
   },
   prefixParselets: {
     AVERAGE_OF: new VariadicAggregateParselet(AVERAGE),
@@ -96,6 +116,13 @@ export const MATHPHRASES_PACKAGE: IEnginePackage = {
     SQUARE_ROOT_OF: unaryPhraseParselet(SQRT),
     CUBE_ROOT_OF: unaryPhraseParselet(CBRT),
     CLAMP: new ClampParselet(),
+    STANDARD_DEVIATION_OF: new VariadicAggregateParselet(STANDARD_DEVIATION),
+    SAMPLE_STANDARD_DEVIATION_OF: new VariadicAggregateParselet(SAMPLE_STANDARD_DEVIATION),
+    VARIANCE_OF: new VariadicAggregateParselet(VARIANCE),
+    SAMPLE_VARIANCE_OF: new VariadicAggregateParselet(SAMPLE_VARIANCE),
+    SPREAD_OF: new VariadicAggregateParselet(SPREAD),
+    MODE_OF: new VariadicAggregateParselet(MODE),
+    WEIGHTED_AVERAGE_OF: new WeightedAverageParselet(WEIGHTED_AVERAGE),
   },
   infixParselets: {
     IS_TO: new ProportionParselet(),
