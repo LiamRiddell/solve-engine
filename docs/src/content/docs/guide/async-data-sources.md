@@ -94,6 +94,34 @@ superseded, because the user kept typing, or the engine was cleared. Pass it to
 that has moved on. This is what stops a slow response from overwriting a newer
 answer.
 
+## Refreshing on a schedule
+
+By default a resolved value refreshes only when its line is re-evaluated and has
+gone stale. To keep an on-screen value fresh while a note sits open, declare a
+cadence on the `AsyncCheckResult` your `preflight` returns: `refetchIntervalMs`
+is how often to refetch, and `refetch` forces a fresh fetch, past your cache, and
+returns the new value.
+
+```ts
+return {
+  queryKey,
+  packageId,
+  signal,
+  resolver: this.fetchRate(pair, signal),
+  refetchIntervalMs: 60_000,                    // refresh an on-screen rate once a minute
+  refetch: () => this.fetchRate(pair, this.refreshSignal),
+};
+```
+
+The engine drives the refetch for the values currently on screen and pushes each
+fresh result to the host on the event stream, the same one the pull path uses. It
+does nothing unless the host enabled background refresh (`backgroundRefresh.enabled`),
+and a value with no cadence stays pull-only. A value no line references any more
+stops at once, and a refetch still running when the next is due is skipped rather
+than stacked, so give `refetch` an `AbortSignal` you own and abort in `destroy()`.
+The [pending lifecycle](/guide/async-and-live-data/#refreshing-on-a-schedule) is
+the consumer's side of this.
+
 ## A complete reference
 
 The currency package is the smallest built-in that does all of this: a symbol

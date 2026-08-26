@@ -86,3 +86,24 @@ page, and `live-data.md` was dissolved entirely into `weather.md`, `stocks.md`
 and `knowledge.md`. Either way, each area ends up found under its own name. A page whose results are not fixed strings (live network data, random
 rolls, dates relative to now) carries no proven examples and is listed, with a
 reason, in the `unprovable` map in `DocExamples.spec.ts`.
+
+## Developer-side documentation (rule)
+
+The docs have two audiences, and a feature is not finished until both are served.
+The reader-facing syntax pages under `docs/src/content/docs/syntax/` are one; the
+package-author pages under `docs/src/content/docs/packages/` (and the async data
+source guide under `guide/`) are the other. A change that alters what a package
+creator can do, a new or changed `IEnginePackage` extension point
+(`lexerVocabulary`, `prefixParselets`, `infixParselets`, `pluginFunctions`,
+`normalizerRules`/`phrases`, `asConverters`, `asyncResolvers`, `tokenCategories`,
+`completionItems`), or a new option on a helper a package uses
+(`createQueryResolver`'s `refetchIntervalMs`, say), updates the developer-side
+docs in the **same change**. Each extension point has its **own** hands-on guide
+under `docs/src/content/docs/packages/` that walks an author through it end to end,
+in the `async-data-sources.md` style (the worked example, the contract, the
+boundary), not one combined reference and not a one-line mention. A new or changed
+extension point gets its guide written or revised, and the routing table in
+`packages/authoring-a-package.md` (Field, Purpose, How-to) stays in step, in the
+same change. The developer experience is only as good as the half
+that is documented, and the half that drifts is the package surface, because it
+has no reader typing an expression to notice.
