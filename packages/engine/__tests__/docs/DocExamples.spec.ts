@@ -202,7 +202,6 @@ describe("documented examples evaluate as documented", () => {
       ["weather.md", "conditions come from a live network service"],
       ["stocks.md", "prices come from a host-supplied network provider"],
       ["knowledge.md", "answers come from a host-supplied provider"],
-      ["dates.md", "relative dates resolve against the current date"],
     ]);
 
     const syntaxDir = path.join(DOCS_ROOT, "syntax");
