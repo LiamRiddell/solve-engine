@@ -148,6 +148,15 @@ const BUILTIN_ARITY: Record<number, BuiltinArity> = {
   98: { name: "splitEach", min: 2, max: 2 },
   99: { name: "savingsGoalPayment", min: 3, max: 3 },
   100: { name: "savingsGoalPeriods", min: 5, max: 5 },
+  // Spread and shape aggregates over a variadic list (issue #184).
+  101: { name: "standardDeviation", min: 0, max: Infinity },
+  102: { name: "sampleStandardDeviation", min: 0, max: Infinity },
+  103: { name: "variance", min: 0, max: Infinity },
+  104: { name: "sampleVariance", min: 0, max: Infinity },
+  105: { name: "spread", min: 0, max: Infinity },
+  106: { name: "mode", min: 0, max: Infinity },
+  // Weighted average, interleaved value/weight pairs (issue #185).
+  107: { name: "weightedAverage", min: 2, max: Infinity },
 };
 
 /** "1 argument" / "2 arguments", so the message reads as English either way. */
