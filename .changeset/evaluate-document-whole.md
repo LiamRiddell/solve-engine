@@ -46,7 +46,7 @@ notepads whose results the build proves, rather than static listings.
 ## Verification
 
 `npm run verify` (typecheck, the test suite, build, and the single-file and
-bundled smoke consumers): 7,783 tests across 345 suites pass. The documentation
+bundled smoke consumers): 7,835 tests across 346 suites pass. The documentation
 example suite now evaluates every whole-document block the same way a notepad
 renders it and asserts each documented result, and a new cross-path suite pins
 each whole-document form through all three entry points at once: the single-line
