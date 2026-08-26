@@ -33,7 +33,25 @@ later.
 Historical rates come from a data source you supply, so nothing is assumed and
 no live rate is passed off as a historical one. Without a provider a dated
 conversion reports that historical rates are not configured rather than falling
-back to today's rate. See [live data](/syntax/live-data/) for wiring one up.
+back to today's rate.
+
+```ts
+import { createCurrencyPackage } from "solve-engine/packages";
+
+const currency = createCurrencyPackage({
+  historicalRateProvider: async (from, to, isoDate, signal) => {
+    const res = await fetch(`https://example.com/fx/${isoDate}?from=${from}&to=${to}`, { signal });
+    return (await res.json()).rate;
+  },
+});
+```
+
+`createCurrencyPackage()` with no argument is the default already in
+`BUILTIN_PACKAGES`, so live conversion works out of the box. Build your own with a
+`historicalRateProvider` and substitute it into the engine's `packages` array to
+answer dated ones. A resolved historical rate never goes stale, since the rate on
+a fixed past date does not change. There is no free, keyless historical-FX service
+to bake in the way the live rate has one.
 
 ## Exact decimals
 

@@ -70,3 +70,19 @@ document result, the cross-path agreement, and the single-line refusal. A
 per-feature test that exercises only one entry point is not enough, because the
 drift this catches is a form that works through one path and misbehaves through
 another.
+
+## Feature placement in the docs (rule)
+
+Before documenting a new feature, look at where it belongs in the syntax
+reference as it stands. A feature that extends an existing area goes on that
+area's page; a feature that is genuinely a new area gets its **own** page,
+created and registered in the sidebar (`docs/astro.config.mjs`, in its
+alphabetical slot), never appended to the nearest existing page because that is
+where the cursor happened to be. A page that has grown to cover several unrelated
+features is the sign the split was missed, and it is broken apart. Both shapes
+have precedent: `line-references.md` had category tags, goal seek and table
+columns carved out into their own pages while it stayed a focused line-reference
+page, and `live-data.md` was dissolved entirely into `weather.md`, `stocks.md`
+and `knowledge.md`. Either way, each area ends up found under its own name. A page whose results are not fixed strings (live network data, random
+rolls, dates relative to now) carries no proven examples and is listed, with a
+reason, in the `unprovable` map in `DocExamples.spec.ts`.

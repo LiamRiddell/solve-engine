@@ -52,8 +52,8 @@ function errorMessageOf(value: Value): string {
  * @param engine - The engine to borrow for the pass. Its current document model
  * (if any) is restored before returning.
  * @param input - The document text, newline-separated.
- * @param options - Parsing options, matching `parseDocument`. Only `inputType`
- * is consulted; it defaults to `markdown`.
+ * @param _options - Accepted so a call reads the same as `parseDocument`'s, but
+ * not consulted: the incremental pass reads the document as markdown regardless.
  */
 export function evaluateDocument(
 	engine: ExpressionEngine,

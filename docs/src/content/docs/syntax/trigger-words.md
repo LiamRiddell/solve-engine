@@ -42,6 +42,15 @@ names.
 :sum + 8 // 50
 ```
 
+## A leading `search:` starts a knowledge query
+
+Where the [knowledge](/syntax/knowledge/) package is registered, `search`, `ask`
+and `google` begin a lookup only with an immediate colon: `search: nearest star`
+is a query, while `search 5` reads the variable `search` and `:search = 5` still
+defines it. The colon, like the parenthesis above, is what separates the special
+reading from the ordinary word. The package is opt-in, so a default engine treats
+all three as plain names.
+
 ## A mid-line `#word` is a category tag
 
 A `#` followed by a letter, in the middle of a line, is read as a
