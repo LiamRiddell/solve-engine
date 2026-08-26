@@ -252,10 +252,17 @@ export default defineConfig({
           ],
         },
         {
+          // A reading order, not alphabetical: the overview, then the reference
+          // index, then a hands-on guide per extension point in pipeline order,
+          // then testing.
           label: "Writing packages",
           items: [
             { slug: "packages/authoring-a-package" },
-            { slug: "packages/extension-points" },
+            { slug: "packages/recognising-phrases" },
+            { slug: "packages/units-and-keywords" },
+            { slug: "packages/functions-and-operators" },
+            { slug: "packages/as-converters" },
+            { slug: "packages/highlighting-and-completions" },
             { slug: "packages/testing-a-package" },
           ],
         },

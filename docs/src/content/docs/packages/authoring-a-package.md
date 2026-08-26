@@ -66,7 +66,7 @@ Anything past that keeps using the full contract below, unchanged:
 - variadic or optional arguments,
 - other value types (units, percentages, dates, matrices),
 - asynchronous work (a network lookup), which wants an
-  [async resolver](/packages/extension-points/) and a parselet,
+  [async data source](/guide/async-data-sources/) and a parselet,
 - any syntax that is not `name(args)`.
 
 `defineFunction` sits on top of the contract and changes none of it, so you can
@@ -92,17 +92,20 @@ a clear message rather than failing mysteriously later.
 
 ## What a package can contribute
 
-| Field | Purpose |
-| --- | --- |
-| `lexerVocabulary` | Keywords, operators and units the tokeniser should recognise |
-| `prefixParselets` | Parsing rules for tokens that begin an expression |
-| `infixParselets` | Parsing rules for tokens that combine expressions |
-| `pluginFunctions` | Functions the virtual machine can call |
-| `normalizerRules` | Token-stream rewrites, including phrase fusion |
-| `asConverters` | Targets for the `as` conversion form |
-| `asyncResolvers` | External data sources |
-| `tokenCategories` | Highlighting categories for new tokens |
-| `completionItems` | Editor completion candidates |
+| Field | Purpose | How-to |
+| --- | --- | --- |
+| `lexerVocabulary` | Keywords, operators and units the tokeniser should recognise | [Units and keywords](/packages/units-and-keywords/) |
+| `prefixParselets` | Parsing rules for tokens that begin an expression | [Functions and operators](/packages/functions-and-operators/) |
+| `infixParselets` | Parsing rules for tokens that combine expressions | [Functions and operators](/packages/functions-and-operators/) |
+| `pluginFunctions` | Functions the virtual machine can call | [Functions and operators](/packages/functions-and-operators/) |
+| `normalizerRules` / `phrases` | Token-stream rewrites, including phrase fusion | [Recognising phrases and words](/packages/recognising-phrases/) |
+| `asConverters` | Targets for the `as` conversion form | [Custom as converters](/packages/as-converters/) |
+| `asyncResolvers` | External data sources | [Async data source](/guide/async-data-sources/) |
+| `tokenCategories` | Highlighting categories for new tokens | [Highlighting and completions](/packages/highlighting-and-completions/) |
+| `completionItems` | Editor completion candidates | [Highlighting and completions](/packages/highlighting-and-completions/) |
+
+Each field has a hands-on guide in the **How-to** column: this table is the map,
+and each guide walks its extension point end to end.
 
 ## Registering
 
