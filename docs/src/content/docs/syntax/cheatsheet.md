@@ -268,7 +268,7 @@ total: 5 + 3 // 8
 A mid-line `#tag` labels a line's category and is dropped from that line's own
 result; the aggregates gather every line carrying the tag. These read the whole
 document, so they are shown rather than asserted. See
-[category tags](/syntax/line-references/#category-tags).
+[category tags](/syntax/category-tags/).
 
 | Expression | Meaning |
 | --- | --- |
