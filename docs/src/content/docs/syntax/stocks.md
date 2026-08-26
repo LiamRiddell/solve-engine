@@ -37,8 +37,10 @@ ordinary word is never mistaken for a symbol.
 Without a `fetchQuote`, `stock(AAPL)` returns a clearly named
 `STOCKS_NOT_CONFIGURED` error rather than a fabricated or zero price. A live price
 reaches the network, so its first result is a pending value and the real answer
-arrives once the request returns. See
-[async and live data](/guide/async-and-live-data/) for how a host waits on that.
+arrives once the request returns. A quote left on screen can also refresh on its
+own, without a keystroke: pass `refetchIntervalMs` and enable background refresh.
+See [async and live data](/guide/async-and-live-data/) for how a host waits on
+the result and drives that schedule.
 
 The results depend on the live provider, so they are shown here rather than
 asserted.

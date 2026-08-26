@@ -235,6 +235,7 @@ describe("getConfig", () => {
 	test("names every section, so a host can enumerate what is configurable", () => {
 		const config = new ConfigManager().getConfig();
 		expect(Object.keys(config).sort()).toEqual([
+			"backgroundRefresh",
 			"date",
 			"diagnostic",
 			"performance",

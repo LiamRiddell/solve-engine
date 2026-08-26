@@ -77,6 +77,44 @@ async function watch(engine: ExpressionEngine, onChange: (lines: number[]) => vo
 Because the stream applies backpressure, a slow consumer cannot be flooded: the
 engine buffers up to a limit and waits rather than growing without bound.
 
+## Refreshing on a schedule
+
+By default a live value refreshes only when its line is re-evaluated: `staleTime`
+marks it stale after a while, and the next keystroke refetches it. A note left
+open, showing a quote or a rate, holds whatever it last resolved.
+
+Proactive background refresh closes that gap. It is off by default, because it
+needs timers and a live editor consuming the stream above; a headless or batch
+host leaves it off. Turn it on when you construct the engine:
+
+```ts
+const engine = createEngine({ config: { backgroundRefresh: { enabled: true } } });
+```
+
+A value refreshes in the background only if its resolver declares a cadence.
+`refetchIntervalMs` sits beside `staleTimeMs` and is independent of it: a live
+quote might refetch every minute, an FX rate every few minutes, an immutable
+historical close never.
+
+```ts
+const stocks = createStocksPackage({
+  fetchQuote: async (ticker, signal) => { /* ... */ },
+  refetchIntervalMs: 60_000, // refresh an on-screen quote once a minute
+});
+```
+
+The fresh value arrives on the same event stream as everything else, a
+`lines-updated` event for the lines that changed, so the `watch` loop above needs
+no changes. It is the push counterpart of the pull path, not a replacement: both
+run off the one stream, and `staleTime` still governs re-evaluation underneath.
+
+The boundaries are deliberate. Only values currently on screen refresh; a value
+whose line the reader has edited away stops at once, so an open note leaks no
+timers or requests. A refetch still running when the next is due is skipped rather
+than stacked, and a failed one is swallowed (the pull path surfaces the failure on
+the next re-evaluation). A value refreshes only if its resolver asked to, so
+enabling the feature does not put every live value on a timer.
+
 ## When a fetch fails
 
 A failed lookup is its own event rather than a thrown error, so one dead request

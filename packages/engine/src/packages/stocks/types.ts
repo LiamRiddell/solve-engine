@@ -62,4 +62,14 @@ export interface StocksPackageConfig {
 	 * fetches, not because the data could go stale.
 	 */
 	historicalStaleTimeMs?: number;
+
+	/**
+	 * Cadence, in ms, for proactive background refresh of a CURRENT quote that
+	 * is on screen (say `60_000` to refresh a live price once a minute). Omit
+	 * (the default) to keep the current quote pull-only, refreshing on the next
+	 * re-evaluation once stale. It applies only to the current-price resolver, a
+	 * historical close never refreshes, and takes effect only when the engine has
+	 * `backgroundRefresh.enabled`.
+	 */
+	refetchIntervalMs?: number;
 }
