@@ -2,32 +2,32 @@
 "solve-engine": minor
 ---
 
-Add inline sparklines and function plots (issues #186, #187).
+Add charts: sparklines and function plots, emitted as data (issues #186, #187).
 
 A note could hold a series of numbers or the shape of a function, but not see
-either. Both now answer with numeric metadata a frontend draws, never pixels,
-exactly as a colour answers with its channels: the engine says what to draw, and
-each host draws it.
+either. Both now produce a `Chart` value: a specification a host draws with its
+own charting library. The engine emits the points, the axes' extents and a
+label, never pixels, the same split the colour swatch uses.
+
+## One value type
+
+`<vector> as sparkline` and `plot <expr> from <a> to <b>` both produce a single
+`ValueType.Chart`, discriminated by a `kind`. A host reads `kind` to choose a
+renderer and draws `points` scaled to `domain` × `range`; new chart kinds are
+added without breaking a host that already switches on it.
 
 ## Sparklines
 
-A numeric vector or a range answers with its numbers as always, and, in a
-notepad that can draw, an inline sparkline of their shape beside them.
-
 | expression | result |
 | --- | --- |
-| `[120, 135, 128, 150, 162]` | `[120, 135, 128, 150, 162]` (plus a sparkline) |
-| `map(x^2, 0:5)` | `[0, 1, 4, 9, 16, 25]` (plus a sparkline) |
+| `[120, 135, 128, 150, 162] as sparkline` | `[120, 135, 128, 150, 162]` (a sparkline chart) |
+| `map(x^2, 0:5) as sparkline` | `[0, 1, 4, 9, 16, 25]` (a sparkline chart) |
 
-The text answer is unchanged; the sparkline is additive. The engine emits a
-series downsampled to at most 32 points with the data's true minimum and
-maximum, so a wide range costs nothing to plot. Only a purely numeric vector or
-a range carries a series; a mixed or non-numeric list draws nothing.
+Only a purely numeric vector or a range can become a sparkline; anything else is
+a clear error. The text answer keeps the numbers, so a reader with no canvas
+still sees them, and the series is downsampled to at most 32 points.
 
 ## Function plots
-
-`plot <expr> from <a> to <b>` samples an expression across a range and answers
-with its points and a plain-text label.
 
 | expression | result |
 | --- | --- |
@@ -36,18 +36,19 @@ with its points and a plain-text label.
 | `plot 1/x from 0.5 to 5` | `1/x over [0.5, 5]` |
 
 The variable is `x`, the same reserved name `map` binds, and the expression is
-re-evaluated at each of 64 sample points, so the sample is exact rather than
-interpolated. This re-entrant evaluation is built on the same machinery `map`
-uses.
+re-evaluated at each of 64 sample points, so the sample is exact. This re-entrant
+evaluation is built on the same machinery `map` uses.
 
 ## The boundaries
 
-- **Points, never pixels.** A plot is `(x, y)` points and a label, a sparkline a
-  downsampled series and its extent; a host that can draw renders them, and one
-  that cannot still shows the numbers. This is the split the colour swatch
-  already uses.
+- **Data, never pixels.** A `Chart` carries the `(x, y)` points, the domain and
+  range they scale to, and a plain-text label; the developer brings the charting
+  library that draws them.
+- **Opt-out.** Charts are a new `solve-chart` package, on by default and
+  removable: an engine that wants no charting drops it and the two forms stop
+  parsing, exactly like the colour package.
 - **A gap is not a failure.** A sample the expression cannot evaluate, `1/x` at
-  zero, is left as a hole in the curve rather than breaking the whole plot.
+  zero, is left as a hole in the curve.
 - **`plot` stays an ordinary word.** It is claimed as syntax only when it starts
   a plot clause, so `:plot = 5` still defines a variable and `plot + 1` reads it.
 
@@ -56,6 +57,6 @@ uses.
 `npm run verify` (typecheck, the full test suite, build, the package smoke script
 and the bundled-consumer tree-shaking contract) passes, along with `npm run
 lint`, the comment-style and doc-coverage checks, and the docs example suite (the
-sparkline examples are proven on the vectors page, the plot labels on the new
-plots page). New tests: `format/Sparkline.spec.ts` and
-`packages/mapreduce/Plot.spec.ts`, both including the worker-DTO round-trip.
+sparkline and plot examples are proven on the new charts page). New tests:
+`packages/chart/Chart.spec.ts`, including the worker-DTO round-trip and that the
+package is removable.

@@ -88,26 +88,20 @@ export interface SerializedValue {
 		css: string;
 	};
 	/**
-	 * Sparkline payload for a numeric vector or a range: a downsampled `series`
-	 * (at most 32 points) with the data's true `min` and `max`, so a host draws
-	 * an inline sparkline beside the plain answer without recomputing. Absent for
-	 * anything not plottable. See issue #186.
+	 * Chart payload, present only for {@link ValueType.Chart}: the specification a
+	 * host renders with its own charting library. `kind` selects the renderer
+	 * (`sparkline`/`plot`); `points` are the `(x, y)` to draw, scaled to `domain`
+	 * × `range`; `label` is the plain-text answer; `expr` is the source
+	 * expression for a plot. The engine emits data, never pixels. See issues #186,
+	 * #187.
 	 */
-	sparkline?: {
-		series: number[];
-		min: number;
-		max: number;
-	};
-	/**
-	 * Plot payload, present only for {@link ValueType.Plot}: the sampled `(x, y)`
-	 * `points`, the source `expr`, and the `from`/`to` bounds, so a host draws the
-	 * curve. See issue #187.
-	 */
-	plot?: {
+	chart?: {
+		kind: string;
 		points: Array<[number, number]>;
-		expr: string;
-		from: number;
-		to: number;
+		label: string;
+		domain: [number, number];
+		range: [number, number];
+		expr?: string;
 	};
 	/** Whether an async fallback timed out, carried through when the engine set it. */
 	timedOut?: boolean;

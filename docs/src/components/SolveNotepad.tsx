@@ -3,7 +3,17 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Plate, PlateContent, usePlateEditor } from "platejs/react";
 import { createEngine } from "solve-engine";
 import { evaluateDocument } from "solve-engine/engine";
-import { formatValue, formatMatrixAligned, sparklineFor, type SparklineData } from "solve-engine/format";
+import { formatValue, formatMatrixAligned } from "solve-engine/format";
+
+/** A chart specification the engine emits (ValueType.Chart); the notepad draws it. */
+type ChartSpec = {
+  kind: string;
+  points: Array<[number, number]>;
+  label: string;
+  domain: [number, number];
+  range: [number, number];
+  expr?: string;
+};
 import { LanguageService, tokenClassName } from "solve-engine/language";
 import { ValueType } from "solve-engine/vm";
 
@@ -48,10 +58,8 @@ interface Answer {
   swatch?: string;
   /** A stacked, column-aligned grid, set when the result is a matrix. */
   matrix?: string;
-  /** A downsampled numeric series, set when the result is a numeric vector or range, to draw an inline sparkline. */
-  sparkline?: SparklineData;
-  /** Sampled (x, y) points, set when the result is a plot, to draw a small line chart. */
-  plot?: { points: Array<[number, number]>; expr: string; from: number; to: number };
+  /** A chart specification (sparkline or plot), set when the result is a ValueType.Chart, to draw. */
+  chart?: ChartSpec;
 }
 
 const EMPTY: Answer = { text: "", kind: "none" };
@@ -147,45 +155,44 @@ function toValueAnswer(result: unknown): Answer {
   // A matrix reads far better as a stacked, aligned grid than as one line, so the
   // answer column shows the aligned form (`text` keeps the compact single line
   // for the tooltip and for anything that wants one value per row).
-  // A numeric vector or range carries a plottable series on the live Value, so
-  // the answer column can draw an inline sparkline beside the plain numbers. The
-  // text answer is unchanged; the sparkline is additive decoration.
-  const sparkline = sparklineFor(result as never) ?? undefined;
   if (v.type === ValueType.Matrix && v.value) {
-    return { text, kind: "value", matrix: formatMatrixAligned(v.value as never), sparkline };
+    return { text, kind: "value", matrix: formatMatrixAligned(v.value as never) };
   }
-  // A plot carries its sampled points on the live Value, so the answer column
-  // draws the curve beside the label.
-  if (v.type === ValueType.Plot && v.value) {
-    return { text, kind: "value", plot: v.value as Answer["plot"] };
+  // A chart (a sparkline or a plot) carries its specification on the live Value.
+  // The engine emits only the data; this notepad is one host that draws it. A
+  // real application would hand `chart` to its own charting library instead.
+  if (v.type === ValueType.Chart && v.value) {
+    return { text, kind: "value", chart: v.value as ChartSpec };
   }
   const kind = v.type === ValueType.Error ? "error" : "value";
-  return { text, kind, sparkline };
+  return { text, kind };
 }
 
-/** A small line chart of a plot's sampled points, scaled to its own extent. */
-function PlotChart({ plot }: { plot: NonNullable<Answer["plot"]> }) {
-  const w = 150;
-  const h = 46;
-  const pts = plot.points;
+/**
+ * Draws a chart specification the engine emitted: a `sparkline` as a tiny inline
+ * line, a `plot` as a small framed curve. This is a deliberately minimal
+ * renderer, enough to demo what the data describes; a real host would pass the
+ * same specification to a charting library.
+ */
+function Chart({ chart }: { chart: ChartSpec }) {
+  const isSparkline = chart.kind === "sparkline";
+  const w = isSparkline ? 64 : 150;
+  const h = isSparkline ? 16 : 46;
+  const pts = chart.points;
   if (pts.length < 2) return null;
-  const xs = pts.map((p) => p[0]);
-  const ys = pts.map((p) => p[1]);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  const spanX = maxX - minX || 1;
-  const spanY = maxY - minY || 1;
+  const [xMin, xMax] = chart.domain;
+  const [yMin, yMax] = chart.range;
+  const spanX = xMax - xMin || 1;
+  const spanY = yMax - yMin || 1;
   const points = pts
-    .map(([x, y]) => `${(((x - minX) / spanX) * w).toFixed(1)},${(h - ((y - minY) / spanY) * h).toFixed(1)}`)
+    .map(([x, y]) => `${(((x - xMin) / spanX) * w).toFixed(1)},${(h - ((y - yMin) / spanY) * h).toFixed(1)}`)
     .join(" ");
-  // A zero line, drawn only when zero falls inside the plotted y-range.
-  const zeroInRange = minY < 0 && maxY > 0;
-  const zeroY = h - ((0 - minY) / spanY) * h;
+  // For a plot, a faint zero line when zero falls inside the y-range.
+  const zeroInRange = !isSparkline && yMin < 0 && yMax > 0;
+  const zeroY = h - ((0 - yMin) / spanY) * h;
   return (
     <svg
-      className="notepad__plot"
+      className={isSparkline ? "notepad__sparkline" : "notepad__plot"}
       width={w}
       height={h}
       viewBox={`0 0 ${w} ${h}`}
@@ -196,38 +203,6 @@ function PlotChart({ plot }: { plot: NonNullable<Answer["plot"]> }) {
         <line x1="0" y1={zeroY.toFixed(1)} x2={w} y2={zeroY.toFixed(1)} stroke="currentColor" strokeWidth="0.5" opacity="0.3" />
       )}
       <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.25" />
-    </svg>
-  );
-}
-
-/** The polyline points for a sparkline, scaled to a `w`×`h` box. */
-function sparklinePoints(spark: SparklineData, w: number, h: number): string {
-  const { series, min, max } = spark;
-  const span = max - min || 1; // a flat series draws along the middle
-  const n = series.length;
-  return series
-    .map((y, i) => {
-      const px = n === 1 ? 0 : (i / (n - 1)) * w;
-      const py = h - ((y - min) / span) * h;
-      return `${px.toFixed(1)},${py.toFixed(1)}`;
-    })
-    .join(" ");
-}
-
-/** A small inline sparkline SVG drawn from a downsampled numeric series. */
-function Sparkline({ spark }: { spark: SparklineData }) {
-  const w = 64;
-  const h = 16;
-  return (
-    <svg
-      className="notepad__sparkline"
-      width={w}
-      height={h}
-      viewBox={`0 0 ${w} ${h}`}
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <polyline points={sparklinePoints(spark, w, h)} fill="none" stroke="currentColor" strokeWidth="1.25" />
     </svg>
   );
 }
@@ -563,18 +538,14 @@ export default function SolveNotepad({
               {answer.matrix ? (
                 /* A matrix is a block, so it is the one answer that breaks the
                    one-row-per-line rule: the row grows to fit the grid. */
-                <>
-                  <pre className="notepad__matrix">{answer.matrix}</pre>
-                  {answer.sparkline && <Sparkline spark={answer.sparkline} />}
-                </>
+                <pre className="notepad__matrix">{answer.matrix}</pre>
               ) : (
                 <>
                   {answer.swatch && (
                     <span className="notepad__swatch" style={{ background: answer.swatch }} aria-hidden="true" />
                   )}
                   {answer.text}
-                  {answer.sparkline && <Sparkline spark={answer.sparkline} />}
-                  {answer.plot && <PlotChart plot={answer.plot} />}
+                  {answer.chart && <Chart chart={answer.chart} />}
                 </>
               )}
             </div>

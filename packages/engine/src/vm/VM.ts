@@ -1,5 +1,5 @@
 import { OpCode } from "@solve-js/parser/OpCode";
-import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, plotValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, chartValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData } from "@solve-js/vm/Value";
 import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
 import { moneyExactMagnitude, scaleMoneyByPercent, scaleMoneyExact } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
@@ -3558,7 +3558,18 @@ export function executeBytecode(
             }
             if (Number.isFinite(y)) points.push([x, y]);
           }
-          stack.push(plotValue({ points, expr: exprText, from, to }));
+          const ys = points.map((p) => p[1]);
+          const yMin = ys.length ? Math.min(...ys) : 0;
+          const yMax = ys.length ? Math.max(...ys) : 0;
+          const boundLabel = (n: number) => (Number.isInteger(n) ? String(n) : String(Number(n.toFixed(2))));
+          stack.push(chartValue({
+            kind: "plot",
+            points,
+            label: `${exprText} over [${boundLabel(from)}, ${boundLabel(to)}]`,
+            domain: [from, to],
+            range: [yMin, yMax],
+            expr: exprText,
+          }));
           break;
         }
 
