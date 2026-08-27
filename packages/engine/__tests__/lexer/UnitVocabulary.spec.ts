@@ -114,7 +114,9 @@ describe("deliberate exclusions", () => {
 
 describe("single-character units", () => {
   test("only the grandfathered ones are admitted", () => {
-    for (const unit of ["m", "g", "s", "h", "d", "l", "b", "B", "C", "F", "K", "W", "t"]) {
+    // `N` (newton) and `J` (joule) joined the set for dimensional arithmetic
+    // (`50 N`, `200 J`); see issue #191.
+    for (const unit of ["m", "g", "s", "h", "d", "l", "b", "B", "C", "F", "K", "W", "t", "N", "J"]) {
       expect(isKnownUnit(unit)).toBe(true);
     }
   });
@@ -122,7 +124,7 @@ describe("single-character units", () => {
   test("the rest stay identifiers, so placeholder names keep working", () => {
     // `x.y` and `x == y` are written all over the test suite. A one-letter
     // unit is indistinguishable from a placeholder name.
-    for (const letter of ["r", "a", "y", "c", "p", "S", "L", "N", "J", "R", "x", "n"]) {
+    for (const letter of ["r", "a", "y", "c", "p", "S", "L", "R", "x", "n"]) {
       expect(isKnownUnit(letter)).toBe(false);
     }
   });
@@ -153,7 +155,8 @@ describe("existing vocabulary is unchanged", () => {
   });
 
   test("the previously excluded engine-owned words are still excluded", () => {
-    for (const word of ["in", "V", "var", "fps", "%"]) {
+    // `V` is now the volt (issue #191); the rest stay excluded.
+    for (const word of ["in", "var", "fps", "%"]) {
       expect(isKnownUnit(word)).toBe(false);
     }
   });

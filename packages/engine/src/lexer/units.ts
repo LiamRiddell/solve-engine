@@ -85,6 +85,9 @@ function isTokenizableSpelling(spelling: string): boolean {
  */
 const GRANDFATHERED_SINGLE_CHARACTER_UNITS = new Set([
   "m", "g", "t", "s", "h", "d", "l", "b", "B", "C", "F", "K", "W",
+  // Newton and joule, so the named forces and energies of dimensional
+  // arithmetic can be typed by their symbol (`50 N`, `200 J`). See issue #191.
+  "N", "J",
 ]);
 
 /** Whether a base-table spelling should become a lexer token. */

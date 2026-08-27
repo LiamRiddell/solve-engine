@@ -217,6 +217,10 @@ function formatMsDuration(ms: number): string {
 
 function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings, exact?: DecimalData): string {
   if (unit === "ms") return `= ${formatMsDuration(value)}`;
+  // A fuel-consumption unit is stored slash-free (so it is not read as a rate)
+  // but shown the way it is written.
+  if (unit === "l100km") unit = "l/100km";
+  if (unit === "mps2") unit = "m/s²";
 
   const dp = settings.unitOfMeasurementResult.decimalPlaces;
 

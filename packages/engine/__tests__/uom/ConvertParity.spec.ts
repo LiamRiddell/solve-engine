@@ -113,7 +113,7 @@ describe("ported unit table matches convert v7.0.2", () => {
   });
 
   test("non-units report no measure, including inherited property names", () => {
-    for (const notAUnit of ["xyz", "USD", "usd", "%", "var", "V", "fps", "pnt", "", " cm ", "constructor", "toString", "__proto__"]) {
+    for (const notAUnit of ["xyz", "USD", "usd", "%", "var", "fps", "pnt", "", " cm ", "constructor", "toString", "__proto__"]) {
       expect(lookupUnit(notAUnit)).toBeUndefined();
       expect(getMeasure(notAUnit)).toBeUndefined();
     }

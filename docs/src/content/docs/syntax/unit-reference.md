@@ -597,7 +597,7 @@ Measured against **m3s**.
 
 ## Spellings that are not listed
 
-The conversion tables carry 1504 spellings in total, and 459 of
+The conversion tables carry 1508 spellings in total, and 463 of
 them are missing above. Most are multi-word forms like `sq ft` and `cu yd`,
 which the tables can resolve but the lexer cannot tokenize, so they are
 unavailable when typing an expression. They are excluded here rather than listed

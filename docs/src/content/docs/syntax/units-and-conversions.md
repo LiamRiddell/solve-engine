@@ -98,6 +98,49 @@ to the whole quotient rather than to the number just before it.
 120 km / 2 hours in kph // 60.00 kph
 ```
 
+## Fuel economy
+
+Fuel economy is written two ways that mean the same thing: **miles per gallon**
+(`mpg`), where a bigger number is better, and **litres per 100 km** (`l/100km`),
+where a smaller number is better. One is distance per fuel, the other fuel per
+distance, so they are opposites of each other, and converting between them means
+taking one over the other, not just rescaling. That is why it needs its own
+step, and it is done for you:
+
+```solve
+40 mpg in l/100km // 5.88 l/100km
+6 l/100km in mpg // 39.20 mpg
+30 mpg in km/l // 12.75 km/l
+```
+
+`mpg` is miles per US gallon (the gallon the engine ships). Going between two
+distance-per-fuel forms, `mpg` and `km/l`, is an ordinary rescale, since both
+count the same way up; it is only the mpg-to-`l/100km` pairing that turns over.
+
+## Named derived units
+
+Many physical quantities are really other quantities multiplied together. A
+**force** is a mass times an acceleration; **power** is voltage times current;
+**energy** is power times time, or a force times a distance. When you multiply
+two quantities, the engine tracks what their units combine into, and when the
+result is one of these named quantities, it shows it by its name:
+
+```solve
+70 kg * 9.81 m/s^2 as N // 686.70 N
+230 V * 13 A as W // 2990.00 W
+50 N * 4 m as J // 200.00 J
+2000 W * 3 hours as kWh // 6.00 kWh
+```
+
+`N` is the newton (force), `W` the watt (power), `J` the joule (energy), and
+`kWh` the kilowatt-hour (energy again, the unit an electricity bill uses).
+Writing `as N` asks for the answer in that unit; the engine also names the result
+on its own when you leave the `as` off. This works only where the combination
+makes a named quantity: `5 m * 3 m` is an area and stays as it was, and
+multiplying two unrelated quantities is still reported as a mismatch rather than
+invented into a unit. (A fuller algebra of units, and units raised to arbitrary
+powers, are a later addition.)
+
 ## Surveying and older length units
 
 ```solve
