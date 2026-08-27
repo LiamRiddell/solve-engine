@@ -8,7 +8,7 @@
  * byte-for-byte the same DTO.
  */
 
-import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type ChartData } from "@solve-js/vm/Value";
+import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type ChartData, type IpCidrData } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { toHexString, formatColour } from "@solve-js/packages/colour/ColourMath";
 import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
@@ -96,6 +96,13 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 			domain: [c.domain[0], c.domain[1]],
 			range: [c.range[0], c.range[1]],
 			...(c.expr !== undefined ? { expr: c.expr } : {}),
+		};
+	} else if (value.type === ValueType.IpCidr) {
+		const ip = raw as IpCidrData;
+		dto.ipCidr = {
+			...(ip.addr !== undefined ? { addr: ip.addr } : {}),
+			...(ip.prefix !== undefined ? { prefix: ip.prefix } : {}),
+			text: formatValue(value).replace(/^=\s*/, ""),
 		};
 	}
 

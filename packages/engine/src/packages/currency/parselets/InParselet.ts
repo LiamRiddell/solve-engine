@@ -3,6 +3,7 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { BindingPower } from "@solve-js/parser/BindingPower";
 import { resolveCurrencyAlias } from "@solve-js/uom/CurrencyAliases";
 import { tryConsumeCurrencyOnDate, HISTORICAL_CURRENCY_FN } from "@solve-js/uom/HistoricalCurrency";
 
@@ -28,6 +29,15 @@ export class InParselet implements InfixParselet {
 
 	parse(parser: Parser, _left: Token, _token: Token, builder: BytecodeBuilder): void {
 		const targetToken = parser.peek();
+		// `<ip> in <cidr>`: a subnet-membership test, not a unit conversion. The
+		// right side is a fused IP/CIDR literal, which only exists when the IP
+		// package is loaded (and so registered the handler this calls). The left
+		// address is already on the stack.
+		if (targetToken?.type === "IP_CIDR") {
+			parser.parseExpression(BindingPower.Prefix, builder);
+			builder.emitPluginCall("ipInCidr", 2);
+			return;
+		}
 		// Accept UNIT, currency symbols, bare IDENT, or IN (for cases like
 		// "3 ft in in" where the target unit is tokenized as a keyword).
 		if (targetToken && (

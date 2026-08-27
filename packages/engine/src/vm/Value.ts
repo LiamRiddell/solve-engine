@@ -128,6 +128,19 @@ export interface ChartData {
 }
 
 /**
+ * An IPv4 address and/or subnet prefix (issue #189). `addr` is the 32-bit
+ * address (`192.168.1.10` held as one number); `prefix` is the CIDR prefix
+ * length in `/24`. A bare address has no `prefix`, a bare `/24` has no `addr`,
+ * and a full block (`192.168.1.0/24`) has both. Lives in a {@link Value}'s
+ * `value` slot as the other struct payloads do; the formatter renders it as the
+ * dotted quad (plus `/prefix` when present).
+ */
+export interface IpCidrData {
+	readonly addr?: number;
+	readonly prefix?: number;
+}
+
+/**
  * Discriminated union tag for {@link Value} objects.
  *
  * Determines the runtime type of a Value and how its `value` field should
@@ -163,6 +176,8 @@ export enum ValueType {
 	Split = 15,
 	/** A chart to draw (`[1,2,3] as sparkline`, `plot sin(x) from 0 to 2pi`). Value is {@link ChartData}. */
 	Chart = 16,
+	/** An IPv4 address or subnet (`192.168.1.0/24`). Value is {@link IpCidrData}. */
+	IpCidr = 17,
 }
 
 // ── ValueArena ────────────────────────────────────────────────────────────
@@ -220,7 +235,7 @@ export class ValueArena {
 	}
 
 	/** Bump-allocate a recycled Value. Falls back to allocation only for overflow. */
-	acquire(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | ChartData | SymbolicNode, unit?: string): Value {
+	acquire(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | ChartData | IpCidrData | SymbolicNode, unit?: string): Value {
 		if (this.index < this.arena.length) {
 			const v = this.arena[this.index++];
 			v.recycle(type, value, unit);
@@ -364,7 +379,7 @@ export class Value {
 	// recycle() which overwrites all fields. External code should treat Values
 	// as immutable after construction (arena handles mutation internally).
 	public type: ValueType;
-	public value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | ChartData | SymbolicNode;
+	public value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | ChartData | IpCidrData | SymbolicNode;
 	public unit?: string;
 	/** Set by async resolvers when a fetch timed out, the result is a fallback (typically 0). */
 	public timedOut?: boolean;
@@ -436,7 +451,7 @@ export class Value {
 
 	constructor(
 		type: ValueType,
-		value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | ChartData | SymbolicNode,
+		value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | ChartData | IpCidrData | SymbolicNode,
 		unit?: string
 	) {
 		this.type = type;
@@ -453,7 +468,7 @@ export class Value {
 	 * Phase 5.3: Reset all fields for arena reuse.
 	 * Called by ValueArena.acquire(), zero allocation, just field assignment.
 	 */
-	recycle(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | ChartData | SymbolicNode, unit?: string): void {
+	recycle(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | ChartData | IpCidrData | SymbolicNode, unit?: string): void {
 		this.type = type;
 		this.value = value;
 		this.unit = unit;
@@ -513,6 +528,10 @@ export class Value {
 
 	isChart(): this is Value & { value: ChartData } {
 		return this.type === ValueType.Chart;
+	}
+
+	isIpCidr(): this is Value & { value: IpCidrData } {
+		return this.type === ValueType.IpCidr;
 	}
 
 	isSymbolic(): this is Value & { value: SymbolicNode } {
@@ -597,6 +616,8 @@ export class Value {
 		if (this.type === ValueType.Colour) return 0;
 		// A chart is a set of points, not a scalar; callers branch on `.isChart()`.
 		if (this.type === ValueType.Chart) return 0;
+		// An IP/CIDR reads as its 32-bit address where a number is wanted (`as int`).
+		if (this.type === ValueType.IpCidr) return (this.value as IpCidrData).addr ?? 0;
 		// A split is a structured multi-share result; its scalar reading is the
 		// "each" (base) share, so a numeric consumer or the worker DTO's number
 		// field still gets a sensible value where a caller does not branch first.
@@ -639,6 +660,7 @@ export class Value {
 		if (this.type === ValueType.Colour) return false;
 		if (this.type === ValueType.Split) return false;
 		if (this.type === ValueType.Chart) return false;
+		if (this.type === ValueType.IpCidr) return false;
 		if (this.type === ValueType.Symbolic) return false;
 		// Matches toNumber()'s boolean reading above. Without this a Boolean
 		// reached the string branch at the bottom and `parseFloat(true)` made
@@ -932,6 +954,12 @@ export function splitValue(data: SplitData): Value {
 export function chartValue(data: ChartData): Value {
 	if (_arenaActive && _arena) return _arena.acquire(ValueType.Chart, data);
 	return new Value(ValueType.Chart, data);
+}
+
+/** Create an IPv4 address/subnet Value. Arena-backed; the {@link IpCidrData} is immutable. */
+export function ipCidrValue(data: IpCidrData): Value {
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.IpCidr, data);
+	return new Value(ValueType.IpCidr, data);
 }
 
 /** Create a Symbolic value, a free-variable algebraic expression tree (`symbolic/SymbolicNode.ts`'s `SymbolicNode`), not a concrete number. */

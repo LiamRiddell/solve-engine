@@ -1,5 +1,6 @@
-import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type SplitData, type SplitShare, type ChartData } from "@solve-js/vm/Value";
+import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type SplitData, type SplitShare, type ChartData, type IpCidrData } from "@solve-js/vm/Value";
 import { formatColour } from "@solve-js/packages/colour/ColourMath";
+import { formatIp } from "@solve-js/packages/ip/IpMath";
 import { decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
 import { autoFormatIntegerOrFloat } from "@solve-js/utilities/Number";
@@ -367,6 +368,16 @@ function formatUnit(value: number, unit: string | undefined): string {
  * number does; the "= " prefix is added once, around the whole sentence, not
  * per share.
  */
+/**
+ * An IP/CIDR as text: the dotted quad, plus `/prefix` when present, or a bare
+ * `/prefix` when there is no address (`netmask of /24` before it resolves).
+ */
+function formatIpCidr(data: IpCidrData): string {
+	if (data.addr === undefined) return `/${data.prefix}`;
+	const dotted = formatIp(data.addr);
+	return data.prefix === undefined ? dotted : `${dotted}/${data.prefix}`;
+}
+
 function formatSplit(data: SplitData, locale: ILocale, settings: FormattingSettings): string {
   const prefix = locale.display.resultPrefix;
   const render = (share: SplitShare): string => {
@@ -443,6 +454,8 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
       // A chart is drawn from its data by the host; the text answer is its label
       // (`sin(x) over [0, 6.28]`, or the series a sparkline came from).
       return `${locale.display.resultPrefix}${(value.value as ChartData).label}`;
+    case ValueType.IpCidr:
+      return `${locale.display.resultPrefix}${formatIpCidr(value.value as IpCidrData)}`;
     case ValueType.Symbolic:
       return formatSymbolic(value.value as SymbolicNode);
     case ValueType.Percentage:
