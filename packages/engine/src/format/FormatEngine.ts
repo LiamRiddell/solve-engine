@@ -1,4 +1,4 @@
-import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type SplitData, type SplitShare } from "@solve-js/vm/Value";
+import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type SplitData, type SplitShare, type ChartData } from "@solve-js/vm/Value";
 import { formatColour } from "@solve-js/packages/colour/ColourMath";
 import { decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
@@ -439,6 +439,10 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
       return `${locale.display.resultPrefix}${formatColour(value.value as ColourData)}`;
     case ValueType.Split:
       return formatSplit(value.value as SplitData, locale, us);
+    case ValueType.Chart:
+      // A chart is drawn from its data by the host; the text answer is its label
+      // (`sin(x) over [0, 6.28]`, or the series a sparkline came from).
+      return `${locale.display.resultPrefix}${(value.value as ChartData).label}`;
     case ValueType.Symbolic:
       return formatSymbolic(value.value as SymbolicNode);
     case ValueType.Percentage:

@@ -210,6 +210,7 @@ export default defineConfig({
             { slug: "syntax/algebra" },
             { slug: "syntax/calculus" },
             { slug: "syntax/category-tags" },
+            { slug: "syntax/charts" },
             { slug: "syntax/colours" },
             { slug: "syntax/complex" },
             { slug: "syntax/conditionals" },

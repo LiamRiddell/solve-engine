@@ -155,7 +155,7 @@ const COMPILED_CORPUS: readonly string[] = [
 	"[1,2;3,4]", "[1,2;3,4][1]", "[1,2;3,4][1,2]",
 	"[1,2,3;4,5,6][1:2, 1:2]", "[1,2,3;4,5,6][1, 1:2]", "[1,2,3;4,5,6][1:2, 1]",
 	"1:5", "map(x*2, [1,2,3])", "reduce(acc+x, [1,2,3])",
-	"sum(x, 1:5)", "prod(x, 1:5)",
+	"sum(x, 1:5)", "prod(x, 1:5)", "plot x^2 from -3 to 3",
 	"der(x^2, x)", "solve(x^2-4=0, x)", "integral(x, x)",
 	// Uncertainty, both spellings, which reach MAKE_UNCERTAIN (no operand byte).
 	"12.3 +/- 0.5", "(10 +/- 1) + (20 +/- 2)",

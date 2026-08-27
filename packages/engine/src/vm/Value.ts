@@ -96,6 +96,38 @@ export interface SplitData {
 }
 
 /**
+ * What a {@link ChartData} draws, and therefore how a host renders it: a
+ * `sparkline` is a tiny inline line with no axes, a `plot` a framed curve over a
+ * domain. New kinds (a bar chart, a scatter) are added here, and every host that
+ * switches on `kind` keeps working for the ones it already knows.
+ */
+export type ChartKind = "sparkline" | "plot";
+
+/**
+ * A chart specification: the DATA to draw, never pixels. One shape holds every
+ * visual the engine produces, `[1,2,3] as sparkline` and `plot sin(x) from 0 to
+ * 2pi` alike, so a host reads `kind` to choose a renderer and draws `points`
+ * scaled to `domain` × `range`. The engine brings the numbers; the developer
+ * brings the charting library. `label` is the plain-text answer a reader without
+ * a canvas still gets. A sparkline's points are `(index, value)`; a plot's are
+ * `(x, y)`. Lives in a {@link Value}'s `value` slot exactly as
+ * {@link MatrixData}/{@link ColourData} do (issues #186, #187).
+ */
+export interface ChartData {
+	readonly kind: ChartKind;
+	/** The points to draw, `(x, y)`. A sparkline indexes x from 0. */
+	readonly points: readonly (readonly [number, number])[];
+	/** The plain-text answer, e.g. `sin(x) over [0, 6.28]` or the series itself. */
+	readonly label: string;
+	/** The x-axis extent `[min, max]`. */
+	readonly domain: readonly [number, number];
+	/** The y-axis extent `[min, max]`, for scaling the drawn height. */
+	readonly range: readonly [number, number];
+	/** The source expression, for a plot; absent for a sparkline. */
+	readonly expr?: string;
+}
+
+/**
  * Discriminated union tag for {@link Value} objects.
  *
  * Determines the runtime type of a Value and how its `value` field should
@@ -129,6 +161,8 @@ export enum ValueType {
 	Colour = 14,
 	/** A per-person bill split (`split $180 between 4`). Value is {@link SplitData}. */
 	Split = 15,
+	/** A chart to draw (`[1,2,3] as sparkline`, `plot sin(x) from 0 to 2pi`). Value is {@link ChartData}. */
+	Chart = 16,
 }
 
 // ── ValueArena ────────────────────────────────────────────────────────────
@@ -186,7 +220,7 @@ export class ValueArena {
 	}
 
 	/** Bump-allocate a recycled Value. Falls back to allocation only for overflow. */
-	acquire(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | SymbolicNode, unit?: string): Value {
+	acquire(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | ChartData | SymbolicNode, unit?: string): Value {
 		if (this.index < this.arena.length) {
 			const v = this.arena[this.index++];
 			v.recycle(type, value, unit);
@@ -330,7 +364,7 @@ export class Value {
 	// recycle() which overwrites all fields. External code should treat Values
 	// as immutable after construction (arena handles mutation internally).
 	public type: ValueType;
-	public value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | SymbolicNode;
+	public value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | ChartData | SymbolicNode;
 	public unit?: string;
 	/** Set by async resolvers when a fetch timed out, the result is a fallback (typically 0). */
 	public timedOut?: boolean;
@@ -402,7 +436,7 @@ export class Value {
 
 	constructor(
 		type: ValueType,
-		value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | SymbolicNode,
+		value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | ChartData | SymbolicNode,
 		unit?: string
 	) {
 		this.type = type;
@@ -419,7 +453,7 @@ export class Value {
 	 * Phase 5.3: Reset all fields for arena reuse.
 	 * Called by ValueArena.acquire(), zero allocation, just field assignment.
 	 */
-	recycle(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | SymbolicNode, unit?: string): void {
+	recycle(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | ChartData | SymbolicNode, unit?: string): void {
 		this.type = type;
 		this.value = value;
 		this.unit = unit;
@@ -475,6 +509,10 @@ export class Value {
 
 	isColour(): this is Value & { value: ColourData } {
 		return this.type === ValueType.Colour;
+	}
+
+	isChart(): this is Value & { value: ChartData } {
+		return this.type === ValueType.Chart;
 	}
 
 	isSymbolic(): this is Value & { value: SymbolicNode } {
@@ -557,6 +595,8 @@ export class Value {
 		// A colour is a struct of channels, not a scalar; like Matrix/Range it has
 		// no single numeric reading. Callers branch on `.isColour()` first.
 		if (this.type === ValueType.Colour) return 0;
+		// A chart is a set of points, not a scalar; callers branch on `.isChart()`.
+		if (this.type === ValueType.Chart) return 0;
 		// A split is a structured multi-share result; its scalar reading is the
 		// "each" (base) share, so a numeric consumer or the worker DTO's number
 		// field still gets a sensible value where a caller does not branch first.
@@ -598,6 +638,7 @@ export class Value {
 		if (this.type === ValueType.Range) return false;
 		if (this.type === ValueType.Colour) return false;
 		if (this.type === ValueType.Split) return false;
+		if (this.type === ValueType.Chart) return false;
 		if (this.type === ValueType.Symbolic) return false;
 		// Matches toNumber()'s boolean reading above. Without this a Boolean
 		// reached the string branch at the bottom and `parseFloat(true)` made
@@ -883,6 +924,14 @@ export function colourValue(c: ColourData): Value {
 export function splitValue(data: SplitData): Value {
 	if (_arenaActive && _arena) return _arena.acquire(ValueType.Split, data);
 	return new Value(ValueType.Split, data);
+}
+
+/** Create a Chart value from its specification. Arena-backed like the other
+ * struct factories; the {@link ChartData} in the `value` slot is immutable, so
+ * arena recycle is safe with no extra clearing. */
+export function chartValue(data: ChartData): Value {
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.Chart, data);
+	return new Value(ValueType.Chart, data);
 }
 
 /** Create a Symbolic value, a free-variable algebraic expression tree (`symbolic/SymbolicNode.ts`'s `SymbolicNode`), not a concrete number. */

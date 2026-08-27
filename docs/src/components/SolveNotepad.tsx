@@ -4,6 +4,16 @@ import { Plate, PlateContent, usePlateEditor } from "platejs/react";
 import { createEngine } from "solve-engine";
 import { evaluateDocument } from "solve-engine/engine";
 import { formatValue, formatMatrixAligned } from "solve-engine/format";
+
+/** A chart specification the engine emits (ValueType.Chart); the notepad draws it. */
+type ChartSpec = {
+  kind: string;
+  points: Array<[number, number]>;
+  label: string;
+  domain: [number, number];
+  range: [number, number];
+  expr?: string;
+};
 import { LanguageService, tokenClassName } from "solve-engine/language";
 import { ValueType } from "solve-engine/vm";
 
@@ -48,6 +58,8 @@ interface Answer {
   swatch?: string;
   /** A stacked, column-aligned grid, set when the result is a matrix. */
   matrix?: string;
+  /** A chart specification (sparkline or plot), set when the result is a ValueType.Chart, to draw. */
+  chart?: ChartSpec;
 }
 
 const EMPTY: Answer = { text: "", kind: "none" };
@@ -146,8 +158,53 @@ function toValueAnswer(result: unknown): Answer {
   if (v.type === ValueType.Matrix && v.value) {
     return { text, kind: "value", matrix: formatMatrixAligned(v.value as never) };
   }
+  // A chart (a sparkline or a plot) carries its specification on the live Value.
+  // The engine emits only the data; this notepad is one host that draws it. A
+  // real application would hand `chart` to its own charting library instead.
+  if (v.type === ValueType.Chart && v.value) {
+    return { text, kind: "value", chart: v.value as ChartSpec };
+  }
   const kind = v.type === ValueType.Error ? "error" : "value";
   return { text, kind };
+}
+
+/**
+ * Draws a chart specification the engine emitted: a `sparkline` as a tiny inline
+ * line, a `plot` as a small framed curve. This is a deliberately minimal
+ * renderer, enough to demo what the data describes; a real host would pass the
+ * same specification to a charting library.
+ */
+function Chart({ chart }: { chart: ChartSpec }) {
+  const isSparkline = chart.kind === "sparkline";
+  const w = isSparkline ? 64 : 150;
+  const h = isSparkline ? 16 : 46;
+  const pts = chart.points;
+  if (pts.length < 2) return null;
+  const [xMin, xMax] = chart.domain;
+  const [yMin, yMax] = chart.range;
+  const spanX = xMax - xMin || 1;
+  const spanY = yMax - yMin || 1;
+  const points = pts
+    .map(([x, y]) => `${(((x - xMin) / spanX) * w).toFixed(1)},${(h - ((y - yMin) / spanY) * h).toFixed(1)}`)
+    .join(" ");
+  // For a plot, a faint zero line when zero falls inside the y-range.
+  const zeroInRange = !isSparkline && yMin < 0 && yMax > 0;
+  const zeroY = h - ((0 - yMin) / spanY) * h;
+  return (
+    <svg
+      className={isSparkline ? "notepad__sparkline" : "notepad__plot"}
+      width={w}
+      height={h}
+      viewBox={`0 0 ${w} ${h}`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      {zeroInRange && (
+        <line x1="0" y1={zeroY.toFixed(1)} x2={w} y2={zeroY.toFixed(1)} stroke="currentColor" strokeWidth="0.5" opacity="0.3" />
+      )}
+      <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.25" />
+    </svg>
+  );
 }
 
 /**
@@ -488,6 +545,7 @@ export default function SolveNotepad({
                     <span className="notepad__swatch" style={{ background: answer.swatch }} aria-hidden="true" />
                   )}
                   {answer.text}
+                  {answer.chart && <Chart chart={answer.chart} />}
                 </>
               )}
             </div>

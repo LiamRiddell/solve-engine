@@ -87,6 +87,22 @@ export interface SerializedValue {
 		format: ColourFormat;
 		css: string;
 	};
+	/**
+	 * Chart payload, present only for {@link ValueType.Chart}: the specification a
+	 * host renders with its own charting library. `kind` selects the renderer
+	 * (`sparkline`/`plot`); `points` are the `(x, y)` to draw, scaled to `domain`
+	 * × `range`; `label` is the plain-text answer; `expr` is the source
+	 * expression for a plot. The engine emits data, never pixels. See issues #186,
+	 * #187.
+	 */
+	chart?: {
+		kind: string;
+		points: Array<[number, number]>;
+		label: string;
+		domain: [number, number];
+		range: [number, number];
+		expr?: string;
+	};
 	/** Whether an async fallback timed out, carried through when the engine set it. */
 	timedOut?: boolean;
 }

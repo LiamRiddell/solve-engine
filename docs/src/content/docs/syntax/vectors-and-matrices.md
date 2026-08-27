@@ -17,6 +17,9 @@ which is what the engine returns as text. In this notepad the answer column
 renders it as a stacked, column-aligned grid instead, one row per line, since a
 grid is easier to read; the two are the same matrix.
 
+A numeric vector can be drawn as a sparkline with `[...] as sparkline`; see
+[charts](/syntax/charts/).
+
 ## Element-wise arithmetic
 
 ```solve

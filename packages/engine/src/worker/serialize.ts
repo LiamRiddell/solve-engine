@@ -8,7 +8,7 @@
  * byte-for-byte the same DTO.
  */
 
-import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData } from "@solve-js/vm/Value";
+import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type ChartData } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { toHexString, formatColour } from "@solve-js/packages/colour/ColourMath";
 import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
@@ -87,6 +87,16 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 	} else if (value.type === ValueType.Colour) {
 		const c = raw as ColourData;
 		dto.colour = { hex: toHexString(c), r: c.r, g: c.g, b: c.b, a: c.a, format: c.format, css: formatColour(c) };
+	} else if (value.type === ValueType.Chart) {
+		const c = raw as ChartData;
+		dto.chart = {
+			kind: c.kind,
+			points: c.points.map((pt) => [pt[0], pt[1]]),
+			label: c.label,
+			domain: [c.domain[0], c.domain[1]],
+			range: [c.range[0], c.range[1]],
+			...(c.expr !== undefined ? { expr: c.expr } : {}),
+		};
 	}
 
 	return dto;

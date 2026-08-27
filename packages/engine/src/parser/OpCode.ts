@@ -162,12 +162,15 @@ export enum OpCode {
 	// same side-table and the same call-frame shadowing MAP_INVOKE uses for a
 	// transform body's parameters. See vm/VM.ts's handler.
 	BIND_UNKNOWN = 159,
-	// 159 and 160 were THEREFORE_SOLVE and STORE_EQUATION_OR_ASSIGNMENT, declared
-	// but never emitted by any parselet nor handled in the VM switch. Both shapes
-	// have effects (a stored equation, a direct vm.setVar()) that a cached
-	// bytecode program cannot represent, so engine/ExpressionEngine.ts intercepts
-	// them before compilation and always will. 159 has since been reused above;
-	// 160 is still free.
+	// 159 was THEREFORE_SOLVE and STORE_EQUATION_OR_ASSIGNMENT, declared but never
+	// emitted by any parselet nor handled in the VM switch. Both shapes have
+	// effects (a stored equation, a direct vm.setVar()) that a cached bytecode
+	// program cannot represent, so engine/ExpressionEngine.ts intercepts them
+	// before compilation and always will. 159 has since been reused above.
+	// `plot <expr> from <a> to <b>`: samples an inline body (binding `x`) across
+	// [a, b], the same anonymousBodies side-table and call-frame shadowing
+	// MAP_INVOKE uses. Operands: the body index, then the pooled source string.
+	PLOT_INVOKE = 160,
 }
 
 // Reverse lookup built once at module load, getOpCodeName() is called once
