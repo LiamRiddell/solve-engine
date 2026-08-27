@@ -1,6 +1,6 @@
 ---
 title: Networking
-description: IPv4 subnet arithmetic: hosts, netmask, broadcast and membership.
+description: "IPv4 subnet arithmetic: hosts, netmask, broadcast and membership."
 ---
 
 > **Package:** `IP_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
