@@ -103,6 +103,16 @@ export interface SerializedValue {
 		range: [number, number];
 		expr?: string;
 	};
+	/**
+	 * IP/CIDR payload, present only for {@link ValueType.IpCidr}: the 32-bit
+	 * `addr` and/or CIDR `prefix`, plus `text` (the dotted-quad form the answer
+	 * shows). See issue #189.
+	 */
+	ipCidr?: {
+		addr?: number;
+		prefix?: number;
+		text: string;
+	};
 	/** Whether an async fallback timed out, carried through when the engine set it. */
 	timedOut?: boolean;
 }

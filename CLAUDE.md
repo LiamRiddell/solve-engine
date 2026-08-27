@@ -27,6 +27,32 @@ What the voice is, concretely:
 The published `solve-engine@1.0.0` and `solve-engine@1.0.2` GitHub releases are
 the reference for tone and structure.
 
+## Documentation for two readers (rule)
+
+Every reader-facing docs page serves two people at once: the developer who
+already knows the domain, and the person who does not. Write for both, and keep
+the docs **well maintained**: when a feature changes, its page changes with it in
+the same work, and a page is never left describing behaviour the engine no longer
+has.
+
+- **Explain the thing before you show it.** Name the concept in a plain sentence
+  a non-specialist can follow, then give the syntax. A subnet page says what a
+  subnet, a prefix and a netmask *are* before the first `hosts in ...`; an
+  encoding page says what turning text into base64 is *for* before `as base64`.
+  A reader should never have to already know the answer to understand the page.
+- **No load-bearing jargon.** Do not let a single unexplained technical term
+  carry a paragraph's meaning. Use the term (developers search for it), but say
+  it plainly alongside, so the sentence still reads for someone meeting the idea
+  for the first time.
+- **Explain everything, briefly.** Every form on the page has a sentence that
+  says what it does and when a person would want it, not just an example. The
+  worked example stays the centre of the page; it sits under prose that earns it.
+
+This rule is about *who the prose assumes on the other side*: someone capable who
+has not met this idea before. It sits on top of the house voice above (still
+declarative, British, before/now, name the boundary), and applies to every docs
+page, changeset and release note.
+
 ## Documentation examples (rule)
 
 Every worked example in the docs is a **live, proven** block, never a static

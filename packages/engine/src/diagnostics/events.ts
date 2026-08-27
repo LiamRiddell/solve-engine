@@ -1,6 +1,6 @@
 
 
-import type { MatrixData, RangeData, ColourData, SplitData, ChartData } from "@solve-js/vm/Value";
+import type { MatrixData, RangeData, ColourData, SplitData, ChartData, IpCidrData } from "@solve-js/vm/Value";
 import type { SymbolicNode } from "@solve-js/symbolic";
 
 /**
@@ -74,7 +74,7 @@ export interface VmStepEvent extends BaseEvent {
   readonly instructionNumber: number;
   readonly stack: ReadonlyArray<{
     readonly type: number;
-    readonly value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | ChartData | SymbolicNode;
+    readonly value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | ChartData | IpCidrData | SymbolicNode;
     readonly unit?: string;
   }>;
 }
@@ -84,7 +84,7 @@ export interface VmHaltEvent extends BaseEvent {
   readonly type: "vm_halt";
   readonly result?: {
     readonly type: number;
-    readonly value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | ChartData | SymbolicNode;
+    readonly value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | ChartData | IpCidrData | SymbolicNode;
     readonly unit?: string;
   };
 }

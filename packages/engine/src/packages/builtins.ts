@@ -41,6 +41,8 @@ import { GOALSEEK_PACKAGE } from "./goalseek";
 import { TABLES_PACKAGE } from "./tables";
 import { COLOUR_PACKAGE } from "./colour";
 import { CHART_PACKAGE } from "./chart";
+import { ENCODING_PACKAGE } from "./encoding";
+import { IP_PACKAGE } from "./ip";
 import { TAGS_PACKAGE } from "./tags";
 
 export {
@@ -72,6 +74,8 @@ export {
   TABLES_PACKAGE,
   COLOUR_PACKAGE,
   CHART_PACKAGE,
+  ENCODING_PACKAGE,
+  IP_PACKAGE,
   TAGS_PACKAGE,
 };
 
@@ -96,7 +100,7 @@ export {
 /**
  * The packages an engine registers when the caller names none.
  *
- * Twenty-six of the twenty-eight. Stocks and knowledge are excluded because
+ * Twenty-eight of the thirty. Stocks and knowledge are excluded because
  * both need a host-supplied data source and do nothing useful without one, so
  * registering them by default would only produce NOT_CONFIGURED results.
  *
@@ -133,6 +137,11 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   // Charts (sparkline, plot): visuals emitted as data. On by default,
   // removable, nothing else depends on it.
   CHART_PACKAGE,
+  // Text encodings (base64, URL, hex bytes) for developers. On by default,
+  // removable.
+  ENCODING_PACKAGE,
+  // IPv4 subnet arithmetic for developers. On by default, removable.
+  IP_PACKAGE,
   // After MATHPHRASES_PACKAGE and LINES_PACKAGE: tag aggregates reuse the
   // `total of`/`count of`/`average of` fusions and walk the document the same
   // way the lines cross-line reads do.
