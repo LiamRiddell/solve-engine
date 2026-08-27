@@ -58,6 +58,8 @@ const TWO_OPERANDS: readonly OpCode[] = [
 	OpCode.CALL_BUILTIN,
 	OpCode.CALL_USER_FUNCTION,
 	OpCode.MAT_NEW,
+	// A body index plus the pooled source-expression string.
+	OpCode.PLOT_INVOKE,
 ];
 
 /**

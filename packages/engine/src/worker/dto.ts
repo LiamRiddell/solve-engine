@@ -87,6 +87,28 @@ export interface SerializedValue {
 		format: ColourFormat;
 		css: string;
 	};
+	/**
+	 * Sparkline payload for a numeric vector or a range: a downsampled `series`
+	 * (at most 32 points) with the data's true `min` and `max`, so a host draws
+	 * an inline sparkline beside the plain answer without recomputing. Absent for
+	 * anything not plottable. See issue #186.
+	 */
+	sparkline?: {
+		series: number[];
+		min: number;
+		max: number;
+	};
+	/**
+	 * Plot payload, present only for {@link ValueType.Plot}: the sampled `(x, y)`
+	 * `points`, the source `expr`, and the `from`/`to` bounds, so a host draws the
+	 * curve. See issue #187.
+	 */
+	plot?: {
+		points: Array<[number, number]>;
+		expr: string;
+		from: number;
+		to: number;
+	};
 	/** Whether an async fallback timed out, carried through when the engine set it. */
 	timedOut?: boolean;
 }

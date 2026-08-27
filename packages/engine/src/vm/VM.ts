@@ -1,5 +1,5 @@
 import { OpCode } from "@solve-js/parser/OpCode";
-import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, plotValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData } from "@solve-js/vm/Value";
 import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
 import { moneyExactMagnitude, scaleMoneyByPercent, scaleMoneyExact } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
@@ -733,6 +733,10 @@ function unrunnableProgram(bytecode: unknown): string | null {
  * map/reduce usage keeps today's exact behavior, a genuinely undefined
  * variable inside the transform body still hard-throws.
  */
+/** How many points a `plot` clause samples across its range. Enough for a
+ * smooth curve, small enough to keep the metadata light across the worker. */
+const PLOT_SAMPLES = 64;
+
 function invokeFrameBody(
     params: string[],
     program: BytecodeProgram,
@@ -3516,6 +3520,45 @@ export function executeBytecode(
           } else {
             stack.push(matrixValue(1, collectionLength, resultData));
           }
+          break;
+        }
+
+        case OpCode.PLOT_INVOKE: {
+          const bodyRef = operandByte(opcodes, ip++, op, "plot body reference");
+          const exprRef = operandByte(opcodes, ip++, op, "plot expression");
+          const exprText = pooledString(strings, exprRef, op);
+          // Pushed in textual order (from, then to), pop in reverse.
+          const to = safePop(stack).toNumber();
+          const from = safePop(stack).toNumber();
+
+          const def = anonymousBodies?.[bodyRef];
+          if (!def) {
+            throw ErrorFactory.internal(
+              "INTERNAL_MISSING_ANONYMOUS_BODY",
+              `Internal error: PLOT_INVOKE referenced missing anonymous body index ${bodyRef}`,
+              { ref: bodyRef },
+            );
+          }
+          if (!Number.isFinite(from) || !Number.isFinite(to)) {
+            stack.push(errorValue("PLOT_INVALID_RANGE", `plot: the range bounds must be finite numbers (got ${from} to ${to})`));
+            break;
+          }
+
+          // Sample the body at PLOT_SAMPLES evenly-spaced points, binding `x` to
+          // each, and keep only the points that come back finite so a curve with
+          // a hole (a pole in 1/x, a domain edge) still draws the rest.
+          const points: [number, number][] = [];
+          for (let i = 0; i < PLOT_SAMPLES; i++) {
+            const x = from + (i / (PLOT_SAMPLES - 1)) * (to - from);
+            let y: number;
+            try {
+              y = invokeFrameBody(def.params, def.program, [numberValue(x)], vm, pipeline, expression, context, !!symbolicTolerant).toNumber();
+            } catch {
+              continue; // a sample the body cannot evaluate is a gap, not a failure
+            }
+            if (Number.isFinite(y)) points.push([x, y]);
+          }
+          stack.push(plotValue({ points, expr: exprText, from, to }));
           break;
         }
 

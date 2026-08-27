@@ -1,4 +1,4 @@
-import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type SplitData, type SplitShare } from "@solve-js/vm/Value";
+import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type SplitData, type SplitShare, type PlotData } from "@solve-js/vm/Value";
 import { formatColour } from "@solve-js/packages/colour/ColourMath";
 import { decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
@@ -367,6 +367,21 @@ function formatUnit(value: number, unit: string | undefined): string {
  * number does; the "= " prefix is added once, around the whole sentence, not
  * per share.
  */
+/** A range bound for a plot label: an integer as itself, otherwise to two places. */
+function formatPlotBound(n: number): string {
+	return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(2)));
+}
+
+/**
+ * The plain-text label for a plot, the sensible answer a reader without a canvas
+ * still gets: the expression as written and the range it was sampled over
+ * (`sin(x) over [0, 6.28]`). The points themselves ride along as metadata for a
+ * host that can draw.
+ */
+function formatPlot(data: PlotData): string {
+	return `${data.expr} over [${formatPlotBound(data.from)}, ${formatPlotBound(data.to)}]`;
+}
+
 function formatSplit(data: SplitData, locale: ILocale, settings: FormattingSettings): string {
   const prefix = locale.display.resultPrefix;
   const render = (share: SplitShare): string => {
@@ -439,6 +454,8 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
       return `${locale.display.resultPrefix}${formatColour(value.value as ColourData)}`;
     case ValueType.Split:
       return formatSplit(value.value as SplitData, locale, us);
+    case ValueType.Plot:
+      return `${locale.display.resultPrefix}${formatPlot(value.value as PlotData)}`;
     case ValueType.Symbolic:
       return formatSymbolic(value.value as SymbolicNode);
     case ValueType.Percentage:

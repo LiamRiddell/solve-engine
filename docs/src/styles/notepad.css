@@ -135,6 +135,24 @@
   border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
 }
 
+/* The inline sparkline sits after the numbers, drawn in the answer's own colour
+   (the polyline uses currentColor) so it reads as one with the text. */
+.notepad__sparkline {
+  display: inline-block;
+  margin-inline-start: 0.5em;
+  vertical-align: -0.2em;
+  opacity: 0.75;
+}
+
+/* A plot is a small line chart drawn in the answer's own colour, sitting after
+   the label. It is taller than a line of text, so its row grows to fit. */
+.notepad__plot {
+  display: inline-block;
+  margin-inline-start: 0.5em;
+  vertical-align: middle;
+  opacity: 0.85;
+}
+
 /* A matrix answer is a grid, not a single line, so it is the one answer allowed
    to grow past a row. It does not break alignment: the component measures this
    answer and grows the editor line opposite it to the same height (see

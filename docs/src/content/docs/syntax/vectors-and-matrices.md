@@ -17,6 +17,23 @@ which is what the engine returns as text. In this notepad the answer column
 renders it as a stacked, column-aligned grid instead, one row per line, since a
 grid is easier to read; the two are the same matrix.
 
+## Sparklines
+
+A numeric vector answers with its numbers as always, and, in a notepad that can
+draw, an inline sparkline of their shape beside them. The text answer is
+unchanged: the sparkline is additive.
+
+```solve
+[120, 135, 128, 150, 162] // [120, 135, 128, 150, 162]
+map(x^2, 0:5) // [0, 1, 4, 9, 16, 25]
+```
+
+The engine emits only numeric metadata, a series downsampled to at most 32
+points with the data's true minimum and maximum, never pixels, so each frontend
+draws the line itself, exactly as the colour swatch works. Only a purely numeric
+vector (a single row or column) or a range carries a series; a mixed or
+non-numeric list draws nothing.
+
 ## Element-wise arithmetic
 
 ```solve

@@ -220,6 +220,7 @@ export default defineConfig({
             { slug: "syntax/line-references" },
             { slug: "syntax/map-reduce-and-aggregates" },
             { slug: "syntax/money-and-finance" },
+            { slug: "syntax/plots" },
             { slug: "syntax/programmer-math" },
             { slug: "syntax/statistics" },
             { slug: "syntax/stocks" },

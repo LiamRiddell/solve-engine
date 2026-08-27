@@ -96,6 +96,20 @@ export interface SplitData {
 }
 
 /**
+ * A sampled function plot: the (x, y) points of `plot <expr> from <from> to
+ * <to>`, together with the source expression, so a host that can draw renders
+ * the curve and one that cannot still shows a sensible label. Lives in a
+ * {@link Value}'s `value` slot exactly as {@link MatrixData}/{@link ColourData}
+ * do; the engine emits points, never pixels (issue #187).
+ */
+export interface PlotData {
+	readonly points: readonly (readonly [number, number])[];
+	readonly expr: string;
+	readonly from: number;
+	readonly to: number;
+}
+
+/**
  * Discriminated union tag for {@link Value} objects.
  *
  * Determines the runtime type of a Value and how its `value` field should
@@ -129,6 +143,8 @@ export enum ValueType {
 	Colour = 14,
 	/** A per-person bill split (`split $180 between 4`). Value is {@link SplitData}. */
 	Split = 15,
+	/** A sampled function plot (`plot sin(x) from 0 to 2pi`). Value is {@link PlotData}. */
+	Plot = 16,
 }
 
 // ── ValueArena ────────────────────────────────────────────────────────────
@@ -186,7 +202,7 @@ export class ValueArena {
 	}
 
 	/** Bump-allocate a recycled Value. Falls back to allocation only for overflow. */
-	acquire(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | SymbolicNode, unit?: string): Value {
+	acquire(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | PlotData | SymbolicNode, unit?: string): Value {
 		if (this.index < this.arena.length) {
 			const v = this.arena[this.index++];
 			v.recycle(type, value, unit);
@@ -330,7 +346,7 @@ export class Value {
 	// recycle() which overwrites all fields. External code should treat Values
 	// as immutable after construction (arena handles mutation internally).
 	public type: ValueType;
-	public value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | SymbolicNode;
+	public value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | PlotData | SymbolicNode;
 	public unit?: string;
 	/** Set by async resolvers when a fetch timed out, the result is a fallback (typically 0). */
 	public timedOut?: boolean;
@@ -402,7 +418,7 @@ export class Value {
 
 	constructor(
 		type: ValueType,
-		value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | SymbolicNode,
+		value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | PlotData | SymbolicNode,
 		unit?: string
 	) {
 		this.type = type;
@@ -419,7 +435,7 @@ export class Value {
 	 * Phase 5.3: Reset all fields for arena reuse.
 	 * Called by ValueArena.acquire(), zero allocation, just field assignment.
 	 */
-	recycle(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | SymbolicNode, unit?: string): void {
+	recycle(type: ValueType, value: number | bigint | string | boolean | MatrixData | RangeData | ColourData | SplitData | PlotData | SymbolicNode, unit?: string): void {
 		this.type = type;
 		this.value = value;
 		this.unit = unit;
@@ -475,6 +491,10 @@ export class Value {
 
 	isColour(): this is Value & { value: ColourData } {
 		return this.type === ValueType.Colour;
+	}
+
+	isPlot(): this is Value & { value: PlotData } {
+		return this.type === ValueType.Plot;
 	}
 
 	isSymbolic(): this is Value & { value: SymbolicNode } {
@@ -557,6 +577,8 @@ export class Value {
 		// A colour is a struct of channels, not a scalar; like Matrix/Range it has
 		// no single numeric reading. Callers branch on `.isColour()` first.
 		if (this.type === ValueType.Colour) return 0;
+		// A plot is a set of points, not a scalar; callers branch on `.isPlot()`.
+		if (this.type === ValueType.Plot) return 0;
 		// A split is a structured multi-share result; its scalar reading is the
 		// "each" (base) share, so a numeric consumer or the worker DTO's number
 		// field still gets a sensible value where a caller does not branch first.
@@ -598,6 +620,7 @@ export class Value {
 		if (this.type === ValueType.Range) return false;
 		if (this.type === ValueType.Colour) return false;
 		if (this.type === ValueType.Split) return false;
+		if (this.type === ValueType.Plot) return false;
 		if (this.type === ValueType.Symbolic) return false;
 		// Matches toNumber()'s boolean reading above. Without this a Boolean
 		// reached the string branch at the bottom and `parseFloat(true)` made
@@ -883,6 +906,16 @@ export function colourValue(c: ColourData): Value {
 export function splitValue(data: SplitData): Value {
 	if (_arenaActive && _arena) return _arena.acquire(ValueType.Split, data);
 	return new Value(ValueType.Split, data);
+}
+
+/**
+ * Create a Plot value from its sampled points and source expression. Arena-backed
+ * like the other struct factories; the {@link PlotData} in the `value` slot is
+ * immutable, so arena recycle is safe with no extra clearing.
+ */
+export function plotValue(data: PlotData): Value {
+	if (_arenaActive && _arena) return _arena.acquire(ValueType.Plot, data);
+	return new Value(ValueType.Plot, data);
 }
 
 /** Create a Symbolic value, a free-variable algebraic expression tree (`symbolic/SymbolicNode.ts`'s `SymbolicNode`), not a concrete number. */

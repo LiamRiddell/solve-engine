@@ -3,7 +3,9 @@ import { MapParselet } from "./parselets/MapParselet";
 import { ReduceParselet } from "./parselets/ReduceParselet";
 import { SumParselet } from "./parselets/SumParselet";
 import { ProdParselet } from "./parselets/ProdParselet";
+import { PlotParselet } from "./parselets/PlotParselet";
 import { mapReduceCallNormalizerRule } from "./normalizer/MapReduceCallNormalizerRule";
+import { plotNormalizerRule } from "./normalizer/PlotNormalizerRule";
 
 /**
  * `map`/`reduce`/`sum`/`prod`, Calca-parity collection transforms over a
@@ -18,11 +20,15 @@ import { mapReduceCallNormalizerRule } from "./normalizer/MapReduceCallNormalize
  */
 export const MAPREDUCE_PACKAGE: IEnginePackage = {
   name: "solve-mapreduce",
-  normalizerRules: [mapReduceCallNormalizerRule()],
+  normalizerRules: [mapReduceCallNormalizerRule(), plotNormalizerRule()],
   prefixParselets: {
     MAP: new MapParselet(),
     REDUCE: new ReduceParselet(),
     SUM_FN: new SumParselet(),
     PROD_FN: new ProdParselet(),
+    PLOT: new PlotParselet(),
+  },
+  tokenCategories: {
+    PLOT: "keyword",
   },
 };
