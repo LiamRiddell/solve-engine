@@ -328,7 +328,22 @@ interface RateForm {
  * metres-per-second factor. That collapses both inputs to one shape, so a
  * single routine handles rate/rate and rate/alias without a second code path.
  */
+/**
+ * The single-token fuel-economy units, each as the `numerator/denominator` rate
+ * it stands for and the factor that turns one of it into that rate's base. `mpg`
+ * is `km/l` scaled, `l/100km` is `l/km` scaled by a hundredth (issue #190).
+ */
+const FUEL_RATE_UNITS: Record<string, { numerator: string; denominator: string; factor: number }> = {
+  mpg: { numerator: "km", denominator: "l", factor: 1.609344 / 3.785411784 },
+  kmpl: { numerator: "km", denominator: "l", factor: 1 },
+  l100km: { numerator: "l", denominator: "km", factor: 0.01 },
+};
+
 function expandUnitToRate(value: number, unit: string): RateForm | null {
+  const fuel = FUEL_RATE_UNITS[unit];
+  if (fuel !== undefined) {
+    return { value: value * fuel.factor, numerator: fuel.numerator, denominator: fuel.denominator };
+  }
   const slash = unit.indexOf("/");
   if (slash >= 0) {
     return { value, numerator: unit.slice(0, slash), denominator: unit.slice(slash + 1) };
@@ -386,8 +401,15 @@ export function convertRate(value: number, from: string, to: string): number | n
   let targetNumerator: string;
   let targetDenominator: string;
   let targetScale: number;
+  const fuelTarget = FUEL_RATE_UNITS[to];
   const slash = to.indexOf("/");
-  if (slash >= 0) {
+  if (fuelTarget !== undefined) {
+    // The base-pair magnitude divided by the fuel unit's own factor reads out in
+    // that unit (so a l/km magnitude becomes a l/100km figure).
+    targetNumerator = fuelTarget.numerator;
+    targetDenominator = fuelTarget.denominator;
+    targetScale = fuelTarget.factor;
+  } else if (slash >= 0) {
     targetNumerator = to.slice(0, slash);
     targetDenominator = to.slice(slash + 1);
     targetScale = 1;
@@ -400,9 +422,24 @@ export function convertRate(value: number, from: string, to: string): number | n
   }
 
   const numeratorFactor = rateAxisFactor(source.numerator, targetNumerator);
-  if (numeratorFactor === null) return null;
   const denominatorFactor = rateAxisFactor(source.denominator, targetDenominator);
-  if (denominatorFactor === null) return null;
+  if (numeratorFactor !== null && denominatorFactor !== null) {
+    return (source.value * numeratorFactor) / denominatorFactor / targetScale;
+  }
 
-  return (source.value * numeratorFactor) / denominatorFactor / targetScale;
+  // A reciprocal pairing: distance-per-volume against volume-per-distance, the
+  // fuel-economy case (miles per gallon to litres per kilometre). The two rates
+  // measure the same thing upside down, so the source's numerator lines up with
+  // the target's denominator and its denominator with the target's numerator,
+  // and the magnitude is inverted. `40 miles/gallon` becomes `0.0588 l/km`:
+  // one over forty, scaled gallon-to-litre over mile-to-kilometre. See issue
+  // #190; this is why fuel economy needs its own route and is not a rescale of
+  // each axis like `mph` to `km/h`.
+  const crossNumerator = rateAxisFactor(source.denominator, targetNumerator);
+  const crossDenominator = rateAxisFactor(source.numerator, targetDenominator);
+  if (crossNumerator !== null && crossDenominator !== null && source.value !== 0) {
+    return (crossNumerator / crossDenominator / source.value) / targetScale;
+  }
+
+  return null;
 }

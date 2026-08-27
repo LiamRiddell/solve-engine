@@ -330,16 +330,15 @@ describe("what the table holds that cannot be typed", () => {
 	});
 
 	test("the single letters the base units need are among the casualties", () => {
-		// Reported, not asserted as correct. `J` is the base unit of energy, `N`
-		// of force and `L` the preferred symbol for the litre, and none of the
-		// three can be typed, while `l`, `mL` and `kJ` all can. That is a
-		// reachability gap rather than a wrong answer, so it is pinned here as a
-		// fact about the vocabulary rather than as desired behaviour.
+		// `N` (newton) and `J` (joule) were grandfathered in for dimensional
+		// arithmetic (issue #191), so they can now be typed. `L`, the preferred
+		// symbol for the litre, is still a casualty (`l` and `mL` work instead):
+		// a reachability gap pinned here as a fact about the vocabulary.
 		expect(lookupUnit("J")).toBeDefined();
 		expect(lookupUnit("N")).toBeDefined();
 		expect(lookupUnit("L")).toBeDefined();
-		expect(knownUnits.has("J")).toBe(false);
-		expect(knownUnits.has("N")).toBe(false);
+		expect(knownUnits.has("J")).toBe(true);
+		expect(knownUnits.has("N")).toBe(true);
 		expect(knownUnits.has("L")).toBe(false);
 		// The longer spellings that do work, so the gap is only in the symbols.
 		expect(knownUnits.has("joule")).toBe(true);

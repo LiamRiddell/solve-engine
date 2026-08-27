@@ -43,6 +43,8 @@ import { COLOUR_PACKAGE } from "./colour";
 import { CHART_PACKAGE } from "./chart";
 import { ENCODING_PACKAGE } from "./encoding";
 import { IP_PACKAGE } from "./ip";
+import { FUEL_PACKAGE } from "./fuel";
+import { DERIVED_UNITS_PACKAGE } from "./derived";
 import { TAGS_PACKAGE } from "./tags";
 
 export {
@@ -76,6 +78,8 @@ export {
   CHART_PACKAGE,
   ENCODING_PACKAGE,
   IP_PACKAGE,
+  FUEL_PACKAGE,
+  DERIVED_UNITS_PACKAGE,
   TAGS_PACKAGE,
 };
 
@@ -100,7 +104,7 @@ export {
 /**
  * The packages an engine registers when the caller names none.
  *
- * Twenty-eight of the thirty. Stocks and knowledge are excluded because
+ * Thirty of the thirty-two. Stocks and knowledge are excluded because
  * both need a host-supplied data source and do nothing useful without one, so
  * registering them by default would only produce NOT_CONFIGURED results.
  *
@@ -142,6 +146,8 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   ENCODING_PACKAGE,
   // IPv4 subnet arithmetic for developers. On by default, removable.
   IP_PACKAGE,
+  FUEL_PACKAGE,
+  DERIVED_UNITS_PACKAGE,
   // After MATHPHRASES_PACKAGE and LINES_PACKAGE: tag aggregates reuse the
   // `total of`/`count of`/`average of` fusions and walk the document the same
   // way the lines cross-line reads do.

@@ -365,11 +365,11 @@ describe("extended measures: voltage and current", () => {
     expect(getMeasure("kA")).toBe("current");
   });
 
-  // Bare "V" is deliberately NOT a registered unit — it collides with the
-  // stocks package's "V" (Visa) ticker, which also requires an IDENT token
-  // (StockTickerNormalizerRule). "mV"/"kV" are used instead.
-  test("'V' alone is not a UoM unit (reserved for the stocks package's Visa ticker)", () => {
-    expect(getMeasure("V")).toBeUndefined();
+  // Bare "V" is a volt, added for dimensional arithmetic (`230 V * 13 A`; see
+  // issue #191). It does collide with the stocks package's "V" (Visa) ticker,
+  // but the bare-ticker form is opt-in, and volts is the broader reading.
+  test("'V' is the volt", () => {
+    expect(getMeasure("V")).toBe("voltage");
   });
 
   test("voltage and current are not mutually convertible", () => {

@@ -65,6 +65,11 @@ export const EXTENDED_UNITS: Record<string, ExtendedUnitDef> = {
   // issue as "var"/"fps" above; not currently test-covered since bare-ticker
   // recognition is opt-in, but a real latent conflict). "mV"/"kV" don't
   // collide with anything and cover the practically useful range.
+  // `V` is registered so `230 V * 13 A` reads as volts times amperes (issue
+  // #191). It does collide with the Visa stock ticker, but the bare-ticker form
+  // is opt-in (the stocks package is not a default), and volts is the more
+  // broadly useful reading of `V` after a number.
+  V: { measure: "voltage", toBase: 1 },
   mV: { measure: "voltage", toBase: 0.001 },
   kV: { measure: "voltage", toBase: 1000 },
 
@@ -99,6 +104,17 @@ export const EXTENDED_UNITS: Record<string, ExtendedUnitDef> = {
   lpm: { measure: "volumeFlowRate", toBase: 0.001 / 60 },
   gpm: { measure: "volumeFlowRate", toBase: 0.003785411784 / 60 }, // US gallon = 3.785411784 L exactly
   cfs: { measure: "volumeFlowRate", toBase: 0.028316846592 }, // 1 ft3 = 0.028316846592 m3 exactly
+
+  // ── Fuel economy: distance per volume (base: km/l) ────────────────────
+  // The reciprocal pairing (economy vs consumption below) is handled by the
+  // converter, not this linear ratio (see UomConverter.ts's convertRate). mpg
+  // is miles per US gallon (issue #190). These display as themselves and expand
+  // to a km/l or l/km rate for conversion.
+  mpg: { measure: "fuelEconomy", toBase: 1.609344 / 3.785411784 }, // 1 mi/US-gal in km/l
+  kmpl: { measure: "fuelEconomy", toBase: 1 },
+
+  // ── Fuel consumption: volume per distance (base: l/km) ────────────────
+  l100km: { measure: "fuelConsumption", toBase: 0.01 }, // 1 l/100km = 0.01 l/km
 
   // ── Parts-Per (base: dimensionless fraction, 1 = whole) ───────────────
   // "%" is intentionally excluded, it's owned by the project's dedicated

@@ -4,6 +4,7 @@ import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/de
 import { moneyExactMagnitude, scaleMoneyByPercent, scaleMoneyExact } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
+import { tryDimensionalCompose } from "@solve-js/uom/Dimensions";
 import { rowMajorToColumnMajor, matrixMultiply, matrixPower, matrixCompare, matIndex, matAt, inBounds, collectionToValues, matrixEntryToValue } from "@solve-js/vm/MatrixOps";
 import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/vm/OpRegistry";
 import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit } from "@solve-js/uom/UomConverter";
@@ -2029,7 +2030,13 @@ export function executeBytecode(
             // because there is no such unit as a dollar-day.
             stack.push(moneyTimesQuantity(l, r)!);
           } else {
-            stack.push(binaryOp(l, r, (a, b) => a * b, (a, b) => a * b, "mul"));
+            // Two compatible quantities whose dimensions multiply onto a named
+            // derived unit: `kg * m/s^2` is a newton, `V * A` a watt. Only fires
+            // when the product names a derived unit, so `m * m` and `kg * m`
+            // (which name nothing) fall through unchanged (issue #191).
+            const composed = tryDimensionalCompose(l, r, true);
+            if (composed) stack.push(composed);
+            else stack.push(binaryOp(l, r, (a, b) => a * b, (a, b) => a * b, "mul"));
           }
           break;
         }
@@ -2060,6 +2067,11 @@ export function executeBytecode(
               // silently becoming a nonsensical currency-pair rate.
               stack.push(errorValue("INCOMPATIBLE_UNITS", `Cannot combine incompatible units: ${l.unit} and ${r.unit}`));
             } else {
+              // A quotient whose dimensions divide onto a named derived unit:
+              // `J / s` is a watt, `W / A` a volt (issue #191). Only when it
+              // names one; otherwise it stays the rate it was.
+              const composed = tryDimensionalCompose(l, r, false);
+              if (composed) { stack.push(composed); break; }
               // Genuinely different measures (e.g. "90 km / 3 day")
               // construct a Rate rather than erroring, now that this
               // codebase has a compound/derived-unit representation (see

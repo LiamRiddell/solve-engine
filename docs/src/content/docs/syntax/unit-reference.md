@@ -137,7 +137,7 @@ Measured against **joule**.
 | cW h | `cWh` | 36 |
 | decajoule | `decajoules`, `daJ` | 10 |
 | mW h | `mWh` | 3.6 |
-| joule | `joules` | 1 |
+| joule | `joules`, `J` | 1 |
 | decijoule | `decijoules`, `dJ` | 0.1 |
 | centijoule | `centijoules`, `cJ` | 0.01 |
 | millijoule | `millijoules`, `mJ` | 0.001 |
@@ -166,7 +166,7 @@ Measured against **newton**.
 | decanewton | `decanewtons`, `daN` | 10 |
 | kilopond | `kiloponds`, `kgf`, `kp` | 9.80665 |
 | lbf | `lbf` | 4.44822 |
-| newton | `newtons` | 1 |
+| newton | `newtons`, `N` | 1 |
 | poundal | `poundals`, `pdl` | 0.138255 |
 | decinewton | `decinewtons`, `dN` | 0.1 |
 | centinewton | `centinewtons`, `cN` | 0.01 |
@@ -525,11 +525,12 @@ Measured against **mps**.
 
 ## Voltage
 
-
+Measured against **V**.
 
 | Unit | Spellings | Relative size |
 | --- | --- | --- |
 | kV | `kV` | 1000 |
+| V | `V` | 1 |
 | mV | `mV` | 0.001 |
 
 ## Current
@@ -584,6 +585,23 @@ Measured against **m3s**.
 | gpm | `gpm` | 0.0000630902 |
 | lpm | `lpm` | 0.0000166667 |
 
+## Fuel economy
+
+Measured against **kmpl**.
+
+| Unit | Spellings | Relative size |
+| --- | --- | --- |
+| kmpl | `kmpl` | 1 |
+| mpg | `mpg` | 0.425144 |
+
+## Fuel consumption
+
+
+
+| Unit | Spellings | Relative size |
+| --- | --- | --- |
+| l100km | `l100km` | 0.01 |
+
 ## Parts per
 
 
@@ -597,7 +615,7 @@ Measured against **m3s**.
 
 ## Spellings that are not listed
 
-The conversion tables carry 1504 spellings in total, and 459 of
+The conversion tables carry 1508 spellings in total, and 457 of
 them are missing above. Most are multi-word forms like `sq ft` and `cu yd`,
 which the tables can resolve but the lexer cannot tokenize, so they are
 unavailable when typing an expression. They are excluded here rather than listed
