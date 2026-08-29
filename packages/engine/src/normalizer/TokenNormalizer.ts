@@ -248,6 +248,17 @@ export class TokenNormalizer {
   private sortedRulesCache: NormalizerRule[] | null = null;
 
   /**
+   * Per-token-type view of the priority-sorted rules: for a token type, the
+   * rules that could match a token of that type (those with no
+   * {@link NormalizerRule.startTokenTypes} hint, plus those that list the type),
+   * in the same priority order {@link getSortedRules} produces. Built lazily on
+   * the first token of each type and cached, so a document of many number and
+   * operator tokens never re-tries the many rules that only fire on an
+   * identifier. Invalidated alongside {@link sortedRulesCache}.
+   */
+  private rulesByTokenType = new Map<string, NormalizerRule[]>();
+
+  /**
    * Phrase trie for single-pass multi-word phrase fusion.
    * Tried at each token position BEFORE other rules, the trie walk
    * is O(depth) vs O(R × W) for separate rule matching.
@@ -280,6 +291,7 @@ export class TokenNormalizer {
   register(rule: NormalizerRule): void {
     this.rules.push(rule);
     this.sortedRulesCache = null;
+    this.rulesByTokenType.clear();
   }
 
   /**
@@ -293,6 +305,7 @@ export class TokenNormalizer {
   unregister(ruleName: string): void {
     this.rules = this.rules.filter(r => r.name !== ruleName);
     this.sortedRulesCache = null;
+    this.rulesByTokenType.clear();
   }
 
   /**
@@ -302,6 +315,7 @@ export class TokenNormalizer {
   clear(): void {
     this.rules = [];
     this.sortedRulesCache = null;
+    this.rulesByTokenType.clear();
     this.phraseTrie = new PhraseTrie();
   }
 
@@ -315,6 +329,25 @@ export class TokenNormalizer {
       this.sortedRulesCache = [...this.rules].sort((a, b) => b.priority - a.priority);
     }
     return this.sortedRulesCache;
+  }
+
+  /**
+   * The priority-sorted rules to try at a token of `type`: every rule with no
+   * {@link NormalizerRule.startTokenTypes} hint, plus those that list this type.
+   * A rule that declares a different trigger would have returned null here
+   * anyway, so omitting it is behaviour-preserving. Built once per distinct type
+   * and cached, which is what turns the per-position rule scan from "try all R
+   * rules" into "try only the ones that could fire on this token".
+   */
+  private rulesForTokenType(type: string): NormalizerRule[] {
+    let list = this.rulesByTokenType.get(type);
+    if (list === undefined) {
+      list = this.getSortedRules().filter(
+        (rule) => rule.startTokenTypes === undefined || rule.startTokenTypes.includes(type),
+      );
+      this.rulesByTokenType.set(type, list);
+    }
+    return list;
   }
 
   /**
@@ -394,8 +427,8 @@ export class TokenNormalizer {
     // ── Early exit: nothing to normalize ──
     if (tokens.length === 0) return tokens;
 
-    // ── Priority-sorted rules, cached across calls, see getSortedRules() ──
-    const sorted = this.getSortedRules();
+    // Rules are consulted per token type via rulesForTokenType(), which builds
+    // on the priority-sorted cache in getSortedRules().
     const fusionHandler = onFusion ?? this.options.onFusion;
     const maxPasses = this.options.maxPasses;
     const maxTokens = this.options.maxTokens;
@@ -441,8 +474,10 @@ export class TokenNormalizer {
           }
         }
 
-        // Try every rule in priority order at this position
-        for (const rule of sorted) {
+        // Try, in priority order, only the rules that can fire on this token's
+        // type (see rulesForTokenType); a rule declaring a different trigger
+        // would have returned null here anyway.
+        for (const rule of this.rulesForTokenType(current[pos].type)) {
           const match = rule.match(current, pos);
           if (match) {
             // Collect source tokens for fusion tracking

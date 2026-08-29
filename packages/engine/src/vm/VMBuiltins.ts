@@ -1314,7 +1314,9 @@ export const pluginFunctionRegistry: Record<number, PluginFunctionHandler> =
     defaultEngineContext.pluginFunctions;
 
 /** Highest index that fits in a single Uint8Array opcode-stream byte. */
-const MAX_PLUGIN_FUNCTION_INDEX = 255;
+// Two bytes in the bytecode stream (CALL_PLUGIN_WIDE), so up to 65536 distinct
+// plugin functions across a process. The first 256 use the one-byte CALL_PLUGIN.
+const MAX_PLUGIN_FUNCTION_INDEX = 65535;
 let nextPluginFunctionIndex = 0;
 
 /**
@@ -1326,7 +1328,8 @@ let nextPluginFunctionIndex = 0;
  * an index: two packages independently picking the same arbitrary number
  * would silently overwrite each other's handler in the shared registry.
  *
- * @throws If the index pool (0-255, a single opcode-stream byte) is exhausted.
+ * @throws If the index pool is exhausted (up to 65536: two opcode-stream bytes
+ *         via CALL_PLUGIN_WIDE, the first 256 via the one-byte CALL_PLUGIN).
  */
 export function allocatePluginFunctionIndex(): number {
     if (nextPluginFunctionIndex > MAX_PLUGIN_FUNCTION_INDEX) {

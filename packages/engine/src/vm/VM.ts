@@ -2588,8 +2588,19 @@ export function executeBytecode(
         // ═══════════════════════════════════════════════════════════════
         // §5  Functions  (OpCode 50–52)
         // ═══════════════════════════════════════════════════════════════
-        case OpCode.CALL_PLUGIN: {
-          const fnIdx = operandByte(opcodes, ip++, op, "plugin-function index");
+        case OpCode.CALL_PLUGIN:
+        case OpCode.CALL_PLUGIN_WIDE: {
+          // Shared body; only the index width differs. CALL_PLUGIN_WIDE carries a
+          // two-byte little-endian index so more than 256 plugin functions can be
+          // reached (see BytecodeBuilder.emitPluginCall).
+          let fnIdx: number;
+          if (op === OpCode.CALL_PLUGIN_WIDE) {
+            const lo = operandByte(opcodes, ip++, op, "plugin-function index (low byte)");
+            const hi = operandByte(opcodes, ip++, op, "plugin-function index (high byte)");
+            fnIdx = lo | (hi << 8);
+          } else {
+            fnIdx = operandByte(opcodes, ip++, op, "plugin-function index");
+          }
           const argCount = operandByte(opcodes, ip++, op, "argument count");
           const args: Value[] = [];
           for (let i = 0; i < argCount; i++) args.push(safePop(stack));

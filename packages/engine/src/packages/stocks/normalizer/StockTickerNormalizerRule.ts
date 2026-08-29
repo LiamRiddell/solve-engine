@@ -44,6 +44,7 @@ export function stockTickerNormalizerRule(): NormalizerRule {
 	return {
 		name: "stocks:bare-ticker",
 		priority: 20,
+		startTokenTypes: ["IDENT"],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const token = tokens[pos];
 			if (!token || token.type !== "IDENT") return null;

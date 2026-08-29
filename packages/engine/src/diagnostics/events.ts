@@ -21,9 +21,6 @@ export const DiagnosticEventType = {
   PipelineEnd: "pipeline_end",
 } as const;
 
-/** Discriminator naming which pipeline event a diagnostic record describes. */
-export type EventType = (typeof DiagnosticEventType)[keyof typeof DiagnosticEventType];
-
 /** Base event, all events include a timestamp relative to pipeline start */
 export interface BaseEvent {
   readonly type: string;
@@ -207,24 +204,4 @@ export interface DiagnosticReport {
 
    /** Serialize to a JSON-safe plain object */
    toJSON(): DiagnosticReportJSON;
-}
-
-/** JSON-serializable representation of a DiagnosticReport */
-export interface DiagnosticReportJSON {
-   readonly events: readonly DiagnosticEvent[];
-   readonly parselets: readonly CategorizedParselet[];
-   readonly summary: {
-     readonly totalTokens: number;
-     readonly totalParselets: number;
-     readonly totalOpcodes: number;
-     readonly cacheHit: boolean;
-     readonly elapsedNs: number;
-     readonly parseCategories: Record<string, number>;
-   };
-   readonly metadata: {
-     readonly expression: string;
-     readonly inputType: string;
-     readonly timestamp: number;
-     readonly vmTraceEnabled: boolean;
-   };
 }

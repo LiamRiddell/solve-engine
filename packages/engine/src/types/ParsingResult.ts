@@ -8,8 +8,6 @@
 
 import { Value } from "@solve-js/vm/Value";
 import { DiagnosticReportJSON } from "@solve-js/diagnostics";
-import type { Token } from "@solve-js/lexer/Token";
-import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 
 /**
  * One inline solve, and where it sits in its line.
@@ -120,23 +118,3 @@ export interface ParseletInfo {
     tokenOffset: number;
 }
 
-/**
- * Intermediate state from one evaluation, for tooling.
- *
- * Not part of an ordinary evaluation result. The playground uses it to show
- * what the lexer, parser and compiler each produced.
- */
-export interface DebugInfo {
-    /** The token stream after lexing and normalisation. */
-    tokens: Token[];
-    /** Which parselet handled each token. */
-    parselets: ParseletInfo[];
-    /** The compiled bytecode. */
-    program: BytecodeProgram;
-    /** One-based line this came from, when it came from a document. */
-    lineNumber?: number;
-    /** When it was captured, for ordering entries in a timeline view. */
-    timestamp?: number;
-    /** Whether the bytecode was reused from cache rather than compiled. */
-    cacheHit?: boolean;
-}

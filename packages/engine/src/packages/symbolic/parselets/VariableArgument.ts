@@ -35,20 +35,6 @@ export function readVariableName(parser: Parser, verb: string): string {
 	return token.value;
 }
 
-/**
- * Reads a bare variable name argument and emits it as a string constant.
- *
- * Pushing the name as a String means the builtin receives it directly and the
- * VM needs no special case.
- *
- * @param parser - The parser, positioned at the name.
- * @param builder - The bytecode builder to emit into.
- * @param verb - The calling verb's name, for the error message.
- */
-export function consumeVariableName(parser: Parser, builder: BytecodeBuilder, verb: string): void {
-	emitVariableName(builder, readVariableName(parser, verb));
-}
-
 /** Emits an already-read unknown's name as the String argument the algebra builtins read it as. */
 export function emitVariableName(builder: BytecodeBuilder, name: string): void {
 	builder.emitOpcode(OpCode.PUSH_STRING);

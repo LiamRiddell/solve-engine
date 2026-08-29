@@ -220,16 +220,6 @@ export function allocationUsed(): number {
 }
 
 /**
- * User-defined-function calls made so far in the evaluation in flight, or in
- * the one that just finished. For tests and for a host reporting on a refusal.
- *
- * @returns The running tally.
- */
-export function functionCallsUsed(): number {
-	return calls;
-}
-
-/**
  * Drop all in-flight evaluation state.
  *
  * For tests that need a known starting point, and as a repair for a host that
