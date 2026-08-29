@@ -51,3 +51,7 @@ docs/.astro
 # writes the tracked baselines under benchmarks/baselines/.
 packages/engine/benchmarks/current/
 .jest-report.json
+
+# CPU profiles
+*.cpuprofile
+perfprof/
