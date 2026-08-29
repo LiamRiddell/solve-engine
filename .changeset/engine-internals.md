@@ -29,11 +29,10 @@ improve by a few per cent with no regression.
 
 ## Dead code
 
-Removed seven unused internal exports (`isComplexOne`, `consumeVariableName`, the
-`DebugInfo`/`ParseletInfo` tooling interfaces, the `EventType` alias,
-`functionCallsUsed`, `registerLocale`), an accidental duplicate declaration of
-`DiagnosticReportJSON`, and the imports they left behind. None was on the public
-API surface.
+Removed six unused internal exports (`isComplexOne`, `consumeVariableName`, the
+`DebugInfo` tooling interface, the `EventType` alias, `functionCallsUsed`,
+`registerLocale`), an accidental duplicate declaration of `DiagnosticReportJSON`,
+and the imports they left behind. None was on the public API surface.
 
 ## Verification
 
