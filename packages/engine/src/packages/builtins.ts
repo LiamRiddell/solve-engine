@@ -53,6 +53,8 @@ import { STATISTICS_PACKAGE } from "./statistics";
 import { NUMERALS_PACKAGE } from "./numerals";
 import { RATIO_PACKAGE } from "./ratio";
 import { GEOMETRY_PACKAGE } from "./geometry";
+import { CONSTANTS_PACKAGE } from "./constants";
+import { HEALTH_PACKAGE } from "./health";
 
 export {
   ARITHMETIC_PACKAGE,
@@ -95,6 +97,8 @@ export {
   NUMERALS_PACKAGE,
   RATIO_PACKAGE,
   GEOMETRY_PACKAGE,
+  CONSTANTS_PACKAGE,
+  HEALTH_PACKAGE,
 };
 
 // ── All built-in packages (registration order matters: arithmetic first) ──
@@ -118,7 +122,7 @@ export {
 /**
  * The packages an engine registers when the caller names none.
  *
- * Thirty-seven of the thirty-nine. Stocks and knowledge are excluded because
+ * Thirty-nine of the forty-one. Stocks and knowledge are excluded because
  * both need a host-supplied data source and do nothing useful without one, so
  * registering them by default would only produce NOT_CONFIGURED results.
  *
@@ -186,4 +190,9 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   // Geometry: area, perimeter and volume of common shapes. On by default,
   // removable.
   GEOMETRY_PACKAGE,
+  // Physical and mathematical constants (speed of light, gravity, tau, ...).
+  // On by default, removable.
+  CONSTANTS_PACKAGE,
+  // Health and fitness helpers (bmi, pace, speed). On by default, removable.
+  HEALTH_PACKAGE,
 ];
