@@ -1903,6 +1903,13 @@ export function executeBytecode(
             // milliseconds wearing the wrong type, which is a confident wrong
             // answer rather than a visible failure.
             stack.push(datetimeValue(shiftDatetime(r.toNumber(), l, 1, vm)));
+          } else if (l.type === ValueType.String && r.type === ValueType.String) {
+            // Text joins to text: "foo" + " bar" is "foo bar". Deliberately only
+            // when both sides are text. A string plus a number has no defined
+            // join here, mixing the two would fall to binaryOp() below, which
+            // reads each operand as a bare number, so "a" + "b" would otherwise
+            // have answered 0. The text package documents this boundary.
+            stack.push(stringValue((l.value as string) + (r.value as string)));
           } else {
             stack.push(binaryOp(l, r, (a, b) => a + b, (a, b) => a + b, "add"));
           }
