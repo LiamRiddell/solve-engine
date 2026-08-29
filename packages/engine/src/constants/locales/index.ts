@@ -20,14 +20,4 @@ export function getLocale(code: string): ILocale {
   return locales[code] || enLocale;
 }
 
-/**
- * Add a locale, or replace one already registered under the same code.
- *
- * @param code - Locale code to register under.
- * @param locale - Keywords, units and formatting for that locale.
- */
-export function registerLocale(code: string, locale: ILocale): void {
-  locales[code] = locale;
-}
-
 export { enLocale, deLocale, frLocale, type ILocale };

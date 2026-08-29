@@ -91,16 +91,6 @@ export function isComplexZero(z: Complex): boolean {
 }
 
 /**
- * Whether a complex value is exactly one.
- *
- * @param z - The value to test.
- * @returns True when it equals one.
- */
-export function isComplexOne(z: Complex): boolean {
-	return isRationalOne(z.re) && isRationalZero(z.im);
-}
-
-/**
  * Exact addition.
  *
  * @param a - Left operand.
