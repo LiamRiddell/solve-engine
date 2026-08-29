@@ -28,6 +28,7 @@ export function plotNormalizerRule(priority = 80): NormalizerRule {
 	return {
 		name: RULE,
 		priority,
+		startTokenTypes: ["IDENT"],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const token = tokens[pos];
 			if (!token || token.type !== "IDENT") return null;

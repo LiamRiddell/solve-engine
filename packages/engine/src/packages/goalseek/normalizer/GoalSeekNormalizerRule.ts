@@ -31,6 +31,7 @@ export function goalSeekNormalizerRule(priority = 75): NormalizerRule {
 	return {
 		name: "goalseek:solve-line",
 		priority,
+		startTokenTypes: ["IDENT"],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			// A definition's own name (`:solve = ...`) is never this trigger, so a
 			// COLON immediately before the word rules it out, the same guard every

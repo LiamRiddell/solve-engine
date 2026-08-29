@@ -140,6 +140,23 @@ export interface NormalizerRule {
   readonly priority: number;
 
   /**
+   * The token types this rule can match at position `pos`, as a performance
+   * hint. When present, the normalizer only tries the rule at a position whose
+   * token type is in this list, and skips it everywhere else.
+   *
+   * This MUST be exact: a rule whose `match()` begins `if (tokens[pos].type !==
+   * "IDENT") return null` can only ever match an `IDENT`, so declaring
+   * `["IDENT"]` changes nothing (the rule would have returned null at every
+   * other position anyway) while letting the normalizer skip it for the many
+   * number/operator tokens in a document. Omit it, or list every type the rule
+   * can match, when the first token is not fixed; an omitted hint means "always
+   * try", the original behaviour. Declaring a type the rule cannot actually
+   * start on is harmless; declaring too FEW (missing a type it can match) makes
+   * the rule silently unreachable there, which is a bug.
+   */
+  readonly startTokenTypes?: readonly string[];
+
+  /**
    * Attempt to match a pattern starting at position `pos` in the token stream.
    *
    * @param tokens - The current token stream (may be partially normalized from prior passes)
