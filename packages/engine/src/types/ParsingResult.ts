@@ -100,3 +100,21 @@ export interface UnifiedParsingOptions {
     includeDiagnostics?: boolean;
 }
 
+/**
+ * Which parselet handled a token.
+ *
+ * For the playground's parser view, where seeing that a token went to an
+ * unexpected parselet is usually the fastest route to understanding why an
+ * expression parsed the way it did.
+ */
+export interface ParseletInfo {
+    /** Token type as the lexer classified it. */
+    tokenType: string;
+    /** The token's text. */
+    tokenValue: string;
+    /** Name of the parselet that consumed it. */
+    parseletType: string;
+    /** Character offset of the token within its line. */
+    tokenOffset: number;
+}
+
