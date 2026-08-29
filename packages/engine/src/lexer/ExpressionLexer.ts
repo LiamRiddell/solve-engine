@@ -459,7 +459,9 @@ export class ExpressionLexer {
 
   // ── Merged lookup collections (keywordMap + pluginKeywordMap, knownUnits + pluginUnits)
   private mergedKeywords: Map<string, string>;
-  private mergedUnits: Set<string>;
+  // ReadonlySet: only membership is ever tested, which lets the common
+  // no-plugin-units case share the built-in `knownUnits` set without a copy.
+  private mergedUnits: ReadonlySet<string>;
 
   // Plugin-extensible keyword map (merged with locale keywordMap)
   private pluginKeywordMap: Map<string, string> = new Map();
@@ -517,9 +519,21 @@ export class ExpressionLexer {
   }
 
   /** Rebuild merged keyword and unit collections after plugin registration. */
-  private rebuildMergedCollections(): void {
-    this.mergedKeywords = new Map([...this.keywordMap, ...this.pluginKeywordMap]);
-    this.mergedUnits = new Set([...knownUnits, ...this.pluginUnits]);
+  // `knownUnits` is a 1000+ entry built-in set. A single combined rebuild used
+  // to copy it (and the whole keyword map) on every registerVocabulary call, so
+  // each keyword-only package paid for it for nothing, the single largest cost
+  // in engine construction. The merged keyword map is now maintained
+  // incrementally (a plugin keyword can never shadow a built-in, so it is a plain
+  // set/delete on the existing map, see registerVocabulary), and only the units
+  // still need an occasional rebuild, done here.
+  private rebuildMergedUnits(): void {
+    // No plugin units is the common case: reference the built-in set directly
+    // rather than copying 1000+ entries. mergedUnits is read-only (membership
+    // tests only), so sharing the constant is safe; a later plugin unit builds a
+    // fresh union instead of mutating it.
+    this.mergedUnits = this.pluginUnits.size === 0
+      ? knownUnits
+      : new Set([...knownUnits, ...this.pluginUnits]);
   }
 
   constructor(localeCode = 'en', lookup?: TokenLookup) {
@@ -531,7 +545,9 @@ export class ExpressionLexer {
       this.keywordMap.set(k.toLowerCase(), v);
     }
     this.mergedKeywords = new Map(this.keywordMap);
-    this.mergedUnits = new Set(knownUnits);
+    // No plugin units yet: share the built-in set (read-only). A later plugin
+    // unit builds a fresh union in rebuildMergedUnits() rather than mutating it.
+    this.mergedUnits = knownUnits;
   }
 
   /**
@@ -562,8 +578,10 @@ export class ExpressionLexer {
           );
         }
         this.pluginKeywordMap.set(lower, tokenType);
+        // Straight into the merged view: guarded above against shadowing a
+        // built-in, so no full rebuild is needed.
+        this.mergedKeywords.set(lower, tokenType);
       }
-      this.rebuildMergedCollections();
     }
 
     if (plugin.operators) {
@@ -634,7 +652,7 @@ export class ExpressionLexer {
         }
         this.pluginUnits.add(unit);
       }
-      this.rebuildMergedCollections();
+      this.rebuildMergedUnits();
     }
 
     if (plugin.rawLinePatterns) {
@@ -656,10 +674,10 @@ export class ExpressionLexer {
   unregisterVocabulary(plugin: LexerVocabulary): void {
     if (plugin.keywords) {
       for (const keyword of Object.keys(plugin.keywords)) {
-        this.pluginKeywordMap.delete(keyword.toLowerCase());
+        const lower = keyword.toLowerCase();
+        this.pluginKeywordMap.delete(lower);
+        this.mergedKeywords.delete(lower);
       }
-      
-      this.rebuildMergedCollections();
     }
 
     if (plugin.operators) {
@@ -683,8 +701,8 @@ export class ExpressionLexer {
       for (const unit of plugin.units) {
         this.pluginUnits.delete(unit);
       }
-      
-      this.rebuildMergedCollections();
+
+      this.rebuildMergedUnits();
     }
 
     if (plugin.rawLinePatterns) {
