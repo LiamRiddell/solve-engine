@@ -223,6 +223,7 @@ export default defineConfig({
             { slug: "syntax/map-reduce-and-aggregates" },
             { slug: "syntax/money-and-finance" },
             { slug: "syntax/networking" },
+            { slug: "syntax/numerals" },
             { slug: "syntax/programmer-math" },
             { slug: "syntax/random" },
             { slug: "syntax/statistics" },

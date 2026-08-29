@@ -50,6 +50,7 @@ import { TEXT_PACKAGE } from "./text";
 import { HASH_PACKAGE } from "./hash";
 import { RANDOM_PACKAGE } from "./random";
 import { STATISTICS_PACKAGE } from "./statistics";
+import { NUMERALS_PACKAGE } from "./numerals";
 
 export {
   ARITHMETIC_PACKAGE,
@@ -89,6 +90,7 @@ export {
   HASH_PACKAGE,
   RANDOM_PACKAGE,
   STATISTICS_PACKAGE,
+  NUMERALS_PACKAGE,
 };
 
 // ── All built-in packages (registration order matters: arithmetic first) ──
@@ -112,7 +114,7 @@ export {
 /**
  * The packages an engine registers when the caller names none.
  *
- * Thirty-four of the thirty-six. Stocks and knowledge are excluded because
+ * Thirty-five of the thirty-seven. Stocks and knowledge are excluded because
  * both need a host-supplied data source and do nothing useful without one, so
  * registering them by default would only produce NOT_CONFIGURED results.
  *
@@ -172,4 +174,7 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   // Second-tier statistics (correlation, regression, percentile, z-score,
   // normal distribution). On by default, removable.
   STATISTICS_PACKAGE,
+  // Numeral spellings: as words, as ordinal, as roman, and from roman. On by
+  // default, removable.
+  NUMERALS_PACKAGE,
 ];
