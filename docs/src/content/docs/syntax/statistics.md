@@ -3,7 +3,7 @@ title: Statistics
 description: Averages, comparisons, proportions and other natural phrasings.
 ---
 
-> **Package:** `MATHPHRASES_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
+> **Packages:** `MATHPHRASES_PACKAGE` (averages, spread, comparisons) and `STATISTICS_PACKAGE` (correlation, regression, percentile, z-score, the normal distribution). Both registered by `createEngine()`; for a slimmer engine, register them explicitly (see [choosing packages](/getting-started/installation/)).
 
 ```solve
 average of 10, 20, 30 // 20
@@ -53,6 +53,67 @@ already sum to 100 come out unchanged. A trailing label on a weight (`3 credits`
 is read for the number and the word ignored. A value written with no `at` clause
 is reported as an error rather than given a silent weight of 1, since guessing
 one would quietly change the answer of a list that was simply mistyped.
+
+## Relationships between two lists
+
+The stats above describe one list. These describe how two lists move together:
+whether taller people also tend to be heavier, and by how much. Give the two
+lists as `[bracketed]` sets of the same length.
+
+**Correlation** is a single number from -1 to 1: 1 means the two rise together in
+perfect step, -1 means one rises exactly as the other falls, and 0 means no
+straight-line relationship at all.
+
+```solve
+correlation of [1, 2, 3, 4] and [2, 4, 5, 8] // 0.98
+```
+
+The **line of best fit** is the straight line that sits closest to the points.
+`slope` is how steep it is (how much the second list changes per step of the
+first), and `intercept` is where it crosses zero.
+
+```solve
+slope of [1, 2, 3, 4] and [2, 4, 5, 8] // 1.90
+intercept of [1, 2, 3, 4] and [2, 4, 5, 8] // 0
+```
+
+**r squared** is the share of the variation the line explains, from 0 to 1; it is
+the correlation squared, and is written as a function.
+
+```solve
+rsquared([1, 2, 3, 4], [2, 4, 5, 8]) // 0.96
+```
+
+Each two-list form also has a call spelling, `correlation([a], [b])` and so on.
+Two lists of different lengths, or fewer than two points, are reported as an
+error rather than answered.
+
+## Position and the normal distribution
+
+A **percentile** is the value a given share of a list sits below: the 90th
+percentile is the value nine tenths of the data fall under. The share is a number
+from 0 to 100, and the 50th percentile is the median.
+
+```solve
+percentile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 90) // 9.10
+```
+
+A **z-score** says how far one value sits from the average, measured in standard
+deviations: a z-score of 2 is two standard deviations above the mean.
+
+```solve
+zscore(9, [2, 4, 4, 4, 5, 5, 7, 9]) // 2
+```
+
+The **normal distribution** is the bell curve much natural data follows.
+`normalcdf(z)` gives the share of that curve to the left of a z-score (so
+`normalcdf(1.96)` is about 0.975, the basis of a 95% interval), and
+`normalpdf(z)` gives the height of the curve at that point.
+
+```solve
+normalcdf(1.96) // 0.98
+normalpdf(0) // 0.40
+```
 
 ## Comparisons and fractions
 
