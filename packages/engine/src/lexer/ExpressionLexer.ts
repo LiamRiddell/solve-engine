@@ -521,7 +521,7 @@ export class ExpressionLexer {
   /** Rebuild merged keyword and unit collections after plugin registration. */
   // `knownUnits` is a 1000+ entry built-in set. A single combined rebuild used
   // to copy it (and the whole keyword map) on every registerVocabulary call, so
-  // each keyword-only package paid for it for nothing — the single largest cost
+  // each keyword-only package paid for it for nothing, the single largest cost
   // in engine construction. The merged keyword map is now maintained
   // incrementally (a plugin keyword can never shadow a built-in, so it is a plain
   // set/delete on the existing map, see registerVocabulary), and only the units
