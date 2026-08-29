@@ -279,3 +279,85 @@ export function checkPackageCompatibility(
     conflicts,
   };
 }
+
+/**
+ * An incremental index that answers the same question as
+ * {@link checkPackageCompatibility}, but in O(fields) per package rather than
+ * O(packages x fields): registering N packages one by one is O(N) work here
+ * instead of the O(N^2) a fresh pairwise scan per registration costs.
+ *
+ * The engine builds one of these across construction. For each candidate it
+ * gathers only the already-registered packages that share at least one
+ * collision-capable key (a parselet token type, a phrase, a converter name, a
+ * plugin-function name, a normalizer-rule name, a lexer keyword or operator, an
+ * async-resolver namespace, or a token-category token type), then runs the
+ * unchanged {@link checkOnePackagePair} against exactly those. A package that
+ * shares no key with the candidate can produce no conflict, so skipping it is
+ * exact, not an approximation: the conflicts returned are identical, package for
+ * package and detail for detail, to what the pairwise scan would return.
+ */
+export class PackageCompatibilityIndex {
+  private readonly prefixOwners = new Map<string, IEnginePackage>();
+  private readonly infixOwners = new Map<string, IEnginePackage>();
+  private readonly phraseOwners = new Map<string, IEnginePackage>();
+  private readonly converterOwners = new Map<string, IEnginePackage>(); // lower-cased name
+  private readonly pluginFnOwners = new Map<string, IEnginePackage>();
+  private readonly ruleOwners = new Map<string, IEnginePackage>();
+  private readonly keywordOwners = new Map<string, IEnginePackage>();
+  private readonly operatorOwners = new Map<string, IEnginePackage>();
+  private readonly resolverOwners = new Map<string, IEnginePackage>();
+  private readonly categoryOwners = new Map<string, IEnginePackage>();
+
+  /** Conflicts between `candidate` and everything added so far. Does not mutate. */
+  check(candidate: IEnginePackage): CompatibilityConflict[] {
+    // Preserves discovery order (a Set keeps insertion order), which for the
+    // common zero-collision case is empty anyway.
+    const colliders = new Set<IEnginePackage>();
+    const gather = (owners: Map<string, IEnginePackage>, key: string): void => {
+      const owner = owners.get(key);
+      if (owner && owner !== candidate && owner.name !== candidate.name) colliders.add(owner);
+    };
+
+    if (candidate.prefixParselets) for (const k of Object.keys(candidate.prefixParselets)) gather(this.prefixOwners, k);
+    if (candidate.infixParselets) for (const k of Object.keys(candidate.infixParselets)) gather(this.infixOwners, k);
+    if (candidate.phrases) for (const k of Object.keys(candidate.phrases)) gather(this.phraseOwners, k);
+    if (candidate.asConverters) for (const k of Object.keys(candidate.asConverters)) gather(this.converterOwners, k.toLowerCase());
+    if (candidate.pluginFunctions) for (const k of Object.keys(candidate.pluginFunctions)) gather(this.pluginFnOwners, k);
+    if (candidate.normalizerRules) for (const r of candidate.normalizerRules) gather(this.ruleOwners, r.name);
+    if (candidate.lexerVocabulary?.keywords) for (const k of Object.keys(candidate.lexerVocabulary.keywords)) gather(this.keywordOwners, k);
+    if (candidate.lexerVocabulary?.operators) for (const k of Object.keys(candidate.lexerVocabulary.operators)) gather(this.operatorOwners, k);
+    if (candidate.asyncResolvers) for (const r of candidate.asyncResolvers) gather(this.resolverOwners, r.namespace);
+    if (candidate.tokenCategories) for (const k of Object.keys(candidate.tokenCategories)) gather(this.categoryOwners, k);
+
+    const conflicts: CompatibilityConflict[] = [];
+    for (const owner of colliders) conflicts.push(...checkOnePackagePair(owner, candidate));
+    return conflicts;
+  }
+
+  /** Record `pkg`'s declarations. Set-if-absent keeps the earliest owner of each key. */
+  add(pkg: IEnginePackage): void {
+    const claim = (owners: Map<string, IEnginePackage>, key: string): void => {
+      if (!owners.has(key)) owners.set(key, pkg);
+    };
+    if (pkg.prefixParselets) for (const k of Object.keys(pkg.prefixParselets)) claim(this.prefixOwners, k);
+    if (pkg.infixParselets) for (const k of Object.keys(pkg.infixParselets)) claim(this.infixOwners, k);
+    if (pkg.phrases) for (const k of Object.keys(pkg.phrases)) claim(this.phraseOwners, k);
+    if (pkg.asConverters) for (const k of Object.keys(pkg.asConverters)) claim(this.converterOwners, k.toLowerCase());
+    if (pkg.pluginFunctions) for (const k of Object.keys(pkg.pluginFunctions)) claim(this.pluginFnOwners, k);
+    if (pkg.normalizerRules) for (const r of pkg.normalizerRules) claim(this.ruleOwners, r.name);
+    if (pkg.lexerVocabulary?.keywords) for (const k of Object.keys(pkg.lexerVocabulary.keywords)) claim(this.keywordOwners, k);
+    if (pkg.lexerVocabulary?.operators) for (const k of Object.keys(pkg.lexerVocabulary.operators)) claim(this.operatorOwners, k);
+    if (pkg.asyncResolvers) for (const r of pkg.asyncResolvers) claim(this.resolverOwners, r.namespace);
+    if (pkg.tokenCategories) for (const k of Object.keys(pkg.tokenCategories)) claim(this.categoryOwners, k);
+  }
+
+  /** Clear and re-add a whole package list, used after an unregister. */
+  rebuild(pkgs: Iterable<IEnginePackage>): void {
+    for (const m of [
+      this.prefixOwners, this.infixOwners, this.phraseOwners, this.converterOwners,
+      this.pluginFnOwners, this.ruleOwners, this.keywordOwners, this.operatorOwners,
+      this.resolverOwners, this.categoryOwners,
+    ]) m.clear();
+    for (const pkg of pkgs) this.add(pkg);
+  }
+}

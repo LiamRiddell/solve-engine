@@ -19,7 +19,7 @@ import { createEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { Value, ValueType, numberValue, stringValue, pendingValue, freezeIfDev, errorValue, type MatrixData } from "@solve-js/vm/Value";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
-import { checkPackageCompatibility } from "@solve-js/api/PackageCompatibility";
+import { PackageCompatibilityIndex } from "@solve-js/api/PackageCompatibility";
 import { assertEngineVersionCompatible } from "@solve-js/api/EngineVersionCompatibility";
 import { ENGINE_VERSION } from "@solve-js/constants/version";
 import {
@@ -292,6 +292,14 @@ export class ExpressionEngine {
      *. See `api/PackageCompatibility.ts`'s module doc for why this exists.
      */
     private registeredPackages = new Map<string, IEnginePackage>();
+
+    /**
+     * Incremental index behind the package-compatibility check. Kept in step
+     * with {@link registeredPackages} so each `registerPackage` costs O(that
+     * package's fields) rather than a fresh O(all packages) pairwise scan, which
+     * turned engine construction into O(packages^2). See PackageCompatibility.ts.
+     */
+    private compatIndex = new PackageCompatibilityIndex();
 
     /**
      * The `DocumentModel` this engine is currently evaluating, if any
@@ -806,8 +814,8 @@ export class ExpressionEngine {
         // asConverterRegistry) even for "error"-severity conflicts, since a
         // host may have a deliberate reason to accept a collision; the
         // point is making it IMPOSSIBLE to miss, not blocking registration.
-        const compatibility = checkPackageCompatibility(pkg, [...this.registeredPackages.values()]);
-        for (const conflict of compatibility.conflicts) {
+        const compatibilityConflicts = this.compatIndex.check(pkg);
+        for (const conflict of compatibilityConflicts) {
             const log = conflict.severity === "error" ? console.error : console.warn;
             log(`[ExpressionEngine] Package compatibility ${conflict.severity} (${conflict.kind}): ${conflict.detail}`);
         }
@@ -914,6 +922,9 @@ export class ExpressionEngine {
         // checking registeredPackages.has(pkg.name) would see "registered"
         // for a package that contributed nothing.
         this.registeredPackages.set(pkg.name, pkg);
+        // Mirror the registration into the compatibility index (kept in step so
+        // the next package's check stays O(its own fields)).
+        this.compatIndex.add(pkg);
     }
 
     /**
@@ -977,6 +988,10 @@ export class ExpressionEngine {
 
         this.packageContributions.delete(packageName);
         this.registeredPackages.delete(packageName);
+        // Rebuild the compatibility index from the survivors. Unregistration is
+        // rare (a re-registered duplicate name, or an explicit host call), so an
+        // O(remaining) rebuild here is far cheaper than tracking per-key removal.
+        this.compatIndex.rebuild(this.registeredPackages.values());
         this.bytecodeCache.clear();
         return true;
     }
