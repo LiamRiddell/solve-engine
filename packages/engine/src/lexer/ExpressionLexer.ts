@@ -519,14 +519,13 @@ export class ExpressionLexer {
   }
 
   /** Rebuild merged keyword and unit collections after plugin registration. */
-  // Split deliberately in two. `knownUnits` is a 1000+ entry built-in set, so
-  // rebuilding the merged units on every keyword registration (as a single
-  // combined rebuild did) copied that whole set for nothing on each of the many
-  // keyword-only packages — it was the single largest cost in engine
-  // construction. Each block below now rebuilds only the collection it changed.
-  private rebuildMergedKeywords(): void {
-    this.mergedKeywords = new Map([...this.keywordMap, ...this.pluginKeywordMap]);
-  }
+  // `knownUnits` is a 1000+ entry built-in set. A single combined rebuild used
+  // to copy it (and the whole keyword map) on every registerVocabulary call, so
+  // each keyword-only package paid for it for nothing — the single largest cost
+  // in engine construction. The merged keyword map is now maintained
+  // incrementally (a plugin keyword can never shadow a built-in, so it is a plain
+  // set/delete on the existing map, see registerVocabulary), and only the units
+  // still need an occasional rebuild, done here.
   private rebuildMergedUnits(): void {
     // No plugin units is the common case: reference the built-in set directly
     // rather than copying 1000+ entries. mergedUnits is read-only (membership
@@ -579,8 +578,10 @@ export class ExpressionLexer {
           );
         }
         this.pluginKeywordMap.set(lower, tokenType);
+        // Straight into the merged view: guarded above against shadowing a
+        // built-in, so no full rebuild is needed.
+        this.mergedKeywords.set(lower, tokenType);
       }
-      this.rebuildMergedKeywords();
     }
 
     if (plugin.operators) {
@@ -673,10 +674,10 @@ export class ExpressionLexer {
   unregisterVocabulary(plugin: LexerVocabulary): void {
     if (plugin.keywords) {
       for (const keyword of Object.keys(plugin.keywords)) {
-        this.pluginKeywordMap.delete(keyword.toLowerCase());
+        const lower = keyword.toLowerCase();
+        this.pluginKeywordMap.delete(lower);
+        this.mergedKeywords.delete(lower);
       }
-
-      this.rebuildMergedKeywords();
     }
 
     if (plugin.operators) {
