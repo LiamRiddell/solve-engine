@@ -46,6 +46,7 @@ import { IP_PACKAGE } from "./ip";
 import { FUEL_PACKAGE } from "./fuel";
 import { DERIVED_UNITS_PACKAGE } from "./derived";
 import { TAGS_PACKAGE } from "./tags";
+import { TEXT_PACKAGE } from "./text";
 
 export {
   ARITHMETIC_PACKAGE,
@@ -81,6 +82,7 @@ export {
   FUEL_PACKAGE,
   DERIVED_UNITS_PACKAGE,
   TAGS_PACKAGE,
+  TEXT_PACKAGE,
 };
 
 // ── All built-in packages (registration order matters: arithmetic first) ──
@@ -104,7 +106,7 @@ export {
 /**
  * The packages an engine registers when the caller names none.
  *
- * Thirty of the thirty-two. Stocks and knowledge are excluded because
+ * Thirty-one of the thirty-three. Stocks and knowledge are excluded because
  * both need a host-supplied data source and do nothing useful without one, so
  * registering them by default would only produce NOT_CONFIGURED results.
  *
@@ -152,4 +154,7 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   // `total of`/`count of`/`average of` fusions and walk the document the same
   // way the lines cross-line reads do.
   TAGS_PACKAGE,
+  // Text operations on String values (length, case, trim, contains, replace,
+  // counts, slug). On by default, removable, nothing else depends on it.
+  TEXT_PACKAGE,
 ];

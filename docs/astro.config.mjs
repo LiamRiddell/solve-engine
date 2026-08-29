@@ -228,6 +228,7 @@ export default defineConfig({
             { slug: "syntax/symbolic" },
             { slug: "syntax/table-columns" },
             { slug: "syntax/text-encoding" },
+            { slug: "syntax/text-operations" },
             { slug: "syntax/time" },
             { slug: "syntax/trigger-words" },
             { slug: "syntax/unit-reference" },
