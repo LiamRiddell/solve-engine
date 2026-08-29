@@ -133,15 +133,34 @@ export class BytecodeBuilder {
 				{ functionName: name },
 			);
 		}
-		this.emitOpcode(OpCode.CALL_PLUGIN);
-		this.emitIndex(index);
+		// One byte covers the first 256 plugin functions; beyond that, the
+		// wide opcode carries a two-byte little-endian index. Emitting the
+		// narrow form whenever it fits keeps existing bytecode and snapshots
+		// byte-for-byte unchanged. The index cannot exceed 65535 because the
+		// allocator (allocatePluginFunctionIndex) caps it, but guard anyway so
+		// a stray index is a clear error rather than a silently truncated byte.
+		if (index > 0xffff) {
+			throw ErrorFactory.parsing(
+				"PLUGIN_FUNCTION_INDEX_TOO_LARGE",
+				`Plugin-function index ${index} exceeds the two-byte bytecode limit (65535).`,
+				{ index },
+			);
+		}
+		if (index <= 0xff) {
+			this.emitOpcode(OpCode.CALL_PLUGIN);
+			this.emitIndex(index);
+		} else {
+			this.emitOpcode(OpCode.CALL_PLUGIN_WIDE);
+			this.emitIndex(index & 0xff); // low byte
+			this.emitIndex((index >> 8) & 0xff); // high byte
+		}
 		this.emitIndex(argCount);
 	}
 
 	/** Emit an {@link OpCode} instruction. */
 	emitOpcode(op: OpCode): void {
 		this.opcodes.push(op);
-		if (op === OpCode.CALL_PLUGIN) {
+		if (op === OpCode.CALL_PLUGIN || op === OpCode.CALL_PLUGIN_WIDE) {
 			this._hasAsync = true;
 		}
 	}

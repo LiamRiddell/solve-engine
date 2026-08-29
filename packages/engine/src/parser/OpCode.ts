@@ -171,6 +171,13 @@ export enum OpCode {
 	// [a, b], the same anonymousBodies side-table and call-frame shadowing
 	// MAP_INVOKE uses. Operands: the body index, then the pooled source string.
 	PLOT_INVOKE = 160,
+	// Wide-index plugin call: identical to CALL_PLUGIN (opcode 50) but its
+	// plugin-function index is TWO bytes (little-endian) rather than one, so a
+	// process can register more than 256 plugin functions. Emitted only when an
+	// index exceeds 255; anything at or below still uses the one-byte CALL_PLUGIN,
+	// so existing bytecode and snapshots are unchanged. See BytecodeBuilder's
+	// emitPluginCall and the VM's shared CALL_PLUGIN / CALL_PLUGIN_WIDE case.
+	CALL_PLUGIN_WIDE = 161,
 }
 
 // Reverse lookup built once at module load, getOpCodeName() is called once

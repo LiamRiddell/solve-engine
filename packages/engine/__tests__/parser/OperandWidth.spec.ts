@@ -192,6 +192,10 @@ const NEVER_EMITTED: ReadonlyMap<OpCode, { width: number; reason: string }> = ne
 	[OpCode.RATE_DIV, { width: 0, reason: "rate construction dispatches on operand type inside DIV" }],
 	[OpCode.RATE_MUL, { width: 0, reason: "rate cancellation dispatches on operand type inside MUL" }],
 	[OpCode.RATE_CONVERT, { width: 0, reason: "rate conversion dispatches on operand type inside the UOM band" }],
+	// Emitted by emitPluginCall only when a plugin-function index exceeds 255.
+	// The built-in corpus never registers that many functions, so this width is
+	// exercised end to end in vm/WidePluginIndex.spec.ts instead of here.
+	[OpCode.CALL_PLUGIN_WIDE, { width: 3, reason: "emitted only for a plugin index > 255; the built-in corpus never reaches that, see WidePluginIndex.spec" }],
 ]);
 
 /**

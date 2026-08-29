@@ -209,8 +209,10 @@ export const CoreErrorCodes = {
   PACKAGE_ENGINE_VERSION_INVALID_RANGE: "PACKAGE_ENGINE_VERSION_INVALID_RANGE",
   /** `OpRegistry.allocateOpcode()`'s dynamic opcode pool (started at 201) exhausted, too many packages calling it. */
   OPCODE_POOL_EXHAUSTED: "OPCODE_POOL_EXHAUSTED",
-  /** `VMBuiltins.allocatePluginFunctionIndex()`'s 0-255 index pool (a single opcode-stream byte) exhausted. */
+  /** `VMBuiltins.allocatePluginFunctionIndex()`'s index pool (up to 65536, two opcode-stream bytes) exhausted. */
   PLUGIN_FUNCTION_INDEX_POOL_EXHAUSTED: "PLUGIN_FUNCTION_INDEX_POOL_EXHAUSTED",
+  /** A plugin-function index exceeds the two-byte (65535) `CALL_PLUGIN_WIDE` bytecode operand. */
+  PLUGIN_FUNCTION_INDEX_TOO_LARGE: "PLUGIN_FUNCTION_INDEX_TOO_LARGE",
 
   // ── vm/Value.ts caller-contract violations (check isRateUnit()/isTimecodeUnit() first) ──
   INVALID_RATE_UNIT: "INVALID_RATE_UNIT",

@@ -68,7 +68,8 @@ const TWO_OPERANDS: readonly OpCode[] = [
  * The map and reduce invocations, which carry a body index alongside their
  * other operands.
  */
-const THREE_OPERANDS: readonly OpCode[] = [OpCode.MAP_INVOKE, OpCode.REDUCE_INVOKE];
+// CALL_PLUGIN_WIDE: a two-byte plugin index plus the one-byte argument count.
+const THREE_OPERANDS: readonly OpCode[] = [OpCode.MAP_INVOKE, OpCode.REDUCE_INVOKE, OpCode.CALL_PLUGIN_WIDE];
 
 /**
  * Operand byte count for every opcode, indexed by opcode value.
