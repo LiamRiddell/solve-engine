@@ -8,8 +8,6 @@
 
 import { Value } from "@solve-js/vm/Value";
 import { DiagnosticReportJSON } from "@solve-js/diagnostics";
-import type { Token } from "@solve-js/lexer/Token";
-import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 
 /**
  * One inline solve, and where it sits in its line.
