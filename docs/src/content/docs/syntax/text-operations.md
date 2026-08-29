@@ -1,6 +1,6 @@
 ---
 title: Text operations
-description: Measure, test and reshape a piece of text: length, case, trimming, membership and counts.
+description: "Measure, test and reshape a piece of text: length, case, trimming, membership and counts."
 ---
 
 > **Package:** `TEXT_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
