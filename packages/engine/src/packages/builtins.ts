@@ -47,6 +47,8 @@ import { FUEL_PACKAGE } from "./fuel";
 import { DERIVED_UNITS_PACKAGE } from "./derived";
 import { TAGS_PACKAGE } from "./tags";
 import { TEXT_PACKAGE } from "./text";
+import { HASH_PACKAGE } from "./hash";
+import { RANDOM_PACKAGE } from "./random";
 
 export {
   ARITHMETIC_PACKAGE,
@@ -83,6 +85,8 @@ export {
   DERIVED_UNITS_PACKAGE,
   TAGS_PACKAGE,
   TEXT_PACKAGE,
+  HASH_PACKAGE,
+  RANDOM_PACKAGE,
 };
 
 // ── All built-in packages (registration order matters: arithmetic first) ──
@@ -106,7 +110,7 @@ export {
 /**
  * The packages an engine registers when the caller names none.
  *
- * Thirty-one of the thirty-three. Stocks and knowledge are excluded because
+ * Thirty-three of the thirty-five. Stocks and knowledge are excluded because
  * both need a host-supplied data source and do nothing useful without one, so
  * registering them by default would only produce NOT_CONFIGURED results.
  *
@@ -157,4 +161,10 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   // Text operations on String values (length, case, trim, contains, replace,
   // counts, slug). On by default, removable, nothing else depends on it.
   TEXT_PACKAGE,
+  // Digests (sha256, sha1, sha512, md5, crc32) for developers, pure-JS and
+  // synchronous. On by default, removable.
+  HASH_PACKAGE,
+  // Everyday randomness and identifiers (uuid, random hex, pick, shuffle,
+  // coin). On by default, removable.
+  RANDOM_PACKAGE,
 ];
