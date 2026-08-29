@@ -51,6 +51,8 @@ import { HASH_PACKAGE } from "./hash";
 import { RANDOM_PACKAGE } from "./random";
 import { STATISTICS_PACKAGE } from "./statistics";
 import { NUMERALS_PACKAGE } from "./numerals";
+import { RATIO_PACKAGE } from "./ratio";
+import { GEOMETRY_PACKAGE } from "./geometry";
 
 export {
   ARITHMETIC_PACKAGE,
@@ -91,6 +93,8 @@ export {
   RANDOM_PACKAGE,
   STATISTICS_PACKAGE,
   NUMERALS_PACKAGE,
+  RATIO_PACKAGE,
+  GEOMETRY_PACKAGE,
 };
 
 // ── All built-in packages (registration order matters: arithmetic first) ──
@@ -114,7 +118,7 @@ export {
 /**
  * The packages an engine registers when the caller names none.
  *
- * Thirty-five of the thirty-seven. Stocks and knowledge are excluded because
+ * Thirty-seven of the thirty-nine. Stocks and knowledge are excluded because
  * both need a host-supplied data source and do nothing useful without one, so
  * registering them by default would only produce NOT_CONFIGURED results.
  *
@@ -177,4 +181,9 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   // Numeral spellings: as words, as ordinal, as roman, and from roman. On by
   // default, removable.
   NUMERALS_PACKAGE,
+  // Ratio reduction (ratio(16, 9) -> 16:9). On by default, removable.
+  RATIO_PACKAGE,
+  // Geometry: area, perimeter and volume of common shapes. On by default,
+  // removable.
+  GEOMETRY_PACKAGE,
 ];
