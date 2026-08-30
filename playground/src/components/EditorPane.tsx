@@ -272,6 +272,19 @@ class ResultWidget extends WidgetType {
   }
 }
 
+/**
+ * Format a stage duration.
+ *
+ * Timings arrive in nanoseconds and span four orders of magnitude between a
+ * bare literal and a line that hits the network, so the unit is chosen per
+ * value; one fixed scale renders the fast lines as zero.
+ */
+function formatNs(ns: number): string {
+  if (ns >= 1_000_000) return `${(ns / 1_000_000).toFixed(2)}ms`
+  if (ns >= 1_000) return `${(ns / 1_000).toFixed(1)}µs`
+  return `${ns.toFixed(0)}ns`
+}
+
 /** One row of the inline detail panel: a dim label and a value beside it. */
 function detailRow(label: string, value: string, mono = true): HTMLDivElement {
   const row = document.createElement("div")
@@ -377,7 +390,7 @@ class LineDetailWidget extends WidgetType {
         const seg = document.createElement("span")
         seg.className = `os-detail-seg os-detail-seg-${name}`
         seg.style.width = `${(ns / d.timing.total) * 100}%`
-        seg.title = `${name}: ${ns >= 1000 ? `${(ns / 1000).toFixed(1)}us` : `${ns.toFixed(0)}ns`}`
+        seg.title = `${name}: ${formatNs(ns)} (${((ns / d.timing!.total) * 100).toFixed(0)}%)`
         bar.append(seg)
       }
       const wrap = document.createElement("div")
@@ -385,7 +398,14 @@ class LineDetailWidget extends WidgetType {
       const key = document.createElement("span")
       key.className = "os-detail-key"
       key.textContent = "Time"
-      wrap.append(key, bar)
+      // The bar carries proportions and nothing else, so on its own it cannot
+      // say whether a line took a microsecond or a second. The total goes
+      // beside it, and each segment names its own share on hover.
+      const total = document.createElement("span")
+      total.className = "os-detail-total os-detail-mono"
+      total.textContent = formatNs(d.timing.total)
+      total.title = parts.map(([n, ns]) => `${n} ${formatNs(ns)}`).join("  ")
+      wrap.append(key, bar, total)
       box.append(wrap)
     }
 

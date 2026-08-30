@@ -504,3 +504,12 @@
 .os-detail-seg-parse { background: var(--chart-2); }
 .os-detail-seg-compile { background: var(--chart-3); }
 .os-detail-seg-execute { background: var(--chart-4); }
+
+.os-detail-total {
+  flex: 0 0 auto;
+  min-width: 3.75rem;
+  color: var(--muted-foreground);
+  font-size: 10px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
