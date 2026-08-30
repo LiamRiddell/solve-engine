@@ -30,7 +30,7 @@ solve line 3 for deposit = 900                        // 170,507.23
 
 There are two mechanisms, chosen automatically. When the target line is closed
 form in the variable, the answer is inverted exactly, the same algebra the
-[`solve(...)`](/syntax/algebra/) verb uses. Otherwise (a finance formula, say)
+[`solve(...)`](/syntax/solving-equations/) verb uses. Otherwise (a finance formula, say)
 a bounded numeric search narrows in on it, assuming the relationship rises or
 falls steadily across the search and crosses the target once.
 

@@ -203,6 +203,10 @@ describe("documented examples evaluate as documented", () => {
       ["weather.md", "conditions come from a live network service"],
       ["stocks.md", "prices come from a host-supplied network provider"],
       ["knowledge.md", "answers come from a host-supplied provider"],
+      ["decimals.md", "the point is the underlying IEEE value, which the display rounds, so no shown line captures it"],
+      ["relative-dates.md", "now, today, tomorrow and next weekday resolve against today, so no output is reproducible"],
+      ["relative-months.md", "this, next and last month resolve against the current month, so no output is reproducible"],
+      ["displaying-dates.md", "the output form is a host formatting setting, not an expression, so there is no line to assert"],
     ]);
 
     const syntaxDir = path.join(DOCS_ROOT, "syntax");

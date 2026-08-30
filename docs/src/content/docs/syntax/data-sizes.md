@@ -1,0 +1,34 @@
+---
+title: "Data sizes"
+description: Byte and bit units, with decimal and binary prefixes kept distinct.
+---
+
+> **Packages:** `ARITHMETIC_PACKAGE`, `FUNCTION_PACKAGE`, `CONVERTERS_PACKAGE`, `UOM_PACKAGE`, `BIGINT_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register them explicitly (see [choosing packages](/getting-started/installation/)).
+
+A data size is measured in bytes and bits, with prefixes like kilo, mega and giga
+that come in two flavours: decimal (a kilobyte is 1,000 bytes) and binary (a
+kibibyte is 1,024). Solve treats them as ordinary units and keeps the two apart,
+so a conversion means exactly what it says.
+
+Byte and bit units are ordinary units, so they convert like any other
+measurement. Decimal and binary prefixes are both there and are kept distinct:
+`kB` is 1,000 bytes and `KiB` is 1,024.
+
+```solve
+1 kB in bytes // 1000.00 bytes
+1 KiB in bytes // 1024.00 bytes
+1 GB in MB // 1000.00 MB
+1 TiB in GiB // 1024.00 GiB
+1 byte in bits // 8.00 bits
+1.5 MB in KB // 1500.00 KB
+```
+
+Case matters, and it matters more here than almost anywhere: `MB` is megabytes
+and `Mb` is megabits, a factor of eight apart.
+
+```solve
+1 GB in bits // 8000000000.00 bits
+1 Gb in Mb // 1000.00 Mb
+```
+
+See [units and conversions](/syntax/unit-arithmetic/) for the full list.

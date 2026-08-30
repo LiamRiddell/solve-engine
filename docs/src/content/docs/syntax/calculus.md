@@ -54,7 +54,7 @@ integral(1/x, x) // log(x)
 Any quotient of polynomials is integrable, and this is the one family where that
 is a guarantee rather than a table lookup. There is no single rule for a
 rational function, so it is first split into
-[partial fractions](/syntax/algebra/), and each of those pieces does have a
+[partial fractions](/syntax/splitting-fractions/), and each of those pieces does have a
 rule: a logarithm, a power, or an arctangent.
 
 ```solve

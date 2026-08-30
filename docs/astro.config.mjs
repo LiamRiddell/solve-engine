@@ -52,6 +52,18 @@ const site = process.env.SITE_URL ?? "https://liamriddell.github.io";
 export default defineConfig({
   site,
   base,
+  // The six broad "catch-all" pages were split into one focused page per
+  // feature. Anyone holding a link to an old page (a bookmark, a search result)
+  // lands on the first page of what it became rather than a 404. Astro prepends
+  // `base` to both sides, so these are written base-relative.
+  redirects: {
+    "/syntax/numbers-and-math/": "/syntax/operators/",
+    "/syntax/programmer-math/": "/syntax/number-bases/",
+    "/syntax/money-and-finance/": "/syntax/currency/",
+    "/syntax/units-and-conversions/": "/syntax/unit-arithmetic/",
+    "/syntax/dates/": "/syntax/date-literals/",
+    "/syntax/algebra/": "/syntax/expanding/",
+  },
   // Emit `page/index.html` rather than `page.html`, which keeps links working
   // with and without a trailing slash on a static host.
   build: { format: "directory" },
@@ -186,123 +198,275 @@ export default defineConfig({
       // what `scripts/check-sidebar.mjs` is for: it fails the build when a page
       // exists and this file has not been told about it.
       sidebar: [
+        // Two readers, two umbrellas. Someone typing expressions into a notepad
+        // wants the language; someone embedding or extending the engine wants the
+        // code. Each reader sees their half as one top-level heading and can
+        // ignore the other. Within an umbrella, the sub-groups are the areas that
+        // reader browses by; the umbrella itself stays open so those areas are
+        // visible at a glance, and each area collapses so the list stays scannable.
         {
-          label: "Getting started",
-          items: [
-            { slug: "getting-started/introduction" },
-            { slug: "getting-started/installation" },
-            { slug: "getting-started/quick-start" },
-            { slug: "getting-started/concepts" },
-          ],
-        },
-        {
-          // Every documentation page, ordered alphabetically by title, so a
-          // reader scanning the sidebar finds a topic by name (the way the
-          // playground's example gallery is ordered). The unit reference, a
-          // generated lookup table rather than a topic to read, is split out
-          // into its own "Reference" group below.
           label: "Documentation",
           items: [
-            { slug: "syntax/algebra" },
-            { slug: "syntax/calculus" },
-            { slug: "syntax/category-tags" },
-            { slug: "syntax/charts" },
-            { slug: "syntax/cheatsheet" },
-            { slug: "syntax/colours" },
-            { slug: "syntax/complex" },
-            { slug: "syntax/conditionals" },
-            { slug: "syntax/constants" },
-            { slug: "syntax/dates" },
-            { slug: "syntax/dice" },
-            { slug: "syntax/geometry" },
-            { slug: "syntax/goal-seek" },
-            { slug: "syntax/hashing" },
-            { slug: "syntax/health" },
-            { slug: "syntax/knowledge" },
-            { slug: "syntax/line-references" },
-            { slug: "syntax/map-reduce-and-aggregates" },
-            { slug: "syntax/money-and-finance" },
-            { slug: "syntax/networking" },
-            { slug: "syntax/numbers-and-math" },
-            { slug: "syntax/numerals" },
-            { slug: "syntax/percentages" },
-            { slug: "syntax/programmer-math" },
-            { slug: "syntax/random" },
-            { slug: "syntax/ratios" },
-            { slug: "syntax/statistics" },
-            { slug: "syntax/stocks" },
-            { slug: "syntax/symbolic" },
-            { slug: "syntax/table-columns" },
-            { slug: "syntax/text-encoding" },
-            { slug: "syntax/text-operations" },
-            { slug: "syntax/time" },
-            { slug: "syntax/trigger-words" },
-            { slug: "syntax/units-and-conversions" },
-            { slug: "syntax/variables" },
-            { slug: "syntax/vectors-and-matrices" },
-            { slug: "syntax/weather" },
+            {
+              // The first four pages anyone reads, in reading order, ending on
+              // the cheatsheet as the one-page tour of the whole language.
+              label: "Start here",
+              items: [
+                { slug: "getting-started/introduction" },
+                { slug: "getting-started/quick-start" },
+                { slug: "getting-started/concepts" },
+                { slug: "syntax/cheatsheet" },
+              ],
+            },
+            {
+              // Everyday number work: the operators, the ways a number can be
+              // written, and the functions that reshape one. Foundations first,
+              // then the forms a reader reaches for by name.
+              label: "Arithmetic",
+              collapsed: true,
+              items: [
+                { slug: "syntax/operators" },
+                { slug: "syntax/number-suffixes" },
+                { slug: "syntax/decimals" },
+                { slug: "syntax/fractions" },
+                { slug: "syntax/percentages" },
+                { slug: "syntax/ratios" },
+                { slug: "syntax/rounding" },
+                { slug: "syntax/number-functions" },
+                { slug: "syntax/uncertainty" },
+              ],
+            },
+            {
+              // Numbers written in a system other than plain base-ten decimal.
+              label: "Number systems",
+              collapsed: true,
+              items: [
+                { slug: "syntax/numerals" },
+                { slug: "syntax/big-integers" },
+                { slug: "syntax/complex" },
+                { slug: "syntax/constants" },
+              ],
+            },
+            {
+              // The bit-level work a programmer reaches for.
+              label: "Programmer math",
+              collapsed: true,
+              items: [
+                { slug: "syntax/number-bases" },
+                { slug: "syntax/bit-shifting" },
+                { slug: "syntax/bitwise-operators" },
+                { slug: "syntax/data-sizes" },
+              ],
+            },
+            {
+              // Working with the symbols themselves, not just their values.
+              label: "Algebra & calculus",
+              collapsed: true,
+              items: [
+                { slug: "syntax/expanding" },
+                { slug: "syntax/factoring" },
+                { slug: "syntax/solving-equations" },
+                { slug: "syntax/cancelling-fractions" },
+                { slug: "syntax/splitting-fractions" },
+                { slug: "syntax/exact-coefficients" },
+                { slug: "syntax/calculus" },
+                { slug: "syntax/symbolic" },
+              ],
+            },
+            {
+              label: "Vectors & statistics",
+              collapsed: true,
+              items: [
+                { slug: "syntax/vectors-and-matrices" },
+                { slug: "syntax/statistics" },
+              ],
+            },
+            {
+              label: "Money & finance",
+              collapsed: true,
+              items: [
+                { slug: "syntax/currency" },
+                { slug: "syntax/money-precision" },
+                { slug: "syntax/tax" },
+                { slug: "syntax/recurring-schedules" },
+                { slug: "syntax/splitting-a-bill" },
+                { slug: "syntax/interest-and-inflation" },
+                { slug: "syntax/savings-goals" },
+                { slug: "syntax/stocks" },
+              ],
+            },
+            {
+              // Writing a date, doing arithmetic on it, and asking about the one
+              // relative to today.
+              label: "Dates & time",
+              collapsed: true,
+              items: [
+                { slug: "syntax/date-literals" },
+                { slug: "syntax/date-arithmetic" },
+                { slug: "syntax/relative-dates" },
+                { slug: "syntax/relative-months" },
+                { slug: "syntax/nth-weekday" },
+                { slug: "syntax/age" },
+                { slug: "syntax/date-differences" },
+                { slug: "syntax/working-days" },
+                { slug: "syntax/displaying-dates" },
+                { slug: "syntax/time" },
+              ],
+            },
+            {
+              // Quantities that carry a unit, and converting between them.
+              label: "Units & measurement",
+              collapsed: true,
+              items: [
+                { slug: "syntax/unit-arithmetic" },
+                { slug: "syntax/converting-units" },
+                { slug: "syntax/unit-representations" },
+                { slug: "syntax/custom-units" },
+                { slug: "syntax/rates-and-speeds" },
+                { slug: "syntax/fuel-economy" },
+                { slug: "syntax/derived-units" },
+                { slug: "syntax/surveying-units" },
+                { slug: "syntax/geometry" },
+                { slug: "syntax/health" },
+              ],
+            },
+            {
+              label: "Text & data",
+              collapsed: true,
+              items: [
+                { slug: "syntax/text-operations" },
+                { slug: "syntax/text-encoding" },
+                { slug: "syntax/hashing" },
+                { slug: "syntax/networking" },
+              ],
+            },
+            {
+              label: "Visual",
+              collapsed: true,
+              items: [
+                { slug: "syntax/charts" },
+                { slug: "syntax/colours" },
+              ],
+            },
+            {
+              label: "Everyday",
+              collapsed: true,
+              items: [
+                { slug: "syntax/dice" },
+                { slug: "syntax/random" },
+              ],
+            },
+            {
+              label: "Live data",
+              collapsed: true,
+              items: [
+                { slug: "syntax/weather" },
+                { slug: "syntax/knowledge" },
+              ],
+            },
+            {
+              // The forms that read or re-run other lines rather than standing
+              // alone: they are a family, and grouping them says so.
+              label: "Working across lines",
+              collapsed: true,
+              items: [
+                { slug: "syntax/variables" },
+                { slug: "syntax/line-references" },
+                { slug: "syntax/category-tags" },
+                { slug: "syntax/table-columns" },
+                { slug: "syntax/map-reduce-and-aggregates" },
+                { slug: "syntax/conditionals" },
+                { slug: "syntax/goal-seek" },
+                { slug: "syntax/trigger-words" },
+              ],
+            },
+            {
+              // The generated unit-spelling lookup, kept apart from the reading
+              // pages: it is a reference table, not a topic to read through.
+              label: "Reference",
+              collapsed: true,
+              items: [
+                { slug: "syntax/unit-reference" },
+              ],
+            },
           ],
         },
         {
-          // The generated unit-spelling lookup, kept apart from the reading
-          // pages: it is a reference table, not a topic. Sits right after the
-          // documentation group in the nav.
-          label: "Reference",
+          label: "Developer guide",
           items: [
-            { slug: "syntax/unit-reference" },
-          ],
-        },
-        {
-          // The order an integration actually happens in.
-          label: "Embedding guide",
-          items: [
-            { slug: "guide/embedding" },
-            { slug: "guide/upgrading-to-2" },
-            { slug: "guide/typescript-usage" },
-            { slug: "guide/explaining-lines" },
-            { slug: "guide/formatting" },
-            { slug: "guide/editor-integration" },
-            { slug: "guide/async-and-live-data" },
-            { slug: "guide/async-data-sources" },
-            { slug: "guide/performance" },
-            { slug: "guide/security" },
-            { slug: "guide/subpath-exports" },
-          ],
-        },
-        {
-          // A reading order, not alphabetical: the overview, then the reference
-          // index, then a hands-on guide per extension point in pipeline order,
-          // then testing.
-          label: "Writing packages",
-          items: [
-            { slug: "packages/authoring-a-package" },
-            { slug: "packages/recognising-phrases" },
-            { slug: "packages/units-and-keywords" },
-            { slug: "packages/functions-and-operators" },
-            { slug: "packages/as-converters" },
-            { slug: "packages/highlighting-and-completions" },
-            { slug: "packages/testing-a-package" },
-          ],
-        },
-        {
-          // Overview first, then the pipeline it describes, then the two pieces
-          // the pipeline leans on, then the reasoning behind all of it.
-          label: "Architecture",
-          items: [
-            { slug: "architecture/overview" },
-            { slug: "architecture/pipeline" },
-            { slug: "architecture/bytecode-vm" },
-            { slug: "architecture/package-system" },
-            { slug: "architecture/design-decisions" },
-          ],
-        },
-        {
-          label: "Contributing",
-          items: [
-            { slug: "contributing/development-setup" },
-            { slug: "contributing/coding-standards" },
-            { slug: "contributing/testing" },
-            { slug: "contributing/releasing" },
+            {
+              // Get the package on disk and, for an existing integration, across
+              // the 2.0 boundary, before anything else.
+              label: "Set up",
+              items: [
+                { slug: "getting-started/installation" },
+                { slug: "guide/subpath-exports" },
+                { slug: "guide/upgrading-to-2" },
+              ],
+            },
+            {
+              // The order an integration actually happens in: stand the engine
+              // up, drive it from TypeScript, then explain, format, and wire it
+              // into an editor and live data, ending on the cross-cutting concerns.
+              label: "Embedding",
+              collapsed: true,
+              items: [
+                { slug: "guide/embedding" },
+                { slug: "guide/typescript-usage" },
+                { slug: "guide/explaining-lines" },
+                { slug: "guide/formatting" },
+                { slug: "guide/editor-integration" },
+                { slug: "guide/async-and-live-data" },
+                { slug: "guide/async-data-sources" },
+                { slug: "guide/performance" },
+                { slug: "guide/security" },
+              ],
+            },
+            {
+              // Overview first, then a hands-on guide per extension point in
+              // pipeline order, then testing.
+              label: "Writing packages",
+              collapsed: true,
+              items: [
+                { slug: "packages/authoring-a-package" },
+                { slug: "packages/recognising-phrases" },
+                { slug: "packages/units-and-keywords" },
+                { slug: "packages/functions-and-operators" },
+                { slug: "packages/as-converters" },
+                { slug: "packages/highlighting-and-completions" },
+                { slug: "packages/testing-a-package" },
+              ],
+            },
+            {
+              // Overview first, then the pipeline it describes, then the two
+              // pieces the pipeline leans on, then the reasoning behind all of it.
+              label: "How it works",
+              collapsed: true,
+              items: [
+                { slug: "architecture/overview" },
+                { slug: "architecture/pipeline" },
+                { slug: "architecture/bytecode-vm" },
+                { slug: "architecture/package-system" },
+                { slug: "architecture/design-decisions" },
+              ],
+            },
+            // The generated type reference. Populated by starlight-typedoc at
+            // build time into `content/docs/api`, pages not in the repository, so
+            // `scripts/check-sidebar.mjs` skips that prefix rather than reporting
+            // every generated page as missing from this file. Nested here so the
+            // API reference sits inside the developer umbrella with everything
+            // else a package author needs.
+            typeDocSidebarGroup,
+            {
+              label: "Contributing",
+              collapsed: true,
+              items: [
+                { slug: "contributing/development-setup" },
+                { slug: "contributing/coding-standards" },
+                { slug: "contributing/testing" },
+                { slug: "contributing/releasing" },
+              ],
+            },
           ],
         },
         {
@@ -310,11 +474,6 @@ export default defineConfig({
           link: "/playground/",
           attrs: { target: "_self" },
         },
-        // Populated by starlight-typedoc at build time. The pages under it are
-        // generated into `content/docs/api` and are not in the repository, so
-        // `scripts/check-sidebar.mjs` skips that prefix rather than reporting
-        // every generated page as missing from this file.
-        typeDocSidebarGroup,
       ],
     }),
     // The landing page runs the real engine in a Plate editor. Those islands
