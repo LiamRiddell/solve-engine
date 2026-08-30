@@ -4,8 +4,27 @@ description: What makes it fast, and what to avoid.
 ---
 
 import Explainer from "../../../components/Explainer.tsx";
+import BenchmarkStats from "../../../components/BenchmarkStats.astro";
 
 The engine is built to run on every keystroke, which sets the performance bar.
+
+## Throughput
+
+Throughput is how much text the engine gets through each second, counting the
+whole journey from raw characters to computed results: lexing, normalising,
+parsing, compiling to bytecode and executing it. It runs over a document in a
+single pass, so the figure that matters for an editor is how many lines of a
+real document it clears per second.
+
+<BenchmarkStats />
+
+The per-line rate rises from the small document to the medium one, because the
+fixed cost of standing an engine up is spread across more lines, and eases back
+on the largest documents as the working set stops fitting in the processor's
+cache. The number to take from the table is its size: an engine meant to run on
+every keystroke keeps pace with a document far larger than anyone types into
+one, and re-parsing an unchanged document is quicker still, since the bytecode is
+already compiled. The sections below are why.
 
 ## Bytecode, not tree walking
 

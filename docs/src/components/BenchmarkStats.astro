@@ -1,0 +1,68 @@
+---
+/**
+ * The throughput table on the Performance page.
+ *
+ * The numbers are imported rather than written. `scripts/collect-benchmark-stats.mjs`
+ * reads them out of the committed benchmark baseline, so this cannot end up
+ * quoting a figure that was true on some machine nobody kept a record of. It is
+ * a snapshot, not a byte-reproducible constant (a throughput moves with the
+ * hardware), which is why the machine it was measured on is named in the caption
+ * rather than left for the reader to guess.
+ */
+import bench from "../data/benchmarkStats.json";
+
+const platformName =
+  { win32: "Windows", darwin: "macOS", linux: "Linux" }[bench.measuredOn.platform] ??
+  bench.measuredOn.platform;
+
+const fmt = (n: number) => n.toLocaleString("en-GB");
+---
+
+<table class="benchmark-table">
+  <thead>
+    <tr>
+      <th>Document</th>
+      <th>Cold, first parse</th>
+      <th>Warm, re-parse</th>
+    </tr>
+  </thead>
+  <tbody>
+    {
+      bench.tiers.map((tier) => (
+        <tr>
+          <td>{fmt(tier.lines)} lines</td>
+          <td>{fmt(tier.coldLinesPerSec)} lines/sec</td>
+          <td>{fmt(tier.warmLinesPerSec)} lines/sec</td>
+        </tr>
+      ))
+    }
+  </tbody>
+</table>
+
+<p class="benchmark-note">
+  Cold is a fresh engine meeting the document for the first time; warm is the
+  same engine re-parsing it with its bytecode already cached. Within a single
+  expression the pipeline divides as lex {bench.stages.lex}%, normalise{" "}
+  {bench.stages.normalize}%, parse and compile {bench.stages.parseCompile}%, and
+  execute {bench.stages.execute}%.
+</p>
+
+<p class="benchmark-note benchmark-note--env">
+  Measured on {bench.measuredOn.cpu}, Node {bench.measuredOn.node} on {
+    platformName
+  }. Throughput depends on the hardware and on what else the machine is doing at
+  the time, so treat these as indicative; reproduce them with <code>npm run bench</code>.
+</p>
+
+<style>
+  .benchmark-table {
+    font-variant-numeric: tabular-nums;
+  }
+  .benchmark-note {
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+  .benchmark-note--env {
+    margin-top: -0.5rem;
+  }
+</style>
