@@ -62,7 +62,7 @@ export const SYMBOLIC_FUNCTIONS: readonly SymbolicFunctionSurface[] = [
 		builtinIndex: SYMBOLIC_BUILTIN_EXPAND,
 		example: "expand((x+1)*(x+2))",
 		expected: "x^2+3x+2",
-		docPage: "algebra.md",
+		docPage: "expanding.md",
 	},
 	{
 		word: "factor",
@@ -70,7 +70,7 @@ export const SYMBOLIC_FUNCTIONS: readonly SymbolicFunctionSurface[] = [
 		builtinIndex: SYMBOLIC_BUILTIN_FACTOR,
 		example: "factor(x^2-4)",
 		expected: "(x-2)*(x+2)",
-		docPage: "algebra.md",
+		docPage: "factoring.md",
 	},
 	{
 		word: "solve",
@@ -78,7 +78,7 @@ export const SYMBOLIC_FUNCTIONS: readonly SymbolicFunctionSurface[] = [
 		builtinIndex: SYMBOLIC_BUILTIN_SOLVE,
 		example: "solve(x^2-4=0, x)",
 		expected: "= [-2, 2]",
-		docPage: "algebra.md",
+		docPage: "solving-equations.md",
 	},
 	{
 		word: "der",
@@ -142,7 +142,7 @@ export const SYMBOLIC_FUNCTIONS: readonly SymbolicFunctionSurface[] = [
 		builtinIndex: SYMBOLIC_BUILTIN_CANCEL,
 		example: "cancel((x^2-1)/(x-1))",
 		expected: "x+1",
-		docPage: "algebra.md",
+		docPage: "cancelling-fractions.md",
 	},
 	{
 		word: "apart",
@@ -150,7 +150,7 @@ export const SYMBOLIC_FUNCTIONS: readonly SymbolicFunctionSurface[] = [
 		builtinIndex: SYMBOLIC_BUILTIN_APART,
 		example: "apart((3x+5)/(x^2-1))",
 		expected: "4/(x-1)-1/(x+1)",
-		docPage: "algebra.md",
+		docPage: "splitting-fractions.md",
 	},
 ];
 

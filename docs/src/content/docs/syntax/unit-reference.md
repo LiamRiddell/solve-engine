@@ -16,7 +16,7 @@ is megabytes and `Mb` is megabits.
 1 KiB in bytes // 1024.00 bytes
 ```
 
-See [units and conversions](/syntax/units-and-conversions/) for how conversion
+See [converting units](/syntax/converting-units/) for how conversion
 and unit arithmetic work. This page is only the vocabulary.
 
 The **relative size** column is each unit measured against the measure's base

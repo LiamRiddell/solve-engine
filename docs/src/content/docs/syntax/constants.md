@@ -20,7 +20,7 @@ gravity // 9.81 m/s²
 
 Because they are real quantities, they take part in the arithmetic. Gravity times
 a mass is a force, and it reads out in newtons through the
-[named derived units](/syntax/units-and-conversions/#named-derived-units):
+[named derived units](/syntax/derived-units/#named-derived-units):
 
 ```solve
 gravity * 70 kg as N // 686.47 N
