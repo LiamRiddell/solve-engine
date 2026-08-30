@@ -33,6 +33,7 @@ export function userUnitExpansionRule(table: UserUnitTable, priority = 82): Norm
   return {
     name: "uom:user-unit",
     priority,
+    startTokenTypes: ["NUMBER", "RPAREN"],
     match(tokens: Token[], pos: number): NormalizerMatch | null {
       // Nothing is defined on most lines, so bail before any scanning.
       if (table.isEmpty) return null;

@@ -23,6 +23,7 @@ export function degreeSymbolNormalizerRule(priority = 74): NormalizerRule {
 	return {
 		name: "uom:degree-symbol",
 		priority,
+		startTokenTypes: ["NUMBER"],
 		match(tokens, pos): NormalizerMatch | null {
 			// Matched from the number rather than from the symbol, so the
 			// replacement emits the pair together and the unit lands adjacent to

@@ -2,7 +2,7 @@ import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { numberValue, stringValue, uomValue, errorValue, ValueType, type Value } from "@solve-js/vm/Value";
 import { bmi, speedKmh, pacePerKm } from "./HealthOps";
 import { HealthCallParselet } from "./parselets/HealthCallParselet";
-import { healthCallNormalizerRule } from "./normalizer/HealthCallNormalizerRule";
+import { HEALTH_CALL_FUNCTIONS } from "./HealthFunctionNames";
 
 /** Read an argument as a number, accepting a bare number or a Uom (its magnitude). */
 function num(value: Value | undefined): number | null {
@@ -26,7 +26,8 @@ export const HEALTH_PACKAGE: IEnginePackage = {
 	prefixParselets: {
 		HEALTH_CALL: new HealthCallParselet(),
 	},
-	normalizerRules: [healthCallNormalizerRule()],
+	// `bmi(...)`, `pace(...)`, `speed(...)` fused to HEALTH_CALL by the shared rule.
+	callFusions: Object.fromEntries(Object.keys(HEALTH_CALL_FUNCTIONS).map((n) => [n, "HEALTH_CALL"])),
 	pluginFunctions: {
 		healthBmi: (args: Value[]): Value => {
 			const w = num(args[0]), h = num(args[1]);

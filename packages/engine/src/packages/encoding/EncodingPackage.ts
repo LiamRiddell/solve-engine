@@ -7,7 +7,6 @@ import {
 } from "./Encoding";
 import { FromEncodingParselet } from "./parselets/FromEncodingParselet";
 import { EncodingCallParselet } from "./parselets/EncodingCallParselet";
-import { base64CallNormalizerRule } from "./normalizer/Base64CallNormalizerRule";
 
 /** The text of a String value, or null when it is not text. */
 function asText(value: Value): string | null {
@@ -69,7 +68,8 @@ export const ENCODING_PACKAGE: IEnginePackage = {
 	prefixParselets: {
 		BASE64_FN: new EncodingCallParselet("base64"),
 	},
-	normalizerRules: [base64CallNormalizerRule()],
+	// `base64(...)`, fused to BASE64_FN by the engine's shared call-fusion rule.
+	callFusions: { base64: "BASE64_FN" },
 	pluginFunctions: {
 		// `base64("...")`, the function spelling of `"..." as base64`.
 		base64: (args: Value[]): Value => encoder("base64", base64Encode)(args[0]),

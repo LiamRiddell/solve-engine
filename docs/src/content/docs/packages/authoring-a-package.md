@@ -98,7 +98,7 @@ a clear message rather than failing mysteriously later.
 | `prefixParselets` | Parsing rules for tokens that begin an expression | [Functions and operators](/packages/functions-and-operators/) |
 | `infixParselets` | Parsing rules for tokens that combine expressions | [Functions and operators](/packages/functions-and-operators/) |
 | `pluginFunctions` | Functions the virtual machine can call | [Functions and operators](/packages/functions-and-operators/) |
-| `normalizerRules` / `phrases` | Token-stream rewrites, including phrase fusion | [Recognising phrases and words](/packages/recognising-phrases/) |
+| `normalizerRules` / `phrases` / `callFusions` | Token-stream rewrites: phrase fusion, and `name(` function-call words | [Recognising phrases and words](/packages/recognising-phrases/) |
 | `asConverters` | Targets for the `as` conversion form | [Custom as converters](/packages/as-converters/) |
 | `asyncResolvers` | External data sources | [Async data source](/guide/async-data-sources/) |
 | `tokenCategories` | Highlighting categories for new tokens | [Highlighting and completions](/packages/highlighting-and-completions/) |

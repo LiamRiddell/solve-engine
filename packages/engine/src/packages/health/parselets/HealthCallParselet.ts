@@ -4,7 +4,7 @@ import type { Token } from "@solve-js/lexer/Token";
 import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { HEALTH_CALL_FUNCTIONS } from "../normalizer/HealthCallNormalizerRule";
+import { HEALTH_CALL_FUNCTIONS } from "../HealthFunctionNames";
 
 /**
  * The parenthesised call form of a health function: `bmi(70, 1.75)`,

@@ -20,6 +20,7 @@ export function functionPhraseNormalizerRule(priority = 69): NormalizerRule {
 	return {
 		name: "mathphrases:function-phrase",
 		priority,
+		startTokenTypes: ["FUNC"],
 		match(tokens, pos): NormalizerMatch | null {
 			const head = tokens[pos];
 			if (head?.type !== "FUNC") return null;

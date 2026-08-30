@@ -25,6 +25,7 @@ export function videoTimecodeNormalizerRule(priority = 75): NormalizerRule {
   return {
     name: "time:video-timecode",
     priority,
+    startTokenTypes: ["NUMBER"],
     match(tokens, pos): NormalizerMatch | null {
       // See ClockTimeNormalizerRule's identical guard, a video timecode
       // inside `[...]` has no legitimate meaning; reserved for matrix ranges.

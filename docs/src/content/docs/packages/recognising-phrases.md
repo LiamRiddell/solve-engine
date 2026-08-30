@@ -56,6 +56,38 @@ A phrase never fuses across a tag, and its words are matched case-insensitively.
 The `mathphrases` package is the smallest complete example to read: a row of
 `phrases` and the matching row of `prefixParselets`.
 
+## Function-call words: `callFusions`
+
+A very common shape is a single word that becomes a function call when it is
+immediately followed by `(`: `sha256("hi")`, `length("hi")`, `percentile([...],
+90)`. It reads as a variable everywhere else (`sha256` on its own, or
+`:sha256 = ...`). Rather than hand-write a normalizer rule for each such word,
+declare it:
+
+```ts
+callFusions: {
+  sha256: "HASH_CALL",
+  md5: "HASH_CALL",
+  // ...or, mapping a whole set of names to one token type:
+  // ...Object.fromEntries(Object.keys(FUNCS).map((n) => [n, "HASH_CALL"])),
+}
+```
+
+Each entry maps the **lower-cased word** to the **token type to mint** when the
+word is followed by `(`. The engine merges every package's `callFusions` into one
+shared map and runs a single rule for all of them, so adding a function is one map
+entry rather than one more rule tried at every identifier. The fused token carries
+the lower-cased word as its value (your call parselet reads it to pick the
+function) and the original text as its raw value; a matching `prefixParselet` on
+the token type does the actual call parsing (see
+[Functions and operators](/packages/functions-and-operators/)). The `:name = ...`
+variable case is handled for you: a word after a `:` is left alone.
+
+The boundary is deliberately narrow. `callFusions` is only the plain `word (`
+shape with that one `:` guard. If your rule needs a different lookbehind, a deeper
+lookahead, or any value logic beyond "is this word one of mine", write a
+[`normalizerRules`](#the-declarative-way-phrases) entry by hand instead.
+
 ## When a word must stay a variable too
 
 `factor(x^2-4)` should call the algebra solver, but `:factor = 1.5` should still

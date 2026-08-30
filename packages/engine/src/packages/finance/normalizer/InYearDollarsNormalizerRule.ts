@@ -30,6 +30,7 @@ export function inYearDollarsNormalizerRule(priority = 70): NormalizerRule {
   return {
     name: "finance:in-year-dollars",
     priority,
+    startTokenTypes: ["IN"],
     match(tokens, pos): NormalizerMatch | null {
       const inToken = tokens[pos];
       const yearToken = tokens[pos + 1];

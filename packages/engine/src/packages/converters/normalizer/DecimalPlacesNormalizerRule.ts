@@ -28,6 +28,7 @@ export function decimalPlacesNormalizerRule(priority = 66): NormalizerRule {
 	return {
 		name: "converters:decimal-places",
 		priority,
+		startTokenTypes: ["TO"],
 		match(tokens, pos): NormalizerMatch | null {
 			if (tokens[pos]?.type !== "TO") return null;
 

@@ -21,6 +21,7 @@ export function twoUnitConversionNormalizerRule(priority = 59): NormalizerRule {
 	return {
 		name: "uom:two-unit-conversion",
 		priority,
+		startTokenTypes: ["IN", "TO"],
 		match(tokens, pos): NormalizerMatch | null {
 			const preposition = tokens[pos];
 			if (preposition?.type !== "IN" && preposition?.type !== "TO") return null;

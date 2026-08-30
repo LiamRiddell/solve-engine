@@ -19,6 +19,7 @@ export function accelerationNormalizerRule(priority = 82): NormalizerRule {
 	return {
 		name: RULE,
 		priority,
+		startTokenTypes: ["UNIT"],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const m = tokens[pos];
 			const slash = tokens[pos + 1];

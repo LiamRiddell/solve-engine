@@ -45,6 +45,7 @@ export function lineRefNormalizerRule(): NormalizerRule {
 	return {
 		name: "lines:line-ref",
 		priority: 80,
+		startTokenTypes: ["IDENT"],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			if (pos > 0 && tokens[pos - 1].type === "COLON") {
 				const isRangeSeparator = pos > 1 && tokens[pos - 2].type === "LINE_REF";
@@ -113,6 +114,7 @@ export function rangeCallNormalizerRule(): NormalizerRule {
 	return {
 		name: "lines:range-call",
 		priority: 80,
+		startTokenTypes: ["IDENT"],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const token = tokens[pos];
 			if (!token || token.type !== "IDENT") return null;

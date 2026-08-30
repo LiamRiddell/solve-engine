@@ -27,6 +27,7 @@ export function clockTimeIntervalNormalizerRule(priority = 66): NormalizerRule {
   return {
     name: "time:clock-time-interval",
     priority,
+    startTokenTypes: ["CLOCK_TIME"],
     match(tokens, pos): NormalizerMatch | null {
       const start = tokens[pos];
       const to = tokens[pos + 1];

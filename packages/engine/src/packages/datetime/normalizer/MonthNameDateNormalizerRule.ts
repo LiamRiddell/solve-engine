@@ -67,6 +67,7 @@ export function monthNameDateNormalizerRule(priority = 64): NormalizerRule {
 	return {
 		name: "datetime:month-name-date",
 		priority,
+		startTokenTypes: ["NUMBER", "IDENT", "UNIT"],
 		match(tokens, pos): NormalizerMatch | null {
 			const RULE = "datetime:month-name-date";
 			const first = tokens[pos];

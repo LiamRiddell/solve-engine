@@ -48,6 +48,7 @@ export function clockTimeNormalizerRule(priority = 65): NormalizerRule {
   return {
     name: "time:clock-time",
     priority,
+    startTokenTypes: ["NUMBER"],
     match(tokens, pos): NormalizerMatch | null {
       // A clock time inside `[...]` (matrix literal/index/slice) has no
       // legitimate meaning, reserve bare `NUMBER:NUMBER` there for a

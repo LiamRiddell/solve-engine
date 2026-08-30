@@ -38,6 +38,7 @@ export function converterPrepositionNormalizerRule(priority = 67): NormalizerRul
 	return {
 		name: "converters:preposition",
 		priority,
+		startTokenTypes: ["IN", "TO"],
 		match(tokens, pos): NormalizerMatch | null {
 			const preposition = tokens[pos];
 			if (preposition?.type !== "IN" && preposition?.type !== "TO") return null;

@@ -1,7 +1,6 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
-import { HASH_PLUGIN_FUNCTIONS } from "./HashPluginFunctions";
+import { HASH_PLUGIN_FUNCTIONS, HASH_CALL_FUNCTIONS } from "./HashPluginFunctions";
 import { HashCallParselet } from "./parselets/HashCallParselet";
-import { hashCallNormalizerRule } from "./normalizer/HashCallNormalizerRule";
 
 /**
  * Cryptographic and checksum digests (issue #240): `sha256`, `sha1`, `sha512`,
@@ -23,7 +22,8 @@ export const HASH_PACKAGE: IEnginePackage = {
 	prefixParselets: {
 		HASH_CALL: new HashCallParselet(),
 	},
-	normalizerRules: [hashCallNormalizerRule()],
+	// `sha256(...)`, `md5(...)`, ... fused to HASH_CALL by the engine's shared rule.
+	callFusions: Object.fromEntries(Object.keys(HASH_CALL_FUNCTIONS).map((n) => [n, "HASH_CALL"])),
 	pluginFunctions: HASH_PLUGIN_FUNCTIONS,
 	tokenCategories: {
 		HASH_CALL: "function",

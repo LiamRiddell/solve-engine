@@ -53,6 +53,7 @@ export function atRateNormalizerRule(priority = 73): NormalizerRule {
 	return {
 		name: "uom:at-rate",
 		priority,
+		startTokenTypes: ["RATE_AT"],
 		match(tokens, pos): NormalizerMatch | null {
 			if (tokens[pos]?.type !== "RATE_AT") return null;
 			if (!hasRateAhead(tokens, pos + 1)) return null;

@@ -20,6 +20,7 @@ export function untilSinceNormalizerRule(priority = 60): NormalizerRule {
   return {
     name: "datetime:until-since",
     priority,
+    startTokenTypes: ["UNIT"],
     match(tokens, pos): NormalizerMatch | null {
       if (pos + 1 >= tokens.length) return null;
       const unitToken = tokens[pos];

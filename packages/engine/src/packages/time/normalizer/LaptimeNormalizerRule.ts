@@ -19,6 +19,7 @@ export function laptimeNormalizerRule(priority = 70): NormalizerRule {
   return {
     name: "time:laptime",
     priority,
+    startTokenTypes: ["NUMBER"],
     match(tokens, pos): NormalizerMatch | null {
       // See ClockTimeNormalizerRule's identical guard, a laptime inside
       // `[...]` has no legitimate meaning; reserved for matrix ranges.

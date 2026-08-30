@@ -38,6 +38,7 @@ export function multiWordUnitNormalizerRule(priority = 78): NormalizerRule {
 	return {
 		name: "uom:multi-word-unit",
 		priority,
+		startTokenTypes: ["UNIT"],
 		match(tokens, pos): NormalizerMatch | null {
 			const first = tokens[pos];
 			const second = tokens[pos + 1];

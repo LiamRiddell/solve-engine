@@ -19,6 +19,7 @@ export function fuelConsumptionNormalizerRule(priority = 82): NormalizerRule {
 	return {
 		name: RULE,
 		priority,
+		startTokenTypes: ["UNIT", "IDENT"],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const litres = tokens[pos];
 			const slash = tokens[pos + 1];
