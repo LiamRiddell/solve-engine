@@ -3,44 +3,44 @@
   "harness": "mitata-1",
   "results": {
     "doc_50_lines_cold": {
-      "meanMs": 3.551275,
-      "medianMs": 3.1875,
-      "minMs": 1.5225
+      "meanMs": 1.7788411764705883,
+      "medianMs": 1.6234,
+      "minMs": 1.2252
     },
     "doc_50_lines_warm": {
-      "meanMs": 1.1247308641975309,
-      "medianMs": 0.8365,
-      "minMs": 0.4875
+      "meanMs": 0.6037904458598726,
+      "medianMs": 0.5166,
+      "minMs": 0.4292
     },
     "doc_250_lines_cold": {
-      "meanMs": 8.07294411764706,
-      "medianMs": 7.0883,
-      "minMs": 4.5099
+      "meanMs": 4.28401999999998,
+      "medianMs": 3.9648,
+      "minMs": 2.9537
     },
     "doc_250_lines_warm": {
-      "meanMs": 4.510738582677165,
-      "medianMs": 4.1889,
-      "minMs": 2.4107
+      "meanMs": 2.7307841860465114,
+      "medianMs": 2.5429,
+      "minMs": 2.0699
     },
     "doc_1000_lines_cold": {
-      "meanMs": 26.284657894736842,
-      "medianMs": 25.3048,
-      "minMs": 20.3715
+      "meanMs": 14.902663888888888,
+      "medianMs": 14.7572,
+      "minMs": 12.7512
     },
     "doc_1000_lines_warm": {
-      "meanMs": 25.14093,
-      "medianMs": 23.1299,
-      "minMs": 19.4587
+      "meanMs": 13.311156097560998,
+      "medianMs": 13.024500000000478,
+      "minMs": 11.5738
     },
     "doc_200_complex_warm": {
-      "meanMs": 4.236791176470588,
-      "medianMs": 3.8149,
-      "minMs": 2.3528
+      "meanMs": 2.930857,
+      "medianMs": 2.852,
+      "minMs": 2.1312
     },
     "doc_200_prose_warm": {
-      "meanMs": 2.807170673076923,
-      "medianMs": 2.613,
-      "minMs": 1.7312
+      "meanMs": 2.0573881118881117,
+      "medianMs": 1.8977,
+      "minMs": 1.5955
     }
   }
 }

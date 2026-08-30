@@ -57,9 +57,10 @@ bare number declares the same start type, so they all stayed candidates at every
 number. The second slot is what tells them apart, a colon opening a clock time
 where a slash opens a network address.
 
-One case is slower. `callFusions`, added in 2.16.0, already collapses the seven
-`name(` rules into a single map lookup, which beats seven separately indexed
-rules; call fusion measures 1.3x slower here and the two designs want combining.
+The two designs compose. `callFusions` collapses the seven `name(` rules into
+one shared map lookup, so there are 51 rules to index rather than 57, and the
+shape index then separates what remains by its second slot. Candidates per
+position fall from 46.7 to 7.5.
 
 ## Compiling
 
@@ -87,12 +88,14 @@ dozen frames down inside a document pass, so each cost around 62 microseconds. A
 **46% of the whole pipeline**, more than lexing, normalising, parsing and
 executing together.
 
-| document | before | now |
+| document | 2.16.0 | now |
 | --- | --- | --- |
-| 200 lines of prose | 11.04 ms | 2.48 ms (4.4x) |
-| 1000 lines, warm | 44.07 ms | 21.35 ms (2.1x) |
-| 250 lines, warm | 8.80 ms | 5.06 ms (1.7x) |
-| 200 complex expressions | 4.97 ms | 3.65 ms (1.4x) |
+| 200 lines of prose | 11.04 ms | 2.27 ms (4.9x) |
+| 1000 lines, warm | 44.07 ms | 14.77 ms (3.0x) |
+| 250 lines, warm | 8.80 ms | 3.17 ms (2.8x) |
+| 200 complex expressions | 4.97 ms | 3.22 ms (1.5x) |
+
+Across the document suite, 2.64x faster with no case slower.
 
 An error that is not recoverable is a genuine fault and still captures a full
 stack. `EngineError.captureRecoverableStacks = true` restores them for the rest
@@ -150,7 +153,7 @@ the per-pass array allocation are untouched and are the next targets.
 
 ## Verification
 
-`npm run verify` passes: 8,169 tests across 373 suites, including the 613 proven
+`npm run verify` passes: 8,180 tests across 375 suites, including the 613 proven
 documentation examples, plus the build, the packaged smoke test and the
 bundled-consumer tree-shaking contract.
 
