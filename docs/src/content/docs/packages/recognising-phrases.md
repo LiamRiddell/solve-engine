@@ -12,7 +12,8 @@ and choosing the right one is most of the work.
 - A **phrase** that is always the same words in the same order: use the
   declarative `phrases` field.
 - A **word that must stay ordinary elsewhere**, special only in one position
-  (before a `(`, next to another token): use a `normalizerRules` rule.
+  (before a `(`, next to another token): use a `normalizerRules` rule, and give
+  it a `shape` so the normalizer knows where it can fire.
 
 Both run in the normalizer, the step between lexing and parsing, and both fuse
 several tokens into one that a parselet then handles.
@@ -107,6 +108,9 @@ export function factorCallRule(priority = 80): NormalizerRule {
   return {
     name: "my-algebra:factor-call",
     priority,
+    // The same two conditions the guards below check, stated as data so the
+    // normalizer can skip this rule everywhere they cannot hold.
+    shape: [{ types: ["IDENT"], values: ["factor"] }, { types: ["LPAREN"] }],
     match(tokens, pos) {
       const token = tokens[pos];
       if (!token || token.type !== "IDENT" || token.value.toLowerCase() !== "factor") return null;
@@ -129,8 +133,46 @@ Register it with `normalizerRules: [factorCallRule()]`. `match` must be pure: it
 looks at the tokens from `pos` and returns without mutating anything. `consumed`
 is how many tokens it replaces (one here, only the word), and `replacement` is
 what to put in their place (one minted `FACTOR_FN` token). Return `null` the
-instant the shape is not yours, `match` runs at every position of every line, so
-it has to be cheap.
+instant the shape is not yours.
+
+## Declare the shape you match
+
+`shape` is the same information as the first few guards in `match`, written as
+data. Each entry describes one token position from the match point onward, by
+type, by value, or by both, and an entry with neither constrains nothing.
+
+Without it, a rule is tried at every position of every line. With it, the
+normalizer intersects the declarations of every registered rule and tries only
+the ones that could possibly fire. On the built-in packages that takes a position
+from 55 candidate rules to 9, because the alternative discriminates poorly: every
+call-fusion rule starts at an identifier, the commonest token in prose, so the
+start type alone leaves all of them candidates at every word. The word, and the
+token after it, are what tell them apart.
+
+```ts
+// Two positions: a known word, then an opening parenthesis.
+shape: [{ types: ["IDENT"], values: ["factor"] }, { types: ["LPAREN"] }]
+
+// A clock time is a number followed by a colon.
+shape: [{ types: ["NUMBER"] }, { types: ["COLON"] }]
+
+// Reach past a position you do not care about.
+shape: [{ types: ["NUMBER"] }, {}, { types: ["UNIT"] }]
+```
+
+**The one rule to get right:** a shape may admit more than the rule matches, but
+never less. Admitting more costs a `match()` call that returns `null`, which is
+what happens without a shape at all. Admitting less makes the rule unreachable at
+the positions left out, and nothing announces it: no error, no failing type, just
+a spelling that quietly stops working. So when a rule has two forms, the shape is
+their **union**. The clock-time rule accepts both `9:00am` and the bare `4pm`, so
+its second slot is `["COLON", "IDENT"]`, not `["COLON"]`.
+
+If in doubt, declare less, or omit `shape` entirely. Being unindexed is slow, not
+wrong.
+
+`startTokenTypes` is the older, narrower form of the same idea, constraining only
+the first token. It still works; `shape` supersedes it.
 
 This is how the `symbolic` package claims `factor`, `solve` and `expand`, and how
 the `lines` package claims `sum(` and `average(`. Both also refuse to fire right

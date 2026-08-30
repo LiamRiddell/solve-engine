@@ -80,6 +80,34 @@ Order of evaluation moves out of the structure and into the order of the
 instructions. Parentheses have no representation in the compiled program at all,
 because by then they have done their job.
 
+## What each stage costs
+
+Measured with a CPU profile over a 250-line document of mixed prose, arithmetic,
+units, dates and cross-line references, which is the shape a real notepad has.
+
+| stage | share |
+| --- | --- |
+| Normalisation | 19% |
+| Execution and orchestration | 20% |
+| Lexing and line scanning | 14% |
+| Parsing and compiling | 12% |
+| Everything else | the remainder |
+
+No single stage dominates, which is the point of listing them: the cheapest way
+to make the engine slower is to assume one of them is free. Two things that used
+to dominate no longer appear. Errors were the larger, at 46% of the pipeline
+before recoverable ones stopped capturing stack traces (see
+[Errors and pending are values](/architecture/design-decisions/#errors-and-pending-are-values)).
+Number literals were the other: parsing `144` used to run six prefix checks, two
+regular expressions and a locale lookup before reaching an answer a single
+character scan gives.
+
+Rule matching in normalisation is bounded the same way. A rule declares the
+shape it can match, the normalizer intersects those declarations, and a position
+where nothing can fire is rejected without calling a rule at all. See
+[Recognising phrases and words](/packages/recognising-phrases/) for how a package
+declares one.
+
 ## Execution
 
 A stack virtual machine runs the bytecode. The dispatch loop bounds instruction

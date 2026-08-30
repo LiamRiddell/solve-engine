@@ -64,6 +64,24 @@ flowchart TD
   coerce["If either were coerced to 0"] --> wrong["0 and 50<br/>plausible, authoritative, wrong"]
 ```
 
+### A recoverable error carries no stack trace
+
+Because a recoverable error is a value, it does not capture a JavaScript stack
+trace. A line of prose in a notepad is not an expression, so parsing it fails,
+and that failure is the answer for that line rather than a bug to investigate.
+
+The cost of doing otherwise is not small. Capturing a stack grows more expensive
+the deeper the stack is at the time, and the engine reaches the throw about a
+dozen frames down inside a document pass. A 250-line document builds one such
+error per non-expression line, and a CPU profile put the error constructor at
+46% of the whole pipeline, more than lexing, normalising, parsing and executing
+together. A prose-heavy document now parses in under a quarter of the time it
+used to.
+
+The boundary: an error that is **not** recoverable is a genuine fault and still
+captures a full stack. Set `EngineError.captureRecoverableStacks = true` to get
+them back for the recoverable ones while debugging.
+
 ## No public holidays in working-day arithmetic
 
 Correct holiday handling needs a region-specific, continuously updated calendar.
