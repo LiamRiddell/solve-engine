@@ -26,6 +26,7 @@ export function dailyNoteLinkNormalizerRule(): NormalizerRule {
   return {
     name: "datetime:daily-note-link",
     priority: 80,
+    startTokenTypes: ["LBRACKET"],
     match(tokens: Token[], pos: number): NormalizerMatch | null {
       if (tokens[pos]?.type !== "LBRACKET") return null;
       if (tokens[pos + 1]?.type !== "LBRACKET") return null;

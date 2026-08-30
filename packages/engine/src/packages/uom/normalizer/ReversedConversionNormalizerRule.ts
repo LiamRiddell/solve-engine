@@ -37,6 +37,7 @@ export function reversedConversionNormalizerRule(priority = 61): NormalizerRule 
 	return {
 		name: "uom:reversed-conversion",
 		priority,
+		startTokenTypes: ["UNIT"],
 		match(tokens, pos): NormalizerMatch | null {
 			// A bare unit, at the very start of the expression. Anywhere else it
 			// is far more likely to be part of something already being parsed.

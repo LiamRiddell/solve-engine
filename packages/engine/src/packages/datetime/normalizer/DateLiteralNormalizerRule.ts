@@ -355,6 +355,7 @@ export function dateLiteralNormalizerRule(
   return {
     name: "datetime:date-literal",
     priority: 70,
+    startTokenTypes: ["NUMBER"],
     match(tokens: Token[], pos: number): NormalizerMatch | null {
       const t0 = tokens[pos];
       if (t0.type !== "NUMBER") return null;

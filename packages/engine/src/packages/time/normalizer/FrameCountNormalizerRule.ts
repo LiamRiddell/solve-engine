@@ -24,6 +24,7 @@ export function frameCountNormalizerRule(priority = 65): NormalizerRule {
   return {
     name: "time:frame-count",
     priority,
+    startTokenTypes: ["NUMBER"],
     match(tokens, pos): NormalizerMatch | null {
       const numberToken = tokens[pos];
       const framesToken = tokens[pos + 1];

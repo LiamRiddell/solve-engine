@@ -16,6 +16,7 @@ export function uomPossibilitiesNormalizerRule(priority = 60): NormalizerRule {
   return {
     name: "uom:possibilities",
     priority,
+    startTokenTypes: ["UNIT"],
     match(tokens, pos): NormalizerMatch | null {
       if (pos + 2 >= tokens.length) return null;
       const unitToken = tokens[pos];

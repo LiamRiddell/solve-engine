@@ -42,6 +42,7 @@ export function ipCidrNormalizerRule(priority = 72): NormalizerRule {
 	return {
 		name: RULE,
 		priority,
+		startTokenTypes: ["NUMBER"],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const first = tokens[pos];
 			if (!first || first.type !== "NUMBER") return null;

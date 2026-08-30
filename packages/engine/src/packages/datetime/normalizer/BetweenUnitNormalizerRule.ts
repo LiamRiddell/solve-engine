@@ -21,6 +21,7 @@ export function betweenUnitNormalizerRule(priority = 60): NormalizerRule {
   return {
     name: "datetime:between-unit",
     priority,
+    startTokenTypes: ["UNIT", "IDENT"],
     match(tokens, pos): NormalizerMatch | null {
       // Optional leading "how many".
       let start = pos;

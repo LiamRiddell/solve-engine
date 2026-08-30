@@ -24,6 +24,7 @@ export function imaginaryLiteralNormalizerRule(priority = 75): NormalizerRule {
 	return {
 		name: "symbolic:imaginary-literal",
 		priority,
+		startTokenTypes: ["NUMBER"],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const number = tokens[pos];
 			if (!number || number.type !== "NUMBER") return null;

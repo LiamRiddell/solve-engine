@@ -18,6 +18,7 @@ export function fpsRateNormalizerRule(priority = 65): NormalizerRule {
   return {
     name: "time:fps-rate",
     priority,
+    startTokenTypes: ["NUMBER"],
     match(tokens, pos): NormalizerMatch | null {
       const numberToken = tokens[pos];
       const fpsToken = tokens[pos + 1];

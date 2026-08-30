@@ -41,6 +41,7 @@ export function daysInPeriodNormalizerRule(priority = 60): NormalizerRule {
 	return {
 		name: "datetime:days-in-period",
 		priority,
+		startTokenTypes: ["UNIT", "IDENT"],
 		match(tokens, pos): NormalizerMatch | null {
 			const days = tokens[pos];
 			if (days === undefined) return null;

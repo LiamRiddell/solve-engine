@@ -18,6 +18,7 @@ export function asciiPlusMinusNormalizerRule(priority = 90): NormalizerRule {
     return {
         name: "uncertainty:ascii-plus-minus",
         priority,
+        startTokenTypes: ["PLUS"],
         match(tokens, pos): NormalizerMatch | null {
             const plus = tokens[pos];
             if (plus?.type !== "PLUS") return null;

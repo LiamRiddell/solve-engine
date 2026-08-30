@@ -33,6 +33,7 @@ export function compoundUnitNormalizerRule(priority = 77): NormalizerRule {
 	return {
 		name: "uom:compound-unit",
 		priority,
+		startTokenTypes: ["UNIT"],
 		match(tokens, pos): NormalizerMatch | null {
 			const numerator = tokens[pos];
 			const slash = tokens[pos + 1];

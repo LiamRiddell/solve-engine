@@ -19,6 +19,7 @@ export function percentOnOffNormalizerRule(priority = 68): NormalizerRule {
 	return {
 		name: "percentage:on-off",
 		priority,
+		startTokenTypes: ["PERCENT"],
 		match(tokens, pos): NormalizerMatch | null {
 			if (tokens[pos]?.type !== "PERCENT") return null;
 

@@ -78,6 +78,7 @@ export function implicitMultiplyRule(
 	return {
     name: "implicit:multiply",
     priority,
+    startTokenTypes: ["NUMBER", "RPAREN"],
     match(tokens: Token[], pos: number): NormalizerMatch | null {
       // ── Need at least one token after the current position ──
       if (pos + 1 >= tokens.length) return null;

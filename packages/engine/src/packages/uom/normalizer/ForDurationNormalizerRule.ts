@@ -31,6 +31,7 @@ export function forDurationNormalizerRule(priority = 76): NormalizerRule {
 	return {
 		name: "uom:for-duration",
 		priority,
+		startTokenTypes: ["FOR_DURATION"],
 		match(tokens, pos): NormalizerMatch | null {
 			const head = tokens[pos];
 			if (head?.type !== "FOR_DURATION") return null;

@@ -65,6 +65,7 @@ export function compoundQuantityNormalizerRule(priority = 63): NormalizerRule {
 	return {
 		name: "uom:compound-quantity",
 		priority,
+		startTokenTypes: ["NUMBER"],
 		match(tokens, pos): NormalizerMatch | null {
 			const firstNumber = tokens[pos];
 			if (firstNumber?.type !== "NUMBER" || !PLAIN_NUMBER.test(firstNumber.text ?? "")) return null;
