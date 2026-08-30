@@ -394,12 +394,10 @@ export const gamePackage: IEnginePackage = {
 ```
 
 ```ts
-import { ExpressionEngine } from "solve-engine";
+import { createEngine } from "solve-engine";
 
-const engine = new ExpressionEngine({ packages: [
-  ...BUILTIN_PACKAGES,
-  gamePackage,
-] });
+// Every built-in package, plus the one above.
+const engine = createEngine({ extraPackages: [gamePackage] });
 ```
 
       </div>
