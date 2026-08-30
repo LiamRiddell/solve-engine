@@ -66,6 +66,16 @@ import { createEngine } from "solve-engine";
 const engine = createEngine(); // every built-in package
 ```
 
+To keep the built-ins and add your own package on top, pass it as
+`extraPackages` rather than assembling the list by hand:
+
+```ts
+import { createEngine } from "solve-engine";
+import { myPackage } from "./my-package";
+
+const engine = createEngine({ extraPackages: [myPackage] });
+```
+
 For a smaller bundle, construct the engine with only the packages you need.
 Importing them from `solve-engine/packages` lets the bundler tree-shake the
 rest away.

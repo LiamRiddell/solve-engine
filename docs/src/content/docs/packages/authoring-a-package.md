@@ -14,8 +14,7 @@ so `defineFunction` derives the whole wiring from a declaration and hands back a
 package you register like any other.
 
 ```ts
-import { defineFunction, ExpressionEngine } from "solve-engine";
-import { BUILTIN_PACKAGES } from "solve-engine/packages";
+import { createEngine, defineFunction } from "solve-engine";
 
 const vat = defineFunction({
   name: "vat",
@@ -24,10 +23,8 @@ const vat = defineFunction({
   call: (amount) => amount * 1.2,
 });
 
-const engine = new ExpressionEngine({ packages: [
-  ...BUILTIN_PACKAGES,
-  vat,
-] });
+// createEngine registers every built-in package; extraPackages adds yours on top.
+const engine = createEngine({ extraPackages: [vat] });
 
 engine.evaluateExpression("vat(100)"); // 120
 ```
@@ -109,17 +106,27 @@ and each guide walks its extension point end to end.
 
 ## Registering
 
-```ts
-import { ExpressionEngine } from "solve-engine";
+The common case is your package on top of the built-ins, which `extraPackages`
+does in one line:
 
-const engine = new ExpressionEngine({ packages: [
-  ...BUILTIN_PACKAGES,
-  myPackage,
-] });
+```ts
+import { createEngine } from "solve-engine";
+
+const engine = createEngine({ extraPackages: [myPackage] });
 ```
 
-Order matters. Arithmetic registers first so its operators are in place before
-anything builds on them.
+Order matters, and `extraPackages` gets it right by construction: it appends your
+package after the built-ins, so arithmetic and the rest are already in place
+before anything you add builds on them. When you need to control the order
+yourself, or leave the built-ins out entirely, pass an explicit `packages` list
+to the `ExpressionEngine` constructor instead:
+
+```ts
+import { ExpressionEngine } from "solve-engine";
+import { BUILTIN_PACKAGES } from "solve-engine/packages";
+
+const engine = new ExpressionEngine({ packages: [...BUILTIN_PACKAGES, myPackage] });
+```
 
 ## Choosing your syntax carefully
 

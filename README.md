@@ -57,9 +57,10 @@ const value = engine.evaluateExpression("2 + 2 * 10");
 console.log(value.toNumber()); // 22
 ```
 
-`createEngine` is batteries-included. The `ExpressionEngine` constructor
-registers only the packages you pass it, so your bundler can drop the built-ins
-you never use:
+`createEngine` is batteries-included; to keep the built-ins and add your own,
+pass it as `createEngine({ extraPackages: [myPackage] })`. The `ExpressionEngine`
+constructor registers only the packages you pass it, so your bundler can drop the
+built-ins you never use:
 
 ```typescript
 import { ExpressionEngine } from "solve-engine";

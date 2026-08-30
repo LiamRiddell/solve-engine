@@ -1,0 +1,40 @@
+{
+  "measuredOn": {
+    "cpu": "AMD Ryzen 9 7950X3D 16-Core Processor",
+    "node": "v24.16.0",
+    "platform": "win32",
+    "arch": "x64"
+  },
+  "stages": {
+    "lex": 24,
+    "normalize": 35.4,
+    "parseCompile": 20.7,
+    "execute": 19.9
+  },
+  "tiers": [
+    {
+      "name": "small",
+      "lines": 100,
+      "coldLinesPerSec": 19812,
+      "warmLinesPerSec": 68154
+    },
+    {
+      "name": "medium",
+      "lines": 1000,
+      "coldLinesPerSec": 55305,
+      "warmLinesPerSec": 88255
+    },
+    {
+      "name": "large",
+      "lines": 10000,
+      "coldLinesPerSec": 42041,
+      "warmLinesPerSec": 43103
+    },
+    {
+      "name": "massive",
+      "lines": 50000,
+      "coldLinesPerSec": 14499,
+      "warmLinesPerSec": 14495
+    }
+  ]
+}

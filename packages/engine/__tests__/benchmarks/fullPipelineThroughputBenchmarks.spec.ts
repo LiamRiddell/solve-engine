@@ -21,6 +21,7 @@
  *   - Per-stage breakdown (lex % / parse+compile % / execute %)
  */
 
+import * as os from "os";
 import { registerPackageForTesting } from "@tools/testUtils";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ARITHMETIC_PACKAGE, BIGINT_PACKAGE, DATETIME_PACKAGE, DICE_PACKAGE, FUNCTION_PACKAGE, PERCENTAGE_PACKAGE, UOM_PACKAGE, VARIABLES_PACKAGE, VECTOR_PACKAGE } from "@solve-js/packages";
@@ -302,6 +303,8 @@ interface AllResults {
   metadata: {
     nodeVersion: string;
     platform: string;
+    arch: string;
+    cpu: string;
     totalLinesAcrossTiers: number;
   };
 }
@@ -314,6 +317,8 @@ describe("Full Pipeline Throughput Benchmarks", () => {
     metadata: {
       nodeVersion: process.version,
       platform: process.platform,
+      arch: process.arch,
+      cpu: (os.cpus()[0]?.model ?? "unknown").trim(),
       totalLinesAcrossTiers: 0,
     },
   };
