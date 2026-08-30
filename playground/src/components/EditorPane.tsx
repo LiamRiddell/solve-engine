@@ -316,7 +316,7 @@ class LineDetailWidget extends WidgetType {
   constructor(
     readonly lineNumber: number,
     readonly detail: {
-      tokens: { type: string; value: string }[]
+      tokenCount: number
       result: string
       type: string
       parselet: string
@@ -335,7 +335,7 @@ class LineDetailWidget extends WidgetType {
       this.lineNumber === other.lineNumber &&
       this.detail.result === other.detail.result &&
       this.detail.error === other.detail.error &&
-      this.detail.tokens.length === other.detail.tokens.length &&
+      this.detail.tokenCount === other.detail.tokenCount &&
       this.detail.opcodes === other.detail.opcodes
     )
   }
@@ -344,23 +344,6 @@ class LineDetailWidget extends WidgetType {
     const d = this.detail
     const box = document.createElement("div")
     box.className = "os-line-detail"
-
-    const tokens = document.createElement("div")
-    tokens.className = "os-detail-tokens"
-    for (const t of d.tokens.slice(0, 40)) {
-      const chip = document.createElement("span")
-      chip.className = `os-detail-token ${tokenClassName(t.type) ?? ""}`
-      chip.textContent = t.value
-      chip.title = t.type
-      tokens.append(chip)
-    }
-    if (d.tokens.length > 40) {
-      const more = document.createElement("span")
-      more.className = "os-detail-key"
-      more.textContent = `+${d.tokens.length - 40} more`
-      tokens.append(more)
-    }
-    if (d.tokens.length > 0) box.append(tokens)
 
     if (d.error) {
       box.append(detailRow("Error", d.error, false))
@@ -372,7 +355,13 @@ class LineDetailWidget extends WidgetType {
     if (cats.length > 0) {
       box.append(detailRow("Matched", cats.map(([k, n]) => (n > 1 ? `${k} x${n}` : k)).join(", "), false))
     }
-    box.append(detailRow("Compiled", `${d.opcodes} opcode${d.opcodes === 1 ? "" : "s"}${d.cached ? ", served from cache" : ""}`, false))
+    box.append(
+      detailRow(
+        "Compiled",
+        `${d.tokenCount} token${d.tokenCount === 1 ? "" : "s"} to ${d.opcodes} opcode${d.opcodes === 1 ? "" : "s"}${d.cached ? ", served from cache" : ""}`,
+        false,
+      ),
+    )
 
     if (d.timing && d.timing.total > 0) {
       const bar = document.createElement("div")
@@ -674,16 +663,17 @@ function renderLineDetails(tabId: string): void {
     const line = view.state.doc.line(lineNumber)
     const stages = report.stagesByLine?.[lineNumber]
     const lexer = stages?.find((st) => st.stage === "lexer")
-    const tokens = ((lexer?.output as { tokens?: { type: string; value: string }[] } | undefined)?.tokens ?? []).map(
-      (t) => ({ type: t.type, value: t.value }),
-    )
+    // Only the count. The chips used to be drawn here and repeated the line
+    // sitting directly above them, which is the one thing a panel under a line
+    // never needs to say.
+    const tokenCount = ((lexer?.output as { tokens?: unknown[] } | undefined)?.tokens ?? []).length
     const ls = report.lineStats?.find((x) => x.lineNumber === lineNumber)?.stats
 
     effects.push({
       pos: line.to,
       deco: Decoration.widget({
         widget: new LineDetailWidget(lineNumber, {
-          tokens,
+          tokenCount,
           result: lr.result,
           type: lr.type,
           parselet: lr.parselet,

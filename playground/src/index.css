@@ -456,21 +456,6 @@
   line-height: 1.5;
 }
 
-.os-detail-tokens {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  margin-bottom: 0.4rem;
-}
-.os-detail-token {
-  padding: 0 0.3rem;
-  border: 1px solid var(--border);
-  border-radius: 0.25rem;
-  background: var(--background);
-  font-family: var(--font-mono);
-  font-size: 10px;
-}
-
 .os-detail-row {
   display: flex;
   align-items: center;
