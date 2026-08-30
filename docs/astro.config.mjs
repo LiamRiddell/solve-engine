@@ -238,7 +238,7 @@ export default defineConfig({
             },
             {
               // Numbers written in a system other than plain base-ten decimal.
-              label: "Number systems",
+              label: "Numbers",
               collapsed: true,
               items: [
                 { slug: "syntax/numerals" },
@@ -260,7 +260,7 @@ export default defineConfig({
             },
             {
               // Working with the symbols themselves, not just their values.
-              label: "Algebra & calculus",
+              label: "Algebra",
               collapsed: true,
               items: [
                 { slug: "syntax/expanding" },
@@ -274,7 +274,7 @@ export default defineConfig({
               ],
             },
             {
-              label: "Vectors & statistics",
+              label: "Statistics",
               collapsed: true,
               items: [
                 { slug: "syntax/vectors-and-matrices" },
@@ -282,7 +282,7 @@ export default defineConfig({
               ],
             },
             {
-              label: "Money & finance",
+              label: "Finance",
               collapsed: true,
               items: [
                 { slug: "syntax/currency" },
@@ -298,7 +298,7 @@ export default defineConfig({
             {
               // Writing a date, doing arithmetic on it, and asking about the one
               // relative to today.
-              label: "Dates & time",
+              label: "Dates",
               collapsed: true,
               items: [
                 { slug: "syntax/date-literals" },
@@ -315,7 +315,7 @@ export default defineConfig({
             },
             {
               // Quantities that carry a unit, and converting between them.
-              label: "Units & measurement",
+              label: "Units",
               collapsed: true,
               items: [
                 { slug: "syntax/unit-arithmetic" },
@@ -331,7 +331,7 @@ export default defineConfig({
               ],
             },
             {
-              label: "Text & data",
+              label: "Text",
               collapsed: true,
               items: [
                 { slug: "syntax/text-operations" },
