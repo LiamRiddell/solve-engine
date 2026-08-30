@@ -136,9 +136,14 @@ export function ParseletRegistryTab() {
               <>
                 <div className="text-muted-foreground mb-1.5 font-mono text-[10px]">{matchedFraction}</div>
                 <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
-                  {matchedParselets.map((mp) => (
+                  {matchedParselets.map((mp, mpIndex) => (
                     <span
-                      key={mp.tokenType + "-" + mp.tokenValue}
+                      // Keyed by position, not by type and value: a line as
+                      // ordinary as `2 * 3 * 2` matches the same parselet at the
+                      // same token value twice, and React was being handed
+                      // duplicate keys, which it is free to resolve by dropping
+                      // one of the chips.
+                      key={`${mpIndex}:${mp.tokenType}:${mp.tokenOffset ?? ""}`}
                       title={`${mp.parseletType} parselet\nToken: ${mp.tokenType}\nValue: ${mp.tokenValue}\nOffset: ${mp.tokenOffset}`}
                       className={cn(
                         "flex items-center gap-1 rounded-md border px-2 py-0.5 font-mono text-[10px]",

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react"
 import { ChevronRight, Package } from "lucide-react"
 import type { ConstantInfo } from "@bridge/engine"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -134,10 +135,10 @@ export function ConstantsExplorer({ constants }: { constants: ConstantInfo[] }) 
           const rows = group.filteredItems ?? group.items
           return (
             <div key={group.type} className="rounded-md border">
-              <button
-                type="button"
+              <Button
+                variant="ghost"
                 onClick={() => setGroupOpen((s) => ({ ...s, [group.type]: !s[group.type] }))}
-                className="hover:bg-accent flex w-full items-center gap-2 px-3 py-1.5 text-left"
+                className="h-auto w-full justify-start gap-2 rounded-none px-3 py-1.5 text-left font-normal"
               >
                 <span className={cn("size-2 rounded-full", TYPE_DOT[group.type])} />
                 <span className="text-sm">{group.label}</span>
@@ -147,7 +148,7 @@ export function ConstantsExplorer({ constants }: { constants: ConstantInfo[] }) 
                 <ChevronRight
                   className={cn("text-muted-foreground size-4 transition-transform", isOpen && "rotate-90")}
                 />
-              </button>
+              </Button>
               {isOpen && (
                 <table className="w-full border-t text-xs">
                   <thead>

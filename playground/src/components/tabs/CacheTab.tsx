@@ -6,6 +6,7 @@ import { useDiagnosticReportStore } from "@/stores/diagnosticReport"
 import { formatDuration } from "@bridge/utils"
 import { EmptyState } from "@/components/shared/EmptyState"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import { TAB_BODY } from "@/components/shared/tabChrome"
 
 function hitRatePct(entry: CacheHistoryEntry): number {
@@ -214,20 +215,22 @@ export function CacheTab() {
               </span>
               <span className="text-muted-foreground text-xs">Last {cacheHistoryEntries.length} runs</span>
               <div className="ml-auto flex gap-1">
-                <button
-                  type="button"
+                <Button
+                  variant={trendView === "hitmiss" ? "default" : "secondary"}
+                  size="sm"
                   onClick={() => setTrendView("hitmiss")}
-                  className={cn("rounded px-2 py-0.5 text-[10px]", trendView === "hitmiss" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}
+                  className="h-5 px-2 text-[10px]"
                 >
                   Hit/Miss
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant={trendView === "size" ? "default" : "secondary"}
+                  size="sm"
                   onClick={() => setTrendView("size")}
-                  className={cn("rounded px-2 py-0.5 text-[10px]", trendView === "size" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}
+                  className="h-5 px-2 text-[10px]"
                 >
                   Size
-                </button>
+                </Button>
               </div>
             </div>
             <div className="space-y-1 p-3">

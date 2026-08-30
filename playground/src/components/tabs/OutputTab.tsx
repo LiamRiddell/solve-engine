@@ -7,6 +7,7 @@ import { useTokensStore, matchToken } from "@/stores/tokens"
 import { usePipelineStore } from "@/stores/pipeline"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import { TAB_ROOT } from "@/components/shared/tabChrome"
 import { tokenClass } from "@/components/shared/tokenClass"
 
@@ -200,14 +201,15 @@ export function OutputTab() {
           className="h-7 max-w-45 text-xs"
         />
         {hasAnyResults && (
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={copyAllResults}
             title="Copy all line results"
-            className="text-muted-foreground hover:bg-accent flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
+            className="h-7 gap-1 text-xs"
           >
             <Copy className="size-3.5" /> Copy all
-          </button>
+          </Button>
         )}
         <span className="text-muted-foreground ml-auto text-xs">{display.countLabel}</span>
       </div>
@@ -311,14 +313,15 @@ export function OutputTab() {
                         <AlertTriangle className="size-3" /> timed out
                       </span>
                     )}
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={() => copyResult(entry.result!.error || entry.result!.result)}
                       title="Copy result"
-                      className="hover:bg-muted ml-auto rounded p-1"
+                      className="ml-auto size-6"
                     >
                       {copiedResult === (entry.result.error || entry.result.result) ? <Check className="size-3" /> : <Copy className="size-3" />}
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
