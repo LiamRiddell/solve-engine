@@ -50,6 +50,40 @@ describe("decode with `from`", () => {
 	});
 });
 
+const JWT =
+	"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+const CLAIMS = '{"sub":"1234567890","name":"John Doe","iat":1516239022}';
+
+describe("reading a token apart", () => {
+	test("jwt decodes the payload claims, function and `from` spellings agreeing", () => {
+		expect(text(`jwt("${JWT}")`)).toBe(CLAIMS);
+		expect(text(`"${JWT}" from jwt`)).toBe(CLAIMS);
+	});
+
+	test("the signature is neither required nor checked", () => {
+		// The same token with its signature dropped still reads: this reports what
+		// a token says, not whether it is genuine.
+		const unsigned = `${JWT.split(".").slice(0, 2).join(".")}.`;
+		expect(text(`jwt("${unsigned}")`)).toBe(CLAIMS);
+	});
+
+	test("a malformed token is a clear error, not a half-read result", () => {
+		expect(newTrackedEngine().evaluateExpression('jwt("not-a-token")').type).toBe(ValueType.Error);
+		expect(newTrackedEngine().evaluateExpression('jwt("a.b.c")').type).toBe(ValueType.Error);
+	});
+
+	test("query parses a query string, decoding escapes and `+`, both spellings", () => {
+		expect(text('query("name=John+Doe&page=2")')).toBe('{"name":"John Doe","page":"2"}');
+		expect(text('"a%20b=1&c=2" from query')).toBe('{"a b":"1","c":"2"}');
+	});
+
+	test("`jwt` and `query` stay usable as variable names", () => {
+		const engine = newTrackedEngine();
+		engine.evaluateLine(1, ":jwt = 3");
+		expect(engine.evaluateLine(2, "jwt + 1").toNumber()).toBe(4);
+	});
+});
+
 describe("the boundaries", () => {
 	test("encoding a non-text value is a clear error, not a silent coercion", () => {
 		expect(newTrackedEngine().evaluateExpression("5 as base64").type).toBe(ValueType.Error);

@@ -4,6 +4,7 @@ import {
 	base64Encode, base64Decode,
 	urlEncode, urlDecode,
 	hexBytesEncode, hexBytesDecode,
+	jwtDecodePayload, parseQueryString,
 } from "./Encoding";
 import { FromEncodingParselet } from "./parselets/FromEncodingParselet";
 import { EncodingCallParselet } from "./parselets/EncodingCallParselet";
@@ -28,6 +29,8 @@ const DECODERS: Record<string, (encoded: string) => string | null> = {
 	url: urlDecode,
 	"hex bytes": hexBytesDecode,
 	hexbytes: hexBytesDecode,
+	jwt: jwtDecodePayload,
+	query: parseQueryString,
 };
 
 /**
@@ -43,6 +46,12 @@ const DECODERS: Record<string, (encoded: string) => string | null> = {
  * `hex bytes` is spelled as two words on purpose: `as hex` already means a
  * number shown in base 16, a different thing, so the byte encoding is kept
  * separate and neither reading is ambiguous.
+ *
+ * Two developer conveniences read a token apart rather than encode one: `jwt(...)`
+ * (also `... from jwt`) decodes a JSON Web Token's claims, and `query(...)` (also
+ * `... from query`) parses a URL query string into JSON. `jwt` reads what a token
+ * says and never checks its signature, since verifying one needs the signing key
+ * and a calculator is the wrong place to imply a token is genuine.
  */
 export const ENCODING_PACKAGE: IEnginePackage = {
 	name: "solve-encoding",
@@ -56,6 +65,8 @@ export const ENCODING_PACKAGE: IEnginePackage = {
 		"from base64": "FROM_ENCODING",
 		"from url": "FROM_ENCODING",
 		"from hex bytes": "FROM_ENCODING",
+		"from jwt": "FROM_ENCODING",
+		"from query": "FROM_ENCODING",
 	},
 	asConverters: {
 		base64: encoder("base64", base64Encode),
@@ -67,12 +78,31 @@ export const ENCODING_PACKAGE: IEnginePackage = {
 	},
 	prefixParselets: {
 		BASE64_FN: new EncodingCallParselet("base64"),
+		JWT_FN: new EncodingCallParselet("jwt"),
+		QUERY_FN: new EncodingCallParselet("query"),
 	},
-	// `base64(...)`, fused to BASE64_FN by the engine's shared call-fusion rule.
-	callFusions: { base64: "BASE64_FN" },
+	// `base64(...)`/`jwt(...)`/`query(...)`, fused to their `*_FN` token by the
+	// engine's shared call-fusion rule (so the words stay usable as variables).
+	callFusions: { base64: "BASE64_FN", jwt: "JWT_FN", query: "QUERY_FN" },
 	pluginFunctions: {
 		// `base64("...")`, the function spelling of `"..." as base64`.
 		base64: (args: Value[]): Value => encoder("base64", base64Encode)(args[0]),
+		// `jwt("...")`, the decode-a-token function; payload claims only.
+		jwt: (args: Value[]): Value => {
+			const text = asText(args[0]);
+			if (text === null) return errorValue("ENCODING_EXPECTED_TEXT", `jwt(...) expects text (a "quoted string")`);
+			const decoded = jwtDecodePayload(text);
+			if (decoded === null) return errorValue("ENCODING_DECODE_FAILED", "jwt(...): the input is not a valid JSON Web Token");
+			return stringValue(decoded);
+		},
+		// `query("a=1&b=2")`, parse a URL query string into JSON.
+		query: (args: Value[]): Value => {
+			const text = asText(args[0]);
+			if (text === null) return errorValue("ENCODING_EXPECTED_TEXT", `query(...) expects text (a "quoted string")`);
+			const decoded = parseQueryString(text);
+			if (decoded === null) return errorValue("ENCODING_DECODE_FAILED", "query(...): the input is not a valid query string");
+			return stringValue(decoded);
+		},
 		// `<value> from <name>`, dispatched by the decode name the parselet pushes.
 		fromEncoding: (args: Value[]): Value => {
 			const text = asText(args[0]);
@@ -87,5 +117,7 @@ export const ENCODING_PACKAGE: IEnginePackage = {
 	},
 	tokenCategories: {
 		BASE64_FN: "function",
+		JWT_FN: "function",
+		QUERY_FN: "function",
 	},
 };

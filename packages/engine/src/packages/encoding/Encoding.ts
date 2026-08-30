@@ -92,3 +92,63 @@ export function hexBytesDecode(encoded: string): string | null {
 		return null;
 	}
 }
+
+/**
+ * base64url (the JOSE/JWT variant) to standard base64: `-` and `_` stand in for
+ * `+` and `/`, and the trailing `=` padding is dropped. Restoring both lets the
+ * ordinary {@link base64Decode} read it.
+ */
+function base64UrlToStandard(segment: string): string {
+	const swapped = segment.replace(/-/g, "+").replace(/_/g, "/");
+	const remainder = swapped.length % 4;
+	return remainder === 0 ? swapped : swapped + "=".repeat(4 - remainder);
+}
+
+/**
+ * Read a JSON Web Token's claims. A JWT is three base64url parts joined by dots
+ * (`header.payload.signature`); this decodes the middle part, the payload, and
+ * returns its claims as compact JSON. Returns null when the input is not a
+ * well-formed JWT payload.
+ *
+ * The signature is deliberately never checked. Verifying it needs the signing
+ * key, and a calculator is the wrong place to imply a token is trustworthy: this
+ * reads what a token *says*, not whether it is genuine.
+ */
+export function jwtDecodePayload(token: string): string | null {
+	const parts = token.trim().split(".");
+	if (parts.length < 2 || parts[1] === "") return null;
+	const json = base64Decode(base64UrlToStandard(parts[1]));
+	if (json === null) return null;
+	try {
+		const claims = JSON.parse(json);
+		// A bare number or string is valid JSON but not a claim set; a JWT payload
+		// is an object.
+		if (claims === null || typeof claims !== "object" || Array.isArray(claims)) return null;
+		return JSON.stringify(claims);
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Parse a URL query string (`a=1&b=2`, with or without a leading `?`) into
+ * compact JSON. Percent-escapes are decoded and `+` reads as a space, the way a
+ * form-encoded value does. Returns null when a component is not valid encoding.
+ */
+export function parseQueryString(input: string): string | null {
+	const body = input.trim().replace(/^\?/, "");
+	if (body === "") return "{}";
+	const out: Record<string, string> = {};
+	for (const pair of body.split("&")) {
+		if (pair === "") continue;
+		const eq = pair.indexOf("=");
+		const rawKey = eq === -1 ? pair : pair.slice(0, eq);
+		const rawValue = eq === -1 ? "" : pair.slice(eq + 1);
+		try {
+			out[decodeURIComponent(rawKey.replace(/\+/g, " "))] = decodeURIComponent(rawValue.replace(/\+/g, " "));
+		} catch {
+			return null;
+		}
+	}
+	return JSON.stringify(out);
+}

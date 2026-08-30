@@ -1,6 +1,6 @@
 ---
 title: Text encoding
-description: Turn text into base64, a URL-safe form or hex bytes, and back again.
+description: Turn text into base64, a URL-safe form or hex bytes, decode a JWT or a query string, and back again.
 ---
 
 > **Package:** `ENCODING_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
@@ -36,6 +36,32 @@ base64 also has a function spelling, for when that reads more naturally:
 ```solve
 base64("Hello, World!") // SGVsbG8sIFdvcmxkIQ==
 ```
+
+## Reading a token apart
+
+Two forms read an existing token rather than make one. `jwt` decodes a JSON Web
+Token: a JWT is three base64url parts joined by dots
+(`header.payload.signature`), and this returns the payload, the claims the token
+carries, as JSON.
+
+```solve
+jwt("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c") // {"sub":"1234567890","name":"John Doe","iat":1516239022}
+```
+
+The signature is never checked, and that is deliberate. Reading a token is not
+the same as trusting it: verifying the signature needs the signing key, and a
+calculator is the wrong place to imply a token is genuine. `jwt` tells you what a
+token *says*; a malformed one is reported as an error rather than half read.
+
+`query` parses a URL query string into JSON, decoding the percent-escapes and
+reading `+` as a space:
+
+```solve
+query("name=John+Doe&page=2") // {"name":"John Doe","page":"2"}
+```
+
+Both also have a `from` spelling, `"..." from jwt` and `"..." from query`, to
+match the decoders above.
 
 ## Notes
 
