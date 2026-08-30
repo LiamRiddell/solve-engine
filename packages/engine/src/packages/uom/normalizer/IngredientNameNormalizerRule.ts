@@ -46,6 +46,9 @@ export function ingredientNameNormalizerRule(priority = 68): NormalizerRule {
   return {
     name: "uom-cooking:ingredient-name",
     priority,
+    // Derived from this rule's own opening guards; see RuleSlot on why an
+    // over-broad slot is safe and an over-narrow one is not.
+    shape: [{ types: ["IDENT"] }],
     match(tokens, pos): NormalizerMatch | null {
       const prevToken = tokens[pos - 1];
       if (!prevToken || prevToken.type !== "UNIT") return null;

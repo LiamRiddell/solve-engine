@@ -1,0 +1,56 @@
+{
+  "suite": "normalizer",
+  "harness": "mitata-1",
+  "results": {
+    "noop_arithmetic": {
+      "meanMs": 0.004605438529299119,
+      "medianMs": 0.0024,
+      "minMs": 0.0022
+    },
+    "noop_prose": {
+      "meanMs": 0.004703531901041667,
+      "medianMs": 0.004164990234375,
+      "minMs": 0.003598974609375
+    },
+    "assignment": {
+      "meanMs": 0.0014326453575721155,
+      "medianMs": 0.001431396484375,
+      "minMs": 0.0010658203125
+    },
+    "implicit_multiply": {
+      "meanMs": 0.009506703694661459,
+      "medianMs": 0.0089161865234375,
+      "minMs": 0.0079146728515625
+    },
+    "phrase_fusion": {
+      "meanMs": 0.0031176615397135415,
+      "medianMs": 0.0026394287109375,
+      "minMs": 0.002383154296875
+    },
+    "call_fusion": {
+      "meanMs": 0.006084100341796875,
+      "medianMs": 0.0054640625,
+      "minMs": 0.0048828369140625
+    },
+    "unit_conversion": {
+      "meanMs": 0.004742515055338542,
+      "medianMs": 0.0041814208984375,
+      "minMs": 0.00388251953125
+    },
+    "date_literal": {
+      "meanMs": 0.004304111735026042,
+      "medianMs": 0.004008642578125,
+      "minMs": 0.003585888671875
+    },
+    "long_prose_line": {
+      "meanMs": 0.10654460196292258,
+      "medianMs": 0.0781,
+      "minMs": 0.0735
+    },
+    "document_500_lines": {
+      "meanMs": 0.8012460869565218,
+      "medianMs": 0.6593,
+      "minMs": 0.5197
+    }
+  }
+}

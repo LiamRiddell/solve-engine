@@ -23,7 +23,9 @@ export function degreeSymbolNormalizerRule(priority = 74): NormalizerRule {
 	return {
 		name: "uom:degree-symbol",
 		priority,
-		startTokenTypes: ["NUMBER"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["NUMBER"] }, { types: ["IDENT"], values: ["°"] }],
 		match(tokens, pos): NormalizerMatch | null {
 			// Matched from the number rather than from the symbol, so the
 			// replacement emits the pair together and the unit lands adjacent to

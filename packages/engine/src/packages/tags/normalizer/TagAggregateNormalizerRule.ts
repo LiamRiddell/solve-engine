@@ -34,6 +34,9 @@ export function tagAggregateNormalizerRule(priority = 80): NormalizerRule {
   return {
     name: "tags:aggregate",
     priority,
+    // Derived from this rule's own opening guards; see RuleSlot on why an
+    // over-broad slot is safe and an over-narrow one is not.
+    shape: [{ types: ["TOTAL_OF", "COUNT_OF", "AVERAGE_OF", "IDENT"] }],
     match(tokens, pos): NormalizerMatch | null {
       const head = tokens[pos];
       if (head === undefined) return null;
@@ -82,6 +85,8 @@ export function tagStripNormalizerRule(priority = 40): NormalizerRule {
   return {
     name: "tags:strip",
     priority,
+    // A bare tag, stripped once nothing else has claimed it.
+    shape: [{ types: ["TAG"] }],
     match(tokens, pos): NormalizerMatch | null {
       if (tokens[pos]?.type !== "TAG") return null;
       const before = tokens[pos - 1];

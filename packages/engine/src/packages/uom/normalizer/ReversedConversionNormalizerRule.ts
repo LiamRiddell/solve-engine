@@ -37,7 +37,9 @@ export function reversedConversionNormalizerRule(priority = 61): NormalizerRule 
 	return {
 		name: "uom:reversed-conversion",
 		priority,
-		startTokenTypes: ["UNIT"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["UNIT"] }, { types: ["IN"] }],
 		match(tokens, pos): NormalizerMatch | null {
 			// A bare unit, at the very start of the expression. Anywhere else it
 			// is far more likely to be part of something already being parsed.

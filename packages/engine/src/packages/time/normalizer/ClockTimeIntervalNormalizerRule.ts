@@ -27,7 +27,9 @@ export function clockTimeIntervalNormalizerRule(priority = 66): NormalizerRule {
   return {
     name: "time:clock-time-interval",
     priority,
-    startTokenTypes: ["CLOCK_TIME"],
+    // Derived from this rule's own opening guards; see RuleSlot on why an
+    // over-broad slot is safe and an over-narrow one is not.
+    shape: [{ types: ["CLOCK_TIME"] }, { types: ["TO"] }],
     match(tokens, pos): NormalizerMatch | null {
       const start = tokens[pos];
       const to = tokens[pos + 1];

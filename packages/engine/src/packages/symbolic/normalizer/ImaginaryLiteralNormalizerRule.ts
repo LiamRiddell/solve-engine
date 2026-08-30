@@ -24,7 +24,9 @@ export function imaginaryLiteralNormalizerRule(priority = 75): NormalizerRule {
 	return {
 		name: "symbolic:imaginary-literal",
 		priority,
-		startTokenTypes: ["NUMBER"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["NUMBER"] }, { types: ["IDENT"], values: ["i"] }],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const number = tokens[pos];
 			if (!number || number.type !== "NUMBER") return null;

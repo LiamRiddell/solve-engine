@@ -114,10 +114,12 @@ const COMPLEX_EXPRESSION = "sqrt(144) + 50% of 200 - 3 * (10 + 5)";
  */
 function timePipelineStages(expression: string, iterations: number): {
   lexNs: number;
+  normalizeNs: number;
   parseCompileNs: number;
   executeNs: number;
   totalNs: number;
   lexPercent: number;
+  normalizePercent: number;
   parseCompilePercent: number;
   executePercent: number;
 } {
@@ -138,7 +140,15 @@ function timePipelineStages(expression: string, iterations: number): {
   const parser = new Parser(registry);
   const vm = createVM(sharedOpRegistry);
 
+  // The normalizer comes from a real engine rather than being hand-registered:
+  // its cost is a function of which rules are loaded, so a partial rule set
+  // would understate the stage. This breakdown omitted normalisation entirely
+  // until now, which is why the reported split summed to 100% across three
+  // stages while the pipeline has four.
+  const normalizer = new ExpressionEngine({ packages: BUILTIN_PACKAGES }).getNormalizer();
+
   let totalLexNs = 0;
+  let totalNormalizeNs = 0;
   let totalParseCompileNs = 0;
   let totalExecuteNs = 0;
   let totalFullNs = 0;
@@ -154,10 +164,11 @@ function timePipelineStages(expression: string, iterations: number): {
       tokens.push(t);
     }
 
-    // -- Full pipeline: parse + compile + execute --
+    // -- Full pipeline: normalize + parse + compile + execute --
     const fullStart = performance.now();
+    const fullTokens = normalizer.normalize(tokens);
     const builder = new BytecodeBuilder();
-    parser.load(tokens);
+    parser.load(fullTokens);
     parser.parseExpression(0, builder);
     const program = builder.build();
     const result = executeBytecode(program, vm);
@@ -173,16 +184,22 @@ function timePipelineStages(expression: string, iterations: number): {
     const lexEnd = performance.now();
     totalLexNs += (lexEnd - lexStart) * 1_000_000;
 
-    // -- Stage 2: Parse + Compile only (measure after lex) --
+    // -- Stage 1.5: Normalize only --
     lexer.reset(expression);
     const tokenCopy: Token[] = [];
     for (const t of lexer) {
       if (t.type === "WS" || t.type.startsWith("MD_")) continue;
       tokenCopy.push(t);
     }
+    const normalizeStart = performance.now();
+    const normalized = normalizer.normalize(tokenCopy);
+    const normalizeEnd = performance.now();
+    totalNormalizeNs += (normalizeEnd - normalizeStart) * 1_000_000;
+
+    // -- Stage 2: Parse + Compile only (measure after lex + normalize) --
     const parseStart = performance.now();
     const builder2 = new BytecodeBuilder();
-    parser.load(tokenCopy);
+    parser.load(normalized);
     parser.parseExpression(0, builder2);
     const program2 = builder2.build();
     const parseEnd = performance.now();
@@ -200,16 +217,19 @@ function timePipelineStages(expression: string, iterations: number): {
 
   const avgTotal = totalFullNs / iterations;
   const avgLex = totalLexNs / iterations;
+  const avgNormalize = totalNormalizeNs / iterations;
   const avgParse = totalParseCompileNs / iterations;
   const avgExec = totalExecuteNs / iterations;
-  const sum = avgLex + avgParse + avgExec;
+  const sum = avgLex + avgNormalize + avgParse + avgExec;
 
   return {
     lexNs: avgLex,
+    normalizeNs: avgNormalize,
     parseCompileNs: avgParse,
     executeNs: avgExec,
-    totalNs: sum, // true end-to-end (lex + parse+compile + execute)
+    totalNs: sum, // true end-to-end (lex + normalize + parse+compile + execute)
     lexPercent: (avgLex / sum) * 100,
+    normalizePercent: (avgNormalize / sum) * 100,
     parseCompilePercent: (avgParse / sum) * 100,
     executePercent: (avgExec / sum) * 100,
   };
@@ -257,12 +277,19 @@ const TIERS: TierConfig[] = [
 interface ThroughputResult {
   meanMs: number;
   opsPerSec: number;
+  /**
+   * Lines and expressions per SECOND. Both were computed as `count / meanMs`,
+   * which is per millisecond, and reported under a per-second name — so every
+   * recorded figure read a thousand times slower than the run actually was.
+   * `opsPerSec` was always correct, which is what hid it.
+   */
   linesPerSec: number;
   exprsPerSec: number;
 }
 
 interface StageBreakdown {
   lexPercent: number;
+  normalizePercent: number;
   parseCompilePercent: number;
   executePercent: number;
   totalNs: number;
@@ -283,7 +310,7 @@ describe("Full Pipeline Throughput Benchmarks", () => {
   const results: AllResults = {
     timestamp: "",
     tiers: {},
-    stageBreakdown: { lexPercent: 0, parseCompilePercent: 0, executePercent: 0, totalNs: 0 },
+    stageBreakdown: { lexPercent: 0, normalizePercent: 0, parseCompilePercent: 0, executePercent: 0, totalNs: 0 },
     metadata: {
       nodeVersion: process.version,
       platform: process.platform,
@@ -314,7 +341,7 @@ describe("Full Pipeline Throughput Benchmarks", () => {
       if (!t) continue;
       totalColdMs += t.cold.meanMs * tier.iterations;
       const throughputLine = tier.lines > 0
-        ? `${(tier.lines / t.cold.meanMs).toFixed(1)} l/s`
+        ? `${((tier.lines / t.cold.meanMs) * 1000).toFixed(0)} l/s`
         : "—";
 
       console.log(
@@ -328,6 +355,7 @@ describe("Full Pipeline Throughput Benchmarks", () => {
     const s = results.stageBreakdown;
     console.log("\n  Per-stage breakdown (single expression):");
     console.log(`    Lex           : ${s.lexPercent.toFixed(1)}%`);
+    console.log(`    Normalise     : ${s.normalizePercent.toFixed(1)}%`);
     console.log(`    Parse+Compile : ${s.parseCompilePercent.toFixed(1)}%`);
     console.log(`    Execute (VM)  : ${s.executePercent.toFixed(1)}%`);
     console.log(`    Total pipeline: ${(s.totalNs / 1000).toFixed(2)} µs`);
@@ -361,7 +389,7 @@ describe("Full Pipeline Throughput Benchmarks", () => {
     results.stageBreakdown = breakdown;
 
     // Sanity: stages sum to ~100%
-    const sum = breakdown.lexPercent + breakdown.parseCompilePercent + breakdown.executePercent;
+    const sum = breakdown.lexPercent + breakdown.normalizePercent + breakdown.parseCompilePercent + breakdown.executePercent;
     expect(sum).toBeGreaterThan(95);
     expect(sum).toBeLessThan(105);
 
@@ -395,15 +423,15 @@ describe("Full Pipeline Throughput Benchmarks", () => {
       const cold: ThroughputResult = {
         meanMs: coldMs,
         opsPerSec: 1000 / coldMs,
-        linesPerSec: tier.lines / coldMs,
-        exprsPerSec: tier.exprs / coldMs,
+        linesPerSec: (tier.lines / coldMs) * 1000,
+        exprsPerSec: (tier.exprs / coldMs) * 1000,
       };
 
       const warm: ThroughputResult = {
         meanMs: warmMs,
         opsPerSec: 1000 / warmMs,
-        linesPerSec: tier.lines / warmMs,
-        exprsPerSec: tier.exprs / warmMs,
+        linesPerSec: (tier.lines / warmMs) * 1000,
+        exprsPerSec: (tier.exprs / warmMs) * 1000,
       };
 
       results.tiers[tier.name] = { cold, warm };

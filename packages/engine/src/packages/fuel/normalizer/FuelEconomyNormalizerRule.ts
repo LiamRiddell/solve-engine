@@ -19,7 +19,9 @@ export function fuelConsumptionNormalizerRule(priority = 82): NormalizerRule {
 	return {
 		name: RULE,
 		priority,
-		startTokenTypes: ["UNIT", "IDENT"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["UNIT", "IDENT"], values: ["l"] }, { types: ["SLASH"] }],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const litres = tokens[pos];
 			const slash = tokens[pos + 1];

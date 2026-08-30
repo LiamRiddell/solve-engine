@@ -19,7 +19,9 @@ export function percentOnOffNormalizerRule(priority = 68): NormalizerRule {
 	return {
 		name: "percentage:on-off",
 		priority,
-		startTokenTypes: ["PERCENT"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["PERCENT"] }, { types: ["IDENT"], values: ["on", "off"] }],
 		match(tokens, pos): NormalizerMatch | null {
 			if (tokens[pos]?.type !== "PERCENT") return null;
 

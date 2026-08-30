@@ -42,7 +42,9 @@ export function ipCidrNormalizerRule(priority = 72): NormalizerRule {
 	return {
 		name: RULE,
 		priority,
-		startTokenTypes: ["NUMBER"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["NUMBER"] }],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const first = tokens[pos];
 			if (!first || first.type !== "NUMBER") return null;

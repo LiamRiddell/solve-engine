@@ -153,7 +153,9 @@ export function largeNumberSuffixNormalizerRule(priority = 65): NormalizerRule {
   return {
     name: "arithmetic:large-number-suffix",
     priority,
-    startTokenTypes: ["NUMBER"],
+    // Derived from this rule's own opening guards; see RuleSlot on why an
+    // over-broad slot is safe and an over-narrow one is not.
+    shape: [{ types: ["NUMBER"] }, { types: ["IDENT", "UNIT"] }],
     match(tokens, pos): NormalizerMatch | null {
       const numberToken = tokens[pos];
       if (numberToken.type !== "NUMBER") return null;

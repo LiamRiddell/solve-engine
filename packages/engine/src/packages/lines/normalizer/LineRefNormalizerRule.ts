@@ -45,6 +45,9 @@ export function lineRefNormalizerRule(): NormalizerRule {
 	return {
 		name: "lines:line-ref",
 		priority: 80,
+		// No second slot: this matches both the glued `line1` identifier and the
+		// spaced `line 1` pair, and must also run at the second half of a
+		// `line1 : line4` range, so what follows is not fixed.
 		startTokenTypes: ["IDENT"],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			if (pos > 0 && tokens[pos - 1].type === "COLON") {
@@ -114,7 +117,8 @@ export function rangeCallNormalizerRule(): NormalizerRule {
 	return {
 		name: "lines:range-call",
 		priority: 80,
-		startTokenTypes: ["IDENT"],
+		// One of the three aggregate words with a call paren after it.
+		shape: [{ types: ["IDENT"], values: ["sum", "total", "average"] }, { types: ["LPAREN"] }],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const token = tokens[pos];
 			if (!token || token.type !== "IDENT") return null;

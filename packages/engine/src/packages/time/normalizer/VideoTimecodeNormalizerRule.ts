@@ -25,11 +25,9 @@ export function videoTimecodeNormalizerRule(priority = 75): NormalizerRule {
   return {
     name: "time:video-timecode",
     priority,
-    startTokenTypes: ["NUMBER"],
+    // `HH:MM:SS:FF`, so a number with a colon after it, as for laptime.
+    shape: [{ types: ["NUMBER"] }, { types: ["COLON"] }],
     match(tokens, pos): NormalizerMatch | null {
-      // See ClockTimeNormalizerRule's identical guard, a video timecode
-      // inside `[...]` has no legitimate meaning; reserved for matrix ranges.
-      if (isInsideRangeContext(tokens, pos)) return null;
       const h = tokens[pos];
       const c1 = tokens[pos + 1];
       const m = tokens[pos + 2];
@@ -45,6 +43,14 @@ export function videoTimecodeNormalizerRule(priority = 75): NormalizerRule {
       if (s?.type !== "NUMBER") return null;
       if (c3?.type !== "COLON") return null;
       if (f?.type !== "NUMBER") return null;
+
+      // See ClockTimeNormalizerRule's identical guard, a video timecode
+      // inside `[...]` has no legitimate meaning; reserved for matrix ranges.
+      // Ordered AFTER the shape test deliberately: this scans back to the
+      // start of the line, so running it first paid an O(pos) walk at every
+      // token of every type. It only ever returns null, so testing it last
+      // among the null-returning guards cannot change any result.
+      if (isInsideRangeContext(tokens, pos)) return null;
 
       const hours = parseInt(h.value, 10);
       const minutes = parseInt(m.value, 10);

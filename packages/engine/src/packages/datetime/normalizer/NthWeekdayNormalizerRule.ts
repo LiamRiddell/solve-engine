@@ -43,6 +43,8 @@ export function nthWeekdayNormalizerRule(priority = 66): NormalizerRule {
 	return {
 		name: RULE,
 		priority,
+		unshapedReason:
+			"Reads an ordinal that may be the LAST keyword, a number, or a word like `third`, so no fixed first-token set describes it.",
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const first = tokens[pos];
 			if (!first) return null;

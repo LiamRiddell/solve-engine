@@ -61,6 +61,8 @@ export function billSplitNormalizerRule(priority = 77): NormalizerRule {
   return {
     name: "finance:bill-split",
     priority,
+    unshapedReason:
+    	"Scans forward an unbounded distance for the BETWEEN keyword, and starts at any value-ending token.",
     match(tokens, pos): NormalizerMatch | null {
       const head = tokens[pos];
       if (head === undefined) return null;

@@ -48,16 +48,26 @@ export function clockTimeNormalizerRule(priority = 65): NormalizerRule {
   return {
     name: "time:clock-time",
     priority,
-    startTokenTypes: ["NUMBER"],
+    // Two shapes, so the second slot is their union: `9:00am` puts a COLON
+    // after the number, while the bare-hour `4pm` puts the am/pm IDENT there.
+    // Declaring only COLON would make the bare form unreachable.
+    shape: [{ types: ["NUMBER"] }, { types: ["COLON", "IDENT"] }],
     match(tokens, pos): NormalizerMatch | null {
-      // A clock time inside `[...]` (matrix literal/index/slice) has no
-      // legitimate meaning, reserve bare `NUMBER:NUMBER` there for a
-      // matrix range instead (see isInsideRangeContext's own doc comment).
-      if (isInsideRangeContext(tokens, pos)) return null;
       const hourToken = tokens[pos];
       if (hourToken.type !== "NUMBER") return null;
       const hour = parseInt(hourToken.value, 10);
       if (isNaN(hour) || hour < 0 || hour > 23) return null;
+
+      // A clock time inside `[...]` (matrix literal/index/slice) has no
+      // legitimate meaning, reserve bare `NUMBER:NUMBER` there for a
+      // matrix range instead (see isInsideRangeContext's own doc comment).
+      //
+      // Ordered AFTER the hour test deliberately: this scans back to the
+      // start of the line, so running it first paid an O(pos) walk at every
+      // token of every type. It sits above both shape branches because it
+      // must suppress each of them, and it only ever returns null, so
+      // moving it below the cheap guards cannot change any result.
+      if (isInsideRangeContext(tokens, pos)) return null;
 
       // Pattern: NUMBER COLON NUMBER [am|pm]
       const colonToken = tokens[pos + 1];

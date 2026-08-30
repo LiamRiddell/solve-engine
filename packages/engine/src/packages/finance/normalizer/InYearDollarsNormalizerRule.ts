@@ -30,7 +30,9 @@ export function inYearDollarsNormalizerRule(priority = 70): NormalizerRule {
   return {
     name: "finance:in-year-dollars",
     priority,
-    startTokenTypes: ["IN"],
+    // Derived from this rule's own opening guards; see RuleSlot on why an
+    // over-broad slot is safe and an over-narrow one is not.
+    shape: [{ types: ["IN"] }, { types: ["NUMBER"] }],
     match(tokens, pos): NormalizerMatch | null {
       const inToken = tokens[pos];
       const yearToken = tokens[pos + 1];

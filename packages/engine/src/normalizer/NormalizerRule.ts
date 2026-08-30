@@ -84,6 +84,45 @@ export interface NormalizerMatch {
 //#region ─── NormalizerRule, Pluggable Rule Interface ────────────────────────
 
 /**
+ * One position of a rule's leading shape, as a declarative constraint.
+ *
+ * A slot says what the token at that offset from the match position may be.
+ * Both fields are optional and an omitted one constrains nothing, so `{}` is a
+ * wildcard slot, useful for reaching past a position a rule does not care about
+ * to one it does.
+ *
+ * The exactness contract runs in one direction only, and it is the whole reason
+ * this is safe to adopt gradually. Declaring MORE than the rule can match costs
+ * a `match()` call that returns null, which is what happens today anyway.
+ * Declaring LESS makes the rule unreachable at the positions left out, which is
+ * a silent bug. So an incomplete shape (or none at all) is always correct, and
+ * only an over-narrow one is wrong. `NormalizerIndexFidelity.spec` checks every
+ * declaration against its rule's real behaviour.
+ */
+export interface RuleSlot {
+  /**
+   * Token types admitted at this slot. Omit when the type is unconstrained,
+   * or when the rule accepts so many that naming them filters nothing.
+   */
+  readonly types?: readonly string[];
+
+  /**
+   * Token values admitted at this slot, compared case-insensitively.
+   *
+   * This is the axis that separates rules sharing a start type. The
+   * call-fusion rules all begin at an `IDENT`, the commonest token in prose,
+   * so type alone leaves every one of them a candidate at every word; the word
+   * itself is what tells them apart, and each already owns that set as an
+   * exported constant.
+   *
+   * A rule whose own check is case-SENSITIVE (the stock ticker rule matches
+   * upper case only) may still declare its lower-cased words here: the index
+   * only ever over-approximates, and the rule's own check still runs.
+   */
+  readonly values?: readonly string[];
+}
+
+/**
  * A pluggable normalization rule registered with the TokenNormalizer.
  *
  * Each rule has a {@link name}, {@link priority}, and {@link match} function.
@@ -155,6 +194,63 @@ export interface NormalizerRule {
    * the rule silently unreachable there, which is a bug.
    */
   readonly startTokenTypes?: readonly string[];
+
+  /**
+   * The rule's leading shape: what the tokens from the match position onward
+   * may be, one {@link RuleSlot} per position.
+   *
+   * This generalises {@link startTokenTypes}, which constrains only the first
+   * token. Constraining the first token alone is not enough to separate the
+   * rules that matter: every rule firing on a bare `NUMBER` declares the same
+   * start type, so they all remain candidates at every number in the document.
+   * What distinguishes them is the token after it, `NUMBER COLON` being a clock
+   * time and `NUMBER SLASH` a network address, and that fact is only usable by
+   * an index if the rule states it rather than hiding it inside `match()`.
+   *
+   * Depth is the rule's choice, not the interface's. The normalizer builds one
+   * lookup plane per declared slot and intersects them, so a rule that declares
+   * three positions is filtered on three. It may also index fewer planes than
+   * were declared, which stays correct for the reason given on {@link RuleSlot}:
+   * a shallower filter admits more candidates, and each surviving rule still
+   * runs its own `match()`.
+   *
+   * Prefer this to {@link startTokenTypes} in new rules. When both are given,
+   * this wins; `startTokenTypes: ["IDENT"]` means exactly `shape: [{ types:
+   * ["IDENT"] }]`.
+   *
+   * @example
+   * ```ts
+   * // 9:00am, 16:00, a clock time is a number followed by a colon
+   * shape: [{ types: ["NUMBER"] }, { types: ["COLON"] }]
+   *
+   * // sha256("hi"), a known word followed by an opening parenthesis
+   * shape: [{ types: ["IDENT"], values: HASH_NAMES }, { types: ["LPAREN"] }]
+   * ```
+   */
+  readonly shape?: readonly RuleSlot[];
+
+  /**
+   * Why this rule cannot declare a {@link shape}, for the few that genuinely
+   * cannot.
+   *
+   * A rule with neither a shape nor a `startTokenTypes` hint is tried at every
+   * position of every line, so it raises the cost of the whole document rather
+   * than only its own feature. Registering one logs a warning naming the rule,
+   * which is how a package author finds out before their users do.
+   *
+   * Some rules really cannot be described by a leading shape: an unbounded
+   * forward scan, a greedy match against a table the host mutates at runtime.
+   * Setting this states that case, silences the warning, and leaves the reason
+   * in the code where the next person will read it. It is deliberately a
+   * sentence and not a boolean, because "why" is the part worth keeping.
+   *
+   * @example
+   * ```ts
+   * unshapedReason: "Scans forward an unbounded number of NUMBER UNIT pairs, so no fixed leading shape describes it.",
+   * ```
+   */
+  readonly unshapedReason?: string;
+
 
   /**
    * Attempt to match a pattern starting at position `pos` in the token stream.

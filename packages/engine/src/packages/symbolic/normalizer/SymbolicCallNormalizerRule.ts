@@ -48,7 +48,9 @@ export function symbolicCallNormalizerRule(priority = 80): NormalizerRule {
 	return {
 		name: "symbolic:call",
 		priority,
-		startTokenTypes: ["IDENT"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["IDENT"], values: Object.keys(SYMBOLIC_WORD_TO_TOKEN_TYPE) }, { types: ["LPAREN"] }],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const token = tokens[pos];
 			if (!token || token.type !== "IDENT") return null;

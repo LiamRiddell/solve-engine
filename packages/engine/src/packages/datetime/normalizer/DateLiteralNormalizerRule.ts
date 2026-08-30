@@ -355,7 +355,9 @@ export function dateLiteralNormalizerRule(
   return {
     name: "datetime:date-literal",
     priority: 70,
-    startTokenTypes: ["NUMBER"],
+    // Derived from this rule's own opening guards; see RuleSlot on why an
+    // over-broad slot is safe and an over-narrow one is not.
+    shape: [{ types: ["NUMBER"] }],
     match(tokens: Token[], pos: number): NormalizerMatch | null {
       const t0 = tokens[pos];
       if (t0.type !== "NUMBER") return null;

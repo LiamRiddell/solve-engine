@@ -31,7 +31,9 @@ export function forDurationNormalizerRule(priority = 76): NormalizerRule {
 	return {
 		name: "uom:for-duration",
 		priority,
-		startTokenTypes: ["FOR_DURATION"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["FOR_DURATION"] }, { types: ["IDENT"] }],
 		match(tokens, pos): NormalizerMatch | null {
 			const head = tokens[pos];
 			if (head?.type !== "FOR_DURATION") return null;

@@ -116,20 +116,64 @@ export class EngineError extends Error {
    */
   readonly cause?: unknown;
 
+  /**
+   * Whether a recoverable error captures a JavaScript stack trace.
+   *
+   * Off, because a recoverable EngineError is a value rather than a fault. A
+   * line of prose in a notepad is not an expression, so parsing it fails, and
+   * that failure is the answer for that line rather than a bug to debug. The
+   * engine builds one such error per non-expression line.
+   *
+   * Capturing a stack is not cheap, and its cost grows with how deep the stack
+   * is when it happens. Measured through `parseDocument`, where the throw site
+   * sits about a dozen frames down, each capture cost around 62 microseconds
+   * and a 250-line document built 74 of them: a CPU profile put the
+   * constructor at 46% of the whole pipeline, more than lexing, normalising,
+   * parsing and executing put together.
+   *
+   * Turn it on to debug where a recoverable error is raised from. Errors that
+   * are NOT recoverable always capture, since those are the genuine faults.
+   *
+   * @example
+   * ```ts
+   * EngineError.captureRecoverableStacks = true;
+   * ```
+   */
+  static captureRecoverableStacks = false;
+
   constructor(category: ErrorCategory, init: EngineErrorInit) {
+    // Before super(), which is legal as long as `this` is untouched. V8 reads
+    // `Error.stackTraceLimit` while constructing the Error, so zeroing it
+    // across the super() call is what actually skips the capture; there is no
+    // per-instance switch for it.
+    const recoverable = init.recoverable ?? true;
+    const skipStack = recoverable && !EngineError.captureRecoverableStacks;
+    // `stackTraceLimit` is a V8 extension, present in Node and every
+    // Chromium-based browser but absent from the DOM lib, so it is reached
+    // through a narrow local view rather than by widening the global type.
+    // Where it does not exist, reading and writing it are both harmless and
+    // the stack is captured as before.
+    const errorCtor = Error as unknown as { stackTraceLimit?: number };
+    const previousLimit = errorCtor.stackTraceLimit;
+    if (skipStack) errorCtor.stackTraceLimit = 0;
     super(init.message);
+    if (skipStack) errorCtor.stackTraceLimit = previousLimit;
+
     this.name = "EngineError";
     this.category = category;
     this.code = init.code;
     this.expected = init.expected;
     this.found = init.found;
     this.suggestion = init.suggestion;
-    this.recoverable = init.recoverable ?? true;
+    this.recoverable = recoverable;
     this.span = init.span;
     this.context = init.context;
     this.cause = init.cause;
     this.timestamp = new Date();
-    if (Error.captureStackTrace) {
+    // Only for the faults. super() has already captured a stack for those, and
+    // this second call recaptures it purely to drop this constructor's own
+    // frame; doing that for every error meant paying the whole cost twice.
+    if (!skipStack && Error.captureStackTrace) {
       Error.captureStackTrace(this, EngineError);
     }
   }

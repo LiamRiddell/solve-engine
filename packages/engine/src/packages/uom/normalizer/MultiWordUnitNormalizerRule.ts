@@ -38,7 +38,9 @@ export function multiWordUnitNormalizerRule(priority = 78): NormalizerRule {
 	return {
 		name: "uom:multi-word-unit",
 		priority,
-		startTokenTypes: ["UNIT"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["UNIT"] }, { types: ["UNIT"] }],
 		match(tokens, pos): NormalizerMatch | null {
 			const first = tokens[pos];
 			const second = tokens[pos + 1];
