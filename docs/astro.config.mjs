@@ -196,21 +196,18 @@ export default defineConfig({
           ],
         },
         {
-          // The syntax reference doubles as a lookup, so unlike the other
-          // groups, which are reading orders, it uses a short on-ramp and then
-          // an alphabetical list: the cheatsheet and the arithmetic everyone
-          // starts with come first, then the rest ordered by title, the way the
-          // playground's example gallery is, so a reader scanning for a page
-          // finds it by name.
-          label: "Syntax reference",
+          // Every documentation page, ordered alphabetically by title, so a
+          // reader scanning the sidebar finds a topic by name (the way the
+          // playground's example gallery is ordered). The unit reference, a
+          // generated lookup table rather than a topic to read, is split out
+          // into its own "Reference" group below.
+          label: "Documentation",
           items: [
-            { slug: "syntax/cheatsheet" },
-            { slug: "syntax/numbers-and-math" },
-            { slug: "syntax/percentages" },
             { slug: "syntax/algebra" },
             { slug: "syntax/calculus" },
             { slug: "syntax/category-tags" },
             { slug: "syntax/charts" },
+            { slug: "syntax/cheatsheet" },
             { slug: "syntax/colours" },
             { slug: "syntax/complex" },
             { slug: "syntax/conditionals" },
@@ -226,7 +223,9 @@ export default defineConfig({
             { slug: "syntax/map-reduce-and-aggregates" },
             { slug: "syntax/money-and-finance" },
             { slug: "syntax/networking" },
+            { slug: "syntax/numbers-and-math" },
             { slug: "syntax/numerals" },
+            { slug: "syntax/percentages" },
             { slug: "syntax/programmer-math" },
             { slug: "syntax/random" },
             { slug: "syntax/ratios" },
@@ -238,11 +237,19 @@ export default defineConfig({
             { slug: "syntax/text-operations" },
             { slug: "syntax/time" },
             { slug: "syntax/trigger-words" },
-            { slug: "syntax/unit-reference" },
             { slug: "syntax/units-and-conversions" },
             { slug: "syntax/variables" },
             { slug: "syntax/vectors-and-matrices" },
             { slug: "syntax/weather" },
+          ],
+        },
+        {
+          // The generated unit-spelling lookup, kept apart from the reading
+          // pages: it is a reference table, not a topic. Sits right after the
+          // documentation group in the nav.
+          label: "Reference",
+          items: [
+            { slug: "syntax/unit-reference" },
           ],
         },
         {
