@@ -5,6 +5,7 @@ import { useDiagnosticReportStore } from "@/stores/diagnosticReport"
 import { fmt } from "@bridge/utils"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import { TAB_ROOT } from "@/components/shared/tabChrome"
 
 /** Acronyms that should stay fully uppercase instead of naive per-word title-casing. */
@@ -105,14 +106,15 @@ export function StreamTab() {
           spellCheck={false}
           className="h-7 max-w-50 text-xs"
         />
-        <button
-          type="button"
+        <Button
+          variant="outline"
+          size="sm"
           onClick={collapseAll}
-          className="text-muted-foreground hover:bg-accent ml-auto flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
+          className="ml-auto h-7 gap-1 text-xs"
         >
           {allCollapsed ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
           {allCollapsed ? "Expand all" : "Collapse all"}
-        </button>
+        </Button>
       </div>
 
       {batcherData && (

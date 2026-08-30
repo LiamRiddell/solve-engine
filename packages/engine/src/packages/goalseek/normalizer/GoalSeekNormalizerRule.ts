@@ -31,7 +31,9 @@ export function goalSeekNormalizerRule(priority = 75): NormalizerRule {
 	return {
 		name: "goalseek:solve-line",
 		priority,
-		startTokenTypes: ["IDENT"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["IDENT"], values: ["solve"] }, { types: ["LINE_REF"] }],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			// A definition's own name (`:solve = ...`) is never this trigger, so a
 			// COLON immediately before the word rules it out, the same guard every

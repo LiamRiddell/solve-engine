@@ -20,6 +20,16 @@ export interface BytecodeProgram {
 	opcodes: Uint8Array;
 	numbers: Float64Array;
 	strings: string[];
+	/**
+	 * Numeric constants by opcode position, restored from a snapshot.
+	 *
+	 * Nothing in the compile path writes this: numbers are emitted inline into
+	 * {@link numbers} instead. `build()` used to attach an empty Map to every
+	 * program anyway, which was one allocation per compiled expression, around a
+	 * tenth of parse-and-compile time, for a collection that was never read.
+	 * It is left off now, and only {@link EngineSnapshot} sets it when restoring
+	 * a program that carried one; every reader already guards on its absence.
+	 */
 	constants?: Map<number, number>;
 	/**
 	 * Whether the program contains any async opcodes (CALL_PLUGIN, etc.).
@@ -85,6 +95,24 @@ export interface UserFunctionDef {
 	params: string[];
 	program: BytecodeProgram;
 }
+
+/**
+ * Shared empty collections for programs that emit none.
+ *
+ * `build()` runs once per compiled expression, so an empty array allocated
+ * there is an allocation per line of every document. Most programs emit no
+ * strings at all (only the unit and datetime parselets do), and one that emits
+ * no numbers is common too, so both were routinely allocating an empty
+ * container that nothing would ever read.
+ *
+ * Sharing them is safe because a built program is read-only downstream: the VM
+ * and the snapshot writer only index and iterate these, and nothing in the
+ * engine pushes to `program.strings` or `program.numbers`. They are frozen so
+ * that a future writer fails loudly here rather than silently corrupting every
+ * other program that shares the instance.
+ */
+const EMPTY_STRINGS: readonly string[] = Object.freeze([]);
+const EMPTY_NUMBERS = new Float64Array(0);
 
 /**
  * Direct-to-bytecode compiler for the Pratt parser.
@@ -296,12 +324,12 @@ export class BytecodeBuilder {
 	build(): BytecodeProgram {
 		return {
 			opcodes: new Uint8Array(this.opcodes),
-			numbers: new Float64Array(this.numbers),
-			// Defensive copy: .length = 0 in reset() would clear a shared reference.
-			// Strings are rare (only UoM/datetime parselets emit them), so the copy
-			// cost is negligible.
-			strings: [...this.strings],
-			constants: new Map(),
+			numbers: this.numbers.length > 0 ? new Float64Array(this.numbers) : EMPTY_NUMBERS,
+			// Defensive copy when there is anything to copy: reset()'s
+			// `.length = 0` would otherwise clear a reference the program still
+			// holds. An empty one needs no copy, so it shares the frozen
+			// singleton instead of allocating per program.
+			strings: this.strings.length > 0 ? [...this.strings] : (EMPTY_STRINGS as string[]),
 			hasAsync: this._hasAsync,
 			userFunctionBodies: this.userFunctionBodies.length > 0 ? [...this.userFunctionBodies] : undefined,
 			anonymousBodies: this.anonymousBodies.length > 0 ? [...this.anonymousBodies] : undefined,
@@ -344,7 +372,6 @@ export class BytecodeBuilder {
 			opcodes,
 			numbers,
 			strings: [...this.strings],
-			constants: new Map(),
 			hasAsync: this._hasAsync,
 			userFunctionBodies: this.userFunctionBodies.length > 0 ? [...this.userFunctionBodies] : undefined,
 			anonymousBodies: this.anonymousBodies.length > 0 ? [...this.anonymousBodies] : undefined,
@@ -357,10 +384,18 @@ export class BytecodeBuilder {
 		// threshold (4→8→16→32...). For a 50-opcode expression, that's 3-4 copies.
 		this.opcodes.length = 0;
 		this.numbers.length = 0;
-		this.strings.length = 0;
-		this.stringIndex.clear();
+		// Guarded on being non-empty. reset() runs once per compiled expression
+		// and a CPU profile put it at over a tenth of parse-and-compile, which
+		// is a lot for clearing collections that are usually already empty:
+		// most expressions emit no strings, and user function bodies are rarer
+		// still. Emptying an empty Map is not free, and neither is the write
+		// barrier on a length assignment.
+		if (this.strings.length > 0) {
+			this.strings.length = 0;
+			this.stringIndex.clear();
+		}
 		this._hasAsync = false;
-		this.userFunctionBodies.length = 0;
-		this.anonymousBodies.length = 0;
+		if (this.userFunctionBodies.length > 0) this.userFunctionBodies.length = 0;
+		if (this.anonymousBodies.length > 0) this.anonymousBodies.length = 0;
 	}
 }

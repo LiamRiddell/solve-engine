@@ -6,6 +6,7 @@ import { fmt, computeOverhead, getDominantStage, STAGE_COLORS, TELEMETRY_STAGE_C
 import { EmptyState } from "@/components/shared/EmptyState"
 import { TimingWaterfall, type WaterfallSegment } from "@/components/shared/TimingWaterfall"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import { TAB_BODY } from "@/components/shared/tabChrome"
 
 const EMPTY_STATS = { lexerTime: 0, parserTime: 0, bytecodeTime: 0, executionTime: 0, totalTime: 0 }
@@ -254,9 +255,9 @@ export function PerfTab() {
             </span>
           ))}
           {flamegraphFilter && (
-            <button type="button" onClick={clearFlamegraphFilter} className="text-muted-foreground hover:bg-muted flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px]">
+            <Button variant="ghost" size="sm" onClick={clearFlamegraphFilter} className="h-5 gap-1 px-1.5 text-[10px]">
               <X className="size-3" /> Clear filter
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -297,9 +298,9 @@ export function PerfTab() {
               </span>
             ))}
             {flamegraphFilter && (
-              <button type="button" onClick={clearFlamegraphFilter} className="text-muted-foreground hover:bg-muted flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px]">
+              <Button variant="ghost" size="sm" onClick={clearFlamegraphFilter} className="h-5 gap-1 px-1.5 text-[10px]">
                 <X className="size-3" /> Clear filter
-              </button>
+              </Button>
             )}
           </div>
         </div>

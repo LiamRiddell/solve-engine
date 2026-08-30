@@ -65,6 +65,12 @@ export class PrecedenceParser {
   private currentExpression: string = "";
   private localeCode: string;
 
+  /** The locale's decimal separator, cached from {@link localeCode}. */
+  private readonly decimalSeparator: string;
+
+  /** The locale's thousands separator, cached from {@link localeCode}. */
+  private readonly thousandsSeparator: string;
+
   /**
    * The binding power the current infix parselet is being invoked at, i.e. the
    * `minBp` of the expression it sits inside. Set immediately before each Tier-2
@@ -134,6 +140,12 @@ export class PrecedenceParser {
     this.registry = parseletRegistry;
     this.maxDepth = maxDepth;
     this.localeCode = localeCode;
+    // Read once, not once per number literal. `localeCode` is set here and
+    // never reassigned, so these cannot go stale, and the profile had
+    // getLocale() plus its property chain inside the hot NUMBER path.
+    const display = getLocale(localeCode).display;
+    this.decimalSeparator = display.decimalSeparator;
+    this.thousandsSeparator = display.thousandsSeparator;
     this.pluginFunctionIndex = pluginFunctionIndex;
   }
 
@@ -382,6 +394,45 @@ export class PrecedenceParser {
         // ordinary PUSH_NUMBER and are unchanged.
         let decimalText: string | null = null;
         const raw = token.value;
+
+        // Fast path: plain digits, with at most one ".".
+        //
+        // Most literals in a document are `144`, `1200`, `0.85`. The general
+        // path below reaches the same answer for them only after six
+        // startsWith() calls, two regular expressions and a split/join that
+        // allocated whether or not the separator was present; a CPU profile put
+        // this whole case at over a third of parse-and-compile. One character
+        // scan settles it instead.
+        //
+        // Guarded on the decimal separator being ".", which is what makes a
+        // lone dot unambiguous. Where "." groups thousands instead, `1.234`
+        // means one thousand two hundred and thirty-four, so that locale has to
+        // keep taking the general path.
+        if (this.decimalSeparator === ".") {
+          let dots = 0;
+          let plain = raw.length > 0;
+          for (let i = 0; i < raw.length; i++) {
+            const c = raw.charCodeAt(i);
+            if (c >= 48 && c <= 57) continue;
+            if (c === 46 && dots === 0) { dots = 1; continue; }
+            plain = false;
+            break;
+          }
+          if (plain) {
+            // One dot with digits optional on either side is exactly what
+            // PLAIN_DECIMAL matches, so this agrees with it: that is the signal
+            // for the exact-decimal opcode rather than a double.
+            if (dots === 1) {
+              builder.emitOpcode(OpCode.PUSH_DECIMAL);
+              builder.emitString(raw);
+              return;
+            }
+            builder.emitOpcode(OpCode.PUSH_NUMBER);
+            builder.emitNumber(+raw);
+            return;
+          }
+        }
+
         if (raw.startsWith("0x") || raw.startsWith("0X")) {
           v = parseInt(raw, 16);
           // A prefix with no digits after it ("0x" alone) makes parseInt
@@ -417,12 +468,13 @@ export class PrecedenceParser {
           // parselets" diagnostic display.
           v = parseFloat(raw.split(".").join(""));
         } else {
-          const locale = getLocale(this.localeCode);
-          const decimalSep = locale.display.decimalSeparator;
-          const thousandsSep = locale.display.thousandsSeparator;
+          const decimalSep = this.decimalSeparator;
+          const thousandsSep = this.thousandsSeparator;
           let normalized = raw;
-          // Replace thousands separator with empty string (split+join avoids per-call RegExp compilation)
-          if (thousandsSep) {
+          // Replace thousands separator with empty string (split+join avoids per-call RegExp compilation).
+          // The indexOf guard stops that pair allocating an array and a string
+          // for the many literals that contain no separator at all.
+          if (thousandsSep && normalized.indexOf(thousandsSep) !== -1) {
             normalized = normalized.split(thousandsSep).join("");
           }
           // Replace locale decimal separator with "." for JavaScript parsing

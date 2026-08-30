@@ -31,8 +31,9 @@
 import type { Token } from "@solve-js/lexer/Token";
 import { tokenTypeId } from "@solve-js/lexer/Token";
 import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
-import type { NormalizerRule, TokenFusion } from "./NormalizerRule";
+import type { NormalizerRule, RuleSlot, TokenFusion } from "./NormalizerRule";
 import { PhraseTrie } from "./PhraseTrie";
+import { RuleIndex, isEmptyMask, effectiveShape } from "./RuleIndex";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 //#endregion
@@ -67,6 +68,20 @@ export interface NormalizerOptions {
    * When `undefined`, fusions are still tracked internally but no callbacks fire.
    */
   onFusion?: (fusion: TokenFusion) => void;
+
+  /**
+   * Try every registered rule at every position, ignoring the shape index.
+   *
+   * Diagnostic only, and much slower. It exists so the indexed walk can be
+   * compared against the unindexed one over a corpus: the index is a pure
+   * filter, so the two must agree token for token, and a rule whose declared
+   * {@link NormalizerRule.shape} is too narrow shows up as a difference rather
+   * than as a feature that quietly stopped working.
+   * `NormalizerIndexFidelity.spec` is the consumer.
+   *
+   * @default false
+   */
+  ignoreRuleIndex?: boolean;
 }
 
 //#endregion
@@ -77,6 +92,7 @@ const DEFAULT_OPTIONS: Required<NormalizerOptions> = {
   maxPasses: 100,
   maxTokens: 10000,
   onFusion: () => {},
+  ignoreRuleIndex: false,
 };
 
 //#endregion
@@ -207,6 +223,41 @@ export const NON_WORD_TABLE: Uint8Array = (() => {
 //#region ─── TokenNormalizer Class ─────────────────────────────────────────────
 
 /**
+ * Rule names already warned about, so a rule registered into many engines
+ * says it once rather than once per engine.
+ */
+const warnedUnshapedRules = new Set<string>();
+
+/**
+ * Warn when a rule declares neither a shape nor a reason for not having one.
+ *
+ * An unshaped rule is tried at every position of every line, so its cost is
+ * paid by every document rather than only by the feature it implements. The
+ * warning names the rule and points at the two ways out, and it fires once per
+ * rule name per process: a warning a package author sees on every engine they
+ * construct is one they learn to filter out, which would make it worse than
+ * useless.
+ *
+ * Deliberately not an error. A rule without a shape is correct, only slower,
+ * and refusing to register it would break every package written before the
+ * field existed.
+ */
+function warnIfUnshaped(rule: NormalizerRule): void {
+  if (rule.shape !== undefined && rule.shape.length > 0) return;
+  if (rule.startTokenTypes !== undefined) return;
+  if (rule.unshapedReason !== undefined) return;
+  if (warnedUnshapedRules.has(rule.name)) return;
+  warnedUnshapedRules.add(rule.name);
+  console.warn(
+    `[TokenNormalizer] Rule "${rule.name}" declares no \`shape\`, so it is tried at every ` +
+    `token of every line and slows down documents that never use it. Declare the tokens it ` +
+    `can start at, e.g. shape: [{ types: ["IDENT"], values: ["myword"] }, { types: ["LPAREN"] }]. ` +
+    `If it genuinely cannot be described that way, set \`unshapedReason\` to say why and this ` +
+    `warning will stop.`,
+  );
+}
+
+/**
  * Token normalizer: applies {@link NormalizerRule | NormalizerRules} to a token stream.
  *
  * ## Lifecycle
@@ -259,6 +310,31 @@ export class TokenNormalizer {
   private rulesByTokenType = new Map<string, NormalizerRule[]>();
 
   /**
+   * Shape index over the priority-sorted rules, rebuilt alongside
+   * {@link sortedRulesCache}. `null` means "stale, rebuild on next use".
+   *
+   * This is what turns the per-position scan from "try every rule that could
+   * fire on this token type" into "AND a few lookup planes and try what
+   * survives", which is usually nothing. See {@link RuleIndex}.
+   */
+  private ruleIndexCache: RuleIndex | null = null;
+
+  /** Reused by {@link rulesAt} so a position's candidate list costs no allocation. */
+  private candidateBuffer: NormalizerRule[] = [];
+
+  /**
+   * How many times {@link normalize} has run, capped once the index is in use.
+   *
+   * The index costs a few tens of microseconds to build and pays that back
+   * within a line or two, but an engine that normalises exactly once, which is
+   * what evaluating a single expression on a fresh engine does, would never
+   * reach the payback. Skipping the build on the first call keeps that case at
+   * the cost it had before the index existed, and a document reaches line two
+   * immediately.
+   */
+  private normalizeCalls = 0;
+
+  /**
    * Phrase trie for single-pass multi-word phrase fusion.
    * Tried at each token position BEFORE other rules, the trie walk
    * is O(depth) vs O(R × W) for separate rule matching.
@@ -289,9 +365,12 @@ export class TokenNormalizer {
    * @param rule - The rule to register
    */
   register(rule: NormalizerRule): void {
+    warnIfUnshaped(rule);
     this.rules.push(rule);
     this.sortedRulesCache = null;
     this.rulesByTokenType.clear();
+    this.ruleIndexCache = null;
+    this.ruleShapesCache = null;
   }
 
   /**
@@ -306,6 +385,8 @@ export class TokenNormalizer {
     this.rules = this.rules.filter(r => r.name !== ruleName);
     this.sortedRulesCache = null;
     this.rulesByTokenType.clear();
+    this.ruleIndexCache = null;
+    this.ruleShapesCache = null;
   }
 
   /**
@@ -316,6 +397,8 @@ export class TokenNormalizer {
     this.rules = [];
     this.sortedRulesCache = null;
     this.rulesByTokenType.clear();
+    this.ruleIndexCache = null;
+    this.ruleShapesCache = null;
     this.phraseTrie = new PhraseTrie();
   }
 
@@ -339,6 +422,62 @@ export class TokenNormalizer {
    * and cached, which is what turns the per-position rule scan from "try all R
    * rules" into "try only the ones that could fire on this token".
    */
+  private getRuleIndex(): RuleIndex {
+    if (this.ruleIndexCache === null) {
+      this.ruleIndexCache = new RuleIndex(this.getSortedRules());
+    }
+    return this.ruleIndexCache;
+  }
+
+  /**
+   * The rules to try at a position, in priority order.
+   *
+   * With a candidate mask, walks its set bits low to high, which is descending
+   * priority because bit `i` is the rule at index `i` of the priority-sorted
+   * list.
+   *
+   * The walk shifts a bit at a time rather than jumping to the next set bit
+   * with `Math.clz32(bits & -bits)`, which is the idiomatic form and was 36x
+   * SLOWER here: 45us per line against 1.2us, measured over the built-in rule
+   * set. `clz32` is specified on uint32 and the masks come out of a
+   * `Uint32Array` as doubles above 2^31, so every call pays a conversion that
+   * swamps the handful of iterations it saves. A de Bruijn table matched the
+   * shift scan to within noise and needs a magic constant, so the plain shift
+   * wins on both counts. Worst case is 32 iterations per word of pure integer
+   * work.
+   *
+   * With `null` (the {@link NormalizerOptions.ignoreRuleIndex} path) it falls
+   * back to the type-bucketed list, which is the behaviour this replaced.
+   *
+   * Returns a buffer reused across positions, so the caller must finish with it
+   * before calling again. Copying the surviving rules out here rather than
+   * yielding them lazily is deliberate twice over: it keeps the mask's own
+   * scratch buffer from being read after the next position overwrites it, and
+   * it avoids a generator on the hottest loop in the pass.
+   */
+  private rulesAt(mask: Uint32Array | null, type: string): NormalizerRule[] {
+    const buffer = this.candidateBuffer;
+    buffer.length = 0;
+
+    if (mask === null) {
+      const list = this.rulesForTokenType(type);
+      for (let i = 0; i < list.length; i++) buffer.push(list[i]);
+      return buffer;
+    }
+
+    const rules = this.getRuleIndex().rules;
+    for (let w = 0; w < mask.length; w++) {
+      let bits = mask[w] >>> 0;
+      let index = w * 32;
+      while (bits !== 0) {
+        if ((bits & 1) !== 0) buffer.push(rules[index]);
+        bits >>>= 1;
+        index++;
+      }
+    }
+    return buffer;
+  }
+
   private rulesForTokenType(type: string): NormalizerRule[] {
     let list = this.rulesByTokenType.get(type);
     if (list === undefined) {
@@ -355,6 +494,73 @@ export class TokenNormalizer {
    */
   get ruleCount(): number {
     return this.rules.length;
+  }
+
+  /**
+   * Every registered rule with the shape it declared, for diagnostic display.
+   *
+   * Exposes what the index is actually working with: a rule that declares a
+   * shape is only tried where that shape can match, and one that declares none
+   * is tried at every position of every line. Which is which is invisible from
+   * the outside otherwise, and it is the difference between a package that
+   * costs the documents that use it and one that costs all of them, so the
+   * playground draws it.
+   *
+   * Returned in priority order, highest first, which is the order the
+   * normalizer tries them in.
+   */
+  private ruleShapesCache: Array<{
+    name: string;
+    priority: number;
+    shape: readonly RuleSlot[];
+    unshapedReason?: string;
+    indexedSlots: number;
+  }> | null = null;
+
+  getRuleShapes(): Array<{
+    name: string;
+    priority: number;
+    shape: readonly RuleSlot[];
+    unshapedReason?: string;
+    indexedSlots: number;
+  }> {
+    // Memoised: the answer depends only on the rule set, but the diagnostic
+    // pipeline builds a stage per LINE, so recomputing it there made a
+    // 25-line document walk every rule 25 times to produce 25 identical lists.
+    if (this.ruleShapesCache !== null) return this.ruleShapesCache;
+    const index = this.getRuleIndex();
+    this.ruleShapesCache = this.getSortedRules().map((rule) => {
+      const shape = effectiveShape(rule);
+      return {
+        name: rule.name,
+        priority: rule.priority,
+        shape,
+        unshapedReason: rule.unshapedReason,
+        indexedSlots: Math.min(shape.length, index.depth),
+      };
+    });
+    return this.ruleShapesCache;
+  }
+
+  /**
+   * How many rules could fire at each position of `tokens`, against the total.
+   *
+   * The point of the index is that most positions admit no rule at all, and
+   * this is what makes that visible rather than asserted.
+   */
+  getCandidateCounts(tokens: Token[]): number[] {
+    const index = this.getRuleIndex();
+    const counts: number[] = [];
+    for (let pos = 0; pos < tokens.length; pos++) {
+      const mask = index.candidates(tokens, pos);
+      let n = 0;
+      for (let w = 0; w < mask.length; w++) {
+        let bits = mask[w] >>> 0;
+        while (bits !== 0) { n += bits & 1; bits >>>= 1; }
+      }
+      counts.push(n);
+    }
+    return counts;
   }
 
   // ── Phrase Registration ────────────────────────────────────────────────
@@ -433,6 +639,13 @@ export class TokenNormalizer {
     const maxPasses = this.options.maxPasses;
     const maxTokens = this.options.maxTokens;
 
+    // Hoisted out of the pass loop: the rule set cannot change mid-normalize,
+    // so the index is resolved once rather than per position.
+    const warmedUp = this.normalizeCalls > 0;
+    if (!warmedUp) this.normalizeCalls = 1;
+    const useIndex = warmedUp && !this.options.ignoreRuleIndex;
+    const ruleIndex = useIndex ? this.getRuleIndex() : null;
+
     let current = tokens;
     let changed = true;
     let passCount = 0;
@@ -442,7 +655,13 @@ export class TokenNormalizer {
       changed = false;
       passCount++;
 
-      const result: Token[] = [];
+      // Built lazily: a pass that changes nothing must not allocate an array
+      // and copy every token into it only to throw the copy away. `null` means
+      // "nothing has changed yet, `current` is still the answer"; the first
+      // rule to fire calls ensureResult() to materialise it. A document whose
+      // lines mostly normalise to themselves is the common case, and it now
+      // costs no allocation at all.
+      let result: Token[] | null = null;
       let pos = 0;
 
       // Single-pass left-to-right greedy walk
@@ -457,6 +676,7 @@ export class TokenNormalizer {
           const trieMatch = this.phraseTrie.matchAt(current, pos);
           if (trieMatch) {
             const sourceTokens = current.slice(pos, pos + trieMatch.consumed);
+            if (result === null) result = current.slice(0, pos);
             for (const rt of trieMatch.replacement) {
               result.push(rt);
             }
@@ -474,16 +694,30 @@ export class TokenNormalizer {
           }
         }
 
-        // Try, in priority order, only the rules that can fire on this token's
-        // type (see rulesForTokenType); a rule declaring a different trigger
-        // would have returned null here anyway.
-        for (const rule of this.rulesForTokenType(current[pos].type)) {
+        // Try, in priority order, only the rules whose declared shape admits
+        // this position. The index is a pure filter: bit order is priority
+        // order, and a rule it excludes would have returned null here anyway
+        // (see RuleIndex). `ignoreRuleIndex` restores the exhaustive scan so
+        // the two can be compared.
+        const candidates = useIndex
+          ? ruleIndex!.candidates(current, pos)
+          : null;
+        if (candidates !== null && isEmptyMask(candidates)) {
+          // Nothing can fire here. This is the common case in running prose,
+          // and reaching it costs a few array loads rather than one call per
+          // registered rule.
+          if (result !== null) result.push(current[pos]);
+          pos++;
+          continue;
+        }
+        for (const rule of this.rulesAt(candidates, current[pos].type)) {
           const match = rule.match(current, pos);
           if (match) {
             // Collect source tokens for fusion tracking
             const sourceTokens = current.slice(pos, pos + match.consumed);
 
             // Insert replacement tokens into result
+            if (result === null) result = current.slice(0, pos);
             for (const rt of match.replacement) {
               result.push(rt);
             }
@@ -517,26 +751,32 @@ export class TokenNormalizer {
         }
 
         if (!matched) {
-          // No rule matched at this position, pass token through unchanged
-          result.push(current[pos]);
+          // No rule matched at this position, pass token through unchanged.
+          // Only copied when an earlier position already forced the array.
+          if (result !== null) result.push(current[pos]);
           pos++;
         }
       }
 
+      // Nothing fired anywhere in this pass, so the stream is already its own
+      // normal form and `changed` is false; the loop is about to end.
+      if (result === null) break;
+      const passResult: Token[] = result;
+
       // Safety: bail if token count explodes (runaway rule expansion)
-      if (result.length > maxTokens) {
+      if (passResult.length > maxTokens) {
         // A raw Error here would bypass ThreeTierEvaluator's DAG-preservation
         // enrichment on compile failure (it specifically checks for
         // EngineError). Same reasoning as ExpressionEngineSafety.ts's
         // complexity/length checks, which this mirrors.
         throw ErrorFactory.validation(
           "NORMALIZED_TOKEN_LIMIT_EXCEEDED",
-          `Normalized token count (${result.length}) exceeds safety limit (${maxTokens})`,
-          { tokenCount: result.length, maxTokens }
+          `Normalized token count (${passResult.length}) exceeds safety limit (${maxTokens})`,
+          { tokenCount: passResult.length, maxTokens }
         );
       }
 
-      current = result;
+      current = passResult;
     }
 
     return current;

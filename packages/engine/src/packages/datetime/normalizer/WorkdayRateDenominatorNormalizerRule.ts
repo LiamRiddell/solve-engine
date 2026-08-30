@@ -40,7 +40,9 @@ export function workdayRateDenominatorNormalizerRule(priority = 70): NormalizerR
   return {
     name: "datetime:workday-rate-denominator",
     priority,
-    startTokenTypes: ["SLASH"],
+    // Derived from this rule's own opening guards; see RuleSlot on why an
+    // over-broad slot is safe and an over-narrow one is not.
+    shape: [{ types: ["SLASH"] }, { types: ["UNIT"], values: ["workday", "workdays"] }],
     match(tokens, pos): NormalizerMatch | null {
       const slash = tokens[pos];
       if (slash.type !== "SLASH") return null;

@@ -33,7 +33,9 @@ export function userUnitExpansionRule(table: UserUnitTable, priority = 82): Norm
   return {
     name: "uom:user-unit",
     priority,
-    startTokenTypes: ["NUMBER", "RPAREN"],
+    // Derived from this rule's own opening guards; see RuleSlot on why an
+    // over-broad slot is safe and an over-narrow one is not.
+    shape: [{ types: ["NUMBER", "RPAREN"] }, { types: ["IDENT"] }],
     match(tokens: Token[], pos: number): NormalizerMatch | null {
       // Nothing is defined on most lines, so bail before any scanning.
       if (table.isEmpty) return null;

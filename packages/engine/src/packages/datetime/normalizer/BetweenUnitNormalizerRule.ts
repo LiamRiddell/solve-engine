@@ -21,6 +21,9 @@ export function betweenUnitNormalizerRule(priority = 60): NormalizerRule {
   return {
     name: "datetime:between-unit",
     priority,
+    // No second slot: an optional `how many` prefix means the first token
+    // is either of two words or the unit itself, and what follows differs
+    // per spelling. The start types still narrow it.
     startTokenTypes: ["UNIT", "IDENT"],
     match(tokens, pos): NormalizerMatch | null {
       // Optional leading "how many".

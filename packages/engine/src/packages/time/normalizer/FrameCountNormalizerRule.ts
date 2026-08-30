@@ -24,7 +24,9 @@ export function frameCountNormalizerRule(priority = 65): NormalizerRule {
   return {
     name: "time:frame-count",
     priority,
-    startTokenTypes: ["NUMBER"],
+    // Derived from this rule's own opening guards; see RuleSlot on why an
+    // over-broad slot is safe and an over-narrow one is not.
+    shape: [{ types: ["NUMBER"] }, { types: ["IDENT"], values: ["frames"] }],
     match(tokens, pos): NormalizerMatch | null {
       const numberToken = tokens[pos];
       const framesToken = tokens[pos + 1];

@@ -18,7 +18,9 @@ export function asciiPlusMinusNormalizerRule(priority = 90): NormalizerRule {
     return {
         name: "uncertainty:ascii-plus-minus",
         priority,
-        startTokenTypes: ["PLUS"],
+        // Derived from this rule's own opening guards; see RuleSlot on why an
+        // over-broad slot is safe and an over-narrow one is not.
+        shape: [{ types: ["PLUS"] }, { types: ["SLASH"] }],
         match(tokens, pos): NormalizerMatch | null {
             const plus = tokens[pos];
             if (plus?.type !== "PLUS") return null;

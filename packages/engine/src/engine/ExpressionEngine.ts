@@ -165,6 +165,19 @@ export interface EngineOptions {
     config?: EngineConfigOverride;
     /** Turn on the diagnostic pipeline (per-stage timing and detail). Defaults to `false`. */
     diagnostics?: boolean;
+
+    /**
+     * Run a few throwaway expressions through the pipeline at construction, so
+     * the first real one is not the one that pays for JIT warmup.
+     *
+     * Off by default, because it moves cost rather than removing it: a process
+     * that evaluates one expression and exits pays for warming paths it never
+     * reuses. Turn it on for anything interactive, where the first keystroke is
+     * the one a person notices. See {@link ExpressionEngine.warmUp}.
+     *
+     * @default false
+     */
+    warmup?: boolean;
 }
 
 //#endregion
@@ -365,6 +378,73 @@ export class ExpressionEngine {
      */
     getDocumentModel(): DocumentModel | null {
         return this.documentModel;
+    }
+
+    /**
+     * A handful of expressions run through the pipeline to warm it, chosen to
+     * cover the shapes the hot paths specialise on rather than to be
+     * interesting.
+     *
+     * V8 runs a function interpreted until it has been called enough times to
+     * be worth optimising, and it specialises on the types it has actually
+     * seen. So the point is breadth, not volume: a number, a unit, a phrase, a
+     * function call, a comparison and a string each drive a different branch of
+     * the lexer, the normalizer and the VM. Warming only with `1 + 1` would
+     * optimise those functions for integers and then deoptimise the moment a
+     * real document mentioned kilograms, which is worse than not warming at all.
+     */
+    private static readonly WARMUP_EXPRESSIONS: readonly string[] = [
+        "1 + 2 * 3",
+        "10.5 / 2 - 0.25",
+        "50% of 200",
+        "3 kg + 400 g",
+        "sqrt(144) + max(1, 2)",
+        "1 < 2 && 3 >= 3",
+        "half of 250",
+        "\"text\" + \"joined\"",
+    ];
+
+    /**
+     * Run the pipeline over a few throwaway expressions so the first real one
+     * is not the one that pays for JIT warmup.
+     *
+     * Nothing here reaches the engine's state: no variable is defined, no line
+     * is registered, no bytecode is cached and no async resolver is consulted.
+     * It lexes, normalises, parses, compiles and executes into a scratch
+     * builder and then drops the result, which is enough to move the hot
+     * functions past the interpreter and to build the normalizer's rule index.
+     *
+     * The cost lands on construction instead. That is the right trade for an
+     * editor, where the first keystroke is the one a person notices, and the
+     * wrong one for a process that evaluates a single expression and exits,
+     * which is why {@link EngineOptions.warmup} exists rather than this being
+     * unconditional.
+     *
+     * Failures are swallowed on purpose: a warmup expression that stops parsing
+     * because a package changed is a warmup that did less good, not a reason to
+     * refuse to construct an engine.
+     */
+    warmUp(): void {
+        const builder = new BytecodeBuilder(this.pluginFunctionIndexByName);
+        for (const expression of ExpressionEngine.WARMUP_EXPRESSIONS) {
+            try {
+                this.lexer.resetExpression(expression);
+                const tokens: Token[] = [];
+                for (const token of this.lexer) {
+                    if (token.type !== "COMMENT") tokens.push(token);
+                }
+                const normalized = this.normalizer.normalize(tokens);
+                builder.reset();
+                this.parser.load(normalized);
+                this.parser.parseExpression(0, builder);
+                const program = builder.build();
+                this.vm.reset();
+                executeBytecode(program, this.vm);
+            } catch {
+                // See this method's doc comment: a warmup miss is not an error.
+            }
+        }
+        this.vm.reset();
     }
 
     /**
@@ -736,6 +816,9 @@ export class ExpressionEngine {
                   this.batcher.add({ queryKey, packageId, signal: this.backgroundRefreshSignal, isError: false }),
               )
             : null;
+
+        // Last, so the warm-up runs against a fully assembled engine.
+        if (options.warmup === true) this.warmUp();
 	}
 
     //#endregion
@@ -2954,6 +3037,8 @@ export class ExpressionEngine {
                     rulesApplied: [...normalizerRuleCounts.entries()].map(([rule, count]) => ({ rule, count })),
                     tokens: [...normalizedTokens],
                     phrases: this.normalizer.getPhrases(),
+                    ruleShapes: this.normalizer.getRuleShapes(),
+                    candidatesPerPosition: this.normalizer.getCandidateCounts(normalizedTokens),
                 });
             } else {
                 this.addDiagnosticStage(stages, 'normalizer', 'Normalizer', '🔄', 'normalizer', 4, zeroElapsed, true, {
@@ -2964,6 +3049,8 @@ export class ExpressionEngine {
                     rulesApplied: [],
                     tokens: [...tokens],
                     phrases: this.normalizer.getPhrases(),
+                    ruleShapes: this.normalizer.getRuleShapes(),
+                    candidatesPerPosition: this.normalizer.getCandidateCounts(tokens),
                 });
             }
         }

@@ -12,10 +12,13 @@ import {
   Gauge,
   Radio,
   AlertTriangle,
+  Shapes,
+  Timer,
 } from "lucide-react"
 import { useDiagnosticReportStore } from "@/stores/diagnosticReport"
 import { useUiStore, type ActiveTab } from "@/stores/ui"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
 import { OutputTab } from "@/components/tabs/OutputTab"
 import { SummaryTab } from "@/components/tabs/SummaryTab"
 import { ErrorsTab } from "@/components/tabs/ErrorsTab"
@@ -29,23 +32,62 @@ import { StreamTab } from "@/components/tabs/StreamTab"
 import { DagTab } from "@/components/tabs/DagTab"
 import { ParseletRegistryTab } from "@/components/tabs/ParseletRegistryTab"
 import { NormalizerTab } from "@/components/tabs/NormalizerTab"
+import { RulesTab } from "@/components/tabs/RulesTab"
+import { LineSpeedsTab } from "@/components/tabs/LineSpeedsTab"
 import { cn } from "@/lib/utils"
 
-const TABS: { id: ActiveTab; label: string; icon: typeof Terminal }[] = [
-  { id: "tokens", label: "Output", icon: Terminal },
-  { id: "summary", label: "Summary", icon: LayoutDashboard },
-  { id: "errors", label: "Errors", icon: AlertTriangle },
-  { id: "normalizer", label: "Normalizer", icon: RefreshCw },
-  { id: "flow", label: "Pipeline", icon: Waypoints },
-  { id: "cache", label: "Cache", icon: Database },
-  { id: "parselets", label: "Parselets", icon: Wrench },
-  { id: "bytecode", label: "Bytecode", icon: Braces },
-  { id: "vmtrace", label: "VM Trace", icon: Zap },
-  { id: "dag", label: "DAG", icon: Share2 },
-  { id: "workers", label: "Workers", icon: Settings },
-  { id: "perf", label: "Perf", icon: Gauge },
-  { id: "stream", label: "Stream", icon: Radio },
+/**
+ * The panes, grouped by where their subject sits in the pipeline.
+ *
+ * Fifteen panes in one flat strip was the previous arrangement, and at any
+ * ordinary window width the last third of them scrolled out of sight with
+ * nothing to say they existed: a tool for showing people what the engine does
+ * was hiding half of what it can show. Grouping them fixes the reachability and
+ * earns its keep twice, because the groups run in pipeline order, so the strip
+ * reads as the journey a line of text takes.
+ */
+const TAB_GROUPS: {
+  label: string
+  tabs: { id: ActiveTab; label: string; icon: typeof Terminal; blurb: string }[]
+}[] = [
+  {
+    label: "Result",
+    tabs: [
+      { id: "tokens", label: "Output", icon: Terminal, blurb: "What each line evaluated to" },
+      { id: "summary", label: "Summary", icon: LayoutDashboard, blurb: "Totals for the whole document" },
+      { id: "errors", label: "Errors", icon: AlertTriangle, blurb: "Lines that did not evaluate" },
+    ],
+  },
+  {
+    label: "Pipeline",
+    tabs: [
+      { id: "flow", label: "Pipeline", icon: Waypoints, blurb: "Every stage, start to finish" },
+      { id: "normalizer", label: "Normalizer", icon: RefreshCw, blurb: "Tokens rewritten before parsing" },
+      { id: "rules", label: "Rules", icon: Shapes, blurb: "Which rules can fire, and where" },
+      { id: "parselets", label: "Parselets", icon: Wrench, blurb: "The parser's grammar table" },
+      { id: "bytecode", label: "Bytecode", icon: Braces, blurb: "The compiled program" },
+      { id: "vmtrace", label: "VM Trace", icon: Zap, blurb: "The stack, instruction by instruction" },
+    ],
+  },
+  {
+    label: "Speed",
+    tabs: [
+      { id: "lines", label: "Line speeds", icon: Timer, blurb: "Which line is slow, and in which stage" },
+      { id: "perf", label: "Perf", icon: Gauge, blurb: "Where the document's time went" },
+      { id: "cache", label: "Cache", icon: Database, blurb: "What was reused rather than recompiled" },
+    ],
+  },
+  {
+    label: "System",
+    tabs: [
+      { id: "dag", label: "DAG", icon: Share2, blurb: "How lines depend on each other" },
+      { id: "workers", label: "Workers", icon: Settings, blurb: "Background evaluation" },
+      { id: "stream", label: "Stream", icon: Radio, blurb: "Results as they arrive" },
+    ],
+  },
 ]
+
+const TABS = TAB_GROUPS.flatMap((g) => g.tabs)
 
 /**
  * Hosts the diagnostic and introspection tabs behind a shadcn Tabs nav.
@@ -65,16 +107,41 @@ export function DiagnosticsPane() {
   return (
     <section className={cn("flex min-h-0 flex-1 flex-col", diagnosticsCollapsed && "w-0 min-w-0 overflow-hidden")}>
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ActiveTab)} className="flex min-h-0 flex-1 flex-col gap-0">
-        <TabsList variant="line" className="bg-card/40 h-9 w-full justify-start overflow-x-auto border-b px-2">
-          {TABS.map((tab) => (
-            <TabsTrigger key={tab.id} value={tab.id} className="gap-1.5 text-xs">
-              <tab.icon className="size-3.5" /> {tab.label}
-              {tab.id === "errors" && errorCount > 0 && (
-                <span className="bg-destructive text-destructive-foreground ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold leading-none">
-                  {errorCount}
-                </span>
-              )}
-            </TabsTrigger>
+        <TabsList
+          variant="line"
+          className="bg-card/40 flex w-full flex-nowrap items-center justify-start gap-x-0.5 overflow-x-auto border-b px-2 py-1 !h-auto group-data-horizontal/tabs:h-auto"
+        >
+          {TAB_GROUPS.map((group, groupIndex) => (
+            <div key={group.label} className="flex shrink-0 items-center gap-0.5">
+              {/* Groups are spaced, not ruled. The separators drew four vertical
+                  lines through a strip that is already only one row tall, which
+                  read as clutter rather than as structure. */}
+              {groupIndex > 0 && <span className="w-3" aria-hidden="true" />}
+              {group.tabs.map((tab) => (
+                <TabsTrigger
+                  key={tab.id}
+                  value={tab.id}
+                  aria-label={tab.label}
+                  // Native title rather than a Tooltip: wrapping the trigger in
+                  // TooltipTrigger asChild took it out of Radix Tabs' own
+                  // collection, and every tab lost its active state.
+                  title={`${tab.label} — ${tab.blurb}`}
+                  className="h-7 flex-none gap-1.5 px-2 text-xs"
+                >
+                  <tab.icon className="size-4" />
+                  {/* Only the active pane spells its name out. Fifteen labels at
+                      once needed three rows and read as a wall; one label still
+                      answers "where am I", and the title answers "what is that
+                      one" without costing a row. */}
+                  {activeTab === tab.id && <span>{tab.label}</span>}
+                  {tab.id === "errors" && errorCount > 0 && (
+                    <Badge variant="destructive" className="ml-0.5 h-4 min-w-4 justify-center px-1 text-[10px] leading-none">
+                      {errorCount}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              ))}
+            </div>
           ))}
         </TabsList>
         <TabsContent value="tokens" className="mt-0 flex min-h-0 flex-col">
@@ -88,6 +155,12 @@ export function DiagnosticsPane() {
         </TabsContent>
         <TabsContent value="normalizer" className="mt-0 flex min-h-0 flex-col">
           <NormalizerTab key={runId} />
+        </TabsContent>
+        <TabsContent value="rules" className="mt-0 flex min-h-0 flex-col">
+          <RulesTab key={runId} />
+        </TabsContent>
+        <TabsContent value="lines" className="mt-0 flex min-h-0 flex-col">
+          <LineSpeedsTab key={runId} />
         </TabsContent>
         <TabsContent value="flow" className="mt-0 flex min-h-0 flex-col">
           <PipelineTab key={runId} />

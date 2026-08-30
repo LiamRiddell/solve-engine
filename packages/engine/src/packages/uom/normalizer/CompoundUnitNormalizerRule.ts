@@ -33,7 +33,9 @@ export function compoundUnitNormalizerRule(priority = 77): NormalizerRule {
 	return {
 		name: "uom:compound-unit",
 		priority,
-		startTokenTypes: ["UNIT"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["UNIT"] }, { types: ["SLASH"] }],
 		match(tokens, pos): NormalizerMatch | null {
 			const numerator = tokens[pos];
 			const slash = tokens[pos + 1];

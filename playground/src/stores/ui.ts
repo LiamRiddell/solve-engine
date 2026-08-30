@@ -14,6 +14,8 @@ export type ActiveTab =
   | "dag"
   | "parselets"
   | "normalizer"
+  | "rules"
+  | "lines"
 
 interface UiState {
   activeTab: ActiveTab

@@ -60,6 +60,8 @@ export function bareRateDenominatorNormalizerRule(priority = 75): NormalizerRule
 	return {
 		name: "uom:bare-rate-denominator",
 		priority,
+		unshapedReason:
+			"Fires after any value-ending token, a set broad enough that naming it would filter nothing.",
 		match(tokens, pos): NormalizerMatch | null {
 			const head = tokens[pos];
 			if (head === undefined) return null;

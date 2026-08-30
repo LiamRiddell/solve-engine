@@ -21,7 +21,9 @@ export function twoUnitConversionNormalizerRule(priority = 59): NormalizerRule {
 	return {
 		name: "uom:two-unit-conversion",
 		priority,
-		startTokenTypes: ["IN", "TO"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["IN", "TO"] }, { types: ["UNIT"] }],
 		match(tokens, pos): NormalizerMatch | null {
 			const preposition = tokens[pos];
 			if (preposition?.type !== "IN" && preposition?.type !== "TO") return null;

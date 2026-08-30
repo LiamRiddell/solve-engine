@@ -67,6 +67,9 @@ export function monthNameDateNormalizerRule(priority = 64): NormalizerRule {
 	return {
 		name: "datetime:month-name-date",
 		priority,
+		// No second slot: five alternative orderings put a number, a month name
+		// or a weekday first, so what follows the first token is a union wide
+		// enough to filter nothing. The start types still narrow it.
 		startTokenTypes: ["NUMBER", "IDENT", "UNIT"],
 		match(tokens, pos): NormalizerMatch | null {
 			const RULE = "datetime:month-name-date";

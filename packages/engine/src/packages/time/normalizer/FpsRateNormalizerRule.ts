@@ -18,7 +18,9 @@ export function fpsRateNormalizerRule(priority = 65): NormalizerRule {
   return {
     name: "time:fps-rate",
     priority,
-    startTokenTypes: ["NUMBER"],
+    // Derived from this rule's own opening guards; see RuleSlot on why an
+    // over-broad slot is safe and an over-narrow one is not.
+    shape: [{ types: ["NUMBER"] }, { types: ["IDENT"], values: ["fps"] }],
     match(tokens, pos): NormalizerMatch | null {
       const numberToken = tokens[pos];
       const fpsToken = tokens[pos + 1];

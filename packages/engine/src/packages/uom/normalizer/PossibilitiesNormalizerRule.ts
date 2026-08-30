@@ -16,7 +16,9 @@ export function uomPossibilitiesNormalizerRule(priority = 60): NormalizerRule {
   return {
     name: "uom:possibilities",
     priority,
-    startTokenTypes: ["UNIT"],
+    // Derived from this rule's own opening guards; see RuleSlot on why an
+    // over-broad slot is safe and an over-narrow one is not.
+    shape: [{ types: ["UNIT"] }, { types: ["TO"] }],
     match(tokens, pos): NormalizerMatch | null {
       if (pos + 2 >= tokens.length) return null;
       const unitToken = tokens[pos];

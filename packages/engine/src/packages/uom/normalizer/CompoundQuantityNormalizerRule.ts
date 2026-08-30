@@ -65,7 +65,9 @@ export function compoundQuantityNormalizerRule(priority = 63): NormalizerRule {
 	return {
 		name: "uom:compound-quantity",
 		priority,
-		startTokenTypes: ["NUMBER"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["NUMBER"] }, { types: ["UNIT"] }],
 		match(tokens, pos): NormalizerMatch | null {
 			const firstNumber = tokens[pos];
 			if (firstNumber?.type !== "NUMBER" || !PLAIN_NUMBER.test(firstNumber.text ?? "")) return null;

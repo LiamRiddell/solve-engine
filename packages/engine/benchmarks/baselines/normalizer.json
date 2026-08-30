@@ -1,0 +1,56 @@
+{
+  "suite": "normalizer",
+  "harness": "mitata-1",
+  "results": {
+    "noop_arithmetic": {
+      "meanMs": 0.002492977634332686,
+      "medianMs": 0.002,
+      "minMs": 0.0018
+    },
+    "noop_prose": {
+      "meanMs": 0.0035924081009344436,
+      "medianMs": 0.0029,
+      "minMs": 0.0026
+    },
+    "assignment": {
+      "meanMs": 0.0009842599051339287,
+      "medianMs": 0.0009759521484375,
+      "minMs": 0.00088701171875
+    },
+    "implicit_multiply": {
+      "meanMs": 0.006865073649088542,
+      "medianMs": 0.0068051513671875,
+      "minMs": 0.0061249267578125
+    },
+    "phrase_fusion": {
+      "meanMs": 0.0020362386067708333,
+      "medianMs": 0.001896142578125,
+      "minMs": 0.0017421142578125
+    },
+    "call_fusion": {
+      "meanMs": 0.0034690694173177086,
+      "medianMs": 0.0032804931640625,
+      "minMs": 0.003113330078125
+    },
+    "unit_conversion": {
+      "meanMs": 0.003371923828125,
+      "medianMs": 0.003170166015625,
+      "minMs": 0.002879931640625
+    },
+    "date_literal": {
+      "meanMs": 0.0029372538248697913,
+      "medianMs": 0.0029904052734375,
+      "minMs": 0.00263115234375
+    },
+    "long_prose_line": {
+      "meanMs": 0.0962286412512219,
+      "medianMs": 0.0861,
+      "minMs": 0.0803
+    },
+    "document_500_lines": {
+      "meanMs": 0.548772159090909,
+      "medianMs": 0.4958,
+      "minMs": 0.4537
+    }
+  }
+}

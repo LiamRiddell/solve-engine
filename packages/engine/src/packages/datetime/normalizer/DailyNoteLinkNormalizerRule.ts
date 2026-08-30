@@ -26,7 +26,9 @@ export function dailyNoteLinkNormalizerRule(): NormalizerRule {
   return {
     name: "datetime:daily-note-link",
     priority: 80,
-    startTokenTypes: ["LBRACKET"],
+    // Derived from this rule's own opening guards; see RuleSlot on why an
+    // over-broad slot is safe and an over-narrow one is not.
+    shape: [{ types: ["LBRACKET"] }, { types: ["LBRACKET"] }],
     match(tokens: Token[], pos: number): NormalizerMatch | null {
       if (tokens[pos]?.type !== "LBRACKET") return null;
       if (tokens[pos + 1]?.type !== "LBRACKET") return null;

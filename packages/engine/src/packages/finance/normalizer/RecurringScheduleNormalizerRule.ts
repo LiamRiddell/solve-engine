@@ -201,6 +201,8 @@ export function recurringScheduleNormalizerRule(priority = 78): NormalizerRule {
   return {
     name: "finance:recurring-schedule",
     priority,
+    unshapedReason:
+    	"Scans forward through a period and a duration sub-grammar of unbounded length, so no fixed leading shape describes it.",
     match(tokens, pos): NormalizerMatch | null {
       const amount = tokens[pos];
       if (amount === undefined || !VALUE_ENDERS.has(amount.type)) return null;

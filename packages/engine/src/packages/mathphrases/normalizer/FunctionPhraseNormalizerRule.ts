@@ -20,7 +20,9 @@ export function functionPhraseNormalizerRule(priority = 69): NormalizerRule {
 	return {
 		name: "mathphrases:function-phrase",
 		priority,
-		startTokenTypes: ["FUNC"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["FUNC"], values: ["root", "log"] }],
 		match(tokens, pos): NormalizerMatch | null {
 			const head = tokens[pos];
 			if (head?.type !== "FUNC") return null;

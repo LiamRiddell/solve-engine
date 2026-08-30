@@ -54,6 +54,9 @@ export function percentUpDownNormalizerRule(priority = 68): NormalizerRule {
 	return {
 		name: "percentage:up-down",
 		priority,
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["NUMBER", "RPAREN", "IDENT"] }],
 		match(tokens, pos): NormalizerMatch | null {
 			// Position 1: a value the implicit-multiply rule would glue to the
 			// word. Consume both, keep the value, retype the word, no `*`.

@@ -38,7 +38,9 @@ export function converterPrepositionNormalizerRule(priority = 67): NormalizerRul
 	return {
 		name: "converters:preposition",
 		priority,
-		startTokenTypes: ["IN", "TO"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["IN", "TO"] }, { types: ["CONVERTER_NAME", "FUNC"] }],
 		match(tokens, pos): NormalizerMatch | null {
 			const preposition = tokens[pos];
 			if (preposition?.type !== "IN" && preposition?.type !== "TO") return null;

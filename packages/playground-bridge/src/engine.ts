@@ -849,7 +849,14 @@ export function runEngineWithStreaming(
 						lastDebugEvents = result.debug.events;
 						lineEventSnapshots.push({
 							lineNumber: lineNum,
-							events: result.debug.events,
+							// Copied, not referenced. The engine reuses and grows one
+							// event array across the document, so storing the
+							// reference made every snapshot alias the same array:
+							// buildLineStats then handed the whole document's events
+							// to line 1 and an empty slice to every line after it,
+							// which is why per-line timings read as one huge line
+							// followed by a column of zeroes.
+							events: [...result.debug.events],
 						});
 					}
 
@@ -1226,7 +1233,8 @@ export function runEngine(expression: string): DebugResult {
 				lastDebugEvents = result.debug.events;
 				lineEventSnapshots.push({
 					lineNumber: lineNum,
-					events: result.debug.events,
+					// Copied for the reason given on the streaming path above.
+					events: [...result.debug.events],
 				});
 			}
 

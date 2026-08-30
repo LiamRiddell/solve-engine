@@ -13,6 +13,15 @@ const MAX_STAGE_SNAPSHOTS = 200
 interface PipelineState {
   /** Currently selected line in the pipeline dropdown (null = aggregate view). */
   selectedLine: number | null
+  /**
+   * Line numbers whose inline detail panel is open in the editor.
+   *
+   * Held here rather than inside the editor so that expanding a line and
+   * selecting one are the same gesture: the diagnostic panes already scope to
+   * `selectedLine`, so opening a panel points every one of them at that line
+   * without the editor having to know they exist.
+   */
+  expandedLines: number[]
   /** Whether the dropdown was manually changed by the user. */
   dropdownManuallyChanged: boolean
   /** Stage output snapshots per line for change detection. */
@@ -21,6 +30,8 @@ interface PipelineState {
   flamegraphFilter: string | null
 
   selectLine: (lineNumber: number | null, manual?: boolean) => void
+  /** Open or close one line's inline detail panel, selecting it when opened. */
+  toggleLineExpanded: (lineNumber: number) => void
   resetDropdownOverride: () => void
   saveStageSnapshot: (lineKey: number, snapshot: string[]) => void
   getStageSnapshot: (lineKey: number) => string[] | undefined
@@ -30,12 +41,24 @@ interface PipelineState {
 
 export const usePipelineStore = create<PipelineState>((set, get) => ({
   selectedLine: null,
+  expandedLines: [],
   dropdownManuallyChanged: false,
   stageSnapshots: new Map(),
   flamegraphFilter: null,
 
   selectLine: (lineNumber, manual = false) =>
     set((s) => ({ selectedLine: lineNumber, dropdownManuallyChanged: manual ? true : s.dropdownManuallyChanged })),
+  toggleLineExpanded: (lineNumber) =>
+    set((s) => {
+      const open = s.expandedLines.includes(lineNumber)
+      return {
+        expandedLines: open ? s.expandedLines.filter((n) => n !== lineNumber) : [...s.expandedLines, lineNumber],
+        // Opening a panel is also a selection, which is what keeps the panes
+        // beside the editor showing the line the reader just opened.
+        selectedLine: open ? s.selectedLine : lineNumber,
+        dropdownManuallyChanged: open ? s.dropdownManuallyChanged : true,
+      }
+    }),
   resetDropdownOverride: () => set({ dropdownManuallyChanged: false }),
   saveStageSnapshot: (lineKey, snapshot) => {
     const snapshots = get().stageSnapshots

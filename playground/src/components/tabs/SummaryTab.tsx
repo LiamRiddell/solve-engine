@@ -74,14 +74,14 @@ export function SummaryTab() {
   }
 
   return (
-    <div className={TAB_BODY}>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+    <div className={cn(TAB_BODY, "@container")}>
+      <div className="grid grid-cols-2 gap-3 @md:grid-cols-3 @3xl:grid-cols-5">
         <StatCard label="Total Time" value={fmt(stats.totalTime)} color="var(--chart-6)" />
         {timingCards.map((card) => (
           <StatCard key={card.label} label={card.label} value={card.value} color={card.color} />
         ))}
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 @md:grid-cols-3 @3xl:grid-cols-5">
         <StatCard label="Lines" value={String(lineResults.length)} color={STAGE_COLORS.Lexer} />
         <StatCard label="Tokens" value={String(tokens)} color={STAGE_COLORS.Lexer} />
         <StatCard label="Opcodes" value={String(opcodes)} color={STAGE_COLORS.Compile} />
@@ -114,14 +114,29 @@ export function SummaryTab() {
   )
 }
 
+/**
+ * One headline figure.
+ *
+ * The label is allowed to wrap and the value is not: a stat card whose number
+ * breaks across two lines ("248.1" above "ms") stops being scannable, which is
+ * the only thing it is for. The label is given a fixed two-line box so that a
+ * row of cards keeps its numbers on one baseline whether the label ran to one
+ * line or two.
+ */
 function StatCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <Card size="sm">
-      <div className="flex items-center justify-between px-4">
-        <span className="text-muted-foreground text-[10px] font-semibold tracking-[0.12em] uppercase">{label}</span>
-        <span className="size-1.5 rounded-full" style={{ background: color }} />
+      <div className="flex items-start justify-between gap-2 px-4">
+        <span className="text-muted-foreground line-clamp-2 min-h-[2.1em] text-[10px] leading-[1.05em] font-semibold tracking-[0.12em] uppercase">
+          {label}
+        </span>
+        <span className="mt-0.5 size-1.5 shrink-0 rounded-full" style={{ background: color }} />
       </div>
-      <div className="mt-1 px-4 font-mono text-lg font-bold" style={{ color }}>
+      <div
+        className="mt-1 truncate px-4 font-mono text-lg font-bold tabular-nums"
+        style={{ color }}
+        title={value}
+      >
         {value}
       </div>
     </Card>

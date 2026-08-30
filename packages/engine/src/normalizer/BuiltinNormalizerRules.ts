@@ -78,13 +78,32 @@ export function implicitMultiplyRule(
 	return {
     name: "implicit:multiply",
     priority,
-    startTokenTypes: ["NUMBER", "RPAREN"],
+    // Both slots are exactly the `triggers` test below, which is the whole
+    // condition: a value or closing bracket, then something a multiplication
+    // could apply to.
+    shape: [
+      { types: ["NUMBER", "RPAREN"] },
+      { types: ["IDENT", "LPAREN", "PI", "E"] },
+    ],
     match(tokens: Token[], pos: number): NormalizerMatch | null {
       // ── Need at least one token after the current position ──
       if (pos + 1 >= tokens.length) return null;
 
       const t = tokens[pos];
       const next = tokens[pos + 1];
+
+      // ── Check trigger conditions ──
+      // Ordered FIRST deliberately. The two guards below only ever suppress a
+      // match, so testing them after the trigger cannot change any result, and
+      // the first of them allocates a lower-cased copy of the next token's
+      // value. Running that ahead of a pair of type comparisons meant every
+      // position in the document paid a string allocation and a set lookup to
+      // reach a test that rejects nearly all of them.
+      const triggers =
+        (t.type === "NUMBER" || t.type === "RPAREN") &&
+        (next.type === "IDENT" || next.type === "LPAREN" || next.type === "PI" || next.type === "E");
+
+      if (!triggers) return null;
 
       // ── Guard: suppress if the next identifier starts a phrase ──
       // Uses the trie's canStart when available, falls back to hardcoded set.
@@ -100,13 +119,6 @@ export function implicitMultiplyRule(
       // fused token stranded in operand position. The slash spelling never had
       // the problem, which is what made it hard to see.
       if (RATE_DENOMINATOR_WORDS.has(nextValue) && tokens[pos + 2]?.type === "UNIT") return null;
-
-      // ── Check trigger conditions ──
-      const triggers =
-        (t.type === "NUMBER" || t.type === "RPAREN") &&
-        (next.type === "IDENT" || next.type === "LPAREN" || next.type === "PI" || next.type === "E");
-
-      if (!triggers) return null;
 
       // ── Insert a STAR token at the next token's position ──
       const starToken = new LexerToken(

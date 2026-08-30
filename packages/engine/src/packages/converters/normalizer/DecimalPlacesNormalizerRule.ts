@@ -28,7 +28,9 @@ export function decimalPlacesNormalizerRule(priority = 66): NormalizerRule {
 	return {
 		name: "converters:decimal-places",
 		priority,
-		startTokenTypes: ["TO"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["TO"] }, { types: ["NUMBER"] }],
 		match(tokens, pos): NormalizerMatch | null {
 			if (tokens[pos]?.type !== "TO") return null;
 

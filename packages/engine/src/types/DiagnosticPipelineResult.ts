@@ -230,6 +230,31 @@ export interface NormalizerOutput {
   /** Post-normalization tokens ready for parsing */
   tokens: Token[];
   /**
+   * Every registered rule with the shape it declared, in priority order.
+   *
+   * A rule that declares a shape is tried only where that shape can match; one
+   * that declares none is tried at every position of every line. That
+   * distinction is invisible from outside the engine and is the difference
+   * between a package costing the documents that use it and costing all of
+   * them, so the playground draws it.
+   */
+  ruleShapes?: {
+    name: string;
+    priority: number;
+    shape: readonly { types?: readonly string[]; values?: readonly string[] }[];
+    unshapedReason?: string;
+    indexedSlots: number;
+  }[];
+
+  /**
+   * How many rules could fire at each position of the normalised stream.
+   *
+   * One entry per token. Mostly zeroes, which is the point of the index: a
+   * position where nothing can match is rejected without calling a rule.
+   */
+  candidatesPerPosition?: number[];
+
+  /**
    * All registered phrase → tokenType mappings from the PhraseTrie.
    * Populated by the engine at diagnostic stage build time so the
    * playground NormalizerTab can render the complete trie structure

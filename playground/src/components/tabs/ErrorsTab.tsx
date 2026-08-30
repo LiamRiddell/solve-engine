@@ -6,6 +6,7 @@ import { usePipelineStore } from "@/stores/pipeline"
 import { EmptyState } from "@/components/shared/EmptyState"
 import { categoryMeta } from "@/lib/errorCategory"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 import { TAB_BODY, TAB_ROOT } from "@/components/shared/tabChrome"
 
 async function copyText(text: string): Promise<void> {
@@ -64,14 +65,15 @@ function ErrorCard({ lr, selected, onSelect }: { lr: LineResult; selected: boole
             <Flag className="size-3" /> internal
           </span>
         )}
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={onCopy}
           title="Copy error detail"
-          className={cn("hover:bg-muted shrink-0 rounded p-1", lr.errorRecoverable !== false && "ml-auto")}
+          className={cn("size-6 shrink-0", lr.errorRecoverable !== false && "ml-auto")}
         >
           {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
-        </button>
+        </Button>
       </div>
 
       <div className="text-muted-foreground truncate font-mono text-[11px]">{lr.expression}</div>
@@ -136,18 +138,24 @@ export function ErrorsTab() {
   return (
     <div className={TAB_ROOT}>
       <div className="flex items-center gap-2 border-b px-4 py-1.5">
+        {/* When there is nothing wrong, the empty state below already says so,
+            and repeating it here just made the pane say "No errors" twice. The
+            header earns its space instead by reporting what WAS checked. */}
         <span className="text-muted-foreground text-xs">
-          {errored.length === 0 ? "No errors" : `${errored.length} error${errored.length !== 1 ? "s" : ""}`}
+          {errored.length === 0
+            ? `${lineResults.length} line${lineResults.length !== 1 ? "s" : ""} checked`
+            : `${errored.length} error${errored.length !== 1 ? "s" : ""} in ${lineResults.length} lines`}
         </span>
         {errored.length > 0 && (
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={copyAll}
             title="Copy all errors"
-            className="text-muted-foreground hover:bg-accent ml-auto flex items-center gap-1 rounded-md border px-2 py-1 text-xs"
+            className="ml-auto h-7 gap-1 text-xs"
           >
             <Copy className="size-3.5" /> Copy all
-          </button>
+          </Button>
         )}
       </div>
 

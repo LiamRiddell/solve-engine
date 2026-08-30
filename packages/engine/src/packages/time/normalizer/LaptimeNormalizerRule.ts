@@ -19,11 +19,10 @@ export function laptimeNormalizerRule(priority = 70): NormalizerRule {
   return {
     name: "time:laptime",
     priority,
-    startTokenTypes: ["NUMBER"],
+    // `HH:MM:SS`, so a number with a colon after it. The colon is what
+    // separates this family from every other rule firing on a bare number.
+    shape: [{ types: ["NUMBER"] }, { types: ["COLON"] }],
     match(tokens, pos): NormalizerMatch | null {
-      // See ClockTimeNormalizerRule's identical guard, a laptime inside
-      // `[...]` has no legitimate meaning; reserved for matrix ranges.
-      if (isInsideRangeContext(tokens, pos)) return null;
       const h = tokens[pos];
       const c1 = tokens[pos + 1];
       const m = tokens[pos + 2];
@@ -34,6 +33,14 @@ export function laptimeNormalizerRule(priority = 70): NormalizerRule {
       if (m?.type !== "NUMBER") return null;
       if (c2?.type !== "COLON") return null;
       if (s?.type !== "NUMBER") return null;
+
+      // See ClockTimeNormalizerRule's identical guard, a laptime inside
+      // `[...]` has no legitimate meaning; reserved for matrix ranges.
+      // Ordered AFTER the shape test deliberately: this scans back to the
+      // start of the line, so running it first paid an O(pos) walk at every
+      // token of every type. It only ever returns null, so testing it last
+      // among the null-returning guards cannot change any result.
+      if (isInsideRangeContext(tokens, pos)) return null;
 
       const hours = parseInt(h.value, 10);
       const minutes = parseInt(m.value, 10);

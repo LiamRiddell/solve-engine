@@ -53,7 +53,9 @@ export function atRateNormalizerRule(priority = 73): NormalizerRule {
 	return {
 		name: "uom:at-rate",
 		priority,
-		startTokenTypes: ["RATE_AT"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["RATE_AT"] }],
 		match(tokens, pos): NormalizerMatch | null {
 			if (tokens[pos]?.type !== "RATE_AT") return null;
 			if (!hasRateAhead(tokens, pos + 1)) return null;

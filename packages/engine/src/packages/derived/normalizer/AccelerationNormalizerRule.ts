@@ -19,7 +19,9 @@ export function accelerationNormalizerRule(priority = 82): NormalizerRule {
 	return {
 		name: RULE,
 		priority,
-		startTokenTypes: ["UNIT"],
+		// Derived from this rule's own opening guards; see RuleSlot on why an
+		// over-broad slot is safe and an over-narrow one is not.
+		shape: [{ types: ["UNIT"], values: ["m"] }, { types: ["SLASH"] }],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const m = tokens[pos];
 			const slash = tokens[pos + 1];
