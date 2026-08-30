@@ -431,3 +431,76 @@
 .os-result-inline.os-result-error:hover {
   background: rgb(225 29 72 / 0.24);
 }
+
+/* ── Inline line detail ──────────────────────────────────────────────────
+   The panel that opens under a line when its result chip is clicked. Sized
+   and coloured to read as an annotation on the document rather than as a
+   second editor: indented to the text, dimmer than the code, and short
+   enough that opening one does not push the next line off the screen. */
+
+.os-result-expandable {
+  cursor: pointer;
+}
+.os-result-expandable:hover {
+  filter: brightness(1.25);
+}
+
+.os-line-detail {
+  margin: 0.25rem 0 0.5rem 2.5rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 2px solid var(--border);
+  border-radius: 0 0.375rem 0.375rem 0;
+  background: color-mix(in oklab, var(--muted) 55%, transparent);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.os-detail-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: 0.4rem;
+}
+.os-detail-token {
+  padding: 0 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  background: var(--background);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.os-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.os-detail-key {
+  flex: 0 0 4.75rem;
+  color: var(--muted-foreground);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.os-detail-val {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.os-detail-mono {
+  font-family: var(--font-mono);
+}
+
+.os-detail-bar {
+  display: flex;
+  overflow: hidden;
+  flex: 1;
+  height: 0.5rem;
+  border-radius: 0.125rem;
+  background: var(--muted);
+}
+.os-detail-seg-lex { background: var(--chart-1); }
+.os-detail-seg-parse { background: var(--chart-2); }
+.os-detail-seg-compile { background: var(--chart-3); }
+.os-detail-seg-execute { background: var(--chart-4); }

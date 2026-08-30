@@ -151,8 +151,29 @@ class ResultWidget extends WidgetType {
     readonly pending = false,
     readonly errorDetail?: ErrorDetail,
     readonly colour?: string,
+    readonly lineNumber?: number,
   ) {
     super()
+  }
+
+  /**
+   * Make the result chip the handle for this line's detail panel.
+   *
+   * The chip is already the thing a reader looks at to see what the line did,
+   * so it is the obvious place to ask for more, and it costs no extra chrome in
+   * a document that is meant to read as a document. `ignoreEvent` has to admit
+   * the click or CodeMirror treats it as an editor gesture and the handler
+   * never runs.
+   */
+  protected attachToggle(el: HTMLElement) {
+    if (this.lineNumber === undefined) return
+    const line = this.lineNumber
+    el.classList.add("os-result-expandable")
+    el.addEventListener("mousedown", (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      usePipelineStore.getState().toggleLineExpanded(line)
+    })
   }
   eq(other: ResultWidget) {
     return (
@@ -201,6 +222,7 @@ class ResultWidget extends WidgetType {
       span.textContent = `⚠ ${this.errorDetail.code ?? "Error"}`
       span.addEventListener("mouseenter", () => this.showPopover(span))
       span.addEventListener("mouseleave", () => this.scheduleHide())
+      this.attachToggle(span)
       return span
     }
 
@@ -231,10 +253,16 @@ class ResultWidget extends WidgetType {
       swatch.style.background = this.colour
       span.appendChild(swatch)
       span.appendChild(document.createTextNode(this.text))
+      this.attachToggle(span)
       return span
     }
     span.textContent = this.text
+    this.attachToggle(span)
     return span
+  }
+
+  ignoreEvent() {
+    return false
   }
 
   destroy() {
@@ -243,6 +271,158 @@ class ResultWidget extends WidgetType {
     this.popover = null
   }
 }
+
+/** One row of the inline detail panel: a dim label and a value beside it. */
+function detailRow(label: string, value: string, mono = true): HTMLDivElement {
+  const row = document.createElement("div")
+  row.className = "os-detail-row"
+  const key = document.createElement("span")
+  key.className = "os-detail-key"
+  key.textContent = label
+  const val = document.createElement("span")
+  val.className = mono ? "os-detail-val os-detail-mono" : "os-detail-val"
+  val.textContent = value
+  row.append(key, val)
+  return row
+}
+
+/**
+ * The panel that opens under a line, showing what the engine did with it.
+ *
+ * A block widget rather than a pane on the right, because the question it
+ * answers is "what happened to THIS line", and the answer reads best where the
+ * line is. The panes beside the editor still show the same line, since opening
+ * a panel selects it.
+ *
+ * Deliberately a summary and not a fourth copy of the diagnostics: tokens, what
+ * the parse matched, the answer and its type, and where the time went. Anything
+ * deeper is a pane away, and this stays short enough to sit inside a document
+ * without pushing the next line off the screen.
+ */
+class LineDetailWidget extends WidgetType {
+  constructor(
+    readonly lineNumber: number,
+    readonly detail: {
+      tokens: { type: string; value: string }[]
+      result: string
+      type: string
+      parselet: string
+      categories: Record<string, number>
+      opcodes: number
+      cached: boolean
+      error?: string
+      timing?: { lex: number; parse: number; compile: number; execute: number; total: number }
+    },
+  ) {
+    super()
+  }
+
+  eq(other: LineDetailWidget) {
+    return (
+      this.lineNumber === other.lineNumber &&
+      this.detail.result === other.detail.result &&
+      this.detail.error === other.detail.error &&
+      this.detail.tokens.length === other.detail.tokens.length &&
+      this.detail.opcodes === other.detail.opcodes
+    )
+  }
+
+  toDOM() {
+    const d = this.detail
+    const box = document.createElement("div")
+    box.className = "os-line-detail"
+
+    const tokens = document.createElement("div")
+    tokens.className = "os-detail-tokens"
+    for (const t of d.tokens.slice(0, 40)) {
+      const chip = document.createElement("span")
+      chip.className = `os-detail-token ${tokenClassName(t.type) ?? ""}`
+      chip.textContent = t.value
+      chip.title = t.type
+      tokens.append(chip)
+    }
+    if (d.tokens.length > 40) {
+      const more = document.createElement("span")
+      more.className = "os-detail-key"
+      more.textContent = `+${d.tokens.length - 40} more`
+      tokens.append(more)
+    }
+    if (d.tokens.length > 0) box.append(tokens)
+
+    if (d.error) {
+      box.append(detailRow("Error", d.error, false))
+    } else {
+      box.append(detailRow("Result", `${d.result}  (${d.type})`))
+    }
+    if (d.parselet) box.append(detailRow("Parsed by", d.parselet))
+    const cats = Object.entries(d.categories)
+    if (cats.length > 0) {
+      box.append(detailRow("Matched", cats.map(([k, n]) => (n > 1 ? `${k} x${n}` : k)).join(", "), false))
+    }
+    box.append(detailRow("Compiled", `${d.opcodes} opcode${d.opcodes === 1 ? "" : "s"}${d.cached ? ", served from cache" : ""}`, false))
+
+    if (d.timing && d.timing.total > 0) {
+      const bar = document.createElement("div")
+      bar.className = "os-detail-bar"
+      // Nanoseconds in, and the widths are shares of this line's own total, so
+      // a fast line still fills the bar rather than rendering as a sliver.
+      const parts: [string, number][] = [
+        ["lex", d.timing.lex],
+        ["parse", d.timing.parse],
+        ["compile", d.timing.compile],
+        ["execute", d.timing.execute],
+      ]
+      for (const [name, ns] of parts) {
+        if (ns <= 0) continue
+        const seg = document.createElement("span")
+        seg.className = `os-detail-seg os-detail-seg-${name}`
+        seg.style.width = `${(ns / d.timing.total) * 100}%`
+        seg.title = `${name}: ${ns >= 1000 ? `${(ns / 1000).toFixed(1)}us` : `${ns.toFixed(0)}ns`}`
+        bar.append(seg)
+      }
+      const wrap = document.createElement("div")
+      wrap.className = "os-detail-row"
+      const key = document.createElement("span")
+      key.className = "os-detail-key"
+      key.textContent = "Time"
+      wrap.append(key, bar)
+      box.append(wrap)
+    }
+
+    return box
+  }
+
+  ignoreEvent() {
+    return false
+  }
+}
+
+const detailEffect = StateEffect.define<{ pos: number; deco: Decoration }[]>()
+
+/**
+ * The open line-detail panels.
+ *
+ * Kept in its own field rather than added to {@link resultField}, because that
+ * one rebuilds its whole set from each dispatch and the panels open and close
+ * on a different signal (a click) from the one that rebuilds results (an
+ * evaluation).
+ */
+const detailField = StateField.define<RangeSet<Decoration>>({
+  create() {
+    return Decoration.none
+  },
+  update(set, tr) {
+    for (const e of tr.effects) {
+      if (e.is(detailEffect)) {
+        const builder = new RangeSetBuilder<Decoration>()
+        for (const { pos, deco } of e.value) builder.add(pos, pos, deco)
+        return builder.finish()
+      }
+    }
+    return set.map(tr.changes)
+  },
+  provide: (f) => EditorView.decorations.from(f),
+})
 
 const resultEffect = StateEffect.define<{ from: number; to: number; deco: Decoration }[]>()
 const resultField = StateField.define<RangeSet<Decoration>>({
@@ -406,6 +586,7 @@ function createTabEditor(tabId: string, container: HTMLElement, initialDoc: stri
         createHighlightPlugin(languageService),
         inlineSolveField,
         resultField,
+        detailField,
         autocompletion({ override: [solveCompletionSource] }),
         placeholder("Enter an expression…  e.g. 10 + 5 * 2"),
         EditorView.updateListener.of((update) => {
@@ -448,6 +629,72 @@ function run(tabId?: string): void {
   engineService.evaluate(prepareEvaluationInput(editor.view.state.doc.toString()), id)
 }
 
+/**
+ * Draw a detail panel under every line the reader has opened.
+ *
+ * Runs on two signals, which is why it is separate from the inline results: an
+ * evaluation (the content changed) and a toggle (which lines are open changed).
+ * Both end in the same place, so a panel opened before a re-run redraws with
+ * the new answer rather than going stale or vanishing.
+ */
+function renderLineDetails(tabId: string): void {
+  const editor = tabEditorsSingleton.get(tabId)
+  if (!editor) return
+  const view = editor.view
+  if (!view.dom || !view.dom.parentNode) return
+
+  const { expandedLines } = usePipelineStore.getState()
+  const report = useDiagnosticReportStore.getState()
+  const effects: { pos: number; deco: Decoration }[] = []
+
+  for (const lineNumber of [...expandedLines].sort((a, b) => a - b)) {
+    if (lineNumber < 1 || lineNumber > view.state.doc.lines) continue
+    const lr = report.lineResults.find((r) => (r.lineNumber ?? 1) === lineNumber)
+    if (!lr) continue
+    const line = view.state.doc.line(lineNumber)
+    const stages = report.stagesByLine?.[lineNumber]
+    const lexer = stages?.find((st) => st.stage === "lexer")
+    const tokens = ((lexer?.output as { tokens?: { type: string; value: string }[] } | undefined)?.tokens ?? []).map(
+      (t) => ({ type: t.type, value: t.value }),
+    )
+    const ls = report.lineStats?.find((x) => x.lineNumber === lineNumber)?.stats
+
+    effects.push({
+      pos: line.to,
+      deco: Decoration.widget({
+        widget: new LineDetailWidget(lineNumber, {
+          tokens,
+          result: lr.result,
+          type: lr.type,
+          parselet: lr.parselet,
+          categories: lr.parseletCategories ?? {},
+          opcodes: lr.opcodeCount,
+          cached: lr.wasCached,
+          error: lr.error,
+          timing: ls
+            ? {
+                lex: ls.lexerTime,
+                parse: ls.parserTime,
+                compile: ls.bytecodeTime,
+                execute: ls.executionTime,
+                total: ls.totalTime,
+              }
+            : undefined,
+        }),
+        block: true,
+        side: 1,
+      }),
+    })
+  }
+
+  try {
+    view.dispatch({ effects: detailEffect.of(effects) })
+  } catch {
+    // Same failure mode the inline results guard against: RangeSetBuilder
+    // rejects out-of-order positions. Sorted above, so this is belt and braces.
+  }
+}
+
 function renderInlineResults(tabId: string, lineResults: LineResult[]): void {
   const editor = tabEditorsSingleton.get(tabId)
   if (!editor) return
@@ -484,7 +731,7 @@ function renderInlineResults(tabId: string, lineResults: LineResult[]): void {
     effects.push({
       from: line.to,
       to: line.to,
-      deco: Decoration.widget({ widget: new ResultWidget(text, lr.type, isPending, errorDetail, lr.colour), side: 1 }),
+      deco: Decoration.widget({ widget: new ResultWidget(text, lr.type, isPending, errorDetail, lr.colour, lr.lineNumber ?? 1), side: 1 }),
     })
   }
   // Always dispatch, even with an empty effects array: resultField's update()
@@ -576,9 +823,21 @@ export function EditorPane() {
   useEffect(() => {
     if (result) {
       const tabId = useTabsStore.getState().activeTabId
-      requestAnimationFrame(() => renderInlineResults(tabId, result.lineResults))
+      requestAnimationFrame(() => {
+        renderInlineResults(tabId, result.lineResults)
+        renderLineDetails(tabId)
+      })
     }
   }, [result])
+
+  // Redraw when the reader opens or closes a panel. Separate from the effect
+  // above because the two run on different signals: that one fires when the
+  // answer changed, this one when which lines are open changed.
+  const expandedLines = usePipelineStore((s) => s.expandedLines)
+  useEffect(() => {
+    const tabId = useTabsStore.getState().activeTabId
+    renderLineDetails(tabId)
+  }, [expandedLines])
 
   return (
     <main className={cn("flex min-h-0 flex-1 flex-col", editorCollapsed && "w-0 min-w-0 overflow-hidden")}>

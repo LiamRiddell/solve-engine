@@ -18,7 +18,6 @@ import {
 import { useDiagnosticReportStore } from "@/stores/diagnosticReport"
 import { useUiStore, type ActiveTab } from "@/stores/ui"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { OutputTab } from "@/components/tabs/OutputTab"
 import { SummaryTab } from "@/components/tabs/SummaryTab"
@@ -114,7 +113,10 @@ export function DiagnosticsPane() {
         >
           {TAB_GROUPS.map((group, groupIndex) => (
             <div key={group.label} className="flex shrink-0 items-center gap-0.5">
-              {groupIndex > 0 && <Separator orientation="vertical" className="mx-1.5 !h-4" />}
+              {/* Groups are spaced, not ruled. The separators drew four vertical
+                  lines through a strip that is already only one row tall, which
+                  read as clutter rather than as structure. */}
+              {groupIndex > 0 && <span className="w-3" aria-hidden="true" />}
               {group.tabs.map((tab) => (
                 <TabsTrigger
                   key={tab.id}
