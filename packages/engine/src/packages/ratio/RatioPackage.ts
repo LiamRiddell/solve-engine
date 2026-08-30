@@ -2,7 +2,6 @@ import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { stringValue, errorValue, ValueType, type Value } from "@solve-js/vm/Value";
 import { reduceRatio } from "./RatioOps";
 import { ratioCallParselet } from "./parselets/RatioCallParselet";
-import { ratioCallNormalizerRule } from "./normalizer/RatioCallNormalizerRule";
 
 /**
  * Reduce a ratio to its lowest whole-number terms (issue #252): `ratio(1920,
@@ -18,7 +17,8 @@ export const RATIO_PACKAGE: IEnginePackage = {
 	prefixParselets: {
 		RATIO_CALL: ratioCallParselet,
 	},
-	normalizerRules: [ratioCallNormalizerRule()],
+	// `ratio(...)`, fused to RATIO_CALL by the engine's shared call-fusion rule.
+	callFusions: { ratio: "RATIO_CALL" },
 	pluginFunctions: {
 		ratioReduce: (args: Value[]): Value => {
 			const parts: number[] = [];

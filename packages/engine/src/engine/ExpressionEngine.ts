@@ -81,6 +81,7 @@ import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import type { TokenFusion } from "@solve-js/normalizer";
 import { UserUnitTable } from "@solve-js/packages/uom/UserUnitTable";
 import { userUnitExpansionRule } from "@solve-js/packages/uom/normalizer/UserUnitNormalizerRule";
+import { callFusionRule } from "@solve-js/normalizer/CallFusionRule";
 import { dateLiteralNormalizerRule } from "@solve-js/packages/datetime/normalizer/DateLiteralNormalizerRule";
 import { buildExplanation } from "@solve-js/explain";
 import type { Explanation } from "@solve-js/explain";
@@ -281,6 +282,7 @@ export class ExpressionEngine {
         lexerVocabulary: LexerVocabulary | undefined;
         asConverterNames: string[];
         normalizerRuleNames: string[];
+        callFusionNames: string[];
     }>();
 
     /**
@@ -292,6 +294,14 @@ export class ExpressionEngine {
      *. See `api/PackageCompatibility.ts`'s module doc for why this exists.
      */
     private registeredPackages = new Map<string, IEnginePackage>();
+
+    /**
+     * The merged `name -> fused token type` map every package's
+     * {@link IEnginePackage.callFusions} feeds, read live by the single
+     * {@link callFusionRule}. Kept in step with registration so one rule serves
+     * every `name(` call word instead of one rule per package.
+     */
+    private callFusions = new Map<string, string>();
 
     /**
      * Incremental index behind the package-compatibility check. Kept in step
@@ -650,6 +660,11 @@ export class ExpressionEngine {
         // of first split into `6 * sprints` with the name stranded as a variable.
         this.normalizer.register(userUnitExpansionRule(this.userUnits));
 
+        // One rule for every package's `name(` call word. It reads the live
+        // callFusions map, which registerPackage fills below, so it is registered
+        // here once and needs no per-package rule. See CallFusionRule.ts.
+        this.normalizer.register(callFusionRule(this.callFusions));
+
         const pkgList = packages ?? [];
         for (const pkg of pkgList) {
             // Per-package containment: registerPackage() can throw (a
@@ -845,6 +860,7 @@ export class ExpressionEngine {
             lexerVocabulary: pkg.lexerVocabulary,
             asConverterNames: [] as string[],
             normalizerRuleNames: [] as string[],
+            callFusionNames: [] as string[],
         };
 
         // Only lexerVocabulary can throw here (built-in keyword/operator/unit
@@ -897,6 +913,15 @@ export class ExpressionEngine {
             for (const rule of pkg.normalizerRules) {
                 this.normalizer.register(rule);
                 contribution.normalizerRuleNames.push(rule.name);
+            }
+        }
+        if (pkg.callFusions) {
+            // Merge into the one shared call-fusion map the single callFusionRule
+            // reads. Tracked per-name so unregisterPackage removes exactly these.
+            for (const [name, tokenType] of Object.entries(pkg.callFusions)) {
+                const lower = name.toLowerCase();
+                this.callFusions.set(lower, tokenType);
+                contribution.callFusionNames.push(lower);
             }
         }
         if (pkg.tokenCategories) {
@@ -983,6 +1008,9 @@ export class ExpressionEngine {
         }
         for (const ruleName of contribution.normalizerRuleNames) {
             this.normalizer.unregister(ruleName);
+        }
+        for (const name of contribution.callFusionNames) {
+            this.callFusions.delete(name);
         }
         this.packageCompletionItems.delete(packageName);
 

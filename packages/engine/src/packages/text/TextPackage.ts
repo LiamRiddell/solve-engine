@@ -5,7 +5,7 @@ import { TEXT_PLUGIN_FUNCTIONS } from "./TextPluginFunctions";
 import { textUpper, textLower, textTitle, textSlug } from "./TextOps";
 import { unaryTextParselet, booleanTextInfixParselet, repeatTextParselet } from "./parselets/TextParselets";
 import { TextCallParselet } from "./parselets/TextCallParselet";
-import { textCallNormalizerRule } from "./normalizer/TextCallNormalizerRule";
+import { TEXT_CALL_FUNCTIONS } from "./TextFunctionNames";
 
 /** An `as`-converter over text: text in, reshaped text out, an error for a non-string. */
 function textConverter(name: string, fn: (t: string) => string): (value: Value) => Value {
@@ -75,7 +75,8 @@ export const TEXT_PACKAGE: IEnginePackage = {
 		title: textConverter("title", textTitle),
 		slug: textConverter("slug", textSlug),
 	},
-	normalizerRules: [textCallNormalizerRule()],
+	// `length(...)`, `upper(...)`, ... fused to TEXT_CALL by the engine's shared rule.
+	callFusions: Object.fromEntries(Object.keys(TEXT_CALL_FUNCTIONS).map((n) => [n, "TEXT_CALL"])),
 	pluginFunctions: TEXT_PLUGIN_FUNCTIONS,
 	tokenCategories: {
 		LENGTH_OF: "function",

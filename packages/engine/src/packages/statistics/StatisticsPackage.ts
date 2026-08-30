@@ -2,7 +2,7 @@ import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { STATISTICS_PLUGIN_FUNCTIONS } from "./StatisticsPluginFunctions";
 import { pairStatParselet } from "./parselets/PairStatParselet";
 import { StatsCallParselet } from "./parselets/StatsCallParselet";
-import { statsCallNormalizerRule } from "./normalizer/StatsCallNormalizerRule";
+import { STATISTICS_CALL_FUNCTIONS } from "./StatisticsFunctionNames";
 
 /**
  * The second tier of statistics (issues #244, #245): the relationship between
@@ -30,7 +30,8 @@ export const STATISTICS_PACKAGE: IEnginePackage = {
 		INTERCEPT_OF: pairStatParselet("statIntercept"),
 		STAT_CALL: new StatsCallParselet(),
 	},
-	normalizerRules: [statsCallNormalizerRule()],
+	// `correlation(...)`, `percentile(...)`, ... fused to STAT_CALL by the shared rule.
+	callFusions: Object.fromEntries(Object.keys(STATISTICS_CALL_FUNCTIONS).map((n) => [n, "STAT_CALL"])),
 	pluginFunctions: STATISTICS_PLUGIN_FUNCTIONS,
 	tokenCategories: {
 		CORRELATION_OF: "function",

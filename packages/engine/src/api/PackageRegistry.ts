@@ -114,6 +114,28 @@ export interface IEnginePackage {
    */
   normalizerRules?: NormalizerRule[];
   /**
+   * Function-call words that fuse to a call token when immediately followed by
+   * `(`, keyed by the lower-cased word and mapped to the token type to mint.
+   * This is the declarative form of the common `name(` normalizer rule (the one
+   * `base64(`, `sha256(`, `length(`, ... all hand-wrote): the engine merges every
+   * package's `callFusions` into one shared map and runs a SINGLE rule for all of
+   * them, rather than one rule per package tried at every identifier.
+   *
+   * The fused token carries the lower-cased word as its value (the call parselet
+   * reads it to pick the function) and the original text as its raw value, and it
+   * does not fire after a `:` (so `:base64 = ...` stays a variable). For anything
+   * more than that plain shape (a different lookbehind, a deeper lookahead), write
+   * a {@link normalizerRules} entry instead.
+   *
+   * @example
+   * ```ts
+   * callFusions: { base64: "BASE64_FN" }
+   * // or, mapping many names to one token type:
+   * callFusions: Object.fromEntries(Object.keys(FUNCS).map((n) => [n, "TEXT_CALL"]))
+   * ```
+   */
+  callFusions?: Record<string, string>;
+  /**
    * Semantic highlight categories for this package's custom token types
    * (introduced via {@link lexerVocabulary} or {@link normalizerRules}), the
    * plugin-facing half of solve-js's editor-agnostic language service (see
