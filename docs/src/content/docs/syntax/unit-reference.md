@@ -523,6 +523,15 @@ Measured against **mps**.
 | min_km | `min_km` | 0.06 |
 | min_mi | `min_mi` | 0.0372823 |
 
+## Css length
+
+Measured against **px**.
+
+| Unit | Spellings | Relative size |
+| --- | --- | --- |
+| rem | `rem` | 16 |
+| px | `px` | 1 |
+
 ## Voltage
 
 Measured against **V**.
@@ -615,7 +624,7 @@ Measured against **kmpl**.
 
 ## Spellings that are not listed
 
-The conversion tables carry 1508 spellings in total, and 457 of
+The conversion tables carry 1510 spellings in total, and 457 of
 them are missing above. Most are multi-word forms like `sq ft` and `cu yd`,
 which the tables can resolve but the lexer cannot tokenize, so they are
 unavailable when typing an expression. They are excluded here rather than listed
