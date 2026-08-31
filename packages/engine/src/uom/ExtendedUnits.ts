@@ -58,6 +58,17 @@ export const EXTENDED_UNITS: Record<string, ExtendedUnitDef> = {
   min_km: { measure: "pace", toBase: 60 / 1000 },
   min_mi: { measure: "pace", toBase: 60 / 1609.344 },
 
+  // ── CSS length (base: px, with rem against a 16px root) ────────────────
+  // A front-end staple: `16px in rem`, `1.5rem in px`. These are kept in their
+  // own measure, deliberately disjoint from physical length: a CSS pixel is a
+  // reference pixel, not a fixed slice of a centimetre a reader would want to
+  // convert to. `rem` is "root em", 16px by the CSS default root font size; the
+  // 16 is a convention, not a measurement, and a configurable root is a possible
+  // later addition. `em` is left out on purpose: it is relative to the element's
+  // own font size, not the root, so a single fixed value would be a quiet lie.
+  px: { measure: "cssLength", toBase: 1 },
+  rem: { measure: "cssLength", toBase: 16 },
+
   // ── Voltage (base: V, expressed in mV/kV only) ─────────────────────────
   // The bare symbol "V" is deliberately NOT registered, it collides with
   // "V" the stock ticker (Visa) in packages/stocks/MajorTickers.ts, whose

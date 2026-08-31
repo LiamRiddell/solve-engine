@@ -30,7 +30,8 @@ import { knownUnits } from "@solve-js/lexer/units";
  */
 const PLUGIN_UNIT_FIXTURES = [
   "tile", "gp", "osrs", "tick",
-  "px", "em", "rem", "vh", "vw", "vmin", "vmax", "ch", "ex", "fr",
+  // `px` and `rem` left this list when they became built-in CSS units.
+  "em", "vh", "vw", "vmin", "vmax", "ch", "ex", "fr",
   "foo", "baz", "nano", "micro", "mega", "q", "r", "n",
   "customunit", "myunit", "unit_a", "unit_b",
 ];
@@ -649,7 +650,8 @@ describe("LexerVocabulary Fuzz — stress test with all fuzz cases", () => {
     // entries in the conversion tables, and a plugin cannot override a built-in
     // unit. See PLUGIN_UNIT_FIXTURES.
     units: [
-      "tile", "gp", "osrs", "px", "em", "rem", "vh", "vw",
+      // `px` and `rem` are built-in CSS units now, so a plugin cannot claim them.
+      "tile", "gp", "osrs", "em", "vh", "vw",
       "vmin", "vmax", "ch", "ex", "fr",
     ],
   };
