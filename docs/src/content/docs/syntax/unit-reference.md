@@ -523,6 +523,21 @@ Measured against **mps**.
 | min_km | `min_km` | 0.06 |
 | min_mi | `min_mi` | 0.0372823 |
 
+## Data rate
+
+Measured against **bps**.
+
+| Unit | Spellings | Relative size |
+| --- | --- | --- |
+| Tbps | `Tbps` | 1000000000000 |
+| GBps | `GBps` | 8000000000 |
+| Gbps | `Gbps` | 1000000000 |
+| MBps | `MBps` | 8000000 |
+| Mbps | `Mbps` | 1000000 |
+| kBps | `kBps` | 8000 |
+| kbps | `kbps` | 1000 |
+| bps | `bps` | 1 |
+
 ## Css length
 
 Measured against **px**.
@@ -624,7 +639,7 @@ Measured against **kmpl**.
 
 ## Spellings that are not listed
 
-The conversion tables carry 1510 spellings in total, and 457 of
+The conversion tables carry 1518 spellings in total, and 457 of
 them are missing above. Most are multi-word forms like `sq ft` and `cu yd`,
 which the tables can resolve but the lexer cannot tokenize, so they are
 unavailable when typing an expression. They are excluded here rather than listed

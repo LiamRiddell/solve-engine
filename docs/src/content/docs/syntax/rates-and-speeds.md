@@ -37,3 +37,17 @@ to the whole quotient rather than to the number just before it.
 120 km / 2 hours // 60.00 km/hours
 120 km / 2 hours in kph // 60.00 kph
 ```
+
+## Drive time
+
+A distance *at* a speed is a duration: how long the journey takes. The answer
+comes back in the largest sensible time unit.
+
+```solve
+250 miles at 60 mph // 4.17 h
+100 km at 60 kph // 1.67 h
+```
+
+For a different unit, convert the whole thing: `(250 miles at 60 mph) in
+minutes`. A quantity that is not a distance, so does not match the speed, is
+reported as an error rather than a wrong number.

@@ -25,6 +25,20 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/finance/data/CpiTable";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
+import { isPhysicalTimeRate, quantityAtRateSeconds } from "@solve-js/uom/UomConverter";
+
+/**
+ * A duration in seconds, shown in the largest whole time unit that keeps the
+ * number readable: seconds under a minute, then minutes, hours, days. Used for
+ * `<quantity> at <speed|bandwidth>`, whose answer is a time.
+ */
+function durationValueFromSeconds(seconds: number): Value {
+	const magnitude = Math.abs(seconds);
+	if (magnitude < 60) return uomValue(seconds, "s");
+	if (magnitude < 3600) return uomValue(seconds / 60, "min");
+	if (magnitude < 86_400) return uomValue(seconds / 3600, "h");
+	return uomValue(seconds / 86_400, "d");
+}
 
 /** The angle measure's kind in UNIT_TABLE. Its base unit is the radian. */
 const ANGLE_KIND = 0;
@@ -983,6 +997,14 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     96: (args) => {
         const left = args[0];
         const rate = args[1];
+        // A physical rate over time, a speed or a bandwidth: "250 miles at 60 mph",
+        // "4 GB at 50 Mbps". Dividing the quantity by the rate gives a duration.
+        // Handled before the price-rate logic below, and only for a length/data
+        // quantity, so "$500 at $20/hour" keeps its own money answer.
+        if (rate.type === ValueType.Uom && left.type === ValueType.Uom && isPhysicalTimeRate(rate.unit)) {
+            const seconds = quantityAtRateSeconds(left.toNumber(), left.unit!, rate.toNumber(), rate.unit!);
+            if (seconds !== null) return durationValueFromSeconds(seconds);
+        }
         if (rate.type !== ValueType.Uom || rate.unit === undefined || !rate.unit.includes("/")) {
             return errorValue("INVALID_RATE", "at: the right-hand side has to be a rate, as in \"$30/hour\"");
         }

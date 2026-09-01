@@ -2,6 +2,7 @@ import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
+import { isPhysicalTimeRate } from "@solve-js/uom/UomConverter";
 
 /** Whether a token is a unit spelling the engine knows. */
 function isUnit(token: Token | undefined): boolean {
@@ -23,6 +24,9 @@ function hasRateAhead(tokens: readonly Token[], from: number): boolean {
 		const token = tokens[i];
 		if (token.type === "PER_UNIT") return true;
 		if (token.type === "EOF" || token.type === "COMMA" || token.type === "RATE_AT") return false;
+		// A single-token physical rate over time, `60 mph` / `50 Mbps`: a distance
+		// or data size at one of these is a duration, so the `at` is a rate `at`.
+		if (token.type === "UNIT" && isPhysicalTimeRate(token.value ?? undefined)) return true;
 		const word = (token.text ?? token.value ?? "").toLowerCase();
 		const introducesDenominator =
 			token.type === "SLASH" || (token.type === "IDENT" && PER_WORDS.has(word));
