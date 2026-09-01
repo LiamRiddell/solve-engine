@@ -31,4 +31,18 @@ and `Mb` is megabits, a factor of eight apart.
 1 Gb in Mb // 1000.00 Mb
 ```
 
+## Bandwidth and transfer time
+
+Bandwidth is a data rate, bits (or bytes) a second: `Mbps`, `Gbps`, `kbps`, and
+the byte forms `MBps`, `GBps`. A data size *at* a bandwidth is the time the
+transfer takes.
+
+```solve
+4 GB at 50 Mbps // 10.67 min
+2 GB at 1 Gbps // 16.00 s
+```
+
+The bit/byte distinction rides the unit's case here too: `50 Mbps` is megabits a
+second, `50 MBps` megabytes, eight times as fast.
+
 See [units and conversions](/syntax/unit-arithmetic/) for the full list.

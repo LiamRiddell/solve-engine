@@ -353,7 +353,49 @@ function expandUnitToRate(value: number, unit: string): RateForm | null {
     // 1 alias == ext.toBase m/s, so `value alias` is `value * toBase` m/s.
     return { value: value * ext.toBase, numerator: "m", denominator: "s" };
   }
+  if (ext !== undefined && ext.measure === "dataRate") {
+    // 1 alias == ext.toBase bits/s, so `value alias` is `value * toBase` b/s.
+    return { value: value * ext.toBase, numerator: "b", denominator: "s" };
+  }
   return null;
+}
+
+/**
+ * Whether `unit` is a *physical* rate over time, one whose numerator is a length
+ * or a data size, so `<quantity> at <unit>` means dividing that quantity by the
+ * rate to get a duration: `250 miles at 60 mph`, `4 GB at 50 Mbps`.
+ *
+ * Deliberately NOT true for a price rate like `$/hour`: those are handled by the
+ * existing at-rate builtin, which multiplies or divides against the currency,
+ * and must keep their own answer (`$500 at $20/hour` is `25 hours`, formatted
+ * that way). The numerator-measure check is what tells the two apart.
+ */
+export function isPhysicalTimeRate(unit: string | undefined): boolean {
+  if (unit === undefined) return false;
+  const rate = expandUnitToRate(1, unit);
+  if (rate === null || getMeasure(rate.denominator) !== "time") return false;
+  const numeratorMeasure = getMeasure(rate.numerator);
+  return numeratorMeasure === "length" || numeratorMeasure === "data";
+}
+
+/**
+ * `<quantity> at <rate>` where `rate` is a {@link isPhysicalTimeRate}, in
+ * seconds. The quantity's measure must match the rate's numerator (a distance at
+ * a speed, a data size at a bandwidth); otherwise the pair does not line up and
+ * this returns null for the caller to report.
+ */
+export function quantityAtRateSeconds(
+  quantity: number,
+  quantityUnit: string,
+  rateValue: number,
+  rateUnit: string,
+): number | null {
+  const rate = expandUnitToRate(rateValue, rateUnit);
+  if (rate === null || getMeasure(rate.denominator) !== "time") return null;
+  if (getMeasure(quantityUnit) !== getMeasure(rate.numerator)) return null;
+  const quantityInNumerator = convertUnit(quantity, quantityUnit, rate.numerator);
+  const timeInDenominator = quantityInNumerator / rate.value;
+  return convertUnit(timeInDenominator, rate.denominator, "s");
 }
 
 /**

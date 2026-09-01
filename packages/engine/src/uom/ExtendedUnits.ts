@@ -58,6 +58,21 @@ export const EXTENDED_UNITS: Record<string, ExtendedUnitDef> = {
   min_km: { measure: "pace", toBase: 60 / 1000 },
   min_mi: { measure: "pace", toBase: 60 / 1609.344 },
 
+  // ── Data rate (base: bps, bits per second) ─────────────────────────────
+  // Network bandwidth, the denominator being a second. Decimal (SI) prefixes,
+  // matching how a connection is advertised: 50 Mbps is 50 million bits per
+  // second, not 2^20. The bit/byte distinction rides the case of the unit,
+  // exactly as it does for the data sizes: `Mbps` is megabits, `MBps` megabytes
+  // (eight times as many bits). These are what make `4 GB at 50 Mbps` a time.
+  bps: { measure: "dataRate", toBase: 1 },
+  kbps: { measure: "dataRate", toBase: 1_000 },
+  Mbps: { measure: "dataRate", toBase: 1_000_000 },
+  Gbps: { measure: "dataRate", toBase: 1_000_000_000 },
+  Tbps: { measure: "dataRate", toBase: 1_000_000_000_000 },
+  kBps: { measure: "dataRate", toBase: 8_000 },
+  MBps: { measure: "dataRate", toBase: 8_000_000 },
+  GBps: { measure: "dataRate", toBase: 8_000_000_000 },
+
   // ── CSS length (base: px, with rem against a 16px root) ────────────────
   // A front-end staple: `16px in rem`, `1.5rem in px`. These are kept in their
   // own measure, deliberately disjoint from physical length: a CSS pixel is a
