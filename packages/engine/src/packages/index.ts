@@ -19,6 +19,7 @@ export {
 	FINANCE_PACKAGE,
 	WEATHER_PACKAGE,
 	createStocksPackage,
+	createCryptoPackage,
 	createCurrencyPackage,
 	createKnowledgePackage,
 	LINES_PACKAGE,
