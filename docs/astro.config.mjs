@@ -292,6 +292,7 @@ export default defineConfig({
                 { slug: "syntax/splitting-a-bill" },
                 { slug: "syntax/interest-and-inflation" },
                 { slug: "syntax/savings-goals" },
+                { slug: "syntax/payroll" },
                 { slug: "syntax/stocks" },
               ],
             },
