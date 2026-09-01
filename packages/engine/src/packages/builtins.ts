@@ -36,6 +36,7 @@ import { PAYROLL_PACKAGE } from "./payroll";
 import { UNCERTAINTY_PACKAGE } from "./uncertainty";
 import { WEATHER_PACKAGE } from "./weather";
 import { createStocksPackage } from "./stocks";
+import { createCryptoPackage } from "./crypto";
 import { createKnowledgePackage } from "./knowledge";
 import { LINES_PACKAGE } from "./lines";
 import { GOALSEEK_PACKAGE } from "./goalseek";
@@ -79,6 +80,7 @@ export {
   UNCERTAINTY_PACKAGE,
   WEATHER_PACKAGE,
   createStocksPackage,
+  createCryptoPackage,
   createCurrencyPackage,
   createKnowledgePackage,
   LINES_PACKAGE,

@@ -294,6 +294,7 @@ export default defineConfig({
                 { slug: "syntax/savings-goals" },
                 { slug: "syntax/payroll" },
                 { slug: "syntax/stocks" },
+                { slug: "syntax/crypto" },
               ],
             },
             {
