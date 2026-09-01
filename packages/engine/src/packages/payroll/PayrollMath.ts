@@ -55,13 +55,14 @@ export function takeHome(gross: number, bands: TaxYearBands): number {
 	return gross - incomeTax(gross, bands) - nationalInsurance(gross, bands);
 }
 
-/**
- * A gross annual salary as an hourly rate, on a full-time year of 1,920 hours
- * (a nominal 40-hour week across 48 working weeks). This is a plain division,
- * before tax; the take-home forms answer the after-tax question.
- */
+/** Hours in a nominal full-time year: a 40-hour week across 48 working weeks. */
 export const FULL_TIME_HOURS_PER_YEAR = 1_920;
 
+/**
+ * A gross annual salary as an hourly rate, over a {@link FULL_TIME_HOURS_PER_YEAR}
+ * year. This is a plain division, before tax; the take-home forms answer the
+ * after-tax question.
+ */
 export function hourlyRate(annual: number): number {
 	return annual / FULL_TIME_HOURS_PER_YEAR;
 }
