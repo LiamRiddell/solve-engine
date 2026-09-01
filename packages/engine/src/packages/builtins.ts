@@ -33,6 +33,7 @@ import { CONVERTERS_PACKAGE } from "./converters";
 import { MATHPHRASES_PACKAGE } from "./mathphrases";
 import { FINANCE_PACKAGE } from "./finance";
 import { PAYROLL_PACKAGE } from "./payroll";
+import { SHOPPING_PACKAGE } from "./shopping";
 import { UNCERTAINTY_PACKAGE } from "./uncertainty";
 import { WEATHER_PACKAGE } from "./weather";
 import { createStocksPackage } from "./stocks";
@@ -152,6 +153,7 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   MATHPHRASES_PACKAGE,
   FINANCE_PACKAGE,
   PAYROLL_PACKAGE,
+  SHOPPING_PACKAGE,
   UNCERTAINTY_PACKAGE,
   WEATHER_PACKAGE,
   LINES_PACKAGE,

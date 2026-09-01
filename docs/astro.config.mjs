@@ -293,6 +293,7 @@ export default defineConfig({
                 { slug: "syntax/interest-and-inflation" },
                 { slug: "syntax/savings-goals" },
                 { slug: "syntax/payroll" },
+                { slug: "syntax/shopping" },
                 { slug: "syntax/stocks" },
                 { slug: "syntax/crypto" },
               ],
