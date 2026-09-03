@@ -2,6 +2,7 @@ import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { Token, tokenTypeId, TokenTypes } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import type { SourceSpan } from "@solve-js/errors/EngineError";
 import { DiagnosticPipeline, DiagnosticEventType, type DiagnosticEvent } from "@solve-js/diagnostics";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower, buildBindingPowerTable } from "@solve-js/parser/BindingPower";
@@ -271,7 +272,7 @@ export class PrecedenceParser {
   private parseExpressionBody(minBp: number): void {
     const token = this.consume();
     if (!token) {
-      throw ErrorFactory.parsing("UNEXPECTED_END", "Unexpected end of expression");
+      throw ErrorFactory.parsing({ code: "UNEXPECTED_END", message: "Unexpected end of expression", span: this.spanAtEnd() });
     }
 
     // ── Prefix ──────────────────────────────────────────────────────────────
@@ -456,17 +457,17 @@ export class PrecedenceParser {
           // return NaN. This used to push straight through as a silent
           // NaN Number value instead of a visible error.
           if (Number.isNaN(v)) {
-            throw ErrorFactory.parsing("INVALID_NUMBER_LITERAL", `Invalid hex literal: "${raw}"`, { raw });
+            throw ErrorFactory.parsing({ code: "INVALID_NUMBER_LITERAL", message: `Invalid hex literal: "${raw}"`, context: { raw }, span: this.spanOf(token) });
           }
         } else if (raw.startsWith("0b") || raw.startsWith("0B")) {
           v = parseInt(raw.slice(2), 2);
           if (Number.isNaN(v)) {
-            throw ErrorFactory.parsing("INVALID_NUMBER_LITERAL", `Invalid binary literal: "${raw}"`, { raw });
+            throw ErrorFactory.parsing({ code: "INVALID_NUMBER_LITERAL", message: `Invalid binary literal: "${raw}"`, context: { raw }, span: this.spanOf(token) });
           }
         } else if (raw.startsWith("0o") || raw.startsWith("0O")) {
           v = parseInt(raw.slice(2), 8);
           if (Number.isNaN(v)) {
-            throw ErrorFactory.parsing("INVALID_NUMBER_LITERAL", `Invalid octal literal: "${raw}"`, { raw });
+            throw ErrorFactory.parsing({ code: "INVALID_NUMBER_LITERAL", message: `Invalid octal literal: "${raw}"`, context: { raw }, span: this.spanOf(token) });
           }
         } else if (CHAINED_DOT_THOUSANDS_GROUPS.test(raw)) {
           // The lexer accepts "." as a thousands-group separator
@@ -605,11 +606,12 @@ export class PrecedenceParser {
     // ── Tier 2: Plugin/parselet prefix path ──────────────────────────────────
     const prefixParselet = this.registry.getPrefix(typeId);
     if (!prefixParselet) {
-      throw ErrorFactory.parsing(
-        "NO_PREFIX_PARSELET",
-        `No prefix parselet found for token: ${token.type} ("${token.value}")`,
-        { tokenType: token.type, tokenValue: token.value }
-      );
+      throw ErrorFactory.parsing({
+        code: "NO_PREFIX_PARSELET",
+        message: `No prefix parselet found for token: ${token.type} ("${token.value}")`,
+        context: { tokenType: token.type, tokenValue: token.value },
+        span: this.spanOf(token),
+      });
     }
 
     prefixParselet.parse(this, token, builder);
@@ -803,11 +805,12 @@ export class PrecedenceParser {
       this.consume();
       return token.value;
     }
-    throw ErrorFactory.parsing(
-      "USER_FUNCTION_INVALID_PARAM_NAME",
-      `Expected a parameter name but got "${token?.type ?? "end of input"}"${token ? ` ("${token.value}")` : ""}`,
-      { actualType: token?.type },
-    );
+    throw ErrorFactory.parsing({
+      code: "USER_FUNCTION_INVALID_PARAM_NAME",
+      message: `Expected a parameter name but got "${token?.type ?? "end of input"}"${token ? ` ("${token.value}")` : ""}`,
+      context: { actualType: token?.type },
+      span: token ? this.spanOf(token) : this.spanAtEnd(),
+    });
   }
 
   private parseUserFunctionDefinition(nameToken: Token, builder: BytecodeBuilder): void {
@@ -823,11 +826,12 @@ export class PrecedenceParser {
     this.consume(TokenTypes.EQUALS);
 
     if (params.length === 0) {
-      throw ErrorFactory.parsing(
-        "USER_FUNCTION_NO_PARAMS",
-        `"${nameToken.value}()" has no parameters -- user-defined functions need at least one (a zero-argument definition is indistinguishable from a plain function CALL with no args, which this grammar doesn't otherwise support)`,
-        { name: nameToken.value },
-      );
+      throw ErrorFactory.parsing({
+        code: "USER_FUNCTION_NO_PARAMS",
+        message: `"${nameToken.value}()" has no parameters -- user-defined functions need at least one (a zero-argument definition is indistinguishable from a plain function CALL with no args, which this grammar doesn't otherwise support)`,
+        context: { name: nameToken.value },
+        span: this.spanOf(nameToken),
+      });
     }
 
     // Compile the body into its OWN independent BytecodeBuilder, reusing
@@ -855,11 +859,12 @@ export class PrecedenceParser {
       // clearest possible error, matching this codebase's "never silently
       // pretend to support something it doesn't" convention (e.g.
       // addBusinessDays()'s own disclosed holiday-exclusion scope-down).
-      throw ErrorFactory.parsing(
-        "FUNCTION_BODY_MUST_BE_SYNCHRONOUS",
-        `"${nameToken.value}(...)"'s body calls an async operation (weather, stocks, currency, ...) — user-defined function bodies must be synchronous`,
-        { name: nameToken.value },
-      );
+      throw ErrorFactory.parsing({
+        code: "FUNCTION_BODY_MUST_BE_SYNCHRONOUS",
+        message: `"${nameToken.value}(...)"'s body calls an async operation (weather, stocks, currency, ...) — user-defined function bodies must be synchronous`,
+        context: { name: nameToken.value },
+        span: this.spanOf(nameToken),
+      });
     }
 
     const bodyIdx = builder.emitUserFunctionBody(nameToken.value, params, bodyProgram);
@@ -895,22 +900,33 @@ export class PrecedenceParser {
   // Token stream navigation (identical API to Parser)
   // ═══════════════════════════════════════════════════════════════════════════════
 
+  /** The source span of `token`: where an editor underlines the error. */
+  private spanOf(token: Token): SourceSpan {
+    return { start: token.offset, end: token.sourceEnd ?? token.offset + token.text.length, line: token.line, col: token.col };
+  }
+
+  /** An empty span just after the last token: where a line that stops short is pointed at. */
+  private spanAtEnd(): SourceSpan {
+    const last = this.tokens[this.tokens.length - 1];
+    if (!last) return { start: 0, end: 0 };
+    const end = last.sourceEnd ?? last.offset + last.text.length;
+    return { start: end, end, line: last.line, col: last.col + (end - last.offset) };
+  }
+
   consume(expectedType?: string): Token {
     const token = this.tokens[this.current];
     if (!token) {
-      throw ErrorFactory.parsing(
-        "UNEXPECTED_END_OF_INPUT",
-        "Unexpected end of input"
-      );
+      throw ErrorFactory.parsing({ code: "UNEXPECTED_END_OF_INPUT", message: "Unexpected end of input", span: this.spanAtEnd() });
     }
     if (expectedType !== undefined) {
       const expectedId = tokenTypeId(expectedType);
       if (token.typeId !== expectedId) {
-        throw ErrorFactory.parsing(
-          "UNEXPECTED_TOKEN_TYPE",
-          `Expected token type "${expectedType}" but got "${token.type}" ("${token.value}")`,
-          { expectedType, actualType: token.type, actualValue: token.value }
-        );
+        throw ErrorFactory.parsing({
+          code: "UNEXPECTED_TOKEN_TYPE",
+          message: `Expected token type "${expectedType}" but got "${token.type}" ("${token.value}")`,
+          context: { expectedType, actualType: token.type, actualValue: token.value },
+          span: this.spanOf(token),
+        });
       }
     }
     this.current++;

@@ -1852,11 +1852,12 @@ export class ExpressionEngine {
                 }
             }
 
-            throw ErrorFactory.parsing(
-                "UNEXPECTED_TRAILING_TOKEN",
-                `Unexpected token after expression: "${leftover.value}"`,
-                { tokenType: leftover.type, tokenValue: leftover.value }
-            );
+            throw ErrorFactory.parsing({
+                code: "UNEXPECTED_TRAILING_TOKEN",
+                message: `Unexpected token after expression: "${leftover.value}"`,
+                context: { tokenType: leftover.type, tokenValue: leftover.value },
+                span: { start: leftover.offset, end: leftover.sourceEnd ?? leftover.offset + leftover.text.length, line: leftover.line, col: leftover.col },
+            });
         }
     }
 
