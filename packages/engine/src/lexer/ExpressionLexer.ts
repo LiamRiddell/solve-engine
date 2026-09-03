@@ -489,14 +489,22 @@ export class ExpressionLexer {
   // Keyword map: lowercase identifier → token type (locale keywords only)
   private keywordMap: Map<string, string>;
 
-  // ── Merged lookup collections (keywordMap + pluginKeywordMap, knownUnits + pluginUnits)
+  // ── Merged lookup collections (keywordMap + plugin keywords, knownUnits + pluginUnits)
   private mergedKeywords: Map<string, string>;
   // ReadonlySet: only membership is ever tested, which lets the common
   // no-plugin-units case share the built-in `knownUnits` set without a copy.
   private mergedUnits: ReadonlySet<string>;
 
-  // Plugin-extensible keyword map (merged with locale keywordMap)
-  private pluginKeywordMap: Map<string, string> = new Map();
+  /**
+   * Who registered each plugin keyword, unit and two-character operator, in
+   * registration order. Two packages may claim the same word (the
+   * compatibility index warns, and the last registered wins, as before); the
+   * owner lists make unregistration exact, so removing one package hands the
+   * word back to the other rather than deleting it for both.
+   */
+  private pluginKeywordOwners: Map<string, Array<{ owner: LexerVocabulary; tokenType: string }>> = new Map();
+  private pluginUnitOwners: Map<string, LexerVocabulary[]> = new Map();
+  private pluginOperatorOwners: Map<number, Array<{ owner: LexerVocabulary; tokenType: string }>> = new Map();
 
   // Plugin-extensible two-char operators: firstChar → (secondChar → tokenType)
   private pluginOperators: Map<number, Map<number, string>> = new Map();
@@ -603,8 +611,11 @@ export class ExpressionLexer {
    * that conflicts with a built-in one.
    */
   registerVocabulary(plugin: LexerVocabulary): void {
+    // Every guard runs before anything is written. A collision on the third
+    // keyword used to leave the first two registered, so a registration that
+    // failed still changed the lexer.
     if (plugin.keywords) {
-      for (const [keyword, tokenType] of Object.entries(plugin.keywords)) {
+      for (const keyword of Object.keys(plugin.keywords)) {
         const lower = keyword.toLowerCase();
         // Guard: prevent overriding built-in locale keywords
         if (this.keywordMap.has(lower)) {
@@ -615,21 +626,14 @@ export class ExpressionLexer {
             { keyword, builtinType: this.keywordMap.get(lower) }
           );
         }
-        this.pluginKeywordMap.set(lower, tokenType);
-        // Straight into the merged view: guarded above against shadowing a
-        // built-in, so no full rebuild is needed.
-        this.mergedKeywords.set(lower, tokenType);
       }
     }
-
     if (plugin.operators) {
-      this.hasPluginOps = true;
-      for (const [chars, tokenType] of Object.entries(plugin.operators)) {
-        // Only support 2-char operators for the fast path
+      for (const chars of Object.keys(plugin.operators)) {
+        // Only 2-char operators take the fast path; others are ignored here.
         if (chars.length === 2) {
           const first = chars.charCodeAt(0);
           const second = chars.charCodeAt(1);
-
           // Guard: prevent overriding built-in two-char operators (==, !=, >=, <=)
           const builtInSecondMap = TWO_CHAR_OPS[first];
           if (builtInSecondMap && builtInSecondMap[second] !== undefined) {
@@ -666,7 +670,40 @@ export class ExpressionLexer {
               { operator: chars, builtinType: 'COMMENT' }
             );
           }
+        }
+      }
+    }
+    if (plugin.units) {
+      for (const unit of plugin.units) {
+        // Guard: prevent overriding built-in units
+        if (knownUnits.has(unit)) {
+          throw ErrorFactory.config(
+            'PLUGIN_UNIT_COLLISION',
+            `Plugin unit "${unit}" conflicts with a built-in unit. ` +
+            `Built-in units cannot be overridden.`,
+            { unit }
+          );
+        }
+      }
+    }
 
+    if (plugin.keywords) {
+      for (const [keyword, tokenType] of Object.entries(plugin.keywords)) {
+        const lower = keyword.toLowerCase();
+        this.claim(this.pluginKeywordOwners, lower, plugin, tokenType);
+        // Straight into the merged view: guarded above against shadowing a
+        // built-in, so no full rebuild is needed.
+        this.mergedKeywords.set(lower, tokenType);
+      }
+    }
+
+    if (plugin.operators) {
+      this.hasPluginOps = true;
+      for (const [chars, tokenType] of Object.entries(plugin.operators)) {
+        if (chars.length === 2) {
+          const first = chars.charCodeAt(0);
+          const second = chars.charCodeAt(1);
+          this.claim(this.pluginOperatorOwners, first * 65536 + second, plugin, tokenType);
           let inner = this.pluginOperators.get(first);
           if (!inner) {
             inner = new Map();
@@ -679,15 +716,9 @@ export class ExpressionLexer {
 
     if (plugin.units) {
       for (const unit of plugin.units) {
-        // Guard: prevent overriding built-in units
-        if (knownUnits.has(unit)) {
-          throw ErrorFactory.config(
-            'PLUGIN_UNIT_COLLISION',
-            `Plugin unit "${unit}" conflicts with a built-in unit. ` +
-            `Built-in units cannot be overridden.`,
-            { unit }
-          );
-        }
+        const owners = this.pluginUnitOwners.get(unit);
+        if (owners) owners.push(plugin);
+        else this.pluginUnitOwners.set(unit, [plugin]);
         this.pluginUnits.add(unit);
       }
       this.rebuildMergedUnits();
@@ -696,6 +727,26 @@ export class ExpressionLexer {
     if (plugin.rawLinePatterns) {
       this.pluginRawLinePatterns.push(...plugin.rawLinePatterns);
     }
+  }
+
+  /** Record `owner`'s claim on `key`. The newest claim is the one in force. */
+  private claim<K>(owners: Map<K, Array<{ owner: LexerVocabulary; tokenType: string }>>, key: K, owner: LexerVocabulary, tokenType: string): void {
+    const claims = owners.get(key);
+    if (claims) claims.push({ owner, tokenType });
+    else owners.set(key, [{ owner, tokenType }]);
+  }
+
+  /** Drop `owner`'s claim on `key`, and return the claim now in force, if any is left. */
+  private release<K>(owners: Map<K, Array<{ owner: LexerVocabulary; tokenType: string }>>, key: K, owner: LexerVocabulary): { owner: LexerVocabulary; tokenType: string } | undefined {
+    const claims = owners.get(key);
+    if (!claims) return undefined;
+    const remaining = claims.filter((claim) => claim.owner !== owner);
+    if (remaining.length === 0) {
+      owners.delete(key);
+      return undefined;
+    }
+    owners.set(key, remaining);
+    return remaining[remaining.length - 1];
   }
 
   /**
@@ -713,8 +764,9 @@ export class ExpressionLexer {
     if (plugin.keywords) {
       for (const keyword of Object.keys(plugin.keywords)) {
         const lower = keyword.toLowerCase();
-        this.pluginKeywordMap.delete(lower);
-        this.mergedKeywords.delete(lower);
+        const survivor = this.release(this.pluginKeywordOwners, lower, plugin);
+        if (survivor) this.mergedKeywords.set(lower, survivor.tokenType);
+        else this.mergedKeywords.delete(lower);
       }
     }
 
@@ -723,12 +775,16 @@ export class ExpressionLexer {
         if (chars.length === 2) {
           const first = chars.charCodeAt(0);
           const second = chars.charCodeAt(1);
+          const survivor = this.release(this.pluginOperatorOwners, first * 65536 + second, plugin);
           const inner = this.pluginOperators.get(first);
-          if (inner) {
-            inner.delete(second);
-            if (inner.size === 0) {
-              this.pluginOperators.delete(first);
-            }
+          if (!inner) continue;
+          if (survivor) {
+            inner.set(second, survivor.tokenType);
+            continue;
+          }
+          inner.delete(second);
+          if (inner.size === 0) {
+            this.pluginOperators.delete(first);
           }
         }
       }
@@ -737,6 +793,14 @@ export class ExpressionLexer {
 
     if (plugin.units) {
       for (const unit of plugin.units) {
+        const owners = this.pluginUnitOwners.get(unit);
+        if (!owners) continue;
+        const remaining = owners.filter((owner) => owner !== plugin);
+        if (remaining.length > 0) {
+          this.pluginUnitOwners.set(unit, remaining);
+          continue;
+        }
+        this.pluginUnitOwners.delete(unit);
         this.pluginUnits.delete(unit);
       }
 
