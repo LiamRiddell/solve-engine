@@ -83,9 +83,10 @@ jobs:
       # LongDocumentRobustness. A suite nothing runs is a suite that quietly
       # rots: when this job was first written, two of those files had decayed
       # to 49 and 13 failures against behaviour the engine had changed under
-      # them. This is the run that includes them, and the run that measures
-      # coverage against the floor in jest.full.config.cjs, because it is the
-      # only run that executes everything.
+      # them. This is the run that includes them. Coverage is measured on the
+      # same suite by coverage.yml, daily rather than here: the per-file v8
+      # conversion made this job ten times slower, which is not a price a
+      # pull-request gate can charge.
       #
       # One Node version rather than the verify matrix. These suites are slow
       # and their failures are logic failures, not version-specific ones, so a

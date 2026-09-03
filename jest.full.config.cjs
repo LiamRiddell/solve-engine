@@ -15,12 +15,8 @@
  * that parallel workers on a two-core runner start failing on allocation rather
  * than on anything real.
  *
- * This is also the run that measures coverage, because it is the run that
- * executes every suite: a figure measured against a subset would move with
- * the subset. The threshold is a floor rather than a target. It exists so
- * coverage cannot fall without the build saying so, and it sits a few points
- * under the measured value so that ordinary churn does not trip it while a
- * real drop does.
+ * Coverage is measured on this same suite by `jest.coverage.config.cjs`, on a
+ * schedule rather than per pull request; see that file for why.
  */
 
 const base = require("./jest.config.js");
@@ -37,23 +33,4 @@ module.exports = {
 	// These suites generate large inputs; the default timeout is not generous
 	// enough for the long-document robustness cases on a cold runner.
 	testTimeout: 120000,
-
-	collectCoverage: true,
-	collectCoverageFrom: [
-		"packages/engine/src/**/*.ts",
-		// The inline worker is a build artefact of esbuild-plugin-inline-worker
-		// and throws when imported directly, so nothing can execute it here.
-		"!packages/engine/src/workers/**",
-	],
-	coverageReporters: ["text-summary"],
-	// Measured when the floor was set: 97.3% statements, 88.3% branches, 92.0%
-	// functions, 97.3% lines. Each floor sits three to four points under.
-	coverageThreshold: {
-		global: {
-			statements: 94,
-			branches: 84,
-			functions: 88,
-			lines: 94,
-		},
-	},
 };

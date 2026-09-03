@@ -41,10 +41,11 @@ Closes #
 
 <!-- That is every check continuous integration applies, as one command: lint,
      comment style, doc coverage, action pins, licences, the audit, the type
-     check, every test suite with the coverage floor, the stats, the build,
-     the smoke checks, publint, the size, the unit reference, the sidebar, and
-     the packed tarball installed and used. `npm run verify` is the fast loop
-     for iterating; it is not the gate. -->
+     check, every test suite, the stats, the build, the smoke checks, publint,
+     the size, the unit reference, the sidebar, and the packed tarball
+     installed and used. `npm run verify` is the fast loop for iterating; it
+     is not the gate. The coverage floor runs daily on its own; run
+     `npm run test:coverage` if this removes tests. -->
 
 ## Anything worth a closer look
 

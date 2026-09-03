@@ -1,0 +1,39 @@
+name: Coverage
+
+# The coverage floor, measured daily rather than on every pull request.
+#
+# It runs the full suite with the v8 coverage provider, which converts
+# coverage for every loaded source file once per spec file: single-threaded on
+# a two-core runner that turned the two and a half minute full-suite job into
+# one of over twenty. A pull-request gate that slow is one people route
+# around, so the floor lives here instead. It fails the run when coverage
+# falls under the thresholds in `jest.coverage.config.cjs`, which sit a few
+# points beneath the value measured when they were set, so a real drop shows
+# within a day and ordinary churn never trips it. `npm run test:coverage` is
+# the same check locally, for a change that removes tests.
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  floor:
+    name: Coverage against the floor
+    # Pinned rather than ubuntu-latest, like every other job here.
+    runs-on: ubuntu-24.04
+    # Generous, because the point of measuring here is that it is slow.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run test:coverage

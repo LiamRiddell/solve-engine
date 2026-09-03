@@ -47,8 +47,10 @@ bundle.
 The difference between the two is four test suites and a dozen lint and
 packaging checks. `verify` skips `heavy/MemoryLeak`, `LexerFuzz`,
 `LexerVocabularyFuzz` and `LongDocumentRobustness`, which are slow and
-memory-hungry; `verify:ci` runs them, measures coverage against the floor, and
-then checks everything the site and the registry depend on.
+memory-hungry; `verify:ci` runs them and then checks everything the site and
+the registry depend on. The coverage floor is the one gate outside it,
+measured daily by its own workflow because the measurement is slow; run
+`npm run test:coverage` for a change that removes tests.
 
 ## Every script
 
@@ -58,7 +60,8 @@ then checks everything the site and the registry depend on.
 | `npm run verify:ci` | Every check below, in one command. The gate. |
 | `npm run typecheck` | The type check, through tsgo (see [coding standards](/contributing/coding-standards/) for why there are two compilers). |
 | `npm test`, `npm run test:ci` | The default test run: every suite except the four slow ones. |
-| `npm run test:full` | Every suite, single-threaded with a raised heap, with coverage measured against the floor in `jest.full.config.cjs`. Writes the report `stats:tests` reads. |
+| `npm run test:full` | Every suite, single-threaded with a raised heap. Writes the report `stats:tests` reads. |
+| `npm run test:coverage` | Every suite with coverage measured against the floor in `jest.coverage.config.cjs`. Slow; CI runs it daily rather than per pull request. |
 | `npm run test:light` | The default run minus the fuzz and robustness suites, for a quick signal on a slow machine. |
 | `npm run lint` | oxlint over the engine source, the spec files, the tools and the scripts. Correctness rules fail; style rules warn. |
 | `npm run lint:comments` | Comment style, over the whole tree. |

@@ -23,13 +23,22 @@ that are slow or memory-hungry: `heavy/MemoryLeak`, `LexerFuzz`,
 `LexerVocabularyFuzz` and `LongDocumentRobustness`.
 
 `jest.full.config.cjs` puts them back. `npm run test:full` runs it
-single-threaded with a raised heap, measures coverage against the floor the
-config declares, and writes the report the test-count stats are read from. It is
-what continuous integration runs, and what `npm run verify:ci` runs. A change
-that touches the lexer vocabulary, a unit, or document-scale behaviour should be
-checked with it before it is pushed: those are the suites the fast run cannot
-see, and the ones that have gone red in continuous integration after a green
-`verify`.
+single-threaded with a raised heap and writes the report the test-count stats
+are read from. It is what continuous integration runs, and what
+`npm run verify:ci` runs. A change that touches the lexer vocabulary, a unit,
+or document-scale behaviour should be checked with it before it is pushed:
+those are the suites the fast run cannot see, and the ones that have gone red
+in continuous integration after a green `verify`.
+
+## The coverage floor
+
+`jest.coverage.config.cjs` runs the same full suite with coverage measured, and
+fails when it falls under the floor the config declares: a few points beneath
+the value measured when the floor was set, so ordinary churn never trips it and
+a real drop does. It runs daily in its own workflow rather than on every pull
+request, because the per-file coverage conversion makes the run several times
+slower than the suite itself. `npm run test:coverage` is the same check
+locally; run it for a change that removes tests.
 
 ## Organisation
 

@@ -18,13 +18,15 @@ the package build. It is what to run while iterating.
 `npm run verify:ci` is the gate. It is every check continuous integration
 applies, as one command: lint (source, tests and tools), comment style, doc
 coverage, action pins, licences, the dependency audit, the type check, every
-test suite including the four slow ones the fast loop skips, the coverage
-floor, the test-count stats, the build, the smoke checks, publint, the size
-figures, the generated unit reference, the sidebar, and the packed tarball
-installed into a scratch project and used. Continuous integration runs those
-same named scripts, split across jobs for speed, and a release runs the whole
-command again before anything reaches npm. If `verify:ci` passes locally, the
-pull request passes; the two cannot drift because they are the same list.
+test suite including the four slow ones the fast loop skips, the test-count
+stats, the build, the smoke checks, publint, the size figures, the generated
+unit reference, the sidebar, and the packed tarball installed into a scratch
+project and used. Continuous integration runs those same named scripts, split
+across jobs for speed, and a release runs the whole command again before
+anything reaches npm. If `verify:ci` passes locally, the pull request passes;
+the two cannot drift because they are the same list. The one gate outside it
+is the coverage floor, measured daily by its own workflow because the
+measurement is slow; `npm run test:coverage` runs it locally.
 
 Run it before pushing anything that touches the lexer vocabulary, a unit, the
 public exports, the docs examples or the bundle. It takes several minutes;
