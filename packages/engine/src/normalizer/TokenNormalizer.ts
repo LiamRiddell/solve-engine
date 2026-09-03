@@ -70,14 +70,16 @@ export interface NormalizerOptions {
   onFusion?: (fusion: TokenFusion) => void;
 
   /**
-   * Try every registered rule at every position, ignoring the shape index.
+   * Try every registered rule at every position, ignoring both the shape
+   * index and the first-token buckets the first call uses.
    *
-   * Diagnostic only, and much slower. It exists so the indexed walk can be
-   * compared against the unindexed one over a corpus: the index is a pure
-   * filter, so the two must agree token for token, and a rule whose declared
+   * Diagnostic only, and much slower. It exists so the filtered walks can be
+   * compared against the exhaustive one over a corpus: each filter is pure,
+   * so all of them must agree token for token, and a rule whose declared
    * {@link NormalizerRule.shape} is too narrow shows up as a difference rather
    * than as a feature that quietly stopped working.
-   * `NormalizerIndexFidelity.spec` is the consumer.
+   * `NormalizerIndexFidelity.spec` and `RuleHintsMatchGuards.spec` are the
+   * consumers.
    *
    * @default false
    */
@@ -299,13 +301,12 @@ export class TokenNormalizer {
   private sortedRulesCache: NormalizerRule[] | null = null;
 
   /**
-   * Per-token-type view of the priority-sorted rules: for a token type, the
-   * rules that could match a token of that type (those with no
-   * {@link NormalizerRule.startTokenTypes} hint, plus those that list the type),
-   * in the same priority order {@link getSortedRules} produces. Built lazily on
-   * the first token of each type and cached, so a document of many number and
-   * operator tokens never re-tries the many rules that only fire on an
-   * identifier. Invalidated alongside {@link sortedRulesCache}.
+   * Per-token-type view of the priority-sorted rules, for the one
+   * {@link normalize} call that runs before the index exists: for a token
+   * type, the rules whose first declared slot admits it (or constrains no
+   * type at all), in the same priority order {@link getSortedRules} produces.
+   * See {@link rulesForTokenType}. Built once per distinct type and cached,
+   * invalidated alongside {@link sortedRulesCache}.
    */
   private rulesByTokenType = new Map<string, NormalizerRule[]>();
 
@@ -330,7 +331,10 @@ export class TokenNormalizer {
    * what evaluating a single expression on a fresh engine does, would never
    * reach the payback. Skipping the build on the first call keeps that case at
    * the cost it had before the index existed, and a document reaches line two
-   * immediately.
+   * immediately. The first call is not unfiltered, though: it reads the same
+   * first-slot types the index would, through {@link rulesForTokenType}, so a
+   * single expression still skips every rule that could not start at its
+   * tokens.
    */
   private normalizeCalls = 0;
 
@@ -415,12 +419,8 @@ export class TokenNormalizer {
   }
 
   /**
-   * The priority-sorted rules to try at a token of `type`: every rule with no
-   * {@link NormalizerRule.startTokenTypes} hint, plus those that list this type.
-   * A rule that declares a different trigger would have returned null here
-   * anyway, so omitting it is behaviour-preserving. Built once per distinct type
-   * and cached, which is what turns the per-position rule scan from "try all R
-   * rules" into "try only the ones that could fire on this token".
+   * The shape index over the priority-sorted rules, built on first use after
+   * a mutation and cached. See {@link RuleIndex}.
    */
   private getRuleIndex(): RuleIndex {
     if (this.ruleIndexCache === null) {
@@ -446,25 +446,25 @@ export class TokenNormalizer {
    * wins on both counts. Worst case is 32 iterations per word of pure integer
    * work.
    *
-   * With `null` (the {@link NormalizerOptions.ignoreRuleIndex} path) it falls
-   * back to the type-bucketed list, which is the behaviour this replaced.
+   * With `null` there is no index to consult, for one of two reasons: this is
+   * the first call, which reads the first-token bucket from
+   * {@link rulesForTokenType}, or {@link NormalizerOptions.ignoreRuleIndex} is
+   * set, which is the exhaustive scan every filter is measured against. Both
+   * hand back a cached list directly, since the caller only reads it.
    *
-   * Returns a buffer reused across positions, so the caller must finish with it
-   * before calling again. Copying the surviving rules out here rather than
-   * yielding them lazily is deliberate twice over: it keeps the mask's own
-   * scratch buffer from being read after the next position overwrites it, and
-   * it avoids a generator on the hottest loop in the pass.
+   * With a mask, returns a buffer reused across positions, so the caller must
+   * finish with it before calling again. Copying the surviving rules out here
+   * rather than yielding them lazily is deliberate twice over: it keeps the
+   * mask's own scratch buffer from being read after the next position
+   * overwrites it, and it avoids a generator on the hottest loop in the pass.
    */
-  private rulesAt(mask: Uint32Array | null, type: string): NormalizerRule[] {
-    const buffer = this.candidateBuffer;
-    buffer.length = 0;
-
+  private rulesAt(mask: Uint32Array | null, type: string): readonly NormalizerRule[] {
     if (mask === null) {
-      const list = this.rulesForTokenType(type);
-      for (let i = 0; i < list.length; i++) buffer.push(list[i]);
-      return buffer;
+      return this.options.ignoreRuleIndex ? this.getSortedRules() : this.rulesForTokenType(type);
     }
 
+    const buffer = this.candidateBuffer;
+    buffer.length = 0;
     const rules = this.getRuleIndex().rules;
     for (let w = 0; w < mask.length; w++) {
       let bits = mask[w] >>> 0;
@@ -478,12 +478,29 @@ export class TokenNormalizer {
     return buffer;
   }
 
+  /**
+   * The priority-sorted rules that could start at a token of `type`, for the
+   * first {@link normalize} call, which runs before the index is built.
+   *
+   * The filter is the first slot of each rule's {@link effectiveShape}: a rule
+   * naming types there is bucketed under exactly those, and one naming none is
+   * in every bucket. That is the same declaration the index reads at its first
+   * plane, only without the value axis, so a rule the bucket omits is one the
+   * index would omit too, and one that would have returned null here anyway.
+   * An earlier version read only the older `startTokenTypes` hint, which most
+   * rules had by then replaced with a `shape`, so the first call tried nearly
+   * every rule at every position and a fresh engine evaluating one expression
+   * paid several times the rule calls of the second line of a document.
+   *
+   * Built once per distinct type and cached until the rule set changes.
+   */
   private rulesForTokenType(type: string): NormalizerRule[] {
     let list = this.rulesByTokenType.get(type);
     if (list === undefined) {
-      list = this.getSortedRules().filter(
-        (rule) => rule.startTokenTypes === undefined || rule.startTokenTypes.includes(type),
-      );
+      list = this.getSortedRules().filter((rule) => {
+        const first = effectiveShape(rule)[0];
+        return first?.types === undefined || first.types.includes(type);
+      });
       this.rulesByTokenType.set(type, list);
     }
     return list;
@@ -633,8 +650,9 @@ export class TokenNormalizer {
     // ── Early exit: nothing to normalize ──
     if (tokens.length === 0) return tokens;
 
-    // Rules are consulted per token type via rulesForTokenType(), which builds
-    // on the priority-sorted cache in getSortedRules().
+    // Rules reach a position through one of three filters, resolved once
+    // below: the shape index, the first-token buckets on the very first call,
+    // or no filter at all under `ignoreRuleIndex`. See rulesAt().
     const fusionHandler = onFusion ?? this.options.onFusion;
     const maxPasses = this.options.maxPasses;
     const maxTokens = this.options.maxTokens;
