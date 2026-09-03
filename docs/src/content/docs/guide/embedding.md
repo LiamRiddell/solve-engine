@@ -113,7 +113,7 @@ the packages that were present when it was written.
 const restored = ExpressionEngine.fromJSON(state, { packages: myPackages });
 ```
 
-`fromJSON` also accepts `config`, `diagnostics`, and a `locale` override, all
+`fromJSON` also accepts `config`, `diagnostics`, `calendar` and a `locale` override, all
 matching the constructor.
 
 ### What is and is not carried

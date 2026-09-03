@@ -121,4 +121,7 @@ backend adds a capability the `Date` one lacks, a per-engine time zone being
 the one in view. Today the sites that run with no engine in hand (the rules
 that fuse a date literal while normalising, `days in <period>`, the stocks and
 historical-currency date phrases, and `formatValue`) read the `Date` backend
-whatever the option says.
+whatever the option says. So does an engine running behind
+`solve-engine/worker` or the inline offload worker: a backend is an object of
+functions and does not cross the message boundary, so a host with its own bakes
+it into its worker entry, as it does for a custom package.

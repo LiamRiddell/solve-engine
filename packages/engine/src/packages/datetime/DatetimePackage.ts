@@ -27,7 +27,6 @@ import { nthWeekdayNormalizerRule } from "./normalizer/NthWeekdayNormalizerRule"
 import { untilSinceNormalizerRule } from "./normalizer/UntilSinceNormalizerRule";
 import { betweenUnitNormalizerRule } from "./normalizer/BetweenUnitNormalizerRule";
 import { workdayRateDenominatorNormalizerRule } from "./normalizer/WorkdayRateDenominatorNormalizerRule";
-import { monthNameDateNormalizerRule } from "./normalizer/MonthNameDateNormalizerRule";
 import { DaysInPeriodParselet } from "./parselets/DaysInPeriodParselet";
 import { daysInPeriodNormalizerRule } from "./normalizer/DaysInPeriodNormalizerRule";
 import { dailyNoteLinkNormalizerRule } from "./normalizer/DailyNoteLinkNormalizerRule";
@@ -227,16 +226,15 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     untilSinceNormalizerRule(),
     betweenUnitNormalizerRule(),
     workdayRateDenominatorNormalizerRule(),
-    // The numeric date-literal rule (`dateLiteralNormalizerRule`) is NOT here:
-    // it reads the per-engine `date.inputOrder` config to choose DMY/MDY/YMD,
-    // and a package descriptor is shared across every engine in the process, so
-    // it is registered in `ExpressionEngine`'s constructor closing over that
-    // engine's config instead, the same reason user-defined units are (see the
-    // constructor's comment). Priority 70 still orders it above the rules here.
-    // Dates with the month spelled out ("March 9, 2024"). Priority 64, just
-    // under the numeric rule, so an all-numeric literal is still claimed by
-    // the rule that has always claimed it.
-    monthNameDateNormalizerRule(),
+    // The two date-literal rules (`dateLiteralNormalizerRule` for the numeric
+    // orderings, `monthNameDateNormalizerRule` for "March 9, 2024") are NOT
+    // here: both build their literal through the engine's own calendar
+    // backend, and the numeric one also reads the per-engine `date.inputOrder`
+    // config to choose DMY/MDY/YMD. A package descriptor is shared across
+    // every engine in the process, so they are registered in
+    // `ExpressionEngine`'s constructor closing over that engine instead, the
+    // same reason user-defined units are (see the constructor's comment).
+    // Their priorities (70 and 64) still order them among the rules here.
     // `<ordinal> <weekday> of <month>`. Priority 66, above the month-name rule
     // so the ordinal head is claimed before the anchor is fused, and it reads
     // the ordinal from the tokens the lexer already produced.

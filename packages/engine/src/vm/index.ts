@@ -3,6 +3,9 @@ export { ScopeManager } from "./ScopeManager";
 export { Value, ValueType, numberValue, hexValue, bigIntValue, stringValue, uomValue, matrixValue, rowVectorValue, colVectorValue, rangeValue } from "./Value";
 export type { MatrixData, MatrixEntry, RangeData } from "./Value";
 export { createVM, executeBytecode } from "./VM";
+// The per-line context a plugin function or `as` converter receives, so a
+// package author can type a handler's second argument by name.
+export type { LineExecutionContext } from "./VM";
 // The allocation guard's accounting half, exported because a package
 // registering its own opcode needs it: an opcode that allocates in proportion
 // to user input has to charge for what it makes, and check before making

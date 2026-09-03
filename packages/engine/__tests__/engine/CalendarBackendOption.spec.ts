@@ -20,7 +20,8 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { createEngineContext } from "@solve-js/engine/EngineContext";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 import type { CalendarBackend, CalendarFields, ZonedFields } from "@solve-js/calendar/CalendarBackend";
-import { ValueType } from "@solve-js/vm/Value";
+import type { IAsyncResolver } from "@solve-js/resolvers/ResolverRegistry";
+import { ValueType, numberValue } from "@solve-js/vm/Value";
 
 /** A backend that delegates to `Date` but records every call and pins `now`. */
 class RecordingCalendar implements CalendarBackend {
@@ -151,5 +152,59 @@ describe("plugin functions and converters read it through the execution context"
 			"Tokyo is 3 hours 30 minutes ahead of Delhi",
 		);
 		expect(calendar.calls).toContain("zoneOffsetMinutes");
+	});
+});
+
+describe("the literal rules build through it", () => {
+	test("a numeric literal and a month-name literal are built by the same backend", () => {
+		const { engine, calendar } = recordingEngine();
+		expect(engine.evaluateExpression("09/03/2024").toNumber()).toBe(DATE_CALENDAR.localMidnight(2024, 2, 9));
+		expect(calendar.calls).toContain("localMidnight");
+		calendar.calls.length = 0;
+		expect(engine.evaluateExpression("March 9, 2024").toNumber()).toBe(DATE_CALENDAR.localMidnight(2024, 2, 9));
+		expect(calendar.calls).toContain("localMidnight");
+	});
+
+	test("a month-name literal with no year reads the year from the backend's clock", () => {
+		const { engine, calendar } = recordingEngine();
+		// The pinned clock says 2026, whatever the real year is.
+		expect(engine.evaluateExpression("March 9").toNumber()).toBe(DATE_CALENDAR.localMidnight(2026, 2, 9));
+		expect(calendar.calls).toContain("now");
+	});
+});
+
+describe("a settled live value re-runs its line through it", () => {
+	/** Flush the microtask queue, so a settled promise reaches the batcher. */
+	const tick = () => new Promise<void>((resolve) => queueMicrotask(resolve));
+
+	test("the re-execution reads the backend the first pass did", async () => {
+		// A resolver that puts the line into the pending state once, then lets
+		// it through: the settled value makes the batcher re-execute the line,
+		// which is the path that once ran with no execution context at all.
+		let armed = true;
+		const resolved = Promise.resolve(numberValue(1));
+		const resolver: IAsyncResolver = {
+			namespace: "once",
+			preflight: () => {
+				if (!armed) return null;
+				armed = false;
+				return { queryKey: "once:key", resolver: resolved, packageId: "test-once", signal: new AbortController().signal };
+			},
+			destroy: () => {},
+		};
+		const calendar = new RecordingCalendar(DATE_CALENDAR, FIXED_NOW);
+		const engine = newTrackedEngine({ calendar, packages: [...BUILTIN_PACKAGES, { name: "test-once", asyncResolvers: [resolver] }] });
+		// A listener, so the batcher does not warn that nothing reads the value.
+		engine.getBatcher().onLineResult = () => {};
+
+		expect(engine.evaluateLine(1, "10/03/2024 as weekday").type).toBe(ValueType.Pending);
+		calendar.calls.length = 0;
+		await resolved;
+		await tick();
+		await tick();
+
+		const entry = engine.getLineCache().getEntryForLine(1);
+		expect(entry?.result.value).toBe("Sunday");
+		expect(calendar.calls).toContain("fields");
 	});
 });

@@ -2,8 +2,9 @@
  * Resolving a host's holiday calendar to the VM's predicate.
  *
  * A host may hand over a function or a plain list of dates, in several date
- * shapes; `resolveHolidayPredicate(, DATE_CALENDAR)` collapses all of them to one
- * `(epochMs) => boolean`. These tests pin the two things that are easy to get
+ * shapes; `resolveHolidayPredicate()` collapses all of them to one
+ * `(epochMs) => boolean`, taking the engine's calendar backend as its second
+ * argument. These tests pin the two things that are easy to get
  * subtly wrong: that a `YYYY-MM-DD` string names its LOCAL calendar day (not a
  * UTC instant that shifts west of Greenwich), and that no calendar resolves to
  * `undefined` so the VM can tell "weekends-only" from "an empty calendar".
