@@ -3325,7 +3325,7 @@ export function executeBytecode(
           if (weekdayFault) { stack.push(weekdayFault); break; }
           const targetDay = targetDayValue.toNumber();
           const now = nowValue.toNumber();
-          const currentDay = vm.context.calendar.weekday(now);
+          const currentDay = vm.context.calendar.fields(now).weekday;
           let diffDays = op === OpCode.DATE_NEXT_WEEKDAY
             ? (targetDay - currentDay + 7) % 7
             : (currentDay - targetDay + 7) % 7;

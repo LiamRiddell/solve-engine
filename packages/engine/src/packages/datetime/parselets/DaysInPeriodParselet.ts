@@ -4,10 +4,11 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-// A parselet runs with no engine in hand, so the count is computed through
-// the built-in `Date` backend rather than the engine's own. The period is a
-// literal, so the answer does not depend on a zone either way.
+// A parselet runs with no engine in hand, so the current year and a fused
+// literal's fields are read through the built-in `Date` backend rather than
+// the engine's own; the month lengths are zone-free Gregorian arithmetic.
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
+import { daysInMonth } from "@solve-js/calendar/Gregorian";
 
 /** VMBuiltins.ts index for labelling a count as days. */
 const DAYS_COUNT_BUILTIN = 93;
@@ -22,7 +23,7 @@ const QUARTERS: Record<string, readonly [number, number]> = {
 
 /** Days in a whole year: 366 when February has its 29th. */
 function daysInYear(year: number): number {
-	return DATE_CALENDAR.daysInMonth(year, 1) === 29 ? 366 : 365;
+	return daysInMonth(year, 1) === 29 ? 366 : 365;
 }
 
 /** The current calendar year, read when the line is parsed. */
@@ -76,7 +77,7 @@ export class DaysInPeriodParselet implements PrefixParselet {
 			const year = this.readOptionalYear(parser) ?? currentYear();
 			let total = 0;
 			for (let month = quarter[0]; month <= quarter[1]; month++) {
-				total += DATE_CALENDAR.daysInMonth(year, month);
+				total += daysInMonth(year, month);
 			}
 			return total;
 		}
@@ -86,7 +87,7 @@ export class DaysInPeriodParselet implements PrefixParselet {
 		if (next?.type === "DATETIME_LITERAL") {
 			parser.consume();
 			const date = DATE_CALENDAR.fields(Number(next.value));
-			return DATE_CALENDAR.daysInMonth(date.year, date.month0);
+			return daysInMonth(date.year, date.month0);
 		}
 
 		// `days in 2024`, a bare year.

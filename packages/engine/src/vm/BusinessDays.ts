@@ -38,7 +38,7 @@ const MS_PER_DAY = 86_400_000;
 /** True for Saturday or Sunday, in the local time zone the rest of the engine's
  *  date arithmetic already works in, read through `calendar`. */
 export function isWeekend(epochMs: number, calendar: CalendarBackend): boolean {
-	const day = calendar.weekday(epochMs); // 0 = Sunday .. 6 = Saturday
+	const day = calendar.fields(epochMs).weekday; // 0 = Sunday .. 6 = Saturday
 	return day === 0 || day === 6;
 }
 

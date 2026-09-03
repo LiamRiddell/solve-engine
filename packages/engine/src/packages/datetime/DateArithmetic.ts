@@ -27,7 +27,7 @@
  */
 
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
-import { dayNumber } from "@solve-js/calendar/Gregorian";
+import { dayNumber, daysInMonth } from "@solve-js/calendar/Gregorian";
 
 /**
  * The date of the `n`-th occurrence of a weekday in a month, or `null` when the
@@ -39,13 +39,13 @@ import { dayNumber } from "@solve-js/calendar/Gregorian";
  * where April has four is not silently answered as the first Friday of May,
  * because the reader asked for a day this month that does not exist and a
  * wrong-month date is worse than an honest error. `n` is 1-based; `dow` is
- * 0=Sunday..6=Saturday, matching `CalendarBackend.weekday`.
+ * 0=Sunday..6=Saturday, matching `CalendarFields.weekday`.
  */
 export function nthWeekdayOfMonth(year: number, month0: number, dow: number, n: number, calendar: CalendarBackend): number | null {
-	const firstDow = calendar.weekday(calendar.localMidnight(year, month0, 1));
+	const firstDow = calendar.fields(calendar.localMidnight(year, month0, 1)).weekday;
 	const offsetToFirst = (dow - firstDow + 7) % 7;
 	const day = 1 + offsetToFirst + (n - 1) * 7;
-	if (day < 1 || day > calendar.daysInMonth(year, month0)) return null;
+	if (day < 1 || day > daysInMonth(year, month0)) return null;
 	return calendar.localMidnight(year, month0, day);
 }
 
@@ -55,8 +55,8 @@ export function nthWeekdayOfMonth(year: number, month0: number, dow: number, n: 
  * returns null. Local-midnight epoch ms, `dow` 0=Sunday..6=Saturday.
  */
 export function lastWeekdayOfMonth(year: number, month0: number, dow: number, calendar: CalendarBackend): number {
-	const lastDay = calendar.daysInMonth(year, month0);
-	const lastDow = calendar.weekday(calendar.localMidnight(year, month0, lastDay));
+	const lastDay = daysInMonth(year, month0);
+	const lastDow = calendar.fields(calendar.localMidnight(year, month0, lastDay)).weekday;
 	const offsetBack = (lastDow - dow + 7) % 7;
 	return calendar.localMidnight(year, month0, lastDay - offsetBack);
 }
@@ -99,14 +99,14 @@ interface CalendarDate {
 }
 
 /** `from` advanced by `n` whole months, the day clamped to the month's end. */
-function addMonthsClamped(from: CalendarDate, n: number, calendar: CalendarBackend): CalendarDate {
+function addMonthsClamped(from: CalendarDate, n: number): CalendarDate {
 	const targetYear = from.year;
 	const targetMonth = from.month0 + n;
 	// Normalise year/month first, then clamp the day, so 31 January + 1 month is
 	// 28 February, not a rolled-over 3 March.
 	const year = targetYear + Math.floor(targetMonth / 12);
 	const month0 = ((targetMonth % 12) + 12) % 12;
-	const day = Math.min(from.day, calendar.daysInMonth(year, month0));
+	const day = Math.min(from.day, daysInMonth(year, month0));
 	return { year, month0, day };
 }
 
@@ -127,12 +127,12 @@ export function calendarBreakdown(fromMs: number, toMs: number, calendar: Calend
 	const to = calendar.fields(toMs);
 
 	let months = (to.year - from.year) * 12 + (to.month0 - from.month0);
-	let anchor = addMonthsClamped(from, months, calendar);
+	let anchor = addMonthsClamped(from, months);
 	// The month arithmetic can overshoot by one when `to`'s day is earlier than
 	// `from`'s; step back until the anchor is on or before `to`.
 	if (calendar.localMidnight(anchor.year, anchor.month0, anchor.day) > toMs) {
 		months--;
-		anchor = addMonthsClamped(from, months, calendar);
+		anchor = addMonthsClamped(from, months);
 	}
 
 	const days = dayNumber(to.year, to.month0, to.day) - dayNumber(anchor.year, anchor.month0, anchor.day);

@@ -28,12 +28,10 @@ class RecordingCalendar implements CalendarBackend {
 	constructor(private readonly inner: CalendarBackend, private readonly fixedNow: number) {}
 	now(): number { this.calls.push("now"); return this.fixedNow; }
 	fields(epochMs: number): CalendarFields { this.calls.push("fields"); return this.inner.fields(epochMs); }
-	weekday(epochMs: number): number { this.calls.push("weekday"); return this.inner.weekday(epochMs); }
 	localMidnight(year: number, month0: number, day: number): number { this.calls.push("localMidnight"); return this.inner.localMidnight(year, month0, day); }
 	localWallClock(year: number, month0: number, day: number, minutes: number): number { this.calls.push("localWallClock"); return this.inner.localWallClock(year, month0, day, minutes); }
 	addDays(epochMs: number, days: number): number { this.calls.push("addDays"); return this.inner.addDays(epochMs, days); }
 	addMonths(epochMs: number, months: number): number { this.calls.push("addMonths"); return this.inner.addMonths(epochMs, months); }
-	daysInMonth(year: number, month0: number): number { this.calls.push("daysInMonth"); return this.inner.daysInMonth(year, month0); }
 	utcOffsetMinutes(epochMs: number): number { this.calls.push("utcOffsetMinutes"); return this.inner.utcOffsetMinutes(epochMs); }
 	parseIso8601(text: string): number { this.calls.push("parseIso8601"); return this.inner.parseIso8601(text); }
 	formatLongDate(epochMs: number, locale: string): string { this.calls.push("formatLongDate"); return this.inner.formatLongDate(epochMs, locale); }
@@ -109,7 +107,7 @@ describe("the VM's date opcodes read it", () => {
 		// Monday 1 January to Friday 5 January 2024, inclusive.
 		expect(engine.evaluateExpression("working days between 01/01/2024 and 05/01/2024").toNumber()).toBe(5);
 		expect(calendar.calls).toContain("addDays");
-		expect(calendar.calls).toContain("weekday");
+		expect(calendar.calls).toContain("fields");
 	});
 
 	test("a clock time is anchored to the backend's today", () => {
@@ -125,10 +123,10 @@ describe("plugin functions and converters read it through the execution context"
 	test("`weekday on <date>` and `<date> as weekday` both read the weekday from it", () => {
 		const { engine, calendar } = recordingEngine();
 		expect(engine.evaluateExpression("weekday on 10/03/2024").value).toBe("Sunday");
-		expect(calendar.calls).toContain("weekday");
+		expect(calendar.calls).toContain("fields");
 		calendar.calls.length = 0;
 		expect(engine.evaluateExpression("10/03/2024 as weekday").value).toBe("Sunday");
-		expect(calendar.calls).toContain("weekday");
+		expect(calendar.calls).toContain("fields");
 	});
 
 	test("`as iso8601` writes the backend's local fields and offset", () => {

@@ -1,4 +1,6 @@
 import type { CalendarBackend, CalendarFields, ZonedFields } from "./CalendarBackend";
+import { daysInMonth, utcMs } from "./Gregorian";
+import { dateInZone, timeInZone, zonedFields } from "./IntlZone";
 
 /**
  * The default {@link CalendarBackend}: the JavaScript `Date` object, read in
@@ -10,15 +12,15 @@ import type { CalendarBackend, CalendarFields, ZonedFields } from "./CalendarBac
  * backend existed. Where `Date` has a quirk (a two-digit year in a
  * constructor maps to the 1900s, an out-of-range instant answers `NaN`), the
  * quirk is kept here deliberately: the point of this backend is to be the
- * behaviour a `Temporal` backend is measured against, not to improve on it.
+ * behaviour the `Temporal` backend is measured against, not to improve on it.
  *
  * It stays the default because it is the one calendar every supported runtime
  * has. `Temporal` ships unflagged in Node 26 and in current Chrome, Firefox
  * and Deno, but not in Safari or in the Node 22 and 24 the engine supports,
  * and the smallest polyfill adds about twenty kilobytes gzipped to a bundle
  * that a host doing plain arithmetic never needs. A host that wants
- * `Temporal` opts in through the engine's `calendar` option, and pays for it
- * only then.
+ * `Temporal` opts in through the engine's `calendar` option with the backend
+ * from `solve-engine/temporal`, and pays for it only then.
  */
 export class DateCalendar implements CalendarBackend {
 	now(): number {
@@ -37,10 +39,6 @@ export class DateCalendar implements CalendarBackend {
 			second: d.getSeconds(),
 			millisecond: d.getMilliseconds(),
 		};
-	}
-
-	weekday(epochMs: number): number {
-		return new Date(epochMs).getDay();
 	}
 
 	localMidnight(year: number, month0: number, day: number): number {
@@ -70,14 +68,8 @@ export class DateCalendar implements CalendarBackend {
 		// the caller asked for.
 		date.setDate(1);
 		date.setMonth(date.getMonth() + months);
-		date.setDate(Math.min(dayOfMonth, this.daysInMonth(date.getFullYear(), date.getMonth())));
+		date.setDate(Math.min(dayOfMonth, daysInMonth(date.getFullYear(), date.getMonth())));
 		return date.getTime();
-	}
-
-	daysInMonth(year: number, month0: number): number {
-		// Day zero of the following month is the last day of this one, which
-		// applies the leap-year rule without restating it.
-		return new Date(year, month0 + 1, 0).getDate();
 	}
 
 	utcOffsetMinutes(epochMs: number): number {
@@ -99,42 +91,23 @@ export class DateCalendar implements CalendarBackend {
 	}
 
 	zoneOffsetMinutes(zone: string, epochMs: number): number {
-		// The `Intl` round trip: format the instant as the zone's wall-clock
+		// The `Intl` round trip: read the instant as the zone's wall-clock
 		// fields, re-read those fields as if they were UTC, and the difference
 		// from the instant is the zone's offset then, daylight saving included.
-		const f = this.fieldsInZone(zone, epochMs);
-		const asUtcMs = Date.UTC(f.year, f.month0, f.day, f.hour, f.minute, f.second);
-		return Math.round((asUtcMs - epochMs) / 60000);
+		const f = zonedFields(zone, epochMs);
+		return Math.round((utcMs(f.year, f.month0, f.day, f.hour, f.minute, f.second) - epochMs) / 60000);
 	}
 
 	fieldsInZone(zone: string, epochMs: number): ZonedFields {
-		// `h23` so midnight reads as hour 0 rather than 24.
-		const dtf = new Intl.DateTimeFormat("en-US", {
-			timeZone: zone,
-			hourCycle: "h23",
-			year: "numeric", month: "2-digit", day: "2-digit",
-			hour: "2-digit", minute: "2-digit", second: "2-digit",
-		});
-		const parts: Record<string, string> = {};
-		for (const p of dtf.formatToParts(new Date(epochMs))) parts[p.type] = p.value;
-		return {
-			year: +parts.year, month0: +parts.month - 1, day: +parts.day,
-			hour: +parts.hour, minute: +parts.minute, second: +parts.second,
-		};
+		return zonedFields(zone, epochMs);
 	}
 
 	formatTimeInZone(zone: string, epochMs: number): string {
-		const dtf = new Intl.DateTimeFormat("en-US", {
-			timeZone: zone, hour: "numeric", minute: "2-digit", hour12: true,
-		});
-		return dtf.format(new Date(epochMs));
+		return timeInZone(zone, epochMs);
 	}
 
 	formatDateInZone(zone: string, epochMs: number): string {
-		const dtf = new Intl.DateTimeFormat("en-US", {
-			timeZone: zone, year: "numeric", month: "long", day: "numeric",
-		});
-		return dtf.format(new Date(epochMs));
+		return dateInZone(zone, epochMs);
 	}
 }
 

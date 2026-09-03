@@ -99,7 +99,7 @@ function asEpochMs(value: Value, fieldName: string): number | Value {
 function weekdayOnDateHandler(args: Value[], context?: LineExecutionContext): Value {
   const epochMs = asEpochMs(args[0], "weekday");
   if (typeof epochMs !== "number") return epochMs;
-  return stringValue(WEEKDAY_NAMES[calendarOf(context).weekday(epochMs)]);
+  return stringValue(WEEKDAY_NAMES[calendarOf(context).fields(epochMs).weekday]);
 }
 
 const MONTH_NAMES = [
@@ -140,7 +140,7 @@ function weekOnDateHandler(args: Value[], context?: LineExecutionContext): Value
 
 /** True for Saturday/Sunday. */
 function isWeekendDate(epochMs: number, calendar: CalendarBackend): boolean {
-  const day = calendar.weekday(epochMs);
+  const day = calendar.fields(epochMs).weekday;
   return day === 0 || day === 6;
 }
 

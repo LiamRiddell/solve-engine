@@ -10,7 +10,34 @@
  */
 
 import { describe, expect, test } from "@jest/globals";
-import { utcMs, dayNumber, utcFields, isoWeekNumber } from "@solve-js/calendar/Gregorian";
+import { utcMs, daysInMonth, dayNumber, utcFields, isoWeekNumber } from "@solve-js/calendar/Gregorian";
+
+describe("daysInMonth", () => {
+	test("knows the leap rule, century rule included", () => {
+		expect(daysInMonth(2024, 1)).toBe(29);
+		expect(daysInMonth(2023, 1)).toBe(28);
+		expect(daysInMonth(1900, 1)).toBe(28);
+		expect(daysInMonth(2000, 1)).toBe(29);
+		expect(daysInMonth(2024, 0)).toBe(31);
+		expect(daysInMonth(2024, 3)).toBe(30);
+		expect(daysInMonth(2024, 11)).toBe(31);
+	});
+
+	test("overflows the month into the adjacent year like Date", () => {
+		expect(daysInMonth(2024, 12)).toBe(31);
+		expect(daysInMonth(2025, -1)).toBe(31);
+	});
+
+	test("is the Date expression it replaced, two-digit years included", () => {
+		// `new Date(y, m + 1, 0).getDate()` read a year from 0 to 99 as the
+		// 1900s; so does `Date.UTC`, and the shared helper keeps that reading.
+		for (const year of [24, 99, 1900, 2000, 2024, 2100]) {
+			for (let month0 = 0; month0 < 12; month0++) {
+				expect(daysInMonth(year, month0)).toBe(new Date(year, month0 + 1, 0).getDate());
+			}
+		}
+	});
+});
 
 describe("utcMs", () => {
 	test("is Date.UTC over the same fields", () => {

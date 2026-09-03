@@ -11,25 +11,25 @@
  * across some twenty files.
  *
  * A backend gathers those questions into one place so that a different
- * implementation can answer them. The one the engine ships and uses by default
- * is {@link DateCalendar}, the same `Date` code moved behind these methods, so
- * nothing observable changes for a host that configures nothing. The reason
- * the seam exists is the `Temporal` API: a backend built on it can carry a time
- * zone of its own rather than the process's, and can be handed a `Temporal`
- * implementation by the host (native where the runtime has one, a polyfill
- * where it does not) without the engine ever importing a polyfill itself.
+ * implementation can answer them. Two ship with the engine. {@link DateCalendar}
+ * is the same `Date` code moved behind these methods and is the default, so
+ * nothing observable changes for a host that configures nothing. The
+ * `Temporal` backend (`solve-engine/temporal`) answers the same questions
+ * through a `Temporal` implementation the host hands it, native or polyfilled,
+ * and carries a time zone of its own rather than the process's; the engine
+ * never imports a polyfill.
  *
  * The contract is deliberately narrow. Methods take and return plain numbers
  * and strings, never a `Date` or a `Temporal` object, so a `Datetime` value's
  * payload stays a number and no worker message, snapshot or arena entry
- * changes shape. Zone-free Gregorian arithmetic (a day number, the ISO week)
- * lives beside the backend in `calendar/Gregorian.ts` rather than behind it,
- * because its answer does not depend on which backend is in use and sharing it
- * is what keeps two backends from disagreeing.
+ * changes shape. Arithmetic whose answer does not depend on a zone (a day
+ * number, the days in a month, the ISO week) lives beside the backend in
+ * `calendar/Gregorian.ts` rather than behind it, because sharing one
+ * implementation is what keeps two backends from disagreeing on it.
  *
- * The shape is settled by the `Temporal` backend that a later release ships;
- * a host implementing this interface directly should expect it to gain
- * methods before then.
+ * The shape is public and settled by the two backends that implement it. A
+ * host may implement the interface directly; a change to it follows the
+ * package's semantic versioning, so a new required method is a major.
  *
  * @module CalendarBackend
  */
@@ -77,19 +77,24 @@ export interface ZonedFields {
  * The calendar computations the engine performs, as one replaceable unit.
  *
  * "Local" throughout means the backend's own zone: the host process's zone for
- * the `Date` backend. An operation that cannot be represented (an instant past
- * the range the backend supports) answers `NaN`, never throws; the caller
- * decides what an unrepresentable date means for its form.
+ * the `Date` backend, the configured zone for the `Temporal` one. A local
+ * operation that cannot be represented (an instant past the range the backend
+ * supports, a field that is not finite) answers `NaN`, never throws; the
+ * caller decides what an unrepresentable date means for its form.
+ *
+ * The four named-zone methods are the exception, and the contract is stated on
+ * each: a zone name the runtime does not know throws its `RangeError`, as
+ * `Intl` and `Temporal` both do, because a zone reaches the backend only from
+ * the engine's own zone registry and an unknown one is a data fault the caller
+ * should see rather than a `NaN` to display. Callers hand those methods a
+ * finite instant (`now()`, or a literal already checked).
  */
 export interface CalendarBackend {
 	/** The current instant, in epoch milliseconds. Read at evaluation time, never baked into bytecode. */
 	now(): number;
 
-	/** The local calendar fields of an instant. See {@link CalendarFields}. */
+	/** The local calendar fields of an instant, `weekday` included. See {@link CalendarFields}. */
 	fields(epochMs: number): CalendarFields;
-
-	/** The local day of the week of an instant: 0 is Sunday, 6 is Saturday. The one field read on its own, because the working-day walk asks it once per step. */
-	weekday(epochMs: number): number;
 
 	/**
 	 * Local midnight on a calendar date, in epoch milliseconds.
@@ -126,9 +131,6 @@ export interface CalendarBackend {
 	 */
 	addMonths(epochMs: number, months: number): number;
 
-	/** Days in a calendar month (`month0` zero-based), honouring leap years. */
-	daysInMonth(year: number, month0: number): number;
-
 	/** The local zone's offset from UTC at an instant, in minutes, positive when ahead of UTC. */
 	utcOffsetMinutes(epochMs: number): number;
 
@@ -138,8 +140,8 @@ export interface CalendarBackend {
 	 *
 	 * A date-only string (`2019-04-01`) is UTC midnight; a date-time with no
 	 * offset and no `Z` is local time. Both readings are the ECMAScript ones,
-	 * and the `Temporal` backend has to reproduce them so the two spellings
-	 * of a literal keep meaning the same instant under either backend.
+	 * and every backend reproduces them so the two spellings of a literal keep
+	 * meaning the same instant whichever backend is in use.
 	 */
 	parseIso8601(text: string): number;
 
@@ -149,15 +151,31 @@ export interface CalendarBackend {
 	/** The local time of day in a locale, `9:30:00 AM` in `en`. */
 	formatTimeOfDay(epochMs: number, locale: string): string;
 
-	/** A named IANA zone's offset from UTC at an instant, in minutes, positive when ahead of UTC. */
+	/**
+	 * A named IANA zone's offset from UTC at an instant, in minutes, positive
+	 * when ahead of UTC. Throws the runtime's `RangeError` for a zone it does
+	 * not know or an instant it cannot represent.
+	 */
 	zoneOffsetMinutes(zone: string, epochMs: number): number;
 
-	/** The calendar date and wall-clock time a named IANA zone shows for an instant. */
+	/**
+	 * The calendar date and wall-clock time a named IANA zone shows for an
+	 * instant. Throws the runtime's `RangeError` for a zone it does not know or
+	 * an instant it cannot represent.
+	 */
 	fieldsInZone(zone: string, epochMs: number): ZonedFields;
 
-	/** The wall-clock time in a named IANA zone, `1:00 AM`, in the `en-US` style the timezone forms answer in. */
+	/**
+	 * The wall-clock time in a named IANA zone, `1:00 AM`, in the `en-US` style
+	 * the timezone forms answer in. Throws the runtime's `RangeError` for a
+	 * zone it does not know or an instant it cannot represent.
+	 */
 	formatTimeInZone(zone: string, epochMs: number): string;
 
-	/** The calendar date in a named IANA zone, `July 31, 2026`, in the `en-US` style the timezone forms answer in. */
+	/**
+	 * The calendar date in a named IANA zone, `July 31, 2026`, in the `en-US`
+	 * style the timezone forms answer in. Throws the runtime's `RangeError` for
+	 * a zone it does not know or an instant it cannot represent.
+	 */
 	formatDateInZone(zone: string, epochMs: number): string;
 }

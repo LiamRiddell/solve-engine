@@ -38,6 +38,23 @@ export function utcMs(year: number, month0: number, day: number, hour = 0, minut
 }
 
 /**
+ * Days in a calendar month, honouring the leap-year rule, century rule
+ * included.
+ *
+ * Day zero of the following month is the last day of this one, which applies
+ * the rule without restating it. Shared rather than a backend method because
+ * the answer never depends on a zone, and the month clamp in a month step and
+ * the count in `days in <period>` must not move between backends.
+ *
+ * @param year - The calendar year (0 to 99 read as the 1900s, as `Date.UTC` does).
+ * @param month0 - Zero-based month; overflow rolls into the adjacent year.
+ * @returns 28 to 31.
+ */
+export function daysInMonth(year: number, month0: number): number {
+	return new Date(Date.UTC(year, month0 + 1, 0)).getUTCDate();
+}
+
+/**
  * A calendar date's day count from the epoch, for a difference between two
  * dates that no daylight-saving hour can tip onto the wrong day.
  *

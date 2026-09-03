@@ -59,7 +59,7 @@ describe("now", () => {
 	});
 });
 
-describe("fields and weekday", () => {
+describe("fields", () => {
 	test.each(TRANSITION_INSTANTS)("match the Date getters at %d", (instant) => {
 		const d = new Date(instant);
 		expect(calendar.fields(instant)).toEqual({
@@ -72,7 +72,6 @@ describe("fields and weekday", () => {
 			second: d.getSeconds(),
 			millisecond: d.getMilliseconds(),
 		});
-		expect(calendar.weekday(instant)).toBe(d.getDay());
 	});
 
 	test("a local midnight reads back as that date with a zero time", () => {
@@ -80,14 +79,14 @@ describe("fields and weekday", () => {
 			year: 2024, month0: 1, day: 29, weekday: 4, hour: 0, minute: 0, second: 0, millisecond: 0,
 		});
 		// 0 is Sunday, 6 is Saturday: 30 March 2024 was a Saturday.
-		expect(calendar.weekday(midnight(2024, 3, 30))).toBe(6);
-		expect(calendar.weekday(midnight(2024, 3, 31))).toBe(0);
+		expect(calendar.fields(midnight(2024, 3, 30)).weekday).toBe(6);
+		expect(calendar.fields(midnight(2024, 3, 31)).weekday).toBe(0);
 	});
 
 	test("an unrepresentable instant reads as NaN in every field", () => {
 		const f = calendar.fields(Number.NaN);
 		expect(Object.values(f).every(Number.isNaN)).toBe(true);
-		expect(calendar.weekday(Number.NaN)).toBeNaN();
+		expect(Object.values(calendar.fields(8.7e15)).every(Number.isNaN)).toBe(true);
 	});
 });
 
@@ -180,23 +179,6 @@ describe("addMonths", () => {
 	});
 });
 
-describe("daysInMonth", () => {
-	test("knows the leap rule, century rule included", () => {
-		expect(calendar.daysInMonth(2024, 1)).toBe(29);
-		expect(calendar.daysInMonth(2023, 1)).toBe(28);
-		expect(calendar.daysInMonth(1900, 1)).toBe(28);
-		expect(calendar.daysInMonth(2000, 1)).toBe(29);
-		expect(calendar.daysInMonth(2024, 0)).toBe(31);
-		expect(calendar.daysInMonth(2024, 3)).toBe(30);
-		expect(calendar.daysInMonth(2024, 11)).toBe(31);
-	});
-
-	test("overflows the month into the adjacent year like Date", () => {
-		expect(calendar.daysInMonth(2024, 12)).toBe(31);
-		expect(calendar.daysInMonth(2025, -1)).toBe(31);
-	});
-});
-
 describe("utcOffsetMinutes", () => {
 	test.each(TRANSITION_INSTANTS)("is the negated getTimezoneOffset at %d", (instant) => {
 		expect(calendar.utcOffsetMinutes(instant)).toBe(-new Date(instant).getTimezoneOffset());
@@ -273,5 +255,32 @@ describe("named zones", () => {
 		expect(calendar.formatDateInZone("Asia/Tokyo", instant)).toBe("January 2, 2024");
 		expect(calendar.formatTimeInZone("UTC", instant)).toBe("4:00 PM");
 		expect(calendar.formatDateInZone("UTC", instant)).toBe("January 1, 2024");
+	});
+
+	// The contract the four zone methods state, and the oracle a second
+	// backend is measured against: an unknown zone or an unrepresentable
+	// instant is a fault the caller sees, never a NaN or an empty string.
+	test("an unknown zone throws the runtime's RangeError from every zone method", () => {
+		const instant = Date.UTC(2024, 0, 1, 16, 0);
+		expect(() => calendar.zoneOffsetMinutes("Mars/Olympus", instant)).toThrow(RangeError);
+		expect(() => calendar.fieldsInZone("Mars/Olympus", instant)).toThrow(RangeError);
+		expect(() => calendar.formatTimeInZone("Mars/Olympus", instant)).toThrow(RangeError);
+		expect(() => calendar.formatDateInZone("Mars/Olympus", instant)).toThrow(RangeError);
+	});
+
+	test("an unrepresentable instant throws the runtime's RangeError from every zone method", () => {
+		expect(() => calendar.zoneOffsetMinutes("UTC", Number.NaN)).toThrow(RangeError);
+		expect(() => calendar.fieldsInZone("UTC", Number.NaN)).toThrow(RangeError);
+		expect(() => calendar.formatTimeInZone("UTC", Number.NaN)).toThrow(RangeError);
+		expect(() => calendar.formatDateInZone("UTC", 8.7e15)).toThrow(RangeError);
+	});
+
+	test("a zone read many times answers the same each time", () => {
+		// The zone reads go through one shared Intl helper; repeating a read
+		// must not change an answer.
+		const instant = Date.UTC(2024, 6, 1, 12);
+		const first = calendar.fieldsInZone("Asia/Kathmandu", instant);
+		for (let i = 0; i < 5; i++) expect(calendar.fieldsInZone("Asia/Kathmandu", instant)).toEqual(first);
+		expect(calendar.zoneOffsetMinutes("Asia/Kathmandu", instant)).toBe(345);
 	});
 });
