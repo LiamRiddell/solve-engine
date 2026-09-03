@@ -1,10 +1,10 @@
 /**
  * Every unit test, including the ones the default run skips.
  *
- * `jest.config.js` excludes the heavy, fuzz and long-document suites so the
- * normal dev cycle stays fast. That is the right default, but it means
- * `npm run verify` leaves sixteen spec files unexecuted, and a suite nothing
- * runs is a suite that quietly rots.
+ * `jest.config.js` excludes four suites (`heavy/MemoryLeak`, `LexerFuzz`,
+ * `LexerVocabularyFuzz`, `LongDocumentRobustness`) so the normal dev cycle
+ * stays fast. That is the right default, but it means `npm run verify` leaves
+ * them unexecuted, and a suite nothing runs is a suite that quietly rots.
  *
  * Benchmarks stay out. They are timing measurements rather than assertions
  * about behaviour, they take minutes, and they have their own workflow with a
@@ -14,6 +14,9 @@
  * `--runInBand`: the fuzz and long-document suites are memory-hungry enough
  * that parallel workers on a two-core runner start failing on allocation rather
  * than on anything real.
+ *
+ * Coverage is measured on this same suite by `jest.coverage.config.cjs`, on a
+ * schedule rather than per pull request; see that file for why.
  */
 
 const base = require("./jest.config.js");

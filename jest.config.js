@@ -2,10 +2,18 @@
  * For a detailed explanation regarding each configuration property, visit:
  * https://jestjs.io/docs/configuration
  *
- * Repo-wide config — runs packages/core's and packages/playground-bridge's
- * test suites together. packages/core also has its own fully self-contained
+ * Repo-wide config: runs packages/engine's and packages/playground-bridge's
+ * test suites together. packages/engine also has its own self-contained
  * jest.config.cjs (usable standalone via `npm test` from inside that
- * package) — this root config is for running everything at once.
+ * package); this root config is for running everything at once.
+ *
+ * This is the FAST configuration, the one `npm test`, `npm run test:ci` and
+ * therefore `npm run verify` use. It leaves out four spec files that CI runs
+ * through `jest.full.config.cjs`: `heavy/MemoryLeak`, `LexerFuzz`,
+ * `LexerVocabularyFuzz` and `LongDocumentRobustness`. A change that can
+ * touch what those cover (the lexer vocabulary, a new unit, document-scale
+ * behaviour) should be checked with `npm run test:full` before it is pushed,
+ * or with `npm run verify:ci`, which runs every gate CI applies.
  */
 
 /** @type {import('jest').Config} */
@@ -51,7 +59,8 @@ const config = {
 		"\\\\node_modules\\\\",
 		"/node_modules/",
 		"__mocks__",
-		// Heavy / stress tests — not part of the normal dev cycle
+		// The four slow suites, named in the header above. Not part of the
+		// normal dev cycle; `jest.full.config.cjs` puts them back.
 		"heavy/",
 		"benchmarks/",
 		"LexerFuzz\\.spec\\.",

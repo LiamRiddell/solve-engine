@@ -1,0 +1,81 @@
+---
+title: Testing
+description: How the suite is organised, the two configurations, and the documentation tests.
+---
+
+import stats from "../../../data/testStats.json";
+
+```bash
+npm run test:ci
+```
+
+The suite is {stats.tests.toLocaleString("en-GB")} tests across {stats.suites.toLocaleString("en-GB")} spec
+files. The figures are imported from `docs/src/data/testStats.json`, which is
+derived from the last full run and checked in continuous integration, so they
+cannot be older than the suite. Tests run against source rather than the built
+package, so a failure points at a line you can edit.
+
+## Two configurations
+
+`jest.config.js` is the fast configuration, the one `npm test`,
+`npm run test:ci` and therefore `npm run verify` use. It leaves out four suites
+that are slow or memory-hungry: `heavy/MemoryLeak`, `LexerFuzz`,
+`LexerVocabularyFuzz` and `LongDocumentRobustness`.
+
+`jest.full.config.cjs` puts them back. `npm run test:full` runs it
+single-threaded with a raised heap and writes the report the test-count stats
+are read from. It is what continuous integration runs, and what
+`npm run verify:ci` runs. A change that touches the lexer vocabulary, a unit,
+or document-scale behaviour should be checked with it before it is pushed:
+those are the suites the fast run cannot see, and the ones that have gone red
+in continuous integration after a green `verify`.
+
+## The coverage floor
+
+`jest.coverage.config.cjs` runs the same full suite with coverage measured, and
+fails when it falls under the floor the config declares: a few points beneath
+the value measured when the floor was set, so ordinary churn never trips it and
+a real drop does. It runs daily in its own workflow rather than on every pull
+request, because the per-file coverage conversion makes the run several times
+slower than the suite itself. `npm run test:coverage` is the same check
+locally; run it for a change that removes tests.
+
+## Organisation
+
+Tests live beside the area they cover: lexer, parser, virtual machine, each
+package, and a set of integration suites that drive a real engine end to end.
+
+There is also a directory of regression tests named after the specific defect
+each one prevents, which is the most useful documentation of past mistakes the
+repository has.
+
+A whole-document feature, one that reads or re-runs other lines, is tested
+through every entry point in
+`__tests__/integration/CrossPathDocumentFeatures.spec.ts`, because each entry
+point behaves differently and a form that works through one and misbehaves
+through another is exactly the drift a per-feature test misses.
+
+## Documentation tests
+
+Every example in the syntax reference is executed when the suite runs, and
+compared against the documented result. There are {stats.docExamples.toLocaleString("en-GB")} of them.
+
+The format is a fenced block tagged `solve`, with the expected result after a
+comment marker:
+
+```
+50% of 200 // 100
+```
+
+Because the marker is the language's own comment syntax, every documented line
+is valid input a reader can paste unchanged. A blank line starts a fresh engine,
+so examples cannot leak variables into one another.
+
+If you change behaviour, the documentation fails the build rather than going
+quietly out of date.
+
+## Benchmarks
+
+Excluded from every test run because they are slow and timing-sensitive. They
+have their own workflow, which compares a pull request against its merge base
+on the same runner; see [performance](/guide/performance/).

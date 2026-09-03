@@ -271,8 +271,9 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 npm install && npm run verify
 ```
 
-`verify` is the whole gate: type check, test suite, and package build. See
-[CONTRIBUTING.md](CONTRIBUTING.md).
+`verify` is the fast loop: type check, the default test run, and the package
+build. `npm run verify:ci` is the whole gate, every check continuous
+integration applies as one command. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Status
 

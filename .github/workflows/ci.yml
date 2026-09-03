@@ -14,6 +14,12 @@ concurrency:
 permissions:
   contents: read
 
+# Every step in every job below is a named npm script, and `npm run verify:ci`
+# is those same scripts in one command. The jobs split the list across runners
+# for wall-clock time; the script keeps it in one place, so what CI checks and
+# what a contributor can check locally cannot drift. A gate added here without
+# being added to `verify:ci` is a gate contributors only meet after pushing,
+# which is how the local-green, CI-red round trips happened.
 jobs:
   verify:
     name: Verify on Node ${{ matrix.node }}
@@ -42,11 +48,21 @@ jobs:
 
       # Correctness-category rules fail the build; no-explicit-any and unused
       # vars are warnings, because a backlog exists and a permanently red check
-      # is one people learn to ignore.
+      # is one people learn to ignore. The spec files and tools are linted too:
+      # a test that reads a variable it never assigned passes for the wrong
+      # reason, and nothing else would notice.
       - run: npm run lint
 
-      # Type check, full test suite, and the package build. Kept as one script
-      # so that what CI runs and what a contributor runs locally cannot drift.
+      # Supply chain, both halves. The licence check walks the one runtime
+      # dependency and everything under it against an allowlist, so a licence
+      # that arrives through a transitive bump is refused rather than found by
+      # a consumer's legal review. The audit fails on a high-severity advisory
+      # against anything installed; Dependabot opens the bump, this is what
+      # stops the release going out before it is merged.
+      - run: npm run lint:licenses
+      - run: npm run audit:deps
+
+      # Type check, the default test run, and the package build.
       - run: npm run verify
 
   test-full:
@@ -62,11 +78,15 @@ jobs:
 
       - run: npm ci
 
-      # `npm run verify` excludes the heavy, fuzz and long-document suites so
-      # the normal dev cycle stays fast. That leaves sixteen spec files that
-      # nothing runs, and a suite nothing runs is a suite that quietly rots:
-      # when this job was first written, two of those files had decayed to 49
-      # and 13 failures against behaviour the engine had changed under them.
+      # `npm run verify` leaves out four suites so the normal dev cycle stays
+      # fast: heavy/MemoryLeak, LexerFuzz, LexerVocabularyFuzz and
+      # LongDocumentRobustness. A suite nothing runs is a suite that quietly
+      # rots: when this job was first written, two of those files had decayed
+      # to 49 and 13 failures against behaviour the engine had changed under
+      # them. This is the run that includes them. Coverage is measured on the
+      # same suite by coverage.yml, daily rather than here: the per-file v8
+      # conversion made this job ten times slower, which is not a price a
+      # pull-request gate can charge.
       #
       # One Node version rather than the verify matrix. These suites are slow
       # and their failures are logic failures, not version-specific ones, so a
@@ -116,15 +136,11 @@ jobs:
       # resolve to the wrong module system. The exports map previously declared
       # one flat "types" per subpath pointing at the ESM .d.ts, which left every
       # .d.cts on disk unreachable and made a require() consumer resolve
-      # ESM-flavoured declarations from an ESM package.
-      #
-      # node10 resolution is expected to fail: it predates subpath exports
-      # entirely, and this package requires a Node version that understands them.
-      # Pinned. `npx --yes <name>` resolves to whatever was published most
-      # recently and executes it against a checkout of this repository, which is
-      # a decision made by someone else at the moment the job happens to run.
-      - run: npx --yes publint@0.3.23 packages/engine
-      - run: npx --yes @arethetypeswrong/cli@0.18.5 --pack packages/engine --ignore-rules no-resolution
+      # ESM-flavoured declarations from an ESM package. Both tools are pinned
+      # inside the script: `npx --yes <name>` would otherwise resolve to
+      # whatever was published most recently and execute it against a checkout
+      # of this repository.
+      - run: npm run lint:package
 
       # Reports the bundled size; it does not gate on it. There is no budget,
       # deliberately: the engine is a language runtime and a CAS rather than a
@@ -145,13 +161,36 @@ jobs:
       #
       # It is also what is left of the size guard. Any change in the figure has
       # to be committed, so a jump arrives as a reviewable diff on a file whose
-      # whole content is numbers, instead of arriving silently.
+      # whole content is numbers, instead of arriving silently. The tarball is
+      # packed under one pinned npm wherever this runs (see the script), and
+      # the gzip figure on this job's Node 22, the version `.nvmrc` names, is
+      # the one the committed file records.
       - run: npm run lint:size
 
       # The unit reference is generated by probing the built engine, so this is
       # not a formatting check: it fails when a unit stops parsing, or starts.
       # Needs the build above, which is why it lives in this job.
       - run: npm run lint:units
+
+  consumer:
+    name: Installs from the tarball on Node ${{ matrix.node }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      # The package claims Node >= 22 and the tarball is the thing a consumer
+      # gets, so it is installed and used on each version the verify matrix
+      # tests, not only the oldest.
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
 
       # Installs the packed tarball into a scratch project and uses it by bare
       # specifier. `npm run smoke` imports packages/engine/dist directly, which
@@ -175,6 +214,10 @@ jobs:
       # catches breakage the engine's own build would not.
       - run: npm ci --prefix playground
       - run: npm run build --prefix playground
+      # The playground has its own lockfile, outside the workspaces, so the
+      # root audit never sees it. Two of the three advisories open when this
+      # step was added lived here.
+      - run: npm audit --prefix playground --audit-level=high
 
   docs:
     name: Documentation builds
@@ -203,6 +246,9 @@ jobs:
       # to the list would otherwise be reachable only by search.
       - run: npm run lint:sidebar
 
+      # Same reasoning as the playground: a lockfile the root audit cannot see.
+      - run: npm audit --prefix docs --audit-level=high
+
   comment-style:
     name: Comment style
     runs-on: ubuntu-24.04
@@ -221,16 +267,16 @@ jobs:
       #
       # Now that the backlog is cleared this runs over the whole tree rather
       # than only changed files, so a regression anywhere fails the build.
-      - run: node scripts/check-comment-style.mjs --all
+      - run: npm run lint:comments
 
       # Every exported symbol outside src/packages carries a doc block, which
       # is what shows on hover and in generated documentation. The language
       # packages under src/packages are not covered yet; 55 gaps remain there.
-      - run: node scripts/check-doc-coverage.mjs
+      - run: npm run lint:docs
 
       # Supply chain. An action named by tag is a mutable pointer owned by
       # somebody else: it can be repointed with no diff and no review, and the
       # next run executes whatever it now points at. publish.yml runs actions in
       # a job holding `id-token: write`, so that would be unreviewed code able
       # to mint a publishing credential for this package.
-      - run: node scripts/check-action-pins.mjs
+      - run: npm run lint:actions

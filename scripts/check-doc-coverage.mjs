@@ -20,6 +20,11 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Anchored to the repository rather than to the working directory, like every
+// other script here, so it answers the same way from any directory.
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function walk(dir, out = []) {
 	for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -33,7 +38,7 @@ function walk(dir, out = []) {
 const gaps = {};
 let pub = 0;
 
-for (const file of walk("packages/engine/src")) {
+for (const file of walk(path.join(ROOT, "packages/engine/src"))) {
 	const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
 	lines.forEach((line, i) => {
 		const m = line.match(
@@ -52,7 +57,7 @@ for (const file of walk("packages/engine/src")) {
 		}
 		if (j >= 0 && lines[j].trim().endsWith("*/")) return;
 
-		const rel = file.split(path.sep).join("/");
+		const rel = path.relative(ROOT, file).split(path.sep).join("/");
 		pub++;
 		(gaps[rel] = gaps[rel] || []).push(m[1]);
 	});

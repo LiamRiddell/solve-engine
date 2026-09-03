@@ -68,6 +68,13 @@ jobs:
           npm run bench || echo "::warning::Benchmarks reported failures on the merge base"
           mkdir -p /tmp/bench-base
           cp packages/engine/benchmarks/current/*.json /tmp/bench-base/ 2>/dev/null || true
+          # A base that produced nothing used to flow through to a comparison
+          # against an empty directory, which reports no regressions because it
+          # has nothing to regress from. Silence there is not a pass.
+          if ! ls /tmp/bench-base/*.json >/dev/null 2>&1; then
+            echo "::error::The merge base produced no benchmark results, so there is nothing to compare this pull request against. Fix the base, or re-run once it builds."
+            exit 1
+          fi
 
       - name: Benchmark this pull request
         run: |
