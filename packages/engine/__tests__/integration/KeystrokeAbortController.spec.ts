@@ -418,9 +418,9 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 			await new Promise<void>((r) => setTimeout(r, 0));
 
 			// ── Assert: stale value was NOT stored ──────────────────
-			// The queryKey format is: "plugin:{fnIdx}:{args joined by |}"
-			// For CALL_PLUGIN 250 1 with arg "1": "plugin:250:1|"
-			expect(engine.queryClient.getQueryData(["plugin:250:1|"])).toBeUndefined();
+			// The queryKey format is: "plugin:{fnIdx}:{type:value[:unit] joined by |}"
+			// For CALL_PLUGIN 250 1 with the number 1: "plugin:250:0:1"
+			expect(engine.queryClient.getQueryData([`plugin:250:${ValueType.Number}:1`])).toBeUndefined();
 
 			// Also verify: the in-flight registration was made
 			// (resolveAsync called registerInFlight before awaiting).

@@ -34,7 +34,7 @@ Open source, sponsored by [Oyren](https://oyren.ai/).
 1024 * 8                      // 8,192
 15% of 2400                   // 360
 100 cm + 2 m                  // 300.00 cm
-30 fps * 3 minutes            // 5400.00 frames
+30 fps * 3 minutes            // 5,400.00 frames
 [1, 2; 3, 4] * [5, 6; 7, 8]   // [19, 22; 43, 50]
 expand((x+1)*(x+2))           // x^2+3x+2
 ```
@@ -83,7 +83,7 @@ suffix: units participate in the calculation and the result keeps the right one.
 5 miles in km                 // 8.05 km
 2 cups to ml                  // 473.18 ml
 250 kg to pounds              // 551.16 pounds
-1 GB in MB                    // 1000.00 MB
+1 GB in MB                    // 1,000.00 MB
 90 minutes in hours           // 1.50 hours
 2 hours + 45 minutes          // 2.75 hours
 ```

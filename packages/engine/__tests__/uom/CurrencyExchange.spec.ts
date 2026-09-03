@@ -163,7 +163,9 @@ describe("CurrencyExchange crypto support", () => {
 		const calledUrl = (fetchMock.mock.calls[0] as unknown[])[0] as string;
 		expect(calledUrl).toContain("coingecko.com");
 		expect(calledUrl).not.toContain("frankfurter");
-		expect(calledUrl).toContain("ids=bitcoin,ethereum");
+		// Built with URLSearchParams, which form-encodes the comma; CoinGecko
+		// decodes it like any standard query parser.
+		expect(calledUrl).toContain("ids=bitcoin%2Cethereum");
 	});
 
 	test("getRate for crypto->fiat fetches the coin's price directly in that fiat currency", async () => {

@@ -20,7 +20,7 @@ The salary keeps its currency, so a `£` figure answers in `£`, and `per month
 after tax` gives the monthly take-home rather than the annual:
 
 ```solve
-£60,000 salary per month after tax // £3779.78
+£60,000 salary per month after tax // £3,779.78
 ```
 
 `hourly for` is a plainer sum: the gross salary as an hourly rate, on a full-time

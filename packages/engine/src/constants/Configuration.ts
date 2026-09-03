@@ -219,6 +219,38 @@ export interface WorkerConfig {
   }
 
   /**
+   * Whether the engine may reach the network at all.
+   *
+   * On by default, which is the historic behaviour: a city name or a currency
+   * pair in a line fetches live data from a public endpoint as soon as the
+   * line evaluates. A host embedding the engine somewhere that must not make
+   * outbound requests (an offline document, a sandboxed evaluation, a tenant
+   * with egress rules) switches it off here and gets the same engine with no
+   * egress: every live-data form answers with a `NETWORK_DISABLED` error
+   * naming the setting, instead of a request.
+   *
+   * The gate closes before any request is made. It stops every async
+   * resolver a package registers (weather, currency, stocks, crypto,
+   * knowledge, and any host-supplied one) unless the resolver declares
+   * itself `local` (it reads engine state, never a network; the engine's own
+   * global-variable resolver is the one built-in case). It also refuses the
+   * result of a plugin function that returns a promise. That last case is a
+   * boundary rather than a guarantee: such a function has already run by the
+   * time the engine sees the promise, so a package that fetches inside a
+   * plugin function rather than through an async resolver may still have
+   * started its request. The documented shape for live data is the resolver
+   * (`createQueryResolver`), which this gate stops cold.
+   *
+   * Rates a host primes by hand (`currencyExchangeService.primeRates`) keep
+   * working with the network off, which is what an offline host with its own
+   * rate table wants.
+   */
+  export interface NetworkConfig {
+    /** Master switch. When false, no async resolver runs and no live value is fetched. */
+    readonly enabled: boolean;
+  }
+
+  /**
    * Virtual Machine configuration.
    * Controls the internal bytecode VM that executes compiled expressions.
    */
@@ -333,6 +365,8 @@ export interface EngineConfig {
     readonly diagnostic: DiagnosticConfig;
     /** Proactive background refresh of live async values */
     readonly backgroundRefresh: BackgroundRefreshConfig;
+    /** Whether live data may be fetched at all. See {@link NetworkConfig}. */
+    readonly network: NetworkConfig;
   }
 
 /**
@@ -425,11 +459,16 @@ export const DEFAULT_CONFIG: EngineConfig = {
     backgroundRefresh: {
       enabled: false,
     },
+    network: {
+      // On, because it is what every existing consumer gets today. A host that
+      // must not make outbound requests turns it off; see NetworkConfig.
+      enabled: true,
+    },
   };
 
 /**
  * Merge a partial config override onto a base `EngineConfig`, section by
- * section, `{ ...base.section, ...override.section }` for each of the 7
+ * section, `{ ...base.section, ...override.section }` for each of the 8
  * top-level sections, not a single top-level spread.
  *
  * A shallow `{ ...base, ...override }` at the TOP level replaces an entire
@@ -454,6 +493,7 @@ export function mergeEngineConfig(
     worker: { ...base.worker, ...override.worker },
     diagnostic: { ...base.diagnostic, ...override.diagnostic },
     backgroundRefresh: { ...base.backgroundRefresh, ...override.backgroundRefresh },
+    network: { ...base.network, ...override.network },
   };
 }
 

@@ -392,7 +392,7 @@ describe("ExecutionPool — worker dispatch", () => {
 // ══════════════════════════════════════════════════════════════════════════
 
 describe("ExecutionPool — timeout fallback", () => {
-	test("resolves with empty results after 30s timeout", async () => {
+	test("answers each line with a WORKER_TIMEOUT error after 30s, and replaces the stuck worker", async () => {
 		jest.useFakeTimers();
 		const pool = new ExecutionPool(2);
 		const entries = makeEntries([1], [42]);
@@ -403,8 +403,19 @@ describe("ExecutionPool — timeout fallback", () => {
 		// Flush microtasks so the resolved Promise fires its .then callbacks
 		await Promise.resolve();
 
+		// One Error result per line, not an empty array: an empty array used to
+		// leave the line showing its stale Pending state with nothing to say why.
 		const results = await promise;
-		expect(results).toEqual([]);
+		expect(results).toHaveLength(1);
+		expect(results[0]).toMatchObject({ lineNumber: 1, valueType: ValueType.Error, isPending: false, errorCode: "WORKER_TIMEOUT" });
+		expect(results[0].unit).toContain("30 seconds");
+		expect(reconstructValue(results[0]).value).toBe("WORKER_TIMEOUT");
+
+		// The stuck worker is terminated and a fresh one stands in its slot:
+		// one probe worker, two pool workers, one replacement.
+		expect(allWorkers[1].terminate).toHaveBeenCalled();
+		expect(allWorkers[2].terminate).not.toHaveBeenCalled();
+		expect(allWorkers).toHaveLength(4);
 	});
 
 	test("clears timeout when worker responds before 30s", async () => {
@@ -444,7 +455,8 @@ describe("ExecutionPool — timeout fallback", () => {
 		jest.runAllTimers();
 		await Promise.resolve();
 		const timeoutResults = await promise;
-		expect(timeoutResults).toEqual([]);
+		expect(timeoutResults).toHaveLength(1);
+		expect(timeoutResults[0].errorCode).toBe("WORKER_TIMEOUT");
 
 		// Now worker responds late — should be silently ignored
 		const w = allWorkers[1];
@@ -483,7 +495,14 @@ describe("ExecutionPool — timeout fallback", () => {
 		// Run ALL pending timers so the 30s timeout triggers and Promise settles.
 		jest.runAllTimers();
 		await Promise.resolve();
-		expect(await promise2).toEqual([]);
+		const results2 = await promise2;
+		expect(results2).toHaveLength(1);
+		expect(results2[0].errorCode).toBe("WORKER_TIMEOUT");
+
+		// Only the worker that went quiet is replaced; the one that answered
+		// keeps its place.
+		expect(realWorkers[0].terminate).not.toHaveBeenCalled();
+		expect(realWorkers[1].terminate).toHaveBeenCalled();
 	});
 });
 
@@ -492,7 +511,7 @@ describe("ExecutionPool — timeout fallback", () => {
 // ══════════════════════════════════════════════════════════════════════════
 
 describe("ExecutionPool — onerror recovery", () => {
-	test("worker error resolves all pending batches with empty results", async () => {
+	test("a crashed worker fails its own batch with a WORKER_EXECUTION_ERROR per line, and is replaced", async () => {
 		const pool = new ExecutionPool(2);
 		const promise1 = pool.executeBatch([1], makeEntries([1], [10]))!;
 		const promise2 = pool.executeBatch([2], makeEntries([2], [20]))!;
@@ -500,9 +519,22 @@ describe("ExecutionPool — onerror recovery", () => {
 		const realWorkers = allWorkers.slice(1);
 		realWorkers[0].simulateError("Worker crashed!");
 
-		// Both promises should resolve with empty arrays
-		expect(await promise1).toEqual([]);
-		expect(await promise2).toEqual([]);
+		const results1 = await promise1;
+		expect(results1).toHaveLength(1);
+		expect(results1[0]).toMatchObject({ lineNumber: 1, valueType: ValueType.Error, errorCode: "WORKER_EXECUTION_ERROR" });
+		expect(results1[0].unit).toContain("Worker crashed!");
+
+		// The crashed worker is out of the rotation and a fresh one took its slot.
+		expect(realWorkers[0].terminate).toHaveBeenCalled();
+		expect(allWorkers).toHaveLength(4);
+
+		// The other worker's batch is unaffected and answers in its own time.
+		realWorkers[1].simulateResponse({
+			id: 2,
+			type: "EXECUTE_RESULT",
+			results: [{ lineNumber: 2, valueType: ValueType.Number, value: 20, isPending: false }],
+		});
+		expect(await promise2).toEqual([{ lineNumber: 2, valueType: ValueType.Number, value: 20, isPending: false }]);
 	});
 
 	test("late worker response after error is a no-op (batch already resolved)", async () => {
@@ -535,10 +567,20 @@ describe("ExecutionPool — onerror recovery", () => {
 		// Worker 0 crashes
 		realWorkers[0].simulateError("Worker 0 died");
 
-		// Both batches are resolved because onerror resolves ALL pending batches
-		// (the current implementation is aggressive — it resolves everything)
-		expect(await promise1).toEqual([]);
-		expect(await promise2).toEqual([]);
+		expect((await promise1)[0].errorCode).toBe("WORKER_EXECUTION_ERROR");
+
+		// Batch 2 is still running on a healthy worker, so it is still pending.
+		// It used to be resolved empty along with everything else, which threw
+		// away a result that was about to arrive.
+		const state = await Promise.race([promise2.then(() => "settled"), flushMicrotasks().then(() => "pending")]);
+		expect(state).toBe("pending");
+
+		realWorkers[1].simulateResponse({
+			id: 2,
+			type: "EXECUTE_RESULT",
+			results: [{ lineNumber: 2, valueType: ValueType.Number, value: 20, isPending: false }],
+		});
+		expect(await promise2).toEqual([{ lineNumber: 2, valueType: ValueType.Number, value: 20, isPending: false }]);
 	});
 
 	test("batches added after error operate normally", async () => {
@@ -549,9 +591,14 @@ describe("ExecutionPool — onerror recovery", () => {
 		realWorkers[0].simulateError("Crash");
 		await promise1;
 
-		// New batch after error
+		// New batch after error, answered by whichever live worker received it
+		// (round-robin has moved on, and the crashed worker's slot holds a
+		// replacement).
 		const promise2 = pool.executeBatch([3], makeEntries([3], [30]))!;
-		realWorkers[0].simulateResponse({
+		const target = allWorkers.find((w) => w.postMessage.mock.calls.some((call) => (call[0] as { id: number }).id === 2))!;
+		expect(target).toBeDefined();
+		expect(target).not.toBe(realWorkers[0]);
+		target.simulateResponse({
 			id: 2,
 			type: "EXECUTE_RESULT",
 			results: [{ lineNumber: 3, valueType: ValueType.Number, value: 30, isPending: false }],

@@ -89,7 +89,7 @@ describe("money times or over a plain count stays money and stays exact", () => 
 	});
 
 	test("a thousands-separated amount keeps every digit", () => {
-		expect(display("$1,000.50 + $0.50")).toBe("= $1001.00");
+		expect(display("$1,000.50 + $0.50")).toBe("= $1,001.00");
 	});
 });
 

@@ -224,22 +224,10 @@ export function createBuiltinNormalizerRules(): NormalizerRule[] {
  *
  * These are registered into the engine's {@link PhraseTrie} during
  * construction. Tests that create a standalone {@link TokenNormalizer}
- * should register these via {@link TokenNormalizer.addPhrase}.
+ * should register these via {@link TokenNormalizer.addPhrase}. The table
+ * itself lives in `lexer/BuiltinPhrases.ts`, shared with the lexer's token
+ * lookup, and is re-exported here so existing imports keep working.
  */
-export const BUILTIN_PHRASES: Record<string, string> = {
-	"to the power of": "CARET",
-	"power of": "CARET",
-	"increase by": "INCREASE_BY",
-	"decrease by": "DECREASE_BY",
-	"times by": "TIMES_BY",
-	"multiply by": "MULTIPLY_BY",
-	"divide by": "DIVIDE_BY",
-	// The past-tense spellings, which is how the operation is usually written
-	// out: "3 multiplied by 4". Same tokens, so no new parselets. Both this
-	// branch and the parity branch added "multiplied by" independently; the
-	// merge kept both copies and the locale table rejected the duplicate key.
-	"multiplied by": "MULTIPLY_BY",
-	"divided by": "DIVIDE_BY",
-};
+export { BUILTIN_PHRASES } from "@solve-js/lexer/BuiltinPhrases";
 
 //#endregion

@@ -81,7 +81,7 @@ describe("mass units the table lacks", () => {
 describe("the bridge does not leak", () => {
 	test("it works in both directions", () => {
 		expect(evaluate("1 mile in furlongs")).toBe("8.00 furlongs");
-		expect(evaluate("1 m in mil")).toBe("39370.08 mil");
+		expect(evaluate("1 m in mil")).toBe("39,370.08 mil");
 	});
 
 	test("a measure the base table has no concept of stays unreachable", () => {

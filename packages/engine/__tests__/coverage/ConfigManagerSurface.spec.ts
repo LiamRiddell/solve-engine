@@ -238,6 +238,7 @@ describe("getConfig", () => {
 			"backgroundRefresh",
 			"date",
 			"diagnostic",
+			"network",
 			"performance",
 			"validation",
 			"vm",

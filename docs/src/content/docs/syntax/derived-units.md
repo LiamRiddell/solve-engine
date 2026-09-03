@@ -18,7 +18,7 @@ result is one of these named quantities, it shows it by its name:
 
 ```solve
 70 kg * 9.81 m/s^2 as N // 686.70 N
-230 V * 13 A as W // 2990.00 W
+230 V * 13 A as W // 2,990.00 W
 50 N * 4 m as J // 200.00 J
 2000 W * 3 hours as kWh // 6.00 kWh
 ```

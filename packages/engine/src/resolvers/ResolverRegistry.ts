@@ -49,6 +49,18 @@ export interface IAsyncResolver {
 	readonly namespace: string;
 
 	/**
+	 * True for a resolver that answers from engine state and never reaches a
+	 * network: it waits on a value another line will produce, or reads a table
+	 * the host loaded up front. Such a resolver keeps running when the host
+	 * has switched live data off (`network.enabled: false`); every other
+	 * resolver is skipped by that setting before its `preflight()` is called,
+	 * so no request is ever started. Leave it unset (the default) for anything
+	 * that fetches. The engine's own global-variable resolver is the built-in
+	 * case that sets it.
+	 */
+	readonly local?: boolean;
+
+	/**
 	 * Pre-flight check: called BEFORE VM execution.
 	 *
 	 * Returns null if all data for this expression is cached and ready.
@@ -132,10 +144,16 @@ export class ResolverRegistry {
 	 * Returns the first AsyncCheckResult found, or null if all data is ready.
 	 * Short-circuits on first pending, subsequent pending ops will be
 	 * discovered on re-evaluation when the first resolves.
+	 *
+	 * With `networkEnabled` false, only resolvers that declare themselves
+	 * {@link IAsyncResolver.local} are consulted. The skip happens here, before
+	 * `preflight()` runs, because a resolver's preflight is what starts the
+	 * fetch: refusing its promise afterwards would already be too late.
 	 */
-	preflightAll(tokens: Token[], bytecode: BytecodeProgram, packageId: string, signal: AbortSignal, queryClient: QueryClient): AsyncCheckResult | null {
+	preflightAll(tokens: Token[], bytecode: BytecodeProgram, packageId: string, signal: AbortSignal, queryClient: QueryClient, networkEnabled = true): AsyncCheckResult | null {
 		for (const resolver of this.resolvers.values()) {
 			if (!resolver.preflight) continue;
+			if (!networkEnabled && !resolver.local) continue;
 			const result = resolver.preflight(tokens, bytecode, packageId, signal, queryClient);
 			if (result) return result;
 		}

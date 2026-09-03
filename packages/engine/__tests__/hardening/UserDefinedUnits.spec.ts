@@ -75,7 +75,7 @@ describe("a defined unit carries its base unit's dimension", () => {
 	test.each([
 		["6 sprints in days", "84 days"],
 		["6 sprints to days", "84 days"],
-		["6 sprints in hours", "2016 hours"],
+		["6 sprints in hours", "2,016 hours"],
 	])("%j converts to %j", (use, expected) => {
 		expect(runDocument(`1 sprint = 2 weeks\n${use}`)).toEqual(["sprint defined", expected]);
 	});

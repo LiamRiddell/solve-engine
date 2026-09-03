@@ -91,7 +91,7 @@ clamp 15 between 1 and 10 // 10
 0xFF & 0x0F // 15
 0xF0 | 0x0F // 255
 12 xor 10 // 6
-1 KiB in bytes // 1024.00 bytes
+1 KiB in bytes // 1,024.00 bytes
 ```
 
 ## Colours

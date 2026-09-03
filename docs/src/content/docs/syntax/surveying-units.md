@@ -23,7 +23,7 @@ A mil is a thousandth of an inch, which is small enough that a metric answer is
 easier to read the other way round.
 
 ```solve
-1 m in mil // 39370.08 mil
+1 m in mil // 39,370.08 mil
 ```
 
 Two mass units that often go missing. The carat is the metric one, exactly

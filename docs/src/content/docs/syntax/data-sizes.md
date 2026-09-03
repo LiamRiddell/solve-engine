@@ -15,20 +15,20 @@ measurement. Decimal and binary prefixes are both there and are kept distinct:
 `kB` is 1,000 bytes and `KiB` is 1,024.
 
 ```solve
-1 kB in bytes // 1000.00 bytes
-1 KiB in bytes // 1024.00 bytes
-1 GB in MB // 1000.00 MB
-1 TiB in GiB // 1024.00 GiB
+1 kB in bytes // 1,000.00 bytes
+1 KiB in bytes // 1,024.00 bytes
+1 GB in MB // 1,000.00 MB
+1 TiB in GiB // 1,024.00 GiB
 1 byte in bits // 8.00 bits
-1.5 MB in KB // 1500.00 KB
+1.5 MB in KB // 1,500.00 KB
 ```
 
 Case matters, and it matters more here than almost anywhere: `MB` is megabytes
 and `Mb` is megabits, a factor of eight apart.
 
 ```solve
-1 GB in bits // 8000000000.00 bits
-1 Gb in Mb // 1000.00 Mb
+1 GB in bits // 8,000,000,000.00 bits
+1 Gb in Mb // 1,000.00 Mb
 ```
 
 ## Bandwidth and transfer time

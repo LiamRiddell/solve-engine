@@ -24,11 +24,7 @@
  * never picks up a stray hour from a timezone offset.
  */
 
-/** Days in a given month, honouring leap years (month is 0-based, JS style). */
-function daysInMonth(year: number, month0: number): number {
-	// Day 0 of the next month is the last day of this one.
-	return new Date(year, month0 + 1, 0).getDate();
-}
+import { daysInMonth } from "@solve-js/utilities/Calendar";
 
 /**
  * The date of the `n`-th occurrence of a weekday in a month, or `null` when the

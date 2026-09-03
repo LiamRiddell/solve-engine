@@ -215,6 +215,42 @@ function formatMsDuration(ms: number): string {
   return `${sign}${hours}:${mm}:${ss}`;
 }
 
+/** The decimal mark each locale writes, looked up once per locale rather than on every value. */
+const decimalMarkByLocale = new Map<string, string>();
+
+function decimalMark(loc: string): string {
+  let mark = decimalMarkByLocale.get(loc);
+  if (mark === undefined) {
+    mark = new Intl.NumberFormat(loc).formatToParts(1.1).find((part) => part.type === "decimal")?.value ?? ".";
+    decimalMarkByLocale.set(loc, mark);
+  }
+  return mark;
+}
+
+/**
+ * Write a fixed-decimal string (`"1234567.50"`) the way `loc` writes numbers:
+ * its decimal mark, and its digit grouping when `useGrouping` is on.
+ *
+ * Every quantity and every money amount used to be rendered with a bare
+ * `toFixed`, so a plain `52000` showed as `52,000` while `£52000` showed as
+ * `£52000.00`, and the `enableSeperator` setting had no effect on the one
+ * value type people most want grouped. The digits are taken from the string
+ * rather than re-rendered from the double, because an exact money amount has
+ * already been rounded from its decimal (see {@link formatUom}) and
+ * re-rendering would undo that. `BigInt` carries the integer part through
+ * `Intl` so grouping follows the locale's own rule (Indian lakhs included)
+ * rather than a hand-written every-three-digits. Anything that is not plain
+ * digits, an `Infinity` or an exponent form, is returned as it came.
+ */
+function localiseFixedDecimal(fixed: string, loc: string, useGrouping: boolean): string {
+  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(fixed);
+  if (!match) return fixed;
+  const [, sign, integer, fraction] = match;
+  const integerText = useGrouping ? BigInt(integer).toLocaleString(loc, { useGrouping: true }) : integer;
+  if (fraction === undefined) return `${sign}${integerText}`;
+  return `${sign}${integerText}${decimalMark(loc)}${fraction}`;
+}
+
 function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings, exact?: DecimalData): string {
   if (unit === "ms") return `= ${formatMsDuration(value)}`;
   // A fuel-consumption unit is stored slash-free (so it is not read as a rate)
@@ -223,6 +259,8 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   if (unit === "mps2") unit = "m/s²";
 
   const dp = settings.unitOfMeasurementResult.decimalPlaces;
+  const useGrouping = settings.floatResult.enableSeperator;
+  const loc = settings.numberResult.decimalSeparatorLocale || "en-US";
 
   // For TimeSpan values (days, weeks, hours, etc.), format as integer if the value is a whole number
   const timeSpanUnits = ["days", "weeks", "months", "years", "hours", "minutes", "seconds", "day", "week", "month", "year", "hour", "minute", "second"];
@@ -231,10 +269,10 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   let formatted: string;
   if (isTimeSpan && value === Math.floor(value)) {
     // For whole number TimeSpan values, format as integer
-    formatted = value.toString();
+    formatted = localiseFixedDecimal(value.toString(), loc, useGrouping);
   } else {
     // For other values, use the configured decimal places
-    formatted = value.toFixed(dp);
+    formatted = localiseFixedDecimal(value.toFixed(dp), loc, useGrouping);
   }
 
   // Currency display: symbol + culturally-conventional placement (e.g.
@@ -251,7 +289,7 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
     // answers "1.00" because the double it is handed already sits below the
     // value the user typed. Amounts with no exact decimal (a currency
     // conversion, whose rate is a double) keep the toFixed rendering above.
-    const moneyText = exact ? decimalToFixed(exact, dp) : formatted;
+    const moneyText = exact ? localiseFixedDecimal(decimalToFixed(exact, dp), loc, useGrouping) : formatted;
     const sep = currencyDisplay.spaced ? " " : "";
     const withSymbol = currencyDisplay.position === "prefix"
       ? `${currencyDisplay.symbol}${sep}${moneyText}`
@@ -274,7 +312,7 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   // less common ISO codes) still rounds from its decimal here, so "1.005 UYW"
   // reads the same way "$1.005" does. Non-currency Uoms never carry an exact,
   // so this leaves "1.50 kg" exactly as it was.
-  const genericText = exact ? decimalToFixed(exact, dp) : formatted;
+  const genericText = exact ? localiseFixedDecimal(decimalToFixed(exact, dp), loc, useGrouping) : formatted;
   return `= ${genericText} ${unit || ""}`.trim();
 }
 

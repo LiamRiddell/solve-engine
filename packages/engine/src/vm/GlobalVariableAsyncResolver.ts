@@ -32,6 +32,13 @@ export class GlobalVariableAsyncResolver implements IAsyncResolver {
 	readonly namespace = "global-variables";
 
 	/**
+	 * Waits on a value another line declares, never on a network, so it keeps
+	 * working when the host has switched live data off. See
+	 * {@link IAsyncResolver.local}.
+	 */
+	readonly local = true;
+
+	/**
 	 * In-flight (not-yet-resolved) promises, keyed by variable name.
 	 *
 	 * Without this, every re-evaluation of a still-pending line (every
