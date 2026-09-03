@@ -659,15 +659,32 @@ export class ExpressionEngine {
      */
     private compiledFrontHalf: Map<string, { normalizedTokens: Token[]; reads: string[]; writes: string[] }> = new Map();
 
-    /** Whether `expression` can be answered without lexing or normalising: both caches hold it. */
-    private hasCompiled(expression: string): boolean {
-        return this.compiledFrontHalf.has(expression) && this.bytecodeCache.has(expression);
+    /**
+     * Expressions whose last parse threw, with what the front half produced
+     * for them. A line that does not parse is the ordinary state of a line
+     * being typed, and every re-evaluation of the document lexed, normalised
+     * and re-parsed it, paying for the throw each time. The entry is used
+     * only after the effectful-grammar tries, which still run because they
+     * read the VM (a stored equation, a running total), so nothing that
+     * depends on document state is skipped: only the pure front half and the
+     * parse that is known to fail. The error object is the one first thrown,
+     * so its timestamp is the first failure's. Cleared with the compiled
+     * caches, because the vocabulary and parselet changes that would change
+     * a program can change whether a line parses at all. Bounded by the same
+     * `defaultCacheSize` as the programs.
+     */
+    private failedParses: Map<string, { error: EngineError; normalizedTokens: Token[]; reads: string[]; writes: string[] }> = new Map();
+
+    /** Whether `expression` can be answered without lexing or normalising: both compiled caches hold it, or its parse is known to fail. */
+    private frontHalfCached(expression: string): boolean {
+        return (this.compiledFrontHalf.has(expression) && this.bytecodeCache.has(expression)) || this.failedParses.has(expression);
     }
 
-    /** Drop every cached program and its front half. Every invalidation goes through here so the two cannot drift. */
+    /** Drop every cached program, its front half and every remembered parse failure. Every invalidation goes through here so the three cannot drift. */
     private clearCompiledCache(): void {
         this.bytecodeCache.clear();
         this.compiledFrontHalf.clear();
+        this.failedParses.clear();
     }
 
     /**
@@ -692,6 +709,15 @@ export class ExpressionEngine {
         }
         this.bytecodeCache.set(expression, program);
         this.compiledFrontHalf.set(expression, front);
+    }
+
+    /** Remember a parse failure, evicting the oldest when full: bounded like the program cache. */
+    private rememberFailedParse(expression: string, failure: { error: EngineError; normalizedTokens: Token[]; reads: string[]; writes: string[] }): void {
+        if (this.failedParses.size >= this.config.performance.defaultCacheSize) {
+            const oldest = this.failedParses.keys().next().value;
+            if (oldest !== undefined) this.failedParses.delete(oldest);
+        }
+        this.failedParses.set(expression, failure);
     }
     // Maps each registered plugin function's name to the index its handler sits
     // at in this engine's context. Populated by registerPackage, shared by
@@ -1069,6 +1095,12 @@ export class ExpressionEngine {
         // Mirror the registration into the compatibility index (kept in step so
         // the next package's check stays O(its own fields)).
         this.compatIndex.add(pkg);
+
+        // A package can add a parselet, a keyword or a normaliser rule, which
+        // changes what a line means or whether it parses at all: a program
+        // compiled before it, and a parse failure remembered before it, are
+        // both stale.
+        this.clearCompiledCache();
     }
 
     /**
@@ -2329,14 +2361,15 @@ export class ExpressionEngine {
     private lexToTokens(expression: string, onToken?: (t: Token) => void, skipWhenCompiled = true): { tokens: Token[]; hasParens: boolean; compiled: boolean } {
         const tokens: Token[] = [];
         let hasParens = false;
-        // An expression whose program and front half are both cached is not
-        // lexed again: prepareExpression() answers from the cache before it
-        // looks at the tokens, so producing them would be pure cost. Skipped
+        // An expression whose program and front half are both cached, or whose
+        // parse is known to fail, is not lexed again: prepareExpression()
+        // answers from the cache before it looks at the tokens, so producing
+        // them would be pure cost. Skipped
         // only when nobody is listening for the tokens themselves, which is a
         // diagnostic collector (`onToken`) or explainLine (`skipWhenCompiled`
         // false), both of which want the real stream. `compiled` tells the
         // caller the empty array is a skip, not an empty line.
-        if (skipWhenCompiled && !onToken && this.hasCompiled(expression)) {
+        if (skipWhenCompiled && !onToken && this.frontHalfCached(expression)) {
             return { tokens, hasParens, compiled: true };
         }
         this.lexer.resetExpression(expression);
@@ -2416,35 +2449,47 @@ export class ExpressionEngine {
         // passed the length and complexity checks, was not one of the
         // effectful shapes (those never reach the cache), and its normalised
         // tokens and reads/writes are what the front half would produce
-        // again. See `compiledFrontHalf` for why this sits first.
+        // again. See `compiledFrontHalf` for why this sits first. Not taken
+        // when a diagnostics collector is listening for fusion events, which
+        // only the real normaliser pass can fire.
         const compiledProgram = this.bytecodeCache.get(expression);
-        if (compiledProgram) {
+        if (compiledProgram && !onFusion) {
             const front = this.compiledFrontHalf.get(expression);
             if (front) {
                 return { kind: 'ready', normalizedTokens: front.normalizedTokens, reads: front.reads, writes: front.writes, program: compiledProgram, cached: true };
             }
         }
 
-        // ══ SAFETY CHECK 1: Expression length limit ══
-        const lengthCheck = checkExpressionLength(expression, this.config.validation);
-        if (!lengthCheck.passed) {
-            return { kind: 'error', stage: 'length', error: lengthCheck.error!.engineError! };
-        }
+        // ══ FAILED BEFORE: skip to the effectful tries ══
+        // See `failedParses`: the front half is known and the parse is known
+        // to throw, but the effectful tries below read the VM and run again.
+        const failed = onFusion ? undefined : this.failedParses.get(expression);
 
-        // Filter COMMENT tokens, they have no parselet.
-        const exprTokens = tokens.filter(t => t.type !== 'COMMENT');
-        if (exprTokens.length === 0) {
-            return { kind: 'empty' };
-        }
+        let normalizedTokens: Token[];
+        if (failed) {
+            normalizedTokens = failed.normalizedTokens;
+        } else {
+            // ══ SAFETY CHECK 1: Expression length limit ══
+            const lengthCheck = checkExpressionLength(expression, this.config.validation);
+            if (!lengthCheck.passed) {
+                return { kind: 'error', stage: 'length', error: lengthCheck.error!.engineError! };
+            }
 
-        // ══ NORMALIZER ══
-        // Phrase fusion, implicit multiply, domain token merging.
-        const normalizedTokens = this.normalizer.normalize(exprTokens, onFusion);
+            // Filter COMMENT tokens, they have no parselet.
+            const exprTokens = tokens.filter(t => t.type !== 'COMMENT');
+            if (exprTokens.length === 0) {
+                return { kind: 'empty' };
+            }
 
-        // ══ SAFETY CHECK 2: Complexity scoring ══
-        const complexityCheck = checkExpressionComplexity(normalizedTokens, this.config.validation);
-        if (!complexityCheck.passed) {
-            return { kind: 'error', stage: 'complexity', error: complexityCheck.engineError!, normalizedTokens };
+            // ══ NORMALIZER ══
+            // Phrase fusion, implicit multiply, domain token merging.
+            normalizedTokens = this.normalizer.normalize(exprTokens, onFusion);
+
+            // ══ SAFETY CHECK 2: Complexity scoring ══
+            const complexityCheck = checkExpressionComplexity(normalizedTokens, this.config.validation);
+            if (!complexityCheck.passed) {
+                return { kind: 'error', stage: 'complexity', error: complexityCheck.engineError!, normalizedTokens };
+            }
         }
 
         // ══ SYMBOLIC ALGEBRA: `=>` / bare equation-statement grammar ══
@@ -2495,6 +2540,9 @@ export class ExpressionEngine {
         if (symbolicResult !== null) {
             return { kind: 'symbolic-solve', normalizedTokens, value: symbolicResult, reads: compoundReadsWrites?.reads, writes: compoundReadsWrites?.writes };
         }
+        if (failed) {
+            return { kind: 'error', stage: 'parse', error: failed.error, reads: failed.reads, writes: failed.writes, normalizedTokens };
+        }
 
         const { reads, writes } = extractReadsAndWrites(normalizedTokens);
 
@@ -2533,7 +2581,9 @@ export class ExpressionEngine {
             // registration, via compileExpression()'s merge below) still
             // learn what this line references and can re-evaluate it once
             // those variables become defined.
-            return { kind: 'error', stage: 'parse', error: normalizeUnknownError(e), reads, writes, normalizedTokens };
+            const error = normalizeUnknownError(e);
+            this.rememberFailedParse(expression, { error, normalizedTokens, reads, writes });
+            return { kind: 'error', stage: 'parse', error, reads, writes, normalizedTokens };
         }
 
         this.cacheBytecode(expression, program, { normalizedTokens, reads, writes });
