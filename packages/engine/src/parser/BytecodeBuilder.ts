@@ -12,6 +12,30 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
  */
 const MAX_CONSTANT_POOL_INDEX = 255;
 
+/** The `numberIndex` key for negative zero, which `Map` would otherwise fold into positive zero. */
+const NEGATIVE_ZERO_KEY = "-0";
+
+/**
+ * An operand that fits the byte the opcode stream stores it in, or a
+ * structured refusal. `build()` copies the stream into a `Uint8Array`, which
+ * keeps the low eight bits of whatever it is given: an operand of 300 used to
+ * become 44 with no error, and the program then read a different constant,
+ * plugin function or argument count from the one the parselet emitted. Every
+ * raw operand goes through here, so a package author's mistake is reported at
+ * compile time as a fault in the package rather than answered with a wrong
+ * number.
+ */
+function checkedOperand(value: number, what: string): number {
+	if (!Number.isInteger(value) || value < 0 || value > 255) {
+		throw ErrorFactory.parsing(
+			"BYTECODE_OPERAND_OUT_OF_RANGE",
+			`A bytecode ${what} must be an integer from 0 to 255, but ${value} was emitted; the opcode stream stores one byte per operand.`,
+			{ value, what }
+		);
+	}
+	return value;
+}
+
 /**
  * Compiled bytecode program produced by {@link BytecodeBuilder}.
  * Ready for consumption by {@link executeBytecode} without further processing.
@@ -128,6 +152,8 @@ export class BytecodeBuilder {
 	private numbers: number[] = [];
 	private strings: string[] = [];
 	private stringIndex = new Map<string, number>();
+	/** Value (or {@link NEGATIVE_ZERO_KEY}) to its slot in `numbers`, so a repeated literal is emitted once. */
+	private numberIndex = new Map<number | string, number>();
 	private _hasAsync = false;
 	private userFunctionBodies: UserFunctionDef[] = [];
 	private anonymousBodies: AnonymousBodyDef[] = [];
@@ -194,28 +220,33 @@ export class BytecodeBuilder {
 	}
 
 	/**
-	 * Emit a numeric literal: appends `n` to the program's constant pool and
-	 * writes its index into the opcode stream (read back by the VM as e.g.
-	 * `PUSH_NUMBER <idx>`).
+	 * Emit a numeric literal: interns `n` into the program's constant pool
+	 * (deduplicated, like {@link emitString}) and writes its index into the
+	 * opcode stream (read back by the VM as e.g. `PUSH_NUMBER <idx>`).
 	 *
-	 * Numeric constants are NOT deduplicated (unlike {@link emitString})
-	 * every call appends a new entry, so an expression with more than
-	 * {@link MAX_CONSTANT_POOL_INDEX}+1 distinct numeric-literal occurrences
-	 * throws rather than silently wrapping the index (see
-	 * `MAX_CONSTANT_POOL_INDEX`'s doc for what that would otherwise do).
+	 * Deduplicated so that the 256-entry pool counts distinct values rather
+	 * than occurrences: a long line of repeated literals used to exhaust it
+	 * long before it held 256 different numbers. Negative zero keeps its own
+	 * slot, because `1 / -0` is not `1 / 0`; NaN shares one, since every NaN
+	 * reads the same.
 	 *
-	 * @throws If the constant pool would exceed 256 entries.
+	 * @throws If the pool would exceed 256 distinct entries.
 	 */
 	emitNumber(n: number): void {
-		const idx = this.numbers.length;
-		if (idx > MAX_CONSTANT_POOL_INDEX) {
-			throw ErrorFactory.parsing(
-				"TOO_MANY_NUMERIC_CONSTANTS",
-				`Expression has more than ${MAX_CONSTANT_POOL_INDEX + 1} numeric literals, exceeding the bytecode constant pool's limit.`,
-				{ limit: MAX_CONSTANT_POOL_INDEX + 1 }
-			);
+		const key = Object.is(n, -0) ? NEGATIVE_ZERO_KEY : n;
+		let idx = this.numberIndex.get(key);
+		if (idx === undefined) {
+			idx = this.numbers.length;
+			if (idx > MAX_CONSTANT_POOL_INDEX) {
+				throw ErrorFactory.parsing(
+					"TOO_MANY_NUMERIC_CONSTANTS",
+					`Expression has more than ${MAX_CONSTANT_POOL_INDEX + 1} distinct numeric literals, exceeding the bytecode constant pool's limit.`,
+					{ limit: MAX_CONSTANT_POOL_INDEX + 1 }
+				);
+			}
+			this.numbers.push(n);
+			this.numberIndex.set(key, idx);
 		}
-		this.numbers.push(n);
 		this.opcodes.push(idx);
 	}
 
@@ -253,12 +284,12 @@ export class BytecodeBuilder {
 	 * operands their own opcode handler expects to read positionally.
 	 */
 	emitIndex(idx: number): void {
-		this.opcodes.push(idx);
+		this.opcodes.push(checkedOperand(idx, "index"));
 	}
 
 	/** Emit a raw byte (0-255), used for fixed small operands like argument counts. */
 	emitByte(b: number): void {
-		this.opcodes.push(b);
+		this.opcodes.push(checkedOperand(b, "byte"));
 	}
 
 	/** Number of opcodes/operands emitted so far, used to compute jump targets before {@link patchJump}. */
@@ -314,7 +345,14 @@ export class BytecodeBuilder {
 
 	/** Overwrite a previously-emitted placeholder operand at `position` with the real jump `target`, once known. */
 	patchJump(position: number, target: number): void {
-		this.opcodes[position] = target;
+		if (position < 0 || position >= this.opcodes.length) {
+			throw ErrorFactory.parsing(
+				"BYTECODE_OPERAND_OUT_OF_RANGE",
+				`patchJump was asked to write at position ${position}, outside the ${this.opcodes.length} bytes emitted so far.`,
+				{ position, length: this.opcodes.length }
+			);
+		}
+		this.opcodes[position] = checkedOperand(target, "jump target");
 	}
 
 	/**
@@ -383,7 +421,10 @@ export class BytecodeBuilder {
 		// = [] discards the ArrayBuffer, forcing V8 to reallocate on every push()
 		// threshold (4→8→16→32...). For a 50-opcode expression, that's 3-4 copies.
 		this.opcodes.length = 0;
-		this.numbers.length = 0;
+		if (this.numbers.length > 0) {
+			this.numbers.length = 0;
+			this.numberIndex.clear();
+		}
 		// Guarded on being non-empty. reset() runs once per compiled expression
 		// and a CPU profile put it at over a tenth of parse-and-compile, which
 		// is a lot for clearing collections that are usually already empty:

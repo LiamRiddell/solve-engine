@@ -71,6 +71,13 @@ Operators work the same way, for a two-character symbol: `operators: { "~>": "MY
 paired with an infix parselet. The engine's own comparison and shift operators
 (`==`, `!=`, `>=`, `<=`, `<<`, `>>`) always win and cannot be overridden.
 
+Registration is all or nothing: if any keyword, operator or unit in a vocabulary
+collides with a built-in, nothing from that vocabulary is registered and the
+engine throws a `CONFIG` error naming the collision. Two packages may claim the
+same word (the engine's compatibility check warns when they do). The one
+registered last is in force, and unregistering it hands the word back to the
+other rather than removing it for both.
+
 ## When not to add a keyword
 
 A lexer keyword is **unconditional**: once you claim `prev`, that word is your

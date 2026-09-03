@@ -53,6 +53,19 @@ describe("Pipeline Benchmarks", () => {
     expect(r.medianMs).toBeLessThan(1);
   });
 
+  test("re-evaluates a line that does not parse (warm) in < 1ms", async () => {
+    const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
+    // A half-typed line, the ordinary state of a line being edited: the
+    // first attempt remembers the failure, the rest answer from it.
+    const broken = "(1 + 2 * ";
+    try { engine.evaluateLine(1, broken); } catch { /* the failure is the point */ }
+    const r = await benchmarkFn(() => {
+      try { engine.evaluateLine(1, broken); } catch { /* expected */ }
+    }, 20000, 200);
+    recordSample(results, "single_eval_failed_warm", r);
+    expect(r.medianMs).toBeLessThan(1);
+  });
+
   test("parses 50-line doc in < 20ms", async () => {
     const input = generateDoc(50);
     const r = await benchmarkFn(() => {

@@ -60,8 +60,9 @@ export function bareRateDenominatorNormalizerRule(priority = 75): NormalizerRule
 	return {
 		name: "uom:bare-rate-denominator",
 		priority,
-		unshapedReason:
-			"Fires after any value-ending token, a set broad enough that naming it would filter nothing.",
+		// The union of the two branches below: a NUMBER before a count label
+		// (an IDENT), or a SLASH or per-word (an IDENT) before a UNIT.
+		shape: [{ types: ["NUMBER", "SLASH", "IDENT"] }, { types: ["IDENT", "UNIT"] }],
 		match(tokens, pos): NormalizerMatch | null {
 			const head = tokens[pos];
 			if (head === undefined) return null;

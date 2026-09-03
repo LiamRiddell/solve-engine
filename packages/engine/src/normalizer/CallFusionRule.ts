@@ -27,7 +27,10 @@ export function callFusionRule(callFusions: ReadonlyMap<string, string>, priorit
 	return {
 		name: CALL_FUSION_RULE_NAME,
 		priority,
-		startTokenTypes: ["IDENT"],
+		// The word itself cannot be declared, since the map is live, but the
+		// opening parenthesis after it is fixed, and that alone rules out
+		// almost every identifier in prose.
+		shape: [{ types: ["IDENT"] }, { types: ["LPAREN"] }],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const token = tokens[pos];
 			if (!token || token.type !== "IDENT") return null;

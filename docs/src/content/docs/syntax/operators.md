@@ -48,3 +48,21 @@ Most operators have a word form, which is often how a line reads more naturally.
 40 with 2 // 42
 40 without 2 // 38
 ```
+
+## Symbols pasted from elsewhere
+
+A word processor, a chat client or a web page often replaces a typed hyphen
+with a minus sign (`−`) or an en dash (`–`), and the multiplication and
+division signs turn up in copied text and on some keyboards. Solve reads all
+four as the operator they look like, so a line pasted from a document still
+calculates.
+
+```solve
+10 − 3 // 7
+10 – 3 // 7
+3 × 4 // 12
+12 ÷ 4 // 3
+```
+
+The em dash (`—`) is not an operator. It is a sentence mark, and a line that
+carries one is read as prose.

@@ -44,16 +44,15 @@ const CATALOGED_FILES = [
 ];
 
 function findErrorFactoryCodes(fileContent: string): string[] {
-  // Matches ErrorFactory.<method>("CODE" or 'CODE', ...) — the 3-arg
-  // legacy shape. The richer `{ code: ErrorCode.X, ... }` object shape
-  // (used once packages migrate) isn't a plain string literal in the
-  // same position, so it's naturally excluded here — this scan is
-  // specifically for the still-common free-string call shape.
-  const pattern = /ErrorFactory\.(?:validation|parsing|execution|external|internal|config)\(\s*["']([A-Z][A-Z0-9_]*)["']/g;
+  // Matches both call shapes: ErrorFactory.<method>("CODE", ...) and
+  // ErrorFactory.<method>({ code: "CODE", ... }). A code written as an
+  // ErrorCode.X reference rather than a string literal is not seen here,
+  // and does not need to be: it can only name a catalogued code.
+  const pattern = /ErrorFactory\.(?:validation|parsing|execution|external|internal|config)\(\s*(?:["']([A-Z][A-Z0-9_]*)["']|\{\s*code:\s*["']([A-Z][A-Z0-9_]*)["'])/g;
   const codes: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = pattern.exec(fileContent)) !== null) {
-    codes.push(m[1]);
+    codes.push(m[1] ?? m[2]);
   }
   return codes;
 }

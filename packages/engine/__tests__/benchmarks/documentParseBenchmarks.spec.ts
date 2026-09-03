@@ -122,10 +122,16 @@ describe("Document Parse Benchmarks", () => {
    * thousand-line case is a median over enough samples to mean something.
    */
   const FULL_BUDGET = 150_000_000;
+  // The 10,000-line tier exists because the 1,000-line one could not see a
+  // quadratic term: the whole-document scan used to cost each line the length
+  // of the document after it, which at 1,000 lines is still a small number
+  // and at 10,000 was two thirds of the parse. A document of that size is
+  // within maxDocumentLines and is what a long-running notepad becomes.
   const SIZES = [
     { name: "doc_50_lines", lines: 50, iters: 200 },
     { name: "doc_250_lines", lines: 250, iters: FULL_BUDGET },
     { name: "doc_1000_lines", lines: 1000, iters: FULL_BUDGET },
+    { name: "doc_10000_lines", lines: 10000, iters: FULL_BUDGET },
   ];
 
   for (const size of SIZES) {

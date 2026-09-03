@@ -38,6 +38,12 @@ Compiled bytecode is cached by expression text, so an unchanged line skips
 lexing, normalising, parsing and compiling entirely. Line results are cached
 separately, so an unchanged line skips execution too.
 
+A line that does not parse is remembered as well. A line being typed does not
+parse for most of its life, so its next evaluation skips the lexing, the
+normalising and the throw, and re-runs only the forms that read other lines'
+values. The memory is cleared with the compiled caches whenever a package or a
+user-defined unit changes what a line means.
+
 <Explainer id="caches" client:load />
 
 ## Incremental re-evaluation

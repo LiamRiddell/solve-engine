@@ -253,10 +253,10 @@ describe("ExpressionLexer — dollar sign", () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("ExpressionLexer — dot vs decimal", () => {
-  test("single dot → NUMBER (special case for 1-char path)", () => {
+  test("single dot → DOT on the 1-char path, the same as on the main path", () => {
     const t = tokenize(".");
     expect(t).toHaveLength(1);
-    expect(t[0].type).toBe("NUMBER");
+    expect(t[0].type).toBe("DOT");
   });
 
   test(".. are two DOT tokens", () => {
