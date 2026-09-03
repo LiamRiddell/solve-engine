@@ -1,5 +1,6 @@
 import { ExpressionLexer, LineClassification, LexerVocabulary, type ScanLineResult } from "./ExpressionLexer";
 import { Token } from "@solve-js/lexer/Token";
+import { EngineError } from "@solve-js/errors/UnifiedErrorFramework";
 import { LexerState } from "@solve-js/lexer/LexerState";
 import { getTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import type { TokenCategory } from "@solve-js/language/TokenCategory";
@@ -204,14 +205,30 @@ export class Lexer {
   }
 
   private collectTokenObjects(lineText: string): Token[] {
-    this.resetExpression(lineText);
+    // Driven token by token off the scanner rather than through
+    // resetExpression(), which tokenises the whole line up front and so has
+    // nothing to hand back when the line faults part way. Highlighting is
+    // painted while the line is still being typed, and an unterminated string
+    // is what a line looks like between the opening quote and the closing one:
+    // the tokens read before the fault are the right thing to paint, and
+    // letting the throw escape blanked the line.
+    this.currentState = LexerState.Main;
+    this.hasPeeked = false;
+    this.peekedToken = undefined;
+    this.expressionLexer.reset(lineText);
     const result: Token[] = [];
-    for (const token of this) {
-      if (token.type === "WS" || token.type === "NEWLINE") continue;
-      if (token.type.startsWith("MD_")) continue;
-      if (token.type === "INLINE_SOLVE_START" || token.type === "BACKTICK_CLOSE") continue;
-      result.push(token);
+    try {
+      for (const token of this.expressionLexer) {
+        if (token.type === "WS" || token.type === "NEWLINE") continue;
+        if (token.type.startsWith("MD_")) continue;
+        if (token.type === "INLINE_SOLVE_START" || token.type === "BACKTICK_CLOSE") continue;
+        result.push(token);
+      }
+    } catch (thrown) {
+      if (!(thrown instanceof EngineError)) throw thrown;
     }
+    this.tokens = result;
+    this.tokenIdx = 0;
     return result;
   }
 

@@ -1535,7 +1535,12 @@ export class ExpressionEngine {
                 error: null,
             };
 
-            if (!isEmpty) {
+            if (scanResult.error) {
+                // The tokeniser refused this line (an unterminated string). It
+                // is reported the way a parse error is, and nothing is
+                // evaluated from it: there are no tokens to evaluate.
+                parsedLine.error = scanResult.error.message;
+            } else if (!isEmpty) {
                 const isVariableAssignment = lineText.trim().startsWith(':');
 
                 if (hasInlineSolves && !isVariableAssignment) {
