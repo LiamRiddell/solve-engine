@@ -37,6 +37,14 @@ any package resolver). With it off, those forms answer with an error naming the
 setting instead of making a request. See
 [switching live data off](/guide/async-and-live-data/#switching-live-data-off).
 
+One option is a component rather than a setting: `calendar`, the backend the
+engine computes dates with (which local day an instant falls on, what a month
+later is, how a date is written out). It defaults to the built-in `Date`
+backend, read in the process's time zone, and leaving it unset changes nothing.
+It is the seam for a `Temporal` backend, shipped by a later release, that
+carries a time zone of its own; see
+[one calendar backend](/architecture/design-decisions/#one-calendar-backend-with-date-as-the-default).
+
 Safety limits exist because the engine is designed to run on untrusted input as
 someone types. They bound expression length, parse complexity, instruction
 count, stack depth, and how many elements a range or matrix may be expanded to

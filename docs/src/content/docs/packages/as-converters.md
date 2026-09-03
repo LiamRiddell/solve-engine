@@ -11,11 +11,17 @@ no index to allocate.
 ## The shape
 
 ```ts
-asConverters?: Record<string, (value: Value) => Value>;
+asConverters?: Record<string, (value: Value, context?: LineExecutionContext) => Value>;
 ```
 
 Each handler takes the value on the left of `as` and returns the converted one.
-That is the whole contract. Here is a package that adds a `roman` target:
+The optional `context` is the same per-line execution context a
+[plugin function](/packages/functions-and-operators/#the-plugin-function)
+receives. A converter that reads a date takes the engine's calendar backend
+from it, `calendarOf(context)` from `solve-engine/engine`, so `<date> as
+weekday` answers as the engine's own date arithmetic would; a converter that
+needs nothing from it leaves it out, as `roman` does below. That is the whole
+contract. Here is a package that adds a `roman` target:
 
 ```ts
 import type { IEnginePackage } from "solve-engine";

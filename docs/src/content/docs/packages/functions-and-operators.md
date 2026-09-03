@@ -92,7 +92,9 @@ type PluginFunctionHandler = (args: Value[], context?: LineExecutionContext) => 
 a string with `args[i].value as string`, and check `args[i].type` against
 `ValueType` for a typed argument. Build the result with a factory: `numberValue`,
 `stringValue`, `uomValue(n, "hours")`, `boolValue`, `percentageValue`. The optional
-`context` carries the line's cross-line data; ignore it unless you need it. A
+`context` carries the line's cross-line data and the engine's calendar backend
+(`context.calendar`, for a handler that reads a date); ignore it unless you need
+it. A
 handler may return a `Promise<Value>` for data it has to fetch, but for that an
 [async data source](/guide/async-data-sources/) is usually the better fit.
 
