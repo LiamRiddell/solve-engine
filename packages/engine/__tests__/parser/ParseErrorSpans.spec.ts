@@ -26,7 +26,7 @@ describe("where a parse error points", () => {
 	test("at the token nothing could start with", () => {
 		const error = failure("2 +* 3");
 		expect(error.code).toBe("NO_PREFIX_PARSELET");
-		expect(error.span).toMatchObject({ start: 3, end: 4 });
+		expect(error.span).toEqual({ start: 3, end: 4, line: 1, col: 4 });
 	});
 
 	test("just after the last token, when the line stops short", () => {
