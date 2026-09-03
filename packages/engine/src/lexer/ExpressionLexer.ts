@@ -1809,6 +1809,47 @@ export class ExpressionLexer {
     return p;
   }
 
+  /**
+   * Whether an inline-solve opener (`s` + backtick) occurs in `[from, end)`.
+   *
+   * Bounded by hand rather than written as `input.indexOf("s\`", from)`. This
+   * used to be the `indexOf` form with an `idx < end` check afterwards, which
+   * is correct but not bounded: when {@link scanDocument} is classifying,
+   * `this.input` is the whole document, so a line with no marker scanned to
+   * the END OF THE DOCUMENT before the check could reject the hit. Every line
+   * paid for every line after it, and a whole-document parse was quadratic in
+   * line count (measured at 28.9 us per line at 10,000 lines against 10.1 us
+   * at 1,000, and two thirds of the parse's self time in a profile). A prose
+   * document with many candidate `s` characters was worse still. The
+   * wikilink close in {@link indexOfWithin} had the same shape.
+   */
+  private hasInlineSolveWithin(from: number, end: number): boolean {
+    const input = this.input;
+    const last = end - 1;
+    for (let i = from; i < last; i++) {
+      if (input.charCodeAt(i) === 115 && input.charCodeAt(i + 1) === 96) return true;
+    }
+    return false;
+  }
+
+  /**
+   * `input.indexOf(needle, from)` restricted to `[from, end)`, returning -1
+   * when the needle does not occur wholly before `end`. See
+   * {@link hasInlineSolveWithin} for why the plain `indexOf` was not enough.
+   */
+  private indexOfWithin(needle: string, from: number, end: number): number {
+    const input = this.input;
+    const last = end - needle.length;
+    const first = needle.charCodeAt(0);
+    for (let i = from; i <= last; i++) {
+      if (input.charCodeAt(i) !== first) continue;
+      let k = 1;
+      while (k < needle.length && input.charCodeAt(i + k) === needle.charCodeAt(k)) k++;
+      if (k === needle.length) return i;
+    }
+    return -1;
+  }
+
   private classifyFromPositions(start: number, end: number): LineClassification {
     const len = end;
 
@@ -1838,10 +1879,7 @@ export class ExpressionLexer {
       // after its #(s), so the colour shape (# + 3/4/6/8 hex digits) never
       // collides with one. This line is tokenized like any expression.
       if (this.matchHexColourEnd(pos, len) !== -1) {
-        if (hasInline === undefined) {
-          const idx = input.indexOf('s`', pos);
-          hasInline = idx !== -1 && idx < len;
-        }
+        if (hasInline === undefined) hasInline = this.hasInlineSolveWithin(pos, len);
         return { type: 'expression', skip: false, hasInlineSolve: hasInline };
       }
       let hashCount = 1;
@@ -1893,10 +1931,7 @@ export class ExpressionLexer {
 
     // ── Unordered list: - ' ', * ' ', + ' ' ──────────────────────────
     if ((c0 === 45 || c0 === 42 || c0 === 43) && pos + 1 < len && input.charCodeAt(pos + 1) === 32) {
-      if (hasInline === undefined) {
-        const idx = input.indexOf('s`', pos);
-        hasInline = idx !== -1 && idx < len;
-      }
+      if (hasInline === undefined) hasInline = this.hasInlineSolveWithin(pos, len);
       // The space is what makes this a marker rather than an operator, and it
       // is required by CommonMark for exactly that reason. `-100 + 20` has no
       // space and stays arithmetic; `- 100 + 20` is a bullet.
@@ -1911,10 +1946,7 @@ export class ExpressionLexer {
       }
       if (digitPos < len && input.charCodeAt(digitPos) === 46) {
         if (digitPos + 1 < len && input.charCodeAt(digitPos + 1) === 32) {
-          if (hasInline === undefined) {
-            const idx = input.indexOf('s`', pos);
-            hasInline = idx !== -1 && idx < len;
-          }
+          if (hasInline === undefined) hasInline = this.hasInlineSolveWithin(pos, len);
           return { type: 'list', skip: false, hasInlineSolve: hasInline, contentOffset: this.skipMarkerGap(digitPos + 1, len) };
         }
       }
@@ -1935,8 +1967,8 @@ export class ExpressionLexer {
 
     // ── Wikilink / embed: [[ or ![[ ───────────────────────────────────
     if (c0 === 91 && pos + 1 < len && input.charCodeAt(pos + 1) === 91) {
-      const closePos = input.indexOf(']]', pos + 2);
-      if (closePos !== -1 && closePos < len) {
+      const closePos = this.indexOfWithin(']]', pos + 2, len);
+      if (closePos !== -1) {
         let trailPos = closePos + 2;
         while (trailPos < len && (input.charCodeAt(trailPos) === 32 || input.charCodeAt(trailPos) === 9)) {
           trailPos++;
@@ -1947,8 +1979,8 @@ export class ExpressionLexer {
       }
     }
     if (c0 === 33 && pos + 2 < len && input.charCodeAt(pos + 1) === 91 && input.charCodeAt(pos + 2) === 91) {
-      const closePos = input.indexOf(']]', pos + 3);
-      if (closePos !== -1 && closePos < len) {
+      const closePos = this.indexOfWithin(']]', pos + 3, len);
+      if (closePos !== -1) {
         let trailPos = closePos + 2;
         while (trailPos < len && (input.charCodeAt(trailPos) === 32 || input.charCodeAt(trailPos) === 9)) {
           trailPos++;
@@ -1975,10 +2007,7 @@ export class ExpressionLexer {
       while (trail < len && (input.charCodeAt(trail) === 32 || input.charCodeAt(trail) === 9)) trail++;
       if (trail >= len) return { type: 'list', skip: false, hasInlineSolve: false };
     }
-    if (hasInline === undefined) {
-      const idx = input.indexOf('s`', pos);
-      hasInline = idx !== -1 && idx < len;
-    }
+    if (hasInline === undefined) hasInline = this.hasInlineSolveWithin(pos, len);
 
     // A line built only from characters the tokenizer discards produces no
     // tokens, so it has nothing to evaluate. Whitespace-only lines already
