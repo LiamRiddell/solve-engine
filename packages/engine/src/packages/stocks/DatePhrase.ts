@@ -1,5 +1,9 @@
 import { Parser } from "@solve-js/parser/Parser";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+// A parselet runs with no engine in hand, so the phrase is validated through
+// the built-in `Date` backend, which is also what built any fused literal it
+// reads.
+import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 
 /**
  * Self-contained date-phrase parser for the Stocks package's `on <date>`
@@ -66,10 +70,10 @@ function pad2(n: number): string {
 	return n < 10 ? `0${n}` : String(n);
 }
 
-/** Construct a real Date and confirm year/month/day didn't roll over (e.g. Feb 30 -> Mar 2). */
+/** Build the calendar date and confirm year/month/day didn't roll over (e.g. Feb 30 -> Mar 2). */
 function validateAndFormat(year: number, monthIndex: number, day: number, raw: string): ParsedDatePhrase {
-	const d = new Date(year, monthIndex, day);
-	if (d.getFullYear() !== year || d.getMonth() !== monthIndex || d.getDate() !== day) {
+	const d = DATE_CALENDAR.fields(DATE_CALENDAR.localMidnight(year, monthIndex, day));
+	if (d.year !== year || d.month0 !== monthIndex || d.day !== day) {
 		throw ErrorFactory.parsing(
 			"STOCKS_INVALID_DATE",
 			`"${raw}" is not a valid calendar date`,
@@ -108,10 +112,10 @@ export function tryParseDatePhrase(parser: Parser): ParsedDatePhrase | null {
 	// its parts: it has already been validated against the calendar.
 	if (first.type === "DATETIME_LITERAL") {
 		parser.consume();
-		const date = new Date(Number(first.value));
-		if (Number.isNaN(date.getTime())) return null;
+		const date = DATE_CALENDAR.fields(Number(first.value));
+		if (Number.isNaN(date.year)) return null;
 		return {
-			isoDate: `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`,
+			isoDate: `${date.year}-${pad2(date.month0 + 1)}-${pad2(date.day)}`,
 			raw: first.text ?? first.value,
 		};
 	}

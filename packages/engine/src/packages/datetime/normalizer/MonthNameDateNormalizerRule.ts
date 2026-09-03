@@ -1,6 +1,10 @@
 import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { buildDateToken } from "./DateLiteralNormalizerRule";
+// Registered through the package descriptor, which is shared across engines,
+// so this rule has no engine's backend to read and builds its literal through
+// the built-in `Date` backend, the engine default.
+import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 
 /** Month names and the common abbreviations, to their 1-based number. */
 const MONTHS: Record<string, number> = {
@@ -39,6 +43,11 @@ const PLAIN_INTEGER = /^\d+$/;
  */
 function looksLikeYear(digits: string): boolean {
 	return digits.length === 4;
+}
+
+/** The current calendar year, for a date written without one. */
+function currentYear(): number {
+	return DATE_CALENDAR.fields(DATE_CALENDAR.now()).year;
 }
 
 /**
@@ -88,11 +97,11 @@ export function monthNameDateNormalizerRule(priority = 64): NormalizerRule {
 					PLAIN_INTEGER.test(yearToken.text ?? "") &&
 					looksLikeYear(yearToken.text ?? "")
 				) {
-					return buildDateToken(day, month, Number(yearToken.text), tokens.slice(pos, pos + 3), RULE);
+					return buildDateToken(day, month, Number(yearToken.text), tokens.slice(pos, pos + 3), RULE, DATE_CALENDAR);
 				}
 				// No year given: the current one, matching what the numeric rule
 				// does for the same shape.
-				return buildDateToken(day, month, new Date().getFullYear(), tokens.slice(pos, pos + 2), RULE);
+				return buildDateToken(day, month, currentYear(), tokens.slice(pos, pos + 2), RULE, DATE_CALENDAR);
 			}
 
 			const month = monthOf(first);
@@ -103,7 +112,7 @@ export function monthNameDateNormalizerRule(priority = 64): NormalizerRule {
 
 			// `February 2020`, a whole month rather than a day in one.
 			if (looksLikeYear(second.text ?? "")) {
-				return buildDateToken(1, month, Number(second.text), tokens.slice(pos, pos + 2), RULE);
+				return buildDateToken(1, month, Number(second.text), tokens.slice(pos, pos + 2), RULE, DATE_CALENDAR);
 			}
 
 			const day = Number(second.text);
@@ -117,7 +126,7 @@ export function monthNameDateNormalizerRule(priority = 64): NormalizerRule {
 				PLAIN_INTEGER.test(yearToken.text ?? "") &&
 				looksLikeYear(yearToken.text ?? "")
 			) {
-				return buildDateToken(day, month, Number(yearToken.text), tokens.slice(pos, pos + 4), RULE);
+				return buildDateToken(day, month, Number(yearToken.text), tokens.slice(pos, pos + 4), RULE, DATE_CALENDAR);
 			}
 
 			// `March 9 2024`, the same without the comma.
@@ -126,11 +135,11 @@ export function monthNameDateNormalizerRule(priority = 64): NormalizerRule {
 				PLAIN_INTEGER.test(comma.text ?? "") &&
 				looksLikeYear(comma.text ?? "")
 			) {
-				return buildDateToken(day, month, Number(comma.text), tokens.slice(pos, pos + 3), RULE);
+				return buildDateToken(day, month, Number(comma.text), tokens.slice(pos, pos + 3), RULE, DATE_CALENDAR);
 			}
 
 			// `March 9`, no year.
-			return buildDateToken(day, month, new Date().getFullYear(), tokens.slice(pos, pos + 2), RULE);
+			return buildDateToken(day, month, currentYear(), tokens.slice(pos, pos + 2), RULE, DATE_CALENDAR);
 		},
 	};
 }

@@ -23,7 +23,7 @@ import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
-import { daysInMonth } from "@solve-js/utilities/Calendar";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 
 /**
@@ -284,6 +284,14 @@ export interface LineExecutionContext {
      * message that describes a different fault. Absent means enabled.
      */
     networkEnabled?: boolean;
+    /**
+     * The calendar backend this engine computes dates with (`EngineContext.calendar`).
+     * A plugin function that reads or steps a date computes through it, so the
+     * date it answers agrees with the one the VM's own opcodes would produce.
+     * Absent means the `Date` backend; `calendarOf()` in
+     * `calendar/DateCalendar.ts` resolves either case.
+     */
+    calendar?: CalendarBackend;
     /** Look up another line's cached result by 1-based line number. `undefined` = not evaluated yet (or out of range), distinct from a line that evaluated to an actual `undefined`-like Value, which can't happen (every Value type has a concrete representation). */
     getLineResult?: (lineNumber: number) => Value | undefined;
     /** Whether line `lineNumber` is a blank line or a `#` heading, the stopping condition for "total above"/"sum above"/"average above" aggregation. */
@@ -1108,7 +1116,7 @@ const WORKDAYS_PER_YEAR = 260;
  * date arithmetic needs the real, exact answer).
  *
  * That walk is why this is the one date offset with a ceiling on it. Every
- * other one moves a Date field once and lets Date recompute (see
+ * other one moves a calendar field once and lets the backend recompute (see
  * addCalendarDays() below), so `today + 100000 days` costs what one day
  * costs; here the cost IS the offset. The loop runs entirely inside a single
  * ADD opcode, so `vm.maxInstructions` is never consulted while it runs:
@@ -1146,7 +1154,7 @@ function addBusinessDays(epochMs: number, n: number, vm: VM): number {
     // in-limit offset never trips this. A pathological all-holiday calendar
     // does, and is reported as the same limit error rather than hanging.
     const maxCalendarSteps = limitWorkdays * 7 + 7;
-    const landed = walkBusinessDays(epochMs, n, (ms) => vm.isHoliday(ms), maxCalendarSteps);
+    const landed = walkBusinessDays(epochMs, n, (ms) => vm.isHoliday(ms), maxCalendarSteps, vm.context.calendar);
     if (landed === null) {
         throw ErrorFactory.execution(
             "DATE_OFFSET_LIMIT_EXCEEDED",
@@ -1193,14 +1201,13 @@ const CALENDAR_MONTHS_PER_UNIT: Record<string, number> = {
  * across either one lands an hour off, and an hour off a local midnight is a
  * different calendar day, so `2024-11-03 + 1 day` answered November 3 again
  * in Los Angeles and `26/10/2024 + 2 days` answered October 27 in London.
- * `setDate()` moves the field and lets Date recompute the offset, so the
- * answer is the day the user named in every zone.
+ * The calendar backend moves the day field and recomputes the offset (see
+ * `CalendarBackend.addDays`), so the answer is the day the user named in
+ * every zone.
  */
-function addCalendarDays(epochMs: number, days: number): number {
+function addCalendarDays(epochMs: number, days: number, calendar: CalendarBackend): number {
     const whole = Math.trunc(days);
-    const date = new Date(epochMs);
-    date.setDate(date.getDate() + whole);
-    const shifted = date.getTime();
+    const shifted = calendar.addDays(epochMs, whole);
     // A shift far enough out to leave the range a Date can represent gives an
     // Invalid Date. Falling back to the linear arithmetic hands back the same
     // out-of-range number as before rather than turning it into a NaN here.
@@ -1215,21 +1222,17 @@ function addCalendarDays(epochMs: number, days: number): number {
  * it lands in: January 31 plus a month is February 28, or February 29 in a leap
  * year, and never March.
  *
- * The clamp is why the day is parked on the 1st before the month field moves.
- * `setMonth()` on its own keeps the day number, so the 31st of a month whose
- * target has 30 days overflows into the month after it, which is how
- * `2024-01-31 + 1 month` answered March 1 and `2024-03-31 - 1 month` answered
- * March 1 as well. Clamping is what every calendar application does with this
- * case, and it is the only choice that keeps the month the user asked for.
+ * The clamp lives in `CalendarBackend.addMonths`, which parks the day on the
+ * 1st before the month field moves. A bare month step keeps the day number,
+ * so the 31st of a month whose target has 30 days overflows into the month
+ * after it, which is how `2024-01-31 + 1 month` answered March 1 and
+ * `2024-03-31 - 1 month` answered March 1 as well. Clamping is what every
+ * calendar application does with this case, and it is the only choice that
+ * keeps the month the user asked for.
  */
-function addCalendarMonths(epochMs: number, months: number): number {
+function addCalendarMonths(epochMs: number, months: number, calendar: CalendarBackend): number {
     const whole = Math.trunc(months);
-    const date = new Date(epochMs);
-    const dayOfMonth = date.getDate();
-    date.setDate(1);
-    date.setMonth(date.getMonth() + whole);
-    date.setDate(Math.min(dayOfMonth, daysInMonth(date.getFullYear(), date.getMonth())));
-    const shifted = date.getTime();
+    const shifted = calendar.addMonths(epochMs, whole);
     // A leftover fraction of a month names no calendar date of its own, so it
     // falls back to the table's fixed-length month. Same overflow reasoning as
     // addCalendarDays() above for the NaN case.
@@ -1266,7 +1269,7 @@ function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM): 
         if (isWorkdayUnit(unit)) return addBusinessDays(epochMs, amount, vm);
 
         const monthsPerUnit = CALENDAR_MONTHS_PER_UNIT[unit];
-        if (monthsPerUnit !== undefined) return addCalendarMonths(epochMs, amount * monthsPerUnit);
+        if (monthsPerUnit !== undefined) return addCalendarMonths(epochMs, amount * monthsPerUnit, vm.context.calendar);
 
         // Measure first, for the reason extractDurationMs() gives below: a
         // unit that is not a duration at all has to contribute nothing rather
@@ -1280,7 +1283,7 @@ function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM): 
             let daysPerUnit = 0;
             try { daysPerUnit = convertUnit(1, unit, "day"); } catch { /* Ignore */ }
             if (Number.isInteger(daysPerUnit) && daysPerUnit >= 1) {
-                return addCalendarDays(epochMs, amount * daysPerUnit);
+                return addCalendarDays(epochMs, amount * daysPerUnit, vm.context.calendar);
             }
         }
     }
@@ -3000,7 +3003,10 @@ export function executeBytecode(
           if (!converter) {
             stack.push(errorValue("UNKNOWN_AS_CONVERTER", `Unknown converter "as ${name}"`));
           } else {
-            stack.push(converter(value));
+            // The execution context rides along so a converter that reads a
+            // date computes through this engine's calendar backend, exactly
+            // as a plugin function does.
+            stack.push(converter(value, context));
           }
           break;
         }
@@ -3223,10 +3229,9 @@ export function executeBytecode(
           const clockFault = faultedOperand(minutesValue);
           if (clockFault) { stack.push(clockFault); break; }
           const totalMinutes = minutesValue.toNumber();
-          const now = new Date();
-          const anchored = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-          anchored.setMinutes(totalMinutes);
-          stack.push(datetimeValue(anchored.getTime()));
+          const clockCalendar = vm.context.calendar;
+          const clockToday = clockCalendar.fields(clockCalendar.now());
+          stack.push(datetimeValue(clockCalendar.localWallClock(clockToday.year, clockToday.month0, clockToday.day, totalMinutes)));
           break;
         }
 
@@ -3234,7 +3239,7 @@ export function executeBytecode(
         // §9  Datetime  (OpCode 90–93)
         // ═══════════════════════════════════════════════════════════════
         case OpCode.DATE_NOW:
-          stack.push(datetimeValue(Date.now()));
+          stack.push(datetimeValue(vm.context.calendar.now()));
           break;
         case OpCode.DATE_LITERAL:
           stack.push(datetimeValue(numbers[poolIndex(opcodes, ip++, op, "constant-pool index", numbers.length, "number-pool")]));
@@ -3294,7 +3299,7 @@ export function executeBytecode(
           // Bounded by the full configured offset range in calendar days, so a
           // span of millennia is refused rather than walked a day at a time.
           const spanLimitDays = Math.ceil((vm.getMaxDateOffsetYears() - vm.getMinDateOffsetYears()) * 366);
-          const workdayCount = countBusinessDaysBetween(startValue.toNumber(), endValue.toNumber(), (ms) => vm.isHoliday(ms), spanLimitDays);
+          const workdayCount = countBusinessDaysBetween(startValue.toNumber(), endValue.toNumber(), (ms) => vm.isHoliday(ms), spanLimitDays, vm.context.calendar);
           if (workdayCount === null) {
             stack.push(errorValue(
               CoreErrorCodes.WORKDAYS_BETWEEN_RANGE_TOO_LARGE,
@@ -3320,7 +3325,7 @@ export function executeBytecode(
           if (weekdayFault) { stack.push(weekdayFault); break; }
           const targetDay = targetDayValue.toNumber();
           const now = nowValue.toNumber();
-          const currentDay = new Date(now).getDay();
+          const currentDay = vm.context.calendar.weekday(now);
           let diffDays = op === OpCode.DATE_NEXT_WEEKDAY
             ? (targetDay - currentDay + 7) % 7
             : (currentDay - targetDay + 7) % 7;
@@ -3330,7 +3335,7 @@ export function executeBytecode(
           // 86,400,000 ms long, and being an hour out is enough to land on the
           // day before or after the weekday that was asked for. See
           // addCalendarDays() above.
-          stack.push(datetimeValue(addCalendarDays(now, op === OpCode.DATE_NEXT_WEEKDAY ? diffDays : -diffDays)));
+          stack.push(datetimeValue(addCalendarDays(now, op === OpCode.DATE_NEXT_WEEKDAY ? diffDays : -diffDays, vm.context.calendar)));
           break;
         }
 

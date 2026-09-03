@@ -1,4 +1,6 @@
 import { Value, ValueType, stringValue, uomValue, datetimeValue, errorValue } from "@solve-js/vm/Value";
+import type { LineExecutionContext } from "@solve-js/vm/VM";
+import { calendarOf } from "@solve-js/calendar/DateCalendar";
 import {
 	nthWeekdayOfMonth as nthWeekdayOfMonthCalc,
 	lastWeekdayOfMonth,
@@ -13,7 +15,9 @@ import {
  * anchors (`next month`), and age (`age of 15/06/1990`). Kept apart from
  * `DatetimeTimestampPluginFunctions.ts` because these walk the calendar
  * (`DateArithmetic.ts`) rather than convert a millisecond span, a distinction
- * that page's doc comment draws out.
+ * that page's doc comment draws out. The walk runs through the calendar
+ * backend on the execution context, so it lands where the VM's own date
+ * arithmetic would for the same engine.
  */
 
 /** Reads a Datetime operand as epoch ms, or an error value naming the form. */
@@ -34,23 +38,24 @@ function asEpochMs(value: Value, form: string): number | Value {
  * satisfy (a 5th Friday of a four-Friday month) returns a structured error
  * rather than wrapping into the next month, see {@link nthWeekdayOfMonthCalc}.
  */
-function nthWeekdayOfMonthHandler(args: Value[]): Value {
+function nthWeekdayOfMonthHandler(args: Value[], context?: LineExecutionContext): Value {
 	const epochMs = asEpochMs(args[0], "nth weekday of month");
 	if (typeof epochMs !== "number") return epochMs;
 	const spec = String(args[1].value ?? "");
 	const [ordinal, dowText] = spec.split(":");
 	const dow = Number(dowText);
 
-	const anchor = new Date(epochMs);
-	const year = anchor.getFullYear();
-	const month0 = anchor.getMonth();
+	const calendar = calendarOf(context);
+	const anchor = calendar.fields(epochMs);
+	const year = anchor.year;
+	const month0 = anchor.month0;
 
 	if (ordinal === "last") {
-		return datetimeValue(lastWeekdayOfMonth(year, month0, dow));
+		return datetimeValue(lastWeekdayOfMonth(year, month0, dow, calendar));
 	}
 
 	const n = Number(ordinal);
-	const result = nthWeekdayOfMonthCalc(year, month0, dow, n);
+	const result = nthWeekdayOfMonthCalc(year, month0, dow, n, calendar);
 	if (result === null) {
 		return errorValue(
 			"NTH_WEEKDAY_OUT_OF_RANGE",
@@ -78,11 +83,11 @@ function ordinalSuffix(n: number): string {
  * of the month matches the anchor `March 2026` resolves to, so the two compose
  * (`1st Monday of next month`).
  */
-function monthAnchorShiftHandler(args: Value[]): Value {
+function monthAnchorShiftHandler(args: Value[], context?: LineExecutionContext): Value {
 	const nowMs = asEpochMs(args[0], "month anchor");
 	if (typeof nowMs !== "number") return nowMs;
 	const offset = args[1].toNumber();
-	return datetimeValue(monthAnchor(nowMs, offset));
+	return datetimeValue(monthAnchor(nowMs, offset, calendarOf(context)));
 }
 
 const MODE_YMD = "ymd";
@@ -98,17 +103,18 @@ const MODE_YMD = "ymd";
  * count (a `years` quantity, "36 years"), or `"ymd"` for the three-part
  * breakdown (a String, "36 years, 2 months, 9 days").
  */
-function ageBetweenHandler(args: Value[]): Value {
+function ageBetweenHandler(args: Value[], context?: LineExecutionContext): Value {
 	const birthMs = asEpochMs(args[0], "age of");
 	if (typeof birthMs !== "number") return birthMs;
 	const refMs = asEpochMs(args[1], "age of");
 	if (typeof refMs !== "number") return refMs;
 	const mode = String(args[2].value ?? "years");
+	const calendar = calendarOf(context);
 
 	if (mode === MODE_YMD) {
-		return stringValue(formatSpan(calendarBreakdown(birthMs, refMs)));
+		return stringValue(formatSpan(calendarBreakdown(birthMs, refMs, calendar)));
 	}
-	return uomValue(wholeYearsBetween(birthMs, refMs), "years");
+	return uomValue(wholeYearsBetween(birthMs, refMs, calendar), "years");
 }
 
 /**

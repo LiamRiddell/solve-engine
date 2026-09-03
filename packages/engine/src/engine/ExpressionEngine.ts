@@ -16,6 +16,7 @@ import type { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { BackgroundRefreshManager } from "@solve-js/engine/BackgroundRefreshManager";
 import { registerAsConverter, unregisterAsConverter, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { createEngineContext } from "@solve-js/engine/EngineContext";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { Value, ValueType, numberValue, stringValue, pendingValue, freezeIfDev, errorValue, type MatrixData } from "@solve-js/vm/Value";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
@@ -139,6 +140,8 @@ export interface EngineRestoreOptions {
     config?: EngineConfigOverride;
     /** Turn on the diagnostic pipeline, as in the constructor's `diagnostics`. */
     diagnostics?: boolean;
+    /** The calendar backend for the restored engine, as in the constructor's `calendar`. */
+    calendar?: CalendarBackend;
     /**
      * Override the locale the snapshot recorded. Rarely needed: the snapshot's
      * own {@link EngineSnapshot.locale} is used by default, so a restored engine
@@ -165,6 +168,25 @@ export interface EngineOptions {
     config?: EngineConfigOverride;
     /** Turn on the diagnostic pipeline (per-stage timing and detail). Defaults to `false`. */
     diagnostics?: boolean;
+
+    /**
+     * The calendar the engine computes dates with: which local day an instant
+     * falls on, what a month later is, whether a day is a Saturday, how a date
+     * is written out. See {@link CalendarBackend}.
+     *
+     * Defaults to the built-in `Date` backend, read in the host process's time
+     * zone, which is what every engine computed with before this option
+     * existed; leaving it unset changes nothing. The option is the seam for a
+     * `Temporal` backend, shipped by a later release, that carries a time zone
+     * of its own.
+     *
+     * The boundary today: the sites that run with no engine in hand (the
+     * normaliser rules that fuse a date literal, `days in <period>`, the
+     * stocks and historical-currency date phrases, and `formatValue`) read the
+     * `Date` backend whatever is passed here, so a backend that computes
+     * differently from `Date` is not yet honoured everywhere.
+     */
+    calendar?: CalendarBackend;
 
     /**
      * Run a few throwaway expressions through the pipeline at construction, so
@@ -497,6 +519,7 @@ export class ExpressionEngine {
                 : undefined,
             goalSeekMaxIterations: this.config.vm.maxGoalSeekIterations,
             networkEnabled: this.config.network.enabled,
+            calendar: this.context.calendar,
             // Raw source text of a line, for features that read markdown the
             // evaluator skipped (a table's rows). See the tables package. Reads
             // from the document when evaluating incrementally, and from the scan
@@ -681,7 +704,7 @@ export class ExpressionEngine {
 
     //#region Constructor
     constructor(options: EngineOptions = {}) {
-        const { locale = "en", diagnostics = false, config, packages } = options;
+        const { locale = "en", diagnostics = false, config, packages, calendar } = options;
         this.localeCode = locale;
         // Per-section merge, not a top-level shallow spread, overriding one
         // field of a section (e.g. `{ performance: { defaultCacheSize: 500 } }`)
@@ -692,8 +715,9 @@ export class ExpressionEngine {
         this.registry = new ParseletRegistry();
         // Before the package loop below, which registers plugin functions into it.
         // Carries the network switch too, since the VM is where a conversion
-        // with no rate and a promise-returning plugin function are first seen.
-        this.context = createEngineContext({ networkEnabled: this.config.network.enabled });
+        // with no rate and a promise-returning plugin function are first seen,
+        // and the calendar backend, since the VM is where a date is stepped.
+        this.context = createEngineContext({ networkEnabled: this.config.network.enabled, calendar });
 
         // Wire the diagnostic pipeline: collect per-stage detail when diagnostics
         // are on, otherwise an empty pipeline whose length check exits with zero
@@ -787,7 +811,7 @@ export class ExpressionEngine {
         // actually being loaded (it owns the DATETIME_LITERAL parselet), so an
         // engine without it does not fuse a date literal it has no way to read.
         if (this.registry.hasPrefix("DATETIME_LITERAL")) {
-            this.normalizer.register(dateLiteralNormalizerRule(() => this.config.date.inputOrder));
+            this.normalizer.register(dateLiteralNormalizerRule(() => this.config.date.inputOrder, () => this.context.calendar));
         }
 
         this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, locale, this.pluginFunctionIndexByName);
@@ -805,7 +829,7 @@ export class ExpressionEngine {
             // Resolved once here, not per evaluation: a host list becomes a
             // Set lookup the walk can run cheaply. Undefined stays undefined,
             // which the VM reads as weekends-only.
-            resolveHolidayPredicate(this.config.date.holidays),
+            resolveHolidayPredicate(this.config.date.holidays, this.context.calendar),
         );
         this.queryClient = createQueryClient();
         this.batcher = new AsyncResolutionBatcher(this.dag, this.lineCache, this.vm);
@@ -4398,7 +4422,7 @@ export class ExpressionEngine {
         // Refuse an incompatible or non-snapshot object before building anything.
         assertRestorable(snapshot);
         const locale = options.locale ?? snapshot.locale ?? "en";
-        const engine = new ExpressionEngine({ locale, diagnostics: options.diagnostics ?? false, config: options.config, packages: options.packages });
+        const engine = new ExpressionEngine({ locale, diagnostics: options.diagnostics ?? false, config: options.config, packages: options.packages, calendar: options.calendar });
         engine.restoreSnapshot(snapshot);
         return engine;
     }

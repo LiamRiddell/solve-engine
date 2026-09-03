@@ -82,6 +82,7 @@ tier table and what "advanced-public" vs. "internal" means for semver purposes. 
 | `errors/` | `EngineError`, `ErrorFactory`. |
 | `constants/` | `EngineConfig` and `DEFAULT_CONFIG`. |
 | `utilities/` | Small stateless helpers (`stripQuotes`, `autoFormatIntegerOrFloat`, ...). |
+| `calendar/` | `CalendarBackend`, the interface every date computation goes through; `DateCalendar`, the `Date` default an engine gets when its `calendar` option is unset; `Gregorian`, the zone-free arithmetic every backend shares. Reached through `engine/`, not a subpath of its own (internal). |
 | `services/` | `DataQueryService` (TanStack QueryClient construction/hand-off). |
 | `cache/` | `LineCache` (per-line result + bytecode cache — internal). |
 | `telemetry/` | `AllocationTracker` (opt-in per-stage timing/allocation diagnostics — internal). |

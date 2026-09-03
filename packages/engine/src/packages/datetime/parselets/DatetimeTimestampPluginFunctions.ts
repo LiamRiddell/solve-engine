@@ -1,4 +1,8 @@
 import { Value, ValueType, numberValue, stringValue, boolValue, uomValue, datetimeValue, errorValue } from "@solve-js/vm/Value";
+import type { LineExecutionContext } from "@solve-js/vm/VM";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
+import { calendarOf } from "@solve-js/calendar/DateCalendar";
+import { isoWeekNumber } from "@solve-js/calendar/Gregorian";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { parseIso8601, unixTimestampToEpochMs } from "../Iso8601";
 
@@ -8,6 +12,10 @@ import { parseIso8601, unixTimestampToEpochMs } from "../Iso8601";
  * they're all small, single-purpose Value -> Value functions with no
  * shared state, mirrors `time/parselets/TimezonePluginFunctions.ts`'s
  * organization for the same kind of grouping.
+ *
+ * Every handler that reads a date field does so through the calendar backend
+ * on its execution context (`calendarOf(context)`), so the weekday it names
+ * is the one the VM's own date opcodes would land on for the same engine.
  */
 
 /**
@@ -88,10 +96,10 @@ function asEpochMs(value: Value, fieldName: string): number | Value {
  * `day of the week on <date>` / `what day is it in <duration>` /
  * `<date> as weekday` -> the weekday name (e.g. "Tuesday") as a String.
  */
-function weekdayOnDateHandler(args: Value[]): Value {
+function weekdayOnDateHandler(args: Value[], context?: LineExecutionContext): Value {
   const epochMs = asEpochMs(args[0], "weekday");
   if (typeof epochMs !== "number") return epochMs;
-  return stringValue(WEEKDAY_NAMES[new Date(epochMs).getDay()]);
+  return stringValue(WEEKDAY_NAMES[calendarOf(context).weekday(epochMs)]);
 }
 
 const MONTH_NAMES = [
@@ -109,46 +117,38 @@ const MONTH_NAMES = [
  * matching the established weekday behaviour beats having the two
  * neighbouring fields disagree about localization.
  */
-function monthOnDateHandler(args: Value[]): Value {
+function monthOnDateHandler(args: Value[], context?: LineExecutionContext): Value {
   const epochMs = asEpochMs(args[0], "month");
   if (typeof epochMs !== "number") return epochMs;
-  return stringValue(MONTH_NAMES[new Date(epochMs).getMonth()]);
+  return stringValue(MONTH_NAMES[calendarOf(context).fields(epochMs).month0]);
 }
 
 /**
  * `what week is it on <date>` / `<date> as week` -> the ISO-8601 week
  * number (1-53) as a plain Number.
  *
- * ISO weeks start on Monday and week 1 is the one containing the first
- * Thursday of the year, which is why this shifts to the Thursday of the
- * target's week before counting. A naive "day-of-year / 7" would disagree
- * with every calendar app for the first and last days of a year.
+ * The local calendar date is read through the backend; the week it falls in
+ * is then zone-free arithmetic (`calendar/Gregorian.ts`'s `isoWeekNumber`),
+ * which is where the Monday-start, first-Thursday rule lives.
  */
-function weekOnDateHandler(args: Value[]): Value {
+function weekOnDateHandler(args: Value[], context?: LineExecutionContext): Value {
   const epochMs = asEpochMs(args[0], "week");
   if (typeof epochMs !== "number") return epochMs;
-  const d = new Date(epochMs);
-  // Work in UTC on a date-only copy so a local-time hour can't shift the day.
-  const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  // getUTCDay(): Sunday=0. Map to ISO's Monday=1..Sunday=7, then step to Thursday.
-  const isoDay = target.getUTCDay() === 0 ? 7 : target.getUTCDay();
-  target.setUTCDate(target.getUTCDate() + 4 - isoDay);
-  const yearStart = Date.UTC(target.getUTCFullYear(), 0, 1);
-  const days = Math.floor((target.getTime() - yearStart) / 86_400_000);
-  return numberValue(Math.floor(days / 7) + 1);
+  const d = calendarOf(context).fields(epochMs);
+  return numberValue(isoWeekNumber(d.year, d.month0, d.day));
 }
 
 /** True for Saturday/Sunday. */
-function isWeekendDate(epochMs: number): boolean {
-  const day = new Date(epochMs).getDay();
+function isWeekendDate(epochMs: number, calendar: CalendarBackend): boolean {
+  const day = calendar.weekday(epochMs);
   return day === 0 || day === 6;
 }
 
 /** `<date> is a weekend` -> Boolean. */
-function isWeekendOnDateHandler(args: Value[]): Value {
+function isWeekendOnDateHandler(args: Value[], context?: LineExecutionContext): Value {
   const epochMs = asEpochMs(args[0], "is a weekend");
   if (typeof epochMs !== "number") return epochMs;
-  return boolValue(isWeekendDate(epochMs));
+  return boolValue(isWeekendDate(epochMs, calendarOf(context)));
 }
 
 /**
@@ -162,10 +162,10 @@ function isWeekendOnDateHandler(args: Value[]): Value {
  * ARITHMETIC (offsets and `between`) is what consults the calendar. See
  * `DatetimePackage.ts`'s holiday scope note.
  */
-function isWorkdayOnDateHandler(args: Value[]): Value {
+function isWorkdayOnDateHandler(args: Value[], context?: LineExecutionContext): Value {
   const epochMs = asEpochMs(args[0], "is a workday");
   if (typeof epochMs !== "number") return epochMs;
-  return boolValue(!isWeekendDate(epochMs));
+  return boolValue(!isWeekendDate(epochMs, calendarOf(context)));
 }
 
 /**
@@ -197,7 +197,7 @@ function spanBetweenDatesHandler(args: Value[]): Value {
  * `Iso8601.ts`'s `unixTimestampToEpochMs()`/`MS_TIMESTAMP_THRESHOLD` doc
  * comment for the exact magnitude threshold and reasoning.
  */
-function toDateFromAnyHandler(args: Value[]): Value {
+function toDateFromAnyHandler(args: Value[], context?: LineExecutionContext): Value {
   const v = args[0];
 
   if (v.type === ValueType.Datetime) {
@@ -205,7 +205,7 @@ function toDateFromAnyHandler(args: Value[]): Value {
   }
 
   if (v.type === ValueType.String) {
-    const ms = parseIso8601(v.value as string);
+    const ms = parseIso8601(v.value as string, calendarOf(context));
     if (ms === null) {
       return errorValue(
         "INVALID_ISO8601_STRING",
@@ -228,11 +228,11 @@ function toDateFromAnyHandler(args: Value[]): Value {
  * feeds it a fresh `DATE_NOW` result via the same opcode, reusing this one
  * handler for both call sites.
  */
-function toTimestampFromAnyHandler(args: Value[]): Value {
+function toTimestampFromAnyHandler(args: Value[], context?: LineExecutionContext): Value {
   const v = args[0];
 
   if (v.type === ValueType.String) {
-    const ms = parseIso8601(v.value as string);
+    const ms = parseIso8601(v.value as string, calendarOf(context));
     if (ms === null) {
       return errorValue(
         "INVALID_ISO8601_STRING",

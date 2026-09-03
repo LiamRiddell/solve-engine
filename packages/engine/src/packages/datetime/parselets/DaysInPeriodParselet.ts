@@ -4,7 +4,10 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { daysInMonth } from "@solve-js/utilities/Calendar";
+// A parselet runs with no engine in hand, so the count is computed through
+// the built-in `Date` backend rather than the engine's own. The period is a
+// literal, so the answer does not depend on a zone either way.
+import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 
 /** VMBuiltins.ts index for labelling a count as days. */
 const DAYS_COUNT_BUILTIN = 93;
@@ -19,7 +22,12 @@ const QUARTERS: Record<string, readonly [number, number]> = {
 
 /** Days in a whole year: 366 when February has its 29th. */
 function daysInYear(year: number): number {
-	return daysInMonth(year, 1) === 29 ? 366 : 365;
+	return DATE_CALENDAR.daysInMonth(year, 1) === 29 ? 366 : 365;
+}
+
+/** The current calendar year, read when the line is parsed. */
+function currentYear(): number {
+	return DATE_CALENDAR.fields(DATE_CALENDAR.now()).year;
 }
 
 /**
@@ -65,10 +73,10 @@ export class DaysInPeriodParselet implements PrefixParselet {
 		const quarter = QUARTERS[word];
 		if (quarter !== undefined) {
 			parser.consume();
-			const year = this.readOptionalYear(parser) ?? new Date().getFullYear();
+			const year = this.readOptionalYear(parser) ?? currentYear();
 			let total = 0;
 			for (let month = quarter[0]; month <= quarter[1]; month++) {
-				total += daysInMonth(year, month);
+				total += DATE_CALENDAR.daysInMonth(year, month);
 			}
 			return total;
 		}
@@ -77,8 +85,8 @@ export class DaysInPeriodParselet implements PrefixParselet {
 		// into a date literal pointing at the first of that month.
 		if (next?.type === "DATETIME_LITERAL") {
 			parser.consume();
-			const date = new Date(Number(next.value));
-			return daysInMonth(date.getFullYear(), date.getMonth());
+			const date = DATE_CALENDAR.fields(Number(next.value));
+			return DATE_CALENDAR.daysInMonth(date.year, date.month0);
 		}
 
 		// `days in 2024`, a bare year.

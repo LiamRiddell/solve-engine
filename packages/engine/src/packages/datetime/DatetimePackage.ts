@@ -32,6 +32,7 @@ import { DaysInPeriodParselet } from "./parselets/DaysInPeriodParselet";
 import { daysInPeriodNormalizerRule } from "./normalizer/DaysInPeriodNormalizerRule";
 import { dailyNoteLinkNormalizerRule } from "./normalizer/DailyNoteLinkNormalizerRule";
 import { formatIso8601Local } from "./Iso8601";
+import { calendarOf } from "@solve-js/calendar/DateCalendar";
 
 /**
  * Date/time keywords: `now`, `today`, `tomorrow`, `yesterday`,
@@ -258,16 +259,18 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     ageBetween,
   },
   asConverters: {
-    iso8601: (value) => stringValue(formatIso8601Local(value.toNumber())),
+    // The execution context is passed through so each converter reads the
+    // date through the same calendar backend the plugin functions do.
+    iso8601: (value, context) => stringValue(formatIso8601Local(value.toNumber(), calendarOf(context))),
     // The same three fields the "what X is it" questions answer, in the
     // composable form: `next friday + 2 weeks as weekday`. Question phrases
     // only ever take a bare date expression, whereas `as` binds after a
     // whole expression, so these are the general case rather than a
     // shorthand, and they cost one line each, sharing the identical
     // handlers.
-    weekday: (value) => weekdayOnDate([value]),
-    month: (value) => monthOnDate([value]),
-    week: (value) => weekOnDate([value]),
+    weekday: (value, context) => weekdayOnDate([value], context),
+    month: (value, context) => monthOnDate([value], context),
+    week: (value, context) => weekOnDate([value], context),
   },
   tokenCategories: {
     // The 2.4.0 forms: an editor colours the fused tokens as datetime syntax.

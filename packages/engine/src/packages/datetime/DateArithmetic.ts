@@ -5,9 +5,11 @@
  * 15/06/1990`).
  *
  * Every function here takes and returns plain numbers (epoch milliseconds at
- * local midnight, or field integers), never a `Value`, so it carries no engine
- * import and is unit-testable on its own. The plugin handlers in
- * `DatetimeCalendarPluginFunctions.ts` wrap these into `Value`s.
+ * local midnight, or field integers), never a `Value`, and computes through
+ * the {@link CalendarBackend} it is handed, so it carries no engine import and
+ * is unit-testable on its own with the `Date` backend. The plugin handlers in
+ * `DatetimeCalendarPluginFunctions.ts` wrap these into `Value`s and pass the
+ * engine's backend in.
  *
  * ## Why a calendar walk, not a millisecond division
  * `<unit> between` and `<unit> since` already answer a span by dividing a
@@ -24,7 +26,8 @@
  * never picks up a stray hour from a timezone offset.
  */
 
-import { daysInMonth } from "@solve-js/utilities/Calendar";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
+import { dayNumber } from "@solve-js/calendar/Gregorian";
 
 /**
  * The date of the `n`-th occurrence of a weekday in a month, or `null` when the
@@ -36,14 +39,14 @@ import { daysInMonth } from "@solve-js/utilities/Calendar";
  * where April has four is not silently answered as the first Friday of May,
  * because the reader asked for a day this month that does not exist and a
  * wrong-month date is worse than an honest error. `n` is 1-based; `dow` is
- * 0=Sunday..6=Saturday, matching `Date.getDay()`.
+ * 0=Sunday..6=Saturday, matching `CalendarBackend.weekday`.
  */
-export function nthWeekdayOfMonth(year: number, month0: number, dow: number, n: number): number | null {
-	const firstDow = new Date(year, month0, 1).getDay();
+export function nthWeekdayOfMonth(year: number, month0: number, dow: number, n: number, calendar: CalendarBackend): number | null {
+	const firstDow = calendar.weekday(calendar.localMidnight(year, month0, 1));
 	const offsetToFirst = (dow - firstDow + 7) % 7;
 	const day = 1 + offsetToFirst + (n - 1) * 7;
-	if (day < 1 || day > daysInMonth(year, month0)) return null;
-	return new Date(year, month0, day).getTime();
+	if (day < 1 || day > calendar.daysInMonth(year, month0)) return null;
+	return calendar.localMidnight(year, month0, day);
 }
 
 /**
@@ -51,11 +54,11 @@ export function nthWeekdayOfMonth(year: number, month0: number, dow: number, n: 
  * November 2026`). Always exists, so unlike {@link nthWeekdayOfMonth} it never
  * returns null. Local-midnight epoch ms, `dow` 0=Sunday..6=Saturday.
  */
-export function lastWeekdayOfMonth(year: number, month0: number, dow: number): number {
-	const lastDay = daysInMonth(year, month0);
-	const lastDow = new Date(year, month0, lastDay).getDay();
+export function lastWeekdayOfMonth(year: number, month0: number, dow: number, calendar: CalendarBackend): number {
+	const lastDay = calendar.daysInMonth(year, month0);
+	const lastDow = calendar.weekday(calendar.localMidnight(year, month0, lastDay));
 	const offsetBack = (lastDow - dow + 7) % 7;
-	return new Date(year, month0, lastDay - offsetBack).getTime();
+	return calendar.localMidnight(year, month0, lastDay - offsetBack);
 }
 
 /**
@@ -70,13 +73,13 @@ export function lastWeekdayOfMonth(year: number, month0: number, dow: number): n
  * expected to be on or before `to`; a `from` after `to` returns a negative
  * count, which the caller may treat as it sees fit.
  */
-export function wholeYearsBetween(fromMs: number, toMs: number): number {
-	const from = new Date(fromMs);
-	const to = new Date(toMs);
-	let years = to.getFullYear() - from.getFullYear();
+export function wholeYearsBetween(fromMs: number, toMs: number, calendar: CalendarBackend): number {
+	const from = calendar.fields(fromMs);
+	const to = calendar.fields(toMs);
+	let years = to.year - from.year;
 	const beforeAnniversary =
-		to.getMonth() < from.getMonth() ||
-		(to.getMonth() === from.getMonth() && to.getDate() < from.getDate());
+		to.month0 < from.month0 ||
+		(to.month0 === from.month0 && to.day < from.day);
 	if (beforeAnniversary) years--;
 	return years;
 }
@@ -88,21 +91,23 @@ export interface CalendarSpan {
 	readonly days: number;
 }
 
+/** A calendar date: the part of the backend's calendar fields the month walk carries. */
+interface CalendarDate {
+	readonly year: number;
+	readonly month0: number;
+	readonly day: number;
+}
+
 /** `from` advanced by `n` whole months, the day clamped to the month's end. */
-function addMonthsClamped(from: Date, n: number): Date {
-	const targetYear = from.getFullYear();
-	const targetMonth = from.getMonth() + n;
+function addMonthsClamped(from: CalendarDate, n: number, calendar: CalendarBackend): CalendarDate {
+	const targetYear = from.year;
+	const targetMonth = from.month0 + n;
 	// Normalise year/month first, then clamp the day, so 31 January + 1 month is
 	// 28 February, not a rolled-over 3 March.
 	const year = targetYear + Math.floor(targetMonth / 12);
 	const month0 = ((targetMonth % 12) + 12) % 12;
-	const day = Math.min(from.getDate(), daysInMonth(year, month0));
-	return new Date(year, month0, day);
-}
-
-/** A local date's day count from the epoch, for a DST-proof day difference. */
-function dayNumber(d: Date): number {
-	return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000);
+	const day = Math.min(from.day, calendar.daysInMonth(year, month0));
+	return { year, month0, day };
 }
 
 /**
@@ -117,17 +122,20 @@ function dayNumber(d: Date): number {
  * rather than a negative-day artefact of a fixed-length subtraction. `from` is
  * expected on or before `to`.
  */
-export function calendarBreakdown(fromMs: number, toMs: number): CalendarSpan {
-	const from = new Date(fromMs);
-	const to = new Date(toMs);
+export function calendarBreakdown(fromMs: number, toMs: number, calendar: CalendarBackend): CalendarSpan {
+	const from = calendar.fields(fromMs);
+	const to = calendar.fields(toMs);
 
-	let months = (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+	let months = (to.year - from.year) * 12 + (to.month0 - from.month0);
+	let anchor = addMonthsClamped(from, months, calendar);
 	// The month arithmetic can overshoot by one when `to`'s day is earlier than
 	// `from`'s; step back until the anchor is on or before `to`.
-	if (addMonthsClamped(from, months) > to) months--;
+	if (calendar.localMidnight(anchor.year, anchor.month0, anchor.day) > toMs) {
+		months--;
+		anchor = addMonthsClamped(from, months, calendar);
+	}
 
-	const anchor = addMonthsClamped(from, months);
-	const days = dayNumber(to) - dayNumber(anchor);
+	const days = dayNumber(to.year, to.month0, to.day) - dayNumber(anchor.year, anchor.month0, anchor.day);
 
 	return { years: Math.floor(months / 12), months: months % 12, days };
 }
@@ -137,7 +145,9 @@ export function calendarBreakdown(fromMs: number, toMs: number): CalendarSpan {
  * `next month`/`this month`/`last month` resolve through this, matching the
  * month-anchor convention that `March 2026` is the first of that month.
  */
-export function monthAnchor(fromMs: number, offsetMonths: number): number {
-	const d = new Date(fromMs);
-	return new Date(d.getFullYear(), d.getMonth() + offsetMonths, 1).getTime();
+export function monthAnchor(fromMs: number, offsetMonths: number, calendar: CalendarBackend): number {
+	const d = calendar.fields(fromMs);
+	// The month may overflow the year; `localMidnight` normalises it the way
+	// `Date` does.
+	return calendar.localMidnight(d.year, d.month0 + offsetMonths, 1);
 }

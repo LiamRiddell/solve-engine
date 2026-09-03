@@ -27,6 +27,11 @@ export type {
 
 export type { Explanation, ExplanationStep } from "@solve-js/explain";
 
+// The calendar the engine computes dates with, the `calendar` option's type,
+// and the `Date` backend that option defaults to.
+export type { CalendarBackend, CalendarFields, ZonedFields } from "@solve-js/calendar/CalendarBackend";
+export { DateCalendar, DATE_CALENDAR, calendarOf } from "@solve-js/calendar/DateCalendar";
+
 export { DocumentModel } from "./DocumentModel";
 export type {
 	LineState,

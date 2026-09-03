@@ -8,6 +8,7 @@ import { FormattingSettings, DEFAULT_FORMATTING_SETTINGS } from "./FormattingSet
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { columnMajorToRowMajor } from "@solve-js/vm/MatrixOps";
 import { formatSymbolic, type SymbolicNode } from "@solve-js/symbolic";
+import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 
 function formatNumber(value: number, locale: ILocale, settings: FormattingSettings, decimalPlaces?: number): string {
   const sep = settings.floatResult.enableSeperator;
@@ -165,32 +166,38 @@ function formatBoolean(value: boolean): string {
  * not exactly local midnight, bare date literals ("today", "17/11/2025")
  * always anchor to local midnight, and showing "00:00:00" on every one of
  * those would be noise, not information.
+ *
+ * Reads the built-in `Date` calendar backend rather than an engine's:
+ * `formatValue` is a free function a host calls with a value and settings,
+ * with no engine in hand, and the `Date` backend is what every engine
+ * computes with by default. A backend carrying its own zone would need the
+ * display to read that zone too, which is the display's half of that change.
  */
 function formatDatetime(value: number, locale: ILocale, settings: FormattingSettings): string {
-  const d = new Date(value);
+  const d = DATE_CALENDAR.fields(value);
   const format = settings.dateResult?.format ?? "long";
-  const isMidnight = d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0 && d.getMilliseconds() === 0;
+  const isMidnight = d.hour === 0 && d.minute === 0 && d.second === 0 && d.millisecond === 0;
 
   // The spelled-out default, localised through the locale's own names.
   if (format === "long") {
-    const dateStr = d.toLocaleDateString(locale.code, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const dateStr = DATE_CALENDAR.formatLongDate(value, locale.code);
     if (isMidnight) return `= ${dateStr}`;
-    return `= ${dateStr}, ${d.toLocaleTimeString(locale.code)}`;
+    return `= ${dateStr}, ${DATE_CALENDAR.formatTimeOfDay(value, locale.code)}`;
   }
 
   // The numeric forms, built from the local calendar fields so they read the
   // same regardless of the JS runtime's own default locale.
   const p2 = (n: number) => String(n).padStart(2, "0");
-  const year = d.getFullYear();
-  const month = p2(d.getMonth() + 1);
-  const day = p2(d.getDate());
+  const year = d.year;
+  const month = p2(d.month0 + 1);
+  const day = p2(d.day);
   let datePart: string;
   if (format === "iso") datePart = `${year}-${month}-${day}`;
   else if (format === "dmy") datePart = `${day}/${month}/${year}`;
   else datePart = `${month}/${day}/${year}`; // mdy
 
   if (isMidnight) return `= ${datePart}`;
-  const time = `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+  const time = `${p2(d.hour)}:${p2(d.minute)}:${p2(d.second)}`;
   // ISO joins date and time with `T`; the slash forms with a space.
   return format === "iso" ? `= ${datePart}T${time}` : `= ${datePart} ${time}`;
 }

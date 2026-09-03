@@ -6,6 +6,7 @@ import type { NormalizerRule } from "@solve-js/normalizer/NormalizerRule";
 import type { TokenCategory } from "@solve-js/language/TokenCategory";
 import type { CompletionItem } from "@solve-js/language/LanguageService";
 import type { PluginFunctionHandler } from "@solve-js/engine/EngineContext";
+import type { AsConverter } from "@solve-js/vm/VMBuiltins";
 
 /**
  * Package descriptor for registering a complete provider with the engine.
@@ -178,15 +179,18 @@ export interface IEnginePackage {
    * keyword registration is needed for a custom name: the AS parselet
    * accepts any bare-word token after "as" and reads its raw text.
    *
-   * Each handler is a pure, synchronous `(value: Value) => Value`, for
-   * async conversions (e.g. a live currency-style lookup), use
-   * {@link asyncResolvers} instead.
+   * Each handler is a pure, synchronous `(value: Value, context?) => Value`.
+   * The optional second argument is the same per-line execution context a
+   * plugin function receives; a converter that reads a date takes the
+   * engine's calendar backend from it (`calendarOf(context)`) so it answers
+   * as the engine's own date arithmetic would. For async conversions (e.g. a
+   * live currency-style lookup), use {@link asyncResolvers} instead.
    *
    * @example
    * ```ts
    * asConverters: { roman: (v) => stringValue(toRomanNumeral(v.toNumber())) }
    * ```
    */
-  asConverters?: Record<string, (value: Value) => Value>;
+  asConverters?: Record<string, AsConverter>;
 }
 

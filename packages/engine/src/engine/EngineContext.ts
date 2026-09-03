@@ -12,16 +12,20 @@
  * by that engine. Anything that needs one of these registries receives the
  * context rather than importing a singleton.
  *
- * Runtime imports here are restricted to leaf modules of `vm/`. This file is
- * imported by `vm/`, which `engine/` imports in turn, so pulling in anything
- * that reaches back into `engine/` would close a cycle. `OpRegistry` is safe
- * because it imports only types plus the error factory. Everything else arrives
- * through `import type`, which is erased before the code runs.
+ * Runtime imports here are restricted to leaf modules of `vm/` and
+ * `calendar/`. This file is imported by `vm/`, which `engine/` imports in
+ * turn, so pulling in anything that reaches back into `engine/` would close a
+ * cycle. `OpRegistry` is safe because it imports only types plus the error
+ * factory, and the `Date` calendar backend imports nothing of the engine's at
+ * all. Everything else arrives through `import type`, which is erased before
+ * the code runs.
  */
 
 import type { Value } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { OpRegistry } from "@solve-js/vm/OpRegistry";
+import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 
 /**
  * A function a package contributes to the VM, reachable from bytecode through
@@ -101,12 +105,27 @@ export interface EngineContext {
 	 * the context is the one object every VM already holds.
 	 */
 	readonly networkEnabled: boolean;
+
+	/**
+	 * The calendar this engine computes dates with, from the engine's
+	 * `calendar` option.
+	 *
+	 * One backend per engine, held here for the same reason the network
+	 * switch is: the VM is where a date literal is stepped, a working-day
+	 * walk runs and `now` is read, and every plugin function that touches a
+	 * date reaches it through the execution context the VM builds from this
+	 * one object. Defaults to the `Date` backend, which is what every engine
+	 * computed with before the backend existed. See `calendar/CalendarBackend.ts`.
+	 */
+	readonly calendar: CalendarBackend;
 }
 
 /** What {@link createEngineContext} takes: the settings a context carries on the engine's behalf. */
 export interface EngineContextOptions {
 	/** Whether live data may be fetched. Defaults to true, the historic behaviour. See `NetworkConfig`. */
 	networkEnabled?: boolean;
+	/** The calendar backend to compute dates with. Defaults to the `Date` backend. See {@link EngineContext.calendar}. */
+	calendar?: CalendarBackend;
 }
 
 /**
@@ -121,6 +140,7 @@ export function createEngineContext(options: EngineContextOptions = {}): EngineC
 		opRegistry: new OpRegistry(),
 		pluginFunctionOwners: {},
 		networkEnabled: options.networkEnabled ?? true,
+		calendar: options.calendar ?? DATE_CALENDAR,
 	};
 }
 

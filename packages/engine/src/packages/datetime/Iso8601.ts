@@ -20,6 +20,8 @@
  * when one of them was always right.
  */
 
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
+
 /**
  * Matches a (reasonably) well-formed ISO8601 date or date-time string:
  * `YYYY-MM-DD` optionally followed by `THH:MM[:SS[.fff]][Z|+HH:MM|-HH:MM]`.
@@ -35,21 +37,25 @@ const ISO8601_PATTERN =
 /**
  * Parse an ISO8601-shaped string into epoch milliseconds.
  *
- * Delegates the actual parsing to the native `Date` constructor, which
- * fully implements the ISO8601 extended format (including "Z"/"+HH:MM"
- * offsets and a fractional-seconds component) per the ECMA-262 Date Time
- * String Format spec, no custom parsing logic needed, just a stricter
- * shape gate in front of it (see {@link ISO8601_PATTERN}'s doc comment).
+ * Delegates the actual parsing to the calendar backend, whose `Date`
+ * implementation is the native constructor: it fully implements the ISO8601
+ * extended format (including "Z"/"+HH:MM" offsets and a fractional-seconds
+ * component) per the ECMA-262 Date Time String Format spec, so no custom
+ * parsing logic is needed, just a stricter shape gate in front of it (see
+ * {@link ISO8601_PATTERN}'s doc comment).
  *
  * A date-only string (`"2019-04-01"`) parses as UTC midnight; a date-time
  * with no offset and no "Z" (`"2019-04-01T15:30:00"`) parses in the HOST
  * SYSTEM's local timezone, both are the native `Date` constructor's own
- * spec-mandated behavior, not something this function adds.
+ * spec-mandated behavior, which every backend reproduces, not something this
+ * function adds.
  *
+ * @param s - The text to parse, with or without surrounding double quotes.
+ * @param calendar - The backend that parses the shape-checked string.
  * @returns epoch ms, or `null` if `s` isn't ISO8601-shaped or doesn't
  *   parse to a valid instant.
  */
-export function parseIso8601(s: string): number | null {
+export function parseIso8601(s: string, calendar: CalendarBackend): number | null {
   // A `ValueType.String` Value's `.value` used to retain its original
   // surrounding double-quotes, because `tokenizeString()` set the token's
   // value to the raw source slice and `OpCode.PUSH_STRING` pushed that
@@ -62,7 +68,7 @@ export function parseIso8601(s: string): number | null {
     trimmed = trimmed.slice(1, -1);
   }
   if (!ISO8601_PATTERN.test(trimmed)) return null;
-  const ms = new Date(trimmed).getTime();
+  const ms = calendar.parseIso8601(trimmed);
   return Number.isNaN(ms) ? null : ms;
 }
 
@@ -75,24 +81,28 @@ export function parseIso8601(s: string): number | null {
  * epoch-ms number with no zone tag (see `packages/time/TimePackage.ts`'s
  * doc comment for the same limitation affecting timezone conversion), so
  * there is no per-expression timezone context to draw on otherwise, the
- * process's own local offset (`Date.getTimezoneOffset()`) is the only
- * notion of "local" available. No milliseconds component is emitted,
- * matching the precision of the task's own worked example.
+ * backend's own local offset (`CalendarBackend.utcOffsetMinutes`, the
+ * process's for the `Date` backend) is the only notion of "local" available.
+ * No milliseconds component is emitted, matching the precision of the
+ * task's own worked example.
+ *
+ * @param epochMs - The instant to format.
+ * @param calendar - The backend whose local fields and offset are written out.
+ * @returns The ISO 8601 string with an explicit offset.
  */
-export function formatIso8601Local(epochMs: number): string {
-  const d = new Date(epochMs);
+export function formatIso8601Local(epochMs: number, calendar: CalendarBackend): string {
+  const d = calendar.fields(epochMs);
   const pad = (n: number) => String(n).padStart(2, "0");
 
-  const year = d.getFullYear();
-  const month = pad(d.getMonth() + 1);
-  const day = pad(d.getDate());
-  const hours = pad(d.getHours());
-  const minutes = pad(d.getMinutes());
-  const seconds = pad(d.getSeconds());
+  const year = d.year;
+  const month = pad(d.month0 + 1);
+  const day = pad(d.day);
+  const hours = pad(d.hour);
+  const minutes = pad(d.minute);
+  const seconds = pad(d.second);
 
-  // getTimezoneOffset() is (UTC - local) in minutes, i.e. the SIGN is
-  // inverted relative to a "+HH:MM ahead of UTC" display offset.
-  const offsetMinutesTotal = -d.getTimezoneOffset();
+  // Positive when ahead of UTC, the "+HH:MM" reading the display wants.
+  const offsetMinutesTotal = calendar.utcOffsetMinutes(epochMs);
   const sign = offsetMinutesTotal >= 0 ? "+" : "-";
   const absOffset = Math.abs(offsetMinutesTotal);
   const offsetHours = pad(Math.floor(absOffset / 60));

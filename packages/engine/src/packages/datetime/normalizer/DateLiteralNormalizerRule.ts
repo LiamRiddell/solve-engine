@@ -4,6 +4,8 @@ import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { parseIso8601 } from "@solve-js/packages/datetime/Iso8601";
 import type { DateInputOrder } from "@solve-js/constants/Configuration";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
+import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 
 /**
  * Token type a fused date literal is rewritten to.
@@ -119,6 +121,8 @@ function resolveYear(digits: string): number | null {
  * token, or null if the triple isn't a real calendar date (e.g. "30" for
  * February), letting the caller fall back to treating the source tokens
  * as ordinary arithmetic instead of a date.
+ *
+ * `calendar` is the backend the literal's local midnight is built with.
  */
 export function buildDateToken(
   day: number,
@@ -126,16 +130,18 @@ export function buildDateToken(
   year: number,
   sourceTokens: Token[],
   ruleName: string,
+  calendar: CalendarBackend,
 ): NormalizerMatch | null {
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
 
-  // Local midnight, consistent with formatDatetime()'s toLocaleString()
-  // display and DATE_NOW's Date.now() epoch, both of which are local-time.
-  const date = new Date(year, month - 1, day);
+  // Local midnight, consistent with formatDatetime()'s display and the
+  // DATE_NOW epoch, both of which are local-time.
+  const epochMs = calendar.localMidnight(year, month - 1, day);
   // Reject calendar rollover (e.g. day=30 in February) rather than silently
   // normalizing to March 2, a rollover almost always means the tokens were
   // never a date to begin with (e.g. "2-30-5" as chained subtraction).
-  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+  const built = calendar.fields(epochMs);
+  if (built.year !== year || built.month0 !== month - 1 || built.day !== day) {
     return null;
   }
 
@@ -144,7 +150,7 @@ export function buildDateToken(
   const fusedToken = new LexerToken(
     DATETIME_LITERAL_TYPE,
     DATETIME_LITERAL_TYPE_ID,
-    String(date.getTime()),
+    String(epochMs),
     text,
     first.offset,
     0,
@@ -226,7 +232,7 @@ const ISO_MAX_TOKENS = 16;
  * timestamp, when the match would end mid-token, or when the shape is
  * ISO-like but names no real instant (`2019-04-01T25:00:00`).
  */
-function fuseIsoTimestamp(tokens: Token[], pos: number, ruleName: string): NormalizerMatch | null {
+function fuseIsoTimestamp(tokens: Token[], pos: number, ruleName: string, calendar: CalendarBackend): NormalizerMatch | null {
   const first = tokens[pos];
   if (first.sourceEnd !== undefined) return null;
   let text = first.text;
@@ -260,7 +266,7 @@ function fuseIsoTimestamp(tokens: Token[], pos: number, ruleName: string): Norma
   // spellings cannot drift apart: an offset means what it means there, and a
   // timestamp with no offset is local time, exactly as a bare date literal is
   // local midnight.
-  const epochMs = parseIso8601(matched[0]);
+  const epochMs = parseIso8601(matched[0], calendar);
   if (epochMs === null) return null;
 
   const fusedToken = new LexerToken(
@@ -348,9 +354,14 @@ function resolveOrderedGroups(
  * `DatePhrase.ts` is a narrower, deliberately-diverging grammar (US-style
  * bare SLASH dates, 4-digit-year-only) scoped to stock-history queries
  * neither of those needed to change for this to land.
+ *
+ * `getCalendar` supplies the calendar backend the literal is built with, read
+ * per match so it follows the engine that registered the rule; the default
+ * is the built-in `Date` backend, for a rule registered outside an engine.
  */
 export function dateLiteralNormalizerRule(
   getInputOrder: () => DateInputOrder = () => "auto",
+  getCalendar: () => CalendarBackend = () => DATE_CALENDAR,
 ): NormalizerRule {
   return {
     name: "datetime:date-literal",
@@ -361,6 +372,7 @@ export function dateLiteralNormalizerRule(
     match(tokens: Token[], pos: number): NormalizerMatch | null {
       const t0 = tokens[pos];
       if (t0.type !== "NUMBER") return null;
+      const calendar = getCalendar();
 
       // ── Dot format: 2-token window (see module doc) ──────────────────
       if (DOT_DAY_MONTH.test(t0.value)) {
@@ -371,7 +383,7 @@ export function dateLiteralNormalizerRule(
           if (year !== null) {
             const match = buildDateToken(
               Number(dayText), Number(monthText), year,
-              [t0, t1], "datetime:date-literal:dot",
+              [t0, t1], "datetime:date-literal:dot", calendar,
             );
             if (match) return match;
           }
@@ -384,7 +396,7 @@ export function dateLiteralNormalizerRule(
       // the date half of a timestamp and leave the time half to be read as
       // arithmetic. See fuseIsoTimestamp().
       if (t0.value.length === 4 && PLAIN_INTEGER.test(t0.value)) {
-        const timestamp = fuseIsoTimestamp(tokens, pos, "datetime:date-literal:iso-timestamp");
+        const timestamp = fuseIsoTimestamp(tokens, pos, "datetime:date-literal:iso-timestamp", calendar);
         if (timestamp) return timestamp;
       }
 
@@ -414,7 +426,7 @@ export function dateLiteralNormalizerRule(
         if (resolved === null) return null;
         return buildDateToken(
           resolved.day, resolved.month, resolved.year, sourceTokens,
-          `datetime:date-literal:${order.toLowerCase()}`,
+          `datetime:date-literal:${order.toLowerCase()}`, calendar,
         );
       }
 
@@ -423,20 +435,20 @@ export function dateLiteralNormalizerRule(
         if (!DAY_OR_MONTH.test(t0.value) || !DAY_OR_MONTH.test(t1.value)) return null;
         const year = resolveYear(t2.value);
         if (year === null) return null;
-        return buildDateToken(Number(t0.value), Number(t1.value), year, sourceTokens, "datetime:date-literal:european");
+        return buildDateToken(Number(t0.value), Number(t1.value), year, sourceTokens, "datetime:date-literal:european", calendar);
       }
 
       // MINUS: ISO (YYYY-MM-DD) if the first group is exactly 4 digits, else US (MM-DD-YYYY)
       if (t0.value.length === 4) {
         if (!DAY_OR_MONTH.test(t1.value) || !DAY_OR_MONTH.test(t2.value)) return null;
         // year=t0, month=t1, day=t2, buildDateToken takes (day, month, year)
-        return buildDateToken(Number(t2.value), Number(t1.value), Number(t0.value), sourceTokens, "datetime:date-literal:iso");
+        return buildDateToken(Number(t2.value), Number(t1.value), Number(t0.value), sourceTokens, "datetime:date-literal:iso", calendar);
       }
       if (!DAY_OR_MONTH.test(t0.value) || !DAY_OR_MONTH.test(t1.value)) return null;
       const year = resolveYear(t2.value);
       if (year === null) return null;
       // month=t0, day=t1, year=t2, buildDateToken takes (day, month, year)
-      return buildDateToken(Number(t1.value), Number(t0.value), year, sourceTokens, "datetime:date-literal:us");
+      return buildDateToken(Number(t1.value), Number(t0.value), year, sourceTokens, "datetime:date-literal:us", calendar);
     },
   };
 }
