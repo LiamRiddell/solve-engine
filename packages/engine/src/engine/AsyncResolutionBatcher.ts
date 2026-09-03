@@ -142,9 +142,10 @@ export class AsyncResolutionBatcher {
 	 * Nullable rather than a constructor parameter because it is cleared by
 	 * `clearAll()` and re-wired on re-subscribe, so it cannot be readonly. That
 	 * makes it easy to miss, which is why {@link warnIfUnwired} exists: leaving
-	 * it unset means async values resolve into the cache and are never shown,
-	 * with nothing to indicate why. A host that genuinely does not want async
-	 * results should not register async resolvers at all.
+	 * it unset, with nobody reading {@link getEventStream} either, means async
+	 * values resolve into the cache and are never shown, with nothing to
+	 * indicate why. A host that genuinely does not want async results should
+	 * not register async resolvers at all.
 	 */
 	onLineResult: ((lineNumber: number, value: Value) => void) | null = null;
 
@@ -158,19 +159,25 @@ export class AsyncResolutionBatcher {
 	private warnedAboutMissingHook = false;
 
 	/**
-	 * Warn once if an async result resolved with no {@link onLineResult} wired.
+	 * Warn once if an async result resolved with nobody to receive it: no
+	 * {@link onLineResult} wired and no reader on {@link getEventStream}.
 	 *
 	 * The failure this catches is silent by nature: the value arrives, the cache
 	 * updates, and the line keeps showing pending forever. Without this a host
-	 * author has no thread to pull on.
+	 * author has no thread to pull on. A host reading the event stream is not
+	 * in that position: the stream is the documented way to learn which lines
+	 * to re-evaluate, and this used to warn at it anyway, telling it to set a
+	 * hook it did not need.
 	 */
 	private warnIfUnwired(): void {
-		if (this.onLineResult || this.warnedAboutMissingHook) return;
+		if (this.onLineResult || this.listenerCount > 0 || this.warnedAboutMissingHook) return;
 		this.warnedAboutMissingHook = true;
 		console.warn(
-			"[solve-engine] An async result resolved but AsyncResolutionBatcher.onLineResult " +
-			"is not set, so the value cannot reach your document and the line will keep " +
-			"showing as pending. Set it to mirror resolved values into your own state. " +
+			"[solve-engine] An async result resolved, but nothing is listening for it: no reader " +
+			"is attached to engine.getEventStream() and AsyncResolutionBatcher.onLineResult is " +
+			"not set. The value is in the cache; without one of those the line keeps showing as " +
+			"pending. Read the event stream and re-evaluate the lines it names (see the async " +
+			"guide), or set onLineResult to mirror resolved values into your own state. " +
 			"This warning appears once per batcher.",
 		);
 	}

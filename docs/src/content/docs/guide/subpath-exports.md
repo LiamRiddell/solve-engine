@@ -8,7 +8,10 @@ use.
 
 ## Public
 
-Stable. Changes follow semantic versioning.
+Stable. Changes follow semantic versioning;
+[versioning and support](/guide/versioning-and-support/) says exactly what that
+promises, including how deprecations are handled and which Node versions are
+tested.
 
 | Entry | Contains |
 | --- | --- |

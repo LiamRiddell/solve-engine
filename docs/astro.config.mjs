@@ -391,6 +391,14 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { slug: "syntax/unit-reference" },
+                // The changelog is published per version as a GitHub release,
+                // with the verification section each note ends with. Linked
+                // rather than copied, so there is one record of what shipped.
+                {
+                  label: "Release notes",
+                  link: "https://github.com/LiamRiddell/solve-engine/releases",
+                  attrs: { target: "_blank", rel: "noopener" },
+                },
               ],
             },
           ],
@@ -405,6 +413,7 @@ export default defineConfig({
               items: [
                 { slug: "getting-started/installation" },
                 { slug: "guide/subpath-exports" },
+                { slug: "guide/versioning-and-support" },
                 { slug: "guide/upgrading-to-2" },
               ],
             },

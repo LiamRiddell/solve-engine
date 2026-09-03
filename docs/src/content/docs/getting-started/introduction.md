@@ -22,8 +22,8 @@ someone's notes.
 
 The engine handles arithmetic, percentages, units of measurement, currencies,
 dates and durations, times and timezones, matrices and vectors, statistics,
-finance, and a set of natural-language phrasings for each. The full list is in
-the [syntax reference](/syntax/cheatsheet/).
+finance, symbolic algebra, and a set of natural-language phrasings for each.
+The full list is in the [syntax reference](/syntax/cheatsheet/).
 
 Beyond evaluating single expressions it also understands a document: variables
 defined on one line and used on another, references to previous lines, and
@@ -31,9 +31,15 @@ aggregate operations over a range of lines.
 
 ## What it is not
 
-It is not a computer algebra system. There is a deliberately bounded symbolic
-mode for keeping an unknown as an unknown, but it does not do polynomial
-factoring, calculus, or general equation solving.
+It is not a general computer algebra system, though it has one inside it. An
+unknown stays an unknown, and over exact rational arithmetic the engine will
+`expand`, `factor`, `solve`, `cancel` and `apart`, take derivatives and
+integrals, build a Taylor series and a Jacobian; the [algebra
+pages](/syntax/expanding/) cover each. The boundary is stated where it applies:
+polynomial degree and expression size are capped, an integral with no
+elementary antiderivative is reported rather than approximated, and a system
+outside what the solver attempts says so instead of guessing. What it does not
+attempt is the open-ended symbolic manipulation a dedicated CAS is built for.
 
 It is not a spreadsheet, and it has no notion of cells, grids, or layout.
 

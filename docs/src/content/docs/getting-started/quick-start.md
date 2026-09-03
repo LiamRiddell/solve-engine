@@ -56,16 +56,38 @@ so that editing line one re-evaluates lines two and three and nothing else.
 
 ## Handling failure
 
-An expression that cannot be evaluated does not throw for ordinary user error.
-It produces a value whose type says so, which is the right behaviour when input
-is being typed one character at a time and is invalid most of the way.
+There are two kinds of failure, and they arrive differently on purpose.
+
+A line the parser cannot read at all (`10 +`, an unclosed bracket), or one that
+names a variable no line has defined, **throws** an `EngineError`. Nothing about
+such a line can be evaluated, so there is no value to hand back.
+
+A line the engine can run but cannot answer (an impossible conversion, a rate it
+has no data for, a live value that has not arrived yet) comes back as a **value
+whose type says so**. That is the right behaviour when input is being typed one
+character at a time and is invalid most of the way: one bad line never takes the
+rest of the document down with it.
 
 ```ts
-import { ValueType } from "solve-engine/vm";
+import { EngineError } from "solve-engine/errors";
 
-const value = engine.evaluateExpression("10 +");
-value.type === ValueType.Error;
+try {
+  engine.evaluateExpression("10 +");
+} catch (error) {
+  if (error instanceof EngineError) {
+    error.code; // "UNEXPECTED_END_OF_INPUT"
+  }
+}
+
+const value = engine.evaluateExpression("5 kg to m");
+value.isError();    // true
+value.errorCode;    // "INCOMPATIBLE_UNITS"
+value.errorMessage; // "a mass cannot be converted to a length"
 ```
+
+`isPending()` marks a value still waiting on live data, and `isFault()` covers
+either case. Check it before `toNumber()`: a faulted value reads as `0` through
+it, indistinguishable from a real zero.
 
 Read [core concepts](/getting-started/concepts/) next for the mental model, or go
 to the [syntax reference](/syntax/cheatsheet/) for what you can write.

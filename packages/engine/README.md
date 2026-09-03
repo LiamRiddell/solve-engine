@@ -52,8 +52,14 @@ const value = engine.evaluateExpression("2 + 2 * 10");
 console.log(value.toNumber()); // 22
 ```
 
-`evaluateExpression` throws an `EngineError` (see `solve-engine/errors`) on a parse or
-evaluation failure, wrap calls with untrusted input in a `try`/`catch`.
+Two kinds of failure, deliberately different. A line the parser cannot read
+(`10 +`), or one that names a variable no line defined, throws an `EngineError`
+(see `solve-engine/errors`), so wrap calls on untrusted input in a `try`/`catch`.
+A line the engine can run but cannot answer (an impossible conversion, a rate it
+has no data for, a live value still loading) comes back as a `Value` whose
+`isError()` or `isPending()` says so, never as a throw, which is the right shape
+for input being typed one character at a time. Check `isFault()` before
+`toNumber()`: a faulted value reads as `0` through it.
 
 For line-oriented input (e.g. a document made of multiple expressions, some referencing
 variables defined on earlier lines), use `evaluateLine`/`parseDocument` instead, see the
@@ -104,13 +110,15 @@ they are:
 
 | Subpath | Purpose |
 |---|---|
-| `solve-engine` | Start here, `ExpressionEngine`, `createEngine`, `IEnginePackage`. |
+| `solve-engine` | Start here: `createEngine`, `ExpressionEngine`, `defineFunction`, `IEnginePackage`, and the result surface `Value`, `ValueType`, `formatValue`. |
 | `solve-engine/engine` | `ExpressionEngine` and its supporting types (`Explanation`, `EngineSnapshot`, etc.) directly, without the package-registration wrapper. |
-| `solve-engine/vm` | The bytecode VM: `Value`/`ValueType`, opcode dispatch, `allocatePluginFunctionIndex`. |
-| `solve-engine/format` | Turning a `Value` into a display string (numbers, dates, units, vectors, ...). |
+| `solve-engine/vm` | The bytecode VM: `Value`/`ValueType`, the value constructors, opcode dispatch. |
+| `solve-engine/format` | Turning a `Value` into a display string (numbers, dates, units, vectors, ...) and the formatting settings. |
 | `solve-engine/language` | Editor-agnostic language service: token categories, completions, highlighting. |
 | `solve-engine/packages` | The built-in packages (arithmetic, datetime, time, dice, uom, currency, vector, conditionals, converters, mathphrases, ...). |
-| `solve-engine/constants` | Engine configuration types and defaults (`EngineConfig`, `VMConfig`, ...). |
+| `solve-engine/constants` | Engine configuration types and defaults (`EngineConfig`, `VMConfig`, `NetworkConfig`, ...). |
+| `solve-engine/worker` | Off-main-thread evaluation: `createWorkerEngine`, `startWorkerRuntime`, the transports and the result DTOs. |
+| `solve-engine/testing` | A test kit for package authors: `createTestEngine`, `expectExpression`, `expectPackage`. |
 
 The following subpaths are **advanced-public**, everything a third-party package author
 needs to extend the engine, but with a looser stability contract than the tier above (these
@@ -132,32 +140,70 @@ Anything not listed above (`telemetry`, `cache`, `diagnostics`, `types`, `worker
 internal and not part of the package's public contract, it may change or disappear between
 minor versions without notice.
 
-## Authoring a package
+## Adding a function
 
-A **package** (`IEnginePackage`) is a plain data descriptor bundling everything needed to
-extend the engine with a new domain: custom tokens, parselets, VM opcode handlers, and
-optional async resolvers. See
-[`solve-engine/api`'s `IEnginePackage`](https://github.com/LiamRiddell/solve-engine/blob/main/packages/engine/src/api/PackageRegistry.ts) for the full field list
-with inline documentation and examples for each field.
-
-Minimal shape:
+The shortest way to teach the engine a new name is `defineFunction`: declare the
+name, the argument types and the return type, and get back a package that plugs
+in beside the built-ins. No parser, no bytecode.
 
 ```typescript
-import { allocatePluginFunctionIndex } from "solve-engine/vm";
-import type { IEnginePackage } from "solve-engine";
+import { createEngine, defineFunction } from "solve-engine";
 
-const MY_FN_IDX = allocatePluginFunctionIndex();
+const vat = defineFunction({
+  name: "vat",
+  args: [{ name: "amount", type: "number" }],
+  returns: "number",
+  call: (amount) => amount * 1.2,
+});
+
+const engine = createEngine({ extraPackages: [vat] });
+engine.evaluateExpression("vat(100)").toNumber(); // 120
+```
+
+Arguments are a fixed list of `number`, `string` or `boolean`, and `call` is
+synchronous; a mismatched call produces a structured error naming the argument.
+Anything beyond that shape (a unit-bearing argument, a phrase rather than a
+call, live data) is a package proper.
+
+## Authoring a package
+
+A **package** (`IEnginePackage`) is a plain data descriptor bundling everything
+needed to extend the engine with a new domain: token vocabulary, normaliser
+rules, parselets, plugin functions, `as` converters, completions, and optional
+async resolvers. The [package author guides](https://liamriddell.github.io/solve-engine/packages/authoring-a-package/)
+walk through each extension point; [`IEnginePackage`](https://github.com/LiamRiddell/solve-engine/blob/main/packages/engine/src/api/PackageRegistry.ts)
+carries the full field list with inline documentation.
+
+Minimal shape, a keyword that calls a function:
+
+```typescript
+import type { IEnginePackage } from "solve-engine";
+import type { PrefixParselet } from "solve-engine/parser";
+import { stringValue } from "solve-engine/vm";
+
+const reverseParselet: PrefixParselet = {
+  category: "Text",
+  parse(parser, _token, builder) {
+    parser.consume("LPAREN");
+    parser.parseExpression(0, builder);
+    parser.consume("RPAREN");
+    // By name; the engine assigns the index when the package registers.
+    builder.emitPluginCall("reverse", 1);
+  },
+};
 
 export const MY_PACKAGE: IEnginePackage = {
-  name: "MyPackage",
-  // engineVersion: "^0.1.0", // optional, see below
-  prefixParselets: [{ tokenType: "MY_FUNC", parselet: new MyParselet() }],
-  pluginFunctions: [{ index: MY_FN_IDX, handler: (args) => /* ... */ }],
+  name: "my-package",
+  // engineVersion: "^2.0.0", // optional, see below
+  lexerVocabulary: { keywords: { reverse: "REVERSE_FN" } },
+  prefixParselets: { REVERSE_FN: reverseParselet },
+  pluginFunctions: { reverse: ([text]) => stringValue([...String(text.value)].reverse().join("")) },
 };
 ```
 
-Register it either as one of the packages passed to the `ExpressionEngine` constructor, or
-at runtime via `ExpressionEngine.registerPackage()` / `unregisterPackage()`.
+Register it as one of the packages passed to the `ExpressionEngine` constructor
+(or `createEngine`'s `extraPackages`), or at runtime via
+`ExpressionEngine.registerPackage()` / `unregisterPackage()`.
 
 ### Declaring engine-version compatibility
 
@@ -210,17 +256,21 @@ published package, see `files` in `package.json`, only `dist/` ships):
 
 ## Known limitations
 
-**Cross-instance isolation is partial.** Plugin functions and the opcode registry are
-now owned per `ExpressionEngine`, so two engines with different package sets no longer
-interfere across those. The lexer and the currency exchange rates
-are still module-level singletons, so full isolation between two engines in one process
-cannot yet be assumed. Tracked as "L1, EngineContext"; three of its five migrations have
-landed and the remaining two are a prerequisite for 1.0.0 proper.
+**Exchange rates are shared across engines, by design.** Plugin functions, the
+opcode registry and the lexer are owned per `ExpressionEngine`, so two engines
+with different package sets do not interfere. The currency rate cache is the one
+deliberate exception: rates are market data with a fifteen-minute freshness
+window, and two engines in one process fetching the same pair separately could
+disagree about it. A host that primes rates (`currencyExchangeService.primeRates`)
+primes them for every engine in the process.
 
-**Async results need a host hook.** `AsyncResolutionBatcher.onLineResult` is the only
-mechanism that patches a resolved async value back into the document model, and it is not
-wired inside the package. A host that does not supply it gets async values that never
-resolve, with no error to explain why.
+**A live value reaches the document only through the event stream.** When a
+fetch lands, the engine does not push the new value at you; it emits a
+`lines-updated` event on `engine.getEventStream()` naming the lines to
+re-evaluate. A host that reads neither that stream nor sets
+`AsyncResolutionBatcher.onLineResult` sees the line stay pending, and a warning
+says so once. The [async guide](https://liamriddell.github.io/solve-engine/guide/async-and-live-data/)
+shows the loop.
 
 ## Development
 
