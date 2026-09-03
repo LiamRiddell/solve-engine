@@ -27,7 +27,7 @@ import type {
 	WorkerToMainMessage,
 } from "./protocol";
 import type {
-	SerializedValue,
+	SerializedWorkerValue,
 	SerializedParsedLine,
 	SerializedParsingResult,
 } from "./dto";
@@ -62,13 +62,13 @@ export interface WorkerCallOptions {
 
 /**
  * One line whose result changed after a live value resolved worker-side, carried
- * as its freshly re-evaluated {@link SerializedValue}. The value the host renders
+ * as its freshly re-evaluated {@link SerializedWorkerValue}. The value the host renders
  * against `lineNumber`, recovered worker-side so the main thread needs no further
  * round-trip to display it.
  */
 export interface WorkerAsyncUpdate {
 	lineNumber: number;
-	value: SerializedValue;
+	value: SerializedWorkerValue;
 }
 
 /**
@@ -94,7 +94,7 @@ export interface WorkerEngine {
 	/** Evaluate an array of lines off-thread. Mirrors `ExpressionEngine.evaluateLines`. */
 	evaluateLines(lines: string[], options?: WorkerCallOptions): Promise<SerializedParsedLine[]>;
 	/** Evaluate a single expression off-thread. Mirrors `ExpressionEngine.evaluateExpression`. */
-	evaluateExpression(expression: string, options?: WorkerCallOptions): Promise<SerializedValue>;
+	evaluateExpression(expression: string, options?: WorkerCallOptions): Promise<SerializedWorkerValue>;
 	/**
 	 * Subscribe to live-data resolutions that land after a request already
 	 * answered.
@@ -172,8 +172,8 @@ class WorkerEngineClient implements WorkerEngine {
 		return this.call<SerializedParsedLine[]>("evaluateLines", [lines], options?.signal);
 	}
 
-	evaluateExpression(expression: string, options?: WorkerCallOptions): Promise<SerializedValue> {
-		return this.call<SerializedValue>("evaluateExpression", [expression], options?.signal);
+	evaluateExpression(expression: string, options?: WorkerCallOptions): Promise<SerializedWorkerValue> {
+		return this.call<SerializedWorkerValue>("evaluateExpression", [expression], options?.signal);
 	}
 
 	onResolved(listener: (lines: WorkerAsyncUpdate[]) => void): () => void {

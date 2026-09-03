@@ -14,7 +14,7 @@ import type { EngineConfigOverride } from "@solve-js/constants/Configuration";
 import type { UnifiedParsingOptions } from "@solve-js/types/ParsingResult";
 import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
 import type { SerializedEngineError } from "@solve-js/errors/WorkerError";
-import type { SerializedValue } from "./dto";
+import type { SerializedWorkerValue } from "./dto";
 
 /** The core evaluate methods the harness proxies. */
 export type WorkerMethod = "parseDocument" | "evaluateLines" | "evaluateExpression";
@@ -89,14 +89,14 @@ export interface ErrorMessage {
 
 /**
  * One line whose result changed after a later async resolution settled, carried
- * as its freshly re-evaluated {@link SerializedValue}. The value, not the line
+ * as its freshly re-evaluated {@link SerializedWorkerValue}. The value, not the line
  * number alone: the engine's own event names only the affected lines and leaves
  * the resolved value in its cache, so the worker re-reads each line before it
  * posts, and the main side receives a value it can render without a round-trip.
  */
 export interface AsyncResolvedLine {
 	lineNumber: number;
-	value: SerializedValue;
+	value: SerializedWorkerValue;
 }
 
 /**

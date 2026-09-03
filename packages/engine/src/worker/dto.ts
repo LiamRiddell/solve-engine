@@ -24,7 +24,7 @@ import type { DiagnosticReportJSON } from "@solve-js/diagnostics";
  * formatted string, since a `SymbolicNode` is a class instance that would not
  * survive the clone; and a non-finite numeric cell (`Infinity`/`-Infinity`/`NaN`,
  * from e.g. a `[1/0, 2]`) becomes the same string tag the scalar
- * {@link SerializedValue.nonFinite} uses, because a raw non-finite number does
+ * {@link SerializedWorkerValue.nonFinite} uses, because a raw non-finite number does
  * not survive `JSON` (it becomes `null`). A host reads a numeric string cell
  * back with `Number(cell)`.
  */
@@ -36,6 +36,16 @@ export interface SerializedMatrix {
 }
 
 /**
+ * The name this DTO carried before it was renamed.
+ *
+ * @deprecated Use {@link SerializedWorkerValue}. The root entry exports the
+ * snapshot shape under the name `SerializedValue`, so a host importing both
+ * met two different types with one name. This alias keeps existing imports
+ * working for at least one minor release and is removed in the next major.
+ */
+export type SerializedValue = SerializedWorkerValue;
+
+/**
  * A single evaluated value, projected onto clone-safe fields.
  *
  * `text` is the formatted display string a host renders, and `number` is the
@@ -45,7 +55,7 @@ export interface SerializedMatrix {
  * fit in a plain number: `bigint` as a base-ten string, `matrix` and `range`
  * as their own shapes.
  */
-export interface SerializedValue {
+export interface SerializedWorkerValue {
 	/** The {@link ValueType} discriminant (a number), so a host can branch on the kind. */
 	type: ValueType;
 	/** The formatted display string, what a host renders against the line. */
@@ -120,7 +130,7 @@ export interface SerializedValue {
 /**
  * One inline solve and its serialised result, mirroring
  * {@link InlineSolvePosition} with the live `Value` replaced by a
- * {@link SerializedValue}.
+ * {@link SerializedWorkerValue}.
  */
 export interface SerializedInlineSolve {
 	start: number;
@@ -128,13 +138,13 @@ export interface SerializedInlineSolve {
 	expression: string;
 	lineNumber: number;
 	columnNumber: number;
-	result: SerializedValue | null;
+	result: SerializedWorkerValue | null;
 	error: string | null;
 }
 
 /**
  * One parsed line, mirroring {@link ParsedLine} with every live `Value`
- * replaced by a {@link SerializedValue}.
+ * replaced by a {@link SerializedWorkerValue}.
  */
 export interface SerializedParsedLine {
 	lineNumber: number;
@@ -145,7 +155,7 @@ export interface SerializedParsedLine {
 	hasInlineSolves: boolean;
 	inlineSolves: SerializedInlineSolve[];
 	expression: string | null;
-	result: SerializedValue | null;
+	result: SerializedWorkerValue | null;
 	error: string | null;
 }
 

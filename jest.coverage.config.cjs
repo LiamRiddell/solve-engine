@@ -30,14 +30,15 @@ module.exports = {
 		"!packages/engine/src/workers/**",
 	],
 	coverageReporters: ["text-summary"],
-	// Measured when the floor was set: 97.3% statements, 88.3% branches, 92.0%
-	// functions, 97.3% lines. Each floor sits three to four points under.
+	// Measured when the floor was set, over every source file including the
+	// ones no test imports: 95.9% statements, 86.1% branches, 91.0% functions,
+	// 95.9% lines. Each floor sits about three points under.
 	coverageThreshold: {
 		global: {
-			statements: 94,
-			branches: 84,
+			statements: 93,
+			branches: 83,
 			functions: 88,
-			lines: 94,
+			lines: 93,
 		},
 	},
 };

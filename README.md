@@ -139,13 +139,13 @@ is the typing. The engine is built to run on every keystroke, on a document
 rather than a single expression, where most lines have not changed and the one
 that did should not cost a full re-evaluation of the rest.
 
-Everything above the pipeline is a package. All 22 of them, arithmetic
+Everything above the pipeline is a package. All 44 of them, arithmetic
 included, register through the same public interface: token vocabulary,
 normaliser rules, parselets, and VM functions. There is no privileged built-in
 tier, which means an extension can do anything the built-ins can. `createEngine()`
-registers twenty-five of them; stocks and knowledge stay out until a host supplies a
-data source, and a bare `new ExpressionEngine()` registers none until you pass the
-packages you want.
+registers 41 of them; stocks, knowledge and crypto stay out until a host supplies
+a data source, and a bare `new ExpressionEngine()` registers none until you pass
+the packages you want.
 
 [Architecture](https://liamriddell.github.io/solve-engine/architecture/overview/)
 covers this properly, including a candid list of what is not finished.
@@ -277,9 +277,12 @@ integration applies as one command. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Status
 
-Working toward `1.0.0-beta`. The engine is stable and heavily tested, but the
-API surface may still move before 1.0. Open items are tracked as issues rather
-than hidden, and the beta release notes will name the ones that matter.
+Released and on a 2.x line. The public entry points follow semantic versioning,
+a deprecated name keeps working for at least one minor release before a major
+removes it, and every release runs the full suite on Node 22 and 24 before it
+reaches npm; [versioning and support](https://liamriddell.github.io/solve-engine/guide/versioning-and-support/)
+states the policy in full. Open items are tracked as issues rather than hidden,
+and each release note names the ones that matter.
 
 ## Licence
 

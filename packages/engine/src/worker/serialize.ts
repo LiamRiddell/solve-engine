@@ -15,7 +15,7 @@ import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
 import { formatSymbolic } from "@solve-js/symbolic";
 import type { ParsedLine, InlineSolvePosition, ParsingResult } from "@solve-js/types/ParsingResult";
 import type {
-	SerializedValue,
+	SerializedWorkerValue,
 	SerializedMatrix,
 	SerializedParsedLine,
 	SerializedInlineSolve,
@@ -49,16 +49,16 @@ function serializeMatrix(m: MatrixData): SerializedMatrix {
 }
 
 /**
- * Project a {@link Value} onto a {@link SerializedValue}.
+ * Project a {@link Value} onto a {@link SerializedWorkerValue}.
  *
  * `text` and `number` are set for every value; the type-specific fields are
  * added only where the payload needs them, so the DTO stays minimal and a
  * deep-equal between the two evaluation paths does not trip on a property one
  * side left `undefined`.
  */
-export function serializeValue(value: Value, settings?: FormattingSettings): SerializedValue {
+export function serializeValue(value: Value, settings?: FormattingSettings): SerializedWorkerValue {
 	const reading = value.toNumber();
-	const dto: SerializedValue = {
+	const dto: SerializedWorkerValue = {
 		type: value.type,
 		text: formatValue(value, settings),
 		// A non-finite reading (1/0, 0/0, an overflow) cannot cross JSON, which
@@ -110,7 +110,7 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 }
 
 /** Serialise a nullable value, the shape both `result` fields carry. */
-function serializeMaybe(value: Value | null | undefined, settings?: FormattingSettings): SerializedValue | null {
+function serializeMaybe(value: Value | null | undefined, settings?: FormattingSettings): SerializedWorkerValue | null {
 	return value ? serializeValue(value, settings) : null;
 }
 

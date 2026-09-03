@@ -38,6 +38,7 @@ export {
 } from "./serialize";
 
 export type {
+	SerializedWorkerValue,
 	SerializedValue,
 	SerializedMatrix,
 	SerializedInlineSolve,
