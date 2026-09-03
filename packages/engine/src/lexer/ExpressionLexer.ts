@@ -25,6 +25,7 @@ const TT_HEX_COLOUR = tokenTypeId('HEX_COLOUR');
 const TT_IDENT = tokenTypeId('IDENT');
 const TT_INLINE_SOLVE_START = tokenTypeId('INLINE_SOLVE_START');
 const TT_LSHIFT = tokenTypeId('LSHIFT');
+const TT_MINUS = tokenTypeId('MINUS');
 const TT_NEQ = tokenTypeId('NEQ');
 const TT_NUMBER = tokenTypeId('NUMBER');
 const TT_PLUS_MINUS = tokenTypeId('PLUS_MINUS');
@@ -1098,6 +1099,9 @@ export class ExpressionLexer {
           } else if (c0 === 0x20B1) {  // ₱ (Philippine peso)
             out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₱', '₱', 0, 0, 1, 1));
             tokenIndex++;
+          } else if (c0 === 0x2212 || c0 === 0x2013) {  // − (minus sign) and – (en dash) → MINUS
+            out.push(new LexerToken('MINUS', TT_MINUS, this.input, this.input, 0, 0, 1, 1));
+            tokenIndex++;
           } else if (c0 >= 128) {
             // Unknown unicode, treat as IDENT for forward compatibility
             out.push(new LexerToken('IDENT', TT_IDENT, this.input, this.input, 0, 0, 1, 1));
@@ -1305,6 +1309,15 @@ export class ExpressionLexer {
             tokenIndex++;
           } else if (c0 === 0x20B1) {  // ₱ (Philippine peso)
             out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₱', '₱', this.pos, 0, this.line, col));
+            this.pos++;
+            tokenIndex++;
+          } else if (c0 === 0x2212 || c0 === 0x2013) {
+            // The minus sign (U+2212) and the en dash (U+2013) are what a word
+            // processor or a web page turns a typed hyphen into, and both read
+            // as subtraction when pasted. The em dash stays prose: it is a
+            // sentence mark, not an operator.
+            const dash = this.input[this.pos];
+            out.push(new LexerToken('MINUS', TT_MINUS, dash, dash, this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 >= 128) {
