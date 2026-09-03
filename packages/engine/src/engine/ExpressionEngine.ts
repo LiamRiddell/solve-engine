@@ -316,6 +316,14 @@ export class ExpressionEngine {
     private callFusions = new Map<string, string>();
 
     /**
+     * Which packages claim each call-fusion word, in registration order. The
+     * newest claim is the one {@link callFusions} holds; removing a package
+     * hands the word back to the previous claimant rather than deleting it
+     * for both.
+     */
+    private callFusionOwners = new Map<string, Array<{ pkg: string; tokenType: string }>>();
+
+    /**
      * Incremental index behind the package-compatibility check. Kept in step
      * with {@link registeredPackages} so each `registerPackage` costs O(that
      * package's fields) rather than a fresh O(all packages) pairwise scan, which
@@ -1065,6 +1073,9 @@ export class ExpressionEngine {
             // reads. Tracked per-name so unregisterPackage removes exactly these.
             for (const [name, tokenType] of Object.entries(pkg.callFusions)) {
                 const lower = name.toLowerCase();
+                const claims = this.callFusionOwners.get(lower);
+                if (claims) claims.push({ pkg: pkg.name, tokenType });
+                else this.callFusionOwners.set(lower, [{ pkg: pkg.name, tokenType }]);
                 this.callFusions.set(lower, tokenType);
                 contribution.callFusionNames.push(lower);
             }
@@ -1161,7 +1172,16 @@ export class ExpressionEngine {
             this.normalizer.unregister(ruleName);
         }
         for (const name of contribution.callFusionNames) {
-            this.callFusions.delete(name);
+            // Two packages may claim one word (the compatibility index warns).
+            // Removing one hands the word back to the other.
+            const remaining = (this.callFusionOwners.get(name) ?? []).filter((claim) => claim.pkg !== packageName);
+            if (remaining.length === 0) {
+                this.callFusionOwners.delete(name);
+                this.callFusions.delete(name);
+            } else {
+                this.callFusionOwners.set(name, remaining);
+                this.callFusions.set(name, remaining[remaining.length - 1].tokenType);
+            }
         }
         this.packageCompletionItems.delete(packageName);
 
