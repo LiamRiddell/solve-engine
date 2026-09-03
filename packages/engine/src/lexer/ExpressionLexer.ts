@@ -464,16 +464,6 @@ const EXPRESSION_INDICATOR_CODES = (() => {
  */
 export class ExpressionLexer {
   private static readonly CHAR_CLASS = buildCharClassTable();
-  /**
-   * Configured TokenLookup from TokenClassRegistry. When set, replaces
-   * the internal keyword map and unit set with registry-built equivalents.
-   * Enables data-driven keyword/unit registration across locale keywords,
-   * provider keywords, and plugins.
-   *
-   * Set at construction time via the constructor parameter. Plugin-registered
-   * keywords/units (via registerVocabulary()) are checked alongside
-   * the configuredLookup, neither source is bypassed.
-   */	private configuredLookup: TokenLookup | null = null;
 
 	// Instance state
   private input: string = '';
@@ -520,7 +510,7 @@ export class ExpressionLexer {
 
   /**
    * Inline solve spans collected during the most recent tokenization pass.
-   * Populated by [Symbol.iterator]() and consumed by scanDocument().
+   * Populated by tokenizeInto() and consumed by scanDocument().
    */
   _inlineSolveSpans: InlineSolveSpan[] = [];
 
@@ -577,10 +567,16 @@ export class ExpressionLexer {
       : new Set([...knownUnits, ...this.pluginUnits]);
   }
 
-  constructor(localeCode = 'en', lookup?: TokenLookup) {
+  /**
+   * @param localeCode - Locale whose keyword table seeds the lexer.
+   * @param _lookup - Ignored. The lexer built its keyword, unit and phrase
+   *   tables from the locale and the registered packages and never read the
+   *   lookup it was handed; the parameter stays so existing callers compile.
+   *   @deprecated Removed in 3.0.
+   */
+  constructor(localeCode = 'en', _lookup?: TokenLookup) {
     this.localeCode = localeCode;
     this.locale = getLocale(localeCode);
-    this.configuredLookup = lookup ?? null;
     this.keywordMap = new Map<string, string>();
     for (const [k, v] of Object.entries(this.locale.keywordMap)) {
       this.keywordMap.set(k.toLowerCase(), v);
@@ -779,9 +775,9 @@ export class ExpressionLexer {
    *   lines that classifyLine() marks as having inline solves.
    *
    * Tokenization is scoped to each line by temporarily restricting
-   * `this.len` to the line end position, so the [Symbol.iterator]
-   * generator naturally stops at the line boundary. After tokenization,
-   * `this.len` is restored and `this.pos` advances past the newline.
+   * `this.len` to the line end position, so tokenizeInto() naturally
+   * stops at the line boundary. After tokenization, `this.len` is
+   * restored and `this.pos` advances past the newline.
    *
    * @param text The full document text (with newlines).
    * @returns Array of ScanLineResult, one per line, in document order.
@@ -833,9 +829,9 @@ export class ExpressionLexer {
           tokens = [rawToken];
         } else {
           // Scope tokenization to just this line by temporarily restricting len.
-          // The [Symbol.iterator]() generator captures `this.len` at call time,
-          // so creating the iterator AFTER setting this.len = lineEnd ensures
-          // tokenization stops at the line boundary. After tokenization,
+          // tokenizeInto() reads `this.len` once on entry, so setting
+          // this.len = lineEnd first ensures tokenization stops at the line
+          // boundary. After tokenization,
           // this.pos will be at lineEnd (the newline position).
           const savedLen = this.len;
           this.len = lineEnd;
@@ -845,7 +841,7 @@ export class ExpressionLexer {
           // with the raw document.
           if (classification.contentOffset !== undefined) this.pos = classification.contentOffset;
           try {
-            tokens = Array.from(this);
+            this.tokenizeInto(tokens);
           } catch (thrown) {
             // A tokeniser error belongs to this line, the way a parse error
             // already does. Letting it escape aborted the whole scan, so one
@@ -867,7 +863,7 @@ export class ExpressionLexer {
       // ── Detect inline solves ──────────────────────────────────────
       // Two data sources are merged:
       //   1. _inlineSolveSpans, token indices collected inline during
-      //      [Symbol.iterator](). Provides correct startTokenIndex /
+      //      tokenizeInto(). Provides correct startTokenIndex /
       //      endTokenIndex. Also handles \` escape (skips the pair
       //      instead of closing the span early).
       //   2. findInlineSolves(), character-level string scan for
@@ -928,9 +924,7 @@ export class ExpressionLexer {
   /**
    * Tokenize an expression string into an array of Tokens.
    *
-   * Delegates to the lazy [Symbol.iterator]() generator and collects all
-   * yielded tokens via Array.from(). For memory-sensitive use cases, prefer
-   * iterating the lexer directly with for...of to avoid array allocation.
+   * Runs {@link tokenizeInto} into a fresh array.
    *
    * Optimizations:
    *  - CHAR_CLASS jump table (Uint8Array) → switch on small integers
@@ -945,27 +939,30 @@ export class ExpressionLexer {
       this._inlineSolveSpans = [];
       return [this.pendingRawLineToken];
     }
-    return Array.from(this);
+    const out: Token[] = [];
+    this.tokenizeInto(out);
+    return out;
   }
 
-  // ── Lazy iterator ─────────────────────────────────────────────────────
+  // ── Scanner ──────────────────────────────────────────────────────────
   /**
-   * Lazy token-by-token generator. Yields each token without allocating an
-   * intermediate Token[] array. Supports for...of and spread usage.
+   * Scan the current input and append every token to `out`.
    *
-   * Usage:
-   *   for (const t of lexer) { ... }  // lazy, no array allocation
-   *   const tokens = [...lexer];       // materializes via spread
-   *   const tokens = lexer.tokenizeAll(); // materializes via Array.from()
+   * This is the scanner itself: {@link tokenizeAll} and the iterator are
+   * thin wrappers over it. It pushes into an array the caller owns rather
+   * than yielding, because a generator paid a resume per token and
+   * `Array.from` a second pass on top, and because a caller that catches a
+   * tokeniser fault (highlighting a line with an unterminated quote) still
+   * holds the tokens read before it.
    *
-   * IMPORTANT: This generator captures `this.len` ONCE at creation time
-   * (const len = this.len). `scanDocument()` relies on this behavior to
-   * scope tokenization to a single line by temporarily restricting
-   * `this.len` to the line end position before creating the iterator.
-   * Do NOT refactor to re-read `this.len` mid-loop without also updating
-   * `scanDocument()`.
+   * IMPORTANT: `this.len` is read ONCE on entry (const len = this.len).
+   * `scanDocument()` relies on this to scope a pass to a single line by
+   * restricting `this.len` to the line end before calling. Do not re-read
+   * `this.len` mid-loop without also updating `scanDocument()`.
+   *
+   * @param out - The array to append to. Left as it was if the input is empty.
    */
-  *[Symbol.iterator](): Generator<Token, void, undefined> {
+  tokenizeInto(out: Token[]): void {
     const len = this.len;
 
     // ── 0-char fast path ────────────────────────────────────────────────
@@ -983,7 +980,7 @@ export class ExpressionLexer {
 
       switch (cc) {
         case CharClass.DIGIT:
-          yield new LexerToken('NUMBER', TT_NUMBER, this.input, this.input, 0, 0, 1, 1);
+          out.push(new LexerToken('NUMBER', TT_NUMBER, this.input, this.input, 0, 0, 1, 1));
           tokenIndex++;
           break;
 
@@ -991,7 +988,7 @@ export class ExpressionLexer {
           // A lone '.' is a DOT, as the main loop makes it. This case used to
           // share the NUMBER arm above, so a stray dot on a line of its own
           // evaluated to 0 while ". " or "a." reported an error.
-          yield new LexerToken('DOT', TT_DOT, '.', '.', 0, 0, 1, 1);
+          out.push(new LexerToken('DOT', TT_DOT, '.', '.', 0, 0, 1, 1));
           tokenIndex++;
           break;
 
@@ -1000,13 +997,13 @@ export class ExpressionLexer {
           const identLower = input.toLowerCase();
           // Use pre-merged collections (built-in + plugin), single lookup each
           if (this.mergedUnits.has(input)) {
-            yield new LexerToken('UNIT', TT_UNIT, input, input, 0, 0, 1, 1);
+            out.push(new LexerToken('UNIT', TT_UNIT, input, input, 0, 0, 1, 1));
           } else {
             const kwType = this.mergedKeywords.get(identLower);
             if (kwType) {
-              yield new LexerToken(kwType, tokenTypeId(kwType), input, input, 0, 0, 1, 1);
+              out.push(new LexerToken(kwType, tokenTypeId(kwType), input, input, 0, 0, 1, 1));
             } else {
-              yield new LexerToken('IDENT', TT_IDENT, input, input, 0, 0, 1, 1);
+              out.push(new LexerToken('IDENT', TT_IDENT, input, input, 0, 0, 1, 1));
             }
           }
           tokenIndex++;
@@ -1016,7 +1013,7 @@ export class ExpressionLexer {
         case CharClass.OPERATOR: {
           const opType = OP_MAP[c0];
           if (opType) {
-            yield new LexerToken(opType, tokenTypeId(opType), this.input, this.input, 0, 0, 1, 1);
+            out.push(new LexerToken(opType, tokenTypeId(opType), this.input, this.input, 0, 0, 1, 1));
             tokenIndex++;
           }
           break;
@@ -1025,25 +1022,25 @@ export class ExpressionLexer {
         case CharClass.QUOTE:
           // Delegate to tokenizeString for correctness (handles unterminated)
           this.pos = 0;
-          yield this.tokenizeString();
+          out.push(this.tokenizeString());
           tokenIndex++;
           break;
 
         case CharClass.HASH:
           // Delegate to tokenizeComment for correctness
           this.pos = 0;
-          yield this.tokenizeComment();
+          out.push(this.tokenizeComment());
           tokenIndex++;
           break;
 
         case CharClass.DOLLAR:
-          yield new LexerToken('DOLLAR', TT_DOLLAR, '$', '$', 0, 0, 1, 1);
+          out.push(new LexerToken('DOLLAR', TT_DOLLAR, '$', '$', 0, 0, 1, 1));
           tokenIndex++;
           break;
 
         case CharClass.BACKTICK:
           // s` is 2 chars, openSpan can never be set in the 1-char fast path
-          yield new LexerToken('BACKTICK_OPEN', TT_BACKTICK_OPEN, '`', '`', 0, 0, 1, 1);
+          out.push(new LexerToken('BACKTICK_OPEN', TT_BACKTICK_OPEN, '`', '`', 0, 0, 1, 1));
           tokenIndex++;
           break;
 
@@ -1054,56 +1051,56 @@ export class ExpressionLexer {
             // holds no expression, exactly as a line holding one space does.
             // Yielding an IDENT for it made it an undefined variable instead.
           } else if (c0 === 0x00D7) {  // × → STAR
-            yield new LexerToken('STAR', TT_STAR, '\u00D7', '\u00D7', 0, 0, 1, 1);
+            out.push(new LexerToken('STAR', TT_STAR, '\u00D7', '\u00D7', 0, 0, 1, 1));
             tokenIndex++;
           } else if (c0 === 0x00F7) {  // ÷ → SLASH
-            yield new LexerToken('SLASH', TT_SLASH, '\u00F7', '\u00F7', 0, 0, 1, 1);
+            out.push(new LexerToken('SLASH', TT_SLASH, '\u00F7', '\u00F7', 0, 0, 1, 1));
             tokenIndex++;
           } else if (c0 === 0x00B1) {  // U+00B1 plus-minus sign, the uncertainty operator
-            yield new LexerToken('PLUS_MINUS', TT_PLUS_MINUS, '\u00B1', '\u00B1', 0, 0, 1, 1);
+            out.push(new LexerToken('PLUS_MINUS', TT_PLUS_MINUS, '\u00B1', '\u00B1', 0, 0, 1, 1));
             tokenIndex++;
           } else if (c0 === 0x2260) {  // ≠ → NEQ
-            yield new LexerToken('NEQ', TT_NEQ, '\u2260', '\u2260', 0, 0, 1, 1);
+            out.push(new LexerToken('NEQ', TT_NEQ, '\u2260', '\u2260', 0, 0, 1, 1));
             tokenIndex++;
           } else if (c0 === 0x00A3) {  // £
-            yield new LexerToken('POUND', TT_POUND, '\u00A3', '\u00A3', 0, 0, 1, 1);
+            out.push(new LexerToken('POUND', TT_POUND, '\u00A3', '\u00A3', 0, 0, 1, 1));
             tokenIndex++;
           } else if (c0 === 0x20AC) {  // €
-            yield new LexerToken('EURO', TT_EURO, '\u20AC', '\u20AC', 0, 0, 1, 1);
+            out.push(new LexerToken('EURO', TT_EURO, '\u20AC', '\u20AC', 0, 0, 1, 1));
             tokenIndex++;
           } else if (c0 === 0x00A5) {  // ¥
-            yield new LexerToken('YEN', TT_YEN, '¥', '¥', 0, 0, 1, 1);
+            out.push(new LexerToken('YEN', TT_YEN, '¥', '¥', 0, 0, 1, 1));
             tokenIndex++;
           } else if (c0 === 0x20BD) {  // ₽
-            yield new LexerToken('RUBLE', TT_RUBLE, '₽', '₽', 0, 0, 1, 1);
+            out.push(new LexerToken('RUBLE', TT_RUBLE, '₽', '₽', 0, 0, 1, 1));
             tokenIndex++;
           } else if (c0 === 0x20A9) {  // ₩
-            yield new LexerToken('WON', TT_WON, '₩', '₩', 0, 0, 1, 1);
+            out.push(new LexerToken('WON', TT_WON, '₩', '₩', 0, 0, 1, 1));
             tokenIndex++;
           } else if (c0 === 0x20B9) {  // ₹ (Indian rupee) — see uom/CurrencyAliases.ts
-            yield new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₹', '₹', 0, 0, 1, 1);
+            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₹', '₹', 0, 0, 1, 1));
             tokenIndex++;
           } else if (c0 === 0x20BA) {  // ₺ (Turkish lira)
-            yield new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₺', '₺', 0, 0, 1, 1);
+            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₺', '₺', 0, 0, 1, 1));
             tokenIndex++;
           } else if (c0 === 0x20B4) {  // ₴ (Ukrainian hryvnia)
-            yield new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₴', '₴', 0, 0, 1, 1);
+            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₴', '₴', 0, 0, 1, 1));
             tokenIndex++;
           } else if (c0 === 0x20AA) {  // ₪ (Israeli new shekel)
-            yield new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₪', '₪', 0, 0, 1, 1);
+            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₪', '₪', 0, 0, 1, 1));
             tokenIndex++;
           } else if (c0 === 0x20AB) {  // ₫ (Vietnamese dong)
-            yield new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₫', '₫', 0, 0, 1, 1);
+            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₫', '₫', 0, 0, 1, 1));
             tokenIndex++;
           } else if (c0 === 0x20A6) {  // ₦ (Nigerian naira)
-            yield new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₦', '₦', 0, 0, 1, 1);
+            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₦', '₦', 0, 0, 1, 1));
             tokenIndex++;
           } else if (c0 === 0x20B1) {  // ₱ (Philippine peso)
-            yield new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₱', '₱', 0, 0, 1, 1);
+            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₱', '₱', 0, 0, 1, 1));
             tokenIndex++;
           } else if (c0 >= 128) {
             // Unknown unicode, treat as IDENT for forward compatibility
-            yield new LexerToken('IDENT', TT_IDENT, this.input, this.input, 0, 0, 1, 1);
+            out.push(new LexerToken('IDENT', TT_IDENT, this.input, this.input, 0, 0, 1, 1));
             tokenIndex++;
           }
           break;
@@ -1152,7 +1149,7 @@ export class ExpressionLexer {
 
         // ── Digit, inline number tokenizer ───────────────────────────
         case CharClass.DIGIT:
-          yield this.tokenizeNumber();
+          out.push(this.tokenizeNumber());
           tokenIndex++;
           break;
 
@@ -1162,7 +1159,7 @@ export class ExpressionLexer {
           if (token.type === 'INLINE_SOLVE_START') {
             openSpan = { startTokenIndex: tokenIndex, startColumn: token.col };
           }
-          yield token;
+          out.push(token);
           tokenIndex++;
           break;
         }
@@ -1172,15 +1169,15 @@ export class ExpressionLexer {
           if (this.pos + 1 < len) {
             const nextCc = ExpressionLexer.CHAR_CLASS[input.charCodeAt(this.pos + 1)] ?? CharClass.SKIP;
             if (nextCc === CharClass.DIGIT) {
-              yield this.tokenizeNumber();
+              out.push(this.tokenizeNumber());
             } else {
               const col = this.pos - this.lineStartPos + 1;
-              yield new LexerToken('DOT', TT_DOT, '.', '.', this.pos, 0, this.line, col);
+              out.push(new LexerToken('DOT', TT_DOT, '.', '.', this.pos, 0, this.line, col));
               this.pos++;
             }
           } else {
             const col = this.pos - this.lineStartPos + 1;
-            yield new LexerToken('DOT', TT_DOT, '.', '.', this.pos, 0, this.line, col);
+            out.push(new LexerToken('DOT', TT_DOT, '.', '.', this.pos, 0, this.line, col));
             this.pos++;
           }
           tokenIndex++;
@@ -1188,26 +1185,26 @@ export class ExpressionLexer {
 
         // ── Operator / punctuation ────────────────────────────────────
         case CharClass.OPERATOR:
-          yield this.tokenizeOperator();
+          out.push(this.tokenizeOperator());
           tokenIndex++;
           break;
 
         // ── String literal ────────────────────────────────────────────
         case CharClass.QUOTE:
-          yield this.tokenizeString();
+          out.push(this.tokenizeString());
           tokenIndex++;
           break;
 
         // ── Comment (# or //) ─────────────────────────────────────────
         case CharClass.HASH:
-          yield this.tokenizeComment();
+          out.push(this.tokenizeComment());
           tokenIndex++;
           break;
 
         // ── Dollar sign $ ─────────────────────────────────────────────
         case CharClass.DOLLAR: {
           const col = this.pos - this.lineStartPos + 1;
-          yield new LexerToken('DOLLAR', TT_DOLLAR, '$', '$', this.pos, 0, this.line, col);
+          out.push(new LexerToken('DOLLAR', TT_DOLLAR, '$', '$', this.pos, 0, this.line, col));
           this.pos++;
           tokenIndex++;
           break;
@@ -1216,7 +1213,7 @@ export class ExpressionLexer {
         // ── Backtick ` ───────────────────────────────────────────────
         case CharClass.BACKTICK: {
           const col = this.pos - this.lineStartPos + 1;
-          yield new LexerToken('BACKTICK_OPEN', TT_BACKTICK_OPEN, '`', '`', this.pos, 0, this.line, col);
+          out.push(new LexerToken('BACKTICK_OPEN', TT_BACKTICK_OPEN, '`', '`', this.pos, 0, this.line, col));
           this.pos++;
           if (openSpan) {
             const span = openSpan;  // narrow for TS
@@ -1247,74 +1244,74 @@ export class ExpressionLexer {
               this.lineStartPos = this.pos;
             }
           } else if (c0 === 0x00D7) {  // × → STAR
-            yield new LexerToken('STAR', TT_STAR, '\u00D7', '\u00D7', this.pos, 0, this.line, col);
+            out.push(new LexerToken('STAR', TT_STAR, '\u00D7', '\u00D7', this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 === 0x00F7) {  // ÷ → SLASH
-            yield new LexerToken('SLASH', TT_SLASH, '\u00F7', '\u00F7', this.pos, 0, this.line, col);
+            out.push(new LexerToken('SLASH', TT_SLASH, '\u00F7', '\u00F7', this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 === 0x00B1) {  // U+00B1 plus-minus sign, the uncertainty operator
-            yield new LexerToken('PLUS_MINUS', TT_PLUS_MINUS, '\u00B1', '\u00B1', this.pos, 0, this.line, col);
+            out.push(new LexerToken('PLUS_MINUS', TT_PLUS_MINUS, '\u00B1', '\u00B1', this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 === 0x2260) {  // ≠ → NEQ
-            yield new LexerToken('NEQ', TT_NEQ, '\u2260', '\u2260', this.pos, 0, this.line, col);
+            out.push(new LexerToken('NEQ', TT_NEQ, '\u2260', '\u2260', this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 === 0x00A3) {  // £
-            yield new LexerToken('POUND', TT_POUND, '\u00A3', '\u00A3', this.pos, 0, this.line, col);
+            out.push(new LexerToken('POUND', TT_POUND, '\u00A3', '\u00A3', this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 === 0x20AC) {  // €
-            yield new LexerToken('EURO', TT_EURO, '\u20AC', '\u20AC', this.pos, 0, this.line, col);
+            out.push(new LexerToken('EURO', TT_EURO, '\u20AC', '\u20AC', this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 === 0x00A5) {  // ¥
-            yield new LexerToken('YEN', TT_YEN, '¥', '¥', this.pos, 0, this.line, col);
+            out.push(new LexerToken('YEN', TT_YEN, '¥', '¥', this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 === 0x20BD) {  // ₽
-            yield new LexerToken('RUBLE', TT_RUBLE, '₽', '₽', this.pos, 0, this.line, col);
+            out.push(new LexerToken('RUBLE', TT_RUBLE, '₽', '₽', this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 === 0x20A9) {  // ₩
-            yield new LexerToken('WON', TT_WON, '₩', '₩', this.pos, 0, this.line, col);
+            out.push(new LexerToken('WON', TT_WON, '₩', '₩', this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 === 0x20B9) {  // ₹ (Indian rupee) — see uom/CurrencyAliases.ts
-            yield new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₹', '₹', this.pos, 0, this.line, col);
+            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₹', '₹', this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 === 0x20BA) {  // ₺ (Turkish lira)
-            yield new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₺', '₺', this.pos, 0, this.line, col);
+            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₺', '₺', this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 === 0x20B4) {  // ₴ (Ukrainian hryvnia)
-            yield new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₴', '₴', this.pos, 0, this.line, col);
+            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₴', '₴', this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 === 0x20AA) {  // ₪ (Israeli new shekel)
-            yield new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₪', '₪', this.pos, 0, this.line, col);
+            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₪', '₪', this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 === 0x20AB) {  // ₫ (Vietnamese dong)
-            yield new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₫', '₫', this.pos, 0, this.line, col);
+            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₫', '₫', this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 === 0x20A6) {  // ₦ (Nigerian naira)
-            yield new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₦', '₦', this.pos, 0, this.line, col);
+            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₦', '₦', this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 === 0x20B1) {  // ₱ (Philippine peso)
-            yield new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₱', '₱', this.pos, 0, this.line, col);
+            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₱', '₱', this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 >= 128) {
             // Unknown unicode, treat as IDENT for forward compatibility.
             // tokenizeIdentifier() now includes cc >= 128 in its reading loop,
             // so this properly advances past all consecutive Unicode chars.
-            yield this.tokenizeIdentifier();
+            out.push(this.tokenizeIdentifier());
             tokenIndex++;
           } else {
             // Unknown ASCII, silently skip
@@ -1325,6 +1322,21 @@ export class ExpressionLexer {
       }
     }
     this._inlineSolveSpans = collectedSpans;
+  }
+
+  /**
+   * Iterate the tokens of the current input.
+   *
+   * Runs {@link tokenizeInto} first, so the tokens are the same as before,
+   * but a fault part way through the line is thrown from the first
+   * `next()` rather than at the token it occurred on. A caller that wants
+   * the tokens read before a fault calls {@link tokenizeInto} with its own
+   * array.
+   */
+  *[Symbol.iterator](): Generator<Token, void, undefined> {
+    const out: Token[] = [];
+    this.tokenizeInto(out);
+    yield* out;
   }
 
   // ── Inline number tokenizer ────────────────────────────────────────────

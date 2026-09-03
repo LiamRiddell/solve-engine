@@ -32,15 +32,12 @@ export class Lexer {
 
   /**
    * @param localeCode - Locale code (e.g., "en", "de"). Defaults to "en".
-   * @param tokenLookup - Optional TokenLookup from TokenClassRegistry.
-   *   When provided, configures ExpressionLexer to use registry-built
-   *   keyword/unit/phrase lookups instead of internal instance maps.
+   * @param _tokenLookup - Ignored. The lexer never read the lookup it was
+   *   handed; the parameter stays so existing callers compile.
+   *   @deprecated Removed in 3.0.
    */
-  constructor(localeCode = "en", tokenLookup?: TokenLookup) {
-    // Pass the lookup directly to ExpressionLexer's constructor, it's an
-    // instance field now, not a static. Each Lexer instance gets its own
-    // isolated lookup, preventing cross-instance corruption.
-    this.expressionLexer = new ExpressionLexer(localeCode, tokenLookup);
+  constructor(localeCode = "en", _tokenLookup?: TokenLookup) {
+    this.expressionLexer = new ExpressionLexer(localeCode);
   }
 
   reset(input: string, state?: LexerState): void {
@@ -205,27 +202,28 @@ export class Lexer {
   }
 
   private collectTokenObjects(lineText: string): Token[] {
-    // Driven token by token off the scanner rather than through
-    // resetExpression(), which tokenises the whole line up front and so has
-    // nothing to hand back when the line faults part way. Highlighting is
-    // painted while the line is still being typed, and an unterminated string
-    // is what a line looks like between the opening quote and the closing one:
-    // the tokens read before the fault are the right thing to paint, and
-    // letting the throw escape blanked the line.
+    // Scanned into an array this method owns rather than through
+    // resetExpression(), which has nothing to hand back when the line faults
+    // part way. Highlighting is painted while the line is still being typed,
+    // and an unterminated string is what a line looks like between the
+    // opening quote and the closing one: the tokens read before the fault are
+    // the right thing to paint, and letting the throw escape blanked the line.
     this.currentState = LexerState.Main;
     this.hasPeeked = false;
     this.peekedToken = undefined;
     this.expressionLexer.reset(lineText);
-    const result: Token[] = [];
+    const raw: Token[] = [];
     try {
-      for (const token of this.expressionLexer) {
-        if (token.type === "WS" || token.type === "NEWLINE") continue;
-        if (token.type.startsWith("MD_")) continue;
-        if (token.type === "INLINE_SOLVE_START" || token.type === "BACKTICK_CLOSE") continue;
-        result.push(token);
-      }
+      this.expressionLexer.tokenizeInto(raw);
     } catch (thrown) {
       if (!(thrown instanceof EngineError)) throw thrown;
+    }
+    const result: Token[] = [];
+    for (const token of raw) {
+      if (token.type === "WS" || token.type === "NEWLINE") continue;
+      if (token.type.startsWith("MD_")) continue;
+      if (token.type === "INLINE_SOLVE_START" || token.type === "BACKTICK_CLOSE") continue;
+      result.push(token);
     }
     this.tokens = result;
     this.tokenIdx = 0;

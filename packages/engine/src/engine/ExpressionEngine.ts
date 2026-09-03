@@ -72,7 +72,6 @@ import {
     checkExpressionComplexity,
     extractReadsAndWrites,
 } from "@solve-js/engine/ExpressionEngineSafety";
-import { buildTokenLookup } from "@solve-js/lexer/tokenRegistration";
 import { containsSymbolicCall } from "@solve-js/packages/symbolic";
 import { solveEquationValues } from "@solve-js/vm/SymbolicOps";
 import { abortLogger } from "@solve-js/utilities/AbortControllerLogger";
@@ -722,7 +721,7 @@ export class ExpressionEngine {
         // used to silently replace the WHOLE section, dropping every other
         // field in it back to `undefined` instead of keeping its default.
         this.config = mergeEngineConfig(DEFAULT_CONFIG, config ?? {});
-        this.lexer = new Lexer(locale, buildTokenLookup(locale));
+        this.lexer = new Lexer(locale);
         this.registry = new ParseletRegistry();
         // Before the package loop below, which registers plugin functions into it.
         // Carries the network switch too, since the VM is where a conversion
