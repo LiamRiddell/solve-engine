@@ -14,7 +14,7 @@ multiplies like any other measurement.
 The speed of light and the acceleration of gravity carry their units:
 
 ```solve
-speed of light // 299792458.00 m/s
+speed of light // 299,792,458.00 m/s
 gravity // 9.81 m/s²
 ```
 
@@ -24,7 +24,7 @@ a mass is a force, and it reads out in newtons through the
 
 ```solve
 gravity * 70 kg as N // 686.47 N
-speed of light in km/h // 1079252848.80 km/h
+speed of light in km/h // 1,079,252,848.80 km/h
 ```
 
 ## Mathematical constants

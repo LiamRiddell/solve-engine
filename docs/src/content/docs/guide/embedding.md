@@ -31,6 +31,12 @@ const engine = createEngine({
 `config` is an `EngineConfigOverride`, merged per section over the defaults: name
 only the fields you change and every other field keeps its default.
 
+One section is a policy rather than a limit: `network.enabled`, on by default,
+is the switch a host uses to stop every live-data fetch (weather, currency, and
+any package resolver). With it off, those forms answer with an error naming the
+setting instead of making a request. See
+[switching live data off](/guide/async-and-live-data/#switching-live-data-off).
+
 Safety limits exist because the engine is designed to run on untrusted input as
 someone types. They bound expression length, parse complexity, instruction
 count, stack depth, and how many elements a range or matrix may be expanded to

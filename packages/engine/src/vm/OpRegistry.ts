@@ -140,15 +140,28 @@ export class OpRegistry {
  * and abort signal management for async cancellation.
  */
 export interface VM {
+	/**
+	 * Push a value.
+	 *
+	 * @throws `STACK_LIMIT_EXCEEDED` (EXECUTION) when the stack is already at
+	 *   `maxStackDepth`. It used to drop the value silently, so a handler's
+	 *   result vanished and the next opcode read whatever lay beneath.
+	 */
 	push(value: Value): void;
+	/**
+	 * Pop the top of the stack.
+	 *
+	 * @throws `STACK_UNDERFLOW` (INTERNAL) if the stack is empty. It used to
+	 *   answer with a plain `0`, which is indistinguishable from a real zero
+	 *   and turned a mismatched push/pop count into a wrong number.
+	 */
 	pop(): Value;
 	/**
 	 * Pop the top of the stack as a number.
 	 *
-	 * @throws `STACK_UNDERFLOW` (INTERNAL) if the stack is empty. Unlike
-	 *   `pop()`, which answers an empty stack with `0`, this reports it: a
-	 *   handler asking for a number has no way to tell that `0` from a real
-	 *   one. Every Value converts, so there is no operand-type throw here.
+	 * @throws `STACK_UNDERFLOW` (INTERNAL) if the stack is empty, exactly as
+	 *   `pop()` does. Every Value converts, so there is no operand-type throw
+	 *   here.
 	 */
 	popNumber(): number;
 	/**

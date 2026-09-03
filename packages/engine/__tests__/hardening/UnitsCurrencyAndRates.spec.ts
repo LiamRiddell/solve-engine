@@ -228,7 +228,7 @@ describe("rate arithmetic", () => {
 		// Checked against the arithmetic rather than against the display: three
 		// days at a hundred an hour is seventy-two hours of work.
 		expect(display("$100/hour * 3 hours")).toBe("$300.00");
-		expect(display("$100/hour * 1 day")).toBe("$2400.00");
+		expect(display("$100/hour * 1 day")).toBe("$2,400.00");
 		expect(display("$100/hour * 90 minutes")).toBe("$150.00");
 		expect(display("60 km/h * 2 h")).toBe("120.00 km");
 		expect(display("10 m/s * 5 s")).toBe("50.00 m");
@@ -236,7 +236,7 @@ describe("rate arithmetic", () => {
 
 	test("and by a quantity of whatever it is denominated in", () => {
 		expect(display("$2/kg * 3 kg")).toBe("$6.00");
-		expect(display("$100/m2 * 50 m2")).toBe("$5000.00");
+		expect(display("$100/m2 * 50 m2")).toBe("$5,000.00");
 		expect(display("10 km/l * 50 l")).toBe("500.00 km");
 	});
 
@@ -253,7 +253,7 @@ describe("rate arithmetic", () => {
 	});
 
 	test("a rate scales by a bare number and keeps its period", () => {
-		expect(display("$100/hour * 24")).toBe("2400.00 USD/hour");
+		expect(display("$100/hour * 24")).toBe("2,400.00 USD/hour");
 		expect(display("$100/hour / 4")).toBe("25.00 USD/hour");
 		expect(display("$100/hour + $100/hour")).toBe("200.00 USD/hour");
 	});

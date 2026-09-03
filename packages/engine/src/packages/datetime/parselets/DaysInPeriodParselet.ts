@@ -4,26 +4,22 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { daysInMonth } from "@solve-js/utilities/Calendar";
 
 /** VMBuiltins.ts index for labelling a count as days. */
 const DAYS_COUNT_BUILTIN = 93;
 
-/** Quarters, as their first and last month numbers. */
+/** Quarters, as their first and last zero-based month indices (January is 0). */
 const QUARTERS: Record<string, readonly [number, number]> = {
-	q1: [1, 3],
-	q2: [4, 6],
-	q3: [7, 9],
-	q4: [10, 12],
+	q1: [0, 2],
+	q2: [3, 5],
+	q3: [6, 8],
+	q4: [9, 11],
 };
 
-/** Days in a month, honouring leap years. */
-function daysInMonth(year: number, month: number): number {
-	return new Date(year, month, 0).getDate();
-}
-
-/** Days in a whole year. */
+/** Days in a whole year: 366 when February has its 29th. */
 function daysInYear(year: number): number {
-	return daysInMonth(year, 2) === 29 ? 366 : 365;
+	return daysInMonth(year, 1) === 29 ? 366 : 365;
 }
 
 /**
@@ -82,7 +78,7 @@ export class DaysInPeriodParselet implements PrefixParselet {
 		if (next?.type === "DATETIME_LITERAL") {
 			parser.consume();
 			const date = new Date(Number(next.value));
-			return daysInMonth(date.getFullYear(), date.getMonth() + 1);
+			return daysInMonth(date.getFullYear(), date.getMonth());
 		}
 
 		// `days in 2024`, a bare year.

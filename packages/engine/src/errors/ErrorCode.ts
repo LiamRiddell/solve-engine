@@ -107,6 +107,8 @@ export const CoreErrorCodes = {
   INTERNAL_MISSING_FUNCTION_BODY: "INTERNAL_MISSING_FUNCTION_BODY",
   /** `MAP_INVOKE`/`REDUCE_INVOKE`'s anonymous-body-index lookup failing. Same class as `INTERNAL_MISSING_FUNCTION_BODY` above, for the `anonymousBodies` side-table instead of `userFunctionBodies`. */
   INTERNAL_MISSING_ANONYMOUS_BODY: "INTERNAL_MISSING_ANONYMOUS_BODY",
+  /** `CALL_BUILTIN` naming an index no builtin is registered at. It used to pop its arguments and push nothing, so the opcode after it read a neighbour's operand as its own; now an Error value on the stack, the shape `map`/`reduce` already used for the same fault. Bytecode-level, so unreachable from source without a compiler or snapshot fault. */
+  UNKNOWN_BUILTIN_FUNCTION: "UNKNOWN_BUILTIN_FUNCTION",
 
   // ── Malformed bytecode on the public `./vm` surface (vm/VM.ts) ──
   //
@@ -184,6 +186,8 @@ export const CoreErrorCodes = {
   UNKNOWN_SAVINGS_PERIOD: "UNKNOWN_SAVINGS_PERIOD",
   /** Colon-separated numbers that are not a time any clock can show ("24:00", "9:60", "100:5"). Raised by the labeled-line fallback, which used to answer them with whatever stood after the colon. */
   INVALID_TIME_LITERAL: "INVALID_TIME_LITERAL",
+  /** A live-data form evaluated on an engine whose host switched the network off (`network.enabled: false`, see `constants/Configuration.ts`'s `NetworkConfig`). A recoverable Error value, raised by the VM for a currency conversion with no primed rate and for a plugin function that returned a promise, and by `createQueryResolver`'s plugin function when its preflight was skipped. Names the setting, so the reader knows it is policy rather than an outage. */
+  NETWORK_DISABLED: "NETWORK_DISABLED",
 
   // ── Snapshot / restore (engine/EngineSnapshot.ts, engine/ExpressionEngine.ts) ──
   /** `fromJSON()` handed an object that is not a snapshot at all, or whose serialised-shape version does not match this engine's reader. The versioning gate that refuses an incompatible snapshot clearly rather than restoring it wrongly. See `engine/EngineSnapshot.ts`'s `assertRestorable()`. */

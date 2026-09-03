@@ -248,7 +248,7 @@ describe("unitOfMeasurementResult", () => {
 	 * and the settings object no longer carries a switch that claims otherwise.
 	 */
 	test("a unit is written as its symbol, and there is no setting claiming otherwise", () => {
-		expect(formatValue(uomValue(3000, "km"))).toBe("= 3000.00 km");
+		expect(formatValue(uomValue(3000, "km"))).toBe("= 3,000.00 km");
 		expect("unitNames" in DEFAULT_FORMATTING_SETTINGS.unitOfMeasurementResult).toBe(false);
 	});
 });

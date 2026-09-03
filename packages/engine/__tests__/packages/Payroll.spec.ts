@@ -57,7 +57,7 @@ describe("the grammar", () => {
 	test("a salary keeps its currency", () => {
 		const v = newTrackedEngine().evaluateExpression("£50,000 salary after tax");
 		expect(v.type).toBe(ValueType.Uom);
-		expect(shown("£50,000 salary after tax")).toBe("£39519.60");
+		expect(shown("£50,000 salary after tax")).toBe("£39,519.60");
 	});
 
 	test("`per month after tax` is the monthly take-home", () => {

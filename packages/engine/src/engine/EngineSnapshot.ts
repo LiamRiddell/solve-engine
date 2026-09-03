@@ -404,7 +404,12 @@ export function deserializeUserFunction(fn: SerializedUserFunction): UserFunctio
  *   straight from `JSON.parse` of untrusted storage.
  * @returns The same object, narrowed to {@link EngineSnapshot}, when it passes.
  * @throws {@link SnapshotErrorCodes.SNAPSHOT_VERSION_MISMATCH} when the envelope
- *   is absent or its version differs from {@link SNAPSHOT_VERSION}.
+ *   is absent or its version differs from {@link SNAPSHOT_VERSION}, and
+ *   {@link SnapshotErrorCodes.SNAPSHOT_MALFORMED} when the envelope is right
+ *   but a field inside it is not the shape the format promises: an opcode
+ *   outside a byte, a constant pool holding the wrong type, a matrix whose
+ *   data does not match its dimensions, or bodies nested past the cap. The
+ *   error names the path to the field.
  */
 export function assertRestorable(snapshot: unknown): asserts snapshot is EngineSnapshot {
 	if (typeof snapshot !== "object" || snapshot === null) {
@@ -436,4 +441,199 @@ export function assertRestorable(snapshot: unknown): asserts snapshot is EngineS
 			context: { snapshotVersion: candidate.version, readerVersion: SNAPSHOT_VERSION, engineVersion: candidate.engineVersion },
 		});
 	}
+
+	assertSnapshotBody(snapshot as Record<string, unknown>);
+}
+
+// ── Body validation ─────────────────────────────────────────────────────────
+//
+// The envelope check above says "this is a snapshot of the right version". It
+// says nothing about what is inside, and until this section existed nothing
+// did: the opcodes, constant pools and nested bodies went straight into an
+// executable program on trust. A snapshot typically arrives from storage the
+// host does not fully control, so its contents are caller input in exactly
+// the way an expression string is, and are checked the same way: refused by
+// name, with the path to the offending field, before any of it runs.
+
+/**
+ * How deeply function and transform bodies may nest inside one another. The
+ * compiler produces a handful of levels at most (a map body inside a user
+ * function inside a map body); a crafted snapshot could nest without limit and
+ * overflow the native stack in {@link deserializeBytecode} before any VM limit
+ * is consulted. Thirty-two is far past anything real.
+ */
+const MAX_BODY_DEPTH = 32;
+
+function describeFound(value: unknown): string {
+	if (value === null) return "null";
+	if (Array.isArray(value)) return `an array of ${value.length}`;
+	if (typeof value === "object") return "an object";
+	return `${typeof value} ${JSON.stringify(value)}`.slice(0, 80);
+}
+
+function malformed(where: string, expected: string, found: unknown): never {
+	throw ErrorFactory.validation({
+		code: SnapshotErrorCodes.SNAPSHOT_MALFORMED,
+		message: `Snapshot is malformed at ${where}: expected ${expected}.`,
+		expected,
+		found: describeFound(found),
+		suggestion: "Regenerate the snapshot with ExpressionEngine.toJSON(), or re-evaluate the document from source.",
+		context: { location: where },
+	});
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isSerializedNumber(value: unknown): boolean {
+	return typeof value === "number" || value === "NaN" || value === "Infinity" || value === "-Infinity";
+}
+
+function isIntegerString(value: unknown): boolean {
+	return typeof value === "string" && /^-?\d+$/.test(value);
+}
+
+function assertStringArray(value: unknown, where: string): void {
+	if (!Array.isArray(value) || !value.every((s) => typeof s === "string")) malformed(where, "an array of strings", value);
+}
+
+function assertDecimalShape(value: unknown, where: string): void {
+	if (!isRecord(value) || !isIntegerString(value.coef) || typeof value.scale !== "number") {
+		malformed(where, "a decimal as { coef: digits, scale: number }", value);
+	}
+}
+
+function assertRationalShape(value: unknown, where: string): void {
+	if (!isRecord(value) || !isIntegerString(value.n) || !isIntegerString(value.d)) {
+		malformed(where, "a rational as { n: digits, d: digits }", value);
+	}
+}
+
+/**
+ * Check one serialised value against its type tag, so {@link deserializeValue}
+ * never meets a field of the wrong kind: `BigInt("abc")` throws a raw
+ * SyntaxError, and a matrix whose `data` is shorter than `rows × cols` would
+ * be read past its end.
+ */
+function assertValueShape(sv: unknown, where: string): void {
+	if (!isRecord(sv)) malformed(where, "a serialised value object", sv);
+	switch (sv.t) {
+		case ValueType.Number:
+			if (!isSerializedNumber(sv.v)) malformed(`${where}.v`, "a number", sv.v);
+			if (sv.exact !== undefined) assertDecimalShape(sv.exact, `${where}.exact`);
+			if (sv.rational !== undefined) assertRationalShape(sv.rational, `${where}.rational`);
+			return;
+		case ValueType.Hex:
+			if (sv.big ? !isIntegerString(sv.v) : !isSerializedNumber(sv.v)) {
+				malformed(`${where}.v`, sv.big ? "an integer string" : "a number", sv.v);
+			}
+			if (sv.base !== undefined && typeof sv.base !== "string") malformed(`${where}.base`, "a base name", sv.base);
+			return;
+		case ValueType.BigInt:
+			if (!isIntegerString(sv.v)) malformed(`${where}.v`, "an integer string", sv.v);
+			return;
+		case ValueType.String:
+			if (typeof sv.v !== "string") malformed(`${where}.v`, "a string", sv.v);
+			return;
+		case ValueType.Datetime:
+		case ValueType.Percentage:
+			if (!isSerializedNumber(sv.v)) malformed(`${where}.v`, "a number", sv.v);
+			return;
+		case ValueType.Uom:
+			if (!isSerializedNumber(sv.v)) malformed(`${where}.v`, "a number", sv.v);
+			if (typeof sv.unit !== "string") malformed(`${where}.unit`, "a unit name", sv.unit);
+			if (sv.exact !== undefined) assertDecimalShape(sv.exact, `${where}.exact`);
+			return;
+		case ValueType.Matrix: {
+			const { rows, cols, data } = sv;
+			if (!Number.isInteger(rows) || (rows as number) < 0) malformed(`${where}.rows`, "a non-negative integer", rows);
+			if (!Number.isInteger(cols) || (cols as number) < 0) malformed(`${where}.cols`, "a non-negative integer", cols);
+			if (!Array.isArray(data) || data.length !== (rows as number) * (cols as number)) {
+				malformed(`${where}.data`, `an array of ${rows} × ${cols} cells`, data);
+			}
+			if (!data.every((cell) => typeof cell === "boolean" || isSerializedNumber(cell))) {
+				malformed(`${where}.data`, "numeric or boolean cells", data);
+			}
+			return;
+		}
+		case ValueType.Range:
+			if (!isSerializedNumber(sv.min) || !isSerializedNumber(sv.max)) malformed(where, "a range with numeric min and max", sv);
+			return;
+		case ValueType.Boolean:
+			if (typeof sv.v !== "boolean") malformed(`${where}.v`, "a boolean", sv.v);
+			return;
+		case ValueType.Error:
+			if (typeof sv.code !== "string" || typeof sv.message !== "string") malformed(where, "an error with a string code and message", sv);
+			return;
+		default:
+			// deserializeValue() names an unknown tag itself; this vouches only
+			// for the shapes it does understand.
+			return;
+	}
+}
+
+/** Check a serialised program, recursively through its nested bodies, with the nesting capped at {@link MAX_BODY_DEPTH}. */
+function assertBytecodeShape(sb: unknown, where: string, depth: number): void {
+	if (depth > MAX_BODY_DEPTH) malformed(where, `function bodies nested at most ${MAX_BODY_DEPTH} deep`, "deeper nesting");
+	if (!isRecord(sb)) malformed(where, "a serialised program object", sb);
+	if (!Array.isArray(sb.opcodes) || !sb.opcodes.every((op) => Number.isInteger(op) && op >= 0 && op <= 255)) {
+		malformed(`${where}.opcodes`, "an array of bytes (integers 0 to 255)", sb.opcodes);
+	}
+	if (!Array.isArray(sb.numbers) || !sb.numbers.every(isSerializedNumber)) malformed(`${where}.numbers`, "an array of numbers", sb.numbers);
+	assertStringArray(sb.strings, `${where}.strings`);
+	if (typeof sb.hasAsync !== "boolean") malformed(`${where}.hasAsync`, "a boolean", sb.hasAsync);
+	if (sb.constants !== undefined) {
+		const isPair = (pair: unknown) => Array.isArray(pair) && pair.length === 2 && typeof pair[0] === "number" && typeof pair[1] === "number";
+		if (!Array.isArray(sb.constants) || !sb.constants.every(isPair)) malformed(`${where}.constants`, "an array of [number, number] pairs", sb.constants);
+	}
+	if (sb.userFunctionBodies !== undefined) {
+		if (!Array.isArray(sb.userFunctionBodies)) malformed(`${where}.userFunctionBodies`, "an array of functions", sb.userFunctionBodies);
+		sb.userFunctionBodies.forEach((fn, i) => assertUserFunctionShape(fn, `${where}.userFunctionBodies[${i}]`, depth + 1));
+	}
+	if (sb.anonymousBodies !== undefined) {
+		if (!Array.isArray(sb.anonymousBodies)) malformed(`${where}.anonymousBodies`, "an array of bodies", sb.anonymousBodies);
+		sb.anonymousBodies.forEach((body, i) => {
+			const at = `${where}.anonymousBodies[${i}]`;
+			if (!isRecord(body)) malformed(at, "a body object", body);
+			assertStringArray(body.params, `${at}.params`);
+			assertBytecodeShape(body.program, `${at}.program`, depth + 1);
+		});
+	}
+}
+
+function assertUserFunctionShape(fn: unknown, where: string, depth: number): void {
+	if (!isRecord(fn)) malformed(where, "a function object", fn);
+	if (typeof fn.name !== "string") malformed(`${where}.name`, "a function name", fn.name);
+	assertStringArray(fn.params, `${where}.params`);
+	assertBytecodeShape(fn.program, `${where}.program`, depth);
+}
+
+/** Check everything inside the envelope, so a corrupted or crafted snapshot is refused by name before any of it is executed. */
+function assertSnapshotBody(candidate: Record<string, unknown>): void {
+	if (candidate.locale !== undefined && typeof candidate.locale !== "string") malformed("locale", "a locale code", candidate.locale);
+	if (!isRecord(candidate.variables)) malformed("variables", "an object of values by name", candidate.variables);
+	for (const [name, sv] of Object.entries(candidate.variables)) assertValueShape(sv, `variables.${name}`);
+
+	if (!Array.isArray(candidate.userFunctions)) malformed("userFunctions", "an array of functions", candidate.userFunctions);
+	candidate.userFunctions.forEach((fn, i) => assertUserFunctionShape(fn, `userFunctions[${i}]`, 1));
+
+	if (!Array.isArray(candidate.lineCache)) malformed("lineCache", "an array of cached lines", candidate.lineCache);
+	candidate.lineCache.forEach((entry, i) => {
+		const at = `lineCache[${i}]`;
+		if (!isRecord(entry)) malformed(at, "a cached line", entry);
+		if (!Number.isInteger(entry.line)) malformed(`${at}.line`, "a line number", entry.line);
+		if (typeof entry.expression !== "string") malformed(`${at}.expression`, "the line's expression text", entry.expression);
+		assertValueShape(entry.result, `${at}.result`);
+		assertBytecodeShape(entry.bytecode, `${at}.bytecode`, 1);
+		assertStringArray(entry.reads, `${at}.reads`);
+		if (entry.writeVar !== null && typeof entry.writeVar !== "string") malformed(`${at}.writeVar`, "a variable name or null", entry.writeVar);
+	});
+
+	if (!Array.isArray(candidate.bytecodeCache)) malformed("bytecodeCache", "an array of compiled expressions", candidate.bytecodeCache);
+	candidate.bytecodeCache.forEach((cached, i) => {
+		const at = `bytecodeCache[${i}]`;
+		if (!isRecord(cached) || typeof cached.expression !== "string") malformed(at, "an { expression, program } pair", cached);
+		assertBytecodeShape(cached.program, `${at}.program`, 1);
+	});
 }

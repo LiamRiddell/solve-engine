@@ -23,6 +23,7 @@ import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
+import { daysInMonth } from "@solve-js/utilities/Calendar";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 
 /**
@@ -113,10 +114,18 @@ export function createVM(
     const scalarEquations = new Map<string, ScalarEquationDef>();
 
     return {
+      /**
+       * Push, refusing to grow past `maxStackDepth`. This used to drop the
+       * value silently once the stack was full, so a handler's result simply
+       * vanished and the opcode after it read whatever lay beneath. The
+       * dispatch loop's own between-opcode check throws the same code for the
+       * same condition; a push from a package handler now reports it too.
+       */
       push(v: Value) {
-        if (stack.length < maxStackDepth) {
-          stack.push(v);
+        if (stack.length >= maxStackDepth) {
+          throw ErrorFactory.execution("STACK_LIMIT_EXCEEDED", `Execution exceeded maximum stack depth of ${maxStackDepth}`);
         }
+        stack.push(v);
       },
       getMaxStackDepth() { return maxStackDepth; },
       getMaxCollectionSize() { return maxCollectionSize; },
@@ -128,12 +137,13 @@ export function createVM(
       // unconfigured working-day arithmetic weekends-only. See
       // vm/BusinessDays.ts, the only reader.
       isHoliday(epochMs: number) { return holidayPredicate ? holidayPredicate(epochMs) : false; },
-      pop() {
-        if (stack.length === 0) {
-          return numberValue(0);
-        }
-        return stack.pop()!;
-      },
+      /**
+       * Popped through `safePop()`, like the two typed pops below. An empty
+       * stack used to answer with a plain `0`, which is indistinguishable from
+       * a real zero and turned a mismatched push/pop count in a package's
+       * handler into a wrong number rather than a report.
+       */
+      pop() { return safePop(stack); },
       /**
        * Popped through `safePop()` for the same reason as `popString()` below.
        * Only the underflow half applies here: `toNumber()` is a real method on
@@ -267,6 +277,13 @@ export interface Bytecode {
 export interface LineExecutionContext {
     /** 1-based current line number, or -1 when there is no real document (see class doc above). */
     lineIndex: number;
+    /**
+     * Whether this engine may fetch live data (`network.enabled`). A plugin
+     * function that reads a resolver's cache uses it to say "live data is
+     * switched off" when the cache is empty, rather than the "not preflighted"
+     * message that describes a different fault. Absent means enabled.
+     */
+    networkEnabled?: boolean;
     /** Look up another line's cached result by 1-based line number. `undefined` = not evaluated yet (or out of range), distinct from a line that evaluated to an actual `undefined`-like Value, which can't happen (every Value type has a concrete representation). */
     getLineResult?: (lineNumber: number) => Value | undefined;
     /** Whether line `lineNumber` is a blank line or a `#` heading, the stopping condition for "total above"/"sum above"/"average above" aggregation. */
@@ -409,6 +426,23 @@ function matrixPowerCells(m: MatrixData, exponent: number): number {
  * but only ever built a backstop against stack GROWTH; underflow had none.
  * Caught for free by `executeBytecode()`'s new outer try/catch.
  */
+/**
+ * The Error value a currency conversion pushes when it has no rate to use.
+ *
+ * Two different situations arrive here and deserve different words. With the
+ * network on, the rate genuinely is not there (the fetch failed, or an
+ * unrecognised pair), which is what "unavailable" says. With the network off,
+ * the host chose not to fetch, and telling the reader the rate is unavailable
+ * would send them looking for an outage that does not exist; naming the
+ * setting is what lets them act.
+ */
+function rateUnavailable(vm: VM, fromUnit: string, toUnit: string): Value {
+    if (vm.context.networkEnabled) {
+        return errorValue("CURRENCY_RATE_UNAVAILABLE", `No exchange rate available for ${fromUnit} to ${toUnit}`);
+    }
+    return errorValue("NETWORK_DISABLED", `No exchange rate for ${fromUnit} to ${toUnit}: live data is switched off for this engine (network.enabled is false)`);
+}
+
 function safePop(stack: Value[]): Value {
     if (stack.length === 0) {
         throw ErrorFactory.internal({
@@ -1148,13 +1182,6 @@ const CALENDAR_MONTHS_PER_UNIT: Record<string, number> = {
     century: 1200, centuries: 1200,
     millennium: 12000, millennia: 12000,
 };
-
-/** Days in calendar month `monthIndex` (0-11) of `year`. Day zero of the
- *  following month is the last day of this one, which is also how the leap
- *  year rule gets applied without restating it. */
-function daysInMonth(year: number, monthIndex: number): number {
-    return new Date(year, monthIndex + 1, 0).getDate();
-}
 
 /**
  * Move `epochMs` by `days` calendar days, holding the local wall-clock time.
@@ -2616,17 +2643,28 @@ export function executeBytecode(
           if (pluginArgFault) {
             stack.push(pluginArgFault);
           } else if (!fn) {
-            stack.push(numberValue(0));
+            // An index nothing is registered at is a package or snapshot
+            // fault, never the reader's line. This used to push a plain 0,
+            // which read as the function's answer.
+            stack.push(errorValue("UNKNOWN_PLUGIN_FUNCTION", `Plugin function index ${fnIdx} is not registered with this engine`));
           } else {
             const result = fn(args, context);
             if (result instanceof Promise) {
+              if (!vm.context.networkEnabled) {
+                // The function has already run, so a request it started
+                // cannot be recalled; what the engine can do is refuse to
+                // wait for it. The `.catch` keeps a rejection of the
+                // discarded promise from surfacing as an unhandled one.
+                result.catch(() => undefined);
+                stack.push(errorValue("NETWORK_DISABLED", "Live data is switched off for this engine (network.enabled is false), so the result of this call was not awaited"));
+                break;
+              }
               // Return pending result, no throw. The orchestrator checks
               // result.type and handles async resolution outside the VM.
-              // The pluginId + domain are embedded in the cache key format:
-              //   {pluginId}:{domain}:{fnIdx}:{hash(args)}
-              // We use a deterministic key from fnIdx + args for now;
-              // the engine scopes it by pluginId before storing.
-              const cacheKey = `plugin:${fnIdx}:${args.map(a => String(a.value ?? '')).join('|')}`;
+              // The key names the type and unit of each argument as well as
+              // its value, so the number 5, the text "5" and a quantity of 5
+              // of something do not share one cached answer.
+              const cacheKey = `plugin:${fnIdx}:${args.map(a => `${a.type}:${String(a.value ?? '')}${a.unit ? `:${a.unit}` : ''}`).join('|')}`;
               // activeSignal must be set by the engine before calling executeBytecode.
               // If it's not (bug), we use a new signal that will never abort
               // this is a safety net, not the expected path.
@@ -2682,6 +2720,11 @@ export function executeBytecode(
             // expression containing unknowns, so they run their own handler.
             const routeSymbolically = sawSymbolic && !SYMBOLIC_NATIVE_BUILTINS.has(fnIdx);
             stack.push(routeSymbolically ? symbolicBuiltin(fnIdx, ordered) : fn(ordered));
+          } else {
+            // The arguments are gone and nothing replaced them, which used to
+            // leave the next opcode reading a neighbour's operand as its own.
+            // The same Error value `map`/`reduce` already answer with.
+            stack.push(errorValue("UNKNOWN_BUILTIN_FUNCTION", `Builtin function index ${fnIdx} is not registered`));
           }
           break;
         }
@@ -3012,7 +3055,7 @@ export function executeBytecode(
               // displaying as "450.00 EUR", which reads as a successful
               // no-op rather than the missing-data case it actually is.
               // An Error value makes the failure visible instead.
-              stack.push(errorValue("CURRENCY_RATE_UNAVAILABLE", `No exchange rate available for ${fromUnit} to ${toUnit}`));
+              stack.push(rateUnavailable(vm, fromUnit, toUnit));
             }
           } else {
             // A rate or speed spelling ("km/h", "m/s", "mph") has no single
@@ -3070,7 +3113,7 @@ export function executeBytecode(
                 // See the matching comment in UOM_CONVERT_TO, pushing the
                 // original value here would silently pass off a missing
                 // exchange rate as a successful (non-)conversion.
-                stack.push(errorValue("CURRENCY_RATE_UNAVAILABLE", `No exchange rate available for ${fromUnit} to ${toUnit}`));
+                stack.push(rateUnavailable(vm, fromUnit, toUnit));
               }
             } else {
               // Rate or speed conversion, "(120 km / 2 hours) in kph". See the

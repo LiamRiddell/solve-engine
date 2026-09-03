@@ -13,6 +13,12 @@
  * - Round-robin dispatch distributes batches evenly across workers.
  * - Workers are terminated on pool.clear() (engine clear) and recreated
  *   lazily on next dispatch.
+ * - A worker that hangs past the batch timeout, or that raises an error, is
+ *   terminated and replaced in place, and every batch it was holding resolves
+ *   to one Error result per line. It used to stay in the rotation with its
+ *   batches answered as empty arrays, so one bad input degraded a quarter of
+ *   the pool for the rest of the process and a crash was indistinguishable
+ *   from "nothing to report".
  * - Falls back to synchronous main-thread execution when Worker is
  *   unavailable (Node.js, SSR, testing without jsdom worker support).
  *
@@ -32,7 +38,7 @@ import { ValueType } from "@solve-js/vm/Value";
 import { numberValue, uomValue, hexValue, bigIntValue, stringValue, boolValue, datetimeValue, percentageValue, errorValue, pendingValue } from "@solve-js/vm/Value";
 import type { Value } from "@solve-js/vm/Value";
 
-/** Timeout for worker batch execution (30s). If exceeded, returns empty results. */
+/** Timeout for worker batch execution (30s). Past it the worker is replaced and its batches resolve to Error results. */
 const WORKER_BATCH_TIMEOUT_MS = 30_000;
 
 // ── Static import of the inline worker factory ────────────────────────────
@@ -52,13 +58,20 @@ interface ExecuteItem {
 	strings: string[];
 }
 
-interface ExecuteResult {
+/** One line's result as it comes back from a worker, in the flat shape the worker can post. */
+export interface ExecuteResult {
 	lineNumber: number;
 	valueType: ValueType;
 	value: number;
 	unit?: string;
 	isPending: boolean;
 	queryKey?: string;
+	/**
+	 * For an Error result the pool raised itself (a timed-out or crashed
+	 * worker) rather than one the worker's VM produced: the code to carry.
+	 * Absent for a worker-produced error, which reads as `WORKER_EXECUTION_ERROR`.
+	 */
+	errorCode?: string;
 }
 
 // ── Batch tracking ────────────────────────────────────────────────────────
@@ -66,8 +79,10 @@ interface ExecuteResult {
 interface PendingBatch {
 	/** Correlation ID sent to the worker. */
 	id: number;
-	/** Line numbers in this batch (in order). Used for result correlation. */
+	/** The line numbers actually posted, in order. Used for result correlation and for the per-line Error results a failure answers with. */
 	lineNumbers: number[];
+	/** Index into `workers` of the worker this batch was posted to, so a failure on that worker resolves its batches and no other's. */
+	workerIndex: number;
 	/** Resolve when results arrive. */
 	resolve: (results: ExecuteResult[]) => void;
 }
@@ -138,7 +153,9 @@ export class ExecutionPool {
 	 *
 	 * Takes ordered line numbers and their LineCache entries. Clones bytecode
 	 * ArrayBuffers for transfer, dispatches to workers round-robin, and
-	 * returns the serialized results (with 30s timeout fallback).
+	 * returns the serialized results. A worker that does not answer within
+	 * the batch timeout is replaced, and the batch resolves to one Error
+	 * result per line (code `WORKER_TIMEOUT`) rather than to nothing.
 	 *
 	 * Falls back to undefined when workers are unavailable, caller should
 	 * use the main-thread path.
@@ -197,19 +214,28 @@ export class ExecutionPool {
 		}
 
 		const batchId = this.nextId++;
-		const worker = this.getNextWorker();
+		const workerIndex = this.nextWorkerIndex();
+		const worker = this.workers[workerIndex];
 
 		return new Promise<ExecuteResult[]>((resolve) => {
-			// Timeout guard: if worker hangs (infinite bytecode loop despite
-			// VM instruction limit), resolve with empty results after 30s.
+			// Timeout guard: a worker that has not answered by now is stuck (an
+			// infinite loop the VM's instruction limit could not see, a crashed
+			// realm). Nothing it answers later can be trusted, so it is
+			// replaced rather than waited on, and the batches queued behind it
+			// on that worker fail with it: they were never going to run.
 			const timeoutId = setTimeout(() => {
-				this.pendingBatches.delete(batchId);
-				resolve([]);
+				if (!this.pendingBatches.has(batchId)) return;
+				this.failWorker(
+					workerIndex,
+					"WORKER_TIMEOUT",
+					`Evaluation did not finish within ${WORKER_BATCH_TIMEOUT_MS / 1000} seconds; the worker was replaced`,
+				);
 			}, WORKER_BATCH_TIMEOUT_MS);
 
 			this.pendingBatches.set(batchId, {
 				id: batchId,
-				lineNumbers: orderedLineNumbers,
+				lineNumbers: items.map((item) => item.lineNumber),
+				workerIndex,
 				resolve: (results: ExecuteResult[]) => {
 					clearTimeout(timeoutId);
 					resolve(results);
@@ -228,7 +254,8 @@ export class ExecutionPool {
 	 * Workers are recreated lazily on next dispatch.
 	 */
 	clear(): void {
-		// Reject all pending batches
+		// Resolve every pending batch empty: the engine that asked is
+		// discarding its caches, so there is nothing to patch a result into.
 		for (const [, batch] of this.pendingBatches) {
 			batch.resolve([]);
 		}
@@ -254,30 +281,55 @@ export class ExecutionPool {
 
 	private ensureWorkers(): void {
 		if (this.workers.length > 0) return;
-
 		for (let i = 0; i < this.poolSize; i++) {
-			const worker = createExecutionWorker();
-			worker.onmessage = (event: MessageEvent) => {
-				this.handleWorkerMessage(event.data);
-			};
-			worker.onerror = (err: ErrorEvent) => {
-				console.error(`[ExecutionPool] Worker ${i} error:`, err.message);
-				// Resolve ALL pending batches with empty results so callers
-				// don't hang. Any in-flight execution results are lost, but
-				// the batcher will re-evaluate on next resolution.
-				for (const [id, batch] of this.pendingBatches) {
-					batch.resolve([]);
-					this.pendingBatches.delete(id);
-				}
-			};
-			this.workers.push(worker);
+			this.spawnWorker(i);
 		}
 	}
 
-	private getNextWorker(): Worker {
-		const w = this.workers[this.nextWorker];
+	/**
+	 * Create the worker for slot `index`, wired so that its failures are
+	 * attributed to that slot. Used both to fill the pool and to replace a
+	 * worker that {@link failWorker} took out of it.
+	 */
+	private spawnWorker(index: number): void {
+		const worker = createExecutionWorker();
+		worker.onmessage = (event: MessageEvent) => {
+			this.handleWorkerMessage(event.data);
+		};
+		worker.onerror = (err: ErrorEvent) => {
+			console.error(`[ExecutionPool] Worker ${index} error:`, err.message);
+			this.failWorker(index, "WORKER_EXECUTION_ERROR", `Worker failed: ${err.message}`);
+		};
+		this.workers[index] = worker;
+	}
+
+	/**
+	 * Retire the worker in slot `index` and put a fresh one in its place.
+	 *
+	 * Every batch posted to that worker resolves to one Error result per line
+	 * carrying `code` and `message`, so the host sees a failure on each line
+	 * rather than a Pending state that never clears. Batches on the other
+	 * workers are untouched: they are running on healthy threads and will
+	 * answer in their own time.
+	 */
+	private failWorker(index: number, code: string, message: string): void {
+		// Already cleared or destroyed: the batches were resolved by clear().
+		if (this.workers.length === 0) return;
+
+		this.workers[index]?.terminate();
+		if (!this.terminated) this.spawnWorker(index);
+
+		for (const [id, batch] of this.pendingBatches) {
+			if (batch.workerIndex !== index) continue;
+			this.pendingBatches.delete(id);
+			batch.resolve(errorResults(batch.lineNumbers, code, message));
+		}
+	}
+
+	private nextWorkerIndex(): number {
+		const index = this.nextWorker;
 		this.nextWorker = (this.nextWorker + 1) % this.workers.length;
-		return w;
+		return index;
 	}
 
 	private handleWorkerMessage(data: { id: number; type: string; results: ExecuteResult[] }): void {
@@ -289,6 +341,18 @@ export class ExecutionPool {
 		this.pendingBatches.delete(data.id);
 		batch.resolve(data.results);
 	}
+}
+
+/** One Error result per line, for a batch whose worker will never answer. */
+function errorResults(lineNumbers: number[], code: string, message: string): ExecuteResult[] {
+	return lineNumbers.map((lineNumber) => ({
+		lineNumber,
+		valueType: ValueType.Error,
+		value: 0,
+		unit: message,
+		isPending: false,
+		errorCode: code,
+	}));
 }
 
 // ── Value reconstruction helpers ──────────────────────────────────────────
@@ -328,7 +392,7 @@ export function reconstructValue(result: ExecuteResult): Value {
 		case ValueType.Pending:
 			return pendingValue(result.queryKey ?? "");
 		case ValueType.Error:
-			return errorValue("WORKER_EXECUTION_ERROR", result.unit ?? "Unknown worker error");
+			return errorValue(result.errorCode ?? "WORKER_EXECUTION_ERROR", result.unit ?? "Unknown worker error");
 		default:
 			return numberValue(result.value);
 	}

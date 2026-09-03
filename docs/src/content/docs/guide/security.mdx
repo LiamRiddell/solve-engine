@@ -132,7 +132,26 @@ function supplied by the host rather than an API key, and neither is registered
 by default, so unconfigured they return an honest "not configured" value rather
 than a guess.
 
-A host that wants no outbound traffic at all assembles its own package list:
+A host that wants no outbound traffic at all switches the network off:
+
+```ts
+import { createEngine } from "solve-engine";
+
+const engine = createEngine({ config: { network: { enabled: false } } });
+```
+
+No async resolver runs, so no request is started. A currency conversion then
+answers *No exchange rate for USD to GBP: live data is switched off for this
+engine (network.enabled is false)*, and a weather lookup says the same. The
+error names the setting rather than an outage, which is the behaviour the engine
+aims for everywhere: an error, never a guess. Rates the host primes by hand keep
+converting. The one thing the switch cannot undo is a request a host-supplied
+plugin function starts on its own before returning a promise; the built-in
+packages all fetch through async resolvers, which the switch stops before they
+run. See [switching live data off](/guide/async-and-live-data/#switching-live-data-off).
+
+Leaving the two packages out is the other way to the same place, and removes the
+code paths as well as closing them:
 
 ```ts
 import { ExpressionEngine } from "solve-engine";
@@ -149,10 +168,7 @@ const offline = BUILTIN_PACKAGES.filter(
 const engine = new ExpressionEngine({ packages: offline });
 ```
 
-Twenty-three packages instead of twenty-five, and no code path that can reach the
-network. A currency conversion then answers *No exchange rate available for USD
-to GBP*, which is the behaviour the engine aims for everywhere: an error, never
-a guess.
+Two packages fewer, and no code path that can reach the network.
 
 ## One runtime dependency
 

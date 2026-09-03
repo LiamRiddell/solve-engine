@@ -103,6 +103,38 @@ const stocks = createStocksPackage({
 });
 ```
 
+## Switching live data off
+
+By default a city name or a currency pair in a line fetches live data from a
+public endpoint as soon as the line evaluates. A host that must not make
+outbound requests (an offline document, a sandboxed evaluation, a tenant with
+egress rules) switches the network off when it constructs the engine:
+
+```ts
+const engine = createEngine({ config: { network: { enabled: false } } });
+```
+
+The engine is otherwise unchanged. Every live-data form answers with a
+`NETWORK_DISABLED` error that names the setting instead of making a request, so
+`weather in London` and `100 USD in GBP` both read *live data is switched off
+for this engine (network.enabled is false)*. The reader learns it is policy,
+not an outage.
+
+Two things keep working with the switch off, because neither reaches a network.
+Rates a host primes by hand (`currencyExchangeService.primeRates`) still
+convert, which is what an offline host with its own rate table wants. And a
+global variable still waits for the line that declares it: the resolver behind
+`global :name` reads engine state, and declares itself `local` (see [writing an
+async data source](/guide/async-data-sources/#resolvers-that-never-reach-a-network)).
+
+The gate closes before any request is made. A package's async resolver is not
+consulted at all, so nothing it would have fetched is started. The one boundary
+is a plugin function that returns a promise directly rather than going through
+an async resolver: such a function has already run by the time the engine sees
+its promise, so the engine refuses the result but cannot recall a request the
+function started. The documented shape for live data is the resolver, and every
+built-in package uses it.
+
 The fresh value arrives on the same event stream as everything else, a
 `lines-updated` event for the lines that changed, so the `watch` loop above needs
 no changes. It is the push counterpart of the pull path, not a replacement: both

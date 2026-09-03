@@ -6,7 +6,7 @@
  * had to be worked out elsewhere and typed back in as a number, which is the
  * part worth checking. `450 monthly for 18 months` now answers 8,100 on its
  * own, `2000 every 2 weeks for 6 months` answers 26,000, and money rides
- * along: `£450 monthly for 18 months` is `£8100.00`.
+ * along: `£450 monthly for 18 months` is `£8,100.00`.
  *
  * The total is the primary result. The number of payments is the secondary
  * detail that produced it (total = per-payment amount times the payment
@@ -88,10 +88,10 @@ describe("every named period, and the every-N form", () => {
 
 describe("money rides along, and stays exact where the amount is exact", () => {
   test.each<[string, string]>([
-    ["£450 monthly for 18 months", "= £8100.00"],
+    ["£450 monthly for 18 months", "= £8,100.00"],
     ["$12.99 monthly for 2 years", "= $311.76"],
     ["$19.99 monthly for 3 months", "= $59.97"],
-    ["$2000 every 2 weeks for 6 months", "= $26000.00"],
+    ["$2000 every 2 weeks for 6 months", "= $26,000.00"],
   ])("%s is %s", (expr, expected) => {
     expect(display(expr)).toBe(expected);
   });
@@ -157,7 +157,7 @@ describe("what must keep working", () => {
     // `1000 for 3 years at 7%` has no period word and ends in a rate, so it
     // stays compound growth. This is the collision the design guards against.
     expect(evaluate("1000 for 3 years at 7%").toNumber()).toBeCloseTo(1225.043, 3);
-    expect(display("$1,000 after 3 years at 7%")).toBe("= $1225.04");
+    expect(display("$1,000 after 3 years at 7%")).toBe("= $1,225.04");
   });
 
   test("the loan-repayment phrase still amortizes", () => {
@@ -167,7 +167,7 @@ describe("what must keep working", () => {
   test("a rate times a duration (`$24 a day for a year`) is untouched", () => {
     // `a day` is an article and a unit, not a period word, so the uom rate
     // grammar keeps it: $24/day over 365 days.
-    expect(display("$24 a day for a year")).toBe("= $8760.00");
+    expect(display("$24 a day for a year")).toBe("= $8,760.00");
   });
 
   test("the period words are still ordinary variable names", () => {

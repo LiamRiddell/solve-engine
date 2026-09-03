@@ -14,20 +14,10 @@ import { TokenClassRegistry } from '@solve-js/lexer/TokenClassRegistry';
 import type { TokenLookup } from '@solve-js/lexer/TokenClassRegistry';
 import { getLocale, type ILocale } from '@solve-js/constants/locales';
 import { knownUnits } from '@solve-js/lexer/units';
-
-// ── Built-in phrase map ───────────────────────────────────────────────────
-// These are the multi-word expressions handled as compound tokens.
-// Matched by the PhraseMatcher (trie-based) in ExpressionLexer.tryMatchPhrase().
-const BUILTIN_PHRASES: Record<string, string> = {
-  'to the power of': 'CARET',
-  'power of': 'CARET',
-  'increase by': 'INCREASE_BY',
-  'decrease by': 'DECREASE_BY',
-  'times by': 'TIMES_BY',
-  'multiply by': 'MULTIPLY_BY',
-  'multiplied by': 'MULTIPLY_BY',
-  'divide by': 'DIVIDE_BY',
-};
+// The multi-word expressions handled as compound tokens, matched by the
+// PhraseMatcher (trie-based) in ExpressionLexer.tryMatchPhrase(). The same
+// table the normalizer's phrase trie reads, so the two cannot drift.
+import { BUILTIN_PHRASES } from '@solve-js/lexer/BuiltinPhrases';
 
 /**
  * Build a TokenLookup from locale keywords, known units, and built-in phrases.

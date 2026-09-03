@@ -89,18 +89,38 @@ export interface EngineContext {
 	 * nowhere.
 	 */
 	readonly pluginFunctionOwners: Record<number, string>;
+
+	/**
+	 * Whether this engine may fetch live data, from `network.enabled` in the
+	 * engine's configuration.
+	 *
+	 * Lives on the context rather than only on the engine because the VM is
+	 * where a plugin function's promise is first seen and where a currency
+	 * conversion discovers it has no rate. Both need to answer "live data is
+	 * switched off" rather than "no rate available" or "result discarded", and
+	 * the context is the one object every VM already holds.
+	 */
+	readonly networkEnabled: boolean;
+}
+
+/** What {@link createEngineContext} takes: the settings a context carries on the engine's behalf. */
+export interface EngineContextOptions {
+	/** Whether live data may be fetched. Defaults to true, the historic behaviour. See `NetworkConfig`. */
+	networkEnabled?: boolean;
 }
 
 /**
  * Create a context with empty registries.
  *
+ * @param options - Settings the context carries for the VM; see {@link EngineContextOptions}.
  * @returns A context owned by exactly one engine.
  */
-export function createEngineContext(): EngineContext {
+export function createEngineContext(options: EngineContextOptions = {}): EngineContext {
 	return {
 		pluginFunctions: {},
 		opRegistry: new OpRegistry(),
 		pluginFunctionOwners: {},
+		networkEnabled: options.networkEnabled ?? true,
 	};
 }
 

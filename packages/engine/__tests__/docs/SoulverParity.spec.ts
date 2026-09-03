@@ -223,7 +223,7 @@ const GAPS: readonly Example[] = [
 
 	// -- Not implemented. Parses to an error rather than a wrong number, which
 	// -- at least tells the truth.
-	// Money times a duration. Soulver reads this as   per day for 4 days.
+	// Money times a duration. Soulver reads this as a per-day amount for 4 days.
 ];
 
 /**
@@ -233,7 +233,7 @@ const GAPS: readonly Example[] = [
  * aligned with Soulver's.
  */
 const FORMATTING_ONLY: readonly (readonly [string, string, string])[] = [
-	["10 km in m", "10,000 m", "10000.00 m"],
+	["10 km in m", "10,000 m", "10,000.00 m"],
 	["0.35 as %", "35%", "35.00%"],
 	["40 to 90 as %", "125%", "125.00%"],
 	["100,000 + 200,000", "300k", "300,000"],
@@ -249,8 +249,8 @@ const FORMATTING_ONLY: readonly (readonly [string, string, string])[] = [
 	["5.5 minutes as timespan", "5 min 30 s", "5 minutes 30 seconds"],
 	// A compound quantity is summed into its smallest unit and rendered as
 	// that total. The arithmetic is identical; Soulver restates the parts.
-	["3 hours 5 minutes 10 seconds in seconds", "11110 s", "11110"],
-	["3h 5m 10s in seconds", "11110 s", "11110"],
+	["3 hours 5 minutes 10 seconds in seconds", "11110 s", "11,110"],
+	["3h 5m 10s in seconds", "11110 s", "11,110"],
 	// Clock and laptime arithmetic is correct; only the rendering differs.
 	// Soulver prints a bare time where this prints the full date it lands on,
 	// and an interval as hours and minutes where this gives total minutes.

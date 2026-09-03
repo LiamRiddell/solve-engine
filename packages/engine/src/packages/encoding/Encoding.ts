@@ -138,7 +138,10 @@ export function jwtDecodePayload(token: string): string | null {
 export function parseQueryString(input: string): string | null {
 	const body = input.trim().replace(/^\?/, "");
 	if (body === "") return "{}";
-	const out: Record<string, string> = {};
+	// A null-prototype object, so a key spelt `__proto__` or `constructor` is
+	// an ordinary entry that appears in the output rather than a write to the
+	// prototype that silently vanishes from it.
+	const out: Record<string, string> = Object.create(null);
 	for (const pair of body.split("&")) {
 		if (pair === "") continue;
 		const eq = pair.indexOf("=");

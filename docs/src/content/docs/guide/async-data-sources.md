@@ -63,6 +63,27 @@ engine.registerPackage({
 });
 ```
 
+## Resolvers that never reach a network
+
+A host can switch live data off (`network.enabled: false`, see [switching live
+data off](/guide/async-and-live-data/#switching-live-data-off)). With it off the
+engine does not call a resolver's `preflight` at all, so no request is ever
+started. A resolver that reads engine state rather than a network, one that
+waits for a value another line declares, or looks up a table the host loaded up
+front, declares itself `local` and keeps running:
+
+```ts
+class TableResolver implements IAsyncResolver {
+  readonly namespace = "mytable";
+  readonly local = true;
+  // preflight and destroy as above
+}
+```
+
+Leave it unset for anything that fetches. The setting is the host's promise that
+nothing leaves the process, and a fetching resolver marked `local` would break
+that promise on the host's behalf.
+
 ## Preflight runs before the VM, and stays synchronous
 
 `preflight` is called for every expression, before it executes, so it has to be

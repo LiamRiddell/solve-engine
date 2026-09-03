@@ -19,7 +19,7 @@ describe("a product composes onto its named derived unit", () => {
 	});
 
 	test("power: voltage times current is watts", () => {
-		expect(shown("230 V * 13 A as W")).toBe("2990.00 W");
+		expect(shown("230 V * 13 A as W")).toBe("2,990.00 W");
 	});
 
 	test("energy: force times length is joules", () => {
@@ -32,7 +32,7 @@ describe("a product composes onto its named derived unit", () => {
 
 	test("the name is produced even without an explicit `as`", () => {
 		expect(shown("70 kg * 9.81 m/s^2")).toBe("686.70 N");
-		expect(shown("230 V * 13 A")).toBe("2990.00 W");
+		expect(shown("230 V * 13 A")).toBe("2,990.00 W");
 	});
 });
 

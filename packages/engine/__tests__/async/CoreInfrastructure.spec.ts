@@ -255,10 +255,11 @@ describe("VM CALL_PLUGIN → EvalResult", () => {
         const result = executeBytecode(bytecode, vm);
         expect(result.type).toBe('pending');
         if (result.type === 'pending') {
-            // Cache key format: plugin:fnIdx:arg1|arg2
+            // Cache key format: plugin:fnIdx:type:value[:unit]|type:value[:unit]
             expect(result.queryKey).toMatch(/^plugin:102:/);
-            // Args are NUMBER(1) and NUMBER(2)
-            expect(result.queryKey).toContain("1|2");
+            // Args are NUMBER(1) and NUMBER(2); the type rides along so a
+            // number, a string and a quantity with the same digits stay apart.
+            expect(result.queryKey).toContain(`${ValueType.Number}:1|${ValueType.Number}:2`);
         }
 
         delete pluginFunctionRegistry[102];

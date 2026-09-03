@@ -69,7 +69,9 @@ export class CurrencyExchangeService {
   };
 
   private isCryptoCode(code: string): boolean {
-    return code.toUpperCase() in CurrencyExchangeService.CRYPTO_IDS;
+    // An own-property check, not `in`: `in` also answers for everything on
+    // Object.prototype, so a code spelt like an inherited name would pass.
+    return Object.prototype.hasOwnProperty.call(CurrencyExchangeService.CRYPTO_IDS, code.toUpperCase());
   }
 
   constructor() {}
@@ -115,7 +117,11 @@ export class CurrencyExchangeService {
     );
 
     try {
-      const response = await fetch(`https://api.frankfurter.dev/v2/rates?base=${fromUpper}`, { signal: fetchSignal });
+      // Built with URLSearchParams rather than interpolated. The code is
+      // ISO-4217 by the time it gets here, but the query should be safe on
+      // its own terms rather than by relying on a check that lives elsewhere.
+      const query = new URLSearchParams({ base: fromUpper });
+      const response = await fetch(`https://api.frankfurter.dev/v2/rates?${query.toString()}`, { signal: fetchSignal });
       if (!response.ok) throw ErrorFactory.external(CurrencyErrorCodes.API_ERROR, `Currency API returned ${response.status}`, { status: response.status });
       const data = await response.json();
       // The v2 endpoint returns a flat array of { date, base, quote, rate }
@@ -214,8 +220,8 @@ export class CurrencyExchangeService {
   }
 
   private async fetchCoinGeckoPrices(ids: string[], vsCurrency: string, signal: AbortSignal): Promise<Record<string, Record<string, number>>> {
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(",")}&vs_currencies=${vsCurrency}`;
-    const response = await fetch(url, { signal });
+    const query = new URLSearchParams({ ids: ids.join(","), vs_currencies: vsCurrency });
+    const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?${query.toString()}`, { signal });
     if (!response.ok) throw ErrorFactory.external(CurrencyErrorCodes.CRYPTO_API_ERROR, `Crypto price API returned ${response.status}`, { status: response.status });
     return response.json();
   }

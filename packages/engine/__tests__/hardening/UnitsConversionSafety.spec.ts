@@ -91,7 +91,7 @@ describe("a conversion between different measures", () => {
 
 	test("a conversion that is possible still works, so this is not a blanket refusal", () => {
 		expect(display("5 kg in lbs")).toBe("11.02 lbs");
-		expect(display("1 m3 in l")).toBe("1000.00 l");
+		expect(display("1 m3 in l")).toBe("1,000.00 l");
 		expect(display("1 hour in min")).toBe("60.00 min");
 	});
 });

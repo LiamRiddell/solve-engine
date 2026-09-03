@@ -77,6 +77,13 @@ describe("reading a token apart", () => {
 		expect(text('"a%20b=1&c=2" from query')).toBe('{"a b":"1","c":"2"}');
 	});
 
+	test("a key spelt like a prototype member is an ordinary entry, not a lost one", () => {
+		// With a plain `{}` accumulator, `__proto__=x` wrote to the prototype
+		// and vanished from the output.
+		expect(text('"__proto__=x&a=1" from query')).toBe('{"__proto__":"x","a":"1"}');
+		expect(text('"constructor=1" from query')).toBe('{"constructor":"1"}');
+	});
+
 	test("`jwt` and `query` stay usable as variable names", () => {
 		const engine = newTrackedEngine();
 		engine.evaluateLine(1, ":jwt = 3");

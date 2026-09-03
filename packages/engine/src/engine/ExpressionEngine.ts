@@ -496,6 +496,7 @@ export class ExpressionEngine {
                       this.evaluateLineWithBinding(n, variable, bound, symbolicTolerant)
                 : undefined,
             goalSeekMaxIterations: this.config.vm.maxGoalSeekIterations,
+            networkEnabled: this.config.network.enabled,
             // Raw source text of a line, for features that read markdown the
             // evaluator skipped (a table's rows). See the tables package. Reads
             // from the document when evaluating incrementally, and from the scan
@@ -690,7 +691,9 @@ export class ExpressionEngine {
         this.lexer = new Lexer(locale, buildTokenLookup(locale));
         this.registry = new ParseletRegistry();
         // Before the package loop below, which registers plugin functions into it.
-        this.context = createEngineContext();
+        // Carries the network switch too, since the VM is where a conversion
+        // with no rate and a promise-returning plugin function are first seen.
+        this.context = createEngineContext({ networkEnabled: this.config.network.enabled });
 
         // Wire the diagnostic pipeline: collect per-stage detail when diagnostics
         // are on, otherwise an empty pipeline whose length check exits with zero
@@ -2524,7 +2527,7 @@ export class ExpressionEngine {
 
         const preflightSignal = preflightController.signal;
         const asyncCheck = this.resolverRegistry.preflightAll(
-            normalizedTokens, program, '_engine', preflightSignal, this.queryClient
+            normalizedTokens, program, '_engine', preflightSignal, this.queryClient, this.config.network.enabled
         );
         if (asyncCheck) {
             // Fire-and-forget, resolves asynchronously, re-evaluates on completion
@@ -3578,7 +3581,7 @@ export class ExpressionEngine {
 
         const preflightSignal = preflightController.signal;
         const asyncCheck = this.resolverRegistry.preflightAll(
-            [], entry.bytecode, '_engine', preflightSignal, this.queryClient
+            [], entry.bytecode, '_engine', preflightSignal, this.queryClient, this.config.network.enabled
         );
         if (asyncCheck) {
             void this.resolveAsync({

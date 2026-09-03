@@ -315,7 +315,7 @@ is megabytes and \`Mb\` is megabits.
 \`\`\`solve
 100 cm + 2 m // 300.00 cm
 5 km to miles // 3.11 miles
-1 KiB in bytes // 1024.00 bytes
+1 KiB in bytes // 1,024.00 bytes
 \`\`\`
 
 See [converting units](/syntax/converting-units/) for how conversion

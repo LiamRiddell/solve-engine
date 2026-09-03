@@ -313,6 +313,88 @@ describe("an incompatible snapshot is refused clearly", () => {
 	});
 });
 
+// ── A malformed body is refused by name ─────────────────────────────────────
+// The envelope check says "a snapshot of the right version". Until the body
+// was checked too, everything inside it went straight into an executable
+// program on trust: an opcode outside a byte, a string pool holding a number,
+// a matrix shorter than its dimensions, bodies nested until the native stack
+// overflowed. A snapshot arrives from storage the host does not fully control,
+// so it is caller input, and is refused the way an expression string is: by
+// name, with the path to the field.
+
+describe("a snapshot with a malformed body is refused by name", () => {
+	function refusal(thunk: () => unknown): { code?: string; message: string } {
+		try {
+			thunk();
+		} catch (e) {
+			return e as { code?: string; message: string };
+		}
+		throw new Error("expected fromJSON to refuse");
+	}
+
+	/** A real snapshot of `source`, through JSON so it is plain data a test can corrupt. */
+	function snapshotOf(source: string): EngineSnapshot {
+		const engine = track(new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
+		engine.parseDocument(source);
+		return JSON.parse(JSON.stringify(engine.toJSON())) as EngineSnapshot;
+	}
+
+	const restore = (snapshot: EngineSnapshot) => () => track(ExpressionEngine.fromJSON(snapshot, { packages: BUILTIN_PACKAGES }));
+
+	test("an opcode outside a byte", () => {
+		const snapshot = snapshotOf(":x = 1 + 2");
+		snapshot.lineCache[0].bytecode.opcodes[0] = 300;
+		const error = refusal(restore(snapshot));
+		expect(error.code).toBe("SNAPSHOT_MALFORMED");
+		expect(error.message).toContain("lineCache[0].bytecode.opcodes");
+	});
+
+	test("a string pool holding something that is not a string", () => {
+		const snapshot = snapshotOf(":x = 1 + 2");
+		snapshot.lineCache[0].bytecode.strings = [42] as unknown as string[];
+		const error = refusal(restore(snapshot));
+		expect(error.code).toBe("SNAPSHOT_MALFORMED");
+		expect(error.message).toContain("lineCache[0].bytecode.strings");
+	});
+
+	test("a variable whose number is not a number", () => {
+		const snapshot = snapshotOf(":x = 1 + 2");
+		(snapshot.variables.x as { v: unknown }).v = "abc";
+		const error = refusal(restore(snapshot));
+		expect(error.code).toBe("SNAPSHOT_MALFORMED");
+		expect(error.message).toContain("variables.x.v");
+	});
+
+	test("a matrix whose data does not match its dimensions", () => {
+		const snapshot = snapshotOf(":m = [1, 2; 3, 4]");
+		(snapshot.variables.m as { data: unknown[] }).data.pop();
+		const error = refusal(restore(snapshot));
+		expect(error.code).toBe("SNAPSHOT_MALFORMED");
+		expect(error.message).toContain("variables.m.data");
+	});
+
+	test("bodies nested past the cap are refused before anything recurses", () => {
+		const snapshot = snapshotOf(":x = 1 + 2");
+		const leaf = snapshot.lineCache[0].bytecode;
+		let program = leaf;
+		for (let i = 0; i < 40; i++) {
+			program = { ...leaf, anonymousBodies: [{ params: ["x"], program }] };
+		}
+		snapshot.lineCache[0].bytecode = program;
+		const error = refusal(restore(snapshot));
+		expect(error.code).toBe("SNAPSHOT_MALFORMED");
+		expect(error.message).toContain("nested");
+	});
+
+	test("a missing section is refused rather than read as empty", () => {
+		const snapshot = snapshotOf(":x = 1 + 2");
+		delete (snapshot as { bytecodeCache?: unknown }).bytecodeCache;
+		const error = refusal(restore(snapshot));
+		expect(error.code).toBe("SNAPSHOT_MALFORMED");
+		expect(error.message).toContain("bytecodeCache");
+	});
+});
+
 // ── Async values are not restored stale ─────────────────────────────────────
 
 describe("resolved and in-flight async values are not restored stale", () => {

@@ -3,6 +3,7 @@ import type { Token } from "@solve-js/lexer";
 import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { errorValue, type Value } from "@solve-js/vm/Value";
+import type { LineExecutionContext } from "@solve-js/vm/VM";
 import type { IAsyncResolver, AsyncCheckResult } from "@solve-js/resolvers/ResolverRegistry";
 import { getActiveQueryClient } from "@solve-js/services/DataQueryService";
 import { createTimeoutSignal } from "@solve-js/utilities/TimeoutSignal";
@@ -81,7 +82,7 @@ export interface QueryResolverPackage {
 	/** Register via `IEnginePackage.asyncResolvers`. */
 	resolver: IAsyncResolver;
 	/** Register via `IEnginePackage.pluginFunctions` at `pluginFunctionIndex`. */
-	pluginFunction: (args: Value[]) => Value;
+	pluginFunction: (args: Value[], context?: LineExecutionContext) => Value;
 }
 
 function defaultOnError(namespace: string): (query: string, error: unknown) => Value {
@@ -220,12 +221,18 @@ export function createQueryResolver(opts: QueryResolverOptions): QueryResolverPa
 		},
 	};
 
-	const pluginFunction = (args: Value[]): Value => {
+	const pluginFunction = (args: Value[], context?: LineExecutionContext): Value => {
 		const query = args[0]?.value as string;
 		const cached = getActiveQueryClient()?.getQueryData(queryKeyFor(query));
 		if (cached !== undefined) return cached as Value;
-		// preflight() guarantees this is cached before the VM ever runs the
-		// CALL_PLUGIN that reaches here. This is an honest "shouldn't
+		// With live data switched off the engine never ran this resolver's
+		// preflight, so an empty cache is the expected state and the reader is
+		// told which setting produced it.
+		if (context?.networkEnabled === false) {
+			return errorValue("NETWORK_DISABLED", `Live data is switched off for this engine (network.enabled is false), so "${query}" was not fetched`);
+		}
+		// Otherwise preflight() guarantees this is cached before the VM ever
+		// runs the CALL_PLUGIN that reaches here. This is an honest "shouldn't
 		// happen" fallback, not a real code path.
 		return errorValue(`${opts.namespace.toUpperCase()}_NOT_PREFLIGHTED`, `No cached result for "${query}"`);
 	};
