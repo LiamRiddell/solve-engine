@@ -36,6 +36,35 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TARGET = path.join(ROOT, "docs/src/data/packageSize.json");
 const DIST = path.join(ROOT, "packages/engine/dist");
 
+/**
+ * The npm that packs the tarball, whichever npm is running this script.
+ *
+ * `npm pack` output is not byte-stable across npm versions: the tar writer and
+ * its gzip settings have moved between majors, and three npms were in use
+ * here at once (the one Node 22 ships in CI, the 12 the publish job installs
+ * to speak OIDC, and whatever a contributor has). Each produced its own
+ * `tarballBytes`, so a figure regenerated locally failed the exact check in
+ * CI and had to be copied back out of the job log. Running the pack through
+ * one pinned version makes the number the same everywhere it is measured.
+ * Pinned rather than `@latest` for the same reason every other `npx` here is.
+ */
+const PACK_NPM = "npm@10.9.9";
+
+/**
+ * The Node line the committed figures are measured on, from `.nvmrc`. The
+ * gzipped sizes come from size-limit, which compresses with the running
+ * Node's zlib; a different zlib can compress the same bytes to a slightly
+ * different count. Reported rather than enforced: a mismatch is the likeliest
+ * explanation for a stale check, and the message says so.
+ */
+function expectedNodeMajor() {
+	try {
+		return Number.parseInt(fs.readFileSync(path.join(ROOT, ".nvmrc"), "utf8"), 10);
+	} catch {
+		return null;
+	}
+}
+
 /** Runs a command from the repository root and returns its stdout. */
 function run(command, args) {
 	return execFileSync(command, args, {
@@ -142,11 +171,9 @@ function firstJsonValue(raw) {
  * The one packed package, whichever way the npm in use reports it.
  *
  * npm 12 changed the shape of `npm pack --json` from a list of packages to an
- * object keyed by package name. Both have to be read, because the two npms are
- * both in use here: the publish workflow pins npm 12 so it can speak OIDC to
- * the registry, while every other job takes whatever the Node version ships.
- * Reading only one shape means the numbers agree everywhere until a release,
- * which is the worst moment to find out.
+ * object keyed by package name. The pack now runs through {@link PACK_NPM},
+ * so only one shape arrives today; both are still read so that moving the
+ * pin across that boundary is a one-line change rather than a surprise.
  */
 function onlyPackage(parsed) {
 	const entry = Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0];
@@ -166,9 +193,9 @@ function onlyPackage(parsed) {
 	return entry;
 }
 
-/** What npm ships and unpacks, straight from `npm pack`. */
+/** What npm ships and unpacks, straight from `npm pack` under the pinned npm (see {@link PACK_NPM}). */
 function published() {
-	const raw = run("npm", ["pack", "--dry-run", "--json", "--workspace=packages/engine"]);
+	const raw = run("npx", ["--yes", PACK_NPM, "pack", "--dry-run", "--json", "--workspace=packages/engine"]);
 	const entry = onlyPackage(firstJsonValue(raw));
 	return {
 		tarballBytes: entry.size,
@@ -202,10 +229,11 @@ function readCommitted() {
  * `package.json` that had been hand-edited into CRLF, not from a clean checkout,
  * so it was measuring a mistake rather than a platform.
  *
- * Confirmed rather than reasoned: a Windows checkout, the CI runner and the
- * published `1.0.0-beta.3` all report `tarballBytes` 2073720 and `unpackedBytes`
- * 8607865. The `dist` bundle is deterministic for the same reason the gzipped
- * figures always matched, and everything else in the tarball is `eol=lf` text.
+ * What did drift, later, was the npm doing the packing: three versions were in
+ * use across CI, the publish job and contributors' machines, and each wrote a
+ * tarball of a different size. That is a toolchain difference rather than a
+ * platform one, and it is closed by packing under one pinned npm
+ * ({@link PACK_NPM}) rather than by widening the gate.
  *
  * The tolerance was not free. On the release that added the highlighting change
  * it silently absorbed a six kilobyte growth in the tarball, which is exactly
@@ -239,12 +267,20 @@ if (process.argv.includes("--check")) {
 	const stale = committed ? staleFields(committed) : ["(the file is missing or unreadable)"];
 
 	if (stale.length > 0) {
+		const expected = expectedNodeMajor();
+		const running = Number.parseInt(process.versions.node, 10);
+		const toolchainNote =
+			expected !== null && running !== expected
+				? `\nMeasured on Node ${process.versions.node}; the committed figures are produced on Node ${expected} (.nvmrc). ` +
+					"A different zlib can gzip the same bytes to a different count, so regenerate on the pinned Node before trusting a gzip difference."
+				: "";
 		console.error(
 			"docs/src/data/packageSize.json is out of date.\n" +
 				`  stale:     ${stale.join(", ")}\n` +
 				`  committed: ${raw.trim() || "(missing)"}\n` +
 				`  actual:    ${next.trim()}\n` +
-				"Run `npm run stats:size` and commit the result.",
+				"Run `npm run stats:size` and commit the result." +
+				toolchainNote,
 		);
 		process.exit(1);
 	}

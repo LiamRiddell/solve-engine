@@ -244,7 +244,7 @@ s\`10% of $200\``;
       // Vector
       const vecResult = result.lines[1].inlineSolves[0].result;
       expect(vecResult?.isMatrix()).toBe(true);
-      expect((vecResult?.value as MatrixData).data).toEqual([4, 6]);
+      expect((vecResult?.value as MatrixData | undefined)?.data).toEqual([4, 6]);
       
       // UOM
       expect(result.lines[2].inlineSolves[0].result?.toNumber()).toBe(15);

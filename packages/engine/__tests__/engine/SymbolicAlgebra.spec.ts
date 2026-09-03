@@ -43,8 +43,8 @@ describe("bare (colon-less) assignment", () => {
     expect(result.type).toBe(ValueType.Matrix);
     const m = result.value as MatrixData;
     expect(m.hasSymbolic).toBe(true);
-    // cell [0,0] (row 0, col 0) is the symbolic "sx"
-    const cell00 = m.data[0 + 0 * 3];
+    // cell [0,0] (row 0, col 0; column-major, so index row + col * 3) is the symbolic "sx"
+    const cell00 = m.data[0];
     expect(typeof cell00).toBe("object");
     expect(formatSymbolic(cell00 as SymbolicNode)).toBe("sx");
     // cell [2,2] is the plain concrete 1

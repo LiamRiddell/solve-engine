@@ -1,0 +1,43 @@
+name: Fuzz
+
+# The fuzzer's soak mode, on a schedule rather than per pull request.
+#
+# It is randomised and open-ended, so a green run says "nothing found within
+# this budget" rather than "correct", and a red one names the seed and the
+# case that reproduce it. That makes it the wrong shape for a pull-request
+# check, which has to answer "did this change break something", and the right
+# shape for a standing watch: a crash it finds has usually been there for a
+# while. Weekly, plus on demand. Until this existed the fuzzer was referenced
+# in the pull request template and run by nobody.
+on:
+  schedule:
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "Wall-clock budget for the run, in minutes"
+        type: number
+        default: 10
+
+permissions:
+  contents: read
+
+jobs:
+  soak:
+    name: Soak the engine with generated input
+    # Pinned rather than ubuntu-latest, like every other job here.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # `--no-save` because the corpus lives in the repository and a runner
+      # cannot commit to it; a finding is reported in the log with its seed,
+      # and reproduced locally with `npm run fuzz -- --seed=<seed>`.
+      - run: npm run fuzz -- --minutes=${{ inputs.minutes || 10 }} --no-save

@@ -55,7 +55,9 @@ describe("a suffixed literal keeps every digit", () => {
 		// spellings stays a visible, chosen thing.
 		const plain = evaluate("12345678901234567890");
 		expect(plain.type).toBe(ValueType.Number);
-		expect(plain.toNumber()).toBe(12345678901234568000);
+		// Written as the double those digits become, rather than as a literal
+		// that cannot itself be represented exactly.
+		expect(plain.toNumber()).toBe(Number("12345678901234567890"));
 	});
 });
 

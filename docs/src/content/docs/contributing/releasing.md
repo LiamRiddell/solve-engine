@@ -68,9 +68,11 @@ green.
    ```
 
 5. **Watch the publish workflow.** The release triggers `publish.yml`. Its
-   `publish` job runs `assert-release-tag` (the tag must match `package.json`),
-   then `verify` and `test:consumer` against the packed tarball, and only then
-   `npm publish`. Nothing reaches the registry until those pass.
+   `publish` job checks that the tag sits on `main`, runs `assert-release-tag`
+   (the tag must match `package.json`, and no changeset may still be waiting),
+   then `npm run verify:ci`, every gate a pull request has to pass, ending with
+   the packed tarball installed and used, and only then `npm publish`. Nothing
+   reaches the registry until all of those pass.
 
 6. **Confirm the version is live.**
 
@@ -90,23 +92,27 @@ the reference for tone and structure.
 
 ## Things that look like failures but are not
 
-- **A red publish run may just be the notify step.** After `npm publish`
-  succeeds, the workflow dispatches a downstream notification
-  (`notify-obsidian-solve`). That dispatch can fail with a 403 without the
-  publish having failed. Check the `publish` job itself, not only the run's
-  overall conclusion, before concluding a release did not go out.
 - **A benchmark regression on the merge-base job is often noise.** The warm
   micro-cases can report a large regression and, in the same run, a matching
   speed-up on an unrelated case. That pattern is noise, not a real change:
   confirm with a local main-versus-branch comparison, then re-run the job.
 
-## Before adding a public export or a doc example
+## The regenerated figures
 
-Two gates run outside `npm run verify` and are easy to miss:
+Three files under `docs/src/data/` are derived rather than written, and each
+has a check that fails when the committed copy has drifted: `testStats.json`
+(`lint:stats`), `packageSize.json` (`lint:size`) and the unit reference page
+(`lint:units`). The version pull request regenerates all three, so a release
+always carries figures produced from its own tree.
 
-- **Documentation coverage.** Every public export needs a doc block, checked by
-  `scripts/check-doc-coverage.mjs` (run in the "Comment style" CI job). Run it
-  locally after adding an export.
+A feature pull request that moves one of them regenerates it too. `npm run
+verify:ci` runs every check, so the drift is caught before pushing rather than
+in the job log. Two things to know when regenerating:
+
 - **The size stat is built from `dist`.** Regenerate `packageSize.json` only
-  after a clean `npm run build`, or the size lint fails on a stale number. It is
-  the last step: build, then `npm run stats:size`.
+  after a clean `npm run build`, or the check fails on a stale number. The
+  tarball is packed under a pinned npm, so that figure is the same on every
+  machine; the gzip figure is measured on the Node version in `.nvmrc`, and a
+  different Node can compress the same bytes to a slightly different count.
+- **The test stats are read from the last full run.** `stats:tests` reads the
+  report `npm run test:full` writes, so run the full suite first.

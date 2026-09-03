@@ -12,9 +12,23 @@ npm install
 npm run verify
 ```
 
-`npm run verify` is the gate: type check, the full test suite, and the package
-build. If it passes locally it should pass in continuous integration, and the
-two run the same script deliberately so they cannot drift.
+`npm run verify` is the fast loop: the type check, the default test run, and
+the package build. It is what to run while iterating.
+
+`npm run verify:ci` is the gate. It is every check continuous integration
+applies, as one command: lint (source, tests and tools), comment style, doc
+coverage, action pins, licences, the dependency audit, the type check, every
+test suite including the four slow ones the fast loop skips, the coverage
+floor, the test-count stats, the build, the smoke checks, publint, the size
+figures, the generated unit reference, the sidebar, and the packed tarball
+installed into a scratch project and used. Continuous integration runs those
+same named scripts, split across jobs for speed, and a release runs the whole
+command again before anything reaches npm. If `verify:ci` passes locally, the
+pull request passes; the two cannot drift because they are the same list.
+
+Run it before pushing anything that touches the lexer vocabulary, a unit, the
+public exports, the docs examples or the bundle. It takes several minutes;
+that is the price of not finding out from the job log.
 
 That is everything the engine needs. The documentation site and the playground
 need one more step:
@@ -141,9 +155,10 @@ changelog entry a stranger reads to decide whether to upgrade, so write it for
 them rather than for the diff.
 
 **Cut the release.** Merging to `main` opens a `chore: version packages` pull
-request that bumps the version, writes `CHANGELOG.md`, and regenerates the size
-figures the documentation site quotes. Review the version and the changelog
-there, then merge it. That changes the repository and publishes nothing.
+request that bumps the version, writes `CHANGELOG.md`, and regenerates every
+figure the documentation site quotes: the test counts, the unit reference and
+the size. Review the version and the changelog there, then merge it. That
+changes the repository and publishes nothing.
 
 To publish, publish a GitHub Release against a tag matching the version the
 pull request just produced (create the tag from the release UI if it does not
@@ -154,9 +169,10 @@ Tag:     solve-engine@1.0.0-beta.4
 Target:  main
 ```
 
-The tag has to match `packages/engine/package.json` exactly or the workflow
-refuses, so release the version commit rather than whatever is on `main` at
-the time. Every release publishes to the `latest` dist-tag, prerelease or not:
+The tag has to match `packages/engine/package.json` exactly, sit on `main`,
+and leave no changeset waiting, or the workflow refuses; so release the version
+commit rather than whatever is on `main` at the time. The workflow then runs
+`npm run verify:ci` against that commit before it publishes. Every release publishes to the `latest` dist-tag, prerelease or not:
 there is no stable line yet, so a beta is what a plain `npm install
 solve-engine` actually gets people, and `latest` sitting several versions
 behind was worse than that. A bare tag push, without a release, does not

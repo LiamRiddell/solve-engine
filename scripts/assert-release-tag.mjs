@@ -47,4 +47,19 @@ if (!semver.valid(pkg.version)) {
 	fail(`package.json has a version semver cannot parse: ${pkg.version}`);
 }
 
-console.log(`${tag} matches package.json.`);
+// A changeset still waiting is a change the version being released does not
+// describe: either the version pull request that consumes them has not been
+// merged, or a later merge added one after it was. Either way the changelog
+// and the tree disagree, and the registry keeps whichever goes out.
+const pending = fs
+	.readdirSync(path.join(ROOT, ".changeset"))
+	.filter((name) => name.endsWith(".md") && name !== "README.md");
+if (pending.length > 0) {
+	fail(
+		`The tree still holds unreleased changesets:\n` +
+			pending.map((name) => `  .changeset/${name}`).join("\n") +
+			"\n\nMerge the version pull request that consumes them, then tag the commit it produced.",
+	);
+}
+
+console.log(`${tag} matches package.json, and no changesets are waiting.`);

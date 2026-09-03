@@ -19,8 +19,8 @@ import type { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistr
 /**
  * Create a fresh ExpressionEngine instance for testing.
  */
-export function createEngine({ locale: locale = "en", diagnostics: diagnostic = false }): ExpressionEngine {
-  return new ExpressionEngine({ locale, diagnostics: diagnostic, packages: BUILTIN_PACKAGES });
+export function createEngine({ locale = "en", diagnostics = false }): ExpressionEngine {
+  return new ExpressionEngine({ locale, diagnostics, packages: BUILTIN_PACKAGES });
 }
 
 /**

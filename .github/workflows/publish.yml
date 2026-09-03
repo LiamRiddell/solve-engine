@@ -133,6 +133,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.release.tag_name }}
+          # The whole history, so the ancestry check below has main to compare
+          # against rather than a single detached commit.
+          fetch-depth: 0
+
+      # A tag that is not on main is a release of something never reviewed as
+      # main: a branch, a rebase that left the tag behind, a tag pushed to the
+      # wrong commit. The version check further down would still pass for any
+      # of those, because the tree would carry the right number, so this is
+      # checked first and separately.
+      - name: Check the tag is on main
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::${RELEASE_TAG} points at a commit that is not on main. Release the commit the version pull request produced."
+            exit 1
+          fi
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -157,17 +173,20 @@ jobs:
 
       # What the tag claims and what the tree actually contains have to be the
       # same thing. Without this a tag typo publishes the previous version under
-      # the new name, and the registry keeps it forever.
+      # the new name, and the registry keeps it forever. The same script refuses
+      # a tree with changesets still waiting, since that is a version whose
+      # changelog does not describe it.
       - name: Check the tag against package.json
         run: node scripts/assert-release-tag.mjs "${RELEASE_TAG}"
 
-      # The same gate a contributor runs, before anything can be published.
-      - run: npm run verify
-
-      # And the one that checks the artefact rather than the working tree. A
-      # version cannot be replaced once it is on the registry, so the last thing
-      # before publishing is to install the tarball and use it.
-      - run: npm run test:consumer
+      # Every gate a pull request has to pass, in one command, before anything
+      # can be published. This used to run `verify` and `test:consumer` only,
+      # which is less than CI asks of a pull request: no lint, no full suite,
+      # no size, units or stats checks, no publint. A release could ship a tree
+      # a pull request would have rejected. The list ends with the tarball
+      # check, because a version cannot be replaced once it is on the registry,
+      # so the last thing before publishing is to install it and use it.
+      - run: npm run verify:ci
 
       # Every release publishes straight to `latest`, prerelease or not. There
       # is no stable line yet, so a beta is what a plain `npm install
