@@ -44,7 +44,9 @@ export function stockTickerNormalizerRule(): NormalizerRule {
 	return {
 		name: "stocks:bare-ticker",
 		priority: 20,
-		startTokenTypes: ["IDENT"],
+		// The index compares values case-insensitively, so this admits `aapl`
+		// as well as `AAPL`; the case-sensitive check below still decides.
+		shape: [{ types: ["IDENT"], values: [...MAJOR_TICKERS] }],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const token = tokens[pos];
 			if (!token || token.type !== "IDENT") return null;

@@ -51,7 +51,7 @@ export function mapReduceCallNormalizerRule(priority = 80): NormalizerRule {
   return {
     name: "mapreduce:call",
     priority,
-    startTokenTypes: ["IDENT"],
+    shape: [{ types: ["IDENT"], values: Object.keys(WORD_TO_TOKEN_TYPE) }, { types: ["LPAREN"] }],
     match(tokens: Token[], pos: number): NormalizerMatch | null {
       const token = tokens[pos];
       if (!token || token.type !== "IDENT") return null;
