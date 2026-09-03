@@ -241,23 +241,36 @@ export class PrecedenceParser {
   parseExpression(minBp: number = 0, _builder?: BytecodeBuilder): void {
     // Accept builder via parameter for backward compatibility with the old Parser API.
     // The ExpressionEngine always calls setBuilder() before parseExpression(),
-    // but tests and parselets pass builder as a parameter.
+    // but tests and parselets pass builder as a parameter. A builder passed
+    // here is in force for this parse only: a parselet compiling a nested body
+    // into its own builder gets the outer one back afterwards.
+    const outerBuilder = this.builder;
     if (_builder) {
       this.builder = _builder;
     }
+    // Depth is restored in a finally rather than on each return, because a
+    // parselet that throws part way through a line (the common case while
+    // someone is typing) used to leave the counter one higher for good.
     this.depth++;
-    if (this.depth > this.maxDepth) {
+    try {
+      if (this.depth > this.maxDepth) {
+        throw ErrorFactory.parsing(
+          "NESTING_DEPTH_EXCEEDED",
+          `Parse nesting depth ${this.depth} exceeds maximum of ${this.maxDepth}`,
+          { maxDepth: this.maxDepth, currentDepth: this.depth }
+        );
+      }
+      this.parseExpressionBody(minBp);
+    } finally {
       this.depth--;
-      throw ErrorFactory.parsing(
-        "NESTING_DEPTH_EXCEEDED",
-        `Parse nesting depth ${this.depth} exceeds maximum of ${this.maxDepth}`,
-        { maxDepth: this.maxDepth, currentDepth: this.depth }
-      );
+      if (_builder) this.builder = outerBuilder;
     }
+  }
 
+  /** The prefix and infix loop of {@link parseExpression}, run with the depth already counted and the builder in place. */
+  private parseExpressionBody(minBp: number): void {
     const token = this.consume();
     if (!token) {
-      this.depth--;
       throw ErrorFactory.parsing("UNEXPECTED_END", "Unexpected end of expression");
     }
 
@@ -346,16 +359,20 @@ export class PrecedenceParser {
         // own token (a unit literal weighing whether a trailing `in`/`to` is
         // its own or an outer operator's) can respect precedence. See
         // infixMinBindingPower's doc comment.
+        const outerMinBindingPower = this.infixMinBindingPower;
         this.infixMinBindingPower = minBp;
-        // Parselet handles its own recursion for right operand internally
-        infixParselet.parse(this, token, lookahead, builder);
+        try {
+          // Parselet handles its own recursion for right operand internally
+          infixParselet.parse(this, token, lookahead, builder);
+        } finally {
+          this.infixMinBindingPower = outerMinBindingPower;
+        }
       }
 
       idx = this.current;
     }
 
     this.current = idx;
-    this.depth--;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════════
