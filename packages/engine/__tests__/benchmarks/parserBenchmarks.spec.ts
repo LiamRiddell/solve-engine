@@ -72,17 +72,21 @@ describe("Parser Benchmarks", () => {
   for (const c of cases) {
     test(`parses "${c.name}" efficiently`, () => {
       const tokens = tokenize(c.input);
+      // One parser and one builder for the whole run, the way the engine
+      // holds them. With a fresh registry per iteration the figure was
+      // registry construction, and a parser change could not move it.
+      // Parselets read `this.builder` internally, so it must be set before
+      // parseExpression() runs (mirrors ExpressionEngine's own private
+      // parseExpression() helper).
+      const p = createConfiguredParser();
+      const builder = new BytecodeBuilder();
       let totalMs = 0;
 
       for (let b = 0; b < c.batches; b++) {
         const start = performance.now();
         for (let i = 0; i < c.perBatch; i++) {
-          const p = createConfiguredParser();
-          // Parser (PrecedenceParser) emits opcodes into a BytecodeBuilder —
-          // parselets read `this.builder` internally, so it must be set
-          // before parseExpression() runs (mirrors ExpressionEngine's own
-          // private parseExpression() helper).
-          p.setBuilder(new BytecodeBuilder());
+          builder.reset();
+          p.setBuilder(builder);
           p.load(tokens);
           p.parseExpression(0);
         }

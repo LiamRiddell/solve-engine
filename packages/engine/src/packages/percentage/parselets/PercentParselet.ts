@@ -20,7 +20,7 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
  */
 export class PercentParselet implements InfixParselet {
 	readonly category = "Percentage";
-	readonly bindingPower = BindingPower.Prefix;
+	readonly bindingPower = BindingPower.Postfix;
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
     // The divide still happens: a Percentage stores its fraction (0.1 for

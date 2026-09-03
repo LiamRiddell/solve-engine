@@ -40,6 +40,8 @@ export const CoreErrorCodes = {
   UNEXPECTED_TRAILING_TOKEN: "UNEXPECTED_TRAILING_TOKEN",
   PARSE_ERROR: "PARSE_ERROR",
   TOO_MANY_NUMERIC_CONSTANTS: "TOO_MANY_NUMERIC_CONSTANTS",
+  /** A raw bytecode operand outside 0 to 255, or a jump patch outside the emitted stream (`parser/BytecodeBuilder.ts`'s `emitIndex`, `emitByte`, `patchJump`). `build()` keeps one byte per operand, so 300 used to become 44 with no error and the program read the wrong constant or plugin function. A package-authoring fault, reported at compile time. */
+  BYTECODE_OPERAND_OUT_OF_RANGE: "BYTECODE_OPERAND_OUT_OF_RANGE",
   TOO_MANY_STRING_CONSTANTS: "TOO_MANY_STRING_CONSTANTS",
   NO_MATCHING_PHRASE_ALTERNATIVE: "NO_MATCHING_PHRASE_ALTERNATIVE",
   INVALID_PHRASE_PATTERN: "INVALID_PHRASE_PATTERN",

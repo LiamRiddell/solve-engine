@@ -83,6 +83,8 @@ function) and the original text as its raw value; a matching `prefixParselet` on
 the token type does the actual call parsing (see
 [Functions and operators](/packages/functions-and-operators/)). The `:name = ...`
 variable case is handled for you: a word after a `:` is left alone.
+Two packages may declare the same word; the one registered last is in force, and
+unregistering it hands the word back to the other.
 
 The boundary is deliberately narrow. `callFusions` is only the plain `word (`
 shape with that one `:` guard. If your rule needs a different lookbehind, a deeper

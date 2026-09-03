@@ -7,8 +7,8 @@
  *   2. Built-in phrase patterns (to the power of, increase by, etc.)
  *   3. Known unit names (from units.ts)
  *
- * The resulting TokenLookup is frozen and passed to ExpressionLexer.configuredLookup
- * at construction time, enabling data-driven keyword/unit/phrase resolution.
+ * The resulting TokenLookup is frozen. Nothing in the engine consumes it any
+ * more (see the deprecation on {@link buildTokenLookup}).
  */
 import { TokenClassRegistry } from '@solve-js/lexer/TokenClassRegistry';
 import type { TokenLookup } from '@solve-js/lexer/TokenClassRegistry';
@@ -27,12 +27,12 @@ import { BUILTIN_PHRASES } from '@solve-js/lexer/BuiltinPhrases';
  *   2. Built-in phrases (via locale phraseMap)
  *   3. Known units (checked AFTER keyword lookup fails, via unitNames set)
  *
- * The resulting TokenLookup replaces the internal keyword map, unit set,
- * phrase trie, and phraseStartWords in ExpressionLexer when set via
- * ExpressionLexer.configuredLookup.
- *
  * @param localeCode - The locale code (e.g., "en", "de"). Defaults to "en".
- * @returns A frozen TokenLookup ready for consumption by the lexer.
+ * @returns A frozen TokenLookup.
+ * @deprecated The lexer never read the lookup it was handed: its keyword, unit
+ *   and phrase tables are built from the locale and the packages registered
+ *   with it, and the engine no longer builds one at construction. Kept for
+ *   callers that build their own; removed in 3.0.
  */
 export function buildTokenLookup(localeCode = 'en'): TokenLookup {
   const locale: ILocale = getLocale(localeCode);

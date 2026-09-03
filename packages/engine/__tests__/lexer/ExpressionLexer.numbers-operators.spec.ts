@@ -39,10 +39,12 @@ describe("ExpressionLexer — fast paths", () => {
     expect(t[0].value).toBe("7");
   });
 
-  test("1-char decimal dot returns NUMBER", () => {
+  test("1-char lone dot returns DOT, as the main path does", () => {
+    // The fast path used to fold DOT into the NUMBER arm, so a stray dot on a
+    // line of its own evaluated to 0 while ". " reported an error.
     const t = tokenize(".");
     expect(t).toHaveLength(1);
-    expect(t[0].type).toBe("NUMBER");
+    expect(t[0].type).toBe("DOT");
     expect(t[0].value).toBe(".");
   });
 

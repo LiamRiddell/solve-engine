@@ -59,15 +59,13 @@ function tierOnePower(tokenType: string): number {
 }
 
 /**
- * Operators the two tables currently disagree about, excluded from the green
- * sweep below and asserted correctly in the `test.failing` after it so the
- * sweep keeps its teeth over the operators that do agree.
- *
- * `%` is a postfix operator declared as a prefix one in its parselet, which is
- * a different kind of mistake from the precedence split the shifts and the
- * bitwise trio used to have, and is left for whoever fixes `%` itself.
+ * Operators the two tables disagree about, excluded from the green sweep
+ * below. Empty at present: `%`, the last one, declared itself a prefix
+ * operator in its parselet while the fast path dispatched it as postfix, and
+ * now reports Postfix (see BindingPowersAgree.spec.ts). Any operator added
+ * here must also be asserted, so the sweep keeps its teeth.
  */
-const KNOWN_DISAGREEMENTS = new Set(["PERCENT"]);
+const KNOWN_DISAGREEMENTS = new Set<string>();
 
 describe("an operator declared in both tiers is declared the same way in both", () => {
 	test("the operators that agree, swept", () => {
@@ -98,20 +96,12 @@ describe("an operator declared in both tiers is declared the same way in both", 
 		}
 	});
 
-	test.failing("including the percent sign", () => {
-		// The truthful expectation, failing today. One operator is left
-		// carrying two different precedences:
-		//
-		//   PERCENT  fast path 70 (Postfix), parselet 60 (Prefix)
-		//
-		// PERCENT is the operator that already caused this exact bug once, and
-		// it is still declared at two different levels; only the emitted
-		// opcodes were brought back into line, not the precedences.
-		//
-		// The fast path wins every time, so the parselet number is dead and
-		// nothing observable is wrong on its own account. It is worth fixing
-		// anyway, because a dead declaration that reads as authoritative is
-		// exactly what let `%` go wrong the first time.
+	test("including the percent sign", () => {
+		// PERCENT once carried two precedences: fast path 70 (Postfix),
+		// parselet 60 (Prefix). The fast path won every time, so the parselet
+		// number was dead, and a dead declaration that reads as authoritative
+		// is exactly what let `%` go wrong the first time. Nothing is excluded
+		// here: every operator in both tiers must agree.
 		const mismatched: string[] = [];
 		for (const { tokenType, bindingPower } of builtinInfixRegistrations()) {
 			const fastPath = tierOnePower(tokenType);

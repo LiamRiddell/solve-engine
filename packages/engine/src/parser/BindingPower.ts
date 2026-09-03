@@ -108,7 +108,7 @@ import { tokenTypeId } from "@solve-js/lexer/Token";
  * Only operators listed here get the Tier 1 fast path in PrecedenceParser.
  * All other infix tokens use the Tier 2 parselet registry fallback.
  */
-const BUILTIN_INFIX_BP: Record<string, number> = {
+export const BUILTIN_INFIX_BP: Record<string, number> = {
   // Arithmetic (infix, left-associative)
   [TokenTypes.PLUS]:     BindingPower.Sum,
   [TokenTypes.MINUS]:    BindingPower.Sum,

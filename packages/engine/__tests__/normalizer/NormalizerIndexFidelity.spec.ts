@@ -25,102 +25,13 @@ import { TokenNormalizer } from "@solve-js/normalizer/TokenNormalizer";
 import { RuleIndex, effectiveShape, isEmptyMask } from "@solve-js/normalizer/RuleIndex";
 import type { NormalizerRule } from "@solve-js/normalizer/NormalizerRule";
 import type { Token } from "@solve-js/lexer/Token";
+import { NORMALIZER_CORPUS } from "@tools/normalizerCorpus";
 
 /**
- * Expressions exercising every rule family the built-in packages register.
- *
- * Breadth matters more than depth here: a shape is only proven at the spellings
- * something actually reaches, so a family absent from this list is a family
- * whose declaration is unproven. Kept beside the rules rather than harvested
- * from the docs so that a spelling with no documentation page is still covered.
+ * The shared corpus, kept in `tools/normalizerCorpus.ts` so the hint and
+ * cost specs read the same spellings this one does.
  */
-const CORPUS: string[] = [
-  // Plain arithmetic and grouping, where nothing should fire.
-  "12 + 34 * (56 - 7) / 8",
-  "The quarterly report covers revenue and cost",
-  ":v42 = 43",
-  "sqrt(144) + 5",
-
-  // Implicit multiplication.
-  "2(x + 1) + 3y",
-  "5(3 + 2)",
-  "2 power of 3",
-  "99 per week",
-
-  // Phrases.
-  "10 increase by 5%",
-  "half of 250",
-  "2 to the power of 8",
-
-  // Clock times, laptimes, timecodes, frames.
-  "9:00am + 30 minutes",
-  "16:00",
-  "4pm",
-  "01:02:03",
-  "01:02:03:04 @ 30fps",
-  "10 frames at 24fps",
-  "9:30 to 17:00",
-
-  // Ranges, which the time rules must NOT claim.
-  "map(10*x, 0:3)",
-  "[1, 2, 3]",
-
-  // Units, compounds, rates, conversions.
-  "120 km/h to m/s",
-  "3 kg + 2 kg",
-  "5 m/s^2",
-  "100 miles per gallon",
-  "1 hour 30 minutes",
-  "20 degrees celsius in fahrenheit",
-  "8 L/100km",
-  "$50 at 5% per year",
-
-  // Dates.
-  "25/12/2026",
-  "March 9, 2024",
-  "next friday",
-  "3rd monday of January",
-  "days until christmas",
-  "now + 5 days",
-
-  // Call-fusion families.
-  'sha256("hi")',
-  'md5("x")',
-  'base64("hello")',
-  'upper("text")',
-  "mean(1, 2, 3)",
-  "median(4, 5, 6)",
-  "pick(1, 2, 3)",
-  "ratio(3, 4)",
-  "bmi(70, 1.8)",
-  "rgb(255, 0, 0)",
-  "plot(x^2)",
-  "solve(x + 2 = 10)",
-  "derivative(x^2)",
-
-  // Percentages.
-  "200 + 10%",
-  "50% of 200",
-  "20% off 80",
-  "increase 100 by 10%",
-
-  // Numerics and literals.
-  "1.5M + 2k",
-  "3 + 4i",
-  "192.168.0.1/24",
-  "0xFF + 0b1010",
-  "1/2 + 1/3",
-
-  // Uncertainty, bigint, misc.
-  "10 +/- 2",
-  "2^100",
-  "45°",
-
-  // Variables and line references.
-  ":total = 100",
-  "line 1 + 2",
-  "sum(line1: line2)",
-];
+const CORPUS: readonly string[] = NORMALIZER_CORPUS;
 
 /** Lex a line the way `prepareExpression` does. */
 function lexAll(engine: ExpressionEngine, text: string): Token[] {
