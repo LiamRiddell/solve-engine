@@ -283,8 +283,11 @@ function fuseIsoTimestamp(tokens: Token[], pos: number, ruleName: string): Norma
  * when a group is the wrong shape for its role (a non-4-digit year in `YMD`, a
  * year group that is neither two nor four digits in `DMY`/`MDY`).
  *
- * Only reached when the host has fixed an order; `'auto'` keeps the historic
- * per-separator reading in the rule below and never calls this.
+ * Only reached when the host has fixed an order, and only for a literal that
+ * is not already an unambiguous ISO date: the rule reads a hyphen literal with
+ * a four-digit leading group as ISO before it consults the order at all.
+ * `'auto'` keeps the historic per-separator reading in the rule below and
+ * never calls this.
  */
 function resolveOrderedGroups(
   g0: string, g1: string, g2: string, order: Exclude<DateInputOrder, "auto">,
@@ -405,6 +408,22 @@ export function dateLiteralNormalizerRule(
       // three equally. See writtenAsOneRun.
       if (!writtenAsOneRun(sourceTokens)) return null;
 
+      // ── An ISO date is read as ISO whatever the order ────────────────
+      // `2026-04-03` has a four-digit leading group, which is neither a day
+      // nor a month, so there is nothing here for an input order to resolve
+      // and no reading but year-month-day. Tried ahead of the order because
+      // DMY and MDY require a one- or two-digit leading group: they declined
+      // this shape, the rule fell through, and a host that set MDY for its US
+      // readers turned every bare ISO date in every document into arithmetic
+      // (`2026-04-03` became 2,019, and `2026-04-03 + 1 day` became
+      // "2,020 day"). Hyphen only: a slash date starting with four digits is
+      // claimed by YMD alone, which is what the input-order table documents.
+      if (sep1.type === "MINUS" && t0.value.length === 4) {
+        if (!DAY_OR_MONTH.test(t1.value) || !DAY_OR_MONTH.test(t2.value)) return null;
+        // buildDateToken takes (day, month, year).
+        return buildDateToken(Number(t2.value), Number(t1.value), Number(t0.value), sourceTokens, "datetime:date-literal:iso");
+      }
+
       // A host-fixed order (DMY/MDY/YMD) reads slash and hyphen dates the same
       // way, so a US reader's `12/25/2023` and an ISO `2023/12/25` both parse.
       // `'auto'` falls through to the historic per-separator reading below.
@@ -426,12 +445,8 @@ export function dateLiteralNormalizerRule(
         return buildDateToken(Number(t0.value), Number(t1.value), year, sourceTokens, "datetime:date-literal:european");
       }
 
-      // MINUS: ISO (YYYY-MM-DD) if the first group is exactly 4 digits, else US (MM-DD-YYYY)
-      if (t0.value.length === 4) {
-        if (!DAY_OR_MONTH.test(t1.value) || !DAY_OR_MONTH.test(t2.value)) return null;
-        // year=t0, month=t1, day=t2, buildDateToken takes (day, month, year)
-        return buildDateToken(Number(t2.value), Number(t1.value), Number(t0.value), sourceTokens, "datetime:date-literal:iso");
-      }
+      // MINUS: US (MM-DD-YYYY). The ISO reading (YYYY-MM-DD) was taken above,
+      // for every order including this one.
       if (!DAY_OR_MONTH.test(t0.value) || !DAY_OR_MONTH.test(t1.value)) return null;
       const year = resolveYear(t2.value);
       if (year === null) return null;
