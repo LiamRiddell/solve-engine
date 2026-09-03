@@ -4,10 +4,11 @@ import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-// A parselet runs with no engine in hand, so the current year and a fused
-// literal's fields are read through the built-in `Date` backend rather than
-// the engine's own; the month lengths are zone-free Gregorian arithmetic.
-import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
+// The month lengths are zone-free Gregorian arithmetic; the current year and
+// a fused literal's fields are read through the parser's calendar backend,
+// the engine's own, so the literal reads back through the backend that built
+// it.
 import { daysInMonth } from "@solve-js/calendar/Gregorian";
 
 /** VMBuiltins.ts index for labelling a count as days. */
@@ -26,9 +27,9 @@ function daysInYear(year: number): number {
 	return daysInMonth(year, 1) === 29 ? 366 : 365;
 }
 
-/** The current calendar year, read when the line is parsed. */
-function currentYear(): number {
-	return DATE_CALENDAR.fields(DATE_CALENDAR.now()).year;
+/** The current calendar year in the backend's zone, read when the line is parsed. */
+function currentYear(calendar: CalendarBackend): number {
+	return calendar.fields(calendar.now()).year;
 }
 
 /**
@@ -67,6 +68,7 @@ export class DaysInPeriodParselet implements PrefixParselet {
 
 	/** The number of days in the period written after `days in`. */
 	private readPeriodDays(parser: Parser): number {
+		const calendar = parser.getCalendar();
 		const next = parser.peek();
 		const word = (next?.text ?? next?.value ?? "").toLowerCase();
 
@@ -74,7 +76,7 @@ export class DaysInPeriodParselet implements PrefixParselet {
 		const quarter = QUARTERS[word];
 		if (quarter !== undefined) {
 			parser.consume();
-			const year = this.readOptionalYear(parser) ?? currentYear();
+			const year = this.readOptionalYear(parser) ?? currentYear(calendar);
 			let total = 0;
 			for (let month = quarter[0]; month <= quarter[1]; month++) {
 				total += daysInMonth(year, month);
@@ -86,7 +88,7 @@ export class DaysInPeriodParselet implements PrefixParselet {
 		// into a date literal pointing at the first of that month.
 		if (next?.type === "DATETIME_LITERAL") {
 			parser.consume();
-			const date = DATE_CALENDAR.fields(Number(next.value));
+			const date = calendar.fields(Number(next.value));
 			return daysInMonth(date.year, date.month0);
 		}
 

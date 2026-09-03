@@ -118,10 +118,15 @@ host that wants it opts in and pays for it then.
 
 The boundary: results never depend on which backend is in use, except where a
 backend adds a capability the `Date` one lacks, a per-engine time zone being
-the one in view. Today the sites that run with no engine in hand (the rules
-that fuse a date literal while normalising, `days in <period>`, the stocks and
-historical-currency date phrases, and `formatValue`) read the `Date` backend
-whatever the option says. So does an engine running behind
-`solve-engine/worker` or the inline offload worker: a backend is an object of
-functions and does not cross the message boundary, so a host with its own bakes
-it into its worker entry, as it does for a custom package.
+the one in view. Every site the engine owns reads its backend: the VM's date
+opcodes, the plugin functions and `as` converters, the rules that fuse a date
+literal while normalising, and the parser for the forms that read a literal
+while parsing (`days in <period>`, the stocks and historical-currency date
+phrases). Two sites sit outside the engine and are told separately.
+`formatValue` is a free function with no engine in hand, so the backend a date
+is written out through is a field on its settings, `calendar`, and a host
+passes the same backend it gave the engine. A worker runtime takes it on
+`WorkerRuntimeOptions.calendar`: a backend is an object of functions and does
+not cross the message boundary, so a host with its own bakes it into its worker
+entry, as it does for a custom package. The inline offload worker computes with
+the `Date` backend.

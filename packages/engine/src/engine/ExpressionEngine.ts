@@ -176,19 +176,19 @@ export interface EngineOptions {
      *
      * Defaults to the built-in `Date` backend, read in the host process's time
      * zone, which is what every engine computed with before this option
-     * existed; leaving it unset changes nothing. The option is the seam for a
-     * `Temporal` backend, shipped by a later release, that carries a time zone
-     * of its own.
+     * existed; leaving it unset changes nothing. The `Temporal` backend from
+     * `solve-engine/temporal` carries a time zone of its own.
      *
-     * The boundary today: the sites that run with no engine in hand (the
-     * normaliser rules that fuse a date literal, `days in <period>`, the
-     * stocks and historical-currency date phrases, and `formatValue`) read the
-     * `Date` backend whatever is passed here, so a backend that computes
-     * differently from `Date` is not yet honoured everywhere. An engine
-     * running behind `solve-engine/worker`, or the inline offload worker,
-     * computes with the `Date` backend too: a backend is an object of
-     * functions and does not cross the message boundary, so a host with its
-     * own bakes it into its worker entry, as it does for a custom package.
+     * Every site the engine owns reads the backend passed here: the VM's date
+     * opcodes, the plugin functions and `as` converters through their
+     * execution context, the rules that fuse a date literal, and the parser
+     * for the forms that read a literal while parsing (`days in <period>`,
+     * the stocks and historical-currency date phrases). Two sites sit outside
+     * the engine and are told separately: `formatValue` takes the backend on
+     * its `FormattingSettings.calendar`, and a worker runtime takes it on
+     * `WorkerRuntimeOptions.calendar`, because a backend is an object of
+     * functions and does not cross the message boundary. The inline offload
+     * worker computes with the `Date` backend.
      */
     calendar?: CalendarBackend;
 
@@ -891,7 +891,7 @@ export class ExpressionEngine {
             this.normalizer.register(monthNameDateNormalizerRule(undefined, calendar));
         }
 
-        this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, locale, this.pluginFunctionIndexByName);
+        this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, locale, this.pluginFunctionIndexByName, this.context.calendar);
         this.vm = createVM(
             this.context.opRegistry,
             this.config.vm.maxStackDepth,

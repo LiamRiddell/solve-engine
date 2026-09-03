@@ -167,22 +167,23 @@ function formatBoolean(value: boolean): string {
  * always anchor to local midnight, and showing "00:00:00" on every one of
  * those would be noise, not information.
  *
- * Reads the built-in `Date` calendar backend rather than an engine's:
- * `formatValue` is a free function a host calls with a value and settings,
- * with no engine in hand, and the `Date` backend is what every engine
- * computes with by default. A backend carrying its own zone would need the
- * display to read that zone too, which is the display's half of that change.
+ * Reads the calendar backend on the settings, or the built-in `Date` one
+ * when the settings name none: `formatValue` is a free function a host calls
+ * with a value and settings, with no engine in hand, so the host passes the
+ * backend its engine computes with (`FormattingSettings.calendar`) and a
+ * date shows the day it was computed on, in that backend's zone.
  */
 function formatDatetime(value: number, locale: ILocale, settings: FormattingSettings): string {
-  const d = DATE_CALENDAR.fields(value);
+  const calendar = settings.calendar ?? DATE_CALENDAR;
+  const d = calendar.fields(value);
   const format = settings.dateResult?.format ?? "long";
   const isMidnight = d.hour === 0 && d.minute === 0 && d.second === 0 && d.millisecond === 0;
 
   // The spelled-out default, localised through the locale's own names.
   if (format === "long") {
-    const dateStr = DATE_CALENDAR.formatLongDate(value, locale.code);
+    const dateStr = calendar.formatLongDate(value, locale.code);
     if (isMidnight) return `= ${dateStr}`;
-    return `= ${dateStr}, ${DATE_CALENDAR.formatTimeOfDay(value, locale.code)}`;
+    return `= ${dateStr}, ${calendar.formatTimeOfDay(value, locale.code)}`;
   }
 
   // The numeric forms, built from the local calendar fields so they read the

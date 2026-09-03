@@ -1,9 +1,6 @@
 import { Parser } from "@solve-js/parser/Parser";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-// A parselet runs with no engine in hand, so the phrase is validated through
-// the built-in `Date` backend, which is also what built any fused literal it
-// reads.
-import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 
 /**
  * Self-contained date-phrase parser for the Stocks package's `on <date>`
@@ -71,8 +68,8 @@ function pad2(n: number): string {
 }
 
 /** Build the calendar date and confirm year/month/day didn't roll over (e.g. Feb 30 -> Mar 2). */
-function validateAndFormat(year: number, monthIndex: number, day: number, raw: string): ParsedDatePhrase {
-	const d = DATE_CALENDAR.fields(DATE_CALENDAR.localMidnight(year, monthIndex, day));
+function validateAndFormat(year: number, monthIndex: number, day: number, raw: string, calendar: CalendarBackend): ParsedDatePhrase {
+	const d = calendar.fields(calendar.localMidnight(year, monthIndex, day));
 	if (d.year !== year || d.month0 !== monthIndex || d.day !== day) {
 		throw ErrorFactory.parsing(
 			"STOCKS_INVALID_DATE",
@@ -101,10 +98,14 @@ function requireYear(text: string, raw: string): number {
  * hard parse error, not a silent `null`, matching
  * `time/parselets/shared/ZoneReference.ts`'s same "commit once confident"
  * discipline).
+ *
+ * The phrase is validated, and a fused literal read back, through the parser's
+ * calendar backend: the engine's own, which is also what built the literal.
  */
 export function tryParseDatePhrase(parser: Parser): ParsedDatePhrase | null {
 	const first = parser.peek();
 	if (!first) return null;
+	const calendar = parser.getCalendar();
 
 	// Already fused into a date literal by the datetime package's normalizer,
 	// which is what "April 12, 2005" now becomes before the parser sees it.
@@ -112,7 +113,7 @@ export function tryParseDatePhrase(parser: Parser): ParsedDatePhrase | null {
 	// its parts: it has already been validated against the calendar.
 	if (first.type === "DATETIME_LITERAL") {
 		parser.consume();
-		const date = DATE_CALENDAR.fields(Number(first.value));
+		const date = calendar.fields(Number(first.value));
 		if (Number.isNaN(date.year)) return null;
 		return {
 			isoDate: `${date.year}-${pad2(date.month0 + 1)}-${pad2(date.day)}`,
@@ -143,19 +144,19 @@ export function tryParseDatePhrase(parser: Parser): ParsedDatePhrase | null {
 				const month = parseInt(g1.value, 10);
 				const day = parseInt(g2.value, 10);
 				const year = requireYear(g3.value, raw);
-				return validateAndFormat(year, month - 1, day, raw);
+				return validateAndFormat(year, month - 1, day, raw, calendar);
 			} else {
 				// MINUS: ISO YYYY-MM-DD if the first group is exactly 4 digits, else US MM-DD-YYYY.
 				if (/^\d{4}$/.test(g1.value)) {
 					const year = parseInt(g1.value, 10);
 					const month = parseInt(g2.value, 10);
 					const day = parseInt(g3.value, 10);
-					return validateAndFormat(year, month - 1, day, raw);
+					return validateAndFormat(year, month - 1, day, raw, calendar);
 				}
 				const month = parseInt(g1.value, 10);
 				const day = parseInt(g2.value, 10);
 				const year = requireYear(g3.value, raw);
-				return validateAndFormat(year, month - 1, day, raw);
+				return validateAndFormat(year, month - 1, day, raw, calendar);
 			}
 		}
 
@@ -168,7 +169,7 @@ export function tryParseDatePhrase(parser: Parser): ParsedDatePhrase | null {
 			const yearTok = parser.consume("NUMBER");
 			const raw = `${g1.value} ${monthTok.value} ${yearTok.value}`;
 			const year = requireYear(yearTok.value, raw);
-			return validateAndFormat(year, monthIndex, parseInt(g1.value, 10), raw);
+			return validateAndFormat(year, monthIndex, parseInt(g1.value, 10), raw, calendar);
 		}
 
 		throw ErrorFactory.parsing(
@@ -186,7 +187,7 @@ export function tryParseDatePhrase(parser: Parser): ParsedDatePhrase | null {
 		const yearTok = parser.consume("NUMBER");
 		const raw = `${first.value} ${dayTok.value}, ${yearTok.value}`;
 		const year = requireYear(yearTok.value, raw);
-		return validateAndFormat(year, monthIndex, parseInt(dayTok.value, 10), raw);
+		return validateAndFormat(year, monthIndex, parseInt(dayTok.value, 10), raw, calendar);
 	}
 
 	return null;

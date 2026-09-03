@@ -19,34 +19,16 @@ import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { createEngineContext } from "@solve-js/engine/EngineContext";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
-import type { CalendarBackend, CalendarFields, ZonedFields } from "@solve-js/calendar/CalendarBackend";
+import { RecordingCalendar } from "@tools/recordingCalendar";
 import type { IAsyncResolver } from "@solve-js/resolvers/ResolverRegistry";
 import { ValueType, numberValue } from "@solve-js/vm/Value";
-
-/** A backend that delegates to `Date` but records every call and pins `now`. */
-class RecordingCalendar implements CalendarBackend {
-	readonly calls: string[] = [];
-	constructor(private readonly inner: CalendarBackend, private readonly fixedNow: number) {}
-	now(): number { this.calls.push("now"); return this.fixedNow; }
-	fields(epochMs: number): CalendarFields { this.calls.push("fields"); return this.inner.fields(epochMs); }
-	localMidnight(year: number, month0: number, day: number): number { this.calls.push("localMidnight"); return this.inner.localMidnight(year, month0, day); }
-	localWallClock(year: number, month0: number, day: number, minutes: number): number { this.calls.push("localWallClock"); return this.inner.localWallClock(year, month0, day, minutes); }
-	addDays(epochMs: number, days: number): number { this.calls.push("addDays"); return this.inner.addDays(epochMs, days); }
-	addMonths(epochMs: number, months: number): number { this.calls.push("addMonths"); return this.inner.addMonths(epochMs, months); }
-	utcOffsetMinutes(epochMs: number): number { this.calls.push("utcOffsetMinutes"); return this.inner.utcOffsetMinutes(epochMs); }
-	parseIso8601(text: string): number { this.calls.push("parseIso8601"); return this.inner.parseIso8601(text); }
-	formatLongDate(epochMs: number, locale: string): string { this.calls.push("formatLongDate"); return this.inner.formatLongDate(epochMs, locale); }
-	formatTimeOfDay(epochMs: number, locale: string): string { this.calls.push("formatTimeOfDay"); return this.inner.formatTimeOfDay(epochMs, locale); }
-	zoneOffsetMinutes(zone: string, epochMs: number): number { this.calls.push("zoneOffsetMinutes"); return this.inner.zoneOffsetMinutes(zone, epochMs); }
-	fieldsInZone(zone: string, epochMs: number): ZonedFields { this.calls.push("fieldsInZone"); return this.inner.fieldsInZone(zone, epochMs); }
-	formatTimeInZone(zone: string, epochMs: number): string { this.calls.push("formatTimeInZone"); return this.inner.formatTimeInZone(zone, epochMs); }
-	formatDateInZone(zone: string, epochMs: number): string { this.calls.push("formatDateInZone"); return this.inner.formatDateInZone(zone, epochMs); }
-}
+import { formatValue } from "@solve-js/format/FormatEngine";
+import { DEFAULT_FORMATTING_SETTINGS } from "@solve-js/format/FormattingSettings";
 
 const FIXED_NOW = Date.parse("2026-08-26T10:00:00Z");
 
 function recordingEngine(): { engine: ExpressionEngine; calendar: RecordingCalendar } {
-	const calendar = new RecordingCalendar(DATE_CALENDAR, FIXED_NOW);
+	const calendar = new RecordingCalendar(FIXED_NOW);
 	const engine = newTrackedEngine({ calendar });
 	return { engine, calendar };
 }
@@ -54,13 +36,16 @@ function recordingEngine(): { engine: ExpressionEngine; calendar: RecordingCalen
 describe("the context carries the backend", () => {
 	test("createEngineContext defaults to the Date backend", () => {
 		expect(createEngineContext().calendar).toBe(DATE_CALENDAR);
-		const custom = new RecordingCalendar(DATE_CALENDAR, FIXED_NOW);
+		const custom = new RecordingCalendar(FIXED_NOW);
 		expect(createEngineContext({ calendar: custom }).calendar).toBe(custom);
 	});
 
 	test("an engine without the option computes with the Date backend", () => {
-		const engine = newTrackedEngine();
+		// Built directly rather than through the tracked helper, which under
+		// `SOLVE_CALENDAR=temporal` supplies a backend of its own.
+		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		expect(engine.getVM().context.calendar).toBe(DATE_CALENDAR);
+		engine.clear();
 	});
 
 	test("an engine with the option holds it, and a second engine is untouched", () => {
@@ -192,7 +177,7 @@ describe("a settled live value re-runs its line through it", () => {
 			},
 			destroy: () => {},
 		};
-		const calendar = new RecordingCalendar(DATE_CALENDAR, FIXED_NOW);
+		const calendar = new RecordingCalendar(FIXED_NOW);
 		const engine = newTrackedEngine({ calendar, packages: [...BUILTIN_PACKAGES, { name: "test-once", asyncResolvers: [resolver] }] });
 		// A listener, so the batcher does not warn that nothing reads the value.
 		engine.getBatcher().onLineResult = () => {};
@@ -206,5 +191,54 @@ describe("a settled live value re-runs its line through it", () => {
 		const entry = engine.getLineCache().getEntryForLine(1);
 		expect(entry?.result.value).toBe("Sunday");
 		expect(calendar.calls).toContain("fields");
+	});
+});
+
+describe("the parser reads it for the forms that read a date while parsing", () => {
+	test("`days in <month>` reads the fused literal back through it", () => {
+		const { engine, calendar } = recordingEngine();
+		// The literal is built by the month-name rule through the backend, and
+		// the parselet reads its fields back through the same backend rather
+		// than a module-level default, so a backend with its own zone names
+		// the month the reader wrote.
+		expect(engine.evaluateExpression("days in February 2024").toNumber()).toBe(29);
+		expect(calendar.calls).toContain("localMidnight");
+		expect(calendar.calls).toContain("fields");
+	});
+
+	test("`days in <quarter>` with no year reads the year from its clock", () => {
+		const { engine, calendar } = recordingEngine();
+		// 2026 is not a leap year, so Q1 is 90 days whatever the real year is.
+		expect(engine.evaluateExpression("days in Q1").toNumber()).toBe(90);
+		expect(calendar.calls).toContain("now");
+	});
+
+	test("the historical-currency date phrase reads the literal through it", () => {
+		const { engine, calendar } = recordingEngine();
+		// The rate is looked up asynchronously (and no provider is configured,
+		// so it settles as an error), but the phrase has already read the fused
+		// literal by the time the line goes pending.
+		const value = engine.evaluateExpression("100 USD in GBP on 12/04/2005");
+		expect([ValueType.Pending, ValueType.Error]).toContain(value.type);
+		expect(calendar.calls).toContain("fields");
+	});
+});
+
+describe("the display reads the backend on the formatting settings", () => {
+	test("formatValue writes a date through `settings.calendar`", () => {
+		const { engine, calendar } = recordingEngine();
+		const value = engine.evaluateExpression("10/03/2024");
+		calendar.calls.length = 0;
+		expect(formatValue(value, { ...DEFAULT_FORMATTING_SETTINGS, calendar })).toBe("= Sunday, March 10, 2024");
+		expect(calendar.calls).toContain("fields");
+		expect(calendar.calls).toContain("formatLongDate");
+	});
+
+	test("formatValue with no backend on the settings reads the Date backend", () => {
+		const { engine, calendar } = recordingEngine();
+		const value = engine.evaluateExpression("10/03/2024");
+		calendar.calls.length = 0;
+		expect(formatValue(value)).toBe("= Sunday, March 10, 2024");
+		expect(calendar.calls).toEqual([]);
 	});
 });

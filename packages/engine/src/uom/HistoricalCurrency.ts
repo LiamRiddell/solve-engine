@@ -42,10 +42,6 @@ import { ValueType, numberValue, uomValue, errorValue, faultedOperand, type Valu
 import type { IAsyncResolver, AsyncCheckResult } from "@solve-js/resolvers/ResolverRegistry";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { createTimeoutSignal } from "@solve-js/utilities/TimeoutSignal";
-// Read at parse time, where no engine is in hand: the literal was built by the
-// datetime normaliser through the same built-in `Date` backend, so its fields
-// read back through it exactly.
-import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 
 /**
  * Resolve one historical exchange rate: the value of 1 unit of `from` in `to`
@@ -165,9 +161,10 @@ export function tryConsumeCurrencyOnDate(parser: Parser, to: string, from?: stri
 
 	parser.consume(); // "on"
 	parser.consume(); // the date literal
-	// Built at local midnight by the datetime normalizer, so it reads back the
-	// same way in local fields.
-	const date = DATE_CALENDAR.fields(Number(dateToken.value));
+	// Built at local midnight by the datetime normaliser through the engine's
+	// own calendar backend, which the parser carries, so it reads back as the
+	// same local day through that backend.
+	const date = parser.getCalendar().fields(Number(dateToken.value));
 	return `${date.year}-${pad2(date.month0 + 1)}-${pad2(date.day)}`;
 }
 

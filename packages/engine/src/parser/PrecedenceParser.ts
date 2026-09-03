@@ -8,6 +8,8 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower, buildBindingPowerTable } from "@solve-js/parser/BindingPower";
 import { getLocale } from "@solve-js/constants/locales";
 import { bigIntLiteralDigits } from "@solve-js/parser/BigIntLiteral";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
+import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 
 /**
  * Matches a CHAINED thousands-grouped integer using "." as the group
@@ -71,6 +73,16 @@ export class PrecedenceParser {
 
   /** The locale's thousands separator, cached from {@link localeCode}. */
   private readonly thousandsSeparator: string;
+
+  /**
+   * The calendar backend of the engine this parser belongs to, for the few
+   * parselets that read a fused date literal or the current year while
+   * parsing (`days in <period>`, the stocks and historical-currency date
+   * phrases). The literal was built through the same backend by the
+   * normaliser, so reading it back here through any other could name the
+   * wrong day. The `Date` backend for a parser built outside an engine.
+   */
+  private readonly calendar: CalendarBackend;
 
   /**
    * The binding power the current infix parselet is being invoked at, i.e. the
@@ -137,7 +149,13 @@ export class PrecedenceParser {
   /** Shared with every BytecodeBuilder so a nested-body builder resolves plugin calls by name. */
   private pluginFunctionIndex?: ReadonlyMap<string, number>;
 
-  constructor(parseletRegistry: ParseletRegistry, maxDepth = 50, localeCode = "en", pluginFunctionIndex?: ReadonlyMap<string, number>) {
+  constructor(
+    parseletRegistry: ParseletRegistry,
+    maxDepth = 50,
+    localeCode = "en",
+    pluginFunctionIndex?: ReadonlyMap<string, number>,
+    calendar: CalendarBackend = DATE_CALENDAR,
+  ) {
     this.registry = parseletRegistry;
     this.maxDepth = maxDepth;
     this.localeCode = localeCode;
@@ -148,11 +166,21 @@ export class PrecedenceParser {
     this.decimalSeparator = display.decimalSeparator;
     this.thousandsSeparator = display.thousandsSeparator;
     this.pluginFunctionIndex = pluginFunctionIndex;
+    this.calendar = calendar;
   }
 
   /** Get locale code for NumberParselet to normalize separators */
   getLocaleCode(): string {
     return this.localeCode;
+  }
+
+  /**
+   * The calendar backend a parselet reads a date with at parse time: the
+   * engine's own, so a fused literal reads back through the backend that
+   * built it. See the field's doc for the sites that need it.
+   */
+  getCalendar(): CalendarBackend {
+    return this.calendar;
   }
 
   /**
