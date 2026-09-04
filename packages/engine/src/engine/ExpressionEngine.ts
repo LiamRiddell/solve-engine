@@ -842,8 +842,25 @@ export class ExpressionEngine {
      * of them out once the cap was reached. About 45 ns per hit, measured.
      * The front half is not moved: it is keyed identically, evicted with the
      * same victim, and its own order is never consulted.
+     *
+     * Only once the cache is full, which is the whole point: recency decides
+     * who gets evicted, and nothing is evicted below the cap, so under it the
+     * delete and re-insert buy nothing and cost on the hottest path there is.
+     * The 45 ns measured for one hit is not what it costs in a document, where
+     * every keystroke touches every line: a variable chain measured 1.17 ms
+     * before this guard and 2.10 ms after the LRU went in, in the same CI run
+     * as its own merge base. A Map holds a deleted key's slot until it
+     * compacts, so a delete-and-add on every hit pays for that repeatedly
+     * rather than once.
+     *
+     * The trade this leaves: the first eviction after the cache fills reads
+     * insertion order rather than true recency, because nothing before the cap
+     * was ordered. Every hit after that re-inserts, so the order is accurate
+     * from the second eviction on, and the first victim is at worst the same
+     * one insertion order would have chosen anyway.
      */
     private touchCompiled(expression: string, program: BytecodeProgram): void {
+        if (this.bytecodeCache.size < this.config.performance.defaultCacheSize) return;
         this.bytecodeCache.delete(expression);
         this.bytecodeCache.set(expression, program);
     }
@@ -857,8 +874,9 @@ export class ExpressionEngine {
         this.failedParses.set(expression, failure);
     }
 
-    /** Mark a remembered parse failure as just used; the same move as {@link touchCompiled}. */
+    /** Mark a remembered parse failure as just used; the same move, and the same guard, as {@link touchCompiled}. */
     private touchFailedParse(expression: string, failure: { error: EngineError; normalizedTokens: Token[]; reads: string[]; writes: string[] }): void {
+        if (this.failedParses.size < this.config.performance.defaultCacheSize) return;
         this.failedParses.delete(expression);
         this.failedParses.set(expression, failure);
     }
