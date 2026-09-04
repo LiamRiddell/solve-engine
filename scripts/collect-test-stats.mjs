@@ -87,6 +87,28 @@ function readReport() {
 	}
 
 	const report = JSON.parse(raw);
+
+	// A suite that fails to LOAD contributes zero failed tests, so the run
+	// reports fewer tests rather than a failure, and the figure below quietly
+	// becomes a smaller true number. That has happened three times: a missing
+	// `temporal-polyfill` install, a module mapping pointing at a deleted mock,
+	// and a config missing the transform those suites need. Each cost more to
+	// find than to fix, because nothing was red. No suite in this repository
+	// legitimately holds no tests, so treat one as the report being untrustworthy
+	// rather than as a smaller total.
+	const empty = (report.testResults ?? []).filter((suite) => (suite.assertionResults ?? []).length === 0);
+	if (empty.length > 0) {
+		const lines = empty.map((suite) => `  ${path.relative(ROOT, suite.name)}  (${suite.status})`);
+		console.error(
+			`${empty.length} suite(s) ran no tests, so the totals cannot be trusted:` +
+				"\n" +
+				lines.join("\n") +
+				"\n\nA suite that fails to load reports no tests rather than a failure. Read its" +
+				"\n`message` in .jest-report.json; it is usually a module it could not resolve.",
+		);
+		process.exit(1);
+	}
+
 	return {
 		tests: report.numTotalTests,
 		suites: report.numTotalTestSuites,
