@@ -156,11 +156,18 @@ export function calendarOf(context?: { readonly calendar?: CalendarBackend }): C
  * reads named zones with, so the accuracy is the same and nothing new is
  * bundled. The one place it is a simplification is a wall clock that a
  * daylight-saving transition made ambiguous or non-existent (01:30 on a
- * spring-forward morning): the single-pass round trip
- * {@link zonedWallClockToUtcMs} documents resolves it one way, and a
- * `Temporal` backend's `disambiguation: 'compatible'` may resolve it an hour
- * differently.
+ * spring-forward morning): {@link zonedWallClockToUtcMs} resolves it one way,
+ * and a `Temporal` backend's `disambiguation: 'compatible'` may resolve it an
+ * hour differently.
  */
+/**
+ * An ISO 8601 date-time with a time of day and NO offset and no `Z`: the one
+ * spelling whose instant depends on which zone reads it. Anchored at both
+ * ends, so a date-only string and anything carrying an offset fall through to
+ * the base class untouched.
+ */
+const ISO_LOCAL_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?$/;
+
 class ZonedDateCalendar extends DateCalendar {
 	/**
 	 * @param namedZone - An IANA zone name `Intl` accepts.
@@ -216,6 +223,26 @@ class ZonedDateCalendar extends DateCalendar {
 
 	utcOffsetMinutes(epochMs: number): number {
 		return this.zoneOffsetMinutes(this.namedZone, epochMs);
+	}
+
+	parseIso8601(text: string): number {
+		// The one reading in that contract that depends on a zone: a date-time
+		// with no offset and no `Z` is LOCAL time, and local here is the named
+		// zone. Without this the backend contradicted itself, computing
+		// `2026-04-03` at New York midnight while reading `2026-04-03T09:30` as
+		// half past nine in the host process's zone. It is also what the
+		// `Temporal` backend already does (`TemporalCalendar.parseIso8601`
+		// resolves a bare wall clock in its own zone), so the two agree.
+		//
+		// Everything else is the base class byte for byte: a date-only string is
+		// still UTC midnight and an explicit offset is still subtracted, both
+		// frozen by the interface's contract.
+		const matched = ISO_LOCAL_DATE_TIME.exec(text.trim());
+		if (matched === null) return super.parseIso8601(text);
+		const [, year, month, day, hour, minute, second, fraction] = matched;
+		const millisecond = fraction === undefined ? 0 : Number(fraction.slice(0, 3).padEnd(3, "0"));
+		return zonedWallClockToUtcMs(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), this.namedZone, this)
+			+ (second === undefined ? 0 : Number(second)) * 1000 + millisecond;
 	}
 
 	formatLongDate(epochMs: number, locale: string): string {

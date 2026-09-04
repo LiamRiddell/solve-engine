@@ -89,11 +89,23 @@ export function resolveOffsetMinutes(zoneRef: string, atMs: number, calendar: Ca
  * The UTC instant a wall-clock reading names when read as local time in a
  * zone reference, in epoch milliseconds.
  *
- * Single-pass rather than iteratively refined against the daylight-saving
- * transition it might land in: the standard simplification every comparable
- * "convert this local time to another zone" tool makes, and it only matters
- * within the hour or two around a transition instant, which is inherent to any
- * offset-based approach without a full transition-table walk.
+ * Two passes, not one. The first offset has to be read at the naive instant
+ * (the fields taken as if they were UTC), because the real instant is what is
+ * being computed; that naive instant is wrong by the zone's own offset, so in a
+ * zone far from UTC it can fall on the other side of a daylight-saving
+ * transition from the reading itself. Measured: 22:30 on 4 April 2026 in
+ * Auckland answered 10:30 UTC on a single pass, an hour late, because the naive
+ * instant is thirteen hours on and lands past the transition at 14:00 UTC on
+ * the 4th. Re-reading the offset at the first guess and using it when the two
+ * disagree narrows the window from the size of the offset to the transition
+ * itself.
+ *
+ * What remains is inherent to any offset-based approach without a full
+ * transition-table walk: a wall clock a spring-forward skipped never happened,
+ * and one a fall-back repeated happened twice, so the answer for those readings
+ * is a choice rather than a fact. A `Temporal` backend's
+ * `disambiguation: 'compatible'` may choose differently, and the
+ * calendar-backends page says so.
  *
  * @param year - The calendar year.
  * @param month0 - Zero-based month; overflow rolls into the adjacent year.
@@ -109,8 +121,10 @@ export function zonedWallClockToUtcMs(
 	zoneRef: string, calendar: CalendarBackend,
 ): number {
 	const naiveUtcMs = utcMs(year, month0, day, hour, minute, 0);
-	const offsetMinutes = resolveOffsetMinutes(zoneRef, naiveUtcMs, calendar);
-	return naiveUtcMs - offsetMinutes * 60000;
+	const naiveOffset = resolveOffsetMinutes(zoneRef, naiveUtcMs, calendar);
+	const firstGuess = naiveUtcMs - naiveOffset * 60000;
+	const refinedOffset = resolveOffsetMinutes(zoneRef, firstGuess, calendar);
+	return refinedOffset === naiveOffset ? firstGuess : naiveUtcMs - refinedOffset * 60000;
 }
 
 /**
