@@ -11,23 +11,46 @@ raise is really worth, means running those bands, which is exactly the fiddly
 arithmetic a calculator should do. Write the salary and ask for it after tax.
 
 ```solve
-50000 after tax // 39,519.60
-take home on 30000 // 25,119.60
-120000 after tax // 76,157.40
+£50,000 after tax // £39,519.60
+take home on £30,000 // £25,119.60
+£120,000 after tax // £76,157.40
 ```
 
-The salary keeps its currency, so a `£` figure answers in `£`, and `per month
-after tax` gives the monthly take-home rather than the annual:
+`per month after tax` gives the monthly take-home rather than the annual:
 
 ```solve
 £60,000 salary per month after tax // £3,779.78
 ```
 
+The salary has to be in pounds, because these bands are British. A salary in
+another currency, or a bare number that names no currency at all, is refused
+rather than answered: the bands would produce a confident figure about a
+country they say nothing about. What to write instead is on the line below.
+
+## A rate you state
+
+Everywhere the bands do not reach, state the rate instead. Nothing about this
+form is national, so it works on any currency and on a bare number.
+
+```solve
+£50,000 after 20% tax // £40,000.00
+$50,000 after 20% tax // $40,000.00
+50000 after 20% tax // 40,000
+```
+
+It is the same take-home question with the arithmetic stated rather than looked
+up, which is what anyone outside the UK needs, and what anyone on a flat rate,
+a contractor rate or a rate they are modelling needs too.
+
+## An hourly rate
+
 `hourly for` is a plainer sum: the gross salary as an hourly rate, on a full-time
-year of 1,920 hours (a 40-hour week across 48 weeks), before any tax.
+year of 1,920 hours (a 40-hour week across 48 weeks), before any tax. No bands
+are involved, so it takes any currency.
 
 ```solve
 hourly for 45000 // 23.44
+hourly for $45,000 // $23.44
 ```
 
 ## Which figures these are
@@ -46,7 +69,9 @@ same in all three; the package carries a table for each, so the year a future
 Budget moves is one table beside its neighbours.
 
 **Scotland sets its own income tax bands and is not covered here.** That is the
-same boundary the [tax](/syntax/tax/) rule draws: a rate that is not shipped is
-not assumed, rather than quietly giving a Scottish salary an English answer. The
+same boundary the [tax](/syntax/tax/) rule draws, and the same one the pound
+requirement above draws: a rate that is not shipped is not assumed, rather than
+quietly giving a Scottish salary an English answer, or a dollar salary a British
+one. `after 20% tax` is the form for every case the table does not describe. The
 figures cover a straightforward employee on the standard tax code; a different
 code, pension contributions, or student loan repayments change the real number.

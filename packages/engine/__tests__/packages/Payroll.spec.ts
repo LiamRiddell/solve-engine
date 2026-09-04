@@ -53,9 +53,9 @@ describe("the HMRC computation", () => {
 
 describe("the grammar", () => {
 	test("`after tax` and `take home on` agree", () => {
-		expect(num("50000 after tax")).toBeCloseTo(39519.6, 2);
-		expect(num("take home on 50000")).toBeCloseTo(39519.6, 2);
-		expect(num("50000 salary after tax")).toBeCloseTo(39519.6, 2);
+		expect(num("£50,000 after tax")).toBeCloseTo(39519.6, 2);
+		expect(num("take home on £50,000")).toBeCloseTo(39519.6, 2);
+		expect(num("£50,000 salary after tax")).toBeCloseTo(39519.6, 2);
 	});
 
 	test("a salary keeps its currency", () => {
@@ -65,15 +65,61 @@ describe("the grammar", () => {
 	});
 
 	test("`per month after tax` is the monthly take-home", () => {
-		expect(num("60000 per month after tax")).toBeCloseTo(3779.78, 2);
+		expect(num("£60,000 per month after tax")).toBeCloseTo(3779.78, 2);
 	});
 
 	test("`after tax` binds to the whole preceding amount", () => {
 		// (50000 + 2000) after tax, not 50000 + (2000 after tax).
-		expect(num("50000 + 2000 after tax")).toBeCloseTo(takeHome(52000, B), 2);
+		expect(num("£50,000 + £2,000 after tax")).toBeCloseTo(takeHome(52000, B), 2);
 	});
 
 	test("`hourly for` is the plain hourly rate", () => {
 		expect(num("hourly for 45000")).toBeCloseTo(23.44, 2);
+	});
+});
+
+describe("the bands are British, and say so", () => {
+	// HMRC's bands are a fact about the United Kingdom. Applied to a dollar
+	// salary they answered confidently about a different country's tax and
+	// printed a dollar sign on it; applied to a bare number they assumed
+	// Britain silently. Both now refuse, and the refusal names the form that
+	// does work, because the question behind it is a real one.
+	test("another currency is refused by name", () => {
+		expect(shown("$50,000 after tax")).toContain("say nothing about USD");
+		expect(shown("€50,000 after tax")).toContain("say nothing about EUR");
+		expect(shown("take home on $50,000")).toContain("say nothing about USD");
+	});
+
+	test("a bare number is refused too, because it names no currency", () => {
+		expect(shown("50000 after tax")).toContain("needs a pound salary");
+		expect(shown("50000 per month after tax")).toContain("needs a pound salary");
+	});
+
+	test("`hourly for` is not gated, because it applies no bands", () => {
+		// A salary divided by a working year is a division, not tax.
+		expect(num("hourly for 45000")).toBeCloseTo(23.44, 2);
+		expect(shown("hourly for $45,000")).toBe("$23.44");
+	});
+});
+
+describe("a rate the line states, which is national about nothing", () => {
+	test("any currency, and a bare number", () => {
+		expect(shown("£50,000 after 20% tax")).toBe("£40,000.00");
+		expect(shown("$50,000 after 20% tax")).toBe("$40,000.00");
+		expect(num("50000 after 20% tax")).toBeCloseTo(40000, 2);
+	});
+
+	test("it binds to the whole preceding amount, as the banded form does", () => {
+		expect(num("50000 + 2000 after 20% tax")).toBeCloseTo(41600, 2);
+	});
+
+	test("a rate that is not a rate is refused rather than applied", () => {
+		expect(shown("50000 after 120% tax")).toContain("between 0 and 100");
+	});
+
+	test("`after` on its own still means what it did", () => {
+		// The whole shape is required, closing word included, so an ordinary
+		// `after` is untouched: this is the parse error it has always been.
+		expect(() => newTrackedEngine().evaluateExpression("3 days after tuesday")).toThrow();
 	});
 });
