@@ -14,6 +14,7 @@ import {
 import { clockTimeNormalizerRule } from "./normalizer/ClockTimeNormalizerRule";
 import { clockTimeIntervalNormalizerRule } from "./normalizer/ClockTimeIntervalNormalizerRule";
 import { clockTimeSumNormalizerRule } from "./normalizer/ClockTimeSumNormalizerRule";
+import { compactDurationNormalizerRule } from "./normalizer/CompactDurationNormalizerRule";
 import { fpsRateNormalizerRule } from "./normalizer/FpsRateNormalizerRule";
 import { laptimeNormalizerRule } from "./normalizer/LaptimeNormalizerRule";
 import { videoTimecodeNormalizerRule } from "./normalizer/VideoTimecodeNormalizerRule";
@@ -93,6 +94,7 @@ export const TIME_PACKAGE: IEnginePackage = {
     clockTimeNormalizerRule(),
     clockTimeIntervalNormalizerRule(),
     clockTimeSumNormalizerRule(),
+    compactDurationNormalizerRule(),
     fpsRateNormalizerRule(),
     laptimeNormalizerRule(),
     videoTimecodeNormalizerRule(),
