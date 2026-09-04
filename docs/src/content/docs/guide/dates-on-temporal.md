@@ -11,9 +11,12 @@ Answering needs a time zone and a set of calendar rules, and by default the
 engine takes both from the JavaScript `Date` object, which reads the zone of the
 process it runs in and nothing else.
 
-This page is about the other way to answer them: through `Temporal`, in a zone
-you choose. It is opt-in, it lives behind its own entry point, and a host that
-does not opt in ships none of it.
+This page is about the other ways to answer them, both of which let you choose
+the zone. The one it is named after is `Temporal`: opt-in, behind its own entry
+point, and a host that does not opt in ships none of it. The other is
+[`dateCalendarInZone`](#choosing-a-zone-without-temporal), which names a zone on
+the `Date` backend everyone already has, and needs nothing installed. If all you
+want is a zone, start there.
 
 ## What Temporal is
 
@@ -46,6 +49,48 @@ result as the engine's `calendar` option. The entry is reached by nothing else
 in the package: a smoke test walks every chunk the root entry loads and refuses
 one that carries the backend's code, so `import { createEngine } from
 "solve-engine"` is the same bundle whether or not this entry exists.
+
+## Choosing a zone without Temporal
+
+A time zone and a calendar implementation are two different asks, and most hosts
+only have the first. `dateCalendarInZone` answers it on the `Date` backend that
+ships in the box: it takes an IANA zone name and hands back a backend that reads
+that zone as "local", with no polyfill, no extra entry point and nothing added
+to the bundle.
+
+```ts
+import { createEngine, dateCalendarInZone } from "solve-engine";
+
+const engine = createEngine({ calendar: dateCalendarInZone("Asia/Tokyo") });
+```
+
+Everything the next section says about what a zone changes applies here too: a
+date literal is midnight in Tokyo, `9:00am` is nine o'clock there, `today` is
+Tokyo's day, and a day step across a daylight-saving change holds the wall clock
+rather than adding twenty-four hours. Reading the zone data is the same
+`Intl.DateTimeFormat` the `Date` backend already uses for `time in Paris`, so
+the answers come from the runtime's own IANA database.
+
+A zone this runtime cannot format with is refused where you name it, with a
+coded `DATE_ZONE_UNKNOWN` error, rather than answering in some other zone once
+per line:
+
+```ts
+dateCalendarInZone("Europe/Atlantis");
+// throws: dateCalendarInZone("Europe/Atlantis") is not a time zone this runtime knows.
+```
+
+There is deliberately no `date.zone` configuration field beside it. The zone
+belongs to the calendar backend, which already owns what "local" means; a second
+place to say it is how the two come to disagree.
+
+The one thing this does not give you is `Temporal`'s own answer for a wall clock
+a daylight-saving change skipped or repeated. 01:30 on a spring-forward morning
+never happened, and on a fall-back morning it happened twice, so the instant it
+names is a choice; `Temporal` makes that choice explicitly with
+`disambiguation: 'compatible'` and this backend makes it with an offset lookup,
+and the two can differ by an hour for exactly those readings. Every other
+answer is the same, which is what the rest of this page is about.
 
 ## Opting in
 
@@ -197,11 +242,13 @@ native on Node 26.
   directly, the `Date` backend may guess through the runtime's legacy parser
   (`"2019/04/01"` reads as local midnight in V8) where the `Temporal` backend
   answers `NaN`; nothing in the engine passes such a string.
-- **Spans that cross a daylight-saving change.** `days between` divides a
-  millisecond span, so in a zone that observes daylight saving a span across
-  the change is an hour short of a whole number of days. That is the engine's
-  own arithmetic and the same on both backends; a `Temporal` engine in `UTC`
-  simply has no such change to cross.
+- **Spans that cross a daylight-saving change.** `days between two dates` counts
+  whole calendar days, so `days between 28 March 2026 and 30 March 2026` is
+  `2 days` in every zone even where the clocks moved between them. Subtracting
+  one date from another is still elapsed time in milliseconds, so
+  `30 March 2026 - 28 March 2026` reads `47:00` in London and `48:00` where
+  nothing changed that weekend. That is the engine's own arithmetic and the same
+  on both backends.
 - **The offsets of local mean time.** Before a zone adopted standard time
   (London in 1847, New York in 1883) its offset was not a whole number of
   minutes. `Date` truncates it to whole minutes, and the backend does the same,
