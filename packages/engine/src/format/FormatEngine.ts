@@ -9,6 +9,7 @@ import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { columnMajorToRowMajor } from "@solve-js/vm/MatrixOps";
 import { formatSymbolic, type SymbolicNode } from "@solve-js/symbolic";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
+import { isFixedOffset, longDateInZone, timeOfDayInZone } from "@solve-js/calendar/IntlZone";
 
 function formatNumber(value: number, locale: ILocale, settings: FormattingSettings, decimalPlaces?: number): string {
   const sep = settings.floatResult.enableSeperator;
@@ -173,17 +174,29 @@ function formatBoolean(value: boolean): string {
  * backend its engine computes with (`FormattingSettings.calendar`) and a
  * date shows the day it was computed on, in that backend's zone.
  */
-function formatDatetime(value: number, locale: ILocale, settings: FormattingSettings): string {
+function formatDatetime(value: number, locale: ILocale, settings: FormattingSettings, zone?: string): string {
   const calendar = settings.calendar ?? DATE_CALENDAR;
-  const d = calendar.fields(value);
   const format = settings.dateResult?.format ?? "long";
-  const isMidnight = d.hour === 0 && d.minute === 0 && d.second === 0 && d.millisecond === 0;
+
+  // A date that names a zone is read in it. `3 April 2026 in Tokyo` is Tokyo's
+  // 3 April, and rendering the instant behind it in the reader's own zone
+  // showed them 2 April: the right moment, answering a question nobody asked.
+  //
+  // Only a named zone, deliberately. An ISO literal carrying `Z` or an offset
+  // records the synthetic fixed-offset form, and how those display is a
+  // separate question this does not answer: they keep reading in the zone the
+  // engine computes in, as they always have.
+  const named = zone !== undefined && !isFixedOffset(zone);
+  const d = named ? calendar.fieldsInZone(zone, value) : calendar.fields(value);
+  const millisecond = named ? 0 : calendar.fields(value).millisecond;
+  const isMidnight = d.hour === 0 && d.minute === 0 && d.second === 0 && millisecond === 0;
 
   // The spelled-out default, localised through the locale's own names.
   if (format === "long") {
-    const dateStr = calendar.formatLongDate(value, locale.code);
+    const dateStr = named ? longDateInZone(zone, value, locale.code) : calendar.formatLongDate(value, locale.code);
     if (isMidnight) return `= ${dateStr}`;
-    return `= ${dateStr}, ${calendar.formatTimeOfDay(value, locale.code)}`;
+    const timeStr = named ? timeOfDayInZone(zone, value, locale.code) : calendar.formatTimeOfDay(value, locale.code);
+    return `= ${dateStr}, ${timeStr}`;
   }
 
   // The numeric forms, built from the local calendar fields so they read the
@@ -487,7 +500,7 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
     case ValueType.Boolean:
       return formatBoolean(value.value as boolean);
     case ValueType.Datetime:
-      return formatDatetime(value.value as number, locale, us);
+      return formatDatetime(value.value as number, locale, us, value.zone);
     case ValueType.Uom:
       return formatUom(value.value as number, value.unit, locale, us, value.exact);
     case ValueType.Matrix:

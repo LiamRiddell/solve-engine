@@ -187,10 +187,10 @@ describe("both survive every round trip a Value makes", () => {
 	});
 });
 
-describe("the sidecars are inert: nothing rendered changed", () => {
+describe("a date that names no zone renders exactly as it did", () => {
 	// Measured on 2.25.0, before the sidecars existed, and asserted as literals
-	// rather than recomputed: the point is that the 2.26.0 formatter does not
-	// read either field, so these strings cannot have moved.
+	// rather than recomputed: a value carrying no zone reads through the same
+	// path it always did, so these strings cannot have moved.
 	const unchanged: ReadonlyArray<readonly [string, string]> = [
 		["2026-04-03", "= Friday, April 3, 2026"],
 		["3 April 2026", "= Friday, April 3, 2026"],
@@ -205,9 +205,20 @@ describe("the sidecars are inert: nothing rendered changed", () => {
 		expect(formatValue(evaluate(expression))).toBe(expected);
 	});
 
-	test("a date carrying sidecars formats exactly as the bare number does", () => {
+	test("the grain alone changes nothing", () => {
 		const bare = datetimeValue(1775170800000);
-		const carrying = datetimeValue(1775170800000, "instant", "Asia/Tokyo");
+		const carrying = datetimeValue(1775170800000, "instant");
 		expect(formatValue(carrying)).toBe(formatValue(bare));
+	});
+
+	test("a named zone is read in that zone, which is the point of recording it", () => {
+		// 1775142000000 is midnight on 3 April 2026 in Tokyo. Rendered in the
+		// zone the line named it is that day; rendered in the zone the engine
+		// computes in (Europe/London for this suite) it is the evening before,
+		// which is the right instant answering a question nobody asked.
+		const bare = datetimeValue(1775142000000);
+		const inTokyo = datetimeValue(1775142000000, "instant", "Asia/Tokyo");
+		expect(formatValue(inTokyo)).toBe("= Friday, April 3, 2026");
+		expect(formatValue(bare)).not.toBe(formatValue(inTokyo));
 	});
 });
