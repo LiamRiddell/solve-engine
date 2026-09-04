@@ -84,6 +84,21 @@ import { UserUnitTable } from "@solve-js/packages/uom/UserUnitTable";
 import { userUnitExpansionRule } from "@solve-js/packages/uom/normalizer/UserUnitNormalizerRule";
 import { callFusionRule } from "@solve-js/normalizer/CallFusionRule";
 import { dateLiteralNormalizerRule } from "@solve-js/packages/datetime/normalizer/DateLiteralNormalizerRule";
+import {
+    classifyRun,
+    completeDateReading,
+    isoOf,
+    readNumericDate,
+    resolveDateOrderPolicy,
+    splitNumericRun,
+    type DateReading,
+    type DateReadingPolicy,
+    type DatetimeErrorCode,
+} from "@solve-js/packages/datetime/DateReading";
+import {
+    DATETIME_LITERAL_TYPE,
+    DATETIME_LITERAL_UNREADABLE_TYPE,
+} from "@solve-js/packages/datetime/normalizer/DateLiteralNormalizerRule";
 import { monthNameDateNormalizerRule } from "@solve-js/packages/datetime/normalizer/MonthNameDateNormalizerRule";
 import { buildExplanation } from "@solve-js/explain";
 import type { Explanation } from "@solve-js/explain";
@@ -294,6 +309,11 @@ export class ExpressionEngine {
      */
     private readonly context: EngineContext;
     private config: typeof DEFAULT_CONFIG;
+    /**
+     * How this engine reads an ambiguous numeric date literal, resolved once
+     * from `config.date` at construction. See {@link getDateReading}.
+     */
+    private readonly dateReading: DateReadingPolicy;
     private diagnosticPipeline: DiagnosticPipeline;
     /**
      * Direct reference to the timeline collector registered above (when
@@ -784,6 +804,15 @@ export class ExpressionEngine {
         // used to silently replace the WHOLE section, dropping every other
         // field in it back to `undefined` instead of keeping its default.
         this.config = mergeEngineConfig(DEFAULT_CONFIG, config ?? {});
+        // Resolved once, here, and then carried. `date.inputOrder: 'locale'`
+        // asks a question of `Intl`, and the date-literal rule runs on every
+        // keystroke, so asking per literal would be a per-keystroke cost for an
+        // answer that cannot change within a process. `this.config` is assigned
+        // exactly here and never reassigned, so the resolved order cannot go
+        // stale against the per-expression bytecode cache either. Raises
+        // DATE_INPUT_LOCALE_INVALID for a malformed `date.inputLocale`, at the
+        // boundary rather than per line.
+        this.dateReading = resolveDateOrderPolicy(this.config.date);
         this.lexer = new Lexer(locale);
         this.registry = new ParseletRegistry();
         // Before the package loop below, which registers plugin functions into it.
@@ -880,16 +909,24 @@ export class ExpressionEngine {
         // (`March 9, 2024`). Registered here rather than through the datetime
         // package descriptor because both rules build their literal through
         // this engine's own calendar backend, and the numeric one also reads
-        // this engine's `date.inputOrder` (DMY/MDY/YMD) to resolve an
+        // this engine's resolved date-reading order (DMY/MDY/YMD) to resolve an
         // ambiguous ordering; a descriptor is shared across every engine, the
-        // same reason user units are registered above. Gated on the datetime
+        // same reason user units are registered above. The RESOLVED order is
+        // passed, never `date.inputOrder`, so the word `'locale'` cannot reach
+        // a rule that would have to re-infer it. Gated on the datetime
         // package actually being loaded (it owns the DATETIME_LITERAL
         // parselet), so an engine without it does not fuse a date literal it
-        // has no way to read.
-        if (this.registry.hasPrefix("DATETIME_LITERAL")) {
+        // has no way to read. Both token types are checked, because the rule
+        // emits either one and a refusal with no parselet behind it would be a
+        // parse error where the old behaviour was a number.
+        if (this.registry.hasPrefix("DATETIME_LITERAL") && this.registry.hasPrefix("DATETIME_LITERAL_UNREADABLE")) {
             const calendar = () => this.context.calendar;
-            this.normalizer.register(dateLiteralNormalizerRule(() => this.config.date.inputOrder, calendar));
-            this.normalizer.register(monthNameDateNormalizerRule(undefined, calendar));
+            this.normalizer.register(dateLiteralNormalizerRule(
+                () => this.dateReading.order,
+                calendar,
+                () => this.config.date.onAmbiguous,
+            ));
+            this.normalizer.register(monthNameDateNormalizerRule(undefined, calendar, () => this.config.date.onAmbiguous));
         }
 
         this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, locale, this.pluginFunctionIndexByName, this.context.calendar);
@@ -1243,6 +1280,151 @@ export class ExpressionEngine {
     getConfig(): EngineConfig {
         return { ...this.config };
     }
+
+    /**
+     * How this engine reads an ambiguous numeric date literal, and where that
+     * reading came from.
+     *
+     * A settings panel renders this ("Dates are read day first, from your
+     * system locale en-GB"), and a bug report should paste it: "why did
+     * `03/04/2026` render as 4 March" is answerable from one line of it and
+     * unanswerable without. `orderSource: 'fallback'` is the visible signal
+     * that an inference was asked for and could not be made, which is the
+     * difference between a decision and a guess, and the case where a host
+     * should offer the reader a manual choice.
+     *
+     * Resolved once at construction from `config.date`, so this is a read of a
+     * settled fact rather than a fresh inference, and two calls on one engine
+     * cannot disagree.
+     *
+     * @returns The frozen policy: the order, its source, and the locale tag it
+     * was inferred from where it was inferred from one.
+     */
+    getDateReading(): DateReadingPolicy {
+        return this.dateReading;
+    }
+
+    /**
+     * How every date literal in a line was read, with the span each occupies.
+     *
+     * This is what an editor puts behind a hover or an underline, beside the
+     * {@link tokenizeForClassification} it already calls per keystroke. It
+     * lexes and normalises only, so no line is evaluated and no document state
+     * is touched, and it is the only surface that carries source offsets and
+     * the only one that can describe two literals on one line.
+     *
+     * The reading is recomputed rather than remembered. A line can hold two
+     * literals (`31/12/2026 - 01/01/2026`), which one answer cannot represent,
+     * and a derived date (`03/04/2026 + 1 day`) is no longer the literal that
+     * was read, so a reading recorded on the value would be right for the
+     * common line and quietly wrong for the rest. It reaches the same answer
+     * because it calls the same function the normaliser did.
+     *
+     * `needsNote` is the field to branch on: it is true exactly when the
+     * reading was a genuine choice between two real days, when a two-digit
+     * year was windowed to a century, or when the literal was refused. A host
+     * that shows `note` on every date writes wallpaper; a host that shows it
+     * on none leaves the reader to guess.
+     *
+     * @param text - The line to read. Not evaluated.
+     * @returns One record per date literal, in the order they appear.
+     */
+    readDates(text: string): DateReading[] {
+        const { tokens } = this.lexToTokens(text, undefined, false);
+        const normalized = this.normalizer.normalize(tokens.filter((t) => t.type !== "COMMENT"));
+        const readings: DateReading[] = [];
+        for (const token of normalized) {
+            const refused = token.type === DATETIME_LITERAL_UNREADABLE_TYPE;
+            if (!refused && token.type !== DATETIME_LITERAL_TYPE) continue;
+            const start = token.offset;
+            const end = token.sourceEnd ?? token.offset + token.text.length;
+            readings.push(this.describeDateLiteral(text.slice(start, end), start, end, token, refused));
+        }
+        return readings;
+    }
+
+    /**
+     * Turns one fused date token back into the reading that produced it.
+     *
+     * The numeric shapes go through `readNumericDate` again, so the account and
+     * the answer are the same decision rather than two that agree by
+     * inspection. Anything else (a spelled-out month, an ISO timestamp) settled
+     * itself, and is described from the instant the token already carries.
+     */
+    private describeDateLiteral(
+        source: string,
+        start: number,
+        end: number,
+        token: Token,
+        refused: boolean,
+    ): DateReading {
+        const run = splitNumericRun(source);
+        if (run !== null) {
+            const read = readNumericDate(run, this.dateReading.order, this.config.date.onAmbiguous, this.context.calendar);
+            // An ISO-shaped run settled itself, so no order and no locale had
+            // any part in it and neither is reported. Every other shape was
+            // read under this engine's order, including when it was refused.
+            const settledItself = classifyRun(run.groups[0], run.groups[1], run.groups[2], run.separator) === "iso";
+            const applied = this.dateReading.order === "auto"
+                ? (run.separator === "hyphen" ? "MDY" : "DMY")
+                : this.dateReading.order;
+            const provenance = settledItself
+                ? { order: "ISO" as const, orderSource: "iso" as const, locale: undefined }
+                : { order: applied, orderSource: this.dateReading.orderSource, locale: this.dateReading.locale };
+            if (read.kind === "date") {
+                return completeDateReading(
+                    {
+                        text: source, start, end,
+                        iso: isoOf(read.day, read.month, read.year),
+                        ...provenance,
+                        contested: read.alternative !== undefined,
+                        shortYear: read.shortYear,
+                        alternative: read.alternative,
+                    },
+                    run.separator,
+                );
+            }
+            return completeDateReading(
+                {
+                    text: source, start, end, iso: null,
+                    ...provenance,
+                    contested: false,
+                    shortYear: false,
+                    problem: read.kind === "refuse" ? read.code : undefined,
+                },
+                run.separator,
+                read.kind === "refuse" ? read.message : undefined,
+            );
+        }
+
+        // Not a three-group numeric run: a spelled-out month, or an ISO
+        // timestamp, both of which have one reading and no order to apply.
+        if (refused) {
+            const fault = JSON.parse(token.value) as { code: DatetimeErrorCode; message: string };
+            return completeDateReading(
+                {
+                    text: source, start, end, iso: null, order: null, orderSource: "spelled",
+                    contested: false, shortYear: false, problem: fault.code,
+                },
+                "slash",
+                fault.message,
+            );
+        }
+        const fields = this.context.calendar.fields(Number(token.value));
+        const settledBy = /^\d{4}-/.test(source) ? "iso" : "spelled";
+        return completeDateReading(
+            {
+                text: source, start, end,
+                iso: isoOf(fields.day, fields.month0 + 1, fields.year),
+                order: settledBy === "iso" ? "ISO" : "spelled",
+                orderSource: settledBy,
+                contested: false,
+                shortYear: false,
+            },
+            "slash",
+        );
+    }
+
 
     /**
      * Get the underlying diagnostic pipeline for advanced usage.
@@ -4109,6 +4291,11 @@ export class ExpressionEngine {
             tokens: normalized,
             evaluate: (source) => this.evaluateIsolated(source),
             locale: this.localeCode,
+            // How each date literal was read, ahead of the arithmetic that
+            // used it. A date line derived to an empty step list before this,
+            // so nothing is displaced: the reader who saw no explanation now
+            // sees the one fact the line turned on.
+            readings: this.readDates(expression),
         });
     }
 

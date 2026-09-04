@@ -143,3 +143,20 @@ export const nthWeekdayOfMonthFn = nthWeekdayOfMonthHandler;
 export const monthAnchorShift = monthAnchorShiftHandler;
 /** `ageBetween` plugin: `age of <date>` -> whole years or a ymd breakdown. */
 export const ageBetween = ageBetweenHandler;
+
+/**
+ * `dateLiteralFault` plugin: the code and message a date-shaped run that no
+ * configured order could read was refused with, as an `Error` Value.
+ *
+ * `args[0]` is the code, `args[1]` the message, both composed by
+ * `DateReading.ts` and carried through the fused token by
+ * `UnreadableDateParselet`. Nothing is decided here: the wording is settled
+ * where the reading was, so the sentence a refusal shows and the sentence
+ * `readDates()` reports for the same text are the same sentence.
+ */
+function dateLiteralFaultHandler(args: Value[]): Value {
+	return errorValue(String(args[0].value ?? "DATE_NOT_A_CALENDAR_DAY"), String(args[1].value ?? ""));
+}
+
+/** `dateLiteralFault` plugin: an unreadable date literal -> the Error value reporting it. */
+export const dateLiteralFault = dateLiteralFaultHandler;
