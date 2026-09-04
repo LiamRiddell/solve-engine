@@ -325,6 +325,17 @@ export default defineConfig({
               ],
             },
             {
+              // One document per task, rather than one page per feature: the
+              // reference is organised by what the engine does, and a visitor
+              // arrives with something they want done.
+              label: "Recipes",
+              collapsed: true,
+              items: [
+                { slug: "recipes/a-freelance-week" },
+                { slug: "recipes/a-trip" },
+              ],
+            },
+            {
               // Quantities that carry a unit, and converting between them.
               label: "Units",
               collapsed: true,
