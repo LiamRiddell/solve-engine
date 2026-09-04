@@ -95,7 +95,7 @@ describe("an engine that asked for inference", () => {
   test("and reads every line of the document under that one order", () => {
     const engine = newTrackedEngine({ config: { date: { inputOrder: "locale", inputLocale: "en-US" } } });
     const reading = engine.getDateReading();
-    expect(reading).toEqual({ order: "MDY", orderSource: "locale", locale: "en-US" });
+    expect(reading).toEqual({ order: "MDY", orderSource: "locale", locale: "en-US", onAmbiguous: "refuse" });
     // The same policy object, every time it is asked, so a host cannot observe
     // two different answers from one engine.
     expect(engine.getDateReading()).toBe(reading);
