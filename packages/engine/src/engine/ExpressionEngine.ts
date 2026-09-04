@@ -17,6 +17,7 @@ import { BackgroundRefreshManager } from "@solve-js/engine/BackgroundRefreshMana
 import { registerAsConverter, unregisterAsConverter, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { createEngineContext } from "@solve-js/engine/EngineContext";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
+import type { CalendarOption } from "@solve-js/calendar/resolveCalendar";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { Value, ValueType, numberValue, stringValue, pendingValue, freezeIfDev, errorValue, type MatrixData } from "@solve-js/vm/Value";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
@@ -141,7 +142,7 @@ export interface EngineRestoreOptions {
     /** Turn on the diagnostic pipeline, as in the constructor's `diagnostics`. */
     diagnostics?: boolean;
     /** The calendar backend for the restored engine, as in the constructor's `calendar`. */
-    calendar?: CalendarBackend;
+    calendar?: CalendarOption;
     /**
      * Override the locale the snapshot recorded. Rarely needed: the snapshot's
      * own {@link EngineSnapshot.locale} is used by default, so a restored engine
@@ -190,7 +191,7 @@ export interface EngineOptions {
      * functions and does not cross the message boundary. The inline offload
      * worker computes with the `Date` backend.
      */
-    calendar?: CalendarBackend;
+    calendar?: CalendarOption;
 
     /**
      * Run a few throwaway expressions through the pipeline at construction, so

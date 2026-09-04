@@ -25,7 +25,7 @@ import type { Value } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { OpRegistry } from "@solve-js/vm/OpRegistry";
-import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
+import { resolveCalendar, type CalendarOption } from "@solve-js/calendar/resolveCalendar";
 
 /**
  * A function a package contributes to the VM, reachable from bytecode through
@@ -114,8 +114,8 @@ export interface EngineContext {
 	 * switch is: the VM is where a date literal is stepped, a working-day
 	 * walk runs and `now` is read, and every plugin function that touches a
 	 * date reaches it through the execution context the VM builds from this
-	 * one object. Defaults to the `Date` backend, which is what every engine
-	 * computed with before the backend existed. See `calendar/CalendarBackend.ts`.
+	 * one object. Defaults to Temporal where the runtime has it and `Date`
+	 * where it does not. See `calendar/resolveCalendar.ts`.
 	 */
 	readonly calendar: CalendarBackend;
 }
@@ -124,8 +124,8 @@ export interface EngineContext {
 export interface EngineContextOptions {
 	/** Whether live data may be fetched. Defaults to true, the historic behaviour. See `NetworkConfig`. */
 	networkEnabled?: boolean;
-	/** The calendar backend to compute dates with. Defaults to the `Date` backend. See {@link EngineContext.calendar}. */
-	calendar?: CalendarBackend;
+	/** How to pick the calendar backend: `"auto"` (the default: Temporal where the runtime has it), `"temporal"`, `"date"`, or a backend. See {@link CalendarOption}. */
+	calendar?: CalendarOption;
 }
 
 /**
@@ -140,7 +140,7 @@ export function createEngineContext(options: EngineContextOptions = {}): EngineC
 		opRegistry: new OpRegistry(),
 		pluginFunctionOwners: {},
 		networkEnabled: options.networkEnabled ?? true,
-		calendar: options.calendar ?? DATE_CALENDAR,
+		calendar: resolveCalendar(options.calendar),
 	};
 }
 

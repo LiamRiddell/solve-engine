@@ -1,19 +1,20 @@
 ---
 title: Dates on Temporal
-description: Computing dates through the Temporal API, in a time zone you choose, with every result unchanged.
+description: The engine computes dates on Temporal wherever the runtime has it, and on Date where it does not.
 ---
 
 Every date the engine works with is an instant: a number of milliseconds since
 1 January 1970, with no time zone attached. Every question it answers about a
 date is a calendar question about that instant: which day it falls on, what the
 same time a month later is, whether it is a Saturday, how it is written out.
-Answering needs a time zone and a set of calendar rules, and by default the
-engine takes both from the JavaScript `Date` object, which reads the zone of the
-process it runs in and nothing else.
+Answering needs a time zone and a set of calendar rules, and the engine takes
+both from `Temporal` wherever the runtime has one. Where it does not, it falls
+back to the JavaScript `Date` object, which reads the zone of the process it
+runs in and nothing else.
 
-This page is about the other way to answer them: through `Temporal`, in a zone
-you choose. It is opt-in, it lives behind its own entry point, and a host that
-does not opt in ships none of it.
+You do not have to do anything to get this. This page is about what the choice
+is, how to pin it when a result must not depend on where it was computed, and
+how to get `Temporal` on a runtime without one.
 
 ## What Temporal is
 
@@ -30,24 +31,56 @@ Node 22 and 24, which the engine also supports, do not (Node 24 keeps it behind
 Safari does not, in any stable release. Where the runtime has none, a polyfill
 supplies it.
 
-## Why the engine does not bundle it
+## What the engine ships, and what it does not
 
-The engine imports no `Temporal` and no polyfill, and that is deliberate. The
-smallest polyfill, `temporal-polyfill` 1.0.4, adds 20.4 KB gzipped (58.6 KB
-minified) to a bundle, measured by bundling its entry with esbuild and
-compressing with gzip at level 9. A host doing plain arithmetic, or one whose
-users never type a date, should not pay that, and a host on Node 26 or a
-current browser already has a native `Temporal` that a bundled polyfill would
-only duplicate.
+The engine reads `globalThis.Temporal` and uses it when it is there. It bundles
+the adapter, the few kilobytes that translate the engine's calendar contract
+onto whichever implementation it finds: 1,645 bytes gzipped, measured as the
+difference in the root entry's compressed size with and without it.
 
-So the backend takes the implementation from you. Import it from
-`solve-engine/temporal`, hand it whichever `Temporal` you have, and pass the
-result as the engine's `calendar` option. The entry is reached by nothing else
-in the package: a smoke test walks every chunk the root entry loads and refuses
-one that carries the backend's code, so `import { createEngine } from
-"solve-engine"` is the same bundle whether or not this entry exists.
+It bundles no polyfill, and that is the deliberate part. The smallest,
+`temporal-polyfill` 1.0.4, adds 20.4 KB gzipped (58.6 KB minified), measured by
+bundling its entry with esbuild and compressing with gzip at level 9. That is
+twelve times the adapter, paid by every host including one whose readers never
+type a date, and on a runtime that already has `Temporal` it would only
+duplicate what is there. A smoke test walks every chunk the root entry loads and
+fails if any of them names a polyfill package, or if the adapter has gone
+missing and the engine can no longer default to `Temporal` at all.
 
-## Opting in
+Where you want `Temporal` on a runtime without one, you install the polyfill
+and hand it over. That is what `solve-engine/temporal` is for, and it is the
+only way a polyfill enters your bundle: because you put it there.
+
+## Choosing a backend
+
+By default the engine chooses for itself: `Temporal` where the runtime has it,
+`Date` where it does not. The `calendar` option pins that choice.
+
+| `calendar` | what the engine computes on |
+| --- | --- |
+| omitted, or `"auto"` | `Temporal` where the runtime has it, `Date` otherwise |
+| `"temporal"` | `Temporal`, refusing to build an engine on a runtime without one |
+| `"date"` | `Date`, whatever the runtime has |
+| a backend | the one you built, from a polyfill or bound to a zone |
+
+```ts
+import { createEngine } from "solve-engine";
+
+const engine = createEngine({ calendar: "date" });
+```
+
+Pin `"date"` when a result must not depend on where it was computed, and
+`"temporal"` when you would rather an engine refuse to start than quietly
+compute on `Date`. Asking for `"temporal"` on a runtime with none throws a
+coded `CALENDAR_TEMPORAL_UNAVAILABLE` error naming both ways out.
+
+The two backends are held to the same answers, which is what makes choosing
+between them safe rather than a coin toss: `npm run test:temporal` runs the
+date suites under both, in three time zones, and a differential suite compares
+them case by case. A reader on Firefox and a reader on Safari see the same
+number.
+
+## Supplying your own
 
 ### With the runtime's own Temporal
 

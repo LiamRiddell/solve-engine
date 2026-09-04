@@ -212,6 +212,8 @@ export const CoreErrorCodes = {
   CONFIG_PROPERTY_NOT_FOUND: "CONFIG_PROPERTY_NOT_FOUND",
 
   // ── Package/lexer registration-time collisions (lexer/ExpressionLexer.ts) ──
+  /** `calendar: "temporal"` was asked for on a runtime with no `Temporal`. Refused rather than silently computing on `Date`, because a host that named Temporal did so to be sure what it was computing on. Recoverable. */
+  CALENDAR_TEMPORAL_UNAVAILABLE: "CALENDAR_TEMPORAL_UNAVAILABLE",
   PLUGIN_OPERATOR_COLLISION: "PLUGIN_OPERATOR_COLLISION",
   PLUGIN_KEYWORD_COLLISION: "PLUGIN_KEYWORD_COLLISION",
   PLUGIN_UNIT_COLLISION: "PLUGIN_UNIT_COLLISION",
