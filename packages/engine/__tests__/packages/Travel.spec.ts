@@ -87,8 +87,9 @@ describe("the reciprocal, directly", () => {
 	});
 
 	test("and a unit that is neither answers null rather than a number", () => {
-		// `convertUnit` would answer 1,488 here, which is what a wrong trip
-		// calculator is built on.
+		// `convertUnit` used to answer 1,488 here, which is what a wrong trip
+		// calculator is built on. It refuses now, and this still answers null,
+		// because a caller of this function wants an economy or nothing.
 		expect(litresPer100Km(35, "kg")).toBeNull();
 		expect(litresForTrip(300, "kg", 35, "mpg")).toBeNull();
 	});

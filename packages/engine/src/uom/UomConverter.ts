@@ -210,10 +210,22 @@ export function convertUnit(value: number, from: string, to: string): number {
   // (see ExtendedUnits.ts), compute the ratio directly from each unit's
   // factor-to-base value instead of calling convertRaw(), which would throw
   // on an unrecognized unit string. Every extended category is a pure linear
-  // ratio scale (no Temperature-style offset), so this is always safe.
+  // ratio scale (no Temperature-style offset), so the ratio itself is safe.
+  //
+  // The measures still have to match, and this is the one place that used to
+  // forget it. `mpg` is distance over volume and `l100km` is volume over
+  // distance, so they are different measures and `canConvert` says false, but
+  // both are extended units, so this branch happily multiplied their ratios
+  // and answered 1,488 for 35 mpg. A number with no meaning is worse than a
+  // refusal: a first version of the travel package's trip arithmetic was built
+  // on that one and had a 300-mile drive burning seven thousand litres.
+  // Reciprocal pairs like those two are what `convertRate` is for.
   const fExt = EXTENDED_UNITS[from];
   const tExt = EXTENDED_UNITS[to];
   if (fExt !== undefined && tExt !== undefined) {
+    if (fExt.measure !== tExt.measure) {
+      throw new RangeError(`Cannot convert between different measures: ${from} and ${to}`);
+    }
     return value * (fExt.toBase / tExt.toBase);
   }
 

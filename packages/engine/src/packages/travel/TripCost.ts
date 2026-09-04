@@ -29,13 +29,13 @@ export function isFuelEconomyUnit(unit: string): boolean {
  * Litres per 100 km, whatever unit the economy was written in, or null when it
  * is not an economy at all.
  *
- * Through `convertRate`, not `convertUnit`. The two spellings are reciprocals
- * and the engine files them as different measures, so `convertUnit` declines to
- * relate them: `canConvert("mpg", "l100km")` is false. It does not say so,
- * though. Asked anyway it returns 1,488 for 35 mpg, a number with no meaning,
- * which is how this arithmetic first produced a 300-mile trip that burned
- * seven thousand litres. `convertRate` is the path the engine's own
- * `40 mpg in l/100km` takes, and it answers null rather than a wrong number.
+ * Through `convertRate`, not `convertUnit`. The two spellings are reciprocals,
+ * so the engine files them as different measures and `convertUnit` cannot
+ * relate them at all: `canConvert("mpg", "l100km")` is false, and asking anyway
+ * now throws. It used to answer 1,488 for 35 mpg instead, a number with no
+ * meaning, which is how this arithmetic first produced a 300-mile trip that
+ * burned seven thousand litres. `convertRate` is the path the engine's own
+ * `40 mpg in l/100km` takes, and it relates reciprocals properly.
  */
 export function litresPer100Km(economy: number, unit: string): number | null {
 	if (!isFuelEconomyUnit(unit)) return null;

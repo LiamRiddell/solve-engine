@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, test, beforeEach } from "@jest/globals";
-import { resolveUnit, getMeasure, canConvert, convertUnit, isConvertibleUnit, getBestUnit } from "@solve-js/uom/UomConverter";
+import { resolveUnit, getMeasure, canConvert, convertUnit, isConvertibleUnit, getBestUnit, convertRate } from "@solve-js/uom/UomConverter";
 import { LFUCache } from "@solve-js/cache";
 
 describe("LFUCache", () => {
@@ -485,5 +485,38 @@ describe("extended measures: getBestUnit gracefully no-ops (no 'best' heuristic 
   test("returns the value and unit unchanged rather than throwing", () => {
     expect(getBestUnit(5000, "kV")).toEqual({ value: 5000, unit: "kV" });
     expect(getBestUnit(2, "mph")).toEqual({ value: 2, unit: "mph" });
+  });
+});
+
+describe("extended measures: a pair that is not the same kind of thing is refused", () => {
+  // The two fuel-economy spellings are reciprocals of each other: mpg is
+  // distance over volume, l/100km is volume over distance. The engine files
+  // them as different measures and `canConvert` says so; the bug was that
+  // `convertUnit` did it anyway, because both are extended units and that
+  // branch multiplied their ratios without comparing measures. 35 mpg came
+  // back as 1,488, and a trip calculator built on it burned seven thousand
+  // litres for 300 miles.
+  test("mpg and l/100km cannot be converted, in either direction", () => {
+    expect(canConvert("mpg", "l100km")).toBe(false);
+    expect(() => convertUnit(35, "mpg", "l100km")).toThrow(RangeError);
+    expect(() => convertUnit(7, "l100km", "mpg")).toThrow(/different measures/);
+  });
+
+  test("the refusal reads the same as the base table's", () => {
+    // One message for one kind of mistake, wherever the units came from.
+    expect(() => convertUnit(35, "mpg", "l100km")).toThrow("Cannot convert between different measures: mpg and l100km");
+    expect(() => convertUnit(5, "kg", "metre")).toThrow(/different measures/);
+  });
+
+  test("two extended units of the SAME measure still convert", () => {
+    // The guard is about measures, not about extended units: this pair is
+    // fuel economy both ways round, so the ratio is meaningful.
+    expect(canConvert("mpg", "kmpl")).toBe(true);
+    expect(convertUnit(35, "mpg", "kmpl")).toBeCloseTo(14.88, 2);
+  });
+
+  test("and the reciprocal pair still relates through convertRate, which is what it is for", () => {
+    // 35 mpg is 14.875 km per litre, so 6.72 litres per hundred kilometres.
+    expect(convertRate(35, "mpg", "l100km")).toBeCloseTo(6.72, 2);
   });
 });
