@@ -59,13 +59,22 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
     expect(r.medianMs).toBeLessThan(50);
   });
 
-  test("[PROD] variable chain in < 1ms", async () => {
+  test("[PROD] variable chain, engine construction included, in < 3ms", async () => {
+    // Constructing the engine inside the timed function is deliberate: this is
+    // the cold path, and a cold parse needs an engine with nothing cached in
+    // it. It does mean the figure is mostly construction, which is why
+    // `create_engine` in the pipeline suite measures that on its own, and why
+    // this limit moved: registering every package now builds the rule index
+    // and the phrase trie that make evaluation faster, so construction costs
+    // more, and a case dominated by construction costs more with it. The warm
+    // cases in this same file are the other half of that trade and went the
+    // other way.
     const r = await benchmarkFn(() => {
       const e = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       e.parseDocument(":x = 1\n:x + 1\n:x + 2\n:x + 3\n:x + 4");
     }, 5000, 100);
     recordSample(results, "PROD_variable_chain", r);
-    expect(r.medianMs).toBeLessThan(2);
+    expect(r.medianMs).toBeLessThan(3);
   });
 
   test("[PROD] full pipeline sqrt(144) + 5 in < 1ms", async () => {
