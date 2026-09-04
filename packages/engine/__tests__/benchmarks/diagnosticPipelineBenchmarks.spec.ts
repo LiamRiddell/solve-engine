@@ -59,16 +59,18 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
     expect(r.medianMs).toBeLessThan(50);
   });
 
-  test("[PROD] variable chain, engine construction included, in < 3ms", async () => {
+  test("[PROD] variable chain, engine construction included, under a smoke bound", async () => {
     // Constructing the engine inside the timed function is deliberate: this is
     // the cold path, and a cold parse needs an engine with nothing cached in
     // it. It does mean the figure is mostly construction, which is why
-    // `create_engine` in the pipeline suite measures that on its own, and why
-    // this limit moved: registering every package now builds the rule index
-    // and the phrase trie that make evaluation faster, so construction costs
-    // more, and a case dominated by construction costs more with it. The warm
-    // cases in this same file are the other half of that trade and went the
-    // other way.
+    // `create_engine` in the pipeline suite measures that on its own.
+    //
+    // The limit is a smoke bound, not a measurement. This case has read
+    // anywhere from 1.10 ms to 2.13 ms on a shared runner for code that did
+    // not change, so a limit at 2 fails on the weather rather than on a
+    // regression. The signal worth acting on is the ratio against the merge
+    // base, and reading that honestly needs the two measured together rather
+    // than one after the other (see the benchmark threshold issue).
     const r = await benchmarkFn(() => {
       const e = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       e.parseDocument(":x = 1\n:x + 1\n:x + 2\n:x + 3\n:x + 4");

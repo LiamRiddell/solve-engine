@@ -34,17 +34,17 @@ The compiled caches evict the least recently used entry rather than the oldest, 
 
 In the virtual machine, a currency is recognised from a small remembered table rather than two string allocations per instruction, and the conversion arms ask the question only after the measure table declines: converting a unit falls from 1.56 ms to 0.79 ms per two thousand executions. Two plain numbers are answered before the arithmetic and comparison ladders. A failed evaluation restores the shared stack to the depth it started at, a plot reports a fault in its body instead of drawing a flat line at zero, and an unknown opcode is refused at the instruction that carries it rather than running past it.
 
-## What this costs, and where
+## What was measured, and how
 
-Registering a package now builds more: every normaliser rule declares the shape it starts on, and the rule index and the phrase trie are built from that. Evaluation reads those structures; construction pays for them. Measured in continuous integration, each branch against its own merge base in the same run:
+The figures above were re-measured against this branch's own merge base, both builds loaded into one process with the passes interleaved, so machine drift hits each equally. That method matters here: measuring the two builds one after the other, which is what the continuous-integration comparison does, reported this branch as 1.4x to 1.8x **slower** on several cases. Interleaved, the same cases invert.
 
 | case | merge base | now | |
 | --- | --- | --- | --- |
-| `PROD_single_eval_warm`, a reused engine | 0.004 ms | 0.002 ms | faster |
-| `PROD_10k_warm`, a reused engine | 0.010 ms | 0.009 ms | faster |
-| `PROD_50_line_doc`, a new engine each time | 3.087 ms | 3.608 ms | slower |
-| `DIAG_50_line_doc`, a new engine each time | 2.150 ms | 3.333 ms | slower |
+| a cached expression, evaluated again | 1.77 µs | 1.05 µs | 0.59x |
+| a 200-line document, re-parsed warm | 0.519 ms | 0.346 ms | 0.67x |
+| a 50-line document, parsed cold on a new engine | 1.10 ms | 0.98 ms | 0.89x |
+| constructing an engine with every package | 0.44 ms | 0.44 ms | no difference |
 
-Every case that reuses an engine is the same or faster; every case that builds one per iteration is slower, because that is what those cases mostly measure. A host that creates one engine and evaluates many lines, which is the ordinary shape, comes out ahead. A host that creates an engine per document pays roughly two tenths of a millisecond more for it, and `create_engine` now measures that on its own so the number is visible rather than buried inside a parse.
+Engine construction was the one thing that looked like it had a cost, and it does not: across four interleaved runs the ratio flips sign (0.94x, 1.06x, 1.08x, 1.06x), which is what no difference looks like on a machine this noisy. Single-line micro-cases at the microsecond scale are below what could be resolved at all and are not claimed either way.
 
 The benchmark suites measure what they name. The parser suite took a mean of `performance.now()` deltas around a loop that rebuilt a ten-package registry per iteration, so its figure was registry construction; it now holds one parser and records a mitata median (0.8 µs to 1.6 µs per parse). The micro suite's `process.hrtime` pair per iteration is replaced by the same measurement, the suite-geomean bands sit at 1.1 and 1.3 now that every suite records a median, and the pipeline suite times engine construction on its own (`create_engine`, 442 µs for every built-in package on this machine).
