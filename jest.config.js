@@ -58,6 +58,10 @@ const config = {
 		"\\\\node_modules\\\\",
 		"/node_modules/",
 		"__mocks__",
+		// A git worktree checked out under `.claude/` is a second copy of this
+		// repository, specs included. Without this, a run started at the repo
+		// root can collect another branch's tests alongside this one's.
+		"\\.claude[\\\\/]",
 		// The four slow suites, named in the header above. Not part of the
 		// normal dev cycle; `jest.full.config.cjs` puts them back.
 		"heavy/",

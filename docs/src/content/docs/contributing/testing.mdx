@@ -15,7 +15,7 @@ derived from the last full run and checked in continuous integration, so they
 cannot be older than the suite. Tests run against source rather than the built
 package, so a failure points at a line you can edit.
 
-## Two configurations
+## Three configurations
 
 `jest.config.js` is the fast configuration, the one `npm test`,
 `npm run test:ci` and therefore `npm run verify` use. It leaves out four suites
@@ -29,6 +29,26 @@ are read from. It is what continuous integration runs, and what
 or document-scale behaviour should be checked with it before it is pushed:
 those are the suites the fast run cannot see, and the ones that have gone red
 in continuous integration after a green `verify`.
+
+`packages/engine/jest.config.cjs` is the third, and it is deliberately
+independent: it is what the engine would use as a repository of its own, so it
+cannot import the root config. `cd packages/engine && npm test` uses it, and so
+do most editor test runners.
+
+Independence means the two are kept in step by hand, and hand-syncing has
+failed three times: on the editor-library mocks the language tests need, on the
+`temporal-polyfill` transform without which three Temporal suites cannot load,
+and on ignoring a git worktree checked out under `.claude/`. Every one of them
+stayed green in continuous integration, which runs the root config, and every
+one of them looked like fewer tests rather than a failure.
+
+Two guards now cover that. `npm run lint:jest-configs` compares the two configs
+on everything that decides whether a test can run, allowing only for the
+different root each addresses files from. And `npm run lint:stats` refuses a
+report in which any suite ran no tests at all, because a suite that fails to
+**load** contributes zero failed tests: the run stays green and the total
+quietly shrinks. No suite here legitimately holds no tests, so that shape is
+always a broken run rather than a smaller one.
 
 ## The coverage floor
 
