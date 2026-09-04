@@ -32,6 +32,14 @@ export type { Explanation, ExplanationStep } from "@solve-js/explain";
 export type { CalendarBackend, CalendarFields, ZonedFields } from "@solve-js/calendar/CalendarBackend";
 export { DateCalendar, DATE_CALENDAR, calendarOf } from "@solve-js/calendar/DateCalendar";
 
+// What `ExpressionEngine.getDateReading()` answers with: the order this engine
+// reads an ambiguous numeric date literal in, and where that order came from.
+export type {
+	DateReadingPolicy,
+	DateOrderSource,
+	ResolvedDateOrder,
+} from "@solve-js/packages/datetime/DateReading";
+
 export { DocumentModel } from "./DocumentModel";
 export type {
 	LineState,

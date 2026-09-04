@@ -83,6 +83,7 @@ import { UserUnitTable } from "@solve-js/packages/uom/UserUnitTable";
 import { userUnitExpansionRule } from "@solve-js/packages/uom/normalizer/UserUnitNormalizerRule";
 import { callFusionRule } from "@solve-js/normalizer/CallFusionRule";
 import { dateLiteralNormalizerRule } from "@solve-js/packages/datetime/normalizer/DateLiteralNormalizerRule";
+import { resolveDateOrderPolicy, type DateReadingPolicy } from "@solve-js/packages/datetime/DateReading";
 import { monthNameDateNormalizerRule } from "@solve-js/packages/datetime/normalizer/MonthNameDateNormalizerRule";
 import { buildExplanation } from "@solve-js/explain";
 import type { Explanation } from "@solve-js/explain";
@@ -293,6 +294,11 @@ export class ExpressionEngine {
      */
     private readonly context: EngineContext;
     private config: typeof DEFAULT_CONFIG;
+    /**
+     * How this engine reads an ambiguous numeric date literal, resolved once
+     * from `config.date` at construction. See {@link getDateReading}.
+     */
+    private readonly dateReading: DateReadingPolicy;
     private diagnosticPipeline: DiagnosticPipeline;
     /**
      * Direct reference to the timeline collector registered above (when
@@ -783,6 +789,15 @@ export class ExpressionEngine {
         // used to silently replace the WHOLE section, dropping every other
         // field in it back to `undefined` instead of keeping its default.
         this.config = mergeEngineConfig(DEFAULT_CONFIG, config ?? {});
+        // Resolved once, here, and then carried. `date.inputOrder: 'locale'`
+        // asks a question of `Intl`, and the date-literal rule runs on every
+        // keystroke, so asking per literal would be a per-keystroke cost for an
+        // answer that cannot change within a process. `this.config` is assigned
+        // exactly here and never reassigned, so the resolved order cannot go
+        // stale against the per-expression bytecode cache either. Raises
+        // DATE_INPUT_LOCALE_INVALID for a malformed `date.inputLocale`, at the
+        // boundary rather than per line.
+        this.dateReading = resolveDateOrderPolicy(this.config.date);
         this.lexer = new Lexer(locale);
         this.registry = new ParseletRegistry();
         // Before the package loop below, which registers plugin functions into it.
@@ -879,15 +894,17 @@ export class ExpressionEngine {
         // (`March 9, 2024`). Registered here rather than through the datetime
         // package descriptor because both rules build their literal through
         // this engine's own calendar backend, and the numeric one also reads
-        // this engine's `date.inputOrder` (DMY/MDY/YMD) to resolve an
+        // this engine's resolved date-reading order (DMY/MDY/YMD) to resolve an
         // ambiguous ordering; a descriptor is shared across every engine, the
-        // same reason user units are registered above. Gated on the datetime
+        // same reason user units are registered above. The RESOLVED order is
+        // passed, never `date.inputOrder`, so the word `'locale'` cannot reach
+        // a rule that would have to re-infer it. Gated on the datetime
         // package actually being loaded (it owns the DATETIME_LITERAL
         // parselet), so an engine without it does not fuse a date literal it
         // has no way to read.
         if (this.registry.hasPrefix("DATETIME_LITERAL")) {
             const calendar = () => this.context.calendar;
-            this.normalizer.register(dateLiteralNormalizerRule(() => this.config.date.inputOrder, calendar));
+            this.normalizer.register(dateLiteralNormalizerRule(() => this.dateReading.order, calendar));
             this.normalizer.register(monthNameDateNormalizerRule(undefined, calendar));
         }
 
@@ -1241,6 +1258,29 @@ export class ExpressionEngine {
      */
     getConfig(): EngineConfig {
         return { ...this.config };
+    }
+
+    /**
+     * How this engine reads an ambiguous numeric date literal, and where that
+     * reading came from.
+     *
+     * A settings panel renders this ("Dates are read day first, from your
+     * system locale en-GB"), and a bug report should paste it: "why did
+     * `03/04/2026` render as 4 March" is answerable from one line of it and
+     * unanswerable without. `orderSource: 'fallback'` is the visible signal
+     * that an inference was asked for and could not be made, which is the
+     * difference between a decision and a guess, and the case where a host
+     * should offer the reader a manual choice.
+     *
+     * Resolved once at construction from `config.date`, so this is a read of a
+     * settled fact rather than a fresh inference, and two calls on one engine
+     * cannot disagree.
+     *
+     * @returns The frozen policy: the order, its source, and the locale tag it
+     * was inferred from where it was inferred from one.
+     */
+    getDateReading(): DateReadingPolicy {
+        return this.dateReading;
     }
 
     /**

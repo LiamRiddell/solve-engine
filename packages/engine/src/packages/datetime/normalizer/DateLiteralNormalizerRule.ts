@@ -3,7 +3,7 @@ import { tokenTypeId } from "@solve-js/lexer/Token";
 import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { parseIso8601 } from "@solve-js/packages/datetime/Iso8601";
-import type { DateInputOrder } from "@solve-js/constants/Configuration";
+import type { ResolvedDateOrder } from "../DateReading";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 
@@ -285,9 +285,9 @@ function fuseIsoTimestamp(tokens: Token[], pos: number, ruleName: string, calend
 
 /**
  * Maps the three numeric groups of a slash- or hyphen-separated literal to a
- * (day, month, year) triple under an explicit {@link DateInputOrder}, or null
- * when a group is the wrong shape for its role (a non-4-digit year in `YMD`, a
- * year group that is neither two nor four digits in `DMY`/`MDY`).
+ * (day, month, year) triple under an explicit {@link ResolvedDateOrder}, or
+ * null when a group is the wrong shape for its role (a non-4-digit year in
+ * `YMD`, a year group that is neither two nor four digits in `DMY`/`MDY`).
  *
  * Only reached when the host has fixed an order, and only for a literal that
  * is not already an unambiguous ISO date: the rule reads a hyphen literal with
@@ -296,7 +296,7 @@ function fuseIsoTimestamp(tokens: Token[], pos: number, ruleName: string, calend
  * never calls this.
  */
 function resolveOrderedGroups(
-  g0: string, g1: string, g2: string, order: Exclude<DateInputOrder, "auto">,
+  g0: string, g1: string, g2: string, order: Exclude<ResolvedDateOrder, "auto">,
 ): { day: number; month: number; year: number } | null {
   if (order === "YMD") {
     if (g0.length !== 4) return null;
@@ -363,7 +363,7 @@ function resolveOrderedGroups(
  * is the built-in `Date` backend, for a rule registered outside an engine.
  */
 export function dateLiteralNormalizerRule(
-  getInputOrder: () => DateInputOrder = () => "auto",
+  getInputOrder: () => ResolvedDateOrder = () => "auto",
   getCalendar: () => CalendarBackend = () => DATE_CALENDAR,
 ): NormalizerRule {
   return {

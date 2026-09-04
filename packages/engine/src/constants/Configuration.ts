@@ -63,13 +63,19 @@ export type HolidayCalendar = HolidayPredicate | Iterable<string | number | Date
  *   a host can match its readers' locale. `'MDY'` is what lets a US reader's
  *   `12/25/2023` parse, which `'auto'` refuses because the slash defaults to
  *   day-first.
+ * - `'locale'`: the order the reader's own machine writes dates in, asked of
+ *   `Intl` once per engine (see `calendar/HostLocale.ts`). Where that cannot
+ *   be answered, the engine reads dates exactly as `'auto'` does and reports
+ *   the fact through `ExpressionEngine.getDateReading()`, rather than guessing.
+ *   A host that is not the reader (a server rendering someone else's document)
+ *   names the reader instead, through {@link DateConfig.inputLocale}.
  *
  * Only ambiguous literals are affected. A spelled-out month (`March 9, 2024`)
  * is never ambiguous; nor is a hyphen literal with a four-digit leading group
  * (`2024-03-09`), which has no reading but year-month-day and is read as ISO
  * under every order, timestamp or not.
  */
-export type DateInputOrder = 'auto' | 'DMY' | 'MDY' | 'YMD';
+export type DateInputOrder = 'auto' | 'locale' | 'DMY' | 'MDY' | 'YMD';
 
 /** Date-related engine configuration: offset limits, input order, holidays. */
 export interface DateConfig {
@@ -78,6 +84,25 @@ export interface DateConfig {
    * `'auto'` (by separator, the historic behaviour). See {@link DateInputOrder}.
    */
   readonly inputOrder: DateInputOrder;
+  /**
+   * The BCP-47 tag `'locale'` reads the order from, `"en-US"` or `"de-DE"`.
+   * Unset, the host machine is asked.
+   *
+   * Read ONLY when {@link inputOrder} is `'locale'`. Setting it beside any
+   * other order changes no result: a field that quietly switched inference on
+   * would make the predictable mistake a wrong reading rather than no change.
+   * Its shape is checked wherever it is set, though, and a tag `Intl` refuses
+   * (`"en_US"`, with an underscore) raises `DATE_INPUT_LOCALE_INVALID` at
+   * construction, because a locale silently ignored is a date order silently
+   * wrong.
+   *
+   * Deliberately separate from the engine's `locale` option, which is a
+   * language (`'en' | 'de' | 'fr'`) and carries no region. Day/month order is a
+   * region question: a bare `en` probes as month-first while a UK machine
+   * resolves to `en-GB` and probes as day-first, so wiring the two together
+   * would flip every existing British engine to month-first.
+   */
+  readonly inputLocale?: string;
   /**
    * How far forward a date offset whose COST grows with the offset may reach,
    * in years. Enforced by `vm/VM.ts`'s `addBusinessDays()`.
