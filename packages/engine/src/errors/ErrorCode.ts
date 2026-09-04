@@ -191,6 +191,12 @@ export const CoreErrorCodes = {
   /** A live-data form evaluated on an engine whose host switched the network off (`network.enabled: false`, see `constants/Configuration.ts`'s `NetworkConfig`). A recoverable Error value, raised by the VM for a currency conversion with no primed rate and for a plugin function that returned a promise, and by `createQueryResolver`'s plugin function when its preflight was skipped. Names the setting, so the reader knows it is policy rather than an outage. */
   NETWORK_DISABLED: "NETWORK_DISABLED",
 
+  // ── Temporal calendar backend (temporal/TemporalCalendar.ts) ──
+  /** `createTemporalCalendar()` was handed something that is not a usable `Temporal` implementation: no `Now.instant`, `Now.timeZoneId`, `Instant.fromEpochMilliseconds` or `PlainDateTime.from`. Raised at construction, naming the missing member, rather than letting the first date computation fail on it obscurely. */
+  TEMPORAL_IMPLEMENTATION_INVALID: "TEMPORAL_IMPLEMENTATION_INVALID",
+  /** The `timeZone` given to `createTemporalCalendar()` is not one the `Temporal` implementation knows. Raised at construction, so a misspelt zone is a configuration error the host sees once, not a `RangeError` from inside every date the engine computes. */
+  TEMPORAL_TIME_ZONE_UNKNOWN: "TEMPORAL_TIME_ZONE_UNKNOWN",
+
   // ── Snapshot / restore (engine/EngineSnapshot.ts, engine/ExpressionEngine.ts) ──
   /** `fromJSON()` handed an object that is not a snapshot at all, or whose serialised-shape version does not match this engine's reader. The versioning gate that refuses an incompatible snapshot clearly rather than restoring it wrongly. See `engine/EngineSnapshot.ts`'s `assertRestorable()`. */
   SNAPSHOT_VERSION_MISMATCH: "SNAPSHOT_VERSION_MISMATCH",

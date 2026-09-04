@@ -50,12 +50,14 @@ describe("the context carries the backend", () => {
 
 	test("an engine with the option holds it, and a second engine is untouched", () => {
 		const { engine, calendar } = recordingEngine();
-		const other = newTrackedEngine();
+		// Built directly, as above, so the run's own default backend is not in play.
+		const other = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		expect(engine.getVM().context.calendar).toBe(calendar);
 		expect(other.getVM().context.calendar).toBe(DATE_CALENDAR);
 		// The pinned clock belongs to the first engine only.
 		expect(engine.evaluateExpression("today").toNumber()).toBe(FIXED_NOW);
 		expect(other.evaluateExpression("today").toNumber()).not.toBe(FIXED_NOW);
+		other.clear();
 	});
 
 	test("a restored snapshot keeps the backend it is given", () => {

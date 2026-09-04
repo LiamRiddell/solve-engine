@@ -41,6 +41,7 @@ const CATALOGED_FILES = [
   "constants/Configuration.ts",
   "lexer/ExpressionLexer.ts",
   "errors/EngineError.ts",
+  "temporal/TemporalCalendar.ts",
 ];
 
 function findErrorFactoryCodes(fileContent: string): string[] {

@@ -181,7 +181,9 @@ describe("addMonths", () => {
 
 describe("utcOffsetMinutes", () => {
 	test.each(TRANSITION_INSTANTS)("is the negated getTimezoneOffset at %d", (instant) => {
-		expect(calendar.utcOffsetMinutes(instant)).toBe(-new Date(instant).getTimezoneOffset());
+		// Subtracted from zero, as the backend does it, so a zero offset is 0
+		// rather than the -0 a bare negation produces; the same number otherwise.
+		expect(calendar.utcOffsetMinutes(instant)).toBe(0 - new Date(instant).getTimezoneOffset());
 	});
 });
 

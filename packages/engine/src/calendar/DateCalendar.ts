@@ -75,7 +75,9 @@ export class DateCalendar implements CalendarBackend {
 	utcOffsetMinutes(epochMs: number): number {
 		// `getTimezoneOffset()` is (UTC minus local), so its sign is inverted
 		// relative to the "+HH:MM ahead of UTC" reading every caller wants.
-		return -new Date(epochMs).getTimezoneOffset();
+		// Subtracted from zero rather than negated, so a zero offset is 0 and
+		// not -0, which a second backend could not be expected to reproduce.
+		return 0 - new Date(epochMs).getTimezoneOffset();
 	}
 
 	parseIso8601(text: string): number {
@@ -95,7 +97,8 @@ export class DateCalendar implements CalendarBackend {
 		// fields, re-read those fields as if they were UTC, and the difference
 		// from the instant is the zone's offset then, daylight saving included.
 		const f = zonedFields(zone, epochMs);
-		return Math.round((utcMs(f.year, f.month0, f.day, f.hour, f.minute, f.second) - epochMs) / 60000);
+		// `|| 0` folds the -0 a negative sub-minute difference rounds to.
+		return Math.round((utcMs(f.year, f.month0, f.day, f.hour, f.minute, f.second) - epochMs) / 60000) || 0;
 	}
 
 	fieldsInZone(zone: string, epochMs: number): ZonedFields {

@@ -14,6 +14,7 @@
 
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import * as fs from "node:fs";
 import * as path from "node:path";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -76,7 +77,7 @@ const subpaths = [
   "engine", "vm", "format", "language", "packages", "constants",
   "lexer", "parser", "normalizer", "resolvers",
   "errors", "utilities", "uom", "services", "worker",
-  "errors", "utilities", "uom", "services", "testing",
+  "errors", "utilities", "uom", "services", "testing", "temporal",
 ];
 
 for (const subpath of subpaths) {
@@ -92,6 +93,67 @@ for (const subpath of subpaths) {
     failures.push(`subpath ${subpath}`);
   }
 }
+
+// The Temporal backend is opt-in, and the promise is that a host which does
+// not opt in pays nothing: the entry must import no polyfill, install no
+// global, and be unreachable from the root entry.
+const temporal = await import(pathToFileURL(path.join(dist, "temporal.js")).href);
+
+check("temporal: the entry exports createTemporalCalendar", () => {
+  if (typeof temporal.createTemporalCalendar !== "function") {
+    throw new Error(`createTemporalCalendar is ${typeof temporal.createTemporalCalendar}, expected function`);
+  }
+});
+
+check("temporal: importing the entry installs no global Temporal", () => {
+  // A native runtime may have one; the entry must not be the reason.
+  if ("Temporal" in globalThis && process.execArgv.some((flag) => flag.includes("temporal"))) return;
+  if (typeof globalThis.Temporal !== "undefined" && Number.parseInt(process.versions.node, 10) < 26) {
+    throw new Error("globalThis.Temporal was defined after importing solve-engine/temporal on a Node without one");
+  }
+});
+
+check("temporal: the built entry imports no polyfill", () => {
+  const source = fs.readFileSync(path.join(dist, "temporal.js"), "utf8");
+  if (/temporal-polyfill|@js-temporal/.test(source)) {
+    throw new Error("dist/temporal.js names a polyfill package");
+  }
+});
+
+check("temporal: the root entry does not reach it", () => {
+  if (typeof esm.createTemporalCalendar !== "undefined") {
+    throw new Error("createTemporalCalendar leaked into the root entry");
+  }
+  // Stronger than the export check: walk every chunk the root entry loads,
+  // transitively, and refuse one that carries the backend's own code. The
+  // identifier is one only temporal/ mentions, so a chunk split that pulled
+  // the backend into the root's graph would name it.
+  const seen = new Set();
+  const queue = ["index.js"];
+  while (queue.length > 0) {
+    const file = queue.pop();
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const source = fs.readFileSync(path.join(dist, file), "utf8");
+    if (/createTemporalCalendar|PlainDateTime/.test(source)) {
+      throw new Error(`${file}, reached from the root entry, carries Temporal backend code`);
+    }
+    for (const match of source.matchAll(/from\s*['"]\.\/([^'"]+)['"]|import\s*['"]\.\/([^'"]+)['"]/g)) {
+      queue.push(match[1] ?? match[2]);
+    }
+  }
+  if (seen.size < 2) throw new Error("the root entry loaded no chunks, so the walk proved nothing");
+});
+
+check("temporal: refuses a value that is not a Temporal, with a coded error", () => {
+  try {
+    temporal.createTemporalCalendar({});
+  } catch (err) {
+    if (err?.code !== "TEMPORAL_IMPLEMENTATION_INVALID") throw new Error(`threw ${err?.code ?? err}`);
+    return;
+  }
+  throw new Error("accepted an empty object as a Temporal implementation");
+});
 
 console.log("");
 if (failures.length > 0) {
