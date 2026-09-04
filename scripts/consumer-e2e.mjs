@@ -282,6 +282,7 @@ fs.writeFileSync(
 	path.join(scratch, "probe-docblocks.mjs"),
 	[
 		'import { createEngine } from "solve-engine";',
+		'import { ValueType } from "solve-engine";',
 		'import { evaluateDocument } from "solve-engine/engine";',
 		'import { formatValue } from "solve-engine/format";',
 		'import { readFileSync } from "node:fs";',
@@ -304,7 +305,11 @@ fs.writeFileSync(
 		"    const parsedLine = parsed.lines[index];",
 		"    let actual;",
 		'    if (parsedLine && parsedLine.error) actual = "ERROR: " + parsedLine.error;',
-		'    else if (parsedLine && parsedLine.result) actual = formatValue(parsedLine.result).replace(/^=\\s*/, "");',
+		// A refusal reaches the line as an error-TYPED Value rather than as a
+		// parse error, and the docs mark both the same way. Without this the two
+		// harnesses disagreed about a refused date: the in-repo one wrote
+		// "ERROR: ..." and this one wrote the bare sentence.
+		'    else if (parsedLine && parsedLine.result) { const shown = formatValue(parsedLine.result).replace(/^=\\s*/, ""); actual = parsedLine.result.type === ValueType.Error ? "ERROR: " + shown : shown; }',
 		'    else actual = "(no result)";',
 		"    results.push({ file: block.file, line: row.line, expression: row.expression, expected: row.expected, actual });",
 		"  });",
