@@ -54,15 +54,22 @@ export default defineConfig({
   base,
   // The six broad "catch-all" pages were split into one focused page per
   // feature. Anyone holding a link to an old page (a bookmark, a search result)
-  // lands on the first page of what it became rather than a 404. Astro prepends
-  // `base` to both sides, so these are written base-relative.
+  // lands on the first page of what it became rather than a 404.
+  //
+  // The destination carries `base` and the route does not, because Astro treats
+  // them differently: the route is matched against the site's own paths, while
+  // the destination is written into the page as a plain href and is emitted
+  // exactly as given. Written base-relative on both sides, every one of these
+  // redirects sent a reader from a real page to a 404, and the deployment check
+  // that noticed refused to publish the site at all, which is how the whole
+  // documentation site went stale rather than six pages of it.
   redirects: {
-    "/syntax/numbers-and-math/": "/syntax/operators/",
-    "/syntax/programmer-math/": "/syntax/number-bases/",
-    "/syntax/money-and-finance/": "/syntax/currency/",
-    "/syntax/units-and-conversions/": "/syntax/unit-arithmetic/",
-    "/syntax/dates/": "/syntax/date-literals/",
-    "/syntax/algebra/": "/syntax/expanding/",
+    "/syntax/numbers-and-math/": `${base}syntax/operators/`,
+    "/syntax/programmer-math/": `${base}syntax/number-bases/`,
+    "/syntax/money-and-finance/": `${base}syntax/currency/`,
+    "/syntax/units-and-conversions/": `${base}syntax/unit-arithmetic/`,
+    "/syntax/dates/": `${base}syntax/date-literals/`,
+    "/syntax/algebra/": `${base}syntax/expanding/`,
   },
   // Emit `page/index.html` rather than `page.html`, which keeps links working
   // with and without a trailing slash on a static host.
