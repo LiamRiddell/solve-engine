@@ -124,7 +124,24 @@ export function zonedWallClockToUtcMs(
 	const naiveOffset = resolveOffsetMinutes(zoneRef, naiveUtcMs, calendar);
 	const firstGuess = naiveUtcMs - naiveOffset * 60000;
 	const refinedOffset = resolveOffsetMinutes(zoneRef, firstGuess, calendar);
-	return refinedOffset === naiveOffset ? firstGuess : naiveUtcMs - refinedOffset * 60000;
+	if (refinedOffset === naiveOffset) return firstGuess;
+
+	// The two offsets disagree, so the reading sits near a transition. Taking
+	// the refined one on trust moved the answer the wrong way in any zone
+	// behind UTC: asking for 00:30 on a spring-forward morning in New York
+	// landed on the previous day. Read each candidate back instead, and keep
+	// the one that really shows the wall clock that was asked for.
+	const secondGuess = naiveUtcMs - refinedOffset * 60000;
+	const shows = (candidate: number): boolean =>
+		candidate + resolveOffsetMinutes(zoneRef, candidate, calendar) * 60000 === naiveUtcMs;
+	if (shows(firstGuess)) return firstGuess;
+	if (shows(secondGuess)) return secondGuess;
+
+	// Neither shows it, so the reading is one a spring-forward skipped: it
+	// never happened. The later instant is the one past the transition, which
+	// is the same choice `Temporal`'s `disambiguation: 'compatible'` makes,
+	// so the two backends agree on a reading that is a choice either way.
+	return Math.max(firstGuess, secondGuess);
 }
 
 /**

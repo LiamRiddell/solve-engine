@@ -1413,6 +1413,15 @@ function datetimeInZone(left: Value, name: string, vm: VM): Value {
     }
     const calendar = vm.context.calendar;
     const f = calendar.fields(epochMs);
+    // A calendar day is re-anchored as that DAY in the named zone, not as the
+    // wall clock the host happens to show for it. Reading the host's fields
+    // for a date meant that on a host zone whose local midnight does not exist
+    // (a spring-forward at midnight, as Chile and Cuba have), `3 April 2026 in
+    // Tokyo` picked up an hour from the host and named the wrong day in Tokyo.
+    // A date carries no time of day, so there is none to preserve.
+    if (left.grain === "date") {
+        return datetimeValue(zonedWallClockToUtcMs(f.year, f.month0, f.day, 0, 0, zoneRef, calendar), "instant", zoneRef);
+    }
     const reanchored = zonedWallClockToUtcMs(f.year, f.month0, f.day, f.hour, f.minute, zoneRef, calendar);
     return datetimeValue(reanchored + f.second * 1000 + f.millisecond, "instant", zoneRef);
 }
