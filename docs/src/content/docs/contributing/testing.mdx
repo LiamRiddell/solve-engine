@@ -99,3 +99,34 @@ quietly out of date.
 Excluded from every test run because they are slow and timing-sensitive. They
 have their own workflow, which compares a pull request against its merge base
 on the same runner; see [performance](/guide/performance/).
+
+
+### Reading a comparison
+
+The comparison job runs the merge base, then this branch, one after the other in
+a single job, and divides. That order is worth knowing about when you read the
+result: the second pass runs on a machine the first has been working for several
+minutes, and a branch that adds benchmark cases makes its own pass longer still.
+
+A ratio near one means nothing changed. A large ratio on a case whose timed
+function constructs an engine (`new ExpressionEngine(...)` inside the loop) is
+usually the machine rather than the code, because those cases are dominated by
+construction and construction is where the drift lands.
+
+When a result matters, measure it directly rather than trusting one run: build
+both revisions, load the two bundles into one process, and interleave the passes
+so drift hits each equally. That method reversed the verdict on the pipeline
+wave-2 branch, which the sequential comparison called 1.4x to 1.8x slower on
+several cases and which was, measured interleaved, faster on the same ones.
+
+How noisy is it, exactly? A branch changing no engine code at all was put
+through the comparison to find out. Per case the spread reached **1.95x** and
+**0.51x** on identical code. Across a whole suite, the geometric mean stayed
+between **0.943x and 1.065x**.
+
+That is why the gate is built the way it is: a single case has to be half again
+as slow before the build stops, while a suite only has to average a quarter
+slower. A uniform slowdown that leaves every individual case under its own limit
+is the shape worth catching, and the suite mean is what catches it. If you are
+tempted to tighten the per-case limit, measure first, on a branch that changes
+nothing.

@@ -1,17 +1,14 @@
 {
   "_comment": "Regression rules for scripts/compare-benchmarks.mjs. Ratios are current divided by reference, so above 1 is slower.",
-
-  "_bandComment": "Two bands, and the gap between them is deliberate. The warn band is where a human should look; the fail band is where a build should stop. They used to be 1.25 and 1.5, which put the failure line inside the range this project's own measurement noise reaches: re-recording the baselines and immediately re-running on byte-identical code produced a 1.71x on parser/datetime. A gate that red-lights unchanged code teaches people to click through it, so the failure line moved out past what noise can plausibly manufacture and the old 1.5 now merely warns.",
+  "_bandComment": "Two bands, and the gap between them is deliberate. The warn band is where a human should look; the fail band is where a build should stop. Measured rather than guessed: a branch changing no engine code at all was put through this comparison, so the spread it reported is what the harness produces on identical code. Per case that spread reaches 1.95x (pipeline/re_eval_dirty) and 0.51x (diagnostic-pipeline/DIAG_variable_chain), with 1.54x and 0.69x elsewhere, so a per-case failure line below about 2 red-lights unchanged code, which is how a gate teaches people to click through it. It stays at 2.5. Tighten it only against a fresh measurement, never against a hunch.",
   "warnRatio": 1.25,
   "failRatio": 2.5,
-
-  "_suiteComment": "A broad uniform slowdown can leave every individual case under its own limit while still costing real throughput. Injecting a context object into the VM dispatch path is exactly that shape, which is why the geometric mean across a suite has its own bound. Same two-band split for the same reason. The bands were 1.15 and 1.4 while the parser suite was measured on means of performance.now() deltas and reached 1.129x on unchanged code; every suite records a mitata median now, so the warning line sits at 1.1 and the build stops at 1.3.",
+  "_suiteComment": "The suite geometric mean is the number worth gating on, and the same measurement is why: across the eight suites on identical code it stayed between 0.943x and 1.065x, while individual cases inside those suites swung from 0.51x to 1.95x. Averaging over a suite cancels the per-case noise and keeps the shape that actually matters, a broad uniform slowdown that leaves every case under its own limit. Failing at 1.25 leaves roughly three times the observed deviation as headroom; warning at 1.10 is about one and a half times it. Both were 1.15 and 1.4, set when the parser suite was still measured on means; it records a median now, which is what the old comment here was waiting for.",
   "suiteGeomeanWarnRatio": 1.1,
-  "suiteGeomeanFailRatio": 1.3,
-
+  "suiteGeomeanFailRatio": 1.25,
   "_improvementComment": "A report that only ever delivers bad news stops being read. Improvements past this are called out.",
   "improvementRatio": 0.8,
-
   "_noiseComment": "Below this a ratio is not worth acting on. This used to be 5 microseconds because the harness timed each iteration with performance.now(), whose resolution swallowed anything faster. mitata batches and calibrates instead, and resolves single-nanosecond work, so the floor is now set by how small a real regression is worth failing a build over rather than by what the clock could see. Milliseconds, so this is 50 nanoseconds.",
-  "noiseFloorMs": 0.00005
+  "noiseFloorMs": 5e-05,
+  "_orderComment": "One thing this comparison cannot correct for: it runs the merge base, then the branch, one after the other in a single job, so the second pass runs on a machine the first has been working for minutes. That order bias reported the pipeline wave-2 branch as 1.4x to 1.8x slower on several cases; measured with both builds in one process and the passes interleaved, the same cases were faster. When a single case matters, measure it that way rather than trusting one run of this."
 }
