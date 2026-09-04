@@ -93,7 +93,10 @@ describe("a date read in a zone", () => {
 
 	test("an abbreviation and a bare UTC both resolve", () => {
 		expect(evaluate("2026-04-03 in EST").zone).toBe("America/New_York");
-		expect(evaluate("2026-04-03 in UTC").zone).toBe("UTCOFFSET:0");
+		// A reader who writes `in UTC` has named a zone, so it is recorded as
+		// one and shown in it. The fixed-offset encoding is for an offset an ISO
+		// literal carried, which is a different thing and displays differently.
+		expect(evaluate("2026-04-03 in UTC").zone).toBe("UTC");
 		expect(evaluate("2026-04-03 in UTC").toNumber()).toBe(Date.parse("2026-04-03T00:00:00Z"));
 	});
 });

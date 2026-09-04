@@ -16,7 +16,7 @@
  * @module ZoneNames
  */
 
-import { encodeFixedOffset } from "./IntlZone";
+
 
 /**
  * City/country/abbreviation name -> IANA timezone identifier.
@@ -223,16 +223,23 @@ export const ZONE_LOOKUP: Record<string, string> = {
  *
  * Case-insensitive, over the same {@link ZONE_LOOKUP} the time package's
  * timezone forms read, so `time in Tokyo` and `2026-04-03 in Tokyo` cannot
- * resolve `Tokyo` to two different places. `utc` and `gmt` on their own are
- * the zero fixed offset, matching what `tryConsumeZoneReference` makes of a
- * bare `GMT`; the signed `GMT+9` spelling is a multi-token form only that
- * parselet can read, and is out of reach here.
+ * resolve `Tokyo` to two different places.
+ *
+ * `utc` and `gmt` resolve to the zone name `"UTC"`, not to the zero fixed
+ * offset. The two mean the same instant, but they are not the same kind of
+ * thing to a reader: a reader who writes `in UTC` has named a zone and is
+ * shown the answer in it, while the fixed-offset form records an offset an
+ * ISO literal carried (`...Z`, `...+09:00`) and leaves the display alone.
+ * Encoding the named spelling as an offset made `3 April 2026 in UTC` display
+ * as the previous evening for a reader in New York. The signed `GMT+9`
+ * spelling is a multi-token form only the time package's own parselet reads,
+ * and is out of reach here.
  *
  * @param name - The name as typed.
  * @returns An IANA identifier or a fixed-offset reference, or null.
  */
 export function resolveZoneName(name: string): string | null {
   const lower = name.trim().toLowerCase();
-  if (lower === "utc" || lower === "gmt") return encodeFixedOffset(0);
+  if (lower === "utc" || lower === "gmt") return "UTC";
   return ZONE_LOOKUP[lower] ?? null;
 }
