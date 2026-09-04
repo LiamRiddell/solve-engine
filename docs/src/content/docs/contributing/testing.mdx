@@ -118,3 +118,15 @@ both revisions, load the two bundles into one process, and interleave the passes
 so drift hits each equally. That method reversed the verdict on the pipeline
 wave-2 branch, which the sequential comparison called 1.4x to 1.8x slower on
 several cases and which was, measured interleaved, faster on the same ones.
+
+How noisy is it, exactly? A branch changing no engine code at all was put
+through the comparison to find out. Per case the spread reached **1.95x** and
+**0.51x** on identical code. Across a whole suite, the geometric mean stayed
+between **0.943x and 1.065x**.
+
+That is why the gate is built the way it is: a single case has to be half again
+as slow before the build stops, while a suite only has to average a quarter
+slower. A uniform slowdown that leaves every individual case under its own limit
+is the shape worth catching, and the suite mean is what catches it. If you are
+tempted to tighten the per-case limit, measure first, on a branch that changes
+nothing.
