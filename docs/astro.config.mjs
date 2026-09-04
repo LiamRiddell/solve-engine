@@ -314,6 +314,7 @@ export default defineConfig({
                 { slug: "syntax/working-days" },
                 { slug: "syntax/displaying-dates" },
                 { slug: "syntax/time" },
+                { slug: "syntax/timesheets" },
               ],
             },
             {
