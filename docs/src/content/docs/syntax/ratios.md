@@ -28,3 +28,9 @@ Keeping ratios as a function leaves that meaning of the colon untouched.
 The parts must be whole positive numbers, and there must be at least two; anything
 else (a fraction, a negative, a single value) is reported as an error rather than
 guessed at.
+
+## A screen or an image
+
+A pair written the way a screen is sold reduces the same way, without the
+brackets: `1920x1080 as ratio` is `16:9`. That spelling, and the resize that
+goes with it, are on [screen and image sizes](/syntax/screen-and-image-sizes/).

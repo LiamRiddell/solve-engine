@@ -216,6 +216,10 @@ export const CoreErrorCodes = {
   CALENDAR_TEMPORAL_UNAVAILABLE: "CALENDAR_TEMPORAL_UNAVAILABLE",
   /** A trip form (`cost to drive ...`) was written without the `at` that separates its parts. Recoverable. */
   TRIP_EXPECTED_AT: "TRIP_EXPECTED_AT",
+  /** A width and a height were written with nothing asked of the pair (`1920x1080` on its own). Recoverable. */
+  DIMENSIONS_EXPECTED_FORM: "DIMENSIONS_EXPECTED_FORM",
+  /** A `resize` was written without one of its parts: the dimensions, the `to`, the size, or the side it names. Recoverable. */
+  RESIZE_EXPECTED_SHAPE: "RESIZE_EXPECTED_SHAPE",
   PLUGIN_OPERATOR_COLLISION: "PLUGIN_OPERATOR_COLLISION",
   PLUGIN_KEYWORD_COLLISION: "PLUGIN_KEYWORD_COLLISION",
   PLUGIN_UNIT_COLLISION: "PLUGIN_UNIT_COLLISION",

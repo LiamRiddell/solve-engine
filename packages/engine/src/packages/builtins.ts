@@ -49,6 +49,7 @@ import { IP_PACKAGE } from "./ip";
 import { COOKING_PACKAGE } from "./cooking";
 import { FUEL_PACKAGE } from "./fuel";
 import { TRAVEL_PACKAGE } from "./travel";
+import { WEB_PACKAGE } from "./web";
 import { DERIVED_UNITS_PACKAGE } from "./derived";
 import { TAGS_PACKAGE } from "./tags";
 import { TEXT_PACKAGE } from "./text";
@@ -96,6 +97,7 @@ export {
   COOKING_PACKAGE,
   FUEL_PACKAGE,
   TRAVEL_PACKAGE,
+  WEB_PACKAGE,
   DERIVED_UNITS_PACKAGE,
   TAGS_PACKAGE,
   TEXT_PACKAGE,
@@ -177,6 +179,7 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   COOKING_PACKAGE,
   FUEL_PACKAGE,
   TRAVEL_PACKAGE,
+  WEB_PACKAGE,
   DERIVED_UNITS_PACKAGE,
   // After MATHPHRASES_PACKAGE and LINES_PACKAGE: tag aggregates reuse the
   // `total of`/`count of`/`average of` fusions and walk the document the same
