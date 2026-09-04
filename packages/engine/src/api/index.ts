@@ -41,7 +41,7 @@ export type { FormattingSettings } from "@solve-js/format/FormattingSettings";
 export { ExpressionEngine, SNAPSHOT_FORMAT, SNAPSHOT_VERSION, SnapshotErrorCodes } from "@solve-js/engine";
 export type { Explanation, ExplanationStep } from "@solve-js/engine";
 export type { CalendarBackend, CalendarFields, ZonedFields } from "@solve-js/engine";
-export type { DateReadingPolicy, DateOrderSource, ResolvedDateOrder } from "@solve-js/engine";
+export type { DateReading, DateReadingPolicy, DateOrderSource, ResolvedDateOrder } from "@solve-js/engine";
 export type {
   EngineOptions,
   EngineRestoreOptions,

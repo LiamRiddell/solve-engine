@@ -17,6 +17,7 @@
 
 import { describe, expect, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
+import { evaluateDocument } from "@solve-js/engine/evaluateDocument";
 import { ValueType, type Value } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import type { DateInputOrder } from "@solve-js/constants/Configuration";
@@ -162,12 +163,17 @@ describe("a spelled-out month that names no real day", () => {
   });
 
   test("date.onAmbiguous: 'arithmetic' restores both old numbers exactly", () => {
+    // Derived rather than written out: the old answer is a day count times a
+    // LOCAL midnight, so the figure is 51,327,216,000,000 in London and a
+    // different fourteen digits in New York. Deriving it from the same `Date`
+    // the literal would have been built with says the same thing in any zone.
     const engine = newTrackedEngine({ config: { date: { onAmbiguous: "arithmetic" } } });
-    expect(formatValue(engine.evaluateExpression("29 February 2026")).replace(/^=\s*/, "")).toBe(
-      "51,327,216,000,000",
-    );
-    expect(formatValue(engine.evaluateExpression("31 April 2026")).replace(/^=\s*/, "")).toBe(
-      "55,024,938,000,000",
+    const localMidnight = (year: number, month: number, day: number) => new Date(year, month - 1, day).getTime();
+    expect(engine.evaluateExpression("29 February 2026").toNumber()).toBe(29 * localMidnight(2026, 2, 1));
+    expect(engine.evaluateExpression("31 April 2026").toNumber()).toBe(31 * localMidnight(2026, 4, 1));
+    // And both really are the fourteen-digit numbers this replaced.
+    expect(formatValue(engine.evaluateExpression("29 February 2026")).replace(/^=\s*/, "")).toMatch(
+      /^5[12],\d{3},\d{3},\d{3},\d{3}$/,
     );
   });
 });
@@ -193,5 +199,48 @@ describe("what the spelled-month refusal leaves alone", () => {
     // parser, which reports what it finds.
     const engine = newTrackedEngine();
     expect(engine.parseDocument("March 99").lines[0].error).not.toBeNull();
+  });
+});
+
+describe("every entry point reports the refusal the same way", () => {
+  // A refused literal is a per-line fact rather than a whole-document one, but
+  // the three entry points reach a Value by different routes, so the same
+  // shape of check applies: an answer that differed between them would be the
+  // drift a single-path test cannot see.
+  const DOCUMENT = ["12/25/2026", "31/04/2026", "2026-02-29", "29 February 2026"];
+
+  test("evaluateLine returns the Error value", () => {
+    const engine = newTrackedEngine({ config: { date: { inputOrder: "DMY" } } });
+    DOCUMENT.forEach((source, i) => {
+      const value = engine.evaluateLine(i + 1, source);
+      expect(value.type).toBe(ValueType.Error);
+    });
+  });
+
+  test("parseDocument reports it on the line, not as a line error", () => {
+    const engine = newTrackedEngine({ config: { date: { inputOrder: "DMY" } } });
+    const result = engine.parseDocument(DOCUMENT.join("\n"));
+    result.lines.forEach((line) => {
+      expect(line.error).toBeNull();
+      expect(line.result?.type).toBe(ValueType.Error);
+    });
+  });
+
+  test("and evaluateDocument agrees with parseDocument, message for message", () => {
+    const batch = newTrackedEngine({ config: { date: { inputOrder: "DMY" } } });
+    const incremental = newTrackedEngine({ config: { date: { inputOrder: "DMY" } } });
+    const source = DOCUMENT.join("\n");
+    const fromBatch = batch.parseDocument(source).lines.map((l) => l.result?.unit);
+    const fromIncremental = evaluateDocument(incremental, source).lines.map((l) => l.result?.unit);
+    expect(fromIncremental).toEqual(fromBatch);
+    expect(fromBatch.every((message) => typeof message === "string" && message.length > 0)).toBe(true);
+  });
+
+  test("and readDates agrees with all three, without evaluating anything", () => {
+    const engine = newTrackedEngine({ config: { date: { inputOrder: "DMY" } } });
+    for (const source of DOCUMENT) {
+      const [reading] = engine.readDates(source);
+      expect(reading.note).toBe(engine.evaluateExpression(source).unit);
+    }
   });
 });

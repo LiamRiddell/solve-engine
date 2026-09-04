@@ -131,9 +131,10 @@ through the rest of the expression, so `31/02/2026 + 1 day` reports the date
 rather than answering a day count built on one that does not exist.
 
 Before this behaviour existed, each of those lines answered a number instead:
-`12/25/2023` was 0.00, `31/04/2026` was 0.00, `2026-02-29` was 1,995 and
-`29 February 2026` was 51,327,216,000,000. If a document relied on one of
-them, `date.onAmbiguous` puts every one of those numbers back:
+`12/25/2023` was 0.00, `31/04/2026` was 0.00, `2026-02-29` was 1,995, and
+`29 February 2026` was a fourteen-digit number, 29 multiplied by the instant
+of the 1st of February. If a document relied on one of them,
+`date.onAmbiguous` puts every one of those numbers back:
 
 ```ts
 new ExpressionEngine({ config: { date: { onAmbiguous: "arithmetic" } } });

@@ -18,6 +18,10 @@
  *   which decide what one run of digits means under that order, and, where it
  *   means nothing, whether saying so is better than answering the arithmetic
  *   the run is spelled like.
+ * - The sentence, {@link composeReadingNote}, which says the same thing to a
+ *   reader. Composed here so that five hosts do not write five different
+ *   sentences about one fact, and so the note a hover shows and the message a
+ *   refusal carries cannot drift apart.
  *
  * @module DateReading
  */
@@ -290,7 +294,7 @@ export type NumericDateRead =
       readonly order: DateFieldOrder | "ISO";
       /** Whether a two-digit year was windowed to a century. */
       readonly shortYear: boolean;
-      /** The ISO of the reading NOT taken, when the other order also names a real day. */
+      /** The ISO of the reading NOT taken, when the other order names a DIFFERENT real day. */
       readonly alternative?: string;
     }
   | { readonly kind: "refuse"; readonly code: DatetimeErrorCode; readonly message: string }
@@ -475,7 +479,11 @@ export function readNumericDate(
   const otherRoles = rolesFor(other, g0, g1);
 
   if (isRealCalendarDay(chosenRoles.day, chosenRoles.month, year, calendar)) {
-    const alternative = isRealCalendarDay(otherRoles.day, otherRoles.month, year, calendar)
+    // The other reading only counts as an alternative when it names a
+    // DIFFERENT day. `01/01/2026` reads the same way round either way, so it
+    // is not a choice the reader needs to be told about.
+    const differs = otherRoles.day !== chosenRoles.day || otherRoles.month !== chosenRoles.month;
+    const alternative = differs && isRealCalendarDay(otherRoles.day, otherRoles.month, year, calendar)
       ? isoOf(otherRoles.day, otherRoles.month, year)
       : undefined;
     return { kind: "date", day: chosenRoles.day, month: chosenRoles.month, year, order: chosen, shortYear, alternative };
@@ -552,4 +560,175 @@ function orderMismatchUnderYearFirst(
       `${opening} Read ${orderInWords(which)} it is ${spellDay(roles.day, roles.month, year)}. ` +
       `Write it as ${isoOf(roles.day, roles.month, year)}, or set date.inputOrder to "${which}".`,
   };
+}
+
+/**
+ * How one date literal in one line was read, with the span it occupies and a
+ * sentence a host can show.
+ *
+ * Derived, never stored. A line can hold two literals
+ * (`31/12/2026 - 01/01/2026`), which one value cannot represent, and a derived
+ * date (`03/04/2026 + 1 day`) is no longer the literal that was read, so a
+ * reading recorded on the answer would be right for the common line and
+ * quietly wrong for the rest. It costs a re-lex of the lines a reader actually
+ * asks about, and nothing at all on the rest.
+ */
+export interface DateReading {
+  /** The literal exactly as typed, `"03/04/2026"`. */
+  readonly text: string;
+  /** Offset of the first character in the line, for an editor underline. */
+  readonly start: number;
+  /** Offset one past the last character. */
+  readonly end: number;
+  /** The day it was read as, `"2026-04-03"`, or null when the literal was refused. */
+  readonly iso: string | null;
+  /** The order actually applied, or null when no order could be. */
+  readonly order: DateFieldOrder | "ISO" | "spelled" | null;
+  /** Where that order came from. `'iso'` and `'spelled'` mean the literal settled itself. */
+  readonly orderSource: DateOrderSource | "iso" | "spelled";
+  /** The BCP-47 tag the order was inferred from, when it was inferred from one. */
+  readonly locale?: string;
+  /** Whether the other order also names a real day, so the reading is a genuine choice. */
+  readonly contested: boolean;
+  /** Whether a two-digit year was windowed to a century. */
+  readonly shortYear: boolean;
+  /** The ISO of the reading not taken, when {@link contested}. */
+  readonly alternative?: string;
+  /** The error code, when the literal was refused. */
+  readonly problem?: DatetimeErrorCode;
+  /**
+   * The sentence a host shows, composed here rather than assembled by each
+   * host from the parts, so five hosts do not write five different sentences
+   * about one fact.
+   */
+  readonly note: string;
+  /**
+   * Whether the note is worth showing: the reading was contested, a two-digit
+   * year was windowed, or the literal was refused. A boolean the engine
+   * computes rather than a judgement each host re-derives, which is what stops
+   * the note being either wallpaper or absent.
+   */
+  readonly needsNote: boolean;
+}
+
+/** Everything about a reading except the two fields composed from the rest. */
+export type DateReadingFacts = Omit<DateReading, "note" | "needsNote">;
+
+/**
+ * How the reading came to be, as the clause that follows the day in a note.
+ *
+ * The separator is named only where the order came from it, because that is
+ * the one case where the reader's next question is "why day first" and the
+ * honest answer is "because you wrote a slash".
+ */
+function sourceInWords(facts: DateReadingFacts, separator: NumericDateSeparator): string {
+  if (facts.orderSource === "iso") return "ISO";
+  if (facts.orderSource === "spelled") return "with the month spelled out";
+  // A refused literal has no order to name, and the two shapes that settle
+  // themselves have already returned, so this only guards the type.
+  const order = facts.order === null || facts.order === "ISO" || facts.order === "spelled"
+    ? "as written"
+    : orderInWords(facts.order);
+  switch (facts.orderSource) {
+    case "config":
+      return `${order}, from date.inputOrder`;
+    case "locale":
+      return `${order}, from the locale ${facts.locale}`;
+    case "host-locale":
+      return `${order}, from the host locale ${facts.locale}`;
+    case "fallback":
+      return `${order}, the default for a ${separator} date, because the host locale could not be read`;
+    default:
+      return `${order}, the default for a ${separator} date`;
+  }
+}
+
+/** An ISO date written out for a reader: `"2026-03-04"` becomes `"4 March 2026"`. */
+function spellIso(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  return spellDay(day, month, year);
+}
+
+/**
+ * Composes the sentence a host shows for one reading.
+ *
+ * In the house voice and in one place, so the note a hover shows and the
+ * message a refusal carries are one story told in two situations rather than
+ * two mechanisms that can drift:
+ *
+ *   03/04/2026 read as 3 April 2026, day first, from the host locale en-GB.
+ *   Month first would be 4 March 2026.
+ *
+ * @param facts - The decided reading.
+ * @param separator - The separator the literal was written with, for the
+ * `'auto'` wording.
+ * @param refusal - The refusal message, when the literal was refused. It IS
+ * the note in that case: there is no reading to describe.
+ * @returns The sentence.
+ */
+export function composeReadingNote(
+  facts: DateReadingFacts,
+  separator: NumericDateSeparator,
+  refusal?: string,
+): string {
+  if (facts.iso === null) return refusal ?? `"${facts.text}" is not a date this engine can read.`;
+  let note = `${facts.text} read as ${spellIso(facts.iso)}, ${sourceInWords(facts, separator)}.`;
+  if (facts.alternative !== undefined && facts.order !== null && facts.order !== "ISO" && facts.order !== "spelled") {
+    const other = facts.order === "DMY" ? "Month first" : "Day first";
+    note += ` ${other} would be ${spellIso(facts.alternative)}.`;
+  }
+  if (facts.shortYear) {
+    note += ` The two-digit year ${facts.text.slice(-2)} was read as ${facts.iso.slice(0, 4)}.`;
+  }
+  return note;
+}
+
+/**
+ * Completes a reading with the two fields derived from the rest: the sentence
+ * and whether it is worth showing.
+ *
+ * @param facts - The decided reading.
+ * @param separator - The separator the literal was written with.
+ * @param refusal - The refusal message, when the literal was refused.
+ * @returns The whole record.
+ */
+export function completeDateReading(
+  facts: DateReadingFacts,
+  separator: NumericDateSeparator,
+  refusal?: string,
+): DateReading {
+  return {
+    ...facts,
+    note: composeReadingNote(facts, separator, refusal),
+    needsNote: facts.contested || facts.shortYear || facts.iso === null,
+  };
+}
+
+/**
+ * Splits a fused literal's source text back into the groups and separator
+ * {@link readNumericDate} takes, or null where the text is not a three-group
+ * numeric run at all (a spelled-out month, an ISO timestamp).
+ *
+ * Reading the text back rather than remembering the groups is what lets the
+ * explanation surfaces reach the same answer through the same function the
+ * normaliser used, with no reading table carried on the bytecode and no
+ * snapshot format change.
+ *
+ * @param text - The literal exactly as typed.
+ * @returns The run, or null.
+ */
+export function splitNumericRun(text: string): NumericDateRun | null {
+  const separated = /^(\d+)([/-])(\d+)\2(\d+)$/.exec(text);
+  if (separated !== null) {
+    return {
+      text,
+      groups: [separated[1], separated[3], separated[4]],
+      separator: separated[2] === "-" ? "hyphen" : "slash",
+    };
+  }
+  const dotted = /^(\d{1,2})\.(\d{1,2})\.(\d{2}|\d{4})$/.exec(text);
+  if (dotted !== null) {
+    return { text, groups: [dotted[1], dotted[2], dotted[3]], separator: "dot" };
+  }
+  return null;
 }

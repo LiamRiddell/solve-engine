@@ -35,6 +35,7 @@ export { DateCalendar, DATE_CALENDAR, calendarOf } from "@solve-js/calendar/Date
 // What `ExpressionEngine.getDateReading()` answers with: the order this engine
 // reads an ambiguous numeric date literal in, and where that order came from.
 export type {
+	DateReading,
 	DateReadingPolicy,
 	DateOrderSource,
 	ResolvedDateOrder,
