@@ -1,7 +1,11 @@
 /**
- * UK take-home pay (issue #277), on the HMRC 2024/25 bands for England, Wales
- * and Northern Ireland. The figures below are worked by hand from the published
+ * UK take-home pay (issue #277), on the HMRC bands for England, Wales and
+ * Northern Ireland. The figures below are worked by hand from the published
  * bands so a drift in the arithmetic, or in the committed rates, fails here.
+ *
+ * Worked against the 2024/25 table, whose employee figures HMRC left unchanged
+ * for 2025/26 and 2026/27, so these numbers hold for every year the package
+ * ships. PayrollTaxYears.spec.ts pins that, and which year is the default.
  */
 
 import { describe, expect, test } from "@jest/globals";

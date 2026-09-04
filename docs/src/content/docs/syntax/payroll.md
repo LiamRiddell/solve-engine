@@ -33,9 +33,17 @@ hourly for 45000 // 23.44
 ## Which figures these are
 
 The bands are the full HMRC figures for **England, Wales and Northern Ireland**,
-tax year **2024/25**: the £12,570 personal allowance, tapered away £1 for every
+tax year **2026/27**: the £12,570 personal allowance, tapered away £1 for every
 £2 earned over £100,000; income tax at 20%, 40% and 45%; and employee National
 Insurance at 8% between £12,570 and £50,270, then 2% above.
+
+A tax year has to be chosen, because take-home depends on one. Solve uses the
+latest year it ships figures for, and that is a fixed table rather than a year
+read off today's date: a new tax year the package has no figures for would
+otherwise be answered with the previous year's, silently. The employee figures
+above are unchanged across 2024/25, 2025/26 and 2026/27, so a salary answers the
+same in all three; the package carries a table for each, so the year a future
+Budget moves is one table beside its neighbours.
 
 **Scotland sets its own income tax bands and is not covered here.** That is the
 same boundary the [tax](/syntax/tax/) rule draws: a rate that is not shipped is
