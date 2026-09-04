@@ -13,19 +13,18 @@
 
 import { afterEach, beforeEach, describe, expect, jest, test } from "@jest/globals";
 import { ExecutionPool, WORKER_OFFLOAD_THRESHOLD, reconstructValue } from "@solve-js/engine/ExecutionPool";
+import { setEngineWorkerFactory } from "@solve-js/workers/WorkerFactory";
 import { Value, ValueType, numberValue, uomValue, hexValue, bigIntValue, stringValue, boolValue, datetimeValue, percentageValue, pendingValue, errorValue } from "@solve-js/vm/Value";
 import { LineCacheEntry } from "@solve-js/cache/LineCache";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
 // ── Mock Worker factory override ────────────────────────────────────────
-// The real createExecutionWorker throws in Jest. We jest.mock the module
-// to return a controllable MockWorker factory.
-//
-// IMPORTANT: jest.mock is hoisted above imports. The factory closure
-// captures `mockFactory` which is a const declared at module level.
-// Jest's babel transform handles this correctly — the const is
-// hoisted with jest.mock, so it's available when the mock factory runs.
+// The pool starts its workers from whatever a host registered with
+// `setEngineWorkerFactory`, so a test registers a controllable one rather than
+// mocking a module. `mockFactory` stands in for the host's factory: the tests
+// below count its calls (one worker per slot, none once unavailable) and make
+// it throw to exercise the fallback.
 
 interface MockWorkerInst {
 	onmessage: ((event: MessageEvent) => void) | null;
@@ -61,11 +60,6 @@ function createMockWorker(): MockWorkerInst {
 // Use a shared jest.fn() that the mock factory wraps. The mock factory
 // redirects to this fn so beforeEach can reconfigure it per test.
 const mockFactory = jest.fn<() => MockWorkerInst>();
-
-jest.mock("@solve-js/workers/engine.worker", () => ({
-	__esModule: true,
-	default: () => mockFactory(),
-}));
 
 /** All MockWorker instances created (pushed by beforeEach's mockFactory impl). */
 let allWorkers: MockWorkerInst[];
@@ -116,10 +110,13 @@ beforeEach(() => {
 		return w as any;
 	});
 	jest.clearAllMocks();
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	setEngineWorkerFactory(() => mockFactory() as any);
 });
 
 afterEach(() => {
 	jest.useRealTimers();
+	setEngineWorkerFactory(null);
 });
 
 // ══════════════════════════════════════════════════════════════════════════

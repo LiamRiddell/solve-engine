@@ -26,6 +26,14 @@ export type { EngineVersionCheckResult } from "./EngineVersionCompatibility";
 // the constructor stays bring-your-own-packages so a consumer can tree-shake.
 export { createEngine } from "./createEngine";
 export type { CreateEngineOptions } from "./createEngine";
+
+// Off-thread compile and execute, opt-in: a host registers what to start a
+// worker from, and the engine's pools use it. Registering nothing keeps every
+// line on the main thread, which is what a host that never calls this gets.
+// The module behind it imports nothing, so a bundle that never registers a
+// factory pays two functions for having the option.
+export { setEngineWorkerFactory } from "@solve-js/workers/WorkerFactory";
+export type { EngineWorkerFactory } from "@solve-js/workers/WorkerFactory";
 export type { EngineConfigOverride } from "@solve-js/constants/Configuration";
 
 // The value a result comes back as, and the one function most hosts call on

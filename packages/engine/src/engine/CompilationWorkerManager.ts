@@ -18,7 +18,7 @@
 
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
-import createCompilationWorker from "@solve-js/workers/engine.worker";
+import { engineWorkerFactory } from "@solve-js/workers/WorkerFactory";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -81,12 +81,22 @@ export class CompilationWorkerManager {
 
 	/**
 	 * Ensure the worker is started (lazy initialization).
-	 * Uses esbuild-plugin-inline-worker to inline the worker as a blob URL.
+	 *
+	 * Starts it from the factory a host registered with
+	 * `setEngineWorkerFactory`. With no factory there is no worker, which is
+	 * the ordinary case: the throw travels as a rejected promise out of
+	 * `compileBatch` (it is `async`), and its callers already treat that as
+	 * "compile this line on the main thread instead". This is the same contract
+	 * the throwing worker stub had before the factory replaced it.
 	 */
 	private ensureWorker(): Worker {
 		if (this.worker) return this.worker;
 
-		this.worker = createCompilationWorker();
+		const factory = engineWorkerFactory();
+		if (factory === null) {
+			throw new Error("no engine worker factory registered, so compilation stays on the main thread");
+		}
+		this.worker = factory();
 
 		this.worker.onmessage = (event: MessageEvent) => {
 			const data = event.data;

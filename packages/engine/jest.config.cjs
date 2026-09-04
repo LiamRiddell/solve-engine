@@ -17,7 +17,6 @@ const config = {
 	moduleDirectories: ["node_modules"],
 	moduleNameMapper: {
 		"^(\\.{1,2}/.*)\\.js$": "$1",
-		"@solve-js/workers/(.*)\\.worker$": "<rootDir>/__tests__/__mocks__/worker-mock.ts",
 		"@solve-js-examples/(.*)": "<rootDir>/examples/$1",
 		"@solve-js/(.*)": "<rootDir>/src/$1",
 		"@tools/(.*)": "<rootDir>/tools/$1",

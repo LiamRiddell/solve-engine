@@ -34,7 +34,6 @@ const config = {
 		// jest. Strip it generically so any such file can be imported by a
 		// test without needing its own per-file mapping entry.
 		"^(\\.{1,2}/.*)\\.js$": "$1",
-		"@solve-js/workers/(.*)\\.worker$": "<rootDir>/packages/engine/__tests__/__mocks__/worker-mock.ts",
 		"@solve-js-examples/(.*)": "<rootDir>/packages/engine/examples/$1",
 		"@solve-js/(.*)": "<rootDir>/packages/engine/src/$1",
 		"@bridge/(.*)": "<rootDir>/packages/playground-bridge/src/$1",

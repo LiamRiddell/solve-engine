@@ -8,7 +8,8 @@
  * merges them behind a single `self.onmessage` dispatching on `msg.type`
  * the message shapes are UNCHANGED from the two original files, so
  * CompilationWorkerManager and ExecutionPool (the main-thread consumers)
- * require no changes beyond importing this file's factory.
+ * reach a worker started from this file through the factory a host registers
+ * with `setEngineWorkerFactory`, and never import this module themselves.
  *
  * Each Worker instance created from this file is used exclusively by ONE
  * consumer (a CompilationWorkerManager sends only COMPILE_BATCH; an
@@ -31,6 +32,7 @@
  */
 
 import { ExpressionEngine } from "../engine/ExpressionEngine";
+import { BUILTIN_PACKAGES } from "../packages/builtins";
 import type { Bytecode } from "../vm/VM";
 import { createVM, executeBytecode } from "../vm/VM";
 import { sharedOpRegistry } from "../vm/OpRegistry";
@@ -100,30 +102,18 @@ type EngineWorkerMessage = CompileBatchMsg | ExecuteBatchMsg | TerminateMsg;
 
 // ── Worker body ───────────────────────────────────────────────────────
 
-// A host that builds with esbuild-plugin-inline-worker gets this replaced by a
-// real factory returning a Worker. Nothing else does, the published tsup bundle
-// included, so this stub is a live runtime path rather than a dead sentinel.
-//
-// Throwing is the contract, not a failure to handle the case. Both consumers
-// probe availability by calling this inside a try/catch
-// ({@link ExecutionPool.isAvailable}, and the equivalent in
-// CompilationWorkerManager), so the throw is how they learn workers are
-// unavailable and fall back to the main thread. The message is for a developer
-// reading a stack trace, and is otherwise swallowed by design.
-//
-// The one raw `throw new Error` in the codebase. It stays raw because it is a
-// build-configuration signal rather than an engine error, and routing it
-// through ErrorFactory would imply a caller should inspect its code.
-export default (() => {
-	throw new Error("engine.worker.ts was not processed by esbuild-plugin-inline-worker, so worker offload is unavailable");
-}) as unknown as () => Worker;
-
 // ── Lazy per-role state, independent, only the used one is created ────
 
 let compileEngine: ExpressionEngine | null = null;
 function getCompileEngine(): ExpressionEngine {
 	if (!compileEngine) {
-		compileEngine = new ExpressionEngine();
+		// The full vocabulary, which is the point of this file being its own
+		// bundle: a compile engine with no packages would refuse every line a
+		// package gives meaning to, and the manager would fall back to the main
+		// thread for nearly all of them. Nothing but a host that registers a
+		// factory (see `WorkerFactory.ts`) reaches this module, so a consumer's
+		// main bundle carries neither the packages nor this file.
+		compileEngine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	}
 	return compileEngine;
 }
@@ -306,16 +296,15 @@ function handleExecuteBatch(msg: ExecuteBatchMsg): void {
 /**
  * Whether this module is executing inside a real worker global scope.
  *
- * Only `esbuild-plugin-inline-worker` splits this file into a separate worker
- * bundle. Any other bundler, tsup included, treats it as an ordinary module and
- * inlines the whole body into whatever imported it, which means the code below
- * runs on the main thread or in Node rather than in a worker.
+ * This file is a bundle entry of its own (`solve-engine/engine-worker`), so a
+ * host that starts a worker from it runs the handler below in a worker. It is
+ * still an ordinary module to anything that merely imports it, a test harness
+ * or a Node script included, and there the handler must not bind.
  *
- * Without this guard, importing the published package from Node throws
- * `self is not defined` before a single expression can be evaluated. The check
- * distinguishes the three environments: Node defines neither `self` nor
- * `window`, a browser main thread defines both, and a worker defines only
- * `self`.
+ * Without this guard, importing it from Node throws `self is not defined`
+ * before a single expression can be evaluated. The check distinguishes the
+ * three environments: Node defines neither `self` nor `window`, a browser main
+ * thread defines both, and a worker defines only `self`.
  */
 const inWorkerScope = typeof self !== "undefined" && typeof window === "undefined";
 

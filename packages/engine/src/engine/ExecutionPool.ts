@@ -45,7 +45,7 @@ const WORKER_BATCH_TIMEOUT_MS = 30_000;
 // esbuild-plugin-inline-worker transforms this into a function that
 // returns Worker (using blob URL or equivalent). At build time it's a
 // factory; at dev time it throws.
-import createExecutionWorker from "@solve-js/workers/engine.worker";
+import { engineWorkerFactory } from "@solve-js/workers/WorkerFactory";
 
 // ── Worker message types (mirrors the EXECUTE_* shapes in engine.worker.ts) ──
 
@@ -138,7 +138,12 @@ export class ExecutionPool {
 		}
 		try {
 			// Create a test worker, then immediately terminate it.
-			const w = createExecutionWorker();
+			const factory = engineWorkerFactory();
+			if (factory === null) {
+				this._available = false;
+				return false;
+			}
+			const w = factory();
 			w.terminate();
 			this._available = true;
 			return true;
@@ -292,7 +297,12 @@ export class ExecutionPool {
 	 * worker that {@link failWorker} took out of it.
 	 */
 	private spawnWorker(index: number): void {
-		const worker = createExecutionWorker();
+		// Never null here: every path into the pool goes through isAvailable(),
+		// which returns false when no host has registered a factory. Checked
+		// rather than asserted, because a host may unregister at any time.
+		const factory = engineWorkerFactory();
+		if (factory === null) return;
+		const worker = factory();
 		worker.onmessage = (event: MessageEvent) => {
 			this.handleWorkerMessage(event.data);
 		};

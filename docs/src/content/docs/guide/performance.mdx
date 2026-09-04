@@ -84,6 +84,41 @@ import { startWorkerRuntime, eventTargetTransport } from "solve-engine/worker";
 startWorkerRuntime(eventTargetTransport(self));
 ```
 
+### Offloaded background compilation
+
+There is a second, narrower use of a worker inside the engine itself. While you
+read a document, the evaluator compiles the lines just past the viewport ahead
+of time, and can run batches of already-compiled bytecode, so scrolling does not
+pay for either. Both of those move to a worker when there is one.
+
+There is no way for a library to make a worker on its own: the file a worker
+runs has to be a URL the host's bundler produced, and every bundler spells that
+differently. So the engine asks. Register a factory once and both paths use it.
+
+```ts
+import { setEngineWorkerFactory } from "solve-engine";
+
+setEngineWorkerFactory(() =>
+  new Worker(new URL("solve-engine/engine-worker", import.meta.url), { type: "module" }),
+);
+```
+
+`solve-engine/engine-worker` is a bundle of its own, and it carries every
+built-in package. That matters more than it sounds: a compile worker with no
+vocabulary refuses every line a package gives meaning to, which is most lines,
+and each of those falls back to the main thread having gained nothing. Being a
+separate bundle is also what keeps it out of your own: a host that registers no
+factory ships neither the worker nor the vocabulary it registers.
+
+Registering nothing is a supported state, not a degraded one. Every published
+build behaved this way until this option existed, and the fallbacks are the
+paths that were always taken: compilation happens on the main thread when the
+line is next evaluated, which is where it happened anyway.
+
+This does not replace `solve-engine/worker` above, and the two are unrelated.
+That entry moves **your** calls off the thread; this one lets the engine get
+ahead of itself on work you never asked for directly.
+
 An `AbortSignal` on a call rejects the promise and aborts the work on the other
 side, so a superseded keystroke does not race a stale result home.
 
