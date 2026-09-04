@@ -2,7 +2,7 @@ import { Value, ValueType, numberValue, stringValue, boolValue, uomValue, dateti
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { calendarOf } from "@solve-js/calendar/DateCalendar";
-import { isoWeekNumber } from "@solve-js/calendar/Gregorian";
+import { dayNumber, isoWeekNumber } from "@solve-js/calendar/Gregorian";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { parseIso8601, unixTimestampToEpochMs } from "../Iso8601";
 
@@ -180,8 +180,42 @@ function isWorkdayOnDateHandler(args: Value[], context?: LineExecutionContext): 
  * Arguments arrive in push order, so `args[0]` is the first endpoint as
  * written, though by construction the result doesn't depend on that.
  */
-function spanBetweenDatesHandler(args: Value[]): Value {
-  return uomValue(Math.abs(args[0].toNumber() - args[1].toNumber()), "ms");
+/** Milliseconds in a day, the factor the unit machinery converts an "ms" span by. */
+const MS_PER_DAY = 86_400_000;
+
+/**
+ * The span between two dates, as an unsigned "ms" quantity the unit
+ * machinery then converts into whatever unit the line asked for.
+ *
+ * Measured as a calendar distance when both endpoints are local midnight,
+ * and as elapsed time otherwise. The difference is a daylight-saving
+ * transition: a 23- or 25-hour day used to leak into the answer, so
+ * `days between 01/01/2024 and 01/06/2024` was 151.96 days in London and
+ * 152.04 in Auckland, when the answer is 152 days for every reader. The
+ * hour is real, but it is not what "how many days between these two dates"
+ * asks: two calendar days apart is two days wherever you read it.
+ *
+ * The boundary: either endpoint carrying a time of day makes this elapsed
+ * time again, because `hours between 09:00 and 17:30` is a duration and the
+ * transition genuinely belongs in it.
+ */
+function spanBetweenDatesHandler(args: Value[], context?: LineExecutionContext): Value {
+  const from = args[0].toNumber();
+  const to = args[1].toNumber();
+  const calendar = calendarOf(context);
+  const fromFields = calendar.fields(from);
+  const toFields = calendar.fields(to);
+  const bothAreDates =
+    calendar.localMidnight(fromFields.year, fromFields.month0, fromFields.day) === from &&
+    calendar.localMidnight(toFields.year, toFields.month0, toFields.day) === to;
+  if (bothAreDates) {
+    const days = Math.abs(
+      dayNumber(toFields.year, toFields.month0, toFields.day) -
+        dayNumber(fromFields.year, fromFields.month0, fromFields.day),
+    );
+    return uomValue(days * MS_PER_DAY, "ms");
+  }
+  return uomValue(Math.abs(from - to), "ms");
 }
 
 /**
