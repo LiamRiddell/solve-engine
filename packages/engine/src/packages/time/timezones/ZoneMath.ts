@@ -11,9 +11,13 @@
  *   which has no IANA identifier of its own and needs no DST awareness
  *   (a fixed offset is fixed, by definition).
  *
- * {@link encodeFixedOffset}/{@link isFixedOffset}/{@link decodeFixedOffsetMinutes}
- * are the only code that needs to know this encoding exists, everything
- * else just calls {@link resolveOffsetMinutes} and {@link zoneLabel}.
+ * The encoding, and the wall-clock conversion built on it, now live in
+ * `calendar/IntlZone.ts` and are re-exported below: the zone-bound `Date`
+ * backend needs them and `calendar/` may not import from `packages/`. What
+ * they do is unchanged, and every importer of this module keeps working.
+ * `encodeFixedOffset`, `isFixedOffset` and `decodeFixedOffsetMinutes` are
+ * still the only code that needs to know the encoding exists, everything
+ * else just calls `resolveOffsetMinutes` and {@link zoneLabel}.
  *
  * Every function that reads a zone takes the {@link CalendarBackend} to read
  * it through, passed down from the plugin function's execution context. A
@@ -24,55 +28,18 @@
 
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { utcFields, utcMs } from "@solve-js/calendar/Gregorian";
-
-const FIXED_OFFSET_PREFIX = "UTCOFFSET:";
-
-/** Encode a fixed UTC offset (in minutes, may be negative) as a zone-reference string. */
-export function encodeFixedOffset(offsetMinutes: number): string {
-  return `${FIXED_OFFSET_PREFIX}${offsetMinutes}`;
-}
-
-function isFixedOffset(zoneRef: string): boolean {
-  return zoneRef.startsWith(FIXED_OFFSET_PREFIX);
-}
-
-function decodeFixedOffsetMinutes(zoneRef: string): number {
-  return parseInt(zoneRef.slice(FIXED_OFFSET_PREFIX.length), 10);
-}
+import { decodeFixedOffsetMinutes, isFixedOffset } from "@solve-js/calendar/IntlZone";
 
 /**
- * The UTC offset (in minutes, positive = ahead of UTC) a zone reference
- * has AT a given instant. A fixed offset is its own answer. An IANA zone is
- * resolved by the backend (`CalendarBackend.zoneOffsetMinutes`), whose `Date`
- * implementation uses the standard `Intl.DateTimeFormat` round-trip trick:
- * format the instant using the zone's wall-clock fields, then re-interpret
- * those same field values as if they were UTC, the difference from the
- * original instant IS the zone's offset at that instant (correctly
- * DST-aware, since the format step already applied whatever DST rule is in
- * effect then).
+ * The zone-reference primitives, re-exported from where they now live.
+ *
+ * They moved to `calendar/IntlZone.ts` unchanged, because the zone-bound
+ * `Date` backend needs them and `calendar/` may not import from `packages/`.
+ * Re-exported here rather than removed so every existing importer of
+ * `ZoneMath` (the time package's parselets and their tests) is untouched, and
+ * so this module still reads as the one place the timezone forms compute in.
  */
-export function resolveOffsetMinutes(zoneRef: string, atMs: number, calendar: CalendarBackend): number {
-  if (isFixedOffset(zoneRef)) return decodeFixedOffsetMinutes(zoneRef);
-  return calendar.zoneOffsetMinutes(zoneRef, atMs);
-}
-
-/**
- * The UTC instant (ms) for a given wall-clock date/time interpreted AS
- * local time in `zoneRef`. Single-pass (not iteratively refined against
- * the DST transition it might land in), the standard, generally-accepted
- * simplification every comparable "convert this local time to another
- * zone" tool makes; only matters within the ~1-2 hour window around a
- * DST transition instant, which is inherent to any offset-based approach
- * without a full transition-table walk.
- */
-export function zonedWallClockToUtcMs(
-  year: number, month0: number, day: number, hour: number, minute: number,
-  zoneRef: string, calendar: CalendarBackend,
-): number {
-  const naiveUtcMs = utcMs(year, month0, day, hour, minute, 0);
-  const offsetMinutes = resolveOffsetMinutes(zoneRef, naiveUtcMs, calendar);
-  return naiveUtcMs - offsetMinutes * 60000;
-}
+export { encodeFixedOffset, resolveOffsetMinutes, zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
 
 /** Format a UTC instant as `zoneRef`'s local wall-clock time, e.g. "1:00 AM". */
 export function formatTimeInZone(atMs: number, zoneRef: string, calendar: CalendarBackend): string {

@@ -16,6 +16,10 @@ You do not have to do anything to get this. This page is about what the choice
 is, how to pin it when a result must not depend on where it was computed, and
 how to get `Temporal` on a runtime without one.
 
+If all you want is a time zone rather than a calendar implementation, see
+[choosing a zone](#choosing-a-zone-on-either-backend): it needs nothing
+installed and works on whichever backend you are on.
+
 ## What Temporal is
 
 `Temporal` is the JavaScript standard library's replacement for `Date`. Where
@@ -79,6 +83,48 @@ between them safe rather than a coin toss: `npm run test:temporal` runs the
 date suites under both, in three time zones, and a differential suite compares
 them case by case. A reader on Firefox and a reader on Safari see the same
 number.
+
+## Choosing a zone on either backend
+
+A time zone and a calendar implementation are two different asks, and a host
+often wants only the first. `dateCalendarInZone` answers it on the `Date`
+backend: it takes an IANA zone name and hands back a backend that reads that
+zone as "local", with no polyfill and nothing added to the bundle. Reach for it
+when you want a named zone and do not care which implementation computes in it.
+
+```ts
+import { createEngine, dateCalendarInZone } from "solve-engine";
+
+const engine = createEngine({ calendar: dateCalendarInZone("Asia/Tokyo") });
+```
+
+Everything the next section says about what a zone changes applies here too: a
+date literal is midnight in Tokyo, `9:00am` is nine o'clock there, `today` is
+Tokyo's day, and a day step across a daylight-saving change holds the wall clock
+rather than adding twenty-four hours. Reading the zone data is the same
+`Intl.DateTimeFormat` the `Date` backend already uses for `time in Paris`, so
+the answers come from the runtime's own IANA database.
+
+A zone this runtime cannot format with is refused where you name it, with a
+coded `DATE_ZONE_UNKNOWN` error, rather than answering in some other zone once
+per line:
+
+```ts
+dateCalendarInZone("Europe/Atlantis");
+// throws: dateCalendarInZone("Europe/Atlantis") is not a time zone this runtime knows.
+```
+
+There is deliberately no `date.zone` configuration field beside it. The zone
+belongs to the calendar backend, which already owns what "local" means; a second
+place to say it is how the two come to disagree.
+
+The one thing this does not give you is `Temporal`'s own answer for a wall clock
+a daylight-saving change skipped or repeated. 01:30 on a spring-forward morning
+never happened, and on a fall-back morning it happened twice, so the instant it
+names is a choice; `Temporal` makes that choice explicitly with
+`disambiguation: 'compatible'` and this backend makes it with an offset lookup,
+and the two can differ by an hour for exactly those readings. Every other
+answer is the same, which is what the rest of this page is about.
 
 ## Supplying your own
 
@@ -230,11 +276,13 @@ native on Node 26.
   directly, the `Date` backend may guess through the runtime's legacy parser
   (`"2019/04/01"` reads as local midnight in V8) where the `Temporal` backend
   answers `NaN`; nothing in the engine passes such a string.
-- **Spans that cross a daylight-saving change.** `days between` divides a
-  millisecond span, so in a zone that observes daylight saving a span across
-  the change is an hour short of a whole number of days. That is the engine's
-  own arithmetic and the same on both backends; a `Temporal` engine in `UTC`
-  simply has no such change to cross.
+- **Spans that cross a daylight-saving change.** `days between two dates` counts
+  whole calendar days, so `days between 28 March 2026 and 30 March 2026` is
+  `2 days` in every zone even where the clocks moved between them. Subtracting
+  one date from another is still elapsed time in milliseconds, so
+  `30 March 2026 - 28 March 2026` reads `47:00` in London and `48:00` where
+  nothing changed that weekend. That is the engine's own arithmetic and the same
+  on both backends.
 - **The offsets of local mean time.** Before a zone adopted standard time
   (London in 1847, New York in 1883) its offset was not a whole number of
   minutes. `Date` truncates it to whole minutes, and the backend does the same,

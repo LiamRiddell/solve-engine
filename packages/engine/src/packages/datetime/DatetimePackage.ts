@@ -20,6 +20,7 @@ import { AgeParselet } from "./parselets/AgeParselet";
 import {
   workdaysInDuration, weekdayOnDate, toDateFromAny, toTimestampFromAny,
   monthOnDate, weekOnDate, isWeekendOnDate, isWorkdayOnDate, spanBetweenDates,
+  datetimeLiteralGrain,
 } from "./parselets/DatetimeTimestampPluginFunctions";
 import {
   nthWeekdayOfMonthFn, monthAnchorShift, ageBetween, dateLiteralFault,
@@ -252,6 +253,7 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     weekdayOnDate,
     toDateFromAny,
     toTimestampFromAny,
+    datetimeLiteralGrain,
     monthOnDate,
     weekOnDate,
     isWeekendOnDate,

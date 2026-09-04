@@ -430,6 +430,10 @@ export default defineConfig({
                 { slug: "guide/formatting" },
                 { slug: "guide/dates-on-temporal" },
                 { slug: "guide/editor-integration" },
+                // After formatting, because choosing a zone is a decision about
+                // what a date MEANS in this host, and the page is read once the
+                // dates are already on screen and reading wrongly.
+                { slug: "guide/dates-on-temporal" },
                 { slug: "guide/async-and-live-data" },
                 { slug: "guide/async-data-sources" },
                 { slug: "guide/performance" },

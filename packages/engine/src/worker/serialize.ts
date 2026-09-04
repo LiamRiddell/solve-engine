@@ -72,6 +72,11 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 
 	if (value.unit !== undefined) dto.unit = value.unit;
 	if (value.timedOut !== undefined) dto.timedOut = value.timedOut;
+	// The two datetime sidecars cross as themselves: both are plain JSON
+	// scalars, so the clone guarantee is untouched, and a worker result that
+	// dropped them would answer a different question from the synchronous one.
+	if (value.grain !== undefined) dto.grain = value.grain;
+	if (value.zone !== undefined) dto.zone = value.zone;
 
 	const raw = value.value;
 	if (typeof raw === "bigint") {

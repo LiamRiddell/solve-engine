@@ -12,7 +12,7 @@
  * property `worker/serialize.ts` is built to guarantee.
  */
 
-import type { ValueType, ColourFormat } from "@solve-js/vm/Value";
+import type { ValueType, ColourFormat, DatetimeGrain } from "@solve-js/vm/Value";
 import type { DiagnosticReportJSON } from "@solve-js/diagnostics";
 
 /**
@@ -125,6 +125,19 @@ export interface SerializedWorkerValue {
 	};
 	/** Whether an async fallback timed out, carried through when the engine set it. */
 	timedOut?: boolean;
+	/**
+	 * What a {@link ValueType.Datetime} anchors, present only when the engine
+	 * recorded it: `"date"` for a calendar day, `"datetime"` for a wall-clock
+	 * reading, `"instant"` for a fixed point. See `Value.grain`. A plain JSON
+	 * string, so the DTO's `structuredClone`/`JSON` guarantee is unaffected.
+	 */
+	grain?: DatetimeGrain;
+	/**
+	 * The zone a Datetime should be read in, present only when the line named
+	 * one: an IANA name (`"Asia/Tokyo"`) or a fixed offset (`"UTCOFFSET:540"`).
+	 * See `Value.zone`.
+	 */
+	zone?: string;
 }
 
 /**

@@ -178,4 +178,19 @@ export interface CalendarBackend {
 	 * a zone it does not know or an instant it cannot represent.
 	 */
 	formatDateInZone(zone: string, epochMs: number): string;
+
+	/**
+	 * The zone this backend's "local" means, when it can name one.
+	 *
+	 * Optional, and deliberately so: the interface's own contract says a new
+	 * REQUIRED method is a major, and every backend written against the shipped
+	 * shape has to keep compiling. A backend that reads the host process's zone
+	 * (the default {@link DateCalendar}) leaves it undefined rather than
+	 * reporting a zone it does not itself compute in; one built for a named zone
+	 * (`dateCalendarInZone`, the `Temporal` backend) returns that IANA name.
+	 *
+	 * A caller that needs "which zone is local here" and gets `undefined` should
+	 * fall back to whatever it meant by local before, never guess a name.
+	 */
+	zone?(): string;
 }

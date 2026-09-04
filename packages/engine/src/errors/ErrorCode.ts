@@ -241,8 +241,31 @@ export const CoreErrorCodes = {
 export type CoreErrorCode = (typeof CoreErrorCodes)[keyof typeof CoreErrorCodes];
 
 /**
- * The aggregated catalog type. Currently just `CoreErrorCode`, union in
- * each package's own code-object type here as Phase 5 converts it, e.g.
- * `CoreErrorCode | WeatherErrorCode | StocksErrorCode | ...`.
+ * Codes for the datetime forms whose failure is raised OUTSIDE the datetime
+ * package.
+ *
+ * These sit here rather than beside the datetime parselets, which is where a
+ * package's own code object belongs, because the two sites that raise them are
+ * `vm/VM.ts` (the `in <zone>` branch of the unit-conversion opcode) and
+ * `calendar/DateCalendar.ts` (the zone-bound backend factory), and neither may
+ * import from `packages/`. A code object in the datetime package would put the
+ * name a core file needs on the wrong side of that line.
  */
-export type ErrorCode = CoreErrorCode;
+export const DatetimeErrorCodes = {
+  /** `2026-04-03 in Atlantis`: a Datetime met `in <name>` and the name is neither a zone this engine knows nor a unit. Before this code the epoch-millisecond payload was simply labelled with the name, and the line answered a fourteen-digit quantity in a unit called Atlantis. */
+  DATETIME_ZONE_UNKNOWN: "DATETIME_ZONE_UNKNOWN",
+  /** `2026-04-03 in furlongs`: the same handler, where the name IS a real unit. Separate from `DATETIME_ZONE_UNKNOWN` because the two mistakes have different fixes: one is a misspelt zone, the other is a category error, and a message that suggests checking the spelling of `furlongs` would be no help at all. */
+  DATETIME_NOT_CONVERTIBLE: "DATETIME_NOT_CONVERTIBLE",
+  /** `dateCalendarInZone("Europe/Atlantis")`: the zone-bound `Date` backend factory, given a zone this runtime's `Intl` cannot format with. Raised at construction rather than per line, because a backend that cannot compute in the zone it was asked for must not silently answer in another one. */
+  DATE_ZONE_UNKNOWN: "DATE_ZONE_UNKNOWN",
+} as const;
+
+/** Every code from {@link DatetimeErrorCodes}. */
+export type DatetimeErrorCode = (typeof DatetimeErrorCodes)[keyof typeof DatetimeErrorCodes];
+
+/**
+ * The aggregated catalog type. Currently `CoreErrorCode` and
+ * `DatetimeErrorCode`, union in each package's own code-object type here as
+ * Phase 5 converts it, e.g. `CoreErrorCode | WeatherErrorCode | ...`.
+ */
+export type ErrorCode = CoreErrorCode | DatetimeErrorCode;
