@@ -98,9 +98,19 @@ describe("Memory Leak Tests", () => {
 			const afterMB = getHeapMB();
 
 			// Cleared engines should collect down to roughly the construction
-			// cost. The bound is well under the uncleared figure so a regression
-			// that breaks clear() shows up here rather than in a host's heap.
-			checkMemoryGrowth("10K parseDocument + clear", beforeMB, afterMB, 10000, 250);
+			// cost, and what this catches is a regression that breaks clear().
+			//
+			// The bound is a ratio in disguise, not a size budget. Each iteration
+			// builds an engine with every built-in package, so the figure rises
+			// whenever a package is added, and it is about twice as large on CI as
+			// on a developer machine (measured: 11.9KB an engine here against
+			// 25.8KB there, for the same commit). What matters is the distance to
+			// the uncleared figure the next test pins, which is 286KB an engine:
+			// while a cleared engine is an order of magnitude below that, clear()
+			// is doing its job. 400MB over ten thousand iterations is 40KB each,
+			// which leaves that order of magnitude intact and does not go red for
+			// a package or a slower runner.
+			checkMemoryGrowth("10K parseDocument + clear", beforeMB, afterMB, 10000, 400);
 		});
 
 		test("engines that are never cleared retain their document state", () => {
