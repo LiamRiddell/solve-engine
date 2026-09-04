@@ -328,6 +328,7 @@ export default defineConfig({
                 { slug: "syntax/custom-units" },
                 { slug: "syntax/css-units" },
                 { slug: "syntax/rates-and-speeds" },
+                { slug: "syntax/travel" },
                 { slug: "syntax/fuel-economy" },
                 { slug: "syntax/derived-units" },
                 { slug: "syntax/surveying-units" },
