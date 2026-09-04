@@ -18,10 +18,14 @@
 import { describe, expect, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
 import { ValueType, type Value } from "@solve-js/vm/Value";
+import { formatValue } from "@solve-js/format/FormatEngine";
 import type { DateInputOrder } from "@solve-js/constants/Configuration";
 
 const evaluate = (expression: string, inputOrder: DateInputOrder = "auto"): Value =>
   newTrackedEngine({ config: { date: { inputOrder } } }).evaluateExpression(expression);
+
+const format = (expression: string, inputOrder: DateInputOrder = "auto"): string =>
+  formatValue(evaluate(expression, inputOrder)).replace(/^=\s*/, "");
 
 describe("DATE_ORDER_MISMATCH", () => {
   test("names the order used, the group that broke, the reading that works, and the way out", () => {
@@ -131,5 +135,63 @@ describe("the fault propagates through the rest of the line", () => {
     const value = evaluate("31/12/2026 - 31/02/2026");
     expect(value.type).toBe(ValueType.Error);
     expect(value.value).toBe("DATE_NOT_A_CALENDAR_DAY");
+  });
+});
+
+describe("a spelled-out month that names no real day", () => {
+  test("29 February 2026 reports the month's real length, instead of 51,327,216,000,000", () => {
+    // That number is 29 times the epoch of 1 February 2026: with no reading to
+    // fuse, the run fell to implicit multiplication and the line answered a
+    // product of a day count and an instant.
+    const value = evaluate("29 February 2026");
+    expect(value.type).toBe(ValueType.Error);
+    expect(value.value).toBe("DATE_NOT_A_CALENDAR_DAY");
+    expect(value.unit).toBe('"29 February 2026" is not a real date: February 2026 has 28 days.');
+  });
+
+  test("31 April 2026 likewise, instead of 55,024,938,000,000", () => {
+    const value = evaluate("31 April 2026");
+    expect(value.value).toBe("DATE_NOT_A_CALENDAR_DAY");
+    expect(value.unit).toBe('"31 April 2026" is not a real date: April 2026 has 30 days.');
+  });
+
+  test("and the comma spelling, quoted back the way it was written", () => {
+    const value = evaluate("February 30, 2026");
+    expect(value.value).toBe("DATE_NOT_A_CALENDAR_DAY");
+    expect(value.unit).toBe('"February 30, 2026" is not a real date: February 2026 has 28 days.');
+  });
+
+  test("date.onAmbiguous: 'arithmetic' restores both old numbers exactly", () => {
+    const engine = newTrackedEngine({ config: { date: { onAmbiguous: "arithmetic" } } });
+    expect(formatValue(engine.evaluateExpression("29 February 2026")).replace(/^=\s*/, "")).toBe(
+      "51,327,216,000,000",
+    );
+    expect(formatValue(engine.evaluateExpression("31 April 2026")).replace(/^=\s*/, "")).toBe(
+      "55,024,938,000,000",
+    );
+  });
+});
+
+describe("what the spelled-month refusal leaves alone", () => {
+  test("a leap day that exists is still that day", () => {
+    expect(evaluate("29 February 2024").type).toBe(ValueType.Datetime);
+    expect(format("29 February 2024")).toBe("Thursday, February 29, 2024");
+  });
+
+  test("and every ordinary spelling is untouched, under every order", () => {
+    for (const order of ["auto", "DMY", "MDY", "YMD"] as const) {
+      expect(format("3 April 2026", order)).toBe("Friday, April 3, 2026");
+      expect(format("March 9, 2024", order)).toBe("Saturday, March 9, 2024");
+      expect(format("Mar 9 2024", order)).toBe("Saturday, March 9, 2024");
+      expect(format("February 2020", order)).toBe("Saturday, February 1, 2020");
+    }
+  });
+
+  test("a group that is out of range for its role at all still declines", () => {
+    // `March 99` is neither a year nor a day of any month, so the run is not
+    // clearly a date attempt: it keeps today's behaviour and is left to the
+    // parser, which reports what it finds.
+    const engine = newTrackedEngine();
+    expect(engine.parseDocument("March 99").lines[0].error).not.toBeNull();
   });
 });

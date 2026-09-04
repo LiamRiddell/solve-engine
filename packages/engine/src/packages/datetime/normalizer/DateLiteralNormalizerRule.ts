@@ -166,6 +166,31 @@ export function buildDateToken(
 }
 
 /**
+ * The source text a run of tokens covers, with one space wherever the tokens
+ * were not written touching.
+ *
+ * Reconstructed from the token offsets because a normaliser rule is handed
+ * tokens rather than the line they came from, and a refusal has to quote what
+ * the reader typed: `"29 February 2026"` and `"March 9, 2024"` read back the
+ * way they were written, while an adjacent run like `"03/04/2026"` reads back
+ * with nothing added.
+ *
+ * @param tokens - The run.
+ * @returns The reconstructed text.
+ */
+export function runText(tokens: Token[]): string {
+  let out = "";
+  let previousEnd = -1;
+  for (const token of tokens) {
+    const text = token.text ?? token.value;
+    if (previousEnd >= 0 && token.offset > previousEnd) out += " ";
+    out += text;
+    previousEnd = token.sourceEnd ?? token.offset + text.length;
+  }
+  return out;
+}
+
+/**
  * Fuses a run that names no readable date into one
  * {@link DATETIME_LITERAL_UNREADABLE_TYPE} token carrying the refusal.
  *
@@ -195,7 +220,7 @@ export function faultMatch(
     DATETIME_LITERAL_UNREADABLE_TYPE,
     DATETIME_LITERAL_UNREADABLE_TYPE_ID,
     JSON.stringify({ code, message }),
-    sourceTokens.map((t) => t.value).join(""),
+    runText(sourceTokens),
     first.offset,
     0,
     first.line,

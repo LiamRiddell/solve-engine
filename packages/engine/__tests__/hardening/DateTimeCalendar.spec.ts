@@ -334,12 +334,23 @@ describe("month name dates reject days that do not exist", () => {
 		expect(evaluate("9 March 2024").toNumber()).toBe(localMidnight(2024, 3, 9));
 	});
 
-	test("February 29 in a common year does not", () => {
-		expect(() => evaluate("February 29, 2023")).toThrow();
+	test("February 29 in a common year is refused, by name rather than by a throw", () => {
+		// This used to fall through to implicit multiplication, and the line threw
+		// on the tokens the parser was left holding. A spelled month is
+		// unmistakably a date attempt, so the answer is now what is wrong with it.
+		const value = evaluate("February 29, 2023");
+		expect(value.type).toBe(ValueType.Error);
+		expect(value.value).toBe("DATE_NOT_A_CALENDAR_DAY");
+		expect(value.unit).toBe('"February 29, 2023" is not a real date: February 2023 has 28 days.');
 	});
 
-	test("nor does a 30th of February or a 32nd of anything", () => {
-		expect(() => evaluate("February 30, 2024")).toThrow();
+	test("and so is a 30th of February", () => {
+		expect(evaluate("February 30, 2024").value).toBe("DATE_NOT_A_CALENDAR_DAY");
+	});
+
+	test("while a 32nd of anything still declines, because it is no month's day at all", () => {
+		// The boundary: only a ROLLOVER refuses. A group out of range for its role
+		// is not clearly a date attempt, so it keeps the behaviour it had.
 		expect(() => evaluate("March 32, 2024")).toThrow();
 	});
 });

@@ -911,7 +911,7 @@ export class ExpressionEngine {
                 calendar,
                 () => this.config.date.onAmbiguous,
             ));
-            this.normalizer.register(monthNameDateNormalizerRule(undefined, calendar));
+            this.normalizer.register(monthNameDateNormalizerRule(undefined, calendar, () => this.config.date.onAmbiguous));
         }
 
         this.parser = new PrecedenceParser(this.registry, this.config.validation.maxNestingDepth, locale, this.pluginFunctionIndexByName, this.context.calendar);
