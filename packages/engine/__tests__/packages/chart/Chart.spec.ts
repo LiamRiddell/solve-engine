@@ -9,6 +9,7 @@ import { newTrackedEngine } from "@tools/trackedEngine";
 import { serializeValue } from "@solve-js/worker/serialize";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { ValueType, type ChartData } from "@solve-js/vm/Value";
+import { EngineError } from "@solve-js/errors/EngineError";
 
 function chartOf(source: string): ChartData {
 	const value = newTrackedEngine().evaluateExpression(source);
@@ -71,6 +72,44 @@ describe("plot", () => {
 		const engine = newTrackedEngine();
 		engine.evaluateLine(1, ":plot = 5");
 		expect(engine.evaluateLine(2, "plot + 1").toNumber()).toBe(6);
+	});
+
+	/*
+	 * What a sample may hide and what it may not. The sample loop used to
+	 * swallow every throw, so `plot x + f(x)` with `f` undefined drew an empty
+	 * chart, and the operands each failed body left on the shared stack then
+	 * tripped the depth guard, which reported the undefined function as a
+	 * stack-limit error. Only a fault of the one point (a whole-number
+	 * operation meeting the fraction x happens to be) is a gap now.
+	 */
+	test("an undefined function in the body is the line's error, named, not an empty chart", () => {
+		let thrown: unknown;
+		try {
+			newTrackedEngine().evaluateExpression("plot x + f(x) from 0 to 1");
+		} catch (e) {
+			thrown = e;
+		}
+		expect(thrown).toBeInstanceOf(EngineError);
+		expect((thrown as EngineError).code).toBe("UNDEFINED_FUNCTION");
+		expect((thrown as EngineError).message).toContain("f");
+	});
+
+	test("a fault of one point is still a gap", () => {
+		// `x * 2n` has an answer only where x is a whole number: at 0 and at 1.
+		// Every other sample throws BIGINT_INEXACT_OPERAND, which is that
+		// point's fault rather than the expression's.
+		const c = chartOf("plot x * 2n from 0 to 1");
+		expect(c.points).toEqual([[0, 0], [1, 2]]);
+	});
+
+	test("a body with no value at any point is reported, not drawn as a flat line at zero", () => {
+		// `5 kg to m` is an Error value, and an Error reads as zero through
+		// toNumber(), so this used to plot sixty-four points at y = 0.
+		const value = newTrackedEngine().evaluateExpression("plot x + (5 kg to m) from 0 to 1");
+		expect(value.type).toBe(ValueType.Error);
+		expect(value.value).toBe("INCOMPATIBLE_UNITS");
+		expect(String(value.unit)).toContain("plot");
+		expect(String(value.unit)).toContain("x + (5 kg to m)");
 	});
 });
 

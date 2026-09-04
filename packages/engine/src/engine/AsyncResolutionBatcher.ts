@@ -79,7 +79,15 @@ interface BatchEntry {
  * `highWaterMark` of 64 events to limit the internal buffer size.
  */
 export class AsyncResolutionBatcher {
-	private pending: BatchEntry[] = [];
+	/**
+	 * Resolutions waiting for the next flush, keyed by `packageId:queryKey`
+	 * so a repeat within the tick is refused in constant time. This used to
+	 * be an array scanned on every add, which made a tick that resolves
+	 * thousands of keys quadratic.
+	 */
+	private pending = new Map<string, BatchEntry>();
+	/** How many adds this tick were refused as repeats of a key already pending. Reset on flush. */
+	private collapsed = 0;
 	private scheduled = false;
 	/** Set to true by clearPending(), flush() checks this to abort stale work. */
 	private cleared = false;
@@ -230,14 +238,13 @@ export class AsyncResolutionBatcher {
 
 		// Deduplicate: if the same (packageId:queryKey) is already in the batch, skip.
 		// This handles the case where the same data source is resolved multiple times
-		// (e.g., fetch → error → retry) within the same tick.
-		for (const existing of this.pending) {
-			if (existing.packageId === entry.packageId && existing.queryKey === entry.queryKey) {
-				return;
-			}
+		// (e.g., fetch → error → retry) within the same tick. First write wins.
+		const key = `${entry.packageId}:${entry.queryKey}`;
+		if (this.pending.has(key)) {
+			this.collapsed++;
+			return;
 		}
-
-		this.pending.push(entry);
+		this.pending.set(key, entry);
 
 		if (!this.scheduled) {
 			this.scheduled = true;
@@ -278,16 +285,16 @@ export class AsyncResolutionBatcher {
 
 	/** Number of resolutions currently queued for the next flush. */
 	get pendingCount(): number {
-		return this.pending.length;
+		return this.pending.size;
 	}
 
-	/** Number of pending entries collapsed by (packageId, queryKey) deduplication. */
+	/**
+	 * Number of resolutions this tick collapsed into one already pending for
+	 * the same (packageId, queryKey). Counted as they are refused: the batch
+	 * itself never holds a repeat, so recounting it here always gave zero.
+	 */
 	get dedupCount(): number {
-		const dedup = new Set<string>();
-		for (const entry of this.pending) {
-			dedup.add(`${entry.packageId}:${entry.queryKey}`);
-		}
-		return Math.max(0, this.pending.length - dedup.size);
+		return this.collapsed;
 	}
 
 	/**
@@ -306,7 +313,8 @@ export class AsyncResolutionBatcher {
 
 	/** Remove all listeners and cancel pending batch. Called on engine clear. */
 	clearAll(): void {
-		this.pending = [];
+		this.pending = new Map();
+		this.collapsed = 0;
 		this.scheduled = false;
 		this.cleared = true;
 
@@ -345,25 +353,20 @@ export class AsyncResolutionBatcher {
 	private flush(): void {
 		this.scheduled = false;
 		if (this.cleared) return; // Engine was cleared — abort stale flush
-		if (this.pending.length === 0) return;
+		if (this.pending.size === 0) return;
 
-		// Take ownership of the pending array (swap with empty).
+		// Take ownership of the pending batch (swap with empty). It already
+		// holds one entry per (packageId, queryKey), since add() refuses repeats.
 		const batch = this.pending;
-		this.pending = [];
-
-		// Deduplicate by (packageId, queryKey), keep last entry per key.
-		const deduped = new Map<string, BatchEntry>();
-		for (const entry of batch) {
-			const compositeKey = `${entry.packageId}:${entry.queryKey}`;
-			deduped.set(compositeKey, entry);
-		}
+		this.pending = new Map();
+		this.collapsed = 0;
 
 		// Step 1: Separate errors from successes, but re-evaluate for BOTH.
 		// Error entries must also trigger DAG re-evaluation so downstream
 		// lines can pick up the Error Value from AsyncResultCache.
 		const errorEntries: BatchEntry[] = [];
 		const okEntries: BatchEntry[] = [];
-		for (const entry of deduped.values()) {
+		for (const entry of batch.values()) {
 			if (entry.isError) {
 				errorEntries.push(entry);
 			} else {
@@ -501,8 +504,12 @@ export class AsyncResolutionBatcher {
 		}
 
 		const ordered: number[] = [];
-		while (queue.length > 0) {
-			const current = queue.shift()!;
+		// A head index rather than shift(), which moves every remaining
+		// element: a live value with thousands of consumers was re-sorted in
+		// quadratic time on every flush. The queue only grows, so the index
+		// is safe.
+		for (let head = 0; head < queue.length; head++) {
+			const current = queue[head];
 			ordered.push(current);
 
 			for (const downstream of adjacency.get(current) ?? []) {
@@ -512,10 +519,12 @@ export class AsyncResolutionBatcher {
 			}
 		}
 
-		// Append unresolvable lines (cycles).
+		// Append unresolvable lines (cycles). A Set, not Array.includes,
+		// for the same reason as the head index above.
 		if (ordered.length < lines.length) {
+			const placed = new Set(ordered);
 			const remaining = lines
-				.filter((l) => !ordered.includes(l))
+				.filter((l) => !placed.has(l))
 				.sort((a, b) => a - b);
 			ordered.push(...remaining);
 		}

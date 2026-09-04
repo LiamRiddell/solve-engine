@@ -13,7 +13,7 @@ import {
 } from "./parselets/InflationPluginFunctions";
 import { inYearDollarsNormalizerRule } from "./normalizer/InYearDollarsNormalizerRule";
 import { recurringScheduleNormalizerRule } from "./normalizer/RecurringScheduleNormalizerRule";
-import { billSplitNormalizerRule } from "./normalizer/BillSplitNormalizerRule";
+import { billSplitNormalizerRule, billSplitPrefixNormalizerRule } from "./normalizer/BillSplitNormalizerRule";
 
 // CALL_BUILTIN indices. See VMBuiltins.ts for the handler implementations.
 const COMPOUND_FV = 51, COMPOUND_INTEREST = 52;
@@ -165,6 +165,7 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     // people contextually so those words stay ordinary names everywhere else.
     // See BillSplitNormalizerRule.ts.
     billSplitNormalizerRule(),
+    billSplitPrefixNormalizerRule(),
   ],
   pluginFunctions: {
     inflationFromYearToPresent: inflationFromYearToPresentHandler,

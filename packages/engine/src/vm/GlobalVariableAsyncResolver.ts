@@ -39,6 +39,13 @@ export class GlobalVariableAsyncResolver implements IAsyncResolver {
 	readonly local = true;
 
 	/**
+	 * The scan below keys on the global read, so a program without one is
+	 * never this resolver's and the engine need not ask. See
+	 * {@link IAsyncResolver.watchedOpcodes}.
+	 */
+	readonly watchedOpcodes: readonly OpCode[] = [OpCode.LOAD_GLOBAL_VAR];
+
+	/**
 	 * In-flight (not-yet-resolved) promises, keyed by variable name.
 	 *
 	 * Without this, every re-evaluation of a still-pending line (every

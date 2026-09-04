@@ -1,6 +1,8 @@
 import type { QueryClient } from "@tanstack/query-core";
 import type { Token } from "@solve-js/lexer";
 import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
+import type { OpCode } from "@solve-js/parser/OpCode";
+import { nextInstruction } from "@solve-js/parser/OperandWidth";
 import type { Value } from "@solve-js/vm/Value";
 
 /**
@@ -61,6 +63,29 @@ export interface IAsyncResolver {
 	readonly local?: boolean;
 
 	/**
+	 * The opcodes this resolver's `preflight` keys on, when it keys on any.
+	 *
+	 * A preflight is a scan of a program for the instructions it can act on
+	 * (a plugin call, a global read, a unit name pushed as a string), and it
+	 * answers `null` for a program that has none of them. Naming those opcodes
+	 * here lets the engine give that `null` without calling `preflight`, and
+	 * lets a line no registered resolver could intercept skip the preflight,
+	 * and the cancellation state it sets up, altogether. Six built-in packages
+	 * register resolvers, so before this every plain line paid for seven scans.
+	 *
+	 * The declaration is a promise about `preflight`: for a program containing
+	 * none of the listed opcodes it would have returned `null`. Where there is
+	 * a choice, name the opcode an ordinary line does not carry: the currency
+	 * resolver watches `PUSH_STRING`, which every unit name arrives as, rather
+	 * than the `ADD` its scan also checks. Leave it unset (the default, and how
+	 * an empty list is read) to be consulted for every program as before; the
+	 * cost of not declaring is speed, never a missed lookup. A program that
+	 * calls a plugin function is consulted with every resolver whatever it
+	 * declared, see {@link ResolverRegistry.preflightAll}.
+	 */
+	readonly watchedOpcodes?: readonly OpCode[];
+
+	/**
 	 * Pre-flight check: called BEFORE VM execution.
 	 *
 	 * Returns null if all data for this expression is cached and ready.
@@ -84,6 +109,16 @@ export interface IAsyncResolver {
 }
 
 /**
+ * A resolver that has a `preflight`, with the mask of the opcodes it watches
+ * over {@link ResolverRegistry}'s opcode bits, or 0 for one that declared none
+ * and is consulted for every program.
+ */
+interface Preflighter {
+	resolver: IAsyncResolver;
+	mask: number;
+}
+
+/**
  * Registry of async resolvers, keyed by namespace.
  *
  * Plugins/packages register resolvers alongside their parselets
@@ -97,6 +132,20 @@ export interface IAsyncResolver {
  */
 export class ResolverRegistry {
 	private resolvers = new Map<string, IAsyncResolver>();
+
+	/**
+	 * The resolvers with a preflight, in registration order, each with its
+	 * opcode mask. Rebuilt with {@link opcodeBits} on every change to the map
+	 * above, which happens at package registration and not per line, so the
+	 * per-program question below is a table lookup.
+	 */
+	private preflighters: Preflighter[] = [];
+
+	/** One bit per opcode some resolver watches, indexed by opcode value; 0 for an opcode none watches. */
+	private opcodeBits = new Int32Array(256);
+
+	/** How many preflighting resolvers declared no opcodes, and so are consulted for every program. */
+	private consultedForEverything = 0;
 
 	/**
 	 * Register an async resolver.
@@ -119,6 +168,7 @@ export class ResolverRegistry {
 			this.resolvers.get(resolver.namespace)!.destroy();
 		}
 		this.resolvers.set(resolver.namespace, resolver);
+		this.rebuildIndex();
 	}
 
 	/**
@@ -130,6 +180,7 @@ export class ResolverRegistry {
 		if (resolver) {
 			resolver.destroy();
 			this.resolvers.delete(namespace);
+			this.rebuildIndex();
 		}
 		// Clear all cache entries for this namespace via TanStack Query
 		// Hierarchical keys: ["osrs"] clears all ["osrs", ...] queries
@@ -139,11 +190,87 @@ export class ResolverRegistry {
 	}
 
 	/**
-	 * Run all registered resolvers' preflight checks against compiled bytecode.
+	 * Rebuild the preflight index from the registered resolvers. Called on
+	 * every registration change, never per line.
+	 */
+	private rebuildIndex(): void {
+		const bits = new Int32Array(256);
+		const preflighters: Preflighter[] = [];
+		let nextBit = 0;
+		let everything = 0;
+		for (const resolver of this.resolvers.values()) {
+			if (!resolver.preflight) continue;
+			const watched = resolver.watchedOpcodes;
+			if (!watched || watched.length === 0) {
+				everything++;
+				preflighters.push({ resolver, mask: 0 });
+				continue;
+			}
+			let mask = 0;
+			for (const op of watched) {
+				if (bits[op] === 0) {
+					// Thirty-two bits cover the handful of opcodes real resolvers
+					// watch. Past that, every further opcode shares the last bit,
+					// which only makes the skip less selective, never wrong.
+					bits[op] = 1 << Math.min(nextBit++, 31);
+				}
+				mask |= bits[op];
+			}
+			preflighters.push({ resolver, mask });
+		}
+		this.opcodeBits = bits;
+		this.preflighters = preflighters;
+		this.consultedForEverything = everything;
+	}
+
+	/**
+	 * The mask of watched opcodes `program` contains.
+	 *
+	 * Scanned on every call rather than remembered per program: a line is a
+	 * dozen table reads, about the cost of one map lookup, and a per-program
+	 * `WeakMap` measurably slowed the fresh-engine benchmarks, since every
+	 * live entry is an ephemeron the collector has to visit.
+	 */
+	private programMask(program: BytecodeProgram): number {
+		const { opcodes } = program;
+		const bits = this.opcodeBits;
+		let mask = 0;
+		for (let i = 0; i < opcodes.length; i = nextInstruction(opcodes, i)) {
+			mask |= bits[opcodes[i]];
+		}
+		return mask;
+	}
+
+	/**
+	 * Whether any registered resolver could return a result for `program`:
+	 * one that declared no opcodes is registered, or the program contains an
+	 * opcode some resolver watches. False means {@link preflightAll} would
+	 * consult nothing and answer null, so the caller can skip the preflight
+	 * and the cancellation state it would arm. A plugin call is not special
+	 * here; the engine forces the preflight for one itself.
+	 *
+	 * @param program - The compiled program about to execute.
+	 * @returns True when a preflight could intercept it.
+	 */
+	mayIntercept(program: BytecodeProgram): boolean {
+		if (this.consultedForEverything > 0) return true;
+		if (this.preflighters.length === 0) return false;
+		return this.programMask(program) !== 0;
+	}
+
+	/**
+	 * Run the registered resolvers' preflight checks against compiled bytecode.
 	 *
 	 * Returns the first AsyncCheckResult found, or null if all data is ready.
 	 * Short-circuits on first pending, subsequent pending ops will be
 	 * discovered on re-evaluation when the first resolves.
+	 *
+	 * A resolver that declared {@link IAsyncResolver.watchedOpcodes} is asked
+	 * only about a program containing one of them. A program that calls a
+	 * plugin function (`hasAsync`) keeps the full pass whatever the resolvers
+	 * declared: it is the one shape whose pending path the VM itself rests on,
+	 * and the opcode gate exists to spare the plain line, not to trim a line
+	 * that already does live work.
 	 *
 	 * With `networkEnabled` false, only resolvers that declare themselves
 	 * {@link IAsyncResolver.local} are consulted. The skip happens here, before
@@ -151,9 +278,17 @@ export class ResolverRegistry {
 	 * fetch: refusing its promise afterwards would already be too late.
 	 */
 	preflightAll(tokens: Token[], bytecode: BytecodeProgram, packageId: string, signal: AbortSignal, queryClient: QueryClient, networkEnabled = true): AsyncCheckResult | null {
-		for (const resolver of this.resolvers.values()) {
-			if (!resolver.preflight) continue;
+		// The watched opcodes this program carries, found on first need.
+		let present: number | undefined;
+		for (const { resolver, mask } of this.preflighters) {
+			if (mask !== 0) {
+				if (present === undefined) present = bytecode.hasAsync ? -1 : this.programMask(bytecode);
+				if ((present & mask) === 0) continue;
+			}
 			if (!networkEnabled && !resolver.local) continue;
+			// Read at call time rather than captured at registration, so a
+			// resolver whose preflight is replaced afterwards is still honoured.
+			if (!resolver.preflight) continue;
 			const result = resolver.preflight(tokens, bytecode, packageId, signal, queryClient);
 			if (result) return result;
 		}
@@ -189,5 +324,6 @@ export class ResolverRegistry {
 			resolver.destroy();
 		}
 		this.resolvers.clear();
+		this.rebuildIndex();
 	}
 }

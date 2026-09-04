@@ -37,7 +37,11 @@ import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-
  * - An instruction counter (bounded by `maxInstructions`)
  * - An AbortSignal for async cancellation
  *
- * @param registry - Opcode handler registry for plugin-extensible opcodes
+ * @param registry - Never consulted, and kept only so the parameter list a
+ *   host already calls with keeps working. The dispatch loop refuses any
+ *   opcode it has no arm for, whatever a registry claims about it; a package
+ *   reaches the VM through `pluginFunctions` and `CALL_PLUGIN`. See
+ *   `OpRegistry.ts`, and the deprecation there.
  * @param maxStackDepth - Maximum stack slots (default 200)
  * @param maxInstructions - Maximum opcodes per expression (default 50000)
  * @param maxFunctionRecursionDepth - Maximum nested user-defined-function
@@ -782,6 +786,30 @@ function unrunnableProgram(bytecode: unknown): string | null {
  * smooth curve, small enough to keep the metadata light across the worker. */
 const PLOT_SAMPLES = 64;
 
+/**
+ * The errors a `plot` body may throw at one sample point without failing the
+ * plot: the expression has no value at that x, which is a gap in the curve,
+ * the same gap a pole in `1/x` leaves. Each is a fault of the operands at one
+ * point (a whole-number operation meeting the fraction x happens to be, a
+ * division by the zero x happens to be), so the next point may well succeed.
+ *
+ * Everything else is rethrown. A safety limit, an undefined name, an arity
+ * mismatch, an internal fault: those are properties of the expression rather
+ * than of one x, and the sample loop used to swallow every one of them, so
+ * `plot x + f(x)` with `f` undefined drew an empty chart, and the leaked
+ * operands of sixty-four failed bodies then tripped the stack-depth guard,
+ * which reported the undefined function as a stack-limit error. An
+ * allow-list rather than a deny-list, so a code added later surfaces until
+ * someone decides it is a gap.
+ */
+const PLOT_SAMPLE_GAP_CODES: ReadonlySet<string> = new Set([
+    "BIGINT_DIVISION_BY_ZERO",
+    "BIGINT_INEXACT_OPERAND",
+    "SYMBOLIC_DIVISION_BY_ZERO",
+    "INVALID_DECIMAL_PLACES",
+    "INVALID_ROUNDING_INCREMENT",
+]);
+
 function invokeFrameBody(
     params: string[],
     program: BytecodeProgram,
@@ -794,12 +822,18 @@ function invokeFrameBody(
 ): Value {
     const frame = new Map<string, Value>();
     for (let i = 0; i < params.length; i++) frame.set(params[i], args[i]);
+    const stack = vm.getStack();
+    const stackBase = stack.length;
     vm.pushCallFrame(frame);
     let bodyResult: EvalResult;
     try {
         bodyResult = executeBytecode(program, vm, pipeline, expression, context, symbolicTolerant);
     } finally {
         vm.popCallFrame();
+        // The error arm restores its own pushes; the pending arm returns from
+        // inside the loop with the body's operands still on the shared stack,
+        // and both rejections below throw, so nothing may be left behind.
+        if (stack.length > stackBase) stack.length = stackBase;
     }
     if (bodyResult.type === "pending") {
         // Same v1 scope decision as CALL_USER_FUNCTION's own async body
@@ -850,12 +884,16 @@ function invokeWithBoundUnknown(
 ): Value {
     const frame = new Map<string, Value>(vm.getCallFrame());
     frame.set(name, symbolicValue(varSymbolicNode(name)));
+    const stack = vm.getStack();
+    const stackBase = stack.length;
     vm.pushCallFrame(frame);
     let bodyResult: EvalResult;
     try {
         bodyResult = executeBytecode(program, vm, pipeline, expression, context, symbolicTolerant);
     } finally {
         vm.popCallFrame();
+        // As in invokeFrameBody(): the pending arm leaves operands behind.
+        if (stack.length > stackBase) stack.length = stackBase;
     }
     if (bodyResult.type === "pending") {
         // Unreachable through the shipped grammar (the parselets refuse an
@@ -1713,9 +1751,12 @@ function toScientificString(n: number): string {
  *   switches (OpCode values 0–200) into a jump table with O(1) dispatch.
  *   All handler code is inlined directly in the switch cases, allowing
  *   TurboFan to optimize across opcode boundaries.
- * - ADD/SUB/MUL have an inlined numeric fast path that skips the `binaryOp()`
- *   function call + closure allocation when both operands are plain numbers
- *   (>90% of arithmetic ops).
+ * - ADD/SUB/MUL/DIV and the six comparisons open with an inlined plain-number
+ *   branch: two Numbers carrying no rational or uncertainty sidecar (>90% of
+ *   arithmetic ops) are answered before any helper (fault propagation,
+ *   percentage, rate period, money, unit, `binaryOp()`) is called. The
+ *   sidecar checks are what keep the branch honest: an exact fraction or a
+ *   measurement takes the ladder below it, exactly as before.
  * - Tracing uses a boolean guard (`shouldTrace`) that the JIT eliminates
  *   entirely when diagnostics are disabled. No function call overhead.
  * - `Value.toNumber()` caches its result, computed once, read thereafter.
@@ -1772,6 +1813,13 @@ export function executeBytecode(
     // host that raises maxComplexity/maxNestingDepth, has no other
     // backstop against unbounded stack growth without this check.
     const stack = vm.getStack();
+    // The depth this call found the stack at, restored on the error arm below.
+    // A body that pushes operands and then throws (a user function calling an
+    // undefined one, a `plot` sample that faults) used to leave every one of
+    // those operands on the shared stack for the caller to find: two per
+    // sample in `plot`, until the depth guard reported a stack-limit error
+    // for what was an undefined function.
+    const stackBase = stack.length;
 
     // Boolean guard: JIT will eliminate the entire branch when false.
     // No function call, no argument evaluation, zero overhead.
@@ -1919,6 +1967,16 @@ export function executeBytecode(
         // ═══════════════════════════════════════════════════════════════
         case OpCode.ADD: {
           const r = safePop(stack), l = safePop(stack);
+          // The plain case first. Two bare numbers with no sidecar are the
+          // overwhelming majority of additions, and every helper below would
+          // decline them one call at a time. A Number is never a faulted
+          // operand, so the type check covers faultedOperand() as well.
+          if (l.type === ValueType.Number && r.type === ValueType.Number
+              && l.rational === undefined && r.rational === undefined
+              && l.uncertainty === undefined && r.uncertainty === undefined) {
+            stack.push(numberValue((l.value as number) + (r.value as number)));
+            break;
+          }
           // binaryOp() at the bottom of this chain propagates a faulted
           // operand, but only the branches that reach it do. The Datetime and
           // timecode branches above it do not: they read the other operand as
@@ -2003,6 +2061,13 @@ export function executeBytecode(
         }
         case OpCode.SUB: {
           const r = safePop(stack), l = safePop(stack);
+          // The plain case first, as in ADD.
+          if (l.type === ValueType.Number && r.type === ValueType.Number
+              && l.rational === undefined && r.rational === undefined
+              && l.uncertainty === undefined && r.uncertainty === undefined) {
+            stack.push(numberValue((l.value as number) - (r.value as number)));
+            break;
+          }
           // Same reason as ADD above.
           const subFault = faultedOperand(l, r);
           if (subFault) { stack.push(subFault); break; }
@@ -2064,6 +2129,14 @@ export function executeBytecode(
         }
         case OpCode.MUL: {
           const r = safePop(stack), l = safePop(stack);
+          // The plain case first, as in ADD. The money and percentage helpers
+          // below all decline two bare numbers, at the cost of a call each.
+          if (l.type === ValueType.Number && r.type === ValueType.Number
+              && l.rational === undefined && r.rational === undefined
+              && l.uncertainty === undefined && r.uncertainty === undefined) {
+            stack.push(numberValue((l.value as number) * (r.value as number)));
+            break;
+          }
           // A percentage scaling an uncertain number carries the tolerance, so
           // "(100 +/- 5) * 10%" and "10% of (100 +/- 5)" are "10 ± 0.5". This sits
           // ahead of uncertainOp, which declines for a Percentage operand.
@@ -2116,13 +2189,17 @@ export function executeBytecode(
           } else if (r.type === ValueType.Uom && isRateUnit(r.unit) && l.type === ValueType.Uom && l.unit) {
             // Commutative: "3 minutes × 30 fps" too.
             stack.push(multiplyRateByMatchingUom(r, l));
-          } else if (moneyTimesQuantity(l, r) !== null) {
+          } else {
             // "$30 × 4 days" is $120: an amount of money multiplied by a
             // count of something. Without this the unit system refused it
             // outright ("Cannot combine incompatible units: USD and days"),
-            // because there is no such unit as a dollar-day.
-            stack.push(moneyTimesQuantity(l, r)!);
-          } else {
+            // because there is no such unit as a dollar-day. Asked once: the
+            // answer used to be computed twice, once to test and once to push.
+            const moneyQuantity = moneyTimesQuantity(l, r);
+            if (moneyQuantity !== null) {
+              stack.push(moneyQuantity);
+              break;
+            }
             // Two compatible quantities whose dimensions multiply onto a named
             // derived unit: `kg * m/s^2` is a newton, `V * A` a watt. Only fires
             // when the product names a derived unit, so `m * m` and `kg * m`
@@ -2135,6 +2212,23 @@ export function executeBytecode(
         }
         case OpCode.DIV: {
           const r = safePop(stack), l = safePop(stack);
+          // The plain case first, as in ADD, with one difference: integer
+          // division is the producer of exact fractions (see the general arm
+          // below), so two whole numbers still seed a rational here. A
+          // fractional operand has no rational image, so the producer is not
+          // even asked for it, which is what the general arm would have found
+          // out one call later.
+          if (l.type === ValueType.Number && r.type === ValueType.Number
+              && l.rational === undefined && r.rational === undefined
+              && l.uncertainty === undefined && r.uncertainty === undefined) {
+            const a = l.value as number, b = r.value as number;
+            if (Number.isInteger(a) && Number.isInteger(b)) {
+              const ratDiv = exactRationalOp(l, r, "div");
+              if (ratDiv) { stack.push(ratDiv); break; }
+            }
+            stack.push(numberValue(a / b));
+            break;
+          }
           // Dividing an uncertain number BY a percentage is a scalar divide, so
           // it carries the tolerance: "(100 +/- 5) / 10%" is "1000 ± 50". This
           // sits ahead of uncertainOp, which declines for a Percentage divisor.
@@ -2454,6 +2548,15 @@ export function executeBytecode(
         // ═══════════════════════════════════════════════════════════════
         case OpCode.EQ: {
           const r = safePop(stack), l = safePop(stack);
+          // The plain case first: two bare numbers compare as doubles, which
+          // is what the Number arm below does once every helper has declined.
+          // A comparison reads the centre of a measurement, so only the
+          // rational sidecar has to be absent for the double compare to be
+          // the right answer.
+          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined) {
+            stack.push(boolValue((l.value as number) === (r.value as number)));
+            break;
+          }
           const eqFault = faultedOperand(l, r);
           if (eqFault) { stack.push(eqFault); break; }
           // Equal fractions are equal on the value, not on whichever doubles
@@ -2499,6 +2602,11 @@ export function executeBytecode(
         }
         case OpCode.NEQ: {
           const r = safePop(stack), l = safePop(stack);
+          // The plain case first, as in EQ.
+          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined) {
+            stack.push(boolValue((l.value as number) !== (r.value as number)));
+            break;
+          }
           const neqFault = faultedOperand(l, r);
           if (neqFault) { stack.push(neqFault); break; }
           // The negation of EQ's rational branch, fraction for fraction.
@@ -2535,6 +2643,11 @@ export function executeBytecode(
         }
         case OpCode.LT: {
           const r = safePop(stack), l = safePop(stack);
+          // The plain case first, as in EQ.
+          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined) {
+            stack.push(boolValue((l.value as number) < (r.value as number)));
+            break;
+          }
           const ltFault = faultedOperand(l, r);
           if (ltFault) { stack.push(ltFault); break; }
           if (l.rational !== undefined || r.rational !== undefined) {
@@ -2559,6 +2672,11 @@ export function executeBytecode(
         }
         case OpCode.LTE: {
           const r = safePop(stack), l = safePop(stack);
+          // The plain case first, as in EQ.
+          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined) {
+            stack.push(boolValue((l.value as number) <= (r.value as number)));
+            break;
+          }
           const lteFault = faultedOperand(l, r);
           if (lteFault) { stack.push(lteFault); break; }
           if (l.rational !== undefined || r.rational !== undefined) {
@@ -2582,6 +2700,11 @@ export function executeBytecode(
         }
         case OpCode.GT: {
           const r = safePop(stack), l = safePop(stack);
+          // The plain case first, as in EQ.
+          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined) {
+            stack.push(boolValue((l.value as number) > (r.value as number)));
+            break;
+          }
           const gtFault = faultedOperand(l, r);
           if (gtFault) { stack.push(gtFault); break; }
           if (l.rational !== undefined || r.rational !== undefined) {
@@ -2605,6 +2728,11 @@ export function executeBytecode(
         }
         case OpCode.GTE: {
           const r = safePop(stack), l = safePop(stack);
+          // The plain case first, as in EQ.
+          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined) {
+            stack.push(boolValue((l.value as number) >= (r.value as number)));
+            break;
+          }
           const gteFault = faultedOperand(l, r);
           if (gteFault) { stack.push(gteFault); break; }
           if (l.rational !== undefined || r.rational !== undefined) {
@@ -3103,10 +3231,11 @@ export function executeBytecode(
           if (faulted) { stack.push(faulted); break; }
           const val = operand.toNumber();
           const measure = getMeasure(fromUnit);
-          const isCurrency = sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit);
           if (measure && getMeasure(toUnit) === measure) {
             stack.push(uomValue(convertUnit(val, fromUnit, toUnit), toUnit));
-          } else if (isCurrency) {
+          } else if (sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit)) {
+            // Asked only once the measure table has declined: a `100 cm to m`
+            // has no reason to consult the currency tables at all.
             const converted = sharedCurrencyExchange.convertSync(val, fromUnit, toUnit);
             if (converted !== null) {
               stack.push(uomValue(converted, toUnit));
@@ -3164,10 +3293,10 @@ export function executeBytecode(
             const fromUnit = left.unit!;
             const val = left.toNumber();
             const measure = getMeasure(fromUnit);
-            const isCurrency = sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit);
             if (measure && getMeasure(toUnit) === measure) {
               stack.push(uomValue(convertUnit(val, fromUnit, toUnit), toUnit));
-            } else if (isCurrency) {
+            } else if (sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit)) {
+              // Deferred past the measure check, as in UOM_CONVERT_TO above.
               const converted = sharedCurrencyExchange.convertSync(val, fromUnit, toUnit);
               if (converted !== null) {
                 stack.push(uomValue(converted, toUnit));
@@ -3704,15 +3833,43 @@ export function executeBytecode(
           // each, and keep only the points that come back finite so a curve with
           // a hole (a pole in 1/x, a domain edge) still draws the rest.
           const points: [number, number][] = [];
+          // How many samples faulted (a gap-class throw, or an Error value),
+          // and the last fault, so a plot with no value anywhere reports the
+          // fault rather than drawing nothing. An Error value used to read as
+          // zero through toNumber(), so `plot x + (5 kg to m)` drew a flat
+          // line at zero.
+          let faulted = 0;
+          let lastFault: Value | undefined;
           for (let i = 0; i < PLOT_SAMPLES; i++) {
             const x = from + (i / (PLOT_SAMPLES - 1)) * (to - from);
-            let y: number;
+            let sample: Value;
             try {
-              y = invokeFrameBody(def.params, def.program, [numberValue(x)], vm, pipeline, expression, context, !!symbolicTolerant).toNumber();
-            } catch {
-              continue; // a sample the body cannot evaluate is a gap, not a failure
+              sample = invokeFrameBody(def.params, def.program, [numberValue(x)], vm, pipeline, expression, context, !!symbolicTolerant);
+            } catch (e) {
+              // A fault of this one point is a gap; see PLOT_SAMPLE_GAP_CODES
+              // for why anything else is the expression's fault, and rethrown.
+              const fault = normalizeUnknownError(e);
+              if (!PLOT_SAMPLE_GAP_CODES.has(fault.code)) throw e;
+              faulted++;
+              lastFault = errorValue(fault.code, fault.message);
+              continue;
             }
+            if (sample.type === ValueType.Error || sample.type === ValueType.Pending) {
+              faulted++;
+              lastFault = sample;
+              continue;
+            }
+            const y = sample.toNumber();
             if (Number.isFinite(y)) points.push([x, y]);
+          }
+          if (faulted === PLOT_SAMPLES && lastFault !== undefined) {
+            // Every point faulted, one way or another: there is no curve to
+            // draw, and an empty chart would hide the reason.
+            stack.push(errorValue(
+              String(lastFault.value),
+              `plot: ${exprText} has no value at any point over [${from}, ${to}]: ${String(lastFault.unit)}`,
+            ));
+            break;
           }
           const ys = points.map((p) => p[1]);
           const yMin = ys.length ? Math.min(...ys) : 0;
@@ -3833,6 +3990,23 @@ export function executeBytecode(
           break;
         }
 
+        default:
+          // An opcode with no arm above. The switch used to have no default,
+          // so such an opcode fell through as a no-op that advanced `ip` by
+          // one: the program ran on and failed some instructions later with
+          // a STACK_UNDERFLOW that named the wrong instruction, or answered
+          // with a value that was missing a step. Refused here, at the
+          // instruction that carries it. This includes the enum members no
+          // arm handles (PUSH_VARIABLE, RETURN) and the dynamic range an
+          // `OpRegistry` once claimed, which this loop never consulted.
+          throw malformedBytecode(
+            "MALFORMED_BYTECODE_UNKNOWN_OPCODE",
+            op,
+            "has no handler in this virtual machine",
+            "an opcode the dispatch switch handles (see parser/OpCode.ts)",
+            `opcode ${op} at offset ${ip - 1}`,
+            { offset: ip - 1 },
+          );
       }
     }
 
@@ -3840,6 +4014,10 @@ export function executeBytecode(
     const fallback = safePop(stack);
     return { type: 'value', value: hasArena ? persistentValue(fallback) : fallback };
     } catch (e) {
+        // Whatever this call pushed is discarded with the error, so the caller
+        // (a reentrant arm, or the engine) sees the stack it handed over. Never
+        // below the entry depth: an operand the caller pushed is the caller's.
+        if (stack.length > stackBase) stack.length = stackBase;
         return { type: 'error', error: normalizeUnknownError(e) };
     } finally {
         endEvaluation();

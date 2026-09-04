@@ -345,6 +345,11 @@ export function createHistoricalCurrencyResolver(provider?: HistoricalRateProvid
 	return {
 		namespace: HISTORICAL_CURRENCY_NS,
 
+		// The scan below keys on the plugin call that carries the date, so a
+		// program without one is never this resolver's and the engine need not
+		// ask. See IAsyncResolver.watchedOpcodes.
+		watchedOpcodes: [OpCode.CALL_PLUGIN, OpCode.CALL_PLUGIN_WIDE],
+
 		preflight(
 			_tokens: Token[],
 			bytecode: BytecodeProgram,

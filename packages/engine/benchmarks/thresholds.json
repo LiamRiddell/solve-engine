@@ -5,9 +5,9 @@
   "warnRatio": 1.25,
   "failRatio": 2.5,
 
-  "_suiteComment": "A broad uniform slowdown can leave every individual case under its own limit while still costing real throughput. Injecting a context object into the VM dispatch path is exactly that shape, which is why the geometric mean across a suite has its own bound. Same two-band split for the same reason: the parser suite is still measured on means rather than medians and its geomean reached 1.129x on unchanged code, so 1.15 is a warning and only 1.4 stops the build. Tighten these back up once parserBenchmarks.spec.ts records a median.",
-  "suiteGeomeanWarnRatio": 1.15,
-  "suiteGeomeanFailRatio": 1.4,
+  "_suiteComment": "A broad uniform slowdown can leave every individual case under its own limit while still costing real throughput. Injecting a context object into the VM dispatch path is exactly that shape, which is why the geometric mean across a suite has its own bound. Same two-band split for the same reason. The bands were 1.15 and 1.4 while the parser suite was measured on means of performance.now() deltas and reached 1.129x on unchanged code; every suite records a mitata median now, so the warning line sits at 1.1 and the build stops at 1.3.",
+  "suiteGeomeanWarnRatio": 1.1,
+  "suiteGeomeanFailRatio": 1.3,
 
   "_improvementComment": "A report that only ever delivers bad news stops being read. Improvements past this are called out.",
   "improvementRatio": 0.8,

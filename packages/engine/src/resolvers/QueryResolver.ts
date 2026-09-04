@@ -148,6 +148,11 @@ export function createQueryResolver(opts: QueryResolverOptions): QueryResolverPa
 	const resolver: IAsyncResolver = {
 		namespace: opts.namespace,
 
+		// The scan below keys on the plugin call, so a program without one is
+		// never this resolver's and the engine need not ask. See
+		// IAsyncResolver.watchedOpcodes.
+		watchedOpcodes: [OpCode.CALL_PLUGIN, OpCode.CALL_PLUGIN_WIDE],
+
 		preflight(
 			_tokens: Token[],
 			bytecode: BytecodeProgram,

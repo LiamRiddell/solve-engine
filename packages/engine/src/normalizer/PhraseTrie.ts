@@ -40,6 +40,7 @@
 import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerMatch } from "./NormalizerRule";
 import { createFusedToken } from "./TokenNormalizer";
+import { lowerCased } from "./RuleIndex";
 
 //#endregion
 //#region ─── TrieNode ─────────────────────────────────────────────────────────
@@ -179,7 +180,7 @@ export class PhraseTrie {
 		if (startType === "TAG" || startType.startsWith("TAG_")) return null;
 
 		// ── O(1) quick-reject: first word not a phrase starter ──
-		const firstWord = tokens[pos].value.toLowerCase();
+		const firstWord = lowerCased(tokens[pos].value);
 		if (!this.startWords.has(firstWord)) return null;
 
 		// ── Walk trie, tracking deepest terminal ──
@@ -189,8 +190,12 @@ export class PhraseTrie {
 		let best: NormalizerMatch | null = null;
 		let depth = 1;
 
-		// Check single-word phrase at first node
-		if (node.terminal) {
+		// Check single-word phrase at first node. A token that already carries the
+		// phrase's type is the fusion, not a word to fuse: proposing it again made
+		// every pass a change, so a line holding `assuming` ran the normaliser to
+		// its pass budget on every evaluation, and the result was whatever the
+		// last pass left.
+		if (node.terminal && tokens[pos].type !== node.terminal.tokenType) {
 			const sourceTokens = tokens.slice(pos, pos + 1);
 			best = {
 				consumed: 1,
@@ -203,7 +208,7 @@ export class PhraseTrie {
 		for (let i = pos + 1; i < tokens.length && node?.children; i++) {
 			const contType = tokens[i].type;
 			if (contType === "TAG" || contType.startsWith("TAG_")) break; // a tag token can't continue a phrase (#197, #213)
-			const word = tokens[i].value.toLowerCase();
+			const word = lowerCased(tokens[i].value);
 			node = node.children.get(word);
 			if (!node) break; // dead end
 			depth++;
@@ -259,7 +264,7 @@ export class PhraseTrie {
 
 	/** Check if any phrase starts with this word (case-insensitive). */
 	canStart(word: string): boolean {
-		return this.startWords.has(word.toLowerCase());
+		return this.startWords.has(lowerCased(word));
 	}
 }
 

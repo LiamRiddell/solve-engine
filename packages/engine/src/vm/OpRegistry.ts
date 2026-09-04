@@ -58,16 +58,19 @@ export interface ScalarEquationDef {
 }
 
 /**
- * Handler function for plugin-registered opcodes via CALL_PLUGIN (opcode 50).
- * No longer dispatched directly from the VM switch, plugins register
- * functions in pluginFunctionRegistry instead.
+ * Handler function for a custom opcode, in the shape the VM never calls.
  *
- * @deprecated Use CALL_PLUGIN + pluginFunctionRegistry for plugin functionality.
- *   OpRegistry remains for the VM interface contract only.
+ * @deprecated Nothing dispatches to a handler of this type. A package reaches
+ *   the VM through `IEnginePackage.pluginFunctions`, which `CALL_PLUGIN`
+ *   resolves per engine. Removed in the next major with {@link OpRegistry}.
  */
 export type OpcodeHandler = (vm: VM, opcodes: Uint8Array, ip: number, numbers: Float64Array, strings: string[]) => number;
 
-/** Registration payload for an opcode handler. Binds an OpCode to its handler function with plugin attribution. */
+/**
+ * Registration payload for an opcode handler.
+ *
+ * @deprecated See {@link OpcodeHandler}. Removed in the next major.
+ */
 export interface IOpcodeHandlerRegistration {
 	opcode: number;
 	handler: OpcodeHandler;
@@ -81,11 +84,26 @@ const MAX_OPCODE = 254;
 const DYNAMIC_OPCODE_START = 200;
 
 /**
- * Legacy opcode registry, retained for the VM interface contract.
+ * A table of custom opcode handlers the virtual machine never reads.
  *
- * Previously dispatched custom opcodes (>= 200) from the VM switch-default
- * branch. Now plugins should use CALL_PLUGIN (opcode 50) via
- * pluginFunctionRegistry instead.
+ * This once described an extension point: a package allocated an opcode from
+ * the dynamic range (201 to 254), registered a handler for it, and the VM's
+ * dispatch switch was meant to call that handler from its default arm. The
+ * switch never consulted the registry, and until recently had no default arm
+ * at all, so a registered opcode ran as a no-op and the program failed some
+ * instructions later with a misleading STACK_UNDERFLOW. The dispatch loop now
+ * refuses any opcode it has no arm for, at that instruction, with
+ * `MALFORMED_BYTECODE_UNKNOWN_OPCODE`, whatever a registry claims about it.
+ *
+ * The class, the {@link sharedOpRegistry} singleton, the `registry` field on
+ * {@link VM} and the first parameter of `createVM()` are kept so the calls a
+ * host already makes keep compiling and running; every one of them is
+ * deprecated and goes in the next major. A package that wants the VM to run
+ * its code declares `IEnginePackage.pluginFunctions`, which `CALL_PLUGIN`
+ * resolves through the engine's own context, one table per engine.
+ *
+ * @deprecated Never consulted by the VM. Use `IEnginePackage.pluginFunctions`.
+ *   Removed in the next major.
  */
 export class OpRegistry {
 	private handlers = new Map<number, OpcodeHandler>();
@@ -178,6 +196,11 @@ export interface VM {
 	popString(): string;
 	peek(): Value;
 	getStack(): Value[];
+	/**
+	 * The registry this machine was built with, which it never reads.
+	 *
+	 * @deprecated See {@link OpRegistry}. Removed in the next major.
+	 */
 	registry: OpRegistry;
 	/**
 	 * Read a variable by name, checks the INNERMOST active user-defined-
@@ -294,5 +317,10 @@ export interface VM {
 	context: EngineContext;
 }
 
-/** Shared singleton OpRegistry, used when no custom opcodes are needed. */
+/**
+ * The registry every `createVM()` call without one of its own is handed.
+ *
+ * @deprecated See {@link OpRegistry}: the VM never reads it. Removed in the
+ *   next major, together with `createVM()`'s first parameter.
+ */
 export const sharedOpRegistry = new OpRegistry();

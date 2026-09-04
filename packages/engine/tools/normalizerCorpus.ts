@@ -28,6 +28,21 @@ export const NORMALIZER_CORPUS: readonly string[] = [
 	"2 power of 3",
 	"99 per week",
 
+	// The three rules shaped last: bill splits, recurring schedules and nth weekdays.
+	"split $120 between 3",
+	"$120 split 3 ways",
+	"split $100 between 4 people",
+	"$120 + 18% split 3 ways",
+	"10 split 3 ways",
+	"450 monthly for 18 months",
+	"12.99 monthly for 2 years",
+	"2000 every 2 weeks for 6 months",
+	"$12.99 monthly for 2 years",
+	"2nd Tuesday of March 2026",
+	"4th Thursday of November 2026",
+	"last Friday of November 2026",
+	"1st Monday of next month",
+
 	// Phrases.
 	"10 increase by 5%",
 	"half of 250",

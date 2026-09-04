@@ -27,6 +27,15 @@ const CURRENCY_NS = "currency";
 export class CurrencyAsyncResolver implements IAsyncResolver {
 	readonly namespace = CURRENCY_NS;
 
+	/**
+	 * Every unit the scan below reads arrives as a `PUSH_STRING` operand, so a
+	 * program with no string constant cannot name a currency and the engine
+	 * need not ask. Deliberately not the arithmetic opcodes the scan also
+	 * checks: `ADD` is in nearly every line, and declaring it would spare
+	 * nothing. See {@link IAsyncResolver.watchedOpcodes}.
+	 */
+	readonly watchedOpcodes: readonly OpCode[] = [OpCode.PUSH_STRING];
+
 	private exchange: CurrencyExchangeService;
 
 	constructor(exchange?: CurrencyExchangeService) {

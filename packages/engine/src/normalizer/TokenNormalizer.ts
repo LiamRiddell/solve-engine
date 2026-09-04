@@ -644,7 +644,10 @@ export class TokenNormalizer {
    * @param tokens   - Raw tokens from the lexer
    * @param onFusion - Optional fusion callback (overrides {@link NormalizerOptions.onFusion})
    * @returns Normalized tokens ready for parsing
-   * @throws {Error} If the normalized token count exceeds maxTokens
+   * @throws {Error} If the normalized token count exceeds maxTokens, or the
+   *   stream is still changing after maxPasses passes (a rule chain that never
+   *   settles): NORMALIZER_PASS_LIMIT_EXCEEDED, rather than a stream that is
+   *   quietly whatever the last pass left.
    */
   normalize(tokens: Token[], onFusion?: (fusion: TokenFusion) => void): Token[] {
     // ── Early exit: nothing to normalize ──
@@ -795,6 +798,19 @@ export class TokenNormalizer {
       }
 
       current = passResult;
+    }
+
+    // The loop above ends either because a pass changed nothing (the stream
+    // is its own normal form) or because the pass budget ran out with the
+    // stream still moving. The second used to return the last pass's output
+    // as if it were the answer; a rule chain that never settles is a bug in
+    // a rule, and the caller should hear about it.
+    if (changed) {
+      throw ErrorFactory.validation(
+        "NORMALIZER_PASS_LIMIT_EXCEEDED",
+        `Normalization was still changing the token stream after ${maxPasses} passes`,
+        { maxPasses, tokenCount: current.length }
+      );
     }
 
     return current;

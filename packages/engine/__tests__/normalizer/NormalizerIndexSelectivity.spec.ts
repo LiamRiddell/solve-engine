@@ -85,6 +85,6 @@ describe("normalizer shape index selectivity", () => {
     // unshaped count is the floor on candidates per position. Pinning it keeps
     // that floor visible: a new rule landing without a shape raises the cost of
     // every position in every document, which is the regression this catches.
-    expect(rules.length - shaped).toBeLessThanOrEqual(15);
+    expect(rules.length - shaped).toBeLessThanOrEqual(0);
   });
 });

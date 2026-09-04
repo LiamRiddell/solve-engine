@@ -88,3 +88,81 @@ describe("a call to nothing", () => {
 		expect(result.value.value).toBe("UNKNOWN_PLUGIN_FUNCTION");
 	});
 });
+
+/**
+ * A body that throws leaves the shared stack as it found it.
+ *
+ * What was wrong: a user function's body runs through a reentrant
+ * `executeBytecode()` on the same stack, and when it threw (an undefined name,
+ * say) every operand it had pushed stayed behind. `plot` samples a body
+ * sixty-four times, so a body that pushed two values before its throw leaked
+ * a hundred and twenty-eight, crossed the default depth of 200, and the depth
+ * guard then reported an undefined function as STACK_LIMIT_EXCEEDED.
+ *
+ * What is pinned: after an error result the stack is at its entry depth, an
+ * operand the caller pushed before the call is still there, and a body that
+ * faults sixty-four times in a row never reaches the depth guard.
+ */
+describe("a failed reentrant body leaves no operands behind", () => {
+	/** A body that pushes three numbers and then reads a name nothing defines. */
+	function leakyBody() {
+		const body = new BytecodeBuilder();
+		body.reset();
+		for (let i = 0; i < 3; i++) {
+			body.emitOpcode(OpCode.PUSH_NUMBER);
+			body.emitNumber(i);
+		}
+		body.emitOpcode(OpCode.LOAD_VAR);
+		body.emitString("nothing_defines_this");
+		body.emitOpcode(OpCode.HALT);
+		return body.build();
+	}
+
+	/** `f(1)` against a VM where `f` is {@link leakyBody}. */
+	function callProgram() {
+		const main = new BytecodeBuilder();
+		main.reset();
+		main.emitOpcode(OpCode.PUSH_NUMBER);
+		main.emitNumber(1);
+		main.emitOpcode(OpCode.CALL_USER_FUNCTION);
+		main.emitString("f");
+		main.emitByte(1);
+		main.emitOpcode(OpCode.HALT);
+		return main.build();
+	}
+
+	test("the stack is back at its entry depth after the error result", () => {
+		const vm = vmWithDepth(200);
+		vm.defineUserFunction("f", ["x"], leakyBody());
+		const result = executeBytecode(callProgram(), vm);
+		expect(result.type).toBe("error");
+		if (result.type !== "error") return;
+		expect(result.error.code).toBe("UNDEFINED_VARIABLE");
+		expect(vm.getStack().length).toBe(0);
+	});
+
+	test("an operand the caller pushed before the call is untouched", () => {
+		const vm = vmWithDepth(200);
+		vm.defineUserFunction("f", ["x"], leakyBody());
+		vm.push(numberValue(42));
+		const result = executeBytecode(callProgram(), vm);
+		expect(result.type).toBe("error");
+		expect(vm.getStack().length).toBe(1);
+		expect(vm.pop().value).toBe(42);
+	});
+
+	test("sixty-four failed calls in a row never reach the depth guard", () => {
+		// The shape `plot` produces: the same failing body, over and over, on
+		// one stack. With the leak this crossed a depth of 200 by the second
+		// dozen and reported STACK_LIMIT_EXCEEDED for an undefined name.
+		const vm = vmWithDepth(200);
+		vm.defineUserFunction("f", ["x"], leakyBody());
+		const program = callProgram();
+		for (let i = 0; i < 64; i++) {
+			const result = executeBytecode(program, vm);
+			expect(result.type).toBe("error");
+			if (result.type === "error") expect(result.error.code).toBe("UNDEFINED_VARIABLE");
+		}
+		expect(vm.getStack().length).toBe(0);
+	});
+});

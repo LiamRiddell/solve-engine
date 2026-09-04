@@ -41,6 +41,44 @@ const TT_URSHIFT = tokenTypeId('URSHIFT');
 const TT_WON = tokenTypeId('WON');
 const TT_YEN = tokenTypeId('YEN');
 
+/** A non-ASCII character the scanner reads as a token of its own. */
+interface SymbolToken {
+  readonly type: string;
+  readonly typeId: number;
+  readonly text: string;
+}
+
+/**
+ * The non-ASCII characters that are tokens in their own right: the
+ * multiplication and division signs, plus-minus, not-equal, the currency
+ * glyphs, and the minus sign and en dash a word processor makes of a hyphen.
+ *
+ * One table serves the one-character fast path, the main loop and the
+ * identifier scanner. It used to be two hand-copied if/else chains, and the
+ * identifier scanner knew nothing of them, so `x×2` was read as one word.
+ */
+const SYMBOL_TOKENS: ReadonlyMap<number, SymbolToken> = new Map<number, SymbolToken>([
+  [0x00D7, { type: 'STAR', typeId: TT_STAR, text: '\u00D7' }],
+  [0x00F7, { type: 'SLASH', typeId: TT_SLASH, text: '\u00F7' }],
+  [0x00B1, { type: 'PLUS_MINUS', typeId: TT_PLUS_MINUS, text: '\u00B1' }],
+  [0x2260, { type: 'NEQ', typeId: TT_NEQ, text: '\u2260' }],
+  [0x00A3, { type: 'POUND', typeId: TT_POUND, text: '\u00A3' }],
+  [0x20AC, { type: 'EURO', typeId: TT_EURO, text: '\u20AC' }],
+  [0x00A5, { type: 'YEN', typeId: TT_YEN, text: '¥' }],
+  [0x20BD, { type: 'RUBLE', typeId: TT_RUBLE, text: '₽' }],
+  [0x20A9, { type: 'WON', typeId: TT_WON, text: '₩' }],
+  [0x20B9, { type: 'CURRENCY_SYMBOL', typeId: TT_CURRENCY_SYMBOL, text: '₹' }],
+  [0x20BA, { type: 'CURRENCY_SYMBOL', typeId: TT_CURRENCY_SYMBOL, text: '₺' }],
+  [0x20B4, { type: 'CURRENCY_SYMBOL', typeId: TT_CURRENCY_SYMBOL, text: '₴' }],
+  [0x20AA, { type: 'CURRENCY_SYMBOL', typeId: TT_CURRENCY_SYMBOL, text: '₪' }],
+  [0x20AB, { type: 'CURRENCY_SYMBOL', typeId: TT_CURRENCY_SYMBOL, text: '₫' }],
+  [0x20A6, { type: 'CURRENCY_SYMBOL', typeId: TT_CURRENCY_SYMBOL, text: '₦' }],
+  [0x20B1, { type: 'CURRENCY_SYMBOL', typeId: TT_CURRENCY_SYMBOL, text: '₱' }],
+  [0x2212, { type: 'MINUS', typeId: TT_MINUS, text: '\u2212' }],
+  [0x2013, { type: 'MINUS', typeId: TT_MINUS, text: '\u2013' }],
+]);
+
+
 // ── Markdown line classification (Phase B) ──────────────────────────────
 
 /** What a line is, structurally, before anything tries to evaluate it. */
@@ -414,42 +452,6 @@ export interface LexerVocabulary {
   rawLinePatterns?: Array<{ pattern: RegExp; tokenType: string }>;
 }
 
-// ── Expression gating (L1) ──────────────────────────────────────────────
-// Pre-computed Set of character codes that indicate an expression might
-// be present. Used by hasExpressionIndicators() to gate prose lines
-// before full tokenization.
-//
-// NOTE: Currently unused, L1 prose gating was removed from classifyFromPositions()
-// because it incorrectly skipped keyword-only lines ("pi"), single identifiers
-// ("hello"), and short alpha lines. Retained for future re-implementation with
-// keyword-awareness and proper test coverage.
-const EXPRESSION_INDICATOR_CODES = (() => {
-  const set = new Set<number>();
-  // Digits 0-9
-  for (let i = 48; i <= 57; i++) set.add(i);
-  // Operators / punctuation
-  // Note: colon (58) is intentionally excluded, it's common in prose
-  // (e.g., "Subject: Hello world") and would cause false-positive
-  // expression classification. Variable assignment lines like
-  // ":myVar = 5" are still caught by '=' and digit indicators.
-  const opCodes = [43, 45, 42, 47, 94, 37, 40, 41, 91, 93, 123, 125, 61, 60, 62, 33, 38, 124, 126, 59, 63];
-  for (const c of opCodes) set.add(c);
-  // Currency
-  set.add(36);   // $
-  set.add(0x00A3); // £
-  set.add(0x20AC); // €
-  set.add(0x00A5); // ¥
-  set.add(0x20BD); // ₽
-  set.add(0x20A9); // ₩
-  // Backtick (inline solve)
-  set.add(96);   // `
-  // Dot (could be decimal)
-  set.add(46);   // .
-  // Hash (comment, still an expression indicator)
-  set.add(35);   // #
-  return set;
-})();
-
 // ── ExpressionLexer ───────────────────────────────────────────────────────
 /**
  * Character-by-character tokenizer for expression text.
@@ -526,7 +528,7 @@ export class ExpressionLexer {
   _inlineSolveSpans: InlineSolveSpan[] = [];
 
   // Plugin-extensible raw-line patterns. See LexerVocabulary.rawLinePatterns.
-  private pluginRawLinePatterns: Array<{ pattern: RegExp; tokenType: string }> = [];
+  private pluginRawLinePatterns: Array<{ pattern: RegExp; tokenType: string; owner: LexerVocabulary }> = [];
 
   /**
    * If a `rawLinePatterns` rule matches the FULL text most recently passed
@@ -632,9 +634,20 @@ export class ExpressionLexer {
     }
     if (plugin.operators) {
       for (const chars of Object.keys(plugin.operators)) {
-        // Only 2-char operators take the fast path; others are ignored here.
+        // The fast path reads exactly two characters, the first of which the
+        // scanner must already class as an operator. Any other shape used to
+        // register without complaint and never fire, which is worse than an
+        // error at the moment the author can act on it.
+        const first = chars.charCodeAt(0);
+        if (chars.length !== 2 || (ExpressionLexer.CHAR_CLASS[first] ?? CharClass.SKIP) !== CharClass.OPERATOR) {
+          throw ErrorFactory.config(
+            'PLUGIN_OPERATOR_UNSUPPORTED',
+            `Plugin operator "${chars}" is not supported: an operator is exactly two characters, ` +
+            `and the first must be one of + - * / ^ % ( ) [ ] { } , : ; = ? & | ~ ! < >.`,
+            { operator: chars }
+          );
+        }
         if (chars.length === 2) {
-          const first = chars.charCodeAt(0);
           const second = chars.charCodeAt(1);
           // Guard: prevent overriding built-in two-char operators (==, !=, >=, <=)
           const builtInSecondMap = TWO_CHAR_OPS[first];
@@ -727,7 +740,14 @@ export class ExpressionLexer {
     }
 
     if (plugin.rawLinePatterns) {
-      this.pluginRawLinePatterns.push(...plugin.rawLinePatterns);
+      for (const rule of plugin.rawLinePatterns) {
+        // A pattern the author wrote with the g or y flag carries lastIndex
+        // between calls, so its second line in a row failed to match. The copy
+        // drops those flags and belongs to the lexer; the owner is kept so
+        // unregistration removes exactly this package's patterns.
+        const pattern = new RegExp(rule.pattern.source, rule.pattern.flags.replace(/[gy]/g, ''));
+        this.pluginRawLinePatterns.push({ pattern, tokenType: rule.tokenType, owner: plugin });
+      }
     }
   }
 
@@ -810,8 +830,7 @@ export class ExpressionLexer {
     }
 
     if (plugin.rawLinePatterns) {
-      const toRemove = new Set(plugin.rawLinePatterns);
-      this.pluginRawLinePatterns = this.pluginRawLinePatterns.filter((r) => !toRemove.has(r));
+      this.pluginRawLinePatterns = this.pluginRawLinePatterns.filter((r) => r.owner !== plugin);
     }
   }
 
@@ -1037,6 +1056,7 @@ export class ExpressionLexer {
 
     // Inline solve tracking state, collected inline during tokenization
     let tokenIndex = 0;
+    let symbol: SymbolToken | undefined;
     let openSpan: { startTokenIndex: number; startColumn: number } | null = null;
     const collectedSpans: InlineSolveSpan[] = [];
 
@@ -1117,56 +1137,8 @@ export class ExpressionLexer {
             // A line holding nothing but a no-break space or a byte-order mark
             // holds no expression, exactly as a line holding one space does.
             // Yielding an IDENT for it made it an undefined variable instead.
-          } else if (c0 === 0x00D7) {  // × → STAR
-            out.push(new LexerToken('STAR', TT_STAR, '\u00D7', '\u00D7', 0, 0, 1, 1));
-            tokenIndex++;
-          } else if (c0 === 0x00F7) {  // ÷ → SLASH
-            out.push(new LexerToken('SLASH', TT_SLASH, '\u00F7', '\u00F7', 0, 0, 1, 1));
-            tokenIndex++;
-          } else if (c0 === 0x00B1) {  // U+00B1 plus-minus sign, the uncertainty operator
-            out.push(new LexerToken('PLUS_MINUS', TT_PLUS_MINUS, '\u00B1', '\u00B1', 0, 0, 1, 1));
-            tokenIndex++;
-          } else if (c0 === 0x2260) {  // ≠ → NEQ
-            out.push(new LexerToken('NEQ', TT_NEQ, '\u2260', '\u2260', 0, 0, 1, 1));
-            tokenIndex++;
-          } else if (c0 === 0x00A3) {  // £
-            out.push(new LexerToken('POUND', TT_POUND, '\u00A3', '\u00A3', 0, 0, 1, 1));
-            tokenIndex++;
-          } else if (c0 === 0x20AC) {  // €
-            out.push(new LexerToken('EURO', TT_EURO, '\u20AC', '\u20AC', 0, 0, 1, 1));
-            tokenIndex++;
-          } else if (c0 === 0x00A5) {  // ¥
-            out.push(new LexerToken('YEN', TT_YEN, '¥', '¥', 0, 0, 1, 1));
-            tokenIndex++;
-          } else if (c0 === 0x20BD) {  // ₽
-            out.push(new LexerToken('RUBLE', TT_RUBLE, '₽', '₽', 0, 0, 1, 1));
-            tokenIndex++;
-          } else if (c0 === 0x20A9) {  // ₩
-            out.push(new LexerToken('WON', TT_WON, '₩', '₩', 0, 0, 1, 1));
-            tokenIndex++;
-          } else if (c0 === 0x20B9) {  // ₹ (Indian rupee) — see uom/CurrencyAliases.ts
-            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₹', '₹', 0, 0, 1, 1));
-            tokenIndex++;
-          } else if (c0 === 0x20BA) {  // ₺ (Turkish lira)
-            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₺', '₺', 0, 0, 1, 1));
-            tokenIndex++;
-          } else if (c0 === 0x20B4) {  // ₴ (Ukrainian hryvnia)
-            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₴', '₴', 0, 0, 1, 1));
-            tokenIndex++;
-          } else if (c0 === 0x20AA) {  // ₪ (Israeli new shekel)
-            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₪', '₪', 0, 0, 1, 1));
-            tokenIndex++;
-          } else if (c0 === 0x20AB) {  // ₫ (Vietnamese dong)
-            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₫', '₫', 0, 0, 1, 1));
-            tokenIndex++;
-          } else if (c0 === 0x20A6) {  // ₦ (Nigerian naira)
-            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₦', '₦', 0, 0, 1, 1));
-            tokenIndex++;
-          } else if (c0 === 0x20B1) {  // ₱ (Philippine peso)
-            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₱', '₱', 0, 0, 1, 1));
-            tokenIndex++;
-          } else if (c0 === 0x2212 || c0 === 0x2013) {  // − (minus sign) and – (en dash) → MINUS
-            out.push(new LexerToken('MINUS', TT_MINUS, this.input, this.input, 0, 0, 1, 1));
+          } else if ((symbol = SYMBOL_TOKENS.get(c0)) !== undefined) {
+            out.push(new LexerToken(symbol.type, symbol.typeId, symbol.text, symbol.text, 0, 0, 1, 1));
             tokenIndex++;
           } else if (c0 >= 128) {
             // Unknown unicode, treat as IDENT for forward compatibility
@@ -1313,77 +1285,8 @@ export class ExpressionLexer {
               this.line++;
               this.lineStartPos = this.pos;
             }
-          } else if (c0 === 0x00D7) {  // × → STAR
-            out.push(new LexerToken('STAR', TT_STAR, '\u00D7', '\u00D7', this.pos, 0, this.line, col));
-            this.pos++;
-            tokenIndex++;
-          } else if (c0 === 0x00F7) {  // ÷ → SLASH
-            out.push(new LexerToken('SLASH', TT_SLASH, '\u00F7', '\u00F7', this.pos, 0, this.line, col));
-            this.pos++;
-            tokenIndex++;
-          } else if (c0 === 0x00B1) {  // U+00B1 plus-minus sign, the uncertainty operator
-            out.push(new LexerToken('PLUS_MINUS', TT_PLUS_MINUS, '\u00B1', '\u00B1', this.pos, 0, this.line, col));
-            this.pos++;
-            tokenIndex++;
-          } else if (c0 === 0x2260) {  // ≠ → NEQ
-            out.push(new LexerToken('NEQ', TT_NEQ, '\u2260', '\u2260', this.pos, 0, this.line, col));
-            this.pos++;
-            tokenIndex++;
-          } else if (c0 === 0x00A3) {  // £
-            out.push(new LexerToken('POUND', TT_POUND, '\u00A3', '\u00A3', this.pos, 0, this.line, col));
-            this.pos++;
-            tokenIndex++;
-          } else if (c0 === 0x20AC) {  // €
-            out.push(new LexerToken('EURO', TT_EURO, '\u20AC', '\u20AC', this.pos, 0, this.line, col));
-            this.pos++;
-            tokenIndex++;
-          } else if (c0 === 0x00A5) {  // ¥
-            out.push(new LexerToken('YEN', TT_YEN, '¥', '¥', this.pos, 0, this.line, col));
-            this.pos++;
-            tokenIndex++;
-          } else if (c0 === 0x20BD) {  // ₽
-            out.push(new LexerToken('RUBLE', TT_RUBLE, '₽', '₽', this.pos, 0, this.line, col));
-            this.pos++;
-            tokenIndex++;
-          } else if (c0 === 0x20A9) {  // ₩
-            out.push(new LexerToken('WON', TT_WON, '₩', '₩', this.pos, 0, this.line, col));
-            this.pos++;
-            tokenIndex++;
-          } else if (c0 === 0x20B9) {  // ₹ (Indian rupee) — see uom/CurrencyAliases.ts
-            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₹', '₹', this.pos, 0, this.line, col));
-            this.pos++;
-            tokenIndex++;
-          } else if (c0 === 0x20BA) {  // ₺ (Turkish lira)
-            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₺', '₺', this.pos, 0, this.line, col));
-            this.pos++;
-            tokenIndex++;
-          } else if (c0 === 0x20B4) {  // ₴ (Ukrainian hryvnia)
-            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₴', '₴', this.pos, 0, this.line, col));
-            this.pos++;
-            tokenIndex++;
-          } else if (c0 === 0x20AA) {  // ₪ (Israeli new shekel)
-            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₪', '₪', this.pos, 0, this.line, col));
-            this.pos++;
-            tokenIndex++;
-          } else if (c0 === 0x20AB) {  // ₫ (Vietnamese dong)
-            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₫', '₫', this.pos, 0, this.line, col));
-            this.pos++;
-            tokenIndex++;
-          } else if (c0 === 0x20A6) {  // ₦ (Nigerian naira)
-            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₦', '₦', this.pos, 0, this.line, col));
-            this.pos++;
-            tokenIndex++;
-          } else if (c0 === 0x20B1) {  // ₱ (Philippine peso)
-            out.push(new LexerToken('CURRENCY_SYMBOL', TT_CURRENCY_SYMBOL, '₱', '₱', this.pos, 0, this.line, col));
-            this.pos++;
-            tokenIndex++;
-          } else if (c0 === 0x2212 || c0 === 0x2013) {
-            // The minus sign (U+2212) and the en dash (U+2013) are what a word
-            // processor or a web page turns a typed hyphen into, and both read
-            // as subtraction when pasted. The em dash stays prose: it is a
-            // sentence mark, not an operator.
-            const dash = this.input[this.pos];
-            out.push(new LexerToken('MINUS', TT_MINUS, dash, dash, this.pos, 0, this.line, col));
+          } else if ((symbol = SYMBOL_TOKENS.get(c0)) !== undefined) {
+            out.push(new LexerToken(symbol.type, symbol.typeId, symbol.text, symbol.text, this.pos, 0, this.line, col));
             this.pos++;
             tokenIndex++;
           } else if (c0 >= 128) {
@@ -1611,7 +1514,7 @@ export class ExpressionLexer {
         (cc >= 65 && cc <= 90) ||   // A-Z
         (cc >= 97 && cc <= 122) ||  // a-z
         cc === 95 ||                 // _
-        (cc >= 128 && !isUnicodeSpace(cc)))  // Unicode (accented chars, emoji, etc.), but not Unicode whitespace
+        (cc >= 128 && !isUnicodeSpace(cc) && !SYMBOL_TOKENS.has(cc)))  // Unicode (accented chars, emoji, etc.), but not whitespace and not a symbol that is a token of its own
     ) {
       pos++;
     }
@@ -1869,36 +1772,6 @@ export class ExpressionLexer {
   }
 
   // ── Markdown line scanner (Phase B) ───────────────────────────────────
-
-  /**
-   * L1 expression gating: quickly determine if a line contains any
-   * characters that indicate an expression (digits, operators, currency,
-   * backticks, parentheses, etc.).
-   *
-   * Pure prose lines (e.g., "The quick brown fox jumps over the lazy dog")
-   * return false and can be skipped without full tokenization (L2).
-   *
-   * This is a fast character-by-character scan that stops at the first
-   * expression indicator. Called once per line in classifyFromPositions().
-   */
-  static hasExpressionIndicators(input: string, start: number, end: number): boolean {
-    const indicatorCodes = EXPRESSION_INDICATOR_CODES;
-    for (let i = start; i < end; i++) {
-      const cc = input.charCodeAt(i);
-      // Check digits and operators via pre-computed Set (O(1) lookup)
-      if (indicatorCodes.has(cc)) return true;
-      // Unicode math/currency symbols (≥ 128, not in the 128-byte table)
-      if (cc >= 128) {
-        // ×, ÷, ≠, £, €, ¥, ₽, ₩, common expression symbols
-        if (cc === 0x00D7 || cc === 0x00F7 || cc === 0x2260 ||
-            cc === 0x00A3 || cc === 0x20AC ||
-            cc === 0x00A5 || cc === 0x20BD || cc === 0x20A9) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
 
   /**
    * Classify a line by its character positions within this.input.

@@ -326,26 +326,20 @@ export function isArenaActive(): boolean {
  * Allocate a Value that persists beyond the current arena cycle.
  * Used for values stored in variables (STORE_VAR) and final expression results
  * (HALT return), these must survive arena.reset() in the next scroll frame.
+ *
+ * A full {@link Value.clone}, so every sidecar survives the round trip: the
+ * exact decimal ("a = $0.10, b = $0.20, a + b" stays exact), the rational
+ * ("a = 1/3, a + a + a" is exactly 1), the uncertainty ("a = 12.3 +/- 0.5,
+ * a * 4" keeps its tolerance), the display precision, and the two a datetime
+ * carries ("d = 2026-04-03 in Tokyo, d" is still that day in Tokyo rather than
+ * a bare instant). This used to copy some of them by name and drop the rest, so
+ * a viewport evaluation (the one path that runs with the arena on) displayed
+ * `3.14159 to 4 dp` as 3.14 while a single-line evaluation of the same text
+ * displayed 3.1416. Naming them was the bug: a sidecar added later is carried
+ * now without this function knowing it exists.
  */
 export function persistentValue(v: Value): Value {
-	const p = new Value(v.type, v.value, v.unit);
-	// The exact sidecar has to survive being stored in a variable, or a
-	// referenced money value would silently drop back to the double: "a = $0.10,
-	// b = $0.20, a + b" must still be exact across the STORE_VAR round trip.
-	if (v.exact !== undefined) p.exact = v.exact;
-	// The rational sidecar survives the same round trip, so "a = 1/3, a + a + a"
-	// is exactly 1 rather than the drifted double a stored fraction would carry.
-	if (v.rational !== undefined) p.rational = v.rational;
-	// The uncertainty sidecar survives too, so "a = 12.3 +/- 0.5, a * 4" still
-	// propagates the tolerance across the STORE_VAR round trip.
-	if (v.uncertainty !== undefined) p.uncertainty = v.uncertainty;
-	// The two datetime sidecars survive as well, so "d = 2026-04-03 in Tokyo, d"
-	// is still that day in Tokyo rather than a bare instant. This function
-	// copies field by field rather than cloning, so a sidecar left out here is
-	// dropped in silence by the one round trip a reader makes most often.
-	if (v.grain !== undefined) p.grain = v.grain;
-	if (v.zone !== undefined) p.zone = v.zone;
-	return p;
+	return v.clone();
 }
 
 // ── Dev-mode immutability guard (Part II, L5, Value model hardening) ──
@@ -557,6 +551,30 @@ export class Value {
 		// the arena hands out next.
 		this.grain = undefined;
 		this.zone = undefined;
+	}
+
+	/**
+	 * A fresh Value carrying everything this one does: the payload, the unit,
+	 * the cached number and every sidecar, present or future.
+	 *
+	 * The inverse of {@link recycle}, and written as a whole-object copy rather
+	 * than a list of fields on purpose. `persistentValue()` used to name the
+	 * sidecars it copied, and the two it did not name (`decimalPlaces`,
+	 * `timedOut`) were silently dropped by every viewport evaluation, so
+	 * `3.14159 to 4 dp` displayed as 3.14 there and as 3.1416 on a single line.
+	 * A sidecar added later is carried here without this method knowing its
+	 * name, which closes that class of bug rather than the one instance.
+	 *
+	 * Shallow, as the old copy was: a matrix, a chart or a symbolic tree is
+	 * shared with the original, which is fine because a Value's payload is
+	 * treated as immutable everywhere outside the arena's own `recycle()`.
+	 *
+	 * @returns A new Value equal to this one in every field.
+	 */
+	clone(): Value {
+		const copy = new Value(this.type, this.value, this.unit);
+		Object.assign(copy, this);
+		return copy;
 	}
 
 	isNumber(): this is Value & { value: number } {

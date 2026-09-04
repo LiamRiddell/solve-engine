@@ -334,12 +334,20 @@ export function isEmptyMask(mask: Uint32Array): boolean {
  * running prose are overwhelmingly already lower case, so this scan pays for
  * itself by skipping the allocation in the common case.
  */
-function hasUpper(value: string): boolean {
+export function hasUpper(value: string): boolean {
 	for (let i = 0; i < value.length; i++) {
 		const c = value.charCodeAt(i);
-		if (c >= 65 && c <= 90) return true;
+		// A-Z, or anything outside ASCII: `Ü` lowers to `ü`, and the keys this
+		// guards were built with a full toLowerCase(), so a non-ASCII word takes
+		// the slow path and meets its key in the case the key was built in.
+		if ((c >= 65 && c <= 90) || c >= 128) return true;
 	}
 	return false;
+}
+
+/** `value` in the case the index and the phrase trie key on: lowered only when it has to be. */
+export function lowerCased(value: string): string {
+	return hasUpper(value) ? value.toLowerCase() : value;
 }
 
 //#endregion

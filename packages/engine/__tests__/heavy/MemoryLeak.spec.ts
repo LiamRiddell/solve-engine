@@ -133,16 +133,21 @@ describe("Memory Leak Tests", () => {
 			const perIterationKB = ((afterMB - beforeMB) * 1024) / iterations;
 
 			// This is a characteristic of the package, not a passing grade. It is
-			// asserted so the number cannot drift silently: roughly 200KB per
-			// engine, against 8.2KB for one that never parsed. The figure tracks
-			// the registered package set, so it climbs as features are added
-			// (~128KB when this test was written); the wide bound below pins the
-			// order of magnitude, not an exact byte count. If it ever drops to
-			// near the construction cost, the retention was fixed and both this
-			// test and the lifecycle docs should be revisited.
+			// asserted so the number cannot drift silently, in either direction.
+			//
+			// It was roughly 200KB per engine (285KB when last measured on main),
+			// against 8.2KB for one that never parsed, and this test said that if
+			// it ever dropped near the construction cost the retention had been
+			// fixed and the bounds should be revisited. That happened: gating the
+			// async preflight stopped a plain line allocating a cancellation
+			// controller and adding keystroke listeners, and an uncleared engine
+			// now retains about 15KB, under twice its construction cost. The
+			// bounds below sit around that: wide enough that ordinary churn in the
+			// package set does not trip them, narrow enough that a return of the
+			// old retention does.
 			console.log(`[Memory:uncleared] ${perIterationKB.toFixed(1)}KB/engine retained`);
-			expect(perIterationKB).toBeGreaterThan(20);
-			expect(perIterationKB).toBeLessThan(400);
+			expect(perIterationKB).toBeGreaterThan(5);
+			expect(perIterationKB).toBeLessThan(60);
 		});
 
 		test("10K evaluateLine iterations do not leak memory", () => {

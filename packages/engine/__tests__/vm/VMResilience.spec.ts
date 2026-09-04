@@ -22,13 +22,54 @@ describe("VM Resilience", () => {
     expect(result.type).toBeDefined();
   });
 
-  test("invalid opcode value does not throw", () => {
+  test("invalid opcode value does not throw, and is refused at its own instruction", () => {
+    // The dispatch switch used to have no default arm, so opcode 255 ran as
+    // a no-op that advanced ip by one, and this program then failed at its
+    // fallback pop with a STACK_UNDERFLOW that named nothing. It is refused
+    // at offset 0, where the opcode is, as an error result rather than a throw.
     const vm = createVM(sharedOpRegistry);
     const opcodes = new Uint8Array([255, 0]);
     const numbers = new Float64Array([0]);
+    let result: ReturnType<typeof executeBytecode> | undefined;
     expect(() => {
-      executeBytecode({ opcodes, numbers, strings: [] }, vm);
+      result = executeBytecode({ opcodes, numbers, strings: [] }, vm);
     }).not.toThrow();
+    expect(result?.type).toBe("error");
+    if (result?.type !== "error") return;
+    expect(result.error.code).toBe("MALFORMED_BYTECODE_UNKNOWN_OPCODE");
+    expect(result.error.category).toBe(ErrorCategory.VALIDATION);
+    expect(result.error.recoverable).toBe(true);
+    expect(result.error.message).toContain("UNKNOWN_255");
+    expect(result.error.context?.offset).toBe(0);
+  });
+
+  test("an unknown opcode after valid instructions names its own offset, not a later underflow", () => {
+    // `PUSH_NUMBER 0` then opcode 255: the refusal names offset 2, the byte
+    // that carries the unknown opcode, and the valid push before it stays
+    // the caller's business (the error arm restores the stack).
+    const vm = createVM(sharedOpRegistry);
+    const opcodes = new Uint8Array([OpCode.PUSH_NUMBER, 0, 255, OpCode.HALT]);
+    const numbers = new Float64Array([7]);
+    const result = executeBytecode({ opcodes, numbers, strings: [] }, vm);
+    expect(result.type).toBe("error");
+    if (result.type !== "error") return;
+    expect(result.error.code).toBe("MALFORMED_BYTECODE_UNKNOWN_OPCODE");
+    expect(result.error.context?.offset).toBe(2);
+    expect(result.error.context?.opcode).toBe(255);
+    expect(vm.getStack().length).toBe(0);
+  });
+
+  test("an enum member with no arm is refused the same way, by name", () => {
+    // PUSH_VARIABLE and RETURN exist in the enum and nothing compiles to
+    // them; the VM has no arm for either, and used to run them as no-ops.
+    for (const op of [OpCode.PUSH_VARIABLE, OpCode.RETURN]) {
+      const vm = createVM(sharedOpRegistry);
+      const result = executeBytecode({ opcodes: new Uint8Array([op, OpCode.HALT]), numbers: new Float64Array([]), strings: [] }, vm);
+      expect(result.type).toBe("error");
+      if (result.type !== "error") continue;
+      expect(result.error.code).toBe("MALFORMED_BYTECODE_UNKNOWN_OPCODE");
+      expect(result.error.message).toContain(OpCode[op]);
+    }
   });
 
   test("PUSH_STRING with index beyond strings length", () => {

@@ -218,10 +218,16 @@ describe("Keystroke AbortController — Cancellation & VM Linkage", () => {
 		const controller = new AbortController();
 		engine.setKeystrokeSignal(controller.signal);
 
-		// evaluateLine sets vm.abortCurrent via executeAndStore
+		// A plain line has nothing a keystroke could cancel, so it arms no
+		// controller and leaves abortCurrent unset (see the engine's
+		// armCancellation). A plugin call can have work in flight and arms
+		// one: `prev` compiles to a plugin call and reaches the VM without
+		// a document (it answers with an error Value there, not a throw).
 		engine.evaluateLine(1, "5 + 3");
-
 		const vm = engine.getVM();
+		expect(vm.abortCurrent).toBeUndefined();
+
+		engine.evaluateLine(2, "prev");
 		expect(vm.abortCurrent).toBeDefined();
 
 		// Reset VM — should clear abortCurrent and abort any in-flight work
