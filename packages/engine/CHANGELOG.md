@@ -1,5 +1,135 @@
 # solve-engine
 
+## 2.26.0
+
+### Minor Changes
+
+- 32b1273: Every date the engine computes now goes through one calendar backend, and the backend is an engine option.
+  
+  ```ts
+  import { createEngine } from "solve-engine";
+  import { DATE_CALENDAR } from "solve-engine/engine";
+  
+  const engine = createEngine({ calendar: DATE_CALENDAR });
+  ```
+  
+  The `calendar` option takes a `CalendarBackend`, the interface behind which the engine reads which local day an instant falls on, steps days and months, walks working days, reads `now`, parses and writes ISO 8601, formats a date and resolves a named time zone. It defaults to the built-in `Date` backend, which is the code the engine has always run moved behind the interface method by method, so an engine that sets nothing computes exactly what it did before: every date result, in every zone, is unchanged. The option exists so a later release can ship a `Temporal` backend, behind its own entry point, that carries a time zone of its own; the engine still imports no polyfill.
+  
+  An `as` converter now receives the same optional execution context a plugin function does, `(value, context?) => Value`, so a converter that reads a date computes through the engine's backend rather than a module-level default. A converter that ignores the second argument is unchanged.
+  
+  Every site the engine owns reads the option: the VM's date opcodes, the plugin functions and `as` converters, the rules that fuse a date literal, and the parser for the forms that read a literal while parsing (`days in <period>`, the stocks and historical-currency date phrases). Two sites sit outside the engine and are told separately. `formatValue` is a free function with no engine in hand, so `FormattingSettings` gains an optional `calendar` field: pass the same backend the engine was given and a date displays in the zone it was computed in; leave it out and the display reads the `Date` backend, as before. A worker runtime takes it on a new `WorkerRuntimeOptions.calendar`: a backend is an object of functions and does not cross the message boundary, so a host with its own bakes it into its worker entry, as it does for a custom package, and the runtime applies it to the formatting the main side sends. The inline offload worker computes with the `Date` backend.
+- 32b1273: A date the engine cannot read is refused by name, instead of quietly becoming arithmetic.
+  
+  A written date is ambiguous. `03/04` is 3 April or 4 March depending on where you are, and the engine used to settle it by the separator: a slash date read day first, a hyphen date month first. When that guess failed there was nowhere to fail to, so the line fell through to the arithmetic it is spelled like and showed a plausible number. A wrong date is bad; a wrong date wearing the clothes of a right answer is worse.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `29 February 2026` | `51,327,216,000,000` | not a real date: February 2026 has 28 days |
+  | `31 April 2026` | `55,024,938,000,000` | not a real date: April 2026 has 30 days |
+  | `12/25/2026` | `0.00` | not a date read day first: there is no month 25. Read month first it is 25 December 2026 |
+  | `2026-13-45` | `1,968` | not a real date: there is no month 13 |
+  | `31/04/2026 + 1 day` | `1.01 day` | the refusal, carried through the line |
+  
+  The refusal is a value, not a throw, so one bad line never takes the document down with it. Every message names the reading that failed and the one that would have worked, because a reader who typed `12/25/2026` meant something, and the engine knows what.
+  
+  The divisions that are divisions stay divisions: `1024/8/2` is still `64`, `2000/12/25` still `6.67`, `1000/10/5` still `20`, and `2024 - 5 - 3`, written with spaces, is still `2,016`. A run of one- and two-digit groups (`12/13/14`) keeps its old reading too. What changed is only a run carrying a four-digit year that no configured order can read.
+  
+  Set `date.onAmbiguous: "arithmetic"` to restore the old behaviour exactly, value for value.
+  
+  **The order can now come from the reader's locale.** `date.inputOrder: "locale"` infers day-month order from the host, and `date.inputLocale` names a tag when the host's own locale is not the reader's, which on a server it never is. Inference is opt-in in this release and stays so until the next major; nothing infers unless asked, and an engine given no configuration constructs no `Intl` formatter at all.
+  
+  **A line can say how it was read.** `engine.getDateReading()` reports the order in force and where it came from, `engine.readDates(text)` reports one reading per literal with its span, and `explainLine` gains a first step for a literal whose reading was not obvious.
+  
+  ```
+  03/04/2026 read as 3 April 2026, day first, the default for a slash date.
+  Month first would be 4 March 2026.
+  ```
+  
+  Nothing about `formatValue` output changes for a date that reads cleanly.
+  
+  **A date can be read in a time zone.** `<date> in <zone>` names the zone and shows the answer in it.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `3 April 2026 in Tokyo` | `1,775,170,800,000.00 Tokyo` | `Friday, April 3, 2026` |
+  | `2026-04-03T09:00 in Tokyo` | `1,775,203,200,000.00 Tokyo` | `Friday, April 3, 2026, 9:00:00 AM` |
+  | `3 April 2026 in New York` | a parse error | `Friday, April 3, 2026` |
+  
+  A two-word city name works, so does a standard abbreviation, and so does `UTC`. A signed offset does not: `in GMT+9` reads as `(in GMT) + 9`, which adds nine milliseconds, because a date plus a bare number is milliseconds throughout the engine. The time page says so and points at `in Tokyo` or `in JST`.
+  
+  The boundary this release draws: an ISO literal carrying `Z` or an explicit offset records that offset and keeps displaying in the zone the engine computes in, unchanged. Whether such a literal should display in the offset it names is a separate question, and moving it would change every document that pastes a timestamp, so it waits for the next major.
+  
+  Two defects found while building this and fixed here: a wall-clock reading near a daylight-saving transition resolved backwards in any zone behind UTC, so asking for midnight on a spring-forward morning in Santiago landed on the previous day; and a calendar day re-anchored into another zone read the host's wall clock rather than the day, which named the wrong day on a host whose local midnight does not exist.
+- 32b1273: The engine computes dates on `Temporal` wherever the runtime has one.
+  
+  `Temporal` is the JavaScript standard library's replacement for `Date`, and it is no longer a curiosity: Chrome, Edge, Firefox and Opera ship it, Node ships it from 26, and it covers about 71% of browsers by usage. Where it is absent (Node 22 and 24, Safari, iOS) the engine falls back to `Date`, which is what every engine computed with before.
+  
+  Nothing is asked of a host to get this, and no polyfill is bundled. What the engine carries is the adapter, the code that translates its calendar contract onto whichever implementation it finds.
+  
+  | root bundle, gzipped | bytes |
+  | --- | --- |
+  | before | 98,981 |
+  | now, with the adapter | 100,626 |
+  | had a polyfill been bundled instead | about 118,000 |
+  
+  The adapter costs 1,645 bytes. The smallest polyfill is 20.4 KB gzipped, twelve times that, and on a runtime that already has `Temporal` it would only duplicate what is there. A smoke test walks every chunk the root entry loads and fails if one names a polyfill package, or if the adapter has gone missing and the engine can no longer prefer `Temporal` at all.
+  
+  The `calendar` option pins the choice when it matters.
+  
+  | `calendar` | what the engine computes on |
+  | --- | --- |
+  | omitted, or `"auto"` | `Temporal` where the runtime has it, `Date` otherwise |
+  | `"temporal"` | `Temporal`, refusing to build an engine on a runtime without one |
+  | `"date"` | `Date`, whatever the runtime has |
+  | a backend | the one you built, from a polyfill or bound to a time zone |
+  
+  Pin `"date"` when a result must not depend on where it was computed, and `"temporal"` when you would rather an engine refuse to start than quietly compute on `Date`; that refusal is a coded `CALENDAR_TEMPORAL_UNAVAILABLE` error naming both ways out.
+  
+  No result changes. The two backends are held to the same answers, which is what makes preferring one safe rather than a coin toss: `npm run test:temporal` runs the date suites under both in three time zones, and a differential suite compares them case by case. A reader on Firefox and a reader on Safari see the same number.
+  
+  The boundary: this changes which implementation computes a date, not what a date means. The engine's payload is still epoch milliseconds with no zone attached, so a `Temporal` engine does not yet answer a question a `Date` engine could not. What it buys is the ground for the zone-aware work to stand on, and one fewer reason to reach for a polyfill.
+
+### Patch Changes
+
+- 790a93f: The take-home figures name the tax year they are for, and the package ships a table for each year rather than one.
+  
+  The payroll package carried a single table labelled 2024/25 and used it as the default for good, so the label went stale when the tax year rolled over and nothing said which year an answer was on. There is now a table for 2024/25, 2025/26 and 2026/27, a lookup by the year as a reader writes it (`2025/26`, `2025-26`, `2025/2026`), and the default is the latest table shipped.
+  
+  | | before | now |
+  | --- | --- | --- |
+  | the year an answer is on | 2024/25, whatever the date | 2026/27, the latest table shipped |
+  | a year the package has no figures for | not askable | answered as unknown, never the nearest year |
+  
+  No result changes. HMRC left the employee figures unchanged across all three years (the £12,570 personal allowance tapering above £100,000, income tax at 20%, 40% and 45%, and employee National Insurance at 8% between £12,570 and £50,270 then 2% above), so `50000 after tax` is `39,519.60` under each.
+  
+  The default is deliberately the latest table rather than a year read off today's date. A tax year the package has no figures for would otherwise be answered with the previous year's, silently, which is the same mistake as assuming a sales-tax rate. The employer's National Insurance rate and secondary threshold did move in April 2025; this package models an employee's deductions only, so those do not appear.
+- 6b3c0a6: An ISO date is read as ISO whatever `date.inputOrder` is set to.
+  
+  `date.inputOrder` fixes how an ambiguous numeric date is read. `DMY` and `MDY` require a one- or two-digit leading group, so a hyphen date starting with a four-digit year matched no reading, the rule fell through, and the line became the arithmetic it is spelled identically to. A host that set `MDY` for its US readers turned every bare ISO date in every document into a subtraction, silently.
+  
+  | expression, with `inputOrder: "MDY"` | before | now |
+  | --- | --- | --- |
+  | `2026-04-03` | `2,019` | `Friday, April 3, 2026` |
+  | `2026-04-03 + 1 day` | `2,020 day` | `Saturday, April 4, 2026` |
+  | `2024-5-3` | `2,016` | `Friday, May 3, 2024` |
+  
+  A four-digit leading group is neither a day nor a month, so there is nothing there for an order to resolve: the ISO reading is now taken before the order is consulted at all. The `DateInputOrder` documentation already claimed this held.
+  
+  The boundary is hyphens. A slash date starting with four digits (`2023/12/25`) is still claimed by `YMD` alone, which is what the input-order table on the date-literals page documents, and a spaced chain (`2024 - 5 - 3`) is still subtraction under every order.
+- 32b1273: The span between two dates is counted in calendar days, so it no longer depends on where the reader is.
+  
+  `<unit> between <a> and <b>` measured the raw millisecond gap and divided it by a fixed 86,400,000. A daylight-saving transition between the two dates therefore leaked an hour into the answer, and its sign followed the hemisphere.
+  
+  | expression | before, London | before, Auckland | now, everywhere |
+  | --- | --- | --- | --- |
+  | `days between 01/01/2024 and 01/06/2024` | 151.96 days | 152.04 days | 152 days |
+  | `days between 01/03/2024 and 01/04/2024` | 30.96 days | 31 days | 31 days |
+  | `weeks between 01/01/2024 and 01/06/2024` | 21.71 weeks | 21.72 weeks | 21.71 weeks |
+  
+  The hour is real, but it is not what the question asks: two calendar days apart is two days wherever you read it. This was found by the differential suite that runs the date behaviour under three time zones, where the documented `weeks between` example failed in Auckland alone.
+  
+  The boundary is a time of day. Either endpoint carrying one makes the span elapsed time again, because `hours between 9am and 5pm` is a duration and a transition genuinely belongs in it. A span with no transition in it is unchanged, and `between` still has no direction, so the endpoints may be written either way round.
+
 ## 2.25.0
 
 ### Minor Changes
