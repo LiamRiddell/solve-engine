@@ -382,6 +382,11 @@ export class TemporalCalendar implements CalendarBackend {
 		return { year: z.year, month0: z.month - 1, day: z.day, hour: z.hour, minute: z.minute, second: z.second };
 	}
 
+	/** The IANA zone this backend computes in, which is what `CalendarBackend.zone` documents. */
+	zone(): string {
+		return this.timeZone;
+	}
+
 	formatTimeInZone(zone: string, epochMs: number): string {
 		return timeInZone(zone, epochMs);
 	}

@@ -39,17 +39,17 @@ the answers follow whatever the rules are this year.
 ### A date or a time in a zone
 
 Writing `in <zone>` after a date, or after a time of day, reads it in that zone
-rather than in yours. A bare date means midnight, so `2026-04-03 in Tokyo` is
-the moment that day starts in Tokyo, which for a reader in London is four in the
-afternoon on the 2nd. A time of day works the same way: `6pm in Chicago` is six
-in the evening there.
+rather than in yours, and shows it there. A bare date means midnight, so
+`2026-04-03 in Tokyo` is the day that starts in Tokyo, shown as that day. A time
+of day works the same way: `6pm in Chicago` is six in the evening there.
 
 | Expression | Result |
 | --- | --- |
-| `2026-04-03 in Tokyo` | the start of that day in Tokyo |
+| `2026-04-03 in Tokyo` | `Friday, April 3, 2026` |
 | `3 April 2026 in Tokyo` | the same, written out |
-| `2026-04-03T09:00 in Tokyo` | nine in the morning, Tokyo |
-| `6pm in Chicago` | six in the evening, Chicago |
+| `3 April 2026 in New York` | `Friday, April 3, 2026`, a two-word name |
+| `2026-04-03T09:00 in Tokyo` | `Friday, April 3, 2026, 9:00:00 AM` |
+| `6pm in Chicago` | `Friday, September 4, 2026, 6:00:00 PM` |
 | `2026-04-03 in UTC` | midnight UTC that day |
 
 The result is a date, not a quantity, which is what it used to be: before this,
@@ -62,12 +62,12 @@ work; `2026-04-03 in furlongs` says a date cannot be read in a unit of length,
 because the two mistakes have different fixes. An ordinary number is untouched,
 so `5 in Tokyo` is still `5.00 Tokyo` and `5 kg in lb` still converts.
 
-The boundary: the zone is recorded on the answer but not yet shown. A date read
-in Tokyo displays in your own zone for now, which is why `2026-04-03 in Tokyo`
-reads as the afternoon of the 2nd in London rather than as midnight in Tokyo.
-Showing an answer in the zone it names is a change to how every date is
-displayed, and it is scheduled with the next major version. A host that wants the
-whole document computed in one zone can pin it today: see
+The boundary is how the zone is written. A city name works, including a
+two-word one, and so does a standard abbreviation or `UTC`. A signed offset
+does not: `2026-04-03 in GMT+9` is read as `(2026-04-03 in GMT) + 9`, which
+adds nine milliseconds rather than shifting nine hours, so write `in Tokyo` or
+`in JST` instead. A host that wants the whole document computed in one zone can
+pin it today: see
 [dates on Temporal](/guide/dates-on-temporal/#choosing-a-zone-without-temporal).
 
 ## Frame rates and timecode

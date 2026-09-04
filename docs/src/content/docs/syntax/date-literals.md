@@ -152,8 +152,16 @@ signal to hang a refusal on.
 12/13/14 // 0.07
 ```
 
-The one refusal `onAmbiguous` cannot switch off is the dot form. `25.12.2026`
-on a month-first engine has no arithmetic reading to fall back to: the two
-dots are not division, so the old behaviour was not a number but a parse
-error, and an error message about a dot is not a better answer than one about
-a date.
+The one refusal `onAmbiguous` cannot switch off is the dot form, and it is the
+one place this release takes an answer away. The dot form used to ignore
+`date.inputOrder` altogether and always read day first, so a month-first engine
+answered `25.12.2026` as 25 December while refusing `12.25.2026` outright. Both
+were wrong for that reader, and in opposite directions.
+
+| on a month-first engine | before | now |
+| --- | --- | --- |
+| `25.12.2026` | Friday, December 25, 2026 | refused: not a date read month first |
+| `12.25.2026` | a parse error | Friday, December 25, 2026 |
+
+There is no arithmetic reading to fall back to here, because two dots are not
+division, which is why the setting cannot restore the old answer.

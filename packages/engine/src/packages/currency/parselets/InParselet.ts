@@ -38,8 +38,9 @@ export class InParselet implements InfixParselet {
 			builder.emitPluginCall("ipInCidr", 2);
 			return;
 		}
-		// Accept UNIT, currency symbols, bare IDENT, or IN (for cases like
-		// "3 ft in in" where the target unit is tokenized as a keyword).
+		// Accept UNIT, currency symbols, a bare IDENT, a fused multi-word zone
+		// name, or IN (for cases like "3 ft in in" where the target unit is
+		// tokenized as a keyword).
 		if (targetToken && (
 			targetToken.type === "UNIT" ||
 			targetToken.type === "DOLLAR" ||
@@ -50,6 +51,10 @@ export class InParselet implements InfixParselet {
 			targetToken.type === "WON" ||
 			targetToken.type === "CURRENCY_SYMBOL" ||
 			targetToken.type === "IDENT" ||
+			// A multi-word zone (`in New York`) the time package fuses into one
+			// token. Without this the name was advertised and unreachable: the
+			// line threw a parse error instead of answering or refusing.
+			targetToken.type === "CITY_NAME" ||
 			targetToken.type === "IN"
 		)) {
 			parser.consume();
