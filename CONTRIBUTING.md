@@ -96,6 +96,21 @@ The playground is already fully on TypeScript 7, since Vite transpiles and its
 | `docs` | The documentation site |
 | `docs-internal` | Maintainer notes, not published |
 
+### Adding syntax
+
+Every feature in the engine is a package, arithmetic included, and a package
+touches at least eight places before it can be judged. One command writes all
+of them:
+
+```bash
+npm run new:package -- fuel-economy --group "Units"
+```
+
+What comes out registers, evaluates something, and passes `npm run verify`
+before you edit a line, so the first thing you change is the behaviour rather
+than the wiring. The [package author guide](https://liamriddell.github.io/solve-engine/packages/authoring-a-package/)
+explains each extension point it leaves you.
+
 ## What a good change looks like
 
 **Tests.** A behaviour change needs a test that fails before it and passes

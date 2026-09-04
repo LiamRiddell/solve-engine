@@ -9,6 +9,7 @@
   "scripts": {
     "build": "npm run build --workspace=packages/engine",
     "setup": "npm run build && npm ci --prefix docs && npm ci --prefix playground",
+    "new:package": "node scripts/new-package.mjs",
     "test": "node --expose-gc node_modules/jest/bin/jest.js --logHeapUsage",
     "test:ci": "node --expose-gc node_modules/jest/bin/jest.js --no-coverage --logHeapUsage",
     "test:engine": "node --expose-gc node_modules/jest/bin/jest.js --testPathPattern=\"packages/engine/__tests__/engine\" --no-coverage --logHeapUsage",
