@@ -28,7 +28,10 @@ import {
 	type SerializedValue,
 	type WorkerAsyncUpdate,
 	type WorkerAsyncError,
+	type WorkerRuntimeOptions,
 } from "@solve-js/worker";
+import { RecordingCalendar } from "@tools/recordingCalendar";
+import { DEFAULT_FORMATTING_SETTINGS } from "@solve-js/format/FormattingSettings";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import {
 	ValueType,
@@ -61,9 +64,9 @@ interface Harness {
 }
 
 /** Spin up a linked client/runtime pair and wait for the engine to be ready. */
-async function makeWorker(options: Partial<WorkerEngineOptions> = {}): Promise<Harness> {
+async function makeWorker(options: Partial<WorkerEngineOptions> = {}, runtime: WorkerRuntimeOptions = {}): Promise<Harness> {
 	const { client, host } = createLinkedTransports();
-	const stopRuntime = startWorkerRuntime(host);
+	const stopRuntime = startWorkerRuntime(host, runtime);
 	const engine = await createWorkerEngine({ transport: client, ...options });
 	return {
 		engine,
@@ -85,8 +88,8 @@ function syncEngine(): ExpressionEngine {
 }
 
 const disposers: Array<() => void> = [];
-async function worker(options?: Partial<WorkerEngineOptions>): Promise<WorkerEngine> {
-	const harness = await makeWorker(options);
+async function worker(options?: Partial<WorkerEngineOptions>, runtime?: WorkerRuntimeOptions): Promise<WorkerEngine> {
+	const harness = await makeWorker(options, runtime);
 	disposers.push(harness.dispose);
 	return harness.engine;
 }
@@ -595,5 +598,42 @@ describe("async live-data resolutions stream back", () => {
 		const lines = await update;
 		expect(lines[0].lineNumber).toBe(1);
 		expect(lines[0].value.number).toBe(30.25);
+	});
+});
+
+// ── The calendar backend, baked into the runtime ────────────────────────
+
+describe("the runtime's calendar backend", () => {
+	const FIXED_NOW = Date.parse("2026-08-26T10:00:00Z");
+
+	test("the worker's engine computes dates through the backend the runtime was given", async () => {
+		const calendar = new RecordingCalendar(FIXED_NOW);
+		const engine = await worker({}, { calendar });
+		const value = await engine.evaluateExpression("today");
+		// The pinned clock is the backend's, so it can only have come through it.
+		expect(value.number).toBe(FIXED_NOW);
+		expect(calendar.calls).toContain("now");
+	});
+
+	test("the DTO's display text is written through the same backend", async () => {
+		const calendar = new RecordingCalendar(FIXED_NOW);
+		const engine = await worker({}, { calendar });
+		const value = await engine.evaluateExpression("10/03/2024");
+		expect(value.text).toBe("= Sunday, March 10, 2024");
+		expect(calendar.calls).toContain("formatLongDate");
+	});
+
+	test("the main side's formatting settings still apply alongside it", async () => {
+		const calendar = new RecordingCalendar(FIXED_NOW);
+		const engine = await worker({ formatting: { ...DEFAULT_FORMATTING_SETTINGS, dateResult: { format: "iso" } } }, { calendar });
+		const value = await engine.evaluateExpression("10/03/2024");
+		expect(value.text).toBe("= 2024-03-10");
+		expect(calendar.calls).toContain("fields");
+	});
+
+	test("a runtime given no backend computes with the Date backend, as before", async () => {
+		const engine = await worker();
+		const value = await engine.evaluateExpression("10/03/2024");
+		expect(value.text).toBe("= Sunday, March 10, 2024");
 	});
 });

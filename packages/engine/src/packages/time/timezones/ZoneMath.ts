@@ -1,7 +1,8 @@
 /**
- * Timezone math, built entirely on native `Intl.DateTimeFormat`/IANA data
- * zero external dependency, DST-correct, and always as current as the
- * runtime's own tz database (no bundled table to go stale).
+ * Timezone math over the calendar backend's named-zone reads (the native
+ * `Intl.DateTimeFormat`/IANA data for the `Date` backend): zero external
+ * dependency, DST-correct, and always as current as the runtime's own tz
+ * database (no bundled table to go stale).
  *
  * A "zone reference" as used throughout this module is one of:
  * - A real IANA zone identifier (e.g. `"Australia/Sydney"`).
@@ -10,107 +11,64 @@
  *   which has no IANA identifier of its own and needs no DST awareness
  *   (a fixed offset is fixed, by definition).
  *
- * {@link encodeFixedOffset}/{@link isFixedOffset}/{@link decodeFixedOffsetMinutes}
- * are the only code that needs to know this encoding exists, everything
- * else just calls {@link resolveOffsetMinutes} and {@link zoneLabel}.
+ * The encoding, and the wall-clock conversion built on it, now live in
+ * `calendar/IntlZone.ts` and are re-exported below: the zone-bound `Date`
+ * backend needs them and `calendar/` may not import from `packages/`. What
+ * they do is unchanged, and every importer of this module keeps working.
+ * `encodeFixedOffset`, `isFixedOffset` and `decodeFixedOffsetMinutes` are
+ * still the only code that needs to know the encoding exists, everything
+ * else just calls `resolveOffsetMinutes` and {@link zoneLabel}.
+ *
+ * Every function that reads a zone takes the {@link CalendarBackend} to read
+ * it through, passed down from the plugin function's execution context. A
+ * fixed offset needs no zone data at all: the instant is shifted by the
+ * offset and read as UTC, which is zone-free arithmetic from
+ * `calendar/Gregorian.ts`.
  */
 
-const FIXED_OFFSET_PREFIX = "UTCOFFSET:";
-
-/** Encode a fixed UTC offset (in minutes, may be negative) as a zone-reference string. */
-export function encodeFixedOffset(offsetMinutes: number): string {
-  return `${FIXED_OFFSET_PREFIX}${offsetMinutes}`;
-}
-
-function isFixedOffset(zoneRef: string): boolean {
-  return zoneRef.startsWith(FIXED_OFFSET_PREFIX);
-}
-
-function decodeFixedOffsetMinutes(zoneRef: string): number {
-  return parseInt(zoneRef.slice(FIXED_OFFSET_PREFIX.length), 10);
-}
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
+import { utcFields, utcMs } from "@solve-js/calendar/Gregorian";
+import { decodeFixedOffsetMinutes, isFixedOffset } from "@solve-js/calendar/IntlZone";
 
 /**
- * The UTC offset (in minutes, positive = ahead of UTC) a zone reference
- * has AT a given instant. IANA zones are resolved via the standard
- * `Intl.DateTimeFormat` round-trip trick: format the instant using the
- * zone's wall-clock fields, then re-interpret those same field values as
- * if they were UTC, the difference from the original instant IS the
- * zone's offset at that instant (correctly DST-aware, since the format
- * step already applied whatever DST rule is in effect then).
+ * The zone-reference primitives, re-exported from where they now live.
+ *
+ * They moved to `calendar/IntlZone.ts` unchanged, because the zone-bound
+ * `Date` backend needs them and `calendar/` may not import from `packages/`.
+ * Re-exported here rather than removed so every existing importer of
+ * `ZoneMath` (the time package's parselets and their tests) is untouched, and
+ * so this module still reads as the one place the timezone forms compute in.
  */
-export function resolveOffsetMinutes(zoneRef: string, atMs: number): number {
-  if (isFixedOffset(zoneRef)) return decodeFixedOffsetMinutes(zoneRef);
-
-  const dtf = new Intl.DateTimeFormat("en-US", {
-    timeZone: zoneRef,
-    hourCycle: "h23",
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  });
-  const parts: Record<string, string> = {};
-  for (const p of dtf.formatToParts(new Date(atMs))) parts[p.type] = p.value;
-  const asUtcMs = Date.UTC(
-    +parts.year, +parts.month - 1, +parts.day,
-    +parts.hour, +parts.minute, +parts.second,
-  );
-  return Math.round((asUtcMs - atMs) / 60000);
-}
-
-/**
- * The UTC instant (ms) for a given wall-clock date/time interpreted AS
- * local time in `zoneRef`. Single-pass (not iteratively refined against
- * the DST transition it might land in), the standard, generally-accepted
- * simplification every comparable "convert this local time to another
- * zone" tool makes; only matters within the ~1-2 hour window around a
- * DST transition instant, which is inherent to any offset-based approach
- * without a full transition-table walk.
- */
-export function zonedWallClockToUtcMs(
-  year: number, month0: number, day: number, hour: number, minute: number,
-  zoneRef: string,
-): number {
-  const naiveUtcMs = Date.UTC(year, month0, day, hour, minute, 0);
-  const offsetMinutes = resolveOffsetMinutes(zoneRef, naiveUtcMs);
-  return naiveUtcMs - offsetMinutes * 60000;
-}
+export { encodeFixedOffset, resolveOffsetMinutes, zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
 
 /** Format a UTC instant as `zoneRef`'s local wall-clock time, e.g. "1:00 AM". */
-export function formatTimeInZone(atMs: number, zoneRef: string): string {
+export function formatTimeInZone(atMs: number, zoneRef: string, calendar: CalendarBackend): string {
   if (isFixedOffset(zoneRef)) {
+    // Shifted by the offset and written out as UTC: a fixed offset has no
+    // zone data to consult.
     const offsetMs = decodeFixedOffsetMinutes(zoneRef) * 60000;
-    return formatTimeUtc(new Date(atMs + offsetMs));
+    return calendar.formatTimeInZone("UTC", atMs + offsetMs);
   }
-  const dtf = new Intl.DateTimeFormat("en-US", {
-    timeZone: zoneRef, hour: "numeric", minute: "2-digit", hour12: true,
-  });
-  return dtf.format(new Date(atMs));
+  return calendar.formatTimeInZone(zoneRef, atMs);
 }
 
 /** Format a UTC instant as `zoneRef`'s local calendar date, e.g. "July 31, 2026". */
-export function formatDateInZone(atMs: number, zoneRef: string): string {
+export function formatDateInZone(atMs: number, zoneRef: string, calendar: CalendarBackend): string {
   if (isFixedOffset(zoneRef)) {
     const offsetMs = decodeFixedOffsetMinutes(zoneRef) * 60000;
-    return formatDateUtc(new Date(atMs + offsetMs));
+    return calendar.formatDateInZone("UTC", atMs + offsetMs);
   }
-  const dtf = new Intl.DateTimeFormat("en-US", {
-    timeZone: zoneRef, year: "numeric", month: "long", day: "numeric",
-  });
-  return dtf.format(new Date(atMs));
+  return calendar.formatDateInZone(zoneRef, atMs);
 }
 
 /** The calendar (year, month0, day) `zoneRef` shows for a given instant. */
-export function zonedYMD(atMs: number, zoneRef: string): { year: number; month0: number; day: number } {
+export function zonedYMD(atMs: number, zoneRef: string, calendar: CalendarBackend): { year: number; month0: number; day: number } {
   if (isFixedOffset(zoneRef)) {
-    const d = new Date(atMs + decodeFixedOffsetMinutes(zoneRef) * 60000);
-    return { year: d.getUTCFullYear(), month0: d.getUTCMonth(), day: d.getUTCDate() };
+    const d = utcFields(atMs + decodeFixedOffsetMinutes(zoneRef) * 60000);
+    return { year: d.year, month0: d.month0, day: d.day };
   }
-  const dtf = new Intl.DateTimeFormat("en-US", {
-    timeZone: zoneRef, year: "numeric", month: "2-digit", day: "2-digit",
-  });
-  const parts: Record<string, string> = {};
-  for (const p of dtf.formatToParts(new Date(atMs))) parts[p.type] = p.value;
-  return { year: +parts.year, month0: +parts.month - 1, day: +parts.day };
+  const d = calendar.fieldsInZone(zoneRef, atMs);
+  return { year: d.year, month0: d.month0, day: d.day };
 }
 
 /**
@@ -119,22 +77,12 @@ export function zonedYMD(atMs: number, zoneRef: string): { year: number; month0:
  * date is one day ahead of `relativeToZoneRef`'s. Correctly handles
  * month/year boundaries (unlike naively diffing day-of-month numbers).
  */
-export function dayShiftBetweenZones(atMs: number, zoneRef: string, relativeToZoneRef: string): number {
-  const a = zonedYMD(atMs, zoneRef);
-  const b = zonedYMD(atMs, relativeToZoneRef);
-  const aMs = Date.UTC(a.year, a.month0, a.day);
-  const bMs = Date.UTC(b.year, b.month0, b.day);
+export function dayShiftBetweenZones(atMs: number, zoneRef: string, relativeToZoneRef: string, calendar: CalendarBackend): number {
+  const a = zonedYMD(atMs, zoneRef, calendar);
+  const b = zonedYMD(atMs, relativeToZoneRef, calendar);
+  const aMs = utcMs(a.year, a.month0, a.day);
+  const bMs = utcMs(b.year, b.month0, b.day);
   return Math.round((aMs - bMs) / 86400000);
-}
-
-function formatTimeUtc(d: Date): string {
-  const dtf = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", hour: "numeric", minute: "2-digit", hour12: true });
-  return dtf.format(d);
-}
-
-function formatDateUtc(d: Date): string {
-  const dtf = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", year: "numeric", month: "long", day: "numeric" });
-  return dtf.format(d);
 }
 
 /**

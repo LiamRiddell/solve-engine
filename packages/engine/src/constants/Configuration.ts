@@ -63,13 +63,26 @@ export type HolidayCalendar = HolidayPredicate | Iterable<string | number | Date
  *   a host can match its readers' locale. `'MDY'` is what lets a US reader's
  *   `12/25/2023` parse, which `'auto'` refuses because the slash defaults to
  *   day-first.
+ * - `'locale'`: the order the reader's own machine writes dates in, asked of
+ *   `Intl` once per engine (see `calendar/HostLocale.ts`). Where that cannot
+ *   be answered, the engine reads dates exactly as `'auto'` does and reports
+ *   the fact through `ExpressionEngine.getDateReading()`, rather than guessing.
+ *   A host that is not the reader (a server rendering someone else's document)
+ *   names the reader instead, through {@link DateConfig.inputLocale}.
  *
  * Only ambiguous literals are affected. A spelled-out month (`March 9, 2024`)
  * is never ambiguous; nor is a hyphen literal with a four-digit leading group
  * (`2024-03-09`), which has no reading but year-month-day and is read as ISO
  * under every order, timestamp or not.
  */
-export type DateInputOrder = 'auto' | 'DMY' | 'MDY' | 'YMD';
+export type DateInputOrder = 'auto' | 'locale' | 'DMY' | 'MDY' | 'YMD';
+
+/**
+ * What a date-shaped numeric run the configured order cannot read does: report
+ * the problem, or fall through to the arithmetic it is spelled like. See
+ * {@link DateConfig.onAmbiguous}.
+ */
+export type DateAmbiguity = 'refuse' | 'arithmetic';
 
 /** Date-related engine configuration: offset limits, input order, holidays. */
 export interface DateConfig {
@@ -78,6 +91,51 @@ export interface DateConfig {
    * `'auto'` (by separator, the historic behaviour). See {@link DateInputOrder}.
    */
   readonly inputOrder: DateInputOrder;
+  /**
+   * The BCP-47 tag `'locale'` reads the order from, `"en-US"` or `"de-DE"`.
+   * Unset, the host machine is asked.
+   *
+   * Read ONLY when {@link inputOrder} is `'locale'`. Setting it beside any
+   * other order changes no result: a field that quietly switched inference on
+   * would make the predictable mistake a wrong reading rather than no change.
+   * Its shape is checked wherever it is set, though, and a tag `Intl` refuses
+   * (`"en_US"`, with an underscore) raises `DATE_INPUT_LOCALE_INVALID` at
+   * construction, because a locale silently ignored is a date order silently
+   * wrong.
+   *
+   * Deliberately separate from the engine's `locale` option, which is a
+   * language (`'en' | 'de' | 'fr'`) and carries no region. Day/month order is a
+   * region question: a bare `en` probes as month-first while a UK machine
+   * resolves to `en-GB` and probes as day-first, so wiring the two together
+   * would flip every existing British engine to month-first.
+   */
+  readonly inputLocale?: string;
+  /**
+   * What a date-shaped numeric run the resolved order cannot read does.
+   * Defaults to `'refuse'`.
+   *
+   * - `'refuse'`: the line reports a structured Error value naming the
+   *   problem, DATE_ORDER_MISMATCH when another order would have read it and
+   *   DATE_NOT_A_CALENDAR_DAY when no order names a real day. `12/25/2026` on
+   *   a day-first engine says there is no month 25, rather than answering
+   *   0.00.
+   * - `'arithmetic'`: the run falls through to the division or subtraction it
+   *   is spelled like, which is what every version before this one did.
+   *   `12/25/2026` is 0.00 again, and `2026-02-29` is 1,995.
+   *
+   * The refusal is scoped to runs nobody writes as arithmetic: a two-step
+   * chain ending in a four-digit denominator (`03/04/2026` as division is
+   * 0.0004), and an ISO-shaped hyphen run. A four-digit LEADING group is
+   * ordinary arithmetic (`1000/10/5` is 20, `1024/8/2` is 64) and is never
+   * refused, and neither is a run whose groups are all one or two digits
+   * (`12/13/14` stays 0.07), because a two-digit year is too weak a signal to
+   * hang a refusal on.
+   *
+   * The one refusal this setting does not restore is the dot form
+   * (`25.12.2026` under a month-first order): its only other outcome is a
+   * parse error, and an error is not an answer.
+   */
+  readonly onAmbiguous: DateAmbiguity;
   /**
    * How far forward a date offset whose COST grows with the offset may reach,
    * in years. Enforced by `vm/VM.ts`'s `addBusinessDays()`.
@@ -397,6 +455,10 @@ export const DEFAULT_CONFIG: EngineConfig = {
      minOffsetYears: -100,
      defaultFormat: 'YYYY-MM-DD',
      inputOrder: 'auto',
+     // A date-shaped run no order can read reports the problem rather than
+     // answering the fraction it is spelled like. See DateConfig.onAmbiguous
+     // for the shapes this covers and the ones it deliberately does not.
+     onAmbiguous: 'refuse',
    },
    performance: {
      // Preserves the effective cache size the hardcoded (now-removed)

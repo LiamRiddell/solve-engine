@@ -5,6 +5,7 @@ import { formatValue } from "@solve-js/format/FormatEngine";
 import { DEFAULT_FORMATTING_SETTINGS } from "@solve-js/format/FormattingSettings";
 import { getLocale } from "@solve-js/constants/locales";
 import type { Explanation, ExplanationStep } from "./Explanation";
+import type { DateReading } from "@solve-js/packages/datetime/DateReading";
 
 /**
  * Evaluate a standalone sub-expression and return its value.
@@ -343,20 +344,35 @@ class Builder {
  * back into `expression`), and `evaluate` runs a self-contained sub-expression
  * through the engine. When the line cannot be broken down, the answer is still
  * returned with an empty step list.
+ *
+ * `readings` are the line's date literals, from `ExpressionEngine.readDates`.
+ * The ones worth remarking on lead the derivation, because how a date was read
+ * is the fact that decided the answer and it is not visible in the answer: a
+ * reader who typed `03/04/2026` and got a date has no way to tell which of the
+ * two days it is from the arithmetic that followed.
  */
 export function buildExplanation(params: {
 	expression: string;
 	tokens: Token[];
 	evaluate: EvaluateSpan;
 	locale: string;
+	readings?: DateReading[];
 }): Explanation {
-	const { expression, tokens, evaluate, locale } = params;
+	const { expression, tokens, evaluate, locale, readings = [] } = params;
 
-	const terminal = (): Explanation => ({
-		expression,
-		steps: [],
-		result: evaluate(expression),
-	});
+	/**
+	 * One step per literal whose reading a reader should be told about: a
+	 * genuine choice between two real days, a windowed two-digit year, or a
+	 * refusal. Each carries the line's own answer, because a reading is a fact
+	 * about the line rather than an intermediate value of its own.
+	 */
+	const readingSteps = (result: Value): ExplanationStep[] =>
+		readings.filter((r) => r.needsNote).map((r) => ({ description: r.note, value: result }));
+
+	const terminal = (): Explanation => {
+		const result = evaluate(expression);
+		return { expression, steps: readingSteps(result), result };
+	};
 
 	let root: Node;
 	try {
@@ -369,7 +385,7 @@ export function buildExplanation(params: {
 
 	try {
 		const { steps, result } = new Builder(expression, evaluate, locale).build(root);
-		return { expression, steps, result };
+		return { expression, steps: [...readingSteps(result), ...steps], result };
 	} catch {
 		// A span failed to evaluate on its own (an unmodelled grouping). The
 		// whole line may still evaluate, so report the answer without steps.

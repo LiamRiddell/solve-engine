@@ -10,7 +10,7 @@ import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/v
 import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
-import { CoreErrorCodes } from "@solve-js/errors/ErrorCode";
+import { CoreErrorCodes, DatetimeErrorCodes } from "@solve-js/errors/ErrorCode";
 import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@solve-js/vm/BusinessDays";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
 import { builtinFunctions, asConverterRegistry } from "@solve-js/vm/VMBuiltins";
@@ -23,7 +23,9 @@ import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
-import { daysInMonth } from "@solve-js/utilities/Calendar";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
+import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
+import { resolveZoneName } from "@solve-js/calendar/ZoneNames";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 
 /**
@@ -284,6 +286,14 @@ export interface LineExecutionContext {
      * message that describes a different fault. Absent means enabled.
      */
     networkEnabled?: boolean;
+    /**
+     * The calendar backend this engine computes dates with (`EngineContext.calendar`).
+     * A plugin function that reads or steps a date computes through it, so the
+     * date it answers agrees with the one the VM's own opcodes would produce.
+     * Absent means the `Date` backend; `calendarOf()` in
+     * `calendar/DateCalendar.ts` resolves either case.
+     */
+    calendar?: CalendarBackend;
     /** Look up another line's cached result by 1-based line number. `undefined` = not evaluated yet (or out of range), distinct from a line that evaluated to an actual `undefined`-like Value, which can't happen (every Value type has a concrete representation). */
     getLineResult?: (lineNumber: number) => Value | undefined;
     /** Whether line `lineNumber` is a blank line or a `#` heading, the stopping condition for "total above"/"sum above"/"average above" aggregation. */
@@ -1108,7 +1118,7 @@ const WORKDAYS_PER_YEAR = 260;
  * date arithmetic needs the real, exact answer).
  *
  * That walk is why this is the one date offset with a ceiling on it. Every
- * other one moves a Date field once and lets Date recompute (see
+ * other one moves a calendar field once and lets the backend recompute (see
  * addCalendarDays() below), so `today + 100000 days` costs what one day
  * costs; here the cost IS the offset. The loop runs entirely inside a single
  * ADD opcode, so `vm.maxInstructions` is never consulted while it runs:
@@ -1146,7 +1156,7 @@ function addBusinessDays(epochMs: number, n: number, vm: VM): number {
     // in-limit offset never trips this. A pathological all-holiday calendar
     // does, and is reported as the same limit error rather than hanging.
     const maxCalendarSteps = limitWorkdays * 7 + 7;
-    const landed = walkBusinessDays(epochMs, n, (ms) => vm.isHoliday(ms), maxCalendarSteps);
+    const landed = walkBusinessDays(epochMs, n, (ms) => vm.isHoliday(ms), maxCalendarSteps, vm.context.calendar);
     if (landed === null) {
         throw ErrorFactory.execution(
             "DATE_OFFSET_LIMIT_EXCEEDED",
@@ -1193,14 +1203,13 @@ const CALENDAR_MONTHS_PER_UNIT: Record<string, number> = {
  * across either one lands an hour off, and an hour off a local midnight is a
  * different calendar day, so `2024-11-03 + 1 day` answered November 3 again
  * in Los Angeles and `26/10/2024 + 2 days` answered October 27 in London.
- * `setDate()` moves the field and lets Date recompute the offset, so the
- * answer is the day the user named in every zone.
+ * The calendar backend moves the day field and recomputes the offset (see
+ * `CalendarBackend.addDays`), so the answer is the day the user named in
+ * every zone.
  */
-function addCalendarDays(epochMs: number, days: number): number {
+function addCalendarDays(epochMs: number, days: number, calendar: CalendarBackend): number {
     const whole = Math.trunc(days);
-    const date = new Date(epochMs);
-    date.setDate(date.getDate() + whole);
-    const shifted = date.getTime();
+    const shifted = calendar.addDays(epochMs, whole);
     // A shift far enough out to leave the range a Date can represent gives an
     // Invalid Date. Falling back to the linear arithmetic hands back the same
     // out-of-range number as before rather than turning it into a NaN here.
@@ -1215,21 +1224,17 @@ function addCalendarDays(epochMs: number, days: number): number {
  * it lands in: January 31 plus a month is February 28, or February 29 in a leap
  * year, and never March.
  *
- * The clamp is why the day is parked on the 1st before the month field moves.
- * `setMonth()` on its own keeps the day number, so the 31st of a month whose
- * target has 30 days overflows into the month after it, which is how
- * `2024-01-31 + 1 month` answered March 1 and `2024-03-31 - 1 month` answered
- * March 1 as well. Clamping is what every calendar application does with this
- * case, and it is the only choice that keeps the month the user asked for.
+ * The clamp lives in `CalendarBackend.addMonths`, which parks the day on the
+ * 1st before the month field moves. A bare month step keeps the day number,
+ * so the 31st of a month whose target has 30 days overflows into the month
+ * after it, which is how `2024-01-31 + 1 month` answered March 1 and
+ * `2024-03-31 - 1 month` answered March 1 as well. Clamping is what every
+ * calendar application does with this case, and it is the only choice that
+ * keeps the month the user asked for.
  */
-function addCalendarMonths(epochMs: number, months: number): number {
+function addCalendarMonths(epochMs: number, months: number, calendar: CalendarBackend): number {
     const whole = Math.trunc(months);
-    const date = new Date(epochMs);
-    const dayOfMonth = date.getDate();
-    date.setDate(1);
-    date.setMonth(date.getMonth() + whole);
-    date.setDate(Math.min(dayOfMonth, daysInMonth(date.getFullYear(), date.getMonth())));
-    const shifted = date.getTime();
+    const shifted = calendar.addMonths(epochMs, whole);
     // A leftover fraction of a month names no calendar date of its own, so it
     // falls back to the table's fixed-length month. Same overflow reasoning as
     // addCalendarDays() above for the NaN case.
@@ -1266,7 +1271,7 @@ function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM): 
         if (isWorkdayUnit(unit)) return addBusinessDays(epochMs, amount, vm);
 
         const monthsPerUnit = CALENDAR_MONTHS_PER_UNIT[unit];
-        if (monthsPerUnit !== undefined) return addCalendarMonths(epochMs, amount * monthsPerUnit);
+        if (monthsPerUnit !== undefined) return addCalendarMonths(epochMs, amount * monthsPerUnit, vm.context.calendar);
 
         // Measure first, for the reason extractDurationMs() gives below: a
         // unit that is not a duration at all has to contribute nothing rather
@@ -1280,7 +1285,7 @@ function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM): 
             let daysPerUnit = 0;
             try { daysPerUnit = convertUnit(1, unit, "day"); } catch { /* Ignore */ }
             if (Number.isInteger(daysPerUnit) && daysPerUnit >= 1) {
-                return addCalendarDays(epochMs, amount * daysPerUnit);
+                return addCalendarDays(epochMs, amount * daysPerUnit, vm.context.calendar);
             }
         }
     }
@@ -1370,6 +1375,57 @@ function isTruthy(value: Value): boolean {
  * exchange does not consider money ("$100 in HRK"). All three are questions
  * with no answer, so all three say so.
  */
+/**
+ * Read a Datetime in a named time zone: the `<datetime> in <zone>` branch of
+ * the conversion opcode.
+ *
+ * What the answer is depends on what the instant anchors, which is why the
+ * grain sidecar exists. A calendar day becomes that day in the named zone, and
+ * a wall-clock reading becomes that reading there, both by re-anchoring the
+ * local fields; an instant, and a value whose grain was never recorded, keeps
+ * its number and only gains the zone, because moving a fixed point on the
+ * timeline would answer a different question from the one asked.
+ *
+ * Nothing about the answer is displayed in 2.26.0: `formatDatetime` does not
+ * read either sidecar, so a re-anchored day renders as the day it now is and
+ * an instant renders exactly as it did.
+ */
+function datetimeInZone(left: Value, name: string, vm: VM): Value {
+    const zoneRef = resolveZoneName(name);
+    if (zoneRef === null) {
+        // A real unit on the right is a different mistake from a misspelt zone,
+        // and the two need different advice. `getMeasure` covers the unit table
+        // and the currency check covers the codes it does not.
+        const isUnit = getMeasure(name) !== undefined || sharedCurrencyExchange.isCurrency(name);
+        return isUnit
+            ? errorValue(
+                DatetimeErrorCodes.DATETIME_NOT_CONVERTIBLE,
+                `A date cannot be read in "${name}". "in <name>" after a date names a time zone, as in "2026-04-03 in Tokyo"`,
+            )
+            : errorValue(
+                DatetimeErrorCodes.DATETIME_ZONE_UNKNOWN,
+                `"${name}" is not a time zone this engine knows. Name a city ("in Tokyo"), a standard abbreviation ("in JST") or "in UTC"`,
+            );
+    }
+    const epochMs = left.toNumber();
+    if (left.grain !== "date" && left.grain !== "datetime") {
+        return datetimeValue(epochMs, "instant", zoneRef);
+    }
+    const calendar = vm.context.calendar;
+    const f = calendar.fields(epochMs);
+    // A calendar day is re-anchored as that DAY in the named zone, not as the
+    // wall clock the host happens to show for it. Reading the host's fields
+    // for a date meant that on a host zone whose local midnight does not exist
+    // (a spring-forward at midnight, as Chile and Cuba have), `3 April 2026 in
+    // Tokyo` picked up an hour from the host and named the wrong day in Tokyo.
+    // A date carries no time of day, so there is none to preserve.
+    if (left.grain === "date") {
+        return datetimeValue(zonedWallClockToUtcMs(f.year, f.month0, f.day, 0, 0, zoneRef, calendar), "instant", zoneRef);
+    }
+    const reanchored = zonedWallClockToUtcMs(f.year, f.month0, f.day, f.hour, f.minute, zoneRef, calendar);
+    return datetimeValue(reanchored + f.second * 1000 + f.millisecond, "instant", zoneRef);
+}
+
 function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
     // Name the two dimensions when both are known ("a duration cannot be
     // converted to a length"). A compound rate or an unrecognised currency code
@@ -1915,7 +1971,10 @@ export function executeBytecode(
             } else {
               // Workdays, calendar months/years and whole calendar days each
               // move a date differently. See shiftDatetime()'s doc comment.
-              stack.push(datetimeValue(shiftDatetime(l.toNumber(), r, 1, vm)));
+              // Shifting a date does not change what it anchors, so the grain
+              // and the zone carry to the result: "2026-04-03 in Tokyo + 1 day"
+              // is still that day in Tokyo, one day on.
+              stack.push(datetimeValue(shiftDatetime(l.toNumber(), r, 1, vm), l.grain, l.zone));
             }
           } else if (l.type === ValueType.Uom && isTimecodeUnit(l.unit)) {
             // "timecode + N frames" / "timecode + duration" / "timecode +
@@ -1929,7 +1988,7 @@ export function executeBytecode(
             // answered 1,703,491,200,100. Both are the date's epoch
             // milliseconds wearing the wrong type, which is a confident wrong
             // answer rather than a visible failure.
-            stack.push(datetimeValue(shiftDatetime(r.toNumber(), l, 1, vm)));
+            stack.push(datetimeValue(shiftDatetime(r.toNumber(), l, 1, vm), r.grain, r.zone));
           } else if (l.type === ValueType.String && r.type === ValueType.String) {
             // Text joins to text: "foo" + " bar" is "foo bar". Deliberately only
             // when both sides are text. A string plus a number has no defined
@@ -1981,7 +2040,7 @@ export function executeBytecode(
             } else {
               // See the matching ADD case above, and shiftDatetime()'s own
               // doc comment for why a day is not a fixed number of ms.
-              stack.push(datetimeValue(shiftDatetime(l.toNumber(), r, -1, vm)));
+              stack.push(datetimeValue(shiftDatetime(l.toNumber(), r, -1, vm), l.grain, l.zone));
             }
           } else if (l.type === ValueType.Uom && isTimecodeUnit(l.unit)) {
             // "timecode - timecode" (difference) / "timecode - duration"
@@ -3000,7 +3059,10 @@ export function executeBytecode(
           if (!converter) {
             stack.push(errorValue("UNKNOWN_AS_CONVERTER", `Unknown converter "as ${name}"`));
           } else {
-            stack.push(converter(value));
+            // The execution context rides along so a converter that reads a
+            // date computes through this engine's calendar backend, exactly
+            // as a plugin function does.
+            stack.push(converter(value, context));
           }
           break;
         }
@@ -3125,6 +3187,15 @@ export function executeBytecode(
                 stack.push(incompatibleConversionError(fromUnit, toUnit));
               }
             }
+          } else if (left.type === ValueType.Datetime) {
+            // `<datetime> in <zone>`. Ahead of the fall-through below, which
+            // read the epoch-millisecond payload as a magnitude and labelled it
+            // with the name: `2026-04-03 in Tokyo` answered
+            // `1,775,170,800,000.00 Tokyo`, a fourteen-digit quantity in a unit
+            // named after a city. There is no new parselet here on purpose, the
+            // currency package already owns the `IN` infix slot and a second
+            // registration would overwrite it.
+            stack.push(datetimeInZone(left, toUnit, vm));
           } else {
             stack.push(uomValue(left.toNumber(), toUnit));
           }
@@ -3223,10 +3294,12 @@ export function executeBytecode(
           const clockFault = faultedOperand(minutesValue);
           if (clockFault) { stack.push(clockFault); break; }
           const totalMinutes = minutesValue.toNumber();
-          const now = new Date();
-          const anchored = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-          anchored.setMinutes(totalMinutes);
-          stack.push(datetimeValue(anchored.getTime()));
+          const clockCalendar = vm.context.calendar;
+          const clockToday = clockCalendar.fields(clockCalendar.now());
+          // A clock time is a wall-clock READING in the backend's own zone, not
+          // a fixed instant: "6pm" names six in the evening wherever it is read,
+          // which is what lets "6pm in Chicago" mean six in Chicago.
+          stack.push(datetimeValue(clockCalendar.localWallClock(clockToday.year, clockToday.month0, clockToday.day, totalMinutes), "datetime"));
           break;
         }
 
@@ -3234,10 +3307,17 @@ export function executeBytecode(
         // §9  Datetime  (OpCode 90–93)
         // ═══════════════════════════════════════════════════════════════
         case OpCode.DATE_NOW:
-          stack.push(datetimeValue(Date.now()));
+          // `now` (and `today`, which is the same opcode) reads the clock, so
+          // the instant is fixed rather than a reading that depends on a zone.
+          stack.push(datetimeValue(vm.context.calendar.now(), "instant"));
           break;
         case OpCode.DATE_LITERAL:
-          stack.push(datetimeValue(numbers[poolIndex(opcodes, ip++, op, "constant-pool index", numbers.length, "number-pool")]));
+          // A literal reaching this opcode is a calendar DAY, held as its local
+          // midnight: `DateLiteralParselet` sends every other shape (an ISO
+          // literal with a time of day, with or without an offset) down the
+          // plugin-call path instead, precisely so the grain here is known by
+          // construction and never guessed from the number.
+          stack.push(datetimeValue(numbers[poolIndex(opcodes, ip++, op, "constant-pool index", numbers.length, "number-pool")], "date"));
           break;
         case OpCode.DATE_ADD: {
           const durValue = safePop(stack), dtValue = safePop(stack);
@@ -3246,14 +3326,17 @@ export function executeBytecode(
           // reasoning as OpCode.ADD's own check.
           const dateAddFault = faultedOperand(dtValue, durValue);
           if (dateAddFault) { stack.push(dateAddFault); break; }
-          stack.push(datetimeValue(shiftDatetime(dtValue.toNumber(), durValue, 1, vm)));
+          // Shifting a date by a duration does not change what it anchors, so
+          // the grain and the zone carry: "2026-04-03 in Tokyo + 1 day" is
+          // still a day in Tokyo.
+          stack.push(datetimeValue(shiftDatetime(dtValue.toNumber(), durValue, 1, vm), dtValue.grain, dtValue.zone));
           break;
         }
         case OpCode.DATE_SUB: {
           const durValue = safePop(stack), dtValue = safePop(stack);
           const dateSubFault = faultedOperand(dtValue, durValue);
           if (dateSubFault) { stack.push(dateSubFault); break; }
-          stack.push(datetimeValue(shiftDatetime(dtValue.toNumber(), durValue, -1, vm)));
+          stack.push(datetimeValue(shiftDatetime(dtValue.toNumber(), durValue, -1, vm), dtValue.grain, dtValue.zone));
           break;
         }
         case OpCode.DATE_WORKDAY_OFFSET: {
@@ -3294,7 +3377,7 @@ export function executeBytecode(
           // Bounded by the full configured offset range in calendar days, so a
           // span of millennia is refused rather than walked a day at a time.
           const spanLimitDays = Math.ceil((vm.getMaxDateOffsetYears() - vm.getMinDateOffsetYears()) * 366);
-          const workdayCount = countBusinessDaysBetween(startValue.toNumber(), endValue.toNumber(), (ms) => vm.isHoliday(ms), spanLimitDays);
+          const workdayCount = countBusinessDaysBetween(startValue.toNumber(), endValue.toNumber(), (ms) => vm.isHoliday(ms), spanLimitDays, vm.context.calendar);
           if (workdayCount === null) {
             stack.push(errorValue(
               CoreErrorCodes.WORKDAYS_BETWEEN_RANGE_TOO_LARGE,
@@ -3320,7 +3403,7 @@ export function executeBytecode(
           if (weekdayFault) { stack.push(weekdayFault); break; }
           const targetDay = targetDayValue.toNumber();
           const now = nowValue.toNumber();
-          const currentDay = new Date(now).getDay();
+          const currentDay = vm.context.calendar.fields(now).weekday;
           let diffDays = op === OpCode.DATE_NEXT_WEEKDAY
             ? (targetDay - currentDay + 7) % 7
             : (currentDay - targetDay + 7) % 7;
@@ -3330,7 +3413,7 @@ export function executeBytecode(
           // 86,400,000 ms long, and being an hour out is enough to land on the
           // day before or after the weekday that was asked for. See
           // addCalendarDays() above.
-          stack.push(datetimeValue(addCalendarDays(now, op === OpCode.DATE_NEXT_WEEKDAY ? diffDays : -diffDays)));
+          stack.push(datetimeValue(addCalendarDays(now, op === OpCode.DATE_NEXT_WEEKDAY ? diffDays : -diffDays, vm.context.calendar)));
           break;
         }
 

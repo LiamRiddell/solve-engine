@@ -140,6 +140,57 @@ CASES.forEach(([source, expected], index) => {
 	check(`${source}  ->  ${expected}`, actual === expected, `got ${actual}`);
 });
 
+// The Temporal entry, by bare specifier. No polyfill is installed into the
+// scratch project, deliberately: the check is that the entry resolves in
+// both module systems, that it shares one EngineError class with the root
+// (a coded error from it is an `instanceof` the consumer can test), and,
+// where the runtime ships a Temporal, that a date computed through the
+// backend matches the Date backend's answer.
+fs.writeFileSync(
+	path.join(scratch, "probe-temporal.mjs"),
+	[
+		'import { createEngine } from "solve-engine";',
+		'import { formatValue } from "solve-engine/format";',
+		'import { EngineError } from "solve-engine/errors";',
+		'import { createTemporalCalendar } from "solve-engine/temporal";',
+		"const out = { entry: typeof createTemporalCalendar, coded: null, sharedClass: null, native: null };",
+		"try { createTemporalCalendar({}); } catch (e) { out.coded = e.code; out.sharedClass = e instanceof EngineError; }",
+		'if (typeof globalThis.Temporal !== "undefined") {',
+		'  const withDate = formatValue(createEngine("en").evaluateExpression("31/01/2024 + 1 month"));',
+		'  const withTemporal = formatValue(createEngine({ locale: "en", calendar: createTemporalCalendar(globalThis.Temporal) }).evaluateExpression("31/01/2024 + 1 month"));',
+		"  out.native = withDate === withTemporal ? withTemporal : `date ${withDate} temporal ${withTemporal}`;",
+		"}",
+		"process.stdout.write(JSON.stringify(out), () => process.exit(0));",
+	].join("\n"),
+);
+fs.writeFileSync(
+	path.join(scratch, "probe-temporal.cjs"),
+	'const { createTemporalCalendar } = require("solve-engine/temporal");\nprocess.stdout.write(typeof createTemporalCalendar);\n',
+);
+
+console.log("\nTemporal entry, by bare specifier");
+let temporalProbe = { entry: "probe failed to run", coded: null, sharedClass: null, native: null };
+try {
+	temporalProbe = JSON.parse(run("node", ["probe-temporal.mjs"], scratch));
+} catch (error) {
+	console.error(`  the Temporal probe did not run: ${error.message}`);
+}
+check('import { createTemporalCalendar } from "solve-engine/temporal" resolves', temporalProbe.entry === "function", `got ${temporalProbe.entry}`);
+check("a non-Temporal is refused with TEMPORAL_IMPLEMENTATION_INVALID", temporalProbe.coded === "TEMPORAL_IMPLEMENTATION_INVALID", `got ${temporalProbe.coded}`);
+check("that error is an instanceof the root EngineError", temporalProbe.sharedClass === true, `got ${temporalProbe.sharedClass}`);
+if (temporalProbe.native !== null) {
+	check("31/01/2024 + 1 month agrees between the Date and the native Temporal backends", temporalProbe.native === "= Thursday, February 29, 2024", `got ${temporalProbe.native}`);
+} else {
+	console.log("  skip  no native Temporal on this Node; the backend is exercised by the polyfilled jest run");
+}
+let temporalCjs;
+try {
+	temporalCjs = run("node", ["probe-temporal.cjs"], scratch).trim();
+} catch (error) {
+	temporalCjs = `threw: ${error.message}`;
+}
+check('require("solve-engine/temporal") resolves', temporalCjs === "function", `got ${temporalCjs}`);
+
 console.log("\nCJS, required by bare specifier");
 let cjsResult;
 try {
@@ -231,6 +282,7 @@ fs.writeFileSync(
 	path.join(scratch, "probe-docblocks.mjs"),
 	[
 		'import { createEngine } from "solve-engine";',
+		'import { ValueType } from "solve-engine";',
 		'import { evaluateDocument } from "solve-engine/engine";',
 		'import { formatValue } from "solve-engine/format";',
 		'import { readFileSync } from "node:fs";',
@@ -253,7 +305,11 @@ fs.writeFileSync(
 		"    const parsedLine = parsed.lines[index];",
 		"    let actual;",
 		'    if (parsedLine && parsedLine.error) actual = "ERROR: " + parsedLine.error;',
-		'    else if (parsedLine && parsedLine.result) actual = formatValue(parsedLine.result).replace(/^=\\s*/, "");',
+		// A refusal reaches the line as an error-TYPED Value rather than as a
+		// parse error, and the docs mark both the same way. Without this the two
+		// harnesses disagreed about a refused date: the in-repo one wrote
+		// "ERROR: ..." and this one wrote the bare sentence.
+		'    else if (parsedLine && parsedLine.result) { const shown = formatValue(parsedLine.result).replace(/^=\\s*/, ""); actual = parsedLine.result.type === ValueType.Error ? "ERROR: " + shown : shown; }',
 		'    else actual = "(no result)";',
 		"    results.push({ file: block.file, line: row.line, expression: row.expression, expected: row.expected, actual });",
 		"  });",
@@ -309,7 +365,7 @@ fs.rmSync(scratch, { recursive: true, force: true });
 
 console.log("");
 if (failures.length > 0) {
-	console.error(`consumer-e2e: ${failures.length} of ${CASES.length + 5} checks failed.`);
+	console.error(`consumer-e2e: ${failures.length} of ${CASES.length + 9} checks failed.`);
 	process.exit(1);
 }
-console.log(`consumer-e2e: ${CASES.length + 5} checks passed against an installed copy, including ${docResults.length} documented examples.`);
+console.log(`consumer-e2e: ${CASES.length + 9} checks passed against an installed copy, including ${docResults.length} documented examples.`);

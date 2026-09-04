@@ -1,4 +1,6 @@
 import { Value, ValueType, numberValue, uomValue, errorValue } from "@solve-js/vm/Value";
+import type { LineExecutionContext } from "@solve-js/vm/VM";
+import { calendarOf } from "@solve-js/calendar/DateCalendar";
 import { adjustForInflation, CPI_MIN_YEAR, CPI_MAX_YEAR } from "../data/CpiTable";
 
 /**
@@ -9,11 +11,17 @@ import { adjustForInflation, CPI_MIN_YEAR, CPI_MAX_YEAR } from "../data/CpiTable
  * `inflationAdjust(amount, fromYear, toYear)` needs that (see VMBuiltins.ts
  * CALL_BUILTIN index 60). Matches TimezonePluginFunctions.ts's pattern.
  *
- * "Present year" is computed at VM EXECUTION time (new Date().getFullYear()
- * inside the handler), not baked in at parse time -- same reasoning as this
- * engine's DATE_NOW opcode: a parse-time constant would go stale if the
- * compiled bytecode for a line is ever re-executed on a later date.
+ * "Present year" is computed at VM EXECUTION time (read from the calendar
+ * backend inside the handler), not baked in at parse time -- same reasoning
+ * as this engine's DATE_NOW opcode: a parse-time constant would go stale if
+ * the compiled bytecode for a line is ever re-executed on a later date.
  */
+
+/** The current calendar year, read through the engine's calendar backend. */
+function presentYear(context: LineExecutionContext | undefined): number {
+  const calendar = calendarOf(context);
+  return calendar.fields(calendar.now()).year;
+}
 
 function yearRangeError(code: string, badYear: number): Value {
   return errorValue(
@@ -23,10 +31,10 @@ function yearRangeError(code: string, badYear: number): Value {
 }
 
 /** "what is $X from YEAR" -> X (given as YEAR's dollars) expressed in present-day dollars. */
-export function inflationFromYearToPresentHandler(args: Value[]): Value {
+export function inflationFromYearToPresentHandler(args: Value[], context?: LineExecutionContext): Value {
   const amountValue = args[0];
   const fromYear = args[1].toNumber();
-  const toYear = new Date().getFullYear();
+  const toYear = presentYear(context);
   const result = adjustForInflation(amountValue.toNumber(), fromYear, toYear);
   if (result === undefined) return yearRangeError("INFLATION_YEAR_OUT_OF_RANGE", fromYear);
   return amountValue.type === ValueType.Uom ? uomValue(result, amountValue.unit!) : numberValue(result);
@@ -36,9 +44,9 @@ export function inflationFromYearToPresentHandler(args: Value[]): Value {
  * "what was $X worth in YEAR" / "$X in YEAR dollars" -> X (given as
  * present-day dollars) expressed in YEAR's dollars.
  */
-export function inflationToYearFromPresentHandler(args: Value[]): Value {
+export function inflationToYearFromPresentHandler(args: Value[], context?: LineExecutionContext): Value {
   const amountValue = args[0];
-  const fromYear = new Date().getFullYear();
+  const fromYear = presentYear(context);
   const toYear = args[1].toNumber();
   const result = adjustForInflation(amountValue.toNumber(), fromYear, toYear);
   if (result === undefined) return yearRangeError("INFLATION_YEAR_OUT_OF_RANGE", toYear);
@@ -62,11 +70,11 @@ export function inflationToYearFromPresentHandler(args: Value[]): Value {
  * Growing a sum at a rate is still available and is a different question:
  * `$500 after 4 years at 5%` (see InvestmentParselets.ts).
  */
-export function inflationFutureValueHandler(args: Value[]): Value {
+export function inflationFutureValueHandler(args: Value[], context?: LineExecutionContext): Value {
   const amountValue = args[0];
   const futureYear = args[1].toNumber();
   const rate = args[2].toNumber();
-  const years = futureYear - new Date().getFullYear();
+  const years = futureYear - presentYear(context);
   if (1 + rate <= 0) {
     return errorValue("INVALID_RATE", `inflationFutureValue: rate ${rate} makes (1 + rate) non-positive`);
   }

@@ -68,6 +68,16 @@ const config = {
 		"LongDocumentRobustness\\.spec\\."
 	],
 
+	// `temporal-polyfill`, which the Temporal calendar specs load, and the
+	// `temporal-utils` it imports ship as ES modules only, which this
+	// CommonJS run cannot load untransformed. They are the one exception to
+	// the rule that node_modules is never transformed; the `.js` transform
+	// below exists for them alone.
+	transformIgnorePatterns: [
+		"/node_modules/(?!temporal-polyfill/|temporal-utils/)",
+		"\\\\node_modules\\\\(?!temporal-polyfill\\\\|temporal-utils\\\\)",
+	],
+
 	transform: {
 		"^.+\\.tsx?$": [
 			"ts-jest",
@@ -75,6 +85,17 @@ const config = {
 				tsconfig: "./packages/engine/__tests__/tsconfig.test.json",
 				skipLibCheck: true,
 				isolatedModules: true
+			},
+		],
+		// Reached only for the two ES-module packages `transformIgnorePatterns`
+		// lets through; every other .js under node_modules stays untouched.
+		"^.+\\.js$": [
+			"ts-jest",
+			{
+				tsconfig: "./packages/engine/__tests__/tsconfig.test.json",
+				skipLibCheck: true,
+				isolatedModules: true,
+				diagnostics: false
 			},
 		],
 	},

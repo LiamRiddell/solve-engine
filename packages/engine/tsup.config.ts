@@ -19,6 +19,10 @@ export default defineConfig({
 		services: "src/services/index.ts",
 		worker: "src/worker/index.ts",
 		testing: "src/testing/index.ts",
+		// The Temporal calendar backend. Its own entry so that nothing under
+		// src/temporal is reachable from the root entry or any other subpath:
+		// a host that never imports it ships none of it.
+		temporal: "src/temporal/index.ts",
 	},
 	format: ["esm", "cjs"],
 	dts: true,

@@ -13,25 +13,27 @@ import { CurrentTimestampParselet } from "./parselets/CurrentTimestampParselet";
 import { ToDateParselet } from "./parselets/ToDateParselet";
 import { ToTimestampParselet } from "./parselets/ToTimestampParselet";
 import { DateLiteralParselet } from "./parselets/DateLiteralParselet";
+import { UnreadableDateParselet } from "./parselets/UnreadableDateParselet";
 import { NthWeekdayParselet } from "./parselets/NthWeekdayParselet";
 import { RelativeMonthParselet } from "./parselets/RelativeMonthParselet";
 import { AgeParselet } from "./parselets/AgeParselet";
 import {
   workdaysInDuration, weekdayOnDate, toDateFromAny, toTimestampFromAny,
   monthOnDate, weekOnDate, isWeekendOnDate, isWorkdayOnDate, spanBetweenDates,
+  datetimeLiteralGrain,
 } from "./parselets/DatetimeTimestampPluginFunctions";
 import {
-  nthWeekdayOfMonthFn, monthAnchorShift, ageBetween,
+  nthWeekdayOfMonthFn, monthAnchorShift, ageBetween, dateLiteralFault,
 } from "./parselets/DatetimeCalendarPluginFunctions";
 import { nthWeekdayNormalizerRule } from "./normalizer/NthWeekdayNormalizerRule";
 import { untilSinceNormalizerRule } from "./normalizer/UntilSinceNormalizerRule";
 import { betweenUnitNormalizerRule } from "./normalizer/BetweenUnitNormalizerRule";
 import { workdayRateDenominatorNormalizerRule } from "./normalizer/WorkdayRateDenominatorNormalizerRule";
-import { monthNameDateNormalizerRule } from "./normalizer/MonthNameDateNormalizerRule";
 import { DaysInPeriodParselet } from "./parselets/DaysInPeriodParselet";
 import { daysInPeriodNormalizerRule } from "./normalizer/DaysInPeriodNormalizerRule";
 import { dailyNoteLinkNormalizerRule } from "./normalizer/DailyNoteLinkNormalizerRule";
 import { formatIso8601Local } from "./Iso8601";
+import { calendarOf } from "@solve-js/calendar/DateCalendar";
 
 /**
  * Date/time keywords: `now`, `today`, `tomorrow`, `yesterday`,
@@ -208,6 +210,10 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     BETWEEN_UNIT: new DurationBetweenParselet(),
     CURRENT_TIMESTAMP: new CurrentTimestampParselet(),
     DATETIME_LITERAL: new DateLiteralParselet(),
+    // The refusal half of the same rule: a date-shaped run no configured order
+    // can read. Registered beside the literal it is the alternative to, so an
+    // engine that can fuse a date can always report one it cannot.
+    DATETIME_LITERAL_UNREADABLE: new UnreadableDateParselet(),
     NTH_WEEKDAY: new NthWeekdayParselet(),
     AGE_OF: new AgeParselet(),
     MONTH_ANCHOR_NEXT: new RelativeMonthParselet(1),
@@ -226,16 +232,15 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     untilSinceNormalizerRule(),
     betweenUnitNormalizerRule(),
     workdayRateDenominatorNormalizerRule(),
-    // The numeric date-literal rule (`dateLiteralNormalizerRule`) is NOT here:
-    // it reads the per-engine `date.inputOrder` config to choose DMY/MDY/YMD,
-    // and a package descriptor is shared across every engine in the process, so
-    // it is registered in `ExpressionEngine`'s constructor closing over that
-    // engine's config instead, the same reason user-defined units are (see the
-    // constructor's comment). Priority 70 still orders it above the rules here.
-    // Dates with the month spelled out ("March 9, 2024"). Priority 64, just
-    // under the numeric rule, so an all-numeric literal is still claimed by
-    // the rule that has always claimed it.
-    monthNameDateNormalizerRule(),
+    // The two date-literal rules (`dateLiteralNormalizerRule` for the numeric
+    // orderings, `monthNameDateNormalizerRule` for "March 9, 2024") are NOT
+    // here: both build their literal through the engine's own calendar
+    // backend, and the numeric one also reads the per-engine `date.inputOrder`
+    // config to choose DMY/MDY/YMD. A package descriptor is shared across
+    // every engine in the process, so they are registered in
+    // `ExpressionEngine`'s constructor closing over that engine instead, the
+    // same reason user-defined units are (see the constructor's comment).
+    // Their priorities (70 and 64) still order them among the rules here.
     // `<ordinal> <weekday> of <month>`. Priority 66, above the month-name rule
     // so the ordinal head is claimed before the anchor is fused, and it reads
     // the ordinal from the tokens the lexer already produced.
@@ -248,6 +253,7 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     weekdayOnDate,
     toDateFromAny,
     toTimestampFromAny,
+    datetimeLiteralGrain,
     monthOnDate,
     weekOnDate,
     isWeekendOnDate,
@@ -256,18 +262,21 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     nthWeekdayOfMonth: nthWeekdayOfMonthFn,
     monthAnchorShift,
     ageBetween,
+    dateLiteralFault,
   },
   asConverters: {
-    iso8601: (value) => stringValue(formatIso8601Local(value.toNumber())),
+    // The execution context is passed through so each converter reads the
+    // date through the same calendar backend the plugin functions do.
+    iso8601: (value, context) => stringValue(formatIso8601Local(value.toNumber(), calendarOf(context))),
     // The same three fields the "what X is it" questions answer, in the
     // composable form: `next friday + 2 weeks as weekday`. Question phrases
     // only ever take a bare date expression, whereas `as` binds after a
     // whole expression, so these are the general case rather than a
     // shorthand, and they cost one line each, sharing the identical
     // handlers.
-    weekday: (value) => weekdayOnDate([value]),
-    month: (value) => monthOnDate([value]),
-    week: (value) => weekOnDate([value]),
+    weekday: (value, context) => weekdayOnDate([value], context),
+    month: (value, context) => monthOnDate([value], context),
+    week: (value, context) => weekOnDate([value], context),
   },
   tokenCategories: {
     // The 2.4.0 forms: an editor colours the fused tokens as datetime syntax.
@@ -276,5 +285,8 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     MONTH_ANCHOR_THIS: "datetime",
     MONTH_ANCHOR_LAST: "datetime",
     AGE_OF: "keyword",
+    // An editor colours a refused date as datetime syntax too: the reader
+    // typed a date, and the run is one token whether it could be read or not.
+    DATETIME_LITERAL_UNREADABLE: "datetime",
   },
 };

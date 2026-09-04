@@ -1,3 +1,4 @@
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 /**
  * How a Datetime value is rendered.
  *
@@ -16,6 +17,18 @@ export type DateOutputFormat = "long" | "iso" | "dmy" | "mdy";
  * This allows the engine to format values without depending on app-specific settings
  */
 export interface FormattingSettings {
+  /**
+   * The calendar backend a date is written out through: which local day and
+   * wall-clock time an instant shows as. Pass the same backend the engine
+   * was given as its `calendar` option, so a date displays in the zone it
+   * was computed in. Absent means the built-in `Date` backend, the process's
+   * own zone, which is what every engine computes with by default.
+   *
+   * A backend is an object of functions, so it cannot cross a `postMessage`
+   * boundary: a worker runtime takes its backend from `WorkerRuntimeOptions`
+   * and applies it to the formatting it receives.
+   */
+  calendar?: CalendarBackend;
   floatResult: {
     decimalPlaces: number;
     enableSeperator: boolean;

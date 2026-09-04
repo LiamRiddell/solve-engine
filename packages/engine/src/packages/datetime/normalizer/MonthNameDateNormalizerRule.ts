@@ -1,6 +1,10 @@
 import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
-import { buildDateToken } from "./DateLiteralNormalizerRule";
+import { buildDateToken, faultMatch, runText } from "./DateLiteralNormalizerRule";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
+import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
+import { DatetimeErrorCodes, describeUnrealDay } from "../DateReading";
+import type { DateAmbiguity } from "@solve-js/constants/Configuration";
 
 /** Month names and the common abbreviations, to their 1-based number. */
 const MONTHS: Record<string, number> = {
@@ -42,6 +46,60 @@ function looksLikeYear(digits: string): boolean {
 }
 
 /**
+ * Builds the literal, or, where the month and day are in range but name a day
+ * that month does not have, the refusal that says so.
+ *
+ * A spelled-out month is unmistakably a date attempt: `29 February 2026` has
+ * no second reading and no order to try, so falling through was never
+ * arithmetic anybody meant. It fell to implicit multiplication instead, and
+ * the line answered 51,327,216,000,000, which is 29 times the epoch of 1
+ * February 2026. `31 April 2026` answered 55,024,938,000,000 the same way.
+ * Neither is a number a reader could have depended on.
+ *
+ * The refusal is scoped to a ROLLOVER, a real month with a day it does not
+ * have. A group that is out of range for its role at all (`March 99`, where 99
+ * is neither a year nor a day of any month) keeps today's behaviour and
+ * declines, because that run is not clearly a date attempt: it may be an
+ * ordinary product the reader wrote with a word the rule happens to know.
+ *
+ * @param day - Day of the month.
+ * @param month - Month, from 1.
+ * @param year - The full year.
+ * @param sourceTokens - The run being replaced.
+ * @param calendar - The backend the literal is built with.
+ * @param onAmbiguous - The engine's refusal policy. `'arithmetic'` restores
+ * the old implicit-multiplication answer, the same opt-out the numeric shapes
+ * have, because 51,327,216,000,000 is a number a host could in principle have
+ * been reading even if nobody meant it.
+ * @returns The date match, the refusal, or null to leave the tokens alone.
+ */
+function dateOrFault(
+	day: number,
+	month: number,
+	year: number,
+	sourceTokens: Token[],
+	calendar: CalendarBackend,
+	onAmbiguous: DateAmbiguity,
+): NormalizerMatch | null {
+	const RULE = "datetime:month-name-date";
+	const match = buildDateToken(day, month, year, sourceTokens, RULE, calendar);
+	if (match !== null) return match;
+	if (onAmbiguous === "arithmetic") return null;
+	if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+	return faultMatch(
+		DatetimeErrorCodes.DATE_NOT_A_CALENDAR_DAY,
+		`"${runText(sourceTokens)}" is not a real date: ${describeUnrealDay(day, month, year)}.`,
+		sourceTokens,
+		`${RULE}:unreadable`,
+	);
+}
+
+/** The current calendar year in the backend's zone, for a date written without one. */
+function currentYear(calendar: CalendarBackend): number {
+	return calendar.fields(calendar.now()).year;
+}
+
+/**
  * Dates written with the month as a word: `March 9, 2024`, `3 March`,
  * `January 24, 1984`.
  *
@@ -62,8 +120,27 @@ function looksLikeYear(digits: string): boolean {
  * a caller asking about the month as a period has a date inside it to work
  * from. Ambiguity is resolved by width: a number after a month name is a year
  * when it has four digits, otherwise a day.
+ *
+ * ## A spelled month that names no real day
+ * `29 February 2026` and `31 April 2026` used to fall through to implicit
+ * multiplication and answer 51,327,216,000,000 and 55,024,938,000,000, which
+ * are 29 and 31 times the epoch of the first of the month. A spelled-out month
+ * is unmistakably a date attempt, with no second reading and no order to try,
+ * so it now reports what is wrong instead. See {@link dateOrFault} for the
+ * boundary: only a rollover refuses, never a group that is out of range for
+ * its role at all.
+ *
+ * `getCalendar` supplies the calendar backend the literal is built with, read
+ * per match so it follows the engine that registered the rule, exactly as the
+ * numeric rule's does; the default is the built-in `Date` backend, for a rule
+ * registered outside an engine. `getOnAmbiguous` supplies that engine's
+ * refusal policy the same way.
  */
-export function monthNameDateNormalizerRule(priority = 64): NormalizerRule {
+export function monthNameDateNormalizerRule(
+	priority = 64,
+	getCalendar: () => CalendarBackend = () => DATE_CALENDAR,
+	getOnAmbiguous: () => DateAmbiguity = () => "refuse",
+): NormalizerRule {
 	return {
 		name: "datetime:month-name-date",
 		priority,
@@ -72,7 +149,8 @@ export function monthNameDateNormalizerRule(priority = 64): NormalizerRule {
 		// enough to filter nothing. The start types still narrow it.
 		startTokenTypes: ["NUMBER", "IDENT", "UNIT"],
 		match(tokens, pos): NormalizerMatch | null {
-			const RULE = "datetime:month-name-date";
+			const calendar = getCalendar();
+			const onAmbiguous = getOnAmbiguous();
 			const first = tokens[pos];
 
 			// `9 March` and `9 March 2024`.
@@ -88,11 +166,11 @@ export function monthNameDateNormalizerRule(priority = 64): NormalizerRule {
 					PLAIN_INTEGER.test(yearToken.text ?? "") &&
 					looksLikeYear(yearToken.text ?? "")
 				) {
-					return buildDateToken(day, month, Number(yearToken.text), tokens.slice(pos, pos + 3), RULE);
+					return dateOrFault(day, month, Number(yearToken.text), tokens.slice(pos, pos + 3), calendar, onAmbiguous);
 				}
 				// No year given: the current one, matching what the numeric rule
 				// does for the same shape.
-				return buildDateToken(day, month, new Date().getFullYear(), tokens.slice(pos, pos + 2), RULE);
+				return dateOrFault(day, month, currentYear(calendar), tokens.slice(pos, pos + 2), calendar, onAmbiguous);
 			}
 
 			const month = monthOf(first);
@@ -103,7 +181,7 @@ export function monthNameDateNormalizerRule(priority = 64): NormalizerRule {
 
 			// `February 2020`, a whole month rather than a day in one.
 			if (looksLikeYear(second.text ?? "")) {
-				return buildDateToken(1, month, Number(second.text), tokens.slice(pos, pos + 2), RULE);
+				return dateOrFault(1, month, Number(second.text), tokens.slice(pos, pos + 2), calendar, onAmbiguous);
 			}
 
 			const day = Number(second.text);
@@ -117,7 +195,7 @@ export function monthNameDateNormalizerRule(priority = 64): NormalizerRule {
 				PLAIN_INTEGER.test(yearToken.text ?? "") &&
 				looksLikeYear(yearToken.text ?? "")
 			) {
-				return buildDateToken(day, month, Number(yearToken.text), tokens.slice(pos, pos + 4), RULE);
+				return dateOrFault(day, month, Number(yearToken.text), tokens.slice(pos, pos + 4), calendar, onAmbiguous);
 			}
 
 			// `March 9 2024`, the same without the comma.
@@ -126,11 +204,11 @@ export function monthNameDateNormalizerRule(priority = 64): NormalizerRule {
 				PLAIN_INTEGER.test(comma.text ?? "") &&
 				looksLikeYear(comma.text ?? "")
 			) {
-				return buildDateToken(day, month, Number(comma.text), tokens.slice(pos, pos + 3), RULE);
+				return dateOrFault(day, month, Number(comma.text), tokens.slice(pos, pos + 3), calendar, onAmbiguous);
 			}
 
 			// `March 9`, no year.
-			return buildDateToken(day, month, new Date().getFullYear(), tokens.slice(pos, pos + 2), RULE);
+			return dateOrFault(day, month, currentYear(calendar), tokens.slice(pos, pos + 2), calendar, onAmbiguous);
 		},
 	};
 }

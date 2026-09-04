@@ -48,8 +48,26 @@ describe("a hyphen date with a four-digit year", () => {
 
 	test("is still refused when its groups are not a calendar date", () => {
 		for (const order of ORDERS) {
-			// Month 13 is no date under any order, so the line stays arithmetic.
-			expect(read("2026-13-03", order)).toBe("2,010");
+			// Month 13 is no date under any order. This used to answer 2,010, the
+			// subtraction the run is spelled like; an ISO shape has no second
+			// reading to fall to, so it now says what is wrong instead.
+			expect(read("2026-13-03", order)).toBe(
+				'"2026-13-03" is not a real date: there is no month 13.',
+			);
+		}
+	});
+
+	test("and the old arithmetic answer is one setting away", () => {
+		for (const order of ORDERS) {
+			const engine = new ExpressionEngine({
+				packages: BUILTIN_PACKAGES,
+				config: { date: { inputOrder: order, onAmbiguous: "arithmetic" } },
+			});
+			try {
+				expect(formatValue(engine.evaluateExpression("2026-13-03")).replace(/^=\s*/, "")).toBe("2,010");
+			} finally {
+				engine.clear();
+			}
 		}
 	});
 

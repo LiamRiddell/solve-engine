@@ -29,7 +29,7 @@
  * `JSON.parse` unchanged.
  */
 
-import { Value, ValueType, type MatrixData, type MatrixEntry } from "@solve-js/vm/Value";
+import { Value, ValueType, type MatrixData, type MatrixEntry, type DatetimeGrain } from "@solve-js/vm/Value";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 import type { DecimalData } from "@solve-js/decimal";
 import type { Rational } from "@solve-js/symbolic";
@@ -112,7 +112,7 @@ export type SerializedValue =
 	| { t: ValueType.Hex; v: SerializedNumber | string; big?: boolean; base?: string }
 	| { t: ValueType.BigInt; v: string }
 	| { t: ValueType.String; v: string }
-	| { t: ValueType.Datetime; v: SerializedNumber }
+	| { t: ValueType.Datetime; v: SerializedNumber; g?: DatetimeGrain; z?: string }
 	| { t: ValueType.Percentage; v: SerializedNumber }
 	| { t: ValueType.Uom; v: SerializedNumber; unit: string; exact?: SerializedDecimal }
 	| { t: ValueType.Matrix; rows: number; cols: number; data: (SerializedNumber | boolean)[] }
@@ -257,8 +257,17 @@ export function serializeValue(value: Value, where: string): SerializedValue {
 			return { t: ValueType.BigInt, v: (value.value as bigint).toString() };
 		case ValueType.String:
 			return { t: ValueType.String, v: value.value as string };
-		case ValueType.Datetime:
-			return { t: ValueType.Datetime, v: encodeNumber(value.value as number) };
+		case ValueType.Datetime: {
+			// The two sidecars ride along as optional fields, which is why this
+			// needs no `SNAPSHOT_VERSION` bump: a snapshot written before they
+			// existed simply carries neither, and restores to a Datetime with
+			// nothing recorded, exactly as it did. Left out, a restored session
+			// would silently forget that a stored date was a day in Tokyo.
+			const out: Extract<SerializedValue, { t: ValueType.Datetime }> = { t: ValueType.Datetime, v: encodeNumber(value.value as number) };
+			if (value.grain !== undefined) out.g = value.grain;
+			if (value.zone !== undefined) out.z = value.zone;
+			return out;
+		}
 		case ValueType.Percentage:
 			return { t: ValueType.Percentage, v: encodeNumber(value.value as number) };
 		case ValueType.Uom: {
@@ -312,8 +321,12 @@ export function deserializeValue(sv: SerializedValue): Value {
 			return new Value(ValueType.BigInt, BigInt(sv.v));
 		case ValueType.String:
 			return new Value(ValueType.String, sv.v);
-		case ValueType.Datetime:
-			return new Value(ValueType.Datetime, decodeNumber(sv.v));
+		case ValueType.Datetime: {
+			const v = new Value(ValueType.Datetime, decodeNumber(sv.v));
+			if (sv.g !== undefined) v.grain = sv.g;
+			if (sv.z !== undefined) v.zone = sv.z;
+			return v;
+		}
 		case ValueType.Percentage:
 			return new Value(ValueType.Percentage, decodeNumber(sv.v));
 		case ValueType.Uom: {
@@ -537,6 +550,15 @@ function assertValueShape(sv: unknown, where: string): void {
 			if (typeof sv.v !== "string") malformed(`${where}.v`, "a string", sv.v);
 			return;
 		case ValueType.Datetime:
+			if (!isSerializedNumber(sv.v)) malformed(`${where}.v`, "a number", sv.v);
+			// Both sidecars are optional, so a snapshot written before they
+			// existed passes here unchanged; present, they must still be the
+			// strings a restore will assign to a `Value`.
+			if (sv.g !== undefined && sv.g !== "date" && sv.g !== "datetime" && sv.g !== "instant") {
+				malformed(`${where}.g`, 'one of "date", "datetime" or "instant"', sv.g);
+			}
+			if (sv.z !== undefined && typeof sv.z !== "string") malformed(`${where}.z`, "a zone reference", sv.z);
+			return;
 		case ValueType.Percentage:
 			if (!isSerializedNumber(sv.v)) malformed(`${where}.v`, "a number", sv.v);
 			return;

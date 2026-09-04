@@ -46,15 +46,35 @@ describe("Date literal parsing (DateLiteralNormalizerRule + DateLiteralParselet)
       expect(result.toNumber()).toBe(localMidnight(1999, 1, 5));
     });
 
-    test("29/02/2023 (not a leap year) is NOT a date — falls back to chained division", () => {
+    // These two used to fall back to chained division and answer 0.01 and
+    // 0.00. A four-digit trailing group ends nothing anybody writes as
+    // arithmetic, so the run now reports what is wrong with it instead. The
+    // old numbers are still available, and are asserted below.
+    test("29/02/2023 (not a leap year) is NOT a date — it reports that February 2023 has 28 days", () => {
       const engine = newTrackedEngine();
+      const result = engine.evaluateExpression("29/02/2023");
+      expect(result.type).toBe(ValueType.Error);
+      expect(result.value).toBe("DATE_NOT_A_CALENDAR_DAY");
+      expect(result.unit).toBe('"29/02/2023" is not a real date: February 2023 has 28 days.');
+    });
+
+    test("and answers the old 29 / 2 / 2023 under date.onAmbiguous: 'arithmetic'", () => {
+      const engine = newTrackedEngine({ config: { date: { onAmbiguous: "arithmetic" } } });
       const result = engine.evaluateExpression("29/02/2023");
       expect(result.type).toBe(ValueType.Number);
       expect(result.toNumber()).toBeCloseTo(29 / 2 / 2023, 10);
     });
 
-    test("25/13/2023 (invalid month) is NOT a date — falls back to chained division", () => {
+    test("25/13/2023 (invalid month) is NOT a date — it reports that there is no month 13", () => {
       const engine = newTrackedEngine();
+      const result = engine.evaluateExpression("25/13/2023");
+      expect(result.type).toBe(ValueType.Error);
+      expect(result.value).toBe("DATE_NOT_A_CALENDAR_DAY");
+      expect(result.unit).toBe('"25/13/2023" is not a real date: there is no month 13.');
+    });
+
+    test("and answers the old 25 / 13 / 2023 under date.onAmbiguous: 'arithmetic'", () => {
+      const engine = newTrackedEngine({ config: { date: { onAmbiguous: "arithmetic" } } });
       const result = engine.evaluateExpression("25/13/2023");
       expect(result.type).toBe(ValueType.Number);
       expect(result.toNumber()).toBeCloseTo(25 / 13 / 2023, 10);
@@ -202,15 +222,39 @@ describe("Date literal parsing (DateLiteralNormalizerRule + DateLiteralParselet)
       expect(result.toNumber()).toBe(localMidnight(2023, 12, 25));
     });
 
-    test("02-30-2023 (Feb 30 doesn't exist) is NOT a date — falls back to chained subtraction", () => {
+    // The hyphen spelling of the same change: these used to answer -2,051 and
+    // -2,011, and now say what is wrong. The second is the interesting one,
+    // because the other order reads it perfectly well, so it is an order
+    // mismatch rather than an impossible day.
+    test("02-30-2023 (Feb 30 doesn't exist) is NOT a date — it reports that February 2023 has 28 days", () => {
       const engine = newTrackedEngine();
+      const result = engine.evaluateExpression("02-30-2023");
+      expect(result.type).toBe(ValueType.Error);
+      expect(result.value).toBe("DATE_NOT_A_CALENDAR_DAY");
+      expect(result.unit).toBe('"02-30-2023" is not a real date: February 2023 has 28 days.');
+    });
+
+    test("and answers the old 2 - 30 - 2023 under date.onAmbiguous: 'arithmetic'", () => {
+      const engine = newTrackedEngine({ config: { date: { onAmbiguous: "arithmetic" } } });
       const result = engine.evaluateExpression("02-30-2023");
       expect(result.type).toBe(ValueType.Number);
       expect(result.toNumber()).toBe(2 - 30 - 2023);
     });
 
-    test("13-01-2023 (invalid month, first group not 4 digits) is NOT a date — falls back to chained subtraction", () => {
+    test("13-01-2023 (invalid month first) names the order that would read it", () => {
       const engine = newTrackedEngine();
+      const result = engine.evaluateExpression("13-01-2023");
+      expect(result.type).toBe(ValueType.Error);
+      expect(result.value).toBe("DATE_ORDER_MISMATCH");
+      expect(result.unit).toBe(
+        '"13-01-2023" is not a date read month first: there is no month 13. ' +
+          "Read day first it is 13 January 2023. " +
+          'Set date.inputOrder to "DMY" to read numeric dates day first.',
+      );
+    });
+
+    test("and answers the old 13 - 1 - 2023 under date.onAmbiguous: 'arithmetic'", () => {
+      const engine = newTrackedEngine({ config: { date: { onAmbiguous: "arithmetic" } } });
       const result = engine.evaluateExpression("13-01-2023");
       expect(result.type).toBe(ValueType.Number);
       expect(result.toNumber()).toBe(13 - 1 - 2023);
@@ -246,11 +290,23 @@ describe("Date literal parsing (DateLiteralNormalizerRule + DateLiteralParselet)
       expect(result.toNumber()).toBe(localMidnight(1999, 12, 31));
     });
 
-    test("30.02.2023 (Feb 30 doesn't exist) is NOT a date — no operator joins the leftover literals, so it throws", () => {
+    test("30.02.2023 (Feb 30 doesn't exist) is NOT a date — it says so, instead of throwing", () => {
+      // This used to throw `Unexpected token after expression: ".2023"`, the
+      // parser reporting the leftover half of a literal the rule declined. A
+      // dot run has nothing to fall through to, so a refusal is the only
+      // answer available and an error message about a dot is not one.
       const engine = newTrackedEngine();
-      expect(() => engine.evaluateExpression("30.02.2023")).toThrow(
-        'Unexpected token after expression: ".2023"'
-      );
+      const result = engine.evaluateExpression("30.02.2023");
+      expect(result.type).toBe(ValueType.Error);
+      expect(result.value).toBe("DATE_NOT_A_CALENDAR_DAY");
+      expect(result.unit).toBe('"30.02.2023" is not a real date: February 2023 has 28 days.');
+    });
+
+    test("and the refusal stands even under date.onAmbiguous: 'arithmetic'", () => {
+      // The one refusal the opt-out cannot restore: there is no old number to
+      // restore, only the old parse error.
+      const engine = newTrackedEngine({ config: { date: { onAmbiguous: "arithmetic" } } });
+      expect(engine.evaluateExpression("30.02.2023").value).toBe("DATE_NOT_A_CALENDAR_DAY");
     });
 
     test("a genuine decimal number is unaffected when nothing follows it: 25.12 alone", () => {

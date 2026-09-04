@@ -9,29 +9,31 @@
  * `date.holidays`.
  *
  * Dates are compared on their LOCAL calendar day, matching the rest of the
- * engine's date arithmetic (a date literal is local midnight). A `YYYY-MM-DD`
- * string is read as that calendar day directly, never through `new Date(str)`,
- * which would read a bare date as UTC and land on the previous day west of
- * Greenwich.
+ * engine's date arithmetic (a date literal is local midnight), and "local" is
+ * read through the engine's calendar backend so the day a holiday falls on
+ * agrees with the day the walk lands on. A `YYYY-MM-DD` string is read as that
+ * calendar day directly, never through an ISO parse, which would read a bare
+ * date as UTC and land on the previous day west of Greenwich.
  */
 
 import type { HolidayCalendar } from "@solve-js/constants/Configuration";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 
 /** `2024-12-25`, the key both a stored date and a queried instant reduce to. */
-function localDateKey(epochMs: number): string {
-	const d = new Date(epochMs);
-	const month = String(d.getMonth() + 1).padStart(2, "0");
-	const day = String(d.getDate()).padStart(2, "0");
-	return `${d.getFullYear()}-${month}-${day}`;
+function localDateKey(epochMs: number, backend: CalendarBackend): string {
+	const d = backend.fields(epochMs);
+	const month = String(d.month0 + 1).padStart(2, "0");
+	const day = String(d.day).padStart(2, "0");
+	return `${d.year}-${month}-${day}`;
 }
 
 /** The local-day key for one calendar entry, or `null` if it is unreadable. A
  *  string is matched on its leading `YYYY-MM-DD` so a full ISO timestamp works
  *  too; a number is epoch milliseconds; a `Date` is taken as-is. */
-function entryToKey(entry: string | number | Date): string | null {
-	if (entry instanceof Date) return localDateKey(entry.getTime());
+function entryToKey(entry: string | number | Date, backend: CalendarBackend): string | null {
+	if (entry instanceof Date) return localDateKey(entry.getTime(), backend);
 	if (typeof entry === "number") {
-		return Number.isFinite(entry) ? localDateKey(entry) : null;
+		return Number.isFinite(entry) ? localDateKey(entry, backend) : null;
 	}
 	const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(entry.trim());
 	if (!match) return null;
@@ -46,24 +48,31 @@ function entryToKey(entry: string | number | Date): string | null {
  * per-day membership test the walk runs thousands of times is a hash lookup,
  * not a re-scan of the list.
  *
+ * @param calendar - The host's holiday calendar, or `undefined` for none.
+ * @param backend - The engine's calendar backend, which reads each instant's local day.
  * @returns the predicate, or `undefined` for no calendar (weekends-only).
  */
 export function resolveHolidayPredicate(
 	calendar: HolidayCalendar | undefined,
+	backend: CalendarBackend,
 ): ((epochMs: number) => boolean) | undefined {
 	if (calendar === undefined) return undefined;
 
 	if (typeof calendar === "function") {
+		// The host's predicate receives a real `Date`: that is its public
+		// contract, and the `Date` is built from the instant for the host to
+		// read, not read by the engine, so it is not a calendar computation
+		// the backend needs to own.
 		return (epochMs: number) => calendar(new Date(epochMs));
 	}
 
 	const keys = new Set<string>();
 	for (const entry of calendar) {
-		const key = entryToKey(entry);
+		const key = entryToKey(entry, backend);
 		if (key !== null) keys.add(key);
 	}
 	// An empty or all-unreadable list is still a configured calendar with no
 	// holidays in it, which is a legitimate thing to say. It reads weekends-only
 	// like the unconfigured case, but through a real (always-false) predicate.
-	return (epochMs: number) => keys.has(localDateKey(epochMs));
+	return (epochMs: number) => keys.has(localDateKey(epochMs, backend));
 }

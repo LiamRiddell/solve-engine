@@ -283,6 +283,8 @@ export class LexerToken implements Token {
     public col: number,
     /** See {@link Token.sourceEnd}. Set only on normalizer-fused tokens. */
     public sourceEnd?: number,
+    /** See {@link Token.fault}. Set only on a fused token standing for a run the engine refuses to read. */
+    public fault?: { readonly code: string; readonly message: string },
   ) {}
 }
 

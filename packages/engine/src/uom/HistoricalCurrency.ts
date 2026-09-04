@@ -161,10 +161,11 @@ export function tryConsumeCurrencyOnDate(parser: Parser, to: string, from?: stri
 
 	parser.consume(); // "on"
 	parser.consume(); // the date literal
-	const date = new Date(Number(dateToken.value));
-	// Built with new Date(year, month - 1, day) (local midnight) by the datetime
-	// normalizer, so it reads back the same way in local fields.
-	return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+	// Built at local midnight by the datetime normaliser through the engine's
+	// own calendar backend, which the parser carries, so it reads back as the
+	// same local day through that backend.
+	const date = parser.getCalendar().fields(Number(dateToken.value));
+	return `${date.year}-${pad2(date.month0 + 1)}-${pad2(date.day)}`;
 }
 
 /**

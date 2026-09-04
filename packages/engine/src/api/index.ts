@@ -35,11 +35,19 @@ export type { EngineConfigOverride } from "@solve-js/constants/Configuration";
 // subpaths keep exporting them; this is the same binding under the name a
 // first-time reader reaches for.
 export { Value, ValueType } from "@solve-js/vm/Value";
+export type { DatetimeGrain } from "@solve-js/vm/Value";
 export { formatValue } from "@solve-js/format/FormatEngine";
 export type { FormattingSettings } from "@solve-js/format/FormattingSettings";
 
+// Pin the zone the engine reads dates in. The zone belongs to the calendar
+// backend, which already owns what "local" means, so this factory is the one
+// knob for it and there is deliberately no `date.zone` config field beside it.
+export { dateCalendarInZone } from "@solve-js/engine";
+
 export { ExpressionEngine, SNAPSHOT_FORMAT, SNAPSHOT_VERSION, SnapshotErrorCodes } from "@solve-js/engine";
 export type { Explanation, ExplanationStep } from "@solve-js/engine";
+export type { CalendarBackend, CalendarFields, ZonedFields } from "@solve-js/engine";
+export type { DateReading, DateReadingPolicy, DateOrderSource, ResolvedDateOrder } from "@solve-js/engine";
 export type {
   EngineOptions,
   EngineRestoreOptions,

@@ -116,9 +116,14 @@ describe("the rows this unblocked", () => {
 
 describe("what must not be swallowed", () => {
 	test("an invalid calendar date is not a date", () => {
-		// February never has thirty days, so these tokens were never a literal
-		// and must fall back rather than rolling over into March.
-		expect(() => evaluate("February 30, 2020")).toThrow();
+		// February never has thirty days, so these tokens are not a date, and the
+		// literal must never roll over into March. It used to fall back to
+		// implicit multiplication and throw on what the parser was left holding;
+		// it now says what is wrong, which is the same refusal reported better.
+		const value = evaluate("February 30, 2020");
+		expect(value.type).toBe(ValueType.Error);
+		expect(value.value).toBe("DATE_NOT_A_CALENDAR_DAY");
+		expect(value.unit).toBe('"February 30, 2020" is not a real date: February 2020 has 29 days.');
 	});
 
 	test("`may` as an ordinary word is untouched when no number follows", () => {

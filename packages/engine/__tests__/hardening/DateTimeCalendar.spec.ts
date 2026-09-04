@@ -39,6 +39,16 @@ function evaluate(source: string) {
 const num = (source: string) => evaluate(source).toNumber();
 
 /**
+ * The same evaluation with the refusal switched off, so a run that now
+ * reports a fault answers the number it answered before this release. Used to
+ * keep the old expectation beside the new one rather than losing it.
+ */
+function asArithmetic(source: string): number {
+	const engine = newTrackedEngine({ config: { date: { onAmbiguous: "arithmetic" } } });
+	return engine.evaluateExpression(source).toNumber();
+}
+
+/**
  * Local midnight for a calendar date, mirroring how `buildDateToken()`
  * constructs a date literal. Using it for the expected value is what keeps
  * these tests from asserting one particular host timezone.
@@ -65,12 +75,17 @@ describe("leap years, including the century rule", () => {
 		expect(value.toNumber()).toBe(localMidnight(2024, 2, 29));
 	});
 
-	test("February 29 does not exist in 2023, so the literal declines and the tokens stay arithmetic", () => {
-		// 2023 - 2 - 29 = 1992. Falling back is the documented behaviour for a
-		// minus-separated triple that is not a real date.
+	test("February 29 does not exist in 2023, so the literal is refused by name", () => {
+		// This used to answer 1992, the subtraction the run is spelled like. An
+		// ISO-shaped run has one reading and nothing to fall back to, so a
+		// rollover here is a date attempt that failed rather than arithmetic that
+		// looked like one.
 		const value = evaluate("2023-02-29");
-		expect(value.type).toBe(ValueType.Number);
-		expect(value.toNumber()).toBe(1992);
+		expect(value.type).toBe(ValueType.Error);
+		expect(value.value).toBe("DATE_NOT_A_CALENDAR_DAY");
+		expect(value.unit).toBe('"2023-02-29" is not a real date: February 2023 has 28 days.');
+		// And the old answer is one setting away.
+		expect(asArithmetic("2023-02-29")).toBe(1992);
 	});
 
 	test("2000 is a leap year: divisible by 400", () => {
@@ -80,11 +95,13 @@ describe("leap years, including the century rule", () => {
 	});
 
 	test("1900 is not a leap year: divisible by 100 but not 400", () => {
-		expect(evaluate("1900-02-29").type).toBe(ValueType.Number);
+		expect(evaluate("1900-02-29").type).toBe(ValueType.Error);
+		expect(asArithmetic("1900-02-29")).toBe(1869);
 	});
 
 	test("2100 is not a leap year either", () => {
-		expect(evaluate("2100-02-29").type).toBe(ValueType.Number);
+		expect(evaluate("2100-02-29").type).toBe(ValueType.Error);
+		expect(asArithmetic("2100-02-29")).toBe(2069);
 	});
 
 	test("`days in February` follows the same century rule", () => {
@@ -101,7 +118,12 @@ describe("leap years, including the century rule", () => {
 
 	test("the European spelling of February 29 agrees with the ISO one", () => {
 		expect(evaluate("29/02/2024").toNumber()).toBe(localMidnight(2024, 2, 29));
-		expect(evaluate("29/02/2023").type).toBe(ValueType.Number);
+		// Both spellings of the impossible day are refused the same way, which is
+		// the agreement this test is about; it used to be that both fell through
+		// to arithmetic instead.
+		expect(evaluate("29/02/2023").type).toBe(ValueType.Error);
+		expect(evaluate("29/02/2023").value).toBe("DATE_NOT_A_CALENDAR_DAY");
+		expect(evaluate("2023-02-29").value).toBe("DATE_NOT_A_CALENDAR_DAY");
 	});
 
 	test("a leap day's weekday is right two centuries out in each direction", () => {
@@ -261,12 +283,21 @@ describe("date literals versus the arithmetic they look like", () => {
 		expect(evaluate("2024-05-3").toNumber()).toBe(localMidnight(2024, 5, 3));
 	});
 
-	test("an out-of-range month or day in ISO shape falls back to arithmetic", () => {
+	test("a SPACED chain is arithmetic whatever its groups say", () => {
+		// Adjacency still decides date-versus-arithmetic before any shape or
+		// order is considered, so these are untouched by the refusal below.
 		expect(num("2024 - 13 - 01")).toBe(2010);
 		expect(num("2024 - 05 - 32")).toBe(1987);
-		// Unspaced too, where adjacency alone would have let them through.
-		expect(num("2024-13-01")).toBe(2010);
-		expect(num("2024-05-32")).toBe(1987);
+	});
+
+	test("while the unspaced run is a date attempt, and is refused rather than answered", () => {
+		// These used to answer 2,010 and 1,987. Written as one run they are
+		// unmistakably ISO-shaped, and an ISO shape has no second reading to fall
+		// to, so the honest answer is what is wrong with them.
+		expect(evaluate("2024-13-01").value).toBe("DATE_NOT_A_CALENDAR_DAY");
+		expect(evaluate("2024-05-32").value).toBe("DATE_NOT_A_CALENDAR_DAY");
+		expect(asArithmetic("2024-13-01")).toBe(2010);
+		expect(asArithmetic("2024-05-32")).toBe(1987);
 	});
 
 	test("the US format still requires a 2 or 4 digit year, so short chains stay arithmetic", () => {
@@ -303,12 +334,23 @@ describe("month name dates reject days that do not exist", () => {
 		expect(evaluate("9 March 2024").toNumber()).toBe(localMidnight(2024, 3, 9));
 	});
 
-	test("February 29 in a common year does not", () => {
-		expect(() => evaluate("February 29, 2023")).toThrow();
+	test("February 29 in a common year is refused, by name rather than by a throw", () => {
+		// This used to fall through to implicit multiplication, and the line threw
+		// on the tokens the parser was left holding. A spelled month is
+		// unmistakably a date attempt, so the answer is now what is wrong with it.
+		const value = evaluate("February 29, 2023");
+		expect(value.type).toBe(ValueType.Error);
+		expect(value.value).toBe("DATE_NOT_A_CALENDAR_DAY");
+		expect(value.unit).toBe('"February 29, 2023" is not a real date: February 2023 has 28 days.');
 	});
 
-	test("nor does a 30th of February or a 32nd of anything", () => {
-		expect(() => evaluate("February 30, 2024")).toThrow();
+	test("and so is a 30th of February", () => {
+		expect(evaluate("February 30, 2024").value).toBe("DATE_NOT_A_CALENDAR_DAY");
+	});
+
+	test("while a 32nd of anything still declines, because it is no month's day at all", () => {
+		// The boundary: only a ROLLOVER refuses. A group out of range for its role
+		// is not clearly a date attempt, so it keeps the behaviour it had.
 		expect(() => evaluate("March 32, 2024")).toThrow();
 	});
 });

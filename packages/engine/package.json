@@ -207,6 +207,16 @@
         "types": "./dist/testing.d.cts",
         "default": "./dist/testing.cjs"
       }
+    },
+    "./temporal": {
+      "import": {
+        "types": "./dist/temporal.d.ts",
+        "default": "./dist/temporal.js"
+      },
+      "require": {
+        "types": "./dist/temporal.d.cts",
+        "default": "./dist/temporal.cjs"
+      }
     }
   },
   "scripts": {
@@ -225,6 +235,7 @@
     "@types/node": "^26.4.0",
     "convert": "^7.0.0",
     "jest": "^30.5.0",
+    "temporal-polyfill": "1.0.4",
     "ts-jest": "^29.4.12",
     "tsup": "8.5.1",
     "typescript": "5.9.3"

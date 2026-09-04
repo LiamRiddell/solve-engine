@@ -648,7 +648,17 @@ export class AsyncResolutionBatcher {
 			// back to it after execution.
 			const stackBefore = this.vm.getStack().length;
 			try {
-				const result = executeBytecode(entry.bytecode, this.vm);
+				// The re-run carries the engine's calendar backend and network
+				// switch, as the first pass did through the engine's own line
+				// context: a plugin function or `as` converter on this line must
+				// compute through the same backend both times. The cross-line
+				// closures are not rebuilt here; a settled live value re-runs one
+				// line, and the batcher has no document to read them from.
+				const result = executeBytecode(entry.bytecode, this.vm, undefined, undefined, {
+					lineIndex: lineNumber,
+					networkEnabled: this.vm.context.networkEnabled,
+					calendar: this.vm.context.calendar,
+				});
 				while (this.vm.getStack().length > stackBefore) {
 					this.vm.pop();
 				}

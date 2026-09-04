@@ -14,6 +14,7 @@
 
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import * as fs from "node:fs";
 import * as path from "node:path";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -76,7 +77,7 @@ const subpaths = [
   "engine", "vm", "format", "language", "packages", "constants",
   "lexer", "parser", "normalizer", "resolvers",
   "errors", "utilities", "uom", "services", "worker",
-  "errors", "utilities", "uom", "services", "testing",
+  "errors", "utilities", "uom", "services", "testing", "temporal",
 ];
 
 for (const subpath of subpaths) {
@@ -92,6 +93,83 @@ for (const subpath of subpaths) {
     failures.push(`subpath ${subpath}`);
   }
 }
+
+// The Temporal backend is opt-in, and the promise is that a host which does
+// not opt in pays nothing: the entry must import no polyfill, install no
+// global, and be unreachable from the root entry.
+const temporal = await import(pathToFileURL(path.join(dist, "temporal.js")).href);
+
+check("temporal: the entry exports createTemporalCalendar", () => {
+  if (typeof temporal.createTemporalCalendar !== "function") {
+    throw new Error(`createTemporalCalendar is ${typeof temporal.createTemporalCalendar}, expected function`);
+  }
+});
+
+check("temporal: importing the entry installs no global Temporal", () => {
+  // A native runtime may have one; the entry must not be the reason.
+  if ("Temporal" in globalThis && process.execArgv.some((flag) => flag.includes("temporal"))) return;
+  if (typeof globalThis.Temporal !== "undefined" && Number.parseInt(process.versions.node, 10) < 26) {
+    throw new Error("globalThis.Temporal was defined after importing solve-engine/temporal on a Node without one");
+  }
+});
+
+check("temporal: the built entry imports no polyfill", () => {
+  const source = fs.readFileSync(path.join(dist, "temporal.js"), "utf8");
+  if (/temporal-polyfill|@js-temporal/.test(source)) {
+    throw new Error("dist/temporal.js names a polyfill package");
+  }
+});
+
+check("temporal: the root entry carries the adapter but no polyfill", () => {
+  // The root entry reaches the adapter deliberately: the engine computes on
+  // Temporal wherever the runtime has one, so the few kilobytes that translate
+  // the backend's contract onto it have to be in the default bundle. What must
+  // never be in there is a polyfill, which is twenty times the size and which
+  // a runtime with its own Temporal would only duplicate.
+  //
+  // Walk every chunk the root entry loads, transitively, and check both halves
+  // of that: the adapter is present (so a change that quietly dropped the
+  // default back to Date is caught), and no polyfill package is named.
+  const seen = new Set();
+  const queue = ["index.js"];
+  let carriesAdapter = false;
+  while (queue.length > 0) {
+    const file = queue.pop();
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const source = fs.readFileSync(path.join(dist, file), "utf8");
+    if (/PlainDateTime/.test(source)) carriesAdapter = true;
+    if (/temporal-polyfill|@js-temporal/.test(source)) {
+      throw new Error(`${file}, reached from the root entry, names a polyfill package`);
+    }
+    for (const match of source.matchAll(/from\s*['"]\.\/([^'"]+)['"]|import\s*['"]\.\/([^'"]+)['"]/g)) {
+      queue.push(match[1] ?? match[2]);
+    }
+  }
+  if (seen.size < 2) throw new Error("the root entry loaded no chunks, so the walk proved nothing");
+  if (!carriesAdapter) {
+    throw new Error("the root entry reaches no Temporal adapter, so the engine cannot default to Temporal");
+  }
+});
+
+check("temporal: importing the root entry installs no global Temporal", () => {
+  // Reading globalThis.Temporal is how the default is chosen; defining it
+  // would be the engine changing the runtime out from under its host.
+  if ("Temporal" in globalThis && process.execArgv.some((flag) => flag.includes("temporal"))) return;
+  if ("Temporal" in globalThis) {
+    throw new Error("globalThis.Temporal was defined after importing solve-engine on a Node without one");
+  }
+});
+
+check("temporal: refuses a value that is not a Temporal, with a coded error", () => {
+  try {
+    temporal.createTemporalCalendar({});
+  } catch (err) {
+    if (err?.code !== "TEMPORAL_IMPLEMENTATION_INVALID") throw new Error(`threw ${err?.code ?? err}`);
+    return;
+  }
+  throw new Error("accepted an empty object as a Temporal implementation");
+});
 
 console.log("");
 if (failures.length > 0) {

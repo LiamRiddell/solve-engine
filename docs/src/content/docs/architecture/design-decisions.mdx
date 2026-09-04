@@ -87,3 +87,46 @@ them back for the recoverable ones while debugging.
 Correct holiday handling needs a region-specific, continuously updated calendar.
 Offering an approximation would be worse than not offering it, because the
 answer would look authoritative while being wrong for most users.
+
+## One calendar backend, with Date as the default
+
+Every date the engine holds is an instant: epoch milliseconds, with no time
+zone attached. Every date question is a calendar question about that instant:
+which day it falls on, what the same time a month later is, whether it is a
+Saturday, how it is written out. Answering needs a time zone and a set of
+calendar rules, and the engine used to take both from the JavaScript `Date`
+object, read in the host process's zone, at some twenty separate places.
+
+Those places now go through one interface, `CalendarBackend`, chosen per engine
+with the `calendar` option. Its methods take and return plain numbers and
+strings, never a `Date` or a `Temporal` object, so a date value's payload stays
+a number and nothing a worker sends or a snapshot stores changes shape. The
+arithmetic that does not depend on a zone once the calendar fields are known (a
+day number, the ISO week) is shared by every backend rather than reimplemented
+behind each one, which is what keeps two backends from disagreeing about it.
+
+The default is the `Date` backend, and it stays the default. It is the same
+code that ran before the interface existed, moved rather than rewritten, so an
+engine that configures nothing computes exactly what it did. It is also the one
+calendar every supported runtime has. `Temporal`, the API that makes a backend
+with a zone of its own possible, is not in Safari, nor in Node 22 and 24, which
+the engine supports, and the smallest polyfill adds about twenty kilobytes to a
+bundle that a host doing plain arithmetic never needs. The engine therefore
+never imports one. A `Temporal` backend is planned as a separate entry point
+that takes the host's own `Temporal` implementation, native or polyfilled, so a
+host that wants it opts in and pays for it then.
+
+The boundary: results never depend on which backend is in use, except where a
+backend adds a capability the `Date` one lacks, a per-engine time zone being
+the one in view. Every site the engine owns reads its backend: the VM's date
+opcodes, the plugin functions and `as` converters, the rules that fuse a date
+literal while normalising, and the parser for the forms that read a literal
+while parsing (`days in <period>`, the stocks and historical-currency date
+phrases). Two sites sit outside the engine and are told separately.
+`formatValue` is a free function with no engine in hand, so the backend a date
+is written out through is a field on its settings, `calendar`, and a host
+passes the same backend it gave the engine. A worker runtime takes it on
+`WorkerRuntimeOptions.calendar`: a backend is an object of functions and does
+not cross the message boundary, so a host with its own bakes it into its worker
+entry, as it does for a custom package. The inline offload worker computes with
+the `Date` backend.

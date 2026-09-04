@@ -5,6 +5,7 @@ import { formatValue } from "@solve-js/format/FormatEngine";
 import { evaluateDocument } from "@solve-js/engine/evaluateDocument";
 import { ValueType } from "@solve-js/vm/Value";
 import { newTrackedEngine } from "@tools/trackedEngine";
+import { blockHasTable, collectAll, groupExamples } from "@tools/docExampleCollector";
 
 /**
  * Evaluates every example in the published documentation and asserts it still
@@ -59,117 +60,8 @@ const DOCS_ROOT = path.join(REPO_ROOT, "docs/src/content/docs");
  */
 const EXTRA_FILES = [path.join(REPO_ROOT, "README.md")];
 
-/** One `solve` line: an expression, and the result documented beside it (or none). */
-interface Example {
-  file: string;
-  line: number;
-  expression: string;
-  expected: string | null;
-}
-
-/** One `solve-doc` block: a whole document, and the results documented within it. */
-interface DocBlock {
-  file: string;
-  line: number;
-  /** Every line in order, blanks and table rows included, so line N maps to result N. */
-  rows: Array<{ line: number; expression: string; expected: string | null }>;
-}
-
-/** Split a line on its LAST `//`, the expected-result marker. */
-function splitExpectation(text: string): { expression: string; expected: string | null } {
-  const idx = text.lastIndexOf("//");
-  if (idx === -1) return { expression: text, expected: null };
-  return { expression: text.slice(0, idx).trim(), expected: text.slice(idx + 2).trim() };
-}
-
-/** Whether a whole-document block holds a markdown table, which routes it to the batch pass. */
-function blockHasTable(block: DocBlock): boolean {
-  return block.rows.some((r) => /^\s*\|/.test(r.expression));
-}
-
-function collectAll(
-  dir: string,
-  extraFiles: string[] = [],
-): { examples: Example[]; docBlocks: DocBlock[] } {
-  const examples: Example[] = [];
-  const docBlocks: DocBlock[] = [];
-
-  const parseFile = (full: string): void => {
-    const lines = fs.readFileSync(full, "utf8").split(/\r?\n/);
-    // Block state: null outside any block, "line" inside ```solve, or a
-    // DocBlock being accumulated inside ```solve-doc.
-    let mode: "none" | "line" | "doc" = "none";
-    let doc: DocBlock | null = null;
-
-    lines.forEach((raw, i) => {
-      const text = raw.trim();
-      const fence = text.match(/^```(\S*)/);
-
-      if (mode === "none") {
-        if (fence && fence[1] === "solve") mode = "line";
-        else if (fence && fence[1] === "solve-doc") {
-          mode = "doc";
-          doc = { file: full, line: i + 1, rows: [] };
-        }
-        return;
-      }
-
-      // A closing fence ends whichever block is open.
-      if (fence && fence[1] === "") {
-        if (mode === "line") {
-          // Close the group. Without this, separate blocks (and separate
-          // files) run against one shared engine, so a variable assigned in
-          // one example silently leaks into the next. That is not a
-          // theoretical concern: it made a symbolic example resolve an
-          // intended-unknown `b` to a value assigned three sections earlier.
-          examples.push({ file: full, line: i + 1, expression: "", expected: null });
-        } else if (doc) {
-          docBlocks.push(doc);
-          doc = null;
-        }
-        mode = "none";
-        return;
-      }
-
-      if (mode === "doc" && doc) {
-        // Keep every line in order, blanks and table rows included, so a
-        // result read back by position lines up with the source. The engine
-        // treats a blank as a boundary and a table row as skippable markdown.
-        const { expression, expected } = splitExpectation(text);
-        doc.rows.push({ line: i + 1, expression, expected });
-        return;
-      }
-
-      // mode === "line"
-      // A blank line inside a block separates independent examples.
-      if (text === "") {
-        examples.push({ file: full, line: i + 1, expression: "", expected: null });
-        return;
-      }
-      const { expression, expected } = splitExpectation(text);
-      examples.push({ file: full, line: i + 1, expression, expected });
-    });
-  };
-
-  const walk = (current: string): void => {
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        walk(full);
-        continue;
-      }
-      if (!/\.mdx?$/.test(entry.name)) continue;
-      parseFile(full);
-    }
-  };
-
-  if (fs.existsSync(dir)) walk(dir);
-  for (const file of extraFiles) {
-    if (fs.existsSync(file)) parseFile(file);
-  }
-  return { examples, docBlocks };
-}
-
+// The collector lives in `tools/docExampleCollector.ts`, shared with the
+// Temporal differential suite so both read the same corpus.
 const { examples, docBlocks } = collectAll(DOCS_ROOT, EXTRA_FILES);
 
 describe("documented examples evaluate as documented", () => {
@@ -231,17 +123,7 @@ describe("documented examples evaluate as documented", () => {
 
   // ── Per-line ```solve blocks ────────────────────────────────────────────
   // Group consecutive non-blank lines so a multi-line example shares one engine.
-  const groups: Example[][] = [];
-  let current: Example[] = [];
-  for (const ex of examples) {
-    if (ex.expression === "") {
-      if (current.length) groups.push(current);
-      current = [];
-    } else {
-      current.push(ex);
-    }
-  }
-  if (current.length) groups.push(current);
+  const groups = groupExamples(examples);
 
   groups.forEach((group, gi) => {
     const label = group

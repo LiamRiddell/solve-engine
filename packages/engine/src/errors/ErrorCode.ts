@@ -191,6 +191,12 @@ export const CoreErrorCodes = {
   /** A live-data form evaluated on an engine whose host switched the network off (`network.enabled: false`, see `constants/Configuration.ts`'s `NetworkConfig`). A recoverable Error value, raised by the VM for a currency conversion with no primed rate and for a plugin function that returned a promise, and by `createQueryResolver`'s plugin function when its preflight was skipped. Names the setting, so the reader knows it is policy rather than an outage. */
   NETWORK_DISABLED: "NETWORK_DISABLED",
 
+  // ── Temporal calendar backend (temporal/TemporalCalendar.ts) ──
+  /** `createTemporalCalendar()` was handed something that is not a usable `Temporal` implementation: no `Now.instant`, `Now.timeZoneId`, `Instant.fromEpochMilliseconds` or `PlainDateTime.from`. Raised at construction, naming the missing member, rather than letting the first date computation fail on it obscurely. */
+  TEMPORAL_IMPLEMENTATION_INVALID: "TEMPORAL_IMPLEMENTATION_INVALID",
+  /** The `timeZone` given to `createTemporalCalendar()` is not one the `Temporal` implementation knows. Raised at construction, so a misspelt zone is a configuration error the host sees once, not a `RangeError` from inside every date the engine computes. */
+  TEMPORAL_TIME_ZONE_UNKNOWN: "TEMPORAL_TIME_ZONE_UNKNOWN",
+
   // ── Snapshot / restore (engine/EngineSnapshot.ts, engine/ExpressionEngine.ts) ──
   /** `fromJSON()` handed an object that is not a snapshot at all, or whose serialised-shape version does not match this engine's reader. The versioning gate that refuses an incompatible snapshot clearly rather than restoring it wrongly. See `engine/EngineSnapshot.ts`'s `assertRestorable()`. */
   SNAPSHOT_VERSION_MISMATCH: "SNAPSHOT_VERSION_MISMATCH",
@@ -206,6 +212,8 @@ export const CoreErrorCodes = {
   CONFIG_PROPERTY_NOT_FOUND: "CONFIG_PROPERTY_NOT_FOUND",
 
   // ── Package/lexer registration-time collisions (lexer/ExpressionLexer.ts) ──
+  /** `calendar: "temporal"` was asked for on a runtime with no `Temporal`. Refused rather than silently computing on `Date`, because a host that named Temporal did so to be sure what it was computing on. Recoverable. */
+  CALENDAR_TEMPORAL_UNAVAILABLE: "CALENDAR_TEMPORAL_UNAVAILABLE",
   PLUGIN_OPERATOR_COLLISION: "PLUGIN_OPERATOR_COLLISION",
   PLUGIN_KEYWORD_COLLISION: "PLUGIN_KEYWORD_COLLISION",
   PLUGIN_UNIT_COLLISION: "PLUGIN_UNIT_COLLISION",
@@ -233,8 +241,31 @@ export const CoreErrorCodes = {
 export type CoreErrorCode = (typeof CoreErrorCodes)[keyof typeof CoreErrorCodes];
 
 /**
- * The aggregated catalog type. Currently just `CoreErrorCode`, union in
- * each package's own code-object type here as Phase 5 converts it, e.g.
- * `CoreErrorCode | WeatherErrorCode | StocksErrorCode | ...`.
+ * Codes for the datetime forms whose failure is raised OUTSIDE the datetime
+ * package.
+ *
+ * These sit here rather than beside the datetime parselets, which is where a
+ * package's own code object belongs, because the two sites that raise them are
+ * `vm/VM.ts` (the `in <zone>` branch of the unit-conversion opcode) and
+ * `calendar/DateCalendar.ts` (the zone-bound backend factory), and neither may
+ * import from `packages/`. A code object in the datetime package would put the
+ * name a core file needs on the wrong side of that line.
  */
-export type ErrorCode = CoreErrorCode;
+export const DatetimeErrorCodes = {
+  /** `2026-04-03 in Atlantis`: a Datetime met `in <name>` and the name is neither a zone this engine knows nor a unit. Before this code the epoch-millisecond payload was simply labelled with the name, and the line answered a fourteen-digit quantity in a unit called Atlantis. */
+  DATETIME_ZONE_UNKNOWN: "DATETIME_ZONE_UNKNOWN",
+  /** `2026-04-03 in furlongs`: the same handler, where the name IS a real unit. Separate from `DATETIME_ZONE_UNKNOWN` because the two mistakes have different fixes: one is a misspelt zone, the other is a category error, and a message that suggests checking the spelling of `furlongs` would be no help at all. */
+  DATETIME_NOT_CONVERTIBLE: "DATETIME_NOT_CONVERTIBLE",
+  /** `dateCalendarInZone("Europe/Atlantis")`: the zone-bound `Date` backend factory, given a zone this runtime's `Intl` cannot format with. Raised at construction rather than per line, because a backend that cannot compute in the zone it was asked for must not silently answer in another one. */
+  DATE_ZONE_UNKNOWN: "DATE_ZONE_UNKNOWN",
+} as const;
+
+/** Every code from {@link DatetimeErrorCodes}. */
+export type DatetimeErrorCode = (typeof DatetimeErrorCodes)[keyof typeof DatetimeErrorCodes];
+
+/**
+ * The aggregated catalog type. Currently `CoreErrorCode` and
+ * `DatetimeErrorCode`, union in each package's own code-object type here as
+ * Phase 5 converts it, e.g. `CoreErrorCode | WeatherErrorCode | ...`.
+ */
+export type ErrorCode = CoreErrorCode | DatetimeErrorCode;

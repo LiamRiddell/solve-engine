@@ -8,6 +8,8 @@ import { FormattingSettings, DEFAULT_FORMATTING_SETTINGS } from "./FormattingSet
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { columnMajorToRowMajor } from "@solve-js/vm/MatrixOps";
 import { formatSymbolic, type SymbolicNode } from "@solve-js/symbolic";
+import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
+import { isFixedOffset, longDateInZone, timeOfDayInZone } from "@solve-js/calendar/IntlZone";
 
 function formatNumber(value: number, locale: ILocale, settings: FormattingSettings, decimalPlaces?: number): string {
   const sep = settings.floatResult.enableSeperator;
@@ -165,32 +167,51 @@ function formatBoolean(value: boolean): string {
  * not exactly local midnight, bare date literals ("today", "17/11/2025")
  * always anchor to local midnight, and showing "00:00:00" on every one of
  * those would be noise, not information.
+ *
+ * Reads the calendar backend on the settings, or the built-in `Date` one
+ * when the settings name none: `formatValue` is a free function a host calls
+ * with a value and settings, with no engine in hand, so the host passes the
+ * backend its engine computes with (`FormattingSettings.calendar`) and a
+ * date shows the day it was computed on, in that backend's zone.
  */
-function formatDatetime(value: number, locale: ILocale, settings: FormattingSettings): string {
-  const d = new Date(value);
+function formatDatetime(value: number, locale: ILocale, settings: FormattingSettings, zone?: string): string {
+  const calendar = settings.calendar ?? DATE_CALENDAR;
   const format = settings.dateResult?.format ?? "long";
-  const isMidnight = d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0 && d.getMilliseconds() === 0;
+
+  // A date that names a zone is read in it. `3 April 2026 in Tokyo` is Tokyo's
+  // 3 April, and rendering the instant behind it in the reader's own zone
+  // showed them 2 April: the right moment, answering a question nobody asked.
+  //
+  // Only a named zone, deliberately. An ISO literal carrying `Z` or an offset
+  // records the synthetic fixed-offset form, and how those display is a
+  // separate question this does not answer: they keep reading in the zone the
+  // engine computes in, as they always have.
+  const named = zone !== undefined && !isFixedOffset(zone);
+  const d = named ? calendar.fieldsInZone(zone, value) : calendar.fields(value);
+  const millisecond = named ? 0 : calendar.fields(value).millisecond;
+  const isMidnight = d.hour === 0 && d.minute === 0 && d.second === 0 && millisecond === 0;
 
   // The spelled-out default, localised through the locale's own names.
   if (format === "long") {
-    const dateStr = d.toLocaleDateString(locale.code, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+    const dateStr = named ? longDateInZone(zone, value, locale.code) : calendar.formatLongDate(value, locale.code);
     if (isMidnight) return `= ${dateStr}`;
-    return `= ${dateStr}, ${d.toLocaleTimeString(locale.code)}`;
+    const timeStr = named ? timeOfDayInZone(zone, value, locale.code) : calendar.formatTimeOfDay(value, locale.code);
+    return `= ${dateStr}, ${timeStr}`;
   }
 
   // The numeric forms, built from the local calendar fields so they read the
   // same regardless of the JS runtime's own default locale.
   const p2 = (n: number) => String(n).padStart(2, "0");
-  const year = d.getFullYear();
-  const month = p2(d.getMonth() + 1);
-  const day = p2(d.getDate());
+  const year = d.year;
+  const month = p2(d.month0 + 1);
+  const day = p2(d.day);
   let datePart: string;
   if (format === "iso") datePart = `${year}-${month}-${day}`;
   else if (format === "dmy") datePart = `${day}/${month}/${year}`;
   else datePart = `${month}/${day}/${year}`; // mdy
 
   if (isMidnight) return `= ${datePart}`;
-  const time = `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+  const time = `${p2(d.hour)}:${p2(d.minute)}:${p2(d.second)}`;
   // ISO joins date and time with `T`; the slash forms with a space.
   return format === "iso" ? `= ${datePart}T${time}` : `= ${datePart} ${time}`;
 }
@@ -479,7 +500,7 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
     case ValueType.Boolean:
       return formatBoolean(value.value as boolean);
     case ValueType.Datetime:
-      return formatDatetime(value.value as number, locale, us);
+      return formatDatetime(value.value as number, locale, us, value.zone);
     case ValueType.Uom:
       return formatUom(value.value as number, value.unit, locale, us, value.exact);
     case ValueType.Matrix:

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "@jest/globals";
 import { Token } from "@solve-js/lexer/Token";
 import { tryParseDatePhrase } from "@solve-js/packages/stocks/DatePhrase";
+import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 
 function tok(type: string, value: string): Token {
 	return { type, typeId: 0, value, text: value, offset: 0, lineBreaks: 0, line: 1, col: 1 } as Token;
@@ -16,6 +17,8 @@ const STRING = (v: string) => tok("STRING", v);
 function mockParser(tokens: Token[]) {
 	const queue = [...tokens];
 	return {
+		// The phrase reads its calendar backend off the parser, as a parselet does.
+		getCalendar: () => DATE_CALENDAR,
 		peek: () => (queue.length > 0 ? queue[0] : undefined),
 		consume: (expected?: string) => {
 			const t = queue.shift();

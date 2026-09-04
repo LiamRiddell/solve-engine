@@ -5,6 +5,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { stockFnParselet, bareStockTickerParselet } from "@solve-js/packages/stocks/parselets/StockParselet";
 import { STOCK_TICKER_TYPE } from "@solve-js/packages/stocks/normalizer/StockTickerNormalizerRule";
 import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
+import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 
 // The parselets emit their plugin calls by NAME (builder.emitPluginCall), and
 // StocksPackage.ts keys pluginFunctions by these names under the package name
@@ -38,6 +39,8 @@ const STOCK_TICKER = (v: string) => tok(STOCK_TICKER_TYPE, v);
 function mockParser(tokens: Token[]) {
 	const queue = [...tokens];
 	return {
+		// The date phrase reads its calendar backend off the parser, as a parselet does.
+		getCalendar: () => DATE_CALENDAR,
 		peek: () => (queue.length > 0 ? queue[0] : undefined),
 		consume: (expected?: string) => {
 			const t = queue.shift();

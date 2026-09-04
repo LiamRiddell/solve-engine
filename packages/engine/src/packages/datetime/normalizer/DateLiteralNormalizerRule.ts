@@ -3,7 +3,15 @@ import { tokenTypeId } from "@solve-js/lexer/Token";
 import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { parseIso8601 } from "@solve-js/packages/datetime/Iso8601";
-import type { DateInputOrder } from "@solve-js/constants/Configuration";
+import {
+  readNumericDate,
+  type DatetimeErrorCode,
+  type NumericDateSeparator,
+  type ResolvedDateOrder,
+} from "../DateReading";
+import type { DateAmbiguity } from "@solve-js/constants/Configuration";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
+import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 
 /**
  * Token type a fused date literal is rewritten to.
@@ -13,6 +21,20 @@ import type { DateInputOrder } from "@solve-js/constants/Configuration";
  */
 export const DATETIME_LITERAL_TYPE = "DATETIME_LITERAL";
 const DATETIME_LITERAL_TYPE_ID = tokenTypeId(DATETIME_LITERAL_TYPE);
+
+/**
+ * Token type a date-shaped run that no configured order can read is rewritten
+ * to, carrying the code and the message rather than a value.
+ *
+ * A separate type rather than a flag on the literal above, so the parselet for
+ * each is the shape of what it does: one pushes a date, the other reports a
+ * fault. `UnreadableDateParselet` compiles it to a plugin call returning an
+ * Error VALUE, which is what keeps a refusal off the throwing path and out of
+ * the bytecode format: no new opcode, no operand change, and
+ * `SNAPSHOT_VERSION` untouched.
+ */
+export const DATETIME_LITERAL_UNREADABLE_TYPE = "DATETIME_LITERAL_UNREADABLE";
+const DATETIME_LITERAL_UNREADABLE_TYPE_ID = tokenTypeId(DATETIME_LITERAL_UNREADABLE_TYPE);
 
 /** A pure digit string, guards against fusing hex/scientific/bigint-suffixed NUMBER tokens. */
 const PLAIN_INTEGER = /^\d+$/;
@@ -24,22 +46,6 @@ const DOT_DAY_MONTH = /^\d{1,2}\.\d{1,2}$/;
 /** Second NUMBER token of a dot-separated literal: the lexer re-enters
  * tokenizeNumber() AT the second dot, so the year keeps its leading dot. */
 const DOT_LEADING_YEAR = /^\.(\d{2}|\d{4})$/;
-
-/**
- * Day and month groups of a separator-separated literal, in any of the three
- * orderings below: one or two digits, padded or not.
- *
- * Deliberately NOT two digits exactly. Zero-padding is what ISO 8601 requires
- * of a serialized date, but it is not what people type: "2024-5-3" is an
- * ordinary way to write a date and has to keep working. The digit count is
- * still bounded because a group of three or more digits is not a date group at
- * all, and the calendar check in {@link buildDateToken} would not catch it on
- * its own ("030" reads back as day 30).
- *
- * What actually separates a date from the arithmetic it is spelled like is
- * adjacency, not padding. See {@link writtenAsOneRun}.
- */
-const DAY_OR_MONTH = /^\d{1,2}$/;
 
 /**
  * Whether every token in a run touches the next one in the source text, with
@@ -97,28 +103,12 @@ function writtenAsOneRun(tokens: Token[]): boolean {
 }
 
 /**
- * Resolves a year token's raw digit text to a 4-digit year.
- *
- * Accepts exactly 2 or 4 digits (matching the wiki's documented formats).
- * A 2-digit year is windowed using the common glibc `strptime("%y")`
- * convention: 00-68 -> 2000-2068, 69-99 -> 1969-1999. Any other digit
- * count (1 or 3 digits) is not a valid year shape and returns null so the
- * caller can decline the match and fall back to ordinary arithmetic.
- */
-function resolveYear(digits: string): number | null {
-  if (digits.length === 4) return Number(digits);
-  if (digits.length === 2) {
-    const yy = Number(digits);
-    return yy <= 68 ? 2000 + yy : 1900 + yy;
-  }
-  return null;
-}
-
-/**
  * Converts a validated day/month/year triple into a fused DATETIME_LITERAL
  * token, or null if the triple isn't a real calendar date (e.g. "30" for
  * February), letting the caller fall back to treating the source tokens
  * as ordinary arithmetic instead of a date.
+ *
+ * `calendar` is the backend the literal's local midnight is built with.
  */
 export function buildDateToken(
   day: number,
@@ -126,16 +116,18 @@ export function buildDateToken(
   year: number,
   sourceTokens: Token[],
   ruleName: string,
+  calendar: CalendarBackend,
 ): NormalizerMatch | null {
   if (month < 1 || month > 12 || day < 1 || day > 31) return null;
 
-  // Local midnight, consistent with formatDatetime()'s toLocaleString()
-  // display and DATE_NOW's Date.now() epoch, both of which are local-time.
-  const date = new Date(year, month - 1, day);
+  // Local midnight, consistent with formatDatetime()'s display and the
+  // DATE_NOW epoch, both of which are local-time.
+  const epochMs = calendar.localMidnight(year, month - 1, day);
   // Reject calendar rollover (e.g. day=30 in February) rather than silently
   // normalizing to March 2, a rollover almost always means the tokens were
   // never a date to begin with (e.g. "2-30-5" as chained subtraction).
-  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+  const built = calendar.fields(epochMs);
+  if (built.year !== year || built.month0 !== month - 1 || built.day !== day) {
     return null;
   }
 
@@ -144,7 +136,7 @@ export function buildDateToken(
   const fusedToken = new LexerToken(
     DATETIME_LITERAL_TYPE,
     DATETIME_LITERAL_TYPE_ID,
-    String(date.getTime()),
+    String(epochMs),
     text,
     first.offset,
     0,
@@ -152,6 +144,75 @@ export function buildDateToken(
     first.col,
   );
 
+  return { consumed: sourceTokens.length, replacement: [fusedToken], ruleName };
+}
+
+/**
+ * The source text a run of tokens covers, with one space wherever the tokens
+ * were not written touching.
+ *
+ * Reconstructed from the token offsets because a normaliser rule is handed
+ * tokens rather than the line they came from, and a refusal has to quote what
+ * the reader typed: `"29 February 2026"` and `"March 9, 2024"` read back the
+ * way they were written, while an adjacent run like `"03/04/2026"` reads back
+ * with nothing added.
+ *
+ * @param tokens - The run.
+ * @returns The reconstructed text.
+ */
+export function runText(tokens: Token[]): string {
+  let out = "";
+  let previousEnd = -1;
+  for (const token of tokens) {
+    const text = token.text ?? token.value;
+    if (previousEnd >= 0 && token.offset > previousEnd) out += " ";
+    out += text;
+    previousEnd = token.sourceEnd ?? token.offset + text.length;
+  }
+  return out;
+}
+
+/**
+ * Fuses a run that names no readable date into one
+ * {@link DATETIME_LITERAL_UNREADABLE_TYPE} token carrying the refusal.
+ *
+ * The code and message travel as JSON in the token's `value`, which is the
+ * only field a fused token has to carry a payload in, and `text` keeps the
+ * run exactly as typed so an editor still underlines what the reader wrote.
+ *
+ * Consuming the run rather than declining it is the whole point: declining
+ * would hand the same five tokens back to the parser, which reads them as the
+ * division they are spelled like, and answering 0.0004 for a date is the
+ * behaviour being fixed.
+ *
+ * @param code - The refusal's error code.
+ * @param message - The sentence the reader sees.
+ * @param sourceTokens - The run being replaced.
+ * @param ruleName - The rule name, for normaliser bookkeeping.
+ * @returns The match.
+ */
+export function faultMatch(
+  code: DatetimeErrorCode,
+  message: string,
+  sourceTokens: Token[],
+  ruleName: string,
+): NormalizerMatch {
+  const first = sourceTokens[0];
+  const text = runText(sourceTokens);
+  const fusedToken = new LexerToken(
+    DATETIME_LITERAL_UNREADABLE_TYPE,
+    DATETIME_LITERAL_UNREADABLE_TYPE_ID,
+    text,
+    text,
+    first.offset,
+    0,
+    first.line,
+    first.col,
+  );
+  // The reason travels on the token: `value` is what a parse error and the
+  // editor token API print, and a reader shown the engine's JSON is being
+  // shown its internals.
+  fusedToken.fault = { code, message };
   return { consumed: sourceTokens.length, replacement: [fusedToken], ruleName };
 }
 
@@ -226,7 +287,7 @@ const ISO_MAX_TOKENS = 16;
  * timestamp, when the match would end mid-token, or when the shape is
  * ISO-like but names no real instant (`2019-04-01T25:00:00`).
  */
-function fuseIsoTimestamp(tokens: Token[], pos: number, ruleName: string): NormalizerMatch | null {
+function fuseIsoTimestamp(tokens: Token[], pos: number, ruleName: string, calendar: CalendarBackend): NormalizerMatch | null {
   const first = tokens[pos];
   if (first.sourceEnd !== undefined) return null;
   let text = first.text;
@@ -260,7 +321,7 @@ function fuseIsoTimestamp(tokens: Token[], pos: number, ruleName: string): Norma
   // spellings cannot drift apart: an offset means what it means there, and a
   // timestamp with no offset is local time, exactly as a bare date literal is
   // local midnight.
-  const epochMs = parseIso8601(matched[0]);
+  const epochMs = parseIso8601(matched[0], calendar);
   if (epochMs === null) return null;
 
   const fusedToken = new LexerToken(
@@ -275,35 +336,6 @@ function fuseIsoTimestamp(tokens: Token[], pos: number, ruleName: string): Norma
     first.offset + matched[0].length,
   );
   return { consumed, replacement: [fusedToken], ruleName };
-}
-
-/**
- * Maps the three numeric groups of a slash- or hyphen-separated literal to a
- * (day, month, year) triple under an explicit {@link DateInputOrder}, or null
- * when a group is the wrong shape for its role (a non-4-digit year in `YMD`, a
- * year group that is neither two nor four digits in `DMY`/`MDY`).
- *
- * Only reached when the host has fixed an order, and only for a literal that
- * is not already an unambiguous ISO date: the rule reads a hyphen literal with
- * a four-digit leading group as ISO before it consults the order at all.
- * `'auto'` keeps the historic per-separator reading in the rule below and
- * never calls this.
- */
-function resolveOrderedGroups(
-  g0: string, g1: string, g2: string, order: Exclude<DateInputOrder, "auto">,
-): { day: number; month: number; year: number } | null {
-  if (order === "YMD") {
-    if (g0.length !== 4) return null;
-    if (!DAY_OR_MONTH.test(g1) || !DAY_OR_MONTH.test(g2)) return null;
-    return { year: Number(g0), month: Number(g1), day: Number(g2) };
-  }
-  // DMY and MDY: two 1-2 digit groups and a trailing 2- or 4-digit year.
-  if (!DAY_OR_MONTH.test(g0) || !DAY_OR_MONTH.test(g1)) return null;
-  const year = resolveYear(g2);
-  if (year === null) return null;
-  return order === "DMY"
-    ? { day: Number(g0), month: Number(g1), year }
-    : { day: Number(g1), month: Number(g0), year };
 }
 
 /**
@@ -351,9 +383,28 @@ function resolveOrderedGroups(
  * `DatePhrase.ts` is a narrower, deliberately-diverging grammar (US-style
  * bare SLASH dates, 4-digit-year-only) scoped to stock-history queries
  * neither of those needed to change for this to land.
+ *
+ * ## What a run no order can read does
+ * A date-shaped run the resolved order cannot read is REFUSED rather than
+ * handed back to the parser as division: `12/25/2026` on a day-first engine
+ * reports that there is no month 25 instead of answering 0.00, and
+ * `31/02/2026 + 1 day` reports that February 2026 has 28 days instead of
+ * answering "1.01 day". Which runs refuse and which still fall through to
+ * arithmetic is decided by shape, in `DateReading.ts`'s `classifyRun`, and the
+ * boundary is measured rather than aesthetic: a four-digit DENOMINATOR ends
+ * nothing anybody writes, while a four-digit NUMERATOR is ordinary division
+ * (`1000/10/5` is 20, `1024/8/2` is 64), so the two are treated differently on
+ * purpose. `date.onAmbiguous: 'arithmetic'` restores every previous value.
+ *
+ * `getCalendar` supplies the calendar backend the literal is built with, read
+ * per match so it follows the engine that registered the rule; the default
+ * is the built-in `Date` backend, for a rule registered outside an engine.
+ * `getOnAmbiguous` supplies that engine's refusal policy the same way.
  */
 export function dateLiteralNormalizerRule(
-  getInputOrder: () => DateInputOrder = () => "auto",
+  getInputOrder: () => ResolvedDateOrder = () => "auto",
+  getCalendar: () => CalendarBackend = () => DATE_CALENDAR,
+  getOnAmbiguous: () => DateAmbiguity = () => "refuse",
 ): NormalizerRule {
   return {
     name: "datetime:date-literal",
@@ -364,19 +415,33 @@ export function dateLiteralNormalizerRule(
     match(tokens: Token[], pos: number): NormalizerMatch | null {
       const t0 = tokens[pos];
       if (t0.type !== "NUMBER") return null;
+      const calendar = getCalendar();
 
       // ── Dot format: 2-token window (see module doc) ──────────────────
+      // The lexer merged the day and month into one float-shaped token, but
+      // the boundary is still there in the text, so the same reading, the same
+      // shapes and the same refusals apply here as to the separator forms. It
+      // used to ignore `date.inputOrder` outright: `03.04.2026` on a
+      // month-first engine answered 3 April, silently reading it the other
+      // way round, and `12.25.2026` answered nothing at all.
       if (DOT_DAY_MONTH.test(t0.value)) {
         const t1 = tokens[pos + 1];
         if (t1 && t1.type === "NUMBER" && DOT_LEADING_YEAR.test(t1.value)) {
-          const [dayText, monthText] = t0.value.split(".");
-          const year = resolveYear(t1.value.slice(1));
-          if (year !== null) {
-            const match = buildDateToken(
-              Number(dayText), Number(monthText), year,
-              [t0, t1], "datetime:date-literal:dot",
+          const [first, second] = t0.value.split(".");
+          const dotRun = {
+            text: `${t0.value}${t1.value}`,
+            groups: [first, second, t1.value.slice(1)] as const,
+            separator: "dot" as NumericDateSeparator,
+          };
+          const dotReading = readNumericDate(dotRun, getInputOrder(), getOnAmbiguous(), calendar);
+          if (dotReading.kind === "date") {
+            return buildDateToken(
+              dotReading.day, dotReading.month, dotReading.year,
+              [t0, t1], "datetime:date-literal:dot", calendar,
             );
-            if (match) return match;
+          }
+          if (dotReading.kind === "refuse") {
+            return faultMatch(dotReading.code, dotReading.message, [t0, t1], "datetime:date-literal:dot:unreadable");
           }
         }
         return null;
@@ -387,7 +452,7 @@ export function dateLiteralNormalizerRule(
       // the date half of a timestamp and leave the time half to be read as
       // arithmetic. See fuseIsoTimestamp().
       if (t0.value.length === 4 && PLAIN_INTEGER.test(t0.value)) {
-        const timestamp = fuseIsoTimestamp(tokens, pos, "datetime:date-literal:iso-timestamp");
+        const timestamp = fuseIsoTimestamp(tokens, pos, "datetime:date-literal:iso-timestamp", calendar);
         if (timestamp) return timestamp;
       }
 
@@ -403,55 +468,32 @@ export function dateLiteralNormalizerRule(
       if (!t2 || t2.type !== "NUMBER" || !PLAIN_INTEGER.test(t2.value)) return null;
 
       const sourceTokens = [t0, sep1, t1, sep2, t2];
-      // The one check that separates every ordering below from the arithmetic
-      // it is spelled identically to, and the only one that applies to all
-      // three equally. See writtenAsOneRun.
+      // The one check that separates every reading below from the arithmetic
+      // it is spelled identically to, and the only one that applies to all of
+      // them equally. Adjacency still decides date-versus-arithmetic before
+      // any shape or order is considered, so `2024 - 5 - 3` is 2,016 and no
+      // setting makes it a date. See writtenAsOneRun.
       if (!writtenAsOneRun(sourceTokens)) return null;
 
-      // ── An ISO date is read as ISO whatever the order ────────────────
-      // `2026-04-03` has a four-digit leading group, which is neither a day
-      // nor a month, so there is nothing here for an input order to resolve
-      // and no reading but year-month-day. Tried ahead of the order because
-      // DMY and MDY require a one- or two-digit leading group: they declined
-      // this shape, the rule fell through, and a host that set MDY for its US
-      // readers turned every bare ISO date in every document into arithmetic
-      // (`2026-04-03` became 2,019, and `2026-04-03 + 1 day` became
-      // "2,020 day"). Hyphen only: a slash date starting with four digits is
-      // claimed by YMD alone, which is what the input-order table documents.
-      if (sep1.type === "MINUS" && t0.value.length === 4) {
-        if (!DAY_OR_MONTH.test(t1.value) || !DAY_OR_MONTH.test(t2.value)) return null;
-        // buildDateToken takes (day, month, year).
-        return buildDateToken(Number(t2.value), Number(t1.value), Number(t0.value), sourceTokens, "datetime:date-literal:iso");
+      // The reading, the refusal and the decision to leave the run alone all
+      // come from one function, so this rule and the surfaces that explain a
+      // literal cannot word or decide the same fact differently. See
+      // `DateReading.ts`, which carries the four shapes and why two of them
+      // refuse while the other two fall through.
+      const run = {
+        text: sourceTokens.map((token) => token.value).join(""),
+        groups: [t0.value, t1.value, t2.value] as const,
+        separator: (sep1.type === "MINUS" ? "hyphen" : "slash") as NumericDateSeparator,
+      };
+      const reading = readNumericDate(run, getInputOrder(), getOnAmbiguous(), calendar);
+      if (reading.kind === "arithmetic") return null;
+      if (reading.kind === "refuse") {
+        return faultMatch(reading.code, reading.message, sourceTokens, "datetime:date-literal:unreadable");
       }
-
-      // A host-fixed order (DMY/MDY/YMD) reads slash and hyphen dates the same
-      // way, so a US reader's `12/25/2023` and an ISO `2023/12/25` both parse.
-      // `'auto'` falls through to the historic per-separator reading below.
-      const order = getInputOrder();
-      if (order !== "auto") {
-        const resolved = resolveOrderedGroups(t0.value, t1.value, t2.value, order);
-        if (resolved === null) return null;
-        return buildDateToken(
-          resolved.day, resolved.month, resolved.year, sourceTokens,
-          `datetime:date-literal:${order.toLowerCase()}`,
-        );
-      }
-
-      if (sep1.type === "SLASH") {
-        // European: DD/MM/YYYY (always, no ISO-slash variant is documented)
-        if (!DAY_OR_MONTH.test(t0.value) || !DAY_OR_MONTH.test(t1.value)) return null;
-        const year = resolveYear(t2.value);
-        if (year === null) return null;
-        return buildDateToken(Number(t0.value), Number(t1.value), year, sourceTokens, "datetime:date-literal:european");
-      }
-
-      // MINUS: US (MM-DD-YYYY). The ISO reading (YYYY-MM-DD) was taken above,
-      // for every order including this one.
-      if (!DAY_OR_MONTH.test(t0.value) || !DAY_OR_MONTH.test(t1.value)) return null;
-      const year = resolveYear(t2.value);
-      if (year === null) return null;
-      // month=t0, day=t1, year=t2, buildDateToken takes (day, month, year)
-      return buildDateToken(Number(t1.value), Number(t0.value), year, sourceTokens, "datetime:date-literal:us");
+      return buildDateToken(
+        reading.day, reading.month, reading.year, sourceTokens,
+        `datetime:date-literal:${reading.order.toLowerCase()}`, calendar,
+      );
     },
   };
 }

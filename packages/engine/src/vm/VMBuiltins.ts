@@ -1,4 +1,5 @@
 import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, splitValue, type MatrixData } from "@solve-js/vm/Value";
+import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom, power, describeMeasureMismatch } from "@solve-js/vm/VMConversion";
@@ -1397,7 +1398,19 @@ export function pluginFunctionIndexFor(qualifiedName: string): number {
  * opcode; anything else falls through to `OpCode.CALL_AS_CONVERTER`, which
  * embeds the name as a string constant and looks it up here at runtime).
  */
-export const asConverterRegistry = new Map<string, (value: Value) => Value>();
+export const asConverterRegistry = new Map<string, AsConverter>();
+
+/**
+ * A package-registered `as <name>` converter: the value on the left of `as`
+ * in, the converted value out.
+ *
+ * The optional `context` is the per-line execution context the VM passes to
+ * a plugin function, handed to a converter for the same reason: a converter
+ * that reads a date computes through the engine's calendar backend on it
+ * rather than a module-level default, so `<date> as weekday` and `weekday on
+ * <date>` cannot disagree. A converter that needs nothing from it ignores it.
+ */
+export type AsConverter = (value: Value, context?: LineExecutionContext) => Value;
 
 /**
  * Register a custom `as <name>` converter. Called by
@@ -1420,7 +1433,7 @@ export const asConverterRegistry = new Map<string, (value: Value) => Value>();
  * pure noise, not a real collision signal, surfaced by
  * `DatetimePackage.ts` becoming this registry's first real consumer.
  */
-export function registerAsConverter(name: string, handler: (value: Value) => Value): void {
+export function registerAsConverter(name: string, handler: AsConverter): void {
     const key = name.toLowerCase();
     const existing = asConverterRegistry.get(key);
     if (existing && existing !== handler) {

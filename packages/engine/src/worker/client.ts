@@ -11,7 +11,8 @@
  * re-inventing it.
  */
 
-import type { EngineConfigOverride } from "@solve-js/constants/Configuration";
+import { DEFAULT_CONFIG, type EngineConfigOverride } from "@solve-js/constants/Configuration";
+import { resolveDateOrderPolicy } from "@solve-js/packages/datetime/DateReading";
 import type { UnifiedParsingOptions } from "@solve-js/types/ParsingResult";
 import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
 import type { EngineError } from "@solve-js/errors";
@@ -124,6 +125,28 @@ interface PendingRequest {
 	onAbort?: () => void;
 }
 
+/**
+ * Replaces `date.inputOrder: 'locale'` with the order this side resolves it
+ * to, before the config crosses to the worker.
+ *
+ * `'locale'` means "ask the reader's machine", and the reader's machine is
+ * this one. A worker re-inferring it would be asking a different environment
+ * the same question: a worker thread can carry different `Intl` data (a
+ * bundler-provided shim, a small-ICU runtime), so the same document could be
+ * read day-first on the main thread and month-first in the worker with nothing
+ * to show for it. The resolved order crosses instead, so both sides read the
+ * document the same way, and `date.inputLocale` is dropped with it because it
+ * has already done its work.
+ *
+ * Anything else passes through untouched, including an absent config.
+ */
+function resolveDateOrderForWorker(config: EngineConfigOverride | undefined): EngineConfigOverride | undefined {
+	if (config?.date?.inputOrder !== "locale") return config;
+	const date = { ...config.date, inputOrder: resolveDateOrderPolicy({ ...DEFAULT_CONFIG.date, ...config.date }).order };
+	delete date.inputLocale;
+	return { ...config, date };
+}
+
 class WorkerEngineClient implements WorkerEngine {
 	private readonly transport: WorkerTransport;
 	private nextId = 1;
@@ -150,7 +173,7 @@ class WorkerEngineClient implements WorkerEngine {
 				id,
 				localeCode: options.localeCode,
 				diagnostics: options.diagnostics,
-				config: options.config,
+				config: resolveDateOrderForWorker(options.config),
 				packages: options.packages,
 				formatting: options.formatting,
 			});

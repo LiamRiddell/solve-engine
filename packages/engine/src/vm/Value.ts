@@ -104,6 +104,24 @@ export interface SplitData {
 export type ChartKind = "sparkline" | "plot";
 
 /**
+ * What a `Datetime`'s epoch-millisecond payload anchors.
+ *
+ * Three questions share one number and mean different things by it, which is
+ * why the distinction is recorded rather than inferred:
+ *
+ * - `date`: a calendar day, held as its local midnight (`2026-04-03`,
+ *   `3 April 2026`, `03/04/2026`). The time of day carries no meaning.
+ * - `datetime`: a wall-clock reading on a day, in the calendar backend's own
+ *   zone (`2026-04-03T09:30`, `6pm`). The reading is what was named; the
+ *   instant follows from the zone it is read in.
+ * - `instant`: a fixed point on the timeline, named without depending on a
+ *   zone (`2026-04-03T10:30:00Z`, `...+09:00`, `now`).
+ *
+ * See {@link Value.grain} for why the number cannot answer this on its own.
+ */
+export type DatetimeGrain = "date" | "datetime" | "instant";
+
+/**
  * A chart specification: the DATA to draw, never pixels. One shape holds every
  * visual the engine produces, `[1,2,3] as sparkline` and `plot sin(x) from 0 to
  * 2pi` alike, so a host reads `kind` to choose a renderer and draws `points`
@@ -321,6 +339,12 @@ export function persistentValue(v: Value): Value {
 	// The uncertainty sidecar survives too, so "a = 12.3 +/- 0.5, a * 4" still
 	// propagates the tolerance across the STORE_VAR round trip.
 	if (v.uncertainty !== undefined) p.uncertainty = v.uncertainty;
+	// The two datetime sidecars survive as well, so "d = 2026-04-03 in Tokyo, d"
+	// is still that day in Tokyo rather than a bare instant. This function
+	// copies field by field rather than cloning, so a sidecar left out here is
+	// dropped in silence by the one round trip a reader makes most often.
+	if (v.grain !== undefined) p.grain = v.grain;
+	if (v.zone !== undefined) p.zone = v.zone;
 	return p;
 }
 
@@ -448,6 +472,45 @@ export class Value {
 	 * by {@link recycle} alongside the other sidecars.
 	 */
 	public decimalPlaces?: number;
+	/**
+	 * What this instant anchors: a calendar day, a wall-clock reading on one, or
+	 * a fixed point on the timeline.
+	 *
+	 * The fifth sidecar, the same shape as {@link exact}, {@link rational},
+	 * {@link uncertainty} and {@link decimalPlaces} and for the same reason: a
+	 * `Datetime`'s payload is epoch milliseconds and has to stay a plain number,
+	 * because the arena union, the worker DTO, the snapshot's Datetime variant
+	 * and the `Datetime` SUB path all read it as one. The number cannot say
+	 * which of three questions it is the answer to, and the difference is not
+	 * recoverable from it: `formatDatetime` decides whether to print a time by
+	 * testing whether the local hour, minute, second and millisecond are all
+	 * zero, which is a guess that `2026-04-03T09:00:00+09:00` under `TZ=UTC`
+	 * gets wrong, because the nine o'clock the reader typed IS UTC midnight.
+	 *
+	 * Set only where the shape is known: a date literal is `'date'`, a
+	 * wall-clock literal (`2026-04-03T09:30`, `6pm`) is `'datetime'`, a literal
+	 * carrying `Z` or an offset is `'instant'`, and so is `now`. Absent means
+	 * not recorded, which every reader treats as an instant rather than
+	 * inferring one. Nothing in 2.26.0 displays it: the formatter does not read
+	 * it, so every rendered date is byte-identical to 2.25.0. Cleared by
+	 * {@link recycle} alongside the other sidecars.
+	 */
+	public grain?: DatetimeGrain;
+	/**
+	 * The zone this instant should be read and displayed in, when the line
+	 * named one.
+	 *
+	 * A zone reference in the encoding `calendar/IntlZone.ts` documents: an IANA
+	 * name (`"Asia/Tokyo"`) or a fixed offset (`"UTCOFFSET:540"`). Set by
+	 * `<datetime> in <zone>` and by an ISO literal carrying `Z` or an explicit
+	 * offset, which names an offset rather than a zone and so records one.
+	 * Absent means the value is read in the calendar backend's own zone, which
+	 * is what every `Datetime` meant before this sidecar existed. Like
+	 * {@link grain} it is recorded and readable in 2.26.0 and read by the
+	 * formatter from 3.0. Cleared by {@link recycle} alongside the other
+	 * sidecars.
+	 */
+	public zone?: string;
 
 	constructor(
 		type: ValueType,
@@ -489,6 +552,11 @@ export class Value {
 		// The display-precision sidecar clears too: a reused Value that once had
 		// an explicit `to N dp` must not display a plain number at that precision.
 		this.decimalPlaces = undefined;
+		// The two datetime sidecars clear the same way: a reused Value that once
+		// held a date in Tokyo must not lend that day, or that zone, to whatever
+		// the arena hands out next.
+		this.grain = undefined;
+		this.zone = undefined;
 	}
 
 	isNumber(): this is Value & { value: number } {
@@ -976,10 +1044,24 @@ export function boolValue(b: boolean): Value {
 	return new Value(ValueType.Boolean, b);
 }
 
-/** Create a Datetime-typed Value (Unix timestamp in milliseconds). */
-export function datetimeValue(n: number): Value {
-	if (_arenaActive && _arena) return _arena.acquire(ValueType.Datetime, n);
-	return new Value(ValueType.Datetime, n);
+/**
+ * Create a Datetime-typed Value (Unix timestamp in milliseconds).
+ *
+ * The two optional arguments are the sidecars described on {@link Value.grain}
+ * and {@link Value.zone}. They are set only where the caller KNOWS the answer
+ * (the opcode or the literal shape says so), never guessed from the number, so
+ * an omitted grain means "not recorded" rather than "a calendar day".
+ *
+ * @param n - The instant, in epoch milliseconds.
+ * @param grain - What the instant anchors, when the caller knows.
+ * @param zone - The zone reference the instant was named in, when the line named one.
+ * @returns The Datetime value.
+ */
+export function datetimeValue(n: number, grain?: DatetimeGrain, zone?: string): Value {
+	const v = _arenaActive && _arena ? _arena.acquire(ValueType.Datetime, n) : new Value(ValueType.Datetime, n);
+	if (grain !== undefined) v.grain = grain;
+	if (zone !== undefined) v.zone = zone;
+	return v;
 }
 
 /** Create a Percentage-typed Value (stored as fraction, e.g. 0.5 for 50%). */

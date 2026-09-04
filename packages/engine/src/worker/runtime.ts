@@ -17,7 +17,8 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import type { AsyncResolutionEvent } from "@solve-js/engine/AsyncResolutionBatcher";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
-import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
+import { DEFAULT_FORMATTING_SETTINGS, type FormattingSettings } from "@solve-js/format/FormattingSettings";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import {
 	ErrorFactory,
 	normalizeUnknownError,
@@ -34,7 +35,7 @@ import type {
 	AsyncResolvedLine,
 } from "./protocol";
 
-/** Options a host bakes into its own worker entry, chiefly its custom packages. */
+/** Options a host bakes into its own worker entry: its custom packages, and its calendar backend. */
 export interface WorkerRuntimeOptions {
 	/**
 	 * The packages available to register, defaulting to {@link BUILTIN_PACKAGES}.
@@ -44,6 +45,14 @@ export interface WorkerRuntimeOptions {
 	 * posted across the boundary.
 	 */
 	packages?: IEnginePackage[];
+	/**
+	 * The calendar backend the worker's engine computes dates with, and writes
+	 * them out with, as the engine's own `calendar` option. Defaults to the
+	 * built-in `Date` backend. Baked in here for the same reason a package is:
+	 * a backend is an object of functions and cannot be posted across the
+	 * boundary, so the main side's formatting settings never carry one.
+	 */
+	calendar?: CalendarBackend;
 }
 
 /**
@@ -196,8 +205,14 @@ export function startWorkerRuntime(transport: WorkerTransport, options: WorkerRu
 				diagnostics: message.diagnostics ?? false,
 				config: message.config,
 				packages,
+				calendar: options.calendar,
 			});
-			formatting = message.formatting;
+			// The display reads the same backend the engine computes with, so a
+			// date in a DTO names the day it was computed on; the main side's
+			// settings cannot carry the backend, so it is joined here.
+			formatting = options.calendar
+				? { ...(message.formatting ?? DEFAULT_FORMATTING_SETTINGS), calendar: options.calendar }
+				: message.formatting;
 			// Drain live-data resolutions for the engine's whole lifetime, so a
 			// value that settles after a request already answered still reaches the
 			// host. Started here, after the engine exists, and torn down with it.
