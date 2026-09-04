@@ -1,17 +1,14 @@
 {
   "_comment": "Regression rules for scripts/compare-benchmarks.mjs. Ratios are current divided by reference, so above 1 is slower.",
-
   "_bandComment": "Two bands, and the gap between them is deliberate. The warn band is where a human should look; the fail band is where a build should stop. They used to be 1.25 and 1.5, which put the failure line inside the range this project's own measurement noise reaches: re-recording the baselines and immediately re-running on byte-identical code produced a 1.71x on parser/datetime. A gate that red-lights unchanged code teaches people to click through it, so the failure line moved out past what noise can plausibly manufacture and the old 1.5 now merely warns.",
   "warnRatio": 1.25,
   "failRatio": 2.5,
-
   "_suiteComment": "A broad uniform slowdown can leave every individual case under its own limit while still costing real throughput. Injecting a context object into the VM dispatch path is exactly that shape, which is why the geometric mean across a suite has its own bound. Same two-band split for the same reason. The bands were 1.15 and 1.4 while the parser suite was measured on means of performance.now() deltas and reached 1.129x on unchanged code; every suite records a mitata median now, so the warning line sits at 1.1 and the build stops at 1.3.",
   "suiteGeomeanWarnRatio": 1.1,
   "suiteGeomeanFailRatio": 1.3,
-
   "_improvementComment": "A report that only ever delivers bad news stops being read. Improvements past this are called out.",
   "improvementRatio": 0.8,
-
   "_noiseComment": "Below this a ratio is not worth acting on. This used to be 5 microseconds because the harness timed each iteration with performance.now(), whose resolution swallowed anything faster. mitata batches and calibrates instead, and resolves single-nanosecond work, so the floor is now set by how small a real regression is worth failing a build over rather than by what the clock could see. Milliseconds, so this is 50 nanoseconds.",
-  "noiseFloorMs": 0.00005
+  "noiseFloorMs": 5e-05,
+  "_measurementComment": "Being set from a measurement rather than from a guess, which is what this run is for: this branch changes no engine code, so the comparison it produces is the spread the harness gives on identical code. The numbers below are unchanged until that lands."
 }
