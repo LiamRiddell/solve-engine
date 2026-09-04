@@ -42,12 +42,14 @@ read as month 25. Fix the order for every numeric separator with the
 new ExpressionEngine({ config: { date: { inputOrder: "MDY" } } });
 ```
 
-| `inputOrder` | `12/25/2023` | `25/12/2023` | `2023/12/25` |
-| --- | --- | --- | --- |
-| `"auto"` (default) | not a date | 25 December 2023 | not a date |
-| `"MDY"` | 25 December 2023 | not a date | not a date |
-| `"DMY"` | not a date | 25 December 2023 | not a date |
-| `"YMD"` | not a date | not a date | 25 December 2023 |
+| `inputOrder` | `12/25/2023` | `25/12/2023` | `2023/12/25` | `2023-12-25` |
+| --- | --- | --- | --- | --- |
+| `"auto"` (default) | not a date | 25 December 2023 | not a date | 25 December 2023 |
+| `"MDY"` | 25 December 2023 | not a date | not a date | 25 December 2023 |
+| `"DMY"` | not a date | 25 December 2023 | not a date | 25 December 2023 |
+| `"YMD"` | not a date | not a date | 25 December 2023 | 25 December 2023 |
 
-Only the all-numeric literals are affected. A spelled-out month (`March 9,
-2024`) is never ambiguous, and a full ISO timestamp is always read as ISO.
+Only ambiguous literals are affected. A spelled-out month (`March 9, 2024`) is
+never ambiguous, and neither is a hyphen date that starts with a four-digit
+year: `2023-12-25` has no reading but year, month, day, so it is read as ISO
+whichever order is set, timestamp or not.

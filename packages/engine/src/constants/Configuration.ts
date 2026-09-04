@@ -64,8 +64,10 @@ export type HolidayCalendar = HolidayPredicate | Iterable<string | number | Date
  *   `12/25/2023` parse, which `'auto'` refuses because the slash defaults to
  *   day-first.
  *
- * Only the all-numeric literals are affected. A spelled-out month (`March 9,
- * 2024`) is never ambiguous, and an ISO timestamp is always read as ISO.
+ * Only ambiguous literals are affected. A spelled-out month (`March 9, 2024`)
+ * is never ambiguous; nor is a hyphen literal with a four-digit leading group
+ * (`2024-03-09`), which has no reading but year-month-day and is read as ISO
+ * under every order, timestamp or not.
  */
 export type DateInputOrder = 'auto' | 'DMY' | 'MDY' | 'YMD';
 
