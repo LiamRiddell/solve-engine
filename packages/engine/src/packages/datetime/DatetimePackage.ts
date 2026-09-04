@@ -13,6 +13,7 @@ import { CurrentTimestampParselet } from "./parselets/CurrentTimestampParselet";
 import { ToDateParselet } from "./parselets/ToDateParselet";
 import { ToTimestampParselet } from "./parselets/ToTimestampParselet";
 import { DateLiteralParselet } from "./parselets/DateLiteralParselet";
+import { UnreadableDateParselet } from "./parselets/UnreadableDateParselet";
 import { NthWeekdayParselet } from "./parselets/NthWeekdayParselet";
 import { RelativeMonthParselet } from "./parselets/RelativeMonthParselet";
 import { AgeParselet } from "./parselets/AgeParselet";
@@ -21,7 +22,7 @@ import {
   monthOnDate, weekOnDate, isWeekendOnDate, isWorkdayOnDate, spanBetweenDates,
 } from "./parselets/DatetimeTimestampPluginFunctions";
 import {
-  nthWeekdayOfMonthFn, monthAnchorShift, ageBetween,
+  nthWeekdayOfMonthFn, monthAnchorShift, ageBetween, dateLiteralFault,
 } from "./parselets/DatetimeCalendarPluginFunctions";
 import { nthWeekdayNormalizerRule } from "./normalizer/NthWeekdayNormalizerRule";
 import { untilSinceNormalizerRule } from "./normalizer/UntilSinceNormalizerRule";
@@ -208,6 +209,10 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     BETWEEN_UNIT: new DurationBetweenParselet(),
     CURRENT_TIMESTAMP: new CurrentTimestampParselet(),
     DATETIME_LITERAL: new DateLiteralParselet(),
+    // The refusal half of the same rule: a date-shaped run no configured order
+    // can read. Registered beside the literal it is the alternative to, so an
+    // engine that can fuse a date can always report one it cannot.
+    DATETIME_LITERAL_UNREADABLE: new UnreadableDateParselet(),
     NTH_WEEKDAY: new NthWeekdayParselet(),
     AGE_OF: new AgeParselet(),
     MONTH_ANCHOR_NEXT: new RelativeMonthParselet(1),
@@ -255,6 +260,7 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     nthWeekdayOfMonth: nthWeekdayOfMonthFn,
     monthAnchorShift,
     ageBetween,
+    dateLiteralFault,
   },
   asConverters: {
     // The execution context is passed through so each converter reads the
@@ -277,5 +283,8 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     MONTH_ANCHOR_THIS: "datetime",
     MONTH_ANCHOR_LAST: "datetime",
     AGE_OF: "keyword",
+    // An editor colours a refused date as datetime syntax too: the reader
+    // typed a date, and the run is one token whether it could be read or not.
+    DATETIME_LITERAL_UNREADABLE: "datetime",
   },
 };

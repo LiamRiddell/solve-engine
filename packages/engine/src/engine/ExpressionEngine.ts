@@ -901,10 +901,16 @@ export class ExpressionEngine {
         // a rule that would have to re-infer it. Gated on the datetime
         // package actually being loaded (it owns the DATETIME_LITERAL
         // parselet), so an engine without it does not fuse a date literal it
-        // has no way to read.
-        if (this.registry.hasPrefix("DATETIME_LITERAL")) {
+        // has no way to read. Both token types are checked, because the rule
+        // emits either one and a refusal with no parselet behind it would be a
+        // parse error where the old behaviour was a number.
+        if (this.registry.hasPrefix("DATETIME_LITERAL") && this.registry.hasPrefix("DATETIME_LITERAL_UNREADABLE")) {
             const calendar = () => this.context.calendar;
-            this.normalizer.register(dateLiteralNormalizerRule(() => this.dateReading.order, calendar));
+            this.normalizer.register(dateLiteralNormalizerRule(
+                () => this.dateReading.order,
+                calendar,
+                () => this.config.date.onAmbiguous,
+            ));
             this.normalizer.register(monthNameDateNormalizerRule(undefined, calendar));
         }
 

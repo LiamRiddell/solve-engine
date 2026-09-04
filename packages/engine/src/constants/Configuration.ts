@@ -77,6 +77,13 @@ export type HolidayCalendar = HolidayPredicate | Iterable<string | number | Date
  */
 export type DateInputOrder = 'auto' | 'locale' | 'DMY' | 'MDY' | 'YMD';
 
+/**
+ * What a date-shaped numeric run the configured order cannot read does: report
+ * the problem, or fall through to the arithmetic it is spelled like. See
+ * {@link DateConfig.onAmbiguous}.
+ */
+export type DateAmbiguity = 'refuse' | 'arithmetic';
+
 /** Date-related engine configuration: offset limits, input order, holidays. */
 export interface DateConfig {
   /**
@@ -103,6 +110,32 @@ export interface DateConfig {
    * would flip every existing British engine to month-first.
    */
   readonly inputLocale?: string;
+  /**
+   * What a date-shaped numeric run the resolved order cannot read does.
+   * Defaults to `'refuse'`.
+   *
+   * - `'refuse'`: the line reports a structured Error value naming the
+   *   problem, DATE_ORDER_MISMATCH when another order would have read it and
+   *   DATE_NOT_A_CALENDAR_DAY when no order names a real day. `12/25/2026` on
+   *   a day-first engine says there is no month 25, rather than answering
+   *   0.00.
+   * - `'arithmetic'`: the run falls through to the division or subtraction it
+   *   is spelled like, which is what every version before this one did.
+   *   `12/25/2026` is 0.00 again, and `2026-02-29` is 1,995.
+   *
+   * The refusal is scoped to runs nobody writes as arithmetic: a two-step
+   * chain ending in a four-digit denominator (`03/04/2026` as division is
+   * 0.0004), and an ISO-shaped hyphen run. A four-digit LEADING group is
+   * ordinary arithmetic (`1000/10/5` is 20, `1024/8/2` is 64) and is never
+   * refused, and neither is a run whose groups are all one or two digits
+   * (`12/13/14` stays 0.07), because a two-digit year is too weak a signal to
+   * hang a refusal on.
+   *
+   * The one refusal this setting does not restore is the dot form
+   * (`25.12.2026` under a month-first order): its only other outcome is a
+   * parse error, and an error is not an answer.
+   */
+  readonly onAmbiguous: DateAmbiguity;
   /**
    * How far forward a date offset whose COST grows with the offset may reach,
    * in years. Enforced by `vm/VM.ts`'s `addBusinessDays()`.
@@ -422,6 +455,10 @@ export const DEFAULT_CONFIG: EngineConfig = {
      minOffsetYears: -100,
      defaultFormat: 'YYYY-MM-DD',
      inputOrder: 'auto',
+     // A date-shaped run no order can read reports the problem rather than
+     // answering the fraction it is spelled like. See DateConfig.onAmbiguous
+     // for the shapes this covers and the ones it deliberately does not.
+     onAmbiguous: 'refuse',
    },
    performance: {
      // Preserves the effective cache size the hardcoded (now-removed)
