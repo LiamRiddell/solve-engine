@@ -103,24 +103,6 @@ function writtenAsOneRun(tokens: Token[]): boolean {
 }
 
 /**
- * Resolves a year token's raw digit text to a 4-digit year.
- *
- * Accepts exactly 2 or 4 digits (matching the wiki's documented formats).
- * A 2-digit year is windowed using the common glibc `strptime("%y")`
- * convention: 00-68 -> 2000-2068, 69-99 -> 1969-1999. Any other digit
- * count (1 or 3 digits) is not a valid year shape and returns null so the
- * caller can decline the match and fall back to ordinary arithmetic.
- */
-function resolveYear(digits: string): number | null {
-  if (digits.length === 4) return Number(digits);
-  if (digits.length === 2) {
-    const yy = Number(digits);
-    return yy <= 68 ? 2000 + yy : 1900 + yy;
-  }
-  return null;
-}
-
-/**
  * Converts a validated day/month/year triple into a fused DATETIME_LITERAL
  * token, or null if the triple isn't a real calendar date (e.g. "30" for
  * February), letting the caller fall back to treating the source tokens
@@ -431,17 +413,30 @@ export function dateLiteralNormalizerRule(
       const calendar = getCalendar();
 
       // ── Dot format: 2-token window (see module doc) ──────────────────
+      // The lexer merged the day and month into one float-shaped token, but
+      // the boundary is still there in the text, so the same reading, the same
+      // shapes and the same refusals apply here as to the separator forms. It
+      // used to ignore `date.inputOrder` outright: `03.04.2026` on a
+      // month-first engine answered 3 April, silently reading it the other
+      // way round, and `12.25.2026` answered nothing at all.
       if (DOT_DAY_MONTH.test(t0.value)) {
         const t1 = tokens[pos + 1];
         if (t1 && t1.type === "NUMBER" && DOT_LEADING_YEAR.test(t1.value)) {
-          const [dayText, monthText] = t0.value.split(".");
-          const year = resolveYear(t1.value.slice(1));
-          if (year !== null) {
-            const match = buildDateToken(
-              Number(dayText), Number(monthText), year,
+          const [first, second] = t0.value.split(".");
+          const dotRun = {
+            text: `${t0.value}${t1.value}`,
+            groups: [first, second, t1.value.slice(1)] as const,
+            separator: "dot" as NumericDateSeparator,
+          };
+          const dotReading = readNumericDate(dotRun, getInputOrder(), getOnAmbiguous(), calendar);
+          if (dotReading.kind === "date") {
+            return buildDateToken(
+              dotReading.day, dotReading.month, dotReading.year,
               [t0, t1], "datetime:date-literal:dot", calendar,
             );
-            if (match) return match;
+          }
+          if (dotReading.kind === "refuse") {
+            return faultMatch(dotReading.code, dotReading.message, [t0, t1], "datetime:date-literal:dot:unreadable");
           }
         }
         return null;

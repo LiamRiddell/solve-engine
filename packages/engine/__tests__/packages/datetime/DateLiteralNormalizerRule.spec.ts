@@ -290,11 +290,23 @@ describe("Date literal parsing (DateLiteralNormalizerRule + DateLiteralParselet)
       expect(result.toNumber()).toBe(localMidnight(1999, 12, 31));
     });
 
-    test("30.02.2023 (Feb 30 doesn't exist) is NOT a date — no operator joins the leftover literals, so it throws", () => {
+    test("30.02.2023 (Feb 30 doesn't exist) is NOT a date — it says so, instead of throwing", () => {
+      // This used to throw `Unexpected token after expression: ".2023"`, the
+      // parser reporting the leftover half of a literal the rule declined. A
+      // dot run has nothing to fall through to, so a refusal is the only
+      // answer available and an error message about a dot is not one.
       const engine = newTrackedEngine();
-      expect(() => engine.evaluateExpression("30.02.2023")).toThrow(
-        'Unexpected token after expression: ".2023"'
-      );
+      const result = engine.evaluateExpression("30.02.2023");
+      expect(result.type).toBe(ValueType.Error);
+      expect(result.value).toBe("DATE_NOT_A_CALENDAR_DAY");
+      expect(result.unit).toBe('"30.02.2023" is not a real date: February 2023 has 28 days.');
+    });
+
+    test("and the refusal stands even under date.onAmbiguous: 'arithmetic'", () => {
+      // The one refusal the opt-out cannot restore: there is no old number to
+      // restore, only the old parse error.
+      const engine = newTrackedEngine({ config: { date: { onAmbiguous: "arithmetic" } } });
+      expect(engine.evaluateExpression("30.02.2023").value).toBe("DATE_NOT_A_CALENDAR_DAY");
     });
 
     test("a genuine decimal number is unaffected when nothing follows it: 25.12 alone", () => {

@@ -99,3 +99,28 @@ describe("the default", () => {
     expect(refused("12/25/2026", "DMY")).toMatch(/there is no month 25/);
   });
 });
+
+describe("the one refusal the opt-out does not restore", () => {
+  test("a dot run no order reads refuses under 'arithmetic' too", () => {
+    // Named at the top of the changeset because it is the single behaviour
+    // this minor removes without an escape. The escape cannot exist: a dot run
+    // that is not a date was never a number, it was the parse error
+    // `Unexpected token after expression: ".2026"`, and the house rule forbids
+    // an error as an answer.
+    expect(restored("25.12.2026", "MDY")).toMatch(/is not a date read month first/);
+    expect(restored("31.02.2026", "DMY")).toMatch(/is not a real date/);
+    expect(restored("12.13.14", "DMY")).toMatch(/is not a date read day first/);
+  });
+
+  test("while the slash spelling of the same digits is restored as usual", () => {
+    // The two differ because one of them really is arithmetic: `12/13/14` is a
+    // fraction chain and `12.13.14` is a parse error.
+    expect(restored("12/13/14", "DMY")).toBe("0.07");
+    expect(restored("31/02/2026", "DMY")).toBe("0.01");
+  });
+
+  test("and a dot date that reads perfectly well is untouched by either setting", () => {
+    expect(restored("25.12.2026", "DMY")).toBe("Friday, December 25, 2026");
+    expect(refused("25.12.2026", "DMY")).toBe("Friday, December 25, 2026");
+  });
+});

@@ -167,3 +167,55 @@ describe("shape: none, a run that is not date-shaped at all", () => {
     }
   });
 });
+
+describe("the dot form joins the same rule", () => {
+  test("25.12.2026 is Christmas under 'auto' and 'DMY', as it always was", () => {
+    expect(read("25.12.2026", "auto")).toBe("Friday, December 25, 2026");
+    expect(read("25.12.2026", "DMY")).toBe("Friday, December 25, 2026");
+  });
+
+  test("and is refused under 'MDY', where it used to be read day first regardless", () => {
+    // The one answer this release takes away without an opt-out. It was
+    // indefensible: the engine was told to read dates month first and read
+    // this one day first anyway, without saying so.
+    expect(read("25.12.2026", "MDY")).toMatch(MISMATCH);
+  });
+
+  test("12.25.2026 under 'MDY' is Christmas, where it used to be a parse error", () => {
+    expect(read("12.25.2026", "MDY")).toBe("Friday, December 25, 2026");
+  });
+
+  test("03.04.2026 under 'MDY' is 4 March, the setting finally being honoured", () => {
+    // Measured before this change: Friday, April 3, 2026, on a month-first
+    // engine.
+    expect(read("03.04.2026", "MDY")).toBe("Wednesday, March 4, 2026");
+    expect(read("03.04.2026", "DMY")).toBe("Friday, April 3, 2026");
+    expect(read("03.04.2026", "auto")).toBe("Friday, April 3, 2026");
+  });
+
+  test("a dot run that names no real day is refused, whatever the order", () => {
+    expect(read("31.02.2026", "auto")).toMatch(NOT_A_DAY);
+    expect(read("31.02.2026", "DMY")).toMatch(NOT_A_DAY);
+    expect(read("31.02.2026", "MDY")).toMatch(NOT_A_DAY);
+    expect(read("31.02.2026", "YMD")).toMatch(NOT_A_DAY);
+  });
+
+  test("and a two-digit-year dot run refuses too, unlike its slash twin", () => {
+    // The `'short'` shape falls through to arithmetic with slashes, because
+    // `12/13/14` really is a fraction chain. `12.13.14` is not: the lexer has
+    // already merged `12.13` into one token, so its fall-through is a parse
+    // error rather than a number, and there is nothing to protect.
+    expect(read("12/13/14", "DMY")).toBe("0.07");
+    expect(read("12.13.14", "DMY")).toMatch(MISMATCH);
+    expect(read("12.13.14", "MDY")).toBe("Saturday, December 13, 2014");
+    expect(read("25.12.26", "DMY")).toBe("Friday, December 25, 2026");
+  });
+
+  test("2026.12.25 still does not parse, which is a separate decision", () => {
+    // The lexer needs one or two digits before the first dot to produce the
+    // two-token window this rule reads, so a year-first dot date never reaches
+    // it. Widening that is a lexer change with its own ambiguities.
+    const engine = newTrackedEngine({ config: { date: { inputOrder: "YMD" } } });
+    expect(engine.parseDocument("2026.12.25").lines[0].error).not.toBeNull();
+  });
+});

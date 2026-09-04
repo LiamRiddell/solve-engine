@@ -406,7 +406,9 @@ function separatorOrder(separator: NumericDateSeparator): DateFieldOrder {
  * @param order - This engine's resolved order. Never `'locale'`.
  * @param onAmbiguous - Whether a refusal is reported or suppressed. A dot run
  * ignores `'arithmetic'`, because its fall-through is a parse error rather
- * than a number, and an error is not an answer.
+ * than a number, and an error is not an answer; for the same reason a dot run
+ * of the `'short'` shape refuses too, where a slash or hyphen one falls
+ * through.
  * @param calendar - The backend the literal would be built with.
  * @returns The reading, a refusal, or a decision to leave the run alone.
  */
@@ -418,9 +420,15 @@ export function readNumericDate(
 ): NumericDateRead {
   const [g0, g1, g2] = run.groups;
   const shape = classifyRun(g0, g1, g2, run.separator);
-  // A dot run's only alternative to a refusal is a parse error, so it refuses
-  // whatever the setting says. Every other shape honours the opt-out.
-  const refusing = onAmbiguous === "refuse" || run.separator === "dot";
+  // A dot run has nothing to fall through TO. The lexer has already merged
+  // `25.12` into one float-shaped token, so a dot run that is not a date is a
+  // parse error rather than a number, and the house rule forbids an error as
+  // an answer. Both escapes therefore close for it: `onAmbiguous` cannot
+  // restore an answer that never existed, and the `'short'` shape's
+  // fall-through has no arithmetic to protect (`12.13.14` written with dots is
+  // not a fraction chain, it is a parse error).
+  const canFallThrough = run.separator !== "dot";
+  const refusing = onAmbiguous === "refuse" || !canFallThrough;
 
   if (shape === "none") return { kind: "arithmetic" };
 
@@ -457,7 +465,7 @@ export function readNumericDate(
   if (order === "YMD") {
     // A year-last run has no year-first reading at all, so there are no roles
     // that failed, there are no roles to apply.
-    if (shape === "short" || !refusing) return { kind: "arithmetic" };
+    if (!refusing || (shape === "short" && canFallThrough)) return { kind: "arithmetic" };
     return orderMismatchUnderYearFirst(run.text, g0, g1, year, calendar);
   }
 
@@ -473,7 +481,7 @@ export function readNumericDate(
     return { kind: "date", day: chosenRoles.day, month: chosenRoles.month, year, order: chosen, shortYear, alternative };
   }
 
-  if (shape === "short" || !refusing) return { kind: "arithmetic" };
+  if (!refusing || (shape === "short" && canFallThrough)) return { kind: "arithmetic" };
 
   if (isRealCalendarDay(otherRoles.day, otherRoles.month, year, calendar)) {
     return {
