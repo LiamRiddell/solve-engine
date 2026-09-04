@@ -69,6 +69,35 @@ Anything past that keeps using the full contract below, unchanged:
 `defineFunction` sits on top of the contract and changes none of it, so you can
 reach for the longhand the moment the shortcut stops fitting.
 
+## The longer path: a whole package, scaffolded
+
+A function is not always what you want. A phrase, an operator, a unit or a
+normalizer rule needs a package of its own, and that touches at least eight
+places before it can be judged: the package folder, both lists in
+`BUILTIN_PACKAGES`, a spec, a documentation page, the sidebar, a changeset, and
+the derived figures.
+
+If you are working in a clone of this repository, one command writes all of it.
+
+```bash
+npm run new:package -- fuel-economy --group "Units"
+```
+
+What comes out registers, evaluates something, and passes `npm run verify`
+before you edit a line: `fuel economy of 21` answers `42`. That placeholder is
+there so the whole chain is wired and green from the first run, phrase to
+parselet to plugin function to pure operation to spec to a proven documentation
+example. Replace the behaviour, keep the shape.
+
+The generated files carry the comments this codebase expects rather than
+placeholders to delete, including the two every package here writes down: what
+it answers, and what it deliberately refuses to guess at.
+
+The command edits `builtins.ts` and the docs sidebar by matching on text in
+them. If either has moved on, it says so and names the file rather than writing
+something plausible into the wrong place, and the fix is to add that one entry
+by hand.
+
 ## The contract
 
 A package is a plain object. Every field is optional, so you declare only what
