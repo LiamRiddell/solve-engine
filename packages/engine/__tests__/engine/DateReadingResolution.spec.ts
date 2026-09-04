@@ -27,25 +27,28 @@ const read = (expression: string, date: Partial<DateConfig>): string =>
 
 describe("the order an engine resolves", () => {
   test("1. a named order is taken outright, and reports 'config'", () => {
-    expect(reading({ inputOrder: "MDY" })).toEqual({ order: "MDY", orderSource: "config" });
-    expect(reading({ inputOrder: "DMY" })).toEqual({ order: "DMY", orderSource: "config" });
-    expect(reading({ inputOrder: "YMD" })).toEqual({ order: "YMD", orderSource: "config" });
+    expect(reading({ inputOrder: "MDY" })).toEqual({ order: "MDY", orderSource: "config", onAmbiguous: "refuse" });
+    expect(reading({ inputOrder: "DMY" })).toEqual({ order: "DMY", orderSource: "config", onAmbiguous: "refuse" });
+    expect(reading({ inputOrder: "YMD" })).toEqual({ order: "YMD", orderSource: "config", onAmbiguous: "refuse" });
   });
 
   test("2. 'locale' with a tag reads that tag, and reports 'locale'", () => {
     expect(reading({ inputOrder: "locale", inputLocale: "en-US" })).toEqual({
       order: "MDY",
       orderSource: "locale",
+      onAmbiguous: "refuse",
       locale: "en-US",
     });
     expect(reading({ inputOrder: "locale", inputLocale: "de-DE" })).toEqual({
       order: "DMY",
       orderSource: "locale",
+      onAmbiguous: "refuse",
       locale: "de-DE",
     });
     expect(reading({ inputOrder: "locale", inputLocale: "ja-JP" })).toEqual({
       order: "YMD",
       orderSource: "locale",
+      onAmbiguous: "refuse",
       locale: "ja-JP",
     });
   });
@@ -65,10 +68,12 @@ describe("the order an engine resolves", () => {
     expect(reading({ inputOrder: "locale", inputLocale: "und" })).toEqual({
       order: "auto",
       orderSource: "fallback",
+      onAmbiguous: "refuse",
     });
     expect(reading({ inputOrder: "locale", inputLocale: "zz-ZZ" })).toEqual({
       order: "auto",
       orderSource: "fallback",
+      onAmbiguous: "refuse",
     });
   });
 
@@ -79,11 +84,11 @@ describe("the order an engine resolves", () => {
   });
 
   test("5. 'auto' is the historic per-separator reading, and reports 'separator'", () => {
-    expect(reading({ inputOrder: "auto" })).toEqual({ order: "auto", orderSource: "separator" });
+    expect(reading({ inputOrder: "auto" })).toEqual({ order: "auto", orderSource: "separator", onAmbiguous: "refuse" });
   });
 
   test("and an engine configured with nothing at all is that same reading", () => {
-    expect(newTrackedEngine().getDateReading()).toEqual({ order: "auto", orderSource: "separator" });
+    expect(newTrackedEngine().getDateReading()).toEqual({ order: "auto", orderSource: "separator", onAmbiguous: "refuse" });
   });
 });
 
@@ -92,6 +97,7 @@ describe("inputLocale is inert unless inputOrder selects it", () => {
     expect(reading({ inputOrder: "auto", inputLocale: "en-US" })).toEqual({
       order: "auto",
       orderSource: "separator",
+      onAmbiguous: "refuse",
     });
   });
 
@@ -104,7 +110,7 @@ describe("inputLocale is inert unless inputOrder selects it", () => {
   });
 
   test("and it is not consulted beside a named order either", () => {
-    expect(reading({ inputOrder: "DMY", inputLocale: "en-US" })).toEqual({ order: "DMY", orderSource: "config" });
+    expect(reading({ inputOrder: "DMY", inputLocale: "en-US" })).toEqual({ order: "DMY", orderSource: "config", onAmbiguous: "refuse" });
     expect(read("03/04/2026", { inputOrder: "DMY", inputLocale: "en-US" })).toBe("Friday, April 3, 2026");
   });
 });

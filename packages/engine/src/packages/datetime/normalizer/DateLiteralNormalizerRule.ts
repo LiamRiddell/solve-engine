@@ -198,16 +198,21 @@ export function faultMatch(
   ruleName: string,
 ): NormalizerMatch {
   const first = sourceTokens[0];
+  const text = runText(sourceTokens);
   const fusedToken = new LexerToken(
     DATETIME_LITERAL_UNREADABLE_TYPE,
     DATETIME_LITERAL_UNREADABLE_TYPE_ID,
-    JSON.stringify({ code, message }),
-    runText(sourceTokens),
+    text,
+    text,
     first.offset,
     0,
     first.line,
     first.col,
   );
+  // The reason travels on the token: `value` is what a parse error and the
+  // editor token API print, and a reader shown the engine's JSON is being
+  // shown its internals.
+  fusedToken.fault = { code, message };
   return { consumed: sourceTokens.length, replacement: [fusedToken], ruleName };
 }
 

@@ -1400,7 +1400,8 @@ export class ExpressionEngine {
         // Not a three-group numeric run: a spelled-out month, or an ISO
         // timestamp, both of which have one reading and no order to apply.
         if (refused) {
-            const fault = JSON.parse(token.value) as { code: DatetimeErrorCode; message: string };
+            // The reason is on the token; `value` is the text the reader typed.
+            const fault = (token.fault ?? { code: "DATE_NOT_A_CALENDAR_DAY", message: `"${token.value}" is not a date this engine can read.` }) as { code: DatetimeErrorCode; message: string };
             return completeDateReading(
                 {
                     text: source, start, end, iso: null, order: null, orderSource: "spelled",

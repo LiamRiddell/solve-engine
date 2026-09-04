@@ -105,6 +105,8 @@ export interface DateReadingPolicy {
   readonly orderSource: DateOrderSource;
   /** The BCP-47 tag the order was inferred from, when it was inferred from one. */
   readonly locale?: string;
+  /** What a run no order can read does: refuse it, or leave it to arithmetic. From `date.onAmbiguous`. */
+  readonly onAmbiguous: DateAmbiguity;
 }
 
 /**
@@ -169,9 +171,10 @@ export function resolveDateOrderPolicy(date: DateConfig): DateReadingPolicy {
     );
   }
 
+  const onAmbiguous = date.onAmbiguous;
   const order = date.inputOrder;
   if (order === "DMY" || order === "MDY" || order === "YMD") {
-    return Object.freeze({ order, orderSource: "config" as const });
+    return Object.freeze({ order, orderSource: "config" as const, onAmbiguous });
   }
 
   if (order === "locale") {
@@ -183,16 +186,17 @@ export function resolveDateOrderPolicy(date: DateConfig): DateReadingPolicy {
           order: inferred,
           orderSource: requestedLocale !== undefined ? ("locale" as const) : ("host-locale" as const),
           locale: tag,
+          onAmbiguous,
         });
       }
     }
     // No Intl, an Intl that answers for a locale that is not the host's, or a
     // tag it cannot describe. Fall back to what the engine already does rather
     // than to a guess, and say so, so a host can tell a decision from a guess.
-    return Object.freeze({ order: "auto" as const, orderSource: "fallback" as const });
+    return Object.freeze({ order: "auto" as const, orderSource: "fallback" as const, onAmbiguous });
   }
 
-  return Object.freeze({ order: "auto" as const, orderSource: "separator" as const });
+  return Object.freeze({ order: "auto" as const, orderSource: "separator" as const, onAmbiguous });
 }
 
 /**
@@ -328,10 +332,14 @@ function resolveYearGroup(digits: string): number | null {
  * @param calendar - The backend the literal would be built with.
  * @returns `true` when the triple reads back unchanged.
  */
-export function isRealCalendarDay(day: number, month: number, year: number, calendar: CalendarBackend): boolean {
-  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
-  const built = calendar.fields(calendar.localMidnight(year, month - 1, day));
-  return built.year === year && built.month0 === month - 1 && built.day === day;
+export function isRealCalendarDay(day: number, month: number, year: number): boolean {
+  // Counted rather than round-tripped through the backend. Building the day
+  // and reading it back went through `Date`'s two-digit-year window, which
+  // maps year 26 to 1926, so every year below 100 was declared unreal and
+  // `0026-04-03` was refused with "April 0026 has 30 days", which is true and
+  // is exactly why it should have been accepted.
+  if (month < 1 || month > 12 || day < 1) return false;
+  return day <= daysInMonth(year, month - 1);
 }
 
 /**
@@ -440,7 +448,7 @@ export function readNumericDate(
     const year = Number(g0);
     const month = Number(g1);
     const day = Number(g2);
-    if (isRealCalendarDay(day, month, year, calendar)) {
+    if (isRealCalendarDay(day, month, year)) {
       return { kind: "date", day, month, year, order: "ISO", shortYear: false };
     }
     // The shape has one reading and no other to fall to, so a rollover here is
@@ -455,7 +463,7 @@ export function readNumericDate(
     const day = Number(g2);
     // Still arithmetic when it is not a real day: a four-digit numerator is
     // ordinary division, and this shape is where that is protected.
-    return isRealCalendarDay(day, month, year, calendar)
+    return isRealCalendarDay(day, month, year)
       ? { kind: "date", day, month, year, order: "YMD", shortYear: false }
       : { kind: "arithmetic" };
   }
@@ -478,12 +486,12 @@ export function readNumericDate(
   const chosenRoles = rolesFor(chosen, g0, g1);
   const otherRoles = rolesFor(other, g0, g1);
 
-  if (isRealCalendarDay(chosenRoles.day, chosenRoles.month, year, calendar)) {
+  if (isRealCalendarDay(chosenRoles.day, chosenRoles.month, year)) {
     // The other reading only counts as an alternative when it names a
     // DIFFERENT day. `01/01/2026` reads the same way round either way, so it
     // is not a choice the reader needs to be told about.
     const differs = otherRoles.day !== chosenRoles.day || otherRoles.month !== chosenRoles.month;
-    const alternative = differs && isRealCalendarDay(otherRoles.day, otherRoles.month, year, calendar)
+    const alternative = differs && isRealCalendarDay(otherRoles.day, otherRoles.month, year)
       ? isoOf(otherRoles.day, otherRoles.month, year)
       : undefined;
     return { kind: "date", day: chosenRoles.day, month: chosenRoles.month, year, order: chosen, shortYear, alternative };
@@ -491,7 +499,7 @@ export function readNumericDate(
 
   if (!refusing || (shape === "short" && canFallThrough)) return { kind: "arithmetic" };
 
-  if (isRealCalendarDay(otherRoles.day, otherRoles.month, year, calendar)) {
+  if (isRealCalendarDay(otherRoles.day, otherRoles.month, year)) {
     return {
       kind: "refuse",
       code: DatetimeErrorCodes.DATE_ORDER_MISMATCH,
@@ -531,15 +539,18 @@ function orderMismatchUnderYearFirst(
 ): NumericDateRead {
   const dayFirst = rolesFor("DMY", g0, g1);
   const monthFirst = rolesFor("MDY", g0, g1);
-  const dayFirstReal = isRealCalendarDay(dayFirst.day, dayFirst.month, year, calendar);
-  const monthFirstReal = isRealCalendarDay(monthFirst.day, monthFirst.month, year, calendar);
+  const dayFirstReal = isRealCalendarDay(dayFirst.day, dayFirst.month, year);
+  const monthFirstReal = isRealCalendarDay(monthFirst.day, monthFirst.month, year);
 
   if (!dayFirstReal && !monthFirstReal) {
     return notACalendarDay(text, dayFirst.day, dayFirst.month, year);
   }
 
   const opening = `"${text}" is not a date read year first.`;
-  if (dayFirstReal && monthFirstReal) {
+  // Both readings can name the SAME day (`03/03/2026`), and offering it twice
+  // read as a bug in the sentence rather than as advice. One reading, said once.
+  const sameDay = dayFirst.day === monthFirst.day && dayFirst.month === monthFirst.month;
+  if (dayFirstReal && monthFirstReal && !sameDay) {
     return {
       kind: "refuse",
       code: DatetimeErrorCodes.DATE_ORDER_MISMATCH,

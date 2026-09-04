@@ -33,6 +33,21 @@ export interface Token {
 	 * the one thing the parser will see rather than as its parts.
 	 */
 	sourceEnd?: number;
+
+	/**
+	 * Why a fused token stands for something the engine refuses to read, when
+	 * it does.
+	 *
+	 * Set by a normaliser rule that has decided a run is not what it is spelled
+	 * like and will not be read as arithmetic either: a date literal naming no
+	 * real day. The parselet for the fused type turns it into an Error value.
+	 *
+	 * Carried here rather than packed into `value`, because `value` is what a
+	 * parse error and the editor's per-keystroke token API print, and a reader
+	 * shown `{"code":"...","message":"..."}` is being shown the engine's
+	 * internals. `value` stays the text the reader typed.
+	 */
+	fault?: { readonly code: string; readonly message: string };
 }
 
 /**

@@ -28,8 +28,9 @@ export class UnreadableDateParselet implements PrefixParselet {
   readonly category = "Date/Time";
 
   parse(_parser: Parser, token: Token, builder: BytecodeBuilder): void {
-    // The normaliser packed both halves into the token's one payload field.
-    const fault = JSON.parse(token.value) as { code: string; message: string };
+    // The normaliser hung the reason on the token; `value` is the text the
+    // reader typed, so anything that prints it prints the date.
+    const fault = token.fault ?? { code: "DATE_NOT_A_CALENDAR_DAY", message: `"${token.value}" is not a date this engine can read.` };
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(fault.code);
     builder.emitOpcode(OpCode.PUSH_STRING);
