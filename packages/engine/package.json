@@ -198,6 +198,16 @@
         "default": "./dist/worker.cjs"
       }
     },
+    "./engine-worker": {
+      "import": {
+        "types": "./dist/engine.worker.d.ts",
+        "default": "./dist/engine.worker.js"
+      },
+      "require": {
+        "types": "./dist/engine.worker.d.cts",
+        "default": "./dist/engine.worker.cjs"
+      }
+    },
     "./testing": {
       "import": {
         "types": "./dist/testing.d.ts",

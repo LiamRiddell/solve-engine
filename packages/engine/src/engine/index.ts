@@ -75,3 +75,8 @@ export type { ValidationConfig, SafetyCheckResult } from "./ExpressionEngineSafe
 // Re-exported here (not from `types/`, which is internal-only) because it's
 // the return type of the public findInlineSolvesInLine() above.
 export type { InlineSolvePosition } from "@solve-js/types/ParsingResult";
+
+// Off-thread compile and execute: how a host says what to start a worker
+// from. Exported here beside ThreeTierEvaluator, which is what uses it.
+export { setEngineWorkerFactory } from "@solve-js/workers/WorkerFactory";
+export type { EngineWorkerFactory } from "@solve-js/workers/WorkerFactory";

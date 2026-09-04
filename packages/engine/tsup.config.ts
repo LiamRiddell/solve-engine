@@ -23,6 +23,11 @@ export default defineConfig({
 		// src/temporal is reachable from the root entry or any other subpath:
 		// a host that never imports it ships none of it.
 		temporal: "src/temporal/index.ts",
+		// The worker entry. Its own bundle for the same reason as temporal, and
+		// a stronger one: it registers the full package vocabulary, which no
+		// consumer's main bundle should carry. Nothing else imports it, so it
+		// is reachable only by a host that starts a worker from it.
+		"engine.worker": "src/workers/engine.worker.ts",
 	},
 	format: ["esm", "cjs"],
 	dts: true,
