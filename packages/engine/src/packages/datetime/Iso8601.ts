@@ -21,6 +21,8 @@
  */
 
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
+import { encodeFixedOffset } from "@solve-js/calendar/IntlZone";
+import type { DatetimeGrain } from "@solve-js/vm/Value";
 
 /**
  * Matches a (reasonably) well-formed ISO8601 date or date-time string:
@@ -70,6 +72,51 @@ export function parseIso8601(s: string, calendar: CalendarBackend): number | nul
   if (!ISO8601_PATTERN.test(trimmed)) return null;
   const ms = calendar.parseIso8601(trimmed);
   return Number.isNaN(ms) ? null : ms;
+}
+
+/**
+ * The same shape as {@link ISO8601_PATTERN}, with the two parts that decide
+ * the grain captured: the time of day, and the `Z` or `±HH:MM` after it.
+ *
+ * Kept beside the pattern it mirrors so the two cannot drift. The offset group
+ * is only reachable after a time group has matched, which is what stops
+ * `12-25-2023` being read as a date with a `-20:23` offset.
+ */
+const ISO8601_GRAIN_PATTERN =
+  /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/;
+
+/**
+ * What an ISO 8601 literal's text says its instant anchors, and the zone it
+ * named, if any.
+ *
+ * The three answers are the three spellings, decided from the text rather than
+ * from the instant, because the instant cannot tell them apart: under `TZ=UTC`
+ * the nine o'clock in `2026-04-03T09:00:00+09:00` IS midnight, so a reading
+ * that tested the time fields would call it a calendar day and lose the hour
+ * the reader typed.
+ *
+ * - No time of day, or text this pattern does not match at all (`03/04/2026`,
+ *   `3 April 2026`, `25.12.2023`): a calendar day.
+ * - A time of day and nothing after it: a wall-clock reading, in whatever zone
+ *   the calendar backend reads as local.
+ * - A time of day and a `Z` or an offset: a fixed instant, carrying that offset
+ *   as its zone. An offset is recorded as an offset (`"UTCOFFSET:540"`) and
+ *   never widened to a zone: `+09:00` says nothing about Tokyo's
+ *   daylight-saving rules and must not be made to.
+ *
+ * @param text - The literal as it was written.
+ * @returns The grain, and the zone reference when the literal named one.
+ */
+export function iso8601Grain(text: string): { grain: DatetimeGrain; zone?: string } {
+  const matched = ISO8601_GRAIN_PATTERN.exec(text.trim());
+  if (matched === null || matched[1] === undefined) return { grain: "date" };
+  const offset = matched[2];
+  if (offset === undefined) return { grain: "datetime" };
+  if (offset === "Z") return { grain: "instant", zone: encodeFixedOffset(0) };
+  const sign = offset[0] === "-" ? -1 : 1;
+  const digits = offset.slice(1).replace(":", "");
+  const minutes = Number(digits.slice(0, 2)) * 60 + Number(digits.slice(2));
+  return { grain: "instant", zone: encodeFixedOffset(sign * minutes) };
 }
 
 /**

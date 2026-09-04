@@ -1,6 +1,8 @@
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { DatetimeErrorCodes } from "@solve-js/errors/ErrorCode";
 import type { CalendarBackend, CalendarFields, ZonedFields } from "./CalendarBackend";
-import { daysInMonth, utcMs } from "./Gregorian";
-import { dateInZone, timeInZone, zonedFields } from "./IntlZone";
+import { dayNumber, daysInMonth, utcMs } from "./Gregorian";
+import { dateInZone, isSupportedZone, longDateInZone, timeInZone, timeOfDayInZone, zonedFields, zonedWallClockToUtcMs } from "./IntlZone";
 
 /**
  * The default {@link CalendarBackend}: the JavaScript `Date` object, read in
@@ -136,4 +138,134 @@ export const DATE_CALENDAR: CalendarBackend = new DateCalendar();
  */
 export function calendarOf(context?: { readonly calendar?: CalendarBackend }): CalendarBackend {
 	return context?.calendar ?? DATE_CALENDAR;
+}
+
+/**
+ * The `Date` backend, computing in a named IANA zone instead of the host
+ * process's.
+ *
+ * Every zone-free answer is inherited unchanged from {@link DateCalendar}:
+ * `now()` is still the clock, `parseIso8601` still reads the two ECMAScript
+ * spellings, and the four named-zone methods already took the zone as an
+ * argument. What changes is what "local" means, which is exactly the set of
+ * questions {@link CalendarBackend} says depends on a zone: which day an
+ * instant falls on, what a wall-clock reading names, what a day or a month
+ * later is, and what the offset from UTC is.
+ *
+ * Those are answered through `Intl`, the same data the base class already
+ * reads named zones with, so the accuracy is the same and nothing new is
+ * bundled. The one place it is a simplification is a wall clock that a
+ * daylight-saving transition made ambiguous or non-existent (01:30 on a
+ * spring-forward morning): the single-pass round trip
+ * {@link zonedWallClockToUtcMs} documents resolves it one way, and a
+ * `Temporal` backend's `disambiguation: 'compatible'` may resolve it an hour
+ * differently.
+ */
+class ZonedDateCalendar extends DateCalendar {
+	/**
+	 * @param namedZone - An IANA zone name `Intl` accepts.
+	 */
+	constructor(private readonly namedZone: string) {
+		super();
+	}
+
+	zone(): string {
+		return this.namedZone;
+	}
+
+	fields(epochMs: number): CalendarFields {
+		const f = zonedFields(this.namedZone, epochMs);
+		// `zonedFields` answers no weekday and no millisecond: the weekday is a
+		// pure function of the zoned date (`Gregorian.dayNumber`, counting from a
+		// Thursday), and the millisecond is the instant's own, which no zone
+		// offset in use is fractional enough to move.
+		const weekday = (((dayNumber(f.year, f.month0, f.day) + 4) % 7) + 7) % 7;
+		return {
+			year: f.year, month0: f.month0, day: f.day, weekday,
+			hour: f.hour, minute: f.minute, second: f.second,
+			millisecond: ((epochMs % 1000) + 1000) % 1000,
+		};
+	}
+
+	localMidnight(year: number, month0: number, day: number): number {
+		return zonedWallClockToUtcMs(year, month0, day, 0, 0, this.namedZone, this);
+	}
+
+	localWallClock(year: number, month0: number, day: number, minutesPastMidnight: number): number {
+		// The minutes go in as the MINUTE field, not as elapsed time, so a
+		// reading of 540 is 09:00 on that date even on a 23-hour day. `Date.UTC`
+		// rolls a minute field past 59 into the hour, which is what makes one
+		// argument enough.
+		return zonedWallClockToUtcMs(year, month0, day, 0, minutesPastMidnight, this.namedZone, this);
+	}
+
+	addDays(epochMs: number, days: number): number {
+		const f = zonedFields(this.namedZone, epochMs);
+		return this.reanchor(f, f.day + days, epochMs);
+	}
+
+	addMonths(epochMs: number, months: number): number {
+		const f = zonedFields(this.namedZone, epochMs);
+		const target = new Date(Date.UTC(f.year, f.month0 + months, 1));
+		const clampedDay = Math.min(f.day, daysInMonth(target.getUTCFullYear(), target.getUTCMonth()));
+		return zonedWallClockToUtcMs(
+			target.getUTCFullYear(), target.getUTCMonth(), clampedDay,
+			f.hour, f.minute, this.namedZone, this,
+		) + f.second * 1000 + (((epochMs % 1000) + 1000) % 1000);
+	}
+
+	utcOffsetMinutes(epochMs: number): number {
+		return this.zoneOffsetMinutes(this.namedZone, epochMs);
+	}
+
+	formatLongDate(epochMs: number, locale: string): string {
+		return longDateInZone(this.namedZone, epochMs, locale);
+	}
+
+	formatTimeOfDay(epochMs: number, locale: string): string {
+		return timeOfDayInZone(this.namedZone, epochMs, locale);
+	}
+
+	/** Rebuild an instant on a (possibly overflowed) day, holding its wall clock down to the millisecond. */
+	private reanchor(f: ZonedFields, day: number, epochMs: number): number {
+		return zonedWallClockToUtcMs(f.year, f.month0, day, f.hour, f.minute, this.namedZone, this)
+			+ f.second * 1000 + (((epochMs % 1000) + 1000) % 1000);
+	}
+}
+
+/**
+ * A `Date` backend that computes in a named time zone rather than the host
+ * process's.
+ *
+ * This is how a host pins the zone the engine reads dates in, and it is the
+ * only knob for it: the zone belongs to the calendar backend, which already
+ * owns what "local" means, so there is deliberately no `date.zone` config
+ * field to drift against it.
+ *
+ * ```ts
+ * import { createEngine, dateCalendarInZone } from "solve-engine";
+ * const engine = createEngine({ calendar: dateCalendarInZone("Asia/Tokyo") });
+ * ```
+ *
+ * It ships on the `Date` backend on purpose. `Temporal` is undefined on Node
+ * 24 and in Safari, so "pass a `Temporal` backend" would put the zone out of
+ * reach for most hosts today; `Temporal` stays an accuracy upgrade for the
+ * ambiguous wall clocks around a daylight-saving transition, never a
+ * prerequisite for naming a zone at all.
+ *
+ * @param zone - An IANA zone name, e.g. `"Asia/Tokyo"`.
+ * @returns A backend whose local zone is that one.
+ * @throws A `DATE_ZONE_UNKNOWN` config error when this runtime's `Intl` does
+ *   not know the zone. Refused here rather than per line, because a backend
+ *   that cannot compute in the zone it was asked for must not quietly answer
+ *   in another one.
+ */
+export function dateCalendarInZone(zone: string): CalendarBackend {
+	if (!isSupportedZone(zone)) {
+		throw ErrorFactory.config(
+			DatetimeErrorCodes.DATE_ZONE_UNKNOWN,
+			`dateCalendarInZone("${zone}") is not a time zone this runtime knows.`,
+		);
+	}
+	return new ZonedDateCalendar(zone);
 }

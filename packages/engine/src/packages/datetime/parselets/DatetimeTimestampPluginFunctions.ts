@@ -1,4 +1,4 @@
-import { Value, ValueType, numberValue, stringValue, boolValue, uomValue, datetimeValue, errorValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, stringValue, boolValue, uomValue, datetimeValue, errorValue, type DatetimeGrain } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { calendarOf } from "@solve-js/calendar/DateCalendar";
@@ -253,6 +253,17 @@ function toDateFromAnyHandler(args: Value[], context?: LineExecutionContext): Va
 }
 
 /**
+ * Attach the grain and the zone an ISO literal's own text named. See
+ * {@link datetimeLiteralGrain}.
+ */
+function datetimeLiteralGrainHandler(args: Value[]): Value {
+  const instant = args[0];
+  const grain = args[1].value as DatetimeGrain;
+  const zone = args[2].value as string;
+  return datetimeValue(instant.toNumber(), grain, zone === "" ? undefined : zone);
+}
+
+/**
  * `<date/time> to timestamp` / `current timestamp` -> a Unix timestamp in
  * SECONDS (rounded down), as a plain Number.
  *
@@ -322,3 +333,15 @@ export const toDateFromAny = toDateFromAnyHandler;
  * {@link toDateFromAny}.
  */
 export const toTimestampFromAny = toTimestampFromAnyHandler;
+/**
+ * Fasten the grain and the zone an ISO literal named onto the Datetime the
+ * `DATE_LITERAL` opcode just pushed.
+ *
+ * Reached only from `DateLiteralParselet` and only for a literal that carries
+ * a time of day: a plain calendar date is the opcode on its own, and pays
+ * nothing for this. The arguments are the value, the grain as a string and the
+ * zone reference (empty when the literal named none). A plugin call rather
+ * than a bytecode operand, because the operand would move
+ * `SerializedBytecode` and with it every stored snapshot.
+ */
+export const datetimeLiteralGrain = datetimeLiteralGrainHandler;

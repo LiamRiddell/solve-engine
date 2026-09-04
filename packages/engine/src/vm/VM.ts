@@ -10,7 +10,7 @@ import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/v
 import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
-import { CoreErrorCodes } from "@solve-js/errors/ErrorCode";
+import { CoreErrorCodes, DatetimeErrorCodes } from "@solve-js/errors/ErrorCode";
 import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@solve-js/vm/BusinessDays";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
 import { builtinFunctions, asConverterRegistry } from "@solve-js/vm/VMBuiltins";
@@ -24,6 +24,8 @@ import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
+import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
+import { resolveZoneName } from "@solve-js/calendar/ZoneNames";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 
 /**
@@ -1373,6 +1375,48 @@ function isTruthy(value: Value): boolean {
  * exchange does not consider money ("$100 in HRK"). All three are questions
  * with no answer, so all three say so.
  */
+/**
+ * Read a Datetime in a named time zone: the `<datetime> in <zone>` branch of
+ * the conversion opcode.
+ *
+ * What the answer is depends on what the instant anchors, which is why the
+ * grain sidecar exists. A calendar day becomes that day in the named zone, and
+ * a wall-clock reading becomes that reading there, both by re-anchoring the
+ * local fields; an instant, and a value whose grain was never recorded, keeps
+ * its number and only gains the zone, because moving a fixed point on the
+ * timeline would answer a different question from the one asked.
+ *
+ * Nothing about the answer is displayed in 2.26.0: `formatDatetime` does not
+ * read either sidecar, so a re-anchored day renders as the day it now is and
+ * an instant renders exactly as it did.
+ */
+function datetimeInZone(left: Value, name: string, vm: VM): Value {
+    const zoneRef = resolveZoneName(name);
+    if (zoneRef === null) {
+        // A real unit on the right is a different mistake from a misspelt zone,
+        // and the two need different advice. `getMeasure` covers the unit table
+        // and the currency check covers the codes it does not.
+        const isUnit = getMeasure(name) !== undefined || sharedCurrencyExchange.isCurrency(name);
+        return isUnit
+            ? errorValue(
+                DatetimeErrorCodes.DATETIME_NOT_CONVERTIBLE,
+                `A date cannot be read in "${name}". "in <name>" after a date names a time zone, as in "2026-04-03 in Tokyo"`,
+            )
+            : errorValue(
+                DatetimeErrorCodes.DATETIME_ZONE_UNKNOWN,
+                `"${name}" is not a time zone this engine knows. Name a city ("in Tokyo"), a standard abbreviation ("in JST") or "in UTC"`,
+            );
+    }
+    const epochMs = left.toNumber();
+    if (left.grain !== "date" && left.grain !== "datetime") {
+        return datetimeValue(epochMs, "instant", zoneRef);
+    }
+    const calendar = vm.context.calendar;
+    const f = calendar.fields(epochMs);
+    const reanchored = zonedWallClockToUtcMs(f.year, f.month0, f.day, f.hour, f.minute, zoneRef, calendar);
+    return datetimeValue(reanchored + f.second * 1000 + f.millisecond, "instant", zoneRef);
+}
+
 function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
     // Name the two dimensions when both are known ("a duration cannot be
     // converted to a length"). A compound rate or an unrecognised currency code
@@ -1918,7 +1962,10 @@ export function executeBytecode(
             } else {
               // Workdays, calendar months/years and whole calendar days each
               // move a date differently. See shiftDatetime()'s doc comment.
-              stack.push(datetimeValue(shiftDatetime(l.toNumber(), r, 1, vm)));
+              // Shifting a date does not change what it anchors, so the grain
+              // and the zone carry to the result: "2026-04-03 in Tokyo + 1 day"
+              // is still that day in Tokyo, one day on.
+              stack.push(datetimeValue(shiftDatetime(l.toNumber(), r, 1, vm), l.grain, l.zone));
             }
           } else if (l.type === ValueType.Uom && isTimecodeUnit(l.unit)) {
             // "timecode + N frames" / "timecode + duration" / "timecode +
@@ -1932,7 +1979,7 @@ export function executeBytecode(
             // answered 1,703,491,200,100. Both are the date's epoch
             // milliseconds wearing the wrong type, which is a confident wrong
             // answer rather than a visible failure.
-            stack.push(datetimeValue(shiftDatetime(r.toNumber(), l, 1, vm)));
+            stack.push(datetimeValue(shiftDatetime(r.toNumber(), l, 1, vm), r.grain, r.zone));
           } else if (l.type === ValueType.String && r.type === ValueType.String) {
             // Text joins to text: "foo" + " bar" is "foo bar". Deliberately only
             // when both sides are text. A string plus a number has no defined
@@ -1984,7 +2031,7 @@ export function executeBytecode(
             } else {
               // See the matching ADD case above, and shiftDatetime()'s own
               // doc comment for why a day is not a fixed number of ms.
-              stack.push(datetimeValue(shiftDatetime(l.toNumber(), r, -1, vm)));
+              stack.push(datetimeValue(shiftDatetime(l.toNumber(), r, -1, vm), l.grain, l.zone));
             }
           } else if (l.type === ValueType.Uom && isTimecodeUnit(l.unit)) {
             // "timecode - timecode" (difference) / "timecode - duration"
@@ -3131,6 +3178,15 @@ export function executeBytecode(
                 stack.push(incompatibleConversionError(fromUnit, toUnit));
               }
             }
+          } else if (left.type === ValueType.Datetime) {
+            // `<datetime> in <zone>`. Ahead of the fall-through below, which
+            // read the epoch-millisecond payload as a magnitude and labelled it
+            // with the name: `2026-04-03 in Tokyo` answered
+            // `1,775,170,800,000.00 Tokyo`, a fourteen-digit quantity in a unit
+            // named after a city. There is no new parselet here on purpose, the
+            // currency package already owns the `IN` infix slot and a second
+            // registration would overwrite it.
+            stack.push(datetimeInZone(left, toUnit, vm));
           } else {
             stack.push(uomValue(left.toNumber(), toUnit));
           }
@@ -3231,7 +3287,10 @@ export function executeBytecode(
           const totalMinutes = minutesValue.toNumber();
           const clockCalendar = vm.context.calendar;
           const clockToday = clockCalendar.fields(clockCalendar.now());
-          stack.push(datetimeValue(clockCalendar.localWallClock(clockToday.year, clockToday.month0, clockToday.day, totalMinutes)));
+          // A clock time is a wall-clock READING in the backend's own zone, not
+          // a fixed instant: "6pm" names six in the evening wherever it is read,
+          // which is what lets "6pm in Chicago" mean six in Chicago.
+          stack.push(datetimeValue(clockCalendar.localWallClock(clockToday.year, clockToday.month0, clockToday.day, totalMinutes), "datetime"));
           break;
         }
 
@@ -3239,10 +3298,17 @@ export function executeBytecode(
         // §9  Datetime  (OpCode 90–93)
         // ═══════════════════════════════════════════════════════════════
         case OpCode.DATE_NOW:
-          stack.push(datetimeValue(vm.context.calendar.now()));
+          // `now` (and `today`, which is the same opcode) reads the clock, so
+          // the instant is fixed rather than a reading that depends on a zone.
+          stack.push(datetimeValue(vm.context.calendar.now(), "instant"));
           break;
         case OpCode.DATE_LITERAL:
-          stack.push(datetimeValue(numbers[poolIndex(opcodes, ip++, op, "constant-pool index", numbers.length, "number-pool")]));
+          // A literal reaching this opcode is a calendar DAY, held as its local
+          // midnight: `DateLiteralParselet` sends every other shape (an ISO
+          // literal with a time of day, with or without an offset) down the
+          // plugin-call path instead, precisely so the grain here is known by
+          // construction and never guessed from the number.
+          stack.push(datetimeValue(numbers[poolIndex(opcodes, ip++, op, "constant-pool index", numbers.length, "number-pool")], "date"));
           break;
         case OpCode.DATE_ADD: {
           const durValue = safePop(stack), dtValue = safePop(stack);
@@ -3251,14 +3317,17 @@ export function executeBytecode(
           // reasoning as OpCode.ADD's own check.
           const dateAddFault = faultedOperand(dtValue, durValue);
           if (dateAddFault) { stack.push(dateAddFault); break; }
-          stack.push(datetimeValue(shiftDatetime(dtValue.toNumber(), durValue, 1, vm)));
+          // Shifting a date by a duration does not change what it anchors, so
+          // the grain and the zone carry: "2026-04-03 in Tokyo + 1 day" is
+          // still a day in Tokyo.
+          stack.push(datetimeValue(shiftDatetime(dtValue.toNumber(), durValue, 1, vm), dtValue.grain, dtValue.zone));
           break;
         }
         case OpCode.DATE_SUB: {
           const durValue = safePop(stack), dtValue = safePop(stack);
           const dateSubFault = faultedOperand(dtValue, durValue);
           if (dateSubFault) { stack.push(dateSubFault); break; }
-          stack.push(datetimeValue(shiftDatetime(dtValue.toNumber(), durValue, -1, vm)));
+          stack.push(datetimeValue(shiftDatetime(dtValue.toNumber(), durValue, -1, vm), dtValue.grain, dtValue.zone));
           break;
         }
         case OpCode.DATE_WORKDAY_OFFSET: {
