@@ -21,6 +21,10 @@ description: Clock times, intervals, frame rates and timezones.
 Intervals crossing midnight are handled, so `4pm to 3am` is eleven hours rather
 than a negative span.
 
+Clock times added together are lengths rather than times of day, which is the
+timesheet sum: `8:15 + 7:45 + 8:30` is the week so far. That, the span and the
+hourly rate are on [timesheets](/syntax/timesheets/).
+
 ## Timezones
 
 A time zone is a region that keeps the same clock: when it is nine in the

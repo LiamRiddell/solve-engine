@@ -1,3 +1,4 @@
+import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { isInsideRangeContext } from "@solve-js/normalizer/BuiltinNormalizerRules";
@@ -24,6 +25,22 @@ function computeTotalMinutes(hour: number, minute: number, ampm: string | undefi
 
 function isAmPmToken(token: { type: string; value: string } | undefined): token is { type: string; value: string } {
   return !!token && token.type === "IDENT" && /^(am|pm)$/i.test(token.value);
+}
+
+/**
+ * The fused clock-time token, carrying its own source text.
+ *
+ * `createFusedToken` writes the value into both fields, which for this token
+ * means the text reads `540` where the line said `9am`. Nothing consumes a
+ * clock time's text as a payload (the minutes are in `value`), and two things
+ * want the real thing: a span that covers what was written, and
+ * `clockTimeSumNormalizerRule`, which adds bare times and refuses times of day,
+ * a distinction only the source spelling carries.
+ */
+function fusedClockTime(source: Token[], totalMinutes: number): Token {
+  const token = createFusedToken("CLOCK_TIME", String(totalMinutes), source);
+  token.text = source.map((t) => t.text ?? "").join("");
+  return token;
 }
 
 /**
@@ -81,7 +98,7 @@ export function clockTimeNormalizerRule(priority = 65): NormalizerRule {
         const consumed = hasAmPm ? 4 : 3;
         return {
           consumed,
-          replacement: [createFusedToken("CLOCK_TIME", String(totalMinutes), tokens.slice(pos, pos + consumed))],
+          replacement: [fusedClockTime(tokens.slice(pos, pos + consumed), totalMinutes)],
           ruleName: "time:clock-time",
         };
       }
@@ -93,7 +110,7 @@ export function clockTimeNormalizerRule(priority = 65): NormalizerRule {
         if (totalMinutes === null) return null;
         return {
           consumed: 2,
-          replacement: [createFusedToken("CLOCK_TIME", String(totalMinutes), tokens.slice(pos, pos + 2))],
+          replacement: [fusedClockTime(tokens.slice(pos, pos + 2), totalMinutes)],
           ruleName: "time:clock-time",
         };
       }
