@@ -417,6 +417,23 @@ export class ExpressionEngine {
     private batchParsedLines: ParsedLine[] | null = null;
 
     /**
+     * The context handed to every line of the current pass, its line number
+     * set by mutation before each execution. The closures inside read only
+     * the document model, or the batch pass's scan and results array, and
+     * those are fixed for the length of a pass, so one object serves the
+     * pass: {@link makeLineContext} rebuilds it the moment any of the three
+     * changes, and a batch pass drops it as it ends so a finished pass's scan
+     * is not retained. The goal-seek re-entry builds its own instead (see
+     * {@link evaluateLineWithBinding}): it runs inside another line's
+     * evaluation, and moving the shared line number under that line would
+     * misdirect every cross-line read it makes afterwards.
+     */
+    private lineContext: LineExecutionContext | null = null;
+    private lineContextDoc: DocumentModel | null = null;
+    private lineContextScan: ScanLineResult[] | null = null;
+    private lineContextParsed: ParsedLine[] | null = null;
+
+    /**
      * Called once by `ThreeTierEvaluator`'s constructor. Not part of the
      * public evaluate-a-document contract, purely internal wiring so
      * {@link makeLineContext} has something to read from.
@@ -503,17 +520,47 @@ export class ExpressionEngine {
     }
 
     /**
-     * Build the {@link LineExecutionContext} passed to `executeBytecode()`
-     * for a given line. `lineNumber = -1` (the existing sentinel
+     * The {@link LineExecutionContext} passed to `executeBytecode()` for a
+     * given line. `lineNumber = -1` (the existing sentinel
      * `evaluateExpression()`/`evaluateLine(-1, ...)` already use for "no
      * real document") naturally produces a context with both closures
      * `undefined`, a cross-line plugin function must check for that itself
      * and return a clear error, never assume line 0 exists.
+     *
+     * One object serves a whole pass, its line number set by mutation here:
+     * the closures read only the document model, or the batch pass's scan
+     * and results, and those are fixed for the length of a pass, so the
+     * context is rebuilt only when one of them changes. See
+     * {@link lineContext} for the re-entrant case that must not share it.
      */
     private makeLineContext(lineNumber: number): LineExecutionContext {
         const doc = this.documentModel;
         const scan = doc ? null : this.batchScanResults;
         const parsed = doc ? null : this.batchParsedLines;
+        let context = this.lineContext;
+        if (context === null || this.lineContextDoc !== doc || this.lineContextScan !== scan || this.lineContextParsed !== parsed) {
+            context = this.buildLineContext(doc, scan, parsed, lineNumber);
+            this.lineContext = context;
+            this.lineContextDoc = doc;
+            this.lineContextScan = scan;
+            this.lineContextParsed = parsed;
+        }
+        context.lineIndex = lineNumber;
+        return context;
+    }
+
+    /**
+     * Allocate a context over the given cross-line sources. Every ordinary
+     * line goes through {@link makeLineContext}, which keeps one of these per
+     * pass; this is the allocation itself, called directly where a fresh
+     * object is required.
+     */
+    private buildLineContext(
+        doc: DocumentModel | null,
+        scan: ScanLineResult[] | null,
+        parsed: ParsedLine[] | null,
+        lineNumber: number,
+    ): LineExecutionContext {
         return {
             lineIndex: lineNumber,
             getLineResult: doc
@@ -524,7 +571,7 @@ export class ExpressionEngine {
             isLineBoundary: doc
                 ? (n: number) => {
                       const state = doc.getLineAt(n);
-                      if (!state) return true; // out of range counts as a boundary — nothing to aggregate past it
+                      if (!state) return true; // out of range counts as a boundary: nothing to aggregate past it
                       return state.isEmpty || /^\s*#/.test(state.text);
                   }
                 : scan
@@ -615,7 +662,10 @@ export class ExpressionEngine {
             const stackBefore = this.vm.getStack().length;
             this.vm.pushCallFrame(frame);
             try {
-                const result = executeBytecode(program, this.vm, undefined, undefined, this.makeLineContext(targetLine), symbolicTolerant);
+                // A fresh context, not the pass's shared one: this runs inside
+                // the goal-seek line's own evaluation, whose context must keep
+                // its line number for the cross-line reads it makes afterwards.
+                const result = executeBytecode(program, this.vm, undefined, undefined, this.buildLineContext(doc, null, null, targetLine), symbolicTolerant);
                 if (result.type === 'pending') {
                     return errorValue("GOAL_SEEK_ASYNC_UNSUPPORTED", `Line ${targetLine} depends on an async value (weather, stocks, currency, ...), which goal seek cannot re-run.`);
                 }
@@ -655,9 +705,9 @@ export class ExpressionEngine {
      * is aborted, causing all in-flight async work (fetches, preflight checks,
      * batcher flushes) to be canceled atomically.
      *
-     * executeAndStore() and executeRaw() link their local AbortControllers to
-     * this signal so that when the keystroke changes, all per-evaluation controllers
-     * are aborted together.
+     * {@link armCancellation} links each per-evaluation AbortController to
+     * this signal, for a line that can have work in flight, so that when the
+     * keystroke changes, all of them are aborted together.
      */
     private keystrokeSignal: AbortSignal | null = null;
 
@@ -677,6 +727,13 @@ export class ExpressionEngine {
      * its results as current; the manager's own timers are what stop the work.
      */
     private readonly backgroundRefreshSignal = new AbortController().signal;
+    /**
+     * The signal a line no resolver could intercept executes under. Never
+     * aborted: such a line has no in-flight work for a keystroke to cancel,
+     * so it shares this one signal rather than allocating a controller and
+     * linking a listener nothing could fire. See {@link armCancellation}.
+     */
+    private readonly inertSignal = new AbortController().signal;
     /** Post-lexer token normalizer for phrase fusion, implicit multiply, etc. */
     private normalizer: TokenNormalizer;
     /**
@@ -690,9 +747,11 @@ export class ExpressionEngine {
     /** TanStack Query client, injected into resolvers for cache reads/writes. */
     readonly queryClient: QueryClient;
     // Bytecode cache, avoids re-parsing identical expressions.
-    // Bounded by config.performance.defaultCacheSize: when full, the oldest
-    // entry (Map insertion order) is evicted so unique expressions across a
-    // long session can't grow memory unboundedly.
+    // Bounded by config.performance.defaultCacheSize: when full, the least
+    // recently used entry is evicted so unique expressions across a long
+    // session can't grow memory unboundedly. A Map keeps insertion order and
+    // a hit re-inserts its key (see touchCompiled), so the first key is the
+    // one nothing has asked for in the longest time.
     private bytecodeCache: Map<string, BytecodeProgram> = new Map();
 
     /**
@@ -745,7 +804,8 @@ export class ExpressionEngine {
     }
 
     /**
-     * Insert into the bytecode cache, evicting the oldest entry when full.
+     * Insert into the bytecode cache, evicting the least recently used entry
+     * when full.
      *
      * Bug fix (found during release hardening): this used to check against
      * a hardcoded `BYTECODE_CACHE_MAX_ENTRIES = 2000` constant that never
@@ -758,22 +818,66 @@ export class ExpressionEngine {
     private cacheBytecode(expression: string, program: BytecodeProgram, front: { normalizedTokens: Token[]; reads: string[]; writes: string[] }): void {
         const maxEntries = this.config.performance.defaultCacheSize;
         if (this.bytecodeCache.size >= maxEntries) {
-            const oldest = this.bytecodeCache.keys().next().value;
-            if (oldest !== undefined) {
-                this.bytecodeCache.delete(oldest);
-                this.compiledFrontHalf.delete(oldest);
+            // The first key is the least recently used, because every hit
+            // re-inserts its key at the end (see touchCompiled).
+            const leastRecent = this.bytecodeCache.keys().next().value;
+            if (leastRecent !== undefined) {
+                this.bytecodeCache.delete(leastRecent);
+                this.compiledFrontHalf.delete(leastRecent);
             }
         }
         this.bytecodeCache.set(expression, program);
         this.compiledFrontHalf.set(expression, front);
     }
 
-    /** Remember a parse failure, evicting the oldest when full: bounded like the program cache. */
+    /**
+     * Mark a cached program as just used, so eviction passes over it.
+     *
+     * Re-inserting the key moves it to the end of the Map's insertion order,
+     * which makes the first key the least recently used, and that is where
+     * {@link cacheBytecode} evicts from. Insertion order alone evicted the
+     * earliest compiled line however hot it was: a document re-evaluated on
+     * every keystroke touches all of its lines, and each one-off expression
+     * (an inline solve, a classification probe of a prose line) pushed one
+     * of them out once the cap was reached. About 45 ns per hit, measured.
+     * The front half is not moved: it is keyed identically, evicted with the
+     * same victim, and its own order is never consulted.
+     *
+     * Only once the cache is full, which is the whole point: recency decides
+     * who gets evicted, and nothing is evicted below the cap, so under it the
+     * delete and re-insert buy nothing and cost on the hottest path there is.
+     * The 45 ns measured for one hit is not what it costs in a document, where
+     * every keystroke touches every line: a variable chain measured 1.17 ms
+     * before this guard and 2.10 ms after the LRU went in, in the same CI run
+     * as its own merge base. A Map holds a deleted key's slot until it
+     * compacts, so a delete-and-add on every hit pays for that repeatedly
+     * rather than once.
+     *
+     * The trade this leaves: the first eviction after the cache fills reads
+     * insertion order rather than true recency, because nothing before the cap
+     * was ordered. Every hit after that re-inserts, so the order is accurate
+     * from the second eviction on, and the first victim is at worst the same
+     * one insertion order would have chosen anyway.
+     */
+    private touchCompiled(expression: string, program: BytecodeProgram): void {
+        if (this.bytecodeCache.size < this.config.performance.defaultCacheSize) return;
+        this.bytecodeCache.delete(expression);
+        this.bytecodeCache.set(expression, program);
+    }
+
+    /** Remember a parse failure, evicting the least recently used when full: bounded like the program cache. */
     private rememberFailedParse(expression: string, failure: { error: EngineError; normalizedTokens: Token[]; reads: string[]; writes: string[] }): void {
         if (this.failedParses.size >= this.config.performance.defaultCacheSize) {
-            const oldest = this.failedParses.keys().next().value;
-            if (oldest !== undefined) this.failedParses.delete(oldest);
+            const leastRecent = this.failedParses.keys().next().value;
+            if (leastRecent !== undefined) this.failedParses.delete(leastRecent);
         }
+        this.failedParses.set(expression, failure);
+    }
+
+    /** Mark a remembered parse failure as just used; the same move, and the same guard, as {@link touchCompiled}. */
+    private touchFailedParse(expression: string, failure: { error: EngineError; normalizedTokens: Token[]; reads: string[]; writes: string[] }): void {
+        if (this.failedParses.size < this.config.performance.defaultCacheSize) return;
+        this.failedParses.delete(expression);
         this.failedParses.set(expression, failure);
     }
     // Maps each registered plugin function's name to the index its handler sits
@@ -1459,6 +1563,59 @@ export class ExpressionEngine {
     }
 
     /**
+     * Whether `program` can have work in flight: it calls a plugin function
+     * (the VM hands its signal to the pending result), or a registered
+     * resolver watches an opcode it contains. Everything else is a plain
+     * line, which skips the async preflight and the cancellation state.
+     */
+    private mayResolve(program: BytecodeProgram): boolean {
+        return program.hasAsync || this.resolverRegistry.mayIntercept(program);
+    }
+
+    /**
+     * Point the VM at the signal `program` executes under.
+     *
+     * A line that can have work in flight gets a fresh controller linked to
+     * the keystroke signal (One AbortController Per Keystroke): when the user
+     * types again the keystroke aborts, which aborts this controller, which
+     * cancels the fetch. A plain line gets the shared {@link inertSignal} and
+     * links nothing, since there is nothing a keystroke could cancel; on a
+     * large document the controller and the two listener changes per line
+     * were most of what a cached line cost.
+     *
+     * @returns The unlink step, to run once the evaluation settles
+     * synchronously (a pending result keeps its link so a later keystroke
+     * still cancels it), or null when nothing was linked.
+     */
+    private armCancellation(program: BytecodeProgram, source: string): (() => void) | null {
+        if (!this.mayResolve(program)) {
+            this.vm.activeSignal = this.inertSignal;
+            this.vm.abortCurrent = undefined;
+            return null;
+        }
+        const controller = new AbortController();
+        const abortLocal = () => controller.abort();
+        // Captured, so the unlink removes the listener from the signal it was
+        // added to even after the host has moved on to the next keystroke.
+        const keystroke = this.keystrokeSignal;
+        keystroke?.addEventListener('abort', abortLocal, { once: true });
+
+        abortLogger.localControllerCreated(source);
+        if (keystroke) {
+            abortLogger.signalLinked(source);
+        }
+
+        const unlink = () => keystroke?.removeEventListener('abort', abortLocal);
+        this.vm.activeSignal = controller.signal;
+        this.vm.abortCurrent = () => {
+            abortLogger.signalUnlinked(source);
+            unlink();
+            controller.abort();
+        };
+        return unlink;
+    }
+
+    /**
      * Execute bytecode and handle the result.
      *
      * Replaces ALL 5 try/catch blocks that previously caught AsyncSuspenseError.
@@ -1487,28 +1644,11 @@ export class ExpressionEngine {
     ): Value {
         const stackBefore = this.vm.getStack().length;
 
-        // Set up AbortController for this evaluation.
-        // When the user edits the line before resolution, the old controller
-        // is aborted, preventing stale data from surfacing.
-        const controller = new AbortController();
-        // ── Link to keystroke signal (One AbortController Per Keystroke) ──
-        // When the user types a new keystroke, the keystrokeController is aborted,
-        // which in turn aborts this local controller, canceling all in-flight
-        // async work for this specific evaluation.
-        const abortLocal = () => controller.abort();
-        this.keystrokeSignal?.addEventListener('abort', abortLocal, { once: true });
-
-        abortLogger.localControllerCreated("executeAndStore");
-        if (this.keystrokeSignal) {
-            abortLogger.signalLinked("executeAndStore");
-        }
-
-        this.vm.activeSignal = controller.signal;
-        this.vm.abortCurrent = () => {
-            abortLogger.signalUnlinked("executeAndStore");
-            this.keystrokeSignal?.removeEventListener('abort', abortLocal);
-            controller.abort();
-        };
+        // The signal this evaluation runs under: a fresh controller linked to
+        // the keystroke when the line can have work in flight, so editing the
+        // line before resolution aborts it and no stale data surfaces; the
+        // shared inert signal otherwise. See armCancellation.
+        const unlink = this.armCancellation(program, "executeAndStore");
 
         setActiveQueryClient(this.queryClient);
         const result = executeBytecode(program, this.vm, tracePipeline, traceExpression, this.makeLineContext(lineNumber));
@@ -1537,14 +1677,14 @@ export class ExpressionEngine {
         }
 
         if (result.type === 'error') {
-            this.keystrokeSignal?.removeEventListener('abort', abortLocal);
+            unlink?.();
             throw result.error;
         }
 
         // Success path, execution finished synchronously, so unhook the
         // keystroke listener now. Without this, one listener per evaluated
         // line accumulates on the keystroke signal for large documents.
-        this.keystrokeSignal?.removeEventListener('abort', abortLocal);
+        unlink?.();
 
         this.dag.registerLine(lineNumber, reads, writes);
         this.storeLineResult(lineNumber, result.value, program, reads, writes, expression);
@@ -1565,22 +1705,9 @@ export class ExpressionEngine {
     private executeRaw(program: BytecodeProgram, lineNumber: number = -1): EvalResult {
         const stackBefore = this.vm.getStack().length;
 
-        const controller = new AbortController();
-        // ── Link to keystroke signal (One AbortController Per Keystroke) ──
-        const abortLocal = () => controller.abort();
-        this.keystrokeSignal?.addEventListener('abort', abortLocal, { once: true });
-
-        abortLogger.localControllerCreated("executeRaw");
-        if (this.keystrokeSignal) {
-            abortLogger.signalLinked("executeRaw");
-        }
-
-        this.vm.activeSignal = controller.signal;
-        this.vm.abortCurrent = () => {
-            abortLogger.signalUnlinked("executeRaw");
-            this.keystrokeSignal?.removeEventListener('abort', abortLocal);
-            controller.abort();
-        };
+        // See armCancellation: a fresh keystroke-linked controller for a line
+        // that can have work in flight, the shared inert signal otherwise.
+        const unlink = this.armCancellation(program, "executeRaw");
 
         setActiveQueryClient(this.queryClient);
         const result = executeBytecode(program, this.vm, undefined, undefined, this.makeLineContext(lineNumber));
@@ -1594,7 +1721,7 @@ export class ExpressionEngine {
         // per-evaluation listener accumulation. Pending results keep the
         // listener so in-flight async work stays cancellable.
         if (result.type !== 'pending') {
-            this.keystrokeSignal?.removeEventListener('abort', abortLocal);
+            unlink?.();
         }
 
         return result;
@@ -1887,6 +2014,9 @@ export class ExpressionEngine {
         } finally {
             this.batchScanResults = previousBatchScanResults;
             this.batchParsedLines = previousBatchParsedLines;
+            // The pass's shared context closed over this scan; drop it so the
+            // scan is released with the pass rather than kept until the next.
+            this.lineContext = null;
         }
 
         return result;
@@ -2695,6 +2825,7 @@ export class ExpressionEngine {
         if (compiledProgram && !onFusion) {
             const front = this.compiledFrontHalf.get(expression);
             if (front) {
+                this.touchCompiled(expression, compiledProgram);
                 return { kind: 'ready', normalizedTokens: front.normalizedTokens, reads: front.reads, writes: front.writes, program: compiledProgram, cached: true };
             }
         }
@@ -2706,6 +2837,7 @@ export class ExpressionEngine {
 
         let normalizedTokens: Token[];
         if (failed) {
+            this.touchFailedParse(expression, failed);
             normalizedTokens = failed.normalizedTokens;
         } else {
             // ══ SAFETY CHECK 1: Expression length limit ══
@@ -2791,6 +2923,7 @@ export class ExpressionEngine {
         // evaluation takes the early return above.
         if (compiledProgram) {
             this.compiledFrontHalf.set(expression, { normalizedTokens, reads, writes });
+            this.touchCompiled(expression, compiledProgram);
             return { kind: 'ready', normalizedTokens, reads, writes, program: compiledProgram, cached: true };
         }
 
@@ -2832,13 +2965,13 @@ export class ExpressionEngine {
     /**
      * Shared async-resolver preflight check, run before VM execution.
      *
-     * O(1) guard: skips the O(n) resolver scan when the bytecode has no
-     * async opcodes AND no resolvers are registered. Either condition alone
-     * is enough to warrant a preflight scan:
-     *   - program.hasAsync: bytecode contains CALL_PLUGIN (async VM path)
-     *   - resolverRegistry.size > 0: resolvers may intercept any expression
-     * For purely sync expressions (e.g., `2 + 2`) with no resolvers, this is
-     * an O(1) fast-path that bypasses the resolver scan entirely.
+     * Skipped outright for a line no registered resolver could intercept
+     * (see {@link mayResolve}): no resolver scan, no controller, no keystroke
+     * listener. With every built-in package loaded that used to be no line at
+     * all, since the old gate asked only whether any resolver was registered,
+     * so `2 + 2` paid for seven scans and two listener changes on every
+     * keystroke. A plugin call (`program.hasAsync`) always takes the full
+     * pass, which the VM's pending path relies on.
      *
      * If any registered resolver says "data not ready", registers a DAG
      * data-source dependency, stores a Pending result, and fires async
@@ -2862,7 +2995,7 @@ export class ExpressionEngine {
         reads: string[],
         writes: string[],
     ): { kind: 'pending'; value: Value } | { kind: 'proceed' } {
-        if (!(program.hasAsync || this.resolverRegistry.size > 0)) {
+        if (!this.mayResolve(program)) {
             return { kind: 'proceed' };
         }
 
@@ -3618,7 +3751,7 @@ export class ExpressionEngine {
         }
 
         // ══ PRE-FLIGHT ASYNC CHECK ══
-        const hasAsyncGuard = program.hasAsync || this.resolverRegistry.size > 0;
+        const hasAsyncGuard = this.mayResolve(program);
         const preflight = this.preflightAsync(normalizedTokens, program, lineNumber, expression, reads, writes);
 
         if (hasCollectors) {
@@ -3641,7 +3774,7 @@ export class ExpressionEngine {
                 this.addDiagnosticStage(stages, 'async_preflight', 'Async Preflight', '🔮', 'async', 10, zeroElapsed, true, {
                     type: 'async_preflight',
                     path: 'sync',
-                    resolverCount: 0,
+                    resolverCount: this.resolverRegistry.size,
                     skippedGuard: true,
                 });
             }
@@ -3923,11 +4056,13 @@ export class ExpressionEngine {
 
         const program = this.bytecodeCache.get(expression);
         if (!program) return undefined;
+        // A re-run is a use, so the line keeps its place against eviction.
+        this.touchCompiled(expression, program);
 
         // ══ PRE-FLIGHT ASYNC CHECK ══
-        // O(1) guard: skip the O(n) resolver scan when the bytecode has no
-        // async opcodes AND no resolvers are registered.
-        if (entry.bytecode.hasAsync || this.resolverRegistry.size > 0) {
+        // Skipped when no registered resolver could intercept this program;
+        // see mayResolve.
+        if (this.mayResolve(entry.bytecode)) {
         // Pre-flight async check, run before VM even for cached bytecode
         // ── Link to keystroke signal ──
         const preflightController = new AbortController();
@@ -4607,6 +4742,7 @@ export class ExpressionEngine {
          this.userUnits.clear();
          this.accumulatorNames.clear();
          this.lastTelemetry = null;
+         this.lineContext = null;
      }
 
     //#endregion

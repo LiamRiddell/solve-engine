@@ -761,14 +761,21 @@ describe("VM — Edge cases & error handling", () => {
     expect(() => unwrapEvalResult(executeBytecode(bc(ops), vm))).toThrow(/maximum of \d+ instructions/i);
   });
 
-  test("invalid opcode does not throw — falls through default case", () => {
+  test("invalid opcode does not throw, and is refused at its instruction rather than skipped", () => {
     const vm = freshVM();
     const result = executeBytecode(
       bc([255, OpCode.PUSH_NUMBER, 0, OpCode.HALT], [42]),
       vm
     );
-    // 255 is not a recognized opcode — falls through default which is a no-op
-    expect(unwrapEvalResult(result).toNumber()).toBe(42);
+    // 255 is not a recognised opcode. The switch used to have no default arm,
+    // so it fell through as a no-op and this program answered 42 as though
+    // the byte had not been there. It is now refused at offset 0, as an error
+    // result rather than a throw, so a corrupt stream is reported where the
+    // corruption is and never runs on to a wrong answer.
+    expect(result.type).toBe("error");
+    if (result.type !== "error") return;
+    expect(result.error.code).toBe("MALFORMED_BYTECODE_UNKNOWN_OPCODE");
+    expect(result.error.context?.offset).toBe(0);
   });
 });
 

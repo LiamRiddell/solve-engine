@@ -20,7 +20,7 @@
  *   - Reports μs/op, bytecode dimensions, and ops-per-μs throughput
  */
 
-import { registerPackageForTesting } from "@tools/testUtils";
+import { benchmarkFn, registerPackageForTesting } from "@tools/testUtils";
 import { ARITHMETIC_PACKAGE, BIGINT_PACKAGE, DATETIME_PACKAGE, DICE_PACKAGE, FUNCTION_PACKAGE, PERCENTAGE_PACKAGE, UOM_PACKAGE, VARIABLES_PACKAGE, VECTOR_PACKAGE } from "@solve-js/packages";
 import { describe, expect, test, afterAll } from "@jest/globals";
 import { Parser } from "@solve-js/parser/Parser";
@@ -70,7 +70,8 @@ interface TimerResultNs {
   maxNs: number;
   meanNs: number;
   medianNs: number;
-  p95Ns: number;
+  p99Ns: number;
+  /** Samples mitata took, reported where the per-iteration count used to be. */
   iterations: number;
   /** Bytecode dimensions measured on the last iteration */
   bytecodeSize: number;
@@ -78,40 +79,27 @@ interface TimerResultNs {
   stringsSize: number;
 }
 
-function timeParseCompileNs(
+async function timeParseCompileNs(
   fn: () => BytecodeProgram,
   iterations: number,
-  warmup = 100,
-): TimerResultNs {
-  // Warmup — prime V8 IC caches and JIT
-  for (let i = 0; i < warmup; i++) {
-    fn();
-  }
-
-  const times: number[] = [];
-  let lastProgram: BytecodeProgram | null = null;
-
-  for (let i = 0; i < iterations; i++) {
-    const t0 = process.hrtime();
-    lastProgram = fn();
-    const t1 = process.hrtime();
-    times.push((t1[0] - t0[0]) * 1e9 + (t1[1] - t0[1]));
-  }
-
-  const sorted = [...times].sort((a, b) => a - b);
-  const sum = times.reduce((a, b) => a + b, 0);
-  const p95Index = Math.floor(iterations * 0.95);
-
+): Promise<TimerResultNs> {
+  // Measured through the shared harness (mitata) rather than a
+  // process.hrtime pair around every iteration: the pair costs about as much
+  // as the parse it brackets and its resolution swallowed the smaller cases,
+  // so the mean was mostly the clock. The last program is built once more
+  // outside the measurement to read its dimensions.
+  const r = await benchmarkFn(fn, iterations, 100);
+  const lastProgram = fn();
   return {
-    minNs: sorted[0],
-    maxNs: sorted[sorted.length - 1],
-    meanNs: sum / iterations,
-    medianNs: sorted[Math.floor(iterations / 2)],
-    p95Ns: sorted[p95Index],
-    iterations,
-    bytecodeSize: lastProgram?.opcodes.length ?? 0,
-    numbersSize: lastProgram?.numbers.length ?? 0,
-    stringsSize: lastProgram?.strings.length ?? 0,
+    minNs: r.minMs * 1e6,
+    maxNs: r.maxMs * 1e6,
+    meanNs: r.meanMs * 1e6,
+    medianNs: r.medianMs * 1e6,
+    p99Ns: r.p99Ms * 1e6,
+    iterations: r.samples,
+    bytecodeSize: lastProgram.opcodes.length,
+    numbersSize: lastProgram.numbers.length,
+    stringsSize: lastProgram.strings.length,
   };
 }
 
@@ -156,7 +144,7 @@ interface ParseCompileResult {
   /** Parse+compile mean in nanoseconds */
   meanNs: number;
   /** Parse+compile P95 in nanoseconds */
-  p95Ns: number;
+  p99Ns: number;
   /** Parse+compile mean in microseconds */
   meanUs: number;
   /** Operations per microsecond (higher = faster) */
@@ -301,13 +289,13 @@ describe("Parse+Compile Micro-Benchmarks", () => {
   };
 
   for (const expr of EXPRESSIONS) {
-    test(`parse+compile "${expr.name}" (${expr.expression})`, () => {
+    test(`parse+compile "${expr.name}" (${expr.expression})`, async () => {
       // Pre-tokenize — NOT timed
       const tokens = tokenize(expr.expression);
       // Per-test builder pool index (reset for each expression)
       let poolIdx = 0;
 
-      const result = timeParseCompileNs(
+      const result = await timeParseCompileNs(
         () => {
           const builder = builderPool[poolIdx++ % builderPool.length];
           builder.reset();
@@ -329,7 +317,7 @@ describe("Parse+Compile Micro-Benchmarks", () => {
 
       results.results[expr.name] = {
         meanNs: result.meanNs,
-        p95Ns: result.p95Ns,
+        p99Ns: result.p99Ns,
         meanUs,
         opsPerUs: 1 / meanUs,
         opcodeCount: result.bytecodeSize,

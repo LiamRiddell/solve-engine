@@ -115,7 +115,7 @@ export const CoreErrorCodes = {
   // ── Malformed bytecode on the public `./vm` surface (vm/VM.ts) ──
   //
   // `executeBytecode` is exported, so a bytecode program is caller input in
-  // the same sense an expression string is, and these five say so. They are
+  // the same sense an expression string is, and these six say so. They are
   // VALIDATION rather than INTERNAL for exactly that reason: before they
   // existed, every one of these cases reached a raw TypeError (`BigInt(undefined)`,
   // `code.toUpperCase()` on a boolean, destructuring a program that was not
@@ -135,6 +135,8 @@ export const CoreErrorCodes = {
   MALFORMED_BYTECODE_BIGINT_LITERAL: "MALFORMED_BYTECODE_BIGINT_LITERAL",
   /** `executeBytecode()` called with something that is not a runnable program at all. Checked before the destructure that used to throw outside the function's own try/catch. */
   MALFORMED_BYTECODE_PROGRAM: "MALFORMED_BYTECODE_PROGRAM",
+  /** An opcode the dispatch switch has no arm for, refused at the instruction that carries it (the `offset` in its context). The switch used to have no default arm, so an unknown opcode ran as a no-op and the program failed some instructions later with a STACK_UNDERFLOW naming the wrong instruction. Covers the two enum members no arm handles (`PUSH_VARIABLE`, `RETURN`) and the dynamic range an `OpRegistry` once claimed. See `vm/VM.ts`'s default arm. */
+  MALFORMED_BYTECODE_UNKNOWN_OPCODE: "MALFORMED_BYTECODE_UNKNOWN_OPCODE",
 
   // ── Symbolic algebra (symbolic/, vm/SymbolicOps.ts) ──
   /** A coefficient grew past `RATIONAL_MAX_BITS`, e.g. repeated exact elimination multiplying denominators together. */
@@ -176,6 +178,8 @@ export const CoreErrorCodes = {
   /** A document with more lines than `performance.maxDocumentLines`. The per-line limits above bound what one line may ask for and say nothing about how many lines there are; two hundred thousand of `1 + 1` exhausted the heap on the line records alone. Recoverable. */
   DOCUMENT_TOO_LARGE: "DOCUMENT_TOO_LARGE",
   NORMALIZED_TOKEN_LIMIT_EXCEEDED: "NORMALIZED_TOKEN_LIMIT_EXCEEDED",
+  /** The normaliser was still changing the token stream after its pass budget (`maxPasses`, 100 by default): a rule chain that never settles. Reported rather than returning whatever the last pass left. Recoverable. */
+  NORMALIZER_PASS_LIMIT_EXCEEDED: "NORMALIZER_PASS_LIMIT_EXCEEDED",
   /** `"=>"` with nothing before it, needs an expression or variable name to solve/simplify. */
   THEREFORE_REQUIRES_EXPRESSION: "THEREFORE_REQUIRES_EXPRESSION",
   /** A `"=>"`-triggered expression called an async plugin (weather/stocks/currency). Same v1 scope restriction as user-function/map-reduce bodies. */
@@ -221,6 +225,8 @@ export const CoreErrorCodes = {
   /** A `resize` was written without one of its parts: the dimensions, the `to`, the size, or the side it names. Recoverable. */
   RESIZE_EXPECTED_SHAPE: "RESIZE_EXPECTED_SHAPE",
   PLUGIN_OPERATOR_COLLISION: "PLUGIN_OPERATOR_COLLISION",
+  /** A package registered an operator the scanner cannot read: not exactly two characters, or a first character the scanner does not class as an operator. It used to register and never fire. Recoverable. */
+  PLUGIN_OPERATOR_UNSUPPORTED: "PLUGIN_OPERATOR_UNSUPPORTED",
   PLUGIN_KEYWORD_COLLISION: "PLUGIN_KEYWORD_COLLISION",
   PLUGIN_UNIT_COLLISION: "PLUGIN_UNIT_COLLISION",
   /** A package's declared `IEnginePackage.engineVersion` semver range doesn't satisfy the running engine's ENGINE_VERSION. See api/EngineVersionCompatibility.ts. */

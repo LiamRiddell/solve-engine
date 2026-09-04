@@ -70,6 +70,10 @@ parselet.
 Operators work the same way, for a two-character symbol: `operators: { "~>": "MY_OP" }`,
 paired with an infix parselet. The engine's own comparison and shift operators
 (`==`, `!=`, `>=`, `<=`, `<<`, `>>`) always win and cannot be overridden.
+An operator is exactly two characters, and the first must be one the scanner
+already reads as an operator (`+ - * / ^ % ( ) [ ] { } , : ; = ? & | ~ ! < >`);
+any other shape is refused with `PLUGIN_OPERATOR_UNSUPPORTED` rather than
+registered and never matched.
 
 Registration is all or nothing: if any keyword, operator or unit in a vocabulary
 collides with a built-in, nothing from that vocabulary is registered and the

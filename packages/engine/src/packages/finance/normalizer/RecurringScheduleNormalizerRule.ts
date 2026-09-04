@@ -201,8 +201,10 @@ export function recurringScheduleNormalizerRule(priority = 78): NormalizerRule {
   return {
     name: "finance:recurring-schedule",
     priority,
-    unshapedReason:
-    	"Scans forward through a period and a duration sub-grammar of unbounded length, so no fixed leading shape describes it.",
+    // The amount's last token, then the period word (`monthly`, `every`).
+    // The duration sub-grammar after `for` is unbounded, but the first two
+    // slots are fixed, and two slots are what the index reads.
+    shape: [{ types: [...VALUE_ENDERS] }, { types: ["IDENT"], values: [...Object.keys(PERIODS_PER_YEAR), "every"] }],
     match(tokens, pos): NormalizerMatch | null {
       const amount = tokens[pos];
       if (amount === undefined || !VALUE_ENDERS.has(amount.type)) return null;

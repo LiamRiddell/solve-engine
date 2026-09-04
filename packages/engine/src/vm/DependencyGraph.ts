@@ -189,8 +189,11 @@ export class DependencyGraph {
     }
 
     const ordered: number[] = [];
-    while (queue.length > 0) {
-      const current = queue.shift()!;
+    // A head index rather than shift(): shift() moves every remaining
+    // element, so ordering a value with thousands of consumers cost
+    // quadratic time. The queue only ever grows, so the index is safe.
+    for (let head = 0; head < queue.length; head++) {
+      const current = queue[head];
       ordered.push(current);
 
       for (const downstream of adjacency.get(current) ?? []) {

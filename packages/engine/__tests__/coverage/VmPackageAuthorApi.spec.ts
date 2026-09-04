@@ -33,6 +33,7 @@ import {
 	type Value,
 } from "@solve-js/vm/Value";
 import { OpRegistry, sharedOpRegistry } from "@solve-js/vm/OpRegistry";
+import { createVM, executeBytecode } from "@solve-js/vm/VM";
 import { OpCode } from "@solve-js/parser/OpCode";
 import type { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import type { Parser } from "@solve-js/parser/Parser";
@@ -314,12 +315,13 @@ describe("the vector and range constructors", () => {
 
 describe("OpRegistry", () => {
 	/*
-	 * The legacy custom-opcode path, superseded by CALL_PLUGIN but still
-	 * exported through `solve-engine/vm` and still what `createVM()` is
-	 * handed. Only one of its six functions had ever been called by a test.
-	 * A package written against the old documentation still reaches it, and
-	 * a registry that lost handlers or reissued opcodes would corrupt
-	 * bytecode rather than fail.
+	 * The legacy custom-opcode table, deprecated and never read by the VM,
+	 * but still exported through `solve-engine/vm` and still what `createVM()`
+	 * is handed, so a package written against the old documentation still
+	 * reaches it. Its bookkeeping is pinned until the next major removes it,
+	 * and the test below pins the fact that matters more: an opcode it claims
+	 * is refused by the dispatch loop, not run, so the table cannot be
+	 * mistaken for an extension point.
 	 */
 	const noopHandler = (_vm: unknown, _opcodes: Uint8Array, ip: number) => ip;
 
@@ -334,11 +336,42 @@ describe("OpRegistry", () => {
 	});
 
 	test("an unregistered opcode is absent rather than an error", () => {
-		// The VM asks before dispatching, so this is the ordinary answer for
-		// every built-in opcode, not an exceptional one.
 		const registry = new OpRegistry();
 		expect(registry.has(201)).toBe(false);
 		expect(registry.get(201)).toBeUndefined();
+	});
+
+	test("a registered opcode is refused by the VM as unknown, never dispatched", () => {
+		/*
+		 * The dispatch switch never consulted the registry, and until it had a
+		 * default arm a registered opcode ran as a no-op that advanced ip by
+		 * one, so the program failed later with a STACK_UNDERFLOW naming the
+		 * wrong instruction. A handler that would push a value if it ran is
+		 * the sharpest way to say so: the value never arrives.
+		 */
+		const registry = new OpRegistry();
+		const opcode = registry.allocateOpcode();
+		let handlerRan = false;
+		registry.register({
+			opcode,
+			pluginName: "never-dispatched",
+			handler: ((vm: { push(v: Value): void }, _opcodes: Uint8Array, ip: number) => {
+				handlerRan = true;
+				vm.push(numberValue(1));
+				return ip;
+			}) as never,
+		});
+		const vm = createVM(registry);
+		const result = executeBytecode(
+			{ opcodes: new Uint8Array([opcode, OpCode.HALT]), numbers: new Float64Array([]), strings: [] },
+			vm,
+		);
+		expect(handlerRan).toBe(false);
+		expect(result.type).toBe("error");
+		if (result.type !== "error") return;
+		expect(result.error.code).toBe("MALFORMED_BYTECODE_UNKNOWN_OPCODE");
+		expect(result.error.context?.opcode).toBe(opcode);
+		expect(result.error.context?.offset).toBe(0);
 	});
 
 	test("unregister removes the handler, which is what package teardown needs", () => {

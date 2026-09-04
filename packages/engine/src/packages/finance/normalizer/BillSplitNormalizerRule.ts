@@ -61,8 +61,8 @@ export function billSplitNormalizerRule(priority = 77): NormalizerRule {
   return {
     name: "finance:bill-split",
     priority,
-    unshapedReason:
-    	"Scans forward an unbounded distance for the BETWEEN keyword, and starts at any value-ending token.",
+    // The amount's last token, then the word `split`.
+    shape: [{ types: [...VALUE_ENDERS] }, { types: ["IDENT"], values: ["split"] }],
     match(tokens, pos): NormalizerMatch | null {
       const head = tokens[pos];
       if (head === undefined) return null;
@@ -96,6 +96,26 @@ export function billSplitNormalizerRule(priority = 77): NormalizerRule {
           };
         }
       }
+
+      return null;
+    },
+  };
+}
+
+/**
+ * The prefix half of the bill split, `split <amount> between <N> [people]`,
+ * matched at `split`. A separate rule from the infix half because the two
+ * start on different tokens, and a rule's shape is read from where it starts.
+ * The name differs because the normaliser unregisters rules by name.
+ */
+export function billSplitPrefixNormalizerRule(priority = 77): NormalizerRule {
+  return {
+    name: "finance:bill-split-prefix",
+    priority,
+    shape: [{ types: ["IDENT"], values: ["split"] }],
+    match(tokens, pos): NormalizerMatch | null {
+      const head = tokens[pos];
+      if (head === undefined) return null;
 
       // PREFIX `split <amount> between <N> [people]`, matched at `split`. A
       // value-ender directly before `split` would be the infix shape, already
@@ -134,8 +154,9 @@ export function billSplitNormalizerRule(priority = 77): NormalizerRule {
       return {
         consumed: lastIndex - pos + 1,
         replacement,
-        ruleName: "finance:bill-split",
+        ruleName: "finance:bill-split-prefix",
       };
     },
+
   };
 }

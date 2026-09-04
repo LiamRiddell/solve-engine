@@ -217,8 +217,9 @@ capped at a depth of 50 (`FUNCTION_RECURSION_LIMIT_EXCEEDED`), which is a
 parameter of `createVM` rather than a config field, so an `ExpressionEngine`
 always uses the default.
 The normaliser refuses to emit more than 10,000 tokens from one line
-(`NORMALIZED_TOKEN_LIMIT_EXCEEDED`), which is an option on the normaliser
-itself.
+(`NORMALIZED_TOKEN_LIMIT_EXCEEDED`), and refuses a rule chain that is still
+changing the line after 100 passes (`NORMALIZER_PASS_LIMIT_EXCEEDED`); both
+are options on the normaliser itself.
 
 ### Changing them
 
@@ -288,6 +289,23 @@ Three properties fix it, and all three are needed:
   recursion refreshes its own allowance on the way in. A budget with that
   property would bound nothing. This one does not refresh, which is why
   `maxFunctionCalls` sits beside it.
+
+One more property of that reentrant machinery is worth stating for a host that
+runs programs on one machine through `executeBytecode` directly: a program that
+fails leaves the value stack at the depth it found it. A function body or a
+`plot` sample that had pushed operands before it threw used to leave them
+behind, so sixty-four failed samples of `plot x + f(x)` with `f` undefined
+crossed `vm.maxStackDepth` and reported the undefined function as
+`STACK_LIMIT_EXCEEDED`; now the first failed sample reports
+`UNDEFINED_FUNCTION`, and the stack is as the caller left it. In the same
+spirit, an opcode the machine has no handler for is refused at that
+instruction with `MALFORMED_BYTECODE_UNKNOWN_OPCODE` (its context carries the
+offset), rather than running as a no-op and failing a few instructions later
+with a stack underflow that names nothing. The `OpRegistry` a host can still
+hand to `createVM` has never been consulted by the dispatch loop, so an opcode
+registered there is refused the same way; the registry, `sharedOpRegistry` and
+`createVM`'s first parameter are deprecated and go in the next major, and a
+package that wants the machine to run its code declares `pluginFunctions`.
 
 The cost of carrying the counter is an integer add and a compare at the sites
 that allocate, measured at roughly 3.5 percent on the virtual machine benchmark

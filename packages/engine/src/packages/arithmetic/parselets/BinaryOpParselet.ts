@@ -1,4 +1,4 @@
-import { InfixParselet } from "@solve-js/parser/Parselet";
+import { InfixParselet, parseRightOperand } from "@solve-js/parser/Parselet";
 import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
@@ -14,22 +14,20 @@ import { OpCode } from "@solve-js/parser/OpCode";
 export class BinaryOpParselet implements InfixParselet {
 	readonly category = "Arithmetic";
 	readonly bindingPower: number;
-	private readonly rightBindingPower: number;
+	readonly rightAssociative: boolean;
 	constructor(
     bp: number,
     private readonly opcode: OpCode,
     rightAssociative = false
   ) {
     this.bindingPower = bp;
-    // The parser's infix loop breaks on `bp <= minBp`, so parsing the right
-    // operand at this operator's OWN power stops at the next occurrence of it
-    // and the chain groups left. One below keeps consuming, which groups
-    // right. `^` is the only right-associative operator here.
-    this.rightBindingPower = rightAssociative ? bp - 1 : bp;
+    // `^` is the only right-associative operator here. The declaration is
+    // what parseRightOperand reads, and what the registry reports.
+    this.rightAssociative = rightAssociative;
   }
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
-    parser.parseExpression(this.rightBindingPower, builder);
+    parseRightOperand(this, parser, builder);
     builder.emitOpcode(this.opcode);
   }
 }

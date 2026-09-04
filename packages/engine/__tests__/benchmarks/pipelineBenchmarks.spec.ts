@@ -42,6 +42,17 @@ describe("Pipeline Benchmarks", () => {
     expect(r.medianMs).toBeLessThan(2);
   });
 
+  test("constructs an engine with every built-in package in < 2ms", async () => {
+    // The cold case above is construction plus one evaluation; this is the
+    // construction alone, which is what a host building an engine per
+    // document, per worker or per test pays.
+    const r = await benchmarkFn(() => {
+      new ExpressionEngine({ packages: BUILTIN_PACKAGES });
+    }, 3000, 50);
+    recordSample(results, "create_engine", r);
+    expect(r.medianMs).toBeLessThan(2);
+  });
+
   test("evaluates warm (cached) in < 0.5ms", async () => {
     const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     // Warm cache

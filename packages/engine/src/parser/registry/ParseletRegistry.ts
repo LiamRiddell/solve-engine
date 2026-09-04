@@ -11,10 +11,10 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
  * optional surface deliberately. A `leftBindingPower`/`rightBindingPower` pair
  * used to be read here as well, and reading a name off an object this way finds
  * PRIVATE fields too, since TypeScript's `private` exists only at compile time:
- * `BinaryOpParselet` holds a private `rightBindingPower` meaning "the minimum
- * power to parse my right operand at", which is a different quantity from "the
- * power at which I bind to my right" and differs from it by one. Reading it
- * silently reported that other number. So neither is read.
+ * `rightAssociative` is the one associativity declaration an InfixParselet
+ * makes (see `parseRightOperand`), and getAllInfix reports it; nothing else
+ * is scraped off a parselet, because a plausible-looking private field with
+ * another meaning was read here once and reported the wrong number.
  *
  * `category` is not here: both interfaces already declare it.
  */
@@ -138,20 +138,20 @@ export class ParseletRegistry {
 	 * one higher. That is the standard encoding for a left-associative
 	 * operator, and it is what the parser itself does, see
 	 * `PrecedenceParser.parseExpression()`'s `bp + 1` for the right operand.
-	 * Every operator is reported that way, `^` included. Associativity is not
-	 * something a parselet declares, it is a property of how each one calls
-	 * `parseExpression`, so this API cannot report it without a new field on
-	 * the interface. See {@link ParseletBindingPowers} for why scraping a
-	 * plausible-looking one off the parselet is worse than not reporting it.
+	 * An operator that declares `rightAssociative` (`^`) is reported with the
+	 * right power one BELOW the left, which is how it parses its right operand
+	 * (see `parseRightOperand`), and `associativity` says which in words.
 	 */
-	getAllInfix(): Array<{ tokenType: string; leftBindingPower: number; rightBindingPower: number; category?: string }> {
-		const result: Array<{ tokenType: string; leftBindingPower: number; rightBindingPower: number; category?: string }> = [];
+	getAllInfix(): Array<{ tokenType: string; leftBindingPower: number; rightBindingPower: number; associativity: "left" | "right"; category?: string }> {
+		const result: Array<{ tokenType: string; leftBindingPower: number; rightBindingPower: number; associativity: "left" | "right"; category?: string }> = [];
 		for (const [tokenType, parselet] of this.infixParselets) {
 			const left = bindingPowersOf(parselet).bindingPower ?? 0;
+			const right = parselet.rightAssociative === true;
 			result.push({
 				tokenType,
 				leftBindingPower: left,
-				rightBindingPower: left + 1,
+				rightBindingPower: right ? left - 1 : left + 1,
+				associativity: right ? "right" : "left",
 				category: parselet.category,
 			});
 		}

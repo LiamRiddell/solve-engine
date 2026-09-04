@@ -551,13 +551,17 @@ describe("LexerVocabulary Fuzz — mixed expression collisions", () => {
         million: "MILLION",
         billion: "BILLION",
       },
-      operators: {
-        "..": "RANGE",
-        "e+": "SCI_EXP",       // Could interfere with scientific notation
-        "e-": "NEG_EXP",
-      },
       units: ["nano", "micro", "mega"],  // SI prefix-like
     };
+
+    // Operators that begin with a dot or a letter were the shapes that could
+    // never fire (the fast path reads them only after an operator character),
+    // and they were where a plugin could have interfered with a number. The
+    // lexer refuses them at registration now, so they cannot be registered
+    // in the first place.
+    for (const chars of ["..", "e+", "e-"]) {
+      expect(() => new ExpressionLexer("en").registerVocabulary({ operators: { [chars]: "NEVER" } })).toThrow(/not supported/);
+    }
 
     // Number forms should be unaffected
     expect(types("42", plugin)).toEqual(["NUMBER"]);

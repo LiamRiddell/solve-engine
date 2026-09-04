@@ -7,6 +7,7 @@ import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { createVM } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { newTrackedEngine } from "@tools/trackedEngine";
+import { formatValue } from "@solve-js/format/FormatEngine";
 
 /**
  * Helper: create an ExpressionEngine for testing.
@@ -568,6 +569,47 @@ describe("ThreeTierEvaluator — Edge Cases", () => {
 		// The inline solve line contributes 0 reads (extracted as "203 + 2").
 		// 10 + 5 * 2 and 100 contribute 0 reads each.
 		expect(totalReads).toBe(4);
+	});
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Display precision through the viewport path
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * A viewport evaluation and a single-line evaluation display the same text
+ * the same way.
+ *
+ * What was wrong: the viewport path runs with the Value arena on, and every
+ * result that leaves the arena went through `persistentValue()`, which copied
+ * the sidecars it knew by name and dropped `decimalPlaces`. So `3.14159 to
+ * 4 dp` displayed as 3.1416 through `evaluateLine` and as 3.14 through
+ * `evaluate(viewport)`, and a stored `:p = 1.5 to 2 dp` lost its two places
+ * the moment it was read back.
+ */
+describe("ThreeTierEvaluator: display precision survives the viewport path", () => {
+	const lines = ["3.14159 to 4 dp", ":p = 1.5 to 2 dp", "p"];
+
+	function singleLine(): string[] {
+		const engine = createEngine();
+		return lines.map((text, i) => formatValue(engine.evaluateLine(i + 1, text)));
+	}
+
+	function viewport(): string[] {
+		const doc = createDoc(lines);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+		const result = evaluator.evaluate({ startLine: 1, endLine: lines.length });
+		return lines.map((_, i) => formatValue(result.resultMap.get(i + 1)![0]));
+	}
+
+	test("an explicit `to N dp` formats identically through both paths", () => {
+		const viewportText = viewport();
+		expect(viewportText).toEqual(singleLine());
+		// And the precision asked for is the one shown, not the default two
+		// places: 3.1416, and 1.50 with its trailing zero.
+		expect(viewportText[0]).toContain("3.1416");
+		expect(viewportText[2]).toContain("1.50");
 	});
 });
 

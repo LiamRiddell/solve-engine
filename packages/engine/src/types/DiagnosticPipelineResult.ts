@@ -364,7 +364,12 @@ export interface AsyncPreflightOutput {
   pendingQueryKey?: string;
   /** Number of registered async resolvers */
   resolverCount: number;
-  /** Whether the preflight guard was skipped (no async opcodes, no resolvers) */
+  /**
+   * Whether the preflight was skipped because no registered resolver could
+   * intercept this program: it calls no plugin function and contains none of
+   * the opcodes a resolver declared it watches (see
+   * `IAsyncResolver.watchedOpcodes`).
+   */
   skippedGuard: boolean;
 }
 

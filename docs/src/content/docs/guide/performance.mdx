@@ -44,6 +44,13 @@ normalising and the throw, and re-runs only the forms that read other lines'
 values. The memory is cleared with the compiled caches whenever a package or a
 user-defined unit changes what a line means.
 
+The compiled caches are bounded (`performance.defaultCacheSize`, 2,000 entries
+by default) and, when full, drop the entry that has gone longest without being
+used. The lines a document re-evaluates on every keystroke are used constantly,
+so they stay compiled while one-off expressions cycle out. A document with more
+distinct lines than the cap does not fit, and every pass then compiles it again
+whatever the eviction order; a host with such documents raises the cap.
+
 <Explainer id="caches" client:load />
 
 ## Incremental re-evaluation

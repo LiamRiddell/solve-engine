@@ -75,21 +75,24 @@ export function clockTimeNormalizerRule(priority = 65): NormalizerRule {
       const hour = parseInt(hourToken.value, 10);
       if (isNaN(hour) || hour < 0 || hour > 23) return null;
 
+      // The two shapes: `9:00am` (NUMBER COLON NUMBER [am|pm]) and the
+      // bare hour `4pm` (NUMBER am|pm). Decided before the range guard below,
+      // which scans back to the start of the line: consulted at every small
+      // number, it made a line of many numbers quadratic, and it only ever
+      // suppresses a match, so asking it last cannot change any result.
+      const colonToken = tokens[pos + 1];
+      const minuteToken = tokens[pos + 2];
+      const colonShape = colonToken?.type === "COLON" && minuteToken?.type === "NUMBER";
+      const bareShape = !colonShape && isAmPmToken(tokens[pos + 1]);
+      if (!colonShape && !bareShape) return null;
+
       // A clock time inside `[...]` (matrix literal/index/slice) has no
       // legitimate meaning, reserve bare `NUMBER:NUMBER` there for a
       // matrix range instead (see isInsideRangeContext's own doc comment).
-      //
-      // Ordered AFTER the hour test deliberately: this scans back to the
-      // start of the line, so running it first paid an O(pos) walk at every
-      // token of every type. It sits above both shape branches because it
-      // must suppress each of them, and it only ever returns null, so
-      // moving it below the cheap guards cannot change any result.
       if (isInsideRangeContext(tokens, pos)) return null;
 
       // Pattern: NUMBER COLON NUMBER [am|pm]
-      const colonToken = tokens[pos + 1];
-      const minuteToken = tokens[pos + 2];
-      if (colonToken?.type === "COLON" && minuteToken?.type === "NUMBER") {
+      if (colonShape) {
         const minute = parseInt(minuteToken.value, 10);
         const ampmToken = tokens[pos + 3];
         const hasAmPm = isAmPmToken(ampmToken);

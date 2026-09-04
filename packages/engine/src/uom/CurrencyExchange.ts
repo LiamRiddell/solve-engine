@@ -74,6 +74,29 @@ export class CurrencyExchangeService {
     return Object.prototype.hasOwnProperty.call(CurrencyExchangeService.CRYPTO_IDS, code.toUpperCase());
   }
 
+  /**
+   * Remembered {@link isCurrency} answers, keyed by the spelling asked about.
+   *
+   * The VM asks this question on every unit-bearing instruction (a `UOM_CONVERT`
+   * for `5 kg`, a `MUL` of money by a count, a `DIV` of two quantities), and each
+   * ask used to upper-case the code twice and probe two tables. The answer never
+   * changes for a given spelling: the ISO 4217 set and {@link CRYPTO_IDS} are
+   * both fixed for the life of the process, so remembering it is safe and the
+   * ask becomes one map read. Keyed by the raw spelling rather than its
+   * upper-cased form so the hot path allocates nothing.
+   */
+  private readonly currencyAnswers = new Map<string, boolean>();
+
+  /**
+   * How many spellings the cache will hold before it is emptied.
+   *
+   * A document's unit vocabulary is small and closed, so an ordinary run never
+   * comes near this. The bound exists for the public `./vm` surface, where a
+   * host can hand `UOM_CONVERT` any string it likes; emptying rather than
+   * evicting keeps the miss path free of bookkeeping.
+   */
+  private static readonly MAX_REMEMBERED_CODES = 4096;
+
   constructor() {}
 
   // ------------------------------------------------------------------------
@@ -340,9 +363,23 @@ export class CurrencyExchangeService {
    * Recognising a code is not the same as having a rate for it. That is
    * answered later, by the exchange provider; conflating the two is what
    * produced the silent failure.
+   *
+   * Remembered per spelling (see {@link currencyAnswers}), because the VM asks
+   * on every unit-bearing instruction and the answer for a spelling never
+   * changes.
    */
   isCurrency(code: string): boolean {
-    return isIso4217(code) || this.isCryptoCode(code);
+    // Every recognised code is three or four letters (ISO 4217 is exactly
+    // three, the crypto tickers three or four), so any other length is plainly
+    // not money and is answered without touching either table or the cache.
+    const length = code.length;
+    if (length < 3 || length > 4) return false;
+    const remembered = this.currencyAnswers.get(code);
+    if (remembered !== undefined) return remembered;
+    const answer = isIso4217(code) || this.isCryptoCode(code);
+    if (this.currencyAnswers.size >= CurrencyExchangeService.MAX_REMEMBERED_CODES) this.currencyAnswers.clear();
+    this.currencyAnswers.set(code, answer);
+    return answer;
   }
 }
 

@@ -133,8 +133,17 @@ class BinaryOpParselet implements InfixParselet {
 }
 ```
 
-The parser reads associativity and precedence from the binding power alone, so
-`2 + 3 * 4` groups correctly without the `+` parselet knowing anything about `*`.
+The parser reads precedence from the binding power, so `2 + 3 * 4` groups
+correctly without the `+` parselet knowing anything about `*`. Associativity,
+which way a chain of the same operator groups, is a separate declaration:
+`rightAssociative: true` on the parselet makes `2 ^ 3 ^ 2` read as
+`2 ^ (3 ^ 2)`, and leaving it out gives the left grouping every other operator
+wants. Parse the right operand through `parseRightOperand(this, parser, builder)`
+rather than calling `parser.parseExpression` with a power of your own, and the
+declaration does the work: it parses one power below the operator's own for a
+right-associative operator, and at the operator's own power otherwise. The
+registry reports the declaration (`getAllInfix()` carries `associativity`), so
+a precedence table built from it says what the parser does.
 The named ladder (`Sum`, `Product`, `Exponent`, `Call`, and the rest) is what to
 pick a level from. Register it under `infixParselets` keyed by the operator's token
 type. Arithmetic's `+` is the reference; currency's `in` and the conditionals'
@@ -155,6 +164,10 @@ than writing a literal.
 
 The parser handles the most common token types inline for speed, ahead of the
 parselet registry. A consequence is that a handful of token types cannot be
-overridden by a package. This is documented in the source next to the switch,
-along with the reasoning, so if a parselet you register never seems to run, check
-whether its token type is one the fast path claims.
+overridden by a package. As a prefix (the start of a value) the fast path claims
+`NUMBER`, `BIGINT`, `STRING`, `IDENT`, `LPAREN`, `MINUS` and `PLUS`; as an
+infix (an operator between values) it claims `+`, `-`, `*`, `/`, `mod`, `^`,
+`|`, `xor`, `&`, `<<`, `>>`, `>>>`, the postfix `%` and `of`. A parselet
+registered for one of those is kept for diagnostics but never runs. The reasoning
+is documented in the source next to the switch, so if a parselet you register
+never seems to run, check whether its token type is in that list.

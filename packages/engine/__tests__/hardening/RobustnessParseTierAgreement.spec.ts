@@ -205,7 +205,13 @@ describe("the registry introspection a host reads to draw an operator table", ()
 			const entry = registry.infix.find((i) => i.tokenType === tokenType);
 			expect(entry).toBeDefined();
 			expect(entry!.rightBindingPower).toBe(entry!.leftBindingPower + 1);
+			expect(entry!.associativity).toBe("left");
 		}
+		// The one right-associative operator declares it, and the report says so.
+		const caret = registry.infix.find((i) => i.tokenType === "CARET");
+		expect(caret).toBeDefined();
+		expect(caret!.rightBindingPower).toBe(caret!.leftBindingPower - 1);
+		expect(caret!.associativity).toBe("right");
 	});
 
 	test("a prefix parselet does not report a power of zero either", () => {

@@ -86,7 +86,8 @@ that promise on the host's behalf.
 
 ## Preflight runs before the VM, and stays synchronous
 
-`preflight` is called for every expression, before it executes, so it has to be
+`preflight` is called before an expression executes, for every expression unless
+you [name the opcodes you watch](#name-the-opcodes-you-watch), so it has to be
 cheap. Its only job is to answer one question: is all the data this line needs
 already cached?
 
@@ -99,6 +100,47 @@ engine waits on it, caches the result, and re-evaluates the line. That
 re-evaluation finds the data cached, so `preflight` returns `null` and the line
 produces a real value. The [pending lifecycle](/guide/async-and-live-data/) is
 the consumer's side of this same loop.
+
+## Name the opcodes you watch
+
+A compiled expression is a list of small numbered instructions, called opcodes:
+push a number, push a string, add, call a plugin function, read a global. A
+`preflight` is a scan of that list for the few instructions it can act on, and
+it returns `null` for a line that has none of them. A document has far more
+plain lines than live ones, so by default most of what a resolver does is say
+"not mine".
+
+`watchedOpcodes` names those instructions up front. For a line that contains
+none of them the engine gives the `null` itself, without calling `preflight`,
+and a line no registered resolver could intercept skips the preflight
+altogether, along with the per-evaluation `AbortSignal` and its link to the
+keystroke.
+
+```ts
+import { OpCode } from "solve-engine/parser";
+
+class RatesResolver implements IAsyncResolver {
+  readonly namespace = "myrates";
+  // The scan reads the unit names PUSH_STRING carries, so a line with no
+  // string constant cannot be a conversion.
+  readonly watchedOpcodes = [OpCode.PUSH_STRING];
+  // preflight and destroy as above
+}
+```
+
+The declaration is a promise about your own `preflight`: for a line containing
+none of the listed opcodes, it would have returned `null`. List every opcode the
+scan keys on. Where there is a choice, name the one an ordinary line does not
+carry: the built-in currency resolver watches `PUSH_STRING`, which every unit
+name arrives as, rather than the `ADD` its scan also checks, because `ADD` is in
+nearly every line and declaring it would spare nothing. A resolver built with
+`createQueryResolver` declares `CALL_PLUGIN` and `CALL_PLUGIN_WIDE` for you.
+
+The boundary: leave it unset and nothing changes, `preflight` runs for every line
+as it always has, so the cost of not declaring is speed, never a missed lookup.
+And a line that calls a plugin function is preflighted by every resolver
+whatever it declared, since that is the one shape whose pending path the virtual
+machine itself relies on.
 
 ## The query key is the deduplication
 
