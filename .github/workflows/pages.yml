@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
   pages: write
+  # For the reporting job at the end: a deploy that fails on main is invisible
+  # otherwise, which is how the site stayed unpublished through five releases.
+  issues: write
   id-token: write
 
 # Never cancel a deploy midway. A half-published site is worse than a slightly
@@ -104,3 +107,44 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+
+  # A red check on a pull request is shown to whoever is about to merge it. A
+  # red deploy on main is shown to nobody, and this one failed silently through
+  # five releases while their notes linked to pages the site had never
+  # published. So it says so, in the one place someone will see it.
+  report:
+    needs: [build, deploy]
+    if: failure()
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Say so in the tracker
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          title="The documentation site failed to deploy"
+
+          cat > body.md <<EOF
+          The pages workflow failed on \`${GITHUB_REF_NAME}\`, so the site is still
+          serving whatever it last published.
+
+          Run: ${RUN_URL}
+
+          Until it passes, any documentation link in a release note points at a page
+          the site does not have. That is what happened before this job existed: the
+          deploy was red for five releases and nothing said so.
+          EOF
+
+          # One issue, reopened and commented on, rather than a new one per run: a
+          # deploy that keeps failing should be one thread, not a pile of them.
+          number=$(gh issue list --state all --search "\"${title}\" in:title" --json number,title \
+            --jq "[.[] | select(.title == \"${title}\")] | .[0].number // empty")
+
+          if [ -n "${number}" ]; then
+            gh issue reopen "${number}" || true
+            gh issue comment "${number}" --body-file body.md
+          else
+            gh issue create --title "${title}" --body-file body.md --label bug
+          fi
