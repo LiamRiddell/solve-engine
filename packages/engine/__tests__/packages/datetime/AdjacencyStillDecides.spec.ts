@@ -52,7 +52,7 @@ describe("a spaced chain is arithmetic", () => {
       for (const policy of POLICIES) {
         expect(read("2024 - 13 - 01", order, policy)).toBe("2,010");
         expect(read("2024 - 05 - 32", order, policy)).toBe("1,987");
-        expect(read("12 / 25 / 2026", order, policy)).toBe("0.00");
+        expect(read("12 / 25 / 2026", order, policy)).toBe("0.000237");
         expect(read("31 / 02 / 2026", order, policy)).toBe("0.01");
       }
     }

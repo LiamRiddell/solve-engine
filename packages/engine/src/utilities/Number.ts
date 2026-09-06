@@ -30,6 +30,66 @@ function removeThousandsSeparators(
 	});
 }
 
+/** How many digits of a too-small value are worth showing: enough to read it, not enough to imply precision. */
+const SIGNIFICANT_DIGITS = 3;
+
+/**
+ * Below this magnitude the plain decimal form stops being readable and the
+ * exponent form takes over.
+ *
+ * At 1e-4 three significant digits still fit in six decimal places, which is
+ * about as many zeros as a reader will count without losing their place.
+ */
+const EXPONENT_FORM_BELOW = 1e-4;
+
+/** The most decimal places the plain form will spend showing a small value. */
+const MAX_PLAIN_DECIMALS = 6;
+
+/**
+ * A reading for a value that is not zero but would print as one.
+ *
+ * Two decimal places is the right budget for almost everything the engine
+ * answers, and wrong for the answers that live below it: `1 Hz in MHz` printed
+ * `0.00 MHz`, which a reader cannot tell from a real zero, and `1 byte in GB`
+ * printed `0.00 GB`. Both are correct conversions with nothing left of them.
+ *
+ * So a magnitude that rounds away is shown to three significant digits instead,
+ * as a decimal while the zeros are still countable and in exponent form once
+ * they are not: `0.001`, and `1e-6`. Three digits is enough to read the value
+ * and few enough not to imply a precision the conversion does not have.
+ *
+ * Returns undefined when the ordinary rendering already shows something, which
+ * is every other value the engine formats, so callers keep the output they had.
+ *
+ * @param value - The magnitude about to be rendered.
+ * @param decimalPlaces - The budget it would be rendered with.
+ * @param numberLocale - `Intl` locale, for the decimal separator of the plain form.
+ */
+export function tooSmallToPrintText(
+	value: number,
+	decimalPlaces: number,
+	numberLocale: string = "en-US"
+): string | undefined {
+	if (!Number.isFinite(value) || value === 0) return undefined;
+	if (Number(value.toFixed(decimalPlaces)) !== 0) return undefined;
+
+	const rounded = Number(value.toPrecision(SIGNIFICANT_DIGITS));
+	if (Math.abs(rounded) >= EXPONENT_FORM_BELOW) {
+		// The zeros before the first digit, plus the digits themselves. Trailing
+		// zeros are trimmed by asking for no minimum, so `0.001` does not read as
+		// `0.00100` and imply three measured digits.
+		const leadingZeros = -Math.floor(Math.log10(Math.abs(rounded)));
+		const places = Math.min(MAX_PLAIN_DECIMALS, leadingZeros + SIGNIFICANT_DIGITS - 1);
+		return rounded.toLocaleString(numberLocale, {
+			useGrouping: false,
+			minimumFractionDigits: 0,
+			maximumFractionDigits: places,
+		});
+	}
+	// `1.00e-6` says nothing `1e-6` does not, so the mantissa's trailing zeros go.
+	return rounded.toExponential(SIGNIFICANT_DIGITS - 1).replace(/\.?0+e/, "e");
+}
+
 /**
  * Format `number` for display, branching on whether it's a whole number:
  * integers are always rendered with zero decimal places (never padded to
