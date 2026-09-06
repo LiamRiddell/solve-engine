@@ -411,9 +411,9 @@ Measured against **kelvin**.
 | hectokelvin | `hectokelvins`, `hK` | 100 |
 | decakelvin | `decakelvins`, `daK` | 10 |
 | kelvin | `kelvins`, `K` | 1 |
-| celsius | `C` | 1 |
+| celsius | `C`, `°C` | 1 |
 | rankine | `rankine` | 0.555556 |
-| fahrenheit | `F` | 0.555556 |
+| fahrenheit | `F`, `°F` | 0.555556 |
 | decikelvin | `decikelvins`, `dK` | 0.1 |
 | centikelvin | `centikelvins`, `cK` | 0.01 |
 | millikelvin | `millikelvins`, `mK` | 0.001 |
@@ -639,7 +639,7 @@ Measured against **kmpl**.
 
 ## Spellings that are not listed
 
-The conversion tables carry 1518 spellings in total, and 456 of
+The conversion tables carry 1518 spellings in total, and 454 of
 them are missing above. Most are multi-word forms like `sq ft` and `cu yd`,
 which the tables can resolve but the lexer cannot tokenize, so they are
 unavailable when typing an expression. They are excluded here rather than listed

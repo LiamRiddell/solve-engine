@@ -26,6 +26,39 @@ rather than guessed. The message names the dimensions rather than the units, so
 different dimensions is refused the same way: `5 kg + 3 m` reports *mass and
 length cannot be added*.
 
+## Temperatures, with or without the degree sign
+
+`°C` and `°F` read as the units they obviously are, which is what a phone
+keyboard, a weather app and a recipe all write. The precomposed `℃` and `℉`
+that some keyboards emit read the same way, and `°K` is kelvin, which has no
+degree sign of its own.
+
+```solve
+20°C in F // 68.00 F
+100°F in C // 37.78 C
+180°C in gas mark // gas 4
+37°C // 37.00 °C
+```
+
+The scale letter is what makes it a temperature, so the bare symbol is still an
+angle:
+
+```solve
+90° // 90.00 degrees
+```
+
+Every spelling of the same question agrees, so use whichever you have to hand:
+
+```solve
+20 C in F // 68.00 F
+20 degrees C in F // 68.00 F
+20° C in F // 68.00 F
+```
+
+The boundary is the symbol forms only. `C` is still Celsius and `c` is still the
+cooking cup, no ordinary word is claimed, and the case sensitivity of the unit
+table is unchanged.
+
 ## Inches, where the abbreviation is also the word for converting
 
 `in` is how the engine spells the conversion itself, so it cannot simply be a
