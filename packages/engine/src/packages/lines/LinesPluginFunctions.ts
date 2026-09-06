@@ -92,6 +92,10 @@ function aggregateRange(from: number, to: number, context: LineExecutionContext,
   let count = 0;
   let commonUnit: string | undefined;
   let sawUom = false;
+  // A total of clock-time spans is still a span, so a timesheet column of
+  // `17:30 - 09:00` lines totals to a clock rather than to milliseconds. One
+  // ordinary quantity in the column is enough to make the total a quantity.
+  let everyPartIsSpan = true;
   const step = from <= to ? 1 : -1;
   for (let n = from; step > 0 ? n <= to : n >= to; n += step) {
     const v = context.getLineResult!(n);
@@ -107,11 +111,15 @@ function aggregateRange(from: number, to: number, context: LineExecutionContext,
         return errorValue("LINE_RANGE_MIXED_UNITS", `Line ${n}'s unit (${v!.unit}) doesn't match the range's first unit (${commonUnit}) — aggregating mixed units would silently misrepresent the result`);
       }
     }
+    everyPartIsSpan &&= v!.datetimeSpan === true;
     total += v!.toNumber();
     count++;
   }
   const result = isAverage ? total / count : total;
-  return sawUom ? uomValue(result, commonUnit!) : numberValue(result);
+  if (!sawUom) return numberValue(result);
+  const aggregate = uomValue(result, commonUnit!);
+  if (everyPartIsSpan) aggregate.datetimeSpan = true;
+  return aggregate;
 }
 
 /** `sum(line X : line Y)` / `total(line X : line Y)`. */
@@ -164,6 +172,10 @@ function aggregateAbove(context: LineExecutionContext, isAverage: boolean): Valu
   let count = 0;
   let commonUnit: string | undefined;
   let sawUom = false;
+  // A total of clock-time spans is still a span, so a timesheet column of
+  // `17:30 - 09:00` lines totals to a clock rather than to milliseconds. One
+  // ordinary quantity in the column is enough to make the total a quantity.
+  let everyPartIsSpan = true;
   for (let n = context.lineIndex - 1; n >= 1; n--) {
     if (boundaryCheck(n)) break;
     const v = context.getLineResult!(n);
@@ -179,12 +191,16 @@ function aggregateAbove(context: LineExecutionContext, isAverage: boolean): Valu
         return errorValue("LINE_RANGE_MIXED_UNITS", `Line ${n}'s unit (${v!.unit}) doesn't match the range's unit (${commonUnit})`);
       }
     }
+    everyPartIsSpan &&= v!.datetimeSpan === true;
     total += v!.toNumber();
     count++;
   }
   if (count === 0) return errorValue("LINE_RANGE_EMPTY", "No lines above to aggregate (hit the top of the document, a blank line, or a heading immediately)");
   const result = isAverage ? total / count : total;
-  return sawUom ? uomValue(result, commonUnit!) : numberValue(result);
+  if (!sawUom) return numberValue(result);
+  const aggregate = uomValue(result, commonUnit!);
+  if (everyPartIsSpan) aggregate.datetimeSpan = true;
+  return aggregate;
 }
 
 /** `total above`, every numeric result on lines before this one. */

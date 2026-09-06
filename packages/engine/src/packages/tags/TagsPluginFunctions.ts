@@ -51,6 +51,7 @@ function aggregateTagged(context: LineExecutionContext, tag: string, mode: TagMo
   let count = 0;
   let commonUnit: string | undefined;
   let sawUom = false;
+  let everyPartIsSpan = true;
 
   for (let n = 1; ; n++) {
     const text = getText(n);
@@ -75,6 +76,9 @@ function aggregateTagged(context: LineExecutionContext, tag: string, mode: TagMo
           return errorValue("TAG_MIXED_UNITS", `Line ${n}'s unit (${v!.unit}) doesn't match #${tag}'s first unit (${commonUnit}), aggregating mixed units would misrepresent the result.`);
         }
       }
+      // A total of clock-time spans is still a span; see the same rule in
+      // `LinesPluginFunctions.aggregateAbove`.
+      everyPartIsSpan &&= v!.datetimeSpan === true;
       total += v!.toNumber();
     }
     count++;
@@ -83,7 +87,10 @@ function aggregateTagged(context: LineExecutionContext, tag: string, mode: TagMo
   if (mode === "count") return numberValue(count);
   if (count === 0) return errorValue("TAG_EMPTY", `No lines are tagged #${tag}.`);
   const result = mode === "average" ? total / count : total;
-  return sawUom ? uomValue(result, commonUnit!) : numberValue(result);
+  if (!sawUom) return numberValue(result);
+  const aggregate = uomValue(result, commonUnit!);
+  if (everyPartIsSpan) aggregate.datetimeSpan = true;
+  return aggregate;
 }
 
 /** `total of #tag` / `sum of #tag`, the sum of every line carrying the tag. */

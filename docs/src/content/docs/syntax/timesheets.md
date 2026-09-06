@@ -67,6 +67,48 @@ number: the end is read as the next day.
 9pm to 5am // 480 minutes
 ```
 
+## Clocking in and out with a minus sign
+
+Subtracting one clock time from another is the same question `to` asks, written
+the way a payslip writes it, and the answer comes back on a clock rather than as
+a count of minutes: `1:00` is one hour, `7:05` is seven hours and five minutes.
+
+```solve
+9:30 - 8:30 // 1:00
+18:00 - 12:55 // 5:05
+```
+
+A stretch of time measured this way stays one through the arithmetic that keeps
+it a stretch. Two of them add together, one scales by a number, and a column of
+them totals, so a week of shifts reads as a week rather than as a number of
+milliseconds.
+
+```solve-doc
+9:30 - 8:30
+12:00 - 11:00
+18:00 - 12:55
+total above // 7:05
+```
+
+Ask for a unit and you are given that unit, because the line said which one it
+wanted:
+
+```solve
+(9:30 - 8:30) in minutes // 60 minutes
+```
+
+The boundary is a quantity of milliseconds somebody typed. `40ms` is a number
+with a unit on it, the way `40 kg` is, and a latency budget adds up as one:
+
+```solve
+40ms + 120ms + 30ms // 190.00 ms
+2 minutes in ms // 120,000.00 ms
+```
+
+Both are milliseconds and the unit cannot tell them apart, so the engine
+remembers which of the two it measured. A stretch between two times shows as a
+clock; a figure you wrote down stays a figure.
+
 ## What it pays
 
 An hourly rate turns any of these into money. The duration does not have to be

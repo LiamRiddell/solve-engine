@@ -272,8 +272,11 @@ function localiseFixedDecimal(fixed: string, loc: string, useGrouping: boolean):
   return `${sign}${integerText}${decimalMark(loc)}${fraction}`;
 }
 
-function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings, exact?: DecimalData): string {
-  if (unit === "ms") return `= ${formatMsDuration(value)}`;
+function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings, exact?: DecimalData, isDatetimeSpan?: boolean): string {
+  // A clock only for the gap between two datetimes, which is marked as such.
+  // A quantity in milliseconds is a quantity: `40ms + 120ms` is 190 ms, not
+  // 0:00, and every neighbouring spelling already agreed (`40 milliseconds`).
+  if (unit === "ms" && isDatetimeSpan) return `= ${formatMsDuration(value)}`;
   // A fuel-consumption unit is stored slash-free (so it is not read as a rate)
   // but shown the way it is written.
   if (unit === "l100km") unit = "l/100km";
@@ -502,7 +505,7 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
     case ValueType.Datetime:
       return formatDatetime(value.value as number, locale, us, value.zone);
     case ValueType.Uom:
-      return formatUom(value.value as number, value.unit, locale, us, value.exact);
+      return formatUom(value.value as number, value.unit, locale, us, value.exact, value.datetimeSpan);
     case ValueType.Matrix:
       return formatMatrix(value.value as MatrixData, locale, us);
     case ValueType.Range: {
