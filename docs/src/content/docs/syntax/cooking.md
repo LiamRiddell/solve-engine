@@ -45,6 +45,48 @@ A temperature between two marks is read as the nearer one, within ten degrees, w
 300C in gas mark // 300C is not a gas setting: the dial runs from gas 1/4 (110C) to gas 9 (240C)
 ```
 
+## Mixed numbers
+
+A recipe is written in mixed numbers rather than decimals, so a whole number and
+a fraction beside it read as the single quantity they are, and carry a unit like
+any other number.
+
+```solve
+1 1/2 cups in ml // 354.88 ml
+2 1/4 kg in lb // 4.96 lb
+```
+
+The fraction can be one of the characters a keyboard offers, on its own or after
+a whole number:
+
+```solve
+½ tsp in ml // 2.46 ml
+2 ½ cups in ml // 591.47 ml
+¼ // 0.25
+```
+
+`and` between the two parts reads the same way when a unit follows, which is the
+spelling that used to answer wrongly: `1 and 1/2 cups` was read as one plus half
+a cup.
+
+```solve
+1 and 1/2 cups in ml // 354.88 ml
+```
+
+### What is deliberately left alone
+
+`+` is not `and`. A sum written as a sum stays a sum, so `1 + 1/2 cups` is one
+plus half a cup, which is a different quantity and an answer nobody should have
+changed underneath them.
+
+```solve
+1 + 1/2 cups in ml // 119.29 ml
+```
+
+The hyphenated `1-1/2` is ambiguous against subtraction and is left as the
+subtraction it reads as, and none of this changes how a fraction prints:
+`1.5 as fraction` is still `3/2`. See [fractions](/syntax/fractions/).
+
 ## Scaling a recipe
 
 A recipe serves four and six people are coming. What you need is the number to multiply every quantity by, and that is what this gives you.
