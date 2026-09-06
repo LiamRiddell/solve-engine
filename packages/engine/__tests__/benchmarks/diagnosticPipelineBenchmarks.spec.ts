@@ -1,6 +1,12 @@
 /**
  * Diagnostic Pipeline Benchmark — compares production vs diagnostic mode
  * to prove zero overhead in production and acceptable cost in diagnostic mode.
+ *
+ * The absolute bounds here follow the same rule as `pipelineBenchmarks.spec.ts`,
+ * and its header says why: they are a smoke bound under the merge-base
+ * comparison, set to at least four times the slowest median the shared CI runner
+ * has been measured delivering. The comparison is what catches a regression;
+ * these catch a collapse.
  */
 
 // Pre-existing: __WORKER_URL__ is an esbuild define substitution, not available in ts-jest
@@ -30,16 +36,16 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
 
   // === PRODUCTION MODE BENCHMARKS ===
 
-  test("[PROD] single eval cold in < 2ms", async () => {
+  test("[PROD] single eval cold in < 10ms", async () => {
     const r = await benchmarkFn(() => {
       const e = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       e.evaluateLine(1, "1 + 2 * 3");
     }, 5000, 100);
     recordSample(results, "PROD_single_eval_cold", r);
-    expect(r.medianMs).toBeLessThan(2);
+    expect(r.medianMs).toBeLessThan(10);
   });
 
-  test("[PROD] single eval warm (cached) in < 0.5ms", async () => {
+  test("[PROD] single eval warm (cached) in < 1ms", async () => {
     const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     engine.evaluateLine(1, "10 + 20");
     const r = await benchmarkFn(() => {
@@ -49,7 +55,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
     expect(r.medianMs).toBeLessThan(1);
   });
 
-  test("[PROD] parses 50-line doc in < 20ms", async () => {
+  test("[PROD] parses 50-line doc in < 50ms", async () => {
     const input = generateDoc(50);
     const r = await benchmarkFn(() => {
       const e = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
@@ -59,7 +65,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
     expect(r.medianMs).toBeLessThan(50);
   });
 
-  test("[PROD] variable chain, engine construction included, under a smoke bound", async () => {
+  test("[PROD] variable chain, engine construction included, in < 10ms", async () => {
     // Constructing the engine inside the timed function is deliberate: this is
     // the cold path, and a cold parse needs an engine with nothing cached in
     // it. It does mean the figure is mostly construction, which is why
@@ -76,16 +82,16 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
       e.parseDocument(":x = 1\n:x + 1\n:x + 2\n:x + 3\n:x + 4");
     }, 5000, 100);
     recordSample(results, "PROD_variable_chain", r);
-    expect(r.medianMs).toBeLessThan(3);
+    expect(r.medianMs).toBeLessThan(10);
   });
 
-  test("[PROD] full pipeline sqrt(144) + 5 in < 1ms", async () => {
+  test("[PROD] full pipeline sqrt(144) + 5 in < 5ms", async () => {
     const r = await benchmarkFn(() => {
       const e = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       e.evaluateLine(1, "sqrt(144) + 5");
     }, 20000, 500);
     recordSample(results, "PROD_function_plus_literal", r);
-    expect(r.medianMs).toBeLessThan(2);
+    expect(r.medianMs).toBeLessThan(5);
   });
 
   test("[PROD] 10k warm evaluations in < 100ms", async () => {
@@ -100,13 +106,13 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
 
   // === DIAGNOSTIC MODE BENCHMARKS ===
 
-  test("[DIAG] single eval cold in < 5ms", async () => {
+  test("[DIAG] single eval cold in < 10ms", async () => {
     const r = await benchmarkFn(() => {
       const e = new ExpressionEngine({ diagnostics: true, packages: BUILTIN_PACKAGES });
       e.evaluateLine(1, "1 + 2 * 3");
     }, 5000, 100);
     recordSample(results, "DIAG_single_eval_cold", r);
-    expect(r.medianMs).toBeLessThan(5);
+    expect(r.medianMs).toBeLessThan(10);
   });
 
   test("[DIAG] single eval warm (cached) in < 1ms", async () => {
@@ -123,7 +129,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
     expect(r.medianMs).toBeLessThan(1);
   });
 
-  test("[DIAG] parses 50-line doc in < 50ms", async () => {
+  test("[DIAG] parses 50-line doc in < 100ms", async () => {
     const input = generateDoc(50);
     const r = await benchmarkFn(() => {
       const e = new ExpressionEngine({ diagnostics: true, packages: BUILTIN_PACKAGES });
@@ -133,7 +139,7 @@ describe("Diagnostic Pipeline Overhead Benchmark", () => {
     expect(r.medianMs).toBeLessThan(100);
   });
 
-  test("[DIAG] variable chain in < 2ms", async () => {
+  test("[DIAG] variable chain in < 5ms", async () => {
     const r = await benchmarkFn(() => {
       const e = new ExpressionEngine({ diagnostics: true, packages: BUILTIN_PACKAGES });
       e.parseDocument(":x = 1\n:x + 1\n:x + 2\n:x + 3\n:x + 4");

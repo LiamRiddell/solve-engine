@@ -4,6 +4,29 @@
  * Most realistic benchmark — includes lex + parse + compile + execute.
  */
 
+/**
+ * Why the absolute limits here are loose.
+ *
+ * Two different things watch these cases. The merge-base comparison is the
+ * regression gate: it runs both revisions on the same machine and divides, so
+ * it sees a change of a few per cent. The `toBeLessThan` bounds in this file
+ * are a smoke bound underneath it, there to catch a collapse rather than a
+ * regression, and every one of them is set to at least **four times the
+ * slowest median the shared CI runner has been measured delivering**, rounded
+ * up to a readable number.
+ *
+ * A bound set close to the measured figure does not watch the engine, it
+ * watches the runner. This case is why the rule is written down: the variable
+ * chain constructs an engine and parses five lines, and it was bounded at 2ms
+ * on a runner delivering medians of 1.61, 2.02, 2.05 and 2.10. It failed on
+ * the **merge-base** pass, which left the comparison with nothing to compare,
+ * so unrelated pull requests went red. Raising a bound loses nothing the
+ * comparison was not already catching better.
+ *
+ * Keep each test's name and its own number in step, so a reader does not have
+ * to check which of the two is current.
+ */
+
 import { describe, expect, test, afterAll } from "@jest/globals";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
@@ -33,16 +56,16 @@ describe("Pipeline Benchmarks", () => {
     writeBenchmarkResults("pipeline", results, "ms");
   });
 
-  test("evaluates cold (no cache) in < 2ms", async () => {
+  test("evaluates cold (no cache) in < 10ms", async () => {
     const r = await benchmarkFn(() => {
       const e = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       e.evaluateLine(1, "1 + 2 * 3");
     }, 5000, 100);
     recordSample(results, "single_eval_cold", r);
-    expect(r.medianMs).toBeLessThan(2);
+    expect(r.medianMs).toBeLessThan(10);
   });
 
-  test("constructs an engine with every built-in package in < 2ms", async () => {
+  test("constructs an engine with every built-in package in < 5ms", async () => {
     // The cold case above is construction plus one evaluation; this is the
     // construction alone, which is what a host building an engine per
     // document, per worker or per test pays.
@@ -50,10 +73,10 @@ describe("Pipeline Benchmarks", () => {
       new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     }, 3000, 50);
     recordSample(results, "create_engine", r);
-    expect(r.medianMs).toBeLessThan(2);
+    expect(r.medianMs).toBeLessThan(5);
   });
 
-  test("evaluates warm (cached) in < 0.5ms", async () => {
+  test("evaluates warm (cached) in < 1ms", async () => {
     const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     // Warm cache
     engine.evaluateLine(1, "10 + 20");
@@ -77,7 +100,7 @@ describe("Pipeline Benchmarks", () => {
     expect(r.medianMs).toBeLessThan(1);
   });
 
-  test("parses 50-line doc in < 20ms", async () => {
+  test("parses 50-line doc in < 50ms", async () => {
     const input = generateDoc(50);
     const r = await benchmarkFn(() => {
       const e = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
@@ -87,7 +110,7 @@ describe("Pipeline Benchmarks", () => {
     expect(r.medianMs).toBeLessThan(50);
   });
 
-  test("parses 200-line doc in < 100ms", async () => {
+  test("parses 200-line doc in < 200ms", async () => {
     const input = generateDoc(200);
     const r = await benchmarkFn(() => {
       const e = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
@@ -97,26 +120,26 @@ describe("Pipeline Benchmarks", () => {
     expect(r.medianMs).toBeLessThan(200);
   });
 
-  test("handles variable chain in < 1ms", async () => {
+  test("handles variable chain in < 10ms", async () => {
     const r = await benchmarkFn(() => {
       const e = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       e.parseDocument(":x = 1\n:x + 1\n:x + 2\n:x + 3\n:x + 4");
     }, 5000, 100);
     recordSample(results, "variable_chain", r);
-    expect(r.medianMs).toBeLessThan(2);
+    expect(r.medianMs).toBeLessThan(10);
   });
 
-  test("handles 20 inline solves in < 5ms", async () => {
+  test("handles 20 inline solves in < 15ms", async () => {
     const input = generateInlineDoc(20);
     const r = await benchmarkFn(() => {
       const e = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       e.parseDocument(input);
     }, 2000, 50);
     recordSample(results, "20_inline_solves", r);
-    expect(r.medianMs).toBeLessThan(10);
+    expect(r.medianMs).toBeLessThan(15);
   });
 
-  test("re-evaluates dirty line in < 1ms", async () => {
+  test("re-evaluates dirty line in < 10ms", async () => {
     const r = await benchmarkFn(() => {
       const e = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       e.parseDocument(":x = 1\n:x + 1\n:x + 2");
@@ -124,24 +147,24 @@ describe("Pipeline Benchmarks", () => {
       e.reEvaluateLine(3, ":x + 2");
     }, 10000, 200);
     recordSample(results, "re_eval_dirty", r);
-    expect(r.medianMs).toBeLessThan(2);
+    expect(r.medianMs).toBeLessThan(10);
   });
 
-  test("mixed expression ($ + % + units) in < 2ms", async () => {
+  test("mixed expression ($ + % + units) in < 10ms", async () => {
     const r = await benchmarkFn(() => {
       const e = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       e.evaluateLine(1, "$10 + 50% of 200 - 3 kg");
     }, 10000, 200);
     recordSample(results, "mixed_complex", r);
-    expect(r.medianMs).toBeLessThan(3);
+    expect(r.medianMs).toBeLessThan(10);
   });
 
-  test("full FunctionCall sqrt(144) + 5 in < 1ms", async () => {
+  test("full FunctionCall sqrt(144) + 5 in < 5ms", async () => {
     const r = await benchmarkFn(() => {
       const e = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       e.evaluateLine(1, "sqrt(144) + 5");
     }, 20000, 500);
     recordSample(results, "function_plus_literal", r);
-    expect(r.medianMs).toBeLessThan(2);
+    expect(r.medianMs).toBeLessThan(5);
   });
 });

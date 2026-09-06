@@ -130,3 +130,22 @@ slower. A uniform slowdown that leaves every individual case under its own limit
 is the shape worth catching, and the suite mean is what catches it. If you are
 tempted to tighten the per-case limit, measure first, on a branch that changes
 nothing.
+
+### The absolute bounds inside the specs
+
+The benchmark specs also carry plain `toBeLessThan` bounds, and those are a
+different instrument from the comparison. The comparison is the regression gate;
+the bounds are a smoke bound underneath it, there to catch a collapse rather than
+a few per cent.
+
+So each is set to at least **four times the slowest median the shared runner has
+been measured delivering**, rounded up to a readable number, and each test's name
+states its own number so the two cannot drift apart.
+
+A bound set close to the measured figure does not watch the engine, it watches
+the runner. One was: the pipeline suite's variable chain constructs an engine and
+parses five lines, and it was bounded at 2ms on a runner delivering medians
+between 1.61 and 2.10. It failed on the *merge base* pass, which left the
+comparison with nothing to compare, so pull requests that had changed nothing
+near it went red. Raising it lost nothing, because the comparison was already
+watching that case more closely than the bound ever could.
