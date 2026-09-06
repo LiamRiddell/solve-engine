@@ -42,6 +42,49 @@ export function unifyUom(l: Value, r: Value): { lv: number; rv: number; unit: st
 }
 
 /**
+ * The magnitudes of a list of values, read in one unit so they can be added.
+ *
+ * The unit is the first one written, and everything after it converts into
+ * that: `total of 1.2 km, 3 km, 800 m` is `5.00 km` because the list opened in
+ * kilometres. A value with no unit contributes its bare magnitude, which is
+ * what a list mixing a count into a column of quantities has always done.
+ *
+ * Returned as `{ magnitudes, unit }`, or as an Error value when two of the
+ * values measure different things, since there is no unit both can be read in
+ * and adding the magnitudes would answer confidently and wrongly. The sentence
+ * names the two dimensions the way the ordering opcodes and `min`/`max` do.
+ */
+export function unifyQuantities(values: readonly Value[], verb: string): { magnitudes: number[]; unit: string | undefined } | Value {
+    const magnitudes: number[] = new Array(values.length);
+    let anchor: Value | undefined;
+    for (let i = 0; i < values.length; i++) {
+        const v = values[i];
+        if (v.type !== ValueType.Uom || v.unit === undefined) {
+            magnitudes[i] = v.toNumber();
+            continue;
+        }
+        if (anchor === undefined) {
+            anchor = v;
+            magnitudes[i] = v.toNumber();
+            continue;
+        }
+        // unifyUom always reads the right operand in the left's unit, so
+        // anchoring on the first value written is what makes its unit the
+        // answer's unit.
+        const { rv, sameMeasure } = unifyUom(anchor, v);
+        if (!sameMeasure) {
+            const named = describeMeasureMismatch(anchor.unit, v.unit, verb);
+            return errorValue(
+                "INCOMPATIBLE_UNITS",
+                named ?? `Cannot combine incompatible units: ${anchor.unit ?? "?"} and ${v.unit ?? "?"}`,
+            );
+        }
+        magnitudes[i] = rv;
+    }
+    return { magnitudes, unit: anchor?.unit };
+}
+
+/**
  * How close two unified magnitudes have to be before a comparison calls them
  * the same number, as a fraction of the magnitudes that produced them.
  *

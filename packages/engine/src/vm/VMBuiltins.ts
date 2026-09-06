@@ -2,7 +2,7 @@ import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixVa
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { unifyUom, power, describeMeasureMismatch } from "@solve-js/vm/VMConversion";
+import { unifyUom, power, describeMeasureMismatch, unifyQuantities } from "@solve-js/vm/VMConversion";
 import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact } from "@solve-js/vm/MoneyExact";
 import { transpose, determinant, inverse, matrixMultiply, matrixPower, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
 import { symbolicToValue, valueToSymbolic, solveEquationValues } from "@solve-js/vm/SymbolicOps";
@@ -135,6 +135,18 @@ function extremum(args: Value[], wantLargest: boolean): Value {
     if (hasNaN) return numberValue(NaN);
     if (best === undefined) return numberValue(wantLargest ? -Infinity : Infinity);
     return best.type === ValueType.Uom ? best : numberValue(best.toNumber());
+}
+
+/**
+ * A magnitude wrapped back in the unit an aggregate read its arguments in.
+ *
+ * The sibling of {@link keepUnit} below, which takes the unit from a single
+ * operand. This one takes it from {@link unifyQuantities}, which has already
+ * read a whole list in one unit, so `total of $4.99, $12.50` keeps the
+ * currency the list opened in.
+ */
+function quantity(magnitude: number, unit: string | undefined): Value {
+    return unit === undefined ? numberValue(magnitude) : uomValue(magnitude, unit);
 }
 
 /**
@@ -492,21 +504,30 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // MathPhrases package's "average of X, Y, Z" (packages/mathphrases/).
     42: (args) => {
         if (args.length === 0) return numberValue(0);
-        const sum = args.reduce((acc, a) => acc + a.toNumber(), 0);
-        return numberValue(sum / args.length);
+        const unified = unifyQuantities(args, "averaged");
+        if (unified instanceof Value) return unified;
+        const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);
+        return quantity(sum / unified.magnitudes.length, unified.unit);
     },
     // median(...), middle value; average of the two middle values for an
     // even argument count.
     43: (args) => {
         if (args.length === 0) return numberValue(0);
-        const sorted = args.map((a) => a.toNumber()).sort((a, b) => a - b);
+        const unified = unifyQuantities(args, "ordered");
+        if (unified instanceof Value) return unified;
+        const sorted = unified.magnitudes.slice().sort((a, b) => a - b);
         const mid = Math.floor(sorted.length / 2);
-        return numberValue(
-            sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid]
+        return quantity(
+            sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid],
+            unified.unit,
         );
     },
     // total(...), sum of any number of arguments.
-    44: (args) => numberValue(args.reduce((acc, a) => acc + a.toNumber(), 0)),
+    44: (args) => {
+        const unified = unifyQuantities(args, "added");
+        if (unified instanceof Value) return unified;
+        return quantity(unified.magnitudes.reduce((acc, n) => acc + n, 0), unified.unit);
+    },
     // count(...), number of arguments passed.
     45: (args) => numberValue(args.length),
     // proportion(a, b, c) -> d such that a:b = c:d, i.e. d = c * (b/a)
@@ -1243,8 +1264,10 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // means a start:end interval elsewhere in the engine.
     105: (args) => {
         if (args.length === 0) return numberValue(0);
-        const nums = args.map((a) => a.toNumber());
-        return numberValue(Math.max(...nums) - Math.min(...nums));
+        const unified = unifyQuantities(args, "compared");
+        if (unified instanceof Value) return unified;
+        const nums = unified.magnitudes;
+        return quantity(Math.max(...nums) - Math.min(...nums), unified.unit);
     },
     // mode: the most frequent value. A tie is broken by first appearance, so the
     // result is deterministic for the same list.

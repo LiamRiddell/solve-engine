@@ -10,6 +10,43 @@ average of 10, 20, 30 // 20
 median of 1, 5, 3 // 3
 ```
 
+## A list that carries units
+
+A list of quantities answers in a unit rather than as a bare number, and the
+unit is the first one written. Everything after it is read in that unit, so a
+set spelling one measure two ways adds up rather than needing to be retyped.
+
+```solve
+total of $4.99, $12.50, $3.20 // $20.69
+total of 1.2 km, 3 km, 800 m // 5.00 km
+total of 800 m, 1.2 km, 3 km // 5,000.00 m
+```
+
+The last two lines are the same three distances and the same answer, shown in
+whichever unit the list opened with.
+
+A list mixing measures has no unit both halves can be read in, so it is refused
+rather than answered: `average of 5 kg, 3 m` reports *mass and length cannot be
+averaged*. Adding a mass to a length is not a harder sum, it is a different
+question, and a number here would be confidently wrong.
+
+The same rule holds wherever a set is named, so a column of money totals to
+money whether the lines are gathered by position with
+[`total above`](/syntax/line-references/), by name with a
+[category tag](/syntax/category-tags/), or by a line range.
+
+```solve-doc
+1.2 km
+3 km
+800 m
+total above // 5.00 km
+```
+
+The boundary is a bare number sitting in a list of quantities. It contributes
+its magnitude, which is what a count written beside a column of measurements has
+always done, so `total of 1 km, 500` is `501.00 km`. And `count of` counts, so it
+carries no unit at all.
+
 ## Spread and shape
 
 `average` and `median` find a list's centre; these four say how spread out it

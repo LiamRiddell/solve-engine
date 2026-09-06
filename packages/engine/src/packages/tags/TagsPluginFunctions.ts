@@ -1,4 +1,5 @@
 import { Value, ValueType, numberValue, uomValue, errorValue } from "@solve-js/vm/Value";
+import { unifyQuantities } from "@solve-js/vm/VMConversion";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { lineCarriesTag } from "./TagScanner";
 
@@ -47,11 +48,8 @@ function aggregateTagged(context: LineExecutionContext, tag: string, mode: TagMo
   const isBoundary = context.isLineBoundary;
   const needle = tag.toLowerCase();
 
-  let total = 0;
+  const values: Value[] = [];
   let count = 0;
-  let commonUnit: string | undefined;
-  let sawUom = false;
-  let everyPartIsSpan = true;
 
   for (let n = 1; ; n++) {
     const text = getText(n);
@@ -69,28 +67,27 @@ function aggregateTagged(context: LineExecutionContext, tag: string, mode: TagMo
       if (v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
         return errorValue("TAG_NON_NUMERIC", `Line ${n}, tagged #${tag}, is not a plain number or unit value.`);
       }
-      if (v!.type === ValueType.Uom) {
-        sawUom = true;
-        if (commonUnit === undefined) commonUnit = v!.unit;
-        else if (v!.unit !== commonUnit) {
-          return errorValue("TAG_MIXED_UNITS", `Line ${n}'s unit (${v!.unit}) doesn't match #${tag}'s first unit (${commonUnit}), aggregating mixed units would misrepresent the result.`);
-        }
-      }
-      // A total of clock-time spans is still a span; see the same rule in
-      // `LinesPluginFunctions.aggregateAbove`.
-      everyPartIsSpan &&= v!.datetimeSpan === true;
-      total += v!.toNumber();
+      values.push(v!);
     }
     count++;
   }
 
   if (mode === "count") return numberValue(count);
   if (count === 0) return errorValue("TAG_EMPTY", `No lines are tagged #${tag}.`);
-  const result = mode === "average" ? total / count : total;
-  if (!sawUom) return numberValue(result);
-  const aggregate = uomValue(result, commonUnit!);
-  if (everyPartIsSpan) aggregate.datetimeSpan = true;
-  return aggregate;
+  // The same rule the `above` aggregates and the inline `total of X, Y, Z`
+  // list follow: read the whole set in the first unit written, and refuse a
+  // set that mixes measures by naming the two dimensions.
+  const isAverage = mode === "average";
+  const unified = unifyQuantities(values, isAverage ? "averaged" : "added");
+  if (unified instanceof Value) return unified;
+  const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);
+  const result = isAverage ? sum / values.length : sum;
+  if (unified.unit === undefined) return numberValue(result);
+  const combined = uomValue(result, unified.unit);
+  // A total of clock-time spans is still a span; see the same rule in
+  // `LinesPluginFunctions.combineQuantities`.
+  if (values.every((v) => v.datetimeSpan === true)) combined.datetimeSpan = true;
+  return combined;
 }
 
 /** `total of #tag` / `sum of #tag`, the sum of every line carrying the tag. */
