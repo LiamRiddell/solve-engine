@@ -299,3 +299,50 @@ describe("FINANCE_PACKAGE — real engine wiring", () => {
     expect(evalReal("(1 + 2) * 3").toNumber()).toBe(9);
   });
 });
+
+describe("a term carries its unit, so 45 days is not 45 years", () => {
+  // The term was read as its bare magnitude, so every unit meant years:
+  // £74,209.08 of interest on a £2,400 invoice over 45 days, and "over
+  // 1 month" answering exactly what "over 1 year" answered. The conversion
+  // goes through the engine's own table, so a month here is what
+  // "18 months in years" already says it is rather than a second convention.
+  test("a term in days", () => {
+    expect(evalReal("interest on £2,400 over 45 days at 8%").toNumber()).toBeCloseTo(22.88, 2);
+  });
+
+  test("a term in months, on the financial convention of a twelfth", () => {
+    // A month is a twelfth here and not the table's thirty days, because a
+    // lender quoting 18 months means a year and a half. The two conventions
+    // disagree on purpose and both are documented.
+    expect(evalReal("interest on £2,400 over 1 month at 8%").toNumber()).toBeCloseTo(15.44, 2);
+    expect(evalReal("interest on £2,400 over 18 months at 8%").toNumber()).toBeCloseTo(293.69, 2);
+  });
+
+  test("so a term in months and the same term in years agree exactly", () => {
+    // 300 months is a 25-year mortgage. Under a thirty-day month it would be
+    // four months short, and the two lines would answer differently.
+    const months = evalReal("monthly repayment on £200,000 over 300 months at 4.5%").toNumber();
+    const years = evalReal("monthly repayment on £200,000 over 25 years at 4.5%").toNumber();
+    expect(months).toBeCloseTo(years, 6);
+  });
+
+  test("a bare number is still years, which every documented form relies on", () => {
+    expect(evalReal("interest on £2,400 over 3 years at 8%").toNumber()).toBeCloseTo(623.31, 2);
+    expect(evalReal("$1,000 after 3 years at 7%").toNumber()).toBeCloseTo(1225.043, 2);
+    expect(evalReal("compound interest on $1,000 over 3 years at 7%").toNumber()).toBeCloseTo(1225.043, 2);
+  });
+
+  test("a fractional term still computes, as it did before", () => {
+    expect(evalReal("interest on £2400 over 0.5 years at 8%").toNumber()).toBeCloseTo(94.15, 2);
+  });
+
+  test("the mortgage forms take a term the same way", () => {
+    expect(evalReal("monthly repayment on £200,000 over 25 years at 4.5%").toNumber()).toBeCloseTo(1111.66, 2);
+    expect(evalReal("monthly repayment on £200,000 over 300 months at 4.5%").toNumber()).toBeCloseTo(1111.66, 2);
+  });
+
+  test("a term that is not a length of time is refused, not read as years", () => {
+    const refused = evalReal("interest on £2,400 over 5 kg at 8%");
+    expect(String(refused.unit ?? refused.value)).toContain("not");
+  });
+});
