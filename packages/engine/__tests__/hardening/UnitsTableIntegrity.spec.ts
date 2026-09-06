@@ -360,19 +360,22 @@ describe("what the table holds that cannot be typed", () => {
 		}
 	});
 
-	// BUG. `°C` and `°F` are in the table, are listed in MEASURE_SYMBOLS, and
-	// are offered by `C to ?` as conversion targets, but typing either one
-	// fails with "Undefined variable: °C". The degree-symbol normalizer covers
-	// the angle case only.
+	// Fixed. `°C` and `°F` are in the table and were unreachable, because the
+	// lexer reads a unit as one run of `[A-Za-z0-9_]` and the degree-symbol
+	// normalizer covered the angle case only. `degreeTemperatureNormalizerRule`
+	// retypes the attached symbol forms, so both now convert, along with the
+	// precomposed `℃` and `℉` some keyboards emit.
 	//
-	// A case per spelling: a `test.failing` never runs the assertions after the
-	// first one that fails, so the two would hide each other. See
-	// `UnitsCurrencyAndRates.spec.ts`'s header for the regression that shape hid.
+	// A case per spelling: a failing assertion stops the test, so the two would
+	// hide each other. See `UnitsCurrencyAndRates.spec.ts`'s header for the
+	// regression that shape hid.
 	for (const [source, expected] of [
 		["20°C in F", 68],
 		["68°F in C", 20],
+		["20℃ in F", 68],
+		["68℉ in C", 20],
 	] as const) {
-		test.failing(`and for temperatures: ${source}`, () => {
+		test(`and for temperatures: ${source}`, () => {
 			const engine = newTrackedEngine();
 			try {
 				expect(engine.evaluateExpression(source).toNumber()).toBeCloseTo(expected, 6);

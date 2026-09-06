@@ -6,6 +6,7 @@ import { uomPossibilitiesNormalizerRule } from "./normalizer/PossibilitiesNormal
 import { compoundQuantityNormalizerRule } from "./normalizer/CompoundQuantityNormalizerRule";
 import { twoUnitConversionNormalizerRule } from "./normalizer/TwoUnitConversionNormalizerRule";
 import { degreeSymbolNormalizerRule } from "./normalizer/DegreeSymbolNormalizerRule";
+import { degreeTemperatureNormalizerRule } from "./normalizer/DegreeTemperatureNormalizerRule";
 import { inchAbbreviationNormalizerRule } from "./normalizer/InchAbbreviationNormalizerRule";
 import { TwoUnitConversionParselet } from "./parselets/TwoUnitConversionParselet";
 import { bareRateDenominatorNormalizerRule } from "./normalizer/BareRateDenominatorNormalizerRule";
@@ -58,6 +59,7 @@ export const UOM_PACKAGE: IEnginePackage = {
     compoundQuantityNormalizerRule(),
     twoUnitConversionNormalizerRule(),
     degreeSymbolNormalizerRule(),
+    degreeTemperatureNormalizerRule(),
     inchAbbreviationNormalizerRule(),
     atRateNormalizerRule(),
     forDurationNormalizerRule(),
