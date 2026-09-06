@@ -12,6 +12,7 @@ import {
   zoneConvertHandler, timeInZoneHandler, dateInZoneHandler, timeDifferenceHandler,
 } from "./parselets/TimezonePluginFunctions";
 import { clockTimeNormalizerRule } from "./normalizer/ClockTimeNormalizerRule";
+import { paceNotationNormalizerRule } from "./normalizer/PaceNotationNormalizerRule";
 import { clockTimeIntervalNormalizerRule } from "./normalizer/ClockTimeIntervalNormalizerRule";
 import { clockTimeSumNormalizerRule } from "./normalizer/ClockTimeSumNormalizerRule";
 import { compactDurationNormalizerRule } from "./normalizer/CompactDurationNormalizerRule";
@@ -92,6 +93,7 @@ export const TIME_PACKAGE: IEnginePackage = {
   },
   normalizerRules: [
     clockTimeNormalizerRule(),
+    paceNotationNormalizerRule(),
     clockTimeIntervalNormalizerRule(),
     clockTimeSumNormalizerRule(),
     compactDurationNormalizerRule(),

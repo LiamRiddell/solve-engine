@@ -4,6 +4,7 @@ import { formatIp } from "@solve-js/packages/ip/IpMath";
 import { decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
 import { autoFormatIntegerOrFloat, tooSmallToPrintText } from "@solve-js/utilities/Number";
+import { getMeasure } from "@solve-js/uom/UomConverter";
 import { FormattingSettings, DEFAULT_FORMATTING_SETTINGS } from "./FormattingSettings";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { columnMajorToRowMajor } from "@solve-js/vm/MatrixOps";
@@ -241,6 +242,62 @@ function formatMsDuration(ms: number): string {
   return `${sign}${hours}:${mm}:${ss}`;
 }
 
+/**
+ * The time units a pace can be written in, and what one of each is in seconds.
+ *
+ * A short list rather than a measure lookup, because a pace is minutes and
+ * seconds by convention and nobody writes a pace in weeks.
+ */
+const PACE_TIME_UNITS: Readonly<Record<string, number>> = {
+	s: 1, sec: 1, secs: 1, second: 1, seconds: 1,
+	min: 60, mins: 60, minute: 60, minutes: 60,
+	h: 3600, hr: 3600, hrs: 3600, hour: 3600, hours: 3600,
+};
+
+/**
+ * Below this many seconds per unit, a pace keeps its ordinary rendering.
+ *
+ * A clock shows whole seconds, and rounding to one is immaterial at a runner's
+ * pace and a real loss below a minute: `0.90 seconds/m` would read `0:01 /m`,
+ * which is a different number. A minute per unit is where the rounding stops
+ * mattering.
+ */
+const PACE_CLOCK_FLOOR_SECONDS = 60;
+
+/**
+ * A time over a distance, written the way a runner writes it.
+ *
+ * `4:30/km` is four and a half minutes to cover a kilometre, and `270.00
+ * seconds/km` is the same number in a spelling nobody uses. So a quantity whose
+ * unit is a time over a length is shown on a clock, matching what the `pace`
+ * function has always printed.
+ *
+ * Returns undefined for everything else, which is every other unit the engine
+ * carries: a speed (`90 km/h`) is a length over a time and reads as a number, a
+ * rate of pay is money over a time, and a pace faster than a minute per unit
+ * keeps its digits. Callers keep the rendering they had.
+ */
+function formatPace(value: number, unit: string): string | undefined {
+	const slash = unit.indexOf("/");
+	if (slash <= 0) return undefined;
+	const perSecond = PACE_TIME_UNITS[unit.slice(0, slash).toLowerCase()];
+	if (perSecond === undefined) return undefined;
+	const distance = unit.slice(slash + 1);
+	if (getMeasure(distance) !== "length") return undefined;
+
+	const seconds = value * perSecond;
+	if (!Number.isFinite(seconds) || Math.abs(seconds) < PACE_CLOCK_FLOOR_SECONDS) return undefined;
+	// The same shape `formatMsDuration` writes, so a pace and a stretch of time
+	// read alike, with the hours dropped when there are none.
+	const sign = seconds < 0 ? "-" : "";
+	const whole = Math.round(Math.abs(seconds));
+	const hours = Math.floor(whole / 3600);
+	const mm = String(Math.floor((whole % 3600) / 60)).padStart(2, "0");
+	const ss = String(whole % 60).padStart(2, "0");
+	const clock = hours === 0 ? `${Math.floor(whole / 60)}:${ss}` : `${hours}:${mm}:${ss}`;
+	return `${sign}${clock} /${distance}`;
+}
+
 /** The decimal mark each locale writes, looked up once per locale rather than on every value. */
 const decimalMarkByLocale = new Map<string, string>();
 
@@ -278,6 +335,12 @@ function localiseFixedDecimal(fixed: string, loc: string, useGrouping: boolean):
 }
 
 function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings, exact?: DecimalData, isDatetimeSpan?: boolean, explicitPlaces?: number): string {
+  // A time over a distance is a pace, and a runner reads a pace on a clock.
+  // Not when the line named its own place count, which asked for digits.
+  if (unit !== undefined && explicitPlaces === undefined) {
+    const pace = formatPace(value, unit);
+    if (pace !== undefined) return `= ${pace}`;
+  }
   // A clock only for the gap between two datetimes, which is marked as such.
   // A quantity in milliseconds is a quantity: `40ms + 120ms` is 190 ms, not
   // 0:00, and every neighbouring spelling already agreed (`40 milliseconds`).
