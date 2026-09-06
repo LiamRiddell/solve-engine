@@ -11,6 +11,14 @@
  * asserted against those literal strings rather than recomputed, so a change
  * of formatting or of arithmetic cannot quietly redefine what "restored"
  * means. Each was taken from a run of 2.25.0 on this branch's base.
+ *
+ * Five of them changed at 2.34.4, and the arithmetic did not. A quantity too
+ * small to survive two decimal places is now shown to three significant digits
+ * instead of as a `0.00` nobody could tell from a real zero, so `12/25/2026`
+ * read as division reads `0.000237` rather than `0.00`. That is a display
+ * change across the whole engine, not something this opt-out does: the value it
+ * restores is the same division it always was, and it is now legible. The
+ * strings below are re-measured to match, and each name says what it is now.
  */
 
 import { describe, expect, test } from "@jest/globals";
@@ -29,33 +37,33 @@ const refused = (expression: string, inputOrder: DateInputOrder): string => {
 };
 
 describe("the ten values the refusal replaced", () => {
-  test("12/25/2026 is 0.00 again, under auto and DMY", () => {
-    expect(restored("12/25/2026", "auto")).toBe("0.00");
-    expect(restored("12/25/2026", "DMY")).toBe("0.00");
+  test("12/25/2026 is the division again, under auto and DMY", () => {
+    expect(restored("12/25/2026", "auto")).toBe("0.000237");
+    expect(restored("12/25/2026", "DMY")).toBe("0.000237");
   });
 
   test("12-25-2026 under DMY is -2,039 again", () => {
     expect(restored("12-25-2026", "DMY")).toBe("-2,039");
   });
 
-  test("25/12/2023 under MDY is 0.00 again", () => {
-    expect(restored("25/12/2023", "MDY")).toBe("0.00");
+  test("25/12/2023 under MDY is the division again", () => {
+    expect(restored("25/12/2023", "MDY")).toBe("0.00103");
   });
 
-  test("03/04/2026 under YMD is 0.00 again", () => {
-    expect(restored("03/04/2026", "YMD")).toBe("0.00");
+  test("03/04/2026 under YMD is the division again", () => {
+    expect(restored("03/04/2026", "YMD")).toBe("0.00037");
   });
 
-  test("31/04/2026 is 0.00 again", () => {
-    expect(restored("31/04/2026", "DMY")).toBe("0.00");
+  test("31/04/2026 is the division again", () => {
+    expect(restored("31/04/2026", "DMY")).toBe("0.00383");
   });
 
   test("29/02/2026 is 0.01 again", () => {
     expect(restored("29/02/2026", "DMY")).toBe("0.01");
   });
 
-  test("13/13/2026 is 0.00 again", () => {
-    expect(restored("13/13/2026", "DMY")).toBe("0.00");
+  test("13/13/2026 is the division again", () => {
+    expect(restored("13/13/2026", "DMY")).toBe("0.000494");
   });
 
   test("2026-02-29 is 1,995 again, under every order", () => {

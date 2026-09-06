@@ -3,7 +3,7 @@ import { formatColour } from "@solve-js/packages/colour/ColourMath";
 import { formatIp } from "@solve-js/packages/ip/IpMath";
 import { decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
-import { autoFormatIntegerOrFloat } from "@solve-js/utilities/Number";
+import { autoFormatIntegerOrFloat, tooSmallToPrintText } from "@solve-js/utilities/Number";
 import { FormattingSettings, DEFAULT_FORMATTING_SETTINGS } from "./FormattingSettings";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { columnMajorToRowMajor } from "@solve-js/vm/MatrixOps";
@@ -28,7 +28,12 @@ function formatNumber(value: number, locale: ILocale, settings: FormattingSettin
     return `${locale.display.resultPrefix}${formatted}`;
   }
   const dp = settings.floatResult.decimalPlaces;
-  const formatted = autoFormatIntegerOrFloat(value, dp, sep, loc);
+  // A value below the decimal budget is shown to three significant digits
+  // rather than as a zero it cannot be told apart from. Only when the budget is
+  // the default one: an explicit `to N dp` above asked for those places and is
+  // given them, zeros included.
+  const tooSmall = tooSmallToPrintText(value, dp, loc || "en-US");
+  const formatted = tooSmall ?? autoFormatIntegerOrFloat(value, dp, sep, loc);
   return `${locale.display.resultPrefix}${formatted}`;
 }
 
@@ -272,7 +277,7 @@ function localiseFixedDecimal(fixed: string, loc: string, useGrouping: boolean):
   return `${sign}${integerText}${decimalMark(loc)}${fraction}`;
 }
 
-function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings, exact?: DecimalData, isDatetimeSpan?: boolean): string {
+function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings, exact?: DecimalData, isDatetimeSpan?: boolean, explicitPlaces?: number): string {
   // A clock only for the gap between two datetimes, which is marked as such.
   // A quantity in milliseconds is a quantity: `40ms + 120ms` is 190 ms, not
   // 0:00, and every neighbouring spelling already agreed (`40 milliseconds`).
@@ -282,7 +287,10 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   if (unit === "l100km") unit = "l/100km";
   if (unit === "mps2") unit = "m/s²";
 
-  const dp = settings.unitOfMeasurementResult.decimalPlaces;
+  // `1.23456 km to 4 dp` asked for four places and used to be given the
+  // setting's two, because a quantity's own place count was never read here the
+  // way a plain number's already was.
+  const dp = explicitPlaces ?? settings.unitOfMeasurementResult.decimalPlaces;
   const useGrouping = settings.floatResult.enableSeperator;
   const loc = settings.numberResult.decimalSeparatorLocale || "en-US";
 
@@ -290,8 +298,18 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   const timeSpanUnits = ["days", "weeks", "months", "years", "hours", "minutes", "seconds", "day", "week", "month", "year", "hour", "minute", "second"];
   const isTimeSpan = unit && timeSpanUnits.includes(unit);
 
+  // A conversion can land far below the decimal budget, and `1 Hz in MHz`
+  // printing `0.00 MHz` is indistinguishable from a real zero. Three
+  // significant digits instead, in exponent form once the zeros stop being
+  // countable. Not for an explicit `to N dp`, which asked for those places, and
+  // not for money below: a currency zero is a real answer, and `$0.001` is
+  // `$0.00` because a tenth of a penny is not a payable amount.
+  const tooSmall = explicitPlaces === undefined ? tooSmallToPrintText(value, dp, loc) : undefined;
+
   let formatted: string;
-  if (isTimeSpan && value === Math.floor(value)) {
+  if (tooSmall !== undefined) {
+    formatted = tooSmall;
+  } else if (isTimeSpan && value === Math.floor(value)) {
     // For whole number TimeSpan values, format as integer
     formatted = localiseFixedDecimal(value.toString(), loc, useGrouping);
   } else {
@@ -505,7 +523,7 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
     case ValueType.Datetime:
       return formatDatetime(value.value as number, locale, us, value.zone);
     case ValueType.Uom:
-      return formatUom(value.value as number, value.unit, locale, us, value.exact, value.datetimeSpan);
+      return formatUom(value.value as number, value.unit, locale, us, value.exact, value.datetimeSpan, value.decimalPlaces);
     case ValueType.Matrix:
       return formatMatrix(value.value as MatrixData, locale, us);
     case ValueType.Range: {
