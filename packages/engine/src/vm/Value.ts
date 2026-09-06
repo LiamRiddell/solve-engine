@@ -505,6 +505,25 @@ export class Value {
 	 * sidecars.
 	 */
 	public zone?: string;
+	/**
+	 * That this quantity is the gap between two datetimes, rather than a
+	 * duration someone wrote down.
+	 *
+	 * Both are milliseconds and both are a `Uom` in `"ms"`, so the unit cannot
+	 * tell them apart, and the formatter used to render every one of them as a
+	 * clock. That is right for `10:30 - 08:00`, which reads `2:30`, and wrong
+	 * for `40ms + 120ms`, which read `0:00` instead of 190 ms: a latency budget
+	 * is a quantity and not a time of day. Set where two datetimes subtract, and
+	 * read only by the formatter.
+	 *
+	 * It survives the arithmetic that keeps a span a span: adding two spans,
+	 * scaling one by a plain number, and totalling a column of them, so a
+	 * timesheet still reads as a clock and half a shift is `0:30`. It does not
+	 * survive a conversion, because `(10:30 - 08:00) in ms` asked for
+	 * milliseconds and should be given them, nor combining with a quantity
+	 * somebody typed. Cleared by {@link recycle} alongside the other sidecars.
+	 */
+	public datetimeSpan?: boolean;
 
 	constructor(
 		type: ValueType,
@@ -551,6 +570,7 @@ export class Value {
 		// the arena hands out next.
 		this.grain = undefined;
 		this.zone = undefined;
+		this.datetimeSpan = undefined;
 	}
 
 	/**

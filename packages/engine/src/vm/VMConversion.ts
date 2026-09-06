@@ -662,7 +662,18 @@ export function binaryOp(
             const named = describeMeasureMismatch(lUnit, rUnit, combineVerb(symbolicOp));
             return errorValue("INCOMPATIBLE_UNITS", named ?? `Cannot combine incompatible units: ${lUnit ?? "?"} and ${rUnit ?? "?"}`);
         }
-        return uomValue(op(lv, rv), unit!);
+        const combined = uomValue(op(lv, rv), unit!);
+        // A span of time stays a span when it is added to another span, or
+        // scaled by a plain number: two shifts added together are a shift, and
+        // half a shift is a shift, so both still read as a clock. A span
+        // combined with a quantity somebody typed is not, which is what keeps
+        // an ordinary `40ms + 120ms` a count of milliseconds.
+        const bothSpans = l.datetimeSpan === true && r.datetimeSpan === true;
+        const scaled =
+            (l.datetimeSpan === true && r.type === ValueType.Number) ||
+            (r.datetimeSpan === true && l.type === ValueType.Number);
+        if (bothSpans || scaled) combined.datetimeSpan = true;
+        return combined;
     }
 
     // Element-wise Matrix dispatch (ADD/SUB/DIV/MOD land here; MUL's real

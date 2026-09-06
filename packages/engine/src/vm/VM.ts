@@ -2101,7 +2101,11 @@ export function executeBytecode(
               // expect. Two datetimes subtract to a duration, not a point
               // in time, represented as a Uom in milliseconds, consistent
               // with how extractDurationMs() reads durations elsewhere.
-              stack.push(uomValue(l.toNumber() - r.toNumber(), "ms"));
+              // Marked as a span so the formatter shows it as a clock. An
+              // ordinary `40ms` carries no mark and shows as a quantity.
+              const span = uomValue(l.toNumber() - r.toNumber(), "ms");
+              span.datetimeSpan = true;
+              stack.push(span);
             } else {
               // See the matching ADD case above, and shiftDatetime()'s own
               // doc comment for why a day is not a fixed number of ms.
