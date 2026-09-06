@@ -218,6 +218,47 @@ function spanBetweenDatesHandler(args: Value[], context?: LineExecutionContext):
   return uomValue(Math.abs(from - to), "ms");
 }
 
+/** Days in a week, which is how far apart two of the same weekday are. */
+const DAYS_PER_WEEK = 7;
+
+/**
+ * How many times a weekday falls between two dates, both ends included.
+ *
+ * `fridays between 01/06/2026 and 31/08/2026` is 13. The nearest approximation
+ * before this was `weeks between`, which ignores which weekday the range starts
+ * and ends on and so is wrong at both ends.
+ *
+ * Both endpoints are included, deliberately: a range written to a Friday was
+ * written to include it, and someone counting shifts or rent days means the
+ * ones on the boundary. It follows that a single day that is the weekday counts
+ * as one, and `friday until <that friday>` counts today.
+ *
+ * The endpoints are read as calendar days rather than instants, so a time of
+ * day on either (which `until` and `since` always carry, since they measure
+ * from now) neither adds nor removes a day. Order does not matter: a weekday
+ * falls in a range the same number of times whichever end you start from.
+ */
+function weekdaysBetweenHandler(args: Value[], context?: LineExecutionContext): Value {
+  const target = Math.trunc(args[2].toNumber());
+  if (!Number.isInteger(target) || target < 0 || target > 6) {
+    return errorValue("INVALID_WEEKDAY", `A weekday is a day of the week, and ${args[2].toNumber()} is not one`);
+  }
+  const calendar = calendarOf(context);
+  const a = calendar.fields(args[0].toNumber());
+  const b = calendar.fields(args[1].toNumber());
+  const dayA = dayNumber(a.year, a.month0, a.day);
+  const dayB = dayNumber(b.year, b.month0, b.day);
+
+  const start = Math.min(dayA, dayB);
+  const end = Math.max(dayA, dayB);
+  const startWeekday = start === dayA ? a.weekday : b.weekday;
+
+  // The first occurrence at or after the start, then every seventh day.
+  const first = start + (((target - startWeekday) % DAYS_PER_WEEK) + DAYS_PER_WEEK) % DAYS_PER_WEEK;
+  if (first > end) return numberValue(0);
+  return numberValue(Math.floor((end - first) / DAYS_PER_WEEK) + 1);
+}
+
 /**
  * `<ISO8601 string> to date` / `<unix timestamp> to date` -> a Datetime
  * value. Dispatches on the RUNTIME value type (a `CALL_PLUGIN` handler
@@ -323,6 +364,9 @@ export const isWorkdayOnDate = isWorkdayOnDateHandler;
  * Elapsed time between two dates, as a duration value.
  */
 export const spanBetweenDates = spanBetweenDatesHandler;
+
+/** `fridays between A and B`, and the `until`/`since` spellings of the same count. */
+export const weekdaysBetween = weekdaysBetweenHandler;
 /**
  * Coerce a Unix timestamp, ISO 8601 string or epoch number to a
  * Datetime.
