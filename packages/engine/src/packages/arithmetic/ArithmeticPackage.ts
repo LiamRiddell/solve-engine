@@ -7,6 +7,7 @@ import { BinaryOpParselet } from "./parselets/BinaryOpParselet";
 import { GroupParselet } from "./parselets/GroupParselet";
 import { ConstantParselet } from "./parselets/ConstantParselet";
 import { largeNumberSuffixNormalizerRule } from "./normalizer/LargeNumberSuffixNormalizerRule";
+import { mixedNumberNormalizerRule } from "./normalizer/MixedNumberNormalizerRule";
 
 /** Core arithmetic: numbers, `()` grouping, `pi`/`e` constants, `+ - * / % ^`, bitwise `<< >> & | ^`, and their `*_by` word forms. */
 export const ARITHMETIC_PACKAGE: IEnginePackage = {
@@ -54,5 +55,5 @@ export const ARITHMETIC_PACKAGE: IEnginePackage = {
     BIT_OR: new BinaryOpParselet(BindingPower.BitwiseOr, OpCode.BIT_OR),
     BIT_XOR: new BinaryOpParselet(BindingPower.BitwiseXor, OpCode.BIT_XOR),
   },
-  normalizerRules: [largeNumberSuffixNormalizerRule()],
+  normalizerRules: [largeNumberSuffixNormalizerRule(), mixedNumberNormalizerRule()],
 };
