@@ -26,7 +26,7 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/finance/data/CpiTable";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
-import { isPhysicalTimeRate, quantityAtRateSeconds } from "@solve-js/uom/UomConverter";
+import { isPhysicalTimeRate, quantityAtRateSeconds, convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 
 /**
  * A duration in seconds, shown in the largest whole time unit that keeps the
@@ -263,6 +263,51 @@ function variance(nums: number[], sample: boolean): number {
     const denom = sample ? n - 1 : n;
     if (denom <= 0) return 0;
     return sumOfSquares(nums) / denom;
+}
+
+/**
+ * Registry of built-in mathematical functions.
+ * Indexed by the number pushed as an operand of OpCode.CALL_BUILTIN.
+ */
+/**
+ * The term of a finance form, in years.
+ *
+ * A term is written as an ordinary quantity (`over 45 days`, `over 18 months`),
+ * and every finance builtin wants years. Reading the magnitude and ignoring the
+ * unit charged 45 days as 45 years: £74,209.08 of interest on a £2,400 invoice,
+ * and `over 1 month` answering the same as `over 1 year`.
+ *
+ * A bare number is still years, which is what the documented phrase forms and
+ * every function-call spelling pass. A quantity that is not a duration is
+ * refused by measure, because a term in kilograms is a mistake rather than a
+ * number.
+ *
+ * A month here is a twelfth of a year, which is the financial convention and
+ * not the engine's general one: `18 months in years` answers 1.48, because the
+ * unit table makes a month thirty days. A lender does not. "18 months at 8%"
+ * means a year and a half to anyone who has been quoted one, and a 300-month
+ * mortgage is a 25-year mortgage exactly, which the thirty-day month misses by
+ * four months. Every other duration goes through the table, where a year is
+ * 365 days. Both conventions are stated on the page.
+ *
+ * @param value - The term operand as the parser left it.
+ * @returns The term in years, or the error Value to return in its place.
+ */
+const MONTHS_PER_YEAR = 12;
+
+/** Every spelling of a month the unit table accepts, singular and plural. */
+const MONTH_UNITS = new Set(["month", "months", "mo", "mos", "mth", "mths"]);
+
+function termInYears(value: Value): number | Value {
+	if (value.type !== ValueType.Uom || value.unit === undefined) return value.toNumber();
+	if (getMeasure(value.unit) !== "time") {
+		return errorValue(
+			"INVALID_TERM",
+			`a term is a length of time, and "${value.unit}" is not: write it as days, months or years`,
+		);
+	}
+	if (MONTH_UNITS.has(value.unit)) return value.toNumber() / MONTHS_PER_YEAR;
+	return convertUnit(value.toNumber(), value.unit, "year");
 }
 
 /**
@@ -528,7 +573,8 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     51: (args) => {
         const principal = args[0].toNumber();
         const rate = args[1].toNumber();
-        const years = args[2].toNumber();
+        const years = termInYears(args[2]);
+        if (typeof years !== "number") return years;
         if (1 + rate <= 0) {
             return errorValue("INVALID_RATE", `compoundInterest: rate ${rate} makes (1 + rate) non-positive`);
         }
@@ -541,7 +587,8 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     52: (args) => {
         const principal = args[0].toNumber();
         const rate = args[1].toNumber();
-        const years = args[2].toNumber();
+        const years = termInYears(args[2]);
+        if (typeof years !== "number") return years;
         if (1 + rate <= 0) {
             return errorValue("INVALID_RATE", `interestEarned: rate ${rate} makes (1 + rate) non-positive`);
         }
@@ -556,7 +603,8 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     53: (args) => {
         const principal = args[0].toNumber();
         const futureValue = args[1].toNumber();
-        const years = args[2].toNumber();
+        const years = termInYears(args[2]);
+        if (typeof years !== "number") return years;
         if (principal <= 0 || futureValue <= 0) {
             return errorValue("INVALID_RANGE", `compoundInterestRate: principal and futureValue must both be positive`);
         }
@@ -594,7 +642,8 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     55: (args) => {
         const principal = args[0].toNumber();
         const rate = args[1].toNumber();
-        const years = args[2].toNumber();
+        const years = termInYears(args[2]);
+        if (typeof years !== "number") return years;
         const periodsPerYear = args[3].toNumber();
         if (principal <= 0) return errorValue("INVALID_RANGE", `loanRepayment: principal must be positive`);
         if (years <= 0) return errorValue("INVALID_RANGE", `loanRepayment: years must be positive`);
@@ -610,7 +659,8 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     56: (args) => {
         const principal = args[0].toNumber();
         const rate = args[1].toNumber();
-        const years = args[2].toNumber();
+        const years = termInYears(args[2]);
+        if (typeof years !== "number") return years;
         const periodsPerYear = args[3].toNumber();
         if (principal <= 0) return errorValue("INVALID_RANGE", `loanInterest: principal must be positive`);
         if (years <= 0) return errorValue("INVALID_RANGE", `loanInterest: years must be positive`);
@@ -626,7 +676,8 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     57: (args) => {
         const principal = args[0].toNumber();
         const rate = args[1].toNumber();
-        const years = args[2].toNumber();
+        const years = termInYears(args[2]);
+        if (typeof years !== "number") return years;
         if (principal <= 0) return errorValue("INVALID_RANGE", `monthlyPayment: principal must be positive`);
         if (years <= 0) return errorValue("INVALID_RANGE", `monthlyPayment: years must be positive`);
         if (rate < 0) return errorValue("INVALID_RATE", `monthlyPayment: rate must not be negative`);
@@ -1048,7 +1099,8 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     80: (args) => {
         const principal = args[0].toNumber();
         const rate = args[1].toNumber();
-        const years = args[2].toNumber();
+        const years = termInYears(args[2]);
+        if (typeof years !== "number") return years;
         const perYear = args[3].toNumber();
         if (perYear <= 0) {
             return errorValue("INVALID_RATE", `compounding: ${perYear} periods per year is not a period`);
@@ -1064,7 +1116,8 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     81: (args) => {
         const principal = args[0].toNumber();
         const rate = args[1].toNumber();
-        const years = args[2].toNumber();
+        const years = termInYears(args[2]);
+        if (typeof years !== "number") return years;
         const perYear = args[3].toNumber();
         if (perYear <= 0 || 1 + rate / perYear <= 0) {
             return errorValue("INVALID_RATE", `compounding: rate ${rate} over ${perYear} periods per year is not usable`);
@@ -1077,7 +1130,8 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     82: (args) => {
         const future = args[0].toNumber();
         const rate = args[1].toNumber();
-        const years = args[2].toNumber();
+        const years = termInYears(args[2]);
+        if (typeof years !== "number") return years;
         if (1 + rate <= 0) {
             return errorValue("INVALID_RATE", `presentValue: rate ${rate} makes (1 + rate) non-positive`);
         }
@@ -1104,7 +1158,8 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     84: (args) => {
         const invested = args[0].toNumber();
         const returned = args[1].toNumber();
-        const years = args[2].toNumber();
+        const years = termInYears(args[2]);
+        if (typeof years !== "number") return years;
         if (invested <= 0) {
             return errorValue("INVALID_RATE", "annual return: the amount invested must be positive");
         }
