@@ -250,7 +250,7 @@ Measured against **meter**.
 | foot | `feet`, `ft` | 0.3048 |
 | hand | `hands` | 0.1016 |
 | decimeter | `decimetre`, `decimeters`, `decimetres`, `dm` | 0.1 |
-| inch | `inches` | 0.0254 |
+| inch | `inches`, `in` | 0.0254 |
 | centimeter | `centimetre`, `centimeters`, `centimetres`, `cm` | 0.01 |
 | pica | `picas` | 0.0042333 |
 | millimeter | `millimetre`, `millimeters`, `millimetres`, `mm` | 0.001 |
@@ -639,7 +639,7 @@ Measured against **kmpl**.
 
 ## Spellings that are not listed
 
-The conversion tables carry 1518 spellings in total, and 457 of
+The conversion tables carry 1518 spellings in total, and 456 of
 them are missing above. Most are multi-word forms like `sq ft` and `cu yd`,
 which the tables can resolve but the lexer cannot tokenize, so they are
 unavailable when typing an expression. They are excluded here rather than listed

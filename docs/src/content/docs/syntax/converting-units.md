@@ -25,3 +25,31 @@ rather than guessed. The message names the dimensions rather than the units, so
 `5 kg in m` reports *a mass cannot be converted to a length*. Combining two
 different dimensions is refused the same way: `5 kg + 3 m` reports *mass and
 length cannot be added*.
+
+## Inches, where the abbreviation is also the word for converting
+
+`in` is how the engine spells the conversion itself, so it cannot simply be a
+unit as well: `12 in ft` has to keep meaning "twelve, in feet". The word is read
+as inches where there is plainly nothing to convert into, which is at the end of
+a line, before an operator, or before a second `in` or a `to`.
+
+```solve
+12 in in cm // 30.48 cm
+2 in + 3 in // 5.00 in
+12 in to cm // 30.48 cm
+```
+
+Everywhere else it is still the preposition, including when the thing being
+converted into is itself inches:
+
+```solve
+3 ft in in // 36.00 in
+```
+
+The full spellings never have to be reasoned about at all, so they are the safer
+thing to write in a document somebody else will read:
+
+```solve
+12 inches in cm // 30.48 cm
+1 inch in mm // 25.40 mm
+```
