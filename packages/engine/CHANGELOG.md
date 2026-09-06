@@ -19,7 +19,7 @@
   
   The last row is the reason this is more than a convenience. That spelling
   answered, and answered wrongly: it computed `1 + (1/2 cups)` rather than
-  `(1 + 1/2) cups`, so a cup and a half came out as a fifth of what it is. Each
+  `(1 + 1/2) cups`, so a cup and a half came out as a third of what it is. Each
   new form is pinned against the decimal it stands for, so the two cannot drift.
   
   Three shapes, one reading. A whole number and a proper fraction beside it are

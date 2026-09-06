@@ -40,6 +40,35 @@ untagged lines, and blank lines between them are all ignored:
 total of #grocery   // 67.50
 ```
 
+### Asking is not joining
+
+A `#tag` after one of those four openers names the group; it does not join it.
+So a tag can answer as many questions as you like, and each answers as though it
+were the only one:
+
+```solve-doc
+40 #grocery
+12.50 #grocery
+total of #grocery // 52.50
+average of #grocery // 26.25
+count of #grocery // 2
+```
+
+A line can do both at once, because the rule is about each `#` rather than about
+the line: the tag being asked about is a question, and any other tag on the line
+is still a mark.
+
+```solve-doc
+40 #grocery #reviewed
+12.50 #grocery
+9 #reviewed
+total of #grocery // 52.50
+total of #reviewed // 49
+```
+
+The first line is counted in both totals, and neither aggregate line is counted
+in either.
+
 `count` answers presence rather than value: it counts every line that carries the
 tag, and a non-numeric tagged line (a note to yourself) counts too, where `total`
 and `average` would reject it.
