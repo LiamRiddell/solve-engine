@@ -8,6 +8,7 @@ import { WorkdayOffsetParselet } from "./parselets/WorkdayOffsetParselet";
 import { WorkdaysBetweenParselet } from "./parselets/WorkdaysBetweenParselet";
 import { DateFieldQueryParselet } from "./parselets/DateFieldQueryParselet";
 import { DurationBetweenParselet } from "./parselets/DurationBetweenParselet";
+import { WeekdayCountParselet, WEEKDAY_COUNT_FN } from "./parselets/WeekdayCountParselet";
 import { DayTypePredicateParselet } from "./parselets/DayTypePredicateParselet";
 import { CurrentTimestampParselet } from "./parselets/CurrentTimestampParselet";
 import { ToDateParselet } from "./parselets/ToDateParselet";
@@ -19,7 +20,7 @@ import { RelativeMonthParselet } from "./parselets/RelativeMonthParselet";
 import { AgeParselet } from "./parselets/AgeParselet";
 import {
   workdaysInDuration, weekdayOnDate, toDateFromAny, toTimestampFromAny,
-  monthOnDate, weekOnDate, isWeekendOnDate, isWorkdayOnDate, spanBetweenDates,
+  monthOnDate, weekOnDate, isWeekendOnDate, isWorkdayOnDate, spanBetweenDates, weekdaysBetween,
   datetimeLiteralGrain,
 } from "./parselets/DatetimeTimestampPluginFunctions";
 import {
@@ -28,6 +29,7 @@ import {
 import { nthWeekdayNormalizerRule } from "./normalizer/NthWeekdayNormalizerRule";
 import { untilSinceNormalizerRule } from "./normalizer/UntilSinceNormalizerRule";
 import { betweenUnitNormalizerRule } from "./normalizer/BetweenUnitNormalizerRule";
+import { weekdayCountNormalizerRule } from "./normalizer/WeekdayCountNormalizerRule";
 import { workdayRateDenominatorNormalizerRule } from "./normalizer/WorkdayRateDenominatorNormalizerRule";
 import { DaysInPeriodParselet } from "./parselets/DaysInPeriodParselet";
 import { daysInPeriodNormalizerRule } from "./normalizer/DaysInPeriodNormalizerRule";
@@ -208,6 +210,9 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     WEEK_ON: new DateFieldQueryParselet("weekOnDate", "on"),
     WEEK_IN: new DateFieldQueryParselet("weekOnDate", "in"),
     BETWEEN_UNIT: new DurationBetweenParselet(),
+    WEEKDAY_BETWEEN: new WeekdayCountParselet("between"),
+    WEEKDAY_UNTIL: new WeekdayCountParselet("now"),
+    WEEKDAY_SINCE: new WeekdayCountParselet("now"),
     CURRENT_TIMESTAMP: new CurrentTimestampParselet(),
     DATETIME_LITERAL: new DateLiteralParselet(),
     // The refusal half of the same rule: a date-shaped run no configured order
@@ -231,6 +236,7 @@ export const DATETIME_PACKAGE: IEnginePackage = {
   normalizerRules: [
     untilSinceNormalizerRule(),
     betweenUnitNormalizerRule(),
+    weekdayCountNormalizerRule(),
     workdayRateDenominatorNormalizerRule(),
     // The two date-literal rules (`dateLiteralNormalizerRule` for the numeric
     // orderings, `monthNameDateNormalizerRule` for "March 9, 2024") are NOT
@@ -259,6 +265,7 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     isWeekendOnDate,
     isWorkdayOnDate,
     spanBetweenDates,
+    [WEEKDAY_COUNT_FN]: weekdaysBetween,
     nthWeekdayOfMonth: nthWeekdayOfMonthFn,
     monthAnchorShift,
     ageBetween,
