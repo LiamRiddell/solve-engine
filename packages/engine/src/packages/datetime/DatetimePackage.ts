@@ -5,6 +5,7 @@ import { NextLastParselet } from "./parselets/NextLastParselet";
 import { UntilSinceParselet } from "./parselets/UntilSinceParselet";
 import { WorkdaysInParselet } from "./parselets/WorkdaysInParselet";
 import { WorkdayOffsetParselet } from "./parselets/WorkdayOffsetParselet";
+import { DateOffsetParselet } from "./parselets/DateOffsetParselet";
 import { WorkdaysBetweenParselet } from "./parselets/WorkdaysBetweenParselet";
 import { DateFieldQueryParselet } from "./parselets/DateFieldQueryParselet";
 import { DurationBetweenParselet } from "./parselets/DurationBetweenParselet";
@@ -30,6 +31,7 @@ import { nthWeekdayNormalizerRule } from "./normalizer/NthWeekdayNormalizerRule"
 import { untilSinceNormalizerRule } from "./normalizer/UntilSinceNormalizerRule";
 import { betweenUnitNormalizerRule } from "./normalizer/BetweenUnitNormalizerRule";
 import { weekdayCountNormalizerRule } from "./normalizer/WeekdayCountNormalizerRule";
+import { dateOffsetNormalizerRule } from "./normalizer/DateOffsetNormalizerRule";
 import { workdayRateDenominatorNormalizerRule } from "./normalizer/WorkdayRateDenominatorNormalizerRule";
 import { DaysInPeriodParselet } from "./parselets/DaysInPeriodParselet";
 import { daysInPeriodNormalizerRule } from "./normalizer/DaysInPeriodNormalizerRule";
@@ -227,6 +229,8 @@ export const DATETIME_PACKAGE: IEnginePackage = {
   },
   infixParselets: {
     WORKDAYS_AFTER: new WorkdayOffsetParselet("forward"),
+    DATE_OFFSET_AFTER: new DateOffsetParselet("forward"),
+    DATE_OFFSET_BEFORE: new DateOffsetParselet("backward"),
     WORKDAYS_BEFORE: new WorkdayOffsetParselet("backward"),
     TO_DATE: new ToDateParselet(),
     TO_TIMESTAMP: new ToTimestampParselet(),
@@ -237,6 +241,7 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     untilSinceNormalizerRule(),
     betweenUnitNormalizerRule(),
     weekdayCountNormalizerRule(),
+    dateOffsetNormalizerRule(),
     workdayRateDenominatorNormalizerRule(),
     // The two date-literal rules (`dateLiteralNormalizerRule` for the numeric
     // orderings, `monthNameDateNormalizerRule` for "March 9, 2024") are NOT
