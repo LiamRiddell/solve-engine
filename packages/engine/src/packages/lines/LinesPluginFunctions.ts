@@ -1,4 +1,5 @@
 import { Value, ValueType, numberValue, uomValue, errorValue } from "@solve-js/vm/Value";
+import { unifyQuantities } from "@solve-js/vm/VMConversion";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 
 /**
@@ -81,6 +82,29 @@ export function lineRefHandler(args: Value[], context?: LineExecutionContext): V
 }
 
 /**
+ * Add or average a column of results, reading them all in one unit.
+ *
+ * The same rule the inline `total of X, Y, Z` list follows, and for the same
+ * reason: a column of money is money, `1.2 km` above `800 m` is 2 km rather
+ * than a refusal or a nonsense 802, and a column mixing measures is refused by
+ * dimension because there is no unit both can be read in. The unit is the
+ * first one in the column, since that is the one the reader wrote first.
+ */
+function combineQuantities(values: Value[], isAverage: boolean): Value {
+  const unified = unifyQuantities(values, isAverage ? "averaged" : "added");
+  if (unified instanceof Value) return unified;
+  const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);
+  const result = isAverage ? sum / values.length : sum;
+  if (unified.unit === undefined) return numberValue(result);
+  const combined = uomValue(result, unified.unit);
+  // A total of clock-time spans is still a span, so a timesheet column of
+  // `17:30 - 09:00` lines totals to a clock rather than to milliseconds. One
+  // ordinary quantity in the column is enough to make the total a quantity.
+  if (values.every((v) => v.datetimeSpan === true)) combined.datetimeSpan = true;
+  return combined;
+}
+
+/**
  * Shared range-walk for `sum(line X : line Y)` / `total(...)` /
  * `average(...)`. Restricted to plain `Number`/`Uom` values of the SAME
  * measure, errors on `String`/`Boolean`/`Datetime` rather than silently
@@ -88,14 +112,7 @@ export function lineRefHandler(args: Value[], context?: LineExecutionContext): V
  * epoch-ms number and silently "sum" timestamps together).
  */
 function aggregateRange(from: number, to: number, context: LineExecutionContext, isAverage: boolean): Value {
-  let total = 0;
-  let count = 0;
-  let commonUnit: string | undefined;
-  let sawUom = false;
-  // A total of clock-time spans is still a span, so a timesheet column of
-  // `17:30 - 09:00` lines totals to a clock rather than to milliseconds. One
-  // ordinary quantity in the column is enough to make the total a quantity.
-  let everyPartIsSpan = true;
+  const values: Value[] = [];
   const step = from <= to ? 1 : -1;
   for (let n = from; step > 0 ? n <= to : n >= to; n += step) {
     const v = context.getLineResult!(n);
@@ -104,22 +121,9 @@ function aggregateRange(from: number, to: number, context: LineExecutionContext,
     if (v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
       return errorValue("LINE_RANGE_NON_NUMERIC", `Line ${n} is not a plain number or unit value — cannot include it in a sum/total/average range`);
     }
-    if (v!.type === ValueType.Uom) {
-      sawUom = true;
-      if (commonUnit === undefined) commonUnit = v!.unit;
-      else if (v!.unit !== commonUnit) {
-        return errorValue("LINE_RANGE_MIXED_UNITS", `Line ${n}'s unit (${v!.unit}) doesn't match the range's first unit (${commonUnit}) — aggregating mixed units would silently misrepresent the result`);
-      }
-    }
-    everyPartIsSpan &&= v!.datetimeSpan === true;
-    total += v!.toNumber();
-    count++;
+    values.push(v!);
   }
-  const result = isAverage ? total / count : total;
-  if (!sawUom) return numberValue(result);
-  const aggregate = uomValue(result, commonUnit!);
-  if (everyPartIsSpan) aggregate.datetimeSpan = true;
-  return aggregate;
+  return combineQuantities(values, isAverage);
 }
 
 /** `sum(line X : line Y)` / `total(line X : line Y)`. */
@@ -168,14 +172,7 @@ function aggregateAbove(context: LineExecutionContext, isAverage: boolean): Valu
   if (!boundaryCheck) {
     return errorValue("LINE_REF_NO_DOCUMENT", "\"above\" aggregation requires a real document");
   }
-  let total = 0;
-  let count = 0;
-  let commonUnit: string | undefined;
-  let sawUom = false;
-  // A total of clock-time spans is still a span, so a timesheet column of
-  // `17:30 - 09:00` lines totals to a clock rather than to milliseconds. One
-  // ordinary quantity in the column is enough to make the total a quantity.
-  let everyPartIsSpan = true;
+  const values: Value[] = [];
   for (let n = context.lineIndex - 1; n >= 1; n--) {
     if (boundaryCheck(n)) break;
     const v = context.getLineResult!(n);
@@ -184,23 +181,15 @@ function aggregateAbove(context: LineExecutionContext, isAverage: boolean): Valu
     if (v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
       return errorValue("LINE_RANGE_NON_NUMERIC", `Line ${n} is not a plain number or unit value — cannot include it in "above" aggregation`);
     }
-    if (v!.type === ValueType.Uom) {
-      sawUom = true;
-      if (commonUnit === undefined) commonUnit = v!.unit;
-      else if (v!.unit !== commonUnit) {
-        return errorValue("LINE_RANGE_MIXED_UNITS", `Line ${n}'s unit (${v!.unit}) doesn't match the range's unit (${commonUnit})`);
-      }
-    }
-    everyPartIsSpan &&= v!.datetimeSpan === true;
-    total += v!.toNumber();
-    count++;
+    values.push(v!);
   }
-  if (count === 0) return errorValue("LINE_RANGE_EMPTY", "No lines above to aggregate (hit the top of the document, a blank line, or a heading immediately)");
-  const result = isAverage ? total / count : total;
-  if (!sawUom) return numberValue(result);
-  const aggregate = uomValue(result, commonUnit!);
-  if (everyPartIsSpan) aggregate.datetimeSpan = true;
-  return aggregate;
+  if (values.length === 0) return errorValue("LINE_RANGE_EMPTY", "No lines above to aggregate (hit the top of the document, a blank line, or a heading immediately)");
+  // The walk runs upwards from the line above, so the column arrives bottom
+  // first. The unit the answer carries is the one written at the top of the
+  // column, which is the one the reader started with, so put it back in
+  // reading order before combining.
+  values.reverse();
+  return combineQuantities(values, isAverage);
 }
 
 /** `total above`, every numeric result on lines before this one. */
