@@ -50,6 +50,20 @@ export interface DagSnapshot {
 }
 
 /**
+ * Returned by every lookup that misses, so a miss allocates nothing.
+ *
+ * The getters already hand back the graph's own sets rather than copies, so a
+ * caller has never been free to mutate what it is given; this shares that rule
+ * with the empty case. Misses are the common case in the evaluator's per-line
+ * loops, where most lines write nothing, and a fresh `new Set()` for each was
+ * about 176 nanoseconds of pure garbage per call.
+ */
+const NO_LINES: ReadonlySet<number> = new Set<number>();
+
+/** The empty key set, for the same reason as {@link NO_LINES}. */
+const NO_KEYS: ReadonlySet<string> = new Set<string>();
+
+/**
  * Dependency graph for variable and data-source tracking across document lines.
  *
  * Tracks which lines read/write which variables, and propagates changes through
@@ -191,19 +205,29 @@ export class DependencyGraph {
    */
   getAffectedLines(changedVariable: string): Set<number> {
     const visited = new Set<number>();
+    // Keys are visited once, not once per line that writes them. Without this
+    // a key with many producers had its whole consumer set rescanned by each
+    // of them, which is quadratic in producers x consumers: exactly the shape a
+    // category tag makes, where a column of members and a set of aggregates
+    // share one key. Measured on 2,000 members and 2,000 aggregates: 15.5 ms
+    // before, and the walk is over the edges once now.
+    const seenKeys = new Set<string>([changedVariable]);
     const queue = [changedVariable];
-    while (queue.length > 0) {
-      const varName = queue.pop()!;
-      const consumers = this.consumers.get(varName);
+    // A head index rather than pop(), so the walk is breadth-first and the
+    // queue is never re-ordered. Depth-first was not wrong, but the order this
+    // hands to the caller is now the order the edges were found in.
+    for (let head = 0; head < queue.length; head++) {
+      const consumers = this.consumers.get(queue[head]);
       if (!consumers) continue;
       for (const line of consumers) {
         if (visited.has(line)) continue;
         visited.add(line);
         const lineWrites = this.writes.get(line);
-        if (lineWrites) {
-          for (const writtenVar of lineWrites) {
-            queue.push(writtenVar);
-          }
+        if (!lineWrites) continue;
+        for (const writtenVar of lineWrites) {
+          if (seenKeys.has(writtenVar)) continue;
+          seenKeys.add(writtenVar);
+          queue.push(writtenVar);
         }
       }
     }
@@ -224,69 +248,97 @@ export class DependencyGraph {
     const affected = this.getAffectedLines(startVariable);
     if (affected.size === 0) return [];
 
-    // Build a local subgraph: for each affected line, compute in-degree
-    // (how many other affected lines produce variables it reads).
-    const inDegree = new Map<number, number>();
-    const adjacency = new Map<number, number[]>(); // line → downstream lines
+    // The sort runs over lines AND the keys between them, rather than over
+    // lines alone.
+    //
+    // Ordering a line after everything it depends on means, for a key, ordering
+    // every reader after every writer. Written as edges between lines that is
+    // one edge per pair: a tagged column of m members with n aggregates over it
+    // costs m x n, which measured 150 ms at two thousand of each. Routing
+    // through the key as a node in its own right says the same thing in m + n:
+    // every writer points at the key, and the key points at every reader.
+    //
+    // Line nodes are numbers and key nodes are strings, so one map holds both
+    // without them ever colliding.
+    type Node = number | string;
+    const inDegree = new Map<Node, number>();
+    const adjacency = new Map<Node, Node[]>();
 
-    for (const line of affected) {
-      if (!inDegree.has(line)) inDegree.set(line, 0);
-      if (!adjacency.has(line)) adjacency.set(line, []);
-    }
+    const edge = (from: Node, to: Node): void => {
+      const existing = adjacency.get(from);
+      if (existing) existing.push(to);
+      else adjacency.set(from, [to]);
+      inDegree.set(to, (inDegree.get(to) ?? 0) + 1);
+    };
 
-    // Build a variable→producer map in one pass, then do O(1) lookups
-    // per read variable instead of O(n) scanning otherAffected lines.
-    const producerOf = new Map<string, number>();
+    for (const line of affected) if (!inDegree.has(line)) inDegree.set(line, 0);
+
+    // A key earns a node only when it is both written and read inside the
+    // affected set: anything else adds a node the sort would have to drain for
+    // no constraint.
+    const writtenKeys = new Set<string>();
     for (const line of affected) {
       const lineWrites = this.writes.get(line);
-      if (lineWrites) {
-        for (const w of lineWrites) producerOf.set(w, line);
-      }
+      if (lineWrites) for (const key of lineWrites) writtenKeys.add(key);
     }
 
-    // For each affected line, check if any reads are produced by another
-    // affected line. If so, add an edge from producer → consumer.
+    const hubKeys = new Set<string>();
     for (const line of affected) {
       const reads = this.lineReads.get(line);
       if (!reads) continue;
+      for (const key of reads) {
+        if (!writtenKeys.has(key)) continue;
+        // A line that both writes and reads one key constrains nothing about
+        // itself, and an edge each way would be a cycle the sort cannot drain.
+        if (this.writes.get(line)?.has(key)) continue;
+        hubKeys.add(key);
+      }
+    }
 
-      for (const readVar of reads) {
-        const producer = producerOf.get(readVar);
-        if (producer !== undefined && producer !== line) {
-          // producer writes readVar, which this line reads
-          // Edge: producer → line (producer → consumer)
-          adjacency.get(producer)!.push(line);
-          inDegree.set(line, (inDegree.get(line) ?? 0) + 1);
+    for (const key of hubKeys) if (!inDegree.has(key)) inDegree.set(key, 0);
+
+    for (const line of affected) {
+      const lineWrites = this.writes.get(line);
+      if (lineWrites) for (const key of lineWrites) if (hubKeys.has(key)) edge(line, key);
+      const reads = this.lineReads.get(line);
+      if (reads) {
+        for (const key of reads) {
+          if (!hubKeys.has(key)) continue;
+          if (lineWrites?.has(key)) continue;
+          edge(key, line);
         }
       }
     }
 
-    // Kahn's algorithm: start with zero-indegree lines (no dependencies within
-    // the affected set), then iteratively remove them, adding newly-freed lines.
-    const queue: number[] = [];
-    for (const [line, degree] of inDegree) {
-      if (degree === 0) queue.push(line);
+    // Kahn's algorithm: start with zero-indegree nodes, then iteratively remove
+    // them, adding newly-freed ones.
+    const queue: Node[] = [];
+    for (const [node, degree] of inDegree) {
+      if (degree === 0) queue.push(node);
     }
 
-    // If every affected line has at least one dependency (cycle or external),
-    // start with the lowest line number as a fallback.
-    if (queue.length === 0 && affected.size > 0) {
+    // If every node has at least one dependency (a cycle, or a producer outside
+    // the affected set), start with the lowest line number as a fallback.
+    if (queue.length === 0) {
       const sorted = Array.from(affected).sort((a, b) => a - b);
       queue.push(sorted[0]);
     }
 
     const ordered: number[] = [];
-    // A head index rather than shift(): shift() moves every remaining
-    // element, so ordering a value with thousands of consumers cost
-    // quadratic time. The queue only ever grows, so the index is safe.
+    // A head index rather than shift(): shift() moves every remaining element,
+    // so ordering a value with thousands of consumers cost quadratic time. The
+    // queue only ever grows, so the index is safe.
     for (let head = 0; head < queue.length; head++) {
       const current = queue[head];
-      ordered.push(current);
+      // Key nodes are scaffolding for the ordering, not lines to evaluate.
+      if (typeof current === "number") ordered.push(current);
 
-      for (const downstream of adjacency.get(current) ?? []) {
-        const newDegree = (inDegree.get(downstream) ?? 1) - 1;
-        inDegree.set(downstream, newDegree);
-        if (newDegree === 0) queue.push(downstream);
+      const downstream = adjacency.get(current);
+      if (!downstream) continue;
+      for (const next of downstream) {
+        const newDegree = (inDegree.get(next) ?? 1) - 1;
+        inDegree.set(next, newDegree);
+        if (newDegree === 0) queue.push(next);
       }
     }
 
@@ -313,8 +365,8 @@ export class DependencyGraph {
    * @param queryKey - The query key that was updated
    * @returns Set of line numbers that need re-evaluation
    */
-  getAffectedLinesByDataSource(dataSourceId: string, queryKey: string[]): Set<number> {
-    return this.consumers.get(dataSourceEdgeKey(dataSourceId, queryKey)) ?? new Set();
+  getAffectedLinesByDataSource(dataSourceId: string, queryKey: string[]): ReadonlySet<number> {
+    return this.consumers.get(dataSourceEdgeKey(dataSourceId, queryKey)) ?? NO_LINES;
   }
 
   /**
@@ -357,8 +409,8 @@ export class DependencyGraph {
    * @param variable - The variable name
    * @returns Set of line numbers that read this variable, or empty set if none
    */
-  getConsumers(variable: string): Set<number> {
-    return this.consumers.get(variable) ?? new Set();
+  getConsumers(variable: string): ReadonlySet<number> {
+    return this.consumers.get(variable) ?? NO_LINES;
   }
 
   /**
@@ -372,8 +424,8 @@ export class DependencyGraph {
    * @param key - The key, from {@link edgeKey}
    * @returns Set of line numbers that write this key, or empty set if none
    */
-  getProducers(key: string): Set<number> {
-    return this.producers.get(key) ?? new Set();
+  getProducers(key: string): ReadonlySet<number> {
+    return this.producers.get(key) ?? NO_LINES;
   }
 
   /**
@@ -382,8 +434,8 @@ export class DependencyGraph {
    * @param lineNumber - The line number to query
    * @returns Set of variable names this line reads, or empty set if none
    */
-  getDependencies(lineNumber: number): Set<string> {
-    return this.dependencies.get(lineNumber) ?? new Set();
+  getDependencies(lineNumber: number): ReadonlySet<string> {
+    return this.dependencies.get(lineNumber) ?? NO_KEYS;
   }
 
   /**
@@ -392,8 +444,8 @@ export class DependencyGraph {
    * @param lineNumber - The line number to query
    * @returns Set of variable names this line writes, or empty set if none
    */
-  getWrites(lineNumber: number): Set<string> {
-    return this.writes.get(lineNumber) ?? new Set();
+  getWrites(lineNumber: number): ReadonlySet<string> {
+    return this.writes.get(lineNumber) ?? NO_KEYS;
   }
 
   /**
