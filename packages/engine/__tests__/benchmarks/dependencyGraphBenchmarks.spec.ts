@@ -36,6 +36,36 @@ function taggedColumn(members: number, aggregates: number): DependencyGraph {
   return dag;
 }
 
+/** One definition read by many lines, each defining a name of its own. */
+function fan(readers: number): DependencyGraph {
+  const dag = new DependencyGraph();
+  dag.registerLine(1, ["seed"], ["root"]);
+  for (let i = 0; i < readers; i++) dag.registerLine(i + 2, ["root"], [`r${i}`]);
+  return dag;
+}
+
+/**
+ * A document shaped the way a notepad is, rather than the way a stress test is.
+ *
+ * Most lines depend on nothing, a few define names other lines read, a few join
+ * a category, and a few total it. The shapes above each isolate one cost; this
+ * one is the mixture the evaluator actually walks, and it is here so an
+ * optimisation that only helps a pathological shape shows as flat.
+ */
+function mixed(lines: number): DependencyGraph {
+  const dag = new DependencyGraph();
+  const tag = edgeKey("tag", "food");
+  for (let i = 0; i < lines; i++) {
+    const n = i + 1;
+    if (i % 7 === 0) dag.registerLine(n, [], [`v${i}`]);
+    else if (i % 7 === 1) dag.registerLine(n, [`v${i - 1}`], [`w${i}`]);
+    else if (i % 7 === 2) dag.registerLine(n, ["seed"], [tag]);
+    else if (i % 7 === 3) dag.registerLine(n, [tag], []);
+    else dag.registerLine(n, [], []);
+  }
+  return dag;
+}
+
 describe("DependencyGraph Benchmarks", () => {
   const results: BenchmarkResults = {};
 
@@ -79,6 +109,39 @@ describe("DependencyGraph Benchmarks", () => {
     const dag = taggedColumn(2_000, 2_000);
     const r = await benchmarkFn(() => { dag.getAffectedLinesInOrder("seed"); }, 100, 10);
     recordSample(results, "ordered_tagged_column_2k", r);
+    expect(r.medianMs).toBeLessThan(40);
+  });
+
+  test("orders a fan of 10,000 readers in < 40ms", async () => {
+    // Nothing an affected line writes is read by another, so the sort has no
+    // constraint to apply and should cost the walk and nothing more.
+    const dag = fan(10_000);
+    const r = await benchmarkFn(() => { dag.getAffectedLinesInOrder("seed"); }, 100, 10);
+    recordSample(results, "ordered_fan_10k", r);
+    expect(r.medianMs).toBeLessThan(40);
+  });
+
+  test("orders a mixed 5,000-line document in < 20ms", async () => {
+    const dag = mixed(5_000);
+    const r = await benchmarkFn(() => { dag.getAffectedLinesInOrder("seed"); }, 100, 10);
+    recordSample(results, "ordered_mixed_5k", r);
+    expect(r.medianMs).toBeLessThan(20);
+  });
+
+  test("registers a mixed 5,000-line document in < 60ms", async () => {
+    const r = await benchmarkFn(() => { mixed(5_000); }, 20, 3);
+    recordSample(results, "register_mixed_5k", r);
+    expect(r.medianMs).toBeLessThan(60);
+  });
+
+  test("re-registers 5,000 unchanged lines in < 40ms", async () => {
+    // The editor's ordinary case: a line re-runs because something it reads
+    // moved, and its own text, which is where its edges come from, did not.
+    const dag = chain(5_000);
+    const r = await benchmarkFn(() => {
+      for (let i = 0; i < 5_000; i++) dag.registerLine(i + 1, i === 0 ? [] : [`v${i - 1}`], [`v${i}`]);
+    }, 20, 3);
+    recordSample(results, "rereg_unchanged_5k", r);
     expect(r.medianMs).toBeLessThan(40);
   });
 
