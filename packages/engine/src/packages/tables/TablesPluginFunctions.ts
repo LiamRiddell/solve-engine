@@ -35,6 +35,28 @@ export type ColumnAggregateOp =
   | "sum" | "average" | "min" | "max" | "count" | "median"
   | "stdev" | "sampleStdev" | "variance" | "sampleVariance" | "spread" | "mode";
 
+/**
+ * The smallest and largest cell in one pass, folded rather than spread.
+ *
+ * `Math.min(...cells)` makes the column into an argument list, so a long enough
+ * column overflows the JavaScript stack: past about 126,000 rows on a default
+ * stack, and past 80,000 on a smaller one, which is well inside the engine's own
+ * document-line cap. `sum` on the same table always answered, because it folds.
+ *
+ * The seeds are the identities `Math.min` and `Math.max` return for no
+ * arguments, so an empty column reads exactly as it did, and folding keeps the
+ * NaN propagation and the `-0` preference the spread form had.
+ */
+function extremes(cells: number[]): { min: number; max: number } {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const n of cells) {
+    min = Math.min(min, n);
+    max = Math.max(max, n);
+  }
+  return { min, max };
+}
+
 /** Variance of a column's cells, population (divide by n) or sample (n-1). */
 function columnVariance(cells: number[], sample: boolean): number {
   const n = cells.length;
@@ -52,9 +74,9 @@ function reduce(op: ColumnAggregateOp, cells: number[]): number {
     case "average":
       return cells.reduce((acc, n) => acc + n, 0) / cells.length;
     case "min":
-      return Math.min(...cells);
+      return extremes(cells).min;
     case "max":
-      return Math.max(...cells);
+      return extremes(cells).max;
     case "count":
       return cells.length;
     case "median": {
@@ -70,8 +92,10 @@ function reduce(op: ColumnAggregateOp, cells: number[]): number {
       return columnVariance(cells, false);
     case "sampleVariance":
       return columnVariance(cells, true);
-    case "spread":
-      return Math.max(...cells) - Math.min(...cells);
+    case "spread": {
+      const { min, max } = extremes(cells);
+      return max - min;
+    }
     case "mode": {
       const counts = new Map<number, number>();
       let best = cells[0];
