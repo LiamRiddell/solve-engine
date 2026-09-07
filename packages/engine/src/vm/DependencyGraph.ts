@@ -105,16 +105,15 @@ export class DependencyGraph {
    * pinned key (a data source) is not part of what a caller passes.
    */
   private hasSameEdges(
-    lineNumber: number,
+    storedReads: Set<string> | undefined,
+    storedWrites: Set<string> | undefined,
     reads: string[],
     writes: string[],
     pinned: Set<string> | undefined,
   ): boolean {
-    const storedReads = this.lineReads.get(lineNumber);
     if (storedReads === undefined) return false;
     if (storedReads.size !== reads.length + (pinned?.size ?? 0)) return false;
 
-    const storedWrites = this.writes.get(lineNumber);
     if (writes.length === 0) {
       if (storedWrites !== undefined) return false;
     } else if (storedWrites === undefined || storedWrites.size !== writes.length) {
@@ -140,7 +139,14 @@ export class DependencyGraph {
    * @param writes - Variable names this line writes (assigns to)
    */
    registerLine(lineNumber: number, reads: string[], writes: string[]): void {
-     const pinned = this.pinnedReads.get(lineNumber);
+     // Almost no document reads a data source, and `size` is a field read where
+     // `get` is a hash of the line number, so the common case never pays for
+     // the lookup at all.
+     const pinned = this.pinnedReads.size !== 0 ? this.pinnedReads.get(lineNumber) : undefined;
+     // Fetched once and handed to both the comparison and the cleanup below,
+     // which used to look each of them up again.
+     const oldReads = this.lineReads.get(lineNumber);
+     const oldWrites = this.writes.get(lineNumber);
 
      // A line whose edges have not moved is left alone.
      //
@@ -154,12 +160,11 @@ export class DependencyGraph {
      // Deliberately conservative. Duplicate names in `reads` make the stored
      // set smaller than the array, and the comparison simply fails and falls
      // through to the full path, which is correct either way.
-     if (this.hasSameEdges(lineNumber, reads, writes, pinned)) return;
+     if (this.hasSameEdges(oldReads, oldWrites, reads, writes, pinned)) return;
 
      // Clean up old consumer references if re-registering this line. A pinned
      // read (a data source, discovered at run time rather than from the text)
      // is not this call's to drop.
-     const oldReads = this.lineReads.get(lineNumber);
      if (oldReads) {
        for (const oldRead of oldReads) {
          if (pinned?.has(oldRead)) continue;
@@ -171,7 +176,6 @@ export class DependencyGraph {
      // Old writes leave the producer index for the same reason: this line may
      // no longer be in the group it was in. Without this a deleted `#food` on
      // an edited line would leave the line a member for ever.
-     const oldWrites = this.writes.get(lineNumber);
      if (oldWrites) {
        for (const oldWrite of oldWrites) {
          const producers = this.producers.get(oldWrite);
@@ -184,21 +188,35 @@ export class DependencyGraph {
      if (pinned) for (const key of pinned) readSet.add(key);
      this.lineReads.set(lineNumber, readSet);
 
-     // Add new consumer references
+     // Add new consumer references.
+     //
+     // One hash lookup per edge rather than three. `has` then `get` then `add`
+     // hashes the key twice before touching the set, and registering a document
+     // does this once per edge: at five thousand lines it was measurable against
+     // the same loop written as a single `get`.
      for (const dep of reads) {
-       if (!this.consumers.has(dep)) this.consumers.set(dep, new Set());
-       this.consumers.get(dep)!.add(lineNumber);
+       const existing = this.consumers.get(dep);
+       if (existing !== undefined) existing.add(lineNumber);
+       else this.consumers.set(dep, new Set([lineNumber]));
      }
 
      // And the reverse direction, which is what makes "who is in this group"
      // a lookup rather than a walk.
      for (const write of writes) {
-       if (!this.producers.has(write)) this.producers.set(write, new Set());
-       this.producers.get(write)!.add(lineNumber);
+       const existing = this.producers.get(write);
+       if (existing !== undefined) existing.add(lineNumber);
+       else this.producers.set(write, new Set([lineNumber]));
      }
 
      if (writes.length > 0) {
-       this.dependencies.set(lineNumber, new Set(reads));
+       // The same set object as `lineReads`, not a copy of it.
+       //
+       // They hold identical contents whenever the line has no pinned key,
+       // which is every line that does not read a data source, so building a
+       // second one allocated a set per line for nothing. The one place that
+       // can make them differ, {@link registerLineDataSourceDependency}, splits
+       // them before it writes, so neither getter can see the other's contents.
+       this.dependencies.set(lineNumber, pinned === undefined ? readSet : new Set(reads));
        this.writes.set(lineNumber, new Set(writes));
        for (const write of writes) {
          const prevConsumer = this.consumers.get(write);
@@ -232,14 +250,27 @@ export class DependencyGraph {
     // one is pinned: it was discovered while the line ran, so the next
     // registration of that line, which recovers edges from its text, must not
     // drop it.
-    if (!this.pinnedReads.has(lineNumber)) this.pinnedReads.set(lineNumber, new Set());
-    this.pinnedReads.get(lineNumber)!.add(key);
+    const existingPinned = this.pinnedReads.get(lineNumber);
+    if (existingPinned !== undefined) existingPinned.add(key);
+    else this.pinnedReads.set(lineNumber, new Set([key]));
 
-    if (!this.lineReads.has(lineNumber)) this.lineReads.set(lineNumber, new Set());
-    this.lineReads.get(lineNumber)!.add(key);
+    // `registerLine` stores one set under both `lineReads` and `dependencies`
+    // when a line has no pinned key. This is the call that gives it one, so the
+    // two part company here: a data-source key is a read of the line, and it is
+    // not one of the dependencies a line declares by writing something.
+    const existingReads = this.lineReads.get(lineNumber);
+    if (existingReads === undefined) {
+      this.lineReads.set(lineNumber, new Set([key]));
+    } else {
+      if (existingReads === this.dependencies.get(lineNumber)) {
+        this.dependencies.set(lineNumber, new Set(existingReads));
+      }
+      existingReads.add(key);
+    }
 
-    if (!this.consumers.has(key)) this.consumers.set(key, new Set());
-    this.consumers.get(key)!.add(lineNumber);
+    const existingConsumers = this.consumers.get(key);
+    if (existingConsumers !== undefined) existingConsumers.add(lineNumber);
+    else this.consumers.set(key, new Set([lineNumber]));
   }
 
   /**
@@ -254,6 +285,9 @@ export class DependencyGraph {
    */
   getAffectedLines(changedVariable: string): Set<number> {
     const visited = new Set<number>();
+    const first = this.consumers.get(changedVariable);
+    if (first === undefined) return visited;
+
     // Keys are visited once, not once per line that writes them. Without this
     // a key with many producers had its whole consumer set rescanned by each
     // of them, which is quadratic in producers x consumers: exactly the shape a
@@ -261,22 +295,27 @@ export class DependencyGraph {
     // share one key. Measured on 2,000 members and 2,000 aggregates: 15.5 ms
     // before, and the walk is over the edges once now.
     const seenKeys = new Set<string>([changedVariable]);
-    const queue = [changedVariable];
+    // The queue holds each key's consumer set rather than the key itself.
+    //
+    // A key is looked up once either way, so what this saves is the queue entry
+    // for a key nobody reads, which is most of them: in a document where every
+    // line defines its own name, the old queue grew to the size of the document
+    // and every entry but the first turned out to lead nowhere.
+    const queue: Set<number>[] = [first];
     // A head index rather than pop(), so the walk is breadth-first and the
     // queue is never re-ordered. Depth-first was not wrong, but the order this
     // hands to the caller is now the order the edges were found in.
     for (let head = 0; head < queue.length; head++) {
-      const consumers = this.consumers.get(queue[head]);
-      if (!consumers) continue;
-      for (const line of consumers) {
+      for (const line of queue[head]) {
         if (visited.has(line)) continue;
         visited.add(line);
         const lineWrites = this.writes.get(line);
-        if (!lineWrites) continue;
+        if (lineWrites === undefined) continue;
         for (const writtenVar of lineWrites) {
           if (seenKeys.has(writtenVar)) continue;
           seenKeys.add(writtenVar);
-          queue.push(writtenVar);
+          const next = this.consumers.get(writtenVar);
+          if (next !== undefined) queue.push(next);
         }
       }
     }
@@ -307,98 +346,160 @@ export class DependencyGraph {
     // through the key as a node in its own right says the same thing in m + n:
     // every writer points at the key, and the key points at every reader.
     //
-    // Line nodes are numbers and key nodes are strings, so one map holds both
-    // without them ever colliding.
-    type Node = number | string;
-    const inDegree = new Map<Node, number>();
-    const adjacency = new Map<Node, Node[]>();
-
-    const edge = (from: Node, to: Node): void => {
-      const existing = adjacency.get(from);
-      if (existing) existing.push(to);
-      else adjacency.set(from, [to]);
-      inDegree.set(to, (inDegree.get(to) ?? 0) + 1);
-    };
-
-    for (const line of affected) if (!inDegree.has(line)) inDegree.set(line, 0);
+    // Lines and keys are numbered into one dense range, lines first, so every
+    // structure below is a typed array indexed by node rather than a map keyed
+    // by one. The map this replaced held number keys for lines and string keys
+    // for hubs, which is the shape that costs the most to look up: a mixed key
+    // type gives up the fast path for both.
+    const lineCount = affected.size;
+    const lines = new Array<number>(lineCount);
+    // Each line's two edge sets, fetched once and held by node index.
+    //
+    // Three of the passes below want them again: the one that collects what the
+    // set writes, the one that finds the keys it reads back, and the one that
+    // records the writes as edges. Reading them from the maps each time meant a
+    // line was hashed into both indexes on every pass rather than once.
+    const writesOf = new Array<Set<string> | undefined>(lineCount);
+    const readsOf = new Array<Set<string> | undefined>(lineCount);
+    {
+      let i = 0;
+      for (const line of affected) {
+        lines[i] = line;
+        writesOf[i] = this.writes.get(line);
+        readsOf[i] = this.lineReads.get(line);
+        i++;
+      }
+    }
 
     // A key earns a node only when it is both written and read inside the
     // affected set: anything else adds a node the sort would have to drain for
     // no constraint.
     const writtenKeys = new Set<string>();
-    for (const line of affected) {
-      const lineWrites = this.writes.get(line);
-      if (lineWrites) for (const key of lineWrites) writtenKeys.add(key);
+    for (let i = 0; i < lineCount; i++) {
+      const lineWrites = writesOf[i];
+      if (lineWrites !== undefined) for (const key of lineWrites) writtenKeys.add(key);
     }
 
-    const hubKeys = new Set<string>();
-    for (const line of affected) {
-      const reads = this.lineReads.get(line);
-      if (!reads) continue;
+    // Hub discovery and the edges out of each hub, in one pass.
+    //
+    // A key becomes a hub the first time an affected line reads it, and that is
+    // the same moment the edge from it to that line is known, so both come out
+    // of one walk over the read sets. What this avoids is hashing every key
+    // again: the passes that follow work from these two integer arrays, and the
+    // only hash left in the whole sort is one lookup per written key below.
+    const hubIndex = new Map<string, number>();
+    const readEdgeFrom: number[] = [];
+    const readEdgeTo: number[] = [];
+    for (let i = 0; i < lineCount; i++) {
+      const reads = readsOf[i];
+      if (reads === undefined) continue;
+      const lineWrites = writesOf[i];
       for (const key of reads) {
         if (!writtenKeys.has(key)) continue;
         // A line that both writes and reads one key constrains nothing about
         // itself, and an edge each way would be a cycle the sort cannot drain.
-        if (this.writes.get(line)?.has(key)) continue;
-        hubKeys.add(key);
-      }
-    }
-
-    for (const key of hubKeys) if (!inDegree.has(key)) inDegree.set(key, 0);
-
-    for (const line of affected) {
-      const lineWrites = this.writes.get(line);
-      if (lineWrites) for (const key of lineWrites) if (hubKeys.has(key)) edge(line, key);
-      const reads = this.lineReads.get(line);
-      if (reads) {
-        for (const key of reads) {
-          if (!hubKeys.has(key)) continue;
-          if (lineWrites?.has(key)) continue;
-          edge(key, line);
+        if (lineWrites !== undefined && lineWrites.has(key)) continue;
+        let hub = hubIndex.get(key);
+        if (hub === undefined) {
+          hub = lineCount + hubIndex.size;
+          hubIndex.set(key, hub);
         }
+        readEdgeFrom.push(hub);
+        readEdgeTo.push(i);
       }
     }
+
+    const nodeCount = lineCount + hubIndex.size;
+
+    // Nothing an affected line writes is read by another one, so there is no
+    // constraint to sort by and the lines come back in the order the walk found
+    // them. This is the ordinary case for a document of independent lines, and
+    // it now allocates nothing beyond the answer.
+    if (hubIndex.size === 0) return lines;
+
+    // The other direction: a line that writes a key the set also reads.
+    const writeEdgeFrom: number[] = [];
+    const writeEdgeTo: number[] = [];
+    for (let i = 0; i < lineCount; i++) {
+      const lineWrites = writesOf[i];
+      if (lineWrites === undefined) continue;
+      for (const key of lineWrites) {
+        const hub = hubIndex.get(key);
+        if (hub === undefined) continue;
+        writeEdgeFrom.push(i);
+        writeEdgeTo.push(hub);
+      }
+    }
+
+    // Counted first, then filled, so the edge lists are two flat arrays rather
+    // than an array per node. `offsets[n]` to `offsets[n + 1]` is node n's
+    // slice of `targets`, the shape a compressed sparse row takes.
+    const writeEdgeCount = writeEdgeFrom.length;
+    const readEdgeCount = readEdgeFrom.length;
+    const outDegree = new Int32Array(nodeCount);
+    const inDegree = new Int32Array(nodeCount);
+    for (let e = 0; e < writeEdgeCount; e++) {
+      outDegree[writeEdgeFrom[e]]++;
+      inDegree[writeEdgeTo[e]]++;
+    }
+    for (let e = 0; e < readEdgeCount; e++) {
+      outDegree[readEdgeFrom[e]]++;
+      inDegree[readEdgeTo[e]]++;
+    }
+
+    const offsets = new Int32Array(nodeCount + 1);
+    for (let n = 0; n < nodeCount; n++) offsets[n + 1] = offsets[n] + outDegree[n];
+    const targets = new Int32Array(offsets[nodeCount]);
+    // Reused as the write cursor, one per node, so the fill needs no second
+    // allocation: after it, `cursor[n]` has advanced to the end of n's slice.
+    const cursor = outDegree;
+    cursor.set(offsets.subarray(0, nodeCount));
+    // Write edges before read edges, per node, which is the order the edges
+    // were discovered in and so the order the drain below emits lines in.
+    for (let e = 0; e < writeEdgeCount; e++) targets[cursor[writeEdgeFrom[e]]++] = writeEdgeTo[e];
+    for (let e = 0; e < readEdgeCount; e++) targets[cursor[readEdgeFrom[e]]++] = readEdgeTo[e];
 
     // Kahn's algorithm: start with zero-indegree nodes, then iteratively remove
     // them, adding newly-freed ones.
-    const queue: Node[] = [];
-    for (const [node, degree] of inDegree) {
-      if (degree === 0) queue.push(node);
+    const queue = new Int32Array(nodeCount);
+    // A node reaches zero in-degree once, so it is enqueued once, except for
+    // the cycle fallback below which enqueues a node that has not. The flag
+    // makes that the only difference rather than a node emitted twice, and
+    // keeps the queue inside the length it was sized to.
+    const queued = new Uint8Array(nodeCount);
+    let tail = 0;
+    for (let n = 0; n < nodeCount; n++) {
+      if (inDegree[n] === 0) { queue[tail++] = n; queued[n] = 1; }
     }
 
     // If every node has at least one dependency (a cycle, or a producer outside
     // the affected set), start with the lowest line number as a fallback.
-    if (queue.length === 0) {
-      const sorted = Array.from(affected).sort((a, b) => a - b);
-      queue.push(sorted[0]);
+    if (tail === 0) {
+      let lowest = 0;
+      for (let i = 1; i < lineCount; i++) if (lines[i] < lines[lowest]) lowest = i;
+      queue[tail++] = lowest;
+      queued[lowest] = 1;
     }
 
     const ordered: number[] = [];
-    // A head index rather than shift(): shift() moves every remaining element,
-    // so ordering a value with thousands of consumers cost quadratic time. The
-    // queue only ever grows, so the index is safe.
-    for (let head = 0; head < queue.length; head++) {
+    for (let head = 0; head < tail; head++) {
       const current = queue[head];
       // Key nodes are scaffolding for the ordering, not lines to evaluate.
-      if (typeof current === "number") ordered.push(current);
-
-      const downstream = adjacency.get(current);
-      if (!downstream) continue;
-      for (const next of downstream) {
-        const newDegree = (inDegree.get(next) ?? 1) - 1;
-        inDegree.set(next, newDegree);
-        if (newDegree === 0) queue.push(next);
+      if (current < lineCount) ordered.push(lines[current]);
+      const end = offsets[current + 1];
+      for (let e = offsets[current]; e < end; e++) {
+        const next = targets[e];
+        if (--inDegree[next] === 0 && queued[next] === 0) { queue[tail++] = next; queued[next] = 1; }
       }
     }
 
     // Append any remaining lines that couldn't be topologically sorted
     // (cycles or external-only dependencies) in ascending order.
-    if (ordered.length < affected.size) {
-      const orderedSet = new Set(ordered);
-      const remaining = Array.from(affected)
-        .filter((l) => !orderedSet.has(l))
-        .sort((a, b) => a - b);
-      ordered.push(...remaining);
+    if (ordered.length < lineCount) {
+      const remaining: number[] = [];
+      for (let i = 0; i < lineCount; i++) if (queued[i] === 0) remaining.push(lines[i]);
+      remaining.sort((a, b) => a - b);
+      for (let i = 0; i < remaining.length; i++) ordered.push(remaining[i]);
     }
 
     return ordered;
@@ -447,9 +548,15 @@ export class DependencyGraph {
        }
      }
 
-     this.dependencies.delete(lineNumber);
-     this.writes.delete(lineNumber);
-     this.pinnedReads.delete(lineNumber);
+     // `dependencies` is only ever written alongside `writes`, so a line with
+     // no write set has no entry there either, and `pinnedReads` is empty for
+     // any document that reads no data source. Both deletes were a hash of the
+     // line number that could only ever miss.
+     if (writes !== undefined) {
+       this.dependencies.delete(lineNumber);
+       this.writes.delete(lineNumber);
+     }
+     if (this.pinnedReads.size !== 0) this.pinnedReads.delete(lineNumber);
    }
 
   /**
