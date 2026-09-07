@@ -34,6 +34,7 @@ export interface CacheHistoryEntry {
 
 const EMPTY_DAG_SNAPSHOT: DagSnapshot = {
   consumers: {},
+  producers: {},
   writes: {},
   reads: {},
   dataSourceDeps: {},
