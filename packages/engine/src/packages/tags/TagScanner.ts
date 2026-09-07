@@ -17,6 +17,25 @@ export function escapeTag(name: string): string {
 const AGGREGATE_OPENER = /(?:total|sum|average|count)\s+of\s+$/i;
 
 /**
+ * How much text before a `#` is examined for an opener.
+ *
+ * The pattern is anchored at its end, so only the characters immediately in
+ * front of the `#` can match it, and testing a fixed window is the same answer
+ * as testing the whole line up to the point where the whitespace runs long.
+ * The longest opener is `average of `, eleven characters, which leaves
+ * fifty-three here for whitespace between the words.
+ *
+ * Testing the whole prefix instead is what made this quadratic: the pattern is
+ * anchored at the end but not the start, so the engine scans from every
+ * position, and a line whose every occurrence is a query pays that once per
+ * occurrence. A 192 KB line of repeated `total of #a` took 2.1 seconds.
+ *
+ * Past the window an opener is not recognised, so its line is read as a member
+ * rather than as a query, which is what it was before any of this existed.
+ */
+const OPENER_WINDOW = 64;
+
+/**
  * Whether `rawText` carries `#tag` as a mid-line annotation, case-insensitively.
  *
  * The tag must not be part of a longer word before (`a#tag`) or after
@@ -37,13 +56,15 @@ const AGGREGATE_OPENER = /(?:total|sum|average|count)\s+of\s+$/i;
 export function lineCarriesTag(rawText: string, tag: string): boolean {
   if (tag === "") return false;
   const re = new RegExp(`(?:^|[^0-9A-Za-z_])#${escapeTag(tag)}(?![0-9A-Za-z_-])`, "gi");
+  // Whether anything precedes a `#` is one property of the line, so it is found
+  // once here rather than by copying the prefix at every occurrence.
+  const firstContent = rawText.search(/\S/);
   for (let m = re.exec(rawText); m !== null; m = re.exec(rawText)) {
     // The `#` sits inside the match.
     const hashIndex = m.index + m[0].indexOf("#");
-    const before = rawText.slice(0, hashIndex);
     // The line's first non-whitespace token: a heading, not a tagged data line.
-    if (before.trim().length === 0) continue;
-    if (AGGREGATE_OPENER.test(before)) continue;
+    if (firstContent === hashIndex) continue;
+    if (AGGREGATE_OPENER.test(rawText.slice(Math.max(0, hashIndex - OPENER_WINDOW), hashIndex))) continue;
     return true;
   }
   return false;
