@@ -37,6 +37,7 @@ import {
 	rationalAdd,
 	rationalMul,
 	rationalDiv,
+	rationalSub,
 	rationalNeg,
 	isRationalZero,
 	isRationalOne,
@@ -74,6 +75,29 @@ export const FACTOR_MAX_DEGREE = 12;
 export const FACTOR_MAX_ROOT_CANDIDATES = 4_096;
 
 /**
+ * Ceiling on how many candidates a divisor search will try.
+ *
+ * {@link FACTOR_MAX_ROOT_CANDIDATES} bounds the divisors *found*, which stops a
+ * highly composite coefficient. It does nothing for the opposite shape: a value
+ * with few divisors runs the whole trial division to its square root, and no cap
+ * on the results is ever reached.
+ *
+ * That is not hypothetical arithmetic. A goal seek reads its target as an exact
+ * rational, and an ordinary floating-point sum is not a tidy one: `0.1 + 0.2` is
+ * `0.30000000000000004`, which clears to a denominator around 10^17, whose
+ * square root is about 1.7 billion candidates. A four-line document froze for
+ * twelve seconds on it, and a subnormal target never came back at all, in one
+ * synchronous loop that no timeout could interrupt.
+ *
+ * A hundred thousand candidates costs about five milliseconds here, and factors
+ * any magnitude up to 10^10 completely, which is every coefficient a written
+ * expression produces. Past that the value is float noise rather than something
+ * anyone typed, and giving up is both faster and no less correct: the caller
+ * already treats `null` as "not factorable this way" and falls back.
+ */
+export const FACTOR_MAX_TRIAL_CANDIDATES = 100_000n;
+
+/**
  * A polynomial written as a rational constant times a list of irreducible
  * factors with multiplicity.
  */
@@ -106,15 +130,21 @@ function lcm(a: bigint, b: bigint): bigint {
  * Every positive divisor of a positive bigint, by trial division to its square
  * root.
  *
- * @returns The divisors, or `null` once more than {@link FACTOR_MAX_ROOT_CANDIDATES}
- * have been found, so a highly-composite coefficient stops the search rather
- * than exhausting time here.
+ * Both ends of the search are bounded, because they blow up in opposite ways: a
+ * highly composite value produces too many divisors, and a value with very few
+ * produces too many candidates on the way to finding none. See
+ * {@link FACTOR_MAX_TRIAL_CANDIDATES} for the second, which is the one an
+ * ordinary document reaches.
+ *
+ * @returns The divisors, or `null` once either bound is passed, so the caller
+ * falls back rather than time being exhausted here.
  */
 function divisors(value: bigint): bigint[] | null {
 	const magnitude = value < 0n ? -value : value;
 	if (magnitude === 0n) return null;
 	const found: bigint[] = [];
 	for (let candidate = 1n; candidate * candidate <= magnitude; candidate++) {
+		if (candidate > FACTOR_MAX_TRIAL_CANDIDATES) return null;
 		if (magnitude % candidate !== 0n) continue;
 		found.push(candidate);
 		const paired = magnitude / candidate;
@@ -159,6 +189,19 @@ function divideByRoot(descending: readonly Rational[], root: Rational): Rational
  */
 export function rationalRoots(descending: readonly Rational[]): readonly Rational[] {
 	if (descending.length < 2) return [];
+
+	// A line has one root and it is closed form: `bx + c` is zero at `-c/b`.
+	// Reaching for the theorem here means factoring both coefficients to
+	// rediscover a division, and a goal seek's trailing coefficient is whatever
+	// rational its target cleared to. `0.1 + 0.2` is `0.30000000000000004`,
+	// whose denominator is around 10^17, so the search that was about to start
+	// had 1.7 billion candidates in it and the document froze for twelve
+	// seconds before refusing. This answers it exactly, immediately.
+	if (descending.length === 2) {
+		const [leadingCoefficient, constant] = descending;
+		if (isRationalZero(leadingCoefficient)) return [];
+		return [rationalDiv(rationalSub(RATIONAL_ZERO, constant), leadingCoefficient)];
+	}
 
 	// Clear denominators so the theorem's integer statement applies.
 	let multiplier = 1n;
