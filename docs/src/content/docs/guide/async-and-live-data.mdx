@@ -159,6 +159,29 @@ if (event.type === "error") {
 }
 ```
 
+### When it keeps failing
+
+A resolver that never becomes ready would otherwise be a loop with nothing at the
+end of it: the engine reports the line changed, you re-evaluate it, the resolver
+starts another failing fetch, and round it goes.
+
+The engine ends that for you. After three consecutive failures for the same
+query, the value stops being announced, so your loop stops being told to
+re-evaluate that line and the fetching stops. Editing the line clears the count
+and tries again, and so does a success, so an outage followed by a recovery is
+not held against the value.
+
+Every step of that round trip is a microtask, which matters more than it sounds:
+the microtask queue drains completely before a single timer runs, so a loop like
+this can starve every `setTimeout` in your process while it spins. The engine
+hands a flush to the macrotask queue once several have chained without the event
+loop getting a turn, so your timers and deadlines keep running even while values
+are still settling.
+
+Neither of these is a reason to skip your own handling. Watch for
+`event.type === "error"` and show the reader something: the engine's job is to
+stop the machine spinning, and yours is to say what happened.
+
 ## Cleaning up
 
 A pending value keeps the background fetch, and the batcher behind it, reachable.
