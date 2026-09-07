@@ -313,9 +313,14 @@ function buildTreap(lineIds: number[], start: number, end: number): Node | null 
 
 	const mid = Math.floor((start + end) / 2);
 
-	// Generate a deterministic-but-random priority based on position
-	// This ensures the same array always produces the same tree shape
-	const priority = pseudoRandom(mid);
+	// The priority comes from the line's own id, not from its position in this
+	// build. Position carries no entropy across separate builds: an insert of a
+	// single line is always `buildTreap(ids, 0, 1)`, so `mid` is always 0, so
+	// every singly-inserted node got the same priority and they chained into a
+	// list instead of a tree. The id is unique and stable, so the same set of
+	// lines still produces the same shape, which is what the determinism here
+	// was for.
+	const priority = pseudoRandom(lineIds[mid]);
 
 	const node: Node = {
 		lineId: lineIds[mid],
@@ -331,11 +336,17 @@ function buildTreap(lineIds: number[], start: number, end: number): Node | null 
 /**
  * Simple pseudo-random number generator for deterministic treap building.
  * Uses a multiplicative hash of the input.
+ *
+ * Zero used to be a fixed point: it survives the shift, the xor and the
+ * multiply unchanged, so `pseudoRandom(0)` was exactly `0`, the lowest priority
+ * a node can have. The seed is offset by a large odd constant first, so no input
+ * maps to itself, and the result is read as unsigned so the range really is
+ * `[0, 1)` rather than straddling zero.
  */
 function pseudoRandom(seed: number): number {
-	let x = seed;
-	x = ((x >> 16) ^ x) * 0x45d9f3b;
-	x = ((x >> 16) ^ x) * 0x45d9f3b;
-	x = (x >> 16) ^ x;
-	return x / 0xffffffff; // normalize to [0, 1)
+	let x = (seed + 0x9e3779b9) | 0;
+	x = Math.imul((x >>> 16) ^ x, 0x45d9f3b);
+	x = Math.imul((x >>> 16) ^ x, 0x45d9f3b);
+	x = ((x >>> 16) ^ x) >>> 0;
+	return x / 0x100000000; // normalize to [0, 1)
 }
