@@ -1,5 +1,158 @@
 # solve-engine
 
+## 2.38.8
+
+### Patch Changes
+
+- d56de68: A value that cannot be fetched settles, and stops starving the event loop
+  
+  The re-evaluate loop the async guide tells hosts to write, read the event stream
+  and re-evaluate the lines each event names, was unbounded against a resolver
+  whose value never becomes ready. Worse than unbounded: every hop of it is a
+  microtask, and the microtask queue drains completely before a single timer runs.
+  
+  Measured against a resolver that always fails, through the documented loop:
+  
+  | | before | now |
+  | --- | --- | --- |
+  | rounds before it stopped | 3,000, the test's own cap | 6 |
+  | preflights, so fetches started | 1,501 | 4 |
+  | did a `setTimeout(..., 0)` armed beforehand fire? | no | yes |
+  
+  Two changes, and either alone leaves half the problem.
+  
+  **A repeated failure stops being announced.** The batcher is what tells a host a
+  line changed, and the host answering that by re-evaluating the line is what
+  starts the next fetch, so declining to announce is what ends the round trip.
+  Three consecutive failures for a query, because a transient failure is ordinary,
+  a flaky network or a service restarting, while a resolver that is genuinely down
+  will not be up by the tenth attempt. A key that succeeds clears its own count, so
+  an outage followed by a recovery is not held against it.
+  
+  The promise is still awaited rather than abandoned when the bound is reached. An
+  earlier attempt returned before the await, which left the rejection unhandled,
+  and in a host process an unhandled rejection is a crash rather than a log line.
+  
+  **A chain of flushes yields to the event loop.** Once several have run without a
+  macrotask getting a turn, the next one is scheduled as a timer rather than a
+  microtask, so timers, I/O and a host's own deadlines keep running. The counter
+  that decides this is reset by a macrotask, so it can only be high while the loop
+  is denying one, and it corrects itself the moment one lands. Four chained flushes
+  before yielding, since an ordinary document settling several values wants them
+  collapsed into as few passes as possible.
+  
+  [Async and live data](https://liamriddell.github.io/solve-engine/guide/async-and-live-data/)
+  gains a section on what a host should do when a resolver never becomes ready, and
+  says plainly that the engine stopping the machine spinning is not a substitute for
+  showing the reader what happened.
+- e0e5a47: DAG: ordering a change is roughly twice as fast, and never names a line twice
+  
+  `getAffectedLinesInOrder` is what the incremental engine re-runs after an edit,
+  and in what order, so its cost is paid on every keystroke that moves a value.
+  The topological sort has been rebuilt around dense integer nodes: lines and the
+  keys between them are numbered into one range, the graph is held as a compressed
+  sparse row rather than a map of arrays, and the edges are discovered once as
+  integers rather than looked up by name in each of four passes.
+  
+  Measured on one machine, medians of eleven interleaved rounds of the committed
+  graph against this one, in the same process:
+  
+  | shape                                | before  | now     | change |
+  | ---                                  | ---     | ---     | ---    |
+  | order a 2,000-line chain             | 1.54 ms | 0.60 ms | -61%   |
+  | order a 5,000-line mixed document    | 0.32 ms | 0.12 ms | -62%   |
+  | order 2,000 members and 2,000 totals | 1.28 ms | 0.58 ms | -55%   |
+  | order a fan of 10,000 readers        | 3.60 ms | 1.92 ms | -47%   |
+  | register a 5,000-line document       | 1.20 ms | 1.10 ms | -8%    |
+  | remove 5,000 mixed lines             | 1.65 ms | 1.54 ms | -7%    |
+  | walk 2,000 members and 2,000 totals  | 0.21 ms | 0.20 ms | -8%    |
+  
+  The registration and removal paths got the smaller half of it: one hash per edge
+  instead of three, one read set per line rather than two identical ones, and no
+  lookup at all into the two indexes a plain line cannot appear in.
+  
+  ## A line was named twice
+  
+  The same work found a fault in the sort, and it is the reason this is worth
+  reading rather than only worth merging.
+  
+  When no node has a free edge, which is what a cycle looks like, the sort seeds
+  itself with the lowest affected line rather than stopping. That line's own edges
+  were then walked a second time when its last dependency drained, so it was
+  emitted twice, and the second walk released lines that were not ready, which
+  reordered the tail as well. Two lines that refer to each other are enough:
+  
+  | document                                | before         | now         |
+  | ---                                     | ---            | ---         |
+  | `:a = b + 1` / `:b = a + 1` / `a + b`   | `[1, 2, 3, 1]` | `[1, 2, 3]` |
+  
+  A line named twice is re-evaluated twice, and for an accumulator that is a
+  different answer rather than a slower one.
+  
+  A differential fuzz of 8,000 random graphs, comparing the two implementations
+  across 418,000 answers, found 1,566 results where the old sort repeated a line
+  and none where the two disagreed about anything else. Audited against the
+  contract directly over 19,640 orderings: 764 repeated lines before, none now,
+  with the same ordering quality on the cyclic graphs where no valid order exists.
+  
+  ## The boundary
+  
+  This is the sort's constant factor and one fault in its fallback, not a change
+  of algorithm: ordering was already linear in lines plus keys after 2.38.6, and
+  still is. What is left in it is string hashing, roughly sixteen thousand map and
+  set operations for a two-thousand-line chain, which only interning keys to
+  integers at registration would remove. That is a change to every index in the
+  file for a path that now costs 0.6 ms on a document that size, so it is not
+  made here.
+  
+  ## Verification
+  
+  9,209 tests in 458 suites, 12 of them new: every affected line named exactly
+  once on cyclic, self-referential and tag-keyed shapes, and every producer before
+  every consumer on chains that run against document order, on a group with many
+  members and many aggregates, and on a fan. Four benchmarks added for the shapes
+  that had none, including the mixed document a notepad actually makes.
+  `npm run verify:ci`, the bundled-consumer contract, and the playground build all
+  pass.
+- be76852: A definition keeps its answer when the document is evaluated again
+  
+  A live document is evaluated over and over rather than once, and a line whose
+  expression compiles to a program with no opcodes lost its answer on the second
+  pass, with nothing edited. A unit definition and an equation stored for later
+  both do their work while being compiled and have nothing left to run:
+  
+  | line                 | pass 1                    | pass 2 before | now       |
+  | ---                  | ---                       | ---           | ---       |
+  | `1 sprint = 2 weeks` | `sprint defined`          | blank         | unchanged |
+  | `y + 3 = 10`         | `y stored as an equation` | blank         | unchanged |
+  
+  Tier 2 skipped the empty programs, collected no results, and then assigned that
+  empty collection over the answer Tier 1 had computed. Executing nothing produces
+  no new result, which is not the same as producing an empty one, so a line that
+  ran nothing now keeps what it had.
+  
+  The unit itself was never affected: `3 sprints in weeks` answered `6 weeks`
+  throughout. It was only the definition line's own displayed result that went.
+  
+  Keeping the old result was not enough on its own, and the second half of this is
+  the more interesting one. A pass runs with the Value arena on, and a result that
+  never came back through the VM's `HALT` was never copied on the way out, so the
+  line held an arena slot that a later line is then handed. Read again after the
+  line below it had run, `sprint defined` had become that line's number, in the
+  same object. The kept result is therefore a copy, not a reference.
+  
+  The boundary: this is about a line keeping an answer it already had. Changing a
+  definition still does not update the lines that already used it, because a user
+  unit is not a dependency key and the lines reading it keep bytecode compiled
+  against the old definition. That is filed separately.
+  
+  ## Verification
+  
+  5 new tests, including the plainest property the evaluator has and one nothing
+  pinned before: four passes over an unchanged document leave every answer exactly
+  as the first pass left it. On `main` four of the five fail. `npm run verify:ci`,
+  the bundled-consumer contract, and the playground build all pass.
+
 ## 2.38.7
 
 ### Patch Changes
