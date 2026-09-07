@@ -99,6 +99,36 @@ export class DependencyGraph {
    private pinnedReads: Map<number, Set<string>> = new Map();
 
   /**
+   * Whether this line already carries exactly these edges.
+   *
+   * Reads are compared against the stored set minus its pinned keys, since a
+   * pinned key (a data source) is not part of what a caller passes.
+   */
+  private hasSameEdges(
+    lineNumber: number,
+    reads: string[],
+    writes: string[],
+    pinned: Set<string> | undefined,
+  ): boolean {
+    const storedReads = this.lineReads.get(lineNumber);
+    if (storedReads === undefined) return false;
+    if (storedReads.size !== reads.length + (pinned?.size ?? 0)) return false;
+
+    const storedWrites = this.writes.get(lineNumber);
+    if (writes.length === 0) {
+      if (storedWrites !== undefined) return false;
+    } else if (storedWrites === undefined || storedWrites.size !== writes.length) {
+      return false;
+    }
+
+    for (const read of reads) if (!storedReads.has(read)) return false;
+    if (storedWrites !== undefined) {
+      for (const write of writes) if (!storedWrites.has(write)) return false;
+    }
+    return true;
+  }
+
+  /**
    * Register a line's variable reads and writes in the dependency graph.
    *
    * If re-registering the same line (e.g., after editing), old consumer
@@ -110,10 +140,25 @@ export class DependencyGraph {
    * @param writes - Variable names this line writes (assigns to)
    */
    registerLine(lineNumber: number, reads: string[], writes: string[]): void {
+     const pinned = this.pinnedReads.get(lineNumber);
+
+     // A line whose edges have not moved is left alone.
+     //
+     // Re-registering unhooks every old edge and hooks the same ones back up,
+     // and allocates a set or three doing it. That is the editor's ordinary
+     // case, not a rare one: a line re-runs because a value it reads changed,
+     // and its own text, which is where its edges come from, did not. The
+     // check is a size comparison and a membership test per edge, against a
+     // delete and an insert per edge plus the allocations.
+     //
+     // Deliberately conservative. Duplicate names in `reads` make the stored
+     // set smaller than the array, and the comparison simply fails and falls
+     // through to the full path, which is correct either way.
+     if (this.hasSameEdges(lineNumber, reads, writes, pinned)) return;
+
      // Clean up old consumer references if re-registering this line. A pinned
      // read (a data source, discovered at run time rather than from the text)
      // is not this call's to drop.
-     const pinned = this.pinnedReads.get(lineNumber);
      const oldReads = this.lineReads.get(lineNumber);
      if (oldReads) {
        for (const oldRead of oldReads) {
@@ -161,8 +206,12 @@ export class DependencyGraph {
        }
      } else {
        // A line that writes nothing must not keep a stale write set, or it
-       // stays a producer of a group it has left.
+       // stays a producer of a group it has left. Its recorded dependencies go
+       // with them: `dependencies` is only ever written alongside `writes`, so
+       // leaving it behind kept a set describing a line that no longer defines
+       // anything, which is what `getDependencies` would then hand out.
        this.writes.delete(lineNumber);
+       this.dependencies.delete(lineNumber);
      }
    }
 

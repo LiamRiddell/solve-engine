@@ -5,7 +5,7 @@
 The dependency walk visits each edge once, and orders against every producer
 
 Two faults in the dependency graph, both invisible while every key had exactly
-one writer, and both load-bearing the moment a key can have many — which is what
+one writer, and both load-bearing the moment a key can have many, which is what
 a category tag is: one key whose producers are the group's members.
 
 **The walk was quadratic in producers by consumers.** `getAffectedLines` pushed a
@@ -54,6 +54,31 @@ sets rather than copies.
 | --- | --- | --- |
 | `getWrites` | 176.0 ms | 2.0 ms |
 | `getConsumers` | 179.7 ms | 1.5 ms |
+
+**A line whose edges have not moved is left alone.** Re-registering unhooked
+every old edge and hooked the same ones back up, allocating a set or three doing
+it, and that is the editor's ordinary case rather than a rare one, since a line
+re-runs because a value it reads changed while its own text, which is where its
+edges come from, did not.
+
+| 20,000 re-registrations | before | now |
+| --- | --- | --- |
+| one read, one write | 31.9 ms | 4.9 ms |
+| five reads, one write | 27.4 ms | 2.2 ms |
+| no edges at all | 8.9 ms | 3.8 ms |
+
+Fresh registration is unchanged. The comparison is deliberately conservative:
+duplicate names make the stored set smaller than the array, and it falls through
+to the full path rather than guessing.
+
+Two smaller corrections came with it. A line that stops writing now drops its
+recorded dependencies as well as its writes, since `dependencies` is only ever
+written alongside `writes` and leaving it behind kept a set describing a line
+that no longer defines anything.
+
+End to end, a 2,000-line document whose every line reads one definition costs
+3.5 ms per keystroke against 4.4 ms, about a fifth less. The larger multiples
+above are the graph in isolation; the graph is one part of a pass.
 
 Registration, removal, and the chain and fan shapes were measured before and
 after and are unchanged: they were already linear.

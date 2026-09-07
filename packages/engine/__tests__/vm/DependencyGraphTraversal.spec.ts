@@ -105,6 +105,56 @@ describe("ordering accounts for every producer of a key", () => {
 	});
 });
 
+describe("a line whose edges have not moved is left alone", () => {
+	test("re-registering the same edges changes nothing", () => {
+		const dag = new DependencyGraph();
+		dag.registerLine(1, ["x"], ["y"]);
+		const writes = dag.getWrites(1);
+		dag.registerLine(1, ["x"], ["y"]);
+
+		// The same set object, not an equal one: the fast path did not rebuild it.
+		expect(dag.getWrites(1)).toBe(writes);
+		expect(Array.from(dag.getConsumers("x"))).toEqual([1]);
+		expect(Array.from(dag.getProducers("y"))).toEqual([1]);
+	});
+
+	test("but a changed edge is still picked up", () => {
+		const dag = new DependencyGraph();
+		dag.registerLine(1, ["x"], ["y"]);
+		dag.registerLine(1, ["z"], ["y"]);
+		expect(dag.getConsumers("x").size).toBe(0);
+		expect(Array.from(dag.getConsumers("z"))).toEqual([1]);
+	});
+
+	test("and so is a write that went away", () => {
+		const dag = new DependencyGraph();
+		dag.registerLine(1, [], ["y"]);
+		dag.registerLine(1, [], []);
+		expect(dag.getProducers("y").size).toBe(0);
+		expect(dag.getWrites(1).size).toBe(0);
+		// `dependencies` is only written alongside `writes`, so it goes with them
+		// rather than describing a line that no longer defines anything.
+		expect(dag.getDependencies(1).size).toBe(0);
+	});
+
+	test("a pinned data-source read does not make the edges look changed", () => {
+		const dag = new DependencyGraph();
+		dag.registerLine(1, ["x"], []);
+		dag.registerLineDataSourceDependency(1, "currency", ["USD"]);
+		const before = dag.getAffectedLinesByDataSource("currency", ["USD"]);
+		dag.registerLine(1, ["x"], []);
+		expect(Array.from(dag.getAffectedLinesByDataSource("currency", ["USD"]))).toEqual(Array.from(before));
+		expect(Array.from(dag.getConsumers("x"))).toEqual([1]);
+	});
+
+	test("a duplicated name falls through rather than being mistaken for a change", () => {
+		const dag = new DependencyGraph();
+		dag.registerLine(1, ["x", "x"], []);
+		dag.registerLine(1, ["x", "x"], []);
+		expect(Array.from(dag.getConsumers("x"))).toEqual([1]);
+	});
+});
+
 describe("a lookup that misses allocates nothing", () => {
 	test("the same empty set is handed back each time", () => {
 		const dag = new DependencyGraph();
