@@ -44,6 +44,7 @@ import type { CompletionItem } from "@solve-js/language/LanguageService";
 import type { LexerVocabulary } from "@solve-js/lexer/ExpressionLexer";
 import { QueryClient } from "@tanstack/query-core";
 import { createQueryClient, setActiveQueryClient, getActiveQueryClient } from "@solve-js/services/DataQueryService";
+import { memberTagsOf, withTagEdges } from "@solve-js/packages/tags/TagScanner";
 import { ErrorFactory, EngineError, normalizeUnknownError } from "@solve-js/errors/UnifiedErrorFramework";
 import { countLines } from "@solve-js/utilities/Strings";
 import {
@@ -417,6 +418,17 @@ export class ExpressionEngine {
     private batchParsedLines: ParsedLine[] | null = null;
 
     /**
+     * Lower-cased category tag to the 1-based lines carrying it, for the batch
+     * pass, or `null` before anything has asked.
+     *
+     * The batch path has no document model to hold this, and the scan it does
+     * have lives only for the pass, so the index does too: built over the scan
+     * on the first aggregate and dropped with it. A document with no aggregate
+     * in it never builds one.
+     */
+    private batchTagIndex: Map<string, number[]> | null = null;
+
+    /**
      * The context handed to every line of the current pass, its line number
      * set by mutation before each execution. The closures inside read only
      * the document model, or the batch pass's scan and results array, and
@@ -610,6 +622,16 @@ export class ExpressionEngine {
                 ? (n: number) => doc.getLineAt(n)?.text
                 : scan
                   ? (n: number) => scan[n - 1]?.text
+                  : undefined,
+            // A category tag aggregate reads its own members rather than the
+            // whole document. The incremental path keeps the index on the
+            // document model, maintained as lines change; the batch path has no
+            // model, so it builds one over the scan for the length of the pass.
+            // See `LineExecutionContext.getTaggedLines`.
+            getTaggedLines: doc
+                ? (tag: string) => doc.linesCarryingTag(tag)
+                : scan
+                  ? (tag: string) => this.batchLinesCarryingTag(scan, tag)
                   : undefined,
         };
     }
@@ -1616,6 +1638,27 @@ export class ExpressionEngine {
     }
 
     /**
+     * Register a line's edges, including the groups its text joins and asks about.
+     *
+     * A category tag is an edge like any other: a line carrying `#food` writes
+     * that group, and `total of #food` reads it. Registering them here is what
+     * lets an edit to a tagged line dirty only the aggregates over that tag.
+     *
+     * Membership is a property of the text rather than of the bytecode, so it
+     * comes from the same scanner the aggregate itself reads with, which is what
+     * keeps the two from ever disagreeing about what is in a group.
+     *
+     * @param lineNumber - 1-based line the edges belong to.
+     * @param text - The line's expression, which is where its tags are.
+     * @param reads - Variable keys the line reads.
+     * @param writes - Variable keys the line writes.
+     */
+    private registerLineWithTags(lineNumber: number, text: string, reads: string[], writes: string[]): void {
+        const edges = withTagEdges(text, reads, writes);
+        this.dag.registerLine(lineNumber, edges.reads, edges.writes);
+    }
+
+    /**
      * Execute bytecode and handle the result.
      *
      * Replaces ALL 5 try/catch blocks that previously caught AsyncSuspenseError.
@@ -1686,7 +1729,7 @@ export class ExpressionEngine {
         // line accumulates on the keystroke signal for large documents.
         unlink?.();
 
-        this.dag.registerLine(lineNumber, reads, writes);
+        this.registerLineWithTags(lineNumber, expression, reads, writes);
         this.storeLineResult(lineNumber, result.value, program, reads, writes, expression);
         return result.value;
     }
@@ -1911,6 +1954,37 @@ export class ExpressionEngine {
     }
 
     /**
+     * The lines of the batch pass's scan carrying `#tag`, ascending.
+     *
+     * The batch counterpart of `DocumentModel.linesCarryingTag`, over the scan
+     * this pass is walking rather than over a document model. Built once and
+     * read by every aggregate in the pass, which is what makes the pass linear
+     * in the document rather than linear per aggregate.
+     *
+     * @param scan - The pass's scanned lines, indexed from 0 for line 1.
+     * @param tag - The tag name without its `#`.
+     * @returns Its lines' 1-based positions, ascending; empty when none carry it.
+     */
+    private batchLinesCarryingTag(scan: ScanLineResult[], tag: string): readonly number[] {
+        let index = this.batchTagIndex;
+        if (index === null) {
+            index = new Map();
+            for (let i = 0; i < scan.length; i++) {
+                const text = scan[i].text;
+                if (text.indexOf("#") < 0) continue; // the overwhelmingly common line
+                for (const name of memberTagsOf(text)) {
+                    const lines = index.get(name);
+                    if (lines === undefined) index.set(name, [i + 1]);
+                    else lines.push(i + 1);
+                }
+            }
+            this.batchTagIndex = index;
+        }
+        // Ascending by construction: the scan is walked in document order.
+        return index.get(tag.toLowerCase()) ?? [];
+    }
+
+    /**
      * Process pre-scanned line results into ParsedLine objects.
      *
      * Shared by parseDocument() (which scanDocuments the raw input) and
@@ -1935,6 +2009,8 @@ export class ExpressionEngine {
         const previousBatchParsedLines = this.batchParsedLines;
         this.batchScanResults = scanResults;
         this.batchParsedLines = result;
+        const previousBatchTagIndex = this.batchTagIndex;
+        this.batchTagIndex = null;
 
         try {
         for (const scanResult of scanResults) {
@@ -2014,6 +2090,7 @@ export class ExpressionEngine {
         } finally {
             this.batchScanResults = previousBatchScanResults;
             this.batchParsedLines = previousBatchParsedLines;
+            this.batchTagIndex = previousBatchTagIndex;
             // The pass's shared context closed over this scan; drop it so the
             // scan is released with the pass rather than kept until the next.
             this.lineContext = null;
@@ -4935,7 +5012,10 @@ export class ExpressionEngine {
             // Rebuild the dependency graph so incremental re-evaluation
             // (evaluateIncremental) still walks producers before consumers,
             // exactly as it would have on the engine that evaluated the document.
-            this.dag.registerLine(e.line, e.reads, e.writeVar ? [e.writeVar] : []);
+            // Tags are recovered from the expression rather than stored, so a
+            // checkpoint does not have to widen its format to carry them, and a
+            // restore cannot silently drop the edges a tagged line had.
+            this.registerLineWithTags(e.line, e.expression, e.reads, e.writeVar ? [e.writeVar] : []);
         }
         for (const { expression, program } of snapshot.bytecodeCache) {
             this.bytecodeCache.set(expression, deserializeBytecode(program));

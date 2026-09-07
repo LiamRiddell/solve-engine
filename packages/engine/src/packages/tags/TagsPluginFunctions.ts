@@ -37,10 +37,19 @@ function requireContext(context: LineExecutionContext | undefined): Value | null
 }
 
 /**
- * Walks the whole document, keeping every line whose raw text carries `#tag`,
- * and reduces their results. Skips the querying line itself (its own text
- * carries the tag) and any boundary line (a blank line or heading), and holds
- * the same Pending/Error and single-unit guards the lines package uses.
+ * Reduces the results of every line carrying `#tag`. Skips the querying line
+ * itself (its own text carries the tag) and any boundary line (a blank line or
+ * heading), and holds the same Pending/Error and single-unit guards the lines
+ * package uses.
+ *
+ * Reads its members from the index the document paths maintain
+ * ({@link LineExecutionContext.getTaggedLines}), and falls back to walking the
+ * document for a host that supplies line text without one. The walk is what
+ * this was: it looks at every line for every aggregate, so a document of tagged
+ * amounts and totals cost aggregates x lines a pass, and twenty thousand such
+ * lines took four minutes. The two orders agree line for line, since the index
+ * is built from {@link memberTagsOf}, the whole-line reading of the same rules
+ * {@link lineCarriesTag} applies to one name.
  */
 function aggregateTagged(context: LineExecutionContext, tag: string, mode: TagMode): Value {
   const getText = context.getLineText!;
@@ -51,12 +60,23 @@ function aggregateTagged(context: LineExecutionContext, tag: string, mode: TagMo
   const values: Value[] = [];
   let count = 0;
 
-  for (let n = 1; ; n++) {
-    const text = getText(n);
-    if (text === undefined) break; // past the end of the document
+  // Ascending, so the first unreadable member this reports is the first one in
+  // the document, which is what the walk named and what a reader looks for.
+  const indexed = context.getTaggedLines?.(needle);
+
+  for (let i = 1; ; i++) {
+    let n: number;
+    if (indexed !== undefined) {
+      if (i > indexed.length) break;
+      n = indexed[i - 1];
+    } else {
+      n = i;
+      const text = getText(n);
+      if (text === undefined) break; // past the end of the document
+      if (!lineCarriesTag(text, needle)) continue;
+    }
     if (n === context.lineIndex) continue; // the query line reads its own tag
     if (isBoundary && isBoundary(n)) continue; // a blank line or heading
-    if (!lineCarriesTag(text, needle)) continue;
 
     const v = getResult(n);
     const err = checkLineValue(v, n);

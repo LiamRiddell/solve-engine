@@ -4,6 +4,7 @@ import { djb2Hash } from "@solve-js/utilities/Hash";
 import { SegmentTree } from "@solve-js/engine/SegmentTree";
 import { DEFAULT_CONFIG } from "@solve-js/constants/Configuration";
 import { countLines } from "@solve-js/utilities/Strings";
+import { memberTagsOf } from "@solve-js/packages/tags/TagScanner";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 // ── LineState ──────────────────────────────────────────────────────────────
@@ -172,6 +173,24 @@ export class DocumentModel {
 	private dirtyLineIds: Set<number> = new Set();
 
 	/**
+	 * Lower-cased category tag to the ids of the lines carrying it, or `null`
+	 * while nothing has asked.
+	 *
+	 * `total of #food` used to walk the whole document looking for `#food`, so a
+	 * document of members and totals cost one walk per total: D aggregates over
+	 * N lines is D x N, and a notepad of a few thousand tagged lines took
+	 * minutes. This turns an aggregate into a lookup of its own members.
+	 *
+	 * Built on the first query rather than with the document, so a document with
+	 * no tags in it, which is most of them, never scans for any. Once built it is
+	 * kept in step by the four places that change a line's text: {@link setDocument},
+	 * {@link applyChanges}, {@link editLine} and {@link clear}. Keyed by line id
+	 * rather than position, so inserting or deleting a line above a tagged one
+	 * does not touch it.
+	 */
+	private tagIndex: Map<string, Set<number>> | null = null;
+
+	/**
 	 * Most lines this model will hold. See `constants/Configuration.ts`'s
 	 * `performance.maxDocumentLines`, which is where the default comes from and
 	 * which a host raises through its engine config; a host that builds a
@@ -216,6 +235,7 @@ export class DocumentModel {
 		this._positionCache = null;
 		this.dirtyLineIds.clear();
 		this.nextLineId = 1;
+		this.tagIndex = null;
 
 		const rawLines = text.split("\n");
 		const lineIds = new Array<number>(rawLines.length);
@@ -303,6 +323,13 @@ export class DocumentModel {
 			// New lines start dirty (see the object literal above), track them.
 			for (const id of newIds) this.dirtyLineIds.add(id);
 
+
+			// Only when something has already asked for one: an index nothing has
+			// built yet describes no lines, so it has none to learn about either.
+			if (this.tagIndex !== null) {
+				for (const id of newIds) this.indexTags(id, this.lines.get(id)!.text);
+			}
+
 			// O(log N) splice: delete old IDs, insert new IDs
 			const removedIds = this.orderTree.spliceAt(
 				startIdx,
@@ -311,6 +338,7 @@ export class DocumentModel {
 			);
 			for (const id of removedIds) {
 				removed.push(id);
+				if (this.tagIndex !== null) this.unindexTags(id, this.lines.get(id)?.text ?? "");
 				this.lines.delete(id);
 				this.dirtyLineIds.delete(id);
 			}
@@ -364,6 +392,10 @@ export class DocumentModel {
 		const newHash = djb2Hash(newText);
 		if (newHash === state.textHash) return false;
 
+		if (this.tagIndex !== null) {
+			this.unindexTags(state.lineId, state.text);
+			this.indexTags(state.lineId, newText);
+		}
 		state.text = newText;
 		state.textHash = newHash;
 		state.expressions = [];
@@ -378,6 +410,64 @@ export class DocumentModel {
 	}
 
 	// ── Queries ─────────────────────────────────────────────────────────
+
+	/**
+	 * The 1-based positions of the lines carrying `#tag`, in document order.
+	 *
+	 * What `total of #tag` reads. Case-insensitive, matching how a tag is read
+	 * on a line, and it names membership only: a line that merely asks about the
+	 * group (`total of #tag`) is not in it, and neither is a `#heading`.
+	 *
+	 * Ascending, because an aggregate reports the first line it cannot read and
+	 * the line it names has to be the first one in the document, not whichever
+	 * happened to be indexed first.
+	 *
+	 * @param tag - The tag name without its `#`.
+	 * @returns Its lines' positions, ascending; empty when no line carries it.
+	 */
+	linesCarryingTag(tag: string): number[] {
+		const ids = this.ensureTagIndex().get(tag.toLowerCase());
+		if (ids === undefined || ids.size === 0) return [];
+		const positions: number[] = [];
+		for (const id of ids) {
+			const position = this.getLinePosition(id);
+			// A line still in the index but no longer in the document cannot
+			// happen through the maintained paths; guarded rather than trusted,
+			// since the alternative is aggregating over position -1.
+			if (position > 0) positions.push(position);
+		}
+		positions.sort((a, b) => a - b);
+		return positions;
+	}
+
+	/** The tag index, built over every line the first time one is asked for. */
+	private ensureTagIndex(): Map<string, Set<number>> {
+		if (this.tagIndex !== null) return this.tagIndex;
+		this.tagIndex = new Map();
+		for (const state of this.lines.values()) this.indexTags(state.lineId, state.text);
+		return this.tagIndex;
+	}
+
+	/** Records `lineId` as a member of every group its text joins. */
+	private indexTags(lineId: number, text: string): void {
+		if (text.indexOf("#") < 0) return; // the overwhelmingly common line
+		for (const tag of memberTagsOf(text)) {
+			const ids = this.tagIndex!.get(tag);
+			if (ids === undefined) this.tagIndex!.set(tag, new Set([lineId]));
+			else ids.add(lineId);
+		}
+	}
+
+	/** Drops `lineId` from every group the text it used to hold joined. */
+	private unindexTags(lineId: number, text: string): void {
+		if (text.indexOf("#") < 0) return;
+		for (const tag of memberTagsOf(text)) {
+			const ids = this.tagIndex!.get(tag);
+			if (ids === undefined) continue;
+			ids.delete(lineId);
+			if (ids.size === 0) this.tagIndex!.delete(tag);
+		}
+	}
 
 	/**
 	 * Get the LineState at the given 1-based line position. O(1).
@@ -675,6 +765,7 @@ export class DocumentModel {
 		this.orderTree.clear();
 		this._positionCache = null;
 		this.nextLineId = 1;
+		this.tagIndex = null;
 	}
 
 	/**

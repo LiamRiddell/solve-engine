@@ -26,6 +26,7 @@ import { CompilationWorkerManager, type CompileRequestItem } from "@solve-js/eng
 import { PageManager } from "@solve-js/engine/PageManager";
 import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { EngineError } from "@solve-js/errors/UnifiedErrorFramework";
+import { withTagEdges } from "@solve-js/packages/tags/TagScanner";
 import { sharedGlobalVariableStore, globalDagKey } from "@solve-js/vm/GlobalVariableStore";
 
 // ── EvalTier (diagnostic enum) ──────────────────────────────────────────
@@ -695,6 +696,19 @@ export class ThreeTierEvaluator {
 	}
 
 	/**
+	 * Register a line's edges, with the groups its text joins and asks about.
+	 *
+	 * The evaluator registers from three places and the engine from two, and a
+	 * line registered twice with different edge sets loses whichever went first.
+	 * They all route through the same helper so the sets cannot disagree.
+	 */
+	private registerWithTags(lineNumber: number, reads: string[], writes: string[]): void {
+		const text = this.doc.getLineAt(lineNumber)?.text ?? "";
+		const edges = withTagEdges(text, reads, writes);
+		this.dag.registerLine(lineNumber, edges.reads, edges.writes);
+	}
+
+	/**
 	 * Tier 1: Full pipeline, lex, parse, compile, execute.
 	 * Uses the engine's existing evaluateLine() which handles all pipeline
 	 * stages including DAG updates and LineCache population.
@@ -848,7 +862,7 @@ export class ThreeTierEvaluator {
 		// Register reads/writes in DAG (aggregated across all expressions).
 		// Always register, even lines with no reads/writes (pure expressions
 		// like "2+2") need DAG entries so downstream queries for line presence work.
-		this.dag.registerLine(lineNumber, reads, writes);
+		this.registerWithTags(lineNumber, reads, writes);
 
 		// ── Checkpoint after variable definition ──
 		// A pending value is not a value worth checkpointing: restoring it would
@@ -910,7 +924,7 @@ export class ThreeTierEvaluator {
 
 		// Update DAG: re-register reads/writes from the cached metadata.
 		// Always register, even empty reads/writes so DAG line-presence queries work.
-		this.dag.registerLine(lineNumber, state.reads, state.writes);
+		this.registerWithTags(lineNumber, state.reads, state.writes);
 
 		state.results = results;
 		state.result = results[0]?.[0] ?? null;
@@ -998,7 +1012,7 @@ export class ThreeTierEvaluator {
 
 		// Register reads/writes in DAG regardless, partial data is valid.
 		// Always register, even empty reads/writes for DAG line-presence queries.
-		this.dag.registerLine(lineNumber, reads, writes);
+		this.registerWithTags(lineNumber, reads, writes);
 
 		if (hasVariableDef && lastResult && !anyFailed && !anyPending) {
 			state.results = [[lastResult]];

@@ -300,6 +300,16 @@ export interface LineExecutionContext {
     calendar?: CalendarBackend;
     /** Look up another line's cached result by 1-based line number. `undefined` = not evaluated yet (or out of range), distinct from a line that evaluated to an actual `undefined`-like Value, which can't happen (every Value type has a concrete representation). */
     getLineResult?: (lineNumber: number) => Value | undefined;
+    /**
+     * The 1-based positions of the lines carrying `#tag`, ascending, or
+     * `undefined` when this path keeps no index and the caller should walk the
+     * document itself.
+     *
+     * `total of #tag` used to look at every line of the document, so a notepad
+     * of tagged amounts and totals cost aggregates x lines per pass. Both
+     * document paths maintain an index instead, and answer from it here.
+     */
+    getTaggedLines?: (tag: string) => readonly number[] | undefined;
     /** Whether line `lineNumber` is a blank line or a `#` heading, the stopping condition for "total above"/"sum above"/"average above" aggregation. */
     isLineBoundary?: (lineNumber: number) => boolean;
     /**
