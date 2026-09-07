@@ -1033,6 +1033,7 @@ export function runEngineWithStreaming(
 	cacheSnapshot = lastDiagnostic?.cacheSnapshot ?? cacheSnapshot;
 	const dagSnapshot = lastDiagnostic?.dagSnapshot ?? {
 		consumers: {},
+		producers: {},
 		writes: {},
 		reads: {},
 		dataSourceDeps: {},
@@ -1371,6 +1372,7 @@ export function runEngine(expression: string): DebugResult {
 		// ── Extract DAG, checkpoint, batcher from last diagnostic ──
 		const dagSnap = lastDiagnostic?.dagSnapshot ?? {
 			consumers: {},
+			producers: {},
 			writes: {},
 			reads: {},
 			dataSourceDeps: {},
@@ -1446,6 +1448,7 @@ export function runEngine(expression: string): DebugResult {
 	// ── Engine not available here (caught error path), use defaults ──
 	const dagSnapshot: DagSnapshot = {
 		consumers: {},
+		producers: {},
 		writes: {},
 		reads: {},
 		dataSourceDeps: {},
