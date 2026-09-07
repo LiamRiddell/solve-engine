@@ -3,6 +3,17 @@
  * in isolation, the same design {@link TableReader} draws.
  */
 
+import { edgeKey } from "@solve-js/vm/DependencyGraph";
+
+/**
+ * The key a category tag takes in the dependency graph.
+ *
+ * Lower-cased, because {@link lineCarriesTag} reads a tag case-insensitively:
+ * `#Food` and `total of #food` are one group to a reader, so they have to be
+ * one key here too, or the aggregate would not be hooked to its members.
+ */
+const tagEdgeKey = (tag: string): string => edgeKey("tag", tag.toLowerCase());
+
 /** Escapes any regex-special character a tag name could carry. */
 export function escapeTag(name: string): string {
   return name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -37,6 +48,51 @@ const OPENER_WINDOW = 64;
 
 /** Any `#tag`, for the scan that reads a line's whole membership rather than asking about one name. */
 const ANY_TAG = /(?:^|[^0-9A-Za-z_])#([0-9A-Za-z_-]+)(?![0-9A-Za-z_-])/g;
+
+/**
+ * A line's edges, with the groups its text joins and asks about folded in.
+ *
+ * A category tag is an edge like any other: a line carrying `#food` writes that
+ * group and `total of #food` reads it, so registering them alongside the
+ * variables is what lets an edit to a tagged line dirty only the aggregates over
+ * that tag.
+ *
+ * Every place that registers a line calls this rather than adding tags itself.
+ * There are five of them, across the engine and the evaluator, and a line
+ * registered twice with different edge sets loses whichever went first: that is
+ * exactly how tag edges were being written and then silently wiped within the
+ * same pass.
+ *
+ * Returns the arrays it was given when the line carries no tags, which is most
+ * lines, so the common path allocates nothing.
+ */
+export function withTagEdges(
+	rawText: string,
+	reads: readonly string[],
+	writes: readonly string[],
+): { reads: string[]; writes: string[] } {
+	const tags = tagEdgesOf(rawText);
+	if (tags.members.length === 0 && tags.queries.length === 0) {
+		return { reads: reads as string[], writes: writes as string[] };
+	}
+	return {
+		reads: tags.queries.length === 0 ? (reads as string[]) : [...reads, ...tags.queries.map(tagEdgeKey)],
+		writes: tags.members.length === 0 ? (writes as string[]) : [...writes, ...tags.members.map(tagEdgeKey)],
+	};
+}
+
+/**
+ * The groups a line joins, lower-cased, in the form an index keys on.
+ *
+ * The membership half of {@link tagEdgesOf}, case-folded the way
+ * {@link lineCarriesTag} reads a name, so a lookup by tag and a scan of the
+ * line answer the same question.
+ */
+export function memberTagsOf(rawText: string): string[] {
+	const members = tagEdgesOf(rawText).members;
+	for (let i = 0; i < members.length; i++) members[i] = members[i].toLowerCase();
+	return members;
+}
 
 /**
  * Every group a line joins, and every group it asks about.
