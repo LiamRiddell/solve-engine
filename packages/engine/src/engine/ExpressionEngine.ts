@@ -289,6 +289,26 @@ export interface EngineOptions {
 export class ExpressionEngine {
     //#region Private Properties
     private dag = new DependencyGraph();
+
+    /**
+     * Consecutive failures per `packageId:queryKey`, so a value that cannot be
+     * fetched stops being fetched.
+     *
+     * Cleared for a key the moment it succeeds, so an outage followed by a
+     * recovery does not count towards a later one, and cleared wholesale when
+     * the engine is.
+     */
+    private asyncFailures = new Map<string, number>();
+
+    /**
+     * How many consecutive failures a value gets before it is reported instead.
+     *
+     * Three rather than one, because a transient failure is ordinary: a flaky
+     * network, a rate limit, a service restarting. Three rather than many,
+     * because each attempt costs the host a full re-evaluation of the line, and
+     * a resolver that is genuinely down will not be up by the tenth.
+     */
+    private static readonly MAX_ASYNC_FAILURES = 3;
     private lineCache = new LineCache();
     /**
      * Names ever used as a running-total target (`total += 5`). A document is
@@ -1702,6 +1722,28 @@ export class ExpressionEngine {
         }
 
         if (result.type === 'pending') {
+            // A value that has failed this many times in a row is reported
+            // rather than fetched again.
+            //
+            // Without this the line never settles: the host is told the line
+            // changed, re-evaluates it, the resolver starts another failing
+            // fetch, and that is a round trip with nothing at the end of it.
+            // Measured against a resolver that never becomes ready, the
+            // documented host loop ran as long as it was allowed to and the
+            // line showed pending throughout. Reporting the failure is both
+            // truthful and terminal.
+            const failureKey = `${result.packageId || packageId}:${result.queryKey}`;
+            const failures = this.asyncFailures.get(failureKey) ?? 0;
+            if (failures >= ExpressionEngine.MAX_ASYNC_FAILURES) {
+                unlink?.();
+                const settled = errorValue(
+                    "ASYNC_RESOLVER_FAILED",
+                    `This value could not be fetched after ${failures} attempts, so it is reported rather than retried. Edit the line to try again.`,
+                );
+                this.storeLineResult(lineNumber, settled, program, reads, writes, expression);
+                return settled;
+            }
+
             // Fire-and-forget async resolution.
             // The keystroke listener stays attached while the async work is
             // in flight so a new keystroke can still cancel it.
@@ -1783,6 +1825,7 @@ export class ExpressionEngine {
     private async resolveAsync(pending: Extract<EvalResult, { type: 'pending' }>): Promise<void> {
         const { queryKey, resolver, packageId, signal } = pending;
         const effectivePackageId = packageId || '_engine';
+        const failureKey = `${effectivePackageId}:${queryKey}`;
 
         // TanStack Query handles dedup + caching automatically via fetchQuery().
         // We just await the resolver and dispatch to the batcher on completion.
@@ -1791,6 +1834,9 @@ export class ExpressionEngine {
             // The resolved value is not needed here, only the fact that it
             // settled: the batcher re-reads it from the cache on re-evaluation.
             await resolver;
+            // A key that succeeds has no history worth keeping: an outage
+            // followed by a recovery should not count towards a later one.
+            this.asyncFailures.delete(failureKey);
             if (signal.aborted) {
                 abortLogger.staleDataDiscarded(queryKey, "signal aborted after resolve");
                 return;
@@ -1808,6 +1854,21 @@ export class ExpressionEngine {
                 return;
             }
             const error = err instanceof Error ? err : new Error(String(err));
+            const failures = (this.asyncFailures.get(failureKey) ?? 0) + 1;
+            this.asyncFailures.set(failureKey, failures);
+
+            // Past the bound the failure stops being announced. The batcher is
+            // what tells the host a line changed, and the host answering that
+            // by re-evaluating the line is what starts the next fetch, so
+            // declining to announce is what ends the round trip. Several places
+            // begin async work and only this one finishes it, which is why the
+            // bound lives here.
+            //
+            // The promise is still awaited rather than abandoned, so a
+            // rejection cannot surface as an unhandled rejection in the host,
+            // and a key that recovers still clears its own count.
+            if (failures > ExpressionEngine.MAX_ASYNC_FAILURES) return;
+
             this.batcher.add({
                 queryKey,
                 packageId: effectivePackageId,
@@ -4786,6 +4847,7 @@ export class ExpressionEngine {
 		// 200KB per engine against 8.2KB for one that never parsed, a figure
 		// that grows with the registered package set. See the class doc.
 		this.batcher.clearAll();
+		this.asyncFailures.clear();
 
 		// Stop every background-refresh timer before the query cache is emptied
 		// below, so no in-flight tick refetches into a cache that is about to be

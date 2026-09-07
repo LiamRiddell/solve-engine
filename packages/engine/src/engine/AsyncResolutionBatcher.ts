@@ -167,6 +167,35 @@ export class AsyncResolutionBatcher {
 	private warnedAboutMissingHook = false;
 
 	/**
+	 * How many times {@link flush} has run without the macrotask queue getting a turn.
+	 *
+	 * A flush emits, the host re-evaluates the lines it named, a resolver that is
+	 * still not ready schedules another flush, and every hop of that is a
+	 * microtask. The microtask queue is drained to empty before a single timer
+	 * runs, so a value that never becomes ready starves every timer in the
+	 * process: measured at 3,000 rounds in 41 ms with a `setTimeout(..., 0)`
+	 * armed beforehand that never fired.
+	 *
+	 * Reset by a macrotask, so it can only be non-zero while the loop is denying
+	 * one, which is exactly the condition worth reacting to.
+	 */
+	private flushesWithoutYielding = 0;
+
+	/** Whether the reset above is already armed, so it is scheduled once per stretch rather than per flush. */
+	private yieldProbeArmed = false;
+
+	/**
+	 * How many flushes may chain through microtasks before one is handed to a
+	 * macrotask instead.
+	 *
+	 * Not one: an ordinary document resolving several values wants them collapsed
+	 * into as few passes as possible, and making every flush a timer would cost a
+	 * turn of the event loop per batch for no reason. A handful is past anything
+	 * a settling document does and far below the point where starvation matters.
+	 */
+	private static readonly MAX_CHAINED_FLUSHES = 4;
+
+	/**
 	 * Warn once if an async result resolved with nobody to receive it: no
 	 * {@link onLineResult} wired and no reader on {@link getEventStream}.
 	 *
@@ -248,6 +277,11 @@ export class AsyncResolutionBatcher {
 
 		if (!this.scheduled) {
 			this.scheduled = true;
+			// Once a stretch of flushes has chained without the event loop
+			// getting a turn, the next one is handed to a macrotask so timers,
+			// I/O and the host's own deadlines can run. The counter is reset by
+			// a macrotask, so this corrects itself the moment one lands.
+			const mustYield = this.flushesWithoutYielding >= AsyncResolutionBatcher.MAX_CHAINED_FLUSHES;
 			// Hard backstop, deliberately redundant with reExecuteMainThread()'s
 			// own per-line try/catch: this runs inside a bare queueMicrotask
 			// callback, which has no caller able to catch anything that escapes
@@ -259,14 +293,16 @@ export class AsyncResolutionBatcher {
 			// FUTURE regression in flush()'s own control flow (topologicalSort(),
 			// the DAG walk, an error-listener notification) degrades to a
 			// logged, contained failure instead of a repeat of that bug.
-			queueMicrotask(() => {
+			const run = (): void => {
 				try {
 					this.flush();
 				} catch (e) {
 					const engineError = normalizeUnknownError(e);
 					console.error(`[AsyncResolutionBatcher] flush() failed unexpectedly — this should never happen; please report: ${engineError.format()}`);
 				}
-			});
+			};
+			if (mustYield) setTimeout(run, 0);
+			else queueMicrotask(run);
 		}
 	}
 
@@ -354,6 +390,19 @@ export class AsyncResolutionBatcher {
 		this.scheduled = false;
 		if (this.cleared) return; // Engine was cleared — abort stale flush
 		if (this.pending.size === 0) return;
+
+		// Count this flush against the yield budget, and arm the reset that
+		// clears it. The reset is a macrotask, so it only runs once the loop
+		// stops denying the event loop a turn, which is what makes the count
+		// mean "flushes since the loop last breathed" rather than "flushes".
+		this.flushesWithoutYielding++;
+		if (!this.yieldProbeArmed) {
+			this.yieldProbeArmed = true;
+			setTimeout(() => {
+				this.flushesWithoutYielding = 0;
+				this.yieldProbeArmed = false;
+			}, 0);
+		}
 
 		// Take ownership of the pending batch (swap with empty). It already
 		// holds one entry per (packageId, queryKey), since add() refuses repeats.
