@@ -207,8 +207,12 @@ export class ThreeTierEvaluator {
 			const docEnd = this.doc.lineCount;
 			const evalEnd = Math.min(viewport.endLine, docEnd);
 
+			// Walked once, rather than descended into per position. See
+			// `DocumentModel.getLineStatesInRange`.
+			const states = this.doc.getLineStatesInRange(1, evalEnd);
+
 			for (let pos = 1; pos <= evalEnd; pos++) {
-				const state = this.doc.getLineAt(pos);
+				const state = states[pos - 1];
 				if (!state) {
 					tierCounts.skipped++;
 					continue;
@@ -650,6 +654,25 @@ export class ThreeTierEvaluator {
 			lineId: state.lineId,
 			lineNumber,
 		};
+
+		// A clean line outside the viewport has nothing to do, and nothing has
+		// to be worked out in order to know that.
+		//
+		// It is the last case the dispatch below reaches, so it used to arrive
+		// there having paid for an emptiness scan of its text and an expression
+		// extraction, neither of which can change the answer: the line is not
+		// dirty, so it is not compiled, and it is not visible, so it is not
+		// executed. A pass runs from line 1 to the end of the viewport, so on a
+		// long document scrolled to the bottom almost every line took that
+		// route, and an edit cost the distance from line 1 rather than the size
+		// of the viewport.
+		//
+		// The two paths below this also mark an empty line clean and record
+		// that it is empty. Both are already true of a line that is clean: it
+		// has been through here before, on the pass that cleaned it.
+		if (!state.dirty && !inViewport) {
+			return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
+		}
 
 		// Skip empty/markdown-only lines
 		if (state.isEmpty || isEmptyLine(state.text)) {
