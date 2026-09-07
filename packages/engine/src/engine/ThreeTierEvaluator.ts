@@ -5,7 +5,7 @@ import {
 	LineState,
 	ViewportRange,
 } from "@solve-js/engine/DocumentModel";
-import { Value, ValueType, enableValueArena, disableValueArena, errorValue } from "@solve-js/vm/Value";
+import { Value, ValueType, enableValueArena, disableValueArena, errorValue, persistentValue, isArenaActive } from "@solve-js/vm/Value";
 import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { isEmptyLine } from "@solve-js/engine/ExpressionEngineSafety";
@@ -926,14 +926,53 @@ export class ThreeTierEvaluator {
 		// Always register, even empty reads/writes so DAG line-presence queries work.
 		this.registerWithTags(lineNumber, state.reads, state.writes);
 
-		state.results = results;
-		state.result = results[0]?.[0] ?? null;
+		// A line that ran nothing keeps the result it already had.
+		//
+		// Some expressions compile to a program with no opcodes: a unit
+		// definition (`1 sprint = 2 weeks`) and an equation stored for later
+		// (`y + 3 = 10`) both do their work while being compiled, and have
+		// nothing left to execute. The loop above skips those programs, so
+		// `results` comes back empty, and assigning it unconditionally replaced
+		// the answer Tier 1 had computed with nothing. The line showed
+		// `sprint defined` on the pass that compiled it and went blank on the
+		// next one, with the document untouched, because a live document is
+		// evaluated again and again rather than once.
+		//
+		// Executing nothing produces no new result, which is not the same as
+		// producing an empty one.
+		if (results.length > 0) {
+			state.results = results;
+			state.result = results[0][0] ?? null;
+		} else if (state.result !== null && isArenaActive()) {
+			// Kept by value, not by reference.
+			//
+			// A pass runs with the Value arena on, and a result that never came
+			// back through the VM's HALT is arena-owned: nothing cloned it on
+			// the way out, because the program had no opcodes to return from.
+			// Holding that object means holding a slot the arena hands to a
+			// later line, and the line's own answer is then overwritten in
+			// place. `1 sprint = 2 weeks` read `sprint defined` and then, once
+			// the line below it had run, read that line's number instead.
+			// Every stored result, keeping the line's shape: a line can hold
+			// several expressions, and all of them can be definitions.
+			state.results = state.results.map((group) => group.map(persistentValue));
+			state.result = state.results[0]?.[0] ?? persistentValue(state.result);
+		}
 		if (anyFailed) {
 			// Mark dirty so failed bytecodes are re-compiled (Tier 1) next pass
 			this.doc.markDirty(state.lineId);
 		}
 
-		return { ...baseResult, tier: EvalTier.Tier2, result: lastValue, results, error: firstError };
+		return {
+			...baseResult,
+			tier: EvalTier.Tier2,
+			// The stored result, for the same reason: a caller reading this pass's
+			// answer for the line must see what the line says, not the nothing
+			// that running no opcodes returned.
+			result: results.length > 0 ? lastValue : state.result,
+			results: results.length > 0 ? results : state.results,
+			error: firstError,
+		};
 	}
 
 	/**
