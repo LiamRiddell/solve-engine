@@ -35,6 +35,41 @@ const AGGREGATE_OPENER = /(?:total|sum|average|count)\s+of\s+$/i;
  */
 const OPENER_WINDOW = 64;
 
+/** Any `#tag`, for the scan that reads a line's whole membership rather than asking about one name. */
+const ANY_TAG = /(?:^|[^0-9A-Za-z_])#([0-9A-Za-z_-]+)(?![0-9A-Za-z_-])/g;
+
+/**
+ * Every group a line joins, and every group it asks about.
+ *
+ * The same reading {@link lineCarriesTag} gives, in the shape an index wants:
+ * one pass over the line naming both sides, rather than one pass per candidate
+ * tag asking a yes-or-no question. They must not drift, so the rules live here
+ * once and that function is the single-tag view of this one.
+ *
+ * A tag can appear on both sides of the same line, which is why these are two
+ * lists rather than a partition of one: `total of #food #food` asks about the
+ * group and joins it.
+ */
+export function tagEdgesOf(rawText: string): { members: string[]; queries: string[] } {
+	const members: string[] = [];
+	const queries: string[] = [];
+	// Whether anything precedes a `#` is one property of the line.
+	const firstContent = rawText.search(/\S/);
+	ANY_TAG.lastIndex = 0;
+	for (let m = ANY_TAG.exec(rawText); m !== null; m = ANY_TAG.exec(rawText)) {
+		const hashIndex = m.index + m[0].indexOf("#");
+		// The line's first non-whitespace token: a heading, not a tagged line.
+		if (firstContent === hashIndex) continue;
+		const name = m[1];
+		if (AGGREGATE_OPENER.test(rawText.slice(Math.max(0, hashIndex - OPENER_WINDOW), hashIndex))) {
+			queries.push(name);
+			continue;
+		}
+		members.push(name);
+	}
+	return { members, queries };
+}
+
 /**
  * Whether `rawText` carries `#tag` as a mid-line annotation, case-insensitively.
  *
