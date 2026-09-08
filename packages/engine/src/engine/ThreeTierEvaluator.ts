@@ -259,6 +259,11 @@ export class ThreeTierEvaluator {
 			// Evict bytecode/results from cold/warm pages to bound memory.
 			this.pageManager.maintainAfterEval(viewport, this.doc);
 
+			// Every line has registered by now and the document is current, so a
+			// name the pass reported as possibly undefined can be decided. See
+			// `ExpressionEngine.settleOrphanedNames`.
+			this.engine.settleOrphanedNames();
+
 			return { lines, resultMap, tierCounts };
 		} finally {
 			// Clear keystroke signal to prevent stale signal references
@@ -507,8 +512,9 @@ export class ThreeTierEvaluator {
 				for (const w of writes) {
 					allWrites.add(w);
 				}
-				// Clean up DAG references for this line
-				this.dag.removeLine(lineNum);
+				// Clean up DAG references for this line, and forget any name the
+				// deleted line was the last to define.
+				this.undefineOrphans(this.dag.removeLine(lineNum));
 				// And its cached bytecode. The dependency graph was already
 				// pruned here; the LineCache was not, so a deleted line kept its
 				// entry until the whole cache was dropped on a document switch.
@@ -771,7 +777,27 @@ export class ThreeTierEvaluator {
 	private registerWithTags(lineNumber: number, reads: string[], writes: string[]): void {
 		const text = this.doc.getLineAt(lineNumber)?.text ?? "";
 		const edges = withTagEdges(text, reads, writes);
-		this.dag.registerLine(lineNumber, edges.reads, edges.writes);
+		this.undefineOrphans(this.dag.registerLine(lineNumber, edges.reads, edges.writes));
+	}
+
+	/**
+	 * Forget names that no line defines any more.
+	 *
+	 * The graph reports a key when the line that wrote it stops doing so and no
+	 * other line writes it. The VM's variable store only ever accumulated, so
+	 * the value outlived the line: deleting `:x = 12` left `x + 4` answering
+	 * `16` for the rest of the session, and editing away `1 sprint = 2 weeks`
+	 * left the conversions below it working.
+	 *
+	 * The checkpoint chain is told as well, since it records what each line
+	 * wrote and would otherwise put the name back on the next restore.
+	 *
+	 * Only variable names: the key space also holds category tags, globals, data
+	 * sources and line positions, and none of those is a VM binding. A prefix is
+	 * what tells them apart, and a variable's key is the bare name.
+	 */
+	private undefineOrphans(orphaned: readonly string[]): void {
+		this.engine.forgetOrphanedNames(orphaned);
 	}
 
 	/**
