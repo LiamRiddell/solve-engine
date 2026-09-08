@@ -117,6 +117,42 @@ describe("DependencyGraph", () => {
     expect(deps.has("c")).toBe(false);
   });
 
+  describe("what each read getter answers", () => {
+    // The difference between them is a trap that has been walked into: the
+    // async batcher ordered its re-runs by asking `getDependencies` what each
+    // line read, and a line that defines nothing answered with nothing, so it
+    // got no ordering constraint and ran before the line it reads from.
+    test("getDependencies answers nothing for a line that writes nothing", () => {
+      const dag = new DependencyGraph();
+      dag.registerLine(10, ["a", "b"], []);
+      expect(dag.getDependencies(10).size).toBe(0);
+    });
+
+    test("getReads answers whether or not the line writes", () => {
+      const dag = new DependencyGraph();
+      dag.registerLine(10, ["a", "b"], []);
+      dag.registerLine(11, ["a", "b"], ["c"]);
+
+      expect([...dag.getReads(10)].sort()).toEqual(["a", "b"]);
+      expect([...dag.getReads(11)].sort()).toEqual(["a", "b"]);
+    });
+
+    test("getReads includes a pinned data-source key and getDependencies does not", () => {
+      // A data-source key is a read of the line like any other, and is not one
+      // of the dependencies the line declares by defining something.
+      const dag = new DependencyGraph();
+      dag.registerLine(10, ["a"], ["c"]);
+      dag.registerLineDataSourceDependency(10, "currency", ["USD", "EUR"]);
+
+      expect(dag.getReads(10).size).toBe(2);
+      expect([...dag.getDependencies(10)]).toEqual(["a"]);
+    });
+
+    test("getReads answers nothing for a line the graph has never seen", () => {
+      expect(new DependencyGraph().getReads(999).size).toBe(0);
+    });
+  });
+
   test("clear resets all state", () => {
     const dag = new DependencyGraph();
     dag.registerLine(10, ["x"], []);

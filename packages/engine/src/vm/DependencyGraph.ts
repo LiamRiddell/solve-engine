@@ -733,10 +733,29 @@ export class DependencyGraph {
   }
 
   /**
-   * Get all variables that a line depends on (reads).
+   * The keys a line that WRITES something reads.
+   *
+   * The qualifier is the whole of it, and the reason this doc is longer than
+   * the method. The map behind this is filled in {@link registerLine} only on
+   * the branch that stores a write set, so a line that reads a name and defines
+   * nothing answers with an empty set rather than with what it reads. It is not
+   * "the variables a line depends on"; it is the dependencies recorded
+   * alongside a definition.
+   *
+   * That is deliberate, and pinned by a test: it is what lets a redefinition
+   * break the old chain rather than depend on itself. It is also a trap, and it
+   * has been walked into. The async batcher ordered the lines it was about to
+   * re-run by asking this what each one read, so a line defining nothing
+   * answered with nothing and got no ordering constraint at all: `rate * 2` was
+   * run before the line that fetched `rate` and read the value from before the
+   * fetch.
+   *
+   * {@link getReads} is the question that was meant there, and is almost always
+   * the one wanted: every key a line reads, whether or not it writes anything.
    *
    * @param lineNumber - The line number to query
-   * @returns Set of variable names this line reads, or empty set if none
+   * @returns The keys recorded alongside this line's write set, or an empty set
+   * if it writes nothing
    */
   getDependencies(lineNumber: number): ReadonlySet<string> {
     return this.dependencies.get(lineNumber) ?? NO_KEYS;
