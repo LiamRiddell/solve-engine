@@ -219,6 +219,10 @@ export class ThreeTierEvaluator {
 			// top to bottom. (No-op when the document has no accumulators.)
 			this.reseedAccumulators();
 
+			// The units in scope before the pass, so one that disappears during
+			// it can be noticed.
+			const unitsBefore = this.engine.userUnitNames();
+
 			const lines: EvalLineResult[] = [];
 			const resultMap = new Map<number, Value[]>();
 			const tierCounts = { tier1: 0, tier2: 0, tier3: 0, skipped: 0 };
@@ -263,6 +267,16 @@ export class ThreeTierEvaluator {
 			// name the pass reported as possibly undefined can be decided. See
 			// `ExpressionEngine.settleOrphanedNames`.
 			this.engine.settleOrphanedNames();
+
+			// A user unit that was in scope when the pass began and is not now
+			// has to reach the lines that used it, since a unit is expanded
+			// while a line is compiled and those lines hold bytecode built
+			// around it. Compared rather than counted, so a line that redefines
+			// the same unit every pass does not invalidate for ever.
+			const unitsAfter = new Set(this.engine.userUnitNames());
+			if (unitsBefore.some((name) => !unitsAfter.has(name))) {
+				this.engine.invalidateForRemovedUserUnits();
+			}
 
 			return { lines, resultMap, tierCounts };
 		} finally {
@@ -515,6 +529,14 @@ export class ThreeTierEvaluator {
 				// Clean up DAG references for this line, and forget any name the
 				// deleted line was the last to define.
 				this.undefineOrphans(this.dag.removeLine(lineNum));
+				// A deleted line will never be compiled again, so it cannot drop
+				// its own definitions on the way through. Losing one reaches the
+				// lines that used it here rather than at the end of a pass,
+				// because this runs before the next pass begins and that
+				// comparison would see the unit already gone.
+				if (this.engine.undefineUserUnitsFrom(lineNum)) {
+					this.engine.invalidateForRemovedUserUnits();
+				}
 				// And its cached bytecode. The dependency graph was already
 				// pruned here; the LineCache was not, so a deleted line kept its
 				// entry until the whole cache was dropped on a document switch.

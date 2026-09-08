@@ -1185,6 +1185,37 @@ export class ExpressionEngine {
      * Tests use this to access `batcher._testCaptures` for synchronous
      * event observation without async stream reader timing issues.
      */
+    /** The names of every user-defined unit in scope, for detecting a removal. */
+    userUnitNames(): string[] {
+        return this.userUnits.names;
+    }
+
+    /**
+     * Drop every user unit defined by `lineNumber`, for a line being removed.
+     *
+     * A line being recompiled clears its own definitions on the way through, so
+     * this is for the line that will never be compiled again.
+     *
+     * @param lineNumber - The 1-based line being deleted.
+     * @returns Whether the line had defined anything.
+     */
+    undefineUserUnitsFrom(lineNumber: number): boolean {
+        return this.userUnits.undefineFrom(lineNumber);
+    }
+
+    /**
+     * Recompile everything, because a user unit is no longer in scope.
+     *
+     * A unit is expanded while a line is compiled, so a line that used one holds
+     * bytecode built around it. Losing the definition has to reach that bytecode
+     * or the conversion goes on working from a definition the document no longer
+     * contains.
+     */
+    invalidateForRemovedUserUnits(): void {
+        this.clearCompiledCache();
+        this.documentModel?.invalidateAll();
+    }
+
     getBatcher(): AsyncResolutionBatcher {
         return this.batcher;
     }
@@ -2688,7 +2719,7 @@ export class ExpressionEngine {
      * inserted a STAR between the coefficient and the name (`1 * sprint`); it is
      * tolerated and skipped.
      */
-    private tryDefineUserUnit(tokens: Token[]): Value | null {
+    private tryDefineUserUnit(tokens: Token[], lineNumber: number): Value | null {
         // Shortest definition is NUMBER IDENT EQUALS NUMBER UNIT.
         if (tokens.length < 5) return null;
         if (tokens[0].type !== 'NUMBER' || Number(tokens[0].value) !== 1) return null;
@@ -2716,7 +2747,7 @@ export class ExpressionEngine {
         // other construct that merely starts the same way.
         if (i !== tokens.length) return null;
 
-        const changed = this.userUnits.define(nameWords, ratioToken.value, baseToken.value);
+        const changed = this.userUnits.define(nameWords, ratioToken.value, baseToken.value, lineNumber);
         // A user unit is expanded at parse time, so the compiled bytecode for
         // any line using one depends on the definitions in scope, which the
         // cache key (the raw expression text) does not capture. A new or changed
@@ -3192,7 +3223,12 @@ export class ExpressionEngine {
             // like the symbolic shapes below, so it rides the same non-bytecode
             // channel. Checked first, so it claims its narrow pattern before the
             // scalar-equation grammar sees the bare `=`.
-            symbolicResult = this.tryDefineUserUnit(normalizedTokens);
+            // Whatever this line used to define, it does not any more until it
+            // says so again below. A line edited from `1 sprint = 2 weeks` into
+            // something else left the unit standing, and the conversions under
+            // it went on working.
+            this.userUnits.undefineFrom(lineNumber);
+            symbolicResult = this.tryDefineUserUnit(normalizedTokens, lineNumber);
             if (symbolicResult === null) {
                 const compound = this.tryCompoundAssignment(normalizedTokens, lineNumber);
                 if (compound !== null) {
