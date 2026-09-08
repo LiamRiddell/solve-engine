@@ -1,5 +1,92 @@
 # solve-engine
 
+## 2.38.11
+
+### Patch Changes
+
+- 38de291: A value arriving reaches the lines that read it
+  
+  When a data source resolves, the batcher re-executes the lines the dependency
+  graph names for that query key. That set was the direct consumers of the key and
+  was never expanded, so a line reading a variable the fetching line defines kept
+  the number from before the fetch:
+  
+  | line                    | before        | now           |
+  | ---                     | ---           | ---           |
+  | `:rate = 100 USD in EUR` | updates       | updates       |
+  | `rate * 2`              | stays as it was | updates too |
+  
+  until something else re-evaluated the document. The set is now closed over the
+  graph: everything that reads what those lines write, and so on.
+  
+  Expanding it surfaced a second fault in the ordering, which is why the first
+  attempt still answered with the old value. The batcher sorts the lines it is
+  about to run so producers come before consumers, and it asked
+  `getDependencies` for what each line reads. That map is only filled alongside a
+  line's write set, so a line that defines nothing answered with nothing, and a
+  line that defines nothing is exactly the line whose reads decide where it goes.
+  `rate * 2` was ordered before the line that fetched `rate`. The graph now
+  answers `getReads`, which is every key a line reads whether or not it writes
+  anything, and the sort asks that instead.
+  
+  The boundary is the VM those lines run against. The batcher deliberately does
+  not reset it, so a re-run reads whatever the last full pass left behind, and for
+  a name written on more than one line that is the last write rather than the one
+  governing the re-run line's position. Reconstructing that prefix needs the
+  checkpointer, which nothing on this path builds yet. Positional reads
+  (`prev`, `total above`, `line N`) register no edge at all and so still cannot be
+  named; that is tracked separately.
+  
+  ## Verification
+  
+  4 new tests: a line reading the fetched value being re-run, the same to any
+  depth with the values proving the order, a line reading something unrelated
+  being left alone, and a cycle between two readers terminating the walk. Two of
+  the four fail without the fix, and the depth one fails for both reasons in turn.
+- 38de291: VM checkpoints stay in document order
+  
+  `VMCheckpointer.restoreTo` reads its checkpoint list as a walk through the
+  document: it takes the last entry at or before a line, stopping at the first
+  entry past it, and replays that entry's parent chain from the root. Both halves
+  assume the list ascends, and a re-run appended instead of replacing, so it did
+  not.
+  
+  A document whose lines 1, 2 and 3 each define something, with line 2 edited and
+  run again, left the list as `[1, 2, 3, 2]`:
+  
+  | after editing line 2      | before                      | now         |
+  | ---                       | ---                         | ---         |
+  | `restoreTo(2)` gives      | the value from before the edit | the edited one |
+  | line 2's parent chain     | line 3, which comes after it | line 1      |
+  
+  So a host restoring to a line read the value from before its own edit, and the
+  chain it walked defined a variable from a line that had not run yet.
+  
+  A line snapshotted again now drops every checkpoint at or after it first, which
+  keeps the list ordered and gives the new entry the line before it as its parent.
+  Nothing is lost by dropping them: a pass runs in document order, and a line
+  running from cache now takes a checkpoint too, so the entries removed are
+  re-taken by the same pass as it continues.
+  
+  That second half was its own hole. Only a line the pass compiled recorded what
+  it wrote, so a clean line sitting between two dirty ones left a gap in the
+  chain, and the truncation above would have dropped entries nothing put back.
+  
+  The boundary: this is a fix to a published constructor argument, not a new
+  behaviour. `evaluateDocument` still builds its evaluator without a checkpointer,
+  so nothing inside the engine restores VM state yet. Making the incremental path
+  depend on it is a separate piece of work, and it is what the async and
+  positional-edge issues are both waiting on.
+  
+  ## Verification
+  
+  10 new tests: the list staying ordered, restoring after a re-run, not defining a
+  variable from a later line, the parent chain, a forward pass being untouched,
+  re-running the first line, and four through the evaluator covering one
+  checkpoint per defining line, a clean line still checkpointing, the chain
+  holding the edited value, and repeated passes not growing it. Five of the ten
+  fail without the fix.
+
 ## 2.38.10
 
 ### Patch Changes
