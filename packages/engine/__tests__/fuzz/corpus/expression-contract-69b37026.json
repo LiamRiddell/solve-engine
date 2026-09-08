@@ -10,5 +10,6 @@
 		"kind": "expression",
 		"source": "`=Y"
 	},
-	"status": "open"
+	"status": "fixed",
+	"note": "Replayed clean: tryCompileExpression() now guards its body and returns false rather than letting a parse error out. Kept as a regression case, and marked fixed because an open entry silences every finding that signs the same way, which for this wording is every contract violation the expression generator can produce."
 }
