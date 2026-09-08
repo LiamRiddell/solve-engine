@@ -68,6 +68,14 @@ function answers(document: DocumentModel, count: number): string[] {
  * rather than the engine's. Construction is the dominant cost of a document
  * case because of it, and that is the right trade.
  *
+ * Retired with {@link ThreeTierEvaluator.terminateWorker} when it is done,
+ * which is the disposal every host is expected to call and the one thing a
+ * throwaway evaluator is easy to forget. An evaluator subscribes to the shared
+ * global-variable store, and that store is module-level, so one that is never
+ * retired keeps itself, its document and its engine alive for the life of the
+ * process: 263KB each, and this builds one per action per case. The first
+ * version of this ran out of a 256MB heap because of it.
+ *
  * @param lines - The document text, one entry per line.
  * @returns One answer per line.
  */
@@ -75,8 +83,12 @@ function settled(lines: string[]): string[] {
 	const document = new DocumentModel();
 	document.setDocument(lines.join(NEWLINE));
 	const evaluator = new ThreeTierEvaluator(document, new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
-	for (let pass = 0; pass < PASSES; pass++) evaluator.evaluate({ startLine: 1, endLine: lines.length });
-	return answers(document, lines.length);
+	try {
+		for (let pass = 0; pass < PASSES; pass++) evaluator.evaluate({ startLine: 1, endLine: lines.length });
+		return answers(document, lines.length);
+	} finally {
+		evaluator.terminateWorker();
+	}
 }
 
 /** Where a session and a settled pass first differ. */
@@ -122,6 +134,23 @@ export function replayDocumentCase(documentCase: DocumentCase): Disagreement | n
 	const document = new DocumentModel();
 	document.setDocument(lines.join(NEWLINE));
 	const evaluator = new ThreeTierEvaluator(document, new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
+	try {
+		return replayWith(documentCase, document, evaluator, lines);
+	} finally {
+		// The same disposal {@link settled} explains. This one is per case
+		// rather than per action, but a soak runs thousands of cases in one
+		// process and they add up just as surely.
+		evaluator.terminateWorker();
+	}
+}
+
+/** The session itself, once the evaluator is owned by a caller that retires it. */
+function replayWith(
+	documentCase: DocumentCase,
+	document: DocumentModel,
+	evaluator: ThreeTierEvaluator,
+	lines: string[],
+): Disagreement | null {
 	evaluator.evaluate({ startLine: 1, endLine: lines.length });
 
 	for (const action of documentCase.actions) {
