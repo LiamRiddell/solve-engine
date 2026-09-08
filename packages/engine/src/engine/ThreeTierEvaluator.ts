@@ -428,6 +428,18 @@ export class ThreeTierEvaluator {
 			return this.evaluate(viewport, signal);
 		}
 
+		// ── Running totals are re-seeded here too ──
+		// A `total += 5` line compiles to no bytecode, so a clean one cannot be
+		// re-run from cache: it has to go back through the full pipeline. That
+		// was already true, and harmless while the VM was never rewound, because
+		// the total simply stayed where the last pass left it. Restoring to the
+		// line before the viewport rewinds it, and a viewport containing the
+		// accumulator lines then found nothing to rebuild them from:
+		// `spent += 10` / `spent += 20` / `spent` answered
+		// `Undefined variable: spent` on a scroll. Marking them dirty sends them
+		// to Tier 1, which recomputes each total from its seed.
+		this.reseedAccumulators();
+
 		// ── Phase 5.2g: Page-based LRU eviction (MUST run before preload) ──
 		// maintainAfterEval captures the scroll direction and updates lastViewportStart
 		// BEFORE preloadNextPages reads the direction for preloading.

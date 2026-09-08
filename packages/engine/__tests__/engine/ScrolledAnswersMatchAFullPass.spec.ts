@@ -212,6 +212,58 @@ describe("a pass that does not cover the whole document", () => {
 	});
 });
 
+describe("lines that a scroll cannot rebuild from cache", () => {
+	test("a running total survives a scroll", () => {
+		// `spent += 10` compiles to no bytecode, so a clean one cannot be re-run
+		// from cache: it has to go back through the full pipeline. That was
+		// harmless while the VM was never rewound, because the total stayed
+		// where the last pass left it. Restoring to the line before the viewport
+		// rewinds it, and a viewport containing the accumulator lines then found
+		// nothing to rebuild them from, so `spent` came back undefined.
+		const lines = ["spent += 10", "spent += 20", "spent", "1 + 1"];
+		const { doc, evaluator } = editorFor(lines);
+		expect(answers(doc, lines.length)).toEqual([10, 30, 30, 2]);
+
+		evaluator.setViewport({ startLine: 1, endLine: 4 });
+		expect(answers(doc, lines.length)).toEqual([10, 30, 30, 2]);
+
+		// And from a viewport that starts below them, where the total is
+		// restored from the chain rather than recomputed.
+		evaluator.setViewport({ startLine: 3, endLine: 4 });
+		expect(doc.getLineAt(3)!.result!.toNumber()).toBe(30);
+	});
+
+	test("a definition keeps its own sentence after a scroll", () => {
+		// The sentence a definition answers with never goes through the VM's
+		// HALT, which is where a result is copied out of the Value arena, so the
+		// line was holding a slot the arena hands to a later one. Scrolling past
+		// it made it read as that line's number.
+		const engine = createEngine() as unknown as ExpressionEngine;
+		const doc = new DocumentModel();
+		doc.setDocument(["1 sprint = 2 weeks", ":a = 1", ":b = 2", "3 sprints in weeks", "a + b"].join("\n"));
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+		evaluator.evaluate({ startLine: 1, endLine: 5 });
+		expect(String(doc.getLineAt(1)!.result!.value)).toContain("sprint");
+
+		evaluator.setViewport({ startLine: 4, endLine: 5 });
+		expect(String(doc.getLineAt(1)!.result!.value)).toContain("sprint");
+		// The unit it declared still converts, which was never the casualty.
+		expect(doc.getLineAt(4)!.result!.toNumber()).toBe(6);
+	});
+
+	test("an equation line keeps its sentence after a scroll", () => {
+		const engine = createEngine() as unknown as ExpressionEngine;
+		const doc = new DocumentModel();
+		doc.setDocument(["y + 3 = 10", ":a = 1", ":b = 2", "a + b", "a * b"].join("\n"));
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+		evaluator.evaluate({ startLine: 1, endLine: 5 });
+		expect(String(doc.getLineAt(1)!.result!.value)).toContain("equation");
+
+		evaluator.setViewport({ startLine: 4, endLine: 5 });
+		expect(String(doc.getLineAt(1)!.result!.value)).toContain("equation");
+	});
+});
+
 describe("documents with nothing to restore", () => {
 	test("a document that defines nothing is unaffected", () => {
 		const plain = ["1 + 1", "2 + 2", "3 + 3", "4 + 4"];

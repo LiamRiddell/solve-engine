@@ -19,7 +19,7 @@ import { createEngineContext } from "@solve-js/engine/EngineContext";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import type { CalendarOption } from "@solve-js/calendar/resolveCalendar";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
-import { Value, ValueType, numberValue, stringValue, pendingValue, freezeIfDev, errorValue, type MatrixData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, stringValue, pendingValue, freezeIfDev, errorValue, isArenaActive, persistentValue, type MatrixData } from "@solve-js/vm/Value";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { PackageCompatibilityIndex } from "@solve-js/api/PackageCompatibility";
 import { assertEngineVersionCompatible } from "@solve-js/api/EngineVersionCompatibility";
@@ -224,6 +224,24 @@ export interface EngineOptions {
 }
 
 //#endregion
+
+/**
+ * A line's own message, in a form that outlives the pass that produced it.
+ *
+ * `1 sprint = 2 weeks` and `y + 3 = 10` do their work while being compiled and
+ * answer with a sentence rather than a number. That sentence never goes through
+ * the VM's `HALT`, which is where a result is copied out of the Value arena, so
+ * the line was holding a slot the arena hands to a later one: the definition
+ * read `sprint defined` after the pass that made it, and a number from a line
+ * below it after the next pass, in the same object.
+ *
+ * The arena is only on during a document pass, so a single-expression call
+ * allocates nothing extra here.
+ */
+function lineMessage(text: string): Value {
+	const value = stringValue(text);
+	return isArenaActive() ? persistentValue(value) : value;
+}
 
 /**
  * Core expression evaluation engine, the top-level orchestrator.
@@ -2608,7 +2626,7 @@ export class ExpressionEngine {
             // for a new one.
             this.documentModel?.invalidateAll();
         }
-        return stringValue(`${nameWords.join(' ')} defined`);
+        return lineMessage(`${nameWords.join(' ')} defined`);
     }
 
     /**
@@ -2796,7 +2814,7 @@ export class ExpressionEngine {
         // about to ask about anyway. The matrix kind is always tried first, so
         // this cannot change what an existing document does.
         this.vm.defineScalarEquation(freeVar, this.compileAdHoc(normalizedTokens.slice(0, eqIdx)), this.compileAdHoc(rhsTokens));
-        return stringValue(`${freeVar} stored as an equation — solve with "${freeVar} =>"`);
+        return lineMessage(`${freeVar} stored as an equation — solve with "${freeVar} =>"`);
     }
 
     /**
@@ -2842,7 +2860,7 @@ export class ExpressionEngine {
 
         const variable = unknowns[0];
         this.vm.defineScalarEquation(variable, this.compileAdHoc(lhsTokens), this.compileAdHoc(rhsTokens));
-        return stringValue(`${variable} stored as an equation — solve with "${variable} =>"`);
+        return lineMessage(`${variable} stored as an equation — solve with "${variable} =>"`);
     }
 
     /**
