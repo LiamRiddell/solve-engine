@@ -550,6 +550,23 @@ export class ThreeTierEvaluator {
 		// structural change shifts line numbers. After applyChanges(),
 		// we mark these lineIds dirty, their positions don't matter.
 		const downstreamLineIds = new Set<number>();
+
+		// Every line that reads a position joins them, because a structural
+		// edit changes what a position means without changing a character of
+		// the line that reads it. `line 5` names different text once a line is
+		// inserted above it, `prev` names a different neighbour, and an `above`
+		// aggregate covers a different block. None of that reaches the loop
+		// above, which follows the names a deleted line wrote.
+		//
+		// A reader that moved counts too, not only one whose target moved:
+		// `line 5 + 4` sitting at position 4 is a reference, and after an
+		// insert above it, sitting at position 5, it is a self-reference. A
+		// settled pass reports that; the edited document answered from the
+		// value it had.
+		for (const reader of this.dag.linesReadingAPosition()) {
+			const state = this.doc.getLineAt(reader);
+			if (state) downstreamLineIds.add(state.lineId);
+		}
 		for (const writeVar of allWrites) {
 			const affected = this.dag.getAffectedLines(writeVar);
 			for (const lineNum of affected) {
