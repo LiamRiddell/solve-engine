@@ -76,6 +76,34 @@ describe("removing the line that defines a unit", () => {
 		expect(shown(doc, 1)).toContain("Undefined");
 	});
 
+	test("editing it into a heading stops the conversions", () => {
+		// A heading is skipped before anything is compiled, so the line that
+		// drops its own definitions is never reached. The unit goes with the
+		// edges the skipped line withdraws.
+		const { doc, evaluator } = editorFor(["1 sprint = 3 weeks", "3 sprints in weeks"]);
+		doc.editLine(1, "# a heading");
+		for (let pass = 0; pass < 3; pass++) evaluator.evaluate({ startLine: 1, endLine: 2 });
+
+		expect(answersOf(doc, 2)).toEqual(settled(["# a heading", "3 sprints in weeks"]));
+		expect(shown(doc, 2)).toContain("Undefined");
+	});
+
+	test("a definition survives a delete above it", () => {
+		// Positions move. A removal keyed on where the definition used to sit
+		// matched nothing once a delete above it had shifted the line down,
+		// so it is keyed on the line's persistent id instead.
+		const lines = ["1 + 1", "1 sprint = 3 weeks", "3 sprints in weeks"];
+		const { doc, evaluator } = editorFor(lines);
+		evaluator.applyTransaction([{ startLine: 1, deleteCount: 1, insertLines: [] }]);
+		for (let pass = 0; pass < 3; pass++) evaluator.evaluate({ startLine: 1, endLine: 2 });
+
+		expect(shown(doc, 2)).toBe("9 weeks");
+
+		evaluator.applyTransaction([{ startLine: 1, deleteCount: 1, insertLines: [] }]);
+		for (let pass = 0; pass < 3; pass++) evaluator.evaluate({ startLine: 1, endLine: 1 });
+		expect(shown(doc, 1)).toContain("Undefined");
+	});
+
 	test("a definition that has not changed survives every pass", () => {
 		// The property the before-and-after comparison protects. A line drops
 		// its own definitions as it recompiles, so counting removals would
