@@ -79,7 +79,7 @@ measured daily by its own workflow because the measurement is slow; run
 | `npm run test:consumer` | Pack the tarball, install it into a scratch project, and use it by bare specifier. |
 | `npm run size` | Report the bundled size. It does not gate. |
 | `npm run bench`, `npm run bench:compare`, `npm run bench:baseline`, `npm run stats:bench` | Run the benchmarks, compare two runs, refresh the committed baselines, and record the throughput figures the site quotes. See [performance](/guide/performance/). |
-| `npm run fuzz` | The fuzzer's soak mode. Runs weekly in CI; run it locally with `-- --seed=<seed>` to reproduce a finding. |
+| `npm run fuzz` | The fuzzer's soak mode, across three generators: `bytecode` corrupts an opcode stream, `expression` writes a line of source, and `document` edits a whole document and checks every answer against a plain pass over the same text. Runs weekly in CI; run one with `-- --generator=document`, or reproduce a finding with `-- --seed=<seed>`. |
 | `npm run verify:all` | `verify` plus the playground build. |
 | `npm run changeset:version` | What the version pull request runs: bump, lockfile, build, full suite, and every regenerated figure. |
 

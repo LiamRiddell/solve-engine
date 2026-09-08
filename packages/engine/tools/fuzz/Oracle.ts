@@ -23,6 +23,7 @@ import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import { resetAllocationTracking } from "@solve-js/vm/AllocationBudget";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import type { UserFunctionDef, AnonymousBodyDef, BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
+import { runDocumentCase } from "@tools/fuzz/DocumentOracle";
 import type { FuzzCase, Outcome, SerializedBody, SerializedProgram } from "@tools/fuzz/FuzzCase";
 
 /**
@@ -54,6 +55,17 @@ export interface OracleOptions {
 	 */
 	slowMs?: number;
 }
+
+/**
+ * The soft budget a whole editing session is judged against.
+ *
+ * Its own constant rather than the caller's `slowMs`, which is set for one
+ * expression. A document case replays a session and builds a settled oracle
+ * after every action, so it is two orders of magnitude more work by design, and
+ * judging it against a single expression's budget would report every case as
+ * slow and drown the real ones.
+ */
+const DOCUMENT_SLOW_MS = 20000;
 
 /** Whether a thrown value satisfies the engine's "everything is an EngineError" contract. */
 function isEngineError(thrown: unknown): boolean {
@@ -351,6 +363,7 @@ function firstFrames(thrown: unknown): string | undefined {
  */
 export function runCase(fuzzCase: FuzzCase, engine: ExpressionEngine | null, options: OracleOptions = {}): Outcome {
 	if (fuzzCase.kind === "bytecode") return runBytecodeCase(fuzzCase.program, options);
+	if (fuzzCase.kind === "document") return runDocumentCase(fuzzCase, { slowMs: DOCUMENT_SLOW_MS });
 	if (!engine) throw new Error("an expression case needs an engine");
 	return runExpressionCase(fuzzCase.source, engine, options);
 }

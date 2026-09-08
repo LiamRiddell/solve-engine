@@ -92,6 +92,14 @@ const OBSERVED_FROM_OUTSIDE: ReadonlySet<string> = new Set(["crash", "hang"]);
  */
 export function failureSignature(outcome: { kind: string; detail: string }, input: FuzzCase): string {
 	if (OBSERVED_FROM_OUTSIDE.has(outcome.kind)) return `${outcome.kind}::${caseId(input)}`;
+	// A disagreement is signed by its input for the same reason, arrived at
+	// from the other direction. Its wording does distinguish one from another,
+	// but only through the two answers, and the normalisation below replaces
+	// every quoted fragment and every number: `says "509", says "4"` and
+	// `says "6 weeks", says "Undefined"` both reduce to the same sentence. One
+	// wrong answer would then silence every other, which is exactly the loss
+	// the hang above is signed by its input to avoid.
+	if (outcome.kind === "disagreement") return `disagreement::${caseId(input)}`;
 	const normalised = outcome.detail
 		// The value a conversion refused is the input, not the bug. Every
 		// non-numeric string reaching `BigInt()` is one finding, and leaving the
