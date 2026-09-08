@@ -105,6 +105,11 @@ export class VMCheckpointer {
 	 * that inherited variable lookups fall through to previous checkpoints
 	 * without copying all variables into each checkpoint.
 	 *
+	 * A line that is snapshotted again drops every checkpoint at or after it
+	 * first, so the list stays in document order and the new checkpoint
+	 * inherits from the line before it rather than from one after it. See the
+	 * body for what went wrong without that.
+	 *
 	 * @param lineNumber 1-based line position.
 	 * @param lineId Persistent line ID from DocumentModel.
 	 * @param variableNames Names of variables that were written at this line.
@@ -117,10 +122,26 @@ export class VMCheckpointer {
 	): VMCheckpoint | null {
 		if (variableNames.length === 0) return null;
 
-		const parent =
-			this.checkpoints.length > 0
-				? this.checkpoints[this.checkpoints.length - 1]
-				: null;
+		// Everything at or after this line goes before the new checkpoint is
+		// taken.
+		//
+		// The list is a sequence of document positions and `restoreTo` reads it
+		// as one, so appending on a re-run broke both halves of that. Editing
+		// line 2 of a document whose lines 1, 2 and 3 each define something
+		// left the list as [1, 2, 3, 2]: `getNearestCheckpoint(2)` stops at the
+		// first entry past its target, so it found the stale line 2 and
+		// restored the old value, and the new line 2 inherited from line 3, a
+		// chain running backwards through the document that would have defined
+		// a variable from a line that had not run yet.
+		//
+		// Nothing is lost by dropping them. A pass runs in document order and
+		// every line that writes takes a checkpoint, so the ones removed here
+		// are re-taken by this same pass as it continues past this line.
+		let keep = this.checkpoints.length;
+		while (keep > 0 && this.checkpoints[keep - 1].lineNumber >= lineNumber) keep--;
+		if (keep !== this.checkpoints.length) this.checkpoints.length = keep;
+
+		const parent = keep > 0 ? this.checkpoints[keep - 1] : null;
 
 		// Create prototypal chain: new checkpoint inherits from parent
 		const variables: Record<string, Value> = Object.create(
