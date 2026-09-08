@@ -579,12 +579,21 @@ export class ThreeTierEvaluator {
 	private reseedAccumulators(): void {
 		const names = this.engine.resetAccumulators();
 		if (names.size === 0) return;
+		// Read from the lines themselves, not from the dependency graph.
+		//
+		// A structural edit clears the graph (see {@link applyTransaction}) and
+		// lets the next pass rebuild it, so asking the graph what each line
+		// writes answers nothing at all on the pass that follows an insert or a
+		// delete. No accumulator line was marked, so none re-ran, and the totals
+		// below the edit kept the previous pass's sum: inserting `spent += 2`
+		// above `spent += 7` left the second line reading 7 rather than 9. The
+		// line's own write set is recorded on the line and survives the edit.
 		const docEnd = this.doc.lineCount;
 		for (let pos = 1; pos <= docEnd; pos++) {
-			const writes = this.dag.getWrites(pos);
-			if (writes.size === 0) continue;
-			for (const w of writes) {
-				if (names.has(w)) {
+			const state = this.doc.getLineAt(pos);
+			if (state === undefined || state.writes.length === 0) continue;
+			for (const written of state.writes) {
+				if (names.has(written)) {
 					this.doc.markDirtyByLineNumber(pos);
 					break;
 				}
