@@ -33,14 +33,19 @@ export interface UserUnitDefinition {
   /** The built-in unit the ratio is expressed in (e.g. `weeks`, `hours`). */
   readonly baseUnit: string;
   /**
-   * The 1-based line that defined it, or -1 where the caller did not say.
+   * The persistent id of the line that defined it, or -1 where there was none.
    *
    * A definition belongs to a line, and the line can be deleted or edited into
    * something else. Without knowing which line said it, the unit outlived the
    * document: `1 sprint = 2 weeks` deleted, and `3 sprints in weeks` went on
    * answering `6 weeks` for the rest of the session.
+   *
+   * The id and not the position, because positions move. Deleting a line above
+   * the definition renumbers it, and a removal keyed on where it used to sit
+   * then matches nothing: the unit survived a delete that had shifted it, which
+   * is exactly the case the first version of this missed.
    */
-  readonly definedAtLine: number;
+  readonly definedByLineId: number;
 }
 
 /**
@@ -84,7 +89,7 @@ export class UserUnitTable {
    * of `baseUnit`. Re-defining a name overwrites the earlier definition, so a
    * corrected line wins over the one above it.
    */
-  define(nameWords: readonly string[], ratioText: string, baseUnit: string, definedAtLine = -1): boolean {
+  define(nameWords: readonly string[], ratioText: string, baseUnit: string, definedByLineId = -1): boolean {
     const key = pluralInsensitiveKey(nameWords);
     const previous = this.byKey.get(key);
     const changed = previous === undefined || previous.ratioText !== ratioText || previous.baseUnit !== baseUnit;
@@ -92,7 +97,7 @@ export class UserUnitTable {
       displayName: nameWords.join(" "),
       ratioText,
       baseUnit,
-      definedAtLine,
+      definedByLineId,
     });
     if (nameWords.length > this.longestName) this.longestName = nameWords.length;
     return changed;
@@ -124,13 +129,14 @@ export class UserUnitTable {
    * that is too large costs a slightly wider scan and never a wrong answer,
    * where recomputing it would cost a walk of the table on every recompile.
    *
-   * @param lineNumber - The 1-based line whose definitions go.
+   * @param lineId - The persistent id of the line whose definitions go.
    * @returns Whether anything was removed.
    */
-  undefineFrom(lineNumber: number): boolean {
+  undefineFrom(lineId: number): boolean {
+    if (lineId < 0) return false;
     let removed = false;
     for (const [key, definition] of this.byKey) {
-      if (definition.definedAtLine !== lineNumber) continue;
+      if (definition.definedByLineId !== lineId) continue;
       this.byKey.delete(key);
       removed = true;
     }
