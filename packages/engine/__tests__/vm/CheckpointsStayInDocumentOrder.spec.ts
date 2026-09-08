@@ -53,7 +53,17 @@ function withLineTwoRerun() {
 describe("a line that is checkpointed again", () => {
 	test("replaces its old entry rather than being appended after later lines", () => {
 		const { cp } = withLineTwoRerun();
-		expect(cp.getAllCheckpoints().map((c) => c.lineNumber)).toEqual([1, 2]);
+		expect(cp.getAllCheckpoints().map((c) => c.lineNumber)).toEqual([1, 2, 3]);
+	});
+
+	test("the lines below it are kept", () => {
+		// Dropping them is sound only for a pass running from line 1, which
+		// re-takes them as it continues. A pass limited to a viewport never
+		// reaches them, and `restoreTo` would then RESET the VM and replay a
+		// prefix that no longer mentions them, turning a number into
+		// `Undefined variable` on a line further down that reads one.
+		const { cp } = withLineTwoRerun();
+		expect(cp.getCheckpointAt(3)?.variables.c?.toNumber()).toBe(3);
 	});
 
 	test("restoring to it gives the value from the re-run, not the one before", () => {
@@ -71,9 +81,19 @@ describe("a line that is checkpointed again", () => {
 
 	test("its parent is the line before it in the document", () => {
 		const { cp } = withLineTwoRerun();
-		const newest = cp.getAllCheckpoints()[cp.getAllCheckpoints().length - 1];
-		expect(newest.lineNumber).toBe(2);
-		expect(newest.parent?.lineNumber).toBe(1);
+		const replaced = cp.getCheckpointAt(2);
+		expect(replaced?.parent?.lineNumber).toBe(1);
+		// And the entry after it now follows the replacement rather than the
+		// object it displaced.
+		expect(cp.getCheckpointAt(3)?.parent).toBe(replaced);
+	});
+
+	test("every entry's parent is the entry before it", () => {
+		// The invariant `restoreTo` relies on to read the array as the chain.
+		const { cp } = withLineTwoRerun();
+		const all = cp.getAllCheckpoints();
+		expect(all[0].parent).toBeNull();
+		for (let i = 1; i < all.length; i++) expect(all[i].parent).toBe(all[i - 1]);
 	});
 
 	test("a forward pass is not truncated by any of this", () => {
@@ -85,15 +105,18 @@ describe("a line that is checkpointed again", () => {
 		expect(cp.count).toBe(5);
 	});
 
-	test("re-running the first line clears the chain behind it", () => {
+	test("re-running the first line leaves the rest of the chain standing", () => {
 		const { vm, cp } = withLineTwoRerun();
 		vm.setVar("a", numberValue(7));
 		cp.snapshot(1, 1, ["a"]);
-		expect(cp.getAllCheckpoints().map((c) => c.lineNumber)).toEqual([1]);
+		expect(cp.getAllCheckpoints().map((c) => c.lineNumber)).toEqual([1, 2, 3]);
 
 		cp.restoreTo(3);
 		expect(vm.getVar("a")?.toNumber()).toBe(7);
-		expect(vm.getVar("b")).toBeUndefined();
+		// The lines below still contribute what they defined, rather than
+		// vanishing because the line above them ran again.
+		expect(vm.getVar("b")?.toNumber()).toBe(99);
+		expect(vm.getVar("c")?.toNumber()).toBe(3);
 	});
 });
 

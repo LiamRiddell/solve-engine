@@ -121,26 +121,28 @@ export class VMCheckpointer {
 	): VMCheckpoint | null {
 		if (variableNames.length === 0) return null;
 
-		// Everything at or after this line goes before the new checkpoint is
-		// taken.
+		// This line's own entry is replaced, and nothing else is touched.
 		//
 		// The list is a sequence of document positions and `restoreTo` reads it
-		// as one, so appending on a re-run broke both halves of that. Editing
-		// line 2 of a document whose lines 1, 2 and 3 each define something
-		// left the list as [1, 2, 3, 2]: `getNearestCheckpoint(2)` stops at the
-		// first entry past its target, so it found the stale line 2 and
-		// restored the old value, and the new line 2 inherited from line 3, a
-		// chain running backwards through the document that would have defined
-		// a variable from a line that had not run yet.
+		// as one, so a re-run must not append after entries that come later in
+		// the document: editing line 2 of a document whose lines 1, 2 and 3 each
+		// define something left the list as [1, 2, 3, 2], and a restore to line
+		// 2 then found the stale entry.
 		//
-		// Nothing is lost by dropping them. A pass runs in document order and
-		// every line that writes takes a checkpoint, so the ones removed here
-		// are re-taken by this same pass as it continues past this line.
-		let keep = this.checkpoints.length;
-		while (keep > 0 && this.checkpoints[keep - 1].lineNumber >= lineNumber) keep--;
-		if (keep !== this.checkpoints.length) this.checkpoints.length = keep;
-
-		const parent = keep > 0 ? this.checkpoints[keep - 1] : null;
+		// Replacing rather than truncating is the part that took a second go.
+		// Dropping every entry at or after the line is sound only for a pass
+		// running from line 1, which re-takes them as it continues. A pass
+		// limited to a viewport does not: it re-snapshots the top of the
+		// document and never reaches the definitions below its end line, so the
+		// chain lost them, and `restoreTo` then RESET the VM and replayed a
+		// prefix that no longer mentioned them. A line further down reading one
+		// answered `Undefined variable` where it had answered a number. Absent
+		// is worse than stale here: a stale entry is what the document is
+		// currently showing anyway, and the pass corrects it when it reaches
+		// that line.
+		const existing = this.indexOfCheckpointAt(lineNumber);
+		const insertAt = existing >= 0 ? existing : this.insertionIndexFor(lineNumber);
+		const parent = insertAt > 0 ? this.checkpoints[insertAt - 1] : null;
 
 		// Each checkpoint holds only what its line wrote, and reaches the rest
 		// through `parent`. It used to reach it through the prototype chain
@@ -182,7 +184,11 @@ export class VMCheckpointer {
 			functions,
 			parent,
 		};
-		this.checkpoints.push(checkpoint);
+		if (existing >= 0) this.checkpoints[existing] = checkpoint;
+		else this.checkpoints.splice(insertAt, 0, checkpoint);
+		// The entry after this one now follows a different object.
+		const next = this.checkpoints[insertAt + 1];
+		if (next !== undefined) next.parent = checkpoint;
 		return checkpoint;
 	}
 
@@ -206,36 +212,73 @@ export class VMCheckpointer {
 	 * state that existed AFTER evaluating lines up to `lineNumber`.
 	 */
 	restoreTo(lineNumber: number): void {
-		const target = this.getNearestCheckpoint(lineNumber);
-		if (!target) {
-			this.vm.reset();
-			return;
-		}
-
-		// Collect the checkpoint chain from root to target.
-		// Walk parent links and reverse so root is first.
-		const chain: VMCheckpoint[] = [];
-		let current: VMCheckpoint | null = target;
-		while (current) {
-			chain.unshift(current);
-			current = current.parent;
-		}
+		// The chain from the root to the target IS the array up to that index.
+		//
+		// Every checkpoint is created with the one before it in the array as its
+		// parent (see {@link snapshot}), and the array is kept in document
+		// order, so walking parent links would visit exactly these entries in
+		// exactly this order. Reading the array instead of the links costs no
+		// allocation, and it was the links that made this quadratic: the walk
+		// runs target-to-root, so the chain was assembled by `unshift`ing each
+		// entry onto the front, which shifts every entry already there. A
+		// document with two thousand definitions did four million shifts per
+		// restore, and a scroll restores.
+		//
+		// `CheckpointsStayInDocumentOrder.spec.ts` asserts the invariant this
+		// relies on, so a change that broke it would fail there rather than
+		// quietly restoring the wrong state here.
+		const targetIndex = this.nearestCheckpointIndex(lineNumber);
 
 		this.vm.reset();
-		for (const cp of chain) {
+		for (let i = 0; i <= targetIndex; i++) {
+			const cp = this.checkpoints[i];
 			// Only the names this checkpoint's own line wrote; the ones before
-			// it are applied by their own links earlier in this same walk.
+			// it are applied by their own entries earlier in this same walk.
 			for (const key of Object.keys(cp.variables)) {
 				this.vm.setVar(key, cp.variables[key]);
 			}
 			// Replay function definitions the same way, a later checkpoint's
 			// redefinition of the same name naturally overwrites an earlier
-			// one since the chain replays in root-to-target order.
+			// one since the walk runs root-to-target.
 			for (const key of Object.keys(cp.functions)) {
 				const fn = cp.functions[key];
 				this.vm.defineUserFunction(fn.name, fn.params, fn.program);
 			}
 		}
+	}
+
+	/** The index of the checkpoint recorded exactly at `lineNumber`, or -1. */
+	private indexOfCheckpointAt(lineNumber: number): number {
+		const index = this.nearestCheckpointIndex(lineNumber);
+		return index >= 0 && this.checkpoints[index].lineNumber === lineNumber ? index : -1;
+	}
+
+	/** Where a checkpoint for `lineNumber` belongs, keeping the list in order. */
+	private insertionIndexFor(lineNumber: number): number {
+		return this.nearestCheckpointIndex(lineNumber) + 1;
+	}
+
+	/**
+	 * The index of the last checkpoint at or before `lineNumber`, or -1.
+	 *
+	 * A binary search rather than a scan. The array is in document order, and
+	 * this is asked once per scroll and once per async batch, on a document
+	 * that can hold a checkpoint per definition.
+	 */
+	private nearestCheckpointIndex(lineNumber: number): number {
+		let low = 0;
+		let high = this.checkpoints.length - 1;
+		let result = -1;
+		while (low <= high) {
+			const mid = (low + high) >> 1;
+			if (this.checkpoints[mid].lineNumber <= lineNumber) {
+				result = mid;
+				low = mid + 1;
+			} else {
+				high = mid - 1;
+			}
+		}
+		return result;
 	}
 
 	/**
@@ -310,15 +353,8 @@ export class VMCheckpointer {
 	 * @returns The nearest checkpoint, or null if none exists before the line.
 	 */
 	getNearestCheckpoint(lineNumber: number): VMCheckpoint | null {
-		let result: VMCheckpoint | null = null;
-		for (const cp of this.checkpoints) {
-			if (cp.lineNumber <= lineNumber) {
-				result = cp;
-			} else {
-				break; // checkpoints are sorted ascending
-			}
-		}
-		return result;
+		const index = this.nearestCheckpointIndex(lineNumber);
+		return index < 0 ? null : this.checkpoints[index];
 	}
 
 	/**
@@ -326,7 +362,12 @@ export class VMCheckpointer {
 	 * @returns The checkpoint, or undefined if not found.
 	 */
 	getCheckpointAt(lineNumber: number): VMCheckpoint | undefined {
-		return this.checkpoints.find((cp) => cp.lineNumber === lineNumber);
+		// Searched, not scanned: the async sweep asks this once for every line
+		// it walks past, and a scan would make that walk quadratic.
+		const index = this.nearestCheckpointIndex(lineNumber);
+		if (index < 0) return undefined;
+		const candidate = this.checkpoints[index];
+		return candidate.lineNumber === lineNumber ? candidate : undefined;
 	}
 
 	/**
