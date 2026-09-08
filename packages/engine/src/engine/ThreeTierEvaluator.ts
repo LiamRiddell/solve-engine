@@ -550,6 +550,7 @@ export class ThreeTierEvaluator {
 		// structural change shifts line numbers. After applyChanges(),
 		// we mark these lineIds dirty, their positions don't matter.
 		const downstreamLineIds = new Set<number>();
+		const positionalReaderLineIds = new Set<number>();
 
 		// Every line that reads a position joins them, because a structural
 		// edit changes what a position means without changing a character of
@@ -563,9 +564,28 @@ export class ThreeTierEvaluator {
 		// insert above it, sitting at position 5, it is a self-reference. A
 		// settled pass reports that; the edited document answered from the
 		// value it had.
+		//
+		// Their answers go as well as their dirty flag, which is the half that
+		// was missing. Marking a line dirty says it must run again; it does not
+		// stop another line reading what it said in the meantime, and after a
+		// structural edit what it said was about a document that no longer
+		// exists. Two positional readers that end up reading each other then
+		// chase those old answers instead of reporting the cycle: `line 3 + 5`
+		// above an `average above` that covers it took the average's previous
+		// value, computed a new one, and the average recomputed from that, by a
+		// smaller amount each pass, landing wherever the passes ran out. With
+		// nothing to chase, both report the cycle, which is what a pass over the
+		// same text reports.
+		//
+		// Only on a structural edit, and only these lines. An ordinary edit
+		// leaves every position meaning what it meant, so a reader's answer is
+		// still about this document and taking it away would show an error to
+		// whoever asked before it ran again.
 		for (const reader of this.dag.linesReadingAPosition()) {
 			const state = this.doc.getLineAt(reader);
-			if (state) downstreamLineIds.add(state.lineId);
+			if (!state) continue;
+			downstreamLineIds.add(state.lineId);
+			positionalReaderLineIds.add(state.lineId);
 		}
 		for (const writeVar of allWrites) {
 			const affected = this.dag.getAffectedLines(writeVar);
@@ -590,6 +610,9 @@ export class ThreeTierEvaluator {
 		// longer in the doc) are silently ignored by markDirty().
 		for (const lineId of downstreamLineIds) {
 			this.doc.markDirty(lineId);
+		}
+		for (const lineId of positionalReaderLineIds) {
+			this.doc.forgetResult(lineId);
 		}
 
 		// ── Phase 5: Clear DAG to avoid phantom entries ────────────────
