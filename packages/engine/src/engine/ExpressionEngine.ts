@@ -2,7 +2,7 @@
 
 import { VM, type EquationDef, type ScalarEquationDef } from "@solve-js/vm/OpRegistry";
 import { matrixMultiply, inverse } from "@solve-js/vm/MatrixOps";
-import { DependencyGraph } from "@solve-js/vm/DependencyGraph";
+import { DependencyGraph, isPrefixedEdgeKey } from "@solve-js/vm/DependencyGraph";
 import { LineCache, LineCacheEntry } from "@solve-js/cache/LineCache";
 import { ScopeManager } from "@solve-js/vm/ScopeManager";
 import { Lexer } from "@solve-js/lexer/Lexer";
@@ -795,6 +795,15 @@ export class ExpressionEngine {
      * DAG walk + re-evaluation pass. Replaces the old single-callback pattern.
      */
     private batcher: AsyncResolutionBatcher;
+
+    /**
+     * Names that may no longer be defined, pending the end of the pass.
+     *
+     * Null rather than an empty set, because a document that never removes a
+     * definition never allocates one. See {@link settleOrphanedNames}.
+     */
+    private orphanCandidates: Set<string> | null = null;
+
     /**
      * Drives proactive background refresh of live values, or `null` when the
      * host has not enabled it (the default). See {@link BackgroundRefreshManager}.
@@ -1710,9 +1719,113 @@ export class ExpressionEngine {
      * @param reads - Variable keys the line reads.
      * @param writes - Variable keys the line writes.
      */
+    /**
+     * Forget names that no line defines any more.
+     *
+     * The graph reports a key when the line that wrote it stops doing so and no
+     * other line writes it. The VM's variable store only ever accumulated, so
+     * the value outlived the line: deleting `:x = 12` left `x + 4` answering
+     * `16` for the rest of the session.
+     *
+     * The checkpoint chain is told as well, since it records what each line
+     * wrote and would otherwise put the name back on the next restore.
+     *
+     * Only variable names. The key space also holds category tags, globals,
+     * data sources and line positions, and none of those is a VM binding; a
+     * prefix is what tells them apart, and a variable's key is the bare name.
+     *
+     * @param orphaned - Keys the graph reports as no longer written by any line.
+     */
+    /**
+     * Forget a name the graph says no line writes any more.
+     *
+     * Reported by {@link DependencyGraph.registerLine} and its `removeLine` when
+     * the line that wrote a key stops doing so and no other line writes it. The
+     * VM's variable store only ever accumulated, so the value outlived the line:
+     * deleting `:x = 12` left `x + 4` answering `16` for the rest of the
+     * session.
+     *
+     * The graph is not the authority here, the document is, and for two
+     * ordering reasons. A line holding several inline expressions registers once
+     * per expression, so the one that defines a name is followed by one that
+     * does not, and the graph would report an orphan mid-line; the document
+     * holds the line's aggregate write set and does not. And a structural edit
+     * clears the graph, so afterwards it would call every name undefined. A
+     * line's recorded write set survives both, and is up to date for the line
+     * being registered, because a pass stores the line's results before it
+     * registers its edges.
+     *
+     * Answering here rather than at the end of the pass is what lets the lines
+     * BELOW the edit see it on the same pass rather than the next one.
+     *
+     * The checkpoint chain is told as well, since it records what each line
+     * wrote and would otherwise put the name back on the next restore.
+     *
+     * Only variable names: the key space also holds category tags, globals,
+     * data sources and line positions, and none of those is a VM binding.
+     *
+     * @param orphaned - Keys that just lost their last writer in the graph.
+     */
+    forgetOrphanedNames(orphaned: readonly string[]): void {
+        if (orphaned.length === 0) return;
+        for (const key of orphaned) {
+            if (!isPrefixedEdgeKey(key)) (this.orphanCandidates ??= new Set()).add(key);
+        }
+    }
+
+    /**
+     * Decide the candidates: forget the ones no line defines any more.
+     *
+     * Asked once, at the end of a pass, because deciding as each line registers
+     * cannot work. A line holding several inline expressions registers once per
+     * expression, so the one that defines a name is followed by one that does
+     * not; and the engine registers a line before the pass records that line's
+     * results, so its recorded write set is a pass behind. Both would answer
+     * wrongly mid-pass. At the end of one, every line has registered and the
+     * document is current.
+     *
+     * The document is the authority, not the graph: a structural edit clears
+     * the graph, and a viewport leaves the lines outside it unregistered, while
+     * a line's recorded write set survives both.
+     *
+     * The reader of a forgotten name updates on the following pass, which an
+     * editor makes anyway. It is not made to happen sooner because every way of
+     * doing that answers the question before it can be answered correctly.
+     */
+    settleOrphanedNames(): void {
+        const candidates = this.orphanCandidates;
+        if (candidates === null || candidates.size === 0) return;
+        this.orphanCandidates = null;
+        const doc = this.documentModel;
+        // Without a document there is no authority on what defines what.
+        // `evaluateExpression` reuses line numbers across independent calls, and
+        // variables accumulating across them is that path's whole contract.
+        if (doc === null) return;
+
+        const stillDefined = new Set<string>();
+        const lineCount = doc.lineCount;
+        for (let position = 1; position <= lineCount; position++) {
+            const state = doc.getLineAt(position);
+            if (state === undefined) continue;
+            for (const written of state.writes) {
+                if (candidates.has(written)) stillDefined.add(written);
+            }
+        }
+
+        const forgotten: string[] = [];
+        for (const name of candidates) {
+            if (stillDefined.has(name)) continue;
+            forgotten.push(name);
+            this.vm.deleteVar(name);
+        }
+        this.batcher.checkpointer?.forget(forgotten);
+    }
+
+
+
     private registerLineWithTags(lineNumber: number, text: string, reads: string[], writes: string[]): void {
         const edges = withTagEdges(text, reads, writes);
-        this.dag.registerLine(lineNumber, edges.reads, edges.writes);
+        this.forgetOrphanedNames(this.dag.registerLine(lineNumber, edges.reads, edges.writes));
     }
 
     /**

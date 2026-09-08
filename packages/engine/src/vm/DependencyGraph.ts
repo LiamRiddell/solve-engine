@@ -64,6 +64,21 @@ export function linePositionEdgeKey(lineNumber: number): string {
 	return edgeKey("line", String(lineNumber));
 }
 
+/**
+ * Whether a key belongs to one of the prefixed kinds rather than to a variable.
+ *
+ * A variable's key is the bare name, so anything carrying a prefix is a
+ * category tag, a global, a data source or a line position. A caller acting on
+ * a key as though it were a variable name asks this first.
+ */
+export function isPrefixedEdgeKey(key: string): boolean {
+	for (const kind in KIND_PREFIX) {
+		const prefix = KIND_PREFIX[kind as EdgeKind];
+		if (prefix !== "" && key.startsWith(prefix)) return true;
+	}
+	return false;
+}
+
 /** The key a data source's query takes, so a line can depend on one query rather than a whole source. */
 export function dataSourceEdgeKey(dataSourceId: string, queryKey: readonly string[]): string {
 	return edgeKey("datasource", `${dataSourceId}:${JSON.stringify(queryKey)}`);
@@ -93,6 +108,15 @@ const NO_LINES: ReadonlySet<number> = new Set<number>();
 
 /** The empty key set, for the same reason as {@link NO_LINES}. */
 const NO_KEYS: ReadonlySet<string> = new Set<string>();
+
+/**
+ * Returned when a registration orphaned nothing, which is nearly every one.
+ *
+ * A line stops writing a name only when it is edited into something else or
+ * deleted, so allocating an array per registration to say "none" would be a
+ * per-line cost for a per-session event.
+ */
+const NO_ORPHANS: readonly string[] = [];
 
 /**
  * Dependency graph for variable and data-source tracking across document lines.
@@ -191,7 +215,7 @@ export class DependencyGraph {
    * @param reads - Variable names this line reads
    * @param writes - Variable names this line writes (assigns to)
    */
-   registerLine(lineNumber: number, reads: string[], writes: string[]): void {
+   registerLine(lineNumber: number, reads: string[], writes: string[]): readonly string[] {
      // Almost no document reads a data source, and `size` is a field read where
      // `get` is a hash of the line number, so the common case never pays for
      // the lookup at all.
@@ -213,7 +237,7 @@ export class DependencyGraph {
      // Deliberately conservative. Duplicate names in `reads` make the stored
      // set smaller than the array, and the comparison simply fails and falls
      // through to the full path, which is correct either way.
-     if (this.hasSameEdges(oldReads, oldWrites, reads, writes, pinned)) return;
+     if (this.hasSameEdges(oldReads, oldWrites, reads, writes, pinned)) return NO_ORPHANS;
 
      // Clean up old consumer references if re-registering this line. A pinned
      // read (a data source, discovered at run time rather than from the text)
@@ -229,10 +253,21 @@ export class DependencyGraph {
      // Old writes leave the producer index for the same reason: this line may
      // no longer be in the group it was in. Without this a deleted `#food` on
      // an edited line would leave the line a member for ever.
+     //
+     // A key this line has stopped writing, and that no other line writes, is
+     // now defined by nothing, and the caller is told so: the value has to leave
+     // the VM too, or a line reading the name goes on answering with it long
+     // after the line that defined it stopped saying so.
+     let orphaned: string[] | null = null;
      if (oldWrites) {
        for (const oldWrite of oldWrites) {
          const producers = this.producers.get(oldWrite);
-         if (producers) producers.delete(lineNumber);
+         if (producers === undefined) continue;
+         producers.delete(lineNumber);
+         if (producers.size === 0 && !writes.includes(oldWrite)) {
+           this.producers.delete(oldWrite);
+           (orphaned ??= []).push(oldWrite);
+         }
        }
      }
 
@@ -284,6 +319,8 @@ export class DependencyGraph {
        this.writes.delete(lineNumber);
        this.dependencies.delete(lineNumber);
      }
+
+     return orphaned ?? NO_ORPHANS;
    }
 
   /**
@@ -668,7 +705,7 @@ export class DependencyGraph {
    *
    * @param lineNumber - The line number being removed
    */
-  removeLine(lineNumber: number): void {
+  removeLine(lineNumber: number): readonly string[] {
      // Remove from consumers of variables this line read, O(k) not O(V)
      const reads = this.lineReads.get(lineNumber);
      if (reads) {
@@ -682,10 +719,19 @@ export class DependencyGraph {
      // Remove from the producers of everything this line wrote, so a deleted
      // line stops being a member of its groups. O(k) via the line's own write
      // set, the same shape as the read cleanup above.
+     // Every key this line wrote loses a writer, and a key with none left is
+     // defined by nothing: the caller is told, so the value can leave the VM.
+     let orphaned: string[] | null = null;
      const writes = this.writes.get(lineNumber);
      if (writes) {
        for (const key of writes) {
-         this.producers.get(key)?.delete(lineNumber);
+         const producers = this.producers.get(key);
+         if (producers === undefined) continue;
+         producers.delete(lineNumber);
+         if (producers.size === 0) {
+           this.producers.delete(key);
+           (orphaned ??= []).push(key);
+         }
        }
      }
 
@@ -705,6 +751,8 @@ export class DependencyGraph {
          this.lastPositionReads = null;
        }
      }
+
+     return orphaned ?? NO_ORPHANS;
    }
 
   /**

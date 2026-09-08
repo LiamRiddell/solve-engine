@@ -341,6 +341,26 @@ export class VMCheckpointer {
 		return true;
 	}
 
+	/**
+	 * Drop `names` from every checkpoint, as though no line had ever set them.
+	 *
+	 * A checkpoint records what its line wrote, so a name whose defining line
+	 * has been deleted or edited into something else is still in the chain, and
+	 * the next restore would put it back into the VM after the VM had been told
+	 * to forget it. The two have to agree.
+	 *
+	 * @param names - The names no line defines any more.
+	 */
+	forget(names: readonly string[]): void {
+		if (names.length === 0) return;
+		for (const checkpoint of this.checkpoints) {
+			for (const name of names) {
+				delete checkpoint.variables[name];
+				delete checkpoint.functions[name];
+			}
+		}
+	}
+
 	// ── Queries ──────────────────────────────────────────────────────
 
 	/**
