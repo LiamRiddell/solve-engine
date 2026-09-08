@@ -40,7 +40,9 @@ the first-undefined-name wording, a clean heading withdrawing nothing across fou
 passes, a unit definition edited into a heading, and a unit surviving a delete
 above it before going with its own line.
 
-Found by the same differential fuzz, and it closes it: over 3,200 whole-document
-comparisons across 400 random editing sessions, the incremental evaluator now
-agrees with a settled pass on every line, with no disagreement of any kind
-remaining.
+Found by the same differential fuzz, and it closes it. Across 2,000 random
+editing sessions and 19,200 whole-document comparisons the incremental evaluator
+now agrees with a settled pass on every line, with no disagreement of any kind
+remaining, where the run that found this one reported seven.
+
+9,315 tests in 469 suites.
