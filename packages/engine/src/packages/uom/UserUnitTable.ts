@@ -32,6 +32,15 @@ export interface UserUnitDefinition {
   readonly ratioText: string;
   /** The built-in unit the ratio is expressed in (e.g. `weeks`, `hours`). */
   readonly baseUnit: string;
+  /**
+   * The 1-based line that defined it, or -1 where the caller did not say.
+   *
+   * A definition belongs to a line, and the line can be deleted or edited into
+   * something else. Without knowing which line said it, the unit outlived the
+   * document: `1 sprint = 2 weeks` deleted, and `3 sprints in weeks` went on
+   * answering `6 weeks` for the rest of the session.
+   */
+  readonly definedAtLine: number;
 }
 
 /**
@@ -75,7 +84,7 @@ export class UserUnitTable {
    * of `baseUnit`. Re-defining a name overwrites the earlier definition, so a
    * corrected line wins over the one above it.
    */
-  define(nameWords: readonly string[], ratioText: string, baseUnit: string): boolean {
+  define(nameWords: readonly string[], ratioText: string, baseUnit: string, definedAtLine = -1): boolean {
     const key = pluralInsensitiveKey(nameWords);
     const previous = this.byKey.get(key);
     const changed = previous === undefined || previous.ratioText !== ratioText || previous.baseUnit !== baseUnit;
@@ -83,6 +92,7 @@ export class UserUnitTable {
       displayName: nameWords.join(" "),
       ratioText,
       baseUnit,
+      definedAtLine,
     });
     if (nameWords.length > this.longestName) this.longestName = nameWords.length;
     return changed;
@@ -103,6 +113,35 @@ export class UserUnitTable {
   }
 
   /** Drop every definition, called when a fresh document pass begins. */
+  /**
+   * Drop every definition made by `lineNumber`.
+   *
+   * Called before a line is compiled again, so a line that has stopped being a
+   * definition stops defining: if it still says the same thing, compiling it
+   * puts the unit straight back.
+   *
+   * `longestName` is left where it is. It only bounds a lookup scan, so a value
+   * that is too large costs a slightly wider scan and never a wrong answer,
+   * where recomputing it would cost a walk of the table on every recompile.
+   *
+   * @param lineNumber - The 1-based line whose definitions go.
+   * @returns Whether anything was removed.
+   */
+  undefineFrom(lineNumber: number): boolean {
+    let removed = false;
+    for (const [key, definition] of this.byKey) {
+      if (definition.definedAtLine !== lineNumber) continue;
+      this.byKey.delete(key);
+      removed = true;
+    }
+    return removed;
+  }
+
+  /** Every registered name, for telling whether a pass removed one. */
+  get names(): string[] {
+    return [...this.byKey.keys()];
+  }
+
   clear(): void {
     this.byKey.clear();
     this.longestName = 0;
