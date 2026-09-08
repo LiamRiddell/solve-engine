@@ -139,6 +139,25 @@ describe("what a resolved data source re-runs", () => {
 		expect(updated).not.toContain(2);
 	});
 
+	test("a line reading the fetched line by position is re-run", async () => {
+		// `prev` under a line that just fetched a rate is reading the value that
+		// arrived, and says so with no variable involved. Before positional
+		// edges the graph had no way to name it.
+		const { dag, lineCache, vm, batcher, updated, line } = harness();
+
+		line(1, [], ["rate"], storeConstant(2, "rate"));
+		dag.registerLineDataSourceDependency(1, "currency", ["USD:EUR"]);
+		line(2, [], [], multiply("rate", 10));
+		dag.registerLinePositionDependency(2, 1);
+
+		vm.setVar("rate", numberValue(1));
+		arrive(batcher);
+		await settle();
+
+		expect(updated).toEqual([1, 2]);
+		expect(lineCache.getEntryForLine(2)?.result?.toNumber()).toBe(20);
+	});
+
 	test("a cycle between two readers does not stall the walk", async () => {
 		// The expansion is a fixed point over a graph a document can make
 		// cyclic, so it has to terminate on one.

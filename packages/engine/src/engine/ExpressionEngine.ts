@@ -593,13 +593,31 @@ export class ExpressionEngine {
         parsed: ParsedLine[] | null,
         lineNumber: number,
     ): LineExecutionContext {
-        return {
+        // Every positional form reads through this one closure: `prev`,
+        // `line 7`, a line range, the `above` aggregates and a table column all
+        // ask for another line's result by number. So recording the edge here
+        // covers all of them at once, and cannot drift as forms are added.
+        //
+        // Only on the incremental path. The batch pass rebuilds every line from
+        // scratch and has nothing that asks the graph what to re-run, so the
+        // registration there would be cost with no reader.
+        const dag = this.dag;
+        // Assigned before anything can call the closure below, which reads the
+        // line number the pass is currently on rather than the one this context
+        // was built for: one context serves a whole pass by mutation.
+        let context: LineExecutionContext;
+        const readLineResult = doc
+            ? (n: number) => {
+                  dag.registerLinePositionDependency(context.lineIndex, n);
+                  return doc.getLineAt(n)?.result ?? undefined;
+              }
+            : parsed
+              ? (n: number) => parsed[n - 1]?.result ?? undefined
+              : undefined;
+
+        context = {
             lineIndex: lineNumber,
-            getLineResult: doc
-                ? (n: number) => doc.getLineAt(n)?.result ?? undefined
-                : parsed
-                  ? (n: number) => parsed[n - 1]?.result ?? undefined
-                  : undefined,
+            getLineResult: readLineResult,
             isLineBoundary: doc
                 ? (n: number) => {
                       const state = doc.getLineAt(n);
@@ -654,6 +672,7 @@ export class ExpressionEngine {
                   ? (tag: string) => this.batchLinesCarryingTag(scan, tag)
                   : undefined,
         };
+        return context;
     }
 
     /**
