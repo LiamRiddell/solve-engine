@@ -219,6 +219,10 @@ export class ThreeTierEvaluator {
 			// top to bottom. (No-op when the document has no accumulators.)
 			this.reseedAccumulators();
 
+			// The units in scope before the pass, so one that disappears during
+			// it can be noticed.
+			const unitsBefore = this.engine.userUnitNames();
+
 			const lines: EvalLineResult[] = [];
 			const resultMap = new Map<number, Value[]>();
 			const tierCounts = { tier1: 0, tier2: 0, tier3: 0, skipped: 0 };
@@ -263,6 +267,16 @@ export class ThreeTierEvaluator {
 			// name the pass reported as possibly undefined can be decided. See
 			// `ExpressionEngine.settleOrphanedNames`.
 			this.engine.settleOrphanedNames();
+
+			// A user unit that was in scope when the pass began and is not now
+			// has to reach the lines that used it, since a unit is expanded
+			// while a line is compiled and those lines hold bytecode built
+			// around it. Compared rather than counted, so a line that redefines
+			// the same unit every pass does not invalidate for ever.
+			const unitsAfter = new Set(this.engine.userUnitNames());
+			if (unitsBefore.some((name) => !unitsAfter.has(name))) {
+				this.engine.invalidateForRemovedUserUnits();
+			}
 
 			return { lines, resultMap, tierCounts };
 		} finally {
@@ -515,6 +529,14 @@ export class ThreeTierEvaluator {
 				// Clean up DAG references for this line, and forget any name the
 				// deleted line was the last to define.
 				this.undefineOrphans(this.dag.removeLine(lineNum));
+				// A deleted line will never be compiled again, so it cannot drop
+				// its own definitions on the way through. Losing one reaches the
+				// lines that used it here rather than at the end of a pass,
+				// because this runs before the next pass begins and that
+				// comparison would see the unit already gone.
+				if (this.engine.undefineUserUnitsFrom(this.doc.getLineAt(lineNum)?.lineId ?? -1)) {
+					this.engine.invalidateForRemovedUserUnits();
+				}
 				// And its cached bytecode. The dependency graph was already
 				// pruned here; the LineCache was not, so a deleted line kept its
 				// entry until the whole cache was dropped on a document switch.
@@ -725,6 +747,7 @@ export class ThreeTierEvaluator {
 
 		// Skip empty/markdown-only lines
 		if (state.isEmpty || isEmptyLine(state.text)) {
+			this.deregisterIfDirty(state, lineNumber);
 			state.isEmpty = true;
 			this.doc.markClean(state.lineId);
 			return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
@@ -733,6 +756,7 @@ export class ThreeTierEvaluator {
 		// Extract all evaluable expressions (may be multiple inline solves)
 		const { expressions, inlineSolveCount } = this.extractExpressions(state);
 		if (expressions.length === 0) {
+			this.deregisterIfDirty(state, lineNumber);
 			state.isEmpty = true;
 			this.doc.markClean(state.lineId);
 			return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
@@ -765,6 +789,34 @@ export class ThreeTierEvaluator {
 
 		// Clean, not in viewport, or no bytecode → skip
 		return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
+	}
+
+	/**
+	 * A line edited into something with nothing to evaluate stops defining.
+	 *
+	 * A heading, a comment or a blank is skipped before anything is compiled, so
+	 * it never reached the registration that tells the graph what it writes, and
+	 * its old edges stood. Turning `:v3 = 19` into `# a heading` therefore left
+	 * `v3` defined for the rest of the session, and a line reading it went on
+	 * answering, or blamed the wrong name: `v3 * v0` reported `v0` as the
+	 * undefined one where a fresh pass reports `v3`.
+	 *
+	 * Registering it with no edges is what says so. Only when the line is dirty,
+	 * since a line that was already empty has nothing to withdraw, and its own
+	 * write set is dropped as part of registering nothing.
+	 *
+	 * Any unit it defined goes the same way, and for the same reason: a line
+	 * drops its own definitions as it is compiled again, which a line nothing
+	 * compiles never reaches. Whether that has to reach the lines that used the
+	 * unit is decided once at the end of the pass, by comparing the units in
+	 * scope before and after it.
+	 */
+	private deregisterIfDirty(state: LineState, lineNumber: number): void {
+		if (!state.dirty) return;
+		state.reads = [];
+		state.writes = [];
+		this.registerWithTags(lineNumber, [], []);
+		this.engine.undefineUserUnitsFrom(state.lineId);
 	}
 
 	/**
@@ -817,6 +869,21 @@ export class ThreeTierEvaluator {
 		inlineSolveCount: number,
 		baseResult: Omit<EvalLineResult, "tier" | "result" | "error">
 	): EvalLineResult {
+		// Whatever this line used to define, it does not any more until it says
+		// so again while being compiled below.
+		//
+		// Done here rather than while compiling, because compiling can be
+		// skipped: the bytecode cache is keyed by the expression's TEXT, so a
+		// line edited into something another line already says is a cache hit
+		// and never reaches the compiler. Editing the definition in
+		// `5 sprints in weeks` / `spent` / `1 sprint = 4 weeks` to `spent` is
+		// exactly that, and the unit survived the line that declared it.
+		//
+		// A line that still is a definition re-registers it as it compiles, and
+		// the pass compares the units in scope before and after itself, so
+		// dropping and re-adding the same one invalidates nothing.
+		this.engine.undefineUserUnitsFrom(state.lineId);
+
 		const allResults: Value[][] = [];
 		const allBytecodes: BytecodeProgram[] = [];
 		const allReads = new Set<string>();
