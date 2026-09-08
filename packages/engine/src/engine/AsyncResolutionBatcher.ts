@@ -3,6 +3,7 @@ import type { LineCache, LineCacheEntry } from "@solve-js/cache/LineCache";
 import { type Value, errorValue } from "@solve-js/vm/Value";
 import { executeBytecode } from "@solve-js/vm/VM";
 import type { VM } from "@solve-js/vm/OpRegistry";
+import type { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { normalizeUnknownError } from "@solve-js/errors/EngineError";
 import {
 	ExecutionPool,
@@ -156,6 +157,24 @@ export class AsyncResolutionBatcher {
 	 * not register async resolvers at all.
 	 */
 	onLineResult: ((lineNumber: number, value: Value) => void) | null = null;
+
+	/**
+	 * The checkpoint chain to rebuild variable state from, when there is one.
+	 *
+	 * A re-run reads whatever the VM currently holds, which after a full pass is
+	 * the state at the END of the document. That is the right answer only for a
+	 * name written once. `:x = <fetched>` above `:x = 99` left the fetched value
+	 * standing at every line below the redefinition, because the line that
+	 * redefines it was not itself affected and so was not re-run: a line reading
+	 * `x` below it answered with the value from the top of the document.
+	 *
+	 * With a chain, the batch is run as a sweep through the document instead:
+	 * restore to the line before the first affected one, then walk forward,
+	 * executing the affected lines and applying the recorded bindings of every
+	 * writing line passed on the way. Null leaves the previous behaviour exactly
+	 * as it was, which is what a host driving the batcher on its own gets.
+	 */
+	checkpointer: VMCheckpointer | null = null;
 
 	/**
 	 * Whether {@link warnIfUnwired} has already fired.
@@ -717,14 +736,52 @@ export class AsyncResolutionBatcher {
 	 * learns about it and stops showing a stale Pending state) and the loop
 	 * continues, one line's failure can no longer take out its neighbors.
 	 */
+	/**
+	 * Begin a sweep: put the VM into the state the document has just before the
+	 * earliest line about to be re-run.
+	 *
+	 * @param ordered - The lines about to run, in the order they will run.
+	 * @returns The sweep's position cursor, or null when there is nothing to do.
+	 */
+	private prepareSweep(ordered: number[]): { at: number } | null {
+		if (ordered.length === 0) return null;
+		let earliest = ordered[0];
+		for (let i = 1; i < ordered.length; i++) if (ordered[i] < earliest) earliest = ordered[i];
+		this.checkpointer!.restoreTo(earliest - 1);
+		return { at: earliest - 1 };
+	}
+
+	/**
+	 * Advance the sweep to `lineNumber`, applying every checkpoint passed.
+	 *
+	 * A line between two affected ones is not re-run, but if it defines
+	 * something it still governs what the lines below it read, so its recorded
+	 * bindings are put back as the sweep goes by. A line the sweep has already
+	 * passed is left alone: the batch runs producers before consumers, and going
+	 * backwards would undo a value one of them has just written.
+	 */
+	private sweepTo(sweep: { at: number }, lineNumber: number): void {
+		for (let position = sweep.at + 1; position < lineNumber; position++) {
+			this.checkpointer!.applyCheckpointAt(position);
+		}
+		if (lineNumber > sweep.at) sweep.at = lineNumber;
+	}
+
 	private reExecuteMainThread(
 		ordered: number[],
 		allQueryKeys: string[],
 		entryMap?: Map<number, LineCacheEntry | undefined>,
 	): number[] {
 		const updatedLineNumbers: number[] = [];
+		// With a chain, the batch runs as a sweep through the document: the
+		// prefix is restored once, and each writing line passed on the way is
+		// applied in turn, so a line re-run at position N sees the state that
+		// position actually has rather than the state the document ends in.
+		// See {@link checkpointer}.
+		const sweep = this.checkpointer !== null ? this.prepareSweep(ordered) : null;
 
 		for (const lineNumber of ordered) {
+			if (sweep !== null) this.sweepTo(sweep, lineNumber);
 			const entry = entryMap
 				? entryMap.get(lineNumber)
 				: this.lineCache.getEntryForLine(lineNumber);
@@ -753,6 +810,15 @@ export class AsyncResolutionBatcher {
 				}
 
 				if (result.type === "value") {
+					// The chain has to carry what this re-run wrote, or the next
+					// line swept past would restore the value from before it.
+					if (sweep !== null && entry.writeVariable !== null) {
+						// Updated in place, not re-snapshotted: `snapshot` drops
+						// the chain after the line, and the sweep is about to
+						// walk through exactly those entries to collect what the
+						// lines it is not re-running defined.
+						this.checkpointer!.updateCheckpointAt(lineNumber, [entry.writeVariable]);
+					}
 					entry.result = result.value;
 					this.warnIfUnwired();
 					this.onLineResult?.(lineNumber, result.value);
