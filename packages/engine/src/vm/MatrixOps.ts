@@ -329,11 +329,21 @@ function toIntegerRows(m: MatrixData): bigint[][] | null {
  * division is exactly divisible as a theorem, so every intermediate stays a
  * whole number and a singular matrix comes out as an exact `0n`.
  *
+ * A matrix with no rows has determinant `1`, the empty product, which is the
+ * convention the two other routes here already follow: their elimination loops
+ * do not run and they return the `1` they started from. This route ends by
+ * reading the last pivot, `rows[n - 1][n - 1]`, so without saying so it read
+ * `rows[-1]` and handed the host a raw `TypeError` wearing an engine error's
+ * clothes. No source can build such a matrix, since a literal `[]` is refused
+ * for having no shape, but the VM is reachable without the parser and its
+ * contract is that nothing escapes as an unexpected error.
+ *
  * @param rows - The matrix, row-major, which this mutates as its working copy.
  * @returns The determinant.
  */
 function integerDeterminant(rows: bigint[][]): bigint {
 	const n = rows.length;
+	if (n === 0) return 1n;
 	let previous = 1n;
 	let sign = 1n;
 

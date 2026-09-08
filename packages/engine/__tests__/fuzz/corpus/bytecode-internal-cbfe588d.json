@@ -1,0 +1,26 @@
+{
+	"id": "cbfe588d",
+	"seed": 995334103,
+	"generator": "bytecode",
+	"outcome": "internal",
+	"detail": "raw exception normalised to UNEXPECTED_ERROR: Cannot read properties of undefined (reading '-1')",
+	"found": "2026-09-08",
+	"shrinkSteps": 9,
+	"input": {
+		"kind": "bytecode",
+		"program": {
+			"opcodes": [
+				152,
+				0,
+				0,
+				51,
+				1,
+				1
+			],
+			"numbers": [],
+			"strings": []
+		}
+	},
+	"status": "fixed",
+	"note": "det of a 0x0 matrix. `isSquare` accepts it, and the integer route ended by reading `rows[n - 1][n - 1]`, so it read `rows[-1]` and leaked a TypeError. It returns the empty product, 1, which is what the numeric and symbolic routes already returned for the same matrix. No source can build one: a literal `[]` is refused for having no shape."
+}
