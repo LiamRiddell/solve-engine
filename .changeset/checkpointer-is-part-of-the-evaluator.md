@@ -79,13 +79,36 @@ millisecond on a document that is nothing but definitions, against a frame of
 about sixteen, and it buys an answer that does not change when the reader scrolls
 to it.
 
+## Two more the viewport path was hiding
+
+Rewinding the VM reached two faults that were latent while it never rewound.
+
+A `total += 5` line compiles to no bytecode, so a clean one cannot be re-run
+from cache and has to go back through the full pipeline. While the total simply
+stayed where the last pass left it that was harmless; restoring rewinds it, and
+a viewport containing the accumulator lines then had nothing to rebuild them
+from, so `spent += 10` / `spent += 20` / `spent` answered
+`Undefined variable: spent` on a scroll. A scroll re-seeds accumulators now, as
+a pass already did.
+
+And the sentence a definition answers with never goes through the VM's `HALT`,
+which is where a result is copied out of the Value arena, so the line was
+holding a slot the arena hands to a later one. `1 sprint = 2 weeks` read
+`sprint defined` after the pass that made it, and a number from four lines below
+it after the next, in the same object. The three places that produce such a
+sentence route through one helper that copies it while the arena is on. That one
+is not new: it behaves identically before this change, and the unit the line
+declares was never affected.
+
 ## Verification
 
-12 tests comparing an editor's behaviour against a single uninterrupted pass over
+15 tests comparing an editor's behaviour against a single uninterrupted pass over
 the same text, which is the answer with no re-running in it: every viewport in a
 document that redefines two names, scrolling back and forth, an edit inside a
 narrow viewport, editing a redefinition, inserting and deleting lines, a session
-of seven alternating edits and scrolls checked at every step, and the
-viewport-limited pass above. Four more pin the chain: an entry replaced in place,
+of seven alternating edits and scrolls checked at every step, the
+viewport-limited pass above, a running total surviving a scroll from two
+different viewports, and a definition and an equation each keeping their own
+sentence. Four more pin the chain: an entry replaced in place,
 the lines below it kept, every entry's parent being the entry before it, and the
 count holding through a partial pass.
