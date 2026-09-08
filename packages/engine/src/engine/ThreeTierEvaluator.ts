@@ -139,6 +139,15 @@ export class ThreeTierEvaluator {
 		this.checkpointer = checkpointer ?? null;
 		this.pageManager = new PageManager();
 
+		// The async batcher re-runs a handful of lines out of the document when
+		// a value arrives, against the same VM. Without the chain it reads what
+		// the last full pass left, which is the state at the END of the
+		// document, and a name written on more than one line is then wrong
+		// everywhere below its second definition. Sharing the chain lets it
+		// rebuild the state each line actually sits in. See
+		// `AsyncResolutionBatcher.checkpointer`.
+		if (this.checkpointer) this.engine.getBatcher().checkpointer = this.checkpointer;
+
 		// Lets the engine answer "what's line N's cached result" for
 		// cross-line features (prev/line<N>/aggregation) without owning
 		// document lifecycle itself. See ExpressionEngine.makeLineContext().

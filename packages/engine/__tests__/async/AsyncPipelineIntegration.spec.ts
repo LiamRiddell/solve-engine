@@ -646,11 +646,14 @@ describe("AsyncPipeline — AbortSignal", () => {
 // ══════════════════════════════════════════════════════════════════════════
 
 describe("AsyncPipeline — producer→consumer ordering", () => {
-	// SKIPPED: LOAD_VAR now throws on undefined variables. The batcher's
-	// re-execution path doesn't properly chain VM state between line executions
-	// — line 20's LOAD_VAR "x" throws because x wasn't persisted from line 10's
-	// STORE_VAR. Pre-existing batcher VM state bug, masked by old silent-0.
-	test.skip("should re-evaluate producers before consumers (topological order)", async () => {
+	// Was skipped while the batcher ordered its re-runs by asking the graph what
+	// each line read through a map only filled alongside a write set: line 20
+	// defines `y` so it answered, but the general case of a line that defines
+	// nothing did not, and the ordering was arbitrary. The expectation below was
+	// also written against the old silent-zero `LOAD_VAR`, so it asserted 10,
+	// the answer for an undefined `x`. Both are fixed: line 10 runs first and
+	// line 20 reads the 5 it stored.
+	test("should re-evaluate producers before consumers (topological order)", async () => {
 		const dag = new DependencyGraph();
 		const lc = new LineCache();
 		const vm = createVM(sharedOpRegistry, 200, 50000);
@@ -696,7 +699,8 @@ describe("AsyncPipeline — producer→consumer ordering", () => {
 
 		const entry20 = lc.getEntryForLine(20);
 		expect(entry20!.result.type).toBe(ValueType.Number);
-		expect(entry20!.result.value).toBe(10);
+		// 5 from line 10, plus 10. Not 10, which is what an undefined `x` gave.
+		expect(entry20!.result.value).toBe(15);
 	});
 
 	// SKIPPED: Same batcher VM state issue as above — LOAD_VAR throws when

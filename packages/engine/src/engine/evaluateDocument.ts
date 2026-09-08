@@ -30,6 +30,7 @@
 import type { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
+import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { findInlineSolvesInLine } from "@solve-js/engine/ExpressionEngineSafety";
 import { Value, ValueType } from "@solve-js/vm/Value";
 import type {
@@ -66,7 +67,11 @@ export function evaluateDocument(
 	doc.setDocument(input);
 	// The constructor wires the model onto the engine (engine.setDocumentModel),
 	// which is what makeLineContext reads to expose the re-run primitive.
-	const evaluator = new ThreeTierEvaluator(doc, engine);
+	// The chain the evaluator records as it goes, and the async batcher reads
+	// when a value arrives later. Without it a re-run of a few lines reads the
+	// variable state the document ENDS in rather than the state each line sits
+	// in, which is wrong for any name defined more than once.
+	const evaluator = new ThreeTierEvaluator(doc, engine, new VMCheckpointer(engine.getVM()));
 
 	try {
 		const lineCount = doc.lineCount;
