@@ -5,7 +5,7 @@
  * line and a key, and a kind is only a way of keeping those keys from colliding.
  * Adding a kind is adding a prefix, not a mechanism.
  */
-export type EdgeKind = "variable" | "global" | "tag" | "datasource";
+export type EdgeKind = "variable" | "global" | "tag" | "datasource" | "line";
 
 /**
  * The prefix each kind takes in the one key space.
@@ -21,6 +21,7 @@ const KIND_PREFIX: Readonly<Record<EdgeKind, string>> = {
 	global: "global:",
 	tag: "#",
 	datasource: "ds:",
+	line: "line:",
 };
 
 /**
@@ -31,6 +32,36 @@ const KIND_PREFIX: Readonly<Record<EdgeKind, string>> = {
  */
 export function edgeKey(kind: EdgeKind, name: string): string {
 	return KIND_PREFIX[kind] + name;
+}
+
+/**
+ * The positions one line has already been recorded as reading.
+ *
+ * A span and a set, rather than a set alone, because the reads that dominate
+ * are contiguous: an `above` aggregate walks every line back to its boundary
+ * on every pass, so the span answers "already recorded" with two integer
+ * comparisons where a set answered it with a hash. Anything outside the span
+ * falls into `sparse`, which is allocated only if something does.
+ */
+interface PositionsRead {
+	/** Lowest position recorded in the contiguous span. */
+	lo: number;
+	/** Highest position recorded in the contiguous span. */
+	hi: number;
+	/** Positions recorded outside the span, or null while there are none. */
+	sparse: Set<number> | null;
+}
+
+/**
+ * The key a line's position takes, so another line can depend on that position.
+ *
+ * `prev`, `line 7`, `sum(line 3 : line 9)` and the `above` aggregates all read
+ * a position rather than a name, which is the one thing the graph could not
+ * express. A reader takes an edge on each position it reads, so an edit or an
+ * arriving value at that position names it the way a variable already does.
+ */
+export function linePositionEdgeKey(lineNumber: number): string {
+	return edgeKey("line", String(lineNumber));
 }
 
 /** The key a data source's query takes, so a line can depend on one query rather than a whole source. */
@@ -97,6 +128,28 @@ export class DependencyGraph {
     * in the same {@link consumers} index; only the bookkeeping differs.
     */
    private pinnedReads: Map<number, Set<string>> = new Map();
+
+   /**
+    * line -> the positions it has already been recorded as reading.
+    *
+    * The same edges {@link consumers} holds under a `line:` key, kept as plain
+    * numbers so the repeat call that finds nothing new to record does not have
+    * to build the key to discover that. See
+    * {@link registerLinePositionDependency}.
+    */
+   private positionReads: Map<number, PositionsRead> = new Map();
+
+   /**
+    * The reader whose entry was looked up last, and that entry.
+    *
+    * An `above` aggregate records every line back to its boundary in one run,
+    * so the reader is the same for the whole burst and the map is asked for
+    * the same entry hundreds of times. One slot answers all but the first.
+    * Cleared wherever the map is, since a stale entry here would record edges
+    * against a line that no longer has any.
+    */
+   private lastPositionReader = -1;
+   private lastPositionReads: PositionsRead | null = null;
 
   /**
    * Whether this line already carries exactly these edges.
@@ -506,6 +559,94 @@ export class DependencyGraph {
   }
 
   /**
+   * Record that `lineNumber` read the result of line `dependsOnLine`.
+   *
+   * A positional read is discovered while the line runs, the same way a data
+   * source is, and for the same reason it is pinned: the next registration of
+   * this line recovers its edges from the text, where a position it reached
+   * for at run time does not appear.
+   *
+   * A line depending on itself is dropped rather than recorded, since it would
+   * be a cycle the ordering has to break and says nothing.
+   *
+   * @param lineNumber - 1-based line doing the reading
+   * @param dependsOnLine - 1-based line whose result it read
+   */
+  registerLinePositionDependency(lineNumber: number, dependsOnLine: number): void {
+    if (lineNumber === dependsOnLine) return;
+
+    // The repeat is the common case, and it is answered without a key.
+    //
+    // A positional read is recorded every time the line runs, and an `above`
+    // aggregate reads every line back to its boundary, so a document with a
+    // running total every twenty lines makes tens of thousands of these calls
+    // per pass and almost all of them describe an edge that already exists.
+    // Building `line:<n>` to find that out cost a string per call, which
+    // measured as more than half the cost of the whole pass on that shape.
+    let positions: PositionsRead | undefined;
+    if (this.lastPositionReader === lineNumber) {
+      positions = this.lastPositionReads as PositionsRead;
+    } else {
+      positions = this.positionReads.get(lineNumber);
+      this.lastPositionReader = lineNumber;
+      this.lastPositionReads = positions ?? null;
+    }
+    if (positions === undefined) {
+      positions = { lo: dependsOnLine, hi: dependsOnLine, sparse: null };
+      this.positionReads.set(lineNumber, positions);
+      this.lastPositionReads = positions;
+    } else if (dependsOnLine >= positions.lo && dependsOnLine <= positions.hi) {
+      return;
+    } else if (dependsOnLine === positions.hi + 1) {
+      positions.hi = dependsOnLine;
+    } else if (dependsOnLine === positions.lo - 1) {
+      positions.lo = dependsOnLine;
+    } else if (positions.sparse === null) {
+      positions.sparse = new Set([dependsOnLine]);
+    } else if (positions.sparse.has(dependsOnLine)) {
+      return;
+    } else {
+      positions.sparse.add(dependsOnLine);
+    }
+
+    const key = linePositionEdgeKey(dependsOnLine);
+
+    const existingPinned = this.pinnedReads.get(lineNumber);
+    if (existingPinned !== undefined) existingPinned.add(key);
+    else this.pinnedReads.set(lineNumber, new Set([key]));
+
+    const existingReads = this.lineReads.get(lineNumber);
+    if (existingReads === undefined) {
+      this.lineReads.set(lineNumber, new Set([key]));
+    } else {
+      // `registerLine` stores one set under both `lineReads` and
+      // `dependencies` when a line has no pinned key; this is the call that
+      // gives it one, so they part company here.
+      if (existingReads === this.dependencies.get(lineNumber)) {
+        this.dependencies.set(lineNumber, new Set(existingReads));
+      }
+      existingReads.add(key);
+    }
+
+    const existingConsumers = this.consumers.get(key);
+    if (existingConsumers !== undefined) existingConsumers.add(lineNumber);
+    else this.consumers.set(key, new Set([lineNumber]));
+  }
+
+  /**
+   * The lines that read the result of line `lineNumber`.
+   *
+   * What an edit to that line, or a value arriving on it, has to re-run beyond
+   * the readers of the names it defines.
+   *
+   * @param lineNumber - 1-based line whose readers are wanted
+   * @returns The lines reading that position, or an empty set if none
+   */
+  getAffectedLinesByPosition(lineNumber: number): ReadonlySet<number> {
+    return this.consumers.get(linePositionEdgeKey(lineNumber)) ?? NO_LINES;
+  }
+
+  /**
    * Find all lines affected by a data source update.
    *
    * When an async data source resolves (e.g., currency rate fetch completes),
@@ -557,6 +698,13 @@ export class DependencyGraph {
        this.writes.delete(lineNumber);
      }
      if (this.pinnedReads.size !== 0) this.pinnedReads.delete(lineNumber);
+     if (this.positionReads.size !== 0) {
+       this.positionReads.delete(lineNumber);
+       if (this.lastPositionReader === lineNumber) {
+         this.lastPositionReader = -1;
+         this.lastPositionReads = null;
+       }
+     }
    }
 
   /**
@@ -679,5 +827,8 @@ export class DependencyGraph {
     this.writes.clear();
     this.lineReads.clear();
     this.pinnedReads.clear();
+    this.positionReads.clear();
+    this.lastPositionReader = -1;
+    this.lastPositionReads = null;
   }
 }

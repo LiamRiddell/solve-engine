@@ -463,14 +463,20 @@ export class AsyncResolutionBatcher {
 		// not, until something else re-evaluated the document.
 		{
 			const queue = [...allAffected];
+			const reach = (line: number): void => {
+				if (allAffected.has(line)) return;
+				allAffected.add(line);
+				queue.push(line);
+			};
 			for (let head = 0; head < queue.length; head++) {
-				for (const key of this.dag.getWrites(queue[head])) {
-					for (const line of this.dag.getAffectedLines(key)) {
-						if (allAffected.has(line)) continue;
-						allAffected.add(line);
-						queue.push(line);
-					}
+				const line = queue[head];
+				for (const key of this.dag.getWrites(line)) {
+					for (const reader of this.dag.getAffectedLines(key)) reach(reader);
 				}
+				// And the lines that read this one by position rather than by
+				// name: `prev` under a line that just fetched a rate is reading
+				// the value that arrived, and says so with no variable involved.
+				for (const reader of this.dag.getAffectedLinesByPosition(line)) reach(reader);
 			}
 		}
 
