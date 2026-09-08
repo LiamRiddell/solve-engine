@@ -986,6 +986,16 @@ export class ThreeTierEvaluator {
 			this.doc.markDirty(state.lineId);
 		}
 
+		// ── Checkpoint after a line that writes ──
+		// Tier 1 does this for a line it compiled; a line running from cache
+		// writes the same names to the VM and has to record them the same way.
+		// Without it the chain has a hole wherever a clean line sits between
+		// two dirty ones, and `snapshot`'s re-run truncation would drop
+		// entries that nothing ever puts back.
+		if (this.checkpointer && state.writes.length > 0 && !anyFailed) {
+			this.checkpointer.snapshot(lineNumber, state.lineId, state.writes);
+		}
+
 		return {
 			...baseResult,
 			tier: EvalTier.Tier2,

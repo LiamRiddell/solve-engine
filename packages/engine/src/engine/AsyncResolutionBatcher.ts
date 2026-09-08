@@ -454,6 +454,26 @@ export class AsyncResolutionBatcher {
 			}
 		}
 
+		// Everything that reads what those lines write, and so on.
+		//
+		// The graph names the lines that read the data source itself. A line
+		// reading a variable one of them defines is a consumer of the value that
+		// just arrived, just at one remove, and was left showing the number from
+		// before the fetch: `:rate = 100 USD in EUR` updated and `rate * 2` did
+		// not, until something else re-evaluated the document.
+		{
+			const queue = [...allAffected];
+			for (let head = 0; head < queue.length; head++) {
+				for (const key of this.dag.getWrites(queue[head])) {
+					for (const line of this.dag.getAffectedLines(key)) {
+						if (allAffected.has(line)) continue;
+						allAffected.add(line);
+						queue.push(line);
+					}
+				}
+			}
+		}
+
 		if (allAffected.size === 0) {
 			// No lines affected, still notify listeners so UI can update
 			// (e.g., clear loading indicators).
@@ -531,7 +551,12 @@ export class AsyncResolutionBatcher {
 
 		// Second pass: build edges from producer → consumer.
 		for (const line of lines) {
-			const reads = this.dag.getDependencies(line);
+			// Every key the line reads, not only the ones recorded alongside a
+			// write set. `getDependencies` answers nothing for a line that
+			// defines nothing, which is exactly the line whose reads decide
+			// where it goes: `rate * 2` under the line that fetched `rate` was
+			// ordered before it and read the value from before the fetch.
+			const reads = this.dag.getReads(line);
 			for (const readVar of reads) {
 				const producer = producerOf.get(readVar);
 				if (producer !== undefined && producer !== line) {
