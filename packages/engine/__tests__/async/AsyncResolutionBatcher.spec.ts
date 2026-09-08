@@ -1545,17 +1545,19 @@ describe("AsyncResolutionBatcher — stream close", () => {
 		expect(reachedDone).toBe(true);
 	});
 
-	test("should replace _streamController with a fresh one after clearAll()", async () => {
+	test("should give a subscriber a fresh controller after clearAll()", async () => {
 		const { batcher } = freshBatcher();
 
+		batcher.getEventStream();
 		const controllerBefore = (batcher as any)._streamController;
 		expect(controllerBefore).not.toBeNull();
 
 		batcher.clearAll();
 
-		// The old controller is closed and a new stream/controller is created —
-		// the engine (and this batcher) survive clear(), so the batcher must
-		// keep emitting events for new subscribers.
+		// The old controller is closed and the stream dropped. The engine (and
+		// this batcher) survive clear(), so the batcher must still be able to
+		// emit to new subscribers, which is what asking again proves.
+		batcher.getEventStream();
 		const controllerAfter = (batcher as any)._streamController;
 		expect(controllerAfter).not.toBeNull();
 		expect(controllerAfter).not.toBe(controllerBefore);
@@ -1632,30 +1634,65 @@ describe("AsyncResolutionBatcher — stream close", () => {
 // ═══════════════════════════════════════════════════════════════════════
 // §13  Stream — Controller Lifecycle
 // ═══════════════════════════════════════════════════════════════════════
-// Tests the _streamController state machine: creation, attachment on
-// first read, null on cancel/close, and re-creation after engine rebuild.
+// Tests the _streamController state machine: creation on first use, null on
+// cancel/close, and re-creation after engine rebuild.
+//
+// The stream is built the first time anything needs one, not in the
+// constructor. A ReadableStream's start algorithm queues promise reactions,
+// so every engine used to pay for a stream it almost never read, and a host
+// constructing engines in a synchronous loop accumulated those microtasks
+// until the loop ended. What the tests below pin is that deferring it changed
+// nothing a consumer can see: an event emitted before anyone subscribed is
+// still waiting for whoever subscribes next.
 
 describe("AsyncResolutionBatcher — stream controller lifecycle", () => {
-	test("should create stream controller on construction", () => {
+	test("should not build a stream until something needs one", () => {
 		const { batcher } = freshBatcher();
 
-		// Controller is set during stream construction (start() callback runs)
-		// But start() is lazy — it runs on first reader attachment.
-		// The ReadableStream is constructed with a start callback, but
-		// start() only runs when a reader is acquired.
+		// Nothing has asked for events and nothing has emitted one, so there
+		// is no stream and no controller. This is the case that made the
+		// difference: almost every engine ever built is this one.
+		expect((batcher as any)._eventStream).toBeNull();
+		expect((batcher as any)._streamController).toBeNull();
+		expect(batcher.listenerCount).toBe(0);
+
+		batcher.getEventStream();
 		expect((batcher as any)._streamController).not.toBeNull();
 	});
 
-	test("should attach controller only once across multiple getEventStream() calls", () => {
+	test("should return the same stream and controller across getEventStream() calls", () => {
 		const { batcher } = freshBatcher();
 
+		const stream1 = batcher.getEventStream();
 		const controller1 = (batcher as any)._streamController;
-
-		// getEventStream() returns the same stream — same controller
-		batcher.getEventStream();
+		const stream2 = batcher.getEventStream();
 		const controller2 = (batcher as any)._streamController;
 
+		expect(stream1).toBe(stream2);
 		expect(controller1).toBe(controller2);
+	});
+
+	test("should keep an event emitted before anyone subscribed", async () => {
+		// The property that decides where the stream is built. It buffers up
+		// to its high-water mark with no reader attached, so a consumer that
+		// subscribes late still gets what it missed. Building the stream on
+		// first subscribe rather than on first use would have dropped exactly
+		// these events, which is why the emit path asks for it too.
+		const { batcher, dag, lc } = freshBatcher();
+		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
+		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(1), [], null));
+
+		batcher.add({ queryKey: "key", packageId: "pkg", signal: liveSignal(), isError: false });
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+		await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+		// Subscribing only now, after the event has already been emitted.
+		const reader = batcher.getEventStream().getReader();
+		const { done, value } = await reader.read();
+
+		expect(done).toBe(false);
+		expect(value).toBeDefined();
+		await reader.cancel();
 	});
 
 	test("should throw when getting a reader on a stream after previous reader cancelled", async () => {
@@ -1679,10 +1716,10 @@ describe("AsyncResolutionBatcher — stream controller lifecycle", () => {
 		dag.registerLineDataSourceDependency(1, "pkg", ["key"]);
 		lc.set(1, new LineCacheEntry(numberValue(0), buildSimpleBytecode(1), [], null));
 
-		// 1. Controller exists after construction
-		expect((batcher as any)._streamController).not.toBeNull();
+		// 1. No controller yet: nothing has needed the stream.
+		expect((batcher as any)._streamController).toBeNull();
 
-		// 2. Read an event — controller remains
+		// 2. Read an event — subscribing builds the stream, and it remains
 		const reader = batcher.getEventStream().getReader();
 		const readPromise = (async () => {
 			const { done, value } = await reader.read();
@@ -1701,20 +1738,27 @@ describe("AsyncResolutionBatcher — stream controller lifecycle", () => {
 		expect((batcher as any)._streamController).toBeNull();
 	});
 
-	test("should recreate controller after clearAll() and recover with new batcher", () => {
+	test("should hand a fresh stream to the next subscriber after clearAll()", () => {
 		const { batcher } = freshBatcher();
 
+		batcher.getEventStream();
 		const controllerBefore = (batcher as any)._streamController;
 		expect(controllerBefore).not.toBeNull();
 
 		batcher.clearAll();
-		// clearAll() closes the old stream and creates a fresh one so the
-		// surviving batcher keeps emitting events to new subscribers.
+		// clearAll() closes the old stream and drops it, so the surviving
+		// batcher hands a fresh one to the next subscriber rather than paying
+		// for a stream that a cleared engine may never use again.
+		expect((batcher as any)._streamController).toBeNull();
+
+		const stream = batcher.getEventStream();
+		expect(stream).toBeDefined();
 		expect((batcher as any)._streamController).not.toBeNull();
 		expect((batcher as any)._streamController).not.toBe(controllerBefore);
 
-		// New batcher = new stream + new controller
+		// New batcher = new stream + new controller, once it is asked for.
 		const { batcher: batcher2 } = freshBatcher();
+		batcher2.getEventStream();
 		expect((batcher2 as any)._streamController).not.toBeNull();
 	});
 });
