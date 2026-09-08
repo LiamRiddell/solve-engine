@@ -650,6 +650,27 @@ export class DocumentModel {
 	/**
 	 * Mark a line as clean (re-evaluated successfully).
 	 */
+	/**
+	 * Forget what a line answered, without forgetting the line.
+	 *
+	 * For a line whose answer was computed about a document that no longer
+	 * exists. Marking it dirty says it must run again; this says that until it
+	 * does, it has nothing to tell anyone who asks, which is the state a pass
+	 * over the text from scratch would be in.
+	 *
+	 * The bytecode is left alone. It is compiled from the line's own text, which
+	 * a structural edit does not change, and dropping it would recompile the
+	 * document for nothing.
+	 *
+	 * @param lineId - Persistent line identifier.
+	 */
+	forgetResult(lineId: number): void {
+		const state = this.lines.get(lineId);
+		if (!state) return;
+		state.result = null;
+		state.results = [];
+	}
+
 	markClean(lineId: number): void {
 		const state = this.lines.get(lineId);
 		if (state) {

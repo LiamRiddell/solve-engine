@@ -32,14 +32,25 @@ import { formatValue } from "@solve-js/format/FormatEngine";
 import type { DocumentCase, EditAction, Outcome } from "@tools/fuzz/FuzzCase";
 
 /**
- * How many passes each side gets before its answers are read.
+ * The most passes either side is given to stop changing its mind.
  *
- * Three, because the longest settling chain the generated shapes can build is
- * two hops (a definition removed, the name forgotten at the end of that pass,
- * the reader re-run on the next), and one spare pass costs almost nothing while
- * a run that is one short reports the engine's convergence as a bug.
+ * A cap, not a count. Both sides run until their answers stop moving, because
+ * a fixed number is a guess about the longest settling chain a generated
+ * document can build, and the guess was wrong: a forward reference resolves one
+ * hop per pass, so `line 4 + 4` above a `line 6 + 3` above a value needs three
+ * on its own, and a fixed three reported the oracle's own impatience as an
+ * engine bug.
+ *
+ * The editor side needs it just as much, and for the opposite reason: it
+ * accumulates passes across a session, so it is usually the more settled of the
+ * two, and comparing a settled editor against an unsettled oracle reports the
+ * difference between them rather than a fault in either.
+ *
+ * Twelve is far past anything the generated shapes need. Reaching it means the
+ * document does not settle at all, which is worth comparing anyway: two sides
+ * that both refuse to settle should at least refuse in the same way.
  */
-const PASSES = 3;
+const MAX_PASSES = 12;
 
 /** The line separator a document is joined on. Written this way so no editor strips it. */
 const NEWLINE = String.fromCharCode(10);
@@ -84,11 +95,34 @@ function settled(lines: string[]): string[] {
 	document.setDocument(lines.join(NEWLINE));
 	const evaluator = new ThreeTierEvaluator(document, new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
 	try {
-		for (let pass = 0; pass < PASSES; pass++) evaluator.evaluate({ startLine: 1, endLine: lines.length });
-		return answers(document, lines.length);
+		return runToStability(document, evaluator, lines.length);
 	} finally {
 		evaluator.terminateWorker();
 	}
+}
+
+/**
+ * Run passes until the answers stop changing, or the cap is reached.
+ *
+ * What "settled" means, in one place, so the two sides cannot be settled to
+ * different standards. Each pass is compared with the one before it, and the
+ * loop stops as soon as nothing moved: a document that is already still costs
+ * two passes to prove it.
+ *
+ * @param document - The document being evaluated.
+ * @param evaluator - Its evaluator.
+ * @param count - How many lines to read.
+ * @returns The answers once they stopped moving.
+ */
+function runToStability(document: DocumentModel, evaluator: ThreeTierEvaluator, count: number): string[] {
+	let previous: string[] = [];
+	for (let pass = 0; pass < MAX_PASSES; pass++) {
+		evaluator.evaluate({ startLine: 1, endLine: count });
+		const current = answers(document, count);
+		if (pass > 0 && current.every((answer, i) => answer === previous[i])) return current;
+		previous = current;
+	}
+	return previous;
 }
 
 /** Where a session and a settled pass first differ. */
@@ -151,7 +185,7 @@ function replayWith(
 	evaluator: ThreeTierEvaluator,
 	lines: string[],
 ): Disagreement | null {
-	evaluator.evaluate({ startLine: 1, endLine: lines.length });
+	runToStability(document, evaluator, lines.length);
 
 	for (const action of documentCase.actions) {
 		if (lines.length === 0) return null;
@@ -176,10 +210,8 @@ function replayWith(
 			evaluator.setViewport({ startLine: action.at, endLine: end });
 		}
 
-		for (let pass = 0; pass < PASSES; pass++) evaluator.evaluate({ startLine: 1, endLine: lines.length });
-
+		const got = runToStability(document, evaluator, lines.length);
 		const expected = settled(lines);
-		const got = answers(document, lines.length);
 		for (let i = 0; i < expected.length; i++) {
 			if (expected[i] === got[i]) continue;
 			return {
