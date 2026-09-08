@@ -804,12 +804,19 @@ export class ThreeTierEvaluator {
 	 * Registering it with no edges is what says so. Only when the line is dirty,
 	 * since a line that was already empty has nothing to withdraw, and its own
 	 * write set is dropped as part of registering nothing.
+	 *
+	 * Any unit it defined goes the same way, and for the same reason: a line
+	 * drops its own definitions as it is compiled again, which a line nothing
+	 * compiles never reaches. Whether that has to reach the lines that used the
+	 * unit is decided once at the end of the pass, by comparing the units in
+	 * scope before and after it.
 	 */
 	private deregisterIfDirty(state: LineState, lineNumber: number): void {
 		if (!state.dirty) return;
 		state.reads = [];
 		state.writes = [];
 		this.registerWithTags(lineNumber, [], []);
+		this.engine.undefineUserUnitsFrom(state.lineId);
 	}
 
 	/**
