@@ -75,14 +75,17 @@ export class UserUnitTable {
    * of `baseUnit`. Re-defining a name overwrites the earlier definition, so a
    * corrected line wins over the one above it.
    */
-  define(nameWords: readonly string[], ratioText: string, baseUnit: string): void {
+  define(nameWords: readonly string[], ratioText: string, baseUnit: string): boolean {
     const key = pluralInsensitiveKey(nameWords);
+    const previous = this.byKey.get(key);
+    const changed = previous === undefined || previous.ratioText !== ratioText || previous.baseUnit !== baseUnit;
     this.byKey.set(key, {
       displayName: nameWords.join(" "),
       ratioText,
       baseUnit,
     });
     if (nameWords.length > this.longestName) this.longestName = nameWords.length;
+    return changed;
   }
 
   /**

@@ -2566,14 +2566,29 @@ export class ExpressionEngine {
         // other construct that merely starts the same way.
         if (i !== tokens.length) return null;
 
-        this.userUnits.define(nameWords, ratioToken.value, baseToken.value);
+        const changed = this.userUnits.define(nameWords, ratioToken.value, baseToken.value);
         // A user unit is expanded at parse time, so the compiled bytecode for
         // any line using one depends on the definitions in scope, which the
         // cache key (the raw expression text) does not capture. A new or changed
         // definition therefore invalidates every cached program, so a later
         // `6 sprints` recompiles against this definition rather than a stale one.
         // Definition lines are rare, so this clear is not on any hot path.
-        this.clearCompiledCache();
+        //
+        // Only when the definition moved. This handler runs every time the line
+        // is compiled, which on the incremental path is every pass in which it
+        // is dirty, and invalidating unconditionally would dirty the document
+        // again on each of them: every pass would recompile every line for ever.
+        if (changed) {
+            this.clearCompiledCache();
+            // The engine's caches are keyed by expression text; the document
+            // keeps its own compiled program per line, and that copy is what
+            // the incremental evaluator runs. Clearing one without the other is
+            // why `1 sprint = 2 weeks` could be edited to `3 weeks` and the
+            // line below go on answering `6 weeks`: it was re-executing bytecode
+            // compiled against the old definition, and being clean, never asked
+            // for a new one.
+            this.documentModel?.invalidateAll();
+        }
         return stringValue(`${nameWords.join(' ')} defined`);
     }
 
