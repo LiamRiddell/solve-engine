@@ -124,7 +124,7 @@ export class AsyncResolutionBatcher {
 	 * Internal {@link ReadableStream} for async resolution events.
 	 * All events (lines-updated and error) are enqueued here.
 	 */
-	private _eventStream: ReadableStream<AsyncResolutionEvent>;
+	private _eventStream: ReadableStream<AsyncResolutionEvent> | null = null;
 
 	/**
 	 * Controller for the internal event stream. Set during stream
@@ -251,15 +251,14 @@ export class AsyncResolutionBatcher {
 		this.lineCache = lineCache;
 		this.vm = vm;
 		this.highWaterMark = highWaterMark;
-
-		this._eventStream = this.createEventStream();
 	}
 
 	/**
 	 * Create a fresh internal event stream and wire its controller.
-	 * Called from the constructor and again from clearAll() so the batcher
-	 * keeps emitting events after an engine clear, the engine instance
-	 * (and this batcher) live on across clear() calls.
+	 *
+	 * Called from {@link eventStream} on first use and again after clearAll(),
+	 * so the batcher keeps emitting events after an engine clear: the engine
+	 * instance (and this batcher) live on across clear() calls.
 	 */
 	private createEventStream(): ReadableStream<AsyncResolutionEvent> {
 		return new ReadableStream<AsyncResolutionEvent>({
@@ -270,6 +269,35 @@ export class AsyncResolutionBatcher {
 				this._streamController = null;
 			},
 		}, new CountQueuingStrategy({ highWaterMark: this.highWaterMark }));
+	}
+
+	/**
+	 * The event stream, built the first time anything needs one.
+	 *
+	 * It used to be built in the constructor, and a ReadableStream is not free
+	 * to build: its start algorithm queues promise reactions, so every engine
+	 * paid for a stream, and a host that constructs engines in a synchronous
+	 * loop accumulated one engine's worth of pending microtasks per engine
+	 * because nothing drained them until the loop ended. At roughly nine
+	 * kilobytes each that is ninety megabytes over ten thousand engines, for a
+	 * stream almost none of them ever read.
+	 *
+	 * Building it on first use rather than on first subscribe is what keeps the
+	 * behaviour identical. The stream buffers up to `highWaterMark` events with
+	 * no reader attached, so a consumer that subscribes after some events have
+	 * already flowed still receives them; deferring until {@link getEventStream}
+	 * would have dropped exactly those. So the emit path asks for it too, and
+	 * the engine that never resolves anything asynchronously and never
+	 * subscribes is the only one that never builds it, which is the case worth
+	 * optimising.
+	 *
+	 * A cancelled stream is not rebuilt: cancellation clears the controller but
+	 * leaves the stream itself in place, so the check below sees one and the
+	 * events go nowhere, which is what cancelling asked for.
+	 */
+	private eventStream(): ReadableStream<AsyncResolutionEvent> {
+		this._eventStream ??= this.createEventStream();
+		return this._eventStream;
 	}
 
 	// ── Public API ────────────────────────────────────────────────────
@@ -335,7 +363,7 @@ export class AsyncResolutionBatcher {
 	 *          items as the batcher processes async resolutions.
 	 */
 	getEventStream(): ReadableStream<AsyncResolutionEvent> {
-		return this._eventStream;
+		return this.eventStream();
 	}
 
 	/** Number of resolutions currently queued for the next flush. */
@@ -358,7 +386,9 @@ export class AsyncResolutionBatcher {
 	 * otherwise locked the stream) and not released it, `0` otherwise.
 	 */
 	get listenerCount(): number {
-		return this._eventStream.locked ? 1 : 0;
+		// Not through {@link eventStream}: asking how many consumers there are
+		// must not be the thing that creates the stream nobody asked for.
+		return this._eventStream?.locked ? 1 : 0;
 	}
 
 	/** Number of flushes that were actually dispatched to the worker pool. */
@@ -388,7 +418,9 @@ export class AsyncResolutionBatcher {
 			// Controller may already be closed or errored.
 		}
 		this._streamController = null;
-		this._eventStream = this.createEventStream();
+		// Dropped rather than replaced, so an engine that is cleared and never
+		// used again does not pay for a stream on the way out.
+		this._eventStream = null;
 
 		if (this.executionPool) {
 			this.executionPool.clear();
@@ -886,6 +918,10 @@ export class AsyncResolutionBatcher {
 			this._testCaptures.push(event);
 		}
 
+		// Builds the stream if this is the first event, so an event emitted
+		// before anyone subscribed is still buffered for whoever subscribes
+		// next, which is what an eagerly built stream gave for free.
+		this.eventStream();
 		if (this._streamController) {
 			try {
 				this._streamController.enqueue(event);

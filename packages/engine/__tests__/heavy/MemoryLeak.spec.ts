@@ -104,16 +104,19 @@ describe("Memory Leak Tests", () => {
 			// builds an engine with every built-in package, so the figure rises
 			// whenever a package is added, and it is about twice as large on CI as
 			// on a developer machine (measured: 11.9KB an engine here against
-			// 25.8KB there, for the same commit). What matters is the distance to
-			// the uncleared figure the next test pins, which is 286KB an engine:
-			// while a cleared engine is an order of magnitude below that, clear()
-			// is doing its job. 400MB over ten thousand iterations is 40KB each,
-			// which leaves that order of magnitude intact and does not go red for
-			// a package or a slower runner.
+			// 25.8KB there, for the same commit).
+			//
+			// It used to be read against the uncleared figure the next test pins,
+			// on the reasoning that a cleared engine an order of magnitude below an
+			// uncleared one meant clear() was doing its job. That comparison has
+			// nothing left to stand on: an uncleared engine now retains almost
+			// nothing either, so this is a plain ceiling on construction cost.
+			// 400MB over ten thousand iterations is 40KB each, which does not go
+			// red for a package or a slower runner.
 			checkMemoryGrowth("10K parseDocument + clear", beforeMB, afterMB, 10000, 400);
 		});
 
-		test("engines that are never cleared retain their document state", () => {
+		test("engines that are never cleared retain almost nothing", () => {
 			if (!hasMemoryTracking()) {
 				console.log("[Memory] Skipped: no process.memoryUsage");
 				return;
@@ -132,22 +135,27 @@ describe("Memory Leak Tests", () => {
 			const afterMB = getHeapMB();
 			const perIterationKB = ((afterMB - beforeMB) * 1024) / iterations;
 
-			// This is a characteristic of the package, not a passing grade. It is
-			// asserted so the number cannot drift silently, in either direction.
+			// This is a characteristic of the package, not a passing grade, and it
+			// is asserted so the number cannot drift silently. It has come down
+			// twice, and each time the bounds were revisited rather than kept:
 			//
-			// It was roughly 200KB per engine (285KB when last measured on main),
-			// against 8.2KB for one that never parsed, and this test said that if
-			// it ever dropped near the construction cost the retention had been
-			// fixed and the bounds should be revisited. That happened: gating the
-			// async preflight stopped a plain line allocating a cancellation
-			// controller and adding keystroke listeners, and an uncleared engine
-			// now retains about 15KB, under twice its construction cost. The
-			// bounds below sit around that: wide enough that ordinary churn in the
-			// package set does not trip them, narrow enough that a return of the
-			// old retention does.
+			// | when                                    | retained per uncleared engine |
+			// | ---                                     | ---                           |
+			// | originally                              | ~285KB                        |
+			// | after gating the async preflight        | ~15KB                         |
+			// | after deferring the event stream        | under 1KB                     |
+			//
+			// The last of those is why there is no lower bound any more. Most of
+			// what this measured was never document state: it was the promise
+			// reactions queued by building a ReadableStream per engine, which a
+			// loop like this one never yields to collect. With the stream built on
+			// first use, an engine nothing refers to is simply collected, and a
+			// lower bound would be asserting that some waste remains.
+			//
+			// The ceiling stays, and it is what catches a return of either of the
+			// two retentions above.
 			console.log(`[Memory:uncleared] ${perIterationKB.toFixed(1)}KB/engine retained`);
-			expect(perIterationKB).toBeGreaterThan(5);
-			expect(perIterationKB).toBeLessThan(60);
+			expect(perIterationKB).toBeLessThan(5);
 		});
 
 		test("10K evaluateLine iterations do not leak memory", () => {
