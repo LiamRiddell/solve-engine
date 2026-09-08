@@ -1,5 +1,138 @@
 # solve-engine
 
+## 2.38.17
+
+### Patch Changes
+
+- cf0189e: A line edited into a heading stops defining what it defined
+  
+  A heading, a comment or a blank line has nothing to evaluate, so the evaluator
+  skips it before anything is compiled. That is the right thing to do and it went
+  one step too far: a skipped line never reached the registration that tells the
+  dependency graph what it writes, so the edges it had before the edit stood. A
+  line that used to be a definition went on defining for the rest of the session.
+  
+  | document                     | action                  | before | now                     |
+  | ---                          | ---                     | ---    | ---                     |
+  | `:x = 12` / `x + 4`          | line 1 to `# a heading` | `16`   | `Undefined variable: x` |
+  | `:x = 12` / `x + 4`          | line 1 emptied          | `16`   | `Undefined variable: x` |
+  | `1 sprint = 3 weeks` / `3 sprints in weeks` | line 1 to `# a heading` | `9 weeks` | `Undefined` |
+  
+  A dirty line that turns out to have nothing to evaluate now registers writing
+  nothing, which is what withdraws the edges, and drops any unit it had defined.
+  Only a dirty one: a line that was already a heading has nothing to take back, and
+  re-registering every heading on every pass would cost a document its headings in
+  work each time.
+  
+  The wording of an error was the tell. `v3 * v0` with `v3` left standing gets past
+  its first name and reports `v0` as the undefined one, where a pass over the same
+  text reports `v3`. Both are errors and both look reasonable on their own, which
+  is exactly why a settled pass, rather than a plausible-looking answer, is what
+  the fuzzer compares against.
+  
+  A related fix rides with it: a user unit is now keyed by the persistent id of the
+  line that defined it rather than by the line's position. Positions move, so
+  deleting a line above a definition renumbered it and a removal keyed on where it
+  used to sit matched nothing.
+  
+  ## Verification
+  
+  7 new tests: a heading and an emptied line each leaving the readers undefined,
+  the first-undefined-name wording, a clean heading withdrawing nothing across four
+  passes, a unit definition edited into a heading, and a unit surviving a delete
+  above it before going with its own line.
+  
+  Found by the same differential fuzz, and it closes it. Across 2,000 random
+  editing sessions and 19,200 whole-document comparisons the incremental evaluator
+  now agrees with a settled pass on every line, with no disagreement of any kind
+  remaining, where the run that found this one reported seven.
+  
+  9,315 tests in 469 suites.
+- e60df59: A name whose defining line is gone reads as undefined
+  
+  The VM's variable store only ever accumulated. Nothing removed a binding when
+  the line that created it was deleted or edited into something else, so the value
+  outlived the document:
+  
+  | document            | action            | before | now                     |
+  | ---                 | ---               | ---    | ---                     |
+  | `:x = 12` / `x + 4` | delete line 1     | `16`   | `Undefined variable: x` |
+  | `:x = 12` / `x + 4` | line 1 to `5 + 5` | `16`   | `Undefined variable: x` |
+  
+  Both survived any number of further passes: nothing ever removed the name.
+  
+  The dependency graph already knew. It drops a line from the producers of a key
+  it no longer writes, so a key with no producers left is a name no line defines.
+  It reports those now, and the engine acts on them: the value leaves the VM, and
+  the checkpoint chain is told as well, since it records what each line wrote and
+  would otherwise put the name back on the next restore.
+  
+  The decision is made once, at the end of a pass, and made against the document
+  rather than the graph. Both halves of that are load-bearing. A line holding
+  several inline expressions registers once per expression, so the one that
+  defines a name is followed by one that does not; and the engine registers a line
+  before the pass records that line's results, so its recorded write set is a pass
+  behind. Either would answer wrongly mid-pass. And the graph itself cannot be
+  asked afterwards, because a structural edit clears it and a viewport leaves the
+  lines outside it unregistered, while a line's recorded write set survives both.
+  
+  The consequence is that the name is forgotten at the end of the pass that
+  removed its definition, so the lines that read it show their new answer on the
+  pass after that. An editor makes one anyway, and every way of making it sooner
+  answers the question before it can be answered.
+  
+  The boundary: without a document there is no such authority.
+  `evaluateExpression` reuses line numbers across independent calls, so
+  re-registering line 1 replaces its edges every time, and variables accumulating
+  across calls is that path's whole contract. It is unaffected.
+  
+  A user unit is not covered. `1 sprint = 2 weeks` lives in its own table rather
+  than the VM, and removing its line still leaves the unit defined; that needs the
+  table to know which line defined what, and is filed separately.
+  
+  ## Verification
+  
+  7 new tests: deleting the definition, editing it into something else, a name
+  another line still defines being kept, re-adding it bringing the name back, a
+  line holding several expressions keeping what it defines, the single-expression
+  path keeping its variables across calls, and a restore not putting a removed
+  name back. Found by a differential fuzz against a settled pass.
+- cf0189e: A unit whose defining line is gone stops converting
+  
+  `1 sprint = 2 weeks` registers a unit on the engine, and nothing removed it when
+  the line that said so was deleted or edited into something else. The conversions
+  below it went on working from a definition the document no longer contained:
+  
+  | document                                    | action              | before    | now         |
+  | ---                                         | ---                 | ---       | ---         |
+  | `1 sprint = 3 weeks` / `3 sprints in weeks` | delete line 1       | `9 weeks` | `Undefined` |
+  | the same                                    | line 1 to `:v = 47` | `9 weeks` | `Undefined` |
+  
+  A definition belongs to the line that made it now. A line drops its own
+  definitions on the way through being compiled again, so a line that has stopped
+  being a definition stops defining, and one that still says the same thing puts it
+  straight back. A deleted line never compiles again, so its definitions are
+  dropped as it goes.
+  
+  Losing a unit has to reach the lines that used it, because a unit is expanded
+  while a line is compiled and those lines hold bytecode built around it. That
+  invalidation is driven by comparing the units in scope before and after a pass
+  rather than by counting removals, and the difference matters: a line that
+  redefines the same unit on every pass removes and re-adds it every time, so
+  invalidating on the removal alone would recompile the document for ever.
+  
+  ## Verification
+  
+  6 new tests: editing the definition away, deleting it, a definition that has not
+  changed surviving five passes, re-adding it bringing the unit back, one
+  definition going while another stands, and the batch pass being unaffected.
+  
+  Found by a differential fuzz that drives random documents through random editor
+  actions and compares every line against a settled pass over the same text. It
+  was the last shape reported after the variable half was fixed: over 1,200
+  whole-document comparisons the disagreements went from 8 to 4, and the 4 that
+  remain are a different shape still being read.
+
 ## 2.38.16
 
 ### Patch Changes
