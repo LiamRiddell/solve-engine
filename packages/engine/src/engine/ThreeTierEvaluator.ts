@@ -987,7 +987,19 @@ export class ThreeTierEvaluator {
 			if (entry) {
 				allBytecodes.push(entry.bytecode);
 				for (const r of entry.readVariables) allReads.add(r);
-				if (entry.writeVariable) {
+				// A line that answered with an error defined nothing, whatever its
+				// compiled form says it would have written. The write set is what
+				// the end-of-pass settle asks whether a name is still defined by
+				// anyone, so a line claiming one it never assigned keeps a stale
+				// value alive: `solve line 5 for v1 = 22` cannot solve a line that
+				// is not there, and reported so, while still holding `v1` open long
+				// after the `:v1 = 44` that gave it a value had been edited away.
+				//
+				// A pending value still counts. It has not failed, it has not
+				// arrived, and forgetting the name while it loads would undefine it
+				// for every reader in the meantime.
+				const failed = value !== null && value.some((v) => v.type === ValueType.Error);
+				if (entry.writeVariable && !failed) {
 					allWrites.add(entry.writeVariable);
 					hasVariableDef = true;
 				}

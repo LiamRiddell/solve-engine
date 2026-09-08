@@ -97,6 +97,25 @@ const SHAPES: readonly LineShape[] = [
 	// A line reference, which reads one specific position.
 	(rng) => `line ${rng.range(1, 6)} + ${rng.range(1, 9)}`,
 
+	// A range, which reads a span of positions at once. The bounds are drawn
+	// independently and often the wrong way round, which is the point: a
+	// backwards or out-of-range span is a shape a host can ask for.
+	(rng) => `sum(line ${rng.range(1, 6)} : line ${rng.range(1, 8)})`,
+
+	// Goal seek, the one form that re-runs another line rather than reading
+	// it, and therefore the one whose staleness looks least like the others.
+	(rng) => `solve line ${rng.range(1, 8)} for v${rng.int(NAME_COUNT)} = ${rng.range(1, 60)}`,
+
+	// The three lines a markdown table is made of, and a column aggregate to
+	// read it. They are emitted independently, so most land alone, which is
+	// deliberate: a stray table row is not an expression, and what the engine
+	// does with one is worth comparing too. Occasionally they land in order
+	// and make a real table.
+	() => `| item | cost |`,
+	() => `| ---- | ---- |`,
+	(rng) => `| ${["rent", "food", "taxi"][rng.int(3)]} | ${rng.range(1, 400)} |`,
+	() => `sum of column "cost" above`,
+
 	// A user unit, defined on one line and used on another.
 	(rng) => `1 sprint = ${rng.range(1, 4)} weeks`,
 	(rng) => `${rng.range(1, 6)} sprints in weeks`,
@@ -105,6 +124,10 @@ const SHAPES: readonly LineShape[] = [
 	// compile to more than arithmetic.
 	(rng) => `${rng.range(1, 50)}% of ${rng.range(10, 400)}`,
 	(rng) => `${rng.range(1, 40)} km in miles`,
+	(rng) => `${rng.range(1, 255)} as hex`,
+	// A date literal rather than a date relative to now, so the answer stays a
+	// fixed function of the text.
+	(rng) => `2020-01-${String(rng.range(1, 28)).padStart(2, "0")} + ${rng.range(1, 60)} days`,
 
 	// The lines that evaluate to nothing. A heading is not filler here: it is
 	// the shape a line takes when someone edits an expression away, and it
