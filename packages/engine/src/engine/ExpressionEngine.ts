@@ -626,11 +626,25 @@ export class ExpressionEngine {
         let context: LineExecutionContext;
         const readLineResult = doc
             ? (n: number) => {
+                  // A line cannot read itself. Refused here rather than left to
+                  // the graph, which drops the self-edge as meaningless and
+                  // would then hand back the line's own previous result.
+                  //
+                  // From scratch that never came up: a line's result is not
+                  // there yet when it runs, so reading its own position gave
+                  // undefined and the line reported the error both paths
+                  // report. A structural edit is where it came up. `line 5 + 4`
+                  // sitting at position 4 is an ordinary reference, and an
+                  // insert above it leaves the same text at position 5, reading
+                  // itself, with a perfectly good value from when it meant
+                  // something else. It answered from that value, where a pass
+                  // over the same text reports the self-reference.
+                  if (n === context.lineIndex) return undefined;
                   dag.registerLinePositionDependency(context.lineIndex, n);
                   return doc.getLineAt(n)?.result ?? undefined;
               }
             : parsed
-              ? (n: number) => parsed[n - 1]?.result ?? undefined
+              ? (n: number) => (n === context.lineIndex ? undefined : (parsed[n - 1]?.result ?? undefined))
               : undefined;
 
         context = {

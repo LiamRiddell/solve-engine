@@ -671,6 +671,28 @@ export class DependencyGraph {
   }
 
   /**
+   * Every line that read some position's result, whichever position it was.
+   *
+   * For a structural edit, which changes what a position *means* rather than
+   * what any line says. Inserting a line moves everything below it, so `line 5`
+   * now names different text, `prev` names a different neighbour, and an
+   * `above` aggregate covers a different block, all without a character
+   * changing on the line that reads them.
+   *
+   * Deliberately not filtered by which positions moved. A reader whose target
+   * shifted has to re-run, and so does one that shifted past its own target and
+   * became a self-reference, and the second is not visible from the target
+   * alone. Positional readers are a small minority of a document's lines, so
+   * re-running all of them costs almost nothing and cannot be wrong.
+   *
+   * @returns The 1-based line numbers doing the reading, valid until the next
+   * structural change.
+   */
+  linesReadingAPosition(): Iterable<number> {
+    return this.positionReads.keys();
+  }
+
+  /**
    * The lines that read the result of line `lineNumber`.
    *
    * What an edit to that line, or a value arriving on it, has to re-run beyond
