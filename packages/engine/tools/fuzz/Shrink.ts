@@ -21,7 +21,7 @@
  * @module Shrink
  */
 
-import type { FuzzCase, Outcome, SerializedBody, SerializedProgram } from "@tools/fuzz/FuzzCase";
+import type { DocumentCase, FuzzCase, Outcome, SerializedBody, SerializedProgram } from "@tools/fuzz/FuzzCase";
 
 /**
  * Whether a candidate still reproduces the failure being shrunk.
@@ -61,12 +61,36 @@ export function sameFailure(a: Outcome, b: Outcome): boolean {
 	// (a missing value, an unreadable one) are different bugs, so the wording is
 	// what distinguishes them.
 	if (a.kind === "contract") return a.detail === b.detail;
+	// A disagreement has neither a code nor a thrown name, and reducing it must
+	// not be allowed to drift onto a different wrong answer, so the two answers
+	// themselves are what has to match. The line number is deliberately not part
+	// of it: dropping a line above the fault renumbers it without changing what
+	// went wrong, and requiring it to hold still would stop the shrink at the
+	// first useful reduction.
+	if (a.kind === "disagreement") return answersOf(a.detail) === answersOf(b.detail);
 	return true;
+}
+
+/**
+ * The two answers named in a disagreement's description, without the position.
+ *
+ * The description is built in one place ({@link runDocumentCase}) and always
+ * ends with the settled answer and the edited one, so reading them back out is
+ * cheaper and less brittle than threading a structured outcome through a
+ * protocol that has to survive JSON and a subprocess.
+ */
+function answersOf(detail: string): string {
+	const at = detail.indexOf(": a settled pass says ");
+	return at === -1 ? detail : detail.slice(at);
 }
 
 /** How big a case is, for reporting and for deciding when to stop. */
 export function caseSize(fuzzCase: FuzzCase): number {
 	if (fuzzCase.kind === "expression") return fuzzCase.source.length;
+	// A session is counted in lines and actions rather than characters. What
+	// makes a document reproduction hard to read is how many things are
+	// happening, not how long the lines are.
+	if (fuzzCase.kind === "document") return fuzzCase.lines.length + fuzzCase.actions.length;
 	return programSize(fuzzCase.program);
 }
 
@@ -208,8 +232,48 @@ function* sourceCandidates(source: string): Generator<string> {
 	yield source.trim();
 }
 
-/** Every smaller candidate for either kind of case. */
+/**
+ * Every smaller session worth trying, largest reduction first.
+ *
+ * Actions before lines, because dropping an action removes a whole step of the
+ * history and is what turns a ten-action session into the one edit that
+ * mattered. Lines come after, and removing one shifts every action below it,
+ * which is why the positions are renumbered here rather than left to the
+ * replay: an action left pointing at the old position is a different session,
+ * and a shrinker that quietly changes the case it is reducing proves nothing.
+ *
+ * A position never goes below one. Removing the first line would otherwise
+ * shift an action onto line zero, which is not a position a host can ask for.
+ */
+function* documentCandidates(fuzzCase: DocumentCase): Generator<DocumentCase> {
+	const { lines, actions } = fuzzCase;
+
+	for (let i = actions.length - 1; i >= 0; i--) {
+		yield { ...fuzzCase, actions: actions.filter((_, k) => k !== i) };
+	}
+
+	for (let i = lines.length - 1; i >= 0; i--) {
+		if (lines.length <= 2) break;
+		yield {
+			...fuzzCase,
+			lines: lines.filter((_, k) => k !== i),
+			actions: actions.map((action) => ({
+				...action,
+				at: Math.max(1, action.at > i ? action.at - 1 : action.at),
+			})),
+		};
+	}
+}
+
+/** Every smaller candidate for any kind of case. */
 function* candidates(fuzzCase: FuzzCase): Generator<FuzzCase> {
+	if (fuzzCase.kind === "document") {
+		const original = caseSize(fuzzCase);
+		for (const candidate of documentCandidates(fuzzCase)) {
+			if (caseSize(candidate) < original) yield candidate;
+		}
+		return;
+	}
 	if (fuzzCase.kind === "expression") {
 		for (const source of sourceCandidates(fuzzCase.source)) {
 			if (source.length < fuzzCase.source.length) yield { kind: "expression", source };

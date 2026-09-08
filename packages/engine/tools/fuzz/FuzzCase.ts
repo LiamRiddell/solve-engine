@@ -72,8 +72,44 @@ export interface ExpressionCase {
 	source: string;
 }
 
-/** Either kind of generated input. */
-export type FuzzCase = BytecodeCase | ExpressionCase;
+/**
+ * One thing an editor does to a document.
+ *
+ * The four are what a host actually performs, and they are not
+ * interchangeable: an edit leaves the line count alone, an insert and a delete
+ * renumber everything below them, and a viewport changes which lines run
+ * without changing the text at all. Bugs have hidden behind each of those
+ * distinctions, so a case records which one it meant rather than a diff.
+ */
+export interface EditAction {
+	/** Which of the four. */
+	kind: "edit" | "insert" | "delete" | "view";
+	/** The 1-based line it acts on. Clamped at replay, never by the generator. */
+	at: number;
+	/** The new text, for `edit` and `insert`. */
+	text?: string;
+	/** The last visible line, for `view`. */
+	end?: number;
+}
+
+/**
+ * A case that drives a document through an editing session.
+ *
+ * Where the other two carry an input, this carries a history: the text to
+ * start from, and the actions to perform on it. That is the point, since the
+ * failure it looks for is not a property of any one document but of how the
+ * engine arrived at it.
+ */
+export interface DocumentCase {
+	kind: "document";
+	/** The document to start from, one entry per line. */
+	lines: string[];
+	/** The editor actions to perform, in order. */
+	actions: EditAction[];
+}
+
+/** Any kind of generated input. */
+export type FuzzCase = BytecodeCase | ExpressionCase | DocumentCase;
 
 /**
  * How a case ended.
@@ -103,6 +139,17 @@ export type OutcomeKind =
 	| "contract"
 	/** Returned an EngineError whose code says a raw JS exception was caught and relabelled. */
 	| "internal"
+	/**
+	 * Answered a line differently from a pass over the same text.
+	 *
+	 * Only the document generator produces this, and it is the one outcome here
+	 * that is not about surviving: the engine returned, promptly, without
+	 * throwing, and gave a different answer than it gives when asked the same
+	 * question with no editing history behind it. For an engine whose promise is
+	 * one line, one expression, one answer, that is the worst kind of failure,
+	 * because nothing about it looks like one.
+	 */
+	| "disagreement"
 	/** Took longer than the soft budget but did finish. Reported, not failed. */
 	| "slow"
 	/** The process died. Only the parent can see this. */
@@ -126,7 +173,14 @@ export interface Outcome {
 }
 
 /** Outcomes that mean the case must be recorded and reported. */
-const FAILING: ReadonlySet<OutcomeKind> = new Set<OutcomeKind>(["throw", "contract", "internal", "crash", "hang"]);
+const FAILING: ReadonlySet<OutcomeKind> = new Set<OutcomeKind>([
+	"throw",
+	"contract",
+	"internal",
+	"disagreement",
+	"crash",
+	"hang",
+]);
 
 /**
  * Whether an outcome is a finding.

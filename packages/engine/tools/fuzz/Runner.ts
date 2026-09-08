@@ -21,6 +21,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { buildVocabulary, type Vocabulary } from "@tools/fuzz/Vocabulary";
 import { generateExpressionCase, generateSeedExpressions } from "@tools/fuzz/ExpressionFuzzer";
 import { buildMutationPool, generateBytecodeCase } from "@tools/fuzz/BytecodeFuzzer";
+import { generateDocumentCase } from "@tools/fuzz/DocumentFuzzer";
 import { runCase, type OracleOptions } from "@tools/fuzz/Oracle";
 import { isFailure, type FuzzCase, type Outcome } from "@tools/fuzz/FuzzCase";
 
@@ -30,7 +31,7 @@ import { isFailure, type FuzzCase, type Outcome } from "@tools/fuzz/FuzzCase";
 export { runCase } from "@tools/fuzz/Oracle";
 
 /** Which generator a run is exercising. */
-export type Generator = "bytecode" | "expression";
+export type Generator = "bytecode" | "expression" | "document";
 
 /** Parsed command line. */
 interface RunnerArgs {
@@ -224,6 +225,10 @@ export function buildRunContext(generator: Generator, slowMs: number, needsGener
  * @returns The case.
  */
 export function caseForSeed(generator: Generator, seed: number, context: RunContext): FuzzCase {
+	// The document generator draws only from its own shapes, so it needs no
+	// vocabulary and the check below would refuse a context that is complete
+	// for it. Asked first for that reason, not for speed.
+	if (generator === "document") return generateDocumentCase(seed);
 	if (!context.vocabulary) throw new Error("this context was built without generators");
 	if (generator === "expression") return generateExpressionCase(seed, context.vocabulary);
 	return generateBytecodeCase(seed, {

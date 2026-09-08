@@ -20,8 +20,8 @@
  * memory with it, and the parent restarts it and carries on from the next seed.
  *
  * Usage:
- *   npm run fuzz                                  both generators, random seeds
- *   npm run fuzz -- --generator=bytecode          one generator only
+ *   npm run fuzz                                  every generator, random seeds
+ *   npm run fuzz -- --generator=document          one generator only
  *   npm run fuzz -- --seed=12345 --count=50000    a specific run, reproducibly
  *   npm run fuzz -- --minutes=10                  run for a wall-clock budget
  *   npm run fuzz -- --no-save                     do not write to the corpus
@@ -49,7 +49,7 @@ for (const arg of process.argv.slice(2)) {
 }
 
 const options = {
-	generators: args.has("generator") ? [args.get("generator")] : ["bytecode", "expression"],
+	generators: args.has("generator") ? [args.get("generator")] : ["bytecode", "expression", "document"],
 	seed: args.has("seed") ? Number(args.get("seed")) : null,
 	count: Number(args.get("count") ?? 20000),
 	minutes: args.has("minutes") ? Number(args.get("minutes")) : 0,
@@ -139,6 +139,20 @@ async function buildRunner() {
  * Resolves with what the block produced, including the reason it stopped. The
  * caller decides whether to continue from the next seed.
  */
+/**
+ * How many cases a generator is asked for, when no wall clock bounds the run.
+ *
+ * The document generator replays a whole editing session and builds a settled
+ * oracle after every action, so one of its cases costs what thousands of
+ * expression cases cost. Asking it for the same count would turn a bare
+ * `npm run fuzz` into an overnight job, which is not what anyone typing that
+ * expects. A scheduled soak passes `--minutes` and is bounded by the clock
+ * instead, where this ceiling never binds.
+ */
+function countFor(generator) {
+	return generator === "document" ? Math.min(options.count, 400) : options.count;
+}
+
 function runBlock(runner, generator, seed, count, heartbeatFile) {
 	return new Promise((resolve) => {
 		try {
@@ -372,6 +386,13 @@ function observedFailureDetail(kind, generator, result) {
 function describeCase(fuzzCase) {
 	if (!fuzzCase) return "(unknown)";
 	if (fuzzCase.kind === "expression") return JSON.stringify(fuzzCase.source);
+	if (fuzzCase.kind === "document") {
+		const actions = fuzzCase.actions.map((a) =>
+			a.kind === "view" ? `view(${a.at}-${a.end})` :
+			a.kind === "delete" ? `delete(${a.at})` :
+			`${a.kind}(${a.at},${JSON.stringify(a.text ?? "")})`).join(" ");
+		return `${fuzzCase.lines.length} lines: ${JSON.stringify(fuzzCase.lines)} then ${actions}`;
+	}
 	const { opcodes, numbers, strings } = fuzzCase.program;
 	const head = opcodes.slice(0, 24).join(",");
 	return `opcodes=[${head}${opcodes.length > 24 ? ",..." : ""}] (${opcodes.length}) numbers=${numbers.length} strings=${strings.length}${fuzzCase.origin ? ` from ${JSON.stringify(fuzzCase.origin)}` : ""}`;
@@ -383,6 +404,15 @@ async function main() {
 	const runner = await buildRunner();
 	const heartbeatFile = path.join(os.tmpdir(), `solve-fuzz-heartbeat-${process.pid}.json`);
 	const deadline = options.minutes > 0 ? Date.now() + options.minutes * 60_000 : Infinity;
+	// A share of the budget each, rather than one deadline they queue behind.
+	// The generators cost wildly different amounts per case (a document case
+	// replays a whole editing session and builds a settled oracle after every
+	// action, so it is worth thousands of expression cases), and with a single
+	// deadline the cheap generator at the front of the list spends the whole
+	// run and the expensive one at the back never starts.
+	const perGenerator = options.minutes > 0
+		? (options.minutes * 60_000) / options.generators.length
+		: Infinity;
 	const startSeed = options.seed ?? ((Date.now() ^ (process.pid * 2654435761)) >>> 0) % 1_000_000_000;
 
 	const { makeEntry, saveEntry, caseId, failureSignature, knownOpenSignatures, loadCorpus } = await loadCorpusModule();
@@ -406,11 +436,15 @@ async function main() {
 
 	console.log(`fuzzing from seed ${startSeed}, ${options.count} cases per generator per block, heap ${options.heapMb}MB`);
 
-	for (const generator of options.generators) {
+	for (const [index, generator] of options.generators.entries()) {
 		let seed = startSeed;
-		let remaining = options.count;
+		let remaining = countFor(generator);
+		// Measured from when this generator starts rather than carved out of the
+		// clock in advance, so a generator that runs out of cases early hands the
+		// rest of the run back instead of leaving a hole in it.
+		const share = perGenerator === Infinity ? Infinity : Date.now() + perGenerator;
 
-		while (remaining > 0 && Date.now() < deadline) {
+		while (remaining > 0 && Date.now() < Math.min(deadline, share)) {
 			// Blocks are bounded so that a crash costs at most one block's worth
 			// of progress, and so that a leak in the engine or in V8 itself
 			// cannot accumulate across a whole run and be blamed on one case.
