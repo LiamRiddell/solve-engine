@@ -19,6 +19,14 @@ updates:
       # on its own branch, not as a side effect of a weekly bump.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # `convert` is here to be compared against, not to be used. The engine's
+      # unit tables were ported from version 7, and
+      # `__tests__/uom/ConvertParity.spec.ts` asserts bit-exact agreement with
+      # that version across 1,450 spellings, so an upgrade does not improve the
+      # comparison, it replaces the thing being compared to. Version 8 also
+      # moves the entry points the spec imports, which is how this surfaced.
+      # The dependency leaves when that spec does, not before.
+      - dependency-name: "convert"
 
   - package-ecosystem: npm
     directory: "/playground"

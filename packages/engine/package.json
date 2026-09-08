@@ -241,10 +241,10 @@
     "@tanstack/query-core": "^5.102.8"
   },
   "devDependencies": {
-    "@jest/globals": "^30.5.0",
-    "@types/node": "^26.4.0",
+    "@jest/globals": "^30.5.1",
+    "@types/node": "^26.4.1",
     "convert": "^7.0.0",
-    "jest": "^30.5.0",
+    "jest": "^30.5.1",
     "temporal-polyfill": "1.0.4",
     "ts-jest": "^29.4.12",
     "tsup": "8.5.1",
