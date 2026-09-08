@@ -595,6 +595,26 @@ export class DependencyGraph {
   }
 
   /**
+   * Every key a line reads, whether or not it writes anything.
+   *
+   * {@link getDependencies} answers this only for a line that writes, because
+   * the map behind it is filled alongside the write set. That makes it the
+   * wrong question to ask when ordering a set of lines: a line that reads a
+   * name and defines nothing is exactly the line whose reads say where it has
+   * to come, and it answered with nothing. The batcher ordered such a line
+   * before the line producing what it read for that reason.
+   *
+   * Includes any data-source key the line was pinned to, since that is a read
+   * of the line like any other.
+   *
+   * @param lineNumber - The line number to query
+   * @returns The keys this line reads, or an empty set if none
+   */
+  getReads(lineNumber: number): ReadonlySet<string> {
+    return this.lineReads.get(lineNumber) ?? NO_KEYS;
+  }
+
+  /**
    * Get all variables that a line writes (assigns to).
    *
    * @param lineNumber - The line number to query
