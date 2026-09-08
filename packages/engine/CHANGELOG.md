@@ -1,5 +1,165 @@
 # solve-engine
 
+## 2.38.18
+
+### Patch Changes
+
+- a69fcf5: Constructing an engine no longer builds an event stream nobody asked for
+  
+  `AsyncResolutionBatcher` created its `ReadableStream` in its constructor, so
+  every engine built one whether or not anything ever read it. A `ReadableStream`
+  is not free to build: its start algorithm queues promise reactions, and those
+  are only collected once the host yields to the microtask queue. A host that
+  builds engines in a synchronous loop, a batch job, a test suite, a server
+  rendering many documents in one turn, never yields, so the reactions accumulated
+  for the length of the loop.
+  
+  | engines built in one synchronous loop | before  | now    |
+  | ---                                   | ---     | ---    |
+  | retained per engine                   | 12.5 KB | 0.1 KB |
+  | 6,400 engines                         | 78 MB   | 0.8 MB |
+  
+  Measured with `--expose-gc`, forcing a collection either side, so the figures
+  are what survives collection rather than what has yet to be collected.
+  
+  The stream is built on first use now, and *use* is deliberately wider than
+  *subscribe*. The stream buffers up to its high-water mark with no reader
+  attached, so a consumer that subscribes after some events have already flowed
+  still receives them. Building it only when someone subscribes would have dropped
+  exactly those, so the emit path asks for it too. An engine that never resolves
+  anything asynchronously and never subscribes is the only one that never builds
+  it, which is nearly all of them.
+  
+  Nothing about delivery changed: the same events reach the same consumers in the
+  same order, a cancelled stream is still not rebuilt, and `clear()` still leaves
+  the batcher able to serve a new subscriber. `listenerCount` answers without
+  building a stream to answer with, since it is asked by hosts deciding whether to
+  subscribe at all.
+  
+  ## Verification
+  
+  6 new tests asserting an engine builds no stream on construction, none after an
+  ordinary expression, one as soon as a consumer asks, the same one every time, a
+  listener count that does not create one, and a thousand engines in a synchronous
+  loop leaving no streams behind. The batcher's own 67 stream and delivery tests
+  cover the behaviour that had to stay the same, including a subscriber that
+  arrives after the event it wants.
+  
+  Found by a differential fuzz of the incremental evaluator: it constructs an
+  engine per case and died of this on a 256 MB heap.
+- 0095ab0: The fuzzer can now edit a document and check the answers
+  
+  The two generators the fuzzer had both ask the same kind of question: does the
+  engine survive this input. They corrupt an opcode stream, or write a line of
+  source, and a run passes when nothing crashed, hung or threw. Neither can catch
+  the engine being wrong, because neither has anything to be right against.
+  
+  A third generator does. It builds a document, drives it through a session of
+  editor actions (change a line, insert one, delete one, move the viewport), and
+  after every action compares every line against a pass over the same text with no
+  editing history behind it. That pass is the answer the document has, so anything
+  a host does to reach the same text has to agree with it, line for line. A
+  mismatch is reported as a new outcome kind, `disagreement`, and it is the one
+  failure here that does not look like a failure: the engine returned, promptly,
+  without throwing, and gave a different answer than it gives when asked the same
+  question twice.
+  
+  Two things about the comparison are load-bearing, and both were learned by
+  getting them wrong. The oracle has to be **settled**, since a whole-document
+  feature can need more than one pass to reach its answer, and comparing against a
+  single pass reported sixty disagreements that were nothing but the oracle being
+  read too early. And both sides need the **same number** of passes, or the run
+  stops measuring correctness and starts measuring which of them converges faster.
+  
+  The shapes it generates are narrower than the grammar allows, on purpose. A case
+  is only useful if a settled pass has an opinion about it, so every line is
+  something that evaluates, and the interesting ones reach across lines: a name
+  defined on one line and read on another, a running total, a category tag, a line
+  reference, a unit definition. Anything whose answer is not a fixed function of
+  the text (a dice roll, a live rate, a date relative to now) is left out, since a
+  fuzzer whose oracle disagrees with itself reports nothing but its own noise.
+  
+  The findings are signed by their input rather than by their wording, unlike
+  every other kind. The wording does distinguish them, but only through the two
+  answers, and the signature normalisation replaces every quoted fragment and
+  number, so one wrong answer would otherwise silence every other.
+  
+  The soak now splits its wall-clock budget between the generators instead of
+  giving them one deadline to queue behind. A document case replays a whole
+  session and builds a settled oracle after every action, so it costs what
+  thousands of expression cases cost, and under a single deadline the cheap
+  generator at the front of the list spent the entire run.
+  
+  ## What it found
+  
+  Three bugs before it was even committed, each after the one before it was fixed:
+  a variable whose defining line was gone, a user unit whose defining line was
+  gone, and a line edited into a heading never withdrawing what it used to define.
+  All three are released. A fourth is open, and this generator found it in sixty
+  cases: a `line 5` reference is not re-evaluated after an insert or a delete
+  moves what position five holds.
+  
+  It also found a memory fault by dying of one. Constructing an engine per case
+  exhausted a 256MB heap, which turned out to be a `ReadableStream` built by every
+  engine whether or not anything read it.
+  
+  ## Verification
+  
+  12 new tests covering the generator and the oracle: a seed always meaning the
+  same session, a session that agrees reporting nothing, an action past the end of
+  a shortened document being skipped rather than throwing, a delete never taking a
+  document below two lines, and a shrink that renumbers its actions when it drops
+  a line, so a reduction is still the same session it started as.
+- 3af108b: A line reference follows the position after an insert or a delete
+  
+  `line 5` names wherever line five happens to be, so inserting a line above it
+  changes what it refers to without changing a character of the line doing the
+  referring. The same is true of `prev`, which names a different neighbour, and of
+  the `above` aggregates, which cover a different block. None of that reached the
+  invalidation a structural edit performs, which followed the names a deleted line
+  wrote and nothing else, so a positional reader kept the answer it had computed
+  about a position that now holds something else.
+  
+  | document            | action           | before | now                             |
+  | ---                 | ---              | ---    | ---                             |
+  | `10` / `line 1 + 5` | insert `20` at 1 | `15`   | `25`                            |
+  | `line 2 + 4` / `10` | insert `5` at 1  | `14`   | `Line 2 has not been evaluated` |
+  
+  Every positional reader is re-run, not only the ones whose target moved. The
+  second row is why: `line 2 + 4` at position 1 is an ordinary reference, and the
+  insert leaves the same text at position 2, referring to itself. That is not
+  visible from the target alone, and positional readers are a small minority of a
+  document's lines, so re-running all of them costs almost nothing and cannot be
+  wrong.
+  
+  A line also refuses to read its own position now, rather than being handed its
+  own previous result. From scratch that never came up: a line's result is not
+  there yet when it runs, so reading its own position gave nothing and the line
+  reported it. Only a structural edit could produce a self-reference that already
+  had a perfectly good value, from when it meant something else.
+  
+  Refusing it closed a disagreement between the entry points as well. A
+  self-reference used to report `Line 1 has an error` through `evaluateDocument`,
+  which is what a line says when the line it read holds an error, and `Line 1 has
+  not been evaluated yet` through `parseDocument`, which is what the case actually
+  is. Both give the second sentence now.
+  
+  The boundary: this is about a position's meaning changing, not about evaluation
+  order. A plain forward reference still resolves the way it always has on the
+  incremental path, which reaches its answer by running the document again rather
+  than in one sweep.
+  
+  ## Verification
+  
+  8 new tests: a reference following an insert and a delete, a reader shifted onto
+  itself, a self-reference written as one, the two entry points agreeing on it,
+  `total above` and `prev` following their block after an insert, and a document
+  with no positional reader left untouched.
+  
+  Found by the differential fuzz of editing sessions, which now covers line
+  references and positional aggregates: it reported this in the first sixty cases
+  it ran.
+
 ## 2.38.17
 
 ### Patch Changes
