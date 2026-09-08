@@ -136,7 +136,20 @@ export class ThreeTierEvaluator {
 		this.doc = doc;
 		this.engine = engine;
 		this.dag = engine.getDag();
-		this.checkpointer = checkpointer ?? null;
+		// Built by default, because without one the engine answers wrong.
+		//
+		// A name written on more than one line has a value per position, and the
+		// VM holds whichever write ran last. Anything re-running part of a
+		// document therefore reads the state the document ENDS in unless this
+		// rebuilds the state that position actually has. `setViewport` has always
+		// asked for that (see {@link restoreTo}) and got nothing, so scrolling to
+		// a line above a redefinition changed its answer: `:x = 1` / `x + 100`
+		// with `:x = 99` below it showed 101, and 199 once scrolled to.
+		//
+		// It was an optional argument, which meant every host that did not know
+		// to pass one got that. A caller may still supply its own, to share a
+		// chain or to inspect it.
+		this.checkpointer = checkpointer ?? new VMCheckpointer(engine.getVM());
 		this.pageManager = new PageManager();
 
 		// The async batcher re-runs a handful of lines out of the document when
@@ -146,7 +159,7 @@ export class ThreeTierEvaluator {
 		// everywhere below its second definition. Sharing the chain lets it
 		// rebuild the state each line actually sits in. See
 		// `AsyncResolutionBatcher.checkpointer`.
-		if (this.checkpointer) this.engine.getBatcher().checkpointer = this.checkpointer;
+		this.engine.getBatcher().checkpointer = this.checkpointer;
 
 		// Lets the engine answer "what's line N's cached result" for
 		// cross-line features (prev/line<N>/aggregation) without owning
@@ -414,6 +427,18 @@ export class ThreeTierEvaluator {
 			this.checkpointer?.clear();
 			return this.evaluate(viewport, signal);
 		}
+
+		// ── Running totals are re-seeded here too ──
+		// A `total += 5` line compiles to no bytecode, so a clean one cannot be
+		// re-run from cache: it has to go back through the full pipeline. That
+		// was already true, and harmless while the VM was never rewound, because
+		// the total simply stayed where the last pass left it. Restoring to the
+		// line before the viewport rewinds it, and a viewport containing the
+		// accumulator lines then found nothing to rebuild them from:
+		// `spent += 10` / `spent += 20` / `spent` answered
+		// `Undefined variable: spent` on a scroll. Marking them dirty sends them
+		// to Tier 1, which recomputes each total from its seed.
+		this.reseedAccumulators();
 
 		// ── Phase 5.2g: Page-based LRU eviction (MUST run before preload) ──
 		// maintainAfterEval captures the scroll direction and updates lastViewportStart

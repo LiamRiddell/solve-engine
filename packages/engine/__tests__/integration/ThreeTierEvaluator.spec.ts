@@ -618,12 +618,30 @@ describe("ThreeTierEvaluator: display precision survives the viewport path", () 
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("ThreeTierEvaluator — VMCheckpointer Integration", () => {
-	test("checkpointer is null by default", () => {
+	test("a checkpointer is built when the caller supplies none", () => {
+		// It used to default to null, which meant a host that did not know to
+		// pass one got wrong answers: `restoreTo` is what rebuilds the variable
+		// state a POSITION has, and without it a re-run of part of a document
+		// reads the state the document ends in. Scrolling to a line above a
+		// redefinition changed its answer.
 		const doc = createDoc([":x = 5"]);
 		const engine = createEngine();
 		const evaluator = new ThreeTierEvaluator(doc, engine);
 
-		expect(evaluator.getCheckpointer()).toBeNull();
+		expect(evaluator.getCheckpointer()).not.toBeNull();
+		// And it is wired to the engine's own VM, or it would restore into one
+		// nothing else reads.
+		expect(evaluator.getCheckpointer()!.vmInstance).toBe(engine.getVM());
+	});
+
+	test("the async batcher is given the same chain", () => {
+		// The batcher re-runs a few lines when a value arrives, against the same
+		// VM, so it needs the same chain to rebuild each line's prefix from.
+		const doc = createDoc([":x = 5"]);
+		const engine = createEngine();
+		const evaluator = new ThreeTierEvaluator(doc, engine);
+
+		expect(engine.getBatcher().checkpointer).toBe(evaluator.getCheckpointer());
 	});
 
 	test("checkpointer can be injected via constructor", () => {
