@@ -351,6 +351,26 @@ export class VMCheckpointer {
 	 *
 	 * @param names - The names no line defines any more.
 	 */
+	/**
+	 * Drop the entry a line holds, because the line no longer writes anything.
+	 *
+	 * A line's entry is replaced when the line writes again and left alone
+	 * otherwise, so a definition edited into an expression with no definition in
+	 * it (`:v3 = 44` edited to `7 + 7`) kept saying `v3 = 44` in the chain. The
+	 * lines below it that asked what the prefix holds were told 44, where a pass
+	 * from scratch has nothing there. The entry after it is re-parented to the
+	 * one before, the same way {@link snapshot} keeps the links straight.
+	 *
+	 * @param lineNumber - 1-based line whose entry, if any, goes.
+	 */
+	dropCheckpointAt(lineNumber: number): void {
+		const index = this.indexOfCheckpointAt(lineNumber);
+		if (index < 0) return;
+		this.checkpoints.splice(index, 1);
+		const next = this.checkpoints[index];
+		if (next !== undefined) next.parent = index > 0 ? this.checkpoints[index - 1] : null;
+	}
+
 	forget(names: readonly string[]): void {
 		if (names.length === 0) return;
 		for (const checkpoint of this.checkpoints) {
@@ -430,6 +450,30 @@ export class VMCheckpointer {
 	 * @param lineNumber - The 1-based line whose own entry is to be excluded.
 	 * @returns The value the lines above set, or undefined.
 	 */
+	/**
+	 * The function a name was bound to at the end of the line before
+	 * `lineNumber`, or undefined if no line above it had defined one.
+	 *
+	 * {@link lookupVariableBefore}, for the functions bag: a function
+	 * definition is a definition, and one edited away or failed leaves the name
+	 * as the lines above left it just as a variable does.
+	 *
+	 * @param name - The function name.
+	 * @param lineNumber - The 1-based line whose own entry is to be excluded.
+	 * @returns The definition the lines above made, or undefined.
+	 */
+	lookupFunctionBefore(name: string, lineNumber: number): UserFunctionDef | undefined {
+		const index = this.nearestCheckpointIndex(lineNumber - 1);
+		let checkpoint: VMCheckpoint | null = index < 0 ? null : this.checkpoints[index];
+		while (checkpoint) {
+			if (Object.prototype.hasOwnProperty.call(checkpoint.functions, name)) {
+				return checkpoint.functions[name];
+			}
+			checkpoint = checkpoint.parent;
+		}
+		return undefined;
+	}
+
 	lookupVariableBefore(name: string, lineNumber: number): Value | undefined {
 		const index = this.nearestCheckpointIndex(lineNumber - 1);
 		let checkpoint: VMCheckpoint | null = index < 0 ? null : this.checkpoints[index];

@@ -245,6 +245,8 @@ export interface VM {
 	defineUserFunction(name: string, params: string[], program: BytecodeProgram): void;
 	getUserFunction(name: string): UserFunctionDef | undefined;
 	hasUserFunction(name: string): boolean;
+	/** Unbind a user function, for a definition edited away, deleted, or failed. */
+	deleteUserFunction(name: string): void;
 	/**
 	 * Every session-scoped variable currently defined, as `[name, value]` pairs,
 	 * for snapshotting the VM's state (see `engine/EngineSnapshot.ts`). The

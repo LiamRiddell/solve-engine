@@ -200,6 +200,11 @@ export function createVM(
       },
       getUserFunction(name: string) { return userFunctions.get(name); },
       hasUserFunction(name: string) { return userFunctions.has(name); },
+      // The one way a function binding leaves. A definition edited away or
+      // deleted left `f` callable for the rest of the session, because the
+      // settle that forgets an orphaned name only knew how to delete a
+      // variable.
+      deleteUserFunction(name: string) { userFunctions.delete(name); },
       getVariableEntries() { return Array.from(variables.entries()); },
       getUserFunctionDefs() { return Array.from(userFunctions.values()); },
       defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram) {

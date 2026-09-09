@@ -1214,33 +1214,54 @@ export class ExpressionEngine {
      * event observation without async stream reader timing issues.
      */
     /**
-     * Leave a name where the lines above left it, after the definition that
-     * would have set it answered with an error.
+     * Put a name back to what the lines above `lineNumber` left it holding.
      *
-     * A pass from scratch skips the store when a definition's right-hand side
-     * errors, so `:x = zz + 1` leaves `x` exactly as the lines above it had it:
-     * undefined if none set it, and 1 after a `:x = 1`. The incremental path
-     * skips the store too, but the VM is not fresh, so what the name keeps is
-     * the value from the previous pass, and for the line that just failed that
-     * is its own old answer. `:x = 5` edited to `:x = zz + 1` left `x + 1` at 6
-     * where a pass over the same text says `x` is undefined.
+     * The invariant a pass from scratch keeps without trying: when it reaches a
+     * line, every name holds what the lines above defined, because those lines
+     * have just run in order and stored. The incremental path keeps the VM
+     * between passes, so a line that writes a name can find the name holding
+     * its own previous answer instead. That is invisible for `:x = 5`, which
+     * stores over it, and wrong twice over for a definition that reads what it
+     * writes or fails to store:
      *
-     * The checkpoint chain records what each line wrote, so the value the
-     * prefix holds is the one it holds just before this line. Called before the
-     * line's own checkpoint is taken, so that checkpoint records the corrected
-     * state rather than the stale one.
+     * - `:v3 = 44` above `:v3 = v3 + 3` is 47 on every pass from scratch, since
+     *   line 1 puts 44 back each time. Edit line 1 away and nothing puts
+     *   anything back, so line 2 reads its own 47 and climbs by three a pass,
+     *   where a pass from scratch says `v3` is undefined.
+     * - `:x = 5` edited to `:x = zz + 1` skips the store, on both paths, and
+     *   the incremental one is left holding the 5 the same line stored before
+     *   the edit, where a pass from scratch has nothing.
      *
-     * An accumulator is left alone. Every pass resets each running total to its
-     * seed and re-runs every line that steps it, in order, so by the time a
-     * `spent += zz` fails the VM already holds what the lines above it built,
-     * and the seed itself is a value a pass from scratch also shows.
+     * The checkpoint chain records what each line wrote in document order, so
+     * the value the prefix holds is the one it holds just before this line,
+     * and this puts the VM there: the value if there is one, absent if not.
+     * The evaluator calls it before a definition runs and again if it fails,
+     * both times before the line's own checkpoint is taken, so the checkpoint
+     * records the corrected state.
      *
-     * @param name - The name the failed definition would have set.
-     * @param lineNumber - The 1-based line the definition sits on.
+     * A function is a definition too, and was the one kind nothing could
+     * undo: `f(x) = x + 4` edited into a blank left `f(9)` answering 13 for
+     * the rest of the session. The prefix is consulted for a function binding
+     * as well, and a name bound to neither is unbound from both bags.
+     *
+     * An accumulator is left alone. Every pass resets each running total to
+     * its seed and re-runs every line that steps it, in order, so by the time
+     * any step runs the VM already holds what the steps above built, seed
+     * included, and putting the prefix back would only undo a step.
+     *
+     * @param name - The name the line writes.
+     * @param lineNumber - The 1-based line it sits on.
      */
-    restoreFailedDefinition(name: string, lineNumber: number): void {
+    restoreToPrefix(name: string, lineNumber: number): void {
         if (this.accumulatorNames.has(name)) return;
-        const prior = this.batcher.checkpointer?.lookupVariableBefore(name, lineNumber);
+        const chain = this.batcher.checkpointer;
+        const priorFunction = chain?.lookupFunctionBefore(name, lineNumber);
+        if (priorFunction !== undefined) {
+            this.vm.defineUserFunction(priorFunction.name, priorFunction.params, priorFunction.program);
+            return;
+        }
+        if (this.vm.hasUserFunction(name)) this.vm.deleteUserFunction(name);
+        const prior = chain?.lookupVariableBefore(name, lineNumber);
         if (prior === undefined) this.vm.deleteVar(name);
         else this.vm.setVar(name, prior);
     }
@@ -1908,6 +1929,9 @@ export class ExpressionEngine {
             if (stillDefined.has(name)) continue;
             forgotten.push(name);
             this.vm.deleteVar(name);
+            // A name can be a function as easily as a variable, and a function
+            // whose defining line was edited away stayed callable until now.
+            if (this.vm.hasUserFunction(name)) this.vm.deleteUserFunction(name);
         }
         this.batcher.checkpointer?.forget(forgotten);
     }

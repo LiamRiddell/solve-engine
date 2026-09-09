@@ -263,6 +263,21 @@ export class DependencyGraph {
     */
    private downwardPositionReads = 0;
 
+   /**
+    * Lines that registered a different edge set since the evaluator last
+    * asked, and the keys whose producer set changed.
+    *
+    * The roots of the end-of-pass cycle walk. A cycle is closed, or a name that
+    * pinned one is withdrawn, by a change in the graph; nothing else creates
+    * one. A line that re-registers the edges it had is not on the list, which
+    * is every line of a settled pass, and it is also a line that is dirty
+    * because it threw, which stays dirty and re-runs every pass: rooting the
+    * walk on "ran" rather than "changed" made such a line reset its cycle on
+    * alternate passes for ever. Taken and cleared by {@link takeEdgeChanges}.
+    */
+   private edgesChangedThisPass: number[] = [];
+   private producersChangedThisPass: Set<string> | null = null;
+
   /**
    * Whether this line already carries exactly these edges.
    *
@@ -326,6 +341,7 @@ export class DependencyGraph {
      // set smaller than the array, and the comparison simply fails and falls
      // through to the full path, which is correct either way.
      if (this.hasSameEdges(oldReads, oldWrites, reads, writes, pinned)) return NO_ORPHANS;
+     this.edgesChangedThisPass.push(lineNumber);
 
      // Clean up old consumer references if re-registering this line. A pinned
      // read (a data source, discovered at run time rather than from the text)
@@ -352,6 +368,7 @@ export class DependencyGraph {
          const producers = this.producers.get(oldWrite);
          if (producers === undefined) continue;
          producers.delete(lineNumber);
+         if (!writes.includes(oldWrite)) (this.producersChangedThisPass ??= new Set()).add(oldWrite);
          if (producers.size === 0 && !writes.includes(oldWrite)) {
            this.producers.delete(oldWrite);
            (orphaned ??= []).push(oldWrite);
@@ -379,6 +396,7 @@ export class DependencyGraph {
      // And the reverse direction, which is what makes "who is in this group"
      // a lookup rather than a walk.
      for (const write of writes) {
+       if (oldWrites === undefined || !oldWrites.has(write)) (this.producersChangedThisPass ??= new Set()).add(write);
        const existing = this.producers.get(write);
        if (existing !== undefined) existing.add(lineNumber);
        else this.producers.set(write, new Set([lineNumber]));
@@ -876,6 +894,21 @@ export class DependencyGraph {
    *
    * @returns The 1-based readers, in the order they recorded
    */
+   /**
+    * What changed in the graph since this was last called: the lines whose
+    * edge set changed, and the keys whose producer set changed. Taking it
+    * clears it. See {@link edgesChangedThisPass}.
+    *
+    * @returns The changed lines and keys, each possibly empty.
+    */
+   takeEdgeChanges(): { lines: readonly number[]; keys: readonly string[] } {
+     const lines = this.edgesChangedThisPass;
+     const keys = this.producersChangedThisPass === null ? NO_ORPHANS : [...this.producersChangedThisPass];
+     if (lines.length !== 0) this.edgesChangedThisPass = [];
+     this.producersChangedThisPass = null;
+     return { lines, keys };
+   }
+
   takeReadersThatGainedAPosition(): readonly number[] {
     if (this.readersThatGainedAPosition.length === 0) return NO_READERS;
     const gained = this.readersThatGainedAPosition;
@@ -987,6 +1020,9 @@ export class DependencyGraph {
      // edge count in step; the generic cleanup below then finds no `line:`
      // key left to touch.
      this.forgetPositionReads(lineNumber);
+     // And what it produced, for the cycle walk: a deleted definition can
+     // withdraw the one name that pinned a cycle's value.
+     for (const key of this.writes.get(lineNumber) ?? []) (this.producersChangedThisPass ??= new Set()).add(key);
 
      // Remove from consumers of variables this line read, O(k) not O(V)
      const reads = this.lineReads.get(lineNumber);
@@ -1051,6 +1087,23 @@ export class DependencyGraph {
    * @param key - The key, from {@link edgeKey}
    * @returns Set of line numbers that write this key, or empty set if none
    */
+  /**
+   * The lines that read `key`, one edge away.
+   *
+   * The consumer index, which {@link registerLine} keeps clear of the line
+   * that writes the key: a definition's read of its own name is a convention
+   * for the graph's benefit, not a dependency, and `x += 1` reads its total
+   * to step it, not to depend on another line. That is what makes this index
+   * the right one for finding a cycle, where the raw reads would make every
+   * definition a self-loop and every twice-defined name a two-cycle.
+   *
+   * @param key - An edge key.
+   * @returns The 1-based readers, or an empty set.
+   */
+  directConsumersOf(key: string): ReadonlySet<number> {
+    return this.consumers.get(key) ?? NO_LINES;
+  }
+
   getProducers(key: string): ReadonlySet<number> {
     return this.producers.get(key) ?? NO_LINES;
   }
@@ -1174,5 +1227,7 @@ export class DependencyGraph {
     this.lastPositionReads = null;
     this.readersThatGainedAPosition = [];
     this.downwardPositionReads = 0;
+    this.edgesChangedThisPass = [];
+    this.producersChangedThisPass = null;
   }
 }
