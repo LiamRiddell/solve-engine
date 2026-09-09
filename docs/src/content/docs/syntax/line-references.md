@@ -73,7 +73,7 @@ reached, typed out at once or edited into a note that used to say something
 else:
 
 ```solve-doc
-line 2 + 5
+line 2 + 5    // ERROR: Line 2 has not been evaluated yet (forward reference, or out of range)
 prev + 5      // ERROR: Line 1 has an error
 ```
 
