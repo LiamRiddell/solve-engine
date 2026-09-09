@@ -109,6 +109,12 @@ export function memberTagsOf(rawText: string): string[] {
 export function tagEdgesOf(rawText: string): { members: string[]; queries: string[] } {
 	const members: string[] = [];
 	const queries: string[] = [];
+	// A tag needs a `#`, so a line without one carries none. Most lines are
+	// that, and this runs on every line the engine registers, so the cheap
+	// `indexOf` before the regex saves the two scans and the loop setup below
+	// on the common case. What it returns is exactly what the loop returns when
+	// `ANY_TAG` finds nothing: two empty arrays.
+	if (rawText.indexOf("#") === -1) return { members, queries };
 	// Whether anything precedes a `#` is one property of the line.
 	const firstContent = rawText.search(/\S/);
 	ANY_TAG.lastIndex = 0;
