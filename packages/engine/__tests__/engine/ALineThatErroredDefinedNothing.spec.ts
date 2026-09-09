@@ -24,6 +24,13 @@
  * arrived, and forgetting the name while it loads would leave every reader of
  * it undefined in the meantime.
  *
+ * A goal seek that *does* run defines nothing either. The seek binds its
+ * unknown in its own call frame and stores nothing when it finishes, so the
+ * `v1 =` in `solve line 4 for v1 = 27` only has the shape of a definition, and
+ * its write set is empty whether or not the seek could run. The boundary used
+ * to be drawn the other way, and holding the name open through a seek that ran
+ * was the second shape the fuzz reported.
+ *
  * Found by the differential fuzz of editing sessions, once its generator was
  * taught goal seek.
  */
@@ -86,14 +93,39 @@ describe("a goal seek that could not run", () => {
 });
 
 describe("what still counts as a definition", () => {
-	test("a goal seek that runs defines its variable", () => {
-		// The boundary. A goal seek that can do its work assigns the answer,
-		// and the name must stay defined for the lines below it.
+	test("a goal seek that runs still defines nothing", () => {
+		// A seek varies its unknown inside its own call frame and stores
+		// nothing: `deposit` below this document is whatever `:deposit =` said,
+		// not 450. So the line answers, and its write set is empty, the same as
+		// a seek that could not run. It used to claim the write, which is the
+		// shape `deposit =` has, and that claim held the name open after the
+		// definition was edited away (the next test).
 		const { doc } = editorFor([":deposit = 100000", "deposit * 2", "solve line 2 for deposit = 900"]);
-		expect(shown(doc, 3)).not.toContain("Undefined");
+		expect(shown(doc, 3)).toBe("450");
+		expect(shown(doc, 2)).toBe("200,000");
 
 		const state = doc.getLineAt(3) as unknown as { writes?: string[] };
-		expect(state?.writes ?? []).toContain("deposit");
+		expect(state?.writes ?? []).not.toContain("deposit");
+	});
+
+	test("a seek that ran does not keep its unknown defined once the definition is edited away", () => {
+		// The shape the differential fuzz shrank to (seed 24000051). Line 4
+		// read `v1` from the definition on line 5; editing that line into a
+		// seek over line 4 left `v1` in the VM, because the seek claimed to
+		// write it, and line 4 went on answering 14 where a pass over the same
+		// text has never had a `v1` to read.
+		const lines = ["total above", ":v2 = 20", "6 sprints in weeks", "v1 + 7", ":v1 = 7"];
+		const { doc, evaluator } = editorFor(lines);
+		expect(shown(doc, 4)).toBe("14");
+
+		doc.editLine(5, "solve line 4 for v1 = 27");
+		for (let pass = 0; pass < 6; pass++) evaluator.evaluate({ startLine: 1, endLine: 5 });
+
+		const text = [...lines.slice(0, 4), "solve line 4 for v1 = 27"];
+		expect(answersOf(doc, 5)).toEqual(settled(text));
+		expect(shown(doc, 4)).toContain("Undefined variable: v1");
+		expect(shown(doc, 5)).toBe("20");
+		evaluator.terminateWorker();
 	});
 
 	test("an ordinary definition is untouched", () => {

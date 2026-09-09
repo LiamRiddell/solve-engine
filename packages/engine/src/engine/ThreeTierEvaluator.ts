@@ -115,6 +115,22 @@ export class ThreeTierEvaluator {
 	private pageManager: PageManager;
 
 	/**
+	 * The text hash each line had when the graph last recorded what it reads,
+	 * by line id.
+	 *
+	 * A positional edge is recorded at run time and pinned, so it outlives the
+	 * text that produced it until the line runs again. Between an edit and
+	 * that run the graph still describes the old text, and a line edited out
+	 * of the viewport is compiled there without running, so the window can be
+	 * as long as the reader likes. The document model records the edit as a
+	 * new hash, and this is the hash the graph's edges for the line describe:
+	 * a line arriving at the pass with a different one has its positions
+	 * forgotten before anything else happens to it. See
+	 * {@link forgetPositionsOfEditedText}.
+	 */
+	private textHashOfRecordedEdges: Map<number, number> = new Map();
+
+	/**
 	 * Unsubscribe from sharedGlobalVariableStore, set in the constructor
 	 * called from terminateWorker(). See the subscription itself below for
 	 * why this only marks lines dirty and never re-evaluates synchronously.
@@ -258,6 +274,11 @@ export class ThreeTierEvaluator {
 					resultMap.set(pos, lineResult.results.flat());
 				}
 			}
+
+			// A line that read a position it had not read before may have
+			// closed a cycle, and the end of the pass is when every edge the
+			// walk would follow describes a run of the text that holds it.
+			this.forgetCyclesClosedThisPass();
 
 			// ── Phase 5.2g: Page-based LRU eviction ──────────────────────
 			// Evict bytecode/results from cold/warm pages to bound memory.
@@ -621,10 +642,148 @@ export class ThreeTierEvaluator {
 		// and let the subsequent evaluate() call rebuild it from scratch.
 		this.dag.clear();
 
+		// A deleted line's id is never seen again, so its entry is dead weight.
+		for (const lineId of result.removed) this.textHashOfRecordedEdges.delete(lineId);
+
 		return {
 			inserted: result.inserted,
 			removed: result.removed,
 		};
+	}
+
+	/**
+	 * Forget the positions the graph says a line reads, once its text changed.
+	 *
+	 * A positional edge is discovered while the line runs and pinned, because
+	 * the text cannot put it back when the line re-registers. That is right
+	 * while the text is the same and wrong the moment it is not: `prev + 1`
+	 * edited to `7` went on reading line 1 in the graph until it ran, and a
+	 * line edited out of the viewport is compiled there without running, so
+	 * it could go on for as long as the reader liked. Three of the attempts
+	 * recorded on #444 found cycles that had already been edited away for
+	 * exactly that reason.
+	 *
+	 * Keyed on the edit itself, which the document model records as a new
+	 * text hash, rather than on anything the graph knows. Done at the line's
+	 * first visit after the edit, whatever tier that visit takes, and only
+	 * when the line is dirty, since an edit always dirties, so a clean line's
+	 * text is the text its edges describe. The run that follows records what
+	 * the new text reads, and {@link DependencyGraph.reconcilePositionReads}
+	 * keeps that exact from then on.
+	 */
+	private forgetPositionsOfEditedText(state: LineState, lineNumber: number): void {
+		const recordedFor = this.textHashOfRecordedEdges.get(state.lineId);
+		if (recordedFor === state.textHash) return;
+		if (recordedFor !== undefined) this.dag.forgetPositionReads(lineNumber);
+		this.textHashOfRecordedEdges.set(state.lineId, state.textHash);
+	}
+
+	/**
+	 * Take the answers off any positional cycle this pass closed, once.
+	 *
+	 * Two lines that read each other's positions have no settled value: reached
+	 * from scratch neither has a value to start from, so each reports the other
+	 * and stays there. Reached by an ordinary edit, one of them already holds a
+	 * number computed about the document before the edit, the other reads it,
+	 * and the pair chases those numbers for as long as the document is open:
+	 * `line 2 + 5` edited in above `prev + 5` grew by ten a pass.
+	 *
+	 * The edge that closes a cycle is recorded when the reader that holds it
+	 * runs its current text, and the graph names those readers. From them, a
+	 * walk over the positions each line reads finds the strongly connected
+	 * components, and a component of more than one line that holds one of
+	 * them is a cycle this pass closed (a cycle that already existed reaches
+	 * the same state on its own, and if it is on the walk it holds errors, so
+	 * nothing below touches it). The walk is one pass over what the new edges
+	 * reach, however many readers there are, which is what keeps a column of
+	 * `prev + 1` linear on the pass after an insert, when every edge is new;
+	 * and it is skipped outright while no edge points downwards, since a cycle
+	 * needs one and a document of `prev` and `above` has none.
+	 *
+	 * Every edge followed is current: an edited line's positions are forgotten
+	 * before it runs (see {@link forgetPositionsOfEditedText}), a run cuts the
+	 * line's positions back to what it read, and a structural edit clears the
+	 * graph. That is what an earlier attempt lacked, and why it found cycles
+	 * that had been edited away.
+	 *
+	 * Only a member holding an answer is reset, and it is reset once. A pass
+	 * from scratch has every member holding an error by the time the cycle
+	 * closes, because some member reads a line below it that has not run, and
+	 * every positional form answers an unread or errored line with an error,
+	 * all the way round. So a number on a member is the one thing a settled
+	 * pass never holds, and forgetting it, with the line marked to run again,
+	 * leaves the members in the state a pass from scratch is in. From there
+	 * both paths take the same steps to the same answers. Resetting on every
+	 * pass, which an earlier attempt did, re-created the not-yet-evaluated
+	 * answer on every pass and stranded the reader.
+	 */
+	private forgetCyclesClosedThisPass(): void {
+		const gained = this.dag.takeReadersThatGainedAPosition();
+		if (gained.length === 0 || !this.dag.hasDownwardPositionRead()) return;
+
+		// Tarjan's components, iteratively: a `prev` chain can be thousands of
+		// lines deep, which is deeper than a recursive walk should go.
+		const roots = new Set(gained);
+		const index = new Map<number, number>();
+		const low = new Map<number, number>();
+		const onStack = new Set<number>();
+		const stack: number[] = [];
+		const frames: { line: number; targets: number[]; next: number }[] = [];
+		let visited = 0;
+		const enter = (line: number): void => {
+			index.set(line, visited);
+			low.set(line, visited);
+			visited++;
+			stack.push(line);
+			onStack.add(line);
+			frames.push({ line, targets: this.dag.positionsReadBy(line), next: 0 });
+		};
+
+		for (const root of gained) {
+			if (index.has(root)) continue;
+			enter(root);
+			while (frames.length > 0) {
+				const frame = frames[frames.length - 1];
+				if (frame.next < frame.targets.length) {
+					const target = frame.targets[frame.next++];
+					if (!index.has(target)) enter(target);
+					else if (onStack.has(target)) low.set(frame.line, Math.min(low.get(frame.line)!, index.get(target)!));
+					continue;
+				}
+				frames.pop();
+				if (frames.length > 0) {
+					const parent = frames[frames.length - 1].line;
+					low.set(parent, Math.min(low.get(parent)!, low.get(frame.line)!));
+				}
+				if (low.get(frame.line) !== index.get(frame.line)) continue;
+				const members: number[] = [];
+				let member: number;
+				do {
+					member = stack.pop()!;
+					onStack.delete(member);
+					members.push(member);
+				} while (member !== frame.line);
+				if (members.length > 1 && members.some((line) => roots.has(line))) this.forgetAnswersOn(members);
+			}
+		}
+	}
+
+	/**
+	 * Take the answer off each member of a cycle that holds one.
+	 *
+	 * An error is left where it is: it is what a settled pass holds, and the
+	 * line re-runs to the same error regardless. A value still arriving is left
+	 * too, since forgetting it would only start the fetch again.
+	 */
+	private forgetAnswersOn(members: readonly number[]): void {
+		for (const member of members) {
+			const state = this.doc.getLineAt(member);
+			if (state === undefined) continue;
+			const held = state.result;
+			if (held === null || held.type === ValueType.Error || held.type === ValueType.Pending) continue;
+			this.doc.forgetResult(state.lineId);
+			this.doc.markDirty(state.lineId);
+		}
 	}
 
 	// ── Private helpers ─────────────────────────────────────────────────
@@ -711,6 +870,10 @@ export class ThreeTierEvaluator {
 			}
 		}
 
+		// The same end-of-pass check `evaluate` makes; a viewport pass runs
+		// lines and records what they read just as a full one does.
+		this.forgetCyclesClosedThisPass();
+
 		return { lines, resultMap, tierCounts };
 	}
 
@@ -755,8 +918,31 @@ export class ThreeTierEvaluator {
 	 * - Dirty + not in viewport → Tier 3 (compile-only, execute variable defs)
 	 * - Clean + has bytecode + in viewport → Tier 2 (execute from cache)
 	 * - Clean + no bytecode → skipped (non-evaluable)
+	 *
+	 * Around the dispatch, the graph is kept honest about what the line reads
+	 * by position: an edited line's old positions go before it runs, and a
+	 * line that executed is cut back to the positions that run read. Only an
+	 * executing tier is reconciled, since a line compiled without running, or
+	 * skipped, read nothing for a reason that says nothing about its text.
 	 */
 	private evaluateSingleLine(
+		state: LineState,
+		lineNumber: number,
+		inViewport: boolean
+	): EvalLineResult {
+		// An edit always dirties, so a clean line's edges describe its text and
+		// the map is not consulted for it: the check costs the pass nothing on
+		// the lines that are most of it.
+		if (state.dirty) this.forgetPositionsOfEditedText(state, lineNumber);
+		const lineResult = this.dispatchLine(state, lineNumber, inViewport);
+		if (lineResult.tier === EvalTier.Tier1 || lineResult.tier === EvalTier.Tier2) {
+			this.dag.reconcilePositionReads(lineNumber);
+		}
+		return lineResult;
+	}
+
+	/** The tier dispatch itself; see {@link evaluateSingleLine} for what wraps it. */
+	private dispatchLine(
 		state: LineState,
 		lineNumber: number,
 		inViewport: boolean

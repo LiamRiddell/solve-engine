@@ -42,6 +42,16 @@ export function edgeKey(kind: EdgeKind, name: string): string {
  * on every pass, so the span answers "already recorded" with two integer
  * comparisons where a set answered it with a hash. Anything outside the span
  * falls into `sparse`, which is allocated only if something does.
+ *
+ * Kept twice over: what the line has ever been recorded reading, and what it
+ * has read since its reads were last reconciled, in the same span-and-set
+ * shape. The second is what makes the first honest. A positional read is
+ * discovered while the line runs, so a position the line stopped reading
+ * cannot be discovered at all: an `above` aggregate whose block shrank under a
+ * new heading still had edges to the lines above the heading, and a reader
+ * edited to name a different line still had an edge to the old one. Once a
+ * run is over, the run half says which of the recorded positions were not
+ * read, and those are dropped. See {@link DependencyGraph.reconcilePositionReads}.
  */
 interface PositionsRead {
 	/** Lowest position recorded in the contiguous span. */
@@ -50,6 +60,53 @@ interface PositionsRead {
 	hi: number;
 	/** Positions recorded outside the span, or null while there are none. */
 	sparse: Set<number> | null;
+	/** Lowest position read since the last reconcile, or -1 while none has been. */
+	runLo: number;
+	/** Highest position read since the last reconcile. */
+	runHi: number;
+	/** Positions read since the last reconcile that fall outside that span, or null while there are none. */
+	runSparse: Set<number> | null;
+}
+
+/**
+ * Note a position in the run half of an entry.
+ *
+ * The same span-first discipline the recorded half uses, and for the same
+ * reason: an `above` aggregate reads its block one line at a time, downwards,
+ * so nearly every call extends the span by one and the set is never touched.
+ */
+function noteReadThisRun(positions: PositionsRead, position: number): void {
+	if (positions.runLo === -1) {
+		positions.runLo = position;
+		positions.runHi = position;
+	} else if (position >= positions.runLo && position <= positions.runHi) {
+		return;
+	} else if (position === positions.runHi + 1) {
+		positions.runHi = position;
+	} else if (position === positions.runLo - 1) {
+		positions.runLo = position;
+	} else if (positions.runSparse === null) {
+		positions.runSparse = new Set([position]);
+	} else {
+		positions.runSparse.add(position);
+	}
+}
+
+/** Whether the run half of an entry read `position`. */
+function readThisRun(positions: PositionsRead, position: number): boolean {
+	if (position >= positions.runLo && position <= positions.runHi) return true;
+	return positions.runSparse !== null && positions.runSparse.has(position);
+}
+
+/**
+ * Whether two sparse sets hold the same positions, an absent set counting as
+ * an empty one.
+ */
+function sameSparse(a: Set<number> | null, b: Set<number> | null): boolean {
+	if (a === null || a.size === 0) return b === null || b.size === 0;
+	if (b === null || a.size !== b.size) return false;
+	for (const n of a) if (!b.has(n)) return false;
+	return true;
 }
 
 /**
@@ -118,6 +175,9 @@ const NO_KEYS: ReadonlySet<string> = new Set<string>();
  */
 const NO_ORPHANS: readonly string[] = [];
 
+/** The answer to "who recorded a new position" on every line of a settled pass. */
+const NO_READERS: readonly number[] = [];
+
 /**
  * Dependency graph for variable and data-source tracking across document lines.
  *
@@ -174,6 +234,34 @@ export class DependencyGraph {
     */
    private lastPositionReader = -1;
    private lastPositionReads: PositionsRead | null = null;
+
+   /**
+    * Readers that recorded a position they had not been recorded reading,
+    * since the evaluator last took the list.
+    *
+    * A positional edge can close a cycle, and the moment it is recorded is the
+    * one moment that is knowable: the reader has just run its current text,
+    * so the edge is real, and every other edge in the graph describes the
+    * last run of the line that holds it. The evaluator takes the list at the
+    * end of each pass and looks for a cycle through each reader on it; see
+    * `ThreeTierEvaluator.forgetCyclesClosedThisPass`. A line that only
+    * re-recorded edges it already had is not on it, which is every line of
+    * every pass once a document has settled.
+    */
+   private readersThatGainedAPosition: number[] = [];
+
+   /**
+    * How many recorded positional edges point downwards, from a reader to a
+    * line below it.
+    *
+    * A cycle needs one. Every edge in a document of `prev` and `above` points
+    * upwards, positions fall strictly along any path, and no path can come
+    * back to where it started. So the evaluator asks this before walking
+    * anything, and a document with no forward reference never pays for the
+    * walk at all, which is nearly every document and every pass after the one
+    * that closed a cycle.
+    */
+   private downwardPositionReads = 0;
 
   /**
    * Whether this line already carries exactly these edges.
@@ -622,28 +710,41 @@ export class DependencyGraph {
     // measured as more than half the cost of the whole pass on that shape.
     let positions: PositionsRead | undefined;
     if (this.lastPositionReader === lineNumber) {
-      positions = this.lastPositionReads as PositionsRead;
+      positions = this.lastPositionReads ?? undefined;
     } else {
       positions = this.positionReads.get(lineNumber);
       this.lastPositionReader = lineNumber;
       this.lastPositionReads = positions ?? null;
     }
     if (positions === undefined) {
-      positions = { lo: dependsOnLine, hi: dependsOnLine, sparse: null };
+      positions = {
+        lo: dependsOnLine,
+        hi: dependsOnLine,
+        sparse: null,
+        runLo: dependsOnLine,
+        runHi: dependsOnLine,
+        runSparse: null,
+      };
       this.positionReads.set(lineNumber, positions);
       this.lastPositionReads = positions;
-    } else if (dependsOnLine >= positions.lo && dependsOnLine <= positions.hi) {
-      return;
-    } else if (dependsOnLine === positions.hi + 1) {
-      positions.hi = dependsOnLine;
-    } else if (dependsOnLine === positions.lo - 1) {
-      positions.lo = dependsOnLine;
-    } else if (positions.sparse === null) {
-      positions.sparse = new Set([dependsOnLine]);
-    } else if (positions.sparse.has(dependsOnLine)) {
-      return;
     } else {
-      positions.sparse.add(dependsOnLine);
+      // The run half is told about every read, repeat or not: it is what
+      // {@link reconcilePositionReads} compares the recorded half against
+      // once the run is over.
+      noteReadThisRun(positions, dependsOnLine);
+      if (dependsOnLine >= positions.lo && dependsOnLine <= positions.hi) {
+        return;
+      } else if (dependsOnLine === positions.hi + 1) {
+        positions.hi = dependsOnLine;
+      } else if (dependsOnLine === positions.lo - 1) {
+        positions.lo = dependsOnLine;
+      } else if (positions.sparse === null) {
+        positions.sparse = new Set([dependsOnLine]);
+      } else if (positions.sparse.has(dependsOnLine)) {
+        return;
+      } else {
+        positions.sparse.add(dependsOnLine);
+      }
     }
 
     const key = linePositionEdgeKey(dependsOnLine);
@@ -665,9 +766,163 @@ export class DependencyGraph {
       existingReads.add(key);
     }
 
+    // The span can grow over a position the set already holds (read as 3
+    // when the span was 5, then 4, then 3 again), and the index is what says
+    // whether the edge is new, not the shape of the entry.
     const existingConsumers = this.consumers.get(key);
-    if (existingConsumers !== undefined) existingConsumers.add(lineNumber);
-    else this.consumers.set(key, new Set([lineNumber]));
+    if (existingConsumers !== undefined) {
+      if (existingConsumers.has(lineNumber)) return;
+      existingConsumers.add(lineNumber);
+    } else {
+      this.consumers.set(key, new Set([lineNumber]));
+    }
+
+    if (dependsOnLine > lineNumber) this.downwardPositionReads++;
+
+    // Reached only for an edge this reader did not have, so the common repeat
+    // above never touches the list. An `above` aggregate recording its whole
+    // block on its first run lands here once per line of it, and the
+    // last-entry check keeps that to one entry.
+    const gained = this.readersThatGainedAPosition;
+    if (gained.length === 0 || gained[gained.length - 1] !== lineNumber) gained.push(lineNumber);
+  }
+
+  /**
+   * Cut a line's recorded positions back to the ones its last run read.
+   *
+   * For the evaluator to call once a line has executed. A positional read is
+   * discovered while the line runs, and a position the line has stopped
+   * reading cannot be discovered that way, so without this the recorded set
+   * only ever grew: `prev + 1` edited to `7` went on reading line 1 in the
+   * graph for the rest of the session, and `total above` kept its edges to
+   * the lines above a heading that had cut its block short. Anything asking
+   * the graph what a line reads was told what it used to read, and a cycle
+   * that the heading had broken was still a cycle to the graph, while a cycle
+   * that its removal re-closed was not new to it and so was never noticed.
+   *
+   * A run that read no position at all leaves the line with none. A line
+   * that did not execute (compiled only, or skipped) must not be reconciled,
+   * since it read nothing for a reason that says nothing about its text.
+   *
+   * @param lineNumber - 1-based line that has just executed
+   */
+  reconcilePositionReads(lineNumber: number): void {
+    const positions = this.positionReads.get(lineNumber);
+    if (positions === undefined) return;
+    if (positions.runLo === -1) {
+      this.forgetPositionReads(lineNumber);
+      return;
+    }
+    const sameShape =
+      positions.lo === positions.runLo &&
+      positions.hi === positions.runHi &&
+      sameSparse(positions.sparse, positions.runSparse);
+    if (!sameShape) {
+      for (const n of this.positionsReadFrom(positions)) {
+        if (!readThisRun(positions, n)) this.dropPositionRead(lineNumber, n);
+      }
+      positions.lo = positions.runLo;
+      positions.hi = positions.runHi;
+      positions.sparse = positions.runSparse;
+    }
+    positions.runLo = -1;
+    positions.runHi = -1;
+    positions.runSparse = null;
+  }
+
+  /**
+   * Forget every position this line was recorded reading.
+   *
+   * For a line whose text has just changed, before it runs: whatever the old
+   * text read is not evidence about the new one, and a rule consulting the
+   * graph between the edit and the run would otherwise be told the old
+   * edges. The next run records what the new text reads. Only the `line:`
+   * keys go; a data-source pin is discovered the same way but is not about
+   * the text, and stays until the line is removed.
+   *
+   * @param lineNumber - 1-based line whose positions are to go
+   */
+  forgetPositionReads(lineNumber: number): void {
+    const positions = this.positionReads.get(lineNumber);
+    if (positions === undefined) return;
+    this.positionReads.delete(lineNumber);
+    if (this.lastPositionReader === lineNumber) {
+      this.lastPositionReader = -1;
+      this.lastPositionReads = null;
+    }
+    for (const n of this.positionsReadFrom(positions)) this.dropPositionRead(lineNumber, n);
+  }
+
+  /**
+   * The positions a line has been recorded reading, as line numbers.
+   *
+   * The forward direction of {@link getAffectedLinesByPosition}: that answers
+   * "who reads this position", this answers "which positions does this line
+   * read". Both directions are what finding a cycle takes.
+   *
+   * @param lineNumber - 1-based line doing the reading
+   * @returns The positions it has read, in no particular order; empty if none
+   */
+  positionsReadBy(lineNumber: number): number[] {
+    const positions = this.positionReads.get(lineNumber);
+    return positions === undefined ? [] : this.positionsReadFrom(positions);
+  }
+
+  /**
+   * The readers that recorded a new position since this was last called, and
+   * an empty list until one does.
+   *
+   * Taking the list clears it. See {@link readersThatGainedAPosition}.
+   *
+   * @returns The 1-based readers, in the order they recorded
+   */
+  takeReadersThatGainedAPosition(): readonly number[] {
+    if (this.readersThatGainedAPosition.length === 0) return NO_READERS;
+    const gained = this.readersThatGainedAPosition;
+    this.readersThatGainedAPosition = [];
+    return gained;
+  }
+
+  /**
+   * Whether any recorded positional edge points from a reader to a line
+   * below it.
+   *
+   * The precondition for a positional cycle, and so for the walk that looks
+   * for one; see {@link downwardPositionReads}.
+   *
+   * @returns True while at least one such edge is recorded
+   */
+  hasDownwardPositionRead(): boolean {
+    return this.downwardPositionReads > 0;
+  }
+
+  /** The positions an entry records, in the recorded half; the same walk {@link positionsReadBy} makes. */
+  private positionsReadFrom(positions: PositionsRead): number[] {
+    const out: number[] = [];
+    for (let n = positions.lo; n <= positions.hi; n++) out.push(n);
+    if (positions.sparse !== null) for (const n of positions.sparse) out.push(n);
+    return out;
+  }
+
+  /**
+   * Drop one positional edge from every index that holds it.
+   *
+   * The consumer index is what says whether the edge exists, so a position the
+   * entry lists twice (in the set, and later inside the span that grew over
+   * it) is dropped once and counted once.
+   */
+  private dropPositionRead(lineNumber: number, position: number): void {
+    const key = linePositionEdgeKey(position);
+    const consumers = this.consumers.get(key);
+    if (consumers === undefined || !consumers.delete(lineNumber)) return;
+    if (consumers.size === 0) this.consumers.delete(key);
+    const pinned = this.pinnedReads.get(lineNumber);
+    if (pinned !== undefined) {
+      pinned.delete(key);
+      if (pinned.size === 0) this.pinnedReads.delete(lineNumber);
+    }
+    this.lineReads.get(lineNumber)?.delete(key);
+    if (position > lineNumber) this.downwardPositionReads--;
   }
 
   /**
@@ -728,6 +983,11 @@ export class DependencyGraph {
    * @param lineNumber - The line number being removed
    */
   removeLine(lineNumber: number): readonly string[] {
+     // Its positions first, through the one path that keeps the downward
+     // edge count in step; the generic cleanup below then finds no `line:`
+     // key left to touch.
+     this.forgetPositionReads(lineNumber);
+
      // Remove from consumers of variables this line read, O(k) not O(V)
      const reads = this.lineReads.get(lineNumber);
      if (reads) {
@@ -766,13 +1026,6 @@ export class DependencyGraph {
        this.writes.delete(lineNumber);
      }
      if (this.pinnedReads.size !== 0) this.pinnedReads.delete(lineNumber);
-     if (this.positionReads.size !== 0) {
-       this.positionReads.delete(lineNumber);
-       if (this.lastPositionReader === lineNumber) {
-         this.lastPositionReader = -1;
-         this.lastPositionReads = null;
-       }
-     }
 
      return orphaned ?? NO_ORPHANS;
    }
@@ -919,5 +1172,7 @@ export class DependencyGraph {
     this.positionReads.clear();
     this.lastPositionReader = -1;
     this.lastPositionReads = null;
+    this.readersThatGainedAPosition = [];
+    this.downwardPositionReads = 0;
   }
 }

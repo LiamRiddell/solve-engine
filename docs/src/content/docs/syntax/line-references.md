@@ -63,6 +63,24 @@ These forms only work inside a document, since they refer to other lines. They
 return an error through the single-expression entry point, which has no document
 to refer to.
 
+## Two lines that read each other
+
+A reference needs a line with an answer of its own. If line 1 reads line 2 and
+line 2 reads line 1, neither has one: each is computed from the other, and there
+is no value to start from. The engine reports that on each line rather than
+settling on a number, and it reports the same thing however the text was
+reached, typed out at once or edited into a note that used to say something
+else:
+
+```solve-doc
+line 2 + 5
+prev + 5      // ERROR: Line 1 has an error
+```
+
+Line 1 reports that line 2 has an error, and line 2 that line 1 has one. A plain
+reference to a line further down is not a cycle: `line 2 + 1` above `7` is
+`8`, because line 2 has an answer of its own once it has been read.
+
 ## Related, document-aware forms
 
 Three other forms read the whole note the same way, each with its own page:

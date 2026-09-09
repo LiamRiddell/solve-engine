@@ -665,6 +665,17 @@ export class ExpressionEngine {
                   : undefined,
             getLineReads: doc
                 ? (n: number) => {
+                      // A goal seek reads its target the way `line N` does,
+                      // and takes the same edge, through both of the closures
+                      // it reads through. Without it the seek was invisible to
+                      // everything that asks the graph who reads a position:
+                      // a target edited to read the seek back was a cycle
+                      // that no walk could see, so an edit into it chased a
+                      // number where a pass over the same text reports the
+                      // cycle. The target's own reads during a probe are
+                      // recorded against the target, whose context the probe
+                      // runs under.
+                      if (n !== context.lineIndex) dag.registerLinePositionDependency(context.lineIndex, n);
                       const state = doc.getLineAt(n);
                       // A line with no compiled bytecode has nothing to solve
                       // against yet (forward reference, out of range, or
@@ -676,8 +687,11 @@ export class ExpressionEngine {
                   }
                 : undefined,
             evaluateLineWithBinding: doc
-                ? (n: number, variable: string, bound: Value, symbolicTolerant: boolean) =>
-                      this.evaluateLineWithBinding(n, variable, bound, symbolicTolerant)
+                ? (n: number, variable: string, bound: Value, symbolicTolerant: boolean) => {
+                      // The same edge as `getLineReads` above, for the same reason.
+                      if (n !== context.lineIndex) dag.registerLinePositionDependency(context.lineIndex, n);
+                      return this.evaluateLineWithBinding(n, variable, bound, symbolicTolerant);
+                  }
                 : undefined,
             goalSeekMaxIterations: this.config.vm.maxGoalSeekIterations,
             networkEnabled: this.config.network.enabled,
