@@ -3321,8 +3321,20 @@ export class ExpressionEngine {
                 return { kind: 'error', stage: 'length', error: lengthCheck.error!.engineError! };
             }
 
-            // Filter COMMENT tokens, they have no parselet.
-            const exprTokens = tokens.filter(t => t.type !== 'COMMENT');
+            // Filter COMMENT tokens, they have no parselet. The lexer already
+            // drops them (see lexToTokens), so a comment reaches here only if a
+            // caller lexed some other way, which none currently does. The copy
+            // the filter makes is otherwise pure waste on every evaluation, so
+            // it is taken only when a COMMENT is actually present; the
+            // normalizer treats its input as read-only, so aliasing the lexer's
+            // array in the common case changes nothing.
+            let exprTokens = tokens;
+            for (let i = 0; i < tokens.length; i++) {
+                if (tokens[i].type === 'COMMENT') {
+                    exprTokens = tokens.filter(t => t.type !== 'COMMENT');
+                    break;
+                }
+            }
             if (exprTokens.length === 0) {
                 return { kind: 'empty' };
             }
