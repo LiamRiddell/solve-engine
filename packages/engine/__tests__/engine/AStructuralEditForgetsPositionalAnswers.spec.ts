@@ -81,7 +81,7 @@ describe("an insert that creates a positional cycle", () => {
 		for (let pass = 0; pass < 4; pass++) evaluator.evaluate({ startLine: 1, endLine: 3 });
 
 		expect(answersOf(doc, 3)).toEqual(settled(["line 3 + 5", ":v = 46", "average above"]));
-		expect(shown(doc, 1)).toContain("error");
+		expect(shown(doc, 1)).toContain("has not been evaluated yet");
 	});
 
 	test("stops moving, where it used to answer differently every pass", () => {
@@ -110,7 +110,7 @@ describe("an insert that creates a positional cycle", () => {
 	test("a cycle written from the start reported it all along", () => {
 		// Kept so the fix cannot be mistaken for the whole behaviour: this case
 		// never went wrong, which is what made the fault incremental only.
-		expect(settled(["line 3 + 5", ":v = 46", "average above"])[0]).toContain("error");
+		expect(settled(["line 3 + 5", ":v = 46", "average above"])[0]).toContain("has not been evaluated yet");
 	});
 });
 

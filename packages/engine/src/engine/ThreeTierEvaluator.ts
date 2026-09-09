@@ -741,7 +741,18 @@ export class ThreeTierEvaluator {
 			if (isPrefixedEdgeKey(key)) continue;
 			for (const reader of this.dag.directConsumersOf(key)) roots.add(reader);
 		}
-		if (roots.size > 0) this.recomputeCycleMembership(roots);
+		if (roots.size === 0) return;
+		// Every current member is re-examined as well. A cycle broken by an edit
+		// to a line that merely fed it is no longer reachable from that line, so
+		// a walk from the change alone left the members marked for ever.
+		if (this.cycleMemberIds.size > 0) {
+			const lineCount = this.doc.lineCount;
+			for (let position = 1; position <= lineCount; position++) {
+				const state = this.doc.getLineAt(position);
+				if (state !== undefined && this.cycleMemberIds.has(state.lineId)) roots.add(position);
+			}
+		}
+		this.recomputeCycleMembership(roots);
 	}
 
 	/**
