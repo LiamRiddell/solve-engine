@@ -92,6 +92,26 @@ function noteReadThisRun(positions: PositionsRead, position: number): void {
 	}
 }
 
+/**
+ * Rewrite the recorded half of an entry from an explicit list of positions,
+ * in the span-and-set shape the rest of the graph reads: the longest run of
+ * consecutive positions from the smallest is the span, and the rest are sparse.
+ */
+function setRecordedPositions(positions: PositionsRead, kept: number[]): void {
+	kept.sort((a, b) => a - b);
+	if (kept.length === 0) {
+		positions.lo = -1;
+		positions.hi = -1;
+		positions.sparse = null;
+		return;
+	}
+	positions.lo = kept[0];
+	let end = 0;
+	while (end + 1 < kept.length && kept[end + 1] === kept[end] + 1) end++;
+	positions.hi = kept[end];
+	positions.sparse = end + 1 < kept.length ? new Set(kept.slice(end + 1)) : null;
+}
+
 /** Whether the run half of an entry read `position`. */
 function readThisRun(positions: PositionsRead, position: number): boolean {
 	if (position >= positions.runLo && position <= positions.runHi) return true;
@@ -244,7 +264,7 @@ export class DependencyGraph {
     * so the edge is real, and every other edge in the graph describes the
     * last run of the line that holds it. The evaluator takes the list at the
     * end of each pass and looks for a cycle through each reader on it; see
-    * `ThreeTierEvaluator.forgetCyclesClosedThisPass`. A line that only
+    * `ThreeTierEvaluator.settleCycles`. A line that only
     * re-recorded edges it already had is not on it, which is every line of
     * every pass once a document has settled.
     */
@@ -824,10 +844,10 @@ export class DependencyGraph {
    *
    * @param lineNumber - 1-based line that has just executed
    */
-  reconcilePositionReads(lineNumber: number): void {
+  reconcilePositionReads(lineNumber: number, keepForward = false): void {
     const positions = this.positionReads.get(lineNumber);
     if (positions === undefined) return;
-    if (positions.runLo === -1) {
+    if (positions.runLo === -1 && !keepForward) {
       this.forgetPositionReads(lineNumber);
       return;
     }
@@ -836,12 +856,26 @@ export class DependencyGraph {
       positions.hi === positions.runHi &&
       sameSparse(positions.sparse, positions.runSparse);
     if (!sameShape) {
+      // A line on a cycle stops reading forward the moment it reaches a
+      // line below it, by design, so what it read this run says nothing
+      // about the lines below it that it reads: those edges are kept as
+      // they were, and only the backward ones follow the run. Dropping the
+      // forward ones took the line off the cycle, and the pass after put
+      // it back on.
+      const kept: number[] = [];
       for (const n of this.positionsReadFrom(positions)) {
-        if (!readThisRun(positions, n)) this.dropPositionRead(lineNumber, n);
+        if (readThisRun(positions, n) || (keepForward && n > lineNumber)) kept.push(n);
+        else this.dropPositionRead(lineNumber, n);
       }
-      positions.lo = positions.runLo;
-      positions.hi = positions.runHi;
-      positions.sparse = positions.runSparse;
+      if (keepForward) {
+        if (positions.runSparse !== null) for (const n of positions.runSparse) if (!kept.includes(n)) kept.push(n);
+        for (let n = positions.runLo; n !== -1 && n <= positions.runHi; n++) if (!kept.includes(n)) kept.push(n);
+        setRecordedPositions(positions, kept);
+      } else {
+        positions.lo = positions.runLo;
+        positions.hi = positions.runHi;
+        positions.sparse = positions.runSparse;
+      }
     }
     positions.runLo = -1;
     positions.runHi = -1;
@@ -932,7 +966,7 @@ export class DependencyGraph {
   /** The positions an entry records, in the recorded half; the same walk {@link positionsReadBy} makes. */
   private positionsReadFrom(positions: PositionsRead): number[] {
     const out: number[] = [];
-    for (let n = positions.lo; n <= positions.hi; n++) out.push(n);
+    if (positions.lo !== -1) for (let n = positions.lo; n <= positions.hi; n++) out.push(n);
     if (positions.sparse !== null) for (const n of positions.sparse) out.push(n);
     return out;
   }
@@ -956,6 +990,11 @@ export class DependencyGraph {
     }
     this.lineReads.get(lineNumber)?.delete(key);
     if (position > lineNumber) this.downwardPositionReads--;
+    // A dropped edge is a change to the graph as much as a gained one: it is
+    // how a cycle is broken, and the walk that keeps cycle membership honest
+    // has to hear about it.
+    const changed = this.edgesChangedThisPass;
+    if (changed.length === 0 || changed[changed.length - 1] !== lineNumber) changed.push(lineNumber);
   }
 
   /**

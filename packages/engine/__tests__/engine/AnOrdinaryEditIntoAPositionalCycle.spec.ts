@@ -42,11 +42,13 @@
  * however many lines gained an edge, so a column of `prev + 1` stays linear on
  * the pass after an insert.
  *
- * The boundary: a cycle through a *name* (`:a = line 2 + 1` above `a + 1`) is
- * not walked. The positional graph does not hold it, and taking it apart would
- * also mean undefining the members' variables and their checkpoint entries. The
- * fuzz generator emits only literal definitions, so it cannot reach the shape;
- * it is pinned at the end so a change to either can be seen here.
+ * A cycle through a *name* (`:a = line 2 + 1` above `a + 1`) is walked too.
+ * The first version of this stopped at positions and pinned the name shape as
+ * a boundary; the fuzz generator learned to write a definition that reads a
+ * position, reported it within a session, and the walk now follows the graph's
+ * consumer index in both kinds of edge. Taking such a cycle apart also means
+ * putting the members' names back to what the lines above left, which is what
+ * `ExpressionEngine.restoreToPrefix` does; the test at the end covers it.
  */
 import { describe, expect, test } from "@jest/globals";
 import { createEngine } from "@solve-js/api/createEngine";
@@ -89,6 +91,22 @@ function settle(lines: string[]): { answers: string[]; passes: number } {
 
 const settled = (lines: string[]) => settle(lines).answers;
 
+/**
+ * What a single fresh pass through `parseDocument` says, line by line.
+ *
+ * The specification for a cycle. A member of one has no answer of its own,
+ * and the batch pass, which never runs a line twice, reports exactly that;
+ * the incremental path is held to the same words. Not used for a goal seek,
+ * which the batch pass refuses outright.
+ */
+function batch(lines: string[]): string[] {
+	const result = createEngine().parseDocument(lines.join("\n"));
+	return result.lines.map((line) => (line.result ? formatValue(line.result).replace(/^=\s*/, "") : ""));
+}
+
+/** The message a line on a cycle gives for the line below it that it reads. */
+const notEvaluated = (n: number) => `Line ${n} has not been evaluated yet (forward reference, or out of range)`;
+
 function editorFor(lines: string[]) {
 	const doc = new DocumentModel();
 	doc.setDocument(lines.join("\n"));
@@ -120,7 +138,7 @@ describe("an ordinary edit that closes a cycle", () => {
 		const text = edit(session, ["1 sprint = 2 weeks", "prev + 5"], 1, "line 2 + 5");
 
 		expect(answersOf(session.doc, 2)).toEqual(settled(text));
-		expect(answersOf(session.doc, 2)).toEqual(["Line 2 has an error", "Line 1 has an error"]);
+		expect(answersOf(session.doc, 2)).toEqual(batch(text));
 		expectStill(session, 2);
 		session.evaluator.terminateWorker();
 	});
@@ -131,7 +149,7 @@ describe("an ordinary edit that closes a cycle", () => {
 		const text = edit(session, ["line 2 + 1", "7"], 2, "line 1 + 1");
 
 		expect(answersOf(session.doc, 2)).toEqual(settled(text));
-		expect(answersOf(session.doc, 2)).toEqual(["Line 2 has an error", "Line 1 has an error"]);
+		expect(answersOf(session.doc, 2)).toEqual(batch(text));
 		session.evaluator.terminateWorker();
 	});
 
@@ -140,7 +158,7 @@ describe("an ordinary edit that closes a cycle", () => {
 		const text = edit(session, ["7", "line 1 + 1", "line 2 + 1"], 1, "line 3 + 1");
 
 		expect(answersOf(session.doc, 3)).toEqual(settled(text));
-		expect(answersOf(session.doc, 3)).toEqual(["Line 3 has an error", "Line 1 has an error", "Line 2 has an error"]);
+		expect(answersOf(session.doc, 3)).toEqual(batch(text));
 		expectStill(session, 3);
 		session.evaluator.terminateWorker();
 	});
@@ -153,7 +171,7 @@ describe("an ordinary edit that closes a cycle", () => {
 		const text = edit(session, ["9", "3", "5", "total above"], 1, "line 4 + 1");
 
 		expect(answersOf(session.doc, 4)).toEqual(settled(text));
-		expect(answersOf(session.doc, 4)).toEqual(["Line 4 has an error", "3", "5", "Line 1 has an error"]);
+		expect(answersOf(session.doc, 4)).toEqual(batch(text));
 		session.evaluator.terminateWorker();
 	});
 
@@ -162,7 +180,7 @@ describe("an ordinary edit that closes a cycle", () => {
 		const text = edit(session, ["10", "", "5", "line 1 + 1"], 1, "sum(line 3 : line 4)");
 
 		expect(answersOf(session.doc, 4)).toEqual(settled(text));
-		expect(answersOf(session.doc, 4)).toEqual(["Line 4 has an error", "", "5", "Line 1 has an error"]);
+		expect(answersOf(session.doc, 4)).toEqual(batch(text));
 		session.evaluator.terminateWorker();
 	});
 
@@ -174,7 +192,7 @@ describe("an ordinary edit that closes a cycle", () => {
 			const text = edit(session, ["7 #t", aggregate], 1, "line 2 + 1 #t");
 
 			expect(answersOf(session.doc, 2)).toEqual(settled(text));
-			expect(answersOf(session.doc, 2)).toEqual(["Line 2 has an error", "Line 1 has an error"]);
+			expect(answersOf(session.doc, 2)).toEqual(batch(text));
 			session.evaluator.terminateWorker();
 		}
 	});
@@ -185,7 +203,7 @@ describe("an ordinary edit that closes a cycle", () => {
 		const text = edit(session, ["line 3 + 5", "prev + 5", "9"], 1, "line 2 + 5");
 
 		expect(answersOf(session.doc, 3)).toEqual(settled(text));
-		expect(answersOf(session.doc, 3)).toEqual(["Line 2 has an error", "Line 1 has an error", "9"]);
+		expect(answersOf(session.doc, 3)).toEqual(batch(text));
 		session.evaluator.terminateWorker();
 	});
 });
@@ -201,7 +219,7 @@ describe("a cycle through a goal seek", () => {
 		const text = edit(session, [":v1 = 7", "v1 + 1", "solve line 2 for v1 = 27"], 2, "line 3 + v1", 6);
 
 		expect(answersOf(session.doc, 3)).toEqual(settled(text));
-		expect(answersOf(session.doc, 3)).toEqual(["7", "Line 3 has an error", "Line 3 has an error"]);
+		expect(answersOf(session.doc, 3)).toEqual(["7", notEvaluated(3), notEvaluated(3)]);
 		expectStill(session, 3);
 		session.evaluator.terminateWorker();
 	});
@@ -211,7 +229,7 @@ describe("a cycle through a goal seek", () => {
 		const text = edit(session, [":v1 = 7", "line 3 + v1", "9"], 3, "solve line 2 for v1 = 27", 6);
 
 		expect(answersOf(session.doc, 3)).toEqual(settled(text));
-		expect(answersOf(session.doc, 3)).toEqual(["7", "Line 3 has an error", "Line 3 has an error"]);
+		expect(answersOf(session.doc, 3)).toEqual(["7", notEvaluated(3), notEvaluated(3)]);
 		session.evaluator.terminateWorker();
 	});
 });
@@ -219,7 +237,7 @@ describe("a cycle through a goal seek", () => {
 describe("a cycle that comes and goes", () => {
 	test("breaking a cycle by editing a member recovers both lines", () => {
 		const session = editorFor(["line 2 + 5", "prev + 5"]);
-		expect(shown(session.doc, 1)).toContain("error");
+		expect(shown(session.doc, 1)).toBe(notEvaluated(2));
 		const text = edit(session, ["line 2 + 5", "prev + 5"], 2, "12");
 
 		expect(answersOf(session.doc, 2)).toEqual(settled(text));
@@ -273,7 +291,7 @@ describe("a cycle that comes and goes", () => {
 
 		text = edit(session, text, 2, "5");
 		expect(answersOf(session.doc, 4)).toEqual(settled(text));
-		expect(answersOf(session.doc, 4)).toEqual(["Line 4 has an error", "5", "3", "Line 1 has an error"]);
+		expect(answersOf(session.doc, 4)).toEqual(batch(text));
 		expectStill(session, 4);
 		session.evaluator.terminateWorker();
 	});
@@ -322,57 +340,54 @@ describe("what is left alone", () => {
 });
 
 describe("a pass from scratch is unchanged", () => {
-	// The specification is the from-scratch answer, so the reset must never
-	// fire there: every member holds an error when the cycle closes. Answers
-	// and pass counts are pinned so a later change to the reset cannot move
-	// the thing it is measured against.
-	const shapes: { lines: string[]; answers: string[]; passes: number }[] = [
-		{ lines: ["line 2 + 5", "prev + 5"], answers: ["Line 2 has an error", "Line 1 has an error"], passes: 3 },
-		{
-			lines: ["line 3 + 1", "line 1 + 1", "line 2 + 1"],
-			answers: ["Line 3 has an error", "Line 1 has an error", "Line 2 has an error"],
-			passes: 3,
-		},
-		{ lines: ["line 4 + 1", "3", "5", "total above"], answers: ["Line 4 has an error", "3", "5", "Line 1 has an error"], passes: 3 },
-		{
-			lines: ["sum(line 3 : line 4)", "", "5", "line 1 + 1"],
-			answers: ["Line 4 has an error", "", "5", "Line 1 has an error"],
-			passes: 3,
-		},
-		{ lines: ["total of #travel", "line 1 + 1 #travel"], answers: ["Line 2 has an error", "Line 1 has an error"], passes: 3 },
+	// The specification is the from-scratch answer, and for a cycle that is the
+	// batch pass's answer: a member has no answer of its own and both paths say
+	// so in the same words. Pass counts are pinned so a later change cannot
+	// quietly make settling slower. A cycle takes two: one pass to find it,
+	// and one for its members to run the way a fresh pass runs them.
+	const shapes: { lines: string[]; answers?: string[]; passes: number }[] = [
+		{ lines: ["line 2 + 5", "prev + 5"], passes: 2 },
+		{ lines: ["line 3 + 1", "line 1 + 1", "line 2 + 1"], passes: 2 },
+		{ lines: ["line 4 + 1", "3", "5", "total above"], passes: 2 },
+		// Four, not two: the range stops at line 3 on the first pass, before it
+		// has read line 4, so the edge that closes the cycle is only recorded on
+		// the second, and the members run the fresh way on the third.
+		{ lines: ["sum(line 3 : line 4)", "", "5", "line 1 + 1"], passes: 4 },
+		{ lines: ["total of #travel", "line 1 + 1 #travel"], passes: 2 },
+		// Not a cycle: a plain forward reference, which the incremental path
+		// resolves by running again and the batch pass does not.
 		{ lines: ["line 2 + 1", "7"], answers: ["8", "7"], passes: 3 },
 		{
 			lines: ["average above", "line 1 + 2"],
 			answers: ["No lines above to aggregate (hit the top of the document, a blank line, or a heading immediately)", "Line 1 has an error"],
 			passes: 2,
 		},
+		// A goal seek is refused by the batch pass, so its cycle is pinned by hand.
 		{
 			lines: [":v1 = 7", "line 3 + v1", "solve line 2 for v1 = 27"],
-			answers: ["7", "Line 3 has an error", "Line 3 has an error"],
-			passes: 3,
+			answers: ["7", notEvaluated(3), notEvaluated(3)],
+			passes: 2,
 		},
 	];
 
 	for (const shape of shapes) {
 		test(`${JSON.stringify(shape.lines)} settles in ${shape.passes} passes`, () => {
-			expect(settle(shape.lines)).toEqual({ answers: shape.answers, passes: shape.passes });
+			expect(settle(shape.lines)).toEqual({ answers: shape.answers ?? batch(shape.lines), passes: shape.passes });
 		});
 	}
 });
 
-describe("the boundary", () => {
-	test("a cycle through a name is not walked", () => {
-		// `:a = line 2 + 1` reads line 2's position; `a + 1` reads the name `a`,
-		// not a position, so the positional graph holds no cycle. A pass over
-		// the text reports one, and the edited document keeps chasing. Pinned
-		// rather than fixed: the fuzz generator emits only literal definitions,
-		// so this is not a shape it can reach, and if either changes this is
-		// where it shows.
-		expect(settled([":a = line 2 + 1", "a + 1"])).toEqual(["Line 2 has an error", "Line 2 has an error"]);
+describe("a cycle through a name", () => {
+	test("is reported like one through positions", () => {
+		// `:a = line 2 + 1` reads line 2's position; `a + 1` reads the name `a`.
+		// The consumer index holds both edges, so the walk finds the pair, and
+		// the reset puts `a` back to what the lines above left, which is
+		// nothing. Both then report the other, as a pass over the text does.
+		expect(settled([":a = line 2 + 1", "a + 1"])).toEqual(batch([":a = line 2 + 1", "a + 1"]));
 
 		const session = editorFor([":a = 7", "a + 1"]);
 		edit(session, [":a = 7", "a + 1"], 1, ":a = line 2 + 1");
-		expect(shown(session.doc, 1)).not.toContain("error");
+		expect(answersOf(session.doc, 2)).toEqual(settled([":a = line 2 + 1", "a + 1"]));
 		session.evaluator.terminateWorker();
 	});
 });

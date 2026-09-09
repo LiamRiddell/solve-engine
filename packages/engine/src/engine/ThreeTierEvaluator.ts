@@ -82,6 +82,19 @@ export interface EvalResult {
 // ── ThreeTierEvaluator ──────────────────────────────────────────────────
 
 /**
+ * Whether a definition's right-hand side reads the name it defines.
+ *
+ * `extractReadsAndWrites` records every `:name = ...` as reading `name` once,
+ * a convention the graph relies on, so one occurrence says nothing. A second
+ * is the right-hand side.
+ */
+function readsItself(reads: readonly string[], name: string): boolean {
+	let seen = 0;
+	for (const read of reads) if (read === name && ++seen === 2) return true;
+	return false;
+}
+
+/**
  * Orchestrates three-tier evaluation over a persistent DocumentModel.
  *
  * ── Tier assignment ─────────────────────────────────────────────────
@@ -106,19 +119,6 @@ export interface EvalResult {
  * `isBytecodeValid()` to ensure the line text hasn't changed between
  * dispatch and response.
  */
-/**
- * Whether a definition's right-hand side reads the name it defines.
- *
- * `extractReadsAndWrites` records every `:name = ...` as reading `name` once,
- * a convention the graph relies on, so one occurrence says nothing. A second
- * is the right-hand side.
- */
-function readsItself(reads: readonly string[], name: string): boolean {
-	let seen = 0;
-	for (const read of reads) if (read === name && ++seen === 2) return true;
-	return false;
-}
-
 export class ThreeTierEvaluator {
 	private doc: DocumentModel;
 	private engine: ExpressionEngine;
@@ -155,6 +155,11 @@ export class ThreeTierEvaluator {
 	 * structural edit does not lose it.
 	 */
 	private selfReadingWrites: Map<number, string[]> = new Map();
+
+	/**
+	 * The lines that sit on a cycle, by line id. See {@link settleCycles}.
+	 */
+	private cycleMemberIds: Set<number> = new Set();
 
 	/**
 	 * Unsubscribe from sharedGlobalVariableStore, set in the constructor
@@ -304,7 +309,7 @@ export class ThreeTierEvaluator {
 			// A line that read a position it had not read before may have
 			// closed a cycle, and the end of the pass is when every edge the
 			// walk would follow describes a run of the text that holds it.
-			this.forgetCyclesClosedThisPass();
+			this.settleCycles();
 
 			// ── Phase 5.2g: Page-based LRU eviction ──────────────────────
 			// Evict bytecode/results from cold/warm pages to bound memory.
@@ -672,6 +677,7 @@ export class ThreeTierEvaluator {
 		for (const lineId of result.removed) {
 			this.textHashOfRecordedEdges.delete(lineId);
 			this.selfReadingWrites.delete(lineId);
+			this.cycleMemberIds.delete(lineId);
 		}
 
 		return {
@@ -708,61 +714,48 @@ export class ThreeTierEvaluator {
 	}
 
 	/**
-	 * Take the answers off any positional cycle this pass closed, once.
+	 * Keep the record of which lines sit on a cycle current.
 	 *
-	 * Two lines that read each other's positions have no settled value: reached
-	 * from scratch neither has a value to start from, so each reports the other
-	 * and stays there. Reached by an ordinary edit, one of them already holds a
-	 * number computed about the document before the edit, the other reads it,
-	 * and the pair chases those numbers for as long as the document is open:
-	 * `line 2 + 5` edited in above `prev + 5` grew by ten a pass.
+	 * A cycle can only appear or vanish with an edge, so the record is
+	 * recomputed only when the graph changed this pass, by a walk from what
+	 * changed: readers that gained a position, lines whose edge set changed
+	 * (a dropped positional edge included, which is how a cycle is broken), and
+	 * the readers of a name whose producers changed, which is how a name that
+	 * pinned a cycle is withdrawn. A line whose status flips is marked to run
+	 * again, so it runs the other way on the next pass. A settled pass changes
+	 * nothing and walks nothing.
 	 *
-	 * The edge that closes a cycle is recorded when the reader that holds it
-	 * runs its current text, and the graph names those readers. From them, a
-	 * walk over the positions each line reads finds the strongly connected
-	 * components, and a component of more than one line that holds one of
-	 * them is a cycle this pass closed (a cycle that already existed reaches
-	 * the same state on its own, and if it is on the walk it holds errors, so
-	 * nothing below touches it). The walk is one pass over what the new edges
-	 * reach, however many readers there are, which is what keeps a column of
-	 * `prev + 1` linear on the pass after an insert, when every edge is new;
-	 * and it is skipped outright while no edge points downwards, since a cycle
-	 * needs one and a document of `prev` and `above` has none.
-	 *
-	 * Every edge followed is current: an edited line's positions are forgotten
-	 * before it runs (see {@link forgetPositionsOfEditedText}), a run cuts the
-	 * line's positions back to what it read, and a structural edit clears the
-	 * graph. That is what an earlier attempt lacked, and why it found cycles
-	 * that had been edited away.
-	 *
-	 * Only a member holding an answer is reset, and it is reset once. A pass
-	 * from scratch has every member holding an error by the time the cycle
-	 * closes, because some member reads a line below it that has not run, and
-	 * every positional form answers an unread or errored line with an error,
-	 * all the way round. So a number on a member is the one thing a settled
-	 * pass never holds, and forgetting it, with the line marked to run again,
-	 * leaves the members in the state a pass from scratch is in. From there
-	 * both paths take the same steps to the same answers. Resetting on every
-	 * pass, which an earlier attempt did, re-created the not-yet-evaluated
-	 * answer on every pass and stranded the reader.
+	 * What membership does is decided where a line runs: see
+	 * {@link evaluateSingleLine} and `ExpressionEngine.setLineOnCycle`. Earlier
+	 * versions reset a member's answer here instead, at the end of the pass,
+	 * and that was one line too late: the number the member computed had
+	 * already been read by the lines below it during the pass. Deciding how the
+	 * member runs means no number ever exists to be read.
 	 */
-	private forgetCyclesClosedThisPass(): void {
+	private settleCycles(): void {
 		const gained = this.dag.takeReadersThatGainedAPosition();
 		const changes = this.dag.takeEdgeChanges();
-		// A cycle is closed, or the name that pinned one withdrawn, by a change in
-		// the graph, so the walk starts from what changed: readers that gained a
-		// position, lines whose edges changed, and the readers of a name whose
-		// producers changed. A settled pass changes nothing and walks nothing.
 		const roots = new Set<number>(gained);
 		for (const line of changes.lines) roots.add(line);
 		for (const key of changes.keys) {
 			if (isPrefixedEdgeKey(key)) continue;
 			for (const reader of this.dag.directConsumersOf(key)) roots.add(reader);
 		}
-		if (roots.size === 0) return;
+		if (roots.size > 0) this.recomputeCycleMembership(roots);
+	}
 
-		// Tarjan's components, iteratively: a `prev` chain can be thousands of
-		// lines deep, which is deeper than a recursive walk should go.
+	/**
+	 * Recompute which lines sit on a cycle, for every line the change reaches.
+	 *
+	 * Tarjan's components, iteratively: a `prev` chain can be thousands of
+	 * lines deep, which is deeper than a recursive walk should go. A line the
+	 * walk visits is on a cycle if its component has more than one member, and
+	 * off one otherwise; a line the walk does not reach kept its edges and its
+	 * status. Membership is by line id, so a structural edit does not lose it;
+	 * such an edit clears the graph and every line re-registers on the next
+	 * pass, so the walk then reaches everything.
+	 */
+	private recomputeCycleMembership(roots: ReadonlySet<number>): void {
 		const index = new Map<number, number>();
 		const low = new Map<number, number>();
 		const onStack = new Set<number>();
@@ -776,6 +769,15 @@ export class ThreeTierEvaluator {
 			stack.push(line);
 			onStack.add(line);
 			frames.push({ line, targets: this.dependantsOf(line), next: 0 });
+		};
+		const setMembership = (line: number, onCycle: boolean): void => {
+			const state = this.doc.getLineAt(line);
+			if (state === undefined) return;
+			if (onCycle === this.cycleMemberIds.has(state.lineId)) return;
+			if (onCycle) this.cycleMemberIds.add(state.lineId);
+			else this.cycleMemberIds.delete(state.lineId);
+			// It runs the other way from now on, so it has to run.
+			this.doc.markDirty(state.lineId);
 		};
 
 		for (const root of roots) {
@@ -802,10 +804,7 @@ export class ThreeTierEvaluator {
 					onStack.delete(member);
 					members.push(member);
 				} while (member !== frame.line);
-				// A component of one line is never a cycle here: a definition that
-				// reads the name it writes is put back to the prefix before it runs,
-				// which is all the from-scratch pass does with it too.
-				if (members.length > 1 && members.some((line) => roots.has(line))) this.forgetAnswersOn(members);
+				for (const line of members) setMembership(line, members.length > 1);
 			}
 		}
 	}
@@ -836,30 +835,19 @@ export class ThreeTierEvaluator {
 		for (const key of this.dag.getWrites(line)) {
 			if (isPrefixedEdgeKey(key)) continue;
 			for (const reader of this.dag.directConsumersOf(key)) out.push(reader);
+			// A running total's other steppers depend on this one through the
+			// total, and the graph keeps a writer out of its own name's consumers,
+			// so that dependency is recovered here for an accumulator name alone.
+			// `spent += line 2` above `spent += 9` is a cycle: the step below
+			// folds in the step above, and the step above reads the line below.
+			// Ordered, because the fold is: a step depends on the steps above it,
+			// never on those below. Without the order a plain column of steps was
+			// a cycle.
+			if (this.engine.isAccumulatorName(key)) {
+				for (const stepper of this.dag.getProducers(key)) if (stepper > line) out.push(stepper);
+			}
 		}
 		return out;
-	}
-
-	/**
-	 * Take the answer off each member of a cycle that holds one.
-	 *
-	 * An error is left where it is: it is what a settled pass holds, and the
-	 * line re-runs to the same error regardless. A value still arriving is left
-	 * too, since forgetting it would only start the fetch again.
-	 */
-	private forgetAnswersOn(members: readonly number[]): void {
-		for (const member of members) {
-			const state = this.doc.getLineAt(member);
-			if (state === undefined) continue;
-			const held = state.result;
-			if (held === null || held.type === ValueType.Error || held.type === ValueType.Pending) continue;
-			this.doc.forgetResult(state.lineId);
-			this.doc.markDirty(state.lineId);
-			// Its names too, now rather than when it next runs. A member above
-			// another reads that one's name before the other runs, and would read
-			// the stale value the reset exists to remove.
-			for (const written of state.writes) this.engine.restoreToPrefix(written, member);
-		}
 	}
 
 	// ── Private helpers ─────────────────────────────────────────────────
@@ -948,7 +936,7 @@ export class ThreeTierEvaluator {
 
 		// The same end-of-pass check `evaluate` makes; a viewport pass runs
 		// lines and records what they read just as a full one does.
-		this.forgetCyclesClosedThisPass();
+		this.settleCycles();
 
 		return { lines, resultMap, tierCounts };
 	}
@@ -1010,9 +998,26 @@ export class ThreeTierEvaluator {
 		// the map is not consulted for it: the check costs the pass nothing on
 		// the lines that are most of it.
 		if (state.dirty) this.forgetPositionsOfEditedText(state, lineNumber);
+		// A line on a cycle runs the way a single fresh pass runs it: the names
+		// it reads hold what the lines above left, and a line below it is not
+		// yet evaluated. That is the answer `parseDocument` gives such a line,
+		// and it is stable, where a number found in the VM from the previous
+		// pass is the start of a chase. See `ExpressionEngine.setLineOnCycle`.
+		const onCycle = this.cycleMemberIds.has(state.lineId);
+		this.engine.setLineOnCycle(onCycle);
+		if (onCycle) {
+			for (const read of state.reads) {
+				if (!isPrefixedEdgeKey(read)) this.engine.restoreToPrefix(read, lineNumber);
+			}
+		}
 		const lineResult = this.dispatchLine(state, lineNumber, inViewport);
+		// A member's run is cut short on purpose (a forward read stops a range
+		// or an aggregate early), so what it read forward is not what it reads
+		// forward; its backward edges still follow the run, which is how an
+		// aggregate whose block shrank under a new heading is seen to have
+		// left the cycle.
 		if (lineResult.tier === EvalTier.Tier1 || lineResult.tier === EvalTier.Tier2) {
-			this.dag.reconcilePositionReads(lineNumber);
+			this.dag.reconcilePositionReads(lineNumber, onCycle);
 		}
 		return lineResult;
 	}
@@ -1263,10 +1268,14 @@ export class ThreeTierEvaluator {
 				allResults.push([errorValue("eval_failed", firstError ?? "unknown error")]);
 			}
 
-			// A throw is a failure as much as an error answer is: either way the
-			// store never happened, and the name must be left as the lines above
-			// left it, whichever branch below learns what this expression writes.
-			const failed = value === null || value.some((v) => v.type === ValueType.Error);
+			// Failed means the store never happened, which is a throw (or, below, a
+			// right-hand side that did not compile). An error that comes back as a
+			// value is stored like any other value: errors are values in this
+			// engine, `:a = line 9 + 1` leaves `a` holding one, and a reader of `a`
+			// reports it. Treating that as a failure too made both paths delete the
+			// name instead, which the two of them agreed on and a pass through
+			// parseDocument does not.
+			const failed = value === null;
 			if (entry) {
 				allBytecodes.push(entry.bytecode);
 				for (const r of entry.readVariables) allReads.add(r);
@@ -1383,7 +1392,13 @@ export class ThreeTierEvaluator {
 		// ── Checkpoint after variable definition ──
 		// A pending value is not a value worth checkpointing: restoring it would
 		// reinstate the unresolved placeholder rather than the eventual result.
-		if (this.checkpointer && writes.length > 0 && !anyFailed && !anyPending) {
+		// A line that failed is snapshotted too. Its names were put back to
+		// the prefix as it failed, so what the VM holds for them now is right,
+		// and skipping the snapshot left the entry from before the edit in the
+		// chain: `:v0 = 49` edited into a line that throws went on telling the
+		// lines below that the prefix held 49. A pending value is still left
+		// out, since it has not arrived.
+		if (this.checkpointer && writes.length > 0 && !anyPending) {
 			this.checkpointer.snapshot(lineNumber, state.lineId, writes);
 		} else if (this.checkpointer && writes.length === 0) {
 			// A line that defines nothing any more has nothing for the chain to
@@ -1467,7 +1482,6 @@ export class ThreeTierEvaluator {
 				const value = this.engine.executeCached(bytecode, lineNumber);
 				lastValue = value;
 				results.push([value]);
-				failed = value.type === ValueType.Error;
 			} catch (e) {
 				const errorMessage = e instanceof Error ? e.message : String(e);
 				if (!firstError) firstError = errorMessage;

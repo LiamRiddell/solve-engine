@@ -641,6 +641,9 @@ export class ExpressionEngine {
                   // over the same text reports the self-reference.
                   if (n === context.lineIndex) return undefined;
                   dag.registerLinePositionDependency(context.lineIndex, n);
+                  // A line on a cycle reads the way a single fresh pass reads: a
+                  // line below it has not been evaluated. See {@link setLineOnCycle}.
+                  if (n > context.lineIndex && this.lineOnCycle) return undefined;
                   return doc.getLineAt(n)?.result ?? undefined;
               }
             : parsed
@@ -676,6 +679,7 @@ export class ExpressionEngine {
                       // recorded against the target, whose context the probe
                       // runs under.
                       if (n !== context.lineIndex) dag.registerLinePositionDependency(context.lineIndex, n);
+                      if (n > context.lineIndex && this.lineOnCycle) return undefined;
                       const state = doc.getLineAt(n);
                       // A line with no compiled bytecode has nothing to solve
                       // against yet (forward reference, out of range, or
@@ -1016,6 +1020,9 @@ export class ExpressionEngine {
     //#endregion
 
     //#region Constructor
+    /** Whether the line being evaluated sits on a cycle; see {@link setLineOnCycle}. */
+    private lineOnCycle = false;
+
     constructor(options: EngineOptions = {}) {
         const { locale = "en", diagnostics = false, config, packages, calendar } = options;
         this.localeCode = locale;
@@ -1264,6 +1271,45 @@ export class ExpressionEngine {
         const prior = chain?.lookupVariableBefore(name, lineNumber);
         if (prior === undefined) this.vm.deleteVar(name);
         else this.vm.setVar(name, prior);
+    }
+
+    /**
+     * Whether `name` is a running total, stepped by `+=` or `-=` somewhere.
+     *
+     * The evaluator's cycle walk asks, because a total's steppers depend on one
+     * another through the total in a way the graph deliberately does not
+     * record: a line is kept out of the consumers of a name it writes, which
+     * is right for `:x = 5` and hides the fold for `spent += 5`.
+     *
+     * @param name - A variable name.
+     * @returns True when a line has stepped it.
+     */
+    /**
+     * Tell the engine whether the line about to run sits on a cycle.
+     *
+     * A line that depends on itself, through positions or names or both, has
+     * no answer of its own: each value it could hold is computed from that same
+     * value a pass earlier. A single fresh pass reports that, because some
+     * member reads a line below it that has not run, and the error travels all
+     * the way round. The incremental path carries the VM between passes, so a
+     * member could find a number to start from, and the pair then chased it.
+     *
+     * While this is set, a positional read of a line below the one running
+     * answers as an unevaluated line does, which is what makes a member report
+     * the cycle rather than the number it read last pass. The evaluator sets it
+     * per line from the cycle membership it keeps, and puts the names such a
+     * line reads back to the prefix before it runs, for the same reason. A line
+     * not on a cycle keeps the incremental path's tolerance of a plain forward
+     * reference, which resolves by running the document again.
+     *
+     * @param onCycle - Whether the line about to run is on a cycle.
+     */
+    setLineOnCycle(onCycle: boolean): void {
+        this.lineOnCycle = onCycle;
+    }
+
+    isAccumulatorName(name: string): boolean {
+        return this.accumulatorNames.has(name);
     }
 
     /** The names of every user-defined unit in scope, for detecting a removal. */

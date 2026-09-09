@@ -109,6 +109,6 @@ describe("Issue #444: an ordinary edit into a positional cycle", () => {
 	test("a cycle written from the start was never affected", () => {
 		// Which is what makes this incremental-only: the same text, read once,
 		// has always reported the cycle.
-		expect(settled(["line 2 + 5", "prev + 5"])[0]).toContain("error");
+		expect(settled(["line 2 + 5", "prev + 5"])[0]).toContain("has not been evaluated yet");
 	});
 });
