@@ -208,3 +208,16 @@ describe("what must keep working", () => {
 		expect(lineResult(doc, 2).toNumber()).toBe(10);
 	});
 });
+
+describe("a seek that names its own line", () => {
+	test("is refused as a seek targeting a seek", () => {
+		// It does not read its variable, which used to be the refusal given,
+		// and is true of it and not the point: it would re-run itself.
+		const doc = solveDoc(["v1 + 7", "solve line 2 for v1 = 7"]);
+		const solved = lineResult(doc, 2);
+		expect(solved.type).toBe(ValueType.Error);
+		expect(solved.value).toBe("GOAL_SEEK_NESTED");
+		const alone = solveDoc(["solve line 1 for v1 = 7"]);
+		expect(lineResult(alone, 1).value).toBe("GOAL_SEEK_NESTED");
+	});
+});

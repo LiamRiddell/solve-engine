@@ -88,6 +88,25 @@ export interface EvalResult {
  * a convention the graph relies on, so one occurrence says nothing. A second
  * is the right-hand side.
  */
+/**
+ * The names these programs define as functions, from the bodies compiled
+ * alongside them.
+ *
+ * The checkpoint chain keeps a variable and a function of the same name in
+ * separate bags and asks which bag a written name goes in. The VM cannot
+ * say: once `f(x) = x + 1` is defined above, it holds a function named `f`
+ * whether the line that just ran defined it or set the variable `f`. The
+ * bytecode can.
+ */
+function functionsDefinedBy(bytecodes: readonly BytecodeProgram[]): Set<string> {
+	const names = new Set<string>();
+	for (const program of bytecodes) {
+		if (program.userFunctionBodies === undefined) continue;
+		for (const body of program.userFunctionBodies) names.add(body.name);
+	}
+	return names;
+}
+
 function readsItself(reads: readonly string[], name: string): boolean {
 	let seen = 0;
 	for (const read of reads) if (read === name && ++seen === 2) return true;
@@ -491,11 +510,14 @@ export class ThreeTierEvaluator {
 		// Link the UI layer's keystroke signal to the engine.
 		this.engine.setKeystrokeSignal(signal ?? null);
 
-		// ── Correctness guard: dirty lines before viewport invalidate checkpoints ──
+		// ── Correctness guard: dirty lines before the viewport run first ──
+		// A dirty line above the viewport may define something the viewport
+		// reads, so the pass runs from line 1 and reaches it. The chain is
+		// kept: a dirty line replaces its own entry when it runs, and a clean
+		// line's entry, which nothing here runs again, is the one the lines
+		// below need. Clearing it left them reading an empty prefix.
 		if (viewport.startLine > 1 && this.hasDirtyLinesBefore(viewport.startLine)) {
-			// Clear stale checkpoints, evaluate() will rebuild them from line 1.
 			// evaluate() handles its own arena enable/disable and signal cleanup.
-			this.checkpointer?.clear();
 			return this.evaluate(viewport, signal);
 		}
 
@@ -652,8 +674,15 @@ export class ThreeTierEvaluator {
 		// ── Phase 2: Apply structural changes to DocumentModel ─────────
 		const result = this.doc.applyChanges(changes);
 
-		// ── Phase 3: Clear checkpointer (line numbers shifted) ─────────
-		this.checkpointer?.clear();
+		// ── Phase 3: The chain follows the lines to their new positions ──
+		// It used to be cleared here and rebuilt as lines ran, but a clean
+		// line above the viewport never runs, so its entry never came back
+		// and a line below asking what the prefix held was told nothing.
+		this.checkpointer?.renumber((lineId) => this.doc.getLinePosition(lineId));
+		// A deleted line's names hold what the rest of the document leaves
+		// them, which is where a pass over the remaining text would leave them;
+		// until now they held what the deleted line had written.
+		for (const written of allWrites) this.engine.restoreToPrefix(written, Number.MAX_SAFE_INTEGER);
 
 		// ── Phase 4: Mark DAG-downstream lines dirty by lineId ─────────
 		// Using lineId instead of line number is position-agnostic:
@@ -1022,13 +1051,14 @@ export class ThreeTierEvaluator {
 			}
 		}
 		const lineResult = this.dispatchLine(state, lineNumber, inViewport);
-		// A member's run is cut short on purpose (a forward read stops a range
-		// or an aggregate early), so what it read forward is not what it reads
-		// forward; its backward edges still follow the run, which is how an
-		// aggregate whose block shrank under a new heading is seen to have
-		// left the cycle.
+		// A member's edges follow its run like any other line's. Its run is cut
+		// short on purpose (a forward read stops a range early), which is why
+		// every aggregate declares its whole span before reading any of it;
+		// keeping a member's forward edges regardless kept an edge to a line
+		// the member had stopped reading, and that phantom cycle outlived the
+		// real one.
 		if (lineResult.tier === EvalTier.Tier1 || lineResult.tier === EvalTier.Tier2) {
-			this.dag.reconcilePositionReads(lineNumber, onCycle);
+			this.dag.reconcilePositionReads(lineNumber);
 		}
 		return lineResult;
 	}
@@ -1121,7 +1151,11 @@ export class ThreeTierEvaluator {
 	 *
 	 * Registering it with no edges is what says so. Only when the line is dirty,
 	 * since a line that was already empty has nothing to withdraw, and its own
-	 * write set is dropped as part of registering nothing.
+	 * write set is dropped as part of registering nothing. What it wrote goes
+	 * back to the prefix first, as it does when a line is compiled again: the
+	 * graph unbinds only a name no other line produces, and `:f = 5` under
+	 * `f(x) = x + 4` produces `f` too, so emptying it left the variable and
+	 * emptying the function's line left the function.
 	 *
 	 * Any unit it defined goes the same way, and for the same reason: a line
 	 * drops its own definitions as it is compiled again, which a line nothing
@@ -1131,6 +1165,7 @@ export class ThreeTierEvaluator {
 	 */
 	private deregisterIfDirty(state: LineState, lineNumber: number): void {
 		if (!state.dirty) return;
+		for (const written of state.writes) this.engine.restoreToPrefix(written, lineNumber);
 		state.reads = [];
 		state.writes = [];
 		this.registerWithTags(lineNumber, [], []);
@@ -1410,7 +1445,7 @@ export class ThreeTierEvaluator {
 		// lines below that the prefix held 49. A pending value is still left
 		// out, since it has not arrived.
 		if (this.checkpointer && writes.length > 0 && !anyPending) {
-			this.checkpointer.snapshot(lineNumber, state.lineId, writes);
+			this.checkpointer.snapshot(lineNumber, state.lineId, writes, functionsDefinedBy(allBytecodes));
 		} else if (this.checkpointer && writes.length === 0) {
 			// A line that defines nothing any more has nothing for the chain to
 			// say about it, and what it used to say is what the lines below would
@@ -1555,7 +1590,7 @@ export class ThreeTierEvaluator {
 		// two dirty ones, and `snapshot`'s re-run truncation would drop
 		// entries that nothing ever puts back.
 		if (this.checkpointer && state.writes.length > 0 && !anyFailed) {
-			this.checkpointer.snapshot(lineNumber, state.lineId, state.writes);
+			this.checkpointer.snapshot(lineNumber, state.lineId, state.writes, functionsDefinedBy(state.bytecodes));
 		}
 
 		return {
@@ -1598,34 +1633,73 @@ export class ThreeTierEvaluator {
 		/** Set when a result is still waiting on a resolver. */
 		let anyPending = false;
 
+		// The same discipline as Tier 1, because a definition runs here too:
+		// before it does, each name it wrote holds what the lines above left,
+		// and a definition that fails is put back there. Without it a line
+		// scrolled out of view kept the value it had before the edit, and one
+		// that read its own name climbed by its step on every pass, for as long
+		// as it stayed out of view. See `ExpressionEngine.restoreToPrefix`.
+		for (const written of state.writes) this.engine.restoreToPrefix(written, lineNumber);
+		const definedEarlierOnThisLine = new Set<string>();
+		const selfReading: string[] = [];
+
 		// Compile each expression independently, a parse error in one
 		// should not prevent other expressions from being compiled and
 		// having their reads/writes registered in the DAG.
 		for (const expression of expressions) {
 			if (!expression.trim()) continue;
 
+			let compiled: { program: BytecodeProgram; reads: string[]; writes: string[] };
 			try {
-				const { program, reads, writes } = this.engine.compileExpression(expression);
-				allBytecodes.push(program);
-				for (const r of reads) allReads.add(r);
-				for (const w of writes) allWrites.add(w);
-				if (writes.length > 0) hasVariableDef = true;
-
-				if (writes.length > 0 && program.opcodes.length > 0) {
-					// Variable definitions MUST execute to maintain VM state
-					lastResult = this.engine.executeCached(program, lineNumber);
-					// Same reasoning as Tier 1: a pending result does not throw,
-					// and marking the line clean would strand it unresolved.
-					if (lastResult && lastResult.type === ValueType.Pending) {
-						anyPending = true;
-					}
-				}
+				compiled = this.engine.compileExpression(expression);
 			} catch (e) {
 				const errorMessage = e instanceof Error ? e.message : String(e);
 				if (!firstError) firstError = errorMessage;
 				anyFailed = true;
 				// Push empty bytecode placeholder for alignment
 				allBytecodes.push({ opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false });
+				// A definition that does not compile set nothing. Its names are
+				// still registered, as Tier 1 registers them, so the line runs
+				// again once they are defined.
+				if (e instanceof EngineError && e.context) {
+					const errReads = e.context.reads;
+					const errWrites = e.context.writes;
+					if (Array.isArray(errReads)) for (const r of errReads) allReads.add(r);
+					if (Array.isArray(errWrites)) {
+						for (const w of errWrites) {
+							allWrites.add(w);
+							if (!definedEarlierOnThisLine.has(w)) this.engine.restoreToPrefix(w, lineNumber);
+						}
+					}
+				}
+				continue;
+			}
+			const { program, reads, writes } = compiled;
+			allBytecodes.push(program);
+			for (const r of reads) allReads.add(r);
+			for (const w of writes) allWrites.add(w);
+			if (writes.length > 0) hasVariableDef = true;
+			for (const w of writes) if (readsItself(reads, w)) selfReading.push(w);
+
+			if (writes.length > 0 && program.opcodes.length > 0) {
+				// Variable definitions MUST execute to maintain VM state
+				try {
+					lastResult = this.engine.executeCached(program, lineNumber);
+					// Same reasoning as Tier 1: a pending result does not throw,
+					// and marking the line clean would strand it unresolved.
+					if (lastResult && lastResult.type === ValueType.Pending) {
+						anyPending = true;
+					}
+					for (const w of writes) definedEarlierOnThisLine.add(w);
+				} catch (e) {
+					const errorMessage = e instanceof Error ? e.message : String(e);
+					if (!firstError) firstError = errorMessage;
+					anyFailed = true;
+					// A definition that threw stored nothing; see Tier 1.
+					for (const w of writes) {
+						if (!definedEarlierOnThisLine.has(w)) this.engine.restoreToPrefix(w, lineNumber);
+					}
+				}
 			}
 		}
 
@@ -1648,15 +1722,25 @@ export class ThreeTierEvaluator {
 		// Always register, even empty reads/writes for DAG line-presence queries.
 		this.registerWithTags(lineNumber, reads, writes);
 
+		if (selfReading.length > 0) this.selfReadingWrites.set(state.lineId, selfReading);
+		else this.selfReadingWrites.delete(state.lineId);
+
 		if (hasVariableDef && lastResult && !anyFailed && !anyPending) {
 			state.results = [[lastResult]];
 			state.result = lastResult;
 			this.doc.markClean(state.lineId);
+		}
 
-			// ── Checkpoint after variable definition ────────────
-			if (this.checkpointer) {
-				this.checkpointer.snapshot(lineNumber, state.lineId, writes);
-			}
+		// ── Checkpoint after variable definition ────────────
+		// Taken whether or not the line failed, as in Tier 1: its names were
+		// put back to the prefix as it failed, so what the VM holds for them
+		// now is right, and the entry from before the edit is the wrong thing
+		// to keep. A pending value is left out, since it has not arrived. A
+		// line that defines nothing any more has nothing for the chain to say.
+		if (this.checkpointer && writes.length > 0 && !anyPending) {
+			this.checkpointer.snapshot(lineNumber, state.lineId, writes, functionsDefinedBy(allBytecodes));
+		} else if (this.checkpointer && writes.length === 0) {
+			this.checkpointer.dropCheckpointAt(lineNumber);
 		}
 
 		return { ...baseResult, tier: EvalTier.Tier3, result: lastResult, results: hasVariableDef && lastResult && !anyFailed && !anyPending ? [[lastResult]] : undefined, error: firstError };

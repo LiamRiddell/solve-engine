@@ -83,33 +83,15 @@ function noteReadThisRun(positions: PositionsRead, position: number): void {
 		return;
 	} else if (position === positions.runHi + 1) {
 		positions.runHi = position;
+		if (positions.runSparse !== null) positions.runSparse.delete(position);
 	} else if (position === positions.runLo - 1) {
 		positions.runLo = position;
+		if (positions.runSparse !== null) positions.runSparse.delete(position);
 	} else if (positions.runSparse === null) {
 		positions.runSparse = new Set([position]);
 	} else {
 		positions.runSparse.add(position);
 	}
-}
-
-/**
- * Rewrite the recorded half of an entry from an explicit list of positions,
- * in the span-and-set shape the rest of the graph reads: the longest run of
- * consecutive positions from the smallest is the span, and the rest are sparse.
- */
-function setRecordedPositions(positions: PositionsRead, kept: number[]): void {
-	kept.sort((a, b) => a - b);
-	if (kept.length === 0) {
-		positions.lo = -1;
-		positions.hi = -1;
-		positions.sparse = null;
-		return;
-	}
-	positions.lo = kept[0];
-	let end = 0;
-	while (end + 1 < kept.length && kept[end + 1] === kept[end] + 1) end++;
-	positions.hi = kept[end];
-	positions.sparse = end + 1 < kept.length ? new Set(kept.slice(end + 1)) : null;
 }
 
 /** Whether the run half of an entry read `position`. */
@@ -774,8 +756,12 @@ export class DependencyGraph {
         return;
       } else if (dependsOnLine === positions.hi + 1) {
         positions.hi = dependsOnLine;
+        // A position the span has grown over is no longer sparse, or the
+        // entry would list it twice.
+        if (positions.sparse !== null) positions.sparse.delete(dependsOnLine);
       } else if (dependsOnLine === positions.lo - 1) {
         positions.lo = dependsOnLine;
+        if (positions.sparse !== null) positions.sparse.delete(dependsOnLine);
       } else if (positions.sparse === null) {
         positions.sparse = new Set([dependsOnLine]);
       } else if (positions.sparse.has(dependsOnLine)) {
@@ -844,10 +830,10 @@ export class DependencyGraph {
    *
    * @param lineNumber - 1-based line that has just executed
    */
-  reconcilePositionReads(lineNumber: number, keepForward = false): void {
+  reconcilePositionReads(lineNumber: number): void {
     const positions = this.positionReads.get(lineNumber);
     if (positions === undefined) return;
-    if (positions.runLo === -1 && !keepForward) {
+    if (positions.runLo === -1) {
       this.forgetPositionReads(lineNumber);
       return;
     }
@@ -856,26 +842,18 @@ export class DependencyGraph {
       positions.hi === positions.runHi &&
       sameSparse(positions.sparse, positions.runSparse);
     if (!sameShape) {
-      // A line on a cycle stops reading forward the moment it reaches a
-      // line below it, by design, so what it read this run says nothing
-      // about the lines below it that it reads: those edges are kept as
-      // they were, and only the backward ones follow the run. Dropping the
-      // forward ones took the line off the cycle, and the pass after put
-      // it back on.
-      const kept: number[] = [];
+      // A line on a cycle is no exception. Its run stops reading forward the
+      // moment it reaches a line below it, by design, which is why every
+      // aggregate declares its whole span before reading any of it. Keeping
+      // a member's forward edges regardless, as this once did, kept an edge
+      // to a line the member had stopped reading, and that phantom cycle
+      // outlived the real one.
       for (const n of this.positionsReadFrom(positions)) {
-        if (readThisRun(positions, n) || (keepForward && n > lineNumber)) kept.push(n);
-        else this.dropPositionRead(lineNumber, n);
+        if (!readThisRun(positions, n)) this.dropPositionRead(lineNumber, n);
       }
-      if (keepForward) {
-        if (positions.runSparse !== null) for (const n of positions.runSparse) if (!kept.includes(n)) kept.push(n);
-        for (let n = positions.runLo; n !== -1 && n <= positions.runHi; n++) if (!kept.includes(n)) kept.push(n);
-        setRecordedPositions(positions, kept);
-      } else {
-        positions.lo = positions.runLo;
-        positions.hi = positions.runHi;
-        positions.sparse = positions.runSparse;
-      }
+      positions.lo = positions.runLo;
+      positions.hi = positions.runHi;
+      positions.sparse = positions.runSparse;
     }
     positions.runLo = -1;
     positions.runHi = -1;

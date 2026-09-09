@@ -74,6 +74,31 @@ step failed recorded no write, so the reseed that re-runs every total each pass
 never found it again, and it stayed on the error after the line it read had
 been fixed.
 
+An adversarial review of the change (three readers over the diff, three probes
+past what the generator writes, two verifiers on every finding) found five more
+things, three of them introduced by the first version of this change, and each
+has a test now. A range declares only the part of its span the document has:
+`sum(line 1 : line 3000000)` declared three million positions and exhausted
+the heap, where the walk that reads them had always stopped at line 4. The
+document's length is asked for each time rather than copied into the context,
+since a copy taken before an insert cut `sum(line 4 : line 5)` a line short
+and hid the cycle through line 5. A member's positional edges follow its run
+like any other line's, now that every aggregate declares its span; keeping a
+member's forward edges regardless kept an edge to a line it had stopped
+reading, and that phantom cycle outlived the real one. The checkpoint chain
+follows the lines through a structural edit instead of being cleared by one: a
+clean line above the viewport never runs again to put its entry back, so
+`:a = 5` above the viewport was reported as `Undefined variable: a` by the
+definition under it. A definition scrolled out of view runs under the same
+discipline as one in view, put back before it runs and put back if it fails,
+where it used to keep its old value out of view, and to climb by its step every
+pass if it read its own name. And a name bound as both a function and a
+variable (`f(x) = x + 4` above `:f = 9`) has each binding put back on its own,
+including when its line is emptied, where stopping at the function left the
+variable holding what the edited line wrote. One wording change came out of the
+same review: a goal seek that names its own line is refused as a seek
+targeting a seek, rather than as a line that does not use its variable.
+
 The boundaries. A pinned cycle that used to converge on the incremental path
 reports the cycle now, as the batch pass always did: `:v3 = v2 + 7` / `:v2 =
 line 1 + 8` / `:v2 = 31` settled at `38`, `46`, `31` and gives `Undefined
@@ -86,25 +111,33 @@ never on those below. And one wording difference between the paths is older
 than this and stays: where the member a line reads is a definition that
 failed, the incremental path says `Line 1 has an error` and the batch pass,
 which stores no result for an errored line, says `Line 1 has not been evaluated
-yet`.
+yet`. And the bookkeeping has a cost on a document with no cycle in it: a pass
+over a 1,000-line document of mixed shapes took 4.5 ms against 3.8 ms before,
+measured in alternation on the same machine, a sixth more.
 
 ## Verification
 
-Four specs, 58 new tests: `AnOrdinaryEditIntoAPositionalCycle` (26: the edit
+Five specs, 69 new tests: `AnOrdinaryEditIntoAPositionalCycle` (26: the edit
 shapes, the goal-seek cycle, the shrunk and re-grown block, and the
 from-scratch answers and pass counts of eight shapes, taken from the batch
-pass), `ACycleThroughANameReportsIt` (14: cycles through a name, a running
+pass), `ACycleThroughANameReportsIt` (18: cycles through a name, a running
 total and a function, a pinned cycle, a viewport pass, a long history of
-edits), `ALineThatErroredDefinedNothing` (9 more: a failed definition, a
-redefinition, a same-line pair, a failed total step re-seeded once its input is
-fixed) and `PositionalEdges` (9 more, for the graph). The two skipped #444
-tests run again, and the cycle example on the line-references page proves both
-its lines. The engine suite is 470 suites, 9,033 tests passing and 4 skipped
-under `npx jest`.
+edits, a name bound as both a function and a variable, the phantom cycle, the
+range declared after an insert), `ALineThatErroredDefinedNothing` (13 more: a
+failed definition, a redefinition, a same-line pair, a failed total step
+re-seeded once its input is fixed, and the prefix out of view and across a
+structural edit), `PositionalEdges` (11 more, for the graph, among them the
+span cut to the document) and `GoalSeek` (1). The two skipped #444 tests run
+again, and the cycle example on the line-references page proves both its
+lines. The engine suite is 470 suites, 9,044 tests passing and 4 skipped under
+`npx jest`.
 
 The differential fuzz of editing sessions (`npm run fuzz --
 --generator=document`) had its generator widened with a definition that reads a
 position or another name, a definition that fails, a total that reads a
 position, and a user function. Over the same ten ranges of 300 sessions,
-unmodified main reports 110 findings and this change reports 0; six further
-ranges of 300, never run against the code before, report 0.
+unmodified main reports 110 findings and this change reports 0. Eight further
+ranges of 300, never run against the code before, report 0; one of them (seed
+60000091) reported the copied line count above before it was fixed, and the
+review's own probe ran six more document ranges, 500 expression cases and 500
+bytecode cases at 0.

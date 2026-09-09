@@ -652,6 +652,7 @@ export class ExpressionEngine {
 
         context = {
             lineIndex: lineNumber,
+            getLineCount: doc ? () => doc.lineCount : undefined,
             getLineResult: readLineResult,
             // The edge without the read; see the field's own doc comment.
             noteLineRead: doc
@@ -1255,7 +1256,9 @@ export class ExpressionEngine {
      * A function is a definition too, and was the one kind nothing could
      * undo: `f(x) = x + 4` edited into a blank left `f(9)` answering 13 for
      * the rest of the session. The prefix is consulted for a function binding
-     * as well, and a name bound to neither is unbound from both bags.
+     * as well as a variable one, and each is put back on its own, since a
+     * name can be bound in both bags at once (`f(x) = x + 1` above `:f = 4`).
+     * A name bound to neither above is unbound from both.
      *
      * An accumulator is left alone. Every pass resets each running total to
      * its seed and re-runs every line that steps it, in order, so by the time
@@ -1271,9 +1274,11 @@ export class ExpressionEngine {
         const priorFunction = chain?.lookupFunctionBefore(name, lineNumber);
         if (priorFunction !== undefined) {
             this.vm.defineUserFunction(priorFunction.name, priorFunction.params, priorFunction.program);
-            return;
+        } else if (this.vm.hasUserFunction(name)) {
+            this.vm.deleteUserFunction(name);
         }
-        if (this.vm.hasUserFunction(name)) this.vm.deleteUserFunction(name);
+        // Stopping at the function left the variable of the same name holding
+        // what the edited line wrote.
         const prior = chain?.lookupVariableBefore(name, lineNumber);
         if (prior === undefined) this.vm.deleteVar(name);
         else this.vm.setVar(name, prior);

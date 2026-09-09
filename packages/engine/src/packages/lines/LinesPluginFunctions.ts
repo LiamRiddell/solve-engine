@@ -116,9 +116,15 @@ function aggregateRange(from: number, to: number, context: LineExecutionContext,
   const step = from <= to ? 1 : -1;
   // The whole span is declared before any of it is read: the walk below
   // stops at the first line it cannot use, and a cycle that closes through
-  // a later one must still be known to the graph.
-  if (context.noteLineRead) {
-    for (let n = from; step > 0 ? n <= to : n >= to; n += step) context.noteLineRead(n);
+  // a later one must still be known to the graph. Only the part of the span
+  // the document has, though: a range written to line three million has no
+  // line to read past the last one, and no cycle can close through a line
+  // that is not there. Declaring all of it exhausted the heap.
+  const lineCount = context.getLineCount?.();
+  if (context.noteLineRead && lineCount !== undefined) {
+    const first = Math.max(1, Math.min(from, to));
+    const last = Math.min(lineCount, Math.max(from, to));
+    for (let n = first; n <= last; n++) context.noteLineRead(n);
   }
   for (let n = from; step > 0 ? n <= to : n >= to; n += step) {
     const v = context.getLineResult!(n);

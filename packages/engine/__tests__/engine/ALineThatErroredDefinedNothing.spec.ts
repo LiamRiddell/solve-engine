@@ -34,6 +34,13 @@
  * nothing, so its unknown is neither a read nor a write of the document; see
  * `extractReadsAndWrites`. The tests below that name a seek pin that.
  *
+ * The same holds out of view. A definition scrolled out of the viewport is
+ * run by Tier 3 so the VM is right for the lines below it, and it runs under
+ * the same discipline: put back before it runs, put back if it fails. And
+ * the checkpoint chain the prefix is read from follows the lines through a
+ * structural edit rather than being cleared by one, since a clean line above
+ * the viewport never runs again to put its entry back.
+ *
  * The boundary: a later expression on the same line that fails does not undo
  * an earlier one that succeeded, since what the earlier expression set is
  * exactly what the lines above that point of the line left. And a pending
@@ -242,5 +249,91 @@ describe("a running total whose step failed", () => {
 		for (let pass = 0; pass < 4; pass++) evaluator.evaluate({ startLine: 1, endLine: 2 });
 		expect(answersOf(doc, 2)).toEqual(settled(["9", "spent += line 1"]));
 		expect(shown(doc, 2)).toBe("9");
+	});
+});
+
+describe("out of view, and after a structural edit", () => {
+	// Tier 3 runs a definition that is out of view so the VM is right for the
+	// lines below it, under the same discipline as Tier 1: the names the line
+	// wrote are put back to the prefix before it runs and again if it fails.
+	// Without that a line scrolled out of view kept what it had stored before
+	// the edit, and one that read its own name climbed by its step on every
+	// pass, for as long as it stayed out of view.
+	const passes = (evaluator: ThreeTierEvaluator, startLine: number, endLine: number, count: number) => {
+		for (let pass = 0; pass < count; pass++) evaluator.evaluate({ startLine, endLine });
+	};
+	const open = (lines: string[]) => {
+		const doc = new DocumentModel();
+		doc.setDocument(lines.join("\n"));
+		return { doc, evaluator: new ThreeTierEvaluator(doc, createEngine() as unknown as ExpressionEngine) };
+	};
+
+	test("a self-reading definition that was only ever compiled out of view", () => {
+		const { doc, evaluator } = open([":v3 = 44", ":v3 = v3 + 3", "v3"]);
+		passes(evaluator, 3, 3, 6);
+		expect(shown(doc, 3)).toBe("47");
+		doc.editLine(1, "7 + 7");
+		passes(evaluator, 3, 3, 6);
+		passes(evaluator, 1, 3, 8);
+		expect(answersOf(doc, 3)).toEqual(settled(["7 + 7", ":v3 = v3 + 3", "v3"]));
+		expect(answersOf(doc, 3)).toEqual(["14", "Undefined variable: v3", "Undefined variable: v3"]);
+		// And it stays there: this used to climb by three a pass with no edit.
+		passes(evaluator, 1, 3, 8);
+		expect(answersOf(doc, 3)).toEqual(["14", "Undefined variable: v3", "Undefined variable: v3"]);
+		evaluator.terminateWorker();
+	});
+
+	test("a definition that fails out of view keeps nothing", () => {
+		const { doc, evaluator } = open([":x = 5", ":x = 9", "x"]);
+		passes(evaluator, 3, 3, 6);
+		expect(shown(doc, 3)).toBe("9");
+		doc.editLine(2, ":x = zz + 1");
+		passes(evaluator, 3, 3, 6);
+		// While still scrolled: the failed line put x back to what line 1 left.
+		expect(shown(doc, 3)).toBe("5");
+		passes(evaluator, 1, 3, 8);
+		expect(answersOf(doc, 3)).toEqual(["5", "Undefined variable: zz", "5"]);
+		evaluator.terminateWorker();
+	});
+
+	test("a definition above the viewport is still the prefix after a structural edit", () => {
+		// The chain used to be cleared by a structural edit and rebuilt as lines
+		// ran; a clean line above the viewport never runs, so its entry never
+		// came back, and the line below it was told the prefix held nothing.
+		const a = open([":x = 5", ":x = x + 1", "x"]);
+		passes(a.evaluator, 1, 3, 6);
+		a.evaluator.applyTransaction([{ startLine: 4, deleteCount: 0, insertLines: ["7"] }]);
+		passes(a.evaluator, 2, 4, 6);
+		expect(answersOf(a.doc, 4)).toEqual(["5", "6", "6", "7"]);
+		a.evaluator.terminateWorker();
+
+		const b = open([":a = 5", ":b = a + c", ":c = b + 1", "b"]);
+		passes(b.evaluator, 1, 4, 6);
+		b.evaluator.applyTransaction([{ startLine: 5, deleteCount: 0, insertLines: ["7"] }]);
+		passes(b.evaluator, 2, 5, 6);
+		// The right name is blamed: `a` is defined on the line above.
+		expect(shown(b.doc, 2)).toBe("Undefined variable: c");
+		b.evaluator.terminateWorker();
+
+		const c = open([":x = 5", ":x = 9", "x"]);
+		passes(c.evaluator, 1, 3, 6);
+		c.evaluator.applyTransaction([{ startLine: 4, deleteCount: 0, insertLines: ["7"] }]);
+		passes(c.evaluator, 2, 4, 6);
+		c.doc.editLine(2, ":x = zz");
+		passes(c.evaluator, 2, 4, 6);
+		expect(shown(c.doc, 3)).toBe("5");
+		c.evaluator.terminateWorker();
+	});
+
+	test("a deleted definition's name holds what the rest of the document leaves it", () => {
+		const { doc, evaluator } = open([":x = 1", ":x = 2", "x"]);
+		passes(evaluator, 1, 3, 4);
+		expect(shown(doc, 3)).toBe("2");
+		evaluator.applyTransaction([{ startLine: 2, deleteCount: 1, insertLines: [] }]);
+		// Line 1 stays out of view, so nothing runs it again: the name has to
+		// have been put back when the line that wrote it went.
+		passes(evaluator, 2, 2, 4);
+		expect(shown(doc, 2)).toBe("1");
+		evaluator.terminateWorker();
 	});
 });

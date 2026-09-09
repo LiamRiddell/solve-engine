@@ -305,3 +305,29 @@ describe("what the graph says about a run", () => {
 		expect(readersOf(dag, 3)).toEqual([4]);
 	});
 });
+
+describe("the span a range declares", () => {
+	test("stops at the end of the document", () => {
+		// A range declares its whole span before reading any of it, so a cycle
+		// closing through a later line is known. A span written past the last
+		// line has nothing there to read or to close a cycle through, and
+		// declaring three million positions exhausted the heap.
+		// The operand `line 3000000` may be one read of its own; the span is not
+		// declared, so nothing between line 3 and it is.
+		const declared = (positions: number[]) => positions.filter((n) => n < 3000000).sort((a, b) => a - b);
+		const ascending = graphFor(["1", "2", "sum(line 1 : line 3000000)"]);
+		expect(declared(ascending.dag.positionsReadBy(3))).toEqual([1, 2]);
+		ascending.evaluator.terminateWorker();
+		const descending = graphFor(["1", "2", "sum(line 3000000 : line 1)"]);
+		expect(declared(descending.dag.positionsReadBy(3))).toEqual([1, 2]);
+		descending.evaluator.terminateWorker();
+	});
+
+	test("lists a position once when the span grows over a sparse one", () => {
+		const dag = new DependencyGraph();
+		for (const position of [5, 3, 4, 3]) dag.registerLinePositionDependency(1, position);
+		expect([...dag.positionsReadBy(1)].sort((a, b) => a - b)).toEqual([3, 4, 5]);
+		dag.reconcilePositionReads(1);
+		expect([...dag.positionsReadBy(1)].sort((a, b) => a - b)).toEqual([3, 4, 5]);
+	});
+});

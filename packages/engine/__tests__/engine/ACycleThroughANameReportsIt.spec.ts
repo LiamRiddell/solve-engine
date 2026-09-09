@@ -148,6 +148,15 @@ describe("a cycle through a running total", () => {
 		agrees(["f(5)", "spent += 5", "spent += prev", "spent"], [["delete", 1], ["edit", 2, "spent += line 3"]]);
 	});
 
+	test("a range declared after the document grew", () => {
+		// The span a range declares is cut to the document, and the document's
+		// length is asked for each time: one context serves a document for as
+		// long as it is open, and a count copied into it when it was built was
+		// the count before the insert, so `sum(line 4 : line 5)` declared line
+		// 4 alone and the cycle through line 5 was not known to the graph.
+		agrees(["prev + 4", "spent += prev", "spent"], [["insert", 3, "total of #food"], ["insert", 1, "sum(line 4 : line 5)"]]);
+	});
+
 	test("a plain column of steps is not a cycle", () => {
 		// The fold is ordered: a step depends on the steps above it, never on
 		// those below, so a column of them has no cycle in it and every step
@@ -183,5 +192,47 @@ describe("the boundary", () => {
 	test("a plain forward reference still resolves", () => {
 		expect(settled(["line 2 + 1", "7"])).toEqual(["8", "7"]);
 		expect(settled(["x + 1", ":x = 5"])).toEqual(["6", "5"]);
+	});
+});
+
+describe("a name bound as both a function and a variable", () => {
+	// `f(x) = x + 4` above `:f = 9` binds `f` in both of the VM's bags at
+	// once, and each is put back to the prefix on its own: the function to
+	// the last definition above, the variable to the last value above.
+	// Stopping at the function left the variable holding what the edited
+	// line wrote, and the graph, which keys both by the bare name, saw no
+	// orphan while either was still produced.
+	test("the variable goes back to the prefix under a function of the same name", () => {
+		const steps = session(["f(x) = x + 4", ":f = 9", "f + 1", "f(2)"], [["edit", 2, ":f = zz"]]);
+		expect(steps[0].editor).toEqual(steps[0].settled);
+		expect(steps[0].editor.slice(2)).toEqual(["Undefined variable: f", "6"]);
+		agrees(["f(x) = x + 4", ":f = 5", "f + 1", "f(2)"], [["edit", 2, ""]]);
+		agrees(["f(x) = x + 4", ":f = 5", "f + 1", "f(2)"], [["delete", 2]]);
+		agrees(["f(x) = x + 1", ":f = 4", "f"], [["edit", 2, "7"]]);
+		agrees(["f(x) = x + 1", ":f = 4", "f"], [["edit", 2, "# heading"]]);
+		agrees(["f(x) = x + 1", "f(1)", ":f = 4", "f"], [["edit", 3, "f(2)"]]);
+	});
+
+	test("the function is unbound under a variable of the same name", () => {
+		const steps = session([":f = 5", "f(x) = x + 4", "f + 1", "f(2)"], [["edit", 2, ""]]);
+		expect(steps[0].editor).toEqual(steps[0].settled);
+		expect(steps[0].editor.slice(2)).toEqual(["6", "Undefined function: f"]);
+		agrees([":f = 5", "f(x) = x + 4", "f + 1", "f(2)"], [["delete", 2]]);
+		agrees([":f = 5", "f(x) = x + 4", "f + 1", "f(2)"], [["edit", 2, "7"]]);
+		agrees(["f(x) = x + 4", ":f = 5", "f + 1", "f(2)"], [["edit", 1, ""]]);
+	});
+});
+
+describe("a member that stops reading a line", () => {
+	test("leaves the line it stopped reading on no phantom cycle", () => {
+		// Line 1 totals the `#food` carriers, one of which reads line 1: a real
+		// cycle through lines 1 and 3. Line 5 then stops carrying the tag and
+		// reads line 1 instead. Keeping a member's forward edges regardless of
+		// its run made {1, 5} a cycle nothing could break, and once the real
+		// one was broken it was the only thing left reporting.
+		const start = ["total of #food", "1", "line 1 + 1 #food", "1", "7 #food", "9"];
+		const steps = session(start, [["edit", 5, "line 6 + line 1"], ["edit", 3, "4 #food"]]);
+		for (const step of steps) expect(step.editor).toEqual(step.settled);
+		expect(steps[1].editor).toEqual(["4", "1", "4", "1", "13", "9"]);
 	});
 });

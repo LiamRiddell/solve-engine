@@ -289,6 +289,21 @@ export interface LineExecutionContext {
     /** 1-based current line number, or -1 when there is no real document (see class doc above). */
     lineIndex: number;
     /**
+     * How many lines the document has now; absent when there is no document.
+     *
+     * A form that declares a span before reading it (see `noteLineRead`) needs
+     * to know where the document ends: a range written as `line 1 : line
+     * 3000000` has no line to read past the last one, and declaring three
+     * million positions that exist nowhere cost the heap for nothing. The
+     * walk that reads the span already stops at the first line it cannot use.
+     *
+     * Asked for rather than copied, because one context serves a document for
+     * as long as it is open: a count taken when the context was built was the
+     * count before the last insert, and a range declared under it stopped a
+     * line short.
+     */
+    getLineCount?: () => number;
+    /**
      * Whether this engine may fetch live data (`network.enabled`). A plugin
      * function that reads a resolver's cache uses it to say "live data is
      * switched off" when the cache is empty, rather than the "not preflighted"
