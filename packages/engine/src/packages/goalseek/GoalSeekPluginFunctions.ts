@@ -98,6 +98,13 @@ export function goalSeekHandler(args: Value[], context?: LineExecutionContext): 
 		return errorValue("GOAL_SEEK_TARGET_NOT_NUMERIC", "Goal seek's target is not a finite number.");
 	}
 
+	// A seek that names its own line would re-run itself. Refused by name,
+	// rather than reported as a line that does not use the variable, which is
+	// true of it and not the point.
+	if (context?.lineIndex === targetLine) {
+		return errorValue("GOAL_SEEK_NESTED", "A goal-seek line cannot target itself, since it already re-runs its target many times.");
+	}
+
 	// Refuse before any searching when the target line does not read the
 	// variable: nothing about changing it could move that line's result, and a
 	// silent "no solution" would be a confusing way to say so.

@@ -19,21 +19,24 @@
  * | a pass over that text        | `Line 2 has an error` |
  * | that text reached by editing | a number, larger every pass |
  *
- * The insert and delete half of this is fixed (2.38.19): a structural edit takes
- * the answers off the lines that read a position, so neither has anything to
- * chase. An **ordinary** edit is not covered, because nothing moved, and every
- * rule tried for it made the engine disagree with itself somewhere else instead.
+ * The insert and delete half of this was fixed first (2.38.19): a structural
+ * edit takes the answers off the lines that read a position, so neither has
+ * anything to chase. The **ordinary** edit took longer, because nothing moved,
+ * and every rule tried for it made the engine disagree with itself somewhere
+ * else instead. Seven approaches are recorded on the issue with what each cost,
+ * measured against 1,600 to 3,200 random editing sessions each. The short
+ * version: every rule that changes what a positional read returns, or when an
+ * answer is thrown away, trades this bug for a different disagreement of the
+ * same size.
  *
- * Seven approaches are recorded on the issue with what each cost, measured
- * against 1,600 to 3,200 random editing sessions each. The short version: every
- * rule that changes what a positional read returns, or when an answer is thrown
- * away, trades this bug for a different disagreement of the same size. The
- * shipped fix works because it does neither, it removes one stale answer at the
- * one moment the document's shape provably changed.
- *
- * These are skipped rather than deleted because the reproduction is the valuable
- * part, and it is smaller than anything the fuzzer will shrink to again. Delete
- * the `.skip` when the fix lands; both should pass without any other change.
+ * The fix does neither. It corrects the graph: a line's positional edges now
+ * follow its text (an edited line's go before it runs, and a run cuts them back
+ * to what it read), and at the end of a pass in which a line recorded a
+ * position it had not recorded, the cycles through those lines are found once
+ * and each member holding a number, which a settled pass never holds, is
+ * forgotten and marked to run again. See
+ * `AnOrdinaryEditIntoAPositionalCycle.spec.ts` for the shapes and the
+ * boundaries. The two reproductions below pass without any other change.
  */
 import { describe, expect, test } from "@jest/globals";
 import { createEngine } from "@solve-js/api/createEngine";
@@ -71,7 +74,7 @@ function editorFor(lines: string[]) {
 }
 
 describe("Issue #444: an ordinary edit into a positional cycle", () => {
-	test.skip("agrees with a pass over the same text", () => {
+	test("agrees with a pass over the same text", () => {
 		const { doc, evaluator } = editorFor(["1 sprint = 2 weeks", "prev + 5"]);
 
 		doc.editLine(1, "line 2 + 5");
@@ -80,7 +83,7 @@ describe("Issue #444: an ordinary edit into a positional cycle", () => {
 		expect(answersOf(doc, 2)).toEqual(settled(["line 2 + 5", "prev + 5"]));
 	});
 
-	test.skip("stops moving once the reader stops typing", () => {
+	test("stops moving once the reader stops typing", () => {
 		// The tell that the answer is not an answer: it is `40` and `45` after
 		// four passes and `120` and `125` after twelve, growing by ten a pass
 		// for as long as anyone leaves the document open.
@@ -94,8 +97,8 @@ describe("Issue #444: an ordinary edit into a positional cycle", () => {
 	});
 
 	test("the structural half is fixed, and stays fixed", () => {
-		// Not skipped. #445 covers this, and it is here so the skipped pair
-		// above cannot be mistaken for the whole issue being open.
+		// #445 covers this; it is here so the two halves of the issue are seen
+		// to hold together.
 		const { doc, evaluator } = editorFor([":v = 46", "average above"]);
 		evaluator.applyTransaction([{ startLine: 1, deleteCount: 0, insertLines: ["line 3 + 5"] }]);
 		for (let pass = 0; pass < 4; pass++) evaluator.evaluate({ startLine: 1, endLine: 3 });
@@ -106,6 +109,6 @@ describe("Issue #444: an ordinary edit into a positional cycle", () => {
 	test("a cycle written from the start was never affected", () => {
 		// Which is what makes this incremental-only: the same text, read once,
 		// has always reported the cycle.
-		expect(settled(["line 2 + 5", "prev + 5"])[0]).toContain("error");
+		expect(settled(["line 2 + 5", "prev + 5"])[0]).toContain("has not been evaluated yet");
 	});
 });

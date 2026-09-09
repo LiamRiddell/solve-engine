@@ -182,6 +182,31 @@ function collectFunctionParamNames(tokens: Token[]): Set<string> {
 }
 
 /**
+ * The position of a goal seek's unknown in a normalised token stream, or -1.
+ *
+ * `solve line 4 for rate = 900` arrives as GOAL_SEEK, LINE_REF, the `for`
+ * connective, then the unknown; the same shape `GoalSeekParselet` reads, with
+ * the same allowance for `for` lexing as a keyword in the English locale and
+ * as a plain identifier elsewhere. Anything else is not a seek this scan can
+ * make sense of, and the ordinary rules apply to whatever follows.
+ *
+ * @param tokens - The normalised tokens of one expression.
+ * @param at - The index of the GOAL_SEEK token.
+ * @returns The index of the unknown's IDENT or UNIT token, or -1.
+ */
+function goalSeekUnknownIndex(tokens: Token[], at: number): number {
+    if (tokens[at + 1]?.type !== "LINE_REF") return -1;
+    const connective = tokens[at + 2];
+    const isFor =
+        connective !== undefined &&
+        (connective.type === "FOR_DURATION" || (connective.type === "IDENT" && connective.value.toLowerCase() === "for"));
+    if (!isFor) return -1;
+    const unknown = tokens[at + 3];
+    if (unknown === undefined || (unknown.type !== "IDENT" && unknown.type !== "UNIT")) return -1;
+    return at + 3;
+}
+
+/**
  * Extract variable reads and writes from a token stream.
  *
  * Handles both IDENT and UNIT tokens as potential variable references.
@@ -201,14 +226,38 @@ function collectFunctionParamNames(tokens: Token[]): Set<string> {
  * own name falls through to the ordinary bare-identifier read-tracking
  * below, the same as any other `LOAD_VAR`-producing identifier. This is
  * already correct once calls compile successfully, no change needed.
+ *
+ * A goal seek's unknown (`solve line 4 for rate = 900`) is neither a read nor
+ * a write, although `rate =` has the shape of a definition: the seek binds it
+ * in its own call frame and the document's variable is untouched. See
+ * {@link goalSeekUnknownIndex}.
  */
 export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; writes: string[] } {
     const reads: string[] = [];
     const writes: string[] = [];
     const functionParamNames = collectFunctionParamNames(tokens);
+    // Token positions that name a goal seek's unknown, never a document read
+    // or write. Allocated only when a seek is found, which is almost never.
+    let goalSeekUnknowns: Set<number> | null = null;
 
     for (let i = 0; i < tokens.length; i++) {
         const t = tokens[i];
+        if (t.type === "GOAL_SEEK") {
+            // `solve line N for x = 900` varies `x` inside the seek's own call
+            // frame and stores nothing: the document's `x`, if there is one,
+            // is untouched when the line finishes. The `x =` in it is the
+            // shape of a definition, and reading it as one declared a write
+            // this line never makes. The end-of-pass settle asks the recorded
+            // writes whether a name is still defined by anyone, so a seek
+            // held its unknown open long after the `:x = 7` that gave it a
+            // value had been edited away, and the line reading `x` went on
+            // answering with 7 where a pass over the same text says the name
+            // is undefined. The same shape the parselet reads: the line
+            // reference, `for`, then the unknown.
+            const unknown = goalSeekUnknownIndex(tokens, i);
+            if (unknown !== -1) (goalSeekUnknowns ??= new Set()).add(unknown);
+            continue;
+        }
         if (t.type === "GLOBAL") {
             // global :name [= expr], GLOBAL, COLON, IDENT/UNIT are three
             // separate tokens (matching GlobalVariableParselet). Emit a
@@ -245,6 +294,8 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
         if (isVarName(t)) {
             // Skip if already consumed by preceding COLON handler above.
             if (i > 0 && tokens[i - 1].type === "COLON") continue;
+            // A goal seek's unknown; see the GOAL_SEEK branch above.
+            if (goalSeekUnknowns !== null && goalSeekUnknowns.has(i)) continue;
             // Skip UNIT tokens acting as a quantity/conversion unit name
             // rather than a variable (see isUnitLiteralContext above).
             if (t.type === "UNIT" && i > 0 && isUnitLiteralContext(tokens[i - 1])) continue;

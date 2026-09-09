@@ -200,6 +200,11 @@ export function createVM(
       },
       getUserFunction(name: string) { return userFunctions.get(name); },
       hasUserFunction(name: string) { return userFunctions.has(name); },
+      // The one way a function binding leaves. A definition edited away or
+      // deleted left `f` callable for the rest of the session, because the
+      // settle that forgets an orphaned name only knew how to delete a
+      // variable.
+      deleteUserFunction(name: string) { userFunctions.delete(name); },
       getVariableEntries() { return Array.from(variables.entries()); },
       getUserFunctionDefs() { return Array.from(userFunctions.values()); },
       defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram) {
@@ -284,6 +289,21 @@ export interface LineExecutionContext {
     /** 1-based current line number, or -1 when there is no real document (see class doc above). */
     lineIndex: number;
     /**
+     * How many lines the document has now; absent when there is no document.
+     *
+     * A form that declares a span before reading it (see `noteLineRead`) needs
+     * to know where the document ends: a range written as `line 1 : line
+     * 3000000` has no line to read past the last one, and declaring three
+     * million positions that exist nowhere cost the heap for nothing. The
+     * walk that reads the span already stops at the first line it cannot use.
+     *
+     * Asked for rather than copied, because one context serves a document for
+     * as long as it is open: a count taken when the context was built was the
+     * count before the last insert, and a range declared under it stopped a
+     * line short.
+     */
+    getLineCount?: () => number;
+    /**
      * Whether this engine may fetch live data (`network.enabled`). A plugin
      * function that reads a resolver's cache uses it to say "live data is
      * switched off" when the cache is empty, rather than the "not preflighted"
@@ -300,6 +320,19 @@ export interface LineExecutionContext {
     calendar?: CalendarBackend;
     /** Look up another line's cached result by 1-based line number. `undefined` = not evaluated yet (or out of range), distinct from a line that evaluated to an actual `undefined`-like Value, which can't happen (every Value type has a concrete representation). */
     getLineResult?: (lineNumber: number) => Value | undefined;
+    /**
+     * Say that this line is about to read `lineNumber`, before reading it.
+     *
+     * A form that reads several lines stops at the first it cannot use, so the
+     * lines after that one are never read and, if reading were the only way
+     * the dependency graph learned of a read, never recorded. A cycle that
+     * closes through one of those lines was then invisible from scratch and
+     * visible from a history that had once read the whole span, and the two
+     * paths disagreed about whether the line was on a cycle at all. A form
+     * declares its whole span through this first, so what the graph knows does
+     * not depend on how far the form got. Absent where there is no document.
+     */
+    noteLineRead?: (lineNumber: number) => void;
     /**
      * The 1-based positions of the lines carrying `#tag`, ascending, or
      * `undefined` when this path keeps no index and the caller should walk the

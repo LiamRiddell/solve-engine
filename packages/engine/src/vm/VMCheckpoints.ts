@@ -112,12 +112,17 @@ export class VMCheckpointer {
 	 * @param lineNumber 1-based line position.
 	 * @param lineId Persistent line ID from DocumentModel.
 	 * @param variableNames Names of variables that were written at this line.
+	 * @param functionNames Which of those names the line defined as functions,
+	 * from the bytecode it ran. Without it the VM is asked, which cannot tell
+	 * a line that defined `f` from one that set the variable `f` under a
+	 * function of that name defined above.
 	 * @returns The new checkpoint, or null if no variable names provided.
 	 */
 	snapshot(
 		lineNumber: number,
 		lineId: number,
-		variableNames: string[]
+		variableNames: string[],
+		functionNames?: ReadonlySet<string>
 	): VMCheckpoint | null {
 		if (variableNames.length === 0) return null;
 
@@ -162,11 +167,14 @@ export class VMCheckpointer {
 		const functions: Record<string, UserFunctionDef> = Object.create(null) as Record<string, UserFunctionDef>;
 
 		// Record current VM values for the written names, routing each into
-		// the right bag (a name is either a variable or a user-defined
-		// function, never both; see VMCheckpoint.functions's doc comment for
-		// why this dispatch is required, not optional).
+		// the bag its line wrote (see VMCheckpoint.functions's doc comment for
+		// why this dispatch is required, not optional). A name can be bound
+		// in both bags at once, `f(x) = x + 1` above `:f = 4`, so the caller
+		// says which names it defined as functions; only without that is the
+		// VM asked, and it answers for the function whichever line ran.
 		for (const name of variableNames) {
-			if (this.vm.hasUserFunction(name)) {
+			const isFunction = functionNames !== undefined ? functionNames.has(name) : this.vm.hasUserFunction(name);
+			if (isFunction) {
 				const fn = this.vm.getUserFunction(name);
 				if (fn) functions[name] = fn;
 				continue;
@@ -351,6 +359,52 @@ export class VMCheckpointer {
 	 *
 	 * @param names - The names no line defines any more.
 	 */
+	/**
+	 * Drop the entry a line holds, because the line no longer writes anything.
+	 *
+	 * A line's entry is replaced when the line writes again and left alone
+	 * otherwise, so a definition edited into an expression with no definition in
+	 * it (`:v3 = 44` edited to `7 + 7`) kept saying `v3 = 44` in the chain. The
+	 * lines below it that asked what the prefix holds were told 44, where a pass
+	 * from scratch has nothing there. The entry after it is re-parented to the
+	 * one before, the same way {@link snapshot} keeps the links straight.
+	 *
+	 * @param lineNumber - 1-based line whose entry, if any, goes.
+	 */
+	dropCheckpointAt(lineNumber: number): void {
+		const index = this.indexOfCheckpointAt(lineNumber);
+		if (index < 0) return;
+		this.checkpoints.splice(index, 1);
+		const next = this.checkpoints[index];
+		if (next !== undefined) next.parent = index > 0 ? this.checkpoints[index - 1] : null;
+	}
+
+	/**
+	 * Follow every line to its new position after a structural edit.
+	 *
+	 * An insert or a delete moves every line below it, and the chain is read
+	 * by position. It used to be cleared instead and rebuilt as lines ran, but
+	 * a clean line above the viewport never runs, so its entry was gone for
+	 * good and a line below asking what the prefix held was told nothing:
+	 * `:a = 5` above the viewport was reported as undefined by `:b = a + c`
+	 * under it. Each entry follows its line by id, the entry of a deleted
+	 * line goes, and the parents are linked again in the new order.
+	 *
+	 * @param positionOf - The 1-based position a line id has now, or -1 for a line that is gone.
+	 */
+	renumber(positionOf: (lineId: number) => number): void {
+		const kept: VMCheckpoint[] = [];
+		for (const checkpoint of this.checkpoints) {
+			const position = positionOf(checkpoint.lineId);
+			if (position < 1) continue;
+			checkpoint.lineNumber = position;
+			kept.push(checkpoint);
+		}
+		kept.sort((a, b) => a.lineNumber - b.lineNumber);
+		for (let i = 0; i < kept.length; i++) kept[i].parent = i > 0 ? kept[i - 1] : null;
+		this.checkpoints = kept;
+	}
+
 	forget(names: readonly string[]): void {
 		if (names.length === 0) return;
 		for (const checkpoint of this.checkpoints) {
@@ -412,6 +466,60 @@ export class VMCheckpointer {
 	 *
 	 * @returns The Value, or undefined if the variable was never set.
 	 */
+	/**
+	 * The value a name held at the end of the line before `lineNumber`, or
+	 * undefined if no line above it had set one.
+	 *
+	 * What a definition that failed leaves behind. A pass from scratch skips
+	 * the store when the right-hand side errors, so the name keeps whatever the
+	 * lines above it had put there: `:x = 1` then `:x = zz` leaves `x` at 1,
+	 * and `:x = zz` on its own leaves it undefined. The incremental path holds
+	 * the value from the previous pass instead, which for the line that failed
+	 * is its own old answer, so the evaluator asks here what the prefix holds
+	 * and puts that back. The chain records what each line wrote, in document
+	 * order, so the entry nearest before the line, followed through its
+	 * parents, is exactly the prefix.
+	 *
+	 * @param name - The variable.
+	 * @param lineNumber - The 1-based line whose own entry is to be excluded.
+	 * @returns The value the lines above set, or undefined.
+	 */
+	/**
+	 * The function a name was bound to at the end of the line before
+	 * `lineNumber`, or undefined if no line above it had defined one.
+	 *
+	 * {@link lookupVariableBefore}, for the functions bag: a function
+	 * definition is a definition, and one edited away or failed leaves the name
+	 * as the lines above left it just as a variable does.
+	 *
+	 * @param name - The function name.
+	 * @param lineNumber - The 1-based line whose own entry is to be excluded.
+	 * @returns The definition the lines above made, or undefined.
+	 */
+	lookupFunctionBefore(name: string, lineNumber: number): UserFunctionDef | undefined {
+		const index = this.nearestCheckpointIndex(lineNumber - 1);
+		let checkpoint: VMCheckpoint | null = index < 0 ? null : this.checkpoints[index];
+		while (checkpoint) {
+			if (Object.prototype.hasOwnProperty.call(checkpoint.functions, name)) {
+				return checkpoint.functions[name];
+			}
+			checkpoint = checkpoint.parent;
+		}
+		return undefined;
+	}
+
+	lookupVariableBefore(name: string, lineNumber: number): Value | undefined {
+		const index = this.nearestCheckpointIndex(lineNumber - 1);
+		let checkpoint: VMCheckpoint | null = index < 0 ? null : this.checkpoints[index];
+		while (checkpoint) {
+			if (Object.prototype.hasOwnProperty.call(checkpoint.variables, name)) {
+				return checkpoint.variables[name];
+			}
+			checkpoint = checkpoint.parent;
+		}
+		return undefined;
+	}
+
 	lookupVariable(name: string): Value | undefined {
 		if (this.checkpoints.length === 0) return undefined;
 

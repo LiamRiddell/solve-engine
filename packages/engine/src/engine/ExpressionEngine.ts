@@ -641,6 +641,9 @@ export class ExpressionEngine {
                   // over the same text reports the self-reference.
                   if (n === context.lineIndex) return undefined;
                   dag.registerLinePositionDependency(context.lineIndex, n);
+                  // A line on a cycle reads the way a single fresh pass reads: a
+                  // line below it has not been evaluated. See {@link setLineOnCycle}.
+                  if (n > context.lineIndex && this.lineOnCycle) return undefined;
                   return doc.getLineAt(n)?.result ?? undefined;
               }
             : parsed
@@ -649,7 +652,14 @@ export class ExpressionEngine {
 
         context = {
             lineIndex: lineNumber,
+            getLineCount: doc ? () => doc.lineCount : undefined,
             getLineResult: readLineResult,
+            // The edge without the read; see the field's own doc comment.
+            noteLineRead: doc
+                ? (n: number) => {
+                      if (n !== context.lineIndex) dag.registerLinePositionDependency(context.lineIndex, n);
+                  }
+                : undefined,
             isLineBoundary: doc
                 ? (n: number) => {
                       const state = doc.getLineAt(n);
@@ -665,6 +675,18 @@ export class ExpressionEngine {
                   : undefined,
             getLineReads: doc
                 ? (n: number) => {
+                      // A goal seek reads its target the way `line N` does,
+                      // and takes the same edge, through both of the closures
+                      // it reads through. Without it the seek was invisible to
+                      // everything that asks the graph who reads a position:
+                      // a target edited to read the seek back was a cycle
+                      // that no walk could see, so an edit into it chased a
+                      // number where a pass over the same text reports the
+                      // cycle. The target's own reads during a probe are
+                      // recorded against the target, whose context the probe
+                      // runs under.
+                      if (n !== context.lineIndex) dag.registerLinePositionDependency(context.lineIndex, n);
+                      if (n > context.lineIndex && this.lineOnCycle) return undefined;
                       const state = doc.getLineAt(n);
                       // A line with no compiled bytecode has nothing to solve
                       // against yet (forward reference, out of range, or
@@ -676,8 +698,11 @@ export class ExpressionEngine {
                   }
                 : undefined,
             evaluateLineWithBinding: doc
-                ? (n: number, variable: string, bound: Value, symbolicTolerant: boolean) =>
-                      this.evaluateLineWithBinding(n, variable, bound, symbolicTolerant)
+                ? (n: number, variable: string, bound: Value, symbolicTolerant: boolean) => {
+                      // The same edge as `getLineReads` above, for the same reason.
+                      if (n !== context.lineIndex) dag.registerLinePositionDependency(context.lineIndex, n);
+                      return this.evaluateLineWithBinding(n, variable, bound, symbolicTolerant);
+                  }
                 : undefined,
             goalSeekMaxIterations: this.config.vm.maxGoalSeekIterations,
             networkEnabled: this.config.network.enabled,
@@ -1002,6 +1027,9 @@ export class ExpressionEngine {
     //#endregion
 
     //#region Constructor
+    /** Whether the line being evaluated sits on a cycle; see {@link setLineOnCycle}. */
+    private lineOnCycle = false;
+
     constructor(options: EngineOptions = {}) {
         const { locale = "en", diagnostics = false, config, packages, calendar } = options;
         this.localeCode = locale;
@@ -1199,6 +1227,102 @@ export class ExpressionEngine {
      * Tests use this to access `batcher._testCaptures` for synchronous
      * event observation without async stream reader timing issues.
      */
+    /**
+     * Put a name back to what the lines above `lineNumber` left it holding.
+     *
+     * The invariant a pass from scratch keeps without trying: when it reaches a
+     * line, every name holds what the lines above defined, because those lines
+     * have just run in order and stored. The incremental path keeps the VM
+     * between passes, so a line that writes a name can find the name holding
+     * its own previous answer instead. That is invisible for `:x = 5`, which
+     * stores over it, and wrong twice over for a definition that reads what it
+     * writes or fails to store:
+     *
+     * - `:v3 = 44` above `:v3 = v3 + 3` is 47 on every pass from scratch, since
+     *   line 1 puts 44 back each time. Edit line 1 away and nothing puts
+     *   anything back, so line 2 reads its own 47 and climbs by three a pass,
+     *   where a pass from scratch says `v3` is undefined.
+     * - `:x = 5` edited to `:x = zz + 1` skips the store, on both paths, and
+     *   the incremental one is left holding the 5 the same line stored before
+     *   the edit, where a pass from scratch has nothing.
+     *
+     * The checkpoint chain records what each line wrote in document order, so
+     * the value the prefix holds is the one it holds just before this line,
+     * and this puts the VM there: the value if there is one, absent if not.
+     * The evaluator calls it before a definition runs and again if it fails,
+     * both times before the line's own checkpoint is taken, so the checkpoint
+     * records the corrected state.
+     *
+     * A function is a definition too, and was the one kind nothing could
+     * undo: `f(x) = x + 4` edited into a blank left `f(9)` answering 13 for
+     * the rest of the session. The prefix is consulted for a function binding
+     * as well as a variable one, and each is put back on its own, since a
+     * name can be bound in both bags at once (`f(x) = x + 1` above `:f = 4`).
+     * A name bound to neither above is unbound from both.
+     *
+     * An accumulator is left alone. Every pass resets each running total to
+     * its seed and re-runs every line that steps it, in order, so by the time
+     * any step runs the VM already holds what the steps above built, seed
+     * included, and putting the prefix back would only undo a step.
+     *
+     * @param name - The name the line writes.
+     * @param lineNumber - The 1-based line it sits on.
+     */
+    restoreToPrefix(name: string, lineNumber: number): void {
+        if (this.accumulatorNames.has(name)) return;
+        const chain = this.batcher.checkpointer;
+        const priorFunction = chain?.lookupFunctionBefore(name, lineNumber);
+        if (priorFunction !== undefined) {
+            this.vm.defineUserFunction(priorFunction.name, priorFunction.params, priorFunction.program);
+        } else if (this.vm.hasUserFunction(name)) {
+            this.vm.deleteUserFunction(name);
+        }
+        // Stopping at the function left the variable of the same name holding
+        // what the edited line wrote.
+        const prior = chain?.lookupVariableBefore(name, lineNumber);
+        if (prior === undefined) this.vm.deleteVar(name);
+        else this.vm.setVar(name, prior);
+    }
+
+    /**
+     * Whether `name` is a running total, stepped by `+=` or `-=` somewhere.
+     *
+     * The evaluator's cycle walk asks, because a total's steppers depend on one
+     * another through the total in a way the graph deliberately does not
+     * record: a line is kept out of the consumers of a name it writes, which
+     * is right for `:x = 5` and hides the fold for `spent += 5`.
+     *
+     * @param name - A variable name.
+     * @returns True when a line has stepped it.
+     */
+    /**
+     * Tell the engine whether the line about to run sits on a cycle.
+     *
+     * A line that depends on itself, through positions or names or both, has
+     * no answer of its own: each value it could hold is computed from that same
+     * value a pass earlier. A single fresh pass reports that, because some
+     * member reads a line below it that has not run, and the error travels all
+     * the way round. The incremental path carries the VM between passes, so a
+     * member could find a number to start from, and the pair then chased it.
+     *
+     * While this is set, a positional read of a line below the one running
+     * answers as an unevaluated line does, which is what makes a member report
+     * the cycle rather than the number it read last pass. The evaluator sets it
+     * per line from the cycle membership it keeps, and puts the names such a
+     * line reads back to the prefix before it runs, for the same reason. A line
+     * not on a cycle keeps the incremental path's tolerance of a plain forward
+     * reference, which resolves by running the document again.
+     *
+     * @param onCycle - Whether the line about to run is on a cycle.
+     */
+    setLineOnCycle(onCycle: boolean): void {
+        this.lineOnCycle = onCycle;
+    }
+
+    isAccumulatorName(name: string): boolean {
+        return this.accumulatorNames.has(name);
+    }
+
     /** The names of every user-defined unit in scope, for detecting a removal. */
     userUnitNames(): string[] {
         return this.userUnits.names;
@@ -1862,6 +1986,9 @@ export class ExpressionEngine {
             if (stillDefined.has(name)) continue;
             forgotten.push(name);
             this.vm.deleteVar(name);
+            // A name can be a function as easily as a variable, and a function
+            // whose defining line was edited away stayed callable until now.
+            if (this.vm.hasUserFunction(name)) this.vm.deleteUserFunction(name);
         }
         this.batcher.checkpointer?.forget(forgotten);
     }
