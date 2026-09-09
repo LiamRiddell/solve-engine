@@ -63,6 +63,11 @@ function aggregateTagged(context: LineExecutionContext, tag: string, mode: TagMo
   // Ascending, so the first unreadable member this reports is the first one in
   // the document, which is what the walk named and what a reader looks for.
   const indexed = context.getTaggedLines?.(needle);
+  // Every carrier is declared before any is read, for the reason the line
+  // range gives: the walk stops at the first member it cannot use.
+  if (indexed !== undefined && context.noteLineRead) {
+    for (const n of indexed) if (n !== context.lineIndex) context.noteLineRead(n);
+  }
 
   for (let i = 1; ; i++) {
     let n: number;

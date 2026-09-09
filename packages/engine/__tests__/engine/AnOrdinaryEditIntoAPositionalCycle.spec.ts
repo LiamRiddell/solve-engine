@@ -349,10 +349,9 @@ describe("a pass from scratch is unchanged", () => {
 		{ lines: ["line 2 + 5", "prev + 5"], passes: 2 },
 		{ lines: ["line 3 + 1", "line 1 + 1", "line 2 + 1"], passes: 2 },
 		{ lines: ["line 4 + 1", "3", "5", "total above"], passes: 2 },
-		// Four, not two: the range stops at line 3 on the first pass, before it
-		// has read line 4, so the edge that closes the cycle is only recorded on
-		// the second, and the members run the fresh way on the third.
-		{ lines: ["sum(line 3 : line 4)", "", "5", "line 1 + 1"], passes: 4 },
+		// The range declares its whole span before it reads, so the cycle is
+		// found on the first pass although the walk stops at line 3.
+		{ lines: ["sum(line 3 : line 4)", "", "5", "line 1 + 1"], passes: 2 },
 		{ lines: ["total of #travel", "line 1 + 1 #travel"], passes: 2 },
 		// Not a cycle: a plain forward reference, which the incremental path
 		// resolves by running again and the batch pass does not.

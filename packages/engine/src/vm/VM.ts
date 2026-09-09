@@ -306,6 +306,19 @@ export interface LineExecutionContext {
     /** Look up another line's cached result by 1-based line number. `undefined` = not evaluated yet (or out of range), distinct from a line that evaluated to an actual `undefined`-like Value, which can't happen (every Value type has a concrete representation). */
     getLineResult?: (lineNumber: number) => Value | undefined;
     /**
+     * Say that this line is about to read `lineNumber`, before reading it.
+     *
+     * A form that reads several lines stops at the first it cannot use, so the
+     * lines after that one are never read and, if reading were the only way
+     * the dependency graph learned of a read, never recorded. A cycle that
+     * closes through one of those lines was then invisible from scratch and
+     * visible from a history that had once read the whole span, and the two
+     * paths disagreed about whether the line was on a cycle at all. A form
+     * declares its whole span through this first, so what the graph knows does
+     * not depend on how far the form got. Absent where there is no document.
+     */
+    noteLineRead?: (lineNumber: number) => void;
+    /**
      * The 1-based positions of the lines carrying `#tag`, ascending, or
      * `undefined` when this path keeps no index and the caller should walk the
      * document itself.

@@ -653,6 +653,12 @@ export class ExpressionEngine {
         context = {
             lineIndex: lineNumber,
             getLineResult: readLineResult,
+            // The edge without the read; see the field's own doc comment.
+            noteLineRead: doc
+                ? (n: number) => {
+                      if (n !== context.lineIndex) dag.registerLinePositionDependency(context.lineIndex, n);
+                  }
+                : undefined,
             isLineBoundary: doc
                 ? (n: number) => {
                       const state = doc.getLineAt(n);
