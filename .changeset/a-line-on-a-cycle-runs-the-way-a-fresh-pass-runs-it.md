@@ -129,8 +129,9 @@ re-seeded once its input is fixed, and the prefix out of view and across a
 structural edit), `PositionalEdges` (11 more, for the graph, among them the
 span cut to the document) and `GoalSeek` (1). The two skipped #444 tests run
 again, and the cycle example on the line-references page proves both its
-lines. The engine suite is 470 suites, 9,044 tests passing and 4 skipped under
-`npx jest`.
+lines. The full run (`npm run test:full`, the counts in `testStats.json`) is
+478 suites, 9,434 tests, 4 skipped; the engine's own `npx jest` is 470 suites,
+9,044 tests.
 
 The differential fuzz of editing sessions (`npm run fuzz --
 --generator=document`) had its generator widened with a definition that reads a
