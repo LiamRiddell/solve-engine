@@ -46,11 +46,22 @@ import type { DocumentCase, EditAction, Outcome } from "@tools/fuzz/FuzzCase";
  * two, and comparing a settled editor against an unsettled oracle reports the
  * difference between them rather than a fault in either.
  *
- * Twelve is far past anything the generated shapes need. Reaching it means the
+ * Sixteen is far past anything the generated shapes need. Reaching it means the
  * document does not settle at all, which is worth comparing anyway: two sides
  * that both refuse to settle should at least refuse in the same way.
  */
-const MAX_PASSES = 12;
+const MAX_PASSES = 16;
+
+/**
+ * How many consecutive passes have to agree before a side counts as settled.
+ *
+ * Three, not two. A document can pause on one answer for a pass or two on its
+ * way to another: `:a = line 1 + 1` above `a + 1` shows `Undefined variable: a`
+ * for two passes before both lines reach the cycle error, on either side. A
+ * rule that stopped at the first repeat stopped inside the pause on whichever
+ * side had taken fewer passes, and reported the pause as a disagreement.
+ */
+const STILL_PASSES = 3;
 
 /** The line separator a document is joined on. Written this way so no editor strips it. */
 const NEWLINE = String.fromCharCode(10);
@@ -116,10 +127,12 @@ function settled(lines: string[]): string[] {
  */
 function runToStability(document: DocumentModel, evaluator: ThreeTierEvaluator, count: number): string[] {
 	let previous: string[] = [];
+	let still = 0;
 	for (let pass = 0; pass < MAX_PASSES; pass++) {
 		evaluator.evaluate({ startLine: 1, endLine: count });
 		const current = answers(document, count);
-		if (pass > 0 && current.every((answer, i) => answer === previous[i])) return current;
+		still = pass > 0 && current.every((answer, i) => answer === previous[i]) ? still + 1 : 0;
+		if (still >= STILL_PASSES - 1) return current;
 		previous = current;
 	}
 	return previous;

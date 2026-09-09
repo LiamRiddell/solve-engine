@@ -1213,6 +1213,38 @@ export class ExpressionEngine {
      * Tests use this to access `batcher._testCaptures` for synchronous
      * event observation without async stream reader timing issues.
      */
+    /**
+     * Leave a name where the lines above left it, after the definition that
+     * would have set it answered with an error.
+     *
+     * A pass from scratch skips the store when a definition's right-hand side
+     * errors, so `:x = zz + 1` leaves `x` exactly as the lines above it had it:
+     * undefined if none set it, and 1 after a `:x = 1`. The incremental path
+     * skips the store too, but the VM is not fresh, so what the name keeps is
+     * the value from the previous pass, and for the line that just failed that
+     * is its own old answer. `:x = 5` edited to `:x = zz + 1` left `x + 1` at 6
+     * where a pass over the same text says `x` is undefined.
+     *
+     * The checkpoint chain records what each line wrote, so the value the
+     * prefix holds is the one it holds just before this line. Called before the
+     * line's own checkpoint is taken, so that checkpoint records the corrected
+     * state rather than the stale one.
+     *
+     * An accumulator is left alone. Every pass resets each running total to its
+     * seed and re-runs every line that steps it, in order, so by the time a
+     * `spent += zz` fails the VM already holds what the lines above it built,
+     * and the seed itself is a value a pass from scratch also shows.
+     *
+     * @param name - The name the failed definition would have set.
+     * @param lineNumber - The 1-based line the definition sits on.
+     */
+    restoreFailedDefinition(name: string, lineNumber: number): void {
+        if (this.accumulatorNames.has(name)) return;
+        const prior = this.batcher.checkpointer?.lookupVariableBefore(name, lineNumber);
+        if (prior === undefined) this.vm.deleteVar(name);
+        else this.vm.setVar(name, prior);
+    }
+
     /** The names of every user-defined unit in scope, for detecting a removal. */
     userUnitNames(): string[] {
         return this.userUnits.names;

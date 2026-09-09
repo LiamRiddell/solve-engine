@@ -1,38 +1,46 @@
 /**
- * A line that answered with an error did not define a variable.
+ * A definition that failed leaves its name as the lines above left it.
  *
- * The write set recorded on a line comes from its compiled form, which says
- * what the line *would* assign. Goal seek is where that parts company with what
- * happened: `solve line 5 for v1 = 22` compiles as a line that writes `v1`, and
- * when there is no line 5 it assigns nothing and reports so.
+ * A pass from scratch skips the store when a definition's right-hand side
+ * errors, so the name keeps whatever the lines above had put there: undefined
+ * if none set it, and the earlier value if one did. The incremental path skips
+ * the store too, but its VM is not fresh, so what the name kept was the value
+ * from the previous pass, and for the line that had just failed that was its
+ * own old answer:
  *
- * The recorded write is what the end-of-pass settle asks when deciding whether
- * a name is still defined by anyone, so a line claiming a write it never made
- * held the name open, and the value from the definition that had been edited
- * away stayed in the VM:
+ * | document                        | action                  | before | now                     |
+ * | ---                             | ---                     | ---    | ---                     |
+ * | `:x = 5` / `x + 1`              | line 1 to `:x = zz + 1` | `6`    | `Undefined variable: x` |
+ * | `:x = 1` / `x` / `:x = 7` / `x` | line 3 to `:x = zz`     | `7`    | `1`                     |
  *
- * | document                                                       | before                  | now                     |
- * | ---                                                            | ---                     | ---                     |
- * | `v1 * v2` / `solve line 5 for v1 = 22` / `prev + 3` / `69 + 2` | `Undefined variable: v2` | `Undefined variable: v1` |
+ * The checkpoint chain records what each line wrote, in document order, so
+ * the value the prefix holds is the one it holds just before the failed line,
+ * and that is what the VM is put back to, before the line's own checkpoint is
+ * taken. Whether the right-hand side answered with an error, threw, or did not
+ * compile makes no difference: the store did not happen in any of them.
  *
- * Both are errors, which is what made it survive: the line was wrong about
- * *which* name was missing, because `v1` still held `44` from a definition no
- * line made any more. A pass over the same text has never seen that value, and
- * says `v1`.
+ * The write stays declared. An earlier version dropped it, reasoning that an
+ * errored line defined nothing, and the fault that reasoning caused was worse
+ * than the one it fixed: a running total whose step failed (`spent += line 1`
+ * with line 1 in error) recorded no write, so the reseed that re-runs every
+ * accumulator each pass never found it again, and it stayed on the error after
+ * the line it read had been fixed. An accumulator is also the one definition
+ * this never touches: every pass resets each total to its seed and re-runs its
+ * steps in order, so by the time one fails the VM already holds exactly what a
+ * pass from scratch holds there, seed included.
  *
- * A pending value still counts as a definition. It has not failed, it has not
- * arrived, and forgetting the name while it loads would leave every reader of
- * it undefined in the meantime.
+ * Goal seek, which started all this, is handled where it belongs now. `solve
+ * line 4 for v1 = 27` varies `v1` inside the seek's own call frame and stores
+ * nothing, so its unknown is neither a read nor a write of the document; see
+ * `extractReadsAndWrites`. The tests below that name a seek pin that.
  *
- * A goal seek that *does* run defines nothing either. The seek binds its
- * unknown in its own call frame and stores nothing when it finishes, so the
- * `v1 =` in `solve line 4 for v1 = 27` only has the shape of a definition, and
- * its write set is empty whether or not the seek could run. The boundary used
- * to be drawn the other way, and holding the name open through a seek that ran
- * was the second shape the fuzz reported.
+ * The boundary: a later expression on the same line that fails does not undo
+ * an earlier one that succeeded, since what the earlier expression set is
+ * exactly what the lines above that point of the line left. And a pending
+ * value is not a failure: it has not arrived yet.
  *
- * Found by the differential fuzz of editing sessions, once its generator was
- * taught goal seek.
+ * Found by the differential fuzz of editing sessions and by the adversarial
+ * verification of the #444 fix, which is what exposed the accumulator strand.
  */
 import { describe, expect, test } from "@jest/globals";
 import { createEngine } from "@solve-js/api/createEngine";
@@ -143,5 +151,96 @@ describe("what still counts as a definition", () => {
 
 		expect(answersOf(doc, 3)).toEqual(settled([":x = 12", "solve line 9 for x = 5", "x + 4"]));
 		expect(shown(doc, 3)).toBe("16");
+	});
+});
+
+describe("a definition that failed", () => {
+	test("is left as the lines above left it, which may be undefined", () => {
+		const { doc, evaluator } = editorFor([":x = 5", "x + 1"]);
+		expect(shown(doc, 2)).toBe("6");
+
+		doc.editLine(1, ":x = zz + 1");
+		for (let pass = 0; pass < 4; pass++) evaluator.evaluate({ startLine: 1, endLine: 2 });
+
+		expect(answersOf(doc, 2)).toEqual(settled([":x = zz + 1", "x + 1"]));
+		expect(shown(doc, 2)).toContain("Undefined variable: x");
+	});
+
+	test("keeps an earlier definition of the same name", () => {
+		// The value the lines above left is a value, not nothing. A pass from
+		// scratch skips the store and reads on with the earlier one.
+		const { doc, evaluator } = editorFor([":x = 1", "x", ":x = 7", "x"]);
+		expect(shown(doc, 4)).toBe("7");
+
+		doc.editLine(3, ":x = zz");
+		for (let pass = 0; pass < 4; pass++) evaluator.evaluate({ startLine: 1, endLine: 4 });
+
+		expect(answersOf(doc, 4)).toEqual(settled([":x = 1", "x", ":x = zz", "x"]));
+		expect(shown(doc, 4)).toBe("1");
+	});
+
+	test("recovers once the right-hand side is fixed", () => {
+		const { doc, evaluator } = editorFor([":x = zz + 1", "x + 1"]);
+		doc.editLine(1, ":x = 5");
+		for (let pass = 0; pass < 4; pass++) evaluator.evaluate({ startLine: 1, endLine: 2 });
+
+		expect(answersOf(doc, 2)).toEqual(settled([":x = 5", "x + 1"]));
+	});
+
+	test("a later expression on the same line does not undo an earlier one", () => {
+		const { doc, evaluator } = editorFor(["s`:a = 5` and s`:a = zz`", "a"]);
+		doc.editLine(1, "s`:a = 6` and s`:a = zz`");
+		for (let pass = 0; pass < 4; pass++) evaluator.evaluate({ startLine: 1, endLine: 2 });
+
+		expect(answersOf(doc, 2)).toEqual(settled(["s`:a = 6` and s`:a = zz`", "a"]));
+		expect(shown(doc, 2)).toBe("6");
+	});
+});
+
+describe("a running total whose step failed", () => {
+	test("is re-seeded again once the line it read is fixed", () => {
+		// The strand the dropped write caused. `spent += line 1` with line 1 in
+		// error recorded no write, the reseed never found it, and it stayed on
+		// the error after line 1 became a number.
+		const { doc, evaluator } = editorFor(["@@@", "spent += line 1", "spent"]);
+		doc.editLine(1, "9");
+		for (let pass = 0; pass < 4; pass++) evaluator.evaluate({ startLine: 1, endLine: 3 });
+
+		expect(answersOf(doc, 3)).toEqual(settled(["9", "spent += line 1", "spent"]));
+		expect(shown(doc, 3)).toBe("9");
+	});
+
+	test("keeps the total the steps above it built", () => {
+		const { doc, evaluator } = editorFor(["spent += 3", "spent += 4", "spent"]);
+		doc.editLine(2, "spent += zz");
+		for (let pass = 0; pass < 4; pass++) evaluator.evaluate({ startLine: 1, endLine: 3 });
+
+		expect(answersOf(doc, 3)).toEqual(settled(["spent += 3", "spent += zz", "spent"]));
+		expect(shown(doc, 3)).toBe("3");
+	});
+
+	test("shows the seed when it is the first step", () => {
+		// The seed is a value a pass from scratch also shows, which is why an
+		// accumulator is the one definition the restore leaves alone.
+		const { doc, evaluator } = editorFor(["spent += 3", "spent"]);
+		doc.editLine(1, "spent += zz");
+		for (let pass = 0; pass < 4; pass++) evaluator.evaluate({ startLine: 1, endLine: 2 });
+
+		expect(answersOf(doc, 2)).toEqual(settled(["spent += zz", "spent"]));
+		expect(shown(doc, 2)).toBe("0");
+	});
+
+	test("a cycle through it, broken again, leaves it able to recover", () => {
+		// The regression the #444 fix's own verifier found: a member reset to an
+		// error must still be re-seeded when the cycle is edited away.
+		const { doc, evaluator } = editorFor(["9", "spent += line 1"]);
+		doc.editLine(1, "line 2 + 1");
+		for (let pass = 0; pass < 4; pass++) evaluator.evaluate({ startLine: 1, endLine: 2 });
+		expect(answersOf(doc, 2)).toEqual(settled(["line 2 + 1", "spent += line 1"]));
+
+		doc.editLine(1, "9");
+		for (let pass = 0; pass < 4; pass++) evaluator.evaluate({ startLine: 1, endLine: 2 });
+		expect(answersOf(doc, 2)).toEqual(settled(["9", "spent += line 1"]));
+		expect(shown(doc, 2)).toBe("9");
 	});
 });

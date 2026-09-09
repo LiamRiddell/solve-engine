@@ -75,13 +75,26 @@ const SHAPES: readonly LineShape[] = [
 	// A name defined, and a name read. The pair the whole generator is for.
 	(rng) => `:v${rng.int(NAME_COUNT)} = ${rng.range(1, 50)}`,
 	(rng) => `:v${rng.int(NAME_COUNT)} = ${rng.range(1, 50)}`,
+	// A definition that reads a position, so a cycle can run through a name
+	// as well as through positions alone; one that reads another name; and
+	// one whose right-hand side is an undefined name, so the definition
+	// fails and the name must be left as the lines above left it.
+	(rng) => `:v${rng.int(NAME_COUNT)} = line ${rng.range(1, 6)} + ${rng.range(1, 9)}`,
+	(rng) => `:v${rng.int(NAME_COUNT)} = v${rng.int(NAME_COUNT)} + ${rng.range(1, 9)}`,
+	(rng) => `:v${rng.int(NAME_COUNT)} = v9 + ${rng.range(1, 9)}`,
 	(rng) => `v${rng.int(NAME_COUNT)} + ${rng.range(1, 9)}`,
 	(rng) => `v${rng.int(NAME_COUNT)} * v${rng.int(NAME_COUNT)}`,
 	(rng) => `v${rng.int(NAME_COUNT)}`,
 
-	// A running total, whose value is a fold over the lines above it.
+	// A running total, whose value is a fold over the lines above it. Two of
+	// its steps read a position rather than a literal: a total that reads a
+	// line is a definition that can fail, and a member a cycle can run
+	// through, and neither was in the vocabulary when the verifiers of the
+	// #444 fix had to write both by hand.
 	(rng) => `spent += ${rng.range(1, 10)}`,
 	(rng) => `spent += ${rng.range(1, 10)}`,
+	(rng) => `spent += line ${rng.range(1, 6)}`,
+	() => `spent += prev`,
 	() => `spent`,
 
 	// The positional aggregates, which read the block above them.
@@ -115,6 +128,12 @@ const SHAPES: readonly LineShape[] = [
 	() => `| ---- | ---- |`,
 	(rng) => `| ${["rent", "food", "taxi"][rng.int(3)]} | ${rng.range(1, 400)} |`,
 	() => `sum of column "cost" above`,
+
+	// A user function, defined on one line and called on another. A
+	// definition that stops being one (edited into a body the engine refuses)
+	// is the shape a stale binding hides behind.
+	(rng) => `f(x) = x + ${rng.range(1, 9)}`,
+	(rng) => `f(${rng.range(1, 9)})`,
 
 	// A user unit, defined on one line and used on another.
 	(rng) => `1 sprint = ${rng.range(1, 4)} weeks`,

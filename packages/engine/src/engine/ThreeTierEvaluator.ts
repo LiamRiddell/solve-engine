@@ -1128,6 +1128,9 @@ export class ThreeTierEvaluator {
 		// solves (s`:a = 5` s`:b = a + 3` s`a + b`) would lose ALL results when
 		// the third expression throws because 'b' references cross a VM state
 		// boundary or the engine encounters a transient error.
+		// Names an earlier expression on this line has already set, so a later
+		// one on the same line that fails does not undo it.
+		const definedEarlierOnThisLine = new Set<string>();
 		for (const expression of expressions) {
 			if (!expression.trim()) continue;
 
@@ -1170,24 +1173,32 @@ export class ThreeTierEvaluator {
 				allResults.push([errorValue("eval_failed", firstError ?? "unknown error")]);
 			}
 
+			// A throw is a failure as much as an error answer is: either way the
+			// store never happened, and the name must be left as the lines above
+			// left it, whichever branch below learns what this expression writes.
+			const failed = value === null || value.some((v) => v.type === ValueType.Error);
 			if (entry) {
 				allBytecodes.push(entry.bytecode);
 				for (const r of entry.readVariables) allReads.add(r);
-				// A line that answered with an error defined nothing, whatever its
-				// compiled form says it would have written. The write set is what
-				// the end-of-pass settle asks whether a name is still defined by
-				// anyone, so a line claiming one it never assigned keeps a stale
-				// value alive: `solve line 5 for v1 = 22` cannot solve a line that
-				// is not there, and reported so, while still holding `v1` open long
-				// after the `:v1 = 44` that gave it a value had been edited away.
-				//
-				// A pending value still counts. It has not failed, it has not
-				// arrived, and forgetting the name while it loads would undefine it
-				// for every reader in the meantime.
-				const failed = value !== null && value.some((v) => v.type === ValueType.Error);
-				if (entry.writeVariable && !failed) {
+				if (entry.writeVariable) {
 					allWrites.add(entry.writeVariable);
 					hasVariableDef = true;
+					// The write stays declared whatever the answer was: the line is
+					// still the one that defines the name, and a running total that
+					// dropped its write when its step failed was never re-seeded
+					// again, stuck on the error after the line it read was fixed.
+					//
+					// What a failed definition may not do is keep its own old value.
+					// A pass from scratch skips the store, leaving the name as the
+					// lines above had it, and this puts it back there. Unless an
+					// earlier expression on this same line set it, in which case that
+					// is what the lines above left and it is already in place. A
+					// pending value is not a failure: it has not arrived yet.
+					if (failed && !definedEarlierOnThisLine.has(entry.writeVariable)) {
+						this.engine.restoreFailedDefinition(entry.writeVariable, lineNumber);
+					} else if (!failed) {
+						definedEarlierOnThisLine.add(entry.writeVariable);
+					}
 				}
 			} else {
 				// Fallback: LineCache missed, compile expression ourselves
@@ -1197,6 +1208,13 @@ export class ThreeTierEvaluator {
 					for (const r of reads) allReads.add(r);
 					for (const w of writes) allWrites.add(w);
 					if (writes.length > 0) hasVariableDef = true;
+					// The same restore as the cached branch above; this is the branch
+					// a throwing right-hand side takes, since a throw leaves no cache
+					// entry behind, and it was the one path that kept its old value.
+					for (const w of writes) {
+						if (failed && !definedEarlierOnThisLine.has(w)) this.engine.restoreFailedDefinition(w, lineNumber);
+						else if (!failed) definedEarlierOnThisLine.add(w);
+					}
 				} catch (compileErr) {
 					// Push empty bytecode, expression will recompile on next pass.
 					// The expression still failed to compile, but reads/writes were
@@ -1210,7 +1228,13 @@ export class ThreeTierEvaluator {
 						const errReads = compileErr.context.reads;
 						const errWrites = compileErr.context.writes;
 						if (Array.isArray(errReads)) for (const r of errReads) allReads.add(r);
-						if (Array.isArray(errWrites)) for (const w of errWrites) allWrites.add(w);
+						if (Array.isArray(errWrites)) {
+							for (const w of errWrites) {
+								allWrites.add(w);
+								// A definition that does not even compile set nothing.
+								if (!definedEarlierOnThisLine.has(w)) this.engine.restoreFailedDefinition(w, lineNumber);
+							}
+						}
 					}
 				}
 			}

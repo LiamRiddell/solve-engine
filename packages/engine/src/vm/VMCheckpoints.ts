@@ -412,6 +412,36 @@ export class VMCheckpointer {
 	 *
 	 * @returns The Value, or undefined if the variable was never set.
 	 */
+	/**
+	 * The value a name held at the end of the line before `lineNumber`, or
+	 * undefined if no line above it had set one.
+	 *
+	 * What a definition that failed leaves behind. A pass from scratch skips
+	 * the store when the right-hand side errors, so the name keeps whatever the
+	 * lines above it had put there: `:x = 1` then `:x = zz` leaves `x` at 1,
+	 * and `:x = zz` on its own leaves it undefined. The incremental path holds
+	 * the value from the previous pass instead, which for the line that failed
+	 * is its own old answer, so the evaluator asks here what the prefix holds
+	 * and puts that back. The chain records what each line wrote, in document
+	 * order, so the entry nearest before the line, followed through its
+	 * parents, is exactly the prefix.
+	 *
+	 * @param name - The variable.
+	 * @param lineNumber - The 1-based line whose own entry is to be excluded.
+	 * @returns The value the lines above set, or undefined.
+	 */
+	lookupVariableBefore(name: string, lineNumber: number): Value | undefined {
+		const index = this.nearestCheckpointIndex(lineNumber - 1);
+		let checkpoint: VMCheckpoint | null = index < 0 ? null : this.checkpoints[index];
+		while (checkpoint) {
+			if (Object.prototype.hasOwnProperty.call(checkpoint.variables, name)) {
+				return checkpoint.variables[name];
+			}
+			checkpoint = checkpoint.parent;
+		}
+		return undefined;
+	}
+
 	lookupVariable(name: string): Value | undefined {
 		if (this.checkpoints.length === 0) return undefined;
 
