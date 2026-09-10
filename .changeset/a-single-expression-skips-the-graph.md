@@ -23,21 +23,32 @@ stable across runs: about 10% off the single-expression path, never slower.
 The boundary. This is the single-expression path only. A document evaluates in
 positive line numbers through the incremental evaluator, which reads the graph
 to decide what an edit affects, so its registration is untouched. The graph's
-other readers all work in positive line numbers too: `evaluateLine(n, ...)`,
-`evaluateIncremental`, and the language service's cross-line completions, which
-a broad version of this change was measured to break before it was narrowed to
-line -1 exactly. Two things a single expression does still rely on are kept:
-variables accumulate across calls through the VM, not the graph, and the async
-data-source dependency that a pending value's arrival reads is registered
-separately and stays.
+other readers work in positive line numbers too: `evaluateLine(n, ...)` and
+`evaluateIncremental`. A broad version of this change, skipping registration
+whenever there was no document, was measured to break nineteen of them before it
+was narrowed to line -1 exactly. Two things a single expression does still rely
+on are kept: variables accumulate across calls through the VM, not the graph, so
+that is untouched, and the async data-source dependency that a pending value's
+arrival reads is registered separately and stays.
+
+One reachable difference, deliberate. The language service builds its
+completion namespace from the graph, and does not filter by line, so a variable
+defined only through `evaluateExpression` used to appear as a completion because
+line -1 leaked its edge in. It no longer does. The variable still evaluates;
+it is simply not part of the document's completions, which is what that feature
+is for, and the namespace a real notepad offers is built from its document
+(positive lines) and is unchanged. A consumer wanting single expressions in the
+list passes its own `variableNameSource`.
 
 ## Verification
 
-3 new tests in `ASingleExpressionSkipsTheGraph` pin that variables still
+4 new tests in `ASingleExpressionSkipsTheGraph` pin that variables still
 accumulate across `evaluateExpression` calls (including across a read-only line
 and a line that writes nothing), that an error is still a value and a failed
-definition leaves the name as the lines above left it, and that the graph is
-left empty for line -1 so the cost cannot creep back. The engine suite is green
+definition leaves the name as the lines above left it, that the graph is left
+empty for line -1 so the cost cannot creep back, and that the completion
+namespace is the document (a line-defined variable is offered, a
+single-expression one is not). The engine suite is green
 (the language-service, `evaluateIncremental` and cache-coherence suites, which
 exercise the graph without a document in positive line numbers, all pass), and
 the differential fuzz of documents, expressions and bytecode reports 0

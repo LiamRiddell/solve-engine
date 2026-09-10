@@ -16,6 +16,7 @@
  */
 import { describe, expect, test } from "@jest/globals";
 import { createEngine } from "@solve-js/api/createEngine";
+import { LanguageService } from "@solve-js/language/LanguageService";
 import { formatValue } from "@solve-js/format/FormatEngine";
 
 function shown(engine: ReturnType<typeof createEngine>, expression: string): string {
@@ -53,5 +54,24 @@ describe("a single expression skips the dependency graph", () => {
 		const dag = (engine as unknown as { getDag(): { getReads(n: number): ReadonlySet<string>; getWrites(n: number): ReadonlySet<string> } }).getDag();
 		expect([...dag.getWrites(-1)]).toEqual([]);
 		expect([...dag.getReads(-1)]).toEqual([]);
+	});
+
+	test("the completion namespace is the document, not single expressions", () => {
+		// The language service's default completion source is the dependency
+		// graph, which is the document's namespace. A variable defined on a real
+		// line is offered; one defined only through `evaluateExpression` (line -1,
+		// no document) is not, and was only ever offered before because line -1
+		// leaked its edge into the graph. The variable still evaluates; it is just
+		// not part of the document's completions. A consumer wanting a different
+		// namespace passes `variableNameSource`.
+		const engine = createEngine();
+		const service = new LanguageService(engine);
+
+		engine.evaluateExpression(":singleOnly = 5");
+		expect(service.getCompletions("single", 6).some((c) => c.label === "singleOnly")).toBe(false);
+		expect(formatValue(engine.evaluateExpression("singleOnly")).replace(/^=\s*/, "")).toBe("5");
+
+		engine.evaluateLine(1, ":docVar = 9");
+		expect(service.getCompletions("doc", 3).some((c) => c.label === "docVar" && c.category === "variable")).toBe(true);
 	});
 });
