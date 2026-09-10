@@ -3441,12 +3441,19 @@ export class ExpressionEngine {
             // parseExpression() under one 'parser' allocation measurement,
             // matching the exact span this file's diagnostic path has always
             // measured (see this method's own doc comment on `parserAlloc`).
-            const parseResult = AllocationTracker.track('parser', () => {
+            // The wrapper's closure and result object are skipped when tracking
+            // is off, which it is in production; see the lexer stage's note.
+            if (AllocationTracker.isEnabled()) {
+                const parseResult = AllocationTracker.track('parser', () => {
+                    this.parseExpression(builder, normalizedTokens, hasParens);
+                    return builder.build();
+                });
+                program = parseResult.result;
+                parserAlloc = parseResult.alloc;
+            } else {
                 this.parseExpression(builder, normalizedTokens, hasParens);
-                return builder.build();
-            });
-            program = parseResult.result;
-            parserAlloc = parseResult.alloc;
+                program = builder.build();
+            }
         } catch (e) {
             // reads/writes were already extracted above from the full token
             // list (independent of whether parsing succeeds), returned
@@ -3863,13 +3870,25 @@ export class ExpressionEngine {
                 },
             });
         } : undefined;
-        const lexResult = AllocationTracker.track('lexer', () => this.lexToTokens(expression, onToken));
-        let tokens = lexResult.result.tokens;
-        const hasParens = lexResult.result.hasParens;
+        // Wrapping a stage in AllocationTracker.track costs the closure and the
+        // result object it returns on every call, whether or not tracking is on,
+        // and it is off in production. The closure is built at the call site
+        // before track() can decide, so the stage is called directly on the
+        // common path and wrapped only when tracking is enabled. Same for the
+        // parser and VM stages below.
+        let lexed: { tokens: Token[]; hasParens: boolean; compiled: boolean };
+        if (trackEnabled) {
+            const lexResult = AllocationTracker.track('lexer', () => this.lexToTokens(expression, onToken));
+            lexed = lexResult.result;
+            if (lexResult.alloc) stageAllocs.push(lexResult.alloc);
+        } else {
+            lexed = this.lexToTokens(expression, onToken);
+        }
+        let tokens = lexed.tokens;
+        const hasParens = lexed.hasParens;
         // True when lexing was skipped because the program is cached; the
         // empty token array is then a skip, not an empty line.
-        const compiled = lexResult.result.compiled;
-        if (trackEnabled && lexResult.alloc) stageAllocs.push(lexResult.alloc);
+        const compiled = lexed.compiled;
 
         // Structured: lexer stage output
         if (hasCollectors) {
@@ -4317,11 +4336,17 @@ export class ExpressionEngine {
         const emitVmTrace = hasCollectors && this.config.diagnostic.vmTraceEnabled === true;
         let result: Value;
         try {
-            const vmResult = AllocationTracker.track('vm', () => {
-                return this.executeAndStore(program, lineNumber, expression, reads, writes, '_engine', emitVmTrace ? pipeline : undefined, expression);
-            }, { cacheHit: !!cachedBefore });
-            result = vmResult.result;
-            if (trackEnabled && vmResult.alloc) stageAllocs.push(vmResult.alloc);
+            // Direct on the common path, wrapped only when tracking is on; see
+            // the lexer stage's note on the closure this avoids.
+            if (trackEnabled) {
+                const vmResult = AllocationTracker.track('vm', () => {
+                    return this.executeAndStore(program, lineNumber, expression, reads, writes, '_engine', emitVmTrace ? pipeline : undefined, expression);
+                }, { cacheHit: !!cachedBefore });
+                result = vmResult.result;
+                if (vmResult.alloc) stageAllocs.push(vmResult.alloc);
+            } else {
+                result = this.executeAndStore(program, lineNumber, expression, reads, writes, '_engine', emitVmTrace ? pipeline : undefined, expression);
+            }
         } catch (e) {
             const engineError = normalizeUnknownError(e);
             if (hasCollectors) {
