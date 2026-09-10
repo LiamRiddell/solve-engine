@@ -1996,6 +1996,21 @@ export class ExpressionEngine {
 
 
     private registerLineWithTags(lineNumber: number, text: string, reads: string[], writes: string[]): void {
+        // Line -1 is the single-expression sentinel: `evaluateExpression` routes
+        // through `evaluateLine(-1, ...)`, which has no document position and no
+        // sibling lines. The dependency graph exists to connect lines across a
+        // document, so an edge from -1 connects nothing a reader consults: the
+        // graph's consumers (the incremental `ThreeTierEvaluator`, `evaluateLine`
+        // with real line numbers, `evaluateIncremental`, the language service's
+        // cross-line completions) all work in positive line numbers, and an
+        // errored line's name settling already returns early without a document.
+        // Scanning tags and registering the edge was a measurable slice of every
+        // single-expression evaluation (about a tenth of the path) spent on a
+        // graph nothing reads. Variable accumulation across calls is the VM's,
+        // not the graph's, so it is untouched; the async data-source dependency,
+        // which IS read when a pending value arrives, is registered separately in
+        // `executeAndStore` and stays.
+        if (lineNumber === -1) return;
         const edges = withTagEdges(text, reads, writes);
         this.forgetOrphanedNames(this.dag.registerLine(lineNumber, edges.reads, edges.writes));
     }
