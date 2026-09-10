@@ -106,6 +106,22 @@ export interface DocumentCase {
 	lines: string[];
 	/** The editor actions to perform, in order. */
 	actions: EditAction[];
+	/**
+	 * A fixed viewport the whole session runs and is compared at, or absent for
+	 * the whole document.
+	 *
+	 * The oracle compares an edited session against a fresh pass driven the same
+	 * way. At the full viewport that is unambiguous. At a narrower one it is only
+	 * unambiguous while the viewport does not move: a line scrolled off the top
+	 * keeps its last answer (the scroll cache), which a fresh pass driven
+	 * straight to that viewport never computed, so a moving viewport would report
+	 * that benign difference as a disagreement. A fixed viewport has no such
+	 * history, and it is what exposes the faults the full viewport heals before
+	 * it measures: an answer a structural edit leaves on a line below the
+	 * viewport, which a line reading that position then reads back as real (#458).
+	 * A case carrying this holds no `view` action, for the same reason.
+	 */
+	viewport?: { startLine: number; endLine: number };
 }
 
 /** Any kind of generated input. */
