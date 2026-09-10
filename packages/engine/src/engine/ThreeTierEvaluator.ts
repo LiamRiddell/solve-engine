@@ -179,6 +179,18 @@ export class ThreeTierEvaluator {
 	 * The lines that sit on a cycle, by line id. See {@link settleCycles}.
 	 */
 	private cycleMemberIds: Set<number> = new Set();
+	/**
+	 * The lowest position a structural edit moved, awaiting the next pass, or
+	 * `MAX_SAFE_INTEGER` when nothing is pending.
+	 *
+	 * A structural edit shifts every line from here down to a new position, and
+	 * the answer such a line still holds was computed for where it used to be.
+	 * The next pass knows the viewport, so it can clear exactly the stale ones,
+	 * the moved lines below the range it runs; see
+	 * {@link forgetMovedBelowViewport}. Recorded rather than acted on at edit
+	 * time because a moved line ABOVE the range is one a fresh pass still shows.
+	 */
+	private movedFloor = Number.MAX_SAFE_INTEGER;
 
 	/**
 	 * Unsubscribe from sharedGlobalVariableStore, set in the constructor
@@ -298,6 +310,7 @@ export class ThreeTierEvaluator {
 			// done separately via backgroundCompile().
 			const docEnd = this.doc.lineCount;
 			const evalEnd = Math.min(viewport.endLine, docEnd);
+			this.forgetMovedBelowViewport(evalEnd);
 
 			// Walked once, rather than descended into per position. See
 			// `DocumentModel.getLineStatesInRange`.
@@ -696,6 +709,18 @@ export class ThreeTierEvaluator {
 			this.doc.forgetResult(lineId);
 		}
 
+		// Every line from the earliest change downward now sits at a different
+		// position, so a result it still holds was computed for where it used to
+		// be. The stale one must not outlive the edit below the viewport, where a
+		// pass never reaches it and a fresh pass shows nothing: a line reading
+		// that position read the stale answer back as a real one (`line 4`
+		// reading a line that had moved to position 4 reported its error rather
+		// than "not evaluated yet"). It is cleared at the next evaluate, once the
+		// viewport is known, since a moved line ABOVE the viewport is one a fresh
+		// pass still shows and must be kept. See {@link forgetMovedBelowViewport}.
+		const earliestChange = changes.reduce((lowest, change) => Math.min(lowest, change.startLine), Number.MAX_SAFE_INTEGER);
+		this.movedFloor = Math.min(this.movedFloor, earliestChange);
+
 		// ── Phase 5: Clear DAG to avoid phantom entries ────────────────
 		// Entries keyed by old line numbers are stale after structural
 		// changes. Rather than updating shifted entries, we clear the DAG
@@ -942,6 +967,34 @@ export class ThreeTierEvaluator {
 	 * @param startLine First line to evaluate (1-based, inclusive).
 	 * @param endLine Last line to evaluate (1-based, inclusive). Clamped to docEnd.
 	 */
+	/**
+	 * Clear the stale answers a structural edit left below the viewport.
+	 *
+	 * An insert or a delete moves every line from {@link movedFloor} down to a
+	 * new position; the answer each still holds was computed for its old one. A
+	 * moved line inside the range about to run is re-run and gets a fresh answer,
+	 * and a moved line above it is one a fresh pass driven to this viewport still
+	 * shows, so both are left alone. A moved line BELOW the range is neither: the
+	 * pass never reaches it, nothing re-runs it, and a fresh pass shows nothing
+	 * there, yet the incremental path kept its old answer, which a line reading
+	 * that position then read back as a real one (#458). Those are cleared here,
+	 * from just past `evalEnd` (or the earliest move, whichever is lower down) to
+	 * the end of the document. Consumed once: a later pass over a wider viewport
+	 * re-runs whichever of them it now covers.
+	 *
+	 * @param evalEnd - The last line this pass will run.
+	 */
+	private forgetMovedBelowViewport(evalEnd: number): void {
+		if (this.movedFloor === Number.MAX_SAFE_INTEGER) return;
+		const from = Math.max(evalEnd + 1, this.movedFloor);
+		const docEnd = this.doc.lineCount;
+		for (let position = from; position <= docEnd; position++) {
+			const moved = this.doc.getLineAt(position);
+			if (moved) this.doc.forgetResult(moved.lineId);
+		}
+		this.movedFloor = Number.MAX_SAFE_INTEGER;
+	}
+
 	private collectEvalResults(startLine: number, endLine: number): EvalResult {
 		const lines: EvalLineResult[] = [];
 		const resultMap = new Map<number, Value[]>();
@@ -949,6 +1002,7 @@ export class ThreeTierEvaluator {
 
 		const docEnd = this.doc.lineCount;
 		const evalEnd = Math.min(endLine, docEnd);
+		this.forgetMovedBelowViewport(evalEnd);
 
 		for (let pos = startLine; pos <= evalEnd; pos++) {
 			const state = this.doc.getLineAt(pos);
