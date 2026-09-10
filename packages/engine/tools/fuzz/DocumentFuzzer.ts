@@ -167,6 +167,42 @@ function lineText(rng: Prng): string {
 }
 
 /**
+ * The shapes a viewport-limited case is built from: lines whose answer is a
+ * function of their own text or of another line's answer by POSITION, and that
+ * leave no state behind them.
+ *
+ * A viewport case is compared against a fresh pass driven to the same viewport,
+ * and that comparison is only sound where the incremental path keeps nothing a
+ * fresh pass would not have. A variable, a running total, a user function, a
+ * user unit or a category tag all persist across lines in the VM or an index,
+ * so a definition an edit pushes below the viewport stays readable above it
+ * while a fresh pass, which never reached the definition, has it undefined:
+ * a real difference, but the scroll cache's, not a fault. Positional reads
+ * (`line N`, `prev`, the `above` aggregates, a line range) carry no such state,
+ * and are exactly where a line left stale below the viewport is read back (the
+ * bug this shape exists to catch), so the case is built only from these.
+ */
+const POSITIONAL_SHAPES: readonly LineShape[] = [
+	(rng) => `${rng.range(1, 99)} + ${rng.range(1, 9)}`,
+	(rng) => `${rng.range(2, 40)} * ${rng.range(2, 9)}`,
+	(rng) => `line ${rng.range(1, 6)} + ${rng.range(1, 9)}`,
+	(rng) => `line ${rng.range(1, 8)} + line ${rng.range(1, 8)}`,
+	(rng) => `sum(line ${rng.range(1, 6)} : line ${rng.range(1, 8)})`,
+	(rng) => `prev + ${rng.range(1, 5)}`,
+	() => `total above`,
+	() => `average above`,
+	(rng) => `${rng.range(1, 50)}% of ${rng.range(10, 400)}`,
+	(rng) => `${rng.range(1, 40)} km in miles`,
+	(rng) => `${rng.range(1, 255)} as hex`,
+	() => `# a heading`,
+	() => ``,
+];
+
+function positionalLineText(rng: Prng): string {
+	return POSITIONAL_SHAPES[rng.int(POSITIONAL_SHAPES.length)](rng);
+}
+
+/**
  * Generate the editing session a seed stands for.
  *
  * The action positions are drawn against a *projected* length rather than the
@@ -205,6 +241,26 @@ export function generateDocumentCase(seed: number, options: DocumentFuzzOptions 
 		} else {
 			actions.push({ kind: "view", at, end: at + rng.int(6) });
 		}
+	}
+
+	// Some sessions run at a fixed narrow viewport instead of the whole
+	// document. This is the shape that catches a line left stale below the
+	// viewport (#458): the whole-document oracle re-reads every line and heals
+	// it before measuring. Decided last, so a full-viewport case generates
+	// exactly as it did before this shape existed.
+	//
+	// A viewport case is rebuilt from positional shapes only (see
+	// POSITIONAL_SHAPES) and carries no `view` action: both are because the
+	// comparison against a fresh same-viewport pass is only sound while the
+	// incremental path retains nothing a fresh pass lacks, which rules out the
+	// stateful shapes and a moving viewport alike.
+	if (lineCount >= 3 && rng.int(100) < 30) {
+		const endLine = rng.range(2, lineCount - 1);
+		const posLines = Array.from({ length: lineCount }, () => positionalLineText(rng));
+		const posActions = actions
+			.filter((action) => action.kind !== "view")
+			.map((action) => (action.kind === "edit" || action.kind === "insert" ? { ...action, text: positionalLineText(rng) } : action));
+		return { kind: "document", lines: posLines, actions: posActions, viewport: { startLine: 1, endLine } };
 	}
 
 	return { kind: "document", lines, actions };

@@ -52,6 +52,31 @@ describe("the document generator", () => {
 		expect(generated.lines.length).toBeLessThanOrEqual(5);
 		expect(generated.actions).toHaveLength(2);
 	});
+
+	test("some sessions run at a fixed narrow viewport, and those carry no view action", () => {
+		// The viewport shape is what exposes a line left stale below the viewport
+		// (#458), which the whole-document oracle heals before it measures. A
+		// viewport case is compared against a fresh pass driven the same way, so
+		// it must not move the viewport mid-session (a scroll cache the fresh pass
+		// has no history for) and is built only from lines that leave no state
+		// behind (no definitions, totals, functions, units or tags, whose
+		// retention across the viewport a fresh pass would not share).
+		let viewportCases = 0;
+		for (let seed = 1; seed <= 200; seed++) {
+			const generated = generateDocumentCase(seed);
+			if (!generated.viewport) continue;
+			viewportCases++;
+			expect(generated.viewport.startLine).toBe(1);
+			expect(generated.viewport.endLine).toBeLessThan(generated.lines.length);
+			expect(generated.viewport.endLine).toBeGreaterThanOrEqual(2);
+			expect(generated.actions.some((action) => action.kind === "view")).toBe(false);
+			// No stateful shapes: a definition (`:v`), a total (`spent`), a
+			// function (`f(`), a unit (`sprint`) or a tag (`#food`, a hash with
+			// no space — a `# heading` is a stateless boundary and is allowed).
+			for (const line of generated.lines) expect(line).not.toMatch(/:v|spent|^f\(|sprint|#\S/);
+		}
+		expect(viewportCases).toBeGreaterThan(0);
+	});
 });
 
 describe("the document oracle", () => {
@@ -71,6 +96,24 @@ describe("the document oracle", () => {
 		const outcome = runDocumentCase(agreeing);
 		expect(outcome.kind).toBe("ok");
 		expect(isFailure(outcome)).toBe(false);
+	});
+
+	test("a viewport case is judged at its viewport: the #458 shape agrees on a fixed engine", () => {
+		// The reported #458 session, as a viewport case: at viewport 1-3, the
+		// insert moves `prev + 5` to line 4, below the viewport. The fix clears
+		// a moved line's answer below the viewport, so the edited session and a
+		// fresh pass driven to the same viewport agree, and the oracle, judging
+		// at that viewport rather than the whole document, confirms it. Before
+		// the fix this case disagreed (line 2 read the moved line's stale answer);
+		// that it now agrees is what this shape is here to keep watch on.
+		const viewportCase: DocumentCase = {
+			kind: "document",
+			lines: ["line 2 + 5", "prev + 5", "7"],
+			actions: [{ kind: "insert", at: 3, text: "9" }],
+			viewport: { startLine: 1, endLine: 3 },
+		};
+		expect(replayDocumentCase(viewportCase)).toBeNull();
+		expect(runDocumentCase(viewportCase).kind).toBe("ok");
 	});
 
 	test("names the line, the action and both answers when they differ", () => {

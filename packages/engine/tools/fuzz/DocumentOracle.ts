@@ -101,12 +101,12 @@ function answers(document: DocumentModel, count: number): string[] {
  * @param lines - The document text, one entry per line.
  * @returns One answer per line.
  */
-function settled(lines: string[]): string[] {
+function settled(lines: string[], viewport?: { startLine: number; endLine: number }): string[] {
 	const document = new DocumentModel();
 	document.setDocument(lines.join(NEWLINE));
 	const evaluator = new ThreeTierEvaluator(document, new ExpressionEngine({ packages: BUILTIN_PACKAGES }));
 	try {
-		return runToStability(document, evaluator, lines.length);
+		return runToStability(document, evaluator, lines.length, viewport);
 	} finally {
 		evaluator.terminateWorker();
 	}
@@ -125,11 +125,13 @@ function settled(lines: string[]): string[] {
  * @param count - How many lines to read.
  * @returns The answers once they stopped moving.
  */
-function runToStability(document: DocumentModel, evaluator: ThreeTierEvaluator, count: number): string[] {
+function runToStability(document: DocumentModel, evaluator: ThreeTierEvaluator, count: number, viewport?: { startLine: number; endLine: number }): string[] {
+	const startLine = viewport?.startLine ?? 1;
+	const endLine = viewport?.endLine ?? count;
 	let previous: string[] = [];
 	let still = 0;
 	for (let pass = 0; pass < MAX_PASSES; pass++) {
-		evaluator.evaluate({ startLine: 1, endLine: count });
+		evaluator.evaluate({ startLine, endLine });
 		const current = answers(document, count);
 		still = pass > 0 && current.every((answer, i) => answer === previous[i]) ? still + 1 : 0;
 		if (still >= STILL_PASSES - 1) return current;
@@ -198,7 +200,8 @@ function replayWith(
 	evaluator: ThreeTierEvaluator,
 	lines: string[],
 ): Disagreement | null {
-	runToStability(document, evaluator, lines.length);
+	const viewport = documentCase.viewport;
+	runToStability(document, evaluator, lines.length, viewport);
 
 	for (const action of documentCase.actions) {
 		if (lines.length === 0) return null;
@@ -223,8 +226,8 @@ function replayWith(
 			evaluator.setViewport({ startLine: action.at, endLine: end });
 		}
 
-		const got = runToStability(document, evaluator, lines.length);
-		const expected = settled(lines);
+		const got = runToStability(document, evaluator, lines.length, viewport);
+		const expected = settled(lines, viewport);
 		for (let i = 0; i < expected.length; i++) {
 			if (expected[i] === got[i]) continue;
 			return {
