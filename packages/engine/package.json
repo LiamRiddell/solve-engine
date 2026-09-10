@@ -1,6 +1,6 @@
 {
   "name": "solve-engine",
-  "version": "2.38.24",
+  "version": "2.38.25",
   "description": "An embeddable expression engine for natural-language calculations: units, currencies, percentages, dates and matrices, with the parsing and evaluation plumbing already built.",
   "keywords": [
     "expression-evaluator",
