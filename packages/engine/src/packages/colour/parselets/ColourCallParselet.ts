@@ -21,7 +21,7 @@ export class ColourCallParselet implements PrefixParselet {
 	readonly category = "Colour";
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
 		const name = token.value.toLowerCase();
-		if (COLOUR_FUNCTION_HANDLERS[name] === undefined) {
+		if (!Object.prototype.hasOwnProperty.call(COLOUR_FUNCTION_HANDLERS, name)) {
 			// Unreachable in practice: the normalizer only mints COLOUR_CALL for a
 			// name in COLOUR_FUNCTION_HANDLERS. Defensive, and a clear message if the
 			// two ever drift apart.

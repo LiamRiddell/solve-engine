@@ -17,7 +17,7 @@ export class TextCallParselet implements PrefixParselet {
 	readonly category = "Text";
 
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
-		const pluginName = TEXT_CALL_FUNCTIONS[token.value];
+		const pluginName = Object.prototype.hasOwnProperty.call(TEXT_CALL_FUNCTIONS, token.value) ? TEXT_CALL_FUNCTIONS[token.value] : undefined;
 		if (pluginName === undefined) {
 			throw ErrorFactory.execution("UNKNOWN_FUNCTION", `Unknown text function: ${token.value}`, {
 				functionName: token.value,

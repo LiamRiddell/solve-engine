@@ -100,7 +100,7 @@ function readPeriod(tokens: Token[], i: number): PeriodHead | null {
   if (head === undefined) return null;
 
   if (head.type === "IDENT") {
-    const simple = PERIODS_PER_YEAR[wordOf(head)];
+    const simple = Object.prototype.hasOwnProperty.call(PERIODS_PER_YEAR, wordOf(head)) ? PERIODS_PER_YEAR[wordOf(head)] : undefined;
     if (simple !== undefined) return { perYear: simple, consumed: 1 };
 
     if (wordOf(head) === "every") {

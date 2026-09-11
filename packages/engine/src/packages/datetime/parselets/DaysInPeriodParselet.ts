@@ -73,7 +73,7 @@ export class DaysInPeriodParselet implements PrefixParselet {
 		const word = (next?.text ?? next?.value ?? "").toLowerCase();
 
 		// `days in Q3`, optionally with a year: `days in Q3 2024`.
-		const quarter = QUARTERS[word];
+		const quarter = Object.prototype.hasOwnProperty.call(QUARTERS, word) ? QUARTERS[word] : undefined;
 		if (quarter !== undefined) {
 			parser.consume();
 			const year = this.readOptionalYear(parser) ?? currentYear(calendar);

@@ -71,7 +71,7 @@ export function parseHex(input: string): ColourData | null {
 export function namedColour(name: string): ColourData | null {
 	const key = name.trim().toLowerCase();
 	if (key === "transparent") return { r: 0, g: 0, b: 0, a: 0, format: "named", name: "transparent" };
-	const rgb = CSS_NAMED_COLOURS[key];
+	const rgb = Object.prototype.hasOwnProperty.call(CSS_NAMED_COLOURS, key) ? CSS_NAMED_COLOURS[key] : undefined;
 	if (!rgb) return null;
 	return { r: rgb[0], g: rgb[1], b: rgb[2], a: 1, format: "named", name: key };
 }

@@ -35,7 +35,7 @@ function isCountLabel(token: Token | undefined): boolean {
 	if (PER_WORDS.has(word)) return false;
 	// A word, not a symbol or a single letter: single letters are overwhelmingly
 	// variables (`30 x / week`) and overwhelmingly not count nouns.
-	return /^[a-z][a-z_]{2,}$/.test(word) && UNIT_TABLE[word] === undefined;
+	return /^[a-z][a-z_]{2,}$/.test(word) && !Object.prototype.hasOwnProperty.call(UNIT_TABLE, word);
 }
 
 /**

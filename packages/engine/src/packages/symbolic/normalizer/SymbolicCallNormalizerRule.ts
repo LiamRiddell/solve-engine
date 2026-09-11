@@ -54,7 +54,7 @@ export function symbolicCallNormalizerRule(priority = 80): NormalizerRule {
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const token = tokens[pos];
 			if (!token || token.type !== "IDENT") return null;
-			const tokenType = SYMBOLIC_WORD_TO_TOKEN_TYPE[token.value.toLowerCase()];
+			const tokenType = Object.prototype.hasOwnProperty.call(SYMBOLIC_WORD_TO_TOKEN_TYPE, token.value.toLowerCase()) ? SYMBOLIC_WORD_TO_TOKEN_TYPE[token.value.toLowerCase()] : undefined;
 			if (!tokenType) return null;
 			if (tokens[pos + 1]?.type !== "LPAREN") return null;
 

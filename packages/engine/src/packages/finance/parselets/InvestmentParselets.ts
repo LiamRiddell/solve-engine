@@ -46,7 +46,7 @@ export function readCompoundingInterval(parser: Parser): number {
 	if (!parser.match("COMPOUNDING")) return 1;
 	const token = parser.peek();
 	const name = (token?.text ?? token?.value ?? "").toLowerCase();
-	const periods = PERIODS_PER_YEAR[name];
+	const periods = Object.prototype.hasOwnProperty.call(PERIODS_PER_YEAR, name) ? PERIODS_PER_YEAR[name] : undefined;
 	if (periods === undefined) {
 		// Naming the accepted set beats "unexpected token": the whole point of
 		// this phrase is that it is written in words, so a typo is the likely

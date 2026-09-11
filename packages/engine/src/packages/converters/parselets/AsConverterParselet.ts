@@ -132,7 +132,7 @@ export class AsConverterParselet implements InfixParselet {
       return;
     }
 
-    const builtinOp = BUILTIN_CONVERTERS[name];
+    const builtinOp = Object.prototype.hasOwnProperty.call(BUILTIN_CONVERTERS, name) ? BUILTIN_CONVERTERS[name] : undefined;
     if (builtinOp !== undefined) {
       // "50 as x of 5" and "2 as multiplier of 1": the multiple is relative to
       // a base rather than to 1, so divide before converting. Only meaningful

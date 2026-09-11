@@ -56,7 +56,7 @@ export function mapReduceCallNormalizerRule(priority = 80): NormalizerRule {
       const token = tokens[pos];
       if (!token || token.type !== "IDENT") return null;
       const word = token.value.toLowerCase();
-      const tokenType = WORD_TO_TOKEN_TYPE[word];
+      const tokenType = Object.prototype.hasOwnProperty.call(WORD_TO_TOKEN_TYPE, word) ? WORD_TO_TOKEN_TYPE[word] : undefined;
       if (!tokenType) return null;
       if (tokens[pos + 1]?.type !== "LPAREN") return null;
       if (word === "sum" && looksLikeLineRef(tokens[pos + 2], tokens[pos + 3])) return null;

@@ -797,6 +797,7 @@ export function numberValue(n: number): Value {
  * Decimal-point literals are compiled to this (see the PUSH_DECIMAL opcode).
  */
 export function numberValueExact(n: number, exact: DecimalData): Value {
+	chargeAllocation(bigIntAllocationBytes(exact.coef), "decimal bytes");
 	const v = numberValue(n);
 	v.exact = exact;
 	return v;
@@ -861,14 +862,52 @@ export function hexValue(n: number | bigint, base: DisplayBase = "hex"): Value {
 	return new Value(ValueType.Hex, n, tag);
 }
 
-/** Create a BigInt-typed Value (arbitrary-precision integer). */
+/**
+ * A cheap, size-proportional proxy for the memory a bigint occupies, in bytes,
+ * so arbitrary-precision growth can be charged against the allocation budget the
+ * same way a matrix charges its cells.
+ *
+ * O(1) for any magnitude a double can size (the bit length is the exponent);
+ * for larger values the hexadecimal length is linear in the size, where turning
+ * it into decimal digits would not be. Mirrors `vm/VM.ts`'s `bigIntBitLength`,
+ * kept here so the value constructors can charge without importing from the VM.
+ */
+function bigIntAllocationBytes(n: bigint): number {
+	const magnitude = n < 0n ? -n : n;
+	if (magnitude === 0n) return 1;
+	const asDouble = Number(magnitude);
+	const bits = Number.isFinite(asDouble)
+		? Math.floor(Math.log2(asDouble)) + 1
+		: magnitude.toString(16).length * 4;
+	return Math.ceil(bits / 8);
+}
+
+/**
+ * Create a BigInt-typed Value (arbitrary-precision integer).
+ *
+ * Charged on birth by its byte size, so a doubling chain like `b(n) = n * n`
+ * nested deep trips the allocation budget (the running tally accumulates each
+ * product) rather than building a multi-megabyte integer. The `^` and `<<`
+ * operators refuse past their own bit ceiling before they reach here; multiply,
+ * which has no such ceiling, is bounded by this charge.
+ */
 export function bigIntValue(n: bigint): Value {
+	chargeAllocation(bigIntAllocationBytes(n), "bigint bytes");
 	if (_arenaActive && _arena) return _arena.acquire(ValueType.BigInt, n);
 	return new Value(ValueType.BigInt, n);
 }
 
-/** Create a String-typed Value. */
+/**
+ * Create a String-typed Value.
+ *
+ * Charged on birth by its length, the one place every string is born, so a
+ * doubling chain like `d(s) = s + s` nested deep trips the allocation budget
+ * rather than building a near-gigabyte string. The charge is a no-op outside an
+ * evaluation (the formatter, snapshot restore and host callers), exactly like
+ * {@link matrixValue}.
+ */
 export function stringValue(s: string): Value {
+	chargeAllocation(s.length, "characters");
 	if (_arenaActive && _arena) return _arena.acquire(ValueType.String, s);
 	return new Value(ValueType.String, s);
 }
@@ -889,6 +928,7 @@ export function uomValue(n: number, unit: string): Value {
  * rather than the way `toFixed` does on a double.
  */
 export function uomValueExact(n: number, unit: string, exact: DecimalData): Value {
+	chargeAllocation(bigIntAllocationBytes(exact.coef), "decimal bytes");
 	const v = uomValue(n, unit);
 	v.exact = exact;
 	return v;
