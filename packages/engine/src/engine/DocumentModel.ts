@@ -159,6 +159,22 @@ export class DocumentModel {
 	private _positionCache: Map<number, number> | null = null;
 
 	/**
+	 * Lazy order cache: 0-based position → lineId, the reverse of
+	 * {@link _positionCache} and the order the tree holds.
+	 *
+	 * `getLineAt(position)` walked the order tree on every call, an O(log n)
+	 * recursion. The cross-line forms lean on it hard — `total above`, a line
+	 * range and each boundary check turn a position into a line this way, once
+	 * per line they scan, every pass — so in an editing session, where the
+	 * positions do not move between structural edits, it was the single largest
+	 * cost in the evaluator (about a quarter of an edit's re-evaluation). This
+	 * turns the lookup into an array index. Built in the same pass as
+	 * {@link _positionCache} and invalidated with it, so an edit that only
+	 * changes a line's text (the common keystroke) leaves it standing.
+	 */
+	private _orderedIds: number[] | null = null;
+
+	/**
 	 * Line IDs currently marked dirty, maintained alongside every
 	 * `state.dirty` mutation (in this class and in every other module that
 	 * holds a direct `LineState` reference: ThreeTierEvaluator, PageManager).
@@ -233,6 +249,7 @@ export class DocumentModel {
 		this.lines.clear();
 		this.orderTree.clear();
 		this._positionCache = null;
+		this._orderedIds = null;
 		this.dirtyLineIds.clear();
 		this.nextLineId = 1;
 		this.tagIndex = null;
@@ -346,6 +363,7 @@ export class DocumentModel {
 
 		// Invalidate position cache, positions shifted for all lines
 		this._positionCache = null;
+		this._orderedIds = null;
 
 		return { inserted, removed };
 	}
@@ -474,9 +492,29 @@ export class DocumentModel {
 	 */
 	getLineAt(position: number): LineState | undefined {
 		const idx = position - 1;
-		const lineId = this.orderTree.getAt(idx);
+		if (idx < 0) return undefined;
+		const ordered = this._orderedIds ?? this.buildOrderCaches();
+		const lineId = ordered[idx];
 		if (lineId === undefined) return undefined;
 		return this.lines.get(lineId);
+	}
+
+	/**
+	 * Build both order caches in one walk of the tree, and return the ordered
+	 * ids. The two are kept in lock-step: either both are current or both are
+	 * rebuilt, so {@link getLineAt} and {@link getLinePosition} never disagree.
+	 */
+	private buildOrderCaches(): number[] {
+		const ordered: number[] = [];
+		const byId = new Map<number, number>();
+		let pos = 1;
+		for (const id of this.orderTree) {
+			ordered.push(id);
+			byId.set(id, pos++);
+		}
+		this._orderedIds = ordered;
+		this._positionCache = byId;
+		return ordered;
 	}
 
 	/**
@@ -487,18 +525,8 @@ export class DocumentModel {
 	 * O(1) on subsequent calls. The cache is invalidated by any structural edit.
 	 */
 	getLinePosition(lineId: number): number {
-		if (this._positionCache) {
-			return this._positionCache.get(lineId) ?? -1;
-		}
-
-		// Build position cache on first call after invalidation
-		this._positionCache = new Map();
-		let pos = 1;
-		for (const id of this.orderTree) {
-			this._positionCache.set(id, pos++);
-		}
-
-		return this._positionCache.get(lineId) ?? -1;
+		if (!this._positionCache) this.buildOrderCaches();
+		return this._positionCache!.get(lineId) ?? -1;
 	}
 
 	/**
@@ -814,6 +842,7 @@ export class DocumentModel {
 		this.lines.clear();
 		this.orderTree.clear();
 		this._positionCache = null;
+		this._orderedIds = null;
 		this.nextLineId = 1;
 		this.tagIndex = null;
 	}
