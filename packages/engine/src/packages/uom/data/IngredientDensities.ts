@@ -134,5 +134,6 @@ export const MAX_INGREDIENT_NAME_WORDS = 2;
 
 /** Look up an ingredient's density (g/mL) by its lowercase, space-joined name. */
 export function getIngredientDensity(name: string): number | undefined {
-  return INGREDIENT_DENSITIES[name.toLowerCase().trim()];
+  const key = name.toLowerCase().trim();
+  return Object.prototype.hasOwnProperty.call(INGREDIENT_DENSITIES, key) ? INGREDIENT_DENSITIES[key] : undefined;
 }

@@ -16,7 +16,7 @@ export class HashCallParselet implements PrefixParselet {
 	readonly category = "Hash";
 
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
-		const pluginName = HASH_CALL_FUNCTIONS[token.value];
+		const pluginName = Object.prototype.hasOwnProperty.call(HASH_CALL_FUNCTIONS, token.value) ? HASH_CALL_FUNCTIONS[token.value] : undefined;
 		if (pluginName === undefined) {
 			throw ErrorFactory.execution("UNKNOWN_FUNCTION", `Unknown hash function: ${token.value}`, {
 				functionName: token.value,

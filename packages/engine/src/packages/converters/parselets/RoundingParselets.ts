@@ -136,7 +136,7 @@ export class ToNearestParselet implements InfixParselet {
 function readIncrement(parser: Parser): number {
 	const next = parser.peek();
 	const word = (next?.text ?? "").toLowerCase();
-	const magnitude = INCREMENT_WORDS[word];
+	const magnitude = Object.prototype.hasOwnProperty.call(INCREMENT_WORDS, word) ? INCREMENT_WORDS[word] : undefined;
 	if (magnitude !== undefined) {
 		parser.consume();
 		return magnitude;

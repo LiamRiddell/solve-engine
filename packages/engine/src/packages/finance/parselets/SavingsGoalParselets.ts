@@ -29,7 +29,7 @@ const SAVINGS_PERIODS: Record<string, SavingsPeriod> = {
 function readSavingsPeriod(parser: Parser): SavingsPeriod {
   const token = parser.peek();
   const word = (token?.text ?? token?.value ?? "").toLowerCase();
-  const period = SAVINGS_PERIODS[word];
+  const period = Object.prototype.hasOwnProperty.call(SAVINGS_PERIODS, word) ? SAVINGS_PERIODS[word] : undefined;
   if (period === undefined) {
     throw ErrorFactory.parsing(
       "UNKNOWN_SAVINGS_PERIOD",

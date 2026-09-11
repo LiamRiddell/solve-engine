@@ -179,12 +179,12 @@ export function largeNumberSuffixNormalizerRule(priority = 65): NormalizerRule {
       // note describes and accepts.
       const wordMagnitude = suffixToken.type === "UNIT"
         ? undefined
-        : WORD_MAGNITUDE[suffixToken.value.toLowerCase()];
+        : (Object.prototype.hasOwnProperty.call(WORD_MAGNITUDE, suffixToken.value.toLowerCase()) ? WORD_MAGNITUDE[suffixToken.value.toLowerCase()] : undefined);
       // A single-letter suffix must touch the number: `5 k` is not 5,000, and
       // more importantly `5 M` next to an unrelated variable M should not be.
       // A word may be separated by the space it is normally written with.
       const magnitude = adjacent
-        ? (SUFFIX_MAGNITUDE[suffixToken.value] ?? wordMagnitude)
+        ? ((Object.prototype.hasOwnProperty.call(SUFFIX_MAGNITUDE, suffixToken.value) ? SUFFIX_MAGNITUDE[suffixToken.value] : undefined) ?? wordMagnitude)
         : wordMagnitude;
       if (magnitude === undefined) return null;
 

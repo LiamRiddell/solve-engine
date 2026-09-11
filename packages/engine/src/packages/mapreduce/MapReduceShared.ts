@@ -42,7 +42,7 @@ export function parseTransform(parser: Parser, builder: BytecodeBuilder): Transf
   if (next && (next.type === "IDENT" || next.type === "UNIT" || next.type === "FUNC") && afterNext?.type === "COMMA") {
     parser.consume();
     const name = next.value;
-    const builtinIdx = builtinNameToIndex[name.toLowerCase()];
+    const builtinIdx = Object.prototype.hasOwnProperty.call(builtinNameToIndex, name.toLowerCase()) ? builtinNameToIndex[name.toLowerCase()] : undefined;
     if (builtinIdx !== undefined) {
       return { kind: 1, builtinIdx };
     }

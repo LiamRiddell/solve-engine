@@ -241,5 +241,5 @@ export const ZONE_LOOKUP: Record<string, string> = {
 export function resolveZoneName(name: string): string | null {
   const lower = name.trim().toLowerCase();
   if (lower === "utc" || lower === "gmt") return "UTC";
-  return ZONE_LOOKUP[lower] ?? null;
+  return Object.prototype.hasOwnProperty.call(ZONE_LOOKUP, lower) ? ZONE_LOOKUP[lower] : null;
 }

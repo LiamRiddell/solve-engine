@@ -77,7 +77,7 @@ export function tryConsumeZoneReference(parser: Parser): ZoneReference | null {
     return { zoneRef, displayName: zoneLabel(zoneRef) };
   }
 
-  const zoneRef = ZONE_LOOKUP[lowerText];
+  const zoneRef = Object.prototype.hasOwnProperty.call(ZONE_LOOKUP, lowerText) ? ZONE_LOOKUP[lowerText] : undefined;
   if (zoneRef) {
     parser.consume();
     const displayName = rawText.replace(/\b\w/g, (c) => c.toUpperCase());

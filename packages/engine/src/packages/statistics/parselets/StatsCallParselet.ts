@@ -16,7 +16,7 @@ export class StatsCallParselet implements PrefixParselet {
 	readonly category = "Statistics";
 
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
-		const pluginName = STATISTICS_CALL_FUNCTIONS[token.value];
+		const pluginName = Object.prototype.hasOwnProperty.call(STATISTICS_CALL_FUNCTIONS, token.value) ? STATISTICS_CALL_FUNCTIONS[token.value] : undefined;
 		if (pluginName === undefined) {
 			throw ErrorFactory.execution("UNKNOWN_FUNCTION", `Unknown statistics function: ${token.value}`, {
 				functionName: token.value,

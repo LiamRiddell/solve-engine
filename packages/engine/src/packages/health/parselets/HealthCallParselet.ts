@@ -15,7 +15,7 @@ export class HealthCallParselet implements PrefixParselet {
 	readonly category = "Health";
 
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
-		const pluginName = HEALTH_CALL_FUNCTIONS[token.value];
+		const pluginName = Object.prototype.hasOwnProperty.call(HEALTH_CALL_FUNCTIONS, token.value) ? HEALTH_CALL_FUNCTIONS[token.value] : undefined;
 		if (pluginName === undefined) {
 			throw ErrorFactory.execution("UNKNOWN_FUNCTION", `Unknown health function: ${token.value}`, {
 				functionName: token.value,

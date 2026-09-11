@@ -23,7 +23,7 @@ function resolveCount(token: Token): number | null {
 		return Number.isInteger(n) && n >= 0 ? n : null;
 	}
 	if (token.type === "IDENT") {
-		return COUNT_WORDS[token.value.toLowerCase()] ?? null;
+		return Object.prototype.hasOwnProperty.call(COUNT_WORDS, token.value.toLowerCase()) ? COUNT_WORDS[token.value.toLowerCase()] : null;
 	}
 	return null;
 }

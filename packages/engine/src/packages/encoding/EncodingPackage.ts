@@ -108,7 +108,7 @@ export const ENCODING_PACKAGE: IEnginePackage = {
 			const text = asText(args[0]);
 			const name = String(args[1].value ?? "");
 			if (text === null) return errorValue("ENCODING_EXPECTED_TEXT", `"from ${name}" expects text (a "quoted string")`);
-			const decode = DECODERS[name];
+			const decode = Object.prototype.hasOwnProperty.call(DECODERS, name) ? DECODERS[name] : undefined;
 			if (!decode) return errorValue("UNKNOWN_ENCODING", `"from ${name}" is not a known encoding (try base64, url or hex bytes)`);
 			const decoded = decode(text);
 			if (decoded === null) return errorValue("ENCODING_DECODE_FAILED", `"from ${name}": the input is not valid ${name}`);

@@ -115,7 +115,15 @@ export const CURRENCY_WORD_ALIASES: Record<string, string> = {
  * callers should fall back to the original text in that case).
  */
 export function resolveCurrencyAlias(text: string): string | undefined {
-  return CURRENCY_SYMBOL_ALIASES[text] ?? CURRENCY_WORD_ALIASES[text.toLowerCase()];
+  // Guarded with hasOwnProperty: `text` is a raw lexed word, so a name that
+  // happens to be an inherited property (`constructor`, `__proto__`,
+  // `valueOf`) would otherwise read a function off `Object.prototype` and, via
+  // a caller's `?? text` fallback, emit it as a bytecode string constant, which
+  // the VM then reads back as a non-string.
+  const lower = text.toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(CURRENCY_SYMBOL_ALIASES, text)) return CURRENCY_SYMBOL_ALIASES[text];
+  if (Object.prototype.hasOwnProperty.call(CURRENCY_WORD_ALIASES, lower)) return CURRENCY_WORD_ALIASES[lower];
+  return undefined;
 }
 
 /** How a currency's amount and symbol are conventionally arranged for display. */
