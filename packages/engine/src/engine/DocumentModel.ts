@@ -163,9 +163,9 @@ export class DocumentModel {
 	 * {@link _positionCache} and the order the tree holds.
 	 *
 	 * `getLineAt(position)` walked the order tree on every call, an O(log n)
-	 * recursion. The cross-line forms lean on it hard — `total above`, a line
+	 * recursion. The cross-line forms lean on it hard: `total above`, a line
 	 * range and each boundary check turn a position into a line this way, once
-	 * per line they scan, every pass — so in an editing session, where the
+	 * per line they scan, every pass, so in an editing session, where the
 	 * positions do not move between structural edits, it was the single largest
 	 * cost in the evaluator (about a quarter of an edit's re-evaluation). This
 	 * turns the lookup into an array index. Built in the same pass as
