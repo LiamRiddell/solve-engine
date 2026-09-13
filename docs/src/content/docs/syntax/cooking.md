@@ -24,7 +24,12 @@ gas 6 // 200.00 C
 gas 6 in F // 392.00 F
 ```
 
-The answer to `in gas mark` is text, not a number, because "gas 4" is what the dial says. That also keeps the two fractional settings readable: 110°C is `gas 1/4`, which is a dial position rather than the number a quarter.
+The answer to `in gas mark` is text, not a number, because "gas 4" is what the dial says. That also keeps the two fractional settings readable: 110°C is `gas 1/4`, which is a dial position rather than the number a quarter. Read the other way, `gas 1/4` is that one setting, so it stands for its own temperature rather than being a quarter of gas 1.
+
+```solve
+gas 1/4 in C // 110.00 C
+gas 1/2 in C // 120.00 C
+```
 
 ### The table
 
