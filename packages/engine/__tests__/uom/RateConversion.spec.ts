@@ -58,6 +58,30 @@ describe("round trips are lossless", () => {
 	});
 });
 
+describe("a data-rate alias converts both ways, and round-trips", () => {
+	// Regression: a data-rate alias (Mbps, MBps, ...) was a valid conversion
+	// source but not a target, because convertRate's target branch accepted only
+	// a speed alias. So `0.5 MBps in kB/s` gave 500 kB/s while the inverse
+	// `500 kB/s in MBps` returned null. Both directions must line up.
+	test.each([
+		[0.5, "MBps", "kB/s", 500],
+		[500, "kB/s", "MBps", 0.5],
+		[50, "Mbps", "b/s", 50_000_000],
+		[50_000_000, "b/s", "Mbps", 50],
+	])("convertRate(%f, %j, %j) is %f", (value, from, to, expected) => {
+		expect(convertRate(value, from, to)).toBeCloseTo(expected, 6);
+	});
+
+	test.each([
+		["MBps", "kB/s"],
+		["Mbps", "b/s"],
+	])("%s to %s and back returns the original", (a, b) => {
+		const there = convertRate(500, a, b)!;
+		const back = convertRate(there, b, a)!;
+		expect(back).toBeCloseTo(500, 9);
+	});
+});
+
 describe("pairs that do not line up return null, not a wrong number", () => {
 	test.each([
 		// A rate has no plain-unit target: neither half is the whole thing.

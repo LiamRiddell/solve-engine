@@ -469,10 +469,23 @@ export function convertRate(value: number, from: string, to: string): number | n
     targetScale = 1;
   } else {
     const ext = EXTENDED_UNITS[to];
-    if (ext === undefined || ext.measure !== "speed") return null;
-    targetNumerator = "m";
-    targetDenominator = "s";
-    targetScale = ext.toBase;
+    if (ext === undefined) return null;
+    if (ext.measure === "speed") {
+      // A speed alias expands to the base m/s pair.
+      targetNumerator = "m";
+      targetDenominator = "s";
+      targetScale = ext.toBase;
+    } else if (ext.measure === "dataRate") {
+      // A data-rate alias (Mbps, MBps, ...) expands to bits per second, the same
+      // base pair expandUnitToRate gives it as a SOURCE. Without this, a data
+      // rate was a valid conversion source but not a target: `0.5 MBps in kB/s`
+      // worked while the inverse `500 kB/s in MBps` was refused.
+      targetNumerator = "b";
+      targetDenominator = "s";
+      targetScale = ext.toBase;
+    } else {
+      return null;
+    }
   }
 
   const numeratorFactor = rateAxisFactor(source.numerator, targetNumerator);
