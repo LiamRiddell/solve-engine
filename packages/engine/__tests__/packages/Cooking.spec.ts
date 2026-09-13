@@ -79,6 +79,37 @@ describe("reading a gas mark as a temperature", () => {
 		expect(answer("gas 6 in F")).toBe("392.00 F");
 	});
 
+	test("the fractional slow-oven settings are the dial's fractions, not a division", () => {
+		// `gas 1/4` used to read the `1` as the mark and divide the answer,
+		// giving 140 / 4 = 35°C. It is one dial setting, the quarter, and the
+		// slow-oven marks are the only two fractions the dial has.
+		expect(answer("gas 1/4 in C")).toBe("110.00 C");
+		expect(answer("gas 1/2 in C")).toBe("120.00 C");
+		expect(answer("gas mark 1/4 in C")).toBe("110.00 C");
+		expect(answer("gas 1/4 in F")).toBe("230.00 F");
+	});
+
+	test("and reading it as a temperature round-trips against reading a temperature as it", () => {
+		for (const [celsius, written] of [
+			[110, "1/4"],
+			[120, "1/2"],
+			[180, "4"],
+			[190, "5"],
+			[200, "6"],
+		] as const) {
+			expect(answer(`${celsius}C in gas mark`)).toBe(`gas ${written}`);
+			expect(answer(`gas ${written} in C`)).toBe(`${celsius}.00 C`);
+		}
+	});
+
+	test("a fraction the dial does not have is refused, not answered as a division", () => {
+		// 3/4 is not a mark on this dial, so it is refused rather than read as
+		// `gas 3` over four. An improper `gas 6/2` is no dial fraction at all and
+		// stays the ordinary division it reads as.
+		expect(answer("gas 3/4 in C")).toContain("there is no gas mark");
+		expect(answer("gas 6 / 2")).toBe("100.00 C");
+	});
+
 	test("a setting the dial does not have is refused", () => {
 		expect(answer("gas mark 12")).toContain("there is no gas mark 12");
 	});
