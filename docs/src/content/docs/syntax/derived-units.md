@@ -27,7 +27,7 @@ result is one of these named quantities, it shows it by its name:
 `kWh` the kilowatt-hour (energy again, the unit an electricity bill uses).
 Writing `as N` asks for the answer in that unit; the engine also names the result
 on its own when you leave the `as` off. This works only where the combination
-makes a named quantity: `5 m * 3 m` is an area and stays as it was, and
-multiplying two unrelated quantities is still reported as a mismatch rather than
-invented into a unit. (A fuller algebra of units, and units raised to arbitrary
+makes a named quantity: `5 m * 3 m` is not one of those, so it stays a plain unit
+product (`15.00 m`) rather than becoming `m²`, and multiplying two unrelated
+quantities is still reported as a mismatch rather than invented into a unit. (A fuller algebra of units, and units raised to arbitrary
 powers, are a later addition.)

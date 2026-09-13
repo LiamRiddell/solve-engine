@@ -41,8 +41,8 @@ One option is a component rather than a setting: `calendar`, the backend the
 engine computes dates with (which local day an instant falls on, what a month
 later is, how a date is written out). It defaults to the built-in `Date`
 backend, read in the process's time zone, and leaving it unset changes nothing.
-It is the seam for a `Temporal` backend, shipped by a later release, that
-carries a time zone of its own; see
+It is the seam for a `Temporal` backend, available at `solve-engine/temporal`
+(`createTemporalCalendar`), that carries a time zone of its own; see
 [one calendar backend](/architecture/design-decisions/#one-calendar-backend-with-date-as-the-default).
 
 Safety limits exist because the engine is designed to run on untrusted input as

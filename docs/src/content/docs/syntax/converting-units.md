@@ -55,9 +55,9 @@ Every spelling of the same question agrees, so use whichever you have to hand:
 20° C in F // 68.00 F
 ```
 
-The boundary is the symbol forms only. `C` is still Celsius and `c` is still the
-cooking cup, no ordinary word is claimed, and the case sensitivity of the unit
-table is unchanged.
+The boundary is the symbol forms only. `C` is Celsius, and no ordinary word is
+claimed as a unit: the cooking cup is spelled `cup`, not `c`, which is not a unit
+at all. The case sensitivity of the unit table is unchanged.
 
 ## Inches, where the abbreviation is also the word for converting
 

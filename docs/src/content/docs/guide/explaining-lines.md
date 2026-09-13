@@ -64,8 +64,8 @@ number. Format it however you format any other result, for instance with
 import { formatValue } from "solve-engine/format";
 
 const explanation = engine.explainLine("5 km + 300 m");
-explanation.steps.map((s) => `${s.description} = ${formatValue(s.value)}`);
-// ["5 km plus 300 m = 5.30 km"]
+explanation.steps.map((s) => `${s.description} ${formatValue(s.value)}`);
+// ["5 km plus 300 m = 5.30 km"]  (formatValue already prefixes "= ")
 ```
 
 Precedence is visible in the order the steps come out. Multiplication taken

@@ -86,7 +86,7 @@ of day works the same way: `6pm in Chicago` is six in the evening there.
 | `3 April 2026 in Tokyo` | the same, written out |
 | `3 April 2026 in New York` | `Friday, April 3, 2026`, a two-word name |
 | `2026-04-03T09:00 in Tokyo` | `Friday, April 3, 2026, 9:00:00 AM` |
-| `6pm in Chicago` | `Friday, September 4, 2026, 6:00:00 PM` |
+| `6pm in Chicago` | six this evening in Chicago, as a full date |
 | `2026-04-03 in UTC` | midnight UTC that day |
 
 The result is a date, not a quantity, which is what it used to be: before this,

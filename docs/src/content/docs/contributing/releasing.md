@@ -14,7 +14,7 @@ replacing one. The irreversible step has its own deliberate act.
   with a changeset in `.changeset/`, a `minor` or `patch` entry written in the
   same voice as these pages.
 - **Pushing to `main` opens a version pull request.** The changeset bot keeps a
-  single "Version packages" pull request open, bumping the version in
+  single "chore: version packages" pull request open, bumping the version in
   `package.json` and writing the changelog from the accumulated changesets. It
   regenerates on every push, so it always reflects the changesets currently on
   `main`.

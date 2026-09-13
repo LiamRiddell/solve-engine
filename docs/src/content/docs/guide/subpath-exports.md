@@ -25,6 +25,7 @@ tested.
 | `solve-engine/worker` | Off-main-thread evaluation: the worker proxy, transports and result DTO |
 | `solve-engine/engine-worker` | The worker entry the engine's own offloaded compile and execute pools run, started by a host through `setEngineWorkerFactory`. Its own bundle, carrying every built-in package |
 | `solve-engine/testing` | A test kit for package authors: `createTestEngine`, `expectExpression`, `expectPackage` |
+| `solve-engine/temporal` | The `Temporal` calendar backend: `createTemporalCalendar`, passed as an engine's `calendar` option |
 
 ## Advanced
 

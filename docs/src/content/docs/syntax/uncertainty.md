@@ -32,4 +32,5 @@ otherwise.
 
 Everything else reads the centre and drops the tolerance: a comparison compares
 the centres, and `sqrt`, `sin` and the like work on the centre alone. Correlated
-errors, and a tolerance on a value with a unit, are out of scope.
+errors are out of scope, and a tolerance on a value with a unit drops the unit:
+`5m ± 1m` is read as `5 ± 1`, not carried as metres.

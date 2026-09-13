@@ -21,9 +21,10 @@ several-part mix, and it divides them all by their largest common factor.
 ## Why it is a function
 
 `ratio(16, 9)` is written as a function rather than as `16:9`, because a colon
-between two numbers already means something else here: a **range**, `1:10`, the
-whole run of numbers from 1 to 10 (see [ranges](/syntax/map-reduce-and-aggregates/)).
-Keeping ratios as a function leaves that meaning of the colon untouched.
+between two numbers is already taken: on its own `1:10` is a clock time (ten past
+one), and inside an aggregate it is a range, the run of numbers from 1 to 10 (see
+[ranges](/syntax/map-reduce-and-aggregates/)). Keeping ratios as a function leaves
+those meanings of the colon untouched.
 
 The parts must be whole positive numbers, and there must be at least two; anything
 else (a fraction, a negative, a single value) is reported as an error rather than

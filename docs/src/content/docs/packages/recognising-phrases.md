@@ -89,7 +89,7 @@ unregistering it hands the word back to the other.
 The boundary is deliberately narrow. `callFusions` is only the plain `word (`
 shape with that one `:` guard. If your rule needs a different lookbehind, a deeper
 lookahead, or any value logic beyond "is this word one of mine", write a
-[`normalizerRules`](#the-declarative-way-phrases) entry by hand instead.
+[`normalizerRules`](#when-a-word-must-stay-a-variable-too) entry by hand instead.
 
 ## When a word must stay a variable too
 

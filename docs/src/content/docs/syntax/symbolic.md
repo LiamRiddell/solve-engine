@@ -34,8 +34,9 @@ a matrix entry that is structurally zero can arrive as a value like
 `0.0000000000000000555` in floating point, which is enough to make a singular
 matrix look invertible.
 
-A function only folds when its answer is exact. `sqrt(4)` becomes `2`, while
-`sqrt(2)` is left alone rather than replaced with an approximation.
+A function of a number folds to its value: `sqrt(4)` becomes `2` and `sqrt(2)`
+its decimal `1.41`. A function of an unknown is left as written, so `sqrt(x)`
+stays `sqrt(x)` rather than inventing a value for the unknown.
 
 ## The bounded simplifier
 
@@ -43,9 +44,6 @@ Simplification is deliberately limited. It folds constants, applies additive and
 multiplicative identities, and collects like terms in a top-level sum. It does
 not apply trigonometric identities, and it never expands or factors on its own,
 which is what keeps `x^2` from turning back into `x*x`.
-
-A function with no symbolic reading, such as `random`, reports that rather than
-computing a result from a placeholder value.
 
 ## Solving a linear system
 

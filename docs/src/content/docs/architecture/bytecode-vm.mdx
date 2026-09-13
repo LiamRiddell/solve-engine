@@ -16,8 +16,8 @@ substantially faster, and it makes execution easy to bound.
 ## Shape
 
 The program is a byte array of opcodes and operands, with separate pools for
-numeric and string constants. Operands are single bytes, which caps a pool at
-256 entries and is checked at compile time.
+numeric and string constants. A constant-pool operand is a single byte, which
+caps each pool at 256 entries, checked at compile time.
 
 ```mermaid A compiled program. Operands index into the pools, never into the code.
 flowchart LR

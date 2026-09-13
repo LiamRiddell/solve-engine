@@ -431,13 +431,16 @@ what the notepads on this page do.
       <div>
 
 ```ts
-import { formatValue } from "solve-engine/format";
+import { formatValue, DEFAULT_FORMATTING_SETTINGS } from "solve-engine/format";
 
 formatValue(value);
 // "= 300.00 cm"
 
+// Settings replace the defaults rather than merging, so spread them and override
+// the fields you want. A unit value takes its places from unitOfMeasurementResult.
 formatValue(value, {
-  numberResult: { decimalPlaces: 4, useThousandsSeparator: false },
+  ...DEFAULT_FORMATTING_SETTINGS,
+  unitOfMeasurementResult: { decimalPlaces: 4 },
 });
 // "= 300.0000 cm"
 
