@@ -68,6 +68,15 @@ Every one of those is recoverable. The engine instance is still usable, and the
 next line is evaluated normally, which is why the last line still answers after
 the six above it.
 
+A word the engine looks up in a table, a converter (`as hex`), a unit, a
+timezone (`in Tokyo`), a function name, is matched only against entries that
+table actually holds. A name every JavaScript object carries on its prototype,
+`constructor` or `__proto__`, is unknown like any other unrecognised word:
+`5 as constructor` is `UNKNOWN_AS_CONVERTER`, not the operand handed back, and
+`map(constructor, [1,2,3])` is an unknown function rather than an internal
+fault. The tables are never written through such a name, so nothing an
+expression types reaches the prototype chain.
+
 One honest note while you are experimenting, because it is the first thing you
 will notice. An unterminated `"` is something the lexer cannot get past at all,
 so it fails the scan of the whole document rather than of one line, and the
@@ -290,6 +299,16 @@ Three properties fix it, and all three are needed:
   property would bound nothing. This one does not refresh, which is why
   `maxFunctionCalls` sits beside it.
 
+The same total covers values that grow without being a collection at all. A
+string joined to itself, a bigint multiplied by itself and the exact decimal
+behind same-currency money each double every time the operator touches them, so
+a one-line function that squares or concatenates its argument, called a few
+dozen deep, once built a value of hundreds of megabytes from under a hundred
+characters while every per-operation limit passed. Each is now charged where it
+is made, against this same budget, so the doubling chain is refused with
+`ALLOCATION_LIMIT_EXCEEDED` at a couple of megabytes rather than at the process
+ceiling.
+
 One more property of that reentrant machinery is worth stating for a host that
 runs programs on one machine through `executeBytecode` directly: a program that
 fails leaves the value stack at the depth it found it. A function body or a
@@ -317,10 +336,15 @@ suite, which is at the edge of what run-to-run noise on one machine can resolve.
   (`transpose`, `inv`, `det`) are charged after allocating rather than before.
   Their output cannot be larger than their input, so the first such allocation
   is never the fatal one and the running total refuses the next.
-- **BigInt growth from repeated multiplication** is bounded by V8's own maximum
-  BigInt size, which raises a catchable `RangeError`. Exponentiation and shifts
-  are bounded by the engine, because both can ask for an arbitrarily large
-  integer from a short line.
+- **A value that doubles under an operator** (a string joined to itself with
+  `+`, a bigint multiplied by itself, the exact decimal behind same-currency
+  money) is charged on birth, the same after-the-fact backstop as the matrix
+  builtins above. One doubling cannot be larger than twice an operand that was
+  itself charged, so the first is never the fatal one and the running total
+  refuses the next, well before V8's own string or BigInt ceiling. Bigint
+  exponentiation and shifts are refused before allocating instead, by a fixed
+  bit ceiling, because either can ask for an arbitrarily large integer from a
+  short line.
 - **The per-document line cache** has no size limit of its own. It grows with
   document size rather than with any one line, and the document itself is
   bounded by `performance.maxDocumentLines`.
