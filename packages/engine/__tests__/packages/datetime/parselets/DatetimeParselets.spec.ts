@@ -224,8 +224,15 @@ describe("Datetime Parselets", () => {
     const result = parseAndExecute("now + 14 days");
     const elapsed = (result.value as number) - now;
     const expectedMs = 14 * 24 * 60 * 60 * 1000;
-    expect(elapsed).toBeGreaterThanOrEqual(expectedMs - 100);
-    expect(elapsed).toBeLessThanOrEqual(expectedMs + 100);
+    // `+ 14 days` adds 14 calendar days at the same wall-clock time, so a fortnight
+    // that crosses a daylight-saving boundary is an hour short or long of 14 * 24h.
+    // That is correct, not a bug, so the window allows a DST shift (plus a second of
+    // test-execution slop) rather than assuming every day is exactly 24 hours. This
+    // test ran green everywhere until a release landed on the day 14 days ahead was
+    // New Zealand's DST start.
+    const tolerance = 60 * 60 * 1000 + 1000;
+    expect(elapsed).toBeGreaterThanOrEqual(expectedMs - tolerance);
+    expect(elapsed).toBeLessThanOrEqual(expectedMs + tolerance);
   });
 
   test("5 years in days conversion", () => {
