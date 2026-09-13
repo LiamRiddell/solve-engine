@@ -76,7 +76,7 @@ try {
 } catch (error) {
   if (error instanceof EngineError) {
     error.code; // "UNEXPECTED_END_OF_INPUT"
-    error.span; // { start: 4, end: 4 }: just after the "+", where an editor underlines
+    error.span; // { start: 4, end: 4, line: 1, col: 5 }: just after the "+", where an editor underlines
   }
 }
 
