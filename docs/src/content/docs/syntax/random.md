@@ -7,7 +7,8 @@ description: "Random helpers and identifiers: uuid, random hex, pick, shuffle an
 
 Everyday random helpers: draw an identifier, pick one option out of several,
 shuffle a list, toss a coin. It is the companion to the [dice](/syntax/dice/)
-page, which covers dice-notation rolls; this is the general pickers.
+page, which covers `roll`, a random integer in a range; these are the
+general-purpose pickers.
 
 Because each answer is drawn fresh, the results below change every time the line
 runs. Edit one and watch it re-roll, that is the point, so unlike the rest of the

@@ -65,9 +65,10 @@ The document is not fixed to five days or to one rate. A tag can hold any number
 of lines, so a six-day week is one more line with `#worked` on it. Two rates
 means two tags.
 
-Write the days the same way when you do: an aggregate refuses to add hours to
-minutes rather than guessing which you meant, so `6h` beside `3h30m` is a
-refusal, and `6h00m` beside `3h30m` is a total.
+The forms mix freely: an aggregate adds durations however they are written, so
+`6h`, `6h00m` and `3h30m` all combine into one total. What it refuses is adding
+different *measures*, so a stray `6kg` among your hours is a refusal
+(`INCOMPATIBLE_UNITS`) rather than a guess.
 
 ```solve-doc
 6h00m #client-a

@@ -57,13 +57,13 @@ measured daily by its own workflow because the measurement is slow; run
 | Script | What it does |
 | --- | --- |
 | `npm run verify` | Type check, default test run, build, smoke checks. The fast loop. |
-| `npm run verify:ci` | Every check below, in one command. The gate. |
-| `npm run typecheck` | The type check, through tsgo (see [coding standards](/contributing/coding-standards/) for why there are two compilers). |
+| `npm run verify:ci` | The gate: every check CI applies, run as one command. The rows below are the main ones. |
+| `npm run typecheck` | The type check, through tsgo; `tsc` runs as a second check via `typecheck:tsc`. |
 | `npm test`, `npm run test:ci` | The default test run: every suite except the four slow ones. |
 | `npm run test:full` | Every suite, single-threaded with a raised heap. Writes the report `stats:tests` reads. |
 | `npm run test:coverage` | Every suite with coverage measured against the floor in `jest.coverage.config.cjs`. Slow; CI runs it daily rather than per pull request. |
 | `npm run test:light` | The default run minus the fuzz and robustness suites, for a quick signal on a slow machine. |
-| `npm run lint` | oxlint over the engine source, the spec files, the tools and the scripts. Correctness rules fail; style rules warn. |
+| `npm run lint` | oxlint over the engine source, the spec files, the tools, the playground bridge and the scripts. Correctness rules fail; style rules warn. |
 | `npm run lint:comments` | Comment style, over the whole tree. |
 | `npm run lint:docs` | Every public export carries a doc block. |
 | `npm run lint:actions` | Every GitHub Action in the workflows is pinned to a commit. |

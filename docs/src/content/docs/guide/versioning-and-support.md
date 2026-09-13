@@ -26,7 +26,8 @@ which Node versions a release is checked on.
 
 The promise covers the **public** entry points listed on
 [subpath exports](/guide/subpath-exports/): the root, `engine`, `vm`, `format`,
-`language`, `packages`, `constants`, `worker` and `testing`. The **advanced**
+`language`, `packages`, `constants`, `worker`, `engine-worker`, `temporal` and
+`testing`. The **advanced**
 entry points (`lexer`, `parser`, `normalizer`, `resolvers`, `errors`,
 `utilities`, `uom`, `services`) are public too, but they expose the pipeline
 internals a package author extends, so they move more often; the same rule

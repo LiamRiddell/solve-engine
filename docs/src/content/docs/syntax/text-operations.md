@@ -24,9 +24,10 @@ A plus joins text to text, end to end.
 "hello" + " world" // hello world
 ```
 
-The two sides must both be text. `"a" + "b"` is `ab`; a text value plus a number
-is left alone rather than being quietly coerced, so keep a join between quoted
-strings.
+The two sides must both be text to join. `"a" + "b"` is `ab`; when one side is a
+number the `+` is arithmetic, not a join, and the text is read as a number, so
+`"5" + 5` is `10` and `"hello" + 5` is `5` (the non-numeric text reads as `0`).
+Keep both sides quoted for a text join.
 
 ## Measuring text
 

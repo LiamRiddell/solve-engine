@@ -95,7 +95,7 @@ register for that feature.
 ## A note on live data
 
 Currency conversion, weather and stock lookups reach the network. Currency and
-weather work out of the box against free, keyless endpoints. Stocks and the
-knowledge package are opt-in and require you to supply the fetching function
+weather work out of the box against free, keyless endpoints. Stocks, crypto and
+the knowledge package are opt-in and require you to supply the fetching function
 yourself, which means the engine never holds an API key. See
 [async and live data](/guide/async-and-live-data/).
