@@ -48,8 +48,9 @@ root font size when `20px base` follows it.
 ## What is left out
 
 `em`, which is relative to an element's own font size rather than the root, is
-deliberately not converted: what an `em` is worth depends on where it sits, so a
-single fixed value would be misleading.
+not a unit here at all: what an `em` is worth depends on where it sits, so a
+single fixed value would be misleading, and `1em` reads as `1 * em` (an undefined
+variable) rather than a length the engine declines to convert.
 
 These are a measure of their own, kept apart from physical length. A CSS pixel is
 a reference pixel, not a slice of a centimetre, so a pixel converts to a `rem`

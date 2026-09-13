@@ -5,7 +5,8 @@ description: Literals, element-wise arithmetic, matrix products, indexing and li
 
 > **Package:** `MATRIX_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
 
-Comma separates columns, semicolon separates rows.
+A vector is a list of numbers in a row; a matrix is a grid of them. Comma
+separates columns, semicolon separates rows.
 
 ```solve
 [1,2,3] // [1, 2, 3]

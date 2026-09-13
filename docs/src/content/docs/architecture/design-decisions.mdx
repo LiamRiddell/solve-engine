@@ -30,7 +30,9 @@ rather than reserved globally.
 
 ## Units are case-sensitive and are never remapped
 
-`m` is metres and `M` is a millions suffix. Accepting both cases, or guessing
+`m` is metres and `M` is a millions suffix; the suffix attaches to a number, so
+`5M` is five million while `5 M` with a space reads `M` as an ordinary name.
+Accepting both cases, or guessing
 between plausible aliases, produces confidently wrong answers. Refusing to guess
 is the safer default for a tool doing arithmetic on someone's real numbers.
 

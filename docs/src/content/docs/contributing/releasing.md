@@ -11,8 +11,8 @@ replacing one. The irreversible step has its own deliberate act.
 ## The shape of it
 
 - **Changesets accumulate.** Every change that should appear in the notes ships
-  with a changeset in `.changeset/`, a `minor` or `patch` entry written in the
-  same voice as these pages.
+  with a changeset in `.changeset/`, a `major`, `minor` or `patch` entry written
+  in the same voice as these pages; `major` is reserved for a breaking API change.
 - **Pushing to `main` opens a version pull request.** The changeset bot keeps a
   single "chore: version packages" pull request open, bumping the version in
   `package.json` and writing the changelog from the accumulated changesets. It

@@ -61,8 +61,8 @@ display alike. An hour or more per unit shows the hours:
 The distance does. A pace is a time over a length, so the unit after the slash is
 what decides, and that is what keeps every other reading of a clock literal
 intact: `4:30` on its own is still half past four in the morning, `8:15 + 7:45`
-is still sixteen hours, and `90 km/h` is a speed rather than a pace because it is
-a distance over a time.
+is still a duration (sixteen hours, shown as `960 minutes`), and `90 km/h` is a
+speed rather than a pace because it is a distance over a time.
 
 The boundary is a pace faster than a minute per unit. A clock shows whole
 seconds, and rounding one that fast would change the number, so it keeps its

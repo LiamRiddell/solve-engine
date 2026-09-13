@@ -5,11 +5,6 @@ description: Multiplying quantities into a named physical unit like the newton, 
 
 > **Package:** `UOM_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
 
-Many physical quantities are built from simpler ones multiplied together: a force
-is a mass times an acceleration, energy is a force times a distance. When you
-multiply two quantities and the combination is one of these named quantities, the
-engine recognises it and shows the answer under its proper name.
-
 Many physical quantities are really other quantities multiplied together. A
 **force** is a mass times an acceleration; **power** is voltage times current;
 **energy** is power times time, or a force times a distance. When you multiply

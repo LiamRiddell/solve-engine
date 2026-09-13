@@ -15,6 +15,7 @@ weather in London
 temperature in Tokyo
 feels like in Paris
 high in Berlin
+low in Berlin
 ```
 
 These forms read the current day: today's conditions, and today's high and low.

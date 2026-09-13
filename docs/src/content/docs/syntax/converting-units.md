@@ -59,6 +59,10 @@ The boundary is the symbol forms only. `C` is Celsius, and no ordinary word is
 claimed as a unit: the cooking cup is spelled `cup`, not `c`, which is not a unit
 at all. The case sensitivity of the unit table is unchanged.
 
+```solve
+1 cup in ml // 236.59 ml
+```
+
 ## Inches, where the abbreviation is also the word for converting
 
 `in` is how the engine spells the conversion itself, so it cannot simply be a

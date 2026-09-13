@@ -28,5 +28,6 @@ how much per month to save $12,000 in 2 years at 6% // $471.85
 
 The duration answers in the contribution's own unit (`weekly` reads in weeks),
 and the count rounds up, because a part period has not yet reached the goal. The
-per-month form takes a duration in months or years, and `reach` reads the same
-as `save`. A bare-number target answers a bare number.
+per-month form takes a duration in months or years, and there `reach` reads the
+same as `save`; the `how long to save` form has no `reach` spelling. A
+bare-number target answers a bare number.
