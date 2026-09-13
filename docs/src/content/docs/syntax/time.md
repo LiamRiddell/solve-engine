@@ -78,7 +78,9 @@ the answers follow whatever the rules are this year.
 Writing `in <zone>` after a date, or after a time of day, reads it in that zone
 rather than in yours, and shows it there. A bare date means midnight, so
 `2026-04-03 in Tokyo` is the day that starts in Tokyo, shown as that day. A time
-of day works the same way: `6pm in Chicago` is six in the evening there.
+of day works the same way: `6pm in Chicago` is six in the evening there, read
+against today, so a bare-time row's date is whatever today is while a dated row
+is fixed.
 
 | Expression | Result |
 | --- | --- |

@@ -7,9 +7,8 @@ description: Writing and showing numbers in hexadecimal, binary and octal.
 
 A base is the number of distinct digits a number is written with: everyday
 decimal has ten, hexadecimal has sixteen, binary two, octal eight. The same
-value can be written in any of them, and shown back in whichever you want.
-Numbers can be written in hexadecimal, binary or octal, mixed freely with
-ordinary decimals, and shown back in whichever base you want.
+value can be written in any of them, mixed freely with ordinary decimals, and
+shown back in whichever base you want.
 
 ## Writing a number in another base
 

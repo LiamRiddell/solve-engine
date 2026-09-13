@@ -42,7 +42,8 @@ function call and an allocation in the common case.
 ## Safety
 
 Every instruction increments a counter and checks the stack depth. Both limits
-are configurable and both produce a named error. This matters because the input
+are configurable and both produce a named error, `INSTRUCTION_LIMIT_EXCEEDED` and
+`STACK_LIMIT_EXCEEDED`. This matters because the input
 is untrusted and arrives one keystroke at a time.
 
 <Explainer id="dispatch" client:load />
