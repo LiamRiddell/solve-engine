@@ -21,6 +21,7 @@ import { DATETIME_PACKAGE } from "./datetime";
 import { TIME_PACKAGE } from "./time";
 import { DICE_PACKAGE } from "./dice";
 import { VARIABLES_PACKAGE } from "./variables";
+import { GLOBAL_VARIABLES_PACKAGE } from "./globals";
 import { UOM_PACKAGE } from "./uom";
 import { CURRENCY_PACKAGE, createCurrencyPackage } from "./currency";
 import { VECTOR_PACKAGE } from "./vector";
@@ -70,6 +71,7 @@ export {
   TIME_PACKAGE,
   DICE_PACKAGE,
   VARIABLES_PACKAGE,
+  GLOBAL_VARIABLES_PACKAGE,
   UOM_PACKAGE,
   CURRENCY_PACKAGE,
   VECTOR_PACKAGE,
@@ -147,6 +149,7 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   TIME_PACKAGE,
   DICE_PACKAGE,
   VARIABLES_PACKAGE,
+  GLOBAL_VARIABLES_PACKAGE,
   UOM_PACKAGE,
   CURRENCY_PACKAGE,
   VECTOR_PACKAGE,

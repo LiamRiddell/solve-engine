@@ -1,5 +1,5 @@
 import { registerPackageForTesting } from "@tools/testUtils";
-import { ARITHMETIC_PACKAGE, VARIABLES_PACKAGE } from "@solve-js/packages";
+import { ARITHMETIC_PACKAGE, VARIABLES_PACKAGE, GLOBAL_VARIABLES_PACKAGE } from "@solve-js/packages";
 import { describe, expect, test, afterEach } from "@jest/globals";
 import { Lexer } from "@solve-js/lexer/Lexer";
 import { TokenTypes } from "@solve-js/lexer/Token";
@@ -41,6 +41,10 @@ function parseAndExecute(input: string): Value {
   const registry = new ParseletRegistry();
   registerPackageForTesting(ARITHMETIC_PACKAGE, registry);
   registerPackageForTesting(VARIABLES_PACKAGE, registry);
+  // The document-spanning form moved to its own package, so a host can refuse
+  // it without losing ordinary variables. Both are registered here because
+  // these tests exercise the pair against each other.
+  registerPackageForTesting(GLOBAL_VARIABLES_PACKAGE, registry);
   const parser = new Parser(registry);
   const builder = new BytecodeBuilder();
   parser.load(tokens);
@@ -105,6 +109,11 @@ describe("Global Variable Parselets", () => {
     const registry = new ParseletRegistry();
     registerPackageForTesting(ARITHMETIC_PACKAGE, registry);
     registerPackageForTesting(VARIABLES_PACKAGE, registry);
+    registerPackageForTesting(GLOBAL_VARIABLES_PACKAGE, registry);
+  // The document-spanning form moved to its own package, so a host can refuse
+  // it without losing ordinary variables. Both are registered here because
+  // these tests exercise the pair against each other.
+  registerPackageForTesting(GLOBAL_VARIABLES_PACKAGE, registry);
     const parser = new Parser(registry);
     const vm = createVM(sharedOpRegistry);
 
