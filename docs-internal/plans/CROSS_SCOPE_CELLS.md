@@ -183,6 +183,33 @@ the core evaluation path in the same commit that introduces it, and exercised by
 hosts before it ships.** An interface that looks implementable and is implemented shallowly is worse
 than no interface, because nothing can validate it from inside the engine.
 
+### Refusing the feature entirely is a requirement, not an afterthought
+
+A host must be able to say no to cross-scope cells **without losing ordinary variables**. They are
+different levels of functionality: `:name = expr` stays inside the document being evaluated, and a
+cell reaches outside it. A single-document editor, a sandboxed evaluation, or a product where one
+document quietly reading another would be surprising all want the first and not the second.
+
+This was not expressible until recently. Both lived in `VARIABLES_PACKAGE`, so the documented way to
+drop a feature, `BUILTIN_PACKAGES.filter((p) => p !== VARIABLES_PACKAGE)`, took `:x = 1` down with
+`global :x = 1`, and a host wanting only the latter refused had to register a replacement parselet for
+the `GLOBAL` token and lean on last-one-wins. `GLOBAL_VARIABLES_PACKAGE` is now a separate package, so
+the choice exists at 2.x.
+
+That makes the requirement concrete for Release D, and the workspace satisfies it more cleanly than a
+package filter can:
+
+- **Refusing is declining to pass a workspace**, one decision at construction time rather than parselet
+  surgery.
+- **It actually isolates the values.** A package filter removes the SYNTAX only: the store is realm-wide
+  and outlives any one engine, so whatever another engine already wrote is still there, merely
+  unaddressable. A host that constructs no workspace has no cells at all.
+- **It cannot take local variables with it**, because the two are no longer bundled.
+
+So the API must tolerate a host that passes no workspace, and the behaviour then is a named refusal on
+any line that tries, never a silent zero. The package split stays regardless: it is what makes a host
+able to refuse the *syntax*, where the workspace governs the *values*.
+
 ## The spelling
 
 Decided separately, and deliberately minimal. The engine ships exactly one neutral form, built
