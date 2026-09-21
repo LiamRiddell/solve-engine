@@ -2,7 +2,8 @@
 
 > Written 2026-09-21, from a multi-agent audit of the global-variable subsystem and two rounds of
 > competing designs. Supersedes nothing; this subsystem has never had a written design.
-> **Status: SPECIFIED, NOT STARTED.** Release A is shippable today and depends on nothing here.
+> **Status: SPECIFIED. Release A shipped (PRs #490 to #493), Releases B onwards not started.**
+> Release A depended on nothing in this design, which is why it went first.
 
 ## Why this exists
 
@@ -208,7 +209,7 @@ the host form is additive.** Neither is labelled a fallback.
 
 | Release | Contents | Breaking |
 | --- | --- | --- |
-| **A** — 2.38.x patch | The independent defects below. No design decision, no API change. | No |
+| **A** — 2.38.x patch | The independent defects below. No design decision, no API change. Shipped: PRs #490-#493. | No |
 | **B** — 2.39.0 | Internal seams only: scope and cells on `LineExecutionContext`, per-engine anonymous scope, staging structures. No observable behaviour change. | No |
 | **C** — folds into 3.0.0 | Cell retraction, intra-scope only. | Yes, user-visibly |
 | **D** — 3.0.0 | `GlobalVariableStore` becomes `Workspace`. `sharedGlobalVariableStore` export removed. | Yes, the major |
@@ -223,33 +224,61 @@ than no limit at all.
 
 ## Release A — defects that need no design decision
 
-Each is independently verified against HEAD and shippable now.
+Each was independently verified against HEAD. Every fix below was proven by reverting the source
+change alone and confirming its tests fail without it.
 
-1. **`formatValue` has no `Pending` case.** A pending value's payload is its dedup query key, so the
+1. ✅ **`formatValue` has no `Pending` case.** A pending value's payload is its dedup query key, so the
    default branch rendered it as the answer: `= global:total`. Same leak as the `Error` case
-   directly above it, which carries a comment recording the identical fix. **Fixed on
-   `fix/pending-value-formatting`.**
-2. **`MAX_NOTIFY_DEPTH` is a silent-corruption path, not a safety net.** `set()` stores the value and
-   then calls `notify()`, which returns at the limit **before** invoking any listener. If it ever
-   fires, the value is stored and every reader is silently never told. It is also unreachable from
-   engine code, because both engine-side listeners are non-reentrant, so it is not the cycle bound it
-   appears to be.
-3. **The only cross-document cycle test passes vacuously.** It installs a listener that writes the
-   same value back, so it terminates on the `sameValue` short-circuit at depth 2, not on any cycle
-   bound. The test that appears to prove cycles are safe proves nothing.
-4. **`sameValue`'s object comparison is dead code.** Its `Array.isArray` branch cannot fire, because
-   `Value.value`'s union contains no array type, so every object-valued cell falls to `Object.is` on
-   a freshly built object and re-notifies on every pass, for ever.
-5. **`GlobalVariableAsyncResolver.preflight` returns at the first unresolved reference**, so a line
-   with N unresolved cell reads costs N serial round trips. Collect every miss in one scan.
-6. **The resolver is constructed at module scope** inside the variables package, so one bare-name-keyed
-   pending map is shared by every engine in the realm that registers it.
-7. **`evaluateDocument` leaves five things behind** despite a comment claiming otherwise; the worst is
-   `getBatcher().checkpointer`, assigned and never restored.
-8. **Retraction is absent.** Deleting the line that wrote a cell never withdraws its value, because
-   `forgetOrphanedNames` skips every prefixed key. Note this one is only sound to fix once writes are
-   owner-keyed, so it belongs to Release C rather than A; it is listed here because it is the defect
-   users would describe first.
+   directly above it, which carries a comment recording the identical fix. **Fixed, PR #490.**
+2. ✅ **`MAX_NOTIFY_DEPTH` is a silent-corruption path, not a safety net.** `set()` stored the value and
+   then called `notify()`, which returned at the limit **before** invoking any listener, so the store
+   held a value every reader was permanently never told about. The bound is now checked before the
+   write, so the store and its readers cannot disagree. It remains unreachable from engine code, both
+   engine-side listeners being non-reentrant, so it is not the cycle bound it appears to be.
+   **Fixed, PR #491.**
+3. ✅ **The only cross-document cycle test passed vacuously.** It wrote the received value straight
+   back, so the second hop hit the unchanged-value short-circuit and the recursion stopped at depth 2
+   without reaching the bound it was named for. It now varies the value per hop, asserts the engine's
+   bound rather than the test's own guard terminates it, and asserts every stored value was announced.
+   **Fixed, PR #491.**
+4. ✅ **`sameValue` was wrong in both directions.** Its `Array.isArray` branch tested the payload
+   itself, which is never an array: the arrays are a level further in, as a matrix's `data`. So every
+   object-valued cell fell to `Object.is` on a freshly built object and re-notified on every pass, for
+   ever. Found while fixing it: the comparison also skipped every sidecar, so `1.5` and `1.5 to 2 dp`,
+   or `30` and `30 ± 2`, compared equal and suppressed the notification, leaving readers rendering the
+   old value with no event that would correct it. That direction is the worse one, because a missed
+   notification is permanent. The payload walk is now bounded and reports not-equal when it cannot
+   finish. **Fixed, PR #491.**
+5. ✅ **`GlobalVariableAsyncResolver.preflight` returned at the first unresolved reference**, so a line
+   with N unresolved cell reads cost N serial pend-and-re-execute round trips. It now collects every
+   miss in the scan it already performs and waits on all of them together, deduplicated and ordered.
+   **Fixed, PR #492.**
+6. ⛔ **The resolver is constructed at module scope** inside the variables package, so one
+   bare-name-keyed pending map is shared by every engine in the realm that registers it.
+   **Deliberately not fixed. Do not fix it in isolation.**
+
+   The impact is smaller than it looks: the map is keyed by name, the store beneath it is realm-wide
+   anyway, so a promise for a name is correct whichever engine asked. The only real coupling is
+   `destroy()` clearing the shared map, which costs a transient duplicate subscription rather than a
+   leak, since subscriptions self-remove on resolve.
+
+   The fix is not small. Per-engine resolver instances require either making `VARIABLES_PACKAGE` a
+   factory, which breaks package identity, or changing `IEnginePackage.asyncResolvers` to take
+   factories rather than instances, which changes the shape every package author writes against.
+   Package identity is a documented public contract: `BUILTIN_PACKAGES.filter((p) => p !==
+   CURRENCY_PACKAGE)` appears in both the README and the security guide as the supported way to drop a
+   package. Either route is a major-version change to buy back a transient duplicate subscription.
+
+   Release D removes the shared store, at which point cells are workspace-scoped and this stops
+   mattering on its own. Fix it there, as part of that, or not at all.
+7. ✅ **`evaluateDocument` left the batcher's checkpointer behind** despite a comment promising it left
+   nothing. The checkpointer is what the async batcher uses to restore VM state when a value lands
+   later, keyed by line position, so a host's async results were restored from checkpoints belonging
+   to a document that no longer existed. **Fixed, PR #493.**
+8. ⏸ **Retraction is absent.** Deleting the line that wrote a cell never withdraws its value, because
+   `forgetOrphanedNames` skips every prefixed key. Only sound to fix once writes are owner-keyed, so
+   it belongs to Release C rather than A. Listed here because it is the defect users would describe
+   first.
 
 ## Open questions
 
