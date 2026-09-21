@@ -204,4 +204,72 @@ describe("GlobalVariableAsyncResolver", () => {
 		const resolver = new GlobalVariableAsyncResolver();
 		expect(resolver.namespace).toBe("global-variables");
 	});
+
+	// ── Several unresolved names on one line ────────────────────────────
+
+	test("preflight waits on every unresolved name at once, not just the first", async () => {
+		// Returning at the first miss made resolution serial: wait for `a`,
+		// re-execute, discover `b` is still missing, wait again. One line
+		// should mean one wait, however many names it reads.
+		const resolver = new GlobalVariableAsyncResolver();
+		const program = bc(
+			[OpCode.LOAD_GLOBAL_VAR, 0, OpCode.LOAD_GLOBAL_VAR, 1, OpCode.LOAD_GLOBAL_VAR, 2, OpCode.HALT],
+			["a", "b", "c"]
+		);
+
+		const result = resolver.preflight(NO_TOKENS, program, "_engine", NO_SIGNAL, FAKE_QUERY_CLIENT);
+		expect(result).not.toBeNull();
+		expect(result!.queryKey).toBe("global:a,b,c");
+
+		let settled = false;
+		void result!.resolver.then(() => { settled = true; });
+
+		// Two of the three arrive. The line still cannot be answered, so the
+		// wait must not be over.
+		sharedGlobalVariableStore.set("a", numberValue(1));
+		sharedGlobalVariableStore.set("c", numberValue(3));
+		await Promise.resolve();
+		expect(settled).toBe(false);
+
+		sharedGlobalVariableStore.set("b", numberValue(2));
+		await result!.resolver;
+		expect(settled).toBe(true);
+	});
+
+	test("a name read twice on one line is waited on once", () => {
+		const resolver = new GlobalVariableAsyncResolver();
+		const program = bc(
+			[OpCode.LOAD_GLOBAL_VAR, 0, OpCode.LOAD_GLOBAL_VAR, 0, OpCode.HALT],
+			["x"]
+		);
+
+		const result = resolver.preflight(NO_TOKENS, program, "_engine", NO_SIGNAL, FAKE_QUERY_CLIENT);
+		// Deduplicated back to the single-name spelling, which is what keeps
+		// the existing queryKey contract intact for the common case.
+		expect(result!.queryKey).toBe("global:x");
+
+		sharedGlobalVariableStore.set("x", numberValue(0));
+	});
+
+	test("the composite key does not depend on the order the names are read in", () => {
+		const resolver = new GlobalVariableAsyncResolver();
+		const forwards = resolver.preflight(
+			NO_TOKENS,
+			bc([OpCode.LOAD_GLOBAL_VAR, 0, OpCode.LOAD_GLOBAL_VAR, 1, OpCode.HALT], ["b", "a"]),
+			"_engine", NO_SIGNAL, FAKE_QUERY_CLIENT
+		);
+		const backwards = resolver.preflight(
+			NO_TOKENS,
+			bc([OpCode.LOAD_GLOBAL_VAR, 0, OpCode.LOAD_GLOBAL_VAR, 1, OpCode.HALT], ["a", "b"]),
+			"_engine", NO_SIGNAL, FAKE_QUERY_CLIENT
+		);
+
+		// The key is registered as a DAG data-source dependency, so two lines
+		// waiting on the same pair have to agree on its spelling.
+		expect(forwards!.queryKey).toBe("global:a,b");
+		expect(backwards!.queryKey).toBe("global:a,b");
+
+		sharedGlobalVariableStore.set("a", numberValue(1));
+		sharedGlobalVariableStore.set("b", numberValue(2));
+	});
 });
