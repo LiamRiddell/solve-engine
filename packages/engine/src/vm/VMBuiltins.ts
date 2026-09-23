@@ -94,6 +94,88 @@ function tangentUndefinedAt(radians: number): Value | null {
     );
 }
 
+/** The sine of each special angle, in whole degrees from 0 up to 360: the multiples of 30° and of 45°. */
+const SPECIAL_SINES: Readonly<Record<number, number>> = {
+    0: 0, 30: 0.5, 45: Math.SQRT1_2, 60: Math.sqrt(3) / 2, 90: 1,
+    120: Math.sqrt(3) / 2, 135: Math.SQRT1_2, 150: 0.5, 180: 0,
+    210: -0.5, 225: -Math.SQRT1_2, 240: -Math.sqrt(3) / 2, 270: -1,
+    300: -Math.sqrt(3) / 2, 315: -Math.SQRT1_2, 330: -0.5,
+};
+
+/**
+ * The special angle `radians` stands for, in whole degrees from 0 up to 360, or
+ * undefined when it is not one.
+ *
+ * The angles people type (0, 30, 45, 60, 90 degrees, and multiples of π) have
+ * exact sines and cosines, but a double holds none of those angles exactly, so
+ * `Math.sin` of the double nearest π is 1.22e-16 rather than 0, and of the double
+ * nearest 30° is 0.49999999999999994. An angle within the conversion's rounding
+ * of a multiple of 15° is read as that multiple, with the tolerance scaled to the
+ * angle the way {@link tangentUndefinedAt} scales it, and it counts as special
+ * when it is a multiple of 30° or 45°.
+ */
+function specialAngleDegrees(radians: number): number | undefined {
+    const steps = radians / (Math.PI / 12);
+    if (!Number.isFinite(steps) || Math.abs(steps) > 1e12) return undefined;
+    const nearest = Math.round(steps);
+    if (Math.abs(steps - nearest) > 16 * Number.EPSILON * Math.max(1, Math.abs(steps))) return undefined;
+    const degrees = (((nearest * 15) % 360) + 360) % 360;
+    return degrees in SPECIAL_SINES ? degrees : undefined;
+}
+
+/** The sine of an angle in radians, exact at the special angles. */
+function exactSine(radians: number): number {
+    const degrees = specialAngleDegrees(radians);
+    return degrees === undefined ? Math.sin(radians) : SPECIAL_SINES[degrees];
+}
+
+/** The cosine of an angle in radians, exact at the special angles. */
+function exactCosine(radians: number): number {
+    const degrees = specialAngleDegrees(radians);
+    return degrees === undefined ? Math.cos(radians) : SPECIAL_SINES[(degrees + 90) % 360];
+}
+
+/**
+ * The tangent of an angle in radians: refused at an odd multiple of a right
+ * angle, exact at the other special angles (`tan(45 degrees)` is 1, and
+ * `tan(180 degrees)` is 0 rather than -1.22e-16).
+ */
+function exactTangent(radians: number): Value {
+    const undefinedAt = tangentUndefinedAt(radians);
+    if (undefinedAt) return undefinedAt;
+    const degrees = specialAngleDegrees(radians);
+    if (degrees === undefined) return numberValue(Math.tan(radians));
+    // 0 over -1 at 180 degrees is -0, which would show as "-0".
+    const tangent = SPECIAL_SINES[degrees] / SPECIAL_SINES[(degrees + 90) % 360];
+    return numberValue(tangent === 0 ? 0 : tangent);
+}
+
+/**
+ * The refusal for a function given a value outside its domain, or null inside
+ * it.
+ *
+ * These functions have no real answer outside their domain, and JavaScript's
+ * Math answers anyway: `log(0)` is -Infinity, `log(-1)` and `asin(2)` are NaN,
+ * `atanh(1)` is Infinity. None of those is a number a reader can use, and NaN
+ * does not say what went wrong. A NaN argument is not refused here: it already
+ * is not a number, and whatever made it has its own story to tell.
+ *
+ * @param name - The function as the reader knows it.
+ * @param x - The argument.
+ * @param inDomain - Whether `x` has a real answer.
+ * @param domain - The domain in words, completing "is only defined for".
+ */
+function outsideDomain(name: string, x: number, inDomain: (x: number) => boolean, domain: string): Value | null {
+    if (Number.isNaN(x) || inDomain(x)) return null;
+    return errorValue("FUNCTION_DOMAIN", `${name}(${x}) has no real value: ${name} is only defined for ${domain}.`);
+}
+
+/** Whether a number is a valid sine or cosine, the domain of the inverse functions. */
+const withinUnit = (x: number): boolean => x >= -1 && x <= 1;
+
+/** Whether a number is positive, the domain of the logarithms. */
+const positive = (x: number): boolean => x > 0;
+
 /**
  * The plural spelling of a unit, when the count calls for one and the table
  * has it.
@@ -433,14 +515,15 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // see wholeNumberUnchanged() in vm/ExactIntegers.ts.
     1: (args) => args[0].type === ValueType.Matrix ? determinant(args[0].value as MatrixData) : wholeNumberUnchanged(args[0], true) ?? keepUnit(args[0], Math.abs(args[0].toNumber())),
     // sin/cos/tan accept an angle with a unit; see angleInRadians().
-    2: (args) => numberValue(Math.sin(angleInRadians(args[0]))),
-    3: (args) => numberValue(Math.cos(angleInRadians(args[0]))),
-    // tan refuses the odd multiples of a right angle; see tangentUndefinedAt().
-    4: (args) => {
-        const radians = angleInRadians(args[0]);
-        return tangentUndefinedAt(radians) ?? numberValue(Math.tan(radians));
-    },
-    5: (args) => numberValue(Math.log(args[0].toNumber())),
+    // Exact at the special angles; see specialAngleDegrees().
+    2: (args) => numberValue(exactSine(angleInRadians(args[0]))),
+    3: (args) => numberValue(exactCosine(angleInRadians(args[0]))),
+    // tan refuses the odd multiples of a right angle and is exact at the other
+    // special angles; see exactTangent().
+    4: (args) => exactTangent(angleInRadians(args[0])),
+    // The logarithms and inverse functions refuse a value outside their domain
+    // rather than answering NaN or an infinity; see outsideDomain().
+    5: (args) => outsideDomain("log", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log(args[0].toNumber())),
     // round/ceil/floor keep a unit for the same reason abs does; see keepUnit().
     6: (args) => wholeNumberUnchanged(args[0], false) ?? keepUnit(args[0], Math.ceil(args[0].toNumber())),
     7: (args) => wholeNumberUnchanged(args[0], false) ?? keepUnit(args[0], Math.floor(args[0].toNumber())),
@@ -454,16 +537,16 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // rather than as a running number.
     9: (args) => extremum(args, false),
     10: (args) => extremum(args, true),
-    11: (args) => numberValue(Math.asin(args[0].toNumber())),
-    12: (args) => numberValue(Math.acos(args[0].toNumber())),
+    11: (args) => outsideDomain("asin", args[0].toNumber(), withinUnit, "numbers from -1 to 1") ?? numberValue(Math.asin(args[0].toNumber())),
+    12: (args) => outsideDomain("acos", args[0].toNumber(), withinUnit, "numbers from -1 to 1") ?? numberValue(Math.acos(args[0].toNumber())),
     13: (args) => numberValue(Math.atan(args[0].toNumber())),
     14: (args) => numberValue(Math.atan2(args[0].toNumber(), args[1].toNumber())),
     15: (args) => numberValue(Math.sinh(args[0].toNumber())),
     16: (args) => numberValue(Math.cosh(args[0].toNumber())),
     17: (args) => numberValue(Math.tanh(args[0].toNumber())),
     18: (args) => numberValue(Math.asinh(args[0].toNumber())),
-    19: (args) => numberValue(Math.acosh(args[0].toNumber())),
-    20: (args) => numberValue(Math.atanh(args[0].toNumber())),
+    19: (args) => outsideDomain("acosh", args[0].toNumber(), (x) => x >= 1, "numbers of 1 or more") ?? numberValue(Math.acosh(args[0].toNumber())),
+    20: (args) => outsideDomain("atanh", args[0].toNumber(), (x) => x > -1 && x < 1, "numbers strictly between -1 and 1") ?? numberValue(Math.atanh(args[0].toNumber())),
     // cbrt: a volume's cube root is a length (`cbrt(27 m3)` is 3 m), the same
     // rule as sqrt for an area.
     21: (args) => {
@@ -481,9 +564,9 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // allocation here is the safer trade.
     26: (args) => numberValue(Math.hypot(...args.map(a => a.toNumber()))),
     27: (args) => numberValue(Math.imul(args[0].toNumber(), args[1].toNumber())),
-    28: (args) => numberValue(Math.log10(args[0].toNumber())),
-    29: (args) => numberValue(Math.log1p(args[0].toNumber())),
-    30: (args) => numberValue(Math.log2(args[0].toNumber())),
+    28: (args) => outsideDomain("log10", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log10(args[0].toNumber())),
+    29: (args) => outsideDomain("log1p", args[0].toNumber(), (x) => x > -1, "numbers greater than -1") ?? numberValue(Math.log1p(args[0].toNumber())),
+    30: (args) => outsideDomain("log2", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log2(args[0].toNumber())),
     // pow(): the spelled-out form of `^`, so a Matrix base means the same
     // repeated matrix multiplication `^` means. Without this branch
     // `pow([1,2;3,4], 2)` was Math.pow of a value whose toNumber() is 0, and
@@ -1137,11 +1220,11 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // The "d" spellings take and return degrees rather than radians, which is
     // the convention every scientific calculator uses. sin(90 degrees) is the
     // other way to say the same thing; both exist because both get typed.
-    87: (args) => numberValue(Math.sin(args[0].toNumber() * Math.PI / 180)),
-    88: (args) => numberValue(Math.cos(args[0].toNumber() * Math.PI / 180)),
-    89: (args) => numberValue(Math.tan(args[0].toNumber() * Math.PI / 180)),
-    90: (args) => numberValue(Math.asin(args[0].toNumber()) * 180 / Math.PI),
-    91: (args) => numberValue(Math.acos(args[0].toNumber()) * 180 / Math.PI),
+    87: (args) => numberValue(exactSine(args[0].toNumber() * Math.PI / 180)),
+    88: (args) => numberValue(exactCosine(args[0].toNumber() * Math.PI / 180)),
+    89: (args) => exactTangent(args[0].toNumber() * Math.PI / 180),
+    90: (args) => outsideDomain("asind", args[0].toNumber(), withinUnit, "numbers from -1 to 1") ?? numberValue(Math.asin(args[0].toNumber()) * 180 / Math.PI),
+    91: (args) => outsideDomain("acosd", args[0].toNumber(), withinUnit, "numbers from -1 to 1") ?? numberValue(Math.acos(args[0].toNumber()) * 180 / Math.PI),
     92: (args) => numberValue(Math.atan(args[0].toNumber()) * 180 / Math.PI),
     // daysCount(n) -> n labelled as days. "days in Q3" is a count of days
     // and should say so; a bare 92 loses what was being counted.
