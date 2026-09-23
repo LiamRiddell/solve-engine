@@ -1,5 +1,192 @@
 # solve-engine
 
+## 2.39.0
+
+### Minor Changes
+
+- 4376c37: Document-spanning variables are their own package, so a host can refuse them and keep ordinary ones
+  
+  `:name = expr` and `global :name` are different levels of functionality. One defines a value inside the
+  document being evaluated. The other reaches outside it, into a store shared by every engine in the
+  realm. A host can reasonably want the first and not the second: a single-document editor, a sandboxed
+  evaluation, or a product where one document quietly reading another would be surprising.
+  
+  Both lived in `VARIABLES_PACKAGE`, so that choice could not be expressed. The documented way to drop a
+  feature is to filter it out of `BUILTIN_PACKAGES`, and doing that here took `:x = 1` down with
+  `global :x = 1`:
+  
+  | line | `filter(p => p !== VARIABLES_PACKAGE)`, before | now, `filter(p => p !== GLOBAL_VARIABLES_PACKAGE)` |
+  | --- | --- | --- |
+  | `:subtotal = 41` | parse error | 41 |
+  | `:subtotal + 1` | parse error | 42 |
+  | `global :x = 5` | parse error | parse error |
+  
+  A host that wanted only the document-spanning half refused had to register a replacement parselet for
+  the `GLOBAL` token and rely on the later registration winning, which works but is not a supported
+  interface and warns when it happens.
+  
+  `GLOBAL_VARIABLES_PACKAGE` is now exported alongside `VARIABLES_PACKAGE` and registered by default, so
+  nothing changes for a consumer taking `BUILTIN_PACKAGES` as it comes. The async resolver that backs a
+  read of a not-yet-declared name travels with it, since it exists only to serve that syntax. Neither
+  package leans on the other: the global parselet consumes its own colon and name, so either can be
+  registered without the other.
+  
+  Two things worth knowing, both unchanged by this and both pinned by tests:
+  
+  - Dropping the package removes the SYNTAX, not the values. The store is realm-wide and outlives any one
+    engine, so whatever another engine already wrote is still there, merely unaddressable. The workspace
+    in `docs-internal/plans/CROSS_SCOPE_CELLS.md` is what resolves that, after which refusing the feature
+    is declining to pass a workspace.
+  - The `global` keyword is claimed by the locale whether or not the package is registered, so a document
+    containing `global :x` without it reports a parse error on that line rather than evaluating to
+    something else. The rest of the document is unaffected.
+  
+  Marked a minor rather than a patch because it adds a public export and changes what filtering
+  `VARIABLES_PACKAGE` removes. A host doing that today to drop variables entirely now keeps the
+  document-spanning form and should filter both.
+  
+  ## Verification
+  
+  A new suite pinning the separation in both directions, that dropping either package leaves the other
+  working, that the refusal is contained to its own line, and that the two descriptors do not register
+  each other's parselets, so a later tidy-up that merges them back fails with a clear reason.
+  `npm run verify` passes: 484 suites, 9,482 tests, plus the lint, docs, units, sidebar and package gates.
+
+### Patch Changes
+
+- b07ff5f: Borrowing an engine for one whole-document pass no longer redirects the host's later async results
+  
+  `evaluateDocument` stands up its own document model and evaluator on an engine the caller may already
+  be driving, and its own comment promises that borrowing the engine "leaves nothing behind". It put the
+  document model back and left one thing behind.
+  
+  Constructing a `ThreeTierEvaluator` wires both the document model and its own VM checkpointer onto the
+  engine's async batcher, unconditionally. Only the model was restored. The checkpointer is not a
+  cosmetic field: it is what the batcher uses to restore VM variable state when an async value arrives
+  later, against checkpoints keyed by line position. So after one borrowed pass, a host's own async
+  results were restored from checkpoints recorded for a document that no longer existed, at positions
+  belonging to entirely different lines.
+  
+  The pass now takes the previous checkpointer before it constructs the evaluator that seizes it, and
+  puts it back in the same `finally` that restores the document model, so a failed pass restores it too.
+  
+  The boundary: this restores what the borrowed pass displaced. Other state the pass legitimately leaves
+  on a shared engine, such as cached bytecode for expressions both documents happen to contain, is
+  unaffected and is not residue.
+  
+  ## Verification
+  
+  A new suite asserting that a host engine driving its own document has both its document model and its
+  checkpointer restored after a borrowed pass, and after three of them in a row. The checkpointer
+  assertions fail before this change. `npm run verify` passes: 480 suites, 9,124 tests.
+- c36d01f: A line reading several not-yet-declared cross-document values waits once, not once per value
+  
+  `GlobalVariableAsyncResolver.preflight` scans a line's bytecode for `global :name` reads whose name no
+  loaded document has declared yet, and returned at the first one it found. The engine then showed the
+  line as pending, waited for that single name, re-executed the line, discovered the second name was
+  still missing, and waited again.
+  
+  So a line reading three undeclared names needed three full pend-and-re-execute round trips before it
+  could produce an answer, and each round trip re-ran the whole line. The scan already walked the entire
+  program, so every one of those names was seen on the first pass and then discarded.
+  
+  The scan now collects them all and waits on all of them together. The names are deduplicated and
+  ordered, so a line reading the same name twice waits once, and two lines reading the same pair agree
+  on one key whichever order they read them in, which matters because that key is registered as a
+  dependency and not only used as a label.
+  
+  A line with exactly one unresolved name is unchanged in every respect, including the spelling of its
+  key.
+  
+  The waiting is for all of them rather than the first to arrive, because a line cannot produce an
+  answer until every name it reads exists; resolving early would re-execute it straight back into the
+  state it just left, which is the behaviour being replaced. A name that nobody ever declares leaves the
+  line pending indefinitely, exactly as a single one always did. There is deliberately no timeout here
+  and that has not changed.
+  
+  ## Verification
+  
+  Three tests: that two of three names arriving does not settle the wait while the third is outstanding,
+  that a name read twice collapses to one wait and keeps the single-name key, and that the composite key
+  does not depend on read order. The first and third fail before this change. `npm run verify` passes:
+  479 suites, 9,124 tests.
+- e700638: A cross-document value notifies its readers when it changes, and stops notifying them when it does not
+  
+  `GlobalVariableStore.set` decides whether a write is worth telling anyone about, and it was wrong in
+  both directions at once.
+  
+  **It told readers nothing when a matrix changed shape and everything when it had not changed at all.**
+  The comparison guarding the notification opened with an `Array.isArray` test on the payload, which can
+  never be true: `Value.value`'s union has no array member. The arrays are one level further in, as a
+  matrix's `data`. So every object-valued cell fell through to `Object.is` on two freshly-built objects,
+  which is never equal, and a matrix, range, colour, split, chart, address or symbolic cell re-notified
+  on every evaluation pass for ever. Each of those notifications dirties the whole downstream closure of
+  every reader, so the cost was not one wasted comparison but a re-evaluation storm proportional to how
+  many lines read the cell.
+  
+  **It stayed silent when a value changed in a way only the reader can see.** The comparison looked at
+  `value`, `unit` and `timedOut`, and skipped every sidecar. But `1.5` and `1.5 to 2 dp` are the same
+  double and render as `1.5` and `1.50`; `30` and `30 ± 2` are the same double and render as `= 30` and
+  `= 30 ± 2.0`; a datetime's grain, zone and span decide whether an instant reads as a day, a wall-clock
+  time or a duration. Those pairs compared equal, the notification was suppressed, and every reader kept
+  displaying the old rendering with no event that would ever correct it.
+  
+  The two directions are not equally bad, which is why the comparison is now conservative. A redundant
+  notification costs a re-evaluation that arrives at the same answer. A missing one is permanent, because
+  nothing re-reads a cell it was not notified about. So the payload walk is bounded, and a payload too
+  large to compare within that bound reports "not equal" rather than guessing.
+  
+  **A value the store held could be one no reader was ever told about.** `set` wrote first and checked
+  the notification-depth bound second, inside `notify`, which returned before calling any listener. At
+  the limit the value was therefore stored and announced to nobody. The bound is now checked before the
+  write, so the store and its readers cannot disagree: either both see the new value or neither does.
+  
+  The boundary: this is not cross-document cycle detection and does not pretend to be. That bound guards
+  a host listener that writes back on notification, and it is unreachable from engine code, because both
+  engine-side listeners are non-reentrant. Cycles that span documents are specified separately in
+  `docs-internal/plans/CROSS_SCOPE_CELLS.md`.
+  
+  ## Verification
+  
+  The suite's only cross-document cycle test passed vacuously: it wrote the received value straight back,
+  so the second hop hit the unchanged-value short-circuit and the recursion stopped at depth 2 without
+  ever reaching the bound it was named for. It now writes a different value on each hop, asserts that the
+  engine's bound rather than the test's own guard is what terminates it, and asserts that every value the
+  store holds is one its listeners were told about. Two further tests cover the object-valued and
+  sidecar-only cases. All three fail before this change. `npm run verify` passes: 479 suites, 9,123 tests.
+- b2a1121: A value that is still loading renders as a placeholder, not as its internal cache key
+  
+  `formatValue` had a case for every value type that carries a payload of its own
+  except one. A `Pending` value stores its deduplication query key in `.value`, so
+  it fell through to the default case and that key was rendered as the answer:
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `global :total`, awaiting a declaration | `= global:total` | `…` |
+  | `100 USD in GBP`, rate not yet fetched | `= currency:USD:GBP` | `…` |
+  
+  This is the same leak that was fixed for `Error` values, one type along in the
+  same switch. That case has a comment recording it: before the fix an error
+  displayed its raw code rather than its message. `Pending` was missed.
+  
+  There is no result prefix on the placeholder, for the reason the `Error` case
+  drops it too. A line whose value has not arrived has no answer yet, and
+  prefixing it with `= ` presents one. `…` is what the
+  [formatting guide](https://liamriddell.github.io/solve-engine/guide/formatting/)
+  already teaches a host to render for this type, so the built-in formatter now
+  agrees with the documented example instead of contradicting it.
+  
+  The boundary: this changes the built-in formatter only. A host that inspects
+  `value.isPending()` and renders its own affordance, which the formatting guide
+  recommends and which is what a host with a spinner does, is unaffected.
+  
+  ## Verification
+  
+  Two unit tests in the FormatEngine suite, asserting that a pending value neither
+  contains its query key nor carries a result prefix. Both fail before the change
+  with the exact strings in the table above. `npm run verify` passes: 479 suites,
+  9,123 tests.
+
 ## 2.38.30
 
 ### Patch Changes
