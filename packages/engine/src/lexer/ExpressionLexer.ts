@@ -3,6 +3,7 @@ import { knownUnits } from '@solve-js/lexer/units';
 import { getLocale, type ILocale } from '@solve-js/constants/locales';
 import { ErrorFactory, EngineError } from '@solve-js/errors/UnifiedErrorFramework';
 import type { TokenLookup } from '@solve-js/lexer/TokenClassRegistry';
+import { DEGREE_SIGN, scanGeoAngle } from '@solve-js/lexer/GeoAngleLiteral';
 
 // Bootstrap all token types at module load
 registerAllTokenTypes();
@@ -21,6 +22,7 @@ const TT_CURRENCY_SYMBOL = tokenTypeId('CURRENCY_SYMBOL');
 const TT_DOLLAR = tokenTypeId('DOLLAR');
 const TT_DOT = tokenTypeId('DOT');
 const TT_EURO = tokenTypeId('EURO');
+const TT_GEO_ANGLE = tokenTypeId('GEO_ANGLE');
 const TT_HEX_COLOUR = tokenTypeId('HEX_COLOUR');
 const TT_IDENT = tokenTypeId('IDENT');
 const TT_INLINE_SOLVE_START = tokenTypeId('INLINE_SOLVE_START');
@@ -1476,6 +1478,20 @@ export class ExpressionLexer {
         const text = input.slice(start, pos);
         this.pos = pos;
         return new LexerToken('BIGINT', TT_BIGINT, text, text, start, 0, this.line, startCol);
+      }
+    }
+
+    // ── An angle as a map writes one: 51°30'27" or 51.5074°N ──────────
+    // Only when a `°` follows the digits directly, so this costs one
+    // comparison per number. The whole literal is one token, which is what
+    // keeps its `"` from opening a string. See GeoAngleLiteral.ts; a bare
+    // `51°` or a `20°C` is not claimed and falls through unchanged.
+    if (pos < len && input.charCodeAt(pos) === DEGREE_SIGN && !hasExponent) {
+      const angle = scanGeoAngle(input, start, pos, len);
+      if (angle !== null) {
+        const angleText = input.slice(start, angle.end);
+        this.pos = angle.end;
+        return new LexerToken('GEO_ANGLE', TT_GEO_ANGLE, angleText, angleText, start, 0, this.line, startCol);
       }
     }
 

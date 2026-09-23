@@ -62,6 +62,7 @@ import { RATIO_PACKAGE } from "./ratio";
 import { GEOMETRY_PACKAGE } from "./geometry";
 import { CONSTANTS_PACKAGE } from "./constants";
 import { HEALTH_PACKAGE } from "./health";
+import { GEO_PACKAGE } from "./geo";
 
 export {
   ARITHMETIC_PACKAGE,
@@ -111,6 +112,7 @@ export {
   GEOMETRY_PACKAGE,
   CONSTANTS_PACKAGE,
   HEALTH_PACKAGE,
+  GEO_PACKAGE,
 };
 
 // ── All built-in packages (registration order matters: arithmetic first) ──
@@ -134,9 +136,10 @@ export {
 /**
  * The packages an engine registers when the caller names none.
  *
- * Thirty-nine of the forty-one. Stocks and knowledge are excluded because
- * both need a host-supplied data source and do nothing useful without one, so
- * registering them by default would only produce NOT_CONFIGURED results.
+ * Forty-six of the forty-nine. Stocks, crypto and knowledge are excluded
+ * because each needs a host-supplied data source and does nothing useful
+ * without one, so registering them by default would only produce
+ * NOT_CONFIGURED results.
  *
  * Pass a filtered copy to the {@link ExpressionEngine} constructor to opt out
  * of a feature, or add to it to register your own alongside the built-ins.
@@ -213,4 +216,9 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   CONSTANTS_PACKAGE,
   // Health and fitness helpers (bmi, pace, speed). On by default, removable.
   HEALTH_PACKAGE,
+  // Places by their coordinates: great-circle distance, initial bearing, and
+  // angles in degrees, minutes and seconds (`51°30'27"N`, `as dms`). On by
+  // default, removable; without it the lexer's GEO_ANGLE literal has no
+  // parselet and is a parse error, as the same text was before.
+  GEO_PACKAGE,
 ];

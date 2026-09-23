@@ -381,6 +381,7 @@ export default defineConfig({
               label: "Everyday",
               collapsed: true,
               items: [
+                { slug: "syntax/coordinates" },
                 { slug: "syntax/dice" },
                 { slug: "syntax/random" },
               ],

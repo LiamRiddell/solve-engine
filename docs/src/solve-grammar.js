@@ -15,6 +15,16 @@ const solvePatterns = [
     // Strings, before anything that might match their contents.
     { match: '"[^"]*"', name: "string.quoted.double.solve" },
 
+    // An angle as a map writes it (51°30'27"N, 51.5074°N). It starts at its
+    // first digit, ahead of the `"` it may contain, so it wins over the string
+    // rule above: without it, two such angles on a line highlighted the text
+    // between their second marks as a string.
+    {
+      match:
+        "\\b\\d+(?:\\.\\d+)?°\\s*(?:\\d+(?:\\.\\d+)?['′’](?:\\s*\\d+(?:\\.\\d+)?(?:\"|″|”|''))?(?:\\s*[NSEWnsew](?![A-Za-z0-9_]))?|[NSEWnsew](?![A-Za-z0-9_]))",
+      name: "constant.numeric.angle.solve",
+    },
+
     // Hexadecimal and binary literals, ahead of the decimal rule so the
     // prefix is not consumed as a bare zero.
     { match: "\\b0[xX][0-9a-fA-F]+\\b", name: "constant.numeric.hex.solve" },
