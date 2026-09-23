@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "@jest/globals";
 import { formatValue } from "@solve-js/format/FormatEngine";
-import { Value, ValueType, numberValue, hexValue, bigIntValue, stringValue, uomValue, rowVectorValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, hexValue, bigIntValue, stringValue, uomValue, rowVectorValue, pendingValue } from "@solve-js/vm/Value";
 import { getLocale } from "@solve-js/constants/locales";
 
 describe("FormatEngine", () => {
@@ -147,6 +147,27 @@ describe("Locale framework", () => {
     const locale = getLocale("en");
     expect(locale.code).toBe("en");
     expect(locale.keywordMap.pi).toBe("PI");
+  });
+
+  // A Pending value carries its dedup query key as its payload
+  // (pendingValue() in Value.ts), so falling through to the default case
+  // rendered that key as the answer: `global :total` awaiting a declaration
+  // displayed "= global:total". The same class of leak was already fixed for
+  // Error values, whose case sits directly above this one in FormatEngine.
+  it("formats a pending value without leaking its internal query key", () => {
+    const result = formatValue(pendingValue("global:total"));
+
+    expect(result).not.toContain("global:total");
+    // The published formatting guide teaches "…" for Pending
+    // (docs/src/content/docs/guide/formatting.md), so the built-in formatter
+    // agrees with the example rather than contradicting it.
+    expect(result).toBe("…");
+  });
+
+  it("formats a pending value with no result prefix", () => {
+    // A pending line has no answer yet, so it must not be dressed as one.
+    // Error formatting drops the prefix for the same reason.
+    expect(formatValue(pendingValue("currency:USD:GBP"))).not.toContain("=");
   });
 
   it("falls back to en for unknown locale", () => {

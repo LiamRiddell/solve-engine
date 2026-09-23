@@ -615,6 +615,16 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
       // case here previously displayed the raw code (e.g.
       // "CURRENCY_RATE_UNAVAILABLE") instead of the actual message.
       return value.unit ?? String(value.value);
+    case ValueType.Pending:
+      // Same leak as the Error case above, one type along. pendingValue()
+      // stores the dedup query key in `.value`, so the default case rendered
+      // an internal key as the answer: a line awaiting a global read showed
+      // "= global:total", and one awaiting a rate showed "= currency:USD:GBP".
+      // No prefix, because a pending line has no answer yet and must not be
+      // dressed as one. "…" is what the formatting guide already teaches a
+      // host to render, so the built-in formatter agrees with the example
+      // rather than contradicting it.
+      return "…";
     default:
       return `= ${String(value.value)}`;
   }
