@@ -31,4 +31,4 @@ The boundary: a lookup matches the first column only, and answers with the one c
 
 A new suite pins every form through both document passes line for line: the exact lookup and its addresses, number and variable keys, money and percentage cells, exact money arithmetic, the band lookup at and between band starts, the progressive total with shares, prices and plain rates, currency adoption and mismatch, each refusal and its code, error propagation from a failing key or amount, an edited table re-answering, and the cell reader directly. The cross-path suite adds the three forms in its standard shape: the document result, the agreement between `parseDocument` and `evaluateDocument`, and the single-line refusal as a structured Error. New Table lookups and Banded rates pages carry proven `solve-doc` examples, including the refusals.
 
-npm run verify:ci passes: TESTS tests across SUITES suites.
+npm run verify:ci passes: 10,709 tests across 517 suites.

@@ -23,4 +23,4 @@ The boundary: exactness covers the multiples of 30° and 45°; an irrational exa
 
 ## Verification
 
-A new suite pins each exact angle in degrees, radians, gradians and the degree functions, the positive zero, the irrational special values, unchanged ordinary angles, `tand`'s asymptote, every domain refusal and its message, the edges of each domain, and the complex square root and IEEE division that stay as they were. The number functions page gains exact angles and a section on domains, with proven examples. `npm run verify:ci` passes: TESTS tests across SUITES suites.
+A new suite pins each exact angle in degrees, radians, gradians and the degree functions, the positive zero, the irrational special values, unchanged ordinary angles, `tand`'s asymptote, every domain refusal and its message, the edges of each domain, and the complex square root and IEEE division that stay as they were. The number functions page gains exact angles and a section on domains, with proven examples. `npm run verify:ci` passes: 10,709 tests across 517 suites.

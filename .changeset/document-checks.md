@@ -20,4 +20,4 @@ The boundary: `check` is a check only at the start of a line that compares two t
 
 ## Verification
 
-A new suite pins passing checks, every failure message, approximate checks by percentage and by amount, the refusals, `check` as a variable, a total beneath a check, and the host count from `parseDocument` and `evaluateDocument` alike. The conditionals page gains a Checks section with proven examples, and the TypeScript guide shows the count. `npm run verify:ci` passes: TESTS tests across SUITES suites.
+A new suite pins passing checks, every failure message, approximate checks by percentage and by amount, the refusals, `check` as a variable, a total beneath a check, and the host count from `parseDocument` and `evaluateDocument` alike. The conditionals page gains a Checks section with proven examples, and the TypeScript guide shows the count. `npm run verify:ci` passes: 10,709 tests across 517 suites.

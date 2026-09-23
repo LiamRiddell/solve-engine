@@ -8,7 +8,7 @@ The list aggregates read every operand without a unit as a number, and a value w
 
 | expression | before | now |
 | --- | --- | --- |
-| `total of "Travel"` | 0 | error: text cannot be added; tag the lines and use `total of #tag` |
+| `total of "Travel"` | 0 | error: text cannot be added; write `total of section "Travel"` for the lines under a heading, or tag them and use `total of #tag` |
 | `average of "a", 4` | 2 | error: text cannot be averaged |
 | `total of [1, 2, 3]` | 0 | error: a bracketed list; list the values with commas |
 | `total of 1:3` | 1,790,121,780,000 | error: a date or time cannot be added |
@@ -20,7 +20,7 @@ The forms covered are `total of`, `average of`, `median of`, `spread of`, `mode 
 
 `min` and `max` of a set made only of dates now return the earliest or latest date itself, which is the answer the question has; a date among plain numbers is refused like any other non-number. The `total above` and `total of #tag` forms already refused a non-numeric line and are unchanged.
 
-The boundary: a bracketed list is refused rather than expanded into its members, and a quoted name is refused rather than read as a section heading. Totalling a section by its heading is the section addressing feature, #508. `mode of` on text, where the most frequent word would be an answer, is refused for now rather than given a numeric mode of zero.
+The boundary: a bracketed list is refused rather than expanded into its members, and a quoted name is refused rather than read as a section heading. Totalling a section by its heading is `total of section "Travel"`, which the message names (#508). `mode of` on text, where the most frequent word would be an answer, is refused for now rather than given a numeric mode of zero.
 
 ## Verification
 

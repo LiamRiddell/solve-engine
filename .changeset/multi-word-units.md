@@ -19,3 +19,7 @@ The spellings come from the unit table and nothing is invented, so the words mus
 The boundary: a spelling the table does not carry is not guessed at. `light year` with a space is not a spelling there (`light-year` is), so it stays unread rather than being matched to the nearest entry.
 
 Fixes #548.
+
+## Verification
+
+A new suite pins each spelling after an amount, as a conversion's source and target, the hyphenated and three-word forms, the plural allowance and the symbol that takes none, and the unchanged two-unit pairs. The converting units page gains a section with proven examples. `npm run verify:ci` passes: 10,709 tests across 517 suites, with the bundled-consumer contract.

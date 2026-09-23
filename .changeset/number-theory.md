@@ -25,4 +25,4 @@ The boundary: `factor` refuses a whole number above 2^64, since factoring is the
 
 ## Verification
 
-A new suite pins primality (including Carmichael numbers), the next prime, modular power and inverse, factorisations up to 2^64 - 1, every engine form, the read-back, the polynomial `factor` that is unchanged, the factorial and choose precedence, `!=`, and every refusal by code. `npm run verify:ci` passes: TESTS tests across SUITES suites.
+A new suite pins primality (including Carmichael numbers), the next prime, modular power and inverse, factorisations up to 2^64 - 1, every engine form, the read-back, the polynomial `factor` that is unchanged, the factorial and choose precedence, `!=`, and every refusal by code. `npm run verify:ci` passes: 10,709 tests across 517 suites.

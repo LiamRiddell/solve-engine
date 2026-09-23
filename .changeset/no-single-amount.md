@@ -24,3 +24,7 @@ A list cell still holds a number, a `true` or `false`, or an unknown (a formula 
 The boundary: a quantity in a list cell is still stored as its magnitude, so `[1 km, 2]` is `[1, 2]`. That drops the unit rather than inventing a number, and giving a list cell a unit is its own change.
 
 Fixes #546, #547 and #549.
+
+## Verification
+
+A new suite pins each refusal by code and message, the forms that still answer (numbers, booleans and unknowns as cells; numbers, quantities and dates converted; text joined to text), and `as number` on text that is and is not a number. Four existing tests that pinned the old reading of text as a number now expect the refusal. The text operations, converting units and vectors pages gain the refusals as proven examples. An A/B run of 3,899 expressions against the previous build differed only where intended. `npm run verify:ci` passes: 10,709 tests across 517 suites, with the bundled-consumer contract.

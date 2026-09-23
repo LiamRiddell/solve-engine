@@ -35,4 +35,4 @@ The boundary, deliberately:
 
 ## Verification
 
-A new suite pins every answer above, each spelling of the hours and of the list, the day shifts in both directions, daylight saving in both hemispheres, a transition inside the hours, the skipped and repeated readings, each refusal and parse error, and the undated forms against a pinned clock. It runs under both calendar backends and in the three zones `npm run test:temporal` uses. The time zones page is proven by the documentation examples suite. `npm run verify:ci` passes: TESTS tests across SUITES suites.
+A new suite pins every answer above, each spelling of the hours and of the list, the day shifts in both directions, daylight saving in both hemispheres, a transition inside the hours, the skipped and repeated readings, each refusal and parse error, and the undated forms against a pinned clock. It runs under both calendar backends and in the three zones `npm run test:temporal` uses. The time zones page is proven by the documentation examples suite. `npm run verify:ci` passes: 10,709 tests across 517 suites.
