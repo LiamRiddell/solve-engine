@@ -1,4 +1,5 @@
 import { Value, ValueType, numberValue, uomValue, errorValue } from "@solve-js/vm/Value";
+import { isCheckResult } from "@solve-js/packages/conditionals/CheckFunctions";
 import { unifyQuantities } from "@solve-js/vm/VMConversion";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 
@@ -194,6 +195,9 @@ function aggregateAbove(context: LineExecutionContext, isAverage: boolean): Valu
   for (let n = context.lineIndex - 1; n >= 1; n--) {
     if (boundaryCheck(n)) break;
     const v = context.getLineResult!(n);
+    // A check line is a statement about the column, not one of its values,
+    // passed or failed alike (#506).
+    if (isCheckResult(v)) continue;
     const err = checkLineValue(v, n);
     if (err) return err;
     if (v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {

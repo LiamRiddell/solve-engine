@@ -183,4 +183,6 @@ export interface SerializedParsingResult {
 	totalLines: number;
 	errors: string[];
 	diagnostics?: DiagnosticReportJSON;
+	/** The document's check pass and fail count, as `ParsingResult.checks`. */
+	checks?: { passed: number; failed: number };
 }
