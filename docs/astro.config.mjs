@@ -300,6 +300,7 @@ export default defineConfig({
                 { slug: "syntax/splitting-a-bill" },
                 { slug: "syntax/interest-and-inflation" },
                 { slug: "syntax/savings-goals" },
+                { slug: "syntax/cash-flow" },
                 { slug: "syntax/payroll" },
                 { slug: "syntax/shopping" },
                 { slug: "syntax/stocks" },

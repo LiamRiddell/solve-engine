@@ -221,6 +221,8 @@ $120 + 18% split 3 ways // $47.20 each
 split $100 between 3 // $33.33 each, with 1 share paying $33.34
 how long to save $10,000 at $500 monthly // 20 months
 how much per month to save $12,000 in 2 years // $500.00
+npv of -1000, 300, 400, 500 at 10% // -21.04
+irr of -1000, 300, 400, 500 // 8.90%
 ```
 
 The term and the rate read in either order, so `at 4% over 25 years` and

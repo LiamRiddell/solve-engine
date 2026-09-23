@@ -11,6 +11,8 @@ import { InYearDollarsParselet } from "./parselets/InYearDollarsParselet";
 import {
   inflationFromYearToPresentHandler, inflationToYearFromPresentHandler, inflationFutureValueHandler,
 } from "./parselets/InflationPluginFunctions";
+import { CashFlowParselet } from "./parselets/CashFlowParselets";
+import { CASH_FLOW_PLUGIN_FUNCTIONS } from "./parselets/CashFlowPluginFunctions";
 import { inYearDollarsNormalizerRule } from "./normalizer/InYearDollarsNormalizerRule";
 import { recurringScheduleNormalizerRule } from "./normalizer/RecurringScheduleNormalizerRule";
 import { billSplitNormalizerRule, billSplitPrefixNormalizerRule } from "./normalizer/BillSplitNormalizerRule";
@@ -77,6 +79,15 @@ const SAVINGS_PAYMENT = 99, SAVINGS_PERIODS = 100;
  * clearly-labeled-approximate CPI-U table and its doc comment on
  * vintage/accuracy) was the one topic explicitly deferred from this
  * package's original scope, now implemented.
+ *
+ * Cash-flow appraisal (`npv of`, `irr of`, `payback of`, see
+ * `parselets/CashFlowParselets.ts` and `CashFlowMath.ts`) appraises a series of
+ * flows rather than one sum. Its triggers are fused phrases too: `npv`, `irr`
+ * and `payback` alone stay names, and `IRR` in particular is also the Iranian
+ * rial's ISO code. The forms run as collision-safe `pluginFunctions`, not
+ * builtin indices, and deliberately have no `npv(...)` call spelling: a
+ * spreadsheet's `NPV()` discounts the first flow as well, and a call spelled the
+ * same way that answered differently would be a trap.
  */
 export const FINANCE_PACKAGE: IEnginePackage = {
   name: "solve-finance",
@@ -113,6 +124,12 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     "how much per month to save": "SAVINGS_HOW_MUCH",
     "how much per month to reach": "SAVINGS_HOW_MUCH",
     "assuming": "ASSUMING",
+    // Cash-flow appraisal. See parselets/CashFlowParselets.ts.
+    "npv of": "NPV_OF",
+    "net present value of": "NPV_OF",
+    "irr of": "IRR_OF",
+    "payback of": "PAYBACK_OF",
+    "payback period of": "PAYBACK_OF",
   },
   prefixParselets: {
     PRESENT_VALUE_OF: new PresentValueParselet(PRESENT_VALUE),
@@ -141,6 +158,10 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     VALUE_OF: new InflationFutureValueParselet(),
     SAVINGS_HOW_LONG: new SavingsDurationParselet(SAVINGS_PERIODS),
     SAVINGS_HOW_MUCH: new SavingsContributionParselet(SAVINGS_PAYMENT),
+
+    NPV_OF: new CashFlowParselet("cashFlowNpv", "npv", true),
+    IRR_OF: new CashFlowParselet("cashFlowIrr", "irr", false),
+    PAYBACK_OF: new CashFlowParselet("cashFlowPayback", "payback", false),
   },
   infixParselets: {
     // The documented bare forms: "$1,000 after 3 years at 7%" and the "for
@@ -173,5 +194,14 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     inflationToYearFromPresent: inflationToYearFromPresentHandler,
     /** Plugin index for projecting an amount forward at an assumed rate. */
     inflationFutureValue: inflationFutureValueHandler,
+    // `npv of`, `irr of`, `payback of`. See parselets/CashFlowPluginFunctions.ts.
+    ...CASH_FLOW_PLUGIN_FUNCTIONS,
+  },
+  // The cash-flow triggers highlight like the other finance phrases, which are
+  // declared centrally in TokenCategoryMap.ts.
+  tokenCategories: {
+    NPV_OF: "keyword",
+    IRR_OF: "keyword",
+    PAYBACK_OF: "keyword",
   },
 };
