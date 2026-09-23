@@ -771,8 +771,8 @@ export function binaryOp(
         return errorValue(
             "TEXT_ARITHMETIC",
             symbolicOp === "add"
-                ? `Text and a number cannot be added: + joins text only to other text. Write the number without quotes to add it.`
-                : "Text cannot be used in arithmetic: only numbers and quantities can. Write the number without quotes.",
+                ? `Text and a number cannot be added: + joins text only to other text. To add a number held as text, convert it first with "as number".`
+                : "Text cannot be used in arithmetic: only numbers and quantities can. To use a number held as text, convert it first with \"as number\".",
         );
     }
 

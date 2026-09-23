@@ -106,3 +106,14 @@ describe("refusals", () => {
 		expect(code(source)).toBe(expected);
 	});
 });
+
+describe("a count that is not whole", () => {
+	test("is refused rather than truncated", () => {
+		// combination(5.5, 2) used to answer the 10 of combination(5, 2).
+		expect(code("combination(5.5, 2)")).toBe("NOT_WHOLE_NUMBER");
+		expect(code("5.5 choose 2")).toBe("NOT_WHOLE_NUMBER");
+		expect(code("permutation(5, 2.5)")).toBe("NOT_WHOLE_NUMBER");
+		expect(shown("combination(5.5, 2)")).toBe("combination counts whole things: 5.5 is not a whole number.");
+		expect(shown("combination(5, 2)")).toBe("= 10");
+	});
+});

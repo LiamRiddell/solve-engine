@@ -365,6 +365,25 @@ export function drawRandom(context?: LineExecutionContext): number {
 }
 
 /**
+ * The refusal for a count that is not whole, or null when both are. A choice
+ * of 2 from 5.5 has no meaning, and truncating it answered `combination(5.5, 2)`
+ * with the 10 of `combination(5, 2)`, a confident answer to a different
+ * question.
+ *
+ * @param name - The function, for the message.
+ * @param args - Its n and r.
+ */
+function notWholeCount(name: string, args: readonly Value[]): Value | null {
+    for (const arg of args.slice(0, 2)) {
+        const x = arg.toNumber();
+        if (!Number.isInteger(x)) {
+            return errorValue("NOT_WHOLE_NUMBER", `${name} counts whole things: ${x} is not a whole number.`);
+        }
+    }
+    return null;
+}
+
+/**
  * A number theory function's whole-number argument, as an exact integer, or the
  * Error that refuses it. A value past 2^53 is read at its exact digits.
  *
@@ -690,8 +709,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // early exit bounds the trip count without a separate estimate, and
     // without ever refusing a permutation that does have an answer.
     40: (args) => {
-        const n = Math.trunc(args[0].toNumber());
-        const r = Math.trunc(args[1].toNumber());
+        const fractional = notWholeCount("permutation", args);
+        if (fractional) return fractional;
+        const n = args[0].toNumber();
+        const r = args[1].toNumber();
         if (n < 0 || r < 0 || r > n) {
             return errorValue("INVALID_RANGE", `permutation: invalid n=${n}, r=${r} (require 0 <= r <= n)`);
         }
@@ -725,8 +746,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // double can hold it never comes back, and the largest run this can now
     // take is the thousand-odd steps C(n, k) needs to cross that line.
     41: (args) => {
-        const n = Math.trunc(args[0].toNumber());
-        const r = Math.trunc(args[1].toNumber());
+        const fractional = notWholeCount("combination", args);
+        if (fractional) return fractional;
+        const n = args[0].toNumber();
+        const r = args[1].toNumber();
         if (n < 0 || r < 0 || r > n) {
             return errorValue("INVALID_RANGE", `combination: invalid n=${n}, r=${r} (require 0 <= r <= n)`);
         }

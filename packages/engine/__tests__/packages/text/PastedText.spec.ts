@@ -248,7 +248,9 @@ describe("field", () => {
 		expect(shown(`field(jwt("${token}"), "name")`)).toBe("John Doe");
 		expect(value(`field(jwt("${token}"), "iat")`).toNumber()).toBe(1516239022);
 		expect(shown('field(query("a=1&b=two"), "b")')).toBe("two");
-		expect(shown('field(query("a=1&b=two"), "a") + 1')).toBe("2");
+		// A query string holds its values as text, so a count is converted
+		// before it is added to (text in arithmetic is refused, #549).
+		expect(shown('field(query("a=1&b=two"), "a") as number + 1')).toBe("2");
 	});
 
 	test("a missing field names what is there", () => {

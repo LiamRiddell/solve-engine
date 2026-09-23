@@ -31,11 +31,24 @@ arithmetic with text on either side is refused by name, for `-`, `*` and `/` as
 well as `+`.
 
 ```solve-doc
-"11:00 PM" + 2 // ERROR: Text and a number cannot be added: + joins text only to other text. Write the number without quotes to add it.
-"5" * 2 // ERROR: Text cannot be used in arithmetic: only numbers and quantities can. Write the number without quotes.
+"11:00 PM" + 2 // ERROR: Text and a number cannot be added: + joins text only to other text. To add a number held as text, convert it first with "as number".
+"5" * 2 // ERROR: Text cannot be used in arithmetic: only numbers and quantities can. To use a number held as text, convert it first with "as number".
 ```
 
-To add, write the number without quotes; to join, quote both sides. Earlier
+To join, quote both sides. To do arithmetic with a number that arrives as text,
+from a pasted value or a decoded field, convert it first with `as number`, which
+reads text only when the whole of it is a number:
+
+```solve
+("5" as number) + 5 // 10
+"1,234.5" as number // 1,234.50
+```
+
+```solve-doc
+"11:00 PM" as number // ERROR: "11:00 PM" is not a number: "as number" reads text that is a number and nothing else.
+```
+
+Earlier
 versions read the text as a number instead, its leading digits or 0, so
 `"11:00 PM" + 2` answered 13, which is why it is now an error rather than a
 guess.

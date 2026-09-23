@@ -375,7 +375,8 @@ describe("every refusal is named", () => {
 		["binompdf(10 kg, 0.5, 3)", "STAT_EXPECTED_VALUE"],
 		["tcdf(2 m, 10)", "STAT_EXPECTED_VALUE"],
 		["erf(50%)", "STAT_EXPECTED_VALUE"],
-		["gamma(asin(2))", "STAT_EXPECTED_VALUE"],
+		// asin(2) is its own domain error (#510), which the call passes on.
+		["gamma(asin(2))", "FUNCTION_DOMAIN"],
 	];
 	test.each(refused)("%s is refused with %s", (source, expected) => {
 		const v = value(source);

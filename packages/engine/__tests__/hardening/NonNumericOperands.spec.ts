@@ -68,7 +68,7 @@ describe("text in arithmetic is refused (#549)", () => {
 	test("a quoted time plus a number is not the time's leading digits plus it", () => {
 		expect(codeOf('"11:00 PM" + 2')).toBe("TEXT_ARITHMETIC");
 		expect(evaluate('"11:00 PM" + 2').errorMessage)
-			.toBe("Text and a number cannot be added: + joins text only to other text. Write the number without quotes to add it.");
+			.toBe('Text and a number cannot be added: + joins text only to other text. To add a number held as text, convert it first with "as number".');
 	});
 
 	test("on either side, and for every operator", () => {
@@ -83,5 +83,23 @@ describe("text in arithmetic is refused (#549)", () => {
 
 	test("and a number without quotes is still arithmetic", () => {
 		expect(evaluate("5 + 5").toNumber()).toBe(10);
+	});
+});
+
+describe("as number reads text only when it is a number", () => {
+	test("a number held as text converts, with its grouping commas", () => {
+		expect(evaluate('"2" as number').toNumber()).toBe(2);
+		expect(evaluate('"1,234.5" as number').toNumber()).toBe(1234.5);
+		expect(evaluate('" -3e2 " as number').toNumber()).toBe(-300);
+		expect(evaluate('("5" as number) + 5').toNumber()).toBe(10);
+	});
+
+	test("anything else is refused, not read up to its first non-digit", () => {
+		// Through parseFloat these were 11, 0 and 12.
+		for (const source of ['"11:00 PM" as number', '"hello" as number', '"12abc" as number', '"" as number']) {
+			expect(codeOf(source)).toBe("TEXT_NOT_A_NUMBER");
+		}
+		expect(evaluate('"hello" as number').errorMessage)
+			.toBe('"hello" is not a number: "as number" reads text that is a number and nothing else.');
 	});
 });

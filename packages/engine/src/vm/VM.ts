@@ -1584,6 +1584,27 @@ function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
  */
 const MAX_EXACT_POW_BITS = 65536;
 
+/** A number written as text: digits with optional commas grouping thousands, a decimal part and an exponent. */
+const NUMBER_TEXT = /^[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
+
+/**
+ * The number a piece of text spells, or the Error that says it spells none.
+ * The whole text must be the number, spaces at either end aside, so `"12abc"`
+ * is refused rather than read as 12.
+ *
+ * @param text - The text to read.
+ */
+function numberFromText(text: string): Value {
+    const trimmed = text.trim();
+    if (!NUMBER_TEXT.test(trimmed)) {
+        return errorValue(
+            "TEXT_NOT_A_NUMBER",
+            `"${text.length > 40 ? `${text.slice(0, 40)}...` : text}" is not a number: "as number" reads text that is a number and nothing else.`,
+        );
+    }
+    return numberValue(Number(trimmed.replace(/,/g, "")));
+}
+
 /**
  * The variables an undefined variable could have been meant as. The unit
  * spellings are searched alongside, through {@link unitNameIndex}, since a
@@ -3287,6 +3308,14 @@ export function executeBytecode(
           const v = safePop(stack);
           const toNumberFault = faultedOperand(v);
           if (toNumberFault) { stack.push(toNumberFault); break; }
+          if (v.type === ValueType.String) {
+            // Text reads as a number only when it is one, whole. Through
+            // `toNumber()` it went by `parseFloat`: `"11:00 PM" as number` was
+            // 11, `"1,234.5"` was 1 and `"hello"` was 0. This is the conversion
+            // the text arithmetic refusal points at, so it must not guess either.
+            stack.push(numberFromText(v.value as string));
+            break;
+          }
           stack.push(numberValue(v.toNumber()));
           break;
         }

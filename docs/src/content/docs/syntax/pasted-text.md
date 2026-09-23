@@ -225,10 +225,13 @@ marks, each paired with a value, and values that can be lists or further
 groups of names, as in `{"order": {"total": 12.5, "items": [...]}}`. The
 `jwt` and `query` forms on the [text encoding page](/syntax/text-encoding/) hand
 back what they decode as JSON. `field(json, "name")` reads one value out of it.
+A value that JSON holds as a number comes back as a number; a query string holds
+every value as text, so a count read from one is converted with `as number`
+before it is added to (see [text operations](/syntax/text-operations/)).
 
 ```solve
 field(query("name=John+Doe&page=2"), "name") // John Doe
-field(query("name=John+Doe&page=2"), "page") + 1 // 3
+field(query("name=John+Doe&page=2"), "page") as number + 1 // 3
 field(jwt("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"), "name") // John Doe
 ```
 
