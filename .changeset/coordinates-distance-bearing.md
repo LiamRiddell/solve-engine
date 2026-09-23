@@ -2,7 +2,7 @@
 "solve-engine": minor
 ---
 
-Add coordinates, great-circle distance and initial bearing (issue #521)
+Places written by latitude and longitude, with the great-circle distance and the initial bearing between them
 
 A place on the globe can now be written by its latitude and longitude, and the engine answers how far apart two places are and which way to set off from one to reach the other. Angles can be written the way a map writes them, in degrees, minutes and seconds (`51°30'27"`) or with a compass letter (`51.5074°N`), and `as dms` writes an angle back that way. It is a new package, `GEO_PACKAGE` (`solve-geo`), on by default and removable.
 
