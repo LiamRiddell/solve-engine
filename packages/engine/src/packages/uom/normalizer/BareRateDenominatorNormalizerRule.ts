@@ -2,6 +2,7 @@ import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
+import { expectsValueAt } from "@solve-js/normalizer/ValuePosition";
 
 /** Whether a token is a unit spelling the engine knows. */
 function isUnit(token: Token | undefined): boolean {
@@ -90,6 +91,10 @@ export function bareRateDenominatorNormalizerRule(priority = 75): NormalizerRule
 			const word = (head.text ?? head.value ?? "").toLowerCase();
 			const isPerWord = head.type === "IDENT" && PER_WORDS.has(word);
 			if (!isSlash && !isPerWord) return null;
+			// A unit-named word in a value position before the slash is the
+			// reader's variable, not a quantity (issue #537): with `m` and `s`
+			// defined, `m / s` divides them rather than reading "m per second".
+			if (isSlash && tokens[pos - 1]?.type === "UNIT" && expectsValueAt(tokens, pos - 1)) return null;
 
 			// A number after the unit means this was never a bare denominator:
 			// `/ 3 days` is a division and `a day + 2` is not a rate at all.

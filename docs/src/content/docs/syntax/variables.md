@@ -19,6 +19,18 @@ count = 10
 count + 5 // 15
 ```
 
+A name can be a letter that is also a unit symbol, `m` for mass or `s` for
+distance, as a physics formula would write it. A unit is always written after a
+value (`9.81 m/s^2`), so where a name stands on its own, at the start of a line or
+after an operator, it is read as your variable:
+
+```solve-doc
+m = 3
+s = 2
+m/s^2 // 0.75
+9.81 m/s^2 // 9.81 m/s²
+```
+
 ## Running totals
 
 `+=` and `-=` update a named total in place, so a note becomes a running balance
