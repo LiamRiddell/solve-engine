@@ -39,6 +39,27 @@ function formatNumber(value: number, locale: ILocale, settings: FormattingSettin
 }
 
 /**
+ * Renders a whole number past the safe range from the exact integer it carries.
+ *
+ * A double past 9,007,199,254,740,991 prints its shortest round-trip form, 17
+ * significant digits and zeros after them, so `2^64` read
+ * 18,446,744,073,709,552,000 though the answer is 18,446,744,073,709,551,616.
+ * A result the VM kept exact (see vm/ExactIntegers.ts) now shows every digit,
+ * grouped and localised the way {@link formatNumber} groups a double, with an
+ * explicit place count still honoured. `Intl.NumberFormat` formats a bigint
+ * without converting it, so no digit is lost on the way out.
+ */
+function formatExactInteger(n: bigint, locale: ILocale, settings: FormattingSettings, decimalPlaces?: number): string {
+  const places = decimalPlaces ?? 0;
+  const formatted = new Intl.NumberFormat(settings.numberResult.decimalSeparatorLocale || "en-US", {
+    useGrouping: settings.floatResult.enableSeperator,
+    minimumFractionDigits: places,
+    maximumFractionDigits: places,
+  }).format(n);
+  return `${locale.display.resultPrefix}${formatted}`;
+}
+
+/**
  * Renders a measurement that carries a one-sigma uncertainty as
  * `center ± spread`, e.g. `49.2 ± 2.0`.
  *
@@ -573,6 +594,11 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
       // other number is unchanged, so a plain value is byte-for-byte what it was.
       if (value.uncertainty !== undefined) {
         return formatUncertain(value.value as number, value.uncertainty, locale, us);
+      }
+      // An exact integer past the safe range shows its own digits. Within the
+      // range the double is already exact and renders as it always has.
+      if (value.rational !== undefined && value.rational.d === 1n && !Number.isSafeInteger(value.value as number)) {
+        return formatExactInteger(value.rational.n, locale, us, value.decimalPlaces);
       }
       return formatNumber(value.value as number, locale, us, value.decimalPlaces);
     case ValueType.Hex:

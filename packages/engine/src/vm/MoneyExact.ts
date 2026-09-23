@@ -87,6 +87,22 @@ export function scaleMoneyExact(amount: Value, factor: number, unit: string): Va
 }
 
 /**
+ * Scale a money amount by an exact whole number, keeping it exact.
+ *
+ * The integer counterpart of {@link scaleMoneyExact}, for a factor past the
+ * safe range that carries its exact value (see vm/ExactIntegers.ts):
+ * `(2^60 + 1) * $1` keeps its last dollar, which the factor's double has
+ * already lost. Null when the amount has no exact value, so the caller keeps
+ * its float path.
+ */
+export function scaleMoneyByInteger(amount: Value, factor: bigint, unit: string): Value | null {
+	const base = moneyExactMagnitude(amount, unit);
+	if (base === null) return null;
+	const result = decimalMultiply(base, decimalFromInteger(factor));
+	return uomValueExact(decimalToNumber(result), unit, result);
+}
+
+/**
  * Scale a money amount by `1 + sign * percent`, keeping it exact.
  *
  * `$X + p%` is `$X * (1 + p%)`, and money multiplication is exact wherever the

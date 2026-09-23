@@ -245,6 +245,7 @@ Results depend on the current date, so these are shown rather than asserted.
 ## Bigger integers
 
 ```solve
+2^53 + 1 // 9,007,199,254,740,993
 123n * 2 // 246
 ```
 

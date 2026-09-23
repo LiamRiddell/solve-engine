@@ -28,6 +28,7 @@ import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/f
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { isPhysicalTimeRate, quantityAtRateSeconds, convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { raiseQuantity, rootQuantity, unitPowerUnsupported } from "@solve-js/vm/QuantityPowers";
+import { exactIntegerArithmetic, exactIntegerValue, exactGcdOrLcm, wholeNumberUnchanged, baseConversionOperand } from "@solve-js/vm/ExactIntegers";
 
 /**
  * A duration in seconds, shown in the largest whole time unit that keeps the
@@ -183,6 +184,13 @@ function keepUnit(operand: Value, magnitude: number): Value {
  */
 function roundToPlaces(source: Value, places: number): Value {
     const p = Number.isFinite(places) ? Math.min(100, Math.max(0, Math.trunc(places))) : 0;
+    // A whole number carrying its exact value is already at every place count,
+    // so it keeps that value: `3^40 to 2 dp` shows all twenty digits, then .00.
+    if (source.type === ValueType.Number && source.rational !== undefined && source.rational.d === 1n) {
+        const whole = withPlaces(source, source.toNumber(), p);
+        whole.rational = source.rational;
+        return whole;
+    }
     if (source.exact !== undefined) {
         const rounded = decimalRound(source.exact, p);
         return withPlaces(source, decimalToNumber(rounded), p, rounded);
@@ -342,22 +350,24 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     },
     // abs(a): for a Matrix, "|a|" (Calca's determinant-pipe notation) is a
     // valid alias for det(a) (index 64), reusing the SAME implementation
-    // not a separate one. Plain-number abs is unaffected.
-    1: (args) => args[0].type === ValueType.Matrix ? determinant(args[0].value as MatrixData) : keepUnit(args[0], Math.abs(args[0].toNumber())),
+    // not a separate one. Plain-number abs is unaffected. An exact integer past
+    // the safe range stays exact here and through the rounding family below;
+    // see wholeNumberUnchanged() in vm/ExactIntegers.ts.
+    1: (args) => args[0].type === ValueType.Matrix ? determinant(args[0].value as MatrixData) : wholeNumberUnchanged(args[0], true) ?? keepUnit(args[0], Math.abs(args[0].toNumber())),
     // sin/cos/tan accept an angle with a unit; see angleInRadians().
     2: (args) => numberValue(Math.sin(angleInRadians(args[0]))),
     3: (args) => numberValue(Math.cos(angleInRadians(args[0]))),
     4: (args) => numberValue(Math.tan(angleInRadians(args[0]))),
     5: (args) => numberValue(Math.log(args[0].toNumber())),
     // round/ceil/floor keep a unit for the same reason abs does; see keepUnit().
-    6: (args) => keepUnit(args[0], Math.ceil(args[0].toNumber())),
-    7: (args) => keepUnit(args[0], Math.floor(args[0].toNumber())),
+    6: (args) => wholeNumberUnchanged(args[0], false) ?? keepUnit(args[0], Math.ceil(args[0].toNumber())),
+    7: (args) => wholeNumberUnchanged(args[0], false) ?? keepUnit(args[0], Math.floor(args[0].toNumber())),
     8: (args) =>
         args.length >= 2
             ? // round(x, n): round to n decimal places and display at that precision.
               roundToPlaces(args[0], args[1].toNumber())
             : // round(x): nearest whole number, the way it always was.
-              keepUnit(args[0], Math.round(args[0].toNumber())),
+              wholeNumberUnchanged(args[0], false) ?? keepUnit(args[0], Math.round(args[0].toNumber())),
     // min/max: see extremum() for why the winner is carried around as a Value
     // rather than as a running number.
     9: (args) => extremum(args, false),
@@ -412,12 +422,16 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         return numericExponent ? raiseQuantity(args[0], args[1].toNumber()) : unitPowerUnsupported(args[0].unit, ValueType[args[1].type].toLowerCase());
       }
       // The spelled-out form of `^` answers what `^` answers, edge cases
-      // included. See power() in vm/VMConversion.ts.
-      return numberValue(power(args[0].toNumber(), args[1].toNumber()));
+      // included, and a whole-number result past the safe range exactly as
+      // `^` does. See power() in vm/VMConversion.ts and vm/ExactIntegers.ts.
+      const raised = power(args[0].toNumber(), args[1].toNumber());
+      return raised <= Number.MAX_SAFE_INTEGER && raised >= -Number.MAX_SAFE_INTEGER
+        ? numberValue(raised)
+        : exactIntegerArithmetic(args[0], args[1], raised, "pow");
     },
     32: () => numberValue(Math.random()), // takes no arguments, unlike its neighbours
     33: (args) => numberValue(Math.sign(args[0].toNumber())),
-    34: (args) => numberValue(Math.trunc(args[0].toNumber())),
+    34: (args) => wholeNumberUnchanged(args[0], false) ?? numberValue(Math.trunc(args[0].toNumber())),
     35: (args) => numberValue(args[0].toNumber() * Math.PI / 180),
     36: (args) => numberValue(args[0].toNumber() * 180 / Math.PI),
     // 37: diceRoll(from, to), random integer in range [from, to] inclusive.
@@ -436,6 +450,12 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // gcd(a, b), Euclidean algorithm. Negative inputs are treated by
     // magnitude (gcd is conventionally defined over non-negative integers).
     38: (args) => {
+        // Double Euclid is exact on doubles, so only an operand carrying an
+        // exact integer needs the bigint form.
+        if (args[0].rational !== undefined || args[1].rational !== undefined) {
+            const exact = exactGcdOrLcm(args[0], args[1], "gcd");
+            if (exact) return exact;
+        }
         const a = Math.trunc(Math.abs(args[0].toNumber()));
         const b = Math.trunc(Math.abs(args[1].toNumber()));
         const nonFinite = nonFiniteEuclidOperand(a, b, "gcd");
@@ -444,7 +464,11 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     },
     // lcm(a, b) = |a*b| / gcd(a, b), via the same Euclidean gcd inline
     // (a standalone gcd() call site, no shared helper needed for two uses).
+    // Whole operands take the exact form, whose answer can pass the safe
+    // range where `(a / g) * b` would round; see vm/ExactIntegers.ts.
     39: (args) => {
+        const exact = exactGcdOrLcm(args[0], args[1], "lcm");
+        if (exact) return exact;
         const a = Math.trunc(Math.abs(args[0].toNumber()));
         const b = Math.trunc(Math.abs(args[1].toNumber()));
         const nonFinite = nonFiniteEuclidOperand(a, b, "lcm");
@@ -483,7 +507,14 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
                 );
             }
         }
-        return numberValue(result);
+        // The double loop proves the answer finite and bounds the work; the
+        // answer itself is built as a bigint, so P(30, 15) keeps the digits a
+        // double drops past the safe range. Not for an `n` typed past that
+        // range, which is already a rounding (see vm/ExactIntegers.ts).
+        if (!Number.isSafeInteger(n)) return numberValue(result);
+        let exact = 1n;
+        for (let i = 0; i < r; i++) exact *= BigInt(n - i);
+        return exactIntegerValue(exact);
     },
     // combination(n, r) = n! / (r! * (n-r)!), multiply-then-divide one
     // step at a time (standard technique) keeps every intermediate result
@@ -512,7 +543,15 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
                 );
             }
         }
-        return numberValue(Math.round(result));
+        // As in permutation: the double loop bounds the work, the bigint one
+        // gives the answer. The running `result * (n - i)` rounds once it
+        // passes the safe range even when C(n, r) itself does not, so
+        // `combination(56, 23)` used to come back one off. Each exact step
+        // divides without remainder, since C(n, i + 1) is a whole number.
+        if (!Number.isSafeInteger(n)) return numberValue(Math.round(result));
+        let exact = 1n;
+        for (let i = 0; i < k; i++) exact = (exact * BigInt(n - i)) / BigInt(i + 1);
+        return exactIntegerValue(exact);
     },
     // average(...), arithmetic mean of any number of arguments. Backs the
     // MathPhrases package's "average of X, Y, Z" (packages/mathphrases/).
@@ -578,16 +617,18 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // function call that returns an ordinary String value, matching
     // Python's hex()/JS convention of a function returning display text,
     // not a numeric type.
-    48: (args) => hexValue(args[0].toNumber()),
+    // An exact integer past the safe range converts from its own digits, as
+    // `as hex` does; see baseConversionOperand() in vm/ExactIntegers.ts.
+    48: (args) => hexValue(baseConversionOperand(args[0])),
     // bin(n). Same call-syntax shape as hex() above, e.g. bin(10) -> "0b1010".
-    49: (args) => hexValue(args[0].toNumber(), "bin"),
+    49: (args) => hexValue(baseConversionOperand(args[0]), "bin"),
     // int(x), coerce ANY value (Number, Percentage, Uom, String, Hex, ...)
     // to a plain integer Number, truncating any fractional part toward
     // zero (Math.trunc semantics: int(5.7) -> 5, int(-5.7) -> -5). Distinct
     // from the Converters package's `x as number` (TO_NUMBER opcode),
     // which only strips a unit/percentage wrapper and keeps any decimal
     // part (e.g. "5.7 as number" -> 5.7), int() additionally truncates.
-    50: (args) => numberValue(Math.trunc(args[0].toNumber())),
+    50: (args) => wholeNumberUnchanged(args[0], false) ?? numberValue(Math.trunc(args[0].toNumber())),
 
     // ── Finance (packages/finance/) ──────────────────────────────────────
     // All finance builtins preserve the principal/amount argument's Uom
@@ -813,9 +854,12 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         if (n > 170) {
             return errorValue("FACTORIAL_OVERFLOW", `fact: ${n}! exceeds the maximum representable double (170! is the largest finite factorial)`);
         }
-        let result = 1;
-        for (let i = 2; i <= n; i++) result *= i;
-        return numberValue(result);
+        // Built as a bigint, so 19! onwards, the first factorial past the safe
+        // range, keeps every digit: 25! is 15,511,210,043,330,985,984,000,000.
+        // The 170 cap stays, since 171! has no finite double to ride on.
+        let result = 1n;
+        for (let i = 2n; i <= BigInt(n); i++) result *= i;
+        return exactIntegerValue(result);
     },
 
     // ── Matrix (packages/matrix/) ────────────────────────────────────────

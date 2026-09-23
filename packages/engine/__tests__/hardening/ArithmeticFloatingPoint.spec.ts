@@ -1,12 +1,19 @@
 /**
  * IEEE 754 behaviour, pinned deliberately rather than by accident.
  *
- * Every number in this engine is a JavaScript double, so the engine inherits
- * every double's quirks: 0.1 + 0.2 is not 0.3, integers above 2^53 have gaps
- * in them, and dividing by zero is a value rather than an error. None of that
- * is a defect. What would be a defect is any of it being *different* from a
- * double, because then an answer computed here could not be reproduced
- * anywhere else, and there would be no rule a reader could apply to predict it.
+ * A decimal, and any number typed past 2^53, is a JavaScript double here, so
+ * the engine inherits every double's quirks for it: 0.1 + 0.2 is not 0.3,
+ * integers typed above 2^53 have gaps in them, and dividing by zero is a value
+ * rather than an error. None of that is a defect. What would be a defect is any
+ * of it being *different* from a double, because then an answer computed here
+ * could not be reproduced anywhere else, and there would be no rule a reader
+ * could apply to predict it.
+ *
+ * Two results are exact rather than doubles, each by a rule with a stated
+ * boundary: a quotient of whole numbers carries its exact fraction, and a
+ * whole-number result of `+`, `-`, `*` or `^` past 2^53, from whole operands
+ * within it, carries its exact integer (vm/ExactIntegers.ts). "The integer
+ * precision ceiling" below pins where that second line falls.
  *
  * So the expectations below are exact, never `toBeCloseTo`. Each one is the
  * value the same expression produces in plain JavaScript, computed
@@ -59,25 +66,49 @@ describe("representation error survives the pipeline unchanged", () => {
 });
 
 describe("the integer precision ceiling", () => {
+	/** The exact integer a result carries, or undefined for a plain double. */
+	const exactInteger = (source: string): bigint | undefined => {
+		const value = evaluate(source);
+		return value.rational !== undefined && value.rational.d === 1n ? value.rational.n : undefined;
+	};
+
 	test("2^53 is exact", () => {
 		expect(num("2 ^ 53")).toBe(9007199254740992);
 	});
 
-	test("2^53 + 1 is not representable, so it is not represented", () => {
-		// The next double after 9007199254740992 is 9007199254740994. Adding
-		// one lands between them and rounds back down. This is the honest
-		// answer for a double; the alternative would be silently promoting to
-		// BigInt, which would change the type of an expression based on its
-		// runtime magnitude.
-		expect(num("2 ^ 53 + 1")).toBe(9007199254740992);
+	test("2^53 + 1 is computed exactly and stays a Number", () => {
+		// DECIDED (#526), reversing what this test used to pin. The next double
+		// after 9007199254740992 is 9007199254740994, so the double answer to
+		// `2^53 + 1` rounds back down and prints a number the reader did not
+		// ask for. The exact integer now rides on the result as its rational
+		// sidecar. The TYPE is still Number, which was the objection to a
+		// BigInt promotion recorded here: nothing downstream sees a different
+		// kind of value, only a Number whose digits are right.
+		//
+		// `toNumber()` alone cannot see this, since it returns the nearest
+		// double either way, so the exact value is asserted directly.
+		const value = evaluate("2 ^ 53 + 1");
+		expect(value.type).toBe(ValueType.Number);
+		expect(exactInteger("2 ^ 53 + 1")).toBe(9007199254740993n);
+		expect(value.toNumber()).toBe(9007199254740992);
 	});
 
-	test("and an odd literal past the ceiling is rounded at parse time", () => {
+	test("an odd literal past the ceiling is still rounded at parse time", () => {
+		// A number typed past 2^53 is a double before the engine sees it, and
+		// seeds no exact value, since its digits may already be invented.
 		expect(num("9007199254740993")).toBe(9007199254740992);
+		expect(exactInteger("9007199254740993")).toBeUndefined();
 	});
 
-	test("2^53 + 2 is representable and does move", () => {
+	test("2^53 + 2 is representable and exact", () => {
 		expect(num("2 ^ 53 + 2")).toBe(9007199254740994);
+		expect(exactInteger("2 ^ 53 + 2")).toBe(9007199254740994n);
+	});
+
+	test("within the safe range there is no sidecar at all", () => {
+		// The plain case stays plain: a double already holds these exactly.
+		expect(exactInteger("2 ^ 52 + 1")).toBeUndefined();
+		expect(exactInteger("9007199254740990 + 1")).toBeUndefined();
 	});
 });
 
@@ -212,6 +243,15 @@ describe("magnitudes far apart", () => {
 		expect(num("1e16 + 1 - 1e16")).toBe(0);
 		expect(num("1e16 - 1e16 + 1")).toBe(1);
 		expect(num("1e16 + 3 - 1e16")).toBe(4);
+	});
+
+	test("the literal is what stays a double: the same sum from 10^16 is exact", () => {
+		// `1e16` is typed past the safe range, so it seeds no exact value and
+		// the sums above are doubles. `10^16` is computed from whole numbers
+		// within the range, so its result carries the exact integer and the
+		// one survives. This is the boundary #526 draws, on provenance.
+		expect(num("10^16 + 1 - 10^16")).toBe(1);
+		expect(num("10^16 + 3 - 10^16")).toBe(3);
 	});
 });
 

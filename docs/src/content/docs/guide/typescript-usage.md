@@ -50,6 +50,29 @@ The tags you will meet most are `Number`, `Percentage`, `Uom` (a number with a
 unit), `Boolean`, `String`, `Datetime`, `Pending` and `Error`. The full set is
 in the [API reference](/api/vm/enumerations/valuetype/).
 
+## Exact values behind a number
+
+Some `Number` results are exact where a double is not, and carry the exact value
+beside the double. `toNumber()` still returns the nearest double, so code that
+reads a number keeps working unchanged; the exact value is `value.rational`, a
+pair of bigints `{ n, d }`, and `formatValue` renders it.
+
+A quotient of whole numbers carries its fraction (`1/3` is `{ n: 1n, d: 3n }`).
+A whole-number result past 9,007,199,254,740,991 (`Number.MAX_SAFE_INTEGER`),
+which the engine computes exactly (see [big integers](/syntax/big-integers/)),
+carries its integer with a denominator of `1n`:
+
+```ts
+const value = engine.evaluateExpression("2^53 + 1");
+value.type;         // ValueType.Number
+value.toNumber();   // 9007199254740992, the nearest double
+value.rational;     // { n: 9007199254740993n, d: 1n }
+formatValue(value); // "= 9,007,199,254,740,993"
+```
+
+Read `rational.n` when every digit matters. A result crossing the worker boundary
+keeps the digits in its formatted `text`; its `number` is the double.
+
 ## Errors are values, not exceptions
 
 Most failures the engine meets while a document is being written come back as
