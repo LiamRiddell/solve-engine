@@ -31,6 +31,61 @@ export class GlobalVariableStore {
 	private static readonly MAX_NOTIFY_DEPTH = 64;
 	private notifyDepth = 0;
 
+	/**
+	 * Notifications staged during an evaluation pass, in the order the writes
+	 * happened, flushed together once the pass leaves the value arena. `null`
+	 * outside a pass, when a write notifies immediately.
+	 *
+	 * The written value still lands in {@link values} eagerly, so a later line
+	 * in the same pass reads what an earlier one wrote; only the *notification*
+	 * waits. Deferring it moves the listener callbacks (a document's dirty
+	 * marking, an async read's first-write promise) out of the arena window,
+	 * which is where the buffered atomic commit in
+	 * `docs-internal/plans/CROSS_SCOPE_CELLS.md` needs them: a listener may then
+	 * legitimately drive another pass, which a callback firing mid-dispatch,
+	 * from inside `enableValueArena()`, cannot. Replayed in write order so the
+	 * sequence a listener sees, and so which write first resolves a pending
+	 * read, is exactly what it was when the notification fired inline.
+	 */
+	private pendingNotifications: { name: string; value: Value }[] | null = null;
+
+	/**
+	 * How many nested passes are open. A pass brackets its writes with
+	 * {@link beginPass}/{@link endPass}; the depth lets the two arena windows a
+	 * single evaluation opens (the from-line-1 pass and the viewport pass) share
+	 * one staging batch and flush it once, at the outermost close.
+	 */
+	private passDepth = 0;
+
+	/**
+	 * Open a pass: from here until the matching {@link endPass}, a write stages
+	 * its notification rather than firing it. Called as the evaluator enters its
+	 * value-arena window. Nesting is counted, so an inner window does not flush
+	 * the outer window's batch early.
+	 */
+	beginPass(): void {
+		if (this.passDepth === 0) this.pendingNotifications = [];
+		this.passDepth += 1;
+	}
+
+	/**
+	 * Close a pass and, at the outermost close, replay every staged notification
+	 * in write order. Called from the evaluator's `finally`, AFTER the arena is
+	 * disabled, so the listeners run outside it and on the exception path too.
+	 * Balanced against {@link beginPass}; a stray close with no pass open is a
+	 * no-op rather than a fault.
+	 */
+	endPass(): void {
+		if (this.passDepth === 0) return;
+		this.passDepth -= 1;
+		if (this.passDepth > 0) return;
+		const pending = this.pendingNotifications;
+		this.pendingNotifications = null;
+		if (pending) {
+			for (const entry of pending) this.notify(entry.name, entry.value);
+		}
+	}
+
 	get(name: string): Value | undefined {
 		return this.values.get(name);
 	}
@@ -85,7 +140,15 @@ export class GlobalVariableStore {
 		if (this.notifyDepth >= GlobalVariableStore.MAX_NOTIFY_DEPTH) return;
 
 		this.values.set(name, value);
-		this.notify(name, value);
+		// The value is written now; the notification is what waits. Inside a
+		// pass it is staged and replayed when the pass leaves the arena (see
+		// {@link pendingNotifications}); outside one, a single-expression run or
+		// the async re-execution of one line, it fires immediately, as before.
+		if (this.pendingNotifications !== null) {
+			this.pendingNotifications.push({ name, value });
+		} else {
+			this.notify(name, value);
+		}
 	}
 
 	private notify(name: string, value: Value): void {
@@ -121,6 +184,8 @@ export class GlobalVariableStore {
 		this.values.clear();
 		this.listeners.clear();
 		this.notifyDepth = 0;
+		this.pendingNotifications = null;
+		this.passDepth = 0;
 	}
 }
 

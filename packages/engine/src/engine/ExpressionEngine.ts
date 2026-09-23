@@ -596,6 +596,11 @@ export class ExpressionEngine {
             this.lineContextParsed = parsed;
         }
         context.lineIndex = lineNumber;
+        // Set by mutation alongside lineIndex, the same way, so the reused
+        // per-pass object never carries a stale scope. Constant per engine
+        // today; the mutation seam is what lets a later release vary it per
+        // pass without the retained object freezing an old value.
+        context.scope = this.context.scope;
         return context;
     }
 
@@ -707,6 +712,12 @@ export class ExpressionEngine {
             goalSeekMaxIterations: this.config.vm.maxGoalSeekIterations,
             networkEnabled: this.config.network.enabled,
             calendar: this.context.calendar,
+            // The engine's own scope, constant for its lifetime, so a cell this
+            // line writes is owned by it. Set here (and mutated alongside
+            // lineIndex in makeLineContext) so both the rebuilt and reused
+            // per-pass contexts, and the fresh context a goal-seek probe
+            // allocates, carry it. See `EngineContext.scope`.
+            scope: this.context.scope,
             // Raw source text of a line, for features that read markdown the
             // evaluator skipped (a table's rows). See the tables package. Reads
             // from the document when evaluating incrementally, and from the scan

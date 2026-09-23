@@ -25,6 +25,7 @@ import type { Value } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { OpRegistry } from "@solve-js/vm/OpRegistry";
+import { mintScope, type ScopeId } from "@solve-js/vm/CellScope";
 import { resolveCalendar, type CalendarOption } from "@solve-js/calendar/resolveCalendar";
 
 /**
@@ -118,6 +119,21 @@ export interface EngineContext {
 	 * where it does not. See `calendar/resolveCalendar.ts`.
 	 */
 	readonly calendar: CalendarBackend;
+
+	/**
+	 * The scope this engine's lines execute under: the owner of every
+	 * `global :name` cell they write, and the default scope a cell read is
+	 * attributed to.
+	 *
+	 * One anonymous scope per engine, minted here and fixed for the engine's
+	 * life. Nothing distinguishes it from another engine's scope yet: the
+	 * {@link GlobalVariableStore} is still realm-wide and keyed on the bare
+	 * name, so two engines writing `global :total` share one cell exactly as
+	 * before. The scope rides the execution context so the seam is in place
+	 * for the workspace model in `docs-internal/plans/CROSS_SCOPE_CELLS.md`,
+	 * whose Release D makes it the key that keeps two documents' cells apart.
+	 */
+	readonly scope: ScopeId;
 }
 
 /** What {@link createEngineContext} takes: the settings a context carries on the engine's behalf. */
@@ -141,6 +157,7 @@ export function createEngineContext(options: EngineContextOptions = {}): EngineC
 		pluginFunctionOwners: {},
 		networkEnabled: options.networkEnabled ?? true,
 		calendar: resolveCalendar(options.calendar),
+		scope: mintScope(),
 	};
 }
 

@@ -836,6 +836,12 @@ export class AsyncResolutionBatcher {
 					lineIndex: lineNumber,
 					networkEnabled: this.vm.context.networkEnabled,
 					calendar: this.vm.context.calendar,
+					// This path re-executes lines that WRITE a cell, so it carries
+					// the engine's scope too: a cell re-written when a live value
+					// lands is owned by the same scope the first pass wrote it
+					// under. A field the first-pass context has and this hand-built
+					// one omits is silently absent exactly here.
+					scope: this.vm.context.scope,
 				});
 				while (this.vm.getStack().length > stackBefore) {
 					this.vm.pop();

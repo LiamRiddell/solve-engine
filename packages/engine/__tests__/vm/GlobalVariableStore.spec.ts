@@ -147,6 +147,77 @@ describe("GlobalVariableStore", () => {
 		});
 	});
 
+	describe("buffered notification during a pass", () => {
+		test("a write inside a pass stores the value at once but defers its notification to endPass", () => {
+			const calls: Array<[string, number]> = [];
+			store.subscribe((name, value) => calls.push([name, value.toNumber()]));
+
+			store.beginPass();
+			store.set("x", numberValue(5));
+			// The value is readable immediately: read-your-writes is not deferred.
+			expect(store.get("x")!.toNumber()).toBe(5);
+			// The notification has not fired yet.
+			expect(calls).toEqual([]);
+
+			store.endPass();
+			expect(calls).toEqual([["x", 5]]);
+		});
+
+		test("staged notifications replay in write order, one per changing write", () => {
+			const calls: number[] = [];
+			store.subscribe((_name, value) => calls.push(value.toNumber()));
+
+			store.beginPass();
+			store.set("x", numberValue(1));
+			store.set("x", numberValue(2));
+			store.set("y", numberValue(9));
+			store.endPass();
+
+			// Same sequence a synchronous notify would have produced, in order.
+			expect(calls).toEqual([1, 2, 9]);
+		});
+
+		test("a write of the SAME value inside a pass stages nothing, matching the unchanged-value short-circuit", () => {
+			const calls: number[] = [];
+			store.subscribe((_name, value) => calls.push(value.toNumber()));
+
+			store.beginPass();
+			store.set("x", numberValue(1));
+			store.set("x", numberValue(1));
+			store.endPass();
+
+			expect(calls).toEqual([1]);
+		});
+
+		test("nested passes flush once, at the outermost close", () => {
+			const calls: number[] = [];
+			store.subscribe((_name, value) => calls.push(value.toNumber()));
+
+			store.beginPass();
+			store.set("a", numberValue(1));
+			store.beginPass();
+			store.set("b", numberValue(2));
+			store.endPass();
+			// The inner close does not flush: the outer pass is still open.
+			expect(calls).toEqual([]);
+			store.endPass();
+			expect(calls).toEqual([1, 2]);
+		});
+
+		test("a write outside any pass notifies immediately, as before", () => {
+			const calls: number[] = [];
+			store.subscribe((_name, value) => calls.push(value.toNumber()));
+
+			store.set("x", numberValue(7));
+
+			expect(calls).toEqual([7]);
+		});
+
+		test("endPass with no pass open is a safe no-op", () => {
+			expect(() => store.endPass()).not.toThrow();
+		});
+	});
+
 	describe("clear()", () => {
 		test("removes all stored values", () => {
 			store.set("x", numberValue(1));
@@ -175,6 +246,17 @@ describe("GlobalVariableStore", () => {
 
 			expect(store.get("y")!.toNumber()).toBe(9);
 			expect(calls).toEqual([9]);
+		});
+
+		test("clear() ends any open pass, so the next write notifies immediately", () => {
+			store.beginPass();
+			store.clear();
+
+			const calls: number[] = [];
+			store.subscribe((_n, v) => calls.push(v.toNumber()));
+			store.set("x", numberValue(1));
+
+			expect(calls).toEqual([1]);
 		});
 	});
 });

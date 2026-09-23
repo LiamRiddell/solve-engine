@@ -288,6 +288,10 @@ export class ThreeTierEvaluator {
 
 		// ── Phase 5.3: Enable arena for zero-allocation Value reuse ──
 		enableValueArena();
+		// Stage cross-document cell notifications for the length of this pass, so
+		// they fire from endPass() below, after the arena is disabled, rather than
+		// synchronously mid-dispatch from inside it. See GlobalVariableStore.
+		sharedGlobalVariableStore.beginPass();
 		try {
 			// Re-seed running-total accumulators before the from-line-1 pass. A
 			// `total += 5` line reads its own running value, so re-running it in
@@ -371,6 +375,11 @@ export class ThreeTierEvaluator {
 			// Phase 5.3: Always disable arena, even on exception.
 			// Prevents arena Values from leaking into subsequent evaluations or tests.
 			disableValueArena();
+
+			// Flush the staged cell notifications now the arena is closed, on the
+			// exception path too. Listeners (a document's dirty marking, an async
+			// read's first-write promise) run here, outside the arena window.
+			sharedGlobalVariableStore.endPass();
 		}
 	}
 
@@ -560,6 +569,10 @@ export class ThreeTierEvaluator {
 
 		// ── Phase 5.3: Enable arena for zero-allocation Tier 2 execution ──
 		enableValueArena();
+		// The viewport pass writes cells too (a Tier-2 line can carry a
+		// STORE_GLOBAL_VAR), so it stages notifications and flushes them once the
+		// arena is closed, exactly as the from-line-1 pass in evaluate() does.
+		sharedGlobalVariableStore.beginPass();
 		try {
 			// ── Evaluate only visible lines ──
 			const result = this.collectEvalResults(viewport.startLine, viewport.endLine);
@@ -571,6 +584,10 @@ export class ThreeTierEvaluator {
 			// Phase 5.3: Always disable arena, even on exception.
 			// Prevents cross-test contamination from arena leaks.
 			disableValueArena();
+
+			// Flush staged cell notifications outside the arena, exception path
+			// included. See the from-line-1 pass in evaluate().
+			sharedGlobalVariableStore.endPass();
 		}
 	}
 

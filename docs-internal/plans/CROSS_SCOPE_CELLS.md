@@ -2,7 +2,9 @@
 
 > Written 2026-09-21, from a multi-agent audit of the global-variable subsystem and two rounds of
 > competing designs. Supersedes nothing; this subsystem has never had a written design.
-> **Status: SPECIFIED. Release A shipped (PRs #490 to #493), Releases B onwards not started.**
+> **Status: SPECIFIED. Release A shipped (PRs #490 to #493). Release B shipped: the scope seams
+> (a per-engine anonymous `ScopeId`, carried on `LineExecutionContext`) and the buffered
+> notification, no observable behaviour change. Releases C onwards not started.**
 > Release A depended on nothing in this design, which is why it went first.
 
 ## Why this exists
@@ -237,7 +239,7 @@ the host form is additive.** Neither is labelled a fallback.
 | Release | Contents | Breaking |
 | --- | --- | --- |
 | **A** — 2.38.x patch | The independent defects below. No design decision, no API change. Shipped: PRs #490-#493. | No |
-| **B** — 2.39.0 | Internal seams only: scope and cells on `LineExecutionContext`, per-engine anonymous scope, staging structures. No observable behaviour change. | No |
+| **B** — a patch on 2.39.x | Internal seams only, **shipped**: a per-engine anonymous `ScopeId` on `EngineContext`, `scope` on `LineExecutionContext` set at every context site (the per-pass context, the goal-seek probe, the async re-execution literal), and the buffered notification (a pass stages its cell notifications and replays them, in order, once it leaves the value arena). The store's `values` Map stays realm-wide and bare-name keyed and its writes stay eager, so read-your-writes and cross-document sharing are unchanged; only the notification timing moves. No observable behaviour change. Scoped write-staging into the two-level Map is Release D, not this. | No |
 | **C** — folds into 3.0.0 | Cell retraction, intra-scope only. | Yes, user-visibly |
 | **D** — 3.0.0 | `GlobalVariableStore` becomes `Workspace`. `sharedGlobalVariableStore` export removed. | Yes, the major |
 | **E** — 3.0.0 or 3.1.0 | Cross-scope cycles: ledger, generation gate, refusal-on-commit. | Additive API |
