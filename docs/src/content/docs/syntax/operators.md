@@ -30,6 +30,18 @@ is 2^9. Everything else groups from the left, so `10-3-2` is `(10-3)-2`.
 (2^3)^2 // 64
 ```
 
+A minus sign at the front of a number belongs to the number, so it is applied
+before a power: `-2^2` is `(-2)^2`, which is 4. That is how a spreadsheet reads
+it, and not how a maths textbook does, where `-2^2` is `-(2^2)`, which is -4.
+Neither reading is wrong, so write the brackets whenever it matters. A minus
+between two numbers is subtraction and waits for the power as usual.
+
+```solve
+-2^2 // 4
+-(2^2) // -4
+0 - 2^2 // -4
+```
+
 ## Operators in words
 
 Most operators have a word form, which is often how a line reads more naturally.

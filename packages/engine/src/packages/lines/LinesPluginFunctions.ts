@@ -200,6 +200,11 @@ function aggregateAbove(context: LineExecutionContext, isAverage: boolean): Valu
     // A check line is a statement about the column, not one of its values,
     // passed or failed alike (#506).
     if (isCheckResult(v)) continue;
+    // A subtotal above is a summary of figures already in the column, not
+    // another figure: `10`, `total above`, `5`, `total above` is 15, not the
+    // 25 that counted the first total as well (#551). The same test the
+    // section totals use, so the two forms agree about one note.
+    if (isSummaryLine(context.getLineText?.(n) ?? "")) continue;
     const err = checkLineValue(v, n);
     if (err) return err;
     if (v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
@@ -328,11 +333,10 @@ function sectionAmbiguous(matches: readonly PlacedHeading[]): Value {
 /**
  * {@link checkLineValue} for a line inside a section, with one reading added.
  *
- * The batch pass leaves a line that failed (a sentence of prose, a slip) with
- * no result at all, where the incremental pass holds an error Value for it.
- * Every line above this one has already run in either pass, so a line above
- * with nothing to read is one that failed, and is reported as the incremental
- * pass reports it. Below this line, nothing has run yet.
+ * Every line above this one has already run, so a line above with nothing to
+ * read is one that gave no figure, such as prose the note does not evaluate,
+ * and is reported as a line with an error rather than as one not reached yet.
+ * Below this line, nothing has run yet.
  */
 function checkSectionMember(v: Value | undefined, lineNumber: number, lineIndex: number): Value | null {
   if (v === undefined && lineNumber < lineIndex) {

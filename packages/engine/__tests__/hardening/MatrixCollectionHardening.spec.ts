@@ -722,8 +722,10 @@ describe("cross-line references", () => {
 		const document = evaluateDocument(["10", "20", "30", "sum above", "average above"]);
 		expect(document.getLineAt(4)!.result!.toNumber()).toBe(60);
 		// The average is over the three numeric lines above it, not over the four
-		// lines above it including the sum: 60/3, not 120/4.
-		expect(document.getLineAt(5)!.result!.toNumber()).toBeCloseTo(30, 9);
+		// lines above it including the sum: 60/3, not 120/4. The assertion used
+		// to pin 30, the 120/4 this comment rules out, until a subtotal was left
+		// out of an above aggregate (#551).
+		expect(document.getLineAt(5)!.result!.toNumber()).toBeCloseTo(20, 9);
 	});
 
 	test("a blank line bounds what above reaches", () => {
