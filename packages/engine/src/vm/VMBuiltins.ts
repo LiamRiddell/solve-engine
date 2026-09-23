@@ -1,4 +1,4 @@
-import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, splitValue, type MatrixData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, boolValue, hexValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, splitValue, type MatrixData } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
@@ -28,7 +28,8 @@ import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/f
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { isPhysicalTimeRate, quantityAtRateSeconds, convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { raiseQuantity, rootQuantity, unitPowerUnsupported } from "@solve-js/vm/QuantityPowers";
-import { exactIntegerArithmetic, exactIntegerValue, exactGcdOrLcm, wholeNumberUnchanged, baseConversionOperand } from "@solve-js/vm/ExactIntegers";
+import { exactIntegerArithmetic, exactIntegerValue, exactGcdOrLcm, wholeNumberUnchanged, baseConversionOperand, exactIntegerOf } from "@solve-js/vm/ExactIntegers";
+import { isPrime, nextPrime, modPow, modInverse, factorInteger, formatFactorisation, FACTOR_LIMIT } from "@solve-js/vm/NumberTheory";
 
 /**
  * A duration in seconds, shown in the largest whole time unit that keeps the
@@ -361,6 +362,38 @@ function roundToSignificant(source: Value, figures: number): Value {
  */
 export function drawRandom(context?: LineExecutionContext): number {
     return context?.random?.() ?? Math.random();
+}
+
+/**
+ * A number theory function's whole-number argument, as an exact integer, or the
+ * Error that refuses it. A value past 2^53 is read at its exact digits.
+ *
+ * @param name - The function, for the message.
+ * @param value - The argument.
+ */
+function wholeArgument(name: string, value: Value | undefined): bigint | Value {
+    const n = value === undefined ? null : exactIntegerOf(value, false);
+    if (n === null) return errorValue("NUMBER_THEORY_EXPECTED_INTEGER", `${name} works on whole numbers`);
+    return n;
+}
+
+/**
+ * factor() of a plain number: its prime factorisation as text, `2^3 * 3^2 * 5`,
+ * which evaluates back to the number. A number past 2^64 is refused rather than
+ * left to run, since factoring is the one step here whose cost grows faster than
+ * the number's length.
+ */
+function factorWholeNumber(value: Value): Value {
+    const n = exactIntegerOf(value, false);
+    if (n === null) return errorValue("NUMBER_THEORY_EXPECTED_INTEGER", "factor of a number works on whole numbers");
+    if (n === 0n) return errorValue("NUMBER_THEORY_DOMAIN", "0 has no prime factorisation: every prime divides it.");
+    const magnitude = n < 0n ? -n : n;
+    if (magnitude > FACTOR_LIMIT) {
+        return errorValue("FACTOR_TOO_LARGE", `factor works on whole numbers up to 2^64 (18,446,744,073,709,551,616); ${n} is larger.`);
+    }
+    if (magnitude === 1n) return stringValue(`${n}`);
+    const text = formatFactorisation(factorInteger(magnitude));
+    return stringValue(n < 0n ? `-1 * ${text}` : text);
 }
 
 /** Carry `source`'s unit onto `magnitude` and stamp its display precision (and exact decimal, when the rounding was exact). */
@@ -1088,6 +1121,9 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // correct answer over that field rather than a failure; see symbolic/Factor.ts.
     68: (args) => {
         const [value] = args;
+        // A whole number factors into primes (#514): factor(360) is
+        // 2^3 * 3^2 * 5, written so it reads back as input.
+        if (value.type === ValueType.Number) return factorWholeNumber(value);
         if (value.type !== ValueType.Symbolic) return value;
         return symbolicToValue(factorSymbolic(value.value as SymbolicNode));
     },
@@ -1544,6 +1580,44 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
             return errorValue("WEIGHTED_AVERAGE_ZERO_WEIGHT", "weighted average: the weights sum to zero, so there is nothing to divide by");
         }
         return numberValue(weightedSum / weightTotal);
+    },
+    // Number theory (#514), over exact integers; see vm/NumberTheory.ts.
+    // isprime(n): true or false.
+    109: (args) => {
+        const n = wholeArgument("isprime", args[0]);
+        if (n instanceof Value) return n;
+        return boolValue(isPrime(n));
+    },
+    // nextprime(n): the smallest prime greater than n.
+    110: (args) => {
+        const n = wholeArgument("nextprime", args[0]);
+        if (n instanceof Value) return n;
+        return exactIntegerValue(nextPrime(n));
+    },
+    // modpow(b, e, m): b to the power e, modulo m, without building b^e.
+    111: (args) => {
+        const b = wholeArgument("modpow", args[0]);
+        if (b instanceof Value) return b;
+        const e = wholeArgument("modpow", args[1]);
+        if (e instanceof Value) return e;
+        const m = wholeArgument("modpow", args[2]);
+        if (m instanceof Value) return m;
+        if (e < 0n) return errorValue("NUMBER_THEORY_DOMAIN", "modpow needs an exponent of 0 or more; for a negative power, take modinv first.");
+        if (m < 1n) return errorValue("NUMBER_THEORY_DOMAIN", "modpow needs a modulus of 1 or more.");
+        return exactIntegerValue(modPow(b, e, m));
+    },
+    // modinv(a, m): the x with a * x leaving remainder 1 on division by m.
+    112: (args) => {
+        const a = wholeArgument("modinv", args[0]);
+        if (a instanceof Value) return a;
+        const m = wholeArgument("modinv", args[1]);
+        if (m instanceof Value) return m;
+        if (m < 2n) return errorValue("NUMBER_THEORY_DOMAIN", "modinv needs a modulus of 2 or more.");
+        const inverse = modInverse(a, m);
+        if (inverse === undefined) {
+            return errorValue("NUMBER_THEORY_NO_INVERSE", `${a} has no inverse modulo ${m}: they share a factor, so no multiple of ${a} leaves remainder 1.`);
+        }
+        return exactIntegerValue(inverse);
     },
 };
 

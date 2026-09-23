@@ -73,7 +73,12 @@ describe("verbs compose with the rest of the language", () => {
 
 	test("a verb applied to a concrete value still evaluates numerically", () => {
 		expect(evaluate("expand(2+3)")).toBe("= 5");
-		expect(evaluate("factor(12)")).toBe("= 12");
+	});
+
+	test("factor of a whole number is its prime factorisation (#514)", () => {
+		// It used to hand the number back unchanged, 12, since factor() only
+		// knew polynomials.
+		expect(evaluate("factor(12)")).toBe("= 2^2 * 3");
 	});
 });
 

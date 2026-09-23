@@ -250,6 +250,7 @@ export default defineConfig({
               items: [
                 { slug: "syntax/numerals" },
                 { slug: "syntax/big-integers" },
+                { slug: "syntax/number-theory" },
                 { slug: "syntax/complex" },
                 { slug: "syntax/constants" },
               ],

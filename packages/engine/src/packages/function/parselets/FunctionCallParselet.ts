@@ -35,6 +35,9 @@ export const builtinNameToIndex: Record<string, number> = {
   // 37 is "roll" (dice), emitted directly by the Dice package, not routed
   // through this name map.
   gcd: 38, lcm: 39, permutation: 40, combination: 41,
+  // The other names combination goes by, and the number theory functions (#514).
+  ncr: 41, nCr: 41, binomial: 41,
+  isprime: 109, nextprime: 110, modpow: 111, powmod: 111, modinv: 112,
   // 42-46 (average/median/total/count/proportion) are emitted directly by
   // the MathPhrases package's own phrase parselets, not routed through
   // this name map either.

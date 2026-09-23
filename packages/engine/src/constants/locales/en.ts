@@ -50,6 +50,9 @@ export const enLocale: ILocale = {
     pow: "FUNC", random: "FUNC", sign: "FUNC", trunc: "FUNC",
     degtorad: "FUNC", radtodeg: "FUNC",
     gcd: "FUNC", lcm: "FUNC", permutation: "FUNC", combination: "FUNC",
+    // Number theory (#514), and the other names combination goes by.
+    isprime: "FUNC", nextprime: "FUNC", modpow: "FUNC", powmod: "FUNC", modinv: "FUNC",
+    ncr: "FUNC", nCr: "FUNC", binomial: "FUNC",
     // hex/bin double as CONVERTER_NAME below ("255 as hex") AND as FUNC
     // call-syntax ("hex(255)"), a word can only have one lexer token
     // type, so these win FUNC (removed from the CONVERTER_NAME list

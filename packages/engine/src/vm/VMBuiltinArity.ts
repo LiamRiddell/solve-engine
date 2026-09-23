@@ -160,6 +160,11 @@ const BUILTIN_ARITY: Record<number, BuiltinArity> = {
   // Not reachable by name, only through `<value> to <n> sf`; see
   // converters/parselets/RoundingParselets.ts.
   108: { name: "roundToSignificant", min: 2, max: 2 },
+  // Number theory (#514).
+  109: { name: "isprime", min: 1, max: 1 },
+  110: { name: "nextprime", min: 1, max: 1 },
+  111: { name: "modpow", min: 3, max: 3 },
+  112: { name: "modinv", min: 2, max: 2 },
 };
 
 /** "1 argument" / "2 arguments", so the message reads as English either way. */
