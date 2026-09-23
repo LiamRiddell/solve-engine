@@ -273,6 +273,14 @@ function roundToSignificant(source: Value, figures: number): Value {
     return withPlaces(source, rounded, 0);
 }
 
+/**
+ * A number in [0, 1) from the line's random source, or from `Math.random` when
+ * the line has none (see LineExecutionContext.random).
+ */
+export function drawRandom(context?: LineExecutionContext): number {
+    return context?.random?.() ?? Math.random();
+}
+
 /** Carry `source`'s unit onto `magnitude` and stamp its display precision (and exact decimal, when the rounding was exact). */
 function withPlaces(source: Value, magnitude: number, places: number, exact?: DecimalData): Value {
     const result = source.type === ValueType.Uom && source.unit !== undefined ? uomValue(magnitude, source.unit) : numberValue(magnitude);
@@ -405,7 +413,7 @@ function termInYears(value: Value): number | Value {
  * Registry of built-in mathematical functions.
  * Indexed by the number pushed as an operand of OpCode.CALL_BUILTIN.
  */
-export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
+export const builtinFunctions: Record<number, (args: Value[], context?: LineExecutionContext) => Value> = {
     // ── Populated below ──
     // sqrt: a negative argument has a complex answer now that there is a complex
     // number to give, so this no longer quietly returns NaN. The exact path runs
@@ -503,7 +511,7 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
         ? numberValue(raised)
         : exactIntegerArithmetic(args[0], args[1], raised, "pow");
     },
-    32: () => numberValue(Math.random()), // takes no arguments, unlike its neighbours
+    32: (_args, context) => numberValue(drawRandom(context)), // takes no arguments, unlike its neighbours
     33: (args) => numberValue(Math.sign(args[0].toNumber())),
     34: (args) => wholeNumberUnchanged(args[0], false) ?? numberValue(Math.trunc(args[0].toNumber())),
     35: (args) => numberValue(args[0].toNumber() * Math.PI / 180),
@@ -513,13 +521,13 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // [to, from] via a negative-length Math.random() spread (e.g.
     // "roll(6, 1)" returning values like 2-5, never 1 or 6) instead of
     // erroring on the invalid input.
-    37: (args) => {
+    37: (args, context) => {
         const from = args[0].toNumber();
         const to = args[1].toNumber();
         if (from > to) {
             return errorValue("INVALID_RANGE", `roll: invalid range, ${from} is greater than ${to}`);
         }
-        return numberValue(Math.floor(Math.random() * (to - from + 1)) + from);
+        return numberValue(Math.floor(drawRandom(context) * (to - from + 1)) + from);
     },
     // gcd(a, b), Euclidean algorithm. Negative inputs are treated by
     // magnitude (gcd is conventionally defined over non-negative integers).

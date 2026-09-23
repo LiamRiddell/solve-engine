@@ -324,6 +324,17 @@ export interface LineExecutionContext {
      */
     calendar?: CalendarBackend;
     /**
+     * The random source this line draws from, a number in [0, 1) per call, the
+     * way `calendar` is the clock. `roll`, `random()`, `pick`, `shuffle`,
+     * `coin` and `uuid` all read it. Unseeded it is `Math.random`; with a seed
+     * (`createEngine({ random: { seed } })` or a `random seed` line) it is a
+     * stream keyed on the seed and this line's own compiled program, so a draw
+     * is the same on every run and changes only when its line is edited.
+     * Absent means `Math.random`. A function rather than a value because the
+     * context object is reused across a pass (see {@link lineIndex}).
+     */
+    random?: () => number;
+    /**
      * The scope this line executes under: the owner of a `global :name` cell it
      * writes. Absent on a path with no engine context of its own (a warm-up run,
      * the worker, a lone `evaluateExpression`); the cell opcodes fall back to the
@@ -3038,7 +3049,9 @@ export function executeBytecode(
             // The algebra verbs are the exception: they exist to take an
             // expression containing unknowns, so they run their own handler.
             const routeSymbolically = sawSymbolic && !SYMBOLIC_NATIVE_BUILTINS.has(fnIdx);
-            stack.push(routeSymbolically ? symbolicBuiltin(fnIdx, ordered) : fn(ordered));
+            // The line context goes through for the few builtins that draw
+            // randomness from it (`random()`, `roll`); every other ignores it.
+            stack.push(routeSymbolically ? symbolicBuiltin(fnIdx, ordered) : fn(ordered, context));
           } else {
             // The arguments are gone and nothing replaced them, which used to
             // leave the next opcode reading a neighbour's operand as its own.

@@ -206,6 +206,7 @@ export function startWorkerRuntime(transport: WorkerTransport, options: WorkerRu
 				config: message.config,
 				packages,
 				calendar: options.calendar,
+				random: message.random,
 			});
 			// The display reads the same backend the engine computes with, so a
 			// date in a DTO names the day it was computed on; the main side's

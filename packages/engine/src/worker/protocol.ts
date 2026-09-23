@@ -38,6 +38,8 @@ export interface InitMessage {
 	packages?: string[];
 	/** Formatting settings the runtime uses when it renders a DTO's display text. */
 	formatting?: FormattingSettings;
+	/** A seed for reproducible random draws, as the engine's own `random` option. */
+	random?: { seed: number | string };
 }
 
 /** Invoke one proxied method. `args` positionally matches the method's own signature. */
