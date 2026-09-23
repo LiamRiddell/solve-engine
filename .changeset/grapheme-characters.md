@@ -20,4 +20,4 @@ The boundary: the characters are grapheme clusters as the runtime's `Intl.Segmen
 
 ## Verification
 
-New tests pin each count and reversal above, and a separate suite removes `Intl.Segmenter` to pin the code-point fallback. The text operations page gains proven examples. `npm run verify:ci` passes: TESTS tests across SUITES suites.
+New tests pin each count and reversal above, and a separate suite removes `Intl.Segmenter` to pin the code-point fallback. The text operations page gains proven examples. `npm run verify:ci` passes: 9,745 tests across 493 suites, with the bundled-consumer contract.

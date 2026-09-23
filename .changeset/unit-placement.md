@@ -27,4 +27,4 @@ The boundary: the same unit twice (`5 kg kg`, `$5 USD`) is let through, since it
 
 ## Verification
 
-A new suite pins every form above, the powers and conversions that are unchanged, the currency codes and labels, and the temperature-scale spellings. The unit arithmetic page gains sections on a unit after a power and on two units side by side, and the currency page on codes after a symbol, with proven examples. `npm run verify:ci` passes: TESTS tests across SUITES suites.
+A new suite pins every form above, the powers and conversions that are unchanged, the currency codes and labels, and the temperature-scale spellings. The unit arithmetic page gains sections on a unit after a power and on two units side by side, and the currency page on codes after a symbol, with proven examples. `npm run verify:ci` passes: 9,745 tests across 493 suites, with the bundled-consumer contract.

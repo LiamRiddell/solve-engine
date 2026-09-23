@@ -20,4 +20,4 @@ The boundary: this is about position, not about which names are defined. A unit-
 
 ## Verification
 
-A new suite pins the reported document and its neighbours, and every rate, speed and acceleration form that still fuses after a value. The variables page gains a proven `solve-doc` example. `npm run verify:ci` passes: TESTS tests across SUITES suites.
+A new suite pins the reported document and its neighbours, and every rate, speed and acceleration form that still fuses after a value. The variables page gains a proven `solve-doc` example. `npm run verify:ci` passes: 9,745 tests across 493 suites, with the bundled-consumer contract.

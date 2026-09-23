@@ -24,4 +24,4 @@ The boundary: a bracketed list is refused rather than expanded into its members,
 
 ## Verification
 
-A new suite pins the reported document, every aggregate's refusal, the named kinds and hints, the forms that still answer, and `min`/`max` over dates. The statistics and number-functions pages gain the refusals and the date answer as proven examples. An A/B run of 3,863 expressions against the previous build differed only on random functions. `npm run verify:ci` passes: TESTS tests across SUITES suites.
+A new suite pins the reported document, every aggregate's refusal, the named kinds and hints, the forms that still answer, and `min`/`max` over dates. The statistics and number-functions pages gain the refusals and the date answer as proven examples. An A/B run of 3,863 expressions against the previous build differed only on random functions. `npm run verify:ci` passes: 9,745 tests across 493 suites, with the bundled-consumer contract.
