@@ -4,15 +4,55 @@
  * wraps each of these to read a String value and hand back a Value, so the
  * logic here is trivially unit-testable on its own.
  *
- * Every operation is Unicode-aware where it counts: character and reversal work
- * on code points (via the string iterator), so a character outside the Basic
- * Multilingual Plane, an emoji say, counts as one character and reverses as one
- * unit rather than being split into its two surrogate halves.
+ * Every operation is Unicode-aware where it counts: character counting and
+ * reversal work on grapheme clusters, the characters a reader sees. A thumbs-up
+ * with a skin tone, a flag, or a letter with a combining accent is one
+ * character, where counting code points made the skin-toned thumbs-up two and
+ * reversing it split the tone off onto its own.
  */
 
-/** The number of characters, counted as code points rather than UTF-16 units. */
+/**
+ * The part of `Intl.Segmenter` this module uses. The engine compiles against
+ * the ES2020 library, which predates the segmenter's types, so the shape is
+ * declared here rather than widening the library for one call.
+ */
+interface GraphemeSegmenter {
+	segment(text: string): Iterable<{ segment: string }>;
+}
+
+/** How a runtime's `Intl.Segmenter` is constructed, for the one granularity used here. */
+type GraphemeSegmenterConstructor = new (locale: string | undefined, options: { granularity: "grapheme" }) => GraphemeSegmenter;
+
+/** The shared segmenter: undefined until first asked for, null in a runtime that has none. */
+let sharedSegmenter: GraphemeSegmenter | null | undefined;
+
+/**
+ * The runtime's grapheme segmenter, built on first use rather than at import,
+ * so loading the text package stays free of side effects. Null where
+ * `Intl.Segmenter` does not exist, and the callers fall back to code points.
+ */
+function graphemeSegmenter(): GraphemeSegmenter | null {
+	if (sharedSegmenter === undefined) {
+		const Segmenter = (Intl as unknown as { Segmenter?: GraphemeSegmenterConstructor }).Segmenter;
+		sharedSegmenter = typeof Segmenter === "function" ? new Segmenter(undefined, { granularity: "grapheme" }) : null;
+	}
+	return sharedSegmenter;
+}
+
+/**
+ * The characters of `text` as a reader sees them: grapheme clusters, or code
+ * points in a runtime without `Intl.Segmenter`, which still keeps an emoji's two
+ * surrogate halves together.
+ */
+function characters(text: string): string[] {
+	const segmenter = graphemeSegmenter();
+	if (segmenter === null) return [...text];
+	return Array.from(segmenter.segment(text), (part) => part.segment);
+}
+
+/** The number of characters, counted as grapheme clusters: `"👍🏽"` is 1. */
 export function textLength(text: string): number {
-	return [...text].length;
+	return characters(text).length;
 }
 
 /** Remove leading and trailing whitespace. */
@@ -20,9 +60,9 @@ export function textTrim(text: string): string {
 	return text.trim();
 }
 
-/** The characters in reverse order, code point by code point. */
+/** The characters in reverse order, each grapheme cluster kept whole. */
 export function textReverse(text: string): string {
-	return [...text].reverse().join("");
+	return characters(text).reverse().join("");
 }
 
 /** Whether `needle` appears anywhere in `text`. */
