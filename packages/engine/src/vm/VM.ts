@@ -23,6 +23,7 @@ import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import type { ScopeId } from "@solve-js/vm/CellScope";
+import { raiseQuantity, unitPowerUnsupported } from "@solve-js/vm/QuantityPowers";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
@@ -2396,6 +2397,19 @@ export function executeBytecode(
           // Value.toNumber() reports 0 for a symbolic value.
           if (l.type === ValueType.Symbolic || r.type === ValueType.Symbolic) {
             stack.push(symbolicPow(l, r));
+            break;
+          }
+          // A quantity raised to a power: `(3 m)^2`, or `a^2` where `a` holds a
+          // length. Falling through dropped the unit and answered the bare
+          // number, so `(3 m)^2` was 9 rather than 9 m2. A power written on a
+          // unit literal (`5 m^2`) never reaches here: UomLiteralParselet takes
+          // it onto the unit at parse time, where it means five square metres.
+          // See vm/QuantityPowers.ts for what has a unit and what is refused.
+          if (l.type === ValueType.Uom && l.unit !== undefined) {
+            const numericExponent = r.type === ValueType.Number || r.type === ValueType.BigInt;
+            stack.push(numericExponent
+              ? raiseQuantity(l, r.toNumber())
+              : unitPowerUnsupported(l.unit, r.unit !== undefined ? `${r.toNumber()} ${r.unit}` : ValueType[r.type].toLowerCase()));
             break;
           }
           // A bigint operand raised to a whole power has an exact answer, and

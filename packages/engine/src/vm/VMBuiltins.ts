@@ -27,6 +27,7 @@ import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/Engi
 import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/finance/data/CpiTable";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { isPhysicalTimeRate, quantityAtRateSeconds, convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
+import { raiseQuantity, rootQuantity, unitPowerUnsupported } from "@solve-js/vm/QuantityPowers";
 
 /**
  * A duration in seconds, shown in the largest whole time unit that keeps the
@@ -332,6 +333,9 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // number to give, so this no longer quietly returns NaN. The exact path runs
     // first, so sqrt(-4) is 2i rather than an approximation.
     0: (args) => {
+        // An area's square root is a length (`sqrt(16 m2)` is 4 m); any other
+        // quantity's is refused, rather than answered without its unit.
+        if (args[0].type === ValueType.Uom && args[0].unit !== undefined) return rootQuantity(args[0], 2, "sqrt");
         const value = args[0].toNumber();
         if (value >= 0) return numberValue(Math.sqrt(value));
         return symbolicToValue(callNode("sqrt", [constNode(value)]));
@@ -368,7 +372,12 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     18: (args) => numberValue(Math.asinh(args[0].toNumber())),
     19: (args) => numberValue(Math.acosh(args[0].toNumber())),
     20: (args) => numberValue(Math.atanh(args[0].toNumber())),
-    21: (args) => numberValue(Math.cbrt(args[0].toNumber())),
+    // cbrt: a volume's cube root is a length (`cbrt(27 m3)` is 3 m), the same
+    // rule as sqrt for an area.
+    21: (args) => {
+        if (args[0].type === ValueType.Uom && args[0].unit !== undefined) return rootQuantity(args[0], 3, "cbrt");
+        return numberValue(Math.cbrt(args[0].toNumber()));
+    },
     22: (args) => numberValue(Math.clz32(args[0].toNumber())),
     23: (args) => numberValue(Math.expm1(args[0].toNumber())),
     24: (args) => numberValue(Math.exp(args[0].toNumber())),
@@ -396,6 +405,11 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
       }
       if (args[1].type === ValueType.Matrix) {
         return errorValue("MATRIX_POWER_UNSUPPORTED", `pow: a matrix may only be the base, as in "pow([1,2;3,4], 2)".`);
+      }
+      // A quantity base answers what `^` answers for it: `pow(3 m, 2)` is 9 m2.
+      if (args[0].type === ValueType.Uom && args[0].unit !== undefined) {
+        const numericExponent = args[1].type === ValueType.Number || args[1].type === ValueType.BigInt;
+        return numericExponent ? raiseQuantity(args[0], args[1].toNumber()) : unitPowerUnsupported(args[0].unit, ValueType[args[1].type].toLowerCase());
       }
       // The spelled-out form of `^` answers what `^` answers, edge cases
       // included. See power() in vm/VMConversion.ts.
@@ -775,6 +789,12 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // other builtin here.
     61: (args) => {
         const n = args[0].toNumber();
+        // A quantity has a root with a unit only for an area (n = 2) or a
+        // volume (n = 3); see sqrt and cbrt above.
+        if (args[1].type === ValueType.Uom && args[1].unit !== undefined) {
+            if (n === 2 || n === 3) return rootQuantity(args[1], n, "root");
+            return errorValue("UNIT_ROOT_UNSUPPORTED", `root: a quantity in ${args[1].unit} has no ${n}th root with a unit; only an area or a volume has a length as its root.`);
+        }
         const x = args[1].toNumber();
         return numberValue(power(x, 1 / n));
     },
@@ -820,6 +840,10 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // special-case doc comment for why this must stay exact).
     65: (args) => {
         if (args[0].type === ValueType.Matrix) return inverse(args[0].value as MatrixData);
+        // `(5 m)^-1` reaches here through the `^-1` suffix rule. A reciprocal
+        // length has no unit the engine can name, so it is refused rather than
+        // answered as the bare 0.2.
+        if (args[0].type === ValueType.Uom && args[0].unit !== undefined) return unitPowerUnsupported(args[0].unit, "-1");
         return numberValue(1 / args[0].toNumber());
     },
     // dot(a, b), matrix product / scalar-broadcast, the SAME dispatch as

@@ -425,12 +425,14 @@ describe("Mixed arithmetic: BODMAS precedence with mixed types", () => {
     expect(evalNum("50% of ($200 + $100)")).toBe(150);
   });
 
-  test("$100 ^ 2", () => {
-    expect(evalNum("$100 ^ 2")).toBe(10000);
+  // A power or root of an amount of money has no unit, so both are refused by
+  // name rather than answered as the bare 10,000 and 10 they used to give (#525).
+  test("$100 ^ 2 is refused: money squared has no unit", () => {
+    expect(String(evalFull("$100 ^ 2").value)).toBe("UNIT_POWER_UNSUPPORTED");
   });
 
-  test("sqrt($100)", () => {
-    expect(evalNum("sqrt($100)")).toBeCloseTo(10);
+  test("sqrt($100) is refused: money has no square root with a unit", () => {
+    expect(String(evalFull("sqrt($100)").value)).toBe("UNIT_ROOT_UNSUPPORTED");
   });
 
   test("$10 + $20 * 3 + $5", () => {
@@ -509,8 +511,12 @@ describe("Mixed arithmetic: nested expressions", () => {
     expect(evalNum("(£200 - £50) * (1 + 10%)")).toBeCloseTo(165, 0);
   });
 
-  test("sqrt(pow($3, 2) + pow($4, 2))", () => {
-    expect(evalNum("sqrt(pow($3, 2) + pow($4, 2))")).toBe(5);
+  // The refusal of `pow($3, 2)` travels through the sum and the root, so the
+  // line reports why rather than answering the bare 5 it used to give (#525).
+  test("sqrt(pow($3, 2) + pow($4, 2)) is refused: the inner power of money has no unit", () => {
+    const value = evalFull("sqrt(pow($3, 2) + pow($4, 2))");
+    expect(value.type).toBe(ValueType.Error);
+    expect(String(value.value)).toBe("UNIT_POWER_UNSUPPORTED");
   });
 
   test("50% of $1000 + 25% of $400", () => {
