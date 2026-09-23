@@ -14,11 +14,11 @@ A mistyped variable, function or unit used to be reported bare, `Undefined varia
 | `sine(1)` | Undefined function: sine | Undefined function: sine. Did you mean sin, sind or sinh? |
 | `5 km in mies` | Cannot convert km to mies: they do not measure the same thing | "mies" is not a unit. Did you mean miles? |
 
-The candidates come from the engine's own vocabulary: the builtin functions, the note's own functions and variables, and every unit spelling, so a package's units are suggested without the package doing anything. Closeness is the edit distance with adjacent transpositions, compared without case, allowing one edit for a short word, two for a medium one and three past eight letters. Names equally close are all listed, up to three.
+The candidates come from the engine's own vocabulary: the builtin functions, the note's own functions and variables, and every unit spelling, so a package's units are suggested without the package doing anything. Closeness is the edit distance with adjacent transpositions, compared without case, allowing one edit up to five letters, two up to nine and three beyond. Names equally close are all listed, up to three.
 
 For a host, the candidates travel on the thrown `EngineError` as `suggestion` (a comma-separated list) and `context.didYouMean` (an array), ready for a one-click fix; a document line carries the sentence in its error text. A target that is not a unit comes back as an `UNKNOWN_UNIT` error value.
 
-The boundary: a word of one or two letters gets no suggestion, since nearly every short word is one edit from a unit symbol, and four or more equally close names get none, since listing them all would not help. The suggestion does not yet carry a source span; a host locates the named word in the line.
+The boundary: a short word gets no suggestion, since the unit table holds thousands of short spellings and nearly every short word is an edit or two from one of them. The floor is three letters for a function name, so `sqr` still finds `sqrt`, and four for a variable, whose candidates include every unit. Four or more equally close names get none, since listing them all would not help. The suggestion does not yet carry a source span; a host locates the named word in the line.
 
 ## Verification
 

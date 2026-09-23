@@ -9,10 +9,12 @@
  *
  * Closeness is the optimal string alignment distance (Levenshtein with
  * adjacent transpositions, so `teh` is one step from `the`), compared without
- * case so `KM` finds `km`. The allowance grows with the word: one edit for a
- * short word, two for a medium one, three past eight letters. A word of one or
- * two letters gets no suggestion at all, since nearly every short word is one
- * edit from a unit symbol and the list would be noise.
+ * case so `KM` finds `km`. The allowance grows with the word: one edit up to
+ * five letters, two up to nine, three beyond. A short word gets no suggestion at
+ * all, since the unit table holds thousands of short spellings and nearly every
+ * short word is an edit or two from one of them: a caller sets how short, three
+ * letters for a function name (`sqr` finds `sqrt`) and four for a variable,
+ * whose candidates include every unit.
  */
 
 /** The most names a suggestion lists; more ties than this and none is offered. */
@@ -20,8 +22,8 @@ const MAX_SUGGESTIONS = 3;
 
 /** How many edits a word of this length may be from a suggestion. */
 function allowance(length: number): number {
-	if (length <= 4) return 1;
-	if (length <= 8) return 2;
+	if (length <= 5) return 1;
+	if (length <= 9) return 2;
 	return 3;
 }
 
@@ -56,9 +58,10 @@ function editDistance(a: string, b: string, limit: number): number {
  *
  * @param word - The unknown word as written.
  * @param candidates - Every name the reader could have meant.
+ * @param minLength - The shortest word that gets a suggestion; 3 by default.
  */
-export function nearestNames(word: string, candidates: Iterable<string>): string[] {
-	if (word.length < 3) return [];
+export function nearestNames(word: string, candidates: Iterable<string>, minLength = 3): string[] {
+	if (word.length < minLength) return [];
 	const target = word.toLowerCase();
 	const limit = allowance(word.length);
 	let best = limit + 1;

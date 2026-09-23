@@ -3188,7 +3188,7 @@ export function executeBytecode(
           } else {
             // Name the nearest variables and units, never silently use one;
             // see errors/DidYouMean.ts.
-            const nearNames = nearestNames(varName, variableNameCandidates(vm));
+            const nearNames = nearestNames(varName, variableNameCandidates(vm), 4);
             throw ErrorFactory.execution({
               code: "UNDEFINED_VARIABLE",
               message: `Undefined variable: ${varName}${nearNames.length === 0 ? "" : `.${didYouMeanSentence(nearNames)}`}`,
