@@ -185,15 +185,16 @@ describe("VM — binaryOp fallback paths", () => {
     expect(unwrapEvalResult(result).unit).toBe("m");
   });
 
-  test("ADD Number + String (falls through to numeric conversion)", () => {
+  test("ADD Number + String is refused, not read as a number", () => {
     const vm = freshVM();
-    // PUSH_STRING r, PUSH_NUMBER l — stack bottom to top: [Number, String]
+    // PUSH_STRING r, PUSH_NUMBER l, stack bottom to top: [Number, String]
     // ADD pops: r=String("5"), l=Number(10)
     pushValues(vm, numberValue(10), stringValue("5"));
     const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
-    // binaryOp final fallback: both toNumber() → 10 + 5 = 15
-    expect(unwrapEvalResult(result).type).toBe(ValueType.Number);
-    expect(unwrapEvalResult(result).toNumber()).toBe(15);
+    // binaryOp refuses text in arithmetic by name (issue #549); it used to
+    // read "5" through parseFloat and answer 15.
+    expect(unwrapEvalResult(result).type).toBe(ValueType.Error);
+    expect(unwrapEvalResult(result).errorCode).toBe("TEXT_ARITHMETIC");
   });
 
   // ── SUB: mixed-type fallback ────────────────────────────────────────

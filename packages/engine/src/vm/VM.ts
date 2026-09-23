@@ -19,7 +19,7 @@ import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/Di
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, compareRationalOperands, uncertainOp, toleranceSpread } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind } from "@solve-js/vm/VMConversion";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
@@ -3530,7 +3530,17 @@ export function executeBytecode(
             // registration would overwrite it.
             stack.push(datetimeInZone(left, toUnit, vm));
           } else {
-            stack.push(uomValue(left.toNumber(), toUnit));
+            // A value with no single amount, a list, a piece of text, a
+            // colour, read as the zero `toNumber()` reports for it and came
+            // back labelled with the unit: `(1, 2) in miles` answered `0.00
+            // miles`. Refused by name, as an aggregate refuses it. Issue #547.
+            const kind = nonNumericKind(left);
+            stack.push(kind === undefined
+              ? uomValue(left.toNumber(), toUnit)
+              : errorValue(
+                "CONVERT_NON_NUMERIC",
+                `${kind[0].toUpperCase()}${kind.slice(1)} has no single amount to convert to ${toUnit}: only a number or a quantity can be converted.`,
+              ));
           }
           break;
         }
@@ -3776,6 +3786,20 @@ export function executeBytecode(
           for (let i = count - 1; i >= 0; i--) {
             const cellVal = safePop(stack);
             if (cellFault === null) cellFault = faultedOperand(cellVal);
+            // A cell with no numeric reading was the same silent zero: a pair
+            // inside a list, `[(1, 2), 3]`, answered `[0, 3]`, and a date
+            // became its epoch milliseconds. A cell holds one number, so the
+            // literal is refused by name. An unknown stays, it is a formula
+            // cell. Issue #546.
+            const kind = cellVal.type === ValueType.Symbolic ? undefined : nonNumericKind(cellVal);
+            if (cellFault === null && kind !== undefined) {
+              cellFault = errorValue(
+                "MATRIX_CELL_NON_NUMERIC",
+                cellVal.type === ValueType.Matrix
+                  ? "A list cannot hold a list inside it: each cell holds one number. Write the values side by side, as in [1, 2, 3]."
+                  : `${kind[0].toUpperCase()}${kind.slice(1)} cannot be a cell of a list: each cell holds one number.`,
+              );
+            }
             rowMajor[i] = cellVal.type === ValueType.Boolean ? (cellVal.value as boolean)
               : cellVal.type === ValueType.Symbolic ? (cellVal.value as SymbolicNodeType)
               : cellVal.toNumber();

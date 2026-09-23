@@ -64,6 +64,18 @@ const NON_NUMERIC_KINDS: Partial<Record<ValueType, string>> = {
 };
 
 /**
+ * How a reader would name a value with no numeric reading ("text", "a
+ * bracketed list"), or undefined when the value reads as a number honestly.
+ * The same set {@link nonNumericOperand} refuses in an aggregate, for the other
+ * places that must not take the accidental reading: a conversion, a list cell.
+ *
+ * @param v - The value to name.
+ */
+export function nonNumericKind(v: Value): string | undefined {
+    return NON_NUMERIC_KINDS[v.type];
+}
+
+/**
  * Refuses an aggregate's operand that has no numeric reading, or null when
  * every operand has one.
  *
@@ -747,6 +759,20 @@ export function binaryOp(
     if (r.type === ValueType.Error) return r;
     if (l.type === ValueType.Pending) return l;
     if (r.type === ValueType.Pending) return r;
+
+    // Text in arithmetic. `toNumber()` reads text through `parseFloat`, so a
+    // quoted time plus a number, `"11:00 PM" + 2`, answered 13 and `"hello" +
+    // 5` answered 5: the text's leading digits, or 0, passed off as its value.
+    // Text joins to text in ADD before this point; everything else that
+    // reaches here with text on either side is refused by name. Issue #549.
+    if (l.type === ValueType.String || r.type === ValueType.String) {
+        return errorValue(
+            "TEXT_ARITHMETIC",
+            symbolicOp === "add"
+                ? `Text and a number cannot be added: + joins text only to other text. Write the number without quotes to add it.`
+                : "Text cannot be used in arithmetic: only numbers and quantities can. Write the number without quotes.",
+        );
+    }
 
     // Symbolic dispatch, either operand carries a free-variable formula.
     // Builds the corresponding SymbolicNode (the non-symbolic side, if

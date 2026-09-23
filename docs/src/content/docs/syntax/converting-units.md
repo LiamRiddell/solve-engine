@@ -26,6 +26,36 @@ rather than guessed. The message names the dimensions rather than the units, so
 different dimensions is refused the same way: `5 kg + 3 m` reports *mass and
 length cannot be added*.
 
+Only a number or a quantity has an amount to convert. A bracketed list or a
+piece of text does not, so converting one is refused rather than answered as
+zero of the unit:
+
+```solve-doc
+(1, 2) in miles // ERROR: A bracketed list has no single amount to convert to miles: only a number or a quantity can be converted.
+```
+
+## Units written in more than one word
+
+Some units are named in two or three words, or with a hyphen: a nautical mile, a
+square foot, a cubic metre, an imperial gallon, a light-year. Each reads as the
+one unit it names, after an amount or after the conversion word.
+
+```solve
+5 km in nautical miles // 2.70 nautical miles
+1 nautical mile in km // 1.85 km
+5 cubic metres in litres // 5,000.00 litres
+3 imperial gallons in litres // 13.64 litres
+10 US fluid ounces in ml // 295.74 ml
+2 troy ounces in g // 62.21 g
+```
+
+The spellings are the unit table's own, so nothing is guessed at: the words are
+separated the way the table writes them, one space, or a hyphen in
+`light-years`, and a spelling the table does not carry stays unread. The one
+allowance is a plural. A few table entries have only the singular (`troy ounce`,
+`watt-hour`), and the plural a reader writes reads as that unit. A symbol takes
+no plural, so `kW h` is the kilowatt-hour and `kW hs` is not a unit.
+
 ## Temperatures, with or without the degree sign
 
 `°C` and `°F` read as the units they obviously are, which is what a phone

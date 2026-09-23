@@ -147,7 +147,10 @@ describe("the operations with no answer say so", () => {
 		// relabelled it UNEXPECTED_ERROR/INTERNAL, so a user dividing by zero
 		// was told the engine had broken. A fuzz run found it as a leaked
 		// internal error.
-		for (const source of ["10n / 0n", "10n mod 0n", "10n / 0", '3n / ""']) {
+		// The divisor that reads as zero is written as arithmetic: an empty
+		// string used to be one, and text in arithmetic is now refused as text
+		// (issue #549).
+		for (const source of ["10n / 0n", "10n mod 0n", "10n / 0", "10n / (0 * 1)"]) {
 			const error = errorFrom(source);
 			expect(error.code).toBe("BIGINT_DIVISION_BY_ZERO");
 			expect(error.recoverable).toBe(true);
@@ -180,9 +183,10 @@ describe("the operations with no answer say so", () => {
 
 	test("an infinity or a NaN is refused the same way", () => {
 		// Reached through arithmetic rather than typed directly, which is how
-		// the fuzzer found it: `9 / ""` is Infinity, and Infinity has no
-		// whole-number form either.
-		expect(errorFrom('9 / "" / 6n').code).toBe("BIGINT_INEXACT_OPERAND");
+		// the fuzzer found it (as `9 / ""`, before text in arithmetic was
+		// refused): an overflow is Infinity, and Infinity has no whole-number
+		// form either.
+		expect(errorFrom("(1e308 * 10) / 6n").code).toBe("BIGINT_INEXACT_OPERAND");
 		expect(errorFrom("(0/0) + 1n").code).toBe("BIGINT_INEXACT_OPERAND");
 	});
 });

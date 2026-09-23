@@ -24,10 +24,21 @@ A plus joins text to text, end to end.
 "hello" + " world" // hello world
 ```
 
-The two sides must both be text to join. `"a" + "b"` is `ab`; when one side is a
-number the `+` is arithmetic, not a join, and the text is read as a number, so
-`"5" + 5` is `10` and `"hello" + 5` is `5` (the non-numeric text reads as `0`).
-Keep both sides quoted for a text join.
+The two sides must both be text to join. When one side is a number there is no
+answer the engine could give honestly: `"5" + 5` could mean 10 or `55`, and a
+time written as text, `"11:00 PM"`, is not a number of hours to add 2 to. So
+arithmetic with text on either side is refused by name, for `-`, `*` and `/` as
+well as `+`.
+
+```solve-doc
+"11:00 PM" + 2 // ERROR: Text and a number cannot be added: + joins text only to other text. Write the number without quotes to add it.
+"5" * 2 // ERROR: Text cannot be used in arithmetic: only numbers and quantities can. Write the number without quotes.
+```
+
+To add, write the number without quotes; to join, quote both sides. Earlier
+versions read the text as a number instead, its leading digits or 0, so
+`"11:00 PM" + 2` answered 13, which is why it is now an error rather than a
+guess.
 
 ## Measuring text
 

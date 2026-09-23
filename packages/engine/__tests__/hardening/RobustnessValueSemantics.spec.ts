@@ -16,8 +16,9 @@
  * the behaviour the rest of the file argues the remaining types should match.
  *
  * Booleans and strings never got the same treatment, and they reach that
- * fallback. `true + 1` and `false + 1` both answer 1. `"abc" + 1` answers 1
- * too. Those are written below as `test.failing` with the truthful
+ * fallback. `true + 1` and `false + 1` both answer 1. `"abc" + 1` answered 1
+ * too, until text in arithmetic was refused by name (issue #549). The gaps
+ * still open are written below as `test.failing` with the truthful
  * expectation rather than pinned, for the reason the file header of
  * `ArithmeticBigInt.spec.ts` gives about its own gap: writing the current
  * answer down as expected would be writing down the bug.
@@ -130,24 +131,20 @@ describe("a string operand", () => {
 		expect(evaluate("\"5\"").value).toBe("5");
 	});
 
-	test.failing("is not silently worth zero in arithmetic", () => {
-		// The truthful expectation, failing today. Same fallback as the boolean
-		// case, reached for a different reason: `parseFloat` of a string that
-		// starts with a quote is NaN whatever the digits after it say, so every
-		// string weighs nothing.
-		//
-		//   "a" + "b"   = 0    (a plain Number 0, not a string and not an error)
-		//   "abc" + 1   = 1
-		//   "3" * "4"   = 0
-		//   "5" + 5     = 5
-		//
-		// The last one is the clearest: a reader who writes it means either 10
-		// or "55", and 5 is neither. Concatenation is not the claim being made
-		// here, only that arithmetic on a string must not answer as though the
-		// string were absent.
+	test("is not silently worth zero in arithmetic", () => {
+		// Arithmetic on text used to read the text through `parseFloat`, so
+		// `"abc" + 1` answered 1 and `"5" + 5` answered 10 or 5 depending on
+		// the payload's shape. A reader who writes the last one means either 10
+		// or "55", and neither reading is the engine's to guess. Text joins to
+		// text; every other arithmetic with text on either side is refused by
+		// name (issue #549).
 		const engine = newTrackedEngine();
-		const sum = engine.evaluateExpression("\"abc\" + 1");
-		expect(sum.type).not.toBe(ValueType.Number);
+		for (const source of ["\"abc\" + 1", "\"5\" + 5", "\"3\" * \"4\"", "1 - \"2\""]) {
+			const value = engine.evaluateExpression(source);
+			expect(value.type).toBe(ValueType.Error);
+			expect(value.errorCode).toBe("TEXT_ARITHMETIC");
+		}
+		expect(engine.evaluateExpression("\"a\" + \"b\"").value).toBe("ab");
 	});
 
 	test("and a string that never closes is not accepted as a string", () => {
