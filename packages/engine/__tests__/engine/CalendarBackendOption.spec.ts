@@ -54,9 +54,11 @@ describe("the context carries the backend", () => {
 		const other = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		expect(engine.getVM().context.calendar).toBe(calendar);
 		expect(other.getVM().context.calendar).toBe(DATE_CALENDAR);
-		// The pinned clock belongs to the first engine only.
+		// The pinned clock belongs to the first engine only; the default backend
+		// reads the real run clock, so `other`'s `today` sits on the current day
+		// (within a day of now) rather than merely differing from the pinned instant.
 		expect(engine.evaluateExpression("today").toNumber()).toBe(FIXED_NOW);
-		expect(other.evaluateExpression("today").toNumber()).not.toBe(FIXED_NOW);
+		expect(Math.abs(other.evaluateExpression("today").toNumber() - Date.now())).toBeLessThan(25 * 60 * 60 * 1000);
 		other.clear();
 	});
 
