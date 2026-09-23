@@ -153,7 +153,9 @@ describe("<unit> until/since <Datetime>", () => {
     const result = parseAndExecute("hours until tomorrow");
     expect(result.type).toBe(ValueType.Uom);
     expect(result.unit).toBe("hours");
-    expect(result.value as number).toBeCloseTo(24, 0);
+    // 24 hours, but 23 or 25 when the day ahead crosses a daylight-saving boundary.
+    expect(result.value as number).toBeGreaterThanOrEqual(22.9);
+    expect(result.value as number).toBeLessThanOrEqual(25.1);
   });
 
   test("days until yesterday is negative (target is in the past)", () => {
