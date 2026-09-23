@@ -11,8 +11,9 @@ page, which covers `roll`, a random integer in a range; these are the
 general-purpose pickers.
 
 Because each answer is drawn fresh, the results below change every time the line
-runs. Edit one and watch it re-roll, that is the point, so unlike the rest of the
-documentation these examples show no fixed answer.
+runs. Edit one and watch it re-roll, that is the point, so these examples show no
+fixed answer. A seed makes them repeatable; see
+[the same draws every time](#the-same-draws-every-time) below.
 
 ## A unique identifier
 
@@ -49,6 +50,35 @@ shuffle [1, 2, 3, 4, 5]
 ```solve
 coin
 ```
+
+## The same draws every time
+
+A random draw that changes on every run cannot be checked, shared or written
+down. A **seed** fixes that: it is a starting value for the generator, and the
+same seed always produces the same draws, on every run and every machine. Write
+`random seed` and any number or word as a line anywhere in the note, and every
+draw in the note becomes repeatable.
+
+```solve-doc
+random seed 42
+uuid // 3735de41-7ba2-430d-8b81-afba841149a5
+random hex 8 // 8fc405d9
+pick("north", "south", "east", "west") // north
+shuffle [1, 2, 3, 4, 5] // [2, 1, 5, 3, 4]
+coin // tails
+```
+
+Each line draws from its own stream, worked out from the seed and from what the
+line says, so a draw changes only when its own line is edited or the seed
+changes. Adding or editing other lines leaves it where it was, and two lines
+written the same way still draw separately. Change the seed to get a different,
+equally repeatable set. A program embedding the engine can seed it the same way
+with `createEngine({ random: { seed: 42 } })`; a `random seed` line in the note
+takes precedence.
+
+The boundary: a seed makes draws repeatable, not secret. The generator is built
+to look random to a reader, not to resist someone trying to predict it, so a
+seeded `uuid` or `random hex` is not suitable as a password or a security token.
 
 ## Notes
 

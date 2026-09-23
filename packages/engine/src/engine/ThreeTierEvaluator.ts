@@ -286,6 +286,13 @@ export class ThreeTierEvaluator {
 		// are canceled when the user types a new keystroke.
 		this.engine.setKeystrokeSignal(signal ?? null);
 
+		// ── The document's random seed ────────────────────────────────
+		// Read before any line runs, as a batch pass does, so a `random seed`
+		// line seeds the whole document. When the seed in force changes, the
+		// lines that drew under the old one are marked dirty so they draw again;
+		// their cached results are keyed on text, which the seed is not part of.
+		this.reseedFromDocument();
+
 		// ── Phase 5.3: Enable arena for zero-allocation Value reuse ──
 		enableValueArena();
 		// Stage cross-document cell notifications for the length of this pass, so
@@ -478,6 +485,24 @@ export class ThreeTierEvaluator {
 		if (this.globalUnsubscribe) {
 			this.globalUnsubscribe();
 			this.globalUnsubscribe = null;
+		}
+	}
+
+	/**
+	 * Put the document's `random seed` line in force on the engine, and mark
+	 * dirty every line whose cached draw came from a different seed. The scan
+	 * checks each line for the word before trying the pattern, so a document
+	 * with no seed line pays one substring test per line.
+	 */
+	private reseedFromDocument(): void {
+		const texts: string[] = [];
+		for (let n = 1; n <= this.doc.lineCount; n++) {
+			const text = this.doc.getLineAt(n)?.text ?? "";
+			texts.push(text.includes("seed") ? text : "");
+		}
+		for (const line of this.engine.applyDocumentRandomSeed(texts)) {
+			const state = this.doc.getLineAt(line);
+			if (state) this.doc.markDirty(state.lineId);
 		}
 	}
 

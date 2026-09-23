@@ -78,6 +78,7 @@ const ROUND_BUILTIN = 8;
 const CEIL_BUILTIN = 6;
 const FLOOR_BUILTIN = 7;
 const ROUND_TO_PLACES_BUILTIN = 97;
+const ROUND_TO_SIGNIFICANT_BUILTIN = 108;
 
 /** Reads an optional `up`/`down` immediately after `rounded`. */
 function readDirection(parser: Parser): Direction {
@@ -185,6 +186,35 @@ export class DecimalPlacesParselet implements InfixParselet {
 		builder.emitNumber(places);
 		builder.emitOpcode(OpCode.CALL_BUILTIN);
 		builder.emitIndex(ROUND_TO_PLACES_BUILTIN);
+		builder.emitIndex(2);
+	}
+}
+
+/**
+ * `<value> to <n> sf` and its spellings, rounding to significant figures.
+ *
+ * The figure count rides on the token the same way the place count does for
+ * `to <n> dp` (see decimalPlacesNormalizerRule), and for the same reason: "to"
+ * is already an infix operator. The rounding is a builtin, since where the
+ * figures start depends on the value's magnitude, which only the VM knows. See
+ * VMBuiltins.ts's roundToSignificant().
+ */
+export class SignificantFiguresParselet implements InfixParselet {
+	readonly category = "Converters";
+	readonly bindingPower = BindingPower.Conditional;
+
+	parse(_parser: Parser, _left: Token, token: Token, builder: BytecodeBuilder): void {
+		const figures = Number(token.value);
+		if (!Number.isInteger(figures) || figures < 1 || figures > 17) {
+			throw ErrorFactory.parsing(
+				"INVALID_SIGNIFICANT_FIGURES",
+				`"to ${token.value} sf": expected a whole number of significant figures between 1 and 17`,
+			);
+		}
+		builder.emitOpcode(OpCode.PUSH_NUMBER);
+		builder.emitNumber(figures);
+		builder.emitOpcode(OpCode.CALL_BUILTIN);
+		builder.emitIndex(ROUND_TO_SIGNIFICANT_BUILTIN);
 		builder.emitIndex(2);
 	}
 }

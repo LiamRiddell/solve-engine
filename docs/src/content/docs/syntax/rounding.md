@@ -31,6 +31,24 @@ so a half at the last place goes up rather than down.
 round(2.675, 2) // 2.68
 ```
 
+## Significant figures
+
+Significant figures count from the first digit that is not zero, which is how a
+measured value is reported: a reading of 0.0012345 known to two figures is
+0.0012, and a population of 1,234,567 to three figures is 1,230,000. `to N sf`
+rounds to that many figures, and shows a trailing zero that is one of them, as
+`to N dp` does. `sig figs` and `significant figures` are the long spellings.
+
+```solve
+1234567 to 3 sf // 1,230,000
+0.0012345 to 2 sf // 0.0012
+2.5 to 3 sf // 2.50
+9.99 to 2 sf // 10
+5.678 km to 2 sf // 5.7 km
+```
+
+The figure count runs from 1 to 17, the most a double carries.
+
 Rounding to a magnitude reads the way it is said. `rounded` with no target is the
 nearest whole; `up` and `down` force the direction; `to nearest <n>` rounds to a
 multiple, and the round magnitude words (`ten`, `hundred`, `thousand`, …) stand

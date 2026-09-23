@@ -1,3 +1,4 @@
+import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 
@@ -5,6 +6,30 @@ const PLACE_WORDS = new Set(["dp", "dps", "decimals", "digits", "digit"]);
 
 /** Two-word spellings whose first word alone means nothing here. */
 const PLACE_PHRASES = new Set(["decimal"]);
+
+/** The one-word spellings of significant figures. */
+const FIGURE_WORDS = new Set(["sf", "s.f.", "sigfigs", "sigfig"]);
+
+/** The first words of the two-word spellings, and the second words each takes. */
+const FIGURE_PHRASES: Readonly<Record<string, ReadonlySet<string>>> = {
+	sig: new Set(["figs", "fig", "figures", "figure"]),
+	significant: new Set(["figures", "figure", "figs", "fig", "digits", "digit"]),
+};
+
+/**
+ * How many tokens from `at` spell "significant figures", or 0 when they do not.
+ *
+ * @param tokens - The line's tokens.
+ * @param at - The index of the word after the count.
+ */
+function significantFiguresLength(tokens: readonly Token[], at: number): number {
+	const first = (tokens[at]?.text ?? tokens[at]?.value ?? "").toLowerCase();
+	if (FIGURE_WORDS.has(first)) return 1;
+	const seconds = FIGURE_PHRASES[first];
+	if (seconds === undefined) return 0;
+	const second = (tokens[at + 1]?.text ?? tokens[at + 1]?.value ?? "").toLowerCase();
+	return seconds.has(second) ? 2 : 0;
+}
 
 /**
  * Fuses `to <n> dp` into one token carrying the place count.
@@ -20,7 +45,9 @@ const PLACE_PHRASES = new Set(["decimal"]);
  * and "to" keeps its one meaning. The place count rides on the fused token's
  * value, which is what `sourceEnd` exists for (see Token.ts).
  *
- * Accepted spellings: `dp`, `dps`, `d.p.`, `decimal place(s)`, and `digits`.
+ * Accepted spellings: `dp`, `dps`, `d.p.`, `decimal place(s)`, and `digits`;
+ * and, fused to their own `SIG_FIGS` token, `sf`, `sig fig(s)` and
+ * `significant figures` (or digits) for significant figures.
  * "digits" is included because Soulver documents `π to 5 digits` as 3.14159,
  * which is five decimal places rather than five significant figures.
  */
@@ -40,6 +67,20 @@ export function decimalPlacesNormalizerRule(priority = 66): NormalizerRule {
 			const unitToken = tokens[pos + 2];
 			if (!unitToken) return null;
 			const word = (unitToken.text ?? unitToken.value ?? "").toLowerCase();
+
+			// Significant figures: `to 3 sf`, `to 3 sig figs`, `to 3 significant
+			// figures` (or digits). Fused to their own token, since the figures
+			// count from the first non-zero digit rather than the decimal point.
+			const figures = significantFiguresLength(tokens, pos + 2);
+			if (figures > 0) {
+				return {
+					consumed: 2 + figures,
+					replacement: [
+						createFusedToken("SIG_FIGS", count.value, tokens.slice(pos, pos + 2 + figures)),
+					],
+					ruleName: "converters:decimal-places",
+				};
+			}
 
 			// "to 2 decimal places" is four tokens; the rest are three.
 			let consumed = 3;

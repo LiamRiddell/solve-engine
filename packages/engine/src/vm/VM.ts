@@ -14,7 +14,8 @@ import { CoreErrorCodes, DatetimeErrorCodes } from "@solve-js/errors/ErrorCode";
 import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@solve-js/vm/BusinessDays";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
 import { builtinFunctions, asConverterRegistry } from "@solve-js/vm/VMBuiltins";
-import { builtinArityError } from "@solve-js/vm/VMBuiltinArity";
+import { builtinArityError, builtinFunctionNames } from "@solve-js/vm/VMBuiltinArity";
+import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/DidYouMean";
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
@@ -184,6 +185,7 @@ export function createVM(
         }
         return variables.get(key);
       },
+      getVariableNames(limit: number) { return variables.size > limit ? undefined : variables.keys(); },
       setVar(key: string, val: Value) { variables.set(key, val); },
       deleteVar(key: string) { variables.delete(key); },
       pushCallFrame(frame: Map<string, Value>) {
@@ -321,6 +323,17 @@ export interface LineExecutionContext {
      * `calendar/DateCalendar.ts` resolves either case.
      */
     calendar?: CalendarBackend;
+    /**
+     * The random source this line draws from, a number in [0, 1) per call, the
+     * way `calendar` is the clock. `roll`, `random()`, `pick`, `shuffle`,
+     * `coin` and `uuid` all read it. Unseeded it is `Math.random`; with a seed
+     * (`createEngine({ random: { seed } })` or a `random seed` line) it is a
+     * stream keyed on the seed and this line's own compiled program, so a draw
+     * is the same on every run and changes only when its line is edited.
+     * Absent means `Math.random`. A function rather than a value because the
+     * context object is reused across a pass (see {@link lineIndex}).
+     */
+    random?: () => number;
     /**
      * The scope this line executes under: the owner of a `global :name` cell it
      * writes. Absent on a path with no engine context of its own (a warm-up run,
@@ -1523,6 +1536,14 @@ function datetimeInZone(left: Value, name: string, vm: VM): Value {
 }
 
 function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
+    // A target that is no unit at all is a different mistake from two units
+    // that measure different things, most often a misspelling: `5 km in mies`
+    // said the two did not measure the same thing. Say what it is, and name the
+    // nearest real units (see errors/DidYouMean.ts).
+    if (getMeasure(toUnit) === undefined && !sharedCurrencyExchange.isCurrency(toUnit) && !toUnit.includes("/")) {
+        const near = nearestNames(toUnit, [], 3, unitNameIndex());
+        return errorValue("UNKNOWN_UNIT", `"${toUnit}" is not a unit.${didYouMeanSentence(near)}`);
+    }
     // Name the two dimensions when both are known ("a duration cannot be
     // converted to a length"). A compound rate or an unrecognised currency code
     // has no single dimension to name, so it keeps the unit-naming fallback.
@@ -1562,6 +1583,43 @@ function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
  * untouched, so `2 ^ 100000` is still Infinity, exactly as IEEE 754 says.
  */
 const MAX_EXACT_POW_BITS = 65536;
+
+/**
+ * The variables an undefined variable could have been meant as. The unit
+ * spellings are searched alongside, through {@link unitNameIndex}, since a
+ * misspelt unit reaches the VM as an undefined variable too.
+ */
+function* variableNameCandidates(vm: VM): Generator<string> {
+    // A generator, so a word too short for a suggestion reads nothing at all.
+    const variables = vm.getVariableNames?.(VARIABLE_SUGGESTION_LIMIT);
+    if (variables !== undefined) yield* variables;
+}
+
+/**
+ * The most variables a "did you mean" compares an unknown name against. Past
+ * this the document is generated rather than written, and comparing every
+ * unknown name with every variable made a long document's evaluation grow with
+ * the square of its length; the suggestion then draws on units alone.
+ */
+const VARIABLE_SUGGESTION_LIMIT = 500;
+
+let unitNames: NameIndex | null = null;
+let builtinNames: NameIndex | null = null;
+
+/** Every unit spelling, indexed once on first use rather than read on every unknown name. */
+function unitNameIndex(): NameIndex {
+    return unitNames ??= new NameIndex(Object.keys(UNIT_TABLE));
+}
+
+/** Every builtin function name, indexed once on first use. */
+function builtinNameIndex(): NameIndex {
+    return builtinNames ??= new NameIndex(builtinFunctionNames());
+}
+
+/** The user's own functions, which an undefined function could have been meant as beside the builtins. */
+function functionNameCandidates(vm: VM): string[] {
+    return vm.getUserFunctionDefs().map((fn) => fn.name);
+}
 
 /**
  * `Number.MAX_SAFE_INTEGER`, the edge of the safe range the plain arithmetic
@@ -3014,7 +3072,9 @@ export function executeBytecode(
             // The algebra verbs are the exception: they exist to take an
             // expression containing unknowns, so they run their own handler.
             const routeSymbolically = sawSymbolic && !SYMBOLIC_NATIVE_BUILTINS.has(fnIdx);
-            stack.push(routeSymbolically ? symbolicBuiltin(fnIdx, ordered) : fn(ordered));
+            // The line context goes through for the few builtins that draw
+            // randomness from it (`random()`, `roll`); every other ignores it.
+            stack.push(routeSymbolically ? symbolicBuiltin(fnIdx, ordered) : fn(ordered, context));
           } else {
             // The arguments are gone and nothing replaced them, which used to
             // leave the next opcode reading a neighbour's operand as its own.
@@ -3064,7 +3124,15 @@ export function executeBytecode(
           args.reverse();
           const fn = vm.getUserFunction(name);
           if (!fn) {
-            throw ErrorFactory.execution("UNDEFINED_FUNCTION", `Undefined function: ${name}`, { name });
+            // Name the nearest real functions, never silently call one; see
+            // errors/DidYouMean.ts.
+            const nearFunctions = nearestNames(name, functionNameCandidates(vm), 3, builtinNameIndex());
+            throw ErrorFactory.execution({
+              code: "UNDEFINED_FUNCTION",
+              message: `Undefined function: ${name}${nearFunctions.length === 0 ? "" : `.${didYouMeanSentence(nearFunctions)}`}`,
+              suggestion: nearFunctions.length > 0 ? nearFunctions.join(", ") : undefined,
+              context: { name, didYouMean: nearFunctions },
+            });
           }
           if (argCount !== fn.params.length) {
             throw ErrorFactory.execution(
@@ -3141,11 +3209,15 @@ export function executeBytecode(
           } else if (symbolicTolerant) {
             stack.push(symbolicValue(varSymbolicNode(varName)));
           } else {
-            throw ErrorFactory.execution(
-              "UNDEFINED_VARIABLE",
-              `Undefined variable: ${varName}`,
-              { varName },
-            );
+            // Name the nearest variables and units, never silently use one;
+            // see errors/DidYouMean.ts.
+            const nearNames = nearestNames(varName, variableNameCandidates(vm), 4, unitNameIndex());
+            throw ErrorFactory.execution({
+              code: "UNDEFINED_VARIABLE",
+              message: `Undefined variable: ${varName}${nearNames.length === 0 ? "" : `.${didYouMeanSentence(nearNames)}`}`,
+              suggestion: nearNames.length > 0 ? nearNames.join(", ") : undefined,
+              context: { varName, didYouMean: nearNames },
+            });
           }
           break;
         }

@@ -63,6 +63,7 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	ROUNDED: "keyword",
 	TO_NEAREST: "keyword",
 	DECIMAL_PLACES: "keyword",
+	SIG_FIGS: "keyword",
 	AVERAGE_OF: "keyword",
 	MEDIAN_OF: "keyword",
 	TOTAL_OF: "keyword",

@@ -1,6 +1,6 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { RANDOM_PLUGIN_FUNCTIONS } from "./RandomPluginFunctions";
-import { nullaryRandomParselet, unaryRandomParselet, pickCallParselet } from "./parselets/RandomParselets";
+import { nullaryRandomParselet, unaryRandomParselet, pickCallParselet, randomSeedParselet } from "./parselets/RandomParselets";
 
 /**
  * Everyday randomness and identifiers (issue #241): `uuid`, `coin`,
@@ -16,6 +16,7 @@ export const RANDOM_PACKAGE: IEnginePackage = {
 	name: "solve-random",
 	phrases: {
 		"random hex": "RANDOM_HEX",
+		"random seed": "RANDOM_SEED",
 	},
 	lexerVocabulary: {
 		keywords: {
@@ -28,6 +29,7 @@ export const RANDOM_PACKAGE: IEnginePackage = {
 		UUID: nullaryRandomParselet("randomUuid"),
 		COIN: nullaryRandomParselet("randomCoin"),
 		RANDOM_HEX: unaryRandomParselet("randomHex"),
+		RANDOM_SEED: randomSeedParselet,
 		SHUFFLE: unaryRandomParselet("randomShuffle"),
 		PICK_CALL: pickCallParselet,
 	},
@@ -38,6 +40,7 @@ export const RANDOM_PACKAGE: IEnginePackage = {
 		UUID: "function",
 		COIN: "function",
 		RANDOM_HEX: "function",
+		RANDOM_SEED: "keyword",
 		SHUFFLE: "function",
 		PICK_CALL: "function",
 	},

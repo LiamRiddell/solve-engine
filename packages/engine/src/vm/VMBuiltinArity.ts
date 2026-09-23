@@ -157,6 +157,9 @@ const BUILTIN_ARITY: Record<number, BuiltinArity> = {
   106: { name: "mode", min: 0, max: Infinity },
   // Weighted average, interleaved value/weight pairs (issue #185).
   107: { name: "weightedAverage", min: 2, max: Infinity },
+  // Not reachable by name, only through `<value> to <n> sf`; see
+  // converters/parselets/RoundingParselets.ts.
+  108: { name: "roundToSignificant", min: 2, max: 2 },
 };
 
 /** "1 argument" / "2 arguments", so the message reads as English either way. */
@@ -169,6 +172,14 @@ function expectation(arity: BuiltinArity): string {
   if (arity.max === Infinity) return `at least ${plural(arity.min)}`;
   if (arity.min === arity.max) return plural(arity.min);
   return `${arity.min} to ${plural(arity.max)}`;
+}
+
+/**
+ * The name of every builtin function in the arity table, for the "did you mean"
+ * suggestion an undefined function carries (see errors/DidYouMean.ts).
+ */
+export function builtinFunctionNames(): string[] {
+  return Object.values(BUILTIN_ARITY).map((arity) => arity.name);
 }
 
 /**

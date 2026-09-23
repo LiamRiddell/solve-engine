@@ -100,6 +100,32 @@ value it gets back for everything else.
 This is deliberate. The engine is built to run on half-typed input as someone is
 still writing it, where most lines are briefly invalid on the way to being valid.
 
+A name the engine does not know (a variable, a function) also throws, and when
+it is close to a real one the error carries the nearest candidates, so a host
+can offer a one-click fix. They are in the message as a sentence, in
+`suggestion` as a comma-separated list, and in `context.didYouMean` as an array.
+The engine never applies one itself.
+
+```ts
+import { EngineError } from "solve-engine/errors";
+
+try {
+  engine.evaluateExpression("sqr(16)");
+} catch (error) {
+  if (error instanceof EngineError) {
+    error.code;                // "UNDEFINED_FUNCTION"
+    error.message;             // "Undefined function: sqr. Did you mean sqrt?"
+    error.context?.didYouMean; // ["sqrt"]
+  }
+}
+```
+
+The candidates come from the engine's own vocabulary, so a package's functions
+and units are suggested without the package doing anything: the builtin
+functions, the user's own functions, every unit spelling, and the variables
+defined so far. A target unit that is not a unit at all, as in `5 km in mies`,
+comes back as an `UNKNOWN_UNIT` error value with the same sentence.
+
 ## Evaluating a document
 
 For more than one line, `evaluateLines` takes an array of lines and returns one

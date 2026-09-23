@@ -90,8 +90,6 @@ describe("documented examples evaluate as documented", () => {
     // Pages whose output is not a fixed string, so an asserted example would
     // either be a lie or a flake. Each needs a reason, not just an entry.
     const unprovable = new Map([
-      ["dice.md", "rolls are random, so no output is reproducible"],
-      ["random.md", "uuid, pick, shuffle and coin draw fresh each run, so no output is reproducible"],
       ["weather.md", "conditions come from a live network service"],
       ["stocks.md", "prices come from a host-supplied network provider"],
       ["crypto.md", "prices come from a host-supplied network provider"],

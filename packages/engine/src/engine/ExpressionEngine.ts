@@ -9,6 +9,7 @@ import { Lexer } from "@solve-js/lexer/Lexer";
 import { PrecedenceParser } from "@solve-js/parser/PrecedenceParser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
+import { seededStream, programKey, documentRandomSeed } from "@solve-js/engine/SeededRandom";
 import { createVM, executeBytecode } from "@solve-js/vm/VM";
 import { resolveHolidayPredicate } from "@solve-js/vm/HolidayCalendar";
 import type { EvalResult, LineExecutionContext } from "@solve-js/vm/VM";
@@ -221,6 +222,16 @@ export interface EngineOptions {
      * @default false
      */
     warmup?: boolean;
+
+    /**
+     * Make random draws reproducible. With a seed, `roll`, `pick`, `shuffle`,
+     * `coin`, `uuid` and `random()` answer the same on every run and every
+     * machine, and a line's draw changes only when that line is edited. A
+     * document can name its own seed with a `random seed <value>` line, which
+     * takes precedence over this one. Unseeded (the default), draws come from
+     * `Math.random` as before. See engine/SeededRandom.ts.
+     */
+    random?: { seed: number | string };
 }
 
 //#endregion
@@ -479,6 +490,29 @@ export class ExpressionEngine {
      * misdirect every cross-line read it makes afterwards.
      */
     private lineContext: LineExecutionContext | null = null;
+
+    /** The seed the host gave (`EngineOptions.random` or {@link setRandomSeed}), as text. */
+    private optionRandomSeed: string | undefined;
+
+    /** The seed the current document names with a `random seed` line, as text. */
+    private documentRandomSeed: string | undefined;
+
+    /** The program of the line now executing, whose draws a seeded stream is keyed on. */
+    private randomProgram: BytecodeProgram | null = null;
+
+    /** That line's seeded stream, built on its first draw and dropped when the next line starts. */
+    private randomStream: (() => number) | null = null;
+
+    /** The line now executing, recorded against its draws. */
+    private randomLine = -1;
+
+    /**
+     * The lines that drew randomness when they last ran. A cached result is
+     * keyed on a line's text, so when the seed changes these are the lines whose
+     * cached draw would otherwise outlive it; see {@link applyRandomSeed}.
+     */
+    private linesDrawingRandom = new Set<number>();
+
     private lineContextDoc: DocumentModel | null = null;
     private lineContextScan: ScanLineResult[] | null = null;
     private lineContextParsed: ParsedLine[] | null = null;
@@ -567,6 +601,101 @@ export class ExpressionEngine {
             }
         }
         this.vm.reset();
+    }
+
+    /**
+     * Start a line's random draws afresh: its seeded stream, if there is a
+     * seed, is built from its program on the first draw. Called before every
+     * line's execution, so re-running a line repeats its draws exactly.
+     */
+    private beginLineRandom(program: BytecodeProgram, lineNumber: number): void {
+        this.randomProgram = program;
+        this.randomStream = null;
+        this.randomLine = lineNumber;
+    }
+
+    /** The seed in force: the document's `random seed` line, else the host's, else none. */
+    private effectiveRandomSeed(): string | undefined {
+        return this.documentRandomSeed ?? this.optionRandomSeed;
+    }
+
+    /**
+     * One draw in [0, 1) for the line now executing: `Math.random` when no
+     * seed is in force, otherwise the line's own seeded stream. The line is
+     * recorded as one that draws, so a later change of seed re-runs it.
+     */
+    private drawRandom(): number {
+        if (this.randomLine > 0) this.linesDrawingRandom.add(this.randomLine);
+        const seed = this.effectiveRandomSeed();
+        if (seed === undefined) return Math.random();
+        if (this.randomStream === null) {
+            const key = this.randomProgram === null ? "" : programKey(this.randomProgram);
+            this.randomStream = seededStream(seed, `${key}#${this.identicalLinesAbove(this.randomLine)}`);
+        }
+        return this.randomStream();
+    }
+
+    /**
+     * How many lines above `line` read exactly as it does, so two `roll(1, 6)`
+     * lines draw two rolls rather than one roll twice. Counted from the
+     * document's text, not the order lines happen to run in, so the answer is
+     * the same in a batch pass and an incremental one. Zero outside a document.
+     */
+    private identicalLinesAbove(line: number): number {
+        const text = this.lineContext?.getLineText?.(line)?.trim();
+        if (text === undefined || line <= 1) return 0;
+        let count = 0;
+        for (let n = 1; n < line; n++) {
+            if (this.lineContext?.getLineText?.(n)?.trim() === text) count++;
+        }
+        return count;
+    }
+
+    /**
+     * Drop the cached results of every line that drew randomness, after the seed
+     * changed. A cached result is keyed on the line's text, which the seed is not
+     * part of, so without this a line would keep the draw the old seed gave it.
+     *
+     * @returns The line numbers whose results were dropped, for an incremental
+     * evaluator to mark dirty.
+     */
+    private invalidateRandomLines(): number[] {
+        const lines = [...this.linesDrawingRandom];
+        for (const line of lines) this.lineCache.removeAllForLine(line);
+        this.linesDrawingRandom.clear();
+        return lines;
+    }
+
+    /**
+     * Seed this engine's random draws, or unseed them with `undefined`, from
+     * the host side; the same as the `random` engine option. A document's own
+     * `random seed` line still takes precedence. Lines that already drew are
+     * dropped from the cache when the seed in force changes, so the next pass
+     * draws them again under the new seed.
+     *
+     * @param seed - Any number or text; the same seed always gives the same draws.
+     */
+    setRandomSeed(seed: number | string | undefined): void {
+        const before = this.effectiveRandomSeed();
+        this.optionRandomSeed = seed === undefined ? undefined : String(seed);
+        if (this.effectiveRandomSeed() !== before) this.invalidateRandomLines();
+    }
+
+    /**
+     * Read the seed a document names with a `random seed <value>` line and put
+     * it in force for the pass about to run. Called at the start of every
+     * document pass, before any line runs, so the seed applies to the whole
+     * document wherever the line sits.
+     *
+     * @param lines - The document's lines of text.
+     * @returns The lines whose cached draws were dropped because the seed in
+     * force changed, empty when it did not.
+     * @internal Called by the document passes and the incremental evaluator.
+     */
+    applyDocumentRandomSeed(lines: readonly string[]): number[] {
+        const before = this.effectiveRandomSeed();
+        this.documentRandomSeed = documentRandomSeed(lines);
+        return this.effectiveRandomSeed() === before ? [] : this.invalidateRandomLines();
     }
 
     /**
@@ -712,6 +841,9 @@ export class ExpressionEngine {
             goalSeekMaxIterations: this.config.vm.maxGoalSeekIterations,
             networkEnabled: this.config.network.enabled,
             calendar: this.context.calendar,
+            // Read through the engine on every draw rather than captured, since
+            // this object serves a whole pass and the line it serves changes.
+            random: () => this.drawRandom(),
             // The engine's own scope, constant for its lifetime, so a cell this
             // line writes is owned by it. Set here (and mutated alongside
             // lineIndex in makeLineContext) so both the rebuilt and reused
@@ -1044,6 +1176,7 @@ export class ExpressionEngine {
     constructor(options: EngineOptions = {}) {
         const { locale = "en", diagnostics = false, config, packages, calendar } = options;
         this.localeCode = locale;
+        this.optionRandomSeed = options.random === undefined ? undefined : String(options.random.seed);
         // Per-section merge, not a top-level shallow spread, overriding one
         // field of a section (e.g. `{ performance: { defaultCacheSize: 500 } }`)
         // used to silently replace the WHOLE section, dropping every other
@@ -2062,6 +2195,7 @@ export class ExpressionEngine {
         const unlink = this.armCancellation(program, "executeAndStore");
 
         setActiveQueryClient(this.queryClient);
+        this.beginLineRandom(program, lineNumber);
         const result = executeBytecode(program, this.vm, tracePipeline, traceExpression, this.makeLineContext(lineNumber));
 
         // Single stack cleanup (replaces 10 occurrences)
@@ -2143,6 +2277,7 @@ export class ExpressionEngine {
         const unlink = this.armCancellation(program, "executeRaw");
 
         setActiveQueryClient(this.queryClient);
+        this.beginLineRandom(program, lineNumber);
         const result = executeBytecode(program, this.vm, undefined, undefined, this.makeLineContext(lineNumber));
 
         // Stack cleanup
@@ -2290,6 +2425,9 @@ export class ExpressionEngine {
         // grows on every keystroke. Cleared here, re-seeded by the line's
         // own `+=`/`-=` as the pass replays it. See resetAccumulators.
         this.resetAccumulators();
+        // The document's own random seed, in force before any line runs, so it
+        // applies wherever the seed line sits. See applyDocumentRandomSeed.
+        this.applyDocumentRandomSeed(input.split("\n"));
         // Scan the entire document in a single pass, bypasses the old
         // split('\n') → evaluateLines() → join('\n') → scanDocument()
         // roundtrip. scanDocument() classifies and tokenizes all lines
@@ -2355,6 +2493,8 @@ export class ExpressionEngine {
         // grows on every keystroke. Cleared here, re-seeded by the line's
         // own `+=`/`-=` as the pass replays it. See resetAccumulators.
         this.resetAccumulators();
+        // The document's own random seed, as in parseDocument.
+        this.applyDocumentRandomSeed(lines);
         // Rejoin lines and scan in a single pass, scanDocument() handles
         // classification + tokenization for all lines in one character walk.
         const documentText = lines.join('\n');
@@ -2731,6 +2871,7 @@ export class ExpressionEngine {
      * `LINE_REF_NO_DOCUMENT` a single-expression eval already returns.
      */
     private executeSymbolicTolerant(program: BytecodeProgram, lineNumber: number = -1): Value {
+        this.beginLineRandom(program, lineNumber);
         const result = executeBytecode(program, this.vm, undefined, undefined, this.makeLineContext(lineNumber), true);
         if (result.type === 'error') throw result.error;
         if (result.type === 'pending') {
@@ -3004,8 +3145,10 @@ export class ExpressionEngine {
             createFusedToken('RPAREN', ')', [opTok]),
         ];
 
+        const accumulatorProgram = this.compileAdHoc(accTokens);
+        this.beginLineRandom(accumulatorProgram, lineNumber);
         const result = executeBytecode(
-            this.compileAdHoc(accTokens), this.vm, undefined, undefined, this.makeLineContext(lineNumber), false,
+            accumulatorProgram, this.vm, undefined, undefined, this.makeLineContext(lineNumber), false,
         );
         if (result.type === 'error') throw result.error;
         if (result.type === 'pending') {

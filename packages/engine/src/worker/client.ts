@@ -41,6 +41,8 @@ export interface WorkerEngineOptions {
 	localeCode?: string;
 	/** Whether the worker builds its engine with diagnostics enabled. */
 	diagnostics?: boolean;
+	/** A seed for reproducible random draws, as the engine's own `random` option. */
+	random?: { seed: number | string };
 	/** Config overrides, merged per section over the defaults worker-side. */
 	config?: EngineConfigOverride;
 	/**
@@ -176,6 +178,7 @@ class WorkerEngineClient implements WorkerEngine {
 				config: resolveDateOrderForWorker(options.config),
 				packages: options.packages,
 				formatting: options.formatting,
+				random: options.random,
 			});
 		});
 	}

@@ -51,6 +51,28 @@ enough for the engine to reach for one. `sci` is the short spelling.
 0.25 as sci // 2.5e-1
 ```
 
+`as engineering` (or `as eng`) is scientific notation with the exponent kept to a
+multiple of three, the steps the metric prefixes take: `12.345e+3` is twelve
+thousand and a bit, where scientific notation would write `1.2345e+4`. It is how
+an engineer reads a value straight off as kilo, mega or micro.
+
+`as compact` writes a large figure the way a report headlines it, with a letter
+for the thousands, millions, billions or trillions, rounded to three significant
+figures. The letters are the ones the engine reads back as input, `k`, `M`, `B`
+and `T` (see [number suffixes](/syntax/number-suffixes/)), so `3.3M` typed back
+in is 3,300,000 again.
+
+```solve
+12345 as engineering // 12.345e+3
+0.00012 as eng // 120e-6
+3 million + 10% as compact // 3.3M
+1234 as compact // 1.23k
+$3300000 as compact // $3.3M
+```
+
+Both answer text, the way `as scientific` does, so they end a line rather than
+feed further arithmetic.
+
 And `to N dp` asks for an exact number of decimal places, on a quantity as much
 as on a plain number. It overrides the display rules above in both directions,
 because a line that names its precision has said what it wants.

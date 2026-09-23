@@ -45,6 +45,24 @@ It is the seam for a `Temporal` backend, available at `solve-engine/temporal`
 (`createTemporalCalendar`), that carries a time zone of its own; see
 [one calendar backend](/architecture/design-decisions/#one-calendar-backend-with-date-as-the-default).
 
+`random` does for randomness what `calendar` does for the clock. Unset, `roll`,
+`pick`, `shuffle`, `coin`, `uuid` and `random()` draw from `Math.random`, fresh on
+every run. Given a seed, any number or text, every draw is the same on every run
+and every machine, and a line's draw changes only when that line is edited, which
+is what a test, a snapshot or a shared worked example needs.
+
+```ts
+const engine = createEngine({ random: { seed: 42 } });
+engine.setRandomSeed(7);         // reseed later, or pass undefined to unseed
+```
+
+A document can also seed itself with a `random seed 42` line, which takes
+precedence over the option (see [randomness](/syntax/random/)). When the seed in
+force changes, lines that drew under the old one are dropped from the cache and
+draw again. A worker host passes the same `random` option to its client's
+`init()`. A seeded draw is repeatable, not unpredictable: do not use one for a
+password or a security token.
+
 Safety limits exist because the engine is designed to run on untrusted input as
 someone types. They bound expression length, parse complexity, instruction
 count, stack depth, and how many elements a range or matrix may be expanded to
