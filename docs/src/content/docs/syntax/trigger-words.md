@@ -82,6 +82,18 @@ column * 2 // 10
 `through` is the same: it starts the [banded rates](/syntax/banded-rates/) total
 only in the whole phrase `through bands`.
 
+## `section` and `tag` need the rest of their phrase
+
+`total of section "Travel"` reads the lines under a heading (see
+[sections](/syntax/sections/)) only when a quoted name follows `section`, and
+`total by tag` needs all three of its words. Neither `section` nor `tag` is a
+keyword on its own, so a variable of either name keeps working:
+
+```solve
+:section = 5
+total of section + 1 // 6
+```
+
 ## Labels are preserved
 
 A line starting with a label keeps the label and evaluates the rest.

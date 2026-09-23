@@ -34,12 +34,14 @@ A value that is not a number at all is refused the same way, by every form on
 this page: a piece of text, a date or a clock time, a bracketed list, a colour.
 Each of those used to be read as some number it happened to convert to, most
 often zero, so `total of "Travel"` reported nothing spent. A quoted name is text,
-not a set of lines; to add up a section, tag its lines and total the tag (see
-[category tags](/syntax/category-tags/)). A bracketed list is one value, so write
-its members out with commas instead. `count of` counts anything, text included.
+not a set of lines; to add up the lines under a heading, name it as a section,
+`total of section "Travel"` (see [sections](/syntax/sections/)), or tag the lines
+and total the tag (see [category tags](/syntax/category-tags/)). A bracketed list
+is one value, so write its members out with commas instead. `count of` counts
+anything, text included.
 
 ```solve-doc
-total of "Travel" // ERROR: Text cannot be added: only numbers and quantities can. To gather lines by name, tag them and use "total of #tag".
+total of "Travel" // ERROR: Text cannot be added: only numbers and quantities can. To gather the lines under a heading, write total of section "Travel"; to gather tagged lines, use "total of #tag".
 total of [1, 2, 3] // ERROR: A bracketed list cannot be added: only numbers and quantities can. List the values with commas instead, as in "total of 1, 2, 3".
 total of 1, 2, 3 // 6
 ```
@@ -47,7 +49,8 @@ total of 1, 2, 3 // 6
 The same rule holds wherever a set is named, so a column of money totals to
 money whether the lines are gathered by position with
 [`total above`](/syntax/line-references/), by name with a
-[category tag](/syntax/category-tags/), or by a line range.
+[category tag](/syntax/category-tags/) or a [section](/syntax/sections/), or by
+a line range.
 
 ```solve-doc
 1.2 km

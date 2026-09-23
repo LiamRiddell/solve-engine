@@ -3,10 +3,13 @@ import { PrevParselet } from "./parselets/PrevParselet";
 import { LineRefParselet } from "./parselets/LineRefParselet";
 import { RangeAggregateParselet } from "./parselets/RangeAggregateParselet";
 import { AboveAggregateParselet } from "./parselets/AboveAggregateParselet";
+import { SectionAggregateParselet } from "./parselets/SectionAggregateParselet";
 import { lineRefNormalizerRule, rangeCallNormalizerRule } from "./normalizer/LineRefNormalizerRule";
+import { sectionAggregateNormalizerRule } from "./normalizer/SectionAggregateNormalizerRule";
 import {
   prevHandler, lineRefHandler, sumRangeHandler, averageRangeHandler,
   totalAboveHandler, averageAboveHandler,
+  sectionSumHandler, sectionAverageHandler, sectionCountHandler,
 } from "./LinesPluginFunctions";
 
 /**
@@ -41,6 +44,10 @@ import {
  *   (deliberately NOT Numi/Numbr's bare `total`/`sum` wording, that's
  *   exactly the bare-keyword collision class this codebase already
  *   regressed on once, see `MathPhrasesPackage.ts`'s "total" note).
+ * - "aggregate the block under a named heading", normalizer-fused as
+ *   `total of section "Travel"` (and `sum of`/`average of`/`count of`) only
+ *   when the word `section` and a quoted name both follow, so `section` is
+ *   never a keyword and a variable of that name still reads.
  */
 export const LINES_PACKAGE: IEnginePackage = {
   name: "solve-lines",
@@ -52,7 +59,7 @@ export const LINES_PACKAGE: IEnginePackage = {
     "sum above": "SUM_ABOVE",
     "average above": "AVERAGE_ABOVE",
   },
-  normalizerRules: [lineRefNormalizerRule(), rangeCallNormalizerRule()],
+  normalizerRules: [lineRefNormalizerRule(), rangeCallNormalizerRule(), sectionAggregateNormalizerRule()],
   prefixParselets: {
     PREV: new PrevParselet(),
     LINE_REF: new LineRefParselet(),
@@ -61,6 +68,9 @@ export const LINES_PACKAGE: IEnginePackage = {
     TOTAL_ABOVE: new AboveAggregateParselet(false),
     SUM_ABOVE: new AboveAggregateParselet(false),
     AVERAGE_ABOVE: new AboveAggregateParselet(true),
+    SECTION_SUM: new SectionAggregateParselet("sectionSum"),
+    SECTION_AVERAGE: new SectionAggregateParselet("sectionAverage"),
+    SECTION_COUNT: new SectionAggregateParselet("sectionCount"),
   },
   pluginFunctions: {
     prev: prevHandler,
@@ -69,5 +79,8 @@ export const LINES_PACKAGE: IEnginePackage = {
     averageRange: averageRangeHandler,
     totalAbove: totalAboveHandler,
     averageAbove: averageAboveHandler,
+    sectionSum: sectionSumHandler,
+    sectionAverage: sectionAverageHandler,
+    sectionCount: sectionCountHandler,
   },
 };

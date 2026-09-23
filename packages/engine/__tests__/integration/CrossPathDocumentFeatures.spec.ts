@@ -1,10 +1,10 @@
 /**
  * The whole-document forms, proven through every entry point that can reach them.
  *
- * Category tags, line references, table columns, table lookups and bands, and
- * goal seek are not ordinary expressions: each reads, or re-runs, other lines,
- * so the answer depends on the entry point the host called. The engine has
- * three, and they do not agree by accident:
+ * Category tags, line references, sections, table columns, table lookups and
+ * bands, and goal seek are not ordinary expressions: each reads, or re-runs,
+ * other lines, so the answer depends on the entry point the host called. The
+ * engine has three, and they do not agree by accident:
  *
  * - `evaluateLine` / `evaluateExpression` — one expression, no document. A
  *   whole-document form has nothing to read here, so the contract is that it
@@ -122,10 +122,81 @@ describe("category tags across entry points", () => {
     expect(incremental(doc)[2]).toBe("2,000");
   });
 
+  test("the breakdown by tag, in both document passes, agrees", () => {
+    const doc = ["$40 #food", "$25 #food", "$30 #transport", "total by tag"];
+    expect(batch(doc)[3]).toBe("food $65.00 (68%) · transport $30.00 (32%)");
+    expect(incremental(doc)).toEqual(batch(doc));
+    const sum = ["$40 #food", "$25 #food", "$30 #transport", "sum by tag"];
+    expect(incremental(sum)).toEqual(batch(sum));
+  });
+
+  test("a breakdown's refusals agree too", () => {
+    const untagged = ["10", "20", "total by tag"];
+    expect(batch(untagged)[2]).toContain("ERROR:");
+    expect(incremental(untagged)).toEqual(batch(untagged));
+    const mixed = ["$40 #food", "5 km #run", "total by tag"];
+    expect(batch(mixed)[2]).toContain("ERROR:");
+    expect(incremental(mixed)).toEqual(batch(mixed));
+  });
+
   test("the single-expression path refuses with a document error", () => {
     expectNeedsDocument("total of #grocery");
     expectNeedsDocument("average of #grocery");
     expectNeedsDocument("count of #grocery");
+    expectNeedsDocument("total by tag");
+    expectNeedsDocument("sum by tag");
+  });
+});
+
+describe("sections across entry points", () => {
+  const budget = [
+    "# Travel",
+    "## Flights",
+    "Outbound: $300",
+    "Return: $150",
+    "## Hotels",
+    "Rome: $220",
+    "Subtotal: total above",
+    "",
+    "# Food",
+    "Groceries: $40",
+    "",
+    "# Summary",
+  ];
+
+  test("total, sum, average and count, in both document passes, agree", () => {
+    const doc = [
+      ...budget,
+      'total of section "Travel"',
+      'sum of section "Flights"',
+      'average of section "Travel"',
+      'count of section "Travel"',
+      'total of section "food"',
+    ];
+    expect(batch(doc).slice(12)).toEqual(["$670.00", "$450.00", "$223.33", "3", "$40.00"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("the refusals agree too: not found, ambiguous, empty, non-numeric, a failed line", () => {
+    const docs = [
+      [...budget, 'total of section "Travle"'],
+      ["## Travel", "$1", "# 2026", "## Travel", "$2", 'total of section "Travel"'],
+      ["# Travel", "# Summary", 'total of section "Travel"'],
+      ["# Travel", "$450", '"booked"', "# Summary", 'total of section "Travel"'],
+      ["# Travel", "Flights are booked for May", "$450", "# Summary", 'total of section "Travel"'],
+    ];
+    for (const doc of docs) {
+      const last = doc.length - 1;
+      expect(batch(doc)[last]).toContain("ERROR:");
+      expect(incremental(doc)).toEqual(batch(doc));
+    }
+  });
+
+  test("the single-expression path refuses with a document error", () => {
+    expectNeedsDocument('total of section "Travel"');
+    expectNeedsDocument('sum of section "Travel"');
+    expectNeedsDocument('average of section "Travel"');
+    expectNeedsDocument('count of section "Travel"');
   });
 });
 

@@ -48,6 +48,10 @@ block rather than the whole document:
 total above   // 100
 ```
 
+To total a block from somewhere else in the note, a summary at the bottom say,
+name its heading instead: `total of section "Travel"` (see
+[sections](/syntax/sections/)).
+
 A `sum(...)` or `average(...)` over an explicit span reads exactly the lines it
 names, so it can reach across a boundary a bare `above` would stop at:
 
@@ -88,10 +92,12 @@ is `8`, because line 2 has an answer of its own once it has been read.
 
 ## Related, document-aware forms
 
-Five other forms read the whole note the same way, each with its own page:
+Six other forms read the whole note the same way, each with its own page:
 
 - [Category tags](/syntax/category-tags/): label a line with `#tag` and total,
-  average or count every line carrying it.
+  average or count every line carrying it, or break the note down by tag.
+- [Sections](/syntax/sections/): total, average or count the figures under a
+  heading, by the heading's name.
 - [Goal seek](/syntax/goal-seek/): solve backwards for the input that makes a
   line reach a target.
 - [Table columns](/syntax/table-columns/): name a markdown table column and

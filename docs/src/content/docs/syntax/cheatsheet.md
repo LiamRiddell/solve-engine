@@ -287,6 +287,21 @@ document, so they are shown rather than asserted. See
 | `sum of #grocery` | a synonym for `total of` |
 | `average of #grocery` | the mean of the tagged lines |
 | `count of #grocery` | how many lines carry the tag |
+| `total by tag` | every tag's total and its share of the whole, as text |
 
 A tag name starts with a letter, keeping it clear of `#c0ffee` and other
 [colour](/syntax/colours/) literals.
+
+## Sections
+
+The lines under a markdown heading, down to the next heading at the same level
+or above, are its section; these add them up by the heading's name, from
+anywhere below the block. They read the whole document, so they are shown
+rather than asserted. See [sections](/syntax/sections/).
+
+| Expression | Meaning |
+| --- | --- |
+| `total of section "Travel"` | the sum of the figures under `# Travel` |
+| `sum of section "Travel"` | a synonym for `total of` |
+| `average of section "Travel"` | the mean of those figures |
+| `count of section "Travel"` | how many figures there are |

@@ -405,6 +405,7 @@ export default defineConfig({
                 { slug: "syntax/variables" },
                 { slug: "syntax/line-references" },
                 { slug: "syntax/category-tags" },
+                { slug: "syntax/sections" },
                 { slug: "syntax/table-columns" },
                 { slug: "syntax/table-lookups" },
                 { slug: "syntax/banded-rates" },

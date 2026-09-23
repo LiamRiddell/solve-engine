@@ -67,7 +67,8 @@ const NON_NUMERIC_KINDS: Partial<Record<ValueType, string>> = {
  * How a reader would name a value with no numeric reading ("text", "a
  * bracketed list"), or undefined when the value reads as a number honestly.
  * The same set {@link nonNumericOperand} refuses in an aggregate, for the other
- * places that must not take the accidental reading: a conversion, a list cell.
+ * places that must not take the accidental reading or that word their own
+ * refusal: a conversion, a list cell, a section total that names the line.
  *
  * @param v - The value to name.
  */
@@ -92,10 +93,11 @@ export function nonNumericOperand(values: readonly Value[], verb: string): Value
         const kind = NON_NUMERIC_KINDS[v.type];
         if (kind === undefined) continue;
         // A quoted name in a total or an average is most likely a section the
-        // reader wanted to add up, which is what a tag does.
-        const tagPhrase = verb === "added" ? "total of #tag" : verb === "averaged" ? "average of #tag" : undefined;
-        const hint = v.type === ValueType.String && tagPhrase !== undefined
-            ? ` To gather lines by name, tag them and use "${tagPhrase}".`
+        // reader wanted to add up: the lines under a heading of that name, or
+        // the lines carrying a tag.
+        const opener = verb === "added" ? "total" : verb === "averaged" ? "average" : undefined;
+        const hint = v.type === ValueType.String && opener !== undefined
+            ? ` To gather the lines under a heading, write ${opener} of section "${String(v.value)}"; to gather tagged lines, use "${opener} of #tag".`
             : v.type === ValueType.Matrix
                 ? ` List the values with commas instead, as in "total of 1, 2, 3".`
                 : "";

@@ -1,6 +1,6 @@
 ---
 title: Category tags
-description: Label lines with a #tag and total, average or count every line carrying it, wherever they sit in the note.
+description: Label lines with a #tag and total, average or count every line carrying it, wherever they sit in the note, or break the whole note down by tag.
 ---
 
 > **Package:** `TAGS_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
@@ -88,6 +88,74 @@ $25 #food
 total of #food   // $65.00
 ```
 
+## Every tag at once
+
+A tagged list is usually kept to answer one question: where did it all go?
+`total by tag` answers it in one line. It gathers every tag in the note and
+gives each one's total and its **share**, the part of the whole that tag makes
+up, as a percentage. The tags appear in the order they are first written.
+
+```solve-doc
+$40 #food
+$25 #food
+$30 #transport
+total by tag   // food $65.00 (68%) · transport $30.00 (32%)
+```
+
+`sum by tag` is a synonym. Each amount is the one `total of #tag` gives for that
+tag, and labels, headings, blank lines and untagged lines are passed over, the
+same as for the single-tag totals:
+
+```solve-doc
+# Budget
+Rent: $1200 #home
+Power: $80 #home
+Train: $60 #transport
+Lunch: $45 #food
+total by tag   // home $1,280.00 (92%) · transport $60.00 (4%) · food $45.00 (3%)
+```
+
+Each share is rounded to a whole percentage on its own, so the shares can add up
+to 99% or 101%, as they do above. A share too small to round to 1% is shown as
+`<1%` rather than as a `0%` that would read as nothing at all:
+
+```solve-doc
+$1000 #rent
+$1 #snack
+total by tag   // rent $1,000.00 (100%) · snack $1.00 (<1%)
+```
+
+The whole is every tagged line counted once; an untagged line is not part of
+it. When each line carries one tag, the shares describe how the whole divides.
+A line carrying two tags counts toward both, so overlapping tags can add up to
+more than 100%, and each share still says what part of the whole that tag
+covers. Here the whole is 61.50, and the first line is both groceries and
+reviewed:
+
+```solve-doc
+40 #grocery #reviewed
+12.50 #grocery
+9 #reviewed
+total by tag   // grocery 52.50 (85%) · reviewed 49 (80%)
+```
+
+The answer is a line of text, not a number: it holds several figures with their
+labels, so it cannot be carried into arithmetic. `total of #food` is the form
+that gives a figure to calculate with. The amounts inside the text are shown the
+way the engine shows them by default; a host's own number formatting, another
+locale's separators for example, is not applied inside it.
+
+A breakdown needs a whole to divide, so each of these is an error rather than a
+line of zeros: a note with no tags, a tagged line that is not a number, tags in
+different measures (money under one, kilometres under another), and tagged lines
+that add up to exactly zero.
+
+```solve-doc
+$40 #food
+5 km #run
+total by tag   // ERROR: money and length cannot be added. A breakdown needs every tagged line in one measure, so the tags share one whole.
+```
+
 ## Boundaries
 
 A few boundaries, each deliberate:
@@ -110,10 +178,6 @@ A few boundaries, each deliberate:
 total of #assuming   // 2,000
 ```
 
-- **One aggregate line per tag per note.** An aggregate line carries the tag it
-  sums, so a second one would try to include the first, and each would wait on
-  the other. The query line always skips itself; a second query is left out of
-  scope rather than guessed at.
 - **A clear error, never a silent figure.** Mixing units under one tag, or
   tagging a line that is not a number then asking for its `total`, is an error
   rather than a guessed number. No tagged lines at all is an error for `total`
@@ -127,3 +191,6 @@ still an ordinary heading or comment.
 Like [line references](/syntax/line-references/), these forms only work inside a
 document, since they read other lines. They return an error through the
 single-expression entry point, which has no document to gather from.
+
+A tag gathers lines wherever they sit. To add up the lines under one heading
+instead, name the heading: see [sections](/syntax/sections/).

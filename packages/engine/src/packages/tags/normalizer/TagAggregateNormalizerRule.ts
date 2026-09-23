@@ -75,6 +75,39 @@ export function tagAggregateNormalizerRule(priority = 80): NormalizerRule {
 }
 
 /**
+ * `total by tag` / `sum by tag`, the breakdown of the whole note by category.
+ * Fuses the three words into one TAG_BREAKDOWN token.
+ *
+ * Collision-safety: all three words must be present, in order. `total` stays an
+ * ordinary word everywhere else (a variable named `total` still reads), `by` is
+ * already the keyword `increase by` uses, and `tag` never becomes a keyword on
+ * its own. Matched on the written words, not on token types, so the rule does
+ * not depend on how the locale lexes `by`.
+ */
+export function tagBreakdownNormalizerRule(priority = 80): NormalizerRule {
+  return {
+    name: "tags:breakdown",
+    priority,
+    // Opens on the bare word; `total by` has no fused phrase to arrive as.
+    shape: [{ types: ["IDENT"], values: ["total", "sum"] }],
+    match(tokens, pos): NormalizerMatch | null {
+      const head = tokens[pos];
+      if (head?.type !== "IDENT") return null;
+      const word = wordOf(head);
+      if (word !== "total" && word !== "sum") return null;
+      const by = tokens[pos + 1];
+      const tag = tokens[pos + 2];
+      if (wordOf(by) !== "by" || tag?.type !== "IDENT" || wordOf(tag) !== "tag") return null;
+      return {
+        consumed: 3,
+        replacement: [createFusedToken("TAG_BREAKDOWN", "tag", [head, by as Token, tag])],
+        ruleName: "tags:breakdown",
+      };
+    },
+  };
+}
+
+/**
  * A lone TAG token, a data-line annotation like `1200 #housing`, is dropped so
  * the line evaluates to its number. Lower priority than the aggregate rule, and
  * declines a TAG that directly follows `of` or a fused `...of` trigger, so a TAG
