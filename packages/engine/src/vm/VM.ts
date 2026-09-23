@@ -1564,6 +1564,18 @@ function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
 const MAX_EXACT_POW_BITS = 65536;
 
 /**
+ * `Number.MAX_SAFE_INTEGER`, the edge of the safe range the plain arithmetic
+ * fast paths test every result against (see vm/ExactIntegers.ts).
+ *
+ * Held in a module constant rather than read off `Number` at each operation,
+ * because a global lookup is slow inside a sandboxed realm such as Node's `vm`
+ * context, which is where Jest runs this code: reading it twice per addition
+ * doubled the cost of `1 + 2` in the benchmark suite, where a bundled build
+ * showed no difference at all.
+ */
+const SAFE_INTEGER_LIMIT = Number.MAX_SAFE_INTEGER;
+
+/**
  * How many bits `base ^ exponent` would occupy as an exact bigint, or `null`
  * when it has no exact bigint answer at all.
  *
@@ -2009,7 +2021,7 @@ export function executeBytecode(
             // One comparison keeps the plain case plain. A sum outside the
             // safe range (or a NaN) takes the exact-integer path, which gives
             // `2^53 + 1` its last digit. See vm/ExactIntegers.ts.
-            stack.push(sum <= Number.MAX_SAFE_INTEGER && sum >= -Number.MAX_SAFE_INTEGER
+            stack.push(sum <= SAFE_INTEGER_LIMIT && sum >= -SAFE_INTEGER_LIMIT
               ? numberValue(sum)
               : exactIntegerArithmetic(l, r, sum, "add"));
             break;
@@ -2105,7 +2117,7 @@ export function executeBytecode(
               && l.rational === undefined && r.rational === undefined
               && l.uncertainty === undefined && r.uncertainty === undefined) {
             const difference = (l.value as number) - (r.value as number);
-            stack.push(difference <= Number.MAX_SAFE_INTEGER && difference >= -Number.MAX_SAFE_INTEGER
+            stack.push(difference <= SAFE_INTEGER_LIMIT && difference >= -SAFE_INTEGER_LIMIT
               ? numberValue(difference)
               : exactIntegerArithmetic(l, r, difference, "sub"));
             break;
@@ -2182,7 +2194,7 @@ export function executeBytecode(
               && l.rational === undefined && r.rational === undefined
               && l.uncertainty === undefined && r.uncertainty === undefined) {
             const product = (l.value as number) * (r.value as number);
-            stack.push(product <= Number.MAX_SAFE_INTEGER && product >= -Number.MAX_SAFE_INTEGER
+            stack.push(product <= SAFE_INTEGER_LIMIT && product >= -SAFE_INTEGER_LIMIT
               ? numberValue(product)
               : exactIntegerArithmetic(l, r, product, "mul"));
             break;
@@ -2373,7 +2385,7 @@ export function executeBytecode(
           // double. See vm/ExactIntegers.ts.
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             const raised = power(l.value as number, r.value as number);
-            stack.push(raised <= Number.MAX_SAFE_INTEGER && raised >= -Number.MAX_SAFE_INTEGER
+            stack.push(raised <= SAFE_INTEGER_LIMIT && raised >= -SAFE_INTEGER_LIMIT
               ? numberValue(raised)
               : exactIntegerArithmetic(l, r, raised, "pow"));
             break;
