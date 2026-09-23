@@ -47,8 +47,11 @@ describe("the duplicated tables agree with their real sources", () => {
 		}
 	});
 
-	test("every algebra verb the package registers is exempt from symbolic interception", () => {
+	test("every algebra verb the package registers as a builtin is exempt from symbolic interception", () => {
+		// A verb implemented as a plugin function (limit) is never intercepted,
+		// so only the builtin ones need, and have, an exemption.
 		for (const fn of SYMBOLIC_FUNCTIONS) {
+			if (fn.builtinIndex === undefined) continue;
 			expect(SYMBOLIC_NATIVE_BUILTINS.has(fn.builtinIndex)).toBe(true);
 		}
 	});
@@ -57,7 +60,7 @@ describe("the duplicated tables agree with their real sources", () => {
 		// `3i` is fused by its own normalizer rule rather than being a word, so it
 		// has no row in SYMBOLIC_FUNCTIONS. Pinning that here keeps the exemption
 		// set from quietly growing entries nobody registered.
-		const fromPackage = new Set(SYMBOLIC_FUNCTIONS.map(fn => fn.builtinIndex));
+		const fromPackage = new Set(SYMBOLIC_FUNCTIONS.flatMap(fn => (fn.builtinIndex === undefined ? [] : [fn.builtinIndex])));
 		const extra = [...SYMBOLIC_NATIVE_BUILTINS].filter(index => !fromPackage.has(index));
 		expect(extra).toEqual([74]);
 	});

@@ -24,6 +24,7 @@ export const SYMBOLIC_WORD_TO_TOKEN_TYPE: Readonly<Record<string, string>> = {
 	im: "IM_FN",
 	cancel: "CANCEL_FN",
 	apart: "APART_FN",
+	limit: "LIMIT_FN",
 };
 
 /**

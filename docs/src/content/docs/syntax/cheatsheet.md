@@ -180,6 +180,7 @@ expand((x+1)*(x+2)) // x^2+3x+2
 factor(x^2-4) // (x-2)*(x+2)
 solve(x^2-4=0, x) // [-2, 2]
 solve(2x+6=0, x) // -3
+solve(cos(x) = x, x) // 0.74
 cancel((x^2-1)/(x-1)) // x+1
 apart((3x+5)/(x^2-1)) // 4/(x-1)-1/(x+1)
 ```
@@ -206,6 +207,8 @@ solve(x^2+1=0, x) // [-i, i]
 ```solve
 der(x^3, x) // 3x^2
 integral(x^2, x) // 1/3x^3
+integral(x^2, x, 0, 3) // 9
+limit(sin(x)/x, x, 0) // 1
 taylor(sin(x), x=0, 5) // 1/120x^5-1/6x^3+x
 jacobian(x*y, x+y) // [y, x; 1, 1]
 ```

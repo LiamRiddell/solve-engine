@@ -289,6 +289,7 @@ export const TokenTypes = {
   IM_FN: "IM_FN",
   CANCEL_FN: "CANCEL_FN",
   APART_FN: "APART_FN",
+  LIMIT_FN: "LIMIT_FN",
   // The imaginary-literal suffix, fused from a number followed immediately by
   // `i`. Same registration reasoning as the verbs above.
   IMAGINARY: "IMAGINARY",

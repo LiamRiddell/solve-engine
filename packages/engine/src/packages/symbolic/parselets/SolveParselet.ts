@@ -5,10 +5,12 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { SYMBOLIC_BUILTIN_SOLVE } from "@solve-js/packages/symbolic/SymbolicBuiltinIndex";
-import { emitVariableName, parseBoundExpression, emitBoundExpression } from "@solve-js/packages/symbolic/parselets/VariableArgument";
+import { emitVariableName, parseBoundExpression, emitBoundExpression, parseOptionalBounds } from "@solve-js/packages/symbolic/parselets/VariableArgument";
 
 /**
- * `solve(equation, variable)`, for example `solve(x^2-4=0, x)`.
+ * `solve(equation, variable)`, for example `solve(x^2-4=0, x)`, and
+ * `solve(equation, variable, lower, upper)`, which keeps only the roots between
+ * the two numbers and, for an equation solved numerically, searches there.
  *
  * Two things here cannot go through the ordinary function-call grammar, which
  * is why this is a hand-written parselet.
@@ -61,11 +63,13 @@ export class SolveParselet implements PrefixParselet {
 			builder.emitNumber(0);
 		}
 		emitVariableName(builder, variable.value);
+		// An optional range to search, `solve(cos(x) = x, x, 0, 1)`.
+		const ranged = parseOptionalBounds(parser, builder, "solve", "solve(cos(x) = x, x, 0, 1)");
 
 		parser.consume("RPAREN");
 
 		builder.emitOpcode(OpCode.CALL_BUILTIN);
 		builder.emitIndex(SYMBOLIC_BUILTIN_SOLVE);
-		builder.emitIndex(3);
+		builder.emitIndex(ranged ? 5 : 3);
 	}
 }

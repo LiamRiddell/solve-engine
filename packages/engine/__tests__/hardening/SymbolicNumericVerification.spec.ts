@@ -562,14 +562,48 @@ describe("every root solve returns satisfies the equation it came from", () => {
 		engine.clear();
 	});
 
-	test("a non-polynomial equation is declined rather than answered approximately", () => {
+	test("a non-polynomial equation is answered numerically, and every root it gives satisfies it", () => {
 		// A wrong root is indistinguishable from a right one once it is used, so
-		// declining is the only safe answer for a shape the solver has no method for.
+		// each root the numeric search returns is substituted into the equation
+		// here, by JavaScript's own functions rather than the engine's, and the
+		// number of roots is checked against a count worked out independently.
+		const cases: { source: string; f: (x: number) => number; count: number }[] = [
+			{ source: "solve(cos(x)=x, x)", f: x => Math.cos(x) - x, count: 1 },
+			// exp(x) - x - 2 is convex with a negative minimum at 0, so two roots.
+			{ source: "solve(exp(x)=x+2, x)", f: x => Math.exp(x) - x - 2, count: 2 },
+			{ source: "solve(2^x=10, x)", f: x => Math.pow(2, x) - 10, count: 1 },
+			{ source: "solve(1/x=2, x)", f: x => 1 / x - 2, count: 1 },
+			{ source: "solve(x*exp(x)=1, x)", f: x => x * Math.exp(x) - 1, count: 1 },
+			// pi/6, 5pi/6, and each again one turn on; the next is past 13.
+			{ source: "solve(sin(x)=0.5, x, 0, 10)", f: x => Math.sin(x) - 0.5, count: 4 },
+		];
 		const engine = newTrackedEngine();
-		for (const source of ["solve(sin(x)=0, x)", "solve(exp(x)=1, x)", "solve(1/x=2, x)"]) {
+		for (const { source, f, count } of cases) {
+			const roots = solvedRoots(engine, source);
+			expect({ source, count: roots.length }).toEqual({ source, count });
+			for (const root of roots) {
+				expect(root.im).toBe(0);
+				if (!(Math.abs(f(root.re)) <= 1e-9)) throw new Error(`${source}: ${root.re} leaves a residual of ${f(root.re)}`);
+			}
+		}
+		engine.clear();
+	});
+
+	test("a non-polynomial equation the search cannot answer is refused by name, never guessed", () => {
+		const engine = newTrackedEngine();
+		const refusals: [string, string][] = [
+			// Infinitely many roots: listing the first ten would read as all of them.
+			["solve(sin(x)=0, x)", "SYMBOLIC_SOLVE_TOO_MANY_ROOTS"],
+			// 1/x changes sign at zero without being zero there: a pole, not a root.
+			["solve(1/x=0, x)", "SYMBOLIC_SOLVE_NO_ROOT_FOUND"],
+			// exp(x) underflows to exactly 0 below -745 without ever being 0.
+			["solve(exp(x)=0, x)", "SYMBOLIC_SOLVE_TOO_MANY_ROOTS"],
+			// A second unknown leaves nothing to search with.
+			["solve(sin(x)=a, x)", "SYMBOLIC_SOLVE_UNSUPPORTED"],
+		];
+		for (const [source, code] of refusals) {
 			const value = engine.evaluateLine(1, source);
-			expect(value.type).toBe(ValueType.Error);
-			expect(String(value.value)).toBe("SYMBOLIC_SOLVE_UNSUPPORTED");
+			expect({ source, type: value.type, code: String(value.value) }).toEqual({ source, type: ValueType.Error, code });
 		}
 		engine.clear();
 	});

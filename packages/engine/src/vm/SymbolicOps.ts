@@ -19,14 +19,20 @@
 import { Value, ValueType, numberValue, stringValue, errorValue, symbolicValue, matrixValue, faultedOperand } from "@solve-js/vm/Value";
 import { solveForVariable, type SolveOutcome } from "@solve-js/symbolic/Solve";
 import type { ApproximateRoot } from "@solve-js/symbolic/NumericRoots";
+import { solveNumerically, NUMERIC_ROOTS_MAX, type NumericSolveOutcome, type SearchRange } from "@solve-js/symbolic/NumericSolve";
+import { definiteIntegral } from "@solve-js/symbolic/DefiniteIntegral";
+import { evaluateConstant, describeNumber } from "@solve-js/symbolic/NumericEvaluate";
 import {
 	type SymbolicNode,
+	type Rational,
 	complex,
 	complexNode,
 	constNode,
 	powNode,
 	callNode,
 	simplifySymbolic,
+	freeVariables,
+	rational,
 	rationalFromNumber,
 	rationalToNumber,
 } from "@solve-js/symbolic";
@@ -202,6 +208,19 @@ function rootToValue(root: SymbolicNode): Value {
 }
 
 /**
+ * Renders an exact result of a calculus verb (a definite integral, a limit) as
+ * a value, keeping a fraction a fraction for the same reason a root does.
+ *
+ * @param node - The exact result: a constant, or an expression in unknowns
+ * other than the one the verb was about.
+ * @returns A Number for a whole number, a Symbolic value otherwise.
+ */
+export function exactResultToValue(node: SymbolicNode): Value {
+	const simplified = simplifySymbolic(node);
+	return simplified.kind === "const" ? rootToValue(simplified) : symbolicToValue(simplified);
+}
+
+/**
  * Renders one numerically-found root as a value.
  *
  * A root off the real line becomes an exact complex node built from the two
@@ -247,10 +266,9 @@ function solveOutcomeToValue(outcome: SolveOutcome): Value {
 			const values = outcome.exact.map(rootToValue);
 			for (const approximate of outcome.approximate) values.push(approximateRootToValue(approximate));
 			if (values.length === 0) return stringValue("no solution");
-			if (values.length === 1) return values[0];
 			// Several roots read best as a row of values, which the matrix
 			// formatter already renders as "[-2, 2]".
-			return matrixValue(1, values.length, values.map(v => (v.type === ValueType.Symbolic ? (v.value as SymbolicNode) : v.toNumber())));
+			return rowOrSingle(values);
 		}
 	}
 }
@@ -264,17 +282,205 @@ function solveOutcomeToValue(outcome: SolveOutcome): Value {
  * here rather than each rendering an outcome themselves, so the two surfaces
  * cannot drift into disagreeing about what an answer looks like.
  *
+ * An equation that is not a polynomial goes on to a numeric search for where
+ * its two sides cross (see `symbolic/NumericSolve.ts`), which is the only
+ * refusal of the exact solver that a search can answer.
+ *
  * @param lhsValue - The left-hand side, evaluated symbolic-tolerantly.
  * @param rhsValue - The right-hand side, likewise.
  * @param variable - The unknown to solve for.
+ * @param range - Where to look, when the reader named a range. The roots
+ * outside it are left out, exact ones included.
  * @returns The solution as a Value, or an error Value when a side has no exact
  * value to solve with.
  */
-export function solveEquationValues(lhsValue: Value, rhsValue: Value, variable: string): Value {
+export function solveEquationValues(lhsValue: Value, rhsValue: Value, variable: string, range?: SearchRange): Value {
 	const lhs = valueToSymbolic(lhsValue);
 	const rhs = valueToSymbolic(rhsValue);
 	if (lhs === null || rhs === null) {
 		return errorValue("SYMBOLIC_NONFINITE_OPERAND", "An equation side has no exact value to solve with.");
 	}
-	return solveOutcomeToValue(solveForVariable(lhs, rhs, variable));
+	const outcome = solveForVariable(lhs, rhs, variable);
+	if (outcome.kind === "unsupported" && outcome.nonPolynomial === true) {
+		return numericSolveToValue(solveNumerically(lhs, rhs, variable, range));
+	}
+	if (range !== undefined && outcome.kind === "roots") return rootsWithinRange(outcome.exact, outcome.approximate, range);
+	return solveOutcomeToValue(outcome);
+}
+
+/** Several values as the row `[a, b, c]`, one as itself. */
+function rowOrSingle(values: readonly Value[]): Value {
+	if (values.length === 1) return values[0];
+	return matrixValue(1, values.length, values.map(v => (v.type === ValueType.Symbolic ? (v.value as SymbolicNode) : v.toNumber())));
+}
+
+/** `between -1000000 and 1000000`, for a message. */
+function describeRange(range: SearchRange): string {
+	return `between ${describeNumber(range.lower)} and ${describeNumber(range.upper)}`;
+}
+
+/**
+ * Renders a numeric root search as a VM value.
+ *
+ * Finding nothing is an error, not the answer "no solution": a search that
+ * found no crossing in the range it looked at has not shown that there is none
+ * anywhere, and saying so would overstate it. The exact solver's "no solution"
+ * is a proof; this is a report.
+ */
+function numericSolveToValue(outcome: NumericSolveOutcome): Value {
+	switch (outcome.kind) {
+		case "unsupported":
+			return errorValue(
+				"SYMBOLIC_SOLVE_UNSUPPORTED",
+				`Cannot solve this equation: it is not a polynomial equation, and it cannot be solved numerically because ${outcome.reason}.`,
+			);
+		case "none":
+			return errorValue(
+				"SYMBOLIC_SOLVE_NO_ROOT_FOUND",
+				`No root was found ${describeRange(outcome.range)}: the two sides never cross there. This equation is solved numerically, which finds crossings, so a root where the sides only touch, or one outside the range searched, is not found.` +
+					(outcome.stated ? "" : " To search elsewhere, name a range after the unknown, as in solve(log(x) = 20, x, 0, 1e9)."),
+			);
+		case "tooMany":
+			return errorValue(
+				"SYMBOLIC_SOLVE_TOO_MANY_ROOTS",
+				`More than ${NUMERIC_ROOTS_MAX} roots lie ${describeRange(outcome.range)}, so this equation may have infinitely many, as one built on sin or cos does. Name a narrower range after the unknown, as in solve(sin(x) = 0.5, x, 0, 3).`,
+			);
+		case "flat":
+			return errorValue(
+				"SYMBOLIC_SOLVE_TOO_MANY_ROOTS",
+				`The two sides are equal, or too close for a double to tell apart, all the way from ${describeNumber(outcome.from)} to ${describeNumber(outcome.to)}, so there is no list of roots to give. Numeric solving compares the two sides as numbers, and there they compare equal.`,
+			);
+		case "roots":
+			return rowOrSingle(outcome.roots.map(numberValue));
+	}
+}
+
+/**
+ * The exact solver's roots that lie in a stated range.
+ *
+ * A polynomial's roots are all known, so the ones in the range are a complete
+ * answer and an empty range is a true "no solution" there. A complex root lies
+ * on no range of the real line and is always left out.
+ */
+function rootsWithinRange(exact: readonly SymbolicNode[], approximate: readonly ApproximateRoot[], range: SearchRange): Value {
+	const inside = (x: number | null): boolean => x !== null && x >= range.lower && x <= range.upper;
+	const values: Value[] = [];
+	for (const root of exact) {
+		const simplified = simplifySymbolic(root);
+		// `solve(a*x+b=0, x, 0, 1)`: the root is -b/a, and whether that lies in
+		// the range depends on a and b. Dropping it would claim there is no
+		// solution there, which nothing has shown.
+		if (freeVariables(simplified).size > 0) {
+			return errorValue(
+				"SYMBOLIC_SOLVE_UNSUPPORTED",
+				`Cannot keep only the roots ${describeRange(range)}: a root depends on another unknown, so whether it lies in the range is not known.`,
+			);
+		}
+		if (inside(evaluateConstant(simplified))) values.push(rootToValue(root));
+	}
+	for (const root of approximate) {
+		if (root.im === 0 && inside(root.re)) values.push(approximateRootToValue(root));
+	}
+	if (values.length === 0) return stringValue(`no solution ${describeRange(range)}`);
+	return rowOrSingle(values);
+}
+
+/** A bound, range end or limit point read exactly, alongside its double. */
+export interface RealOperand {
+	/** The exact value, or `null` for an infinite operand, which has none. */
+	readonly exact: Rational | null;
+	/** The nearest double, which is infinite exactly when `exact` is `null`. */
+	readonly approx: number;
+}
+
+/**
+ * Reads a bound, a search range's end or a limit's point as an exact real
+ * number.
+ *
+ * A fraction keeps the exact value it was typed as (`1/3` is a third, not the
+ * double nearest it), which is what lets `integral(x, x, 0, 1/3)` come out as
+ * exactly `1/18`. A value that is already a fault is handed back unchanged so
+ * its own message reaches the reader.
+ *
+ * @param value - The operand.
+ * @param what - What it is, for the message: "integral's lower bound".
+ * @returns The number, or an error Value. An infinite operand comes back with
+ * no exact value rather than as an error, since whether infinity is allowed is
+ * the caller's decision and what to call it is theirs too.
+ */
+export function readRealOperand(value: Value, what: string): RealOperand | Value {
+	const faulted = faultedOperand(value);
+	if (faulted) return faulted;
+	if (value.type === ValueType.Number || value.type === ValueType.BigInt) {
+		const approx = value.toNumber();
+		if (Number.isNaN(approx)) return errorValue("SYMBOLIC_BOUND_INVALID", `${what} is not a number.`);
+		if (!Number.isFinite(approx)) return { exact: null, approx };
+		if (value.type === ValueType.BigInt) return { exact: rational(value.value as bigint), approx };
+		return { exact: value.rational ?? rationalFromNumber(approx), approx };
+	}
+	if (value.type === ValueType.Symbolic) {
+		const node = simplifySymbolic(value.value as SymbolicNode);
+		if (node.kind === "const") return { exact: node.value, approx: rationalToNumber(node.value) };
+	}
+	return errorValue("SYMBOLIC_BOUND_INVALID", `${what} must be a plain number, with no unit and no unknown in it.`);
+}
+
+/**
+ * `integral(f, x, a, b)`, the definite integral, rendered as a VM value.
+ *
+ * An exact result keeps its fraction (`1/3`), as a root does. A result through
+ * the antiderivative that involves an irrational value, and a numeric one, are
+ * ordinary numbers.
+ *
+ * @param integrand - The expression, as a tree.
+ * @param variable - The variable of integration.
+ * @param lowerValue - The lower bound.
+ * @param upperValue - The upper bound.
+ * @returns The integral, or an error Value naming why there is none.
+ */
+export function definiteIntegralValue(integrand: SymbolicNode, variable: string, lowerValue: Value, upperValue: Value): Value {
+	const lower = readRealOperand(lowerValue, "integral's lower bound");
+	if (lower instanceof Value) return lower;
+	const upper = readRealOperand(upperValue, "integral's upper bound");
+	if (upper instanceof Value) return upper;
+	if (lower.exact === null || upper.exact === null) {
+		return errorValue("SYMBOLIC_INTEGRAL_IMPROPER", "Cannot integrate this: a bound is infinite, which makes this an improper integral, and those are not evaluated.");
+	}
+
+	const outcome = definiteIntegral(integrand, variable, lower.exact, upper.exact);
+	switch (outcome.kind) {
+		case "exact":
+			return exactResultToValue(outcome.value);
+		case "evaluated":
+		case "numeric":
+			return numberValue(outcome.value);
+		case "improper":
+			return errorValue("SYMBOLIC_INTEGRAL_IMPROPER", `Cannot integrate this: ${outcome.reason}.`);
+		case "unsettled":
+			return errorValue("SYMBOLIC_INTEGRAL_UNSETTLED", `Cannot integrate this: ${outcome.reason}.`);
+		case "unsupported":
+			return errorValue("SYMBOLIC_INTEGRAL_UNSUPPORTED", `Cannot integrate this: it has no antiderivative here and cannot be integrated numerically because ${outcome.reason}.`);
+	}
+}
+
+/**
+ * A stated search range for `solve`, read from its two operands.
+ *
+ * @returns The range, lowest end first, or an error Value.
+ */
+export function readSearchRange(lowerValue: Value | undefined, upperValue: Value | undefined): SearchRange | Value {
+	if (lowerValue === undefined || upperValue === undefined) {
+		return errorValue("SYMBOLIC_BOUND_INVALID", "solve's range needs both ends, as in solve(cos(x) = x, x, 0, 1).");
+	}
+	const lower = readRealOperand(lowerValue, "solve's range");
+	if (lower instanceof Value) return lower;
+	const upper = readRealOperand(upperValue, "solve's range");
+	if (upper instanceof Value) return upper;
+	if (lower.exact === null || upper.exact === null) {
+		return errorValue("SYMBOLIC_BOUND_INVALID", "solve's range must have two finite ends.");
+	}
+	if (lower.approx === upper.approx) {
+		return errorValue("SYMBOLIC_BOUND_INVALID", "solve's range must have two different ends.");
+	}
+	return { lower: Math.min(lower.approx, upper.approx), upper: Math.max(lower.approx, upper.approx) };
 }

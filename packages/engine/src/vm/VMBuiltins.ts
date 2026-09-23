@@ -5,7 +5,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand } from "@solve-js/vm/VMConversion";
 import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact } from "@solve-js/vm/MoneyExact";
 import { transpose, determinant, inverse, matrixMultiply, matrixPower, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
-import { symbolicToValue, valueToSymbolic, solveEquationValues } from "@solve-js/vm/SymbolicOps";
+import { symbolicToValue, valueToSymbolic, solveEquationValues, definiteIntegralValue, readSearchRange } from "@solve-js/vm/SymbolicOps";
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
 import { factorSymbolic } from "@solve-js/symbolic/Factor";
 import { cancelSymbolic } from "@solve-js/symbolic/Gcd";
@@ -1131,12 +1131,18 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // values: the two sides of the equation, then the variable NAME as a
     // String. Reading the name as a string rather than compiling it as a
     // variable read is what lets `solve(x^2-4=0, x)` work without `x` existing.
+    //
+    // solve(equation, variable, lower, upper) adds the two ends of a range to
+    // search, five values in all. See SymbolicOps.ts's solveEquationValues.
     69: (args) => {
-        const [lhsValue, rhsValue, variableValue] = args;
+        const [lhsValue, rhsValue, variableValue, lowerValue, upperValue] = args;
         if (variableValue?.type !== ValueType.String) {
             return errorValue("SOLVE_REQUIRES_VARIABLE_NAME", "solve's second argument must be the name of the unknown.");
         }
-        return solveEquationValues(lhsValue, rhsValue, variableValue.value as string);
+        if (lowerValue === undefined) return solveEquationValues(lhsValue, rhsValue, variableValue.value as string);
+        const range = readSearchRange(lowerValue, upperValue);
+        if (range instanceof Value) return range;
+        return solveEquationValues(lhsValue, rhsValue, variableValue.value as string, range);
     },
     // der(expr, variable, order), the symbolic derivative. Genuinely symbolic
     // rather than a finite difference, so it is exact.
@@ -1151,12 +1157,22 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // integral(expr, variable), the indefinite integral without a constant of
     // integration. Reports what it cannot do rather than approximating; see
     // symbolic/Integral.ts.
+    //
+    // integral(expr, variable, lower, upper) is the definite integral, a
+    // number: exact through the antiderivative where there is one, numeric
+    // (and verified) where there is not. See symbolic/DefiniteIntegral.ts.
     71: (args) => {
-        const [target, variableValue] = args;
+        const [target, variableValue, lowerValue, upperValue] = args;
         const variable = symbolicVariableName(variableValue, "integral");
         if (typeof variable !== "string") return variable;
         const expression = valueToSymbolic(target);
         if (expression === null) return errorValue("SYMBOLIC_NONFINITE_OPERAND", "integral needs an expression with an exact value.");
+        if (lowerValue !== undefined || upperValue !== undefined) {
+            if (lowerValue === undefined || upperValue === undefined) {
+                return errorValue("SYMBOLIC_BOUND_INVALID", "integral takes both bounds, as in integral(x^2, x, 0, 3).");
+            }
+            return definiteIntegralValue(expression, variable, lowerValue, upperValue);
+        }
         const result = integrate(expression, variable);
         if (!result.ok) return errorValue("SYMBOLIC_INTEGRAL_UNSUPPORTED", `Cannot integrate this: ${result.reason}.`);
         return symbolicToValue(result.value);

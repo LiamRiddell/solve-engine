@@ -178,11 +178,14 @@ mid-thought is the normal case, not the edge case.
 - **Not a full computer algebra system.** There is a real one inside: exact
   rational arithmetic, `expand`, `factor`, `solve`, and symbolic `der`,
   `integral`, `taylor` and `jacobian`. It is deliberately bounded, and it says
-  what it cannot do rather than approximating. Factoring works over the
-  rationals, so `x^2-2` comes back unfactored; solving goes further and works
-  over the complex numbers, so it answers with every root an equation has or
-  counts the ones it could not find; and integration reports when an expression
-  has no elementary antiderivative instead of guessing.
+  what it cannot do rather than guessing. Factoring works over the rationals,
+  so `x^2-2` comes back unfactored; solving goes further and works over the
+  complex numbers, so it answers with every root a polynomial has or counts the
+  ones it could not find; and integration reports when an expression has no
+  elementary antiderivative. Where an answer is a number the algebra cannot
+  reach (a root of `cos(x) = x`, a definite integral of `exp(x^2)`, a `limit`),
+  it is found numerically, checked before it is shown, and documented as
+  approximate.
 - **Not a spreadsheet.** Lines reference earlier lines. There are no sheets,
   no cells, and no circular references to resolve.
 - **Not arbitrary-precision by default.** Ordinary arithmetic uses doubles, and
