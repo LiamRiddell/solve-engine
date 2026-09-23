@@ -29,6 +29,18 @@ describe("measuring text", () => {
 		expect(value('length of "a😀b"').toNumber()).toBe(3);
 	});
 
+	test("length counts the characters a reader sees, not code points (#531)", () => {
+		// A skin-toned thumbs-up is two code points, a flag two regional
+		// indicators, a family three people joined by two zero-width joiners,
+		// and a decomposed é an e with a combining accent. Each is one character.
+		expect(value('characters in "👍🏽"').toNumber()).toBe(1);
+		expect(value('length of "👍🏽"').toNumber()).toBe(1);
+		expect(value('length of "🇬🇧"').toNumber()).toBe(1);
+		expect(value('length of "👨‍👩‍👧"').toNumber()).toBe(1);
+		expect(value('length of "é"').toNumber()).toBe(1);
+		expect(value('length of ""').toNumber()).toBe(0);
+	});
+
 	test("words in / characters in / lines in", () => {
 		expect(value('words in "the quick brown fox"').toNumber()).toBe(4);
 		expect(value('characters in "hello"').toNumber()).toBe(5);
@@ -57,6 +69,13 @@ describe("reshaping text", () => {
 
 	test("reverse", () => {
 		expect(shown('reverse "hello"')).toBe("olleh");
+	});
+
+	test("reverse keeps each character whole (#531)", () => {
+		// Reversing code points put the skin tone before the thumb, and turned
+		// the flag pair GB FR into the regional indicators of other countries.
+		expect(shown('reverse "👍🏽a"')).toBe("a👍🏽");
+		expect(shown('reverse "🇬🇧🇫🇷"')).toBe("🇫🇷🇬🇧");
 	});
 
 	test("replace (function form; literal replace-all)", () => {

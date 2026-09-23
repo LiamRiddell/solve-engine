@@ -83,3 +83,30 @@ superscript `m²` is not accepted as typed input (write `m2` or `m^2`), and a
 fuller algebra of units, such as a speed squared, is a later addition.
 Acceleration in metres per second squared, `m/s^2`, is a unit in its own right;
 see [derived units](/syntax/derived-units/).
+
+## A unit after a power of ten
+
+Scientific notation puts the unit after the power: `1.5 * 10^3 kg` is 1,500
+kilograms. The unit belongs to the whole power, not to the exponent, so
+`10^3 m` is a thousand metres and `10^-3 m` a millimetre. A power's exponent is a
+count and never has a unit, so one written with a unit inside brackets is
+refused.
+
+```solve
+10^3 m in km // 1.00 km
+1.5 * 10^3 kg // 1,500.00 kg
+10^-3 m in mm // 1.00 mm
+```
+
+## Two units side by side
+
+A quantity takes one unit. A second unit written straight after the first, as
+in `5 kg m`, names nothing the engine knows (kilogram-metres is not in its table),
+so it is refused rather than relabelling the five kilograms as five metres. To
+change a quantity's unit, convert it with `in`. Compound units such as `km/h` and
+`m/s^2` are written with a slash and read as one unit.
+
+```solve-doc
+5 kg m // ERROR: A quantity in kg cannot take a second unit, m: two units side by side are not a unit. To convert, write "in m".
+2^(3 m) // ERROR: An exponent cannot carry a unit (m): a power counts multiplications. For a quantity in scientific notation, write the unit after the power, as in "10^3 m".
+```

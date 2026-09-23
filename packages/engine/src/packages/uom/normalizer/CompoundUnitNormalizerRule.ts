@@ -1,6 +1,7 @@
 import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
+import { expectsValueAt } from "@solve-js/normalizer/ValuePosition";
 
 /**
  * Fuses a slash-notation compound unit, `UNIT / UNIT`, into one UNIT token
@@ -21,6 +22,10 @@ import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
  * - Both flanks must be UNIT tokens. `120 km / 2 hours` has a number after the
  *   slash, so the slash stays a divide and the result is still a rate built the
  *   ordinary way. `a / b` between variables is untouched.
+ * - The numerator must follow a value (a number, a bracket, a variable, or a
+ *   conversion keyword). At the start of a line or after an operator the words
+ *   are the reader's variables, so with `m` and `s` defined `m/s` is their
+ *   quotient (issue #537); see expectsValueAt().
  * - Exactly one slash is fused. `m/s^2` becomes `m/s` followed by `^2`, which
  *   is the same value the engine already produced for it, a squared rate rather
  *   than an acceleration. Naming a compound derived unit like the newton is left
@@ -43,6 +48,7 @@ export function compoundUnitNormalizerRule(priority = 77): NormalizerRule {
 			if (numerator?.type !== "UNIT") return null;
 			if (slash?.type !== "SLASH") return null;
 			if (denominator?.type !== "UNIT") return null;
+			if (expectsValueAt(tokens, pos)) return null;
 
 			const spelling = `${numerator.value}/${denominator.value}`;
 			return {

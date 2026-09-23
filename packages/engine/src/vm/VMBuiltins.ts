@@ -2,7 +2,7 @@ import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixVa
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { unifyUom, power, describeMeasureMismatch, unifyQuantities } from "@solve-js/vm/VMConversion";
+import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand } from "@solve-js/vm/VMConversion";
 import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact } from "@solve-js/vm/MoneyExact";
 import { transpose, determinant, inverse, matrixMultiply, matrixPower, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
 import { symbolicToValue, valueToSymbolic, solveEquationValues } from "@solve-js/vm/SymbolicOps";
@@ -67,6 +67,34 @@ function angleInRadians(value: Value): number {
 }
 
 /**
+ * The refusal for `tan` at an odd multiple of a right angle, or null anywhere
+ * else.
+ *
+ * The tangent of 90° has no value: the curve runs off to infinity either side
+ * of it. The double nearest π/2 is not π/2, though, so `Math.tan` of it is a
+ * finite 16,331,239,353,195,370, and `tan(90 degrees)` reported that as an
+ * answer. So an angle within the conversion's own rounding of an odd number of
+ * right angles is refused by name. The tolerance grows with the angle, since
+ * the rounding does, and past a trillion right angles a double no longer holds
+ * the angle closely enough to tell one side of an asymptote from the other, so
+ * the check stops there and the plain `Math.tan` answer stands.
+ *
+ * @param radians - The angle, already read in radians.
+ */
+function tangentUndefinedAt(radians: number): Value | null {
+    const rightAngles = radians / (Math.PI / 2);
+    if (!Number.isFinite(rightAngles) || Math.abs(rightAngles) > 1e12) return null;
+    const nearest = Math.round(rightAngles);
+    if (nearest % 2 === 0) return null;
+    const tolerance = 16 * Number.EPSILON * Math.max(1, Math.abs(rightAngles));
+    if (Math.abs(rightAngles - nearest) > tolerance) return null;
+    return errorValue(
+        "TRIG_UNDEFINED",
+        `tan is undefined at ${nearest * 90} degrees: at an odd multiple of a right angle the tangent has no value, only an asymptote.`,
+    );
+}
+
+/**
  * The plural spelling of a unit, when the count calls for one and the table
  * has it.
  *
@@ -114,6 +142,19 @@ function pluraliseUnit(unit: string, count: number): string {
  * @param wantLargest - max when true, min when false.
  */
 function extremum(args: Value[], wantLargest: boolean): Value {
+    // Dates order by their instant, so a set made only of dates has an answer,
+    // and it is the date itself: `max(today, tomorrow)` is tomorrow, where the
+    // magnitude path below answered with its epoch milliseconds. A date among
+    // numbers, like every other value with no numeric reading, is refused.
+    if (args.length > 0 && args.every((a) => a.type === ValueType.Datetime)) {
+        let winner = args[0];
+        for (const a of args) {
+            if (wantLargest ? a.toNumber() > winner.toNumber() : a.toNumber() < winner.toNumber()) winner = a;
+        }
+        return winner;
+    }
+    const nonNumeric = nonNumericOperand(args, "compared");
+    if (nonNumeric) return nonNumeric;
     let best: Value | undefined;
     let hasNaN = false;
     for (const a of args) {
@@ -357,7 +398,11 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // sin/cos/tan accept an angle with a unit; see angleInRadians().
     2: (args) => numberValue(Math.sin(angleInRadians(args[0]))),
     3: (args) => numberValue(Math.cos(angleInRadians(args[0]))),
-    4: (args) => numberValue(Math.tan(angleInRadians(args[0]))),
+    // tan refuses the odd multiples of a right angle; see tangentUndefinedAt().
+    4: (args) => {
+        const radians = angleInRadians(args[0]);
+        return tangentUndefinedAt(radians) ?? numberValue(Math.tan(radians));
+    },
     5: (args) => numberValue(Math.log(args[0].toNumber())),
     // round/ceil/floor keep a unit for the same reason abs does; see keepUnit().
     6: (args) => wholeNumberUnchanged(args[0], false) ?? keepUnit(args[0], Math.ceil(args[0].toNumber())),
@@ -1321,13 +1366,15 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // "variance of ...", "spread of ...", "mode of ..."). Population form is the
     // default; the sample form is a separate index. See issue #184. ──
     // standard deviation (population): the spread in the same units as the data.
-    101: (args) => numberValue(Math.sqrt(variance(args.map((a) => a.toNumber()), false))),
+    // Each refuses a value with no numeric reading (text, a date, a bracketed
+    // list) rather than reading it as 0; see nonNumericOperand().
+    101: (args) => nonNumericOperand(args, "used in a standard deviation") ?? numberValue(Math.sqrt(variance(args.map((a) => a.toNumber()), false))),
     // sample standard deviation (divide by n-1).
-    102: (args) => numberValue(Math.sqrt(variance(args.map((a) => a.toNumber()), true))),
+    102: (args) => nonNumericOperand(args, "used in a standard deviation") ?? numberValue(Math.sqrt(variance(args.map((a) => a.toNumber()), true))),
     // variance (population): the mean squared deviation.
-    103: (args) => numberValue(variance(args.map((a) => a.toNumber()), false)),
+    103: (args) => nonNumericOperand(args, "used in a variance") ?? numberValue(variance(args.map((a) => a.toNumber()), false)),
     // sample variance (divide by n-1).
-    104: (args) => numberValue(variance(args.map((a) => a.toNumber()), true)),
+    104: (args) => nonNumericOperand(args, "used in a variance") ?? numberValue(variance(args.map((a) => a.toNumber()), true)),
     // spread: largest minus smallest. Named "spread" because "range" already
     // means a start:end interval elsewhere in the engine.
     105: (args) => {
@@ -1341,6 +1388,8 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // result is deterministic for the same list.
     106: (args) => {
         if (args.length === 0) return numberValue(0);
+        const nonNumeric = nonNumericOperand(args, "counted for a mode");
+        if (nonNumeric) return nonNumeric;
         const counts = new Map<number, number>();
         let best = args[0].toNumber();
         let bestCount = 0;

@@ -41,8 +41,23 @@ words in "the quick brown fox" // 4
 characters in "hello" // 5
 ```
 
-Counting is by character, not by byte, so an accent or an emoji counts as the
-one character it looks like rather than the two-or-more bytes it is stored as.
+Counting is by the characters a reader sees, not by how the text is stored.
+Some characters on screen are several pieces underneath: a thumbs-up with a skin
+tone is the thumb plus a tone modifier, a flag is two letter-like symbols, and an
+accent can be a separate mark laid over its letter. Each of those counts as the
+one character it looks like, and `reverse` keeps each one whole rather than
+splitting the tone from its thumb.
+
+```solve
+characters in "👍🏽" // 1
+length of "🇬🇧" // 1
+reverse "👍🏽a" // a👍🏽
+```
+
+The boundary: this uses the runtime's text segmenter (`Intl.Segmenter`), which
+every current browser and Node.js provide. On an older runtime without one,
+counting falls back to Unicode code points, which keeps an emoji whole but counts
+a skin tone or a flag as two.
 
 ## Testing text
 

@@ -15,7 +15,18 @@ $100 + $50 // $150.00
 10 dollars // $10.00
 ```
 
-Symbols and words are both recognised. Conversion between currencies reaches the
+Symbols and words are both recognised. One symbol can stand for several
+currencies: `$` is the US dollar by default, and also the Canadian, Australian
+and other dollars. Write the currency's three-letter code after the amount to say
+which one is meant. A code for a currency with a different symbol, or any other
+unit after the amount, is refused rather than dropped.
+
+```solve
+$5 CAD in CAD // $5.00
+¥500 CNY in CNY // ¥500.00
+```
+
+Conversion between currencies reaches the
 network and resolves asynchronously. See
 [async and live data](/guide/async-and-live-data/).
 
