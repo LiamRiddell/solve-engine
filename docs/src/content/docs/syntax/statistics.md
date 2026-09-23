@@ -152,6 +152,33 @@ normalcdf(1.96) // 0.98
 normalpdf(0) // 0.40
 ```
 
+Real data rarely comes as z-scores. Give a value, a mean and a standard deviation
+instead, in that order (the order a spreadsheet's `NORM.DIST` uses), and the
+value is standardised for you: with IQ scores averaging 100 and a standard
+deviation of 15, `normalcdf(110, 100, 15)` is the share of people scoring 110 or
+less. `normalpdf` in this form gives the height of that curve, which is per point
+of the score, so it is smaller the wider the spread.
+
+```solve
+normalcdf(110, 100, 15) // 0.75
+1 - normalcdf(130, 100, 15) // 0.02
+normalpdf(110, 100, 15) // 0.02
+```
+
+The boundary: these take one argument or three, never two, since a mean with no
+standard deviation has no scale to measure against. A graphing calculator's
+four-argument `normalcdf(lower, upper, mean, sd)` is not a form here; subtract
+two calls instead. The standard deviation must be greater than zero, the
+arguments are plain numbers rather than quantities with units, and results are
+accurate to about seven decimal places. Every statistics call refuses an argument
+it does not read, rather than quietly leaving it out:
+
+```solve-doc
+normalcdf(110, 100) // ERROR: normalcdf takes 1 or 3 arguments, but was given 2, as in normalcdf(1.96) or normalcdf(110, 100, 15)
+normalcdf(110, 100, 0) // ERROR: normalcdf: a standard deviation must be greater than zero, but was 0
+percentile([1, 2, 3], 50, 9) // ERROR: percentile takes 2 arguments, but was given 3, as in percentile([1, 2, 3], 90)
+```
+
 ## Comparisons and fractions
 
 ```solve

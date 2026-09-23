@@ -8,14 +8,14 @@ import { STATISTICS_CALL_FUNCTIONS } from "./StatisticsFunctionNames";
  * The second tier of statistics (issues #244, #245): the relationship between
  * two lists, and position within one. `correlation of A and B`, `slope of A and
  * B`, `intercept of A and B`; `percentile([list], p)`, `zscore(x, [list])`, and
- * the standard-normal `normalcdf`/`normalpdf`. Every form also has a call
- * spelling.
+ * `normalcdf`/`normalpdf`, on the standard normal or with a mean and standard
+ * deviation. Every form also has a call spelling.
  *
  * A companion to the spread, shape and weighted-average forms already in the
  * language (and to `median of`, which the maths-phrases package supplies). On by
  * default and removable. Lists are `[bracketed]` vectors (or an integer range),
- * and a bad shape, a length mismatch or too few points is answered with a
- * structured Error rather than a wrong number.
+ * and a bad shape, a length mismatch, too few points or an argument the form
+ * does not read is answered with a structured Error rather than a wrong number.
  */
 export const STATISTICS_PACKAGE: IEnginePackage = {
 	name: "solve-statistics",
