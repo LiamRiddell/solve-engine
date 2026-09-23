@@ -173,6 +173,48 @@ describe("forms that already worked are unchanged", () => {
 	});
 });
 
+describe("lengths multiply into areas and volumes (#533)", () => {
+	// The general multiply converted the right operand into the left's unit and
+	// then kept only that unit, so `5 m * 3 m` was reported as 15 m, a length.
+	test.each([
+		["5 m * 3 m", 15, "m2"],
+		["5 m * 3 ft", 4.572, "m2"],
+		["5 ft * 3 ft", 15, "ft2"],
+		["5 km * 3 m", 0.015, "km2"],
+		["5 m * 3 m in ft2", 161.4586, "ft2"],
+		["2 m * 3 m * 4 m", 24, "m3"],
+		["5 m2 * 3 m", 15, "m3"],
+		["5 m2 * 3 ft", 4.572, "m3"],
+		["3 m * 5 m2", 15, "m3"],
+		// An area with a name of its own, or a length with no square spelling,
+		// is measured in metres instead.
+		["2 ha * 3 m", 60_000, "m3"],
+		["2 furlong * 3 furlong", 242_811.385344, "m2"],
+	])("%s is %d %s", (source, magnitude, unit) => {
+		const value = evaluate(source);
+		expect(value.type).toBe(ValueType.Uom);
+		expect(value.unit).toBe(unit);
+		expect(value.toNumber()).toBeCloseTo(magnitude, 3);
+	});
+
+	test("the product keeps exact decimals: 0.1 m * 0.2 m is exactly 0.02 m2", () => {
+		expect(evaluate("0.1 m * 0.2 m == 0.02 m2").value).toBe(true);
+	});
+
+	test.each(["5 m2 * 3 m2", "5 m3 * 2 m"])("%s, more than three lengths, is refused by name", (source) => {
+		const value = evaluate(source);
+		expect(value.type).toBe(ValueType.Error);
+		expect(String(value.value)).toBe("UNIT_PRODUCT_UNSUPPORTED");
+	});
+
+	test("products that are not of lengths keep their own rules", () => {
+		expectQuantity("5 m * 3", 15, "m");
+		expect(evaluate("70 kg * 9.81 m/s^2").unit).toBe("N");
+		expect(evaluate("10 N * 5 m").unit).toBe("J");
+		expect(evaluate("5 kg * 3 m").type).toBe(ValueType.Error);
+	});
+});
+
 describe("the spelling helpers", () => {
 	test("poweredUnit finds the square and cube spellings of a length", () => {
 		expect(poweredUnit("m", 2)).toBe("m2");
