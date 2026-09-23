@@ -24,5 +24,6 @@ Writing `as N` asks for the answer in that unit; the engine also names the resul
 on its own when you leave the `as` off. This works only where the combination
 makes a named quantity: `5 m * 3 m` is not one of those, so it stays a plain unit
 product (`15.00 m`) rather than becoming `m²`, and multiplying two unrelated
-quantities is still reported as a mismatch rather than invented into a unit. (A fuller algebra of units, and units raised to arbitrary
-powers, are a later addition.)
+quantities is still reported as a mismatch rather than invented into a unit. (A fuller algebra of units is a later addition. A length squared or
+cubed, written `5 m^2` or `(3 m)^2`, is an area or a volume; see
+[squares and cubes](/syntax/unit-arithmetic/#squares-and-cubes).)

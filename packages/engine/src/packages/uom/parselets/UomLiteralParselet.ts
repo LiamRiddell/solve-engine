@@ -7,6 +7,8 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
 import { isKnownUnit } from "@solve-js/lexer/units";
 import { resolveCurrencyAlias } from "@solve-js/uom/CurrencyAliases";
 import { tryConsumeCurrencyOnDate, HISTORICAL_CURRENCY_FN } from "@solve-js/uom/HistoricalCurrency";
+import { poweredUnit } from "@solve-js/uom/UnitPowers";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
  * Resolve `rawUnit` to its canonical ISO 4217 code if it's a recognized
@@ -17,6 +19,39 @@ import { tryConsumeCurrencyOnDate, HISTORICAL_CURRENCY_FN } from "@solve-js/uom/
  */
 function resolveUnitAlias(rawUnit: string): string {
   return resolveCurrencyAlias(rawUnit) ?? rawUnit;
+}
+
+/**
+ * Take a power written on a unit onto the unit itself. Called when the token
+ * after the unit is `^`.
+ *
+ * The power belongs to the unit, not to the number beside it: `5 m^2` is five
+ * square metres, not (5 m) squared, which is 25 square metres. The unit literal
+ * binds tighter than `^`, so without this the parser built `(5 m)^2` and the
+ * power handler, which had no reading for a unit, answered a bare 25. Taking the
+ * power here gives `m2`, a unit the table already holds, and everything after it
+ * (a conversion, `best`) carries on as for any area or volume.
+ *
+ * Only a whole power of 2 or 3 on a length the table spells squared or cubed has
+ * a unit, so that is all this accepts; a power of 1 leaves the unit as it is.
+ * Anything else written on a unit (`5 kg^2`, `5 m^4`, `9.81 ft/s^2`) is refused
+ * by name here, where the reading is still known, rather than left to become the
+ * number squared.
+ */
+function takeUnitPower(parser: Parser, unit: string): string {
+  const exponent = parser.peekAt(1);
+  const power = exponent?.type === "NUMBER" ? Number(exponent.value) : Number.NaN;
+  const spelled = power === 1 ? unit : poweredUnit(unit, power);
+  if (spelled === undefined) {
+    throw ErrorFactory.parsing(
+      "UNIT_POWER_UNSUPPORTED",
+      `"${unit}^${exponent?.value ?? ""}" is not a unit: a power on a unit makes an area or a volume, so it applies only to a length the unit table spells squared or cubed, such as m^2 or ft^3.`,
+      { unit, exponent: exponent?.value },
+    );
+  }
+  parser.consume(); // ^
+  parser.consume(); // the power
+  return spelled;
 }
 
 /**
@@ -31,7 +66,8 @@ export class UomLiteralParselet implements InfixParselet {
 	readonly bindingPower = BindingPower.Postfix;
 
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
-    const unit = resolveUnitAlias(token.value);
+    let unit = resolveUnitAlias(token.value);
+    if (parser.peek()?.type === "CARET") unit = takeUnitPower(parser, unit);
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString(unit);
 
@@ -43,15 +79,27 @@ export class UomLiteralParselet implements InfixParselet {
     // infixMinBindingPower doc comment.
     const boundInsideProduct = parser.infixMinBindingPower >= BindingPower.Product;
 
-    // Check if the next token is "to" or "in"
-    if (!boundInsideProduct && (parser.peek()?.type === "TO" || parser.peek()?.type === "IN")) {
+    // Check if the next token is "to" or "in", followed by something this
+    // parselet can take as the target: a unit, `in` itself (for "3 ft in in",
+    // where the inch collides with the keyword), `?`, or `best` (for
+    // "500 lux to best", handled by the `best` branch below once the `to` is
+    // taken). Any other target is left alone, `to`/`in` included, for the
+    // outer conversion parselet, which reads a target the lexer did not mark
+    // as a unit: `L` is not a lexer unit, so `1 m3 in L` used to consume the
+    // `in` here and then fail on the `L`.
+    const conversion = parser.peek()?.type;
+    const targetAhead = parser.peekAt(1)?.type;
+    const takesTarget = targetAhead === "UNIT" || targetAhead === "IN" || targetAhead === "QUESTION" || targetAhead === "BEST";
+    if (!boundInsideProduct && (conversion === "TO" || conversion === "IN") && takesTarget) {
       parser.consume(); // consume TO or IN
       const targetToken = parser.peek();
       // Accept UNIT or IN (for cases like "3 ft in in" where
       // the target unit name collides with the IN keyword).
       if (targetToken?.type === "UNIT" || targetToken?.type === "IN") {
         parser.consume();
-        const targetUnit = resolveUnitAlias(targetToken.value);
+        let targetUnit = resolveUnitAlias(targetToken.value);
+        // A power on the target is the target's, as on the source: `15 ft2 in m^2`.
+        if (parser.peek()?.type === "CARET") targetUnit = takeUnitPower(parser, targetUnit);
 
         // `<money> in <currency> on <date>`: a historical conversion through
         // the host-supplied rate provider, distinct from the live conversion

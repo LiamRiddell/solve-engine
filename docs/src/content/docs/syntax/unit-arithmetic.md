@@ -28,3 +28,48 @@ The left operand decides the result unit.
 100cm + 2m // 300.00 cm
 1 km + 500 m // 1.50 km
 ```
+
+## Squares and cubes
+
+An area is a length times a length, so it is measured in square units: a room
+5 metres by 3 metres covers 15 square metres, written `m2`. A volume is three
+lengths multiplied, measured in cubic units such as `m3` or litres. Either can be
+written as a power on the unit: `m^2` is square metres and `m^3` is cubic
+metres.
+
+The power belongs to the unit it is written on. `5 m^2` is five square metres,
+the way a physics book reads it, not five metres squared, which would be 25
+square metres. To square a whole quantity, put it in brackets.
+
+```solve
+5 m^2 // 5.00 m2
+10 m^3 in litres // 10,000.00 litres
+5 m^2 in ft2 // 53.82 ft2
+(3 m)^2 // 9.00 m2
+```
+
+A square root takes an area back to a length, and a cube root takes a volume
+back to one. An area with a name of its own, such as a hectare, answers in
+metres.
+
+```solve
+sqrt(16 m2) // 4.00 m
+cbrt(27 m3) // 3.00 m
+sqrt(1 ha) // 100.00 m
+```
+
+Only a length has a square or a cube with a unit, so a power or root of anything
+else is an error rather than the bare number. A kilogram squared, a currency
+squared or a metre to the fourth power has no unit to report, and answering 25
+for `5 kg^2` would drop the unit without saying so.
+
+```solve-doc
+5 kg^2 // ERROR: "kg^2" is not a unit: a power on a unit makes an area or a volume, so it applies only to a length the unit table spells squared or cubed, such as m^2 or ft^3.
+sqrt(16 m) // ERROR: sqrt: a quantity in m has no square root with a unit; only an area has a length as its root.
+```
+
+The boundary: this covers a length squared or cubed, and nothing wider. The
+superscript `m²` is not accepted as typed input (write `m2` or `m^2`), and a
+fuller algebra of units, such as a speed squared, is a later addition.
+Acceleration in metres per second squared, `m/s^2`, is a unit in its own right;
+see [derived units](/syntax/derived-units/).

@@ -110,12 +110,16 @@ describe("BODMAS: Exponentiation precedence with mixed types", () => {
     expect(typeof result).toBe("number");
   });
 
-  test("10 GBP ^ 2 = 100 (currency squared)", () => {
-    expect(evalNum("10 GBP ^ 2")).toBe(100);
+  // A currency squared has no unit, so both spellings are refused by name
+  // rather than answered with the bare number, which is what they used to give
+  // (100 and 25). See #525: a power on a unit only means an area or a volume.
+  test("10 GBP ^ 2 is refused: a power written on the unit has no reading for a currency", () => {
+    expect(() => newTrackedEngine().evaluateExpression("10 GBP ^ 2")).toThrow(/"GBP\^2" is not a unit/);
   });
 
-  test("(5 USD) ^ 2 = 25 (currency with parens squared)", () => {
-    expect(evalNum("(5 USD) ^ 2")).toBe(25);
+  test("(5 USD) ^ 2 is refused: a currency amount squared has no unit", () => {
+    const value = newTrackedEngine().evaluateExpression("(5 USD) ^ 2");
+    expect(String(value.value)).toBe("UNIT_POWER_UNSUPPORTED");
   });
 });
 
@@ -218,8 +222,12 @@ describe("BODMAS: Percentage in complex expressions", () => {
 });
 
 describe("BODMAS: Function calls in mixed expressions", () => {
-  test("sqrt($100) + 5 = 15", () => {
-    expect(evalNum("sqrt($100) + 5")).toBe(15);
+  // The square root of an amount of money has no unit, so it is refused by name
+  // rather than answered as the bare 10 it used to give (#525). `round` below
+  // keeps its currency, since rounding an amount leaves it an amount.
+  test("sqrt($100) + 5 is refused: money has no square root with a unit", () => {
+    const value = newTrackedEngine().evaluateExpression("sqrt($100) + 5");
+    expect(String(value.value)).toBe("UNIT_ROOT_UNSUPPORTED");
   });
 
   test("round(10.6 USD) + round(4.3 USD) = 15", () => {
@@ -230,8 +238,11 @@ describe("BODMAS: Function calls in mixed expressions", () => {
     expect(evalNum("abs(-$50) * 2")).toBe(100);
   });
 
-  test("pow($2, 3) + pow($3, 2) = 17", () => {
-    expect(evalNum("pow($2, 3) + pow($3, 2)")).toBe(17);
+  // A power of an amount of money has no unit either, the spelled-out form
+  // answering what `^` answers (#525). It used to give the bare 17.
+  test("pow($2, 3) + pow($3, 2) is refused: money raised to a power has no unit", () => {
+    const value = newTrackedEngine().evaluateExpression("pow($2, 3) + pow($3, 2)");
+    expect(String(value.value)).toBe("UNIT_POWER_UNSUPPORTED");
   });
 
   test("max(10.5, 20.3) + min(5.7, 2.1) = 22.4", () => {
