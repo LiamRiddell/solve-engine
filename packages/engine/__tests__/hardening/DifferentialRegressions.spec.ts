@@ -161,8 +161,10 @@ describe("an exact shift or power past the ceiling", () => {
 	 * The line this draws is the one the codebase already draws between its two
 	 * numeric types one operator over: `1 / 0` is Infinity and `1n / 0n` is
 	 * refused, because exact integer arithmetic does not hand back
-	 * approximations. Doubles keep IEEE 754 semantics throughout, so
-	 * `2 ^ 100000` is still Infinity.
+	 * approximations. Doubles keep IEEE 754 semantics past their range, so
+	 * `2 ^ 100000` is still Infinity. (Since #526 a whole-number result of `^`
+	 * that a double CAN hold carries its exact integer, but only within that
+	 * range, so this line is unchanged; see vm/ExactIntegers.ts.)
 	 *
 	 * The ceiling and the operators either side of it are covered in
 	 * `DenialOfServiceUnboundedWork.spec.ts`; these two rows are the ones this

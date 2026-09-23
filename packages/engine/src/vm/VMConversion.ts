@@ -529,7 +529,12 @@ export function exactRationalOp(l: Value, r: Value, op: "add" | "sub" | "mul" | 
         // fail a line that only happened to build a very large fraction.
         return null;
     }
-    return numberValueRational(rationalToNumber(result), result);
+    // A result past a double's range keeps the double path's infinity rather
+    // than an exact value riding on one, the rule vm/ExactIntegers.ts keeps for
+    // whole numbers: `2^1000 * 2^30` is Infinity, as `2^1030` is.
+    const approx = rationalToNumber(result);
+    if (!Number.isFinite(approx)) return null;
+    return numberValueRational(approx, result);
 }
 
 /**

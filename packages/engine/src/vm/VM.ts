@@ -1,7 +1,7 @@
 import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, chartValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData } from "@solve-js/vm/Value";
 import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
-import { moneyExactMagnitude, scaleMoneyByPercent, scaleMoneyExact } from "@solve-js/vm/MoneyExact";
+import { moneyExactMagnitude, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { tryDimensionalCompose } from "@solve-js/uom/Dimensions";
@@ -24,6 +24,7 @@ import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import type { ScopeId } from "@solve-js/vm/CellScope";
 import { raiseQuantity, unitPowerUnsupported, multiplyLengths } from "@solve-js/vm/QuantityPowers";
+import { bigIntPow, exactIntegerArithmetic, exactIntegerRemainder, baseConversionOperand } from "@solve-js/vm/ExactIntegers";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
@@ -1123,7 +1124,11 @@ function multiplyMoneyByScalarExact(l: Value, r: Value): Value | null {
     const scalar = l.type === ValueType.Uom ? r : l;
     if (money.type !== ValueType.Uom || money.unit === undefined || !sharedCurrencyExchange.isCurrency(money.unit)) return null;
     if (scalar.type !== ValueType.Number && scalar.type !== ValueType.Percentage) return null;
-    if (scalar.rational !== undefined) return null;
+    // A whole number carrying its exact value (one past the safe range, see
+    // vm/ExactIntegers.ts) scales by that value rather than its rounded double.
+    if (scalar.rational !== undefined) {
+        return scalar.rational.d === 1n ? scaleMoneyByInteger(money, scalar.rational.n, money.unit) : null;
+    }
     return scaleMoneyExact(money, scalar.toNumber(), money.unit);
 }
 
@@ -1584,33 +1589,6 @@ function exactPowBits(base: Value, exponent: number): number | null {
 }
 
 /**
- * `base ** exponent` for bigints, by repeated squaring.
- *
- * Written out rather than using the `**` operator on purpose. TypeScript
- * downlevels `**` to `Math.pow()` for any target below ES2016, and the test
- * config compiles at ES6, so the operator form threw "Cannot convert a BigInt
- * value to a number" under the test runner while working in the shipped build:
- * a difference between what is tested and what ships, which is worse than the
- * loop. `symbolic/Complex.ts`'s `complexPow` does the same thing for the same
- * shape of reason.
- *
- * `exponent` must be non-negative; {@link exactPowBits} is the guard.
- */
-function bigIntPow(base: bigint, exponent: bigint): bigint {
-    let result = 1n;
-    let factor = base;
-    let remaining = exponent;
-    while (remaining > 0n) {
-        if (remaining % 2n === 1n) result *= factor;
-        remaining /= 2n;
-        // Skipped on the last pass, where squaring would only build a number
-        // twice the size of the answer and throw it away.
-        if (remaining > 0n) factor *= factor;
-    }
-    return result;
-}
-
-/**
  * How large an exact bigint SHIFT is allowed to grow, in bits.
  *
  * Deliberately the same number as {@link MAX_EXACT_POW_BITS}, and named
@@ -2027,7 +2005,13 @@ export function executeBytecode(
           if (l.type === ValueType.Number && r.type === ValueType.Number
               && l.rational === undefined && r.rational === undefined
               && l.uncertainty === undefined && r.uncertainty === undefined) {
-            stack.push(numberValue((l.value as number) + (r.value as number)));
+            const sum = (l.value as number) + (r.value as number);
+            // One comparison keeps the plain case plain. A sum outside the
+            // safe range (or a NaN) takes the exact-integer path, which gives
+            // `2^53 + 1` its last digit. See vm/ExactIntegers.ts.
+            stack.push(sum <= Number.MAX_SAFE_INTEGER && sum >= -Number.MAX_SAFE_INTEGER
+              ? numberValue(sum)
+              : exactIntegerArithmetic(l, r, sum, "add"));
             break;
           }
           // binaryOp() at the bottom of this chain propagates a faulted
@@ -2048,8 +2032,10 @@ export function executeBytecode(
           }
           // Fraction arithmetic stays exact when a rational already rides on an
           // operand: "1/3 + 1/3 + 1/3" is exactly 1. The sidecar check gates it
-          // so this only ever PRESERVES a fraction, a plain integer sum never
-          // grows one and "1e16 + 1 - 1e16" stays the double it must be.
+          // so this only ever PRESERVES a rational. The one other producer is
+          // the fast path above, for a whole-number result past the safe range
+          // from whole operands within it; a number typed past that range seeds
+          // nothing, so "1e16 + 1 - 1e16" stays the double it must be.
           if (l.rational !== undefined || r.rational !== undefined) {
             const ratAdd = exactRationalOp(l, r, "add");
             if (ratAdd) { stack.push(ratAdd); break; }
@@ -2114,11 +2100,14 @@ export function executeBytecode(
         }
         case OpCode.SUB: {
           const r = safePop(stack), l = safePop(stack);
-          // The plain case first, as in ADD.
+          // The plain case first, as in ADD, exact past the safe range as ADD is.
           if (l.type === ValueType.Number && r.type === ValueType.Number
               && l.rational === undefined && r.rational === undefined
               && l.uncertainty === undefined && r.uncertainty === undefined) {
-            stack.push(numberValue((l.value as number) - (r.value as number)));
+            const difference = (l.value as number) - (r.value as number);
+            stack.push(difference <= Number.MAX_SAFE_INTEGER && difference >= -Number.MAX_SAFE_INTEGER
+              ? numberValue(difference)
+              : exactIntegerArithmetic(l, r, difference, "sub"));
             break;
           }
           // Same reason as ADD above.
@@ -2188,10 +2177,14 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           // The plain case first, as in ADD. The money and percentage helpers
           // below all decline two bare numbers, at the cost of a call each.
+          // Exact past the safe range, as in ADD: `2^40 * 3^20` keeps every digit.
           if (l.type === ValueType.Number && r.type === ValueType.Number
               && l.rational === undefined && r.rational === undefined
               && l.uncertainty === undefined && r.uncertainty === undefined) {
-            stack.push(numberValue((l.value as number) * (r.value as number)));
+            const product = (l.value as number) * (r.value as number);
+            stack.push(product <= Number.MAX_SAFE_INTEGER && product >= -Number.MAX_SAFE_INTEGER
+              ? numberValue(product)
+              : exactIntegerArithmetic(l, r, product, "mul"));
             break;
           }
           // A percentage scaling an uncertain number carries the tolerance, so
@@ -2350,6 +2343,14 @@ export function executeBytecode(
           // Same zero case as DIV above, and refused the same way: a
           // remainder is defined in terms of the quotient, so where one has
           // no answer neither does the other.
+          //
+          // An operand carrying an exact integer takes its remainder from that
+          // integer, not from the double it rounds to: `3^40 mod 7` is 4, where
+          // the double's low digits answered 6. See vm/ExactIntegers.ts.
+          if (l.rational !== undefined || r.rational !== undefined) {
+            const exactMod = exactIntegerRemainder(l, r);
+            if (exactMod) { stack.push(exactMod); break; }
+          }
           stack.push(binaryOp(l, r, (a, b) => a % b, (a, b) => { if (b === 0n) throw bigIntDivisionByZero(); return a % b; }));
           break;
         }
@@ -2366,9 +2367,15 @@ export function executeBytecode(
           if (l.type === ValueType.Pending) { stack.push(l); break; }
           if (r.type === ValueType.Pending) { stack.push(r); break; }
           // Plain numbers first, so the overwhelmingly common case pays for no
-          // extra type test beyond the ones already above it.
+          // extra type test beyond the ones already above it. A result past the
+          // safe range is recomputed exactly when both sides are whole numbers,
+          // so `3^40` is 12,157,665,459,056,928,801 rather than the nearest
+          // double. See vm/ExactIntegers.ts.
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(numberValue(power(l.value as number, r.value as number)));
+            const raised = power(l.value as number, r.value as number);
+            stack.push(raised <= Number.MAX_SAFE_INTEGER && raised >= -Number.MAX_SAFE_INTEGER
+              ? numberValue(raised)
+              : exactIntegerArithmetic(l, r, raised, "pow"));
             break;
           }
           // A Matrix operand means matrix exponentiation, which is repeated
@@ -3198,8 +3205,9 @@ export function executeBytecode(
           }
           // A bigint keeps its bigint, exactly as ADD/SUB/MUL/DIV do:
           // `12345678901234567890n as hex` rendered 0xAB54A98CEB1F0800 while
-          // the value ends 0AD2, because toNumber() rounded it first.
-          stack.push(hexValue(v.type === ValueType.BigInt ? (v.value as bigint) : v.toNumber()));
+          // the value ends 0AD2, because toNumber() rounded it first. An exact
+          // integer past the safe range converts from its own digits likewise.
+          stack.push(hexValue(baseConversionOperand(v)));
           break;
         }
         case OpCode.TO_PERCENTAGE: {
@@ -3239,14 +3247,14 @@ export function executeBytecode(
           const v = safePop(stack);
           const toBinaryFault = faultedOperand(v);
           if (toBinaryFault) { stack.push(toBinaryFault); break; }
-          stack.push(hexValue(v.type === ValueType.BigInt ? (v.value as bigint) : v.toNumber(), "bin"));
+          stack.push(hexValue(baseConversionOperand(v), "bin"));
           break;
         }
         case OpCode.TO_OCTAL: {
           const v = safePop(stack);
           const toOctalFault = faultedOperand(v);
           if (toOctalFault) { stack.push(toOctalFault); break; }
-          stack.push(hexValue(v.type === ValueType.BigInt ? (v.value as bigint) : v.toNumber(), "oct"));
+          stack.push(hexValue(baseConversionOperand(v), "oct"));
           break;
         }
         case OpCode.CALL_AS_CONVERTER: {

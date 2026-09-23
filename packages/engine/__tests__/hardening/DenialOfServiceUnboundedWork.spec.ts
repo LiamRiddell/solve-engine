@@ -227,7 +227,12 @@ describe("a combinatorial function refuses what it cannot answer", () => {
 		// Infinity.
 		const engine = newTrackedEngine();
 		expect(evaluate(engine, "fact(171)").value).toBe("FACTORIAL_OVERFLOW");
-		expect(evaluate(engine, "fact(170)").value).toBe(7.257415615307994e306);
+		// 170! is built exactly now (#526), so its double is the nearest one to
+		// the true value. The running double product this pinned before,
+		// 7.257415615307994e306, had drifted five units in the last place.
+		const largest = evaluate(engine, "fact(170)");
+		expect(largest.value).toBe(7.257415615307999e306);
+		expect(largest.rational?.n.toString().length).toBe(307);
 	});
 
 	test("and so does permutation, which is the same product", () => {
