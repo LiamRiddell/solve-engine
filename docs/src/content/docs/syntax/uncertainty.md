@@ -32,5 +32,50 @@ otherwise.
 
 Everything else reads the centre and drops the tolerance: a comparison compares
 the centres, and `sqrt`, `sin` and the like work on the centre alone. Correlated
-errors are out of scope, and a tolerance on a value with a unit drops the unit:
-`5m ± 1m` is read as `5 ± 1`, not carried as metres.
+errors are out of scope.
+
+## A tolerance as a percentage
+
+A tolerance written as a percentage is relative to the value, the way a
+component rated "± 5%" is read: `100 ± 5%` means within 5 of 100, and `12.3 ± 2%`
+within 0.246 of 12.3.
+
+```solve
+100 +/- 5% // 100 ± 5.0
+12.3 +/- 2% // 12.3 ± 0.25
+(100 +/- 5%) * 2 // 200 ± 10.0
+```
+
+The one exception is a value that is itself a percentage. There the tolerance is
+in percentage points, as a poll's margin of error is: `45% ± 3%` means somewhere
+from 42% to 48%, not 45% give or take 3% of 45%. It shows as the proportion, since
+the value's own percentage sign is not carried either.
+
+```solve
+45% +/- 3% // 0.45 ± 0.03
+```
+
+## A tolerance with a unit
+
+A tolerance on a value with a unit drops the unit, so `5 m ± 1 m` is read as
+`5 ± 1`, not carried as metres. When the tolerance is written in a different
+unit from the value, it is converted into the value's unit first, so the spread
+is the right size: a centimetre on a length in metres is 0.01. A temperature
+tolerance is converted as a width rather than as a reading, so 1 °F on a Celsius
+value is 5/9 of a degree.
+
+```solve
+5 m +/- 1 cm // 5 ± 0.01
+5 km +/- 100 m // 5 ± 0.1
+20 C +/- 1 F // 20 ± 0.56
+```
+
+A plain number as the tolerance is taken in the value's unit. A tolerance in a
+unit that does not measure the same thing as the value, or one given on a value
+with no unit to convert it into, is refused rather than having its unit quietly
+discarded:
+
+```solve-doc
+5 m +/- 1 kg // ERROR: A tolerance in kg cannot be read against a value in m: they do not measure the same thing.
+5 +/- 1 cm // ERROR: A tolerance in cm needs a value measured in a unit it converts to, as in "5 m +/- 1 cm"; this value has no unit to read it in.
+```

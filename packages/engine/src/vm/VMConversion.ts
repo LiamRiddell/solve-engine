@@ -538,6 +538,64 @@ export function exactRationalOp(l: Value, r: Value, op: "add" | "sub" | "mul" | 
 }
 
 /**
+ * The spread a `center ± spread` measurement carries, as a magnitude in the
+ * center's own terms, or the Error that refuses it.
+ *
+ * The spread used to be read as a bare number whatever it was written as, which
+ * gave two confident wrong answers. `100 ± 5%` became `100 ± 0.05`, because a
+ * percentage reads as its proportion; and `5 m ± 1 cm` became `5 ± 1`, a spread
+ * a hundred times too wide, because both units were dropped before either was
+ * converted. So:
+ *
+ * - A percentage is a tolerance relative to the value, `100 ± 5%` is `100 ± 5`,
+ *   the way a component's "± 5%" is read. On a center that is itself a
+ *   percentage it stays absolute, in percentage points, so a poll's
+ *   `45% ± 3%` is 0.45 ± 0.03 as it always was.
+ * - A spread with a unit is converted into the center's unit first, as an
+ *   interval rather than a reading: `convert(s) - convert(0)`, so a tolerance of
+ *   1 °F on a Celsius value is 0.56 °C wide, not the -17.2 °C that converting
+ *   1 °F as a temperature gives. A unit the center's cannot convert to, or a
+ *   center with no unit at all to convert into, is refused by name rather than
+ *   having the spread's unit silently discarded.
+ * - A plain number is taken as it is, in whatever unit the center is in.
+ *
+ * The center's own unit is still dropped afterwards, as the uncertainty page
+ * documents: carrying units through the quadrature rules is out of scope.
+ */
+export function toleranceSpread(center: Value, spread: Value): number | Value {
+    if (spread.type === ValueType.Percentage) {
+        const proportion = Math.abs(spread.toNumber());
+        return center.type === ValueType.Percentage ? proportion : Math.abs(center.toNumber()) * proportion;
+    }
+    if (spread.type !== ValueType.Uom || spread.unit === undefined) return Math.abs(spread.toNumber());
+
+    const width = Math.abs(spread.toNumber());
+    if (center.type !== ValueType.Uom || center.unit === undefined) {
+        return errorValue(
+            "UNCERTAINTY_UNIT_MISMATCH",
+            `A tolerance in ${spread.unit} needs a value measured in a unit it converts to, as in "5 m +/- 1 cm"; this value has no unit to read it in.`,
+        );
+    }
+    if (center.unit === spread.unit) return width;
+    if (sharedCurrencyExchange.isCurrency(center.unit) && sharedCurrencyExchange.isCurrency(spread.unit)) {
+        const converted = sharedCurrencyExchange.convertSync(width, spread.unit, center.unit);
+        if (converted !== null) return Math.abs(converted);
+        return errorValue(
+            "UNCERTAINTY_UNIT_MISMATCH",
+            `A tolerance in ${spread.unit} cannot be read against a value in ${center.unit} without an exchange rate, and none is available.`,
+        );
+    }
+    const measure = getMeasure(center.unit);
+    if (measure === undefined || measure !== getMeasure(spread.unit)) {
+        return errorValue(
+            "UNCERTAINTY_UNIT_MISMATCH",
+            `A tolerance in ${spread.unit} cannot be read against a value in ${center.unit}: they do not measure the same thing.`,
+        );
+    }
+    return Math.abs(convertUnit(width, spread.unit, center.unit) - convertUnit(0, spread.unit, center.unit));
+}
+
+/**
  * The result of a `+`/`-`/`*`/`/` between operands, at least one of which
  * carries a one-sigma uncertainty, propagated in quadrature. Null when it does
  * not apply.
