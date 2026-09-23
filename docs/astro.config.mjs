@@ -287,6 +287,7 @@ export default defineConfig({
               items: [
                 { slug: "syntax/vectors-and-matrices" },
                 { slug: "syntax/statistics" },
+                { slug: "syntax/probability-distributions" },
               ],
             },
             {

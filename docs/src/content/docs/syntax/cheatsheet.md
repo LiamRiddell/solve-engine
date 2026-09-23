@@ -70,6 +70,8 @@ median of 1, 5, 3 // 3
 larger of 10 and 4 // 10
 half of 50 // 25
 clamp 15 between 1 and 10 // 10
+binompdf(10, 0.5, 3) // 0.12
+normalinv(0.975) // 1.96
 ```
 
 ## Conversions

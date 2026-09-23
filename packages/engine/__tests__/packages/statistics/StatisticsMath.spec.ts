@@ -6,8 +6,9 @@
 import { describe, expect, test } from "@jest/globals";
 import {
 	correlation, slope, intercept, rSquared,
-	percentile, zScore, normalCdf, normalPdf,
+	percentile, zScore,
 } from "@solve-js/packages/statistics/StatisticsMath";
+import { normalCdf, normalPdf } from "@solve-js/packages/statistics/DistributionMath";
 
 describe("correlation and regression", () => {
 	test("a perfect positive relationship is 1", () => {

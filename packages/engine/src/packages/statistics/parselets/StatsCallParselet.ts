@@ -8,7 +8,8 @@ import { STATISTICS_CALL_FUNCTIONS } from "../StatisticsFunctionNames";
 
 /**
  * The parenthesised call form of a statistics function: `correlation([a], [b])`,
- * `percentile([list], 90)`, `zscore(5, [list])`, `normalcdf(1.96)`. Triggered on
+ * `percentile([list], 90)`, `zscore(5, [list])`, `normalcdf(1.96)`,
+ * `binompdf(10, 0.5, 3)`. Triggered on
  * the `STAT_CALL` token; the name maps to a plugin function and the call lowers
  * to one `CALL_PLUGIN`, with the plugin validating arity and shapes.
  */

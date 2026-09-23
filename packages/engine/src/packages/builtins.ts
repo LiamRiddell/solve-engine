@@ -200,8 +200,9 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   // Everyday randomness and identifiers (uuid, random hex, pick, shuffle,
   // coin). On by default, removable.
   RANDOM_PACKAGE,
-  // Second-tier statistics (correlation, regression, percentile, z-score,
-  // normal distribution). On by default, removable.
+  // Second-tier statistics (correlation, regression, percentile, z-score) and
+  // the probability distributions (normal, binomial, Poisson, Student's t, erf,
+  // gamma). On by default, removable.
   STATISTICS_PACKAGE,
   // Numeral spellings: as words, as ordinal, as roman, and from roman. On by
   // default, removable.

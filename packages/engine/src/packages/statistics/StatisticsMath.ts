@@ -1,7 +1,8 @@
 /**
  * Statistics as pure functions: number arrays in, a number out, no engine types
  * and no side effects, so each is unit-tested on its own against known values.
- * The package layer reads lists off the engine's values and calls these.
+ * The package layer reads lists off the engine's values and calls these. The
+ * probability distributions are in DistributionMath.ts.
  *
  * "Population" forms are used throughout (dividing by n, not n-1), to match the
  * standard deviation the engine's existing `stdev` already reports, so a z-score
@@ -84,25 +85,4 @@ export function percentile(xs: readonly number[], p: number): number {
 export function zScore(x: number, xs: readonly number[]): number {
 	const s = stdev(xs);
 	return s === 0 ? NaN : (x - mean(xs)) / s;
-}
-
-/**
- * The error function, via the Abramowitz & Stegun 7.1.26 approximation
- * (maximum error about 1.5e-7), the building block of the normal CDF.
- */
-function erf(x: number): number {
-	const sign = x < 0 ? -1 : 1;
-	const t = 1 / (1 + 0.3275911 * Math.abs(x));
-	const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
-	return sign * y;
-}
-
-/** The standard-normal cumulative probability P(Z ≤ z). */
-export function normalCdf(z: number): number {
-	return 0.5 * (1 + erf(z / Math.SQRT2));
-}
-
-/** The standard-normal probability density at z. */
-export function normalPdf(z: number): number {
-	return Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
 }
