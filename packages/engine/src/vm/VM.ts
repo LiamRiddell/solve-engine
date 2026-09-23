@@ -15,7 +15,7 @@ import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
 import { builtinFunctions, asConverterRegistry } from "@solve-js/vm/VMBuiltins";
 import { builtinArityError, builtinFunctionNames } from "@solve-js/vm/VMBuiltinArity";
-import { nearestNames, didYouMeanSentence } from "@solve-js/errors/DidYouMean";
+import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/DidYouMean";
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
@@ -185,7 +185,7 @@ export function createVM(
         }
         return variables.get(key);
       },
-      getVariableNames() { return Array.from(variables.keys()); },
+      getVariableNames(limit: number) { return variables.size > limit ? undefined : variables.keys(); },
       setVar(key: string, val: Value) { variables.set(key, val); },
       deleteVar(key: string) { variables.delete(key); },
       pushCallFrame(frame: Map<string, Value>) {
@@ -1541,7 +1541,7 @@ function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
     // said the two did not measure the same thing. Say what it is, and name the
     // nearest real units (see errors/DidYouMean.ts).
     if (getMeasure(toUnit) === undefined && !sharedCurrencyExchange.isCurrency(toUnit) && !toUnit.includes("/")) {
-        const near = nearestNames(toUnit, Object.keys(UNIT_TABLE));
+        const near = nearestNames(toUnit, [], 3, unitNameIndex());
         return errorValue("UNKNOWN_UNIT", `"${toUnit}" is not a unit.${didYouMeanSentence(near)}`);
     }
     // Name the two dimensions when both are known ("a duration cannot be
@@ -1585,17 +1585,40 @@ function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
 const MAX_EXACT_POW_BITS = 65536;
 
 /**
- * The names an undefined variable could have been meant as: the variables set
- * so far, and every unit spelling (a misspelt unit reaches the VM as an
- * undefined variable, since the lexer did not recognise it as a unit).
+ * The variables an undefined variable could have been meant as. The unit
+ * spellings are searched alongside, through {@link unitNameIndex}, since a
+ * misspelt unit reaches the VM as an undefined variable too.
  */
-function variableNameCandidates(vm: VM): string[] {
-    return [...(vm.getVariableNames?.() ?? []), ...Object.keys(UNIT_TABLE)];
+function* variableNameCandidates(vm: VM): Generator<string> {
+    // A generator, so a word too short for a suggestion reads nothing at all.
+    const variables = vm.getVariableNames?.(VARIABLE_SUGGESTION_LIMIT);
+    if (variables !== undefined) yield* variables;
 }
 
-/** The names an undefined function could have been meant as: the builtins and the user's own. */
+/**
+ * The most variables a "did you mean" compares an unknown name against. Past
+ * this the document is generated rather than written, and comparing every
+ * unknown name with every variable made a long document's evaluation grow with
+ * the square of its length; the suggestion then draws on units alone.
+ */
+const VARIABLE_SUGGESTION_LIMIT = 500;
+
+let unitNames: NameIndex | null = null;
+let builtinNames: NameIndex | null = null;
+
+/** Every unit spelling, indexed once on first use rather than read on every unknown name. */
+function unitNameIndex(): NameIndex {
+    return unitNames ??= new NameIndex(Object.keys(UNIT_TABLE));
+}
+
+/** Every builtin function name, indexed once on first use. */
+function builtinNameIndex(): NameIndex {
+    return builtinNames ??= new NameIndex(builtinFunctionNames());
+}
+
+/** The user's own functions, which an undefined function could have been meant as beside the builtins. */
 function functionNameCandidates(vm: VM): string[] {
-    return [...builtinFunctionNames(), ...vm.getUserFunctionDefs().map((fn) => fn.name)];
+    return vm.getUserFunctionDefs().map((fn) => fn.name);
 }
 
 /**
@@ -3103,7 +3126,7 @@ export function executeBytecode(
           if (!fn) {
             // Name the nearest real functions, never silently call one; see
             // errors/DidYouMean.ts.
-            const nearFunctions = nearestNames(name, functionNameCandidates(vm));
+            const nearFunctions = nearestNames(name, functionNameCandidates(vm), 3, builtinNameIndex());
             throw ErrorFactory.execution({
               code: "UNDEFINED_FUNCTION",
               message: `Undefined function: ${name}${nearFunctions.length === 0 ? "" : `.${didYouMeanSentence(nearFunctions)}`}`,
@@ -3188,7 +3211,7 @@ export function executeBytecode(
           } else {
             // Name the nearest variables and units, never silently use one;
             // see errors/DidYouMean.ts.
-            const nearNames = nearestNames(varName, variableNameCandidates(vm), 4);
+            const nearNames = nearestNames(varName, variableNameCandidates(vm), 4, unitNameIndex());
             throw ErrorFactory.execution({
               code: "UNDEFINED_VARIABLE",
               message: `Undefined variable: ${varName}${nearNames.length === 0 ? "" : `.${didYouMeanSentence(nearNames)}`}`,

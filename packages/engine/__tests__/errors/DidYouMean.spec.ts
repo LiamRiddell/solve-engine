@@ -10,7 +10,8 @@ import { describe, expect, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { EngineError } from "@solve-js/errors/EngineError";
-import { nearestNames, didYouMeanSentence } from "@solve-js/errors/DidYouMean";
+import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/DidYouMean";
+import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 
 function thrown(source: string): EngineError {
 	try {
@@ -94,5 +95,76 @@ describe("a conversion target that is not a unit says so", () => {
 
 	test("while a real unit of another measure is still a mismatch", () => {
 		expect(newTrackedEngine().evaluateExpression("5 kg to m").errorCode).toBe("INCOMPATIBLE_UNITS");
+	});
+});
+
+describe("the search stays exact and cheap", () => {
+	/** The optimal string alignment distance, as a full matrix, with no shortcuts. */
+	function referenceDistance(a: string, b: string): number {
+		const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+		for (let i = 1; i <= a.length; i++) {
+			for (let j = 1; j <= b.length; j++) {
+				d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+				if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+			}
+		}
+		return d[a.length][b.length];
+	}
+
+	/** The suggestion rule applied by brute force: every candidate, every distance. */
+	function reference(word: string, candidates: readonly string[], minLength: number): string[] {
+		if (word.length < minLength) return [];
+		const limit = word.length <= 5 ? 1 : word.length <= 9 ? 2 : 3;
+		const scored = [...new Set(candidates)]
+			.filter((c) => c !== word)
+			.map((c) => ({ c, d: referenceDistance(word.toLowerCase(), c.toLowerCase()) }))
+			.filter((s) => s.d <= limit);
+		if (scored.length === 0) return [];
+		const best = Math.min(...scored.map((s) => s.d));
+		const found = scored.filter((s) => s.d === best).map((s) => s.c);
+		return found.length > 3 ? [] : found.sort();
+	}
+
+	test("the prefilter and the index never drop a real match", () => {
+		// Every unit spelling, each misspelt by a deletion, an insertion, a
+		// substitution and a transposition, searched through the index and by
+		// brute force. A deterministic generator, so a failure repeats.
+		const units = Object.keys(UNIT_TABLE);
+		const index = new NameIndex(units);
+		let state = 12345;
+		const next = (n: number) => {
+			state = (Math.imul(state, 1103515245) + 12345) >>> 0;
+			return state % n;
+		};
+		const letters = "abcdefghijklmnopqrstuvwxyz0123456789";
+		let checked = 0;
+		for (let u = 0; u < units.length; u += 3) {
+			const unit = units[u];
+			if (unit.length < 2) continue;
+			const at = next(unit.length);
+			const words = [
+				unit.slice(0, at) + unit.slice(at + 1),
+				unit.slice(0, at) + letters[next(letters.length)] + unit.slice(at),
+				unit.slice(0, at) + letters[next(letters.length)] + unit.slice(at + 1),
+				at + 1 < unit.length ? unit.slice(0, at) + unit[at + 1] + unit[at] + unit.slice(at + 2) : unit + "s",
+			];
+			for (const word of words) {
+				expect(nearestNames(word, [], 3, index)).toEqual(reference(word, units, 3));
+				checked++;
+			}
+		}
+		expect(checked).toBeGreaterThan(1000);
+	});
+
+	test("a long document's unknown names do not compare against every variable", () => {
+		// Past the limit the variables are left out, and the unit table still
+		// answers: a generated document of thousands of variables and unknown
+		// names used to grow with the square of its length.
+		const lines: string[] = [];
+		for (let i = 0; i < 600; i++) lines.push(`:value${i} = ${i}`);
+		lines.push("valeu1 + 1", "5 kilometrs");
+		const result = newTrackedEngine().parseDocument(lines.join("\n"));
+		expect(result.lines[600].error).toBe("Undefined variable: valeu1");
+		expect(result.lines[601].error).toBe("Undefined variable: kilometrs. Did you mean kilometers, kilometre or kilometres?");
 	});
 });
