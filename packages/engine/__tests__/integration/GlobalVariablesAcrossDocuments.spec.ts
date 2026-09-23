@@ -3,7 +3,7 @@ import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { DocumentModel, ViewportRange } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator, EvalTier } from "@solve-js/engine/ThreeTierEvaluator";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
-import { ValueType, numberValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue } from "@solve-js/vm/Value";
 import { sharedGlobalVariableStore, globalDagKey } from "@solve-js/vm/GlobalVariableStore";
 
 /**
@@ -282,20 +282,92 @@ describe("Global variables across documents", () => {
 	// ── 10. Reentrancy / cycle guard doesn't corrupt or hang ────────────
 
 	test("a mutual write cycle across two documents doesn't hang or corrupt state", () => {
-		let depth = 0;
-		let maxDepth = 0;
+		// Each hop writes a DIFFERENT value. The previous version of this test
+		// passed the received Value straight back, so the second hop hit
+		// sameValue's short-circuit and the cycle stopped at depth 2 without
+		// ever reaching the depth bound it claimed to be testing. It passed
+		// while the thing it names was never exercised at all.
+		let hops = 0;
+		const announced = new Map<string, number>();
 		const unsubscribe = sharedGlobalVariableStore.subscribe((name, value) => {
-			depth++;
-			maxDepth = Math.max(maxDepth, depth);
-			if (depth < 1000) {
-				if (name === "cycleA") sharedGlobalVariableStore.set("cycleB", value);
-				else if (name === "cycleB") sharedGlobalVariableStore.set("cycleA", value);
-			}
-			depth--;
+			hops++;
+			announced.set(name, value.toNumber());
+			// A guard belonging to the TEST, set high enough that the engine's
+			// own bound is what terminates this. If this is what stops the
+			// recursion then the engine has no bound, and the assertions below
+			// are what say so.
+			if (hops > 5000) return;
+			const next = numberValue(value.toNumber() + 1);
+			if (name === "cycleA") sharedGlobalVariableStore.set("cycleB", next);
+			else if (name === "cycleB") sharedGlobalVariableStore.set("cycleA", next);
 		});
 
 		expect(() => sharedGlobalVariableStore.set("cycleA", numberValue(0))).not.toThrow();
-		expect(maxDepth).toBeLessThan(100);
+
+		// Terminated on the engine's bound, not on the test's.
+		expect(hops).toBeGreaterThan(1);
+		expect(hops).toBeLessThan(200);
+
+		// The invariant that matters: every value the store HOLDS is one its
+		// listeners were TOLD about. Before this fix the write landed before
+		// the depth check and notify() returned early at the limit, so the
+		// last stored value was one no reader ever saw, and nothing re-reads a
+		// cell it was not notified of.
+		for (const [name, lastAnnounced] of announced) {
+			expect(sharedGlobalVariableStore.get(name)!.toNumber()).toBe(lastAnnounced);
+		}
+
+		unsubscribe();
+	});
+
+	test("an unchanged object-valued global does not re-notify", () => {
+		// The short-circuit that stops a write storm tested `Array.isArray` on
+		// the payload itself, which no payload ever is: the arrays are a level
+		// further in, as a matrix's `data`. So two structurally identical
+		// matrices fell through to Object.is on two freshly-built objects,
+		// every pass re-notified, and each notification dirtied the whole
+		// downstream closure of every reader.
+		const matrix = () => new Value(ValueType.Matrix, { rows: 1, cols: 2, data: [1, 2], hasSymbolic: false });
+
+		let notifications = 0;
+		const unsubscribe = sharedGlobalVariableStore.subscribe(() => { notifications++; });
+
+		sharedGlobalVariableStore.set("m", matrix());
+		expect(notifications).toBe(1);
+
+		sharedGlobalVariableStore.set("m", matrix());
+		sharedGlobalVariableStore.set("m", matrix());
+		expect(notifications).toBe(1);
+
+		// A genuine change still gets through.
+		sharedGlobalVariableStore.set("m", new Value(ValueType.Matrix, { rows: 1, cols: 2, data: [1, 3], hasSymbolic: false }));
+		expect(notifications).toBe(2);
+
+		unsubscribe();
+	});
+
+	test("a change visible only in a display sidecar still notifies", () => {
+		// `1.5` and `1.5 to 2 dp` are the same double and render as "1.5" and
+		// "1.50". Comparing only `value` called them equal and suppressed the
+		// notification, leaving every reader of the cell showing the old
+		// rendering with no event that would ever correct it. A redundant
+		// notification costs a re-evaluation; a missing one is permanent.
+		let notifications = 0;
+		const unsubscribe = sharedGlobalVariableStore.subscribe(() => { notifications++; });
+
+		sharedGlobalVariableStore.set("d", numberValue(1.5));
+		expect(notifications).toBe(1);
+
+		const withPrecision = numberValue(1.5);
+		withPrecision.decimalPlaces = 2;
+		sharedGlobalVariableStore.set("d", withPrecision);
+		expect(notifications).toBe(2);
+
+		const withTolerance = numberValue(1.5);
+		withTolerance.decimalPlaces = 2;
+		withTolerance.uncertainty = 0.25;
+		sharedGlobalVariableStore.set("d", withTolerance);
+		expect(notifications).toBe(3);
 
 		unsubscribe();
 	});
