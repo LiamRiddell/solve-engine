@@ -24,4 +24,4 @@ The boundary: both notations answer text, as `as scientific` does, so they end a
 
 ## Verification
 
-A new suite pins each rounding above including the carries, the exact-decimal half, every spelling, units and money, the refused count, and the unchanged `to N dp` and `to N digits`; engineering and compact form are pinned directly and through the engine, including the suffix round trip and a refused text value. The rounding and decimals pages gain proven examples. `npm run verify:ci` passes: TESTS tests across SUITES suites.
+A new suite pins each rounding above including the carries, the exact-decimal half, every spelling, units and money, the refused count, and the unchanged `to N dp` and `to N digits`; engineering and compact form are pinned directly and through the engine, including the suffix round trip and a refused text value. The rounding and decimals pages gain proven examples. `npm run verify:ci` passes: 9,807 tests across 496 suites, with the bundled-consumer contract.

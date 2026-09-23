@@ -22,4 +22,4 @@ The boundary: a short word gets no suggestion, since the unit table holds thousa
 
 ## Verification
 
-A new suite pins the distance, the ties and the thresholds, the sentence, each of the error forms above including a user-defined function and a variable from earlier in the note, and the mismatch that is still a mismatch. The unit arithmetic and variables pages gain proven examples, and the TypeScript guide shows the fields a host reads. `npm run verify:ci` passes: TESTS tests across SUITES suites.
+A new suite pins the distance, the ties and the thresholds, the sentence, each of the error forms above including a user-defined function and a variable from earlier in the note, and the mismatch that is still a mismatch. The unit arithmetic and variables pages gain proven examples, and the TypeScript guide shows the fields a host reads. `npm run verify:ci` passes: 9,807 tests across 496 suites, with the bundled-consumer contract.

@@ -21,4 +21,4 @@ The boundary: a seeded draw is repeatable, not unpredictable. The generator (mul
 
 ## Verification
 
-A new suite pins the stream, the document seed line, repeatability across engines, variation when unseeded, reseeding and restoring, precedence, a line inserted above, identical lines, agreement between `parseDocument` and `evaluateDocument`, a re-draw after the seed line is edited in the incremental evaluator, and a single evaluated line. The dice, randomness and embedding pages are updated, with proven examples. `npm run verify:ci` passes: TESTS tests across SUITES suites.
+A new suite pins the stream, the document seed line, repeatability across engines, variation when unseeded, reseeding and restoring, precedence, a line inserted above, identical lines, agreement between `parseDocument` and `evaluateDocument`, a re-draw after the seed line is edited in the incremental evaluator, and a single evaluated line. The dice, randomness and embedding pages are updated, with proven examples. `npm run verify:ci` passes: 9,807 tests across 496 suites, with the bundled-consumer contract.
