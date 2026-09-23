@@ -14,7 +14,8 @@ import { CoreErrorCodes, DatetimeErrorCodes } from "@solve-js/errors/ErrorCode";
 import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@solve-js/vm/BusinessDays";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
 import { builtinFunctions, asConverterRegistry } from "@solve-js/vm/VMBuiltins";
-import { builtinArityError } from "@solve-js/vm/VMBuiltinArity";
+import { builtinArityError, builtinFunctionNames } from "@solve-js/vm/VMBuiltinArity";
+import { nearestNames, didYouMeanSentence } from "@solve-js/errors/DidYouMean";
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
@@ -184,6 +185,7 @@ export function createVM(
         }
         return variables.get(key);
       },
+      getVariableNames() { return Array.from(variables.keys()); },
       setVar(key: string, val: Value) { variables.set(key, val); },
       deleteVar(key: string) { variables.delete(key); },
       pushCallFrame(frame: Map<string, Value>) {
@@ -1523,6 +1525,14 @@ function datetimeInZone(left: Value, name: string, vm: VM): Value {
 }
 
 function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
+    // A target that is no unit at all is a different mistake from two units
+    // that measure different things, most often a misspelling: `5 km in mies`
+    // said the two did not measure the same thing. Say what it is, and name the
+    // nearest real units (see errors/DidYouMean.ts).
+    if (getMeasure(toUnit) === undefined && !sharedCurrencyExchange.isCurrency(toUnit) && !toUnit.includes("/")) {
+        const near = nearestNames(toUnit, Object.keys(UNIT_TABLE));
+        return errorValue("UNKNOWN_UNIT", `"${toUnit}" is not a unit.${didYouMeanSentence(near)}`);
+    }
     // Name the two dimensions when both are known ("a duration cannot be
     // converted to a length"). A compound rate or an unrecognised currency code
     // has no single dimension to name, so it keeps the unit-naming fallback.
@@ -1562,6 +1572,20 @@ function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
  * untouched, so `2 ^ 100000` is still Infinity, exactly as IEEE 754 says.
  */
 const MAX_EXACT_POW_BITS = 65536;
+
+/**
+ * The names an undefined variable could have been meant as: the variables set
+ * so far, and every unit spelling (a misspelt unit reaches the VM as an
+ * undefined variable, since the lexer did not recognise it as a unit).
+ */
+function variableNameCandidates(vm: VM): string[] {
+    return [...(vm.getVariableNames?.() ?? []), ...Object.keys(UNIT_TABLE)];
+}
+
+/** The names an undefined function could have been meant as: the builtins and the user's own. */
+function functionNameCandidates(vm: VM): string[] {
+    return [...builtinFunctionNames(), ...vm.getUserFunctionDefs().map((fn) => fn.name)];
+}
 
 /**
  * `Number.MAX_SAFE_INTEGER`, the edge of the safe range the plain arithmetic
@@ -3064,7 +3088,15 @@ export function executeBytecode(
           args.reverse();
           const fn = vm.getUserFunction(name);
           if (!fn) {
-            throw ErrorFactory.execution("UNDEFINED_FUNCTION", `Undefined function: ${name}`, { name });
+            // Name the nearest real functions, never silently call one; see
+            // errors/DidYouMean.ts.
+            const nearFunctions = nearestNames(name, functionNameCandidates(vm));
+            throw ErrorFactory.execution({
+              code: "UNDEFINED_FUNCTION",
+              message: `Undefined function: ${name}${nearFunctions.length === 0 ? "" : `.${didYouMeanSentence(nearFunctions)}`}`,
+              suggestion: nearFunctions.length > 0 ? nearFunctions.join(", ") : undefined,
+              context: { name, didYouMean: nearFunctions },
+            });
           }
           if (argCount !== fn.params.length) {
             throw ErrorFactory.execution(
@@ -3141,11 +3173,15 @@ export function executeBytecode(
           } else if (symbolicTolerant) {
             stack.push(symbolicValue(varSymbolicNode(varName)));
           } else {
-            throw ErrorFactory.execution(
-              "UNDEFINED_VARIABLE",
-              `Undefined variable: ${varName}`,
-              { varName },
-            );
+            // Name the nearest variables and units, never silently use one;
+            // see errors/DidYouMean.ts.
+            const nearNames = nearestNames(varName, variableNameCandidates(vm));
+            throw ErrorFactory.execution({
+              code: "UNDEFINED_VARIABLE",
+              message: `Undefined variable: ${varName}${nearNames.length === 0 ? "" : `.${didYouMeanSentence(nearNames)}`}`,
+              suggestion: nearNames.length > 0 ? nearNames.join(", ") : undefined,
+              context: { varName, didYouMean: nearNames },
+            });
           }
           break;
         }

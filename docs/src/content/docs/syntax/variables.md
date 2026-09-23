@@ -31,6 +31,15 @@ m/s^2 // 0.75
 9.81 m/s^2 // 9.81 m/s²
 ```
 
+A name that was never defined is an error, and when it is one or two letters
+from a name that was, the error says so rather than quietly using it:
+
+```solve-doc
+budget = 100
+budgte * 2 // ERROR: Undefined variable: budgte. Did you mean budget?
+sqr(16) // ERROR: Undefined function: sqr. Did you mean sqrt?
+```
+
 ## Running totals
 
 `+=` and `-=` update a named total in place, so a note becomes a running balance

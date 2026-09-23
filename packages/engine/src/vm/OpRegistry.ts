@@ -212,6 +212,13 @@ export interface VM {
 	 * compiling a function body at all.
 	 */
 	getVar(key: string): Value | undefined;
+	/**
+	 * The names of every top-level variable currently set, for the "did you
+	 * mean" suggestion an undefined name carries (see errors/DidYouMean.ts).
+	 * Optional so a VM built elsewhere need not supply it; without it the
+	 * suggestion draws on units and functions alone.
+	 */
+	getVariableNames?(): string[];
 	setVar(key: string, value: Value): void;
 	/**
 	 * Remove a top-level variable binding. Used at the start of each document

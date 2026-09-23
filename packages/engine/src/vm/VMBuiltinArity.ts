@@ -172,6 +172,14 @@ function expectation(arity: BuiltinArity): string {
 }
 
 /**
+ * The name of every builtin function in the arity table, for the "did you mean"
+ * suggestion an undefined function carries (see errors/DidYouMean.ts).
+ */
+export function builtinFunctionNames(): string[] {
+  return Object.values(BUILTIN_ARITY).map((arity) => arity.name);
+}
+
+/**
  * Checks a builtin call's argument count before the implementation runs.
  *
  * @param index - The builtin index, the first operand of `OpCode.CALL_BUILTIN`.
