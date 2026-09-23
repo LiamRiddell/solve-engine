@@ -205,6 +205,8 @@ export const TokenTypes = {
   ROUNDED: "ROUNDED",
   TO_NEAREST: "TO_NEAREST",
   DECIMAL_PLACES: "DECIMAL_PLACES",
+  // `to 3 sf`: significant figures, fused by the same rule as DECIMAL_PLACES.
+  SIG_FIGS: "SIG_FIGS",
   // Fused two-word phrase tokens (see MathPhrasesPackage.ts's `phrases`
   // field), deliberately NOT bare single-word keywords: "average"
   // "total", "count", etc. are common variable names, and this codebase

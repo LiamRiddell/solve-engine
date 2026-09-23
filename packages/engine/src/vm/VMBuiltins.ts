@@ -244,6 +244,35 @@ function roundToPlaces(source: Value, places: number): Value {
     return withPlaces(source, Math.round(scaled) / scale, p);
 }
 
+/**
+ * Round a value to a number of significant figures, the way a measured value is
+ * reported: `1234567 to 3 sf` is 1,230,000 and `0.0012345 to 2 sf` is 0.0012.
+ *
+ * The figures that matter start at the value's first non-zero digit, so the
+ * place to round at is found from the value's magnitude. Where that place is at
+ * or after the decimal point this is `to N dp` at that place count, which keeps
+ * an exact decimal exact and shows the trailing zeros significance implies
+ * (`2.5 to 3 sf` is 2.50). Where it falls before the decimal point, the value is
+ * rounded to that power of ten and shown with no decimals. Zero, an infinity and
+ * NaN have no first digit and are returned as they are. The unit is kept.
+ *
+ * @param source - The value to round.
+ * @param figures - How many significant figures to keep, 1 to 17.
+ */
+function roundToSignificant(source: Value, figures: number): Value {
+    const n = Math.trunc(figures);
+    const value = source.toNumber();
+    if (value === 0 || !Number.isFinite(value)) return withPlaces(source, value, Math.max(0, n - 1));
+    // The magnitude is read off the value already rounded to n figures, since
+    // rounding can carry into the next power of ten: 9.99 to 2 sf is 10, whose
+    // two figures end at the units, not the tenths.
+    const rounded = Number(value.toPrecision(n));
+    const magnitude = Math.floor(Math.log10(Math.abs(rounded)));
+    const places = n - 1 - magnitude;
+    if (places >= 0) return roundToPlaces(source, places);
+    return withPlaces(source, rounded, 0);
+}
+
 /** Carry `source`'s unit onto `magnitude` and stamp its display precision (and exact decimal, when the rounding was exact). */
 function withPlaces(source: Value, magnitude: number, places: number, exact?: DecimalData): Value {
     const result = source.type === ValueType.Uom && source.unit !== undefined ? uomValue(magnitude, source.unit) : numberValue(magnitude);
@@ -1318,6 +1347,9 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // pure loss. Asking for fewer decimal places than a number has cannot
     // change it, so a value that is already whole is returned untouched.
     97: (args) => roundToPlaces(args[0], args[1].toNumber()),
+    // Not reachable by name, only through `<value> to <n> sf`; see
+    // roundToSignificant() and converters/parselets/RoundingParselets.ts.
+    108: (args) => roundToSignificant(args[0], args[1].toNumber()),
     // splitEach(amount, n): a per-person bill split, `split $180 between 4` and
     // `$120 + 18% split 3 ways`. Backs both split spellings (see
     // BillSplitParselets.ts). Money stays exact and the shares add back to the

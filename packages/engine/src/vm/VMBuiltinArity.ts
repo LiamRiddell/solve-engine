@@ -157,6 +157,9 @@ const BUILTIN_ARITY: Record<number, BuiltinArity> = {
   106: { name: "mode", min: 0, max: Infinity },
   // Weighted average, interleaved value/weight pairs (issue #185).
   107: { name: "weightedAverage", min: 2, max: Infinity },
+  // Not reachable by name, only through `<value> to <n> sf`; see
+  // converters/parselets/RoundingParselets.ts.
+  108: { name: "roundToSignificant", min: 2, max: 2 },
 };
 
 /** "1 argument" / "2 arguments", so the message reads as English either way. */

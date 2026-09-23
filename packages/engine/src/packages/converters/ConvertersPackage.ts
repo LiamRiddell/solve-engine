@@ -1,6 +1,7 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { AsConverterParselet } from "./parselets/AsConverterParselet";
-import { RoundedParselet, ToNearestParselet, DecimalPlacesParselet } from "./parselets/RoundingParselets";
+import { toEngineering, toCompact } from "./NumberNotation";
+import { RoundedParselet, ToNearestParselet, DecimalPlacesParselet, SignificantFiguresParselet } from "./parselets/RoundingParselets";
 import { decimalPlacesNormalizerRule } from "./normalizer/DecimalPlacesNormalizerRule";
 import { converterPrepositionNormalizerRule } from "./normalizer/ConverterPrepositionNormalizerRule";
 
@@ -39,9 +40,16 @@ export const CONVERTERS_PACKAGE: IEnginePackage = {
     ROUNDED: new RoundedParselet(),
     TO_NEAREST: new ToNearestParselet(),
     DECIMAL_PLACES: new DecimalPlacesParselet(),
+    SIG_FIGS: new SignificantFiguresParselet(),
   },
   normalizerRules: [
     decimalPlacesNormalizerRule(),
     converterPrepositionNormalizerRule(),
   ],
+  // Short forms of a number, as text; see NumberNotation.ts.
+  asConverters: {
+    engineering: toEngineering,
+    eng: toEngineering,
+    compact: toCompact,
+  },
 };
