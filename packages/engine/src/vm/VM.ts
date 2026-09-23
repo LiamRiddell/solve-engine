@@ -22,6 +22,7 @@ import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConvers
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
+import type { ScopeId } from "@solve-js/vm/CellScope";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
@@ -318,6 +319,14 @@ export interface LineExecutionContext {
      * `calendar/DateCalendar.ts` resolves either case.
      */
     calendar?: CalendarBackend;
+    /**
+     * The scope this line executes under: the owner of a `global :name` cell it
+     * writes. Absent on a path with no engine context of its own (a warm-up run,
+     * the worker, a lone `evaluateExpression`); the cell opcodes fall back to the
+     * engine's own `EngineContext.scope` there. See `vm/CellScope.ts` and
+     * `docs-internal/plans/CROSS_SCOPE_CELLS.md`.
+     */
+    scope?: ScopeId;
     /** Look up another line's cached result by 1-based line number. `undefined` = not evaluated yet (or out of range), distinct from a line that evaluated to an actual `undefined`-like Value, which can't happen (every Value type has a concrete representation). */
     getLineResult?: (lineNumber: number) => Value | undefined;
     /**
