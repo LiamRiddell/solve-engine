@@ -62,6 +62,15 @@ export function evaluateDocument(
 	_options: UnifiedParsingOptions = { inputType: "markdown" },
 ): ParsingResult {
 	const previousDocumentModel = engine.getDocumentModel();
+	// Taken before the evaluator below is constructed, because constructing one
+	// seizes this unconditionally (ThreeTierEvaluator wires its own checkpointer
+	// onto the engine's batcher). Restoring it is not housekeeping: the batcher
+	// uses whatever checkpointer it holds to restore VM state when an async
+	// value lands later, and checkpoints are keyed by line position. Leaving
+	// this pass's checkpointer in place meant a host's own async results were
+	// restored from checkpoints recorded against a document that no longer
+	// exists, at line numbers belonging to different lines.
+	const previousCheckpointer = engine.getBatcher().checkpointer;
 
 	const doc = new DocumentModel();
 	doc.setDocument(input);
@@ -143,9 +152,10 @@ export function evaluateDocument(
 		return { lines, totalLines: lineCount, errors };
 	} finally {
 		// Drop this pass's evaluator (unsubscribes it from the shared global
-		// store) and put back whatever document the host had wired, so borrowing
-		// the engine for one pass leaves nothing behind.
+		// store) and put back whatever document and checkpointer the host had
+		// wired, so borrowing the engine for one pass leaves nothing behind.
 		evaluator.terminateWorker();
 		engine.setDocumentModel(previousDocumentModel);
+		engine.getBatcher().checkpointer = previousCheckpointer;
 	}
 }
