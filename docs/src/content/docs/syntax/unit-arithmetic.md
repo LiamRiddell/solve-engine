@@ -33,11 +33,19 @@ The left operand decides the result unit.
 
 An area is a length times a length, so it is measured in square units: a room
 5 metres by 3 metres covers 15 square metres, written `m2`. A volume is three
-lengths multiplied, measured in cubic units such as `m3` or litres. Either can be
-written as a power on the unit: `m^2` is square metres and `m^3` is cubic
-metres.
+lengths multiplied, measured in cubic units such as `m3` or litres. Multiplying
+lengths gives exactly that, with the left operand's unit setting the answer's, the
+same rule addition follows.
 
-The power belongs to the unit it is written on. `5 m^2` is five square metres,
+```solve
+5 m * 3 m // 15.00 m2
+2 m * 3 m * 4 m // 24.00 m3
+5 m * 3 ft // 4.57 m2
+5 m2 * 3 m // 15.00 m3
+```
+
+An area or volume can also be written as a power on the unit: `m^2` is square
+metres and `m^3` is cubic metres. The power belongs to the unit it is written on. `5 m^2` is five square metres,
 the way a physics book reads it, not five metres squared, which would be 25
 square metres. To square a whole quantity, put it in brackets.
 
@@ -61,11 +69,13 @@ sqrt(1 ha) // 100.00 m
 Only a length has a square or a cube with a unit, so a power or root of anything
 else is an error rather than the bare number. A kilogram squared, a currency
 squared or a metre to the fourth power has no unit to report, and answering 25
-for `5 kg^2` would drop the unit without saying so.
+for `5 kg^2` would drop the unit without saying so. An area times an area is a
+metre to the fourth power too, so it is refused the same way.
 
 ```solve-doc
 5 kg^2 // ERROR: "kg^2" is not a unit: a power on a unit makes an area or a volume, so it applies only to a length the unit table spells squared or cubed, such as m^2 or ft^3.
 sqrt(16 m) // ERROR: sqrt: a quantity in m has no square root with a unit; only an area has a length as its root.
+5 m2 * 3 m2 // ERROR: A quantity in m2 times one in m2 has no unit: lengths multiply into an area or a volume, and a product of more than three lengths is not a unit.
 ```
 
 The boundary: this covers a length squared or cubed, and nothing wider. The

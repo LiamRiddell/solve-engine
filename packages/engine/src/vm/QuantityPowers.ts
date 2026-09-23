@@ -1,5 +1,8 @@
 /**
- * Powers and roots of a quantity that carries a unit.
+ * Powers, roots and products of a quantity that carries a unit.
+ *
+ * Lengths multiply into areas and volumes: `5 m * 3 m` is 15 m2 and
+ * `2 m * 3 m * 4 m` is 24 m3 (see {@link multiplyLengths}).
  *
  * A length squared is an area and a length cubed is a volume, so `(3 m)^2` is
  * 9 m2 and `sqrt(16 m2)` is 4 m. Those are the only powers of a unit the engine
@@ -14,7 +17,8 @@
  * where `5 m^2` means 5 square metres rather than (5 m) squared.
  */
 
-import { Value, uomValue, numberValue, errorValue } from "@solve-js/vm/Value";
+import { Value, ValueType, uomValue, uomValueExact, numberValue, errorValue } from "@solve-js/vm/Value";
+import { binaryOp } from "@solve-js/vm/VMConversion";
 import { poweredUnit, rootUnit, measureForPower } from "@solve-js/uom/UnitPowers";
 import { getMeasure, convertUnit } from "@solve-js/uom/UomConverter";
 
@@ -95,4 +99,80 @@ export function rootQuantity(value: Value, power: 2 | 3, name: string): Value {
 	const length = rootUnit(unit, power);
 	if (length !== undefined) return uomValue(root(magnitude), length);
 	return uomValue(root(convertUnit(magnitude, unit, BASE_UNIT_FOR_POWER[power])), BASE_UNIT_FOR_POWER[1]);
+}
+
+/** How many lengths each measure is a product of. */
+const GEOMETRIC_DIMENSION: Readonly<Record<string, number>> = { length: 1, area: 2, volume: 3 };
+
+/**
+ * A product of `magnitude` in units of `length` raised to `power`, labelled as
+ * the area or volume it is: the matching square or cube spelling where the table
+ * has one, and square or cubic metres where it does not. The exact decimal
+ * sidecar is kept when the spelling is used, so `0.1 m * 0.2 m` stays exact.
+ */
+function asPowerOfLength(product: Value, length: string, power: number): Value {
+	const spelled = poweredUnit(length, power);
+	if (spelled !== undefined) {
+		return product.exact !== undefined
+			? uomValueExact(product.toNumber(), spelled, product.exact)
+			: uomValue(product.toNumber(), spelled);
+	}
+	const factor = convertUnit(1, length, "m") ** power;
+	return uomValue(product.toNumber() * factor, BASE_UNIT_FOR_POWER[power]);
+}
+
+/**
+ * The product of two lengths, or of a length and an area, as the area or volume
+ * it is; `undefined` when either operand is not a length, area or volume, so the
+ * caller keeps its own rule for every other pair.
+ *
+ * A length times a length is an area and a length times an area is a volume, in
+ * either order. The left operand's length sets the unit, the same rule addition
+ * follows: `5 m * 3 ft` is 4.57 m2 and `5 m2 * 3 ft` is 4.57 m3. The general
+ * multiply used to convert the right operand into the left's unit and then keep
+ * only that unit, so `5 m * 3 m` was reported as 15 m, a length. A product of
+ * more than three lengths (an area times an area, a volume times anything) has no
+ * unit, and is refused by name rather than reported as the left operand's unit.
+ *
+ * @param l - The left operand.
+ * @param r - The right operand.
+ * @returns The area or volume, an error value, or `undefined` if not applicable.
+ */
+export function multiplyLengths(l: Value, r: Value): Value | undefined {
+	if (l.type !== ValueType.Uom || r.type !== ValueType.Uom || l.unit === undefined || r.unit === undefined) return undefined;
+	const left = getMeasure(l.unit);
+	const right = getMeasure(r.unit);
+	const leftDimension = left === undefined ? undefined : GEOMETRIC_DIMENSION[left];
+	const rightDimension = right === undefined ? undefined : GEOMETRIC_DIMENSION[right];
+	if (leftDimension === undefined || rightDimension === undefined) return undefined;
+	const dimension = leftDimension + rightDimension;
+
+	if (dimension === 2) {
+		// The general multiply already converts the right length into the left's
+		// unit and multiplies, exactly where both carry exact decimals. Only its
+		// label is wrong, so the product is taken from it and relabelled.
+		const product = binaryOp(l, r, (a, b) => a * b, (a, b) => a * b, "mul");
+		return product.type === ValueType.Uom ? asPowerOfLength(product, l.unit, 2) : product;
+	}
+
+	if (dimension === 3) {
+		// The length the volume is measured in: the left operand's own length, or
+		// the length a left-hand area is the square of (`m2` gives `m`).
+		const [area, length] = left === "area" ? [l, r] : [r, l];
+		const basis = left === "length" ? l.unit : rootUnit(l.unit, 2);
+		const basisArea = basis === undefined ? undefined : poweredUnit(basis, 2);
+		if (basis !== undefined && basisArea !== undefined) {
+			const magnitude = convertUnit(area.toNumber(), area.unit as string, basisArea) * convertUnit(length.toNumber(), length.unit as string, basis);
+			return asPowerOfLength(uomValue(magnitude, basis), basis, 3);
+		}
+		// An area with a name of its own (`ha`), or a length with no square
+		// spelling (`furlong`): measured in metres instead.
+		const cubicMetres = convertUnit(area.toNumber(), area.unit as string, "m2") * convertUnit(length.toNumber(), length.unit as string, "m");
+		return uomValue(cubicMetres, BASE_UNIT_FOR_POWER[3]);
+	}
+
+	return errorValue(
+		"UNIT_PRODUCT_UNSUPPORTED",
+		`A quantity in ${l.unit} times one in ${r.unit} has no unit: lengths multiply into an area or a volume, and a product of more than three lengths is not a unit.`,
+	);
 }

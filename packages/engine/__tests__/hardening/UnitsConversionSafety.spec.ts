@@ -232,24 +232,16 @@ describe("comparing two quantities", () => {
 
 describe("multiplying two quantities together", () => {
 	/*
-	 * BUG, one cause, five cases. `binaryOp` unifies the two operands into a
-	 * common unit and applies the operator to the magnitudes, so the unit comes
-	 * out unchanged: ten metres by ten metres is reported as a hundred metres,
-	 * and two by three by four metres as twenty-four metres. An area is not a
-	 * length.
-	 *
-	 * The counterpart division is right, which is the reason to expect better
-	 * here: `10 m / 5 m` correctly returns a bare 2.
+	 * Was a bug, one cause, five cases (#533). `binaryOp` unified the two
+	 * operands into a common unit and applied the operator to the magnitudes, so
+	 * the unit came out unchanged: ten metres by ten metres was reported as a
+	 * hundred metres, and two by three by four metres as twenty-four metres. A
+	 * length times a length is now an area and a length times an area a volume
+	 * (vm/QuantityPowers.ts), so these five, once `test.failing`, now pass.
 	 *
 	 * One assertion each, for the reason given in `UnitsCurrencyAndRates.spec.ts`'s
-	 * header: the measure and the magnitude are two separate claims, and a
-	 * `test.failing` that asserts both reports only whichever fails first.
-	 *
-	 * Splitting them showed that immediately. The type assertion below was the
-	 * first line of the `test.failing` this block used to be, and it PASSES: the
-	 * product is a quantity, it is just the wrong quantity. So it was never
-	 * describing the bug at all, and its only effect inside that test was to
-	 * mask the two assertions after it if either of those ever changed.
+	 * header: the measure and the magnitude are two separate claims, and a test
+	 * that asserts both reports only whichever fails first.
 	 */
 
 	test("of the same measure does produce a quantity, whatever it says it is", () => {
@@ -258,17 +250,17 @@ describe("multiplying two quantities together", () => {
 		expect(evaluate("10 m * 10 m").type).toBe(ValueType.Uom);
 	});
 
-	test.failing("of the same measure raises the dimension", () => {
+	test("of the same measure raises the dimension", () => {
 		const area = evaluate("10 m * 10 m");
 		expect(getMeasure(area.unit!)).toBe("area");
 	});
 
-	test.failing("and the area it names is the right one", () => {
+	test("and the area it names is the right one", () => {
 		const area = evaluate("10 m * 10 m");
 		expect(convertUnit(area.toNumber(), area.unit!, "m2")).toBeCloseTo(100, 9);
 	});
 
-	test.failing("even when the two are written in different prefixes", () => {
+	test("even when the two are written in different prefixes", () => {
 		// The more alarming shape: the answer is not merely mislabelled, it is
 		// the product of a metre count and a centimetre count with one of them
 		// silently rescaled.
@@ -276,12 +268,12 @@ describe("multiplying two quantities together", () => {
 		expect(getMeasure(area.unit!)).toBe("area");
 	});
 
-	test.failing("and that one names the right area too", () => {
+	test("and that one names the right area too", () => {
 		const area = evaluate("10 m * 3 cm");
 		expect(convertUnit(area.toNumber(), area.unit!, "m2")).toBeCloseTo(0.3, 9);
 	});
 
-	test.failing("and an explicit target unit is honoured rather than dropped", () => {
+	test("and an explicit target unit is honoured rather than dropped", () => {
 		// BUG. `5 m * 4 m in m2` reports "20.00 m". The conversion is not refused,
 		// it is discarded, because by the time `in m2` runs the left operand is
 		// already a length and the cross-measure branch hands the input back.
@@ -290,17 +282,19 @@ describe("multiplying two quantities together", () => {
 
 	test("dividing does produce the right kind of answer", () => {
 		// Two lengths divide to a bare ratio, and a length over a time makes a
-		// rate. Both are the behaviour multiplication is missing.
+		// rate: the division counterpart of the products above.
 		expect(evaluate("10 m / 5 m").type).toBe(ValueType.Number);
 		expect(evaluate("10 m / 5 m").toNumber()).toBe(2);
 		expect(display("10 m / 2 s")).toBe("5.00 m/s");
 		expect(display("100 km / 2 h")).toBe("50.00 km/h");
 	});
 
-	test("mixing measures under multiplication is already refused", () => {
-		// So the engine declines the case it could not compute and accepts the one
-		// it computes wrongly.
-		expect(evaluate("10 m2 * 2 m").type).toBe(ValueType.Error);
+	test("an area times a length is a volume, and an unrelated measure is still refused", () => {
+		// `10 m2 * 2 m` used to be refused as a mismatch while `10 m * 10 m`, which
+		// it computed wrongly, was accepted. Both are products of lengths now.
+		const volume = evaluate("10 m2 * 2 m");
+		expect(getMeasure(volume.unit!)).toBe("volume");
+		expect(convertUnit(volume.toNumber(), volume.unit!, "m3")).toBeCloseTo(20, 9);
 		expect(evaluate("10 m * 5 kg").type).toBe(ValueType.Error);
 	});
 });

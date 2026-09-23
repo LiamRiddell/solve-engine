@@ -23,7 +23,7 @@ import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import type { ScopeId } from "@solve-js/vm/CellScope";
-import { raiseQuantity, unitPowerUnsupported } from "@solve-js/vm/QuantityPowers";
+import { raiseQuantity, unitPowerUnsupported, multiplyLengths } from "@solve-js/vm/QuantityPowers";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
@@ -2259,11 +2259,15 @@ export function executeBytecode(
             }
             // Two compatible quantities whose dimensions multiply onto a named
             // derived unit: `kg * m/s^2` is a newton, `V * A` a watt. Only fires
-            // when the product names a derived unit, so `m * m` and `kg * m`
-            // (which name nothing) fall through unchanged (issue #191).
+            // when the product names a derived unit (issue #191), so `kg * m`,
+            // which names nothing, falls through.
             const composed = tryDimensionalCompose(l, r, true);
-            if (composed) stack.push(composed);
-            else stack.push(binaryOp(l, r, (a, b) => a * b, (a, b) => a * b, "mul"));
+            if (composed) { stack.push(composed); break; }
+            // Lengths multiply into an area or a volume: `5 m * 3 m` is 15 m2.
+            // The general multiply below keeps only the left operand's unit,
+            // which reported that product as 15 m. See vm/QuantityPowers.ts.
+            const geometric = multiplyLengths(l, r);
+            stack.push(geometric ?? binaryOp(l, r, (a, b) => a * b, (a, b) => a * b, "mul"));
           }
           break;
         }

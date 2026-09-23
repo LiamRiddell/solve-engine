@@ -48,9 +48,11 @@ describe("it stops at compatible quantities", () => {
 		expect(value("9.81 m/s^2").toNumber()).toBeCloseTo(9.81, 5);
 	});
 
-	test("a product that names nothing is unchanged", () => {
-		// `m * m` keeps its old reading; the feature does not invent a unit for it.
-		expect(shown("5 m * 3 m")).toBe("15.00 m");
+	test("a product of lengths is an area, not a derived unit and not a length", () => {
+		// `m * m` names no derived unit, and it used to keep the left operand's
+		// unit, reporting 15 m. A length times a length is an area (#533), which
+		// the unit table holds without this feature inventing anything.
+		expect(shown("5 m * 3 m")).toBe("15.00 m2");
 	});
 
 	test("a mismatch stays a mismatch", () => {

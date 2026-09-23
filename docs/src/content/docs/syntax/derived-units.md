@@ -22,8 +22,9 @@ result is one of these named quantities, it shows it by its name:
 `kWh` the kilowatt-hour (energy again, the unit an electricity bill uses).
 Writing `as N` asks for the answer in that unit; the engine also names the result
 on its own when you leave the `as` off. This works only where the combination
-makes a named quantity: `5 m * 3 m` is not one of those, so it stays a plain unit
-product (`15.00 m`) rather than becoming `m²`, and multiplying two unrelated
-quantities is still reported as a mismatch rather than invented into a unit. (A fuller algebra of units is a later addition. A length squared or
-cubed, written `5 m^2` or `(3 m)^2`, is an area or a volume; see
-[squares and cubes](/syntax/unit-arithmetic/#squares-and-cubes).)
+makes a named quantity, and multiplying two unrelated quantities is still reported
+as a mismatch rather than invented into a unit. Lengths are the exception that
+needs no name: a length times a length is an area and a length times an area is a
+volume, so `5 m * 3 m` is `15.00 m2`; see
+[squares and cubes](/syntax/unit-arithmetic/#squares-and-cubes). (A fuller algebra
+of units is a later addition.)
