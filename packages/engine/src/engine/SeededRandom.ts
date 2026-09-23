@@ -73,8 +73,10 @@ export function programKey(program: BytecodeProgram): string {
 			}
 		}
 	}
-	const names = calls === undefined ? "" : calls.names.join("\u0001");
-	return `${opcodes.join(",")}|${Array.from(program.numbers).join(",")}|${program.strings.join("\u0001")}|${names}`;
+	const key = `${opcodes.join(",")}|${Array.from(program.numbers).join(",")}|${program.strings.join("\u0001")}`;
+	// A program with no plugin call keeps the key it has always had, so its
+	// seeded draws are unchanged.
+	return calls === undefined ? key : `${key}|${calls.names.join("\u0001")}`;
 }
 
 /** A line that seeds the document's draws: `random seed 42`. */
