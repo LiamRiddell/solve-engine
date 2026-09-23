@@ -186,30 +186,39 @@ describe("Datetime Parselets", () => {
     const now = Date.now();
     const result = parseAndExecute("today + 3 days");
     const elapsed = (result.value as number) - now;
-    expect(elapsed).toBeGreaterThanOrEqual(259000000);
-    expect(elapsed).toBeLessThanOrEqual(260000000);
+    // `+ 3 days` is calendar arithmetic at the same wall-clock time, so a span that
+    // crosses a daylight-saving boundary is an hour short or long of 3 * 24h. Allow
+    // a DST hour (plus a second of slop) rather than assuming every day is 24 hours.
+    const tolerance = 60 * 60 * 1000 + 1000;
+    expect(elapsed).toBeGreaterThanOrEqual(259200000 - tolerance);
+    expect(elapsed).toBeLessThanOrEqual(259200000 + tolerance);
   });
 
   test("yesterday + 1 day = tomorrow", () => {
     const yesterday = parseAndExecute("yesterday");
     const result = parseAndExecute("yesterday + 1 day");
     const diff = (result.value as number) - (yesterday.value as number);
-    expect(diff).toBeCloseTo(86400000, -2);
+    // The single calendar day between them is 23h or 25h across a DST boundary, so
+    // allow an hour either side of 24h.
+    expect(Math.abs(diff - 86400000)).toBeLessThanOrEqual(60 * 60 * 1000 + 1000);
   });
 
   test("tomorrow - 1 day = today (or yesterday)", () => {
     const tomorrow = parseAndExecute("tomorrow");
     const result = parseAndExecute("tomorrow - 1 day");
     const diff = (result.value as number) - (tomorrow.value as number);
-    expect(diff).toBeCloseTo(-86400000, -2);
+    // See "yesterday + 1 day": the calendar day is 23h or 25h across a DST boundary.
+    expect(Math.abs(diff + 86400000)).toBeLessThanOrEqual(60 * 60 * 1000 + 1000);
   });
 
   test("now + 1 week yields ~604800000", () => {
     const now = Date.now();
     const result = parseAndExecute("now + 1 week");
     const elapsed = (result.value as number) - now;
-    expect(elapsed).toBeGreaterThanOrEqual(604000000);
-    expect(elapsed).toBeLessThanOrEqual(606000000);
+    // See "today + 3 days": a week that crosses a DST boundary is an hour off 7 * 24h.
+    const tolerance = 60 * 60 * 1000 + 1000;
+    expect(elapsed).toBeGreaterThanOrEqual(604800000 - tolerance);
+    expect(elapsed).toBeLessThanOrEqual(604800000 + tolerance);
   });
 
   test("14 days returns ValueType.Uom", () => {
