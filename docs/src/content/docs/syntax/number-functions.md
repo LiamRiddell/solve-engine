@@ -29,3 +29,33 @@ refused rather than counted as zero, and so is a date among plain numbers.
 max(1 km, 500 m) // 1.00 km
 max(25/12/2026, 1/1/2027) // Friday, January 1, 2027
 ```
+
+## Trigonometry
+
+`sin`, `cos` and `tan` relate an angle to the sides of a right-angled triangle:
+the sine is the opposite side over the longest, the cosine the adjacent side over
+the longest, and the tangent the opposite over the adjacent. A bare number is an
+angle in radians, the convention maths and programming share, where a full turn
+is 2π. Write `degrees` (or `grad`) after the angle to give it in those instead.
+
+```solve
+sin(30 degrees) // 0.50
+cos(60 degrees) // 0.50
+tan(45 degrees) // 1.00
+sin(pi/2) // 1
+```
+
+The tangent grows without limit as the angle nears a right angle, and at exactly
+90° (or 270°, or any odd number of right angles) it has no value at all. There it
+is refused by name, rather than answered with the enormous finite number the
+computer's nearest approximation to 90° produces. An angle close to it, but not
+on it, still answers:
+
+```solve-doc
+tan(90 degrees) // ERROR: tan is undefined at 90 degrees: at an odd multiple of a right angle the tangent has no value, only an asymptote.
+tan(89.9 degrees) // 572.96
+```
+
+The boundary: other special angles are not yet exact, so `sin(180 degrees)` is
+the tiny 1.22e-16 the approximation of π leaves rather than 0. Exact special
+angles are a planned addition.

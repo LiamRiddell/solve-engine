@@ -79,3 +79,35 @@ describe("a non-angle unit is left alone", () => {
 		expect(num("sin(1 metre)")).toBeCloseTo(Math.sin(1), 10);
 	});
 });
+
+describe("tan at an odd multiple of a right angle is undefined (#532)", () => {
+	const code = (source: string) => newTrackedEngine().evaluateExpression(source).errorCode;
+
+	test.each(["tan(90 degrees)", "tan(270 degrees)", "tan(-90 degrees)", "tan(450 degrees)", "tan(pi/2)", "tan(3*pi/2)", "tan(100 grad)"])(
+		"%s is refused rather than answered with the double's 1.6e16",
+		(source) => {
+			expect(code(source)).toBe("TRIG_UNDEFINED");
+		},
+	);
+
+	test("the message names the angle in degrees", () => {
+		expect(newTrackedEngine().evaluateExpression("tan(pi/2)").errorMessage).toContain("90 degrees");
+	});
+
+	test("an angle just either side of the asymptote still answers", () => {
+		// Within a ten-thousandth of a degree, well outside the conversion's
+		// rounding, the tangent is large but real.
+		expect(num("tan(89.9999 degrees)")).toBeCloseTo(572957.8, 0);
+		expect(num("tan(90.0001 degrees)")).toBeCloseTo(-572957.8, 0);
+	});
+
+	test("the even multiples and ordinary angles are unchanged", () => {
+		expect(num("tan(45 degrees)")).toBeCloseTo(1, 10);
+		expect(num("tan(0)")).toBe(0);
+		expect(num("tan(1)")).toBeCloseTo(Math.tan(1), 12);
+	});
+
+	test("a double too large to place against the asymptote keeps Math.tan's answer", () => {
+		expect(num("tan(1e20)")).toBeCloseTo(Math.tan(1e20), 12);
+	});
+});

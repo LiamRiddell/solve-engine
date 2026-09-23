@@ -67,6 +67,34 @@ function angleInRadians(value: Value): number {
 }
 
 /**
+ * The refusal for `tan` at an odd multiple of a right angle, or null anywhere
+ * else.
+ *
+ * The tangent of 90° has no value: the curve runs off to infinity either side
+ * of it. The double nearest π/2 is not π/2, though, so `Math.tan` of it is a
+ * finite 16,331,239,353,195,370, and `tan(90 degrees)` reported that as an
+ * answer. So an angle within the conversion's own rounding of an odd number of
+ * right angles is refused by name. The tolerance grows with the angle, since
+ * the rounding does, and past a trillion right angles a double no longer holds
+ * the angle closely enough to tell one side of an asymptote from the other, so
+ * the check stops there and the plain `Math.tan` answer stands.
+ *
+ * @param radians - The angle, already read in radians.
+ */
+function tangentUndefinedAt(radians: number): Value | null {
+    const rightAngles = radians / (Math.PI / 2);
+    if (!Number.isFinite(rightAngles) || Math.abs(rightAngles) > 1e12) return null;
+    const nearest = Math.round(rightAngles);
+    if (nearest % 2 === 0) return null;
+    const tolerance = 16 * Number.EPSILON * Math.max(1, Math.abs(rightAngles));
+    if (Math.abs(rightAngles - nearest) > tolerance) return null;
+    return errorValue(
+        "TRIG_UNDEFINED",
+        `tan is undefined at ${nearest * 90} degrees: at an odd multiple of a right angle the tangent has no value, only an asymptote.`,
+    );
+}
+
+/**
  * The plural spelling of a unit, when the count calls for one and the table
  * has it.
  *
@@ -370,7 +398,11 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // sin/cos/tan accept an angle with a unit; see angleInRadians().
     2: (args) => numberValue(Math.sin(angleInRadians(args[0]))),
     3: (args) => numberValue(Math.cos(angleInRadians(args[0]))),
-    4: (args) => numberValue(Math.tan(angleInRadians(args[0]))),
+    // tan refuses the odd multiples of a right angle; see tangentUndefinedAt().
+    4: (args) => {
+        const radians = angleInRadians(args[0]);
+        return tangentUndefinedAt(radians) ?? numberValue(Math.tan(radians));
+    },
     5: (args) => numberValue(Math.log(args[0].toNumber())),
     // round/ceil/floor keep a unit for the same reason abs does; see keepUnit().
     6: (args) => wholeNumberUnchanged(args[0], false) ?? keepUnit(args[0], Math.ceil(args[0].toNumber())),
