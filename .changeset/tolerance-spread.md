@@ -23,4 +23,4 @@ The boundary: the value's own unit is still dropped once the spread is converted
 
 ## Verification
 
-A new suite pins each form above, including the temperature interval, the percentage-point reading, propagation of a relative spread, and the refusals, with the existing percentage-arithmetic suites unchanged. The uncertainty page gains sections on percentage and unit tolerances with proven examples and a `solve-doc` block of the refusals. An A/B run of 3,863 expressions against the previous build differed only on random functions. `npm run verify:ci` passes: TESTS tests across SUITES suites.
+A new suite pins each form above, including the temperature interval, the percentage-point reading, propagation of a relative spread, and the refusals, with the existing percentage-arithmetic suites unchanged. The uncertainty page gains sections on percentage and unit tolerances with proven examples and a `solve-doc` block of the refusals. An A/B run of 3,863 expressions against the previous build differed only on random functions. `npm run verify:ci` passes: 9,647 tests across 489 suites, with the bundled-consumer contract.
