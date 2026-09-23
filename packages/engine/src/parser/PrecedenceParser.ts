@@ -95,6 +95,21 @@ export class PrecedenceParser {
   infixMinBindingPower = 0;
 
   /**
+   * Whether the parser is inside the right operand of a `^`, where a unit
+   * literal declines to bind so it attaches to the whole power instead.
+   *
+   * A unit binds tighter than `^`, so `10^3 m` used to parse as `10^(3 m)`, a
+   * power with a unit in its exponent, which the VM answered as the bare 1,000;
+   * `10^3 m in km` then labelled that 1,000 as kilometres. Scientific notation
+   * with a unit is an ordinary way to write a quantity, so the unit is left for
+   * the level above the power: `10^3 m` is `(10^3) m`, and `10^-3 m` is a
+   * millimetre. A fresh expression below the power's level (a bracket, a
+   * function's arguments) clears the flag, so `2^(3 m)` still puts the unit on
+   * the 3, where the VM refuses it by name. Issue #535.
+   */
+  private insideExponent = false;
+
+  /**
    * Static binding power table, built once at module load, shared across all instances.
    * Index = tokenTypeId, value = binding power (0 = not a built-in infix).
    */
@@ -281,6 +296,10 @@ export class PrecedenceParser {
     // parselet that throws part way through a line (the common case while
     // someone is typing) used to leave the counter one higher for good.
     this.depth++;
+    // A fresh expression below the power's level is not inside an exponent;
+    // see insideExponent.
+    const outerInsideExponent = this.insideExponent;
+    if (minBp < BindingPower.Exponent - 1) this.insideExponent = false;
     try {
       if (this.depth > this.maxDepth) {
         throw ErrorFactory.parsing(
@@ -292,6 +311,7 @@ export class PrecedenceParser {
       this.parseExpressionBody(minBp);
     } finally {
       this.depth--;
+      this.insideExponent = outerInsideExponent;
       if (_builder) this.builder = outerBuilder;
     }
   }
@@ -370,7 +390,13 @@ export class PrecedenceParser {
           // unaffected: it parses its operand at Prefix (60), above `^`
           // either way, so "-2 ^ 2" is still (-2)^2 = 4.
           const rightBp = (typeId === PrecedenceParser.CARET_ID) ? bp - 1 : bp + 1;
-          this.parseExpression(rightBp, builder);
+          const outerInsideExponent = this.insideExponent;
+          if (typeId === PrecedenceParser.CARET_ID) this.insideExponent = true;
+          try {
+            this.parseExpression(rightBp, builder);
+          } finally {
+            this.insideExponent = outerInsideExponent;
+          }
           builder.emitOpcode(PrecedenceParser.INFIX_OPCODE[typeId]);
         }
       } else {
@@ -378,6 +404,9 @@ export class PrecedenceParser {
         const infixParselet = registry.getInfix(lookahead.typeId);
         if (!infixParselet) break;
         if (infixParselet.bindingPower <= minBp) break;
+        // A unit inside an exponent belongs to the whole power; see
+        // insideExponent.
+        if (this.insideExponent && lookahead.type === "UNIT") break;
 
         this.current = ++idx;
 

@@ -2460,6 +2460,17 @@ export function executeBytecode(
             // (`4n ^ 0.5` is 2 and `2n ^ -1` is 0.5), so those keep the double
             // path below, which is their right answer rather than a fallback.
           }
+          // An exponent is a count of multiplications, so it has no unit. One
+          // written with a unit (`2^(3 m)`) used to be read as its bare number;
+          // it is refused instead. `10^3 m` never arrives here: the parser
+          // gives that unit to the whole power. Issue #535.
+          if (r.type === ValueType.Uom && r.unit !== undefined) {
+            stack.push(errorValue(
+              "UNIT_IN_EXPONENT",
+              `An exponent cannot carry a unit (${r.unit}): a power counts multiplications. For a quantity in scientific notation, write the unit after the power, as in "10^3 m".`,
+            ));
+            break;
+          }
           stack.push(numberValue(power(l.toNumber(), r.toNumber())));
           break;
         }
@@ -3301,6 +3312,19 @@ export function executeBytecode(
           const operand = safePop(stack);
           const faulted = faultedOperand(operand);
           if (faulted) { stack.push(faulted); break; }
+          // A second unit written straight after a quantity used to relabel it:
+          // `5 kg m` was 5 m, the kilograms discarded without a word, and
+          // `5 USD GBP` was five pounds. Two units side by side name nothing the
+          // engine knows (a compound like `km/h` or `m/s^2` is joined into one
+          // unit before it gets here), so it is refused. The same unit twice
+          // (`5 kg kg`) changes nothing and is let through. Issue #536.
+          if (operand.type === ValueType.Uom && operand.unit !== undefined && operand.unit !== unit) {
+            stack.push(errorValue(
+              "UNIT_AFTER_UNIT",
+              `A quantity in ${operand.unit} cannot take a second unit, ${unit}: two units side by side are not a unit. To convert, write "in ${unit}".`,
+            ));
+            break;
+          }
           // Money keeps its exact decimal from here on. The amount either
           // arrived as a decimal literal (exact sidecar already set) or is a
           // whole number, either of which has an exact decimal; a fractional
@@ -3327,6 +3351,16 @@ export function executeBytecode(
           // carried its fault everywhere except through here.
           const faulted = faultedOperand(operand);
           if (faulted) { stack.push(faulted); break; }
+          // The same second-unit refusal as UOM_CONVERT, for the literal with a
+          // conversion attached: `5 kg m in cm` read the five kilograms as five
+          // metres and answered 500 cm. Issue #536.
+          if (operand.type === ValueType.Uom && operand.unit !== undefined && operand.unit !== fromUnit) {
+            stack.push(errorValue(
+              "UNIT_AFTER_UNIT",
+              `A quantity in ${operand.unit} cannot take a second unit, ${fromUnit}: two units side by side are not a unit. To convert, write "in ${toUnit}".`,
+            ));
+            break;
+          }
           const val = operand.toNumber();
           const measure = getMeasure(fromUnit);
           if (measure && getMeasure(toUnit) === measure) {
