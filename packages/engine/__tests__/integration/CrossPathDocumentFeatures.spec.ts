@@ -1,10 +1,10 @@
 /**
  * The whole-document forms, proven through every entry point that can reach them.
  *
- * Category tags, line references, table columns and goal seek are not ordinary
- * expressions: each reads, or re-runs, other lines, so the answer depends on the
- * entry point the host called. The engine has three, and they do not agree by
- * accident:
+ * Category tags, line references, table columns, table lookups and bands, and
+ * goal seek are not ordinary expressions: each reads, or re-runs, other lines,
+ * so the answer depends on the entry point the host called. The engine has
+ * three, and they do not agree by accident:
  *
  * - `evaluateLine` / `evaluateExpression` — one expression, no document. A
  *   whole-document form has nothing to read here, so the contract is that it
@@ -188,6 +188,46 @@ describe("table columns across entry points", () => {
     // an expression with. In a document it is skipped; alone it is a parse error,
     // which is the honest answer for input that was never an expression.
     expect(single("| item | cost |").threw).toBe(true);
+  });
+});
+
+describe("table lookups and bands across entry points", () => {
+  const budget = ["| item | cost |", "| ---- | ---- |", "| rent | 1200 |", "| food | 300 |", "| taxi | 12 |", ""];
+  const bands = ["| from | rate |", "| ---- | ---- |", "| 0 | 0% |", "| 10,000 | 20% |", "| 40,000 | 40% |", ""];
+
+  test("an exact lookup reads the same cell through both passes", () => {
+    const doc = [...budget, 'column "cost" for "food"', 'column "cost" for "rent" in table above * 2'];
+    expect(batch(doc).slice(6)).toEqual(["300", "2,400"]);
+    expect(incremental(doc).slice(6)).toEqual(["300", "2,400"]);
+  });
+
+  test("a band lookup and a progressive total agree through both passes", () => {
+    const doc = [...bands, 'column "rate" for 45,000 in bands above', "45,000 through bands above", "$45,000 through bands above"];
+    const expected = ["40.00%", "8,000", "$8,000.00"];
+    expect(batch(doc).slice(6)).toEqual(expected);
+    expect(incremental(doc).slice(6)).toEqual(expected);
+  });
+
+  test("money stays exact to the penny through both passes", () => {
+    // $10.10 at 15% is $1.515, a half-cent the till rounds up; a double rounds it down.
+    const doc = ["| from | rate |", "| ---- | ---- |", "| 0 | 15% |", "", "$10.10 through bands above"];
+    expect(batch(doc)[4]).toBe("$1.52");
+    expect(incremental(doc)[4]).toBe("$1.52");
+  });
+
+  test("a refusal is the same refusal through both passes", () => {
+    const missing = [...budget, 'column "cost" for "fuel"'];
+    expect(batch(missing)[6]).toContain("ERROR:");
+    expect(incremental(missing)[6]).toBe(batch(missing)[6]);
+    const notFromZero = ["| from | rate |", "| ---- | ---- |", "| 10 | 5% |", "", "100 through bands above"];
+    expect(batch(notFromZero)[4]).toContain("ERROR:");
+    expect(incremental(notFromZero)[4]).toBe(batch(notFromZero)[4]);
+  });
+
+  test("the single-expression path refuses with a document error", () => {
+    expectNeedsDocument('column "cost" for "food"');
+    expectNeedsDocument('column "rate" for 45,000 in bands above');
+    expectNeedsDocument("45,000 through bands above");
   });
 });
 

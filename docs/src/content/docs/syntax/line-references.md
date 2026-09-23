@@ -88,7 +88,7 @@ is `8`, because line 2 has an answer of its own once it has been read.
 
 ## Related, document-aware forms
 
-Three other forms read the whole note the same way, each with its own page:
+Five other forms read the whole note the same way, each with its own page:
 
 - [Category tags](/syntax/category-tags/): label a line with `#tag` and total,
   average or count every line carrying it.
@@ -96,3 +96,7 @@ Three other forms read the whole note the same way, each with its own page:
   line reach a target.
 - [Table columns](/syntax/table-columns/): name a markdown table column and
   summarise the numbers in it.
+- [Table lookups](/syntax/table-lookups/): read one cell of a table by the label
+  on its row.
+- [Banded rates](/syntax/banded-rates/): apply a table of bands, such as a tax or
+  commission schedule, to an amount.

@@ -73,8 +73,14 @@ counted, so a stray row does not break an otherwise-numeric column. A column
 with no numbers at all, or a name that is not one of the headers, is a clear
 error rather than a silent zero.
 
-Currency and unit cells are not read yet, and a table whose rows do not start
-with a pipe is not recognised. Both are deliberately left for a later slice.
+Currency and unit cells are not read by a column summary yet, and a table whose
+rows do not start with a pipe is not recognised. Both are deliberately left for a
+later slice.
+
+To read one cell rather than a whole column, name its row with a
+[table lookup](/syntax/table-lookups/): `column "cost" for "food"`. A lookup does
+read money and percentage cells. A table of thresholds and rates can be applied
+to an amount as [banded rates](/syntax/banded-rates/).
 
 Like [line references](/syntax/line-references/), a column read only works inside
 a document, since it reads a table elsewhere in the note.

@@ -404,6 +404,8 @@ export default defineConfig({
                 { slug: "syntax/line-references" },
                 { slug: "syntax/category-tags" },
                 { slug: "syntax/table-columns" },
+                { slug: "syntax/table-lookups" },
+                { slug: "syntax/banded-rates" },
                 { slug: "syntax/map-reduce-and-aggregates" },
                 { slug: "syntax/conditionals" },
                 { slug: "syntax/goal-seek" },

@@ -26,6 +26,11 @@ export interface MarkdownTable {
   header: string[];
   /** Each data row, already split into trimmed cell texts. */
   rows: string[][];
+  /**
+   * The 1-based document line each data row sits on, parallel to `rows`, so
+   * a lookup that refuses a row can say which line to look at.
+   */
+  rowLines: number[];
 }
 
 /** Whether a line, once trimmed, begins a markdown table row (a leading `|`). */
@@ -147,10 +152,12 @@ export function findTableAbove(
 
   const header = splitTableRow(getLineText(separator - 1)!);
   const rows: string[][] = [];
+  const rowLines: number[] = [];
   for (let n = separator + 1; n <= bottom; n++) {
     rows.push(splitTableRow(getLineText(n)!));
+    rowLines.push(n);
   }
-  return { header, rows };
+  return { header, rows, rowLines };
 }
 
 /**

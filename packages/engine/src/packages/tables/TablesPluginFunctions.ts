@@ -28,6 +28,28 @@ export const TablesErrorCodes = {
   TABLE_COLUMN_NOT_FOUND: "TABLE_COLUMN_NOT_FOUND",
   /** The column held no plain-number cells to aggregate. */
   TABLE_COLUMN_NO_NUMERIC_CELLS: "TABLE_COLUMN_NO_NUMERIC_CELLS",
+  /** A lookup named a column the header carries more than once. */
+  TABLE_COLUMN_AMBIGUOUS: "TABLE_COLUMN_AMBIGUOUS",
+  /** No row's first cell carries the label an exact lookup asked for. */
+  TABLE_ROW_NOT_FOUND: "TABLE_ROW_NOT_FOUND",
+  /** More than one row carries the label, so an exact lookup cannot choose. */
+  TABLE_ROW_AMBIGUOUS: "TABLE_ROW_AMBIGUOUS",
+  /** An exact lookup's key was neither quoted text nor a plain number. */
+  TABLE_LOOKUP_KEY_INVALID: "TABLE_LOOKUP_KEY_INVALID",
+  /** The looked-up cell is empty. */
+  TABLE_CELL_EMPTY: "TABLE_CELL_EMPTY",
+  /** The looked-up cell is text, not a number, an amount of money or a percentage. */
+  TABLE_CELL_NOT_A_VALUE: "TABLE_CELL_NOT_A_VALUE",
+  /** The table cannot be read as bands: a start that is not a number, starts out of order, a rate that cannot be read. */
+  TABLE_BANDS_MALFORMED: "TABLE_BANDS_MALFORMED",
+  /** A progressive total's first band does not start at 0, so part of the amount falls in no band. */
+  TABLE_BANDS_NOT_FROM_ZERO: "TABLE_BANDS_NOT_FROM_ZERO",
+  /** A band lookup's amount is below where the first band starts. */
+  TABLE_BAND_BELOW_FIRST: "TABLE_BAND_BELOW_FIRST",
+  /** The amount placed in the bands is not a plain number or money, or is below zero for a progressive total. */
+  TABLE_BAND_AMOUNT_INVALID: "TABLE_BAND_AMOUNT_INVALID",
+  /** The amount, the band starts and the rates name currencies that do not go together. */
+  TABLE_BAND_UNIT_MISMATCH: "TABLE_BAND_UNIT_MISMATCH",
 } as const;
 
 /** The reductions a column aggregate can apply to its numeric cells. */
