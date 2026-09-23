@@ -364,6 +364,7 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { slug: "syntax/text-operations" },
+                { slug: "syntax/pasted-text" },
                 { slug: "syntax/text-encoding" },
                 { slug: "syntax/hashing" },
                 { slug: "syntax/networking" },

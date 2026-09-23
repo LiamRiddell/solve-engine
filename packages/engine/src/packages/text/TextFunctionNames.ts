@@ -28,4 +28,10 @@ export const TEXT_CALL_FUNCTIONS: Record<string, string> = {
 	charcount: "textCharCount",
 	lines: "textLineCount",
 	linecount: "textLineCount",
+	// Reading pasted text: a pattern's match, whether it occurs, how often,
+	// and one field of JSON.
+	match: "textMatch",
+	matches: "textMatches",
+	matchcount: "textMatchCount",
+	field: "textField",
 };

@@ -30,8 +30,17 @@ what happens **inside** one.
 | `MAX_EXACT_POW_BITS` / `MAX_EXACT_SHIFT_BITS` | `vm/VM.ts`'s `exactPowFits()` / `bigIntShift()` | bits in a bigint built by `^` or `<<` |
 | `MAX_DISPLAYED_BIGINT_DIGITS` | `format/FormatEngine.ts`'s `formatBigInt()` | decimal digits rendered |
 | `MAX_SIMPLIFY_DEPTH` / `MAX_FORMAT_DEPTH` | `symbolic/Simplify.ts`, `symbolic/SymbolicFormat.ts` | levels of a symbolic tree walked recursively |
+| `MAX_PATTERN_STEPS` | `packages/text/TextPattern.ts`, tallied per evaluation through `currentEvaluation()` | steps the text package's pattern matcher takes, across every `match`/`matches`/`matchcount` call on one line |
+| `MAX_PATTERN_LENGTH` / `_GROUPS` / `_REPEAT` / `_PROGRAM` / `_NESTING` | same | a pattern's characters, captured groups, repeat counts, compiled instructions and group depth |
+| `MAX_NUMBERS_READ` | `packages/text/TextExtractionFunctions.ts` | numbers read out of one piece of text by `numbers in` / `amounts in` |
 
-The bottom seven were added by the 1.0.0 denial-of-service pass. Four of them (the
+The last three bound the text package's reading of pasted text (#520): its pattern matcher
+runs in time proportional to the text by construction, and these bound the rest, with the
+step count kept per evaluation rather than per call so that it composes, the lesson of the
+allocation counter below.
+
+The seven rows from `vm.maxCollectionSize` to `MAX_SIMPLIFY_DEPTH` were added by the 1.0.0
+denial-of-service pass. Four of them (the
 document and date rows) enforce fields that were declared in `constants/Configuration.ts`
 and read nowhere, which is worse than a missing limit rather than equivalent to one: a
 host that configures it believes it has protection it does not have. The four fields in

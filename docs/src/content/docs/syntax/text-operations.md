@@ -104,7 +104,10 @@ replace("banana", "a", "@") // b@n@n@
 ```
 
 The replacement is literal: `find` is matched exactly, character for character,
-with no pattern matching. (Regular expressions are a possible later addition.)
+with no pattern matching. To find text by its shape rather than its exact
+characters, a pattern (a regular expression) does it: see `match` on the
+[pasted text page](/syntax/pasted-text/), which also reads the numbers, the
+amounts of money and the fields of JSON out of a piece of text.
 
 ## Changing case
 
