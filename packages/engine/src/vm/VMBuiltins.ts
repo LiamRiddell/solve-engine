@@ -2,7 +2,7 @@ import { Value, ValueType, numberValue, hexValue, uomValue, errorValue, matrixVa
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { unifyUom, power, describeMeasureMismatch, unifyQuantities } from "@solve-js/vm/VMConversion";
+import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand } from "@solve-js/vm/VMConversion";
 import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact } from "@solve-js/vm/MoneyExact";
 import { transpose, determinant, inverse, matrixMultiply, matrixPower, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
 import { symbolicToValue, valueToSymbolic, solveEquationValues } from "@solve-js/vm/SymbolicOps";
@@ -114,6 +114,19 @@ function pluraliseUnit(unit: string, count: number): string {
  * @param wantLargest - max when true, min when false.
  */
 function extremum(args: Value[], wantLargest: boolean): Value {
+    // Dates order by their instant, so a set made only of dates has an answer,
+    // and it is the date itself: `max(today, tomorrow)` is tomorrow, where the
+    // magnitude path below answered with its epoch milliseconds. A date among
+    // numbers, like every other value with no numeric reading, is refused.
+    if (args.length > 0 && args.every((a) => a.type === ValueType.Datetime)) {
+        let winner = args[0];
+        for (const a of args) {
+            if (wantLargest ? a.toNumber() > winner.toNumber() : a.toNumber() < winner.toNumber()) winner = a;
+        }
+        return winner;
+    }
+    const nonNumeric = nonNumericOperand(args, "compared");
+    if (nonNumeric) return nonNumeric;
     let best: Value | undefined;
     let hasNaN = false;
     for (const a of args) {
@@ -1321,13 +1334,15 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // "variance of ...", "spread of ...", "mode of ..."). Population form is the
     // default; the sample form is a separate index. See issue #184. ──
     // standard deviation (population): the spread in the same units as the data.
-    101: (args) => numberValue(Math.sqrt(variance(args.map((a) => a.toNumber()), false))),
+    // Each refuses a value with no numeric reading (text, a date, a bracketed
+    // list) rather than reading it as 0; see nonNumericOperand().
+    101: (args) => nonNumericOperand(args, "used in a standard deviation") ?? numberValue(Math.sqrt(variance(args.map((a) => a.toNumber()), false))),
     // sample standard deviation (divide by n-1).
-    102: (args) => numberValue(Math.sqrt(variance(args.map((a) => a.toNumber()), true))),
+    102: (args) => nonNumericOperand(args, "used in a standard deviation") ?? numberValue(Math.sqrt(variance(args.map((a) => a.toNumber()), true))),
     // variance (population): the mean squared deviation.
-    103: (args) => numberValue(variance(args.map((a) => a.toNumber()), false)),
+    103: (args) => nonNumericOperand(args, "used in a variance") ?? numberValue(variance(args.map((a) => a.toNumber()), false)),
     // sample variance (divide by n-1).
-    104: (args) => numberValue(variance(args.map((a) => a.toNumber()), true)),
+    104: (args) => nonNumericOperand(args, "used in a variance") ?? numberValue(variance(args.map((a) => a.toNumber()), true)),
     // spread: largest minus smallest. Named "spread" because "range" already
     // means a start:end interval elsewhere in the engine.
     105: (args) => {
@@ -1341,6 +1356,8 @@ export const builtinFunctions: Record<number, (args: Value[]) => Value> = {
     // result is deterministic for the same list.
     106: (args) => {
         if (args.length === 0) return numberValue(0);
+        const nonNumeric = nonNumericOperand(args, "counted for a mode");
+        if (nonNumeric) return nonNumeric;
         const counts = new Map<number, number>();
         let best = args[0].toNumber();
         let bestCount = 0;

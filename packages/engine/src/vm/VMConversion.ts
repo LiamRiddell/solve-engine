@@ -42,6 +42,60 @@ export function unifyUom(l: Value, r: Value): { lv: number; rv: number; unit: st
 }
 
 /**
+ * The kinds of value with no numeric reading an aggregate could use, named the
+ * way a reader would name them.
+ *
+ * Each of these reads as a number only by accident: text through `parseFloat`,
+ * which makes `"Travel"` 0; a date as its epoch milliseconds; a bracketed list,
+ * a colour or an unknown as 0. An aggregate that took those readings answered
+ * `total of "Travel"` with 0 and `average of 1:3` (a clock time) with a
+ * thirteen-digit number, and neither is an answer to the question.
+ */
+const NON_NUMERIC_KINDS: Partial<Record<ValueType, string>> = {
+    [ValueType.String]: "text",
+    [ValueType.Datetime]: "a date or time",
+    [ValueType.Matrix]: "a bracketed list",
+    [ValueType.Range]: "a range",
+    [ValueType.Colour]: "a colour",
+    [ValueType.IpCidr]: "an IP address",
+    [ValueType.Chart]: "a chart",
+    [ValueType.Split]: "a split",
+    [ValueType.Symbolic]: "an unknown",
+};
+
+/**
+ * Refuses an aggregate's operand that has no numeric reading, or null when
+ * every operand has one.
+ *
+ * Numbers, quantities, percentages, booleans (1 and 0), hex and big integers
+ * pass. Everything in {@link NON_NUMERIC_KINDS} is refused by name, with a
+ * pointer to what was probably meant: a quoted name is not a set of lines, and
+ * a bracketed list is one value rather than several.
+ *
+ * @param values - The aggregate's operands.
+ * @param verb - What the aggregate does, completing "cannot be ...", e.g. "added".
+ */
+export function nonNumericOperand(values: readonly Value[], verb: string): Value | null {
+    for (const v of values) {
+        const kind = NON_NUMERIC_KINDS[v.type];
+        if (kind === undefined) continue;
+        // A quoted name in a total or an average is most likely a section the
+        // reader wanted to add up, which is what a tag does.
+        const tagPhrase = verb === "added" ? "total of #tag" : verb === "averaged" ? "average of #tag" : undefined;
+        const hint = v.type === ValueType.String && tagPhrase !== undefined
+            ? ` To gather lines by name, tag them and use "${tagPhrase}".`
+            : v.type === ValueType.Matrix
+                ? ` List the values with commas instead, as in "total of 1, 2, 3".`
+                : "";
+        return errorValue(
+            "AGGREGATE_NON_NUMERIC",
+            `${kind[0].toUpperCase()}${kind.slice(1)} cannot be ${verb}: only numbers and quantities can.${hint}`,
+        );
+    }
+    return null;
+}
+
+/**
  * The magnitudes of a list of values, read in one unit so they can be added.
  *
  * The unit is the first one written, and everything after it converts into
@@ -52,9 +106,13 @@ export function unifyUom(l: Value, r: Value): { lv: number; rv: number; unit: st
  * Returned as `{ magnitudes, unit }`, or as an Error value when two of the
  * values measure different things, since there is no unit both can be read in
  * and adding the magnitudes would answer confidently and wrongly. The sentence
- * names the two dimensions the way the ordering opcodes and `min`/`max` do.
+ * names the two dimensions the way the ordering opcodes and `min`/`max` do. A
+ * value with no numeric reading at all (text, a date, a bracketed list) is
+ * refused the same way; see {@link nonNumericOperand}.
  */
 export function unifyQuantities(values: readonly Value[], verb: string): { magnitudes: number[]; unit: string | undefined } | Value {
+    const nonNumeric = nonNumericOperand(values, verb);
+    if (nonNumeric) return nonNumeric;
     const magnitudes: number[] = new Array(values.length);
     let anchor: Value | undefined;
     for (let i = 0; i < values.length; i++) {
