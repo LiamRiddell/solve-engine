@@ -18,7 +18,7 @@ import { builtinArityError } from "@solve-js/vm/VMBuiltinArity";
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, compareRationalOperands, uncertainOp } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, compareRationalOperands, uncertainOp, toleranceSpread } from "@solve-js/vm/VMConversion";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
@@ -2520,10 +2520,14 @@ export function executeBytecode(
           if (uncFault) { stack.push(uncFault); break; }
           // The center is the measured value, the spread its one-sigma tolerance.
           // The spread is taken as a magnitude, so "5 +/- -2" reads the same as
-          // "5 +/- 2". Only a plain-number center carries an uncertainty (a unit
-          // or other typed center falls back to its bare magnitude, units with
-          // uncertainty are out of scope for this slice).
-          stack.push(numberValueUncertain(center.toNumber(), Math.abs(spread.toNumber())));
+          // "5 +/- 2". A percentage spread is relative to the center and a spread
+          // with a unit is converted into the center's unit before either unit
+          // is dropped; see toleranceSpread(). Only a plain-number center carries
+          // an uncertainty (a unit or other typed center falls back to its bare
+          // magnitude, units with uncertainty are out of scope for this slice).
+          const tolerance = toleranceSpread(center, spread);
+          if (tolerance instanceof Value) { stack.push(tolerance); break; }
+          stack.push(numberValueUncertain(center.toNumber(), tolerance));
           break;
         }
 
