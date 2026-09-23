@@ -243,6 +243,11 @@ Results depend on the current date, so these are shown rather than asserted.
 | `days until 25/12/2026` | the number of days, as a duration |
 | `9:00am + 3 hours` | `12:00:00 PM` on the current day |
 | `7:30 to 20:45` | `795 minutes` |
+| `3pm London in Tokyo and New York` | the time in each city, today |
+| `overlap of 9am to 5pm in London and New York` | the hours the two share, today |
+
+Add `on 23 September 2026` to a time zone line to fix the day. See
+[time zones](/syntax/time-zones/).
 
 ## Bigger integers
 

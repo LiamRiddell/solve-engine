@@ -4,5 +4,6 @@ export { FpsRateParselet } from "./FpsRateParselet";
 export { LaptimeParselet } from "./LaptimeParselet";
 export { timeOrDateInZoneParselet } from "./TimeInZoneParselet";
 export { TimeDifferenceParselet } from "./TimeDifferenceParselet";
+export { HoursOverlapParselet } from "./HoursOverlapParselet";
 export { VideoTimecodeParselet } from "./VideoTimecodeParselet";
 export { FrameCountParselet } from "./FrameCountParselet";
