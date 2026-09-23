@@ -69,13 +69,22 @@ export class GlobalVariableAsyncResolver implements IAsyncResolver {
 		const len = opcodes.length;
 		let i = 0;
 
+		// Every unresolved name on the line, not just the first. Returning at
+		// the first miss made a line resolve its references strictly serially:
+		// the engine waited on that one name, re-executed the line, found the
+		// second name still missing, waited again, and so on, so a line reading
+		// three undeclared globals needed three full pend-and-re-execute round
+		// trips to produce an answer it could give after one. The scan already
+		// walks the whole program, so collecting the rest costs only the array.
+		let missing: string[] | null = null;
+
 		while (i < len) {
 			const op = opcodes[i] as OpCode;
 
 			if (op === OpCode.LOAD_GLOBAL_VAR) {
 				const varName = strings[opcodes[i + 1]];
 				if (!sharedGlobalVariableStore.has(varName)) {
-					return this.pendingResultFor(varName, packageId, signal);
+					(missing ??= []).push(varName);
 				}
 			}
 
@@ -93,10 +102,48 @@ export class GlobalVariableAsyncResolver implements IAsyncResolver {
 			i = nextInstruction(opcodes, i);
 		}
 
-		return null;
+		return missing === null ? null : this.pendingResultFor(missing, packageId, signal);
 	}
 
-	private pendingResultFor(varName: string, packageId: string, signal: AbortSignal): AsyncCheckResult {
+	private pendingResultFor(varNames: string[], packageId: string, signal: AbortSignal): AsyncCheckResult {
+		// Deduplicated and ordered, so a line reading the same name twice waits
+		// once, and two lines reading the same pair produce the same key
+		// whichever order they read them in. The key is a DAG data-source
+		// dependency as well as the Pending payload, so a stable spelling
+		// matters.
+		const names = varNames.length === 1 ? varNames : [...new Set(varNames)].sort();
+
+		// Waits for ALL of them, because the line cannot produce an answer
+		// until every name it reads exists. Resolving on the first arrival
+		// would re-execute the line into the same pending state it just left,
+		// which is the serial behaviour this replaces.
+		//
+		// A name nobody ever declares leaves this pending for ever, exactly as
+		// a single one always has: there is deliberately no timeout here, and
+		// that is unchanged.
+		const waits = names.map((name) => this.promiseFor(name));
+		const resolver = waits.length === 1 ? waits[0] : Promise.all(waits).then((values) => values[values.length - 1]);
+
+		return {
+			// The single-name spelling is unchanged, byte for byte. Only a line
+			// with more than one unresolved name gets the composite form.
+			queryKey: names.length === 1 ? `global:${names[0]}` : `global:${names.join(",")}`,
+			resolver,
+			packageId,
+			signal,
+			metadata: { varNames: names },
+		};
+	}
+
+	/**
+	 * The shared in-flight promise for one name, created on first demand.
+	 *
+	 * Kept per NAME rather than per line or per call so the dedup described on
+	 * {@link pending} still holds when several lines, in several documents,
+	 * wait on the same undeclared name: they all receive this promise and
+	 * therefore this single store subscription.
+	 */
+	private promiseFor(varName: string): Promise<Value> {
 		let resolver = this.pending.get(varName);
 		if (!resolver) {
 			resolver = new Promise<Value>((resolve) => {
@@ -109,14 +156,7 @@ export class GlobalVariableAsyncResolver implements IAsyncResolver {
 			});
 			this.pending.set(varName, resolver);
 		}
-
-		return {
-			queryKey: `global:${varName}`,
-			resolver,
-			packageId,
-			signal,
-			metadata: { varName },
-		};
+		return resolver;
 	}
 
 	destroy(): void {

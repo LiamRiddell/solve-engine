@@ -60,13 +60,35 @@ export class GlobalVariableStore {
 	 */
 	set(name: string, value: Value): void {
 		const previous = this.values.get(name);
+		if (previous !== undefined && sameValue(previous, value)) {
+			// Nothing observable changed, so nobody is told. The newer object
+			// still replaces the older one: they are interchangeable by
+			// definition here, and keeping the most recent one avoids holding a
+			// reference to a Value from an older pass.
+			this.values.set(name, value);
+			return;
+		}
+
+		// The depth bound is checked BEFORE the write, not inside notify()
+		// afterwards. It used to guard only the notification, so at the limit
+		// the value was stored and then no listener was called: the store held
+		// a number that every reader of it was, permanently, never told about.
+		// That is the one state this class cannot be allowed to reach, because
+		// nothing later re-reads a cell it was not notified of. Refusing the
+		// write instead keeps the store and its readers agreeing on the same
+		// value, which is the invariant callers actually depend on.
+		//
+		// This bounds a host listener that writes back on notification. It is
+		// not, and was never, a cross-document cycle detector: both engine-side
+		// listeners are non-reentrant, so engine code cannot reach a depth
+		// above 1. See docs-internal/plans/CROSS_SCOPE_CELLS.md, Release E.
+		if (this.notifyDepth >= GlobalVariableStore.MAX_NOTIFY_DEPTH) return;
+
 		this.values.set(name, value);
-		if (previous !== undefined && sameValue(previous, value)) return;
 		this.notify(name, value);
 	}
 
 	private notify(name: string, value: Value): void {
-		if (this.notifyDepth >= GlobalVariableStore.MAX_NOTIFY_DEPTH) return;
 		this.notifyDepth++;
 		try {
 			for (const listener of this.listeners) listener(name, value);
@@ -118,17 +140,73 @@ function sameValue(a: Value, b: Value): boolean {
 	if (a.unit !== b.unit) return false;
 	if ((a.timedOut ?? false) !== (b.timedOut ?? false)) return false;
 
-	const av = a.value;
-	const bv = b.value;
-	if (Array.isArray(av) || Array.isArray(bv)) {
-		if (!Array.isArray(av) || !Array.isArray(bv)) return false;
-		if (av.length !== bv.length) return false;
-		for (let i = 0; i < av.length; i++) {
-			if (!Object.is(av[i], bv[i])) return false;
+	// Every sidecar changes what a reader SEES while `value` stays identical,
+	// so none of them may be skipped here. `1.5` and `1.5 to 2 dp` are the same
+	// double and display as "1.5" and "1.50"; `30` and `30 ± 2` are the same
+	// double and display as "= 30" and "= 30 ± 2.0"; a datetime's grain, zone
+	// and span decide whether an instant reads as a day, a wall clock or a
+	// duration. Comparing only `value` reported those pairs equal and
+	// suppressed the notification, which left every reader of the cell
+	// displaying the old rendering with no event that would ever correct it.
+	// A missed notification is the one direction this function must never err
+	// in: an unnecessary one costs a re-evaluation that reaches the same
+	// answer, a missing one is permanent.
+	if (a.decimalPlaces !== b.decimalPlaces) return false;
+	if (a.uncertainty !== b.uncertainty) return false;
+	if (a.grain !== b.grain) return false;
+	if (a.zone !== b.zone) return false;
+	if ((a.datetimeSpan ?? false) !== (b.datetimeSpan ?? false)) return false;
+	if (!structurallyEqual(a.exact, b.exact, { left: MAX_COMPARED_NODES })) return false;
+	if (!structurallyEqual(a.rational, b.rational, { left: MAX_COMPARED_NODES })) return false;
+
+	return structurallyEqual(a.value, b.value, { left: MAX_COMPARED_NODES });
+}
+
+/**
+ * How much of a payload is walked before the comparison gives up and reports
+ * "not equal". A matrix, a range or a colour is far below this; a pathological
+ * symbolic tree is not, and walking one on every write of every cell is the
+ * cost this bound exists to refuse.
+ *
+ * Giving up is safe in one direction only, which is why it reports not-equal:
+ * see the note in {@link sameValue}.
+ */
+const MAX_COMPARED_NODES = 1024;
+
+/**
+ * Structural comparison of two stored payloads, bounded.
+ *
+ * This used to be an `Array.isArray` check on the payload itself, which could
+ * never fire: `Value.value`'s union has no array member. The arrays are one
+ * level further in, as a matrix's `data` field, so the check was looking at
+ * the wrong level and every object-valued cell fell through to `Object.is` on
+ * two freshly-built objects. That is never true, so a matrix, range, colour,
+ * split, chart, address or symbolic cell re-notified on every evaluation pass
+ * for ever, each one dirtying the whole downstream closure of every reader.
+ */
+function structurallyEqual(a: unknown, b: unknown, budget: { left: number }): boolean {
+	// Covers every primitive payload, and NaN compares equal to itself here so
+	// `global :x = 0/0` does not re-notify on every pass.
+	if (Object.is(a, b)) return true;
+	if (budget.left-- <= 0) return false;
+	if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+
+	if (Array.isArray(a) || Array.isArray(b)) {
+		if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+		for (let i = 0; i < a.length; i++) {
+			if (!structurallyEqual(a[i], b[i], budget)) return false;
 		}
 		return true;
 	}
-	return Object.is(av, bv);
+
+	const aKeys = Object.keys(a);
+	const bKeys = Object.keys(b);
+	if (aKeys.length !== bKeys.length) return false;
+	for (const key of aKeys) {
+		if (!Object.prototype.hasOwnProperty.call(b, key)) return false;
+		if (!structurallyEqual((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key], budget)) return false;
+	}
+	return true;
 }
 
 /** Called when a cross-document global changes, so dependents can re-evaluate. */

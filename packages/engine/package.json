@@ -238,14 +238,14 @@
     "typecheck:tsc": "tsc --noEmit --skipLibCheck"
   },
   "dependencies": {
-    "@tanstack/query-core": "^5.102.8"
+    "@tanstack/query-core": "^5.103.1"
   },
   "devDependencies": {
-    "@jest/globals": "^30.5.1",
-    "@types/node": "^26.4.1",
+    "@jest/globals": "^30.5.2",
+    "@types/node": "^26.6.1",
     "convert": "^7.0.0",
-    "jest": "^30.5.1",
-    "temporal-polyfill": "1.0.4",
+    "jest": "^30.5.2",
+    "temporal-polyfill": "1.0.5",
     "ts-jest": "^29.4.12",
     "tsup": "8.5.1",
     "typescript": "5.9.3"
