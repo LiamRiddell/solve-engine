@@ -17,4 +17,4 @@ Fixes #568.
 
 ## Verification
 
-A new spec pins both cases with stub providers, a new engine whose first line fetches and two engines in one process, and that the slot reads as before once the re-run finishes; both cases fail without the fix. `npm run verify:ci` passes: TESTS tests across SUITES suites, with the bundled-consumer contract.
+A new spec pins both cases with stub providers, a new engine whose first line fetches and two engines in one process, and that the slot reads as before once the re-run finishes; both cases fail without the fix. `npm run verify:ci` passes: 10,950 tests across 523 suites, with the bundled-consumer contract.
