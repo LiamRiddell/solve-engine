@@ -211,7 +211,9 @@ function compile(node: SymbolicNode, variable: string, depth: number): RealFunct
 /** A function application, by the name the `call` node records. */
 function compileCall(name: string, args: readonly RealFunction[]): RealFunction {
 	const unary = UNARY.get(name);
-	if (unary !== undefined && args.length === 1) {
+	// A typeof test as well as the Map: the name comes from the expression, and
+	// only a function found under it is called.
+	if (typeof unary === "function" && args.length === 1) {
 		const [arg] = args;
 		return x => unary(arg(x));
 	}
@@ -416,7 +418,7 @@ function compileBounded(node: SymbolicNode, variable: string, depth: number): Bo
 function compileBoundedCall(name: string, args: readonly BoundedFunction[]): BoundedFunction {
 	const unary = UNARY.get(name);
 	const slope = UNARY_SLOPE.get(name);
-	if (unary !== undefined && slope !== undefined && args.length === 1) {
+	if (typeof unary === "function" && typeof slope === "function" && args.length === 1) {
 		const [arg] = args;
 		return x => {
 			const u = arg(x);
