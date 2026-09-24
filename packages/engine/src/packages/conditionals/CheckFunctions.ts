@@ -117,6 +117,12 @@ function percent(fraction: number): string {
 	return `${(fraction * 100).toFixed(2).replace(/\.?0+$/, "")}%`;
 }
 
+/** A side's own magnitude, as written, or 0 when it is not finite. */
+function finiteMagnitude(v: Value): number {
+	const n = Math.abs(v.toNumber());
+	return Number.isFinite(n) ? n : 0;
+}
+
 /** Whether a value has a number a check can compare: an `n` whole number is one, compared on its digits by {@link exactOrder}. */
 function numeric(v: Value): boolean {
 	return v.type === ValueType.Number || v.type === ValueType.Uom || v.type === ValueType.Percentage || v.type === ValueType.Datetime || v.type === ValueType.BigInt;
@@ -150,7 +156,11 @@ export function checkComparison(args: Value[]): Value {
 	}
 
 	const gap = Math.abs(lv - rv);
-	const scale = Math.max(Math.abs(lv), Math.abs(rv));
+	// Scaled by the sides as written as well as converted, as compareUom scales
+	// `==`: 32 F in Celsius is 5.7e-14 rather than 0, and a margin taken from the
+	// two converted values alone, both near zero, failed `check 0 C == 32 F`
+	// where `0 C == 32 F` is true (#595).
+	const scale = Math.max(Math.abs(lv), Math.abs(rv), finiteMagnitude(left), finiteMagnitude(right));
 	const approximate = op === "≈" || tolerance !== undefined;
 
 	// The margin the two sides may differ by, and how to say it.
@@ -229,13 +239,36 @@ export function checkComparison(args: Value[]): Value {
 	return errorValue("CHECK_FAILED", `check failed: ${reason}`);
 }
 
+/** A check's pass, as {@link checkComparison} writes it: a tick, and for an approximate check how close it came. */
+const CHECK_PASS = /^✓( \(differs by [^)]*\))?$/;
+
 /**
- * Whether a line's result is a check's: its tick, or its failure. A column
- * total (`total above`) steps over these, so a check written under a column of
- * numbers does not break the total beneath it.
+ * A line written as a check: the `check` keyword opening it, after a label if
+ * it has one, and not a variable of that name being assigned (`check = $80`).
  */
-export function isCheckResult(value: Value | undefined): boolean {
-	if (value === undefined) return false;
-	if (value.type === ValueType.String) return String(value.value).startsWith("✓");
+const CHECK_LINE = /^\s*(?:[^:"]*:\s*)?check\s+(?![-+*/]?=[^=])/i;
+
+/** Whether a line's text is written as a check, whatever it answered; see {@link isCheckLine}. */
+export function isWrittenAsCheck(text: string): boolean {
+	return CHECK_LINE.test(text);
+}
+
+/**
+ * Whether a line is a check: written with the `check` keyword, and answered
+ * with a check's tick or its failure.
+ *
+ * Both halves are needed. The answer alone is not enough, since a piece of text
+ * that happens to begin with a tick (`"✓ shipped"`) was counted as a passed
+ * check (#594), and the text alone is not enough, since `check` is also an
+ * ordinary name. A column total (`total above`) steps over a check line, so a
+ * check written under a column of numbers does not break the total beneath it,
+ * and the host's pass and fail count reads the same test.
+ *
+ * @param text - The line as written.
+ * @param value - Its answer, or null when it has none.
+ */
+export function isCheckLine(text: string, value: Value | null | undefined): boolean {
+	if (value == null || !isWrittenAsCheck(text)) return false;
+	if (value.type === ValueType.String) return CHECK_PASS.test(String(value.value));
 	return value.type === ValueType.Error && value.errorCode === "CHECK_FAILED";
 }

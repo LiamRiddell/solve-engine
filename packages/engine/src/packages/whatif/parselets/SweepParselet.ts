@@ -30,7 +30,11 @@ export class SweepParselet implements PrefixParselet {
 	readonly category = "WhatIf";
 
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
-		const targetLine = parseInt(token.value, 10);
+		// `line deleted with ...`: the target was deleted and renumbering wrote
+		// it as `line deleted` (#596). It compiles to -1, mirroring
+		// `DELETED_LINE_NUMBER` in packages/lines as goal seek does, and the
+		// handler answers with the deleted-line error rather than "line NaN".
+		const targetLine = token.value === "deleted" ? -1 : parseInt(token.value, 10);
 		const nameToken = parser.peek();
 		if (!nameToken || (nameToken.type !== "IDENT" && nameToken.type !== "UNIT")) {
 			throw ErrorFactory.parsing(

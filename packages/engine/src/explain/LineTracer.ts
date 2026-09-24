@@ -4,13 +4,17 @@ import { formatValue } from "@solve-js/format/FormatEngine";
 import { DEFAULT_FORMATTING_SETTINGS } from "@solve-js/format/FormattingSettings";
 import { extractReadsAndWrites } from "@solve-js/engine/ExpressionEngineSafety";
 import type { LineTrace } from "./Explanation";
+import { headingOf, isSummaryLine, sectionKey } from "@solve-js/packages/lines/SectionReader";
+import { findTableAbove, isTableRow, splitTableRow } from "@solve-js/packages/tables/TableReader";
+import { isCheckLine } from "@solve-js/packages/conditionals/CheckFunctions";
 
 /**
  * Where a line's answer came from, worked out from the document's text.
  *
- * A line reads other lines three ways: by a variable another line defines
- * (`deposit`), by position (`line 2`, `prev`, `total above`, `sum(line 1 :
- * line 3)`), and by a category tag (`total of #food`). This module reads each
+ * A line reads other lines by a variable another line defines (`deposit`), by
+ * position (`line 2`, `prev`, `total above`, `sum(line 1 : line 3)`), by a
+ * category tag (`total of #food`), by a section (`total of section "Travel"`),
+ * or through the table above it (`column "cost" for "food"`). This module reads each
  * line's normalised tokens, the same tokens the line was compiled from, and
  * follows those reads upwards, line by line, into a {@link LineTrace}.
  *
@@ -37,6 +41,8 @@ export interface TraceSource {
 	isBoundary(line: number): boolean;
 	/** The lines carrying `#tag`, ascending. */
 	taggedLines(tag: string): readonly number[];
+	/** A line's raw text, or `undefined` past the end of the document. */
+	lineText(line: number): string | undefined;
 }
 
 /** How far a trace is followed, and from where. */
@@ -81,6 +87,55 @@ const RANGE_TOKENS: ReadonlySet<string> = new Set(["SUM_RANGE_CALL", "AVERAGE_RA
 const WHAT_IF_TOKENS: ReadonlySet<string> = new Set(["WHAT_IF", "SWEEP"]);
 /** The category-tag aggregate tokens, whose value is the tag name. */
 const TAG_TOKENS: ReadonlySet<string> = new Set(["TAG_SUM", "TAG_AVERAGE", "TAG_COUNT"]);
+/** The section aggregate tokens, whose value is the section's name (`total of section "Travel"`). */
+const SECTION_TOKENS: ReadonlySet<string> = new Set(["SECTION_SUM", "SECTION_AVERAGE", "SECTION_COUNT"]);
+
+/** Whether a token opens a read of the table above: a column aggregate, a lookup, or a band calculation. */
+function readsTable(type: string): boolean {
+	return type === "TABLE_LOOKUP" || type === "TABLE_THROUGH_BANDS" || type.startsWith("TABLE_COLUMN_");
+}
+
+/**
+ * Whether an aggregate steps over a line: a check (a statement about the
+ * figures, not one of them) or a summary of figures already counted. The same
+ * test `total above` and the section totals apply, so a trace lists what the
+ * aggregate added and not the lines it passed over (#597).
+ */
+function steppedOver(source: TraceSource, line: number): boolean {
+	const text = source.lineText(line) ?? "";
+	return isSummaryLine(text) || isCheckLine(text, source.result(line));
+}
+
+/**
+ * The lines a section total reads: under the one heading with that name, down
+ * to the next heading at its level or above, passing over blank lines,
+ * headings, checks, summaries and the reader itself, as the total does. Empty
+ * when no heading, or more than one, has the name, where the total answers
+ * with an error instead.
+ */
+function sectionLines(source: TraceSource, name: string, reader: number): number[] {
+	const wanted = sectionKey(name);
+	if (wanted === "") return [];
+	let open: { line: number; level: number } | null = null;
+	for (let n = 1; n <= source.lineCount; n++) {
+		const text = source.lineText(n) ?? "";
+		if (text.indexOf("#") === -1) continue;
+		const heading = headingOf(text);
+		if (heading === null || sectionKey(heading.name) !== wanted) continue;
+		if (open !== null) return []; // two headings share the name
+		open = { line: n, level: heading.level };
+	}
+	if (open === null) return [];
+	const lines: number[] = [];
+	for (let n = open.line + 1; n <= source.lineCount; n++) {
+		const text = source.lineText(n) ?? "";
+		const heading = text.indexOf("#") === -1 ? null : headingOf(text);
+		if (heading !== null && heading.level <= open.level) break;
+		if (n === reader || source.isBoundary(n) || steppedOver(source, n)) continue;
+		lines.push(n);
+	}
+	return lines;
+}
 
 /** A name as a reader would write it: a `global :rate` key shows as `rate`. */
 function displayName(key: string): string {
@@ -167,15 +222,26 @@ function readLine(
 				}
 			} else if ((t.type === "LINE_REF" && !inRange.has(i)) || WHAT_IF_TOKENS.has(t.type)) {
 				// A what-if or a sweep fuses its `line N` into one token that
-				// carries N, and reads that line as a reference does.
+				// carries N, and reads that line as a reference does. `line deleted`
+				// reads no line at all; it was listed as "line NaN".
 				const n = parseInt(t.value, 10);
-				reads.push({ order: offset + i, kind: "lines", lines: [n], via: `line ${n}` });
+				if (Number.isInteger(n)) reads.push({ order: offset + i, kind: "lines", lines: [n], via: `line ${n}` });
 			} else if (t.type === "PREV") {
 				reads.push({ order: offset + i, kind: "lines", lines: [line - 1], via: "prev" });
 			} else if (ABOVE_TOKENS.has(t.type)) {
 				const lines: number[] = [];
-				for (let n = line - 1; n >= 1 && !source.isBoundary(n); n--) lines.unshift(n);
+				for (let n = line - 1; n >= 1 && !source.isBoundary(n); n--) {
+					if (!steppedOver(source, n)) lines.unshift(n);
+				}
 				reads.push({ order: offset + i, kind: "lines", lines, via: "above" });
+			} else if (SECTION_TOKENS.has(t.type)) {
+				reads.push({ order: offset + i, kind: "lines", lines: sectionLines(source, t.value, line), via: `section "${t.value}"` });
+			} else if (readsTable(t.type)) {
+				// The table's data rows. A lookup reads one of them, but its key can be
+				// a value the tracer does not work out, so the rows it chose among are
+				// listed rather than a guess at the one it picked.
+				const table = findTableAbove((n) => source.lineText(n), line);
+				reads.push({ order: offset + i, kind: "lines", lines: table?.rowLines ?? [], via: "table" });
 			} else if (TAG_TOKENS.has(t.type)) {
 				const lines = source.taggedLines(t.value).filter((n) => n !== line);
 				reads.push({ order: offset + i, kind: "lines", lines, via: `#${t.value.toLowerCase()}` });
@@ -260,18 +326,31 @@ export function buildLineTrace(
 		return key === undefined ? null : displayName(key);
 	};
 
+	/**
+	 * A table row's label, its first cell, or null for any other line. A row is
+	 * listed by its label and with no answer, since a markdown row is not an
+	 * expression and has none of its own.
+	 */
+	const rowLabel = (n: number): string | null => {
+		const text = source.lineText(n);
+		if (text === undefined || !isTableRow(text)) return null;
+		return (splitTableRow(text)[0] ?? "").trim();
+	};
+
 	const visit = (n: number, via: readonly string[], depth: number, reader: number | null): LineTrace => {
-		const name = nameOf(n);
+		const row = rowLabel(n);
+		const name = row ?? nameOf(n);
+		const answer = (): Value | null => (row !== null ? null : source.result(n));
 		const forward = reader !== null && n > reader;
 		if (path.has(n)) {
-			return { line: n, name, value: source.result(n), via, inputs: [], cycle: true, forward, truncated: false };
+			return { line: n, name, value: answer(), via, inputs: [], cycle: true, forward, truncated: false };
 		}
 		if (forward && !options.followForward) {
 			return { line: n, name, value: null, via, inputs: [], cycle: false, forward, truncated: false };
 		}
 		budget--;
 		const direct = inputsOf(n);
-		const value = source.result(n);
+		const value = answer();
 		if (direct.length > 0 && (depth >= options.maxDepth || budget <= 0)) {
 			return { line: n, name, value, via, inputs: [], cycle: false, forward, truncated: true };
 		}

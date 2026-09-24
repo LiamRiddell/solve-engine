@@ -1,5 +1,5 @@
 import { Value, ValueType, numberValue, uomValue, errorValue, stringValue } from "@solve-js/vm/Value";
-import { isCheckResult } from "@solve-js/packages/conditionals/CheckFunctions";
+import { isCheckLine } from "@solve-js/packages/conditionals/CheckFunctions";
 import { nonNumericKind, unifyQuantities } from "@solve-js/vm/VMConversion";
 import { sourcesOfValues, withSources } from "@solve-js/vm/Provenance";
 import { exactDecimalTotal } from "@solve-js/vm/ExactDecimals";
@@ -255,7 +255,7 @@ function aggregateAbove(context: LineExecutionContext, isAverage: boolean): Valu
     const v = context.getLineResult!(n);
     // A check line is a statement about the column, not one of its values,
     // passed or failed alike (#506).
-    if (isCheckResult(v)) continue;
+    if (isCheckLine(context.getLineText?.(n) ?? "", v)) continue;
     // A subtotal above is a summary of figures already in the column, not
     // another figure: `10`, `total above`, `5`, `total above` is 15, not the
     // 25 that counted the first total as well (#551). The same test the
@@ -475,7 +475,7 @@ function aggregateSection(context: LineExecutionContext, name: string, mode: Sec
     const v = getResult(n);
     // A check line is a statement about the section, not one of its figures,
     // passed or failed alike, as `total above` treats it (#506).
-    if (isCheckResult(v)) continue;
+    if (isCheckLine(getText(n) ?? "", v)) continue;
     const err = checkSectionMember(v, n, context.lineIndex);
     if (err) return err;
     // `count of section` is "how many figures sit under the heading", so a

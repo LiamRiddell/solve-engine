@@ -752,6 +752,27 @@ describe("inputs of line N across entry points", () => {
     expect(incremental(doc)).toEqual(batch(doc));
   });
 
+  // #597: a trace reads the spans the forms read. A section total and a table
+  // read list the lines behind them, and `total above` leaves out the check it
+  // stepped over, value for value through both passes.
+  test("a section total lists its section's lines, both passes", () => {
+    const doc = ["# Travel", "train = 12", "taxi = 7", "# Food", "t = total of section \"Travel\"", "inputs of line 5"];
+    expect(batch(doc)[5]).toBe("t 19 (line 5) <- train 12 (line 2), taxi 7 (line 3)");
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("a table read lists the table's rows by their labels, both passes", () => {
+    const doc = ["| item | cost |", "| --- | --- |", "| food | 10 |", "| rent | 20 |", "", "c = column \"cost\" for \"food\"", "inputs of line 6"];
+    expect(batch(doc)[6]).toBe("c 10 (line 6) <- food (line 3), rent (line 4)");
+    expect(incremental(doc)[6]).toBe(batch(doc)[6]);
+  });
+
+  test("total above leaves out the check line it stepped over, both passes", () => {
+    const doc = ["10", "check 10 == 10", "5", "total above", "inputs of line 4"];
+    expect(batch(doc)[4]).toBe("15 (line 4) <- 10 (line 1), 5 (line 3)");
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
   test("a cycle is a named error, the same in both passes", () => {
     const doc = ["line 2 + 5", "prev + 5", "inputs of line 2"];
     const out = batch(doc);

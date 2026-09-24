@@ -71,6 +71,13 @@ function noDocument(form: string): Value {
 }
 
 /**
+ * The line number a deleted target compiles to, mirroring the lines package's
+ * `DELETED_LINE_NUMBER`: no line can be written as `line -1`, so it is free to
+ * mean "deleted".
+ */
+const DELETED_LINE = -1;
+
+/**
  * Open the re-run for `targetLine` after the checks both forms share, or
  * return the error that stops it.
  *
@@ -80,6 +87,9 @@ function noDocument(form: string): Value {
  * @returns The open session, or an error Value.
  */
 function openRerun(context: LineExecutionContext | undefined, targetLine: number, form: string): LineRerun | Value {
+	// The lines package's own error for a reference into a deleted line, so a
+	// what-if says what `line deleted + 1` says.
+	if (targetLine === DELETED_LINE) return errorValue("LINE_REFERENCE_DELETED", "This reference pointed at a line that has been deleted");
 	const rerunLines = context?.rerunLines;
 	if (!rerunLines) return noDocument(form);
 	if (context.lineIndex === targetLine) {

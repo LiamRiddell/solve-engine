@@ -346,6 +346,25 @@ describe("shiftLineReferences", () => {
 		expect(incremental(after)[3]).toBe("30");
 	});
 
+	// #596: a what-if and a sweep fuse their `line N` into one token, which the
+	// shift used to pass over, so an inserted line left them on the old line.
+	test("a what-if and a sweep target are renumbered, and their answers are unchanged", () => {
+		const lines = ["x = 1", "y = x * 10 + 10", "line 2 with x = 5", "line 2 for x from 1 to 3 step 1"];
+		const inserted = doc("# Heading", ...lines);
+		const after = shifted(inserted, { kind: "insert", line: 1, count: 1 });
+		expect(after).toBe(doc("# Heading", "x = 1", "y = x * 10 + 10", "line 3 with x = 5", "line 3 for x from 1 to 3 step 1"));
+		expect(batch(doc(...lines)).slice(2)).toEqual(["60", "[20, 30, 40]"]);
+		expect(batch(after).slice(3)).toEqual(["60", "[20, 30, 40]"]);
+		expect(incremental(after).slice(3)).toEqual(["60", "[20, 30, 40]"]);
+	});
+
+	test("a what-if into a deleted line becomes `line deleted`, and says so", () => {
+		const after = shifted(doc("y = 2", "line 1 with x = 5"), { kind: "delete", line: 1, count: 1 });
+		expect(after).toBe(doc("y = 2", "line deleted with x = 5"));
+		expect(batch(after)[1]).toBe(incremental(after)[1]);
+		expect(batch(after)[1]).toMatch(/^ERROR:/);
+	});
+
 	test("a reference above the insertion is left alone", () => {
 		expect(shifted(doc("10", "line 1 * 2", "new", "20", "line 3 + 1"), { kind: "insert", line: 3, count: 1 })).toBe(
 			doc("10", "line 1 * 2", "new", "20", "line 4 + 1"),

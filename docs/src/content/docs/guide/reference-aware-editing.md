@@ -291,8 +291,9 @@ string from the last to the first and keeps the document's own line breaks.
   document that reads it, and one document cannot rename it in the others.
 - **Relative forms are left alone.** `prev`, `total above` and `average above`
   read whatever is above them now; that is their meaning, so a shift never
-  rewrites them. Only an absolute `line N` moves, including a range's ends and a
-  goal seek's target.
+  rewrites them. Only an absolute `line N` moves, including a range's ends, a
+  goal seek's target, and the line a [what-if or a sweep](/syntax/what-if/)
+  re-runs (`line 4 with deposit = 150000`).
 - **Inserted lines are left as written.** They were written against the note as
   it now stands.
 - **A label followed by a definition** (`rent: :rent = 1200`) is reported as the
