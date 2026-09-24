@@ -11,7 +11,7 @@
  * months from now still names the seed that produced it.
  */
 
-import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { createEngine } from "@solve-js/api/createEngine";
 import { buildVocabulary } from "@tools/fuzz/Vocabulary";
 import { generateExpressionCase } from "@tools/fuzz/ExpressionFuzzer";
 import * as fs from "node:fs";
@@ -26,7 +26,10 @@ const seed = Number(args.get("seed") ?? 20260811);
 const count = Number(args.get("count") ?? 30000);
 const out = args.get("out");
 
-const engine = new ExpressionEngine("en");
+// Every built-in package, so the vocabulary has the units, functions and
+// phrases a consumer's engine has. The bare constructor registers none since
+// 2.0, which left the generator drawing from an empty vocabulary (#572).
+const engine = createEngine();
 const vocabulary = buildVocabulary(engine);
 engine.clear();
 
