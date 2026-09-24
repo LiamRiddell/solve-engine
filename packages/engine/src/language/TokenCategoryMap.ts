@@ -214,7 +214,6 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 
 	// Comparison operators
 	NEQ: "comparison",
-	IN: "comparison",
 	GTE: "comparison",
 	LTE: "comparison",
 	EQUALITY: "comparison",
@@ -244,8 +243,12 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 
 	// Units / conversions / currency symbols
 	UNIT: "unit",
-	CONVERT: "unit",
-	TO: "unit",
+	// The conversion words, `to`, `in`/`into` and `convert`, are keywords
+	// alike: `to` was coloured as a unit and `in` as a comparison, so the
+	// same word took a different colour from one line to the next (#576).
+	CONVERT: "keyword",
+	TO: "keyword",
+	IN: "keyword",
 	POUND: "unit",
 	EURO: "unit",
 	YEN: "unit",

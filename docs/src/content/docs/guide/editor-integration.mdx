@@ -43,6 +43,11 @@ and a task box (`- [ ] total += 5`). A bullet's `-` is markup, not a minus sign,
 which is also why the engine evaluates `- 100 + 20` as 120. Written with no
 space after it, `-100 + 20` is arithmetic, and its minus is coloured as one.
 
+A line's label (`Total: 1 + 2`) is prose the engine sets aside, so it is left
+uncoloured like the markdown in front of it. The conversion words `to`, `in`
+and `into` are coloured as keywords, and the colon of a clock time (`12:30`)
+as part of its number.
+
 ## References, rename and moving lines
 
 The same service reads a whole document for the features that follow a name

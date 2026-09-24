@@ -33,7 +33,7 @@ describe("TokenCategoryMap", () => {
   });
 
   test("returns 'comparison' for comparison operators", () => {
-    for (const op of ["NEQ", "IN", "GTE", "LTE", "EQUALITY"]) {
+    for (const op of ["NEQ", "GTE", "LTE", "EQUALITY"]) {
       expect(getTokenCategory(op)).toBe("comparison");
     }
   });
@@ -62,9 +62,15 @@ describe("TokenCategoryMap", () => {
     expect(getTokenCategory("STRING")).toBe("string");
   });
 
-  test("returns 'unit' for unit/conversion tokens", () => {
-    for (const t of ["UNIT", "CONVERT", "TO", "POUND", "EURO"]) {
+  test("returns 'unit' for unit and currency tokens", () => {
+    for (const t of ["UNIT", "POUND", "EURO"]) {
       expect(getTokenCategory(t)).toBe("unit");
+    }
+  });
+
+  test("returns 'keyword' for the conversion words alike (#576)", () => {
+    for (const t of ["CONVERT", "TO", "IN"]) {
+      expect(getTokenCategory(t)).toBe("keyword");
     }
   });
 

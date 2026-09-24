@@ -61,6 +61,28 @@ const CATEGORY_TIER: Partial<Record<TokenCategory, number>> = {
 const MAX_CACHED_LINES = 2000;
 
 /**
+ * Whether `token` is the colon of a clock time (`12:30`): a colon written hard
+ * between two numbers, which is part of the number rather than a variable's
+ * sigil (#576).
+ *
+ * @param lexed - The line's highlight tokens, in order.
+ * @param token - One of them.
+ */
+function isClockColon(
+	lexed: readonly { type: string; offset: number; length: number }[],
+	token: { type: string; offset: number; length: number },
+): boolean {
+	if (token.type !== "COLON") return false;
+	const i = lexed.indexOf(token);
+	const before = lexed[i - 1];
+	const after = lexed[i + 1];
+	return (
+		before?.type === "NUMBER" && before.offset + before.length === token.offset &&
+		after?.type === "NUMBER" && token.offset + token.length === after.offset
+	);
+}
+
+/**
  * The offset of a running total's name (`total` in `total += 5`), or -1 when
  * the line is not one.
  *
@@ -398,8 +420,19 @@ export class LanguageService {
 			const text = contentStart > 0 ? lineText.slice(contentStart) : lineText;
 			if (this.parsesAsExpression(text)) {
 				const runningTotalName = runningTotalNameOffset(lexed);
+				const codeStart = contentStart + this.labelLength(text);
 				for (const token of lexed) {
 					if (!token.category) continue;
+					// A label (`Total: 1 + 2`) is prose the parser set aside, not a
+					// variable the line reads, so its words and colon stay
+					// uncoloured (#576).
+					if (token.offset < codeStart) continue;
+					// The colon of a clock time (`12:30`) is part of the number,
+					// not a variable's sigil.
+					if (isClockColon(lexed, token)) {
+						tokens.push({ from: token.offset, to: token.offset + token.length, category: "number" });
+						continue;
+					}
 					const category = token.offset === runningTotalName ? "variable" : token.category;
 					tokens.push({ from: token.offset, to: token.offset + token.length, category });
 				}
@@ -426,6 +459,19 @@ export class LanguageService {
 
 		this.putCache(lineNumber, lineText, tokens);
 		return tokens;
+	}
+
+	/**
+	 * How many characters of `text` are a label the parser sets aside
+	 * (`Total: ` in `Total: 1 + 2`), or 0 when it has none. Asked only of a
+	 * line with a colon past its first character, since only such a line can
+	 * carry one, so an ordinary line costs nothing more to highlight.
+	 */
+	private labelLength(text: string): number {
+		if (!this.engine || text.indexOf(":", 1) < 0) return 0;
+		const read = this.engine.readExpressionTokens(text);
+		if (read === null || read.start === 0) return 0;
+		return read.tokens[read.start]?.offset ?? 0;
 	}
 
 	/**
