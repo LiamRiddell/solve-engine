@@ -79,6 +79,7 @@ export function createStocksPackage(config: StocksPackageConfig = {}): IEnginePa
 		// so watch the same engine-assigned slot the emit-by-name path produces.
 		pluginFunctionIndex: pluginFunctionIndexFor(`${PACKAGE_NAME}:${CURRENT_FN}`),
 		staleTimeMs: config.staleTimeMs ?? 60_000, // 1 min — intraday quotes move continuously
+		provider: config.provider ?? "host",
 		// Only the live current quote refreshes in the background, and only when
 		// the host asked for it; a historical close (below) never does.
 		refetchIntervalMs: config.refetchIntervalMs,
@@ -95,12 +96,16 @@ export function createStocksPackage(config: StocksPackageConfig = {}): IEnginePa
 		// assigned index for `stockhistorical` so preflight matches the bytecode.
 		pluginFunctionIndex: pluginFunctionIndexFor(`${PACKAGE_NAME}:${HISTORICAL_FN}`),
 		staleTimeMs: config.historicalStaleTimeMs ?? 30 * 24 * 60 * 60 * 1000, // 30 days — a past close never changes
+		provider: config.provider ?? "host",
 		fetchQuery: async (query: string, signal: AbortSignal): Promise<Value> => {
 			const [field, ticker, isoDate] = query.split(":");
 			if (!config.fetchHistoricalQuote) return notConfigured("fetchHistoricalQuote");
 			const quote = await config.fetchHistoricalQuote(ticker, isoDate, signal);
-			if (field === "volume") return numberValue(quote.volume ?? 0);
-			return uomValue(quote.close, quote.currency ?? "USD");
+			// A past close is a historical figure for a named day, which the
+			// resolver's default live stamp could not say.
+			const value = field === "volume" ? numberValue(quote.volume ?? 0) : uomValue(quote.close, quote.currency ?? "USD");
+			value.sources = [{ provider: config.provider ?? "host", kind: "historical", fetchedAt: Date.now(), subject: ticker, asOf: isoDate }];
+			return value;
 		},
 	});
 

@@ -178,11 +178,37 @@ the change). For a running total that is the next total, not the total at the
 line's own place in the document: with the total at 5, explaining `total += 5`
 answers 10.
 
+## Where a live figure came from
+
+A converted amount is only as good as its rate, and the rate is not on the line.
+When an answer depends on a live figure, the derivation ends with a step per
+figure naming the provider, how the figure was obtained, and when (see
+[where a live value came from](/guide/async-and-live-data/#where-a-live-value-came-from)):
+
+```ts
+currencyExchangeService.primeRates("USD", { GBP: 0.741 }, {
+  provider: "Treasury feed",
+  publishedAt: Date.parse("2026-09-23T16:02:00Z"),
+});
+engine.explainLine("10 USD in GBP").steps.map((s) => s.description);
+// ["USD/GBP from Treasury feed (supplied by the host), fetched 2026-09-23 16:02 UTC"]
+```
+
+A rate the engine fetched itself reads `(live)`, and a rate for a past day names
+the day. A [frozen answer](/syntax/frozen-answers/) leads with a step saying when
+it was frozen, and each source says so too. The times are in UTC so a derivation
+reads the same wherever it is produced; the epoch values are on the answer for a
+host that wants local time. Like a date reading, each of these steps carries the
+line's answer, since a source is a fact about the answer rather than a value of
+its own. Explaining a frozen line never freezes it: an explanation is a look at
+the line, not an evaluation of the document.
+
 ## When there is nothing to break down
 
 A bare literal has no derivation, and neither does a line built from a construct
 the derivation does not cover (a comparison, a matrix). In both cases
-`explainLine` still reports the answer, with an empty `steps` array, rather than
+`explainLine` still reports the answer, with an empty `steps` array (apart from
+the source steps above, when the answer depends on a live figure), rather than
 raising:
 
 ```ts
@@ -205,12 +231,13 @@ A line that does not evaluate at all throws an `EngineError`, the same as
 The derivation covers arithmetic with its precedence and associativity,
 parentheses, a minus in front of a group, percentages (`+ 20%`, `20% off`,
 `20% on`, `20% of`) and quantities in units and money, plus how each date
-literal on the line was read. Through the built-in packages' hooks it covers
-unit, rate and currency conversions, the named functions (`sqrt`, `round`,
-`max`, the trigonometric and logarithmic functions, and the rest), and the
-finance forms: compound growth, present value, loan repayments and interest,
-return on investment, and sales tax. A package of your own adds its steps the
-same way; see [explaining your steps](/packages/explaining-steps/).
+literal on the line was read and where each live figure came from. Through the
+built-in packages' hooks it covers unit, rate and currency conversions, the
+named functions (`sqrt`, `round`, `max`, the trigonometric and logarithmic
+functions, and the rest), and the finance forms: compound growth, present value,
+loan repayments and interest, return on investment, and sales tax. A package of
+your own adds its steps the same way; see
+[explaining your steps](/packages/explaining-steps/).
 
 Date arithmetic, matrices and symbolic algebra are not covered, and report
 their answer without a breakdown. A line that waits for data (a live rate, an

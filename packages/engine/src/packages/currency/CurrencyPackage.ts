@@ -35,7 +35,7 @@ export function createCurrencyPackage(config: CurrencyPackageConfig = {}): IEngi
     name: "solve-currency",
     asyncResolvers: [
       new CurrencyAsyncResolver(),
-      createHistoricalCurrencyResolver(config.historicalRateProvider),
+      createHistoricalCurrencyResolver(config.historicalRateProvider, config.historicalProviderName),
     ],
     prefixParselets: {
       DOLLAR: new CurrencySymbolParselet(),
@@ -58,7 +58,7 @@ export function createCurrencyPackage(config: CurrencyPackageConfig = {}): IEngi
       // target and date strings. The handler carries the same provider as the
       // resolver, so a source currency known only at runtime (`x in GBP on
       // <date>`) can fetch the rate the bytecode scan could not preflight.
-      [HISTORICAL_CURRENCY_FN]: createHistoricalCurrencyPluginFunction(config.historicalRateProvider),
+      [HISTORICAL_CURRENCY_FN]: createHistoricalCurrencyPluginFunction(config.historicalRateProvider, config.historicalProviderName),
     },
   };
 }

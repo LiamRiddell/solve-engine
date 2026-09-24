@@ -21,6 +21,8 @@ import type { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { BackgroundRefreshManager } from "@solve-js/engine/BackgroundRefreshManager";
 import { registerAsConverter, unregisterAsConverter, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { createEngineContext } from "@solve-js/engine/EngineContext";
+import { splitFrozenSuffix, frozenDirectiveFor } from "@solve-js/engine/FrozenSuffix";
+import type { FrozenRecord } from "@solve-js/vm/FrozenValues";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import type { CalendarOption } from "@solve-js/calendar/resolveCalendar";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
@@ -40,6 +42,8 @@ import {
     deserializeBytecode,
     serializeUserFunction,
     deserializeUserFunction,
+    serializeFrozenRecord,
+    deserializeFrozenRecord,
     type EngineSnapshot,
     type SerializedValue,
     type SerializedLineCacheEntry,
@@ -144,7 +148,12 @@ export type {
     SerializedDecimal,
     SerializedRational,
     SerializedNumber,
+    SerializedValueSidecars,
+    SerializedFrozenRecord,
 } from "@solve-js/engine/EngineSnapshot";
+// What a frozen line keeps, and what a live value records about its source.
+export type { FrozenRecord } from "@solve-js/vm/FrozenValues";
+export type { ValueSource, SourceKind, FrozenMark } from "@solve-js/vm/Provenance";
 
 /**
  * Options for {@link ExpressionEngine.fromJSON}, restoring a snapshot onto a
@@ -2921,6 +2930,13 @@ export class ExpressionEngine {
         unlink?.();
 
         this.registerLineWithTags(lineNumber, expression, reads, writes);
+        // A frozen line answered from the store (or refused for a day it holds
+        // nothing for) never reads its source again, so it stops being one of
+        // the source's consumers: the batcher no longer re-runs it when the
+        // value lands, and a background refresh with no other reader stops.
+        if (program.frozen !== undefined && (result.value.frozen !== undefined || result.value.errorCode === "FROZEN_VALUE_MISSING")) {
+            this.dag.dropDataSourceReads(lineNumber);
+        }
         this.storeLineResult(lineNumber, result.value, program, reads, writes, expression);
         return result.value;
     }
@@ -4305,7 +4321,24 @@ export class ExpressionEngine {
             return { kind: 'error', stage: 'parse', error: failed.error, reads: failed.reads, writes: failed.writes, normalizedTokens };
         }
 
-        const { reads, writes } = extractReadsAndWrites(normalizedTokens);
+        // ══ FROZEN SUFFIX ══
+        // `<expression> frozen` compiles the expression alone and marks the
+        // program, so the VM answers it from the frozen store. Taken only when
+        // the expression before the word compiles on its own; a line that just
+        // ends in a variable called `frozen` compiles whole below, as it always
+        // did. Reads and writes come from the expression, so the word is never
+        // taken for a variable the line depends on. See engine/FrozenSuffix.ts.
+        let frozenLine: { program: BytecodeProgram | null; operand: Token[] } | null;
+        try {
+            frozenLine = this.compileFrozenSuffix(normalizedTokens, hasParens, compiledProgram);
+        } catch (e) {
+            const error = normalizeUnknownError(e);
+            const { reads, writes } = extractReadsAndWrites(normalizedTokens);
+            this.rememberFailedParse(expression, { error, normalizedTokens, reads, writes });
+            return { kind: 'error', stage: 'parse', error, reads, writes, normalizedTokens };
+        }
+
+        const { reads, writes } = extractReadsAndWrites(frozenLine?.operand ?? normalizedTokens);
 
         // ══ BYTECODE CACHE / PARSE+COMPILE ══
         // Reached with a cached program only when its front half is missing
@@ -4315,6 +4348,11 @@ export class ExpressionEngine {
             this.compiledFrontHalf.set(expression, { normalizedTokens, reads, writes });
             this.touchCompiled(expression, compiledProgram);
             return { kind: 'ready', normalizedTokens, reads, writes, program: compiledProgram, cached: true };
+        }
+
+        if (frozenLine?.program) {
+            this.cacheBytecode(expression, frozenLine.program, { normalizedTokens, reads, writes });
+            return { kind: 'ready', normalizedTokens, reads, writes, program: frozenLine.program, cached: false };
         }
 
         // Get a pooled builder, avoids 4 heap allocations per expression
@@ -4360,6 +4398,43 @@ export class ExpressionEngine {
     }
 
     /**
+     * Compile a line that ends in `frozen`, or report that it does not.
+     *
+     * Returns `null` when the line has no suffix, or when what precedes the word
+     * does not compile on its own (the caller then compiles the whole line, as
+     * it always did). For a program restored from a snapshot, which is already
+     * compiled, it returns only the operand tokens, so the caller can read the
+     * line's dependencies from them rather than from the suffix.
+     *
+     * @throws A date literal's own error for `frozen on <a day that does not
+     * exist>`, and `FROZEN_UNSUPPORTED` for a line with no single answer to
+     * keep. See `engine/FrozenSuffix.ts`.
+     */
+    private compileFrozenSuffix(
+        tokens: Token[],
+        hasParens: boolean | undefined,
+        compiled: BytecodeProgram | undefined,
+    ): { program: BytecodeProgram | null; operand: Token[] } | null {
+        const suffix = splitFrozenSuffix(tokens, this.context.calendar);
+        if (suffix === null) return null;
+        if (compiled) return compiled.frozen !== undefined ? { program: null, operand: suffix.operand } : null;
+
+        const builder = this.builderPool[this.builderPoolIndex++ % this.builderPool.length];
+        builder.reset();
+        let program: BytecodeProgram;
+        try {
+            this.parseExpression(builder, suffix.operand, hasParens);
+            program = builder.build();
+        } catch {
+            // Not a freeze: the expression before the word does not stand on
+            // its own, so the word belongs to the line.
+            return null;
+        }
+        program.frozen = frozenDirectiveFor(program, suffix);
+        return { program, operand: suffix.operand };
+    }
+
+    /**
      * Shared async-resolver preflight check, run before VM execution.
      *
      * Skipped outright for a line no registered resolver could intercept
@@ -4393,6 +4468,12 @@ export class ExpressionEngine {
         writes: string[],
     ): { kind: 'pending'; value: Value } | { kind: 'proceed' } {
         if (!this.mayResolve(program)) {
+            return { kind: 'proceed' };
+        }
+        // A frozen line that will be answered from the store (or refused for a
+        // day it has no value for) never runs, so there is nothing to fetch,
+        // and fetching is exactly what freezing promises not to do.
+        if (program.frozen !== undefined && this.context.frozenValues.outcome(program.frozen, this.context.calendar).kind !== "evaluate") {
             return { kind: 'proceed' };
         }
 
@@ -6076,6 +6157,13 @@ export class ExpressionEngine {
      * @param observeCall - Receives every call the VM makes while evaluating it.
      */
     private evaluateIsolated(expression: string, observeCall?: (call: ObservedCall) => void): Value {
+        // Explaining a line must not freeze it: a frozen line answers from the
+        // store when it has an answer, and otherwise answers live unrecorded.
+        return this.context.frozenValues.withoutRecording(() => this.evaluateIsolatedRecorded(expression, observeCall));
+    }
+
+    /** The body of {@link evaluateIsolated}, run with frozen recording switched off. */
+    private evaluateIsolatedRecorded(expression: string, observeCall?: (call: ObservedCall) => void): Value {
         const { tokens, hasParens } = this.lexToTokens(expression);
         const prep = this.prepareExpression(expression, tokens, hasParens, undefined, -1);
         if (prep.kind === "empty") return numberValue(0);
@@ -6528,6 +6616,9 @@ export class ExpressionEngine {
 		// later execution read a cache this engine no longer owns.
 		if (getActiveQueryClient() === this.queryClient) setActiveQueryClient(null);
 
+         // Frozen answers belong to the document, like everything else here:
+         // another document freezing the same expression keeps its own.
+         this.context.frozenValues.clear();
          this.dag.clear();
          this.lineCache.clear();
          this.scopeManager.clear();
@@ -6563,7 +6654,10 @@ export class ExpressionEngine {
      *   data-source dependency, or an async plugin call in its bytecode) is
      *   dropped from the line cache, and any variable whose most-recent
      *   definition was such a line is dropped too. An in-flight (Pending) value
-     *   is likewise never written.
+     *   is likewise never written. A `frozen` line is the opt-in exception:
+     *   its stored answer is written to {@link EngineSnapshot.frozen}, and the
+     *   line and the variable it defines are carried, so the restored document
+     *   reads the same answer with no network.
      * - **Package-contributed state.** Core state only for v1; a package opt-in
      *   is a follow-up.
      * - **Symbolic (algebra) values.** Deferred: a variable holding one makes
@@ -6598,7 +6692,21 @@ export class ExpressionEngine {
         // carried, matching the value the live VM actually holds.
         const lineEntries = this.lineCache.snapshotEntries();
         const latestWriter = new Map<string, { line: number; async: boolean }>();
+        const frozenStore = this.context.frozenValues;
         for (const { line, entry } of lineEntries) {
+            // A frozen line whose answer is stored is the opt-in exception: its
+            // answer is the one the reader asked to keep, not a point-in-time
+            // value to re-fetch, so it and the variable it defines are carried.
+            const frozenDirective = entry.bytecode.frozen;
+            if (frozenDirective !== undefined && frozenStore.has(frozenDirective.key) && entry.result.type !== ValueType.Pending) {
+                asyncLines.delete(line);
+                const writeVar = entry.writeVariable;
+                if (writeVar) {
+                    const prev = latestWriter.get(writeVar);
+                    if (!prev || line >= prev.line) latestWriter.set(writeVar, { line, async: false });
+                }
+                continue;
+            }
             const isAsync = asyncLines.has(line) || entry.bytecode.hasAsync;
             if (isAsync) asyncLines.add(line);
             const writeVar = entry.writeVariable;
@@ -6661,7 +6769,7 @@ export class ExpressionEngine {
             program: serializeBytecode(program),
         }));
 
-        return {
+        const snapshot: EngineSnapshot = {
             format: SNAPSHOT_FORMAT,
             version: SNAPSHOT_VERSION,
             engineVersion: ENGINE_VERSION,
@@ -6671,6 +6779,10 @@ export class ExpressionEngine {
             lineCache,
             bytecodeCache,
         };
+        // Written only when there is something to carry, so a document with no
+        // frozen line produces the same snapshot it always did.
+        if (frozenStore.size > 0) snapshot.frozen = frozenStore.entries().map(serializeFrozenRecord);
+        return snapshot;
     }
 
     /**
@@ -6711,6 +6823,11 @@ export class ExpressionEngine {
      * entry point is the static {@link ExpressionEngine.fromJSON}.
      */
     private restoreSnapshot(snapshot: EngineSnapshot): void {
+        // First, so a restored frozen line, and anything that re-runs it, finds
+        // its answer stored rather than fetching.
+        for (const record of snapshot.frozen ?? []) {
+            this.context.frozenValues.restore(deserializeFrozenRecord(record));
+        }
         for (const [name, sv] of Object.entries(snapshot.variables)) {
             this.vm.setVar(name, deserializeValue(sv));
         }
@@ -6740,6 +6857,44 @@ export class ExpressionEngine {
         for (const { expression, program } of snapshot.bytecodeCache) {
             this.bytecodeCache.set(expression, deserializeBytecode(program));
         }
+    }
+
+    /**
+     * The answers this engine's `frozen` lines keep, in the order they were
+     * frozen.
+     *
+     * Each record names the key its line is stored under (the expression
+     * without its suffix, as written), when it was frozen, the day that was,
+     * and the answer, which carries its {@link Value.frozen} mark and its
+     * {@link Value.sources}. The snapshot carries the same records (see
+     * {@link EngineSnapshot.frozen}); this is the live view of them.
+     *
+     * @returns A copy of the list; changing it changes nothing in the engine.
+     */
+    getFrozenValues(): FrozenRecord[] {
+        return this.context.frozenValues.entries();
+    }
+
+    /**
+     * Forget frozen answers, so their lines freeze afresh the next time they
+     * are evaluated.
+     *
+     * A line that names its day (`frozen on 2026-09-23`) is refused once its
+     * answer is forgotten, unless that day is today, rather than frozen at
+     * today's figure: forgetting an answer does not change what the line says.
+     * Results already handed to the host are not changed; re-evaluate the
+     * document to see the lines answer again.
+     *
+     * @param key - One answer's key, as a frozen value carries it in
+     * `value.frozen.key`. Omit it to forget every answer.
+     * @returns How many answers were forgotten.
+     */
+    unfreeze(key?: string): number {
+        const store = this.context.frozenValues;
+        if (key !== undefined) return store.delete(key) ? 1 : 0;
+        const count = store.size;
+        store.clear();
+        return count;
     }
 
     //#endregion

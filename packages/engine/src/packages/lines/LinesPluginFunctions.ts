@@ -1,6 +1,7 @@
 import { Value, ValueType, numberValue, uomValue, errorValue, stringValue } from "@solve-js/vm/Value";
 import { isCheckResult } from "@solve-js/packages/conditionals/CheckFunctions";
 import { nonNumericKind, unifyQuantities } from "@solve-js/vm/VMConversion";
+import { withSources } from "@solve-js/vm/Provenance";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { headingOf, isSummaryLine, sectionKey } from "./SectionReader";
 import { formatLineTrace, traceProblem } from "@solve-js/explain/LineTracer";
@@ -140,8 +141,8 @@ function combineQuantities(values: Value[], isAverage: boolean): Value {
   if (unified instanceof Value) return unified;
   const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);
   const result = isAverage ? sum / values.length : sum;
-  if (unified.unit === undefined) return numberValue(result);
-  const combined = uomValue(result, unified.unit);
+  if (unified.unit === undefined) return withSources(numberValue(result), unified.sources);
+  const combined = withSources(uomValue(result, unified.unit), unified.sources);
   // A total of clock-time spans is still a span, so a timesheet column of
   // `17:30 - 09:00` lines totals to a clock rather than to milliseconds. One
   // ordinary quantity in the column is enough to make the total a quantity.

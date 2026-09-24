@@ -3,6 +3,7 @@ import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand } from "@solve-js/vm/VMConversion";
+import { withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact } from "@solve-js/vm/MoneyExact";
 import { transpose, determinant, inverse, matrixMultiply, matrixPower, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
 import { symbolicToValue, valueToSymbolic, solveEquationValues, definiteIntegralValue, readSearchRange } from "@solve-js/vm/SymbolicOps";
@@ -272,8 +273,8 @@ function extremum(args: Value[], wantLargest: boolean): Value {
  * read a whole list in one unit, so `total of $4.99, $12.50` keeps the
  * currency the list opened in.
  */
-function quantity(magnitude: number, unit: string | undefined): Value {
-    return unit === undefined ? numberValue(magnitude) : uomValue(magnitude, unit);
+function quantity(magnitude: number, unit: string | undefined, sources?: readonly ValueSource[]): Value {
+    return withSources(unit === undefined ? numberValue(magnitude) : uomValue(magnitude, unit), sources);
 }
 
 /**
@@ -737,7 +738,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const unified = unifyQuantities(args, "averaged");
         if (unified instanceof Value) return unified;
         const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);
-        return quantity(sum / unified.magnitudes.length, unified.unit);
+        return quantity(sum / unified.magnitudes.length, unified.unit, unified.sources);
     },
     // median(...), middle value; average of the two middle values for an
     // even argument count.
@@ -750,13 +751,14 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         return quantity(
             sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid],
             unified.unit,
+            unified.sources,
         );
     },
     // total(...), sum of any number of arguments.
     44: (args) => {
         const unified = unifyQuantities(args, "added");
         if (unified instanceof Value) return unified;
-        return quantity(unified.magnitudes.reduce((acc, n) => acc + n, 0), unified.unit);
+        return quantity(unified.magnitudes.reduce((acc, n) => acc + n, 0), unified.unit, unified.sources);
     },
     // count(...), number of arguments passed.
     45: (args) => numberValue(args.length),

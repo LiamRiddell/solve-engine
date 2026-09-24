@@ -19,7 +19,9 @@ import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/Di
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, currencyRateSources } from "@solve-js/vm/VMConversion";
+import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
+import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
@@ -277,6 +279,8 @@ export interface Bytecode {
     userFunctionBodies?: UserFunctionDef[];
     /** map/reduce anonymous transform bodies. See `parser/BytecodeBuilder.ts`'s `BytecodeProgram.anonymousBodies`. */
     anonymousBodies?: AnonymousBodyDef[];
+    /** Present on a line compiled with a `frozen` suffix. See `parser/BytecodeBuilder.ts`'s `BytecodeProgram.frozen`. */
+    frozen?: FrozenDirective;
 }
 
 /**
@@ -2526,6 +2530,85 @@ function reduceInvoke(stack: Value[], op: OpCode, kind: number, ref: number, has
 }
 
 /**
+ * Give the value an operation just pushed the sources its operands carried.
+ *
+ * Called after the dispatch switch only when an operation set its carry, which
+ * only the slow paths of the operations that carry provenance do. A fault is
+ * left alone: an Error or a Pending is not a figure and has no source. The
+ * pushed value is copied rather than changed, because some operations push an
+ * operand back as their answer (`max` returns the larger argument), and that
+ * operand may be a variable's stored value or a cached provider result. The
+ * copy drops any frozen mark for the same reason: it is a new value, not the
+ * frozen answer.
+ */
+function stampTopWithSources(stack: Value[], sources: readonly ValueSource[]): void {
+    const i = stack.length - 1;
+    if (i < 0) return;
+    const top = stack[i];
+    if (top.type === ValueType.Error || top.type === ValueType.Pending) return;
+    const merged = combineSources(top.sources, sources);
+    if (merged === top.sources) return;
+    const stamped = top.clone();
+    stamped.sources = merged;
+    stamped.frozen = undefined;
+    stack[i] = stamped;
+}
+
+/** The sentence a frozen line gives when the day it names has no stored value. */
+function frozenMissingMessage(on: string, storedDay: string | undefined): string {
+    const stored = storedDay === undefined
+        ? "no value frozen that day is stored in this engine"
+        : `the value stored for it was frozen on ${storedDay}`;
+    return `This line was frozen on ${on}, but ${stored}. A frozen value is never fetched again: restore the snapshot or frozen values it was saved with, or remove "on ${on}" to freeze it anew.`;
+}
+
+/** Answer a frozen line with `value`, setting the variable it defines as its STORE_VAR would have. */
+function frozenAnswer(vm: VM, directive: FrozenDirective, value: Value): EvalResult {
+    if (directive.write !== undefined) vm.setVar(directive.write, value);
+    return { type: 'value', value };
+}
+
+/**
+ * Run a line compiled with a `frozen` suffix. See `vm/FrozenValues.ts`.
+ *
+ * A stored answer, or the refusal for a named day with none, is returned
+ * without running the program, which is the whole guarantee: no instruction,
+ * no rate read, no request. Otherwise the program runs as an ordinary line, and
+ * a settled answer (neither an Error nor still Pending) is frozen, so the next
+ * evaluation, on whichever path, finds it stored.
+ *
+ * Only the document's own evaluation of the line freezes it. A goal-seek probe
+ * (a call frame is bound), a symbolic probe, or an evaluation the engine runs
+ * with recording switched off (an explanation's sub-expressions) answers live
+ * and records nothing, since what it computed is not the line's answer.
+ */
+function executeFrozen(
+    program: Bytecode,
+    directive: FrozenDirective,
+    vm: VM,
+    pipeline: DiagnosticPipeline | undefined,
+    expression: string | undefined,
+    context: LineExecutionContext | undefined,
+    symbolicTolerant: boolean | undefined,
+): EvalResult {
+    const store = vm.context.frozenValues;
+    const calendar = vm.context.calendar;
+    const outcome = store.outcome(directive, calendar);
+    if (outcome.kind === "stored") return frozenAnswer(vm, directive, outcome.record.value);
+    if (outcome.kind === "missing") {
+        return frozenAnswer(vm, directive, errorValue("FROZEN_VALUE_MISSING", frozenMissingMessage(outcome.on, outcome.storedDay)));
+    }
+
+    const live = executeBytecode({ ...program, frozen: undefined }, vm, pipeline, expression, context, symbolicTolerant);
+    if (live.type !== 'value') return live;
+    const value = live.value;
+    if (value.type === ValueType.Error || value.type === ValueType.Pending) return live;
+    if (!store.recording || symbolicTolerant === true || vm.getCallFrame() !== undefined) return live;
+    const at = calendar.now();
+    return frozenAnswer(vm, directive, store.record(directive.key, value, at, isoDayOf(calendar, at)));
+}
+
+/**
  * Execute bytecode with optional diagnostic pipeline integration.
  *
  * Performance notes:
@@ -2580,6 +2663,12 @@ export function executeBytecode(
         };
     }
 
+    // A frozen line is answered from the engine's store whenever it can be,
+    // without running a single instruction: no rate is read and no request is
+    // made. Checked here because every path that runs a line comes through
+    // this function. One property read per program, never per instruction.
+    if (bytecode.frozen !== undefined) return executeFrozen(bytecode, bytecode.frozen, vm, pipeline, expression, context, symbolicTolerant);
+
     const { opcodes, numbers, strings, userFunctionBodies, anonymousBodies } = bytecode;
     let ip = 0;
     let localInstructionCount = 0;
@@ -2631,6 +2720,12 @@ export function executeBytecode(
     // `localInstructionCount`. Paired with `endEvaluation()` in the `finally`
     // below, which is why a throw cannot leave a budget current.
     beginEvaluation(vm);
+
+    // The sources an operation read, for the stamp after the switch to hand to
+    // what it pushed. Only the slow paths of the operations that carry
+    // provenance set it, so plain arithmetic never reaches the stamp's body.
+    // See vm/Provenance.ts.
+    let carry: readonly ValueSource[] | undefined;
 
     // Fatal-bug fix: this whole dispatch loop used to have NO surrounding
     // try/catch at all, a safety-limit throw (INSTRUCTION_LIMIT_EXCEEDED/
@@ -2761,7 +2856,8 @@ export function executeBytecode(
           // operand, so the type check covers faultedOperand() as well.
           if (l.type === ValueType.Number && r.type === ValueType.Number
               && l.rational === undefined && r.rational === undefined
-              && l.uncertainty === undefined && r.uncertainty === undefined) {
+              && l.uncertainty === undefined && r.uncertainty === undefined
+              && l.sources === undefined && r.sources === undefined) {
             const sum = (l.value as number) + (r.value as number);
             // One comparison keeps the plain case plain. A sum outside the
             // safe range (or a NaN) takes the exact-integer path, which gives
@@ -2771,6 +2867,7 @@ export function executeBytecode(
               : exactIntegerArithmetic(l, r, sum, "add"));
             break;
           }
+          carry = combineSources(l.sources, r.sources);
           // binaryOp() at the bottom of this chain propagates a faulted
           // operand, but only the branches that reach it do. The Datetime and
           // timecode branches above it do not: they read the other operand as
@@ -2860,13 +2957,15 @@ export function executeBytecode(
           // The plain case first, as in ADD, exact past the safe range as ADD is.
           if (l.type === ValueType.Number && r.type === ValueType.Number
               && l.rational === undefined && r.rational === undefined
-              && l.uncertainty === undefined && r.uncertainty === undefined) {
+              && l.uncertainty === undefined && r.uncertainty === undefined
+              && l.sources === undefined && r.sources === undefined) {
             const difference = (l.value as number) - (r.value as number);
             stack.push(difference <= SAFE_INTEGER_LIMIT && difference >= -SAFE_INTEGER_LIMIT
               ? numberValue(difference)
               : exactIntegerArithmetic(l, r, difference, "sub"));
             break;
           }
+          carry = combineSources(l.sources, r.sources);
           // Same reason as ADD above.
           const subFault = faultedOperand(l, r);
           if (subFault) { stack.push(subFault); break; }
@@ -2937,13 +3036,15 @@ export function executeBytecode(
           // Exact past the safe range, as in ADD: `2^40 * 3^20` keeps every digit.
           if (l.type === ValueType.Number && r.type === ValueType.Number
               && l.rational === undefined && r.rational === undefined
-              && l.uncertainty === undefined && r.uncertainty === undefined) {
+              && l.uncertainty === undefined && r.uncertainty === undefined
+              && l.sources === undefined && r.sources === undefined) {
             const product = (l.value as number) * (r.value as number);
             stack.push(product <= SAFE_INTEGER_LIMIT && product >= -SAFE_INTEGER_LIMIT
               ? numberValue(product)
               : exactIntegerArithmetic(l, r, product, "mul"));
             break;
           }
+          carry = combineSources(l.sources, r.sources);
           // A percentage scaling an uncertain number carries the tolerance, so
           // "(100 +/- 5) * 10%" and "10% of (100 +/- 5)" are "10 ± 0.5". This sits
           // ahead of uncertainOp, which declines for a Percentage operand.
@@ -3031,7 +3132,8 @@ export function executeBytecode(
           // out one call later.
           if (l.type === ValueType.Number && r.type === ValueType.Number
               && l.rational === undefined && r.rational === undefined
-              && l.uncertainty === undefined && r.uncertainty === undefined) {
+              && l.uncertainty === undefined && r.uncertainty === undefined
+              && l.sources === undefined && r.sources === undefined) {
             const a = l.value as number, b = r.value as number;
             if (Number.isInteger(a) && Number.isInteger(b)) {
               const ratDiv = exactRationalOp(l, r, "div");
@@ -3040,6 +3142,7 @@ export function executeBytecode(
             stack.push(numberValue(a / b));
             break;
           }
+          carry = combineSources(l.sources, r.sources);
           // Dividing an uncertain number BY a percentage is a scalar divide, so
           // it carries the tolerance: "(100 +/- 5) / 10%" is "1000 ± 50". This
           // sits ahead of uncertainOp, which declines for a Percentage divisor.
@@ -3056,7 +3159,7 @@ export function executeBytecode(
           if (l.type === ValueType.Uom && r.type === ValueType.Uom) {
             const { lv, rv, sameMeasure } = unifyUom(l, r);
             if (sameMeasure) {
-              stack.push(numberValue(lv / rv));
+              stack.push(withSources(numberValue(lv / rv), currencyRateSources(l, r)));
             } else if (sharedCurrencyExchange.isCurrency(l.unit!) && sharedCurrencyExchange.isCurrency(r.unit!)) {
               // Both currencies, but unifyUom couldn't reconcile them (no
               // live rate cached yet), an honest failure, not a rate:
@@ -3097,6 +3200,7 @@ export function executeBytecode(
         }
         case OpCode.MOD: {
           const r = safePop(stack), l = safePop(stack);
+          carry = combineSources(l.sources, r.sources);
           // Same zero case as DIV above, and refused the same way: a
           // remainder is defined in terms of the quotient, so where one has
           // no answer neither does the other.
@@ -3113,6 +3217,9 @@ export function executeBytecode(
         }
         case OpCode.EXP: {
           const r = safePop(stack), l = safePop(stack);
+          // Ahead of the plain-number branch below, which has no sidecar test of
+          // its own to decline a sourced operand with.
+          if (l.sources !== undefined || r.sources !== undefined) carry = combineSources(l.sources, r.sources);
           // Unlike ADD/SUB/MUL/DIV/MOD, EXP never routed through
           // binaryOp() (VMConversion.ts), it called Math.pow() on raw
           // toNumber() output unconditionally, so it needs its own
@@ -3224,6 +3331,7 @@ export function executeBytecode(
           // A negated fault is still a fault, and `-0` looks like an answer.
           const negFault = faultedOperand(v);
           if (negFault) { stack.push(negFault); break; }
+          carry = v.sources;
           if (v.type === ValueType.BigInt) stack.push(bigIntValue(-(v.value as bigint)));
           // Negating money keeps it exact: "-$0.10" is exactly "-$0.10".
           else if (v.type === ValueType.Uom && v.exact !== undefined) stack.push(uomValueExact(-v.toNumber(), v.unit!, decimalNegate(v.exact)));
@@ -3253,6 +3361,7 @@ export function executeBytecode(
           const v = safePop(stack);
           const posFault = faultedOperand(v);
           if (posFault) { stack.push(posFault); break; }
+          carry = v.sources;
           // Unary plus is a no-op, so money keeps its exact decimal too.
           if (v.type === ValueType.Uom && v.exact !== undefined) stack.push(uomValueExact(v.toNumber(), v.unit!, v.exact));
           else if (v.type === ValueType.Uom) stack.push(uomValue(v.toNumber(), v.unit!));
@@ -3679,6 +3788,7 @@ export function executeBytecode(
           // with a query built from one. Checked here rather than in each
           // handler, for the same reason the arity check below lives at the
           // dispatch point.
+          carry = sourcesOfValues(args);
           const pluginArgFault = faultedIn(args);
           if (pluginArgFault) {
             stack.push(pluginArgFault);
@@ -3749,6 +3859,7 @@ export function executeBytecode(
           // here covers all ~90 of them; see faultedOperand() in vm/Value.ts.
           const builtinArgFault = faultedIn(args);
           if (builtinArgFault) { stack.push(builtinArgFault); break; }
+          carry = sourcesOfValues(args);
           const fn = builtinFunctions[fnIdx];
           if (fn) {
             const ordered = args.reverse();
@@ -3984,6 +4095,7 @@ export function executeBytecode(
             stack.push(numberFromText(v.value as string));
             break;
           }
+          carry = v.sources;
           stack.push(numberValue(v.toNumber()));
           break;
         }
@@ -4010,6 +4122,7 @@ export function executeBytecode(
           const v = safePop(stack);
           const toPercentageFault = faultedOperand(v);
           if (toPercentageFault) { stack.push(toPercentageFault); break; }
+          carry = v.sources;
           stack.push(percentageValue(v.toNumber()));
           break;
         }
@@ -4061,6 +4174,7 @@ export function executeBytecode(
           // than inside each converter.
           const converterFault = faultedOperand(value);
           if (converterFault) { stack.push(converterFault); break; }
+          carry = value.sources;
           const converter = asConverterRegistry.get(name);
           if (!converter) {
             stack.push(errorValue("UNKNOWN_AS_CONVERTER", `Unknown converter "as ${name}"`));
@@ -4082,6 +4196,7 @@ export function executeBytecode(
           const operand = safePop(stack);
           const faulted = faultedOperand(operand);
           if (faulted) { stack.push(faulted); break; }
+          carry = operand.sources;
           // A second unit written straight after a quantity used to relabel it:
           // `5 kg m` was 5 m, the kilograms discarded without a word, and
           // `5 USD GBP` was five pounds. Two units side by side name nothing the
@@ -4121,6 +4236,7 @@ export function executeBytecode(
           // carried its fault everywhere except through here.
           const faulted = faultedOperand(operand);
           if (faulted) { stack.push(faulted); break; }
+          carry = operand.sources;
           // The same second-unit refusal as UOM_CONVERT, for the literal with a
           // conversion attached: `5 kg m in cm` read the five kilograms as five
           // metres and answered 500 cm. Issue #536.
@@ -4141,7 +4257,9 @@ export function executeBytecode(
             // has no reason to consult the currency tables at all.
             const converted = sharedCurrencyExchange.convertSync(val, fromUnit, toUnit);
             if (converted !== null) {
-              stack.push(uomValue(converted, toUnit));
+              // The answer is only as good as the rate, so it says whose rate
+              // it was and when; the operand's own sources ride along too.
+              stack.push(withSources(uomValue(converted, toUnit), combineSources(operand.sources, sharedCurrencyExchange.rateSourcesSync(fromUnit, toUnit))));
               if (observeCall !== undefined) observeConversion(observeCall, "currency", uomValue(val, fromUnit), stack);
             } else {
               // No live rate cached yet (or the fetch failed). Pushing the
@@ -4180,6 +4298,7 @@ export function executeBytecode(
           const operand = safePop(stack);
           const faulted = faultedOperand(operand);
           if (faulted) { stack.push(faulted); break; }
+          carry = operand.sources;
           const { value, unit: bestUnit } = getBestUnit(operand.toNumber(), unit);
           stack.push(uomValue(value, bestUnit));
           break;
@@ -4194,6 +4313,7 @@ export function executeBytecode(
           // `uomValue(0, "s")`.
           const faulted = faultedOperand(left);
           if (faulted) { stack.push(faulted); break; }
+          carry = left.sources;
           if (left.type === ValueType.Uom) {
             const fromUnit = left.unit!;
             const val = left.toNumber();
@@ -4205,7 +4325,7 @@ export function executeBytecode(
               // Deferred past the measure check, as in UOM_CONVERT_TO above.
               const converted = sharedCurrencyExchange.convertSync(val, fromUnit, toUnit);
               if (converted !== null) {
-                stack.push(uomValue(converted, toUnit));
+                stack.push(withSources(uomValue(converted, toUnit), combineSources(left.sources, sharedCurrencyExchange.rateSourcesSync(fromUnit, toUnit))));
                 if (observeCall !== undefined) observeConversion(observeCall, "currency", left, stack);
               } else {
                 // See the matching comment in UOM_CONVERT_TO, pushing the
@@ -4252,6 +4372,7 @@ export function executeBytecode(
           const v = safePop(stack);
           const getValueFault = faultedOperand(v);
           if (getValueFault) { stack.push(getValueFault); break; }
+          carry = v.sources;
           stack.push(numberValue(v.toNumber()));
           break;
         }
@@ -4273,6 +4394,7 @@ export function executeBytecode(
           // "0.00 /s", a rate of nothing per second.
           const rateDivFault = faultedOperand(numeratorVal, denominatorVal);
           if (rateDivFault) { stack.push(rateDivFault); break; }
+          carry = combineSources(numeratorVal.sources, denominatorVal.sources);
           if (denominatorVal.type !== ValueType.Uom || !denominatorVal.unit) {
             stack.push(errorValue("RATE_MISSING_DENOMINATOR_UNIT", "Cannot build a rate: the right-hand side of \"/\" has no unit"));
             break;
@@ -4291,6 +4413,7 @@ export function executeBytecode(
           const rate = safePop(stack);
           const rateMulFault = faultedOperand(rate, multiplier);
           if (rateMulFault) { stack.push(rateMulFault); break; }
+          carry = combineSources(rate.sources, multiplier.sources);
           if (rate.type !== ValueType.Uom || !isRateUnit(rate.unit)) {
             stack.push(errorValue("RATE_MUL_LEFT_NOT_A_RATE", "Left-hand side of a rate multiplication must be a rate (e.g. \"$50/week\")"));
             break;
@@ -4309,6 +4432,7 @@ export function executeBytecode(
           const rate = safePop(stack);
           const rateConvertFault = faultedOperand(rate);
           if (rateConvertFault) { stack.push(rateConvertFault); break; }
+          carry = rate.sources;
           if (rate.type !== ValueType.Uom || !isRateUnit(rate.unit)) {
             stack.push(errorValue("RATE_CONVERT_NOT_A_RATE", "Cannot convert a non-rate value's denominator"));
             break;
@@ -4502,6 +4626,13 @@ export function executeBytecode(
             `opcode ${op} at offset ${ip - 1}`,
             { offset: ip - 1 },
           );
+      }
+
+      // An operation that read a sourced operand hands the sources to what it
+      // pushed. One comparison of a local per instruction when nothing is set.
+      if (carry !== undefined) {
+        stampTopWithSources(stack, carry);
+        carry = undefined;
       }
     }
 

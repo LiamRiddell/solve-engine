@@ -39,6 +39,7 @@ import { nextInstruction } from "@solve-js/parser/OperandWidth";
 import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { getActiveQueryClient } from "@solve-js/services/DataQueryService";
 import { ValueType, numberValue, uomValue, errorValue, faultedOperand, type Value } from "@solve-js/vm/Value";
+import { combineSources, withSources } from "@solve-js/vm/Provenance";
 import type { IAsyncResolver, AsyncCheckResult } from "@solve-js/resolvers/ResolverRegistry";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { createTimeoutSignal } from "@solve-js/utilities/TimeoutSignal";
@@ -180,6 +181,7 @@ export function tryConsumeCurrencyOnDate(parser: Parser, to: string, from?: stri
  */
 async function fetchHistoricalRate(
 	provider: HistoricalRateProvider | undefined,
+	providerName: string,
 	from: string,
 	to: string,
 	isoDate: string,
@@ -199,7 +201,11 @@ async function fetchHistoricalRate(
 	const { signal: fetchSignal, cleanup } = createTimeoutSignal(signal, FETCH_TIMEOUT_MS, "Historical currency rate fetch");
 	try {
 		const rate = await provider(fromUpper, toUpper, isoDate, fetchSignal);
-		return numberValue(rate);
+		// The rate for a named day, so a conversion through it can say whose
+		// rate it was, which day it describes, and when it was fetched.
+		const value = numberValue(rate);
+		value.sources = [{ provider: providerName, kind: "historical", fetchedAt: Date.now(), subject: `${fromUpper}/${toUpper}`, asOf: isoDate }];
+		return value;
 	} catch (error) {
 		const failedValue = errorValue(
 			HistoricalCurrencyErrorCodes.QUERY_FAILED,
@@ -251,6 +257,7 @@ async function fetchHistoricalRate(
  */
 export function createHistoricalCurrencyPluginFunction(
 	provider?: HistoricalRateProvider,
+	providerName = "host",
 ): (args: Value[]) => Value | Promise<Value> {
 	return (args: Value[]): Value | Promise<Value> => {
 		const amount = args[0];
@@ -302,7 +309,7 @@ export function createHistoricalCurrencyPluginFunction(
 			}
 			return queryClient.fetchQuery({
 				queryKey: key,
-				queryFn: ({ signal }) => fetchHistoricalRate(provider, from, to, isoDate, signal, queryClient),
+				queryFn: ({ signal }) => fetchHistoricalRate(provider, providerName, from, to, isoDate, signal, queryClient),
 				staleTime: HISTORICAL_RATE_STALE_TIME_MS,
 			});
 		}
@@ -314,7 +321,7 @@ export function createHistoricalCurrencyPluginFunction(
 		// A cross-currency rate is a double, so the result is an ordinary float Uom,
 		// the same as the live path (exact-decimal money holds only within one
 		// currency, see vm/VMConversion.ts's exactMoneyOp).
-		return uomValue(amount.toNumber() * rate, to);
+		return withSources(uomValue(amount.toNumber() * rate, to), combineSources(amount.sources, cached.sources));
 	};
 }
 
@@ -341,7 +348,7 @@ export const historicalCurrencyPluginFunction = createHistoricalCurrencyPluginFu
  * discovered by the fetch, not here, so the grammar still recognises `on <date>`
  * and reports the not-configured error plainly.
  */
-export function createHistoricalCurrencyResolver(provider?: HistoricalRateProvider): IAsyncResolver {
+export function createHistoricalCurrencyResolver(provider?: HistoricalRateProvider, providerName = "host"): IAsyncResolver {
 	return {
 		namespace: HISTORICAL_CURRENCY_NS,
 
@@ -409,7 +416,7 @@ export function createHistoricalCurrencyResolver(provider?: HistoricalRateProvid
 								if (queryClient.getQueryData(key) === undefined) {
 									const resolver = queryClient.fetchQuery({
 										queryKey: key,
-										queryFn: ({ signal: qSignal }) => fetchHistoricalRate(provider, from, to, isoDate, qSignal, queryClient),
+										queryFn: ({ signal: qSignal }) => fetchHistoricalRate(provider, providerName, from, to, isoDate, qSignal, queryClient),
 										staleTime: HISTORICAL_RATE_STALE_TIME_MS,
 									});
 									return { queryKey: key.join(":"), resolver, packageId, signal, metadata: { from, to, isoDate } };

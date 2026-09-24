@@ -49,6 +49,13 @@ export interface StocksPackageConfig {
 	enableBareTickerRecognition?: boolean;
 
 	/**
+	 * The provider's name, recorded on every quote this package fetches so a
+	 * host can say where a figure came from and when (see `vm/Provenance.ts`).
+	 * Defaults to `"host"`, since the fetch is the host's own.
+	 */
+	provider?: string;
+
+	/**
 	 * TanStack Query staleTime for CURRENT-price lookups, in ms. Default 60s
 	 *, intraday quotes move continuously, so a short stale window keeps
 	 * re-evaluation reasonably fresh without re-fetching on every keystroke.

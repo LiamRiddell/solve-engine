@@ -25,6 +25,12 @@ export type {
 	SerializedRational,
 	SerializedNumber,
 	WhatIfOverrides,
+	SerializedValueSidecars,
+	SerializedFrozenRecord,
+	FrozenRecord,
+	ValueSource,
+	SourceKind,
+	FrozenMark,
 } from "./ExpressionEngine";
 
 export type { Explanation, ExplanationStep, ExplainCall, ExplainContext, ExplainHook, LineTrace } from "@solve-js/explain";

@@ -44,6 +44,7 @@ network and resolves asynchronously. See
 | `100 euros to dollars` | the same, in words |
 | `100 USD in GBP on 2024-01-15` | converted at that day's rate |
 | `100 USD in GBP on 15 Jan 2024` | the same day, written differently |
+| `10 USD in GBP frozen` | converted once, then kept at that amount |
 
 An `on <date>` suffix converts at the rate for the day it names rather than
 today's, which is what an expense or an invoice reconciled after the fact needs:
@@ -73,4 +74,21 @@ const currency = createCurrencyPackage({
 `historicalRateProvider` and substitute it into the engine's `packages` array to
 answer dated ones. A resolved historical rate never goes stale, since the rate on
 a fixed past date does not change. There is no free, keyless historical-FX service
-to bake in the way the live rate has one.
+to bake in the way the live rate has one. Pass `historicalProviderName` beside it
+to say whose rates they are.
+
+## Where a rate came from
+
+Every converted amount records where its rate came from: the provider
+(Frankfurter, the European Central Bank's reference rates, for the built-in live
+rate; the name a host gives for its own), whether the rate was fetched live,
+supplied by the host, or looked up for a past day, and when. The record travels
+with every line computed from the amount, so an app can show "reference rate, 23
+Sep 16:02" beside a total built from converted lines and mark those lines as
+depending on a rate. Amounts in one currency involve no rate and record nothing.
+See [async and live data](/guide/async-and-live-data/#where-a-live-value-came-from)
+for how a host reads it.
+
+To stop a converted amount moving with the market, end the line with `frozen`:
+it keeps the first answer, with the date it was fixed. See
+[frozen answers](/syntax/frozen-answers/).

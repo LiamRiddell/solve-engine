@@ -85,7 +85,9 @@ value.unit;        // undefined
 ## Clearing state
 
 An engine accumulates variables and cached results. Call `clear()` to reset it
-between documents rather than constructing a new one, which is cheaper.
+between documents rather than constructing a new one, which is cheaper. It also
+forgets the document's [frozen answers](/syntax/frozen-answers/), which belong to
+the document; carry them to the next session in a snapshot.
 
 ```ts
 engine.clear();
@@ -205,6 +207,14 @@ matching the constructor.
   async resolver is dropped from the snapshot, along with any variable whose
   most recent definition came from one, so a restored engine re-fetches rather
   than serving a value from another moment.
+- **Carried on request: frozen answers.** A line the reader ended with `frozen`
+  asked for its answer to be kept, so it is the one live line a snapshot keeps.
+  Its answer, with the moment it was frozen and the sources behind it, is written
+  to the snapshot's `frozen` field, and the line and any variable it defines are
+  carried like any other line. A restored engine answers those lines from the
+  snapshot with no network. A snapshot written before frozen answers existed has
+  no `frozen` field and restores exactly as it did. See
+  [keeping an answer fixed](/guide/async-and-live-data/#keeping-an-answer-fixed).
 - **Not carried: package-contributed state.** Only core engine state is
   snapshotted for now; a package opt-in is planned.
 - **Deferred: symbolic (algebra) values.** A variable holding one makes

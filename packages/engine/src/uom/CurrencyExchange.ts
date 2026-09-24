@@ -6,6 +6,62 @@
 import { isIso4217 } from "@solve-js/uom/Iso4217";
 import { createTimeoutSignal } from "@solve-js/utilities/TimeoutSignal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import type { SourceKind, ValueSource } from "@solve-js/vm/Provenance";
+
+/**
+ * The provider name the engine records for rates it fetched itself from
+ * Frankfurter (European Central Bank reference rates). See {@link ValueSource}.
+ */
+export const FRANKFURTER_PROVIDER = "Frankfurter";
+
+/** The provider name the engine records for crypto prices it fetched itself from CoinGecko. */
+export const COINGECKO_PROVIDER = "CoinGecko";
+
+/**
+ * The provider name recorded for a table a host primed without naming one.
+ * A host that knows where its rates came from passes `provider` to
+ * {@link CurrencyExchangeService.primeRates} instead.
+ */
+export const PRIMED_RATES_PROVIDER = "host";
+
+/**
+ * Options for {@link CurrencyExchangeService.primeRates}: where the rates came
+ * from, so a conversion that uses them can say so.
+ */
+export interface PrimeRatesOptions {
+  /** The provider's name, recorded on every conversion that uses this table. Defaults to {@link PRIMED_RATES_PROVIDER}. */
+  provider?: string;
+  /**
+   * When the host's rates were published, in epoch milliseconds. Recorded as
+   * the source's `fetchedAt`. Defaults to the moment of priming. It does not
+   * move the freshness window, which always runs from the moment of priming.
+   */
+  publishedAt?: number;
+}
+
+/**
+ * One cached rate table: every rate a provider returned for one base currency,
+ * when it arrived, and the provenance record a conversion through it carries.
+ */
+interface RateTable {
+  /** When the table was stored, for the freshness window. */
+  fetchedAt: number;
+  rates: Record<string, number>;
+  /** Who supplied the table and how, without a subject; see {@link pairSources}. */
+  source: Omit<ValueSource, "subject">;
+  /** The per-pair record lists handed out so far, so a repeated conversion allocates nothing. */
+  pairSources: Map<string, readonly ValueSource[]>;
+}
+
+/** Build a table with its provenance record. */
+function rateTable(rates: Record<string, number>, provider: string, kind: SourceKind, storedAt: number, publishedAt?: number): RateTable {
+  return {
+    fetchedAt: storedAt,
+    rates,
+    source: { provider, kind, fetchedAt: publishedAt ?? storedAt },
+    pairSources: new Map(),
+  };
+}
 
 /**
  * Error codes for this service. Co-located rather than unioned into
@@ -45,7 +101,7 @@ export class CurrencyExchangeService {
    * Stale tables are ignored, not evicted; the next successful fetch for
    * the same base overwrites them.
    */
-  private baseTables: Map<string, { fetchedAt: number; rates: Record<string, number> }> = new Map();
+  private baseTables: Map<string, RateTable> = new Map();
 
   /**
    * How long a fetched rate may be served synchronously by getRateSync().
@@ -171,10 +227,7 @@ export class CurrencyExchangeService {
       // table so subsequent conversions (including cross pairs via
       // triangulation) resolve synchronously within the freshness window
       // instead of going Pending again.
-      this.baseTables.set(fromUpper, {
-        fetchedAt: Date.now(),
-        rates: { ...rates, [fromUpper]: 1 },
-      });
+      this.baseTables.set(fromUpper, rateTable({ ...rates, [fromUpper]: 1 }, FRANKFURTER_PROVIDER, "live", Date.now()));
 
       return rates[toUpper];
     } finally {
@@ -231,10 +284,7 @@ export class CurrencyExchangeService {
       // Cache as a single-pair base table, same shape Frankfurter fetches
       // produce, so getRateSync/convertSync's triangulation logic doesn't
       // need to know or care which source a rate came from.
-      this.baseTables.set(fromUpper, {
-        fetchedAt: Date.now(),
-        rates: { [fromUpper]: 1, [toUpper]: rate },
-      });
+      this.baseTables.set(fromUpper, rateTable({ [fromUpper]: 1, [toUpper]: rate }, COINGECKO_PROVIDER, "live", Date.now()));
 
       return rate;
     } finally {
@@ -252,19 +302,24 @@ export class CurrencyExchangeService {
   /**
    * Seed a base rate table without a network fetch.
    *
-   * Intended for tests and for future user-provided offline rates
-   * production live data always comes from {@link getRate}. Seeded rates
-   * obey the same freshness window as fetched ones.
+   * Intended for tests and for a host's own offline rates; the engine's
+   * own live data comes from {@link getRate}. Seeded rates obey the same
+   * freshness window as fetched ones.
+   *
+   * A conversion through a primed table records it as a `primed` source (see
+   * `vm/Provenance.ts`), named by `options.provider` so a host can say whose
+   * rates they are.
    *
    * @param base - Base currency code (e.g. "USD").
    * @param rates - Map of currency code → rate relative to the base.
+   * @param options - The provider's name and when its rates were published.
    */
-  primeRates(base: string, rates: Record<string, number>): void {
+  primeRates(base: string, rates: Record<string, number>, options: PrimeRatesOptions = {}): void {
     const baseUpper = base.toUpperCase();
-    this.baseTables.set(baseUpper, {
-      fetchedAt: Date.now(),
-      rates: { ...rates, [baseUpper]: 1 },
-    });
+    this.baseTables.set(
+      baseUpper,
+      rateTable({ ...rates, [baseUpper]: 1 }, options.provider ?? PRIMED_RATES_PROVIDER, "primed", Date.now(), options.publishedAt),
+    );
   }
 
   /**
@@ -304,6 +359,40 @@ export class CurrencyExchangeService {
       }
     }
     return null;
+  }
+
+  /**
+   * Where the rate {@link getRateSync} would use for this pair came from.
+   *
+   * The same lookup, in the same order, so the record always describes the
+   * table that actually served the conversion. `undefined` for a same-currency
+   * pair (no rate is involved) and for a pair no fresh table covers (the
+   * conversion has no rate either, and reports that itself).
+   *
+   * The list for one pair from one table is built once and handed out again,
+   * so converting the same pair on every keystroke allocates nothing.
+   *
+   * @returns A one-record list naming the provider, how the rate was obtained,
+   * when, and the pair as `FROM/TO`.
+   */
+  rateSourcesSync(from: string, to: string): readonly ValueSource[] | undefined {
+    const fromUpper = from.toUpperCase();
+    const toUpper = to.toUpperCase();
+    if (fromUpper === toUpper) return undefined;
+    const now = Date.now();
+    for (const table of this.baseTables.values()) {
+      if (now - table.fetchedAt > CurrencyExchangeService.RATE_FRESHNESS_MS) continue;
+      if (table.rates[fromUpper] && table.rates[toUpper]) {
+        const subject = `${fromUpper}/${toUpper}`;
+        let sources = table.pairSources.get(subject);
+        if (sources === undefined) {
+          sources = Object.freeze([Object.freeze({ ...table.source, subject })]);
+          table.pairSources.set(subject, sources);
+        }
+        return sources;
+      }
+    }
+    return undefined;
   }
 
   /** Convert `value` from `from` to `to` using a freshly-fetched live rate (see {@link getRate}). */

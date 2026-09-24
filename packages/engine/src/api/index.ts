@@ -44,6 +44,10 @@ export type { EngineConfigOverride } from "@solve-js/constants/Configuration";
 // first-time reader reaches for.
 export { Value, ValueType } from "@solve-js/vm/Value";
 export type { DatetimeGrain } from "@solve-js/vm/Value";
+// Where a live figure came from, and the mark a frozen answer carries, read off
+// the same Value, so a host showing "reference rate, 23 Sep 16:02" needs no
+// other import.
+export type { ValueSource, SourceKind, FrozenMark, FrozenRecord } from "@solve-js/engine";
 export { formatValue } from "@solve-js/format/FormatEngine";
 export type { FormattingSettings } from "@solve-js/format/FormattingSettings";
 
@@ -70,6 +74,8 @@ export type {
   SerializedRational,
   SerializedNumber,
   WhatIfOverrides,
+  SerializedValueSidecars,
+  SerializedFrozenRecord,
 } from "@solve-js/engine";
 
 export { ENGINE_VERSION } from "@solve-js/constants/version";

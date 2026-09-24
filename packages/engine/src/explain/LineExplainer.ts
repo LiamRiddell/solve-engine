@@ -6,6 +6,46 @@ import { DEFAULT_FORMATTING_SETTINGS } from "@solve-js/format/FormattingSettings
 import { getLocale } from "@solve-js/constants/locales";
 import type { Explanation, ExplanationStep, ExplainCall } from "./Explanation";
 import type { DateReading } from "@solve-js/packages/datetime/DateReading";
+import type { ValueSource } from "@solve-js/vm/Provenance";
+
+/**
+ * An instant as a reader-facing UTC stamp, `2026-09-23 16:02 UTC`.
+ *
+ * UTC rather than the reader's zone so a derivation reads the same wherever it
+ * is produced; a host that wants local time has the epoch value on the
+ * answer's `sources` and `frozen` fields to format itself.
+ */
+function utcStamp(epochMs: number): string {
+	const iso = new Date(epochMs).toISOString();
+	return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
+}
+
+/** One provenance record as a derivation step's sentence. */
+function describeSource(source: ValueSource): string {
+	const what = source.subject !== undefined ? `${source.subject} from ${source.provider}` : `From ${source.provider}`;
+	const how = source.kind === "live"
+		? "live"
+		: source.kind === "primed"
+			? "supplied by the host"
+			: `the figure for ${source.asOf ?? "a past day"}`;
+	const frozen = source.frozenAt !== undefined ? `, frozen ${utcStamp(source.frozenAt)}` : "";
+	return `${what} (${how}), fetched ${utcStamp(source.fetchedAt)}${frozen}`;
+}
+
+/**
+ * The steps that say where an answer's live figures came from, and whether it
+ * is frozen. Each carries the line's own answer, because a source is a fact
+ * about the answer rather than an intermediate value of its own, the same shape
+ * a date reading's note takes.
+ */
+function provenanceSteps(result: Value): ExplanationStep[] {
+	const steps: ExplanationStep[] = [];
+	if (result.frozen !== undefined) {
+		steps.push({ description: `Frozen ${utcStamp(result.frozen.at)}: this answer is kept, not fetched again`, value: result });
+	}
+	for (const source of result.sources ?? []) steps.push({ description: describeSource(source), value: result });
+	return steps;
+}
 
 /**
  * A span's value, with every call the engine made while working it out, in
@@ -526,7 +566,7 @@ export function buildExplanation(params: {
 
 	const terminal = (): Explanation => {
 		const chain = chainSteps(line, describeCall) ?? [];
-		return { expression, steps: [...readingSteps(line.value), ...chain], result: line.value };
+		return { expression, steps: [...readingSteps(line.value), ...chain, ...provenanceSteps(line.value)], result: line.value };
 	};
 
 	let root: Node;
@@ -542,7 +582,9 @@ export function buildExplanation(params: {
 
 	try {
 		const { steps, result } = new Builder(expression, evaluate, describeCall, locale).build(root);
-		return { expression, steps: [...readingSteps(result), ...steps], result };
+		// Where the answer's live figures came from closes the derivation: the
+		// steps above say how the line combined them, these say whose they were.
+		return { expression, steps: [...readingSteps(result), ...steps, ...provenanceSteps(result)], result };
 	} catch {
 		// A span failed to evaluate on its own (an unmodelled grouping), or a
 		// call in the tree has no description. The whole line may still

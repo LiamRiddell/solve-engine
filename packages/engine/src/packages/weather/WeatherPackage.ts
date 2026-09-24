@@ -67,6 +67,7 @@ const { resolver: weatherResolver, pluginFunction: weatherPluginFunction } = cre
 	namespace: "weather",
 	pluginFunctionIndex: WEATHER_FN_IDX,
 	staleTimeMs: 10 * 60 * 1000, // 10 minutes — see module doc above
+	provider: "Open-Meteo",
 	fetchQuery: async (query: string, signal: AbortSignal): Promise<Value> => {
 		const sep = query.indexOf(":");
 		const kind = sep === -1 ? query : query.slice(0, sep);

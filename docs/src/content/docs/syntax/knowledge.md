@@ -39,4 +39,8 @@ your provider, so its first result is a pending value and the answer arrives onc
 the call returns. See [async and live data](/guide/async-and-live-data/) for how
 a host waits on that.
 
+Each answer records the provider it came from (pass `provider` with your
+service's name) and when it was fetched, and ending the line with `frozen` keeps
+it; see [frozen answers](/syntax/frozen-answers/).
+
 The answers come from your provider, so they are shown here rather than asserted.

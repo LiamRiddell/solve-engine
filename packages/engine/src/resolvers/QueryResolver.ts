@@ -2,7 +2,7 @@ import type { QueryClient } from "@tanstack/query-core";
 import type { Token } from "@solve-js/lexer";
 import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { errorValue, type Value } from "@solve-js/vm/Value";
+import { errorValue, ValueType, type Value } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import type { IAsyncResolver, AsyncCheckResult } from "@solve-js/resolvers/ResolverRegistry";
 import { getActiveQueryClient } from "@solve-js/services/DataQueryService";
@@ -44,8 +44,20 @@ export interface QueryResolverOptions {
 	 * Perform the live fetch for `query` and return the resolved `Value`.
 	 * Receives an `AbortSignal` that fires on caller cancellation OR the
 	 * `timeoutMs` deadline, whichever comes first, pass it to `fetch()`.
+	 *
+	 * The returned value is stamped with where it came from (see
+	 * {@link provider}) unless it already carries `sources` of its own, which a
+	 * package sets when it knows more than the resolver does: a historical
+	 * figure's day, say.
 	 */
 	fetchQuery: (query: string, signal: AbortSignal) => Promise<Value>;
+	/**
+	 * Who supplies the data, recorded on every value this resolver fetches so a
+	 * host can say where a figure came from and when (`"Open-Meteo"`, or the name
+	 * of the provider a host plugged in). Defaults to {@link namespace}. See
+	 * `vm/Provenance.ts`.
+	 */
+	provider?: string;
 	/** TanStack Query staleTime in ms, how long a resolved value stays cached before a re-evaluation refetches it. Default 5 minutes. */
 	staleTimeMs?: number;
 	/**
@@ -110,10 +122,19 @@ export function createQueryResolver(opts: QueryResolverOptions): QueryResolverPa
 
 	const queryKeyFor = (query: string) => [opts.namespace, query] as const;
 
+	const provider = opts.provider ?? opts.namespace;
+
 	async function fetchAndCache(query: string, signal: AbortSignal, queryClient: QueryClient): Promise<Value> {
 		const { signal: fetchSignal, cleanup } = createTimeoutSignal(signal, timeoutMs, `${opts.namespace} query`);
 		try {
-			return await opts.fetchQuery(query, fetchSignal);
+			const value = await opts.fetchQuery(query, fetchSignal);
+			// Stamped once, as it arrives and before it is cached, so every line
+			// that reads it gets the same record. A fault is not a figure and
+			// carries none; a package that set its own sources keeps them.
+			if (value.sources === undefined && value.type !== ValueType.Error && value.type !== ValueType.Pending) {
+				value.sources = [{ provider, kind: "live", fetchedAt: Date.now(), subject: query }];
+			}
+			return value;
 		} catch (error) {
 			const failedValue = onError(query, error);
 			// Bound the failure's lifetime in the cache separately from

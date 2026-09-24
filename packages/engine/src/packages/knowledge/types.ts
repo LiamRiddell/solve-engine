@@ -22,4 +22,11 @@ export interface KnowledgePackageConfig {
 	 * Tokyo = ?") as permanently fixed.
 	 */
 	staleTimeMs?: number;
+
+	/**
+	 * The provider's name, recorded on every answer this package fetches so a
+	 * host can say where a figure came from and when (see `vm/Provenance.ts`).
+	 * Defaults to `"host"`, since the fetch is the host's own.
+	 */
+	provider?: string;
 }

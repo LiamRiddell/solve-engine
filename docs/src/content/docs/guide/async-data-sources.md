@@ -185,6 +185,57 @@ than stacked, so give `refetch` an `AbortSignal` you own and abort in `destroy()
 The [pending lifecycle](/guide/async-and-live-data/#refreshing-on-a-schedule) is
 the consumer's side of this.
 
+## Saying where a value came from
+
+A figure a resolver fetches is true at one moment according to one provider, and
+a host can only say so if the value does. Every `Value` has a `sources` field for
+that: a list of records naming the provider, how the figure was obtained, and
+when (see [where a live value came from](/guide/async-and-live-data/#where-a-live-value-came-from)
+for what a host does with it). Set it on the value your fetch returns, and the
+engine carries it through every line computed from that value; you do nothing
+further.
+
+```ts
+private async fetchRate(pair, signal): Promise<Value> {
+  const res = await fetch(`https://example.com/rate/${pair.from}/${pair.to}`, { signal });
+  const rate = await res.json();
+  const value = uomValue(rate.value, pair.to);
+  value.sources = [{
+    provider: "Example Rates",   // who supplied it, as a reader should see it
+    kind: "live",                // or "historical" for a figure for a past day
+    fetchedAt: Date.now(),       // when it arrived, in epoch milliseconds
+    subject: `${pair.from}/${pair.to}`,
+  }];
+  return value;
+}
+```
+
+A resolver built with `createQueryResolver` does this for you: it stamps each
+value its `fetchQuery` returns with a `live` record whose `provider` is the
+option of that name (the namespace if you leave it out), whose `subject` is the
+query, and whose `fetchedAt` is the moment the fetch returned. A value that
+already carries `sources` is left as it is, which is how a package records what
+only it knows. The stocks package's historical close does this:
+
+```ts
+const value = uomValue(quote.close, quote.currency ?? "USD");
+value.sources = [{ provider, kind: "historical", fetchedAt: Date.now(), subject: ticker, asOf: isoDate }];
+return value;
+```
+
+The built-in packages name their providers: `Frankfurter` and `CoinGecko` for the
+rates the engine fetches itself, `Open-Meteo` for weather, and for the packages
+that take a host's fetch (stocks, crypto, knowledge, historical currency) a
+`provider` option, `host` by default.
+
+Three boundaries. A failed fetch returns an Error value, which is not a figure and
+carries no record, so do not stamp one. The record is set once, as the value
+arrives; do not change it on a value you have already returned, because the
+engine shares that value between every line that reads it. And a line the reader
+froze (`... frozen`) never reaches your resolver once its answer is kept: the
+engine answers it from its own store, so a resolver needs no special case for
+[frozen answers](/syntax/frozen-answers/).
+
 ## A complete reference
 
 The currency package is the smallest built-in that does all of this: a symbol

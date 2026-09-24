@@ -2,6 +2,11 @@ export { DependencyGraph } from "./DependencyGraph";
 export { ScopeManager } from "./ScopeManager";
 export { Value, ValueType, numberValue, hexValue, bigIntValue, stringValue, uomValue, matrixValue, rowVectorValue, colVectorValue, rangeValue, errorValue } from "./Value";
 export type { MatrixData, MatrixEntry, RangeData } from "./Value";
+// Provenance, for a package that stamps its own sources on what it fetches
+// (a historical figure's day, say), and the merge rule the VM applies.
+export type { ValueSource, SourceKind, FrozenMark } from "./Provenance";
+export { combineSources } from "./Provenance";
+export type { FrozenDirective, FrozenRecord } from "./FrozenValues";
 export { createVM, executeBytecode } from "./VM";
 // The per-line context a plugin function or `as` converter receives, so a
 // package author can type a handler's second argument by name.

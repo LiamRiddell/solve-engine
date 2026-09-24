@@ -42,5 +42,11 @@ own, without a keystroke: pass `refetchIntervalMs` and enable background refresh
 See [async and live data](/guide/async-and-live-data/) for how a host waits on
 the result and drives that schedule.
 
+Each price records the provider it came from and when it was fetched (a dated
+close is recorded as the figure for its day), and every line computed from it
+carries that record; pass `provider` with your service's name so the record can
+name it. To keep a price from moving, end the line with `frozen`; see
+[frozen answers](/syntax/frozen-answers/).
+
 The results depend on the live provider, so they are shown here rather than
 asserted.

@@ -394,6 +394,9 @@ export default defineConfig({
               items: [
                 { slug: "syntax/weather" },
                 { slug: "syntax/knowledge" },
+                // Keeping any live answer fixed: it applies to every page in
+                // this group, and to currency, stocks and crypto beside money.
+                { slug: "syntax/frozen-answers" },
               ],
             },
             {

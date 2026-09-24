@@ -230,6 +230,13 @@ export const CoreErrorCodes = {
   WHAT_IF_INPUT_NOT_USED: "WHAT_IF_INPUT_NOT_USED",
   /** A what-if would re-run a line that sets a `global :name`. A global is shared with every other document in the process, so the scenario's value would reach them; refused rather than re-run. Thrown by `engine.whatIf`; returned as an Error value by the line forms. */
   WHAT_IF_WRITES_GLOBAL: "WHAT_IF_WRITES_GLOBAL",
+  // ── Frozen answers (engine/FrozenSuffix.ts, vm/VM.ts, vm/FrozenValues.ts) ──
+  /** A line ending `frozen on <day>` whose engine holds no value frozen that day, and the day is not today. A recoverable Error value, raised by the VM in place of running the line: a frozen answer is never fetched again, so the line is refused rather than frozen at today's figure. The message names the day, and the day of the value that is stored when there is one. */
+  FROZEN_VALUE_MISSING: "FROZEN_VALUE_MISSING",
+  /** `frozen` on a line with no single answer to keep: a function definition, a global cell write, or a definition part-way through the line. Raised at compile time, naming the shape. */
+  FROZEN_UNSUPPORTED: "FROZEN_UNSUPPORTED",
+  /** `frozen on` followed by something that is not a single date at the end of the line (`frozen on tuesday`, a bare `frozen on`). Raised at compile time, with an example of the form. A day that does not exist (`frozen on 2026-02-30`) reports the date literal's own error instead. */
+  FROZEN_DATE_EXPECTED: "FROZEN_DATE_EXPECTED",
 
   // ── Temporal calendar backend (temporal/TemporalCalendar.ts) ──
   /** `createTemporalCalendar()` was handed something that is not a usable `Temporal` implementation: no `Now.instant`, `Now.timeZoneId`, `Instant.fromEpochMilliseconds` or `PlainDateTime.from`. Raised at construction, naming the missing member, rather than letting the first date computation fail on it obscurely. */

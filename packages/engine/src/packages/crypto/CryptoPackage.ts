@@ -39,6 +39,7 @@ export function createCryptoPackage(config: CryptoPackageConfig = {}): IEnginePa
 		pluginFunctionIndex: pluginFunctionIndexFor(`${PACKAGE_NAME}:${CRYPTO_FN}`),
 		staleTimeMs: config.staleTimeMs ?? 60_000,
 		refetchIntervalMs: config.refetchIntervalMs,
+		provider: config.provider ?? "host",
 		fetchQuery: async (coin: string, signal: AbortSignal): Promise<Value> => {
 			if (!config.fetchPrice) return notConfigured();
 			const quote = await config.fetchPrice(coin, signal);

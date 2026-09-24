@@ -45,6 +45,7 @@ const CATALOGED_FILES = [
   "vm/VMBuiltins.ts",
   "engine/ExpressionEngine.ts",
   "engine/ExpressionEngineSafety.ts",
+  "engine/FrozenSuffix.ts",
   "engine/AsyncResolutionBatcher.ts",
   "normalizer/TokenNormalizer.ts",
   "constants/Configuration.ts",
