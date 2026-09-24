@@ -6378,10 +6378,7 @@ export class ExpressionEngine {
 	 * unit definition, a trailing `=>`) are recognised here by their shape,
 	 * each side parsed on its own, and never run. Asking about a document
 	 * therefore never moves a running total or defines a unit in the engine a
-	 * host is also evaluating with. The one place the two can differ is a line
-	 * whose label is followed by a definition (`rent: :rent = 1200`), which the
-	 * engine's equation grammar claims before its parser sees it; here the
-	 * parser's reading, past the label, is the one reported.
+	 * host is also evaluating with.
 	 *
 	 * @param expression - One expression as a document pass evaluates it: a
 	 *   line's text past any list marker, or the inside of an inline solve.
@@ -6412,6 +6409,39 @@ export class ExpressionEngine {
 		}
 		if (tokens.length === 0) return null;
 		if (!checkExpressionComplexity(tokens, this.config.validation).passed) return null;
+		// A trailing `frozen` (or `frozen on <day>`) is the engine's own suffix,
+		// set aside before the line compiles, so the rest is what is read here.
+		// A malformed suffix (`frozen on tuesday`) does not compile, so it is
+		// not code either.
+		let frozen: ReturnType<typeof splitFrozenSuffix>;
+		try {
+			frozen = splitFrozenSuffix(tokens, this.context.calendar);
+		} catch {
+			return null;
+		}
+		if (frozen !== null) {
+			// As compiling does: when the part before the word does not stand on
+			// its own, the word belongs to the line and nothing is set aside;
+			// when it does but has no single answer to keep (a function
+			// definition), the line does not compile, so it is not code.
+			const operand = [...frozen.operand];
+			let program: BytecodeProgram | null = null;
+			try {
+				const builder = new BytecodeBuilder(this.pluginFunctionIndexByName);
+				this.parseExpression(builder, operand, operand.some((t) => t.type === 'LPAREN' || t.type === 'RPAREN'));
+				program = builder.build();
+			} catch {
+				program = null;
+			}
+			if (program !== null) {
+				try {
+					frozenDirectiveFor(program, frozen);
+				} catch {
+					return null;
+				}
+				tokens = operand;
+			}
+		}
 
 		let hasParens = false;
 		for (const t of tokens) {

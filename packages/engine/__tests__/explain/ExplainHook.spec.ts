@@ -90,7 +90,11 @@ describe("conversions", () => {
 		sharedCurrencyExchange.primeRates("EUR", { USD: 1.08 });
 		try {
 			const explanation = newTrackedEngine().explainLine("100 EUR in USD");
-			expect(explanation.steps.map((s) => s.description)).toEqual(["1 EUR is 1.08 USD", "100 times 1.08"]);
+			const steps = explanation.steps.map((s) => s.description);
+			expect(steps.slice(0, 2)).toEqual(["1 EUR is 1.08 USD", "100 times 1.08"]);
+			// The rate's source closes the derivation (#512); its time is when
+			// the host primed it, so only its shape is pinned.
+			expect(steps.slice(2)).toEqual([expect.stringMatching(/^EUR\/USD from host \(supplied by the host\), fetched \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC$/)]);
 			expect(explanation.result.toNumber()).toBeCloseTo(108, 10);
 		} finally {
 			sharedCurrencyExchange.clearRates();
