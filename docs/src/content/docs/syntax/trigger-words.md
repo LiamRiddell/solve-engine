@@ -92,6 +92,8 @@ keyword on its own, so a variable of either name keeps working:
 ```solve
 :section = 5
 total of section + 1 // 6
+```
+
 ## `with`, `for` and `step` after a line reference
 
 A [what-if or a sweep](/syntax/what-if/) opens with a line reference, and its
