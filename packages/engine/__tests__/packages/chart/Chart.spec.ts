@@ -36,6 +36,11 @@ describe("as sparkline", () => {
 		expect(label("[120, 135, 128, 150, 162] as sparkline")).toBe("[120, 135, 128, 150, 162]");
 	});
 
+	test("written as the list itself reads, not by its raw digits (#558)", () => {
+		expect(label("[1.23456, 2.5, 3.14159] as sparkline")).toBe(label("[1.23456, 2.5, 3.14159]"));
+		expect(label("[1.23456, 2.5, 3.14159] as sparkline")).toBe("[1.23, 2.50, 3.14]");
+	});
+
 	test("a scalar is declined with a clear error, not a silent pass-through", () => {
 		const value = newTrackedEngine().evaluateExpression("5 as sparkline");
 		expect(value.type).toBe(ValueType.Error);

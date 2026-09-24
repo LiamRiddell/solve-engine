@@ -23,11 +23,13 @@ same numbers, drawn as a shape.
 ```solve
 [120, 135, 128, 150, 162] as sparkline // [120, 135, 128, 150, 162]
 map(x^2, 0:5) as sparkline // [0, 1, 4, 9, 16, 25]
+[1.23456, 2.5, 3.14159] as sparkline // [1.23, 2.50, 3.14]
 ```
 
 Only a purely numeric vector (a single row or column) or a range can become a
 sparkline; anything else is a clear error rather than an empty chart. The text
-answer keeps the numbers, so a reader with no canvas still sees them. The series
+answer keeps the numbers, written as the list itself would be, at the same
+decimal places, so a reader with no canvas still sees them. The series
 is downsampled to at most 32 points, so a wide range costs nothing to draw.
 
 ## Function plots
