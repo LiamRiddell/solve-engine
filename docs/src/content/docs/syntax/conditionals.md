@@ -41,6 +41,19 @@ check :spent <= :budget // ERROR: check failed: $2,010.00 is more than $1,950.00
 check 1 km == 1000 m // ✓
 ```
 
+A check compares the way the comparison does anywhere else in the note. A
+decimal, a fraction, an amount of money and a whole number past 2^53 each hold
+their value exactly, and are checked on it; only a pair of approximate numbers,
+such as the result of a unit conversion, is allowed the conversion's own
+rounding. A failed check shows both sides to as many decimal places as it takes
+to tell them apart, since at the usual two places `1.845` and `1.85` would both
+read `1.85`:
+
+```solve
+check 2^53 + 1 > 2^53 // ✓
+check 1.845 == 1.85 // check failed: 1.845 is not equal to 1.850
+```
+
 Two numbers worked out in different ways rarely match to the last digit, so a
 check can allow a margin: `≈` (or `~=`) means approximately equal, and `within`
 says how close is close enough, as a percentage of the right-hand side or as an

@@ -29,6 +29,24 @@ describe("a passing check", () => {
 		expect(shown(source)).toBe("= ✓");
 	});
 
+	// #581: exact kinds are checked exactly, the way the operators compare them.
+	test.each([
+		"check 2^53 + 1 > 2^53",
+		"check 2^53 + 1 != 2^53",
+		"check 2^53 + 1 >= 2^53",
+		"check 2^53 < 2^53 + 1",
+		"check 3^40 == 12157665459056928801n",
+		"check 5n == 5",
+		"check 12345678901234567891n > 12345678901234567890n",
+		"check 1.0000000000001 != 1",
+		"check 1.0000000000001 > 1",
+		"check $1.0000000000001 != $1",
+		"check $0.1 + $0.2 == $0.3",
+		"check 1/3 * 3 == 1",
+	])("%s is a tick, as the operator says", (source) => {
+		expect(shown(source)).toBe("= ✓");
+	});
+
 	test("an approximate check says how close it was", () => {
 		expect(shown("check 22/7 ≈ pi within 0.1%")).toBe("= ✓ (differs by 0.04%)");
 		expect(shown("check 22/7 ~= pi within 0.1%")).toBe("= ✓ (differs by 0.04%)");
@@ -55,6 +73,25 @@ describe("a failing check names both sides", () => {
 		const value = newTrackedEngine().evaluateExpression(source);
 		expect(value.errorCode).toBe("CHECK_FAILED");
 		expect(value.errorMessage).toBe(message);
+	});
+
+	// #582: a failure's sides differ, so they must not read the same. The usual
+	// two places round 1.845 and 1.85 together; the sides widen until they part.
+	test.each([
+		["check 1.845 == 1.85", "check failed: 1.845 is not equal to 1.850"],
+		["check 12.3 kWh * $0.15/kWh == $1.85", "check failed: $1.845 is not equal to $1.850"],
+		["check 1.845 > 1.85", "check failed: 1.845 is not more than 1.850"],
+		["check 1.0000000000001 == 1", "check failed: 1.0000000000001 is not equal to 1"],
+		["check 3.1415926 ≈ 3.1415927", "check failed: 3.1415926 is not equal to 3.1415927"],
+		["check 1 km == 1000.001 m", "check failed: 1.000000 km is not equal to 1,000.001000 m"],
+	])("%s names two sides that read apart", (source, message) => {
+		const value = newTrackedEngine().evaluateExpression(source);
+		expect(value.errorCode).toBe("CHECK_FAILED");
+		expect(value.errorMessage).toBe(message);
+	});
+
+	test("sides that differ at the usual places are shown as usual", () => {
+		expect(newTrackedEngine().evaluateExpression("check 1.84 == 1.85").errorMessage).toBe("check failed: 1.84 is not equal to 1.85");
 	});
 
 	test("two things that cannot be compared are refused, not failed", () => {

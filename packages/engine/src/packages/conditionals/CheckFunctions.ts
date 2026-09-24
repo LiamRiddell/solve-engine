@@ -4,15 +4,19 @@
  *
  * Numbers and quantities are compared in a shared unit, reconciled the way the
  * engine's own comparisons reconcile them, so `check 1 km == 1000 m` passes.
- * Equality allows the conversion's own rounding (a millionth of a millionth,
+ * An exact kind (a decimal, a fraction, money, a whole number past 2^53) is
+ * compared exactly, as the operators compare it; a pair of plain doubles is
+ * allowed the conversion's own rounding (a millionth of a millionth,
  * relatively), and `≈` or a `within` clause widens that to a tolerance: a
  * percentage is relative to the right-hand side, a number or a quantity is an
  * absolute margin. Text compares with `==` and `!=` only.
  */
 
 import { Value, ValueType, stringValue, errorValue } from "@solve-js/vm/Value";
-import { unifyUom, describeMeasureMismatch } from "@solve-js/vm/VMConversion";
+import { unifyUom, describeMeasureMismatch, compareBigIntOperands, compareRationalOperands } from "@solve-js/vm/VMConversion";
 import { formatValue } from "@solve-js/format/FormatEngine";
+import { DEFAULT_FORMATTING_SETTINGS, type FormattingSettings } from "@solve-js/format/FormattingSettings";
+import { decimalCompare } from "@solve-js/decimal";
 
 /** The relative gap two values may differ by and still be equal: a conversion's rounding. */
 const EQUAL_TOLERANCE = 1e-12;
@@ -20,9 +24,92 @@ const EQUAL_TOLERANCE = 1e-12;
 /** The relative gap `≈` allows when no `within` names one: rounding noise, not a real difference. */
 const APPROX_TOLERANCE = 1e-9;
 
+/** The decimal places a result is shown to, where widening a failure's sides starts from. */
+const SHOWN_PLACES = DEFAULT_FORMATTING_SETTINGS.floatResult.decimalPlaces;
+
+/**
+ * The most decimal places a failure's sides are widened to before they are
+ * left as they read: past a double's seventeen digits, so an exact decimal
+ * with a long tail can still be told from its neighbour.
+ */
+const MOST_PLACES = 20;
+
 /** A value as the reader sees it, without the result marker. */
-function shown(value: Value): string {
-	return formatValue(value).replace(/^=\s*/, "");
+function shown(value: Value, settings?: FormattingSettings): string {
+	return formatValue(value, settings).replace(/^=\s*/, "");
+}
+
+/** A value shown to a given number of decimal places, a plain number, a quantity and a percentage alike. */
+function shownTo(value: Value, places: number): string {
+	const base = DEFAULT_FORMATTING_SETTINGS;
+	return shown(value, {
+		...base,
+		floatResult: { ...base.floatResult, decimalPlaces: places },
+		unitOfMeasurementResult: { decimalPlaces: places },
+		percentageResult: { decimalPlaces: places },
+	});
+}
+
+/**
+ * The exact order of two sides, decided the way the comparison operators
+ * decide it, or null for a pair of plain doubles.
+ *
+ * A whole number past 2^53, an exact decimal, a fraction and an amount of money
+ * in one currency each carry their value exactly, and `==`, `<` and the rest
+ * compare them on it: `2^53 + 1 == 2^53` and `1.0000000000001 == 1` are both
+ * false. Read as doubles within {@link EQUAL_TOLERANCE} they were equal, so a
+ * check passed the second and failed `check 2^53 + 1 > 2^53` (#581). Only a
+ * pair with none of these reaches the tolerance, which is there for a unit
+ * conversion's rounding.
+ */
+function exactOrder(left: Value, right: Value): -1 | 0 | 1 | null {
+	if (left.type === ValueType.Uom && right.type === ValueType.Uom) {
+		// Money of one currency: the exact sidecar is only ever on money.
+		if (left.unit === right.unit && left.exact !== undefined && right.exact !== undefined) {
+			return decimalCompare(left.exact, right.exact);
+		}
+		return null;
+	}
+	if (left.rational !== undefined || right.rational !== undefined || left.exact !== undefined || right.exact !== undefined) {
+		const order = compareRationalOperands(left, right);
+		if (order !== null) return order;
+	}
+	if (left.type === ValueType.BigInt || right.type === ValueType.BigInt) return compareBigIntOperands(left, right);
+	return null;
+}
+
+/** Shown text with each number's trailing fractional zeros dropped, so `1.00` and `1` read as the one number they are. */
+function bare(text: string): string {
+	return text.replace(/\.(\d*?)0+(?!\d)/g, (_, kept: string) => (kept ? `.${kept}` : ""));
+}
+
+/**
+ * Both sides of a failed comparison widened a decimal place at a time until
+ * they read apart, or null when they already do.
+ *
+ * A failure means the two differ, yet `1.845` and `1.85` both read `1.85` at
+ * two places, and "1.85 is not equal to 1.85" contradicts itself (#582). Sides
+ * in one unit are apart when their numbers read differently, trailing zeros
+ * aside. Sides in different units are told apart in the left side's unit
+ * instead, since `1.00 km` and `1,000.00 m` read differently while meaning the
+ * same thing.
+ *
+ * @param lv - The left side in the shared unit.
+ * @param rv - The right side in the shared unit.
+ * @param l - The left side as it would be shown.
+ * @param r - The right side as it would be shown.
+ */
+function toldApart(left: Value, right: Value, lv: number, rv: number, l: string, r: string): [string, string] | null {
+	const oneUnit = !(left.type === ValueType.Uom && right.type === ValueType.Uom && left.unit !== right.unit);
+	const apart = (places: number, a: string, b: string): boolean =>
+		oneUnit ? bare(a) !== bare(b) : lv.toFixed(places) !== rv.toFixed(places);
+	if (apart(SHOWN_PLACES, l, r)) return null;
+	for (let places = SHOWN_PLACES + 1; places <= MOST_PLACES; places++) {
+		const a = shownTo(left, places);
+		const b = shownTo(right, places);
+		if (apart(places, a, b)) return [a, b];
+	}
+	return null;
 }
 
 /** A relative difference as a percentage, to two places. */
@@ -30,9 +117,9 @@ function percent(fraction: number): string {
 	return `${(fraction * 100).toFixed(2).replace(/\.?0+$/, "")}%`;
 }
 
-/** Whether a value has a number a check can compare. */
+/** Whether a value has a number a check can compare: an `n` whole number is one, compared on its digits by {@link exactOrder}. */
 function numeric(v: Value): boolean {
-	return v.type === ValueType.Number || v.type === ValueType.Uom || v.type === ValueType.Percentage || v.type === ValueType.Datetime;
+	return v.type === ValueType.Number || v.type === ValueType.Uom || v.type === ValueType.Percentage || v.type === ValueType.Datetime || v.type === ValueType.BigInt;
 }
 
 /**
@@ -86,17 +173,21 @@ export function checkComparison(args: Value[]): Value {
 	} else if (op === "≈") {
 		margin = APPROX_TOLERANCE * scale;
 	}
-	const equal = gap <= margin;
+	// An exact side is compared exactly, unless the check asked for a margin.
+	const order = approximate ? null : exactOrder(left, right);
+	const equal = order === null ? gap <= margin : order === 0;
+	const less = order === null ? lv < rv : order < 0;
+	const more = order === null ? lv > rv : order > 0;
 
 	let holds: boolean;
 	switch (op) {
 		case "==":
 		case "≈": holds = equal; break;
 		case "!=": holds = !equal; break;
-		case "<": holds = lv < rv && !equal; break;
-		case "<=": holds = lv <= rv || equal; break;
-		case ">": holds = lv > rv && !equal; break;
-		case ">=": holds = lv >= rv || equal; break;
+		case "<": holds = less && !equal; break;
+		case "<=": holds = less || equal; break;
+		case ">": holds = more && !equal; break;
+		case ">=": holds = more || equal; break;
 		default: return errorValue("CHECK_EXPECTED_COMPARISON", `check: unknown comparison ${op}`);
 	}
 
@@ -113,8 +204,14 @@ export function checkComparison(args: Value[]): Value {
 	// its sides are shown to six significant figures.
 	const precise = (v: Value, n: number): string =>
 		approximate && v.type !== ValueType.Datetime ? `${Number(n.toPrecision(6))}${v.type === ValueType.Uom && v.unit !== undefined ? ` ${v.unit}` : ""}` : shown(v);
-	const l = precise(left, left.toNumber());
-	const r = precise(right, right.toNumber());
+	let l = precise(left, left.toNumber());
+	let r = precise(right, right.toNumber());
+	// A side that is equal to the other already reads the same, as it should
+	// ("1.85 is equal to 1.85"); every other failure has sides that differ.
+	if (!equal && left.type !== ValueType.Datetime && right.type !== ValueType.Datetime) {
+		const widened = toldApart(left, right, lv, rv, l, r);
+		if (widened) [l, r] = widened;
+	}
 	let reason: string;
 	switch (op) {
 		case "==":

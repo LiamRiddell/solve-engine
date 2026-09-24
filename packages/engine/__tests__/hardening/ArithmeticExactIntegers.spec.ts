@@ -207,3 +207,25 @@ describe("what reads the exact integer", () => {
 		]);
 	});
 });
+
+// #583: an `n` whole number is exact too, so where it meets an exact result the
+// two combine on their digits. Reading the Number through its double put 3^40
+// 33 short of itself.
+describe("an n whole number meets an exact result", () => {
+	test.each([
+		["3^40 - 12157665459056928801n", "= 0"],
+		["3^40 == 12157665459056928801n", "= true"],
+		["12157665459056928801n == 3^40", "= true"],
+		["3^40 < 12157665459056928802n", "= true"],
+		["(2^53 + 1) & 1n", "= 1"],
+		["(2^53 + 1) | 0n", "= 9007199254740993"],
+		["(2^53 + 1) + 1n", "= 9007199254740994"],
+		["(2^53 + 1) * 2n", "= 18014398509481986"],
+	])("%s", (source, expected) => {
+		expect(shown(source)).toBe(expected);
+	});
+
+	test("a fraction is still refused, not rounded to a whole number", () => {
+		expect(() => evaluate("1n + 1/3")).toThrow(/whole-number/);
+	});
+});
