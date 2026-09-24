@@ -1424,6 +1424,11 @@ export class ExpressionEngine {
         );
         this.queryClient = createQueryClient();
         this.batcher = new AsyncResolutionBatcher(this.dag, this.lineCache, this.vm);
+        // The batcher re-runs lines when a value lands, outside any evaluation
+        // this engine makes, so it publishes this engine's cache itself for the
+        // length of the re-run. Without it the re-run read whichever cache was
+        // published last, or none at all.
+        this.batcher.queryClient = this.queryClient;
         // Only stand up the background refresher when the host asked for it: a
         // headless or batch host wants no timers. When null, every value stays
         // pull-only, exactly as before. It feeds the same batcher the pull path
