@@ -408,6 +408,26 @@ export interface LineExecutionContext {
      */
     goalSeekMaxIterations?: number;
     /**
+     * Open a re-run of the document up to and including `lineNumber`, for
+     * asking what that line would say if some inputs were different. This is
+     * the primitive the what-if and sweep forms (`packages/whatif/`) drive.
+     *
+     * Unlike {@link evaluateLineWithBinding}, which re-runs one line with one
+     * name bound in a call frame, this re-runs every line from the top of the
+     * document to the target, from their text, in a scratch engine of its own.
+     * So an input the target reads through another line (`payment` on line 3
+     * reading `deposit`, line 4 reading `payment`) reaches it, and nothing the
+     * document holds (its variables, its cached results, its dependency graph)
+     * is touched: the scratch engine is thrown away when the session closes.
+     *
+     * Returns the session, or an error Value when there is nothing to re-run:
+     * the line is out of range, the re-run would be nested inside another one,
+     * or a line in the span writes a `global :name`, which other documents read.
+     * Absent where there is no document (the single-expression path). The caller
+     * must {@link LineRerun.close} the session, in a `finally`.
+     */
+    rerunLines?: (lineNumber: number) => LineRerun | Value;
+    /**
      * The RAW markdown text of line `lineNumber` (1-based), or `undefined`
      * when there is no real document or the line is out of range. Distinct
      * from `getLineResult`, which returns a line's evaluated Value: a
@@ -417,6 +437,34 @@ export interface LineExecutionContext {
      * current line to find the nearest table and read one of its columns.
      */
     getLineText?: (lineNumber: number) => string | undefined;
+}
+
+/**
+ * A re-run of the lines above a target, opened by
+ * {@link LineExecutionContext.rerunLines}.
+ *
+ * Each {@link run} is a fresh pass over the same lines with a different set of
+ * inputs, so a sweep of many values opens one session and runs it once per
+ * value. A name the run overrides keeps its override on every line: a line
+ * that would set it (`deposit = 100000`) leaves it at the override instead, so
+ * the override is what every line below reads.
+ */
+export interface LineRerun {
+    /**
+     * Re-run the lines with `overrides` in force and return the target line's
+     * answer: its Value, or an error Value when it has none (the line is prose
+     * or a heading, it holds several inline answers, it failed, or it waits on
+     * live data a re-run cannot fetch).
+     */
+    run(overrides: ReadonlyMap<string, Value>): Value;
+    /**
+     * Whether any line in the span, other than the line asking, mentions
+     * `name`. Overriding a name no line mentions cannot change the answer, and
+     * is almost always a misspelling, so the forms that override refuse it.
+     */
+    uses(name: string): boolean;
+    /** Release the scratch engine. Call it once, in a `finally`. */
+    close(): void;
 }
 
 /**

@@ -42,6 +42,7 @@ import { createCryptoPackage } from "./crypto";
 import { createKnowledgePackage } from "./knowledge";
 import { LINES_PACKAGE } from "./lines";
 import { GOALSEEK_PACKAGE } from "./goalseek";
+import { WHATIF_PACKAGE } from "./whatif";
 import { TABLES_PACKAGE } from "./tables";
 import { COLOUR_PACKAGE } from "./colour";
 import { CHART_PACKAGE } from "./chart";
@@ -94,6 +95,7 @@ export {
   createKnowledgePackage,
   LINES_PACKAGE,
   GOALSEEK_PACKAGE,
+  WHATIF_PACKAGE,
   TABLES_PACKAGE,
   COLOUR_PACKAGE,
   CHART_PACKAGE,
@@ -138,7 +140,7 @@ export {
 /**
  * The packages an engine registers when the caller names none.
  *
- * Forty-six of the forty-nine. Stocks, crypto and knowledge are excluded
+ * Every built-in package but three. Stocks, crypto and knowledge are excluded
  * because each needs a host-supplied data source and does nothing useful
  * without one, so registering them by default would only produce
  * NOT_CONFIGURED results.
@@ -224,4 +226,8 @@ export const BUILTIN_PACKAGES: IEnginePackage[] = [
   // default, removable; without it the lexer's GEO_ANGLE literal has no
   // parselet and is a parse error, as the same text was before.
   GEO_PACKAGE,
+  // What-if and sweeps. After LINES_PACKAGE, whose rule mints the LINE_REF
+  // both forms open on. (A seeded random draw keys a plugin call by its
+  // name, so where a package sits in this list does not move any draw.)
+  WHATIF_PACKAGE,
 ];

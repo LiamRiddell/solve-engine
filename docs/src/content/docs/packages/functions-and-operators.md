@@ -105,6 +105,59 @@ Check your own arguments, and return an `errorValue(code, message)` rather than
 throwing when they are wrong, as `doubleHandler` does above. A returned error is a
 value the reader sees on that one line; a thrown one is harder for a host to place.
 
+### Asking what another line would say
+
+Sometimes a handler needs another line's answer under different inputs, rather
+than its answer as the note stands: what line 4 would be if `deposit` were
+200,000. `context.rerunLines(lineNumber)` opens that question. It is the
+primitive the [what-if and sweep](/syntax/what-if/) forms are built on: the lines
+from the top of the document down to `lineNumber` are run again from their text,
+in a scratch engine, with the names you pass held at the values you pass, and the
+note itself is not touched. Because the lines are re-run rather than read, an
+input reaches the line through every line between.
+
+```ts
+import { numberValue, errorValue, Value, type LineExecutionContext } from "solve-engine/vm";
+
+// atDoubleDeposit(4): line 4's answer with deposit at 200,000.
+function atDoubleDepositHandler(args: Value[], context?: LineExecutionContext): Value {
+  const opened = context?.rerunLines?.(args[0].toNumber());
+  if (opened === undefined) {
+    return errorValue("NEEDS_DOCUMENT", "atDoubleDeposit only works inside a document.");
+  }
+  if (opened instanceof Value) return opened; // why the re-run could not open
+  try {
+    if (!opened.uses("deposit")) {
+      return errorValue("DEPOSIT_NOT_USED", "No line up to that one uses deposit.");
+    }
+    return opened.run(new Map([["deposit", numberValue(200000)]]));
+  } finally {
+    opened.close();
+  }
+}
+```
+
+The contract, in the order a handler meets it:
+
+- `rerunLines` is absent where there is no document, the single-expression
+  entry point. Answer with an error that says a document is needed.
+- It returns either an open session or an error Value: the line is out of range,
+  the handler is already running inside another re-run, or a line in the span
+  sets a `global :name` (which other documents read, so it is never re-run).
+  Pass the error on.
+- `uses(name)` says whether any line in the span, other than the one asking,
+  mentions the name. Overriding a name nothing uses cannot change the answer, so
+  refuse it as the likely misspelling it is.
+- `run(overrides)` returns the line's answer, or an error Value when it has none:
+  the line is prose or a heading, holds several inline answers, fails, or waits
+  on live data the scratch engine does not fetch. Call it as many times as you
+  need; each call is a fresh pass from the top.
+- `close()` releases the scratch engine. Call it once, in a `finally`.
+
+Each `run` re-runs every line above the target, so bound how many a handler
+makes. The sweep form caps itself at 1,000 values and 100,000 line re-runs, and
+refuses past either by name.
+
 ## Operators, not just functions
 
 An **infix** parselet handles a token that **joins** a value already parsed to the

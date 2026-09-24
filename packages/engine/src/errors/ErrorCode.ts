@@ -219,6 +219,14 @@ export const CoreErrorCodes = {
   /** A live-data form evaluated on an engine whose host switched the network off (`network.enabled: false`, see `constants/Configuration.ts`'s `NetworkConfig`). A recoverable Error value, raised by the VM for a currency conversion with no primed rate and for a plugin function that returned a promise, and by `createQueryResolver`'s plugin function when its preflight was skipped. Names the setting, so the reader knows it is policy rather than an outage. */
   NETWORK_DISABLED: "NETWORK_DISABLED",
 
+  // ── What-if (engine/ExpressionEngine.ts's `whatIf`, engine/WhatIfRun.ts) ──
+  /** `engine.whatIf(text, overrides)` was given an override whose name is not a variable name, or whose value is not a finite number, text that evaluates on its own, or a `Value`. Thrown, since it is the host's argument that is wrong rather than a line of the note. */
+  WHAT_IF_OVERRIDE_INVALID: "WHAT_IF_OVERRIDE_INVALID",
+  /** A what-if overrides a name no line it re-runs mentions, which cannot change any answer and is almost always a misspelling. Thrown by `engine.whatIf`; returned as an Error value by the `line N with ...` and sweep forms. */
+  WHAT_IF_INPUT_NOT_USED: "WHAT_IF_INPUT_NOT_USED",
+  /** A what-if would re-run a line that sets a `global :name`. A global is shared with every other document in the process, so the scenario's value would reach them; refused rather than re-run. Thrown by `engine.whatIf`; returned as an Error value by the line forms. */
+  WHAT_IF_WRITES_GLOBAL: "WHAT_IF_WRITES_GLOBAL",
+
   // ── Temporal calendar backend (temporal/TemporalCalendar.ts) ──
   /** `createTemporalCalendar()` was handed something that is not a usable `Temporal` implementation: no `Now.instant`, `Now.timeZoneId`, `Instant.fromEpochMilliseconds` or `PlainDateTime.from`. Raised at construction, naming the missing member, rather than letting the first date computation fail on it obscurely. */
   TEMPORAL_IMPLEMENTATION_INVALID: "TEMPORAL_IMPLEMENTATION_INVALID",

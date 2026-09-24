@@ -231,17 +231,38 @@ function goalSeekUnknownIndex(tokens: Token[], at: number): number {
  * a write, although `rate =` has the shape of a definition: the seek binds it
  * in its own call frame and the document's variable is untouched. See
  * {@link goalSeekUnknownIndex}.
+ *
+ * The same is true of a what-if's inputs (`line 4 with deposit = 150000`) and a
+ * sweep's input (`line 4 for rate from 3% to 6% step 1%`): each is a name the
+ * form holds fixed in a scratch re-run, never a write to the document's own
+ * variable, and never a read of it either. The value an input is given is an
+ * ordinary expression, and its reads count as usual.
  */
 export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; writes: string[] } {
     const reads: string[] = [];
     const writes: string[] = [];
     const functionParamNames = collectFunctionParamNames(tokens);
-    // Token positions that name a goal seek's unknown, never a document read
-    // or write. Allocated only when a seek is found, which is almost never.
-    let goalSeekUnknowns: Set<number> | null = null;
+    // Token positions that name a goal seek's unknown or a sweep's input, never
+    // a document read or write. Allocated only when one is found, which is
+    // almost never.
+    let formInputs: Set<number> | null = null;
+    // Whether a what-if has opened, after which a name directly before `=` is
+    // one of its inputs rather than a definition.
+    let inWhatIf = false;
 
     for (let i = 0; i < tokens.length; i++) {
         const t = tokens[i];
+        if (t.type === "WHAT_IF") {
+            inWhatIf = true;
+            continue;
+        }
+        if (t.type === "SWEEP") {
+            // `line N for <name> from ...`: the swept name follows the opener.
+            const swept = tokens[i + 1];
+            if (swept !== undefined && isVarName(swept)) (formInputs ??= new Set()).add(i + 1);
+            continue;
+        }
+        if (inWhatIf && isVarName(t) && tokens[i + 1]?.type === "EQUALS") continue;
         if (t.type === "GOAL_SEEK") {
             // `solve line N for x = 900` varies `x` inside the seek's own call
             // frame and stores nothing: the document's `x`, if there is one,
@@ -255,7 +276,7 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
             // is undefined. The same shape the parselet reads: the line
             // reference, `for`, then the unknown.
             const unknown = goalSeekUnknownIndex(tokens, i);
-            if (unknown !== -1) (goalSeekUnknowns ??= new Set()).add(unknown);
+            if (unknown !== -1) (formInputs ??= new Set()).add(unknown);
             continue;
         }
         if (t.type === "GLOBAL") {
@@ -294,8 +315,9 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
         if (isVarName(t)) {
             // Skip if already consumed by preceding COLON handler above.
             if (i > 0 && tokens[i - 1].type === "COLON") continue;
-            // A goal seek's unknown; see the GOAL_SEEK branch above.
-            if (goalSeekUnknowns !== null && goalSeekUnknowns.has(i)) continue;
+            // A goal seek's unknown or a sweep's input; see the GOAL_SEEK and
+            // SWEEP branches above.
+            if (formInputs !== null && formInputs.has(i)) continue;
             // Skip UNIT tokens acting as a quantity/conversion unit name
             // rather than a variable (see isUnitLiteralContext above).
             if (t.type === "UNIT" && i > 0 && isUnitLiteralContext(tokens[i - 1])) continue;

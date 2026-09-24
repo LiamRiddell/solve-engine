@@ -23,6 +23,7 @@ export type {
 	SerializedDecimal,
 	SerializedRational,
 	SerializedNumber,
+	WhatIfOverrides,
 } from "./ExpressionEngine";
 
 export type { Explanation, ExplanationStep } from "@solve-js/explain";

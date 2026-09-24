@@ -68,6 +68,7 @@ export type {
   SerializedDecimal,
   SerializedRational,
   SerializedNumber,
+  WhatIfOverrides,
 } from "@solve-js/engine";
 
 export { ENGINE_VERSION } from "@solve-js/constants/version";

@@ -11,7 +11,10 @@ Goal seek does that search for you, against a line reference.
 
 `solve line 4 for rate = 900` reads as "find the value of `rate` that makes line
 four equal 900". The variable named after `for` must be one the target line
-uses, since changing it is how the target moves. The result is that value.
+uses, since changing it is how the target moves. The result is that value. The
+forward question, what a line would say if an input were different, is a
+[what-if](/syntax/what-if/), and that one follows an input through the lines
+between as well.
 
 | Expression | Meaning |
 | --- | --- |

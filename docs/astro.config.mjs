@@ -413,6 +413,7 @@ export default defineConfig({
                 { slug: "syntax/conditionals" },
                 { slug: "syntax/goal-seek" },
                 { slug: "syntax/trigger-words" },
+                { slug: "syntax/what-if" },
               ],
             },
             {

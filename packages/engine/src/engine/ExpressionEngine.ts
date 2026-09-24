@@ -15,7 +15,8 @@ import { createVM, executeBytecode } from "@solve-js/vm/VM";
 import { createScratchVM } from "@solve-js/vm/ScratchVM";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import { resolveHolidayPredicate } from "@solve-js/vm/HolidayCalendar";
-import type { EvalResult, LineExecutionContext } from "@solve-js/vm/VM";
+import type { EvalResult, LineExecutionContext, LineRerun } from "@solve-js/vm/VM";
+import { firstGlobalWrite, lineMentions, copyFetchedData, targetAnswer, overrideValue, type WhatIfOverrides } from "@solve-js/engine/WhatIfRun";
 import type { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { BackgroundRefreshManager } from "@solve-js/engine/BackgroundRefreshManager";
 import { registerAsConverter, unregisterAsConverter, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
@@ -123,6 +124,7 @@ import {
 // Re-export for consumers (playground imports these from ExpressionEngine)
 export type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo, AsyncCachePackageInfo };
 export type { DagSnapshot } from "@solve-js/vm/DependencyGraph";
+export type { WhatIfOverrides } from "@solve-js/engine/WhatIfRun";
 // The snapshot/restore surface, re-exported so `toJSON`/`fromJSON` callers can
 // import their types from the same module as `ExpressionEngine`.
 export {
@@ -496,6 +498,25 @@ export class ExpressionEngine {
 
     /** The most nesting {@link makeLineContext}'s `evaluateLineWithBinding` allows before refusing, so the bisection re-runs can never compound. */
     private static readonly GOAL_SEEK_MAX_NESTING_DEPTH = 1;
+
+    /**
+     * The names a what-if holds fixed, and their values, or `null` outside one.
+     *
+     * Set only on the scratch engine a what-if re-runs lines in (see
+     * {@link openLineRerun}), and only for the length of one pass. Every line of
+     * that pass starts with these put back, so a line that would set one
+     * (`deposit = 100000`) leaves it at the override for every line below, and a
+     * line that reads one reads the override.
+     */
+    private pinnedVariables: ReadonlyMap<string, Value> | null = null;
+
+    /**
+     * How many what-if re-runs enclose this engine: 0 for an ordinary engine,
+     * one more than its parent's for a scratch engine a what-if line opened. A
+     * what-if line inside a re-run is refused rather than opening a re-run of
+     * its own, so a what-if whose span holds another cannot recurse.
+     */
+    private whatIfDepth = 0;
 
     /**
      * Batch cross-line source, set only for the duration of a
@@ -921,6 +942,28 @@ export class ExpressionEngine {
                   }
                 : undefined,
             goalSeekMaxIterations: this.config.vm.maxGoalSeekIterations,
+            // Both document paths re-run from the lines' text, so a what-if
+            // answers the same through either; see {@link openLineRerun}.
+            rerunLines: doc || scan
+                ? (n: number) => {
+                      const count = doc ? doc.lineCount : scan!.length;
+                      const last = Number.isInteger(n) ? Math.min(Math.max(n, 0), count) : 0;
+                      // Every line in the span is read, by its text, so an edit to
+                      // any of them has to re-run the line asking. Declared the way
+                      // an aggregate declares its span, on the incremental path,
+                      // which is the one that asks the graph what to re-run.
+                      if (doc) {
+                          for (let i = 1; i <= last; i++) {
+                              if (i !== context.lineIndex) dag.registerLinePositionDependency(context.lineIndex, i);
+                          }
+                      }
+                      const texts: string[] = [];
+                      for (let i = 1; i <= last; i++) {
+                          texts.push((doc ? doc.getLineAt(i)?.text : scan![i - 1]?.text) ?? "");
+                      }
+                      return this.openLineRerun(texts, n, count, context.lineIndex);
+                  }
+                : undefined,
             networkEnabled: this.config.network.enabled,
             calendar: this.context.calendar,
             // Read through the engine on every draw rather than captured, since
@@ -1030,6 +1073,281 @@ export class ExpressionEngine {
             return errorValue("GOAL_SEEK_TARGET_ERROR", normalizeUnknownError(e).message);
         } finally {
             this.goalSeekDepth--;
+        }
+    }
+
+    /**
+     * Open a re-run of a document's lines up to `targetLine`, the primitive
+     * behind {@link LineExecutionContext.rerunLines}. See {@link LineRerun}.
+     *
+     * The lines are re-run from their text, as a batch pass over the span, in a
+     * scratch engine built like this one (same packages, configuration, locale,
+     * calendar and random seed) and thrown away when the session closes. Two
+     * things follow. Nothing this engine holds is touched: not its variables,
+     * not its cached results, not its dependency graph, not the document model
+     * a host wired. And the answer does not depend on which document pass
+     * asked, since both hand over the same text, so a what-if agrees through
+     * `parseDocument` and the incremental evaluator by construction.
+     *
+     * Names this engine is itself holding fixed (when it is the scratch engine
+     * of the host's {@link whatIf}) carry into the re-run, under the line's own
+     * overrides, so a what-if line inside a scenario answers within that
+     * scenario.
+     *
+     * @param texts - The lines from 1 to the target, as written.
+     * @param targetLine - The line whose answer is wanted.
+     * @param lineCount - How many lines the document has, for the range check.
+     * @param ownLine - The line asking, left out of the check that an input is used.
+     * @returns The session, or an error Value saying why none could open.
+     */
+    private openLineRerun(texts: readonly string[], targetLine: number, lineCount: number, ownLine: number): LineRerun | Value {
+        if (!Number.isInteger(targetLine) || targetLine < 1 || targetLine > lineCount) {
+            return errorValue("WHAT_IF_LINE_OUT_OF_RANGE", `There is no line ${targetLine} to re-run: the document has ${lineCount} line${lineCount === 1 ? "" : "s"}.`);
+        }
+        if (this.whatIfDepth >= 1) {
+            return errorValue(
+                "WHAT_IF_NESTED",
+                "A what-if or sweep cannot run inside another one's re-run of the document. Name a line that does not itself hold one.",
+            );
+        }
+        const tokenize = (text: string) => this.tokensOrNone(text);
+        const globalLine = firstGlobalWrite(texts, tokenize);
+        if (globalLine !== -1) {
+            return errorValue(
+                "WHAT_IF_WRITES_GLOBAL",
+                `Line ${globalLine} sets a global variable, which other documents read, so a what-if will not re-run it.`,
+            );
+        }
+
+        const scratch = this.createScenarioEngine(this.whatIfDepth + 1);
+        const input = texts.join("\n");
+        const inherited = this.pinnedVariables;
+        const liveData = this.config.network.enabled;
+        let closed = false;
+        return {
+            run: (overrides) => {
+                const pins = inherited === null ? overrides : new Map([...inherited, ...overrides]);
+                try {
+                    return targetAnswer(this.runScenario(scratch, input, pins), targetLine, liveData);
+                } catch (e) {
+                    // The pass itself refusing, rather than a line in it failing,
+                    // which each line reports on its own. Reported on the asking
+                    // line as a value, the way every failure of a line is.
+                    return errorValue("WHAT_IF_TARGET_ERROR", normalizeUnknownError(e).message);
+                }
+            },
+            uses: (name) => texts.some((text, i) => i + 1 !== ownLine && lineMentions(text, name, tokenize)),
+            close: () => {
+                if (closed) return;
+                closed = true;
+                this.disposeScenarioEngine(scratch);
+            },
+        };
+    }
+
+    /**
+     * Build the scratch engine a what-if re-runs lines in: the same packages,
+     * configuration, locale, calendar and random seed as this engine, so every
+     * line reads there as it reads here, with two differences. It never fetches
+     * (live data off, no background refresh), since a what-if is a question
+     * about the document rather than a reason to go to the network; it starts
+     * with whatever this engine has already fetched instead. And it knows how
+     * deeply it is nested, so a what-if inside it is refused.
+     *
+     * @param depth - The {@link whatIfDepth} the scratch engine runs at.
+     */
+    private createScenarioEngine(depth: number): ExpressionEngine {
+        const config: EngineConfigOverride = {
+            ...this.config,
+            network: { ...this.config.network, enabled: false },
+            backgroundRefresh: { ...this.config.backgroundRefresh, enabled: false },
+        };
+        const seed = this.effectiveRandomSeed();
+        const scratch = new ExpressionEngine({
+            locale: this.localeCode,
+            config,
+            packages: [...this.registeredPackages.values()],
+            calendar: this.context.calendar,
+            random: seed === undefined ? undefined : { seed },
+        });
+        scratch.whatIfDepth = depth;
+        copyFetchedData(this.queryClient, scratch.queryClient);
+        return scratch;
+    }
+
+    /**
+     * One pass of a scratch engine over `input`, with `pins` held fixed.
+     *
+     * Starts from nothing each time (variables, functions, cached results, the
+     * dependency graph), so a sweep's second value is not read against state
+     * its first value left: a line that failed at one value would otherwise
+     * keep the definition it made at the one before, where a fresh pass has
+     * nothing.
+     *
+     * @param scratch - A scratch engine from {@link createScenarioEngine}.
+     * @param input - The lines to run, newline-separated.
+     * @param pins - The names to hold fixed.
+     * @returns The pass's result.
+     * @throws Whatever {@link parseDocument} throws for the pass as a whole.
+     */
+    private runScenario(scratch: ExpressionEngine, input: string, pins: ReadonlyMap<string, Value>): ParsingResult {
+        // The scratch engine's lines publish its query client for the plugin
+        // functions they call, and a what-if line runs inside this engine's own
+        // evaluation, which goes on after it returns: put back what was there.
+        const activeClient = getActiveQueryClient();
+        try {
+            scratch.vm.reset();
+            scratch.dag.clear();
+            scratch.lineCache.clear();
+            scratch.pinnedVariables = pins;
+            return scratch.parseDocument(input, { inputType: "markdown" });
+        } finally {
+            scratch.pinnedVariables = null;
+            setActiveQueryClient(activeClient);
+        }
+    }
+
+    /**
+     * A line's tokens for the what-if checks, or none when the line does not
+     * tokenise (an unterminated string, say). Those checks read other lines
+     * than the one asking, and a line that cannot be read has no name in it and
+     * sets no global; its own failure is reported on its own line.
+     */
+    private tokensOrNone(text: string): Token[] {
+        try {
+            return this.tokenizeForClassification(text);
+        } catch {
+            return [];
+        }
+    }
+
+    /**
+     * Refuse a document longer than one pass will process, before any of it is
+     * scanned. Every other limit bounds what a single line may ask for, and a
+     * document's cost is its line count whatever the lines say: two hundred
+     * thousand lines of `1 + 1` exhausted the heap on the per-line records
+     * alone, which is a process abort no host can catch. See
+     * `constants/Configuration.ts`'s `performance.maxDocumentLines`.
+     *
+     * @param input - The document text.
+     * @throws `DOCUMENT_TOO_LARGE` past `performance.maxDocumentLines`.
+     */
+    private assertDocumentSize(input: string): void {
+        const maxLines = this.config.performance.maxDocumentLines;
+        if (countLines(input, maxLines) > maxLines) {
+            throw ErrorFactory.execution(
+                "DOCUMENT_TOO_LARGE",
+                `This document has more than ${maxLines.toLocaleString("en-US")} lines, which is the most the engine will process in one pass`,
+                { maxLines },
+            );
+        }
+    }
+
+    /** Release a scratch engine: its query cache's timers, its batcher, its caches. */
+    private disposeScenarioEngine(scratch: ExpressionEngine): void {
+        const activeClient = getActiveQueryClient();
+        scratch.clear();
+        setActiveQueryClient(activeClient === scratch.queryClient ? null : activeClient);
+    }
+
+    /**
+     * Put every held name back before a line of a what-if pass runs.
+     *
+     * @param pins - The names held fixed, see {@link pinnedVariables}.
+     */
+    private applyPins(pins: ReadonlyMap<string, Value>): void {
+        for (const [name, value] of pins) this.vm.setVar(name, value);
+    }
+
+    /**
+     * After a line of a what-if pass, the held value it overwrote, or `null`.
+     *
+     * A line that sets a held name has just replaced it, and is put back at once
+     * so a later expression on the same line reads the override too. The value
+     * is returned so the line can read as the override: in a scenario where
+     * `deposit` is 150,000, the line `deposit = 100000` says 150,000, which is
+     * what every line below it now reads.
+     *
+     * @param pins - The names held fixed.
+     */
+    private restorePins(pins: ReadonlyMap<string, Value>): Value | null {
+        let overwritten: Value | null = null;
+        for (const [name, value] of pins) {
+            if (this.vm.getVar(name) === value) continue;
+            this.vm.setVar(name, value);
+            overwritten ??= value;
+        }
+        return overwritten;
+    }
+
+    /**
+     * Evaluate a whole document as it would read if some of its inputs were
+     * different, without touching this engine or the document.
+     *
+     * The host's side of the what-if forms: `engine.whatIf(text, { price: 120
+     * })` answers what `engine.parseDocument(text)` would answer if `price`
+     * held 120 on every line, including the line that sets it. It returns the
+     * same {@link ParsingResult} shape, so a host reads a scenario exactly as it
+     * reads the document, and nothing about this engine changes: the pass runs
+     * in a scratch engine built like this one and thrown away afterwards, so
+     * this engine's variables and cached results are as they were.
+     *
+     * Each override is a number, an expression in text (`"$120"`, `"5%"`,
+     * `"3 kg"`, evaluated on its own so a unit is kept), or a `Value`.
+     *
+     * The run is the batch pass, so it reads a document the way
+     * {@link parseDocument} does: a goal seek in it reports that pass's refusal.
+     * It never fetches live data; a line waiting on data this engine has not
+     * already fetched reports so.
+     *
+     * @param input - The document text, newline-separated.
+     * @param overrides - The inputs to hold fixed, by variable name.
+     * @returns The per-line results with the overrides in force.
+     * @throws `WHAT_IF_OVERRIDE_INVALID` when an override is not a variable name
+     * or its value is not a value (an expression that fails, a non-finite
+     * number); `WHAT_IF_INPUT_NOT_USED` when no line uses an overridden name;
+     * `WHAT_IF_WRITES_GLOBAL` when a line sets a `global :name`, which a scenario
+     * would write where other documents read it; and `DOCUMENT_TOO_LARGE` as
+     * {@link parseDocument} does.
+     */
+    whatIf(input: string, overrides: WhatIfOverrides): ParsingResult {
+        this.assertDocumentSize(input);
+        const texts = input.split("\n");
+        const tokenize = (text: string) => this.tokensOrNone(text);
+        const globalLine = firstGlobalWrite(texts, tokenize);
+        if (globalLine !== -1) {
+            throw ErrorFactory.validation(
+                "WHAT_IF_WRITES_GLOBAL",
+                `Line ${globalLine} sets a global variable, which other documents read, so a what-if will not run it.`,
+                { line: globalLine },
+            );
+        }
+
+        const activeClient = getActiveQueryClient();
+        const scratch = this.createScenarioEngine(this.whatIfDepth);
+        try {
+            const pins = new Map<string, Value>();
+            for (const [name, raw] of Object.entries(overrides)) {
+                const nameTokens = tokenize(name);
+                const isName = nameTokens.length === 1 && (nameTokens[0].type === "IDENT" || nameTokens[0].type === "UNIT") && nameTokens[0].value === name;
+                if (!isName) {
+                    throw ErrorFactory.validation("WHAT_IF_OVERRIDE_INVALID", `"${name}" is not a variable name a document can use.`, { name });
+                }
+                const value = overrideValue(name, raw, (expression) => scratch.evaluateExpression(expression));
+                if (!texts.some((text) => lineMentions(text, name, tokenize))) {
+                    throw ErrorFactory.validation(
+                        "WHAT_IF_INPUT_NOT_USED",
+                        `No line of this document uses ${name}, so overriding it cannot change any answer.`,
+                        { name },
+                    );
+                }
+                pins.set(name, value);
+            }
+            return this.runScenario(scratch, input, pins);
+        } finally {
+            this.disposeScenarioEngine(scratch);
+            // Evaluating a text override ran in the scratch engine too.
+            setActiveQueryClient(activeClient);
         }
     }
 
@@ -2545,20 +2863,7 @@ export class ExpressionEngine {
      * with precise coordinate mapping for inline solves.
      */
     parseDocument(input: string, options: UnifiedParsingOptions = { inputType: 'markdown' }): ParsingResult {
-        // Refused before the scan rather than during it. Every limit above this
-        // one bounds what a single LINE may ask for, and a document's cost is
-        // its line count whatever the lines say: two hundred thousand lines of
-        // `1 + 1` exhausted the heap on the per-line records alone, which is a
-        // process abort no host can catch. See
-        // `constants/Configuration.ts`'s `performance.maxDocumentLines`.
-        const maxLines = this.config.performance.maxDocumentLines;
-        if (countLines(input, maxLines) > maxLines) {
-            throw ErrorFactory.execution(
-                "DOCUMENT_TOO_LARGE",
-                `This document has more than ${maxLines.toLocaleString("en-US")} lines, which is the most the engine will process in one pass`,
-                { maxLines },
-            );
-        }
+        this.assertDocumentSize(input);
         // Fresh unit definitions for this pass. A host re-parses the whole
         // document on each keystroke, so rebuilding the table top-to-bottom is
         // what keeps a renamed or deleted definition from lingering. Only drop
@@ -2743,6 +3048,10 @@ export class ExpressionEngine {
                 error: null,
             };
 
+            // A what-if pass holds some names fixed; see pinnedVariables. Null on
+            // every ordinary pass, which is the whole cost there.
+            const pins = this.pinnedVariables;
+
             if (scanResult.error) {
                 // The tokeniser refused this line (an unterminated string). It
                 // is reported the way a parse error is, and nothing is
@@ -2750,6 +3059,7 @@ export class ExpressionEngine {
                 parsedLine.error = scanResult.error.message;
             } else if (!isEmpty) {
                 const isVariableAssignment = lineText.trim().startsWith(':');
+                if (pins !== null) this.applyPins(pins);
 
                 if (hasInlineSolves && !isVariableAssignment) {
                     for (const solve of inlineSolves) {
@@ -2759,6 +3069,8 @@ export class ExpressionEngine {
                             const errorMessage = error instanceof Error ? error.message : String(error);
                             solve.error = errorMessage;
                         }
+                        const held = pins === null ? null : this.restorePins(pins);
+                        if (held !== null && solve.result) solve.result = held;
                     }
                 } else {
                     // Sliced from the same offset the tokens were, or the text
@@ -2780,6 +3092,8 @@ export class ExpressionEngine {
                             const errorMessage = error instanceof Error ? error.message : String(error);
                             parsedLine.error = errorMessage;
                         }
+                        const held = pins === null ? null : this.restorePins(pins);
+                        if (held !== null && parsedLine.result !== null) parsedLine.result = held;
                     }
                 }
             }
@@ -3426,6 +3740,12 @@ export class ExpressionEngine {
 
         const eqIdx = normalizedTokens.findIndex(t => t.type === 'EQUALS');
         if (eqIdx === -1) return null;
+
+        // A what-if (`line 4 with deposit = 150000`) owns its `=` signs the same
+        // way, wherever it sits on the line: `(line 4 with x = 5) - line 4`
+        // would otherwise reach the scalar-equation detector below with `x` as
+        // an unknown and be stored as an equation.
+        if (normalizedTokens.some(t => t.type === 'WHAT_IF')) return null;
 
         const names = this.parseFactorChain(normalizedTokens.slice(0, eqIdx));
         if (names === null) {

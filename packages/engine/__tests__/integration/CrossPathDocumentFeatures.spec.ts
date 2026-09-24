@@ -2,9 +2,9 @@
  * The whole-document forms, proven through every entry point that can reach them.
  *
  * Category tags, line references, sections, table columns, table lookups and
- * bands, and goal seek are not ordinary expressions: each reads, or re-runs,
- * other lines, so the answer depends on the entry point the host called. The
- * engine has three, and they do not agree by accident:
+ * bands, goal seek, and what-if and sweeps are not ordinary expressions: each
+ * reads, or re-runs, other lines, so the answer depends on the entry point the
+ * host called. The engine has three, and they do not agree by accident:
  *
  * - `evaluateLine` / `evaluateExpression` — one expression, no document. A
  *   whole-document form has nothing to read here, so the contract is that it
@@ -14,10 +14,13 @@
  * - `parseDocument` — the batch pass. It reads earlier lines' results and skips
  *   markdown, so tags, line references and table columns resolve. What it cannot
  *   do is re-run a line with a variable bound to a trial value, so goal seek
- *   refuses here too, by the same structured Error rather than a guess.
+ *   refuses here too, by the same structured Error rather than a guess. A
+ *   what-if and a sweep are different: they re-run the lines above their
+ *   target from the lines' text, in a scratch engine of their own, so they
+ *   need nothing this pass lacks and resolve here too.
  * - `evaluateDocument` — the incremental pass. It adds the re-run primitive, so
  *   goal seek resolves; and it agrees with `parseDocument`, value for value, on
- *   every form both support.
+ *   every form both support, the what-if forms included.
  *
  * These tests pin all three at once, because a feature that passes through one
  * entry point and silently misbehaves through another is exactly the drift a
@@ -601,6 +604,46 @@ describe("a stored equation goes with its line (#569)", () => {
     expect(shown[2]).toBe("5");
     expect(shown[4]).toBe("5");
     expect(shown).toEqual(batch(edited));
+  });
+});
+
+describe("what-if and sweeps across entry points", () => {
+  // Line 4 reads payment, which line 3 computes from deposit: the input
+  // reaches the target only through the line between.
+  const mortgage = [
+    "deposit = 100000",
+    "rate = 4%",
+    "payment = monthly repayment on deposit over 25 years at rate",
+    "payment * 12",
+  ];
+  const doc = [...mortgage, "line 4 with deposit = 150000", "line 4 for rate from 3% to 6% step 1%"];
+
+  test("both document passes re-run the lines between, and agree value for value", () => {
+    const fromBatch = batch(doc);
+    expect(fromBatch.slice(4)).toEqual(["9,501.06", "[5,690.54, 6,334.04, 7,015.08, 7,731.62]"]);
+    expect(incremental(doc)).toEqual(fromBatch);
+  });
+
+  test("the lines they re-run answer as they do without them, both passes", () => {
+    const plain = [...mortgage, "line 3", "deposit"];
+    const withForms = [...doc, "line 3", "deposit"];
+    const expected = batch(plain);
+    for (const out of [batch(withForms), incremental(withForms)]) {
+      expect([...out.slice(0, 4), ...out.slice(6)]).toEqual(expected);
+    }
+  });
+
+  test("a refusal is the same named error through both passes", () => {
+    const refused = [...mortgage, "line 4 with depsoit = 150000", "line 4 for rate from 3% to 6% step 0"];
+    const fromBatch = batch(refused);
+    expect(fromBatch[4]).toContain("ERROR:");
+    expect(fromBatch[5]).toContain("ERROR:");
+    expect(incremental(refused)).toEqual(fromBatch);
+  });
+
+  test("the single-expression path refuses with a document error", () => {
+    expectNeedsDocument("line 4 with deposit = 150000");
+    expectNeedsDocument("line 4 for rate from 3% to 6% step 1%");
   });
 });
 
