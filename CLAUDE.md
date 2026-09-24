@@ -122,7 +122,7 @@ source guide under `guide/`) are the other. A change that alters what a package
 creator can do, a new or changed `IEnginePackage` extension point
 (`lexerVocabulary`, `prefixParselets`, `infixParselets`, `pluginFunctions`,
 `normalizerRules`/`phrases`, `asConverters`, `asyncResolvers`, `tokenCategories`,
-`completionItems`), or a new option on a helper a package uses
+`completionItems`, `explain`), or a new option on a helper a package uses
 (`createQueryResolver`'s `refetchIntervalMs`, say), updates the developer-side
 docs in the **same change**. Each extension point has its **own** hands-on guide
 under `docs/src/content/docs/packages/` that walks an author through it end to end,
