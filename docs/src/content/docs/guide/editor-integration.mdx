@@ -28,9 +28,22 @@ engine only owns the middle two.
 
 <Explainer id="highlighting" client:load />
 
+Highlighting reads a line and never runs it. Some lines change the document
+when they run: a running total (`total += 5`) adds to its total, an assignment
+(`x = 3`) sets a variable, and a unit definition (`1 sprint = 2 weeks`) adds a
+unit. The service checks that such a line is well formed and leaves it there,
+so an editor can highlight on every keystroke, as often as it likes, and no
+value in the document moves. Running the line is the evaluator's job alone.
+
 ## Checking a line parses
 
 For deciding whether to decorate a line at all, there is a non-throwing check
 that avoids constructing an error object for the common case of prose that is
 not an expression. On a document that is mostly prose, that difference is
 substantial.
+
+The check answers whether the line is well formed, not what it would come to,
+and it is read-only for the same reason highlighting is. A line that parses but
+would fail when run, such as `total += nope` where `nope` is never defined, is
+still a line the engine reads as an expression, so it answers yes, the same as
+`5 + nope` does.

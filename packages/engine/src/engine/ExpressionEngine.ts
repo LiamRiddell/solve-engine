@@ -271,6 +271,31 @@ interface SymbolicOutcome {
 }
 
 /**
+ * Whether a line with an effect of its own runs that effect or is only checked.
+ *
+ * Some line shapes do their work while being compiled rather than by leaving
+ * bytecode behind: a running total (`total += 5`) reads, adds and stores; a bare
+ * assignment (`x = 3`) stores; an equation (`x^2 - 4 = 0`) is kept for a later
+ * `x =>`; a unit definition (`1 sprint = 2 weeks`) registers the unit. The
+ * evaluation paths `'apply'` those effects, which is what the line means.
+ *
+ * `'check'` is for a caller that only asks whether the line is well formed,
+ * {@link ExpressionEngine.tryCompileExpression}, which the language service
+ * calls for every visible line on every keystroke. It walks the same shape
+ * matching and compiles the same operands, so it gives the same answer about
+ * the line's form, but it executes nothing and stores nothing. Applying there
+ * meant colouring `total += 5` added another 5 to the total (#559).
+ */
+type EffectMode = "apply" | "check";
+
+/**
+ * What an effectful line shape answers when it was only checked: its operands
+ * compiled and nothing ran. Never shown to anyone, since the one caller that
+ * checks reads only whether the line matched, not what it would answer.
+ */
+const CHECKED_NOT_RUN: Value = new Value(ValueType.String, "checked, not run");
+
+/**
  * Core expression evaluation engine, the top-level orchestrator.
  *
  * Owns the full evaluation pipeline: lexing, parsing, bytecode compilation,
@@ -2980,9 +3005,18 @@ export class ExpressionEngine {
         return result.value;
     }
 
-    /** Compiles and executes `tokens` in symbolic-tolerant mode, the "just simplify this" `=>` fallback when there's no stored equation to solve. `lineNumber` (1-based, `-1` outside a document) is forwarded so a bare assignment's RHS can resolve cross-line references. */
-    private simplifySymbolically(tokens: Token[], lineNumber: number = -1): Value {
-        return this.executeSymbolicTolerant(this.compileAdHoc(tokens), lineNumber);
+    /**
+     * Compiles and executes `tokens` in symbolic-tolerant mode, the "just
+     * simplify this" `=>` fallback when there's no stored equation to solve.
+     * `lineNumber` (1-based, `-1` outside a document) is forwarded so a bare
+     * assignment's RHS can resolve cross-line references. Under `effects:
+     * 'check'` it compiles and does not execute, since running a program is
+     * free to draw randomness and read other lines, which a check must not.
+     */
+    private simplifySymbolically(tokens: Token[], lineNumber: number = -1, effects: EffectMode = "apply"): Value {
+        const program = this.compileAdHoc(tokens);
+        if (effects === "check") return CHECKED_NOT_RUN;
+        return this.executeSymbolicTolerant(program, lineNumber);
     }
 
     /**
@@ -3123,8 +3157,13 @@ export class ExpressionEngine {
      * `tokens` are already normalized, so the implicit-multiply pass has usually
      * inserted a STAR between the coefficient and the name (`1 * sprint`); it is
      * tolerated and skipped.
+     *
+     * Under `effects: 'check'` the match is made and nothing is registered. The
+     * registration is not harmless to repeat: it overwrites the owning line id,
+     * so a definition checked from outside the document (id -1) was no longer
+     * removed when its real line was deleted.
      */
-    private tryDefineUserUnit(tokens: Token[], definedByLineId: number): Value | null {
+    private tryDefineUserUnit(tokens: Token[], definedByLineId: number, effects: EffectMode = "apply"): Value | null {
         // Shortest definition is NUMBER IDENT EQUALS NUMBER UNIT.
         if (tokens.length < 5) return null;
         if (tokens[0].type !== 'NUMBER' || Number(tokens[0].value) !== 1) return null;
@@ -3151,6 +3190,7 @@ export class ExpressionEngine {
         // A definition is the whole line: anything trailing means this is some
         // other construct that merely starts the same way.
         if (i !== tokens.length) return null;
+        if (effects === "check") return CHECKED_NOT_RUN;
 
         const changed = this.userUnits.define(nameWords, ratioToken.value, baseToken.value, definedByLineId);
         // A user unit is expanded at parse time, so the compiled bytecode for
@@ -3202,7 +3242,7 @@ export class ExpressionEngine {
      * first use. The colon (`:name`) and `global :name` grammars are untouched:
      * they lex their own leading token, never IDENT/UNIT, so they decline here.
      */
-    private tryCompoundAssignment(tokens: Token[], lineNumber: number = -1): Value | null {
+    private tryCompoundAssignment(tokens: Token[], lineNumber: number = -1, effects: EffectMode = "apply"): Value | null {
         if (tokens.length < 2) return null;
         const nameTok = tokens[0];
         const opTok = tokens[1];
@@ -3219,16 +3259,6 @@ export class ExpressionEngine {
         }
 
         const name = nameTok.value;
-        // Remember this name is an accumulator, so a batch document pass can
-        // reset it before re-evaluating (see parseDocument): the seed below
-        // only fires when the name is undefined, which after the first pass it
-        // no longer is, so without the reset the total would read its own
-        // previous pass's value and double-count on every keystroke.
-        this.accumulatorNames.add(name);
-        // A first `+=`/`-=` on an unknown name seeds 0, so a ledger can open
-        // straight into `spent += 10` without an UNDEFINED_VARIABLE.
-        if (this.vm.getVar(name) === undefined) this.vm.setVar(name, numberValue(0));
-
         const op = opTok.type === 'PLUS_EQUALS' ? { type: 'PLUS', text: '+' } : { type: 'MINUS', text: '-' };
         // `name <op> ( rhs )`: the accumulator is read as an ordinary IDENT so a
         // unit-letter name (`b`, `s`) loads its variable rather than a unit, and
@@ -3241,6 +3271,25 @@ export class ExpressionEngine {
             ...rhs,
             createFusedToken('RPAREN', ')', [opTok]),
         ];
+
+        // A check compiles the accumulation and stops. Everything past this
+        // point is the effect: remembering the name, seeding it, running the
+        // step and storing the new total. Running it here is what made every
+        // highlight of `total += 5` add another 5 (#559).
+        if (effects === "check") {
+            this.compileAdHoc(accTokens);
+            return CHECKED_NOT_RUN;
+        }
+
+        // Remember this name is an accumulator, so a batch document pass can
+        // reset it before re-evaluating (see parseDocument): the seed below
+        // only fires when the name is undefined, which after the first pass it
+        // no longer is, so without the reset the total would read its own
+        // previous pass's value and double-count on every keystroke.
+        this.accumulatorNames.add(name);
+        // A first `+=`/`-=` on an unknown name seeds 0, so a ledger can open
+        // straight into `spent += 10` without an UNDEFINED_VARIABLE.
+        if (this.vm.getVar(name) === undefined) this.vm.setVar(name, numberValue(0));
 
         const accumulatorProgram = this.compileAdHoc(accTokens);
         this.beginLineRandom(accumulatorProgram, lineNumber);
@@ -3276,7 +3325,7 @@ export class ExpressionEngine {
         return this.accumulatorNames;
     }
 
-    private trySymbolicGrammar(normalizedTokens: Token[], lineNumber: number = -1): SymbolicOutcome | null {
+    private trySymbolicGrammar(normalizedTokens: Token[], lineNumber: number = -1, effects: EffectMode = "apply"): SymbolicOutcome | null {
         if (normalizedTokens.length === 0) return null;
 
         const last = normalizedTokens[normalizedTokens.length - 1];
@@ -3292,6 +3341,9 @@ export class ExpressionEngine {
                 const name = beforeTokens[0].value;
                 const equation = this.vm.getEquation(name);
                 const scalar = this.vm.getScalarEquation(name);
+                // Solving runs the stored equation's programs, compiled when it
+                // was stored, so a check has nothing left to compile.
+                if (effects === "check" && (equation || scalar)) return { value: CHECKED_NOT_RUN, assigned: null };
                 if (equation) {
                     const solved = this.solveEquation(equation, lineNumber);
                     // A product chain of names is stored as a matrix equation
@@ -3309,7 +3361,7 @@ export class ExpressionEngine {
                     return { value: this.solveScalarEquation(scalar, lineNumber), assigned: null };
                 }
             }
-            return { value: this.simplifySymbolically(beforeTokens, lineNumber), assigned: null };
+            return { value: this.simplifySymbolically(beforeTokens, lineNumber, effects), assigned: null };
         }
 
         // An algebra verb (`expand(...)`, and the later phases' `factor`/
@@ -3320,7 +3372,7 @@ export class ExpressionEngine {
         // still wins, and before the COLON/GLOBAL guard so the existing
         // assignment grammars stay untouched.
         if (containsSymbolicCall(normalizedTokens)) {
-            return { value: this.simplifySymbolically(normalizedTokens, lineNumber), assigned: null };
+            return { value: this.simplifySymbolically(normalizedTokens, lineNumber, effects), assigned: null };
         }
 
         // Already the colon-prefixed (`:name = value`) or `global :name`
@@ -3344,20 +3396,26 @@ export class ExpressionEngine {
             // (`x^2-4 = 0`), which is a strictly narrower attempt made only
             // after every existing shape has declined. See
             // {@link tryStoreScalarEquation} for what it refuses to swallow.
-            const stored = this.tryStoreScalarEquation(normalizedTokens, eqIdx, lineNumber);
+            const stored = this.tryStoreScalarEquation(normalizedTokens, eqIdx, lineNumber, effects);
             return stored === null ? null : { value: stored, assigned: null };
         }
 
         const rhsTokens = normalizedTokens.slice(eqIdx + 1);
 
         if (names.length === 1) {
-            const result = this.simplifySymbolically(rhsTokens, lineNumber);
-            this.vm.setVar(names[0], result);
+            const result = this.simplifySymbolically(rhsTokens, lineNumber, effects);
+            if (effects === "apply") this.vm.setVar(names[0], result);
             return { value: result, assigned: names[0] };
         }
 
         const freeVar = names[names.length - 1];
         const factorNames = names.slice(0, -1);
+        // A check compiles both sides, as storing would, and stores neither.
+        if (effects === "check") {
+            this.compileAdHoc(rhsTokens);
+            this.compileAdHoc(normalizedTokens.slice(0, eqIdx));
+            return { value: CHECKED_NOT_RUN, assigned: null };
+        }
         this.vm.defineEquation(freeVar, factorNames, this.compileAdHoc(rhsTokens));
         this.noteEquationOwner("matrix", freeVar, lineNumber);
         // Also stored as a scalar equation, so that `a*n = 10` with a numeric
@@ -3400,9 +3458,10 @@ export class ExpressionEngine {
      * @param normalizedTokens - The whole line's normalized tokens.
      * @param eqIdx - Index of the first `EQUALS` token.
      * @param lineNumber - The 1-based line storing it, recorded as its owner.
+     * @param effects - `'check'` compiles both sides and stores nothing.
      * @returns A confirmation value when stored, or `null` to decline.
      */
-    private tryStoreScalarEquation(normalizedTokens: Token[], eqIdx: number, lineNumber: number): Value | null {
+    private tryStoreScalarEquation(normalizedTokens: Token[], eqIdx: number, lineNumber: number, effects: EffectMode = "apply"): Value | null {
         if (normalizedTokens[1]?.type === 'LPAREN') return null;
         if (eqIdx === 0 || eqIdx === normalizedTokens.length - 1) return null;
 
@@ -3419,7 +3478,10 @@ export class ExpressionEngine {
         if (unknowns.length !== 1) return null;
 
         const variable = unknowns[0];
-        this.vm.defineScalarEquation(variable, this.compileAdHoc(lhsTokens), this.compileAdHoc(rhsTokens));
+        const lhsProgram = this.compileAdHoc(lhsTokens);
+        const rhsProgram = this.compileAdHoc(rhsTokens);
+        if (effects === "check") return CHECKED_NOT_RUN;
+        this.vm.defineScalarEquation(variable, lhsProgram, rhsProgram);
         this.noteEquationOwner("scalar", variable, lineNumber);
         return lineMessage(`${variable} stored as an equation — solve with "${variable} =>"`);
     }
@@ -3552,6 +3614,11 @@ export class ExpressionEngine {
      * to also cover normalize/complexity-check/cache-lookup, which measurably
      * produced negative-allocation readings (a GC sweep landing inside the
      * wider window) in `AllocationTracker.spec.ts` well over half the time.
+     *
+     * `effects` is `'apply'` on every evaluation path. `'check'` (see
+     * {@link EffectMode}) is for {@link tryCompileExpression}: an effectful
+     * line is matched and its operands compiled, and its `'symbolic-solve'`
+     * result carries a placeholder value, since nothing ran to produce one.
      */
     private prepareExpression(
         expression: string,
@@ -3559,6 +3626,7 @@ export class ExpressionEngine {
         hasParens: boolean | undefined,
         onFusion?: (fusion: TokenFusion) => void,
         lineNumber: number = -1,
+        effects: EffectMode = "apply",
     ):
         | { kind: 'empty' }
         | { kind: 'error'; stage: 'length' | 'complexity' | 'parse'; error: EngineError; reads?: string[]; writes?: string[]; normalizedTokens?: Token[] }
@@ -3659,16 +3727,16 @@ export class ExpressionEngine {
             // channel. Checked first, so it claims its narrow pattern before the
             // scalar-equation grammar sees the bare `=`.
             const definingLineId = this.documentModel?.getLineAt(lineNumber)?.lineId ?? -1;
-            symbolicResult = this.tryDefineUserUnit(normalizedTokens, definingLineId);
+            symbolicResult = this.tryDefineUserUnit(normalizedTokens, definingLineId, effects);
             if (symbolicResult === null) {
-                const compound = this.tryCompoundAssignment(normalizedTokens, lineNumber);
+                const compound = this.tryCompoundAssignment(normalizedTokens, lineNumber, effects);
                 if (compound !== null) {
                     symbolicResult = compound;
                     symbolicReadsWrites = extractReadsAndWrites(normalizedTokens);
                 }
             }
             if (symbolicResult === null) {
-                const symbolic = this.trySymbolicGrammar(normalizedTokens, lineNumber);
+                const symbolic = this.trySymbolicGrammar(normalizedTokens, lineNumber, effects);
                 if (symbolic !== null) {
                     symbolicResult = symbolic.value;
                     // Only the one name a bare assignment set is a write, not
@@ -5276,6 +5344,12 @@ export class ExpressionEngine {
      * Uses the bytecode cache, repeated compilations of the same expression
      * return the cached program with zero allocation.
      *
+     * "Without execution" holds for an ordinary line, whose work is its
+     * bytecode. A line that does its work while compiling (a running total, a
+     * bare assignment, an equation, a unit definition) does it here, since the
+     * incremental evaluator compiles through this method and depends on that;
+     * {@link tryCompileExpression} is the read-only check.
+     *
      * A line with no program to compile (a stored equation, a unit definition,
      * a bare assignment) does its work here instead, so the line it sits on is
      * what that work is recorded against. Without `lineNumber` an equation
@@ -5398,6 +5472,23 @@ export class ExpressionEngine {
 	 * A catch costs nothing on the path that does not throw, so the "no" answer
 	 * this method exists to make cheap stays cheap. Anything that does throw
 	 * was already paying for the Error it constructed.
+	 *
+	 * It is also read-only, a second contract the language service relies on,
+	 * and one it had not kept. A line that does its work while compiling (a
+	 * running total `total += 5`, a bare assignment `x = 3`, an equation, a
+	 * unit definition) used to do that work here too, so each highlight of
+	 * `total += 5` added another 5 (#559). Those shapes are now matched and
+	 * their operands compiled with nothing executed or stored (see
+	 * {@link EffectMode}), so no variable, running total, equation, user
+	 * unit, random draw or cached line result changes. What it still writes
+	 * are the compile caches, memos keyed by the text that change no answer.
+	 *
+	 * Because nothing runs, a well-formed line whose value would be an error
+	 * (`total += nope`, with `nope` never defined) answers `true`, the same as
+	 * `5 + nope` always has: the question is whether the line parses, not what
+	 * it evaluates to. {@link compileExpression} is unchanged and still applies
+	 * a line's effect, since the incremental evaluator compiles through it and
+	 * relies on the effect happening.
 	 */
 	tryCompileExpression(expression: string): boolean {
 		try {
@@ -5414,7 +5505,7 @@ export class ExpressionEngine {
 	/** The body of {@link tryCompileExpression}, which owns the contract. */
 	private tryCompileExpressionUnguarded(expression: string): boolean {
 		const { tokens, hasParens } = this.lexToTokens(expression);
-		const prep = this.prepareExpression(expression, tokens, hasParens);
+		const prep = this.prepareExpression(expression, tokens, hasParens, undefined, -1, "check");
 		return prep.kind !== 'error';
 	}
 

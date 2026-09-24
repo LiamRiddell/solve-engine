@@ -259,10 +259,11 @@ export function runExpressionCase(source: string, engine: ExpressionEngine, opti
  * never found `hello =` taking an editor down. The invariant the oracle was
  * asserting was simply weaker than the contract this method publishes.
  *
- * Run *after* the evaluation rather than before it, because the symbolic
- * grammar this reaches assigns variables and stores equations. Probing first
- * would change what the evaluation then saw and make a case behave differently
- * alone than in a soak.
+ * Run *after* the evaluation rather than before it. The symbolic grammar this
+ * reaches used to assign variables and store equations, so probing first would
+ * have changed what the evaluation then saw. It no longer does (#559: the
+ * method only checks those lines now), but keeping the probe second means a
+ * regression back to a mutating check cannot change the case it is probing.
  *
  * @param source - The same line the case just evaluated.
  * @param engine - The case's engine, deliberately not cleared in between.
