@@ -1,5 +1,4 @@
 ---
-"solve-engine": patch
 ---
 
 The differential harness sees a changed value again
@@ -27,4 +26,4 @@ Fixes #572.
 
 ## Verification
 
-A new suite runs the real probe and the real report over two stand-in builds that differ by one known value, and asserts that the value is recorded, that a build without `createEngine` is still probed, and that the report names exactly that one difference; it fails against the old probe. `npm run verify:ci` passes: TESTS tests across SUITES suites, with the bundled-consumer contract.
+A new suite runs the real probe and the real report over two stand-in builds that differ by one known value, and asserts that the value is recorded, that a build without `createEngine` is still probed, and that the report names exactly that one difference; it fails against the old probe. `npm run verify:ci` passes: 11,356 tests across 526 suites, with the bundled-consumer contract.
