@@ -208,12 +208,22 @@ function compile(node: SymbolicNode, variable: string, depth: number): RealFunct
 	}
 }
 
+/**
+ * The table's own spelling of a function name, or undefined when the table has
+ * none. What is then looked up and called is always a key of the table, never
+ * the expression's text, so a name the reader wrote cannot select anything the
+ * table does not hold.
+ */
+function knownName(table: ReadonlyMap<string, unknown>, name: string): string | undefined {
+	for (const key of table.keys()) if (key === name) return key;
+	return undefined;
+}
+
 /** A function application, by the name the `call` node records. */
 function compileCall(name: string, args: readonly RealFunction[]): RealFunction {
-	const unary = UNARY.get(name);
-	// A typeof test as well as the Map: the name comes from the expression, and
-	// only a function found under it is called.
-	if (typeof unary === "function" && args.length === 1) {
+	const key = knownName(UNARY, name);
+	const unary = key === undefined ? undefined : UNARY.get(key);
+	if (unary !== undefined && args.length === 1) {
 		const [arg] = args;
 		return x => unary(arg(x));
 	}
@@ -416,9 +426,10 @@ function compileBounded(node: SymbolicNode, variable: string, depth: number): Bo
 
 /** A function application with error bounds, by the name the `call` node records. */
 function compileBoundedCall(name: string, args: readonly BoundedFunction[]): BoundedFunction {
-	const unary = UNARY.get(name);
-	const slope = UNARY_SLOPE.get(name);
-	if (typeof unary === "function" && typeof slope === "function" && args.length === 1) {
+	const key = knownName(UNARY, name);
+	const unary = key === undefined ? undefined : UNARY.get(key);
+	const slope = key === undefined ? undefined : UNARY_SLOPE.get(key);
+	if (unary !== undefined && slope !== undefined && args.length === 1) {
 		const [arg] = args;
 		return x => {
 			const u = arg(x);
