@@ -120,6 +120,42 @@ $30/hour * 8 hours/day // 240.00 USD/day
 (100 km/h) / (10 l/h) // 10.00 km/l
 ```
 
+## One per something
+
+A plain number divided by a quantity is its reciprocal: how many of something
+fit in one of the unit, or how often a thing happens per unit. One divided by
+two metres is half of one per metre, written `/m`, the same per-unit rate the
+engine uses anywhere a count is per something. It cancels like any other rate,
+so multiplying it by a length gives back a plain number. A rate turns over, so
+the reciprocal of a speed is the time a kilometre takes, and the reciprocal of
+a frequency is its period in seconds.
+
+```solve
+1 / (2 m) // 0.50 /m
+10 / (5 s) // 2.00 /s
+1 / (2 m) * 4 m // 2
+1 / (50 Hz) // 0.02 s
+1 / (2/week) // 0.50 week
+```
+
+The brackets matter. A fraction written in front of a unit is that much of the
+unit, the way a recipe or a timesheet reads it, so `1/2 hour` is half an hour and
+`3/4 cup` three quarters of a cup. Bracket the quantity to ask for the
+reciprocal instead.
+
+```solve
+1/2 hour // 0.50 hour
+3 / 4 cup // 0.75 cup
+1 / (2 hour) // 0.50 /hour
+```
+
+A temperature has no reciprocal: it is measured from a zero point of its own,
+so there is no "per degree" to show, and it is refused by name.
+
+```solve-doc
+1 / (20 C) // ERROR: A number divided by a temperature in C has no unit: a temperature is measured from a zero point of its own, so there is no "per degree" to show it in.
+```
+
 ## Worked through
 
 Paint for one wall, two coats, from a tin that covers 12 square metres a litre:
@@ -174,9 +210,8 @@ rates of one unit per another, and the named physical units on the
 units, so a product such as a kilogram-metre, or a metre to the fourth power,
 is refused rather than shown.
 
-- A plain number divided by a quantity keeps the quantity's unit, because
-  `1/2 hour` is read as half an hour. A reciprocal unit, such as "per metre", is
-  not represented.
+- A reciprocal is a per-unit rate (`/s`), not a named unit, so ten per second is
+  `10.00 /s` rather than ten hertz, and the two do not convert into each other.
 - A rate cancels against the quantity it meets. `$0.30/kWh * 2 kW * 3 h` is
   refused, because the price meets a power before the time has made it an
   energy; write the energy first, as in `2 kW * 3 h * $0.30/kWh`.

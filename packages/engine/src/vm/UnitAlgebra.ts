@@ -202,6 +202,48 @@ export function divideRates(l: Value, r: Value): Value | undefined {
 }
 
 /**
+ * A plain number divided by a quantity, as the reciprocal it is: `1 / (2 m)` is
+ * half of one per metre, `0.50 /m`, and `10 / (5 s)` is two a second. The
+ * general divide kept the quantity's unit, so the first was reported as half a
+ * metre (#570). `undefined` when the operands are not a number over a quantity.
+ *
+ * The reciprocal unit is the per-unit rate the engine already writes as `/m`
+ * (the same one `(60 km/h) / 2 km` gives as `/h`), so it cancels against the
+ * quantity again: `1 / (2 m) * 4 m` is 2. A rate turns over (`1 / (60 km/h)` is
+ * a time per kilometre, `h/km`), a count per something turns into that something
+ * (`1 / (2/week)` is half a week), and a frequency is its period in seconds
+ * (`1 / (50 Hz)` is 0.02 s). A quantity with no reciprocal the engine can show,
+ * a temperature or a label that is not a unit, is refused by name.
+ *
+ * `1 / 2 hour` never arrives here: a fraction written in front of a unit is
+ * bracketed by the uom package's fraction rule, so it is still half an hour.
+ *
+ * @param l - The dividend.
+ * @param r - The divisor.
+ * @returns The reciprocal, an error value, or `undefined` if not applicable.
+ */
+export function reciprocalOf(l: Value, r: Value): Value | undefined {
+	if (l.type !== ValueType.Number || r.type !== ValueType.Uom || r.unit === undefined) return undefined;
+	const unit = r.unit;
+	const form = rateForm(unit);
+	if (form !== null) {
+		const magnitude = l.toNumber() / inPair(r, form);
+		return form.numerator === "" ? uomValue(magnitude, form.denominator) : uomValue(magnitude, `${form.denominator}/${form.numerator}`);
+	}
+	const measure = getMeasure(unit);
+	if (measure === "frequency") return uomValue(l.toNumber() / convertUnit(r.toNumber(), unit, "Hz"), "s");
+	if ((measure !== undefined && measure !== "temperature") || sharedCurrencyExchange.isCurrency(unit)) {
+		return uomValue(l.toNumber() / r.toNumber(), `/${unit}`);
+	}
+	return errorValue(
+		"UNIT_RECIPROCAL_UNSUPPORTED",
+		measure === "temperature"
+			? `A number divided by a temperature in ${unit} has no unit: a temperature is measured from a zero point of its own, so there is no "per degree" to show it in.`
+			: `A number divided by a quantity in ${unit} has no unit: ${unit} is not a unit the engine can count "per" of.`,
+	);
+}
+
+/**
  * The error for a product of two quantities of the same kind that are not
  * lengths, or `undefined` when the pair is not that. A mass times a mass has no
  * unit the engine can show, and neither has money times money; the general

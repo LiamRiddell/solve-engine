@@ -206,6 +206,59 @@ describe("a price per unit cancels against that unit", () => {
 	});
 });
 
+describe("a number over a quantity is its reciprocal (#570)", () => {
+	test.each([
+		["1 / (2 m)", "0.50 /m"],
+		["10 / (5 s)", "2.00 /s"],
+		["1 / $5", "0.20 /USD"],
+		["1 / (2/week)", "0.50 week"],
+		["1 / (50 Hz)", "0.02 s"],
+		["1 / (30 mpg)", "0.03 gal/mi"],
+		["1 / ($5/kg)", "0.20 kg/USD"],
+	])("%s is %s", (source, expected) => {
+		expect(shown(source)).toBe(expected);
+	});
+
+	test("a rate turns over, so a speed's reciprocal is a pace", () => {
+		const value = evaluate("1 / (60 km/h)");
+		expect(value.unit).toBe("h/km");
+		expect(value.toNumber()).toBeCloseTo(1 / 60, 12);
+	});
+
+	test("the reciprocal cancels against the quantity again", () => {
+		expect(evaluate("1 / (2 m) * 4 m").toNumber()).toBe(2);
+		expect(evaluate("1 / (2 h) * 6 h").toNumber()).toBe(3);
+	});
+
+	test("a variable holding a quantity turns over the same way", () => {
+		const engine = newTrackedEngine();
+		engine.evaluateLine(1, "width = 4 m");
+		expect(formatValue(engine.evaluateLine(2, "2 / width"))).toBe("= 0.50 /m");
+	});
+
+	test("a quantity with no reciprocal the engine can show is refused by name", () => {
+		expect(errorCode("1 / (20 C)")).toBe("UNIT_RECIPROCAL_UNSUPPORTED");
+	});
+
+	test("a fraction written in front of a unit is still that much of the unit", () => {
+		expect(shown("1 / 2 hour")).toBe("0.50 hour");
+		expect(shown("1/2 hour")).toBe("0.50 hour");
+		expect(shown("3 / 4 cup")).toBe("0.75 cup");
+		expect(shown("10 / 2 m")).toBe("5.00 m");
+		expect(shown("-1/2 hour")).toBe("-0.50 hour");
+		expect(shown("2 * 1/2 hour")).toBe("1 hour");
+		expect(shown("1/2 m^2")).toBe("0.50 m²");
+		expect(shown("1 / 2 m in cm")).toBe("50.00 cm");
+	});
+
+	test("a quantity or a symbol before the slash is still a division", () => {
+		expect(shown("100 km / 2 h")).toBe("50.00 km/h");
+		expect(shown("$10 / 2 h")).toBe("5.00 USD/h");
+		// Straight after a division or a power the number is that operator's.
+		expect(shown("6 / 3 / 2 h")).toBe("1.00 /h");
+	});
+});
+
 describe("a rate cancels against what it is per", () => {
 	test.each([
 		["60 mph * 2 hours", "120.00 mi"],

@@ -27,7 +27,7 @@ import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import type { ScopeId } from "@solve-js/vm/CellScope";
 import { raiseQuantity, unitPowerUnsupported, multiplyLengths, divideLengths } from "@solve-js/vm/QuantityPowers";
-import { multiplyRates, divideRates, refuseLikeProduct } from "@solve-js/vm/UnitAlgebra";
+import { multiplyRates, divideRates, refuseLikeProduct, reciprocalOf } from "@solve-js/vm/UnitAlgebra";
 import { bigIntPow, exactIntegerArithmetic, exactIntegerRemainder, baseConversionOperand } from "@solve-js/vm/ExactIntegers";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
@@ -3196,6 +3196,13 @@ export function executeBytecode(
               stack.push(rateValue(lv / rv, l.unit!, r.unit!));
             }
           } else {
+            // A number over a quantity is its reciprocal: `1 / (2 m)` is 0.50 /m,
+            // where the general divide below kept the quantity's unit and said
+            // half a metre (#570). See vm/UnitAlgebra.ts.
+            if (l.type === ValueType.Number && r.type === ValueType.Uom) {
+              const reciprocal = reciprocalOf(l, r);
+              if (reciprocal) { stack.push(reciprocal); break; }
+            }
             // Integer division is the producer of exact fractions: "1/3" seeds
             // the rational 1/3 that the rest of the system carries, so "1/3 + 1/3
             // + 1/3" is exactly 1 and "1/3 as fraction" is exact. exactRationalOp
