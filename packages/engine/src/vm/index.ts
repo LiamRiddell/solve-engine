@@ -1,6 +1,6 @@
 export { DependencyGraph } from "./DependencyGraph";
 export { ScopeManager } from "./ScopeManager";
-export { Value, ValueType, numberValue, hexValue, bigIntValue, stringValue, uomValue, matrixValue, rowVectorValue, colVectorValue, rangeValue } from "./Value";
+export { Value, ValueType, numberValue, hexValue, bigIntValue, stringValue, uomValue, matrixValue, rowVectorValue, colVectorValue, rangeValue, errorValue } from "./Value";
 export type { MatrixData, MatrixEntry, RangeData } from "./Value";
 export { createVM, executeBytecode } from "./VM";
 // The per-line context a plugin function or `as` converter receives, so a
