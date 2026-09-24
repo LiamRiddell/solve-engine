@@ -5,10 +5,14 @@
  * The unit table stores areas and volumes as units in their own right (`m2`,
  * `ft3`, `L`), not as lengths with an exponent, so raising `m` to the power 2
  * means finding the spelling the table already has for a square metre. Every
- * length symbol with such a spelling follows one convention: the symbol plus the
- * power (`m2`, `km3`, `ft2`, `in3`), whose ratio to the base unit is the length's
- * ratio squared or cubed. A word form (`metres`, `feet`) reaches its symbol
- * through the table itself, because every alias of a unit shares the one entry.
+ * length symbol with such a spelling follows one convention, in two scripts: the
+ * symbol plus the power as a digit (`m2`, `km3`, `ft2`) or as a superscript
+ * (`m²`, `km³`, `ft²`), both aliases of the one entry, whose ratio to the base
+ * unit is the length's ratio squared or cubed. A power the engine works out is
+ * spelled with the superscript, the way it is printed; either spelling reads
+ * back, and since the two share an entry they convert, compare and add as one
+ * unit. A word form (`metres`, `feet`) reaches its symbol through the table
+ * itself, because every alias of a unit shares the one entry.
  *
  * Nothing here builds a unit that the table does not already hold, so a length
  * with no square spelling (`furlong`, `nmi`) is reported as absent rather than
@@ -24,6 +28,20 @@ const LENGTH_KIND = 7;
 
 /** What a length becomes when raised to each power the table can spell. */
 const MEASURE_FOR_POWER: Readonly<Record<number, string>> = { 2: "area", 3: "volume" };
+
+/** The superscript each power the table can spell is printed with. */
+const SUPERSCRIPT: Readonly<Record<number, string>> = { 2: "²", 3: "³" };
+
+/**
+ * The power an area or volume spelling ends in, written as a digit or as a
+ * superscript: `m2` and `m²` both give 2. `undefined` for any other ending.
+ */
+function trailingPower(unit: string): number | undefined {
+	const last = unit.charAt(unit.length - 1);
+	if (last === "2" || last === SUPERSCRIPT[2]) return 2;
+	if (last === "3" || last === SUPERSCRIPT[3]) return 3;
+	return undefined;
+}
 
 /**
  * The length symbol a spelling is an alias of: `metres` and `m` share one table
@@ -56,9 +74,12 @@ function isPowerOf(candidate: string, length: string, power: number): boolean {
 }
 
 /**
- * The unit spelling for a length raised to the power 2 or 3: `m` gives `m2`,
- * `km` gives `km3`, `feet` gives `ft2`. `undefined` when `unit` is not a length,
- * the power is not 2 or 3, or the table holds no square or cube spelling for it.
+ * The unit spelling for a length raised to the power 2 or 3: `m` gives `m²`,
+ * `km` gives `km³`, `feet` gives `ft²`. The superscript is the spelling a printed
+ * answer uses; the digit form (`m2`) is the same table entry, and is returned
+ * only for a length whose superscript spelling the table does not hold.
+ * `undefined` when `unit` is not a length, the power is not 2 or 3, or the table
+ * holds no square or cube spelling for it.
  *
  * @param unit - The unit as written, a symbol or a word.
  * @param power - The exponent.
@@ -69,19 +90,27 @@ export function poweredUnit(unit: string, power: number): string | undefined {
 	if (getMeasure(unit) !== "length") return undefined;
 	for (const length of [unit, lengthSymbolOf(unit)]) {
 		if (length === undefined) continue;
-		const candidate = `${length}${power}`;
-		if (isPowerOf(candidate, length, power)) return candidate;
+		const superscript = `${length}${SUPERSCRIPT[power]}`;
+		if (isPowerOf(superscript, length, power)) return superscript;
+		const digit = `${length}${power}`;
+		if (isPowerOf(digit, length, power)) return digit;
 	}
 	return undefined;
 }
 
+/** The words that spell a square or a cube in front of a length: `sq ft`, `cubic metres`. */
+const POWER_WORDS: Readonly<Record<number, readonly string[]>> = { 2: ["sq ", "square "], 3: ["cu ", "cubic "] };
+
+/** The table's measure kind for each power's measure, as keyed in `MEASURE_SYMBOLS`. */
+const KIND_FOR_POWER: Readonly<Record<number, number>> = { 2: 1, 3: 15 };
+
 /**
  * The length an area or volume unit is written as the square or cube of: `m2`
- * gives `m`, `ft3` gives `ft`. Only a spelling that is itself a symbol plus the
- * power qualifies. An area with a name of its own (`ha`, `acre`, `L`) gives
- * `undefined`, since the length behind it (`hm` for a hectare) is not a unit a
- * reader would expect to see; the caller measures such a value in square or
- * cubic metres instead.
+ * and `m²` give `m`, `ft3` gives `ft`, and a spelling in words gives the length
+ * it names (`sq ft` and `square feet` give `ft`, `cubic metres` gives `m`). An
+ * area with a name of its own (`ha`, `acre`, `L`) gives `undefined`, since the
+ * length behind it (`hm` for a hectare) is not a unit a reader would expect to
+ * see; the caller measures such a value in square or cubic metres instead.
  *
  * @param unit - An area (power 2) or volume (power 3) unit.
  * @param power - 2 for a square root, 3 for a cube root.
@@ -89,10 +118,20 @@ export function poweredUnit(unit: string, power: number): string | undefined {
  */
 export function rootUnit(unit: string, power: number): string | undefined {
 	if (power !== 2 && power !== 3) return undefined;
-	if (!unit.endsWith(String(power))) return undefined;
-	const length = unit.slice(0, -1);
-	if (getMeasure(length) !== "length") return undefined;
-	return isPowerOf(unit, length, power) ? length : undefined;
+	if (trailingPower(unit) === power) {
+		const length = unit.slice(0, -1);
+		if (getMeasure(length) !== "length") return undefined;
+		return isPowerOf(unit, length, power) ? length : undefined;
+	}
+	// A spelling in words names its length, and shares its table entry with the
+	// symbol spelling (`sq ft` and `ft²` are one unit), which gives the length.
+	if (!POWER_WORDS[power].some((word) => unit.startsWith(word))) return undefined;
+	const entry = UNIT_TABLE[unit];
+	if (entry === undefined) return undefined;
+	for (const symbol of MEASURE_SYMBOLS[KIND_FOR_POWER[power]] ?? []) {
+		if (UNIT_TABLE[symbol] === entry && trailingPower(symbol) === power) return rootUnit(symbol, power);
+	}
+	return undefined;
 }
 
 /**

@@ -38,40 +38,40 @@ describe("a power written on a unit belongs to the unit", () => {
 	test.each([
 		["10 m^3 in litres", 10_000, "litres"],
 		["1 m^3 in L", 1_000, "L"],
-		["5 m^2", 5, "m2"],
+		["5 m^2", 5, "m²"],
 		["5 m^2 in ft2", 53.8195520835, "ft2"],
-		["5 metres^2", 5, "m2"],
+		["5 metres^2", 5, "m²"],
 		["5 feet^3 in litres", 141.5842327, "litres"],
-		["-5 m^2", -5, "m2"],
-		["2 * 5 m^2", 10, "m2"],
-		["2 km^2", 2, "km2"],
-		["3 in^2", 3, "in2"],
+		["-5 m^2", -5, "m²"],
+		["2 * 5 m^2", 10, "m²"],
+		["2 km^2", 2, "km²"],
+		["3 in^2", 3, "in²"],
 		["5 m^1", 5, "m"],
 	])("%s is %d %s", (source, magnitude, unit) => {
 		expectQuantity(source, magnitude, unit);
 	});
 
 	test("a power on the conversion target is the target's, as on the source", () => {
-		expectQuantity("15 ft2 in m^2", 1.3935456, "m2");
+		expectQuantity("15 ft2 in m^2", 1.3935456, "m²");
 	});
 
 	test("a value beside the unit keeps the unit's power, not its own", () => {
 		const engine = newTrackedEngine();
 		engine.evaluateExpression("x = 4");
 		const value = engine.evaluateExpression("x m^2");
-		expect(value.unit).toBe("m2");
+		expect(value.unit).toBe("m²");
 		expect(value.toNumber()).toBe(4);
 	});
 });
 
 describe("a quantity raised to a power keeps its unit", () => {
 	test.each([
-		["(3 m)^2", 9, "m2"],
-		["(2 ft)^3", 8, "ft3"],
-		["pow(3 m, 2)", 9, "m2"],
+		["(3 m)^2", 9, "m²"],
+		["(2 ft)^3", 8, "ft³"],
+		["pow(3 m, 2)", 9, "m²"],
 		["(5 m)^1", 5, "m"],
 		// A length with no square spelling of its own is measured in metres first.
-		["(5 furlong)^2", 1_011_714.1056, "m2"],
+		["(5 furlong)^2", 1_011_714.1056, "m²"],
 	])("%s is %d %s", (source, magnitude, unit) => {
 		expectQuantity(source, magnitude, unit);
 	});
@@ -80,7 +80,7 @@ describe("a quantity raised to a power keeps its unit", () => {
 		const engine = newTrackedEngine();
 		engine.evaluateExpression("a = 5 m");
 		const value = engine.evaluateExpression("a^2");
-		expect(value.unit).toBe("m2");
+		expect(value.unit).toBe("m²");
 		expect(value.toNumber()).toBe(25);
 	});
 
@@ -177,19 +177,19 @@ describe("lengths multiply into areas and volumes (#533)", () => {
 	// The general multiply converted the right operand into the left's unit and
 	// then kept only that unit, so `5 m * 3 m` was reported as 15 m, a length.
 	test.each([
-		["5 m * 3 m", 15, "m2"],
-		["5 m * 3 ft", 4.572, "m2"],
-		["5 ft * 3 ft", 15, "ft2"],
-		["5 km * 3 m", 0.015, "km2"],
+		["5 m * 3 m", 15, "m²"],
+		["5 m * 3 ft", 4.572, "m²"],
+		["5 ft * 3 ft", 15, "ft²"],
+		["5 km * 3 m", 0.015, "km²"],
 		["5 m * 3 m in ft2", 161.4586, "ft2"],
-		["2 m * 3 m * 4 m", 24, "m3"],
-		["5 m2 * 3 m", 15, "m3"],
-		["5 m2 * 3 ft", 4.572, "m3"],
-		["3 m * 5 m2", 15, "m3"],
+		["2 m * 3 m * 4 m", 24, "m³"],
+		["5 m2 * 3 m", 15, "m³"],
+		["5 m2 * 3 ft", 4.572, "m³"],
+		["3 m * 5 m2", 15, "m³"],
 		// An area with a name of its own, or a length with no square spelling,
 		// is measured in metres instead.
-		["2 ha * 3 m", 60_000, "m3"],
-		["2 furlong * 3 furlong", 242_811.385344, "m2"],
+		["2 ha * 3 m", 60_000, "m³"],
+		["2 furlong * 3 furlong", 242_811.385344, "m²"],
 	])("%s is %d %s", (source, magnitude, unit) => {
 		const value = evaluate(source);
 		expect(value.type).toBe(ValueType.Uom);
@@ -217,11 +217,11 @@ describe("lengths multiply into areas and volumes (#533)", () => {
 
 describe("the spelling helpers", () => {
 	test("poweredUnit finds the square and cube spellings of a length", () => {
-		expect(poweredUnit("m", 2)).toBe("m2");
-		expect(poweredUnit("km", 3)).toBe("km3");
-		expect(poweredUnit("ft", 2)).toBe("ft2");
-		expect(poweredUnit("metres", 3)).toBe("m3");
-		expect(poweredUnit("feet", 2)).toBe("ft2");
+		expect(poweredUnit("m", 2)).toBe("m²");
+		expect(poweredUnit("km", 3)).toBe("km³");
+		expect(poweredUnit("ft", 2)).toBe("ft²");
+		expect(poweredUnit("metres", 3)).toBe("m³");
+		expect(poweredUnit("feet", 2)).toBe("ft²");
 	});
 
 	test("poweredUnit has nothing for a non-length, an unsupported power, or a length the table does not spell", () => {
@@ -238,10 +238,26 @@ describe("the spelling helpers", () => {
 		expect(rootUnit("km2", 2)).toBe("km");
 	});
 
+	test("rootUnit reads the superscript and the word spellings the same way (#513)", () => {
+		expect(rootUnit("m²", 2)).toBe("m");
+		expect(rootUnit("ft³", 3)).toBe("ft");
+		expect(rootUnit("sq ft", 2)).toBe("ft");
+		expect(rootUnit("square metres", 2)).toBe("m");
+		expect(rootUnit("cubic feet", 3)).toBe("ft");
+		expect(rootUnit("cu in", 3)).toBe("in");
+	});
+
+	test("poweredUnit prints the superscript spelling, which the table holds beside the digit one", () => {
+		expect(poweredUnit("mi", 2)).toBe("mi²");
+		expect(poweredUnit("yd", 3)).toBe("yd³");
+	});
+
 	test("rootUnit has nothing for an area with a name of its own, or a mismatched power", () => {
 		expect(rootUnit("ha", 2)).toBeUndefined();
 		expect(rootUnit("L", 3)).toBeUndefined();
 		expect(rootUnit("m2", 3)).toBeUndefined();
 		expect(rootUnit("m3", 2)).toBeUndefined();
+		expect(rootUnit("sq ft", 3)).toBeUndefined();
+		expect(rootUnit("cubic feet", 2)).toBeUndefined();
 	});
 });

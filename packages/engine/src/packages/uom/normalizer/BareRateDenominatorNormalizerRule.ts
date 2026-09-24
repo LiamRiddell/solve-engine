@@ -4,10 +4,27 @@ import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { expectsValueAt } from "@solve-js/normalizer/ValuePosition";
 
-/** Whether a token is a unit spelling the engine knows. */
-function isUnit(token: Token | undefined): boolean {
+/**
+ * Whether a token is a unit spelling the engine knows, and so can stand as a
+ * rate's denominator. Shared with the at-rate rule, which looks ahead for the
+ * same denominators before this rule has fused them.
+ *
+ * Read as written as well as lowercased, because the table is case-sensitive:
+ * `kWh`, `MJ` and `GB` are keys only in their own case, so a lookup that only
+ * lowercased the spelling missed them, and `$0.30/kWh` was read as money divided
+ * by a variable called kWh. The lowercased read is kept for the spellings it
+ * always admitted.
+ *
+ * A single capital letter is left to the lowercased read alone. `N`, `W`, `J`,
+ * `K` and `F` are units, but they are also the names people give a count or a
+ * total (`sum / N`), and after a slash nothing tells the two apart; the word
+ * forms (`per watt`, `/newton`) are unambiguous and already work.
+ */
+export function isDenominatorUnit(token: Token | undefined): boolean {
 	if (token === undefined || token.type !== "UNIT") return false;
-	return UNIT_TABLE[(token.value ?? "").toLowerCase()] !== undefined;
+	const spelling = token.value ?? "";
+	if (UNIT_TABLE[spelling.toLowerCase()] !== undefined) return true;
+	return spelling.length > 1 && UNIT_TABLE[spelling] !== undefined;
 }
 
 /** Words that introduce a rate denominator on their own. */
@@ -76,7 +93,7 @@ export function bareRateDenominatorNormalizerRule(priority = 75): NormalizerRule
 				const introduces =
 					after?.type === "SLASH" ||
 					(after?.type === "IDENT" && PER_WORDS.has((after.text ?? after.value ?? "").toLowerCase()));
-				if (introduces && isUnit(tokens[pos + 3])) {
+				if (introduces && isDenominatorUnit(tokens[pos + 3])) {
 					return {
 						consumed: 2,
 						replacement: [head, createFusedToken("UNIT", label.value, [label])],
@@ -85,7 +102,7 @@ export function bareRateDenominatorNormalizerRule(priority = 75): NormalizerRule
 				}
 			}
 
-			if (!isUnit(tokens[pos + 1])) return null;
+			if (!isDenominatorUnit(tokens[pos + 1])) return null;
 
 			const isSlash = head.type === "SLASH";
 			const word = (head.text ?? head.value ?? "").toLowerCase();

@@ -86,6 +86,23 @@ Whatever leaks past that is caught rather than assumed away: each build is
 probed **twice**, and any expression that disagrees with itself across its own
 two runs is dropped from the comparison entirely and counted as `unstable`.
 
+## What the probe builds, and how that is checked
+
+Each expression gets a fresh engine from `createEngine()`, the engine a
+consumer gets, with every built-in package. Since 2.0 the bare
+`new ExpressionEngine("en")` registers no package at all, and a 1.x build has
+no `createEngine`, so the probe uses the constructor only for a build that
+lacks it. `evaluateLine` answers one Value, and the probe records that Value.
+
+Both used to be wrong (#572): the probe built bare engines and read the answer
+as an array, so every answer that was not an error recorded as no values, and
+two builds that disagreed about a number compared as identical. A harness that
+cannot see a change looks exactly like a release with none, so
+`packages/engine/__tests__/hardening/DifferentialProbeSelfTest.spec.ts` runs the
+real probe and the real report over two stand-in builds that differ by one known
+value, and asserts the report names that one difference. `report.mjs --run=<file>`
+reads a run kept anywhere and writes `differences.json` beside it.
+
 ## Surviving the corpus
 
 The corpus contains inputs designed to break things, so the probe process is

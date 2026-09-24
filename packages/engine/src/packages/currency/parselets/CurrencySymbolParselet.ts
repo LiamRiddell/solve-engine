@@ -33,6 +33,13 @@ function sharesSymbol(code: string, currency: string): boolean {
  * (`€5 GBP`, `$5 kg`) used to be consumed and discarded, so `$5 CAD` was five US
  * dollars; it is now left in place, where the unit literal refuses a second unit
  * on a quantity (issue #536).
+ *
+ * A price per unit written straight after the amount (`$5/kg`, `$0.30 per kWh`,
+ * `£2 a day`) is part of the literal, the way `5 GBP/kg` is one unit: the amount
+ * and its denominator make one rate before any operator sees them. Left to the
+ * rate parselet, which binds at the level of `*`, the denominator attached to
+ * everything before it instead, so `3 kg * $5/kg` was read as `(3 kg * $5) per
+ * kg` and answered 15.00 USD/kg rather than $15.00.
  */
 export class CurrencySymbolParselet implements PrefixParselet {
 	readonly category = "UoM";
@@ -60,8 +67,17 @@ export class CurrencySymbolParselet implements PrefixParselet {
         parser.consume();
       }
     }
+    // The fused denominator of a price per unit (see the class comment). Only
+    // the one: a second `per` after it is a rate of a rate, which the rate
+    // parselet refuses by name, as it always has.
+    let unit = currency;
+    const perUnit = parser.peek();
+    if (perUnit?.type === "PER_UNIT") {
+      parser.consume();
+      unit = `${currency}/${String(perUnit.value)}`;
+    }
     builder.emitOpcode(OpCode.PUSH_STRING);
-    builder.emitString(currency);
+    builder.emitString(unit);
     builder.emitOpcode(OpCode.UOM_CONVERT);
   }
 }

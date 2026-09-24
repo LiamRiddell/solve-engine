@@ -232,16 +232,16 @@ describe("Plain MUL/DIV auto-detect rate operands (no explicit RATE_MUL/RATE_DIV
     expect(result.toNumber()).toBeCloseTo(5400);
   });
 
-  test("Uom × Uom with neither side a rate is unaffected (plain unit scaling, not rate logic)", () => {
+  test("Uom × Uom with neither side a rate takes no rate logic: money times money is refused by name", () => {
     const result = run((b) => {
       pushUom(b, 5, "USD");
       pushUom(b, 3, "USD");
       b.emitOpcode(OpCode.MUL);
     });
-    // Not a rate case — falls through to the pre-existing generic binaryOp
-    // path exactly as before this change (behavior unchanged, not a
-    // regression target of this test beyond "still doesn't crash/misfire").
-    expect(result.type).not.toBe(ValueType.Error);
+    // Not a rate case. The generic path used to keep the left operand's unit
+    // and answer $15; a dollar squared has no unit, so it is refused (#513).
+    expect(result.type).toBe(ValueType.Error);
+    expect(result.errorCode).toBe("UNIT_PRODUCT_UNSUPPORTED");
   });
 
   test("different-measure Uom ÷ Uom via plain DIV constructs a Rate: 90 km / 3 day -> 30 km/day", () => {

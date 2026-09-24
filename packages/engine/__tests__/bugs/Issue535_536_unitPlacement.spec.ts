@@ -36,8 +36,9 @@ describe("#535: a unit after a power belongs to the whole power", () => {
 	});
 
 	test("a power on the unit itself is still the unit's", () => {
-		expect(shown("5 m^2")).toBe("= 5.00 m2");
-		expect(shown("(3 m)^2")).toBe("= 9.00 m2");
+		// Printed with the superscript since #513; `m²` and `m2` are one unit.
+		expect(shown("5 m^2")).toBe("= 5.00 m²");
+		expect(shown("(3 m)^2")).toBe("= 9.00 m²");
 	});
 
 	test("an exponent that carries a unit is refused rather than read as a number", () => {

@@ -21,6 +21,7 @@ import { ingredientNameNormalizerRule } from "./normalizer/IngredientNameNormali
 import { multiWordUnitNormalizerRule } from "./normalizer/MultiWordUnitNormalizerRule";
 import { compoundUnitNormalizerRule } from "./normalizer/CompoundUnitNormalizerRule";
 import { explainConversion } from "./UomExplain";
+import { fractionBeforeUnitNormalizerRule } from "./normalizer/FractionBeforeUnitNormalizerRule";
 
 /**
  * Units of measurement: `10 km`, `10 km to miles`, `convert 10 km to miles`,
@@ -67,6 +68,9 @@ export const UOM_PACKAGE: IEnginePackage = {
     inchAbbreviationNormalizerRule(),
     atRateNormalizerRule(),
     forDurationNormalizerRule(),
+    // `1/2 hour` is half an hour: the fraction is bracketed before the unit
+    // binds to its denominator, which would make it one over two hours.
+    fractionBeforeUnitNormalizerRule(),
     bareRateDenominatorNormalizerRule(),
     reversedConversionNormalizerRule(),
     ingredientNameNormalizerRule(),

@@ -89,8 +89,21 @@ process.on("unhandledRejection", () => {});
 
 // ── Load the build under test ─────────────────────────────────────────────
 
-const { ExpressionEngine } = await import(pathToFileURL(path.join(root, "index.js")).href);
+const engineModule = await import(pathToFileURL(path.join(root, "index.js")).href);
 const { formatValue } = await import(pathToFileURL(path.join(root, "format.js")).href);
+
+/**
+ * A fresh engine with every built-in package, the engine a consumer gets.
+ *
+ * `createEngine()` since 2.0, where the bare constructor registers no package at
+ * all: a `new ExpressionEngine("en")` there knows no unit, no currency and no
+ * function, so both builds failed alike on most of the corpus and the run
+ * compared two empty engines (#572). A 1.x build has no `createEngine`, and its
+ * constructor registers everything, so it is used as it was.
+ */
+const newEngine = typeof engineModule.createEngine === "function"
+	? () => engineModule.createEngine()
+	: () => new engineModule.ExpressionEngine("en");
 
 const corpus = JSON.parse(fs.readFileSync(corpusFile, "utf8"));
 
@@ -162,12 +175,17 @@ for (let i = start; i < end; i += stride) {
 	// builds do not have to agree about what survives.
 	let engine = null;
 	try {
-		engine = new ExpressionEngine("en");
-		const results = engine.evaluateLine(1, source);
+		engine = newEngine();
+		// `evaluateLine` answers one Value. It was read as an array of them, so
+		// every answer that was not an error recorded as no values at all, and a
+		// changed number could never show up as a difference (#572). An array is
+		// still accepted, for a build that returned one.
+		const answer = engine.evaluateLine(1, source);
+		const results = Array.isArray(answer) ? answer : answer === undefined || answer === null ? [] : [answer];
 		record = {
 			ok: true,
-			count: Array.isArray(results) ? results.length : 0,
-			values: (Array.isArray(results) ? results : []).slice(0, 3).map(describeValue),
+			count: results.length,
+			values: results.slice(0, 3).map(describeValue),
 		};
 	} catch (error) {
 		record = { ok: false, error: describeError(error) };

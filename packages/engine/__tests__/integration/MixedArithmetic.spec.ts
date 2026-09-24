@@ -143,8 +143,10 @@ describe("Mixed arithmetic: UOM + scalar", () => {
     expect(evalNum("10 m + 20 m")).toBe(30);
   });
 
-  test("5 g * 10 g", () => {
-    expect(evalNum("5 g * 10 g")).toBe(50);
+  test("5 g * 10 g has no unit, so it is refused rather than reported as 50 g", () => {
+    // A mass times a mass is not a unit the engine can show. It used to keep the
+    // left operand's unit and answer 50 g (#513).
+    expect(evalFull("5 g * 10 g").errorCode).toBe("UNIT_PRODUCT_UNSUPPORTED");
   });
 });
 

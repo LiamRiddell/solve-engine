@@ -23,6 +23,7 @@
  *   node tools/differential/report.mjs                 summary to stdout
  *   node tools/differential/report.mjs --signature=X   every row of one shape
  *   node tools/differential/report.mjs --examples=8    more examples per shape
+ *   node tools/differential/report.mjs --run=<file>    a run.json kept somewhere else
  */
 
 import * as fs from "node:fs";
@@ -39,7 +40,8 @@ for (const arg of process.argv.slice(2)) {
 	if (match) args.set(match[1], match[2] ?? "true");
 }
 
-const run = JSON.parse(fs.readFileSync(args.get("run") ?? path.join(WORK, "run.json"), "utf8"));
+const runFile = args.get("run") ?? path.join(WORK, "run.json");
+const run = JSON.parse(fs.readFileSync(runFile, "utf8"));
 const examplesWanted = Number(args.get("examples") ?? 4);
 const wantedSignature = args.get("signature") ?? null;
 
@@ -181,4 +183,6 @@ if (wantedSignature !== null) {
 	}
 }
 
-fs.writeFileSync(path.join(WORK, "differences.json"), JSON.stringify(differences, null, 1));
+// Beside the run it was read from, so a run kept elsewhere (the probe's
+// self-test uses a scratch directory) does not overwrite the last real one.
+fs.writeFileSync(path.join(path.dirname(runFile), "differences.json"), JSON.stringify(differences, null, 1));

@@ -186,7 +186,10 @@ const positive = (x: number): boolean => x > 0;
  * `$500 at $20/hour` is twenty-five hours, not twenty-five hour. The
  * denominator is written singular in the rate, so a count derived from it
  * inherits the wrong number unless it is adjusted here. Only spellings the
- * unit table already knows are used, so nothing is invented.
+ * unit table already knows are used, so nothing is invented, and the plural
+ * must be the same unit as the singular: a symbol plus `s` is often another
+ * unit entirely, so `$500 at $20/h` answered 25 `hs` (hectoseconds) and
+ * `$500 at $20/m` 25 `ms` (milliseconds).
  *
  * @param unit - The unit as written.
  * @param count - How many, deciding singular or plural.
@@ -194,7 +197,9 @@ const positive = (x: number): boolean => x > 0;
 function pluraliseUnit(unit: string, count: number): string {
     if (count === 1) return unit;
     const plural = `${unit}s`;
-    return UNIT_TABLE[plural.toLowerCase()] === undefined ? unit : plural;
+    const entry = UNIT_TABLE[unit] ?? UNIT_TABLE[unit.toLowerCase()];
+    const pluralEntry = UNIT_TABLE[plural] ?? UNIT_TABLE[plural.toLowerCase()];
+    return entry !== undefined && pluralEntry === entry ? plural : unit;
 }
 
 /**
@@ -1352,8 +1357,11 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const denominator = rate.unit.slice(slash + 1);
         const leftUnit = left.type === ValueType.Uom ? left.unit : undefined;
 
-        const denominatorEntry = UNIT_TABLE[denominator.toLowerCase()] as readonly [number, number] | undefined;
-        const leftEntry = leftUnit === undefined ? undefined : (UNIT_TABLE[leftUnit.toLowerCase()] as readonly [number, number] | undefined);
+        // Read as written before lowercasing: the table is case-sensitive, and
+        // `kWh` is a key only in its own case, so `6 kWh at $0.30/kWh` matched
+        // neither side.
+        const denominatorEntry = (UNIT_TABLE[denominator] ?? UNIT_TABLE[denominator.toLowerCase()]) as readonly [number, number] | undefined;
+        const leftEntry = leftUnit === undefined ? undefined : ((UNIT_TABLE[leftUnit] ?? UNIT_TABLE[leftUnit.toLowerCase()]) as readonly [number, number] | undefined);
 
         // "30 hours at $30/hour": the left side counts denominators.
         if (leftEntry !== undefined && denominatorEntry !== undefined && leftEntry[0] === denominatorEntry[0]) {
