@@ -749,6 +749,25 @@ function stringOperand(value: Value, site: BytecodeSite, role?: string): string 
     return value.value;
 }
 
+/** The builtin table's own indices, listed once on first use. */
+let builtinIndices: readonly number[] | null = null;
+
+/**
+ * The builtin a `map` or `reduce` names by index, or undefined when there is
+ * none. The index is compared against the table's own indices and the match is
+ * what is read, so the number the bytecode carries is never itself the
+ * property looked up (CodeQL's js/unvalidated-dynamic-method-call).
+ *
+ * @param ref - The builtin index the bytecode carries.
+ */
+function builtinAt(ref: number): ((args: Value[], context?: LineExecutionContext) => Value) | undefined {
+    builtinIndices ??= Object.keys(builtinFunctions).map(Number);
+    for (const index of builtinIndices) {
+        if (index === ref) return builtinFunctions[index];
+    }
+    return undefined;
+}
+
 /**
  * Refuses a `map`/`reduce` body kind the dispatch has no arm for.
  *
@@ -2201,15 +2220,15 @@ function mapInvoke(stack: Value[], op: OpCode, kind: number, ref: number, collec
 
     const resultData: MatrixEntry[] = checkedArray<MatrixEntry>(collectionLength, "matrix cells");
     let mapError: Value | undefined;
-    // The builtin is found by the index the bytecode carries, and called only
-    // when a function sits there.
-    const mapBuiltin = kind === 1 ? builtinFunctions[ref] : undefined;
+    // The builtin is found by the index the bytecode carries (see builtinAt),
+    // and called only when one is there.
+    const mapBuiltin = kind === 1 ? builtinAt(ref) : undefined;
     for (let i = 0; i < collectionLength; i++) {
       const args: Value[] = new Array(collectionCount);
       for (let j = 0; j < collectionCount; j++) args[j] = cellArrays[j][i];
 
       const resultVal = kind === 1
-        ? (typeof mapBuiltin === "function" ? mapBuiltin(args) : errorValue("UNKNOWN_BUILTIN_FUNCTION", `map: unknown builtin function index ${ref}`))
+        ? (mapBuiltin !== undefined ? mapBuiltin(args) : errorValue("UNKNOWN_BUILTIN_FUNCTION", `map: unknown builtin function index ${ref}`))
         : invokeFrameBody(paramNames, program!, args, vm, pipeline, expression, context, !!symbolicTolerant);
 
       const resultFault = faultedOperand(resultVal);
@@ -2376,12 +2395,12 @@ function reduceInvoke(stack: Value[], op: OpCode, kind: number, ref: number, has
     }
 
     let reduceError: Value | undefined;
-    // As in map: called only when a function sits at the index.
-    const reduceBuiltin = kind === 1 ? builtinFunctions[ref] : undefined;
+    // As in map: found through builtinAt, called only when one is there.
+    const reduceBuiltin = kind === 1 ? builtinAt(ref) : undefined;
     for (let i = startIdx; i < cells.length; i++) {
       const args = [acc, cells[i]];
       const resultVal = kind === 1
-        ? (typeof reduceBuiltin === "function" ? reduceBuiltin(args) : errorValue("UNKNOWN_BUILTIN_FUNCTION", `reduce: unknown builtin function index ${ref}`))
+        ? (reduceBuiltin !== undefined ? reduceBuiltin(args) : errorValue("UNKNOWN_BUILTIN_FUNCTION", `reduce: unknown builtin function index ${ref}`))
         : invokeFrameBody(paramNames, program!, args, vm, pipeline, expression, context, !!symbolicTolerant);
 
       const stepFault = faultedOperand(resultVal);
