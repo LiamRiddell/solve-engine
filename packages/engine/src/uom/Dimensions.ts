@@ -145,8 +145,8 @@ function isClockScale(unit: string): boolean {
  * The name for an energy or a power worked out from a power and a time, where
  * the watt-hour reads better than the joule: a kilowatt for three hours is
  * `6.00 kWh`, not 21,600,000 joules, and six kilowatt-hours over three hours is
- * `2.00 kW`. `undefined` when the operands are not that shape, and the joule or
- * watt answer stands.
+ * `2.00 kW`. `null` when the operands are not that shape, and the joule or watt
+ * answer stands.
  */
 function wattHourName(left: string, right: string, multiply: boolean, siResult: number): Value | null {
 	if (multiply) {
