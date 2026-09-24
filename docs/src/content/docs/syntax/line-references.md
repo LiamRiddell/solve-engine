@@ -48,6 +48,21 @@ block rather than the whole document:
 total above   // 100
 ```
 
+A subtotal inside the block is a summary of figures already counted, not
+another figure, so a later `total above` leaves it out rather than counting
+those figures twice:
+
+```solve-doc
+10
+total above   // 10
+5
+total above   // 15
+```
+
+A line that is itself a total, `total above`, `sum(line 1 : line 3)`, a tag or
+section total, is recognised from its text, with any label before a colon set
+aside, which is the same test the [section totals](/syntax/sections/) use.
+
 To total a block from somewhere else in the note, a summary at the bottom say,
 name its heading instead: `total of section "Travel"` (see
 [sections](/syntax/sections/)).

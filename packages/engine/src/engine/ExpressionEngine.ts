@@ -782,7 +782,19 @@ export class ExpressionEngine {
                   return doc.getLineAt(n)?.result ?? undefined;
               }
             : parsed
-              ? (n: number) => (n === context.lineIndex ? undefined : (parsed[n - 1]?.result ?? undefined))
+              ? (n: number) => {
+                    if (n === context.lineIndex) return undefined;
+                    const line = parsed[n - 1];
+                    // A line that failed holds its error text and no result.
+                    // Handed back as the error Value the incremental pass holds
+                    // for the same line, so a reference to it reports the
+                    // failure in both passes, rather than calling a line that
+                    // ran and failed "not evaluated yet" (#552).
+                    if (line !== undefined && line.result === null && line.error !== null) {
+                        return errorValue("LINE_FAILED", line.error);
+                    }
+                    return line?.result ?? undefined;
+                }
               : undefined;
 
         context = {

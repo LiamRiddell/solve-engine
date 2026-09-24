@@ -213,6 +213,23 @@ describe("line references across entry points", () => {
     expect(incremental(doc)[4]).toBe("100");
   });
 
+  test("total above leaves a subtotal out, both passes (#551)", () => {
+    // The second total adds 10 and 5; it used to count the first total as a
+    // third figure and answer 25.
+    const doc = ["10", "total above", "5", "total above", "Subtotal: total above", "average above"];
+    const expected = ["10", "10", "5", "15", "15", "7.50"];
+    expect(batch(doc)).toEqual(expected);
+    expect(incremental(doc)).toEqual(expected);
+  });
+
+  test("a reference to a line that failed says so, the same in both passes (#552)", () => {
+    // The batch pass used to call the failed line "not evaluated yet".
+    const doc = ["this is prose", "line 1 + 1", "prev"];
+    const expected = [batch(doc)[0], "ERROR: Line 1 has an error", "ERROR: Line 2 has an error"];
+    expect(batch(doc).slice(1)).toEqual(expected.slice(1));
+    expect(incremental(doc).slice(1)).toEqual(expected.slice(1));
+  });
+
   test("an explicit span reaches across a boundary, both passes", () => {
     const doc = ["10", "20", "30", "sum(line 1 : line 3)", "average(line 1 : line 3)"];
     expect(batch(doc).slice(3)).toEqual(["60", "20"]);
