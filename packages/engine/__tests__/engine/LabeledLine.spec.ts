@@ -95,3 +95,21 @@ describe("labeled-line fallback", () => {
 		expect(String(value.value)).toMatch(/defined/i);
 	});
 });
+
+describe("a label that is the same word as the variable it assigns (#561)", () => {
+	test("assigns rather than storing an equation", () => {
+		// `rent: :rent = 1200` has one unknown on the left only because the label
+		// repeats the name, and the scalar-equation detector used to claim it.
+		const engine = newTrackedEngine();
+		const lines = engine.parseDocument("rent: :rent = 1200\nrent * 2").lines;
+		expect(lines[0].result?.toNumber()).toBe(1200);
+		expect(lines[1].result?.toNumber()).toBe(2400);
+	});
+
+	test("a real equation is still stored", () => {
+		const engine = newTrackedEngine();
+		const lines = engine.parseDocument("2x + 1 = 7\nx =>").lines;
+		expect(String(lines[0].result?.value)).toMatch(/stored as an equation/);
+		expect(lines[1].result?.toNumber()).toBe(3);
+	});
+});

@@ -3325,6 +3325,11 @@ export class ExpressionEngine {
         const lhsTokens = normalizedTokens.slice(0, eqIdx);
         const rhsTokens = normalizedTokens.slice(eqIdx + 1);
         if (rhsTokens.some(t => t.type === 'EQUALS')) return null;
+        // A colon on the left is a label or a `:name =` assignment, never part
+        // of an equation. `rent: :rent = 1200` has one unknown only because the
+        // label is the same word as the variable, and was stored as an equation
+        // where `Rent: :rent = 1200` assigned (#561).
+        if (lhsTokens.some(t => t.type === 'COLON')) return null;
 
         const unknowns = this.equationUnknowns(lhsTokens, rhsTokens);
         if (unknowns.length !== 1) return null;
