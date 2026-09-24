@@ -19,7 +19,7 @@ import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/Di
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, currencyRateSources } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, currencyRateSources } from "@solve-js/vm/VMConversion";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
@@ -1704,7 +1704,7 @@ function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
     // that measure different things, most often a misspelling: `5 km in mies`
     // said the two did not measure the same thing. Say what it is, and name the
     // nearest real units (see errors/DidYouMean.ts).
-    if (getMeasure(toUnit) === undefined && !sharedCurrencyExchange.isCurrency(toUnit) && !toUnit.includes("/")) {
+    if (describeMeasure(toUnit) === undefined && !toUnit.includes("/")) {
         const near = nearestNames(toUnit, [], 3, unitNameIndex());
         return errorValue("UNKNOWN_UNIT", `"${toUnit}" is not a unit.${didYouMeanSentence(near)}`);
     }

@@ -444,8 +444,13 @@ function rateAxisFactor(from: string, to: string): number | null {
  * The rule is the ordinary one for a quotient of quantities: convert the
  * numerator and the denominator each on their own, so `A/B -> C/D` scales by
  * `(A->C) / (B->D)`.
+ *
+ * A unit converts to itself unchanged. That matters for a unit with a dimension
+ * but no measure in the tables, such as the acceleration `mps2`, which
+ * {@link convertUnit} does not know, so `9.81 m/s^2 in m/s^2` was refused (#590).
  */
 export function convertRate(value: number, from: string, to: string): number | null {
+  if (from === to) return value;
   const source = expandUnitToRate(value, from);
   if (source === null) return null;
 

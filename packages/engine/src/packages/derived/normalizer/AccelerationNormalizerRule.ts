@@ -34,17 +34,26 @@ export function accelerationNormalizerRule(priority = 82): NormalizerRule {
 			const m = tokens[pos];
 			const slash = tokens[pos + 1];
 			const s = tokens[pos + 2];
-			const caret = tokens[pos + 3];
-			const two = tokens[pos + 4];
 			if (!m || m.type !== "UNIT" || (m.value ?? "") !== "m") return null;
 			if (slash?.type !== "SLASH") return null;
-			if (s?.type !== "UNIT" || (s.value ?? "") !== "s") return null;
-			if (caret?.type !== "CARET") return null;
-			if (two?.type !== "NUMBER" || two.value !== "2") return null;
+			// `m/s²`, the way the engine writes an acceleration back (#586). The
+			// lexer reads `s²` as one word, and no unit is spelled that way, so it
+			// arrives as a name rather than a unit and a power.
+			let consumed: number;
+			if ((s?.type === "IDENT" || s?.type === "UNIT") && s.value === "s²") {
+				consumed = 3;
+			} else {
+				const caret = tokens[pos + 3];
+				const two = tokens[pos + 4];
+				if (s?.type !== "UNIT" || (s.value ?? "") !== "s") return null;
+				if (caret?.type !== "CARET") return null;
+				if (two?.type !== "NUMBER" || two.value !== "2") return null;
+				consumed = 5;
+			}
 			if (expectsValueAt(tokens, pos)) return null;
 
 			const fused = new LexerToken("UNIT", UNIT_ID, "mps2", "m/s^2", m.offset, 0, m.line, m.col);
-			return { consumed: 5, replacement: [fused], ruleName: RULE };
+			return { consumed, replacement: [fused], ruleName: RULE };
 		},
 	};
 }

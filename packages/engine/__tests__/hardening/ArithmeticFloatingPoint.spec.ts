@@ -190,8 +190,8 @@ describe("NaN", () => {
 		expect(evaluate("0 / 0 >= 0 / 0").value).toBe(false);
 	});
 
-	test("the root of a negative number has no real answer", () => {
-		expect(num("-2 ^ 0.5")).toBeNaN();
+	test("the root of a negative number has no real answer, and says so (#588)", () => {
+		expect(evaluate("-2 ^ 0.5").errorCode).toBe("POWER_NO_REAL_VALUE");
 	});
 
 	test("and it propagates through a measured quantity, unit and all", () => {

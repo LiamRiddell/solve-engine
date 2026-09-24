@@ -2,7 +2,7 @@ import { Value, ValueType, numberValue, boolValue, hexValue, uomValue, errorValu
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand } from "@solve-js/vm/VMConversion";
+import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand, describeQuantity } from "@solve-js/vm/VMConversion";
 import { withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact, valueInUnit, moneyForCount } from "@solve-js/vm/MoneyExact";
 import { transpose, determinant, inverse, matrixMultiply, matrixPower, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
@@ -32,7 +32,7 @@ import { raiseQuantity, rootQuantity, unitPowerUnsupported } from "@solve-js/vm/
 import { termInYears, growthFactor, periodicGrowthFactor, amortizeLoan } from "@solve-js/vm/FinanceFormulas";
 import { exactIntegerArithmetic, exactIntegerValue, exactGcdOrLcm, wholeNumberUnchanged, baseConversionOperand, exactIntegerOf } from "@solve-js/vm/ExactIntegers";
 import { isPrime, nextPrime, modPow, modInverse, factorInteger, formatFactorisation, FACTOR_LIMIT } from "@solve-js/vm/NumberTheory";
-import { exactDecimalPower, exactDecimalTotal, absExactDecimal, roundExactDecimalToWhole, roundRationalToPlaces, compareExactDecimals } from "@solve-js/vm/ExactDecimals";
+import { exactDecimalPower, exactDecimalTotal, absExactDecimal, roundExactDecimalToWhole, roundRationalToPlaces, compareExactDecimals, negativeBaseRoot, roundHalfAwayFromZero } from "@solve-js/vm/ExactDecimals";
 
 /**
  * A duration in seconds, shown in the largest whole time unit that keeps the
@@ -68,6 +68,32 @@ function angleInRadians(value: Value): number {
         if (entry !== undefined && entry[0] === ANGLE_KIND) return value.toNumber() * entry[1];
     }
     return value.toNumber();
+}
+
+/**
+ * The refusal for a function given a quantity it has no reading of, or null.
+ *
+ * A sine, a logarithm or an exponential of a length has no meaning. Read as its
+ * bare magnitude the answer depended on the unit that happened to be written:
+ * `sin(1 m)` was 0.84 and `sin(100 cm)` -0.51 (#587). `sqrt` of a length is
+ * refused the same way (see rootQuantity()). The trigonometric functions take
+ * an angle, so `angles` admits one; a ratio that cancels (`1 m / 2 m`) is a
+ * plain number by the time it arrives, and passes.
+ *
+ * @param name - The function, for the message.
+ * @param value - Its argument.
+ * @param angles - Whether an angle is an argument the function takes.
+ */
+function quantityRefused(name: string, value: Value, angles: boolean): Value | null {
+    if (value.type !== ValueType.Uom || value.unit === undefined) return null;
+    if (angles) {
+        const entry = UNIT_TABLE[value.unit.toLowerCase()];
+        if (entry !== undefined && entry[0] === ANGLE_KIND) return null;
+    }
+    return errorValue(
+        "FUNCTION_TAKES_NUMBER",
+        `${name} takes ${angles ? "an angle or a plain number" : "a plain number"}, not ${describeQuantity(value.unit)}`,
+    );
 }
 
 /**
@@ -350,7 +376,7 @@ function roundToPlaces(source: Value, places: number): Value {
     const scale = Math.pow(10, p);
     const scaled = value * scale;
     if (!Number.isFinite(scaled) || Math.abs(scaled) > Number.MAX_SAFE_INTEGER) return withPlaces(source, value, p);
-    return withPlaces(source, Math.round(scaled) / scale, p);
+    return withPlaces(source, roundHalfAwayFromZero(scaled) / scale, p);
 }
 
 /**
@@ -551,14 +577,17 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     1: (args) => args[0].type === ValueType.Matrix ? determinant(args[0].value as MatrixData) : wholeNumberUnchanged(args[0], true) ?? absExactDecimal(args[0]) ?? keepUnit(args[0], Math.abs(args[0].toNumber())),
     // sin/cos/tan accept an angle with a unit; see angleInRadians().
     // Exact at the special angles; see specialAngleDegrees().
-    2: (args) => numberValue(exactSine(angleInRadians(args[0]))),
-    3: (args) => numberValue(exactCosine(angleInRadians(args[0]))),
+    // A quantity that is not an angle is refused; see quantityRefused().
+    2: (args) => quantityRefused("sin", args[0], true) ?? numberValue(exactSine(angleInRadians(args[0]))),
+    3: (args) => quantityRefused("cos", args[0], true) ?? numberValue(exactCosine(angleInRadians(args[0]))),
     // tan refuses the odd multiples of a right angle and is exact at the other
     // special angles; see exactTangent().
-    4: (args) => exactTangent(angleInRadians(args[0])),
+    4: (args) => quantityRefused("tan", args[0], true) ?? exactTangent(angleInRadians(args[0])),
     // The logarithms and inverse functions refuse a value outside their domain
     // rather than answering NaN or an infinity; see outsideDomain().
-    5: (args) => outsideDomain("log", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log(args[0].toNumber())),
+    // The logarithms, exponentials, inverse and hyperbolic functions take a
+    // plain number, so a quantity is refused; see quantityRefused().
+    5: (args) => quantityRefused("log", args[0], false) ?? outsideDomain("log", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log(args[0].toNumber())),
     // round/ceil/floor keep a unit for the same reason abs does; see keepUnit().
     6: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "ceil") ?? keepUnit(args[0], Math.ceil(args[0].toNumber())),
     7: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "floor") ?? keepUnit(args[0], Math.floor(args[0].toNumber())),
@@ -566,22 +595,23 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         args.length >= 2
             ? // round(x, n): round to n decimal places and display at that precision.
               roundToPlaces(args[0], args[1].toNumber())
-            : // round(x): nearest whole number, the way it always was.
-              wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "round") ?? keepUnit(args[0], Math.round(args[0].toNumber())),
+            : // round(x): the nearest whole number, a half away from zero as
+              // round(x, n) and `to N dp` round one (#584); see roundHalfAwayFromZero().
+              wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "round") ?? keepUnit(args[0], roundHalfAwayFromZero(args[0].toNumber())),
     // min/max: see extremum() for why the winner is carried around as a Value
     // rather than as a running number.
     9: (args) => extremum(args, false),
     10: (args) => extremum(args, true),
-    11: (args) => outsideDomain("asin", args[0].toNumber(), withinUnit, "numbers from -1 to 1") ?? numberValue(Math.asin(args[0].toNumber())),
-    12: (args) => outsideDomain("acos", args[0].toNumber(), withinUnit, "numbers from -1 to 1") ?? numberValue(Math.acos(args[0].toNumber())),
-    13: (args) => numberValue(Math.atan(args[0].toNumber())),
+    11: (args) => quantityRefused("asin", args[0], false) ?? outsideDomain("asin", args[0].toNumber(), withinUnit, "numbers from -1 to 1") ?? numberValue(Math.asin(args[0].toNumber())),
+    12: (args) => quantityRefused("acos", args[0], false) ?? outsideDomain("acos", args[0].toNumber(), withinUnit, "numbers from -1 to 1") ?? numberValue(Math.acos(args[0].toNumber())),
+    13: (args) => quantityRefused("atan", args[0], false) ?? numberValue(Math.atan(args[0].toNumber())),
     14: (args) => numberValue(Math.atan2(args[0].toNumber(), args[1].toNumber())),
-    15: (args) => numberValue(Math.sinh(args[0].toNumber())),
-    16: (args) => numberValue(Math.cosh(args[0].toNumber())),
-    17: (args) => numberValue(Math.tanh(args[0].toNumber())),
-    18: (args) => numberValue(Math.asinh(args[0].toNumber())),
-    19: (args) => outsideDomain("acosh", args[0].toNumber(), (x) => x >= 1, "numbers of 1 or more") ?? numberValue(Math.acosh(args[0].toNumber())),
-    20: (args) => outsideDomain("atanh", args[0].toNumber(), (x) => x > -1 && x < 1, "numbers strictly between -1 and 1") ?? numberValue(Math.atanh(args[0].toNumber())),
+    15: (args) => quantityRefused("sinh", args[0], false) ?? numberValue(Math.sinh(args[0].toNumber())),
+    16: (args) => quantityRefused("cosh", args[0], false) ?? numberValue(Math.cosh(args[0].toNumber())),
+    17: (args) => quantityRefused("tanh", args[0], false) ?? numberValue(Math.tanh(args[0].toNumber())),
+    18: (args) => quantityRefused("asinh", args[0], false) ?? numberValue(Math.asinh(args[0].toNumber())),
+    19: (args) => quantityRefused("acosh", args[0], false) ?? outsideDomain("acosh", args[0].toNumber(), (x) => x >= 1, "numbers of 1 or more") ?? numberValue(Math.acosh(args[0].toNumber())),
+    20: (args) => quantityRefused("atanh", args[0], false) ?? outsideDomain("atanh", args[0].toNumber(), (x) => x > -1 && x < 1, "numbers strictly between -1 and 1") ?? numberValue(Math.atanh(args[0].toNumber())),
     // cbrt: a volume's cube root is a length (`cbrt(27 m3)` is 3 m), the same
     // rule as sqrt for an area.
     21: (args) => {
@@ -589,8 +619,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         return numberValue(Math.cbrt(args[0].toNumber()));
     },
     22: (args) => numberValue(Math.clz32(args[0].toNumber())),
-    23: (args) => numberValue(Math.expm1(args[0].toNumber())),
-    24: (args) => numberValue(Math.exp(args[0].toNumber())),
+    23: (args) => quantityRefused("expm1", args[0], false) ?? numberValue(Math.expm1(args[0].toNumber())),
+    24: (args) => quantityRefused("exp", args[0], false) ?? numberValue(Math.exp(args[0].toNumber())),
     25: (args) => numberValue(Math.fround(args[0].toNumber())),
     // hypot: left as .map()+spread (unlike min/max above), Math.hypot uses
     // a numerically-stable scaling algorithm internally to avoid overflow
@@ -599,9 +629,9 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // allocation here is the safer trade.
     26: (args) => numberValue(Math.hypot(...args.map(a => a.toNumber()))),
     27: (args) => numberValue(Math.imul(args[0].toNumber(), args[1].toNumber())),
-    28: (args) => outsideDomain("log10", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log10(args[0].toNumber())),
-    29: (args) => outsideDomain("log1p", args[0].toNumber(), (x) => x > -1, "numbers greater than -1") ?? numberValue(Math.log1p(args[0].toNumber())),
-    30: (args) => outsideDomain("log2", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log2(args[0].toNumber())),
+    28: (args) => quantityRefused("log10", args[0], false) ?? outsideDomain("log10", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log10(args[0].toNumber())),
+    29: (args) => quantityRefused("log1p", args[0], false) ?? outsideDomain("log1p", args[0].toNumber(), (x) => x > -1, "numbers greater than -1") ?? numberValue(Math.log1p(args[0].toNumber())),
+    30: (args) => quantityRefused("log2", args[0], false) ?? outsideDomain("log2", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log2(args[0].toNumber())),
     // pow(): the spelled-out form of `^`, so a Matrix base means the same
     // repeated matrix multiplication `^` means. Without this branch
     // `pow([1,2;3,4], 2)` was Math.pow of a value whose toNumber() is 0, and
@@ -629,6 +659,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
       const exactPower = exactDecimalPower(args[0], args[1]);
       if (exactPower !== null) return exactPower;
       const raised = power(args[0].toNumber(), args[1].toNumber());
+      // A negative base to a fraction: its real root, or a refusal, as `^`.
+      if (Number.isNaN(raised)) return negativeBaseRoot(args[0], args[1]) ?? numberValue(raised);
       return raised <= Number.MAX_SAFE_INTEGER && raised >= -Number.MAX_SAFE_INTEGER
         ? numberValue(raised)
         : exactIntegerArithmetic(args[0], args[1], raised, "pow");

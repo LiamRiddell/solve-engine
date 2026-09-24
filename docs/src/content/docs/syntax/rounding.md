@@ -31,6 +31,22 @@ so a half at the last place goes up rather than down.
 round(2.675, 2) // 2.68
 ```
 
+A number exactly halfway between two others rounds away from zero, however the
+rounding is written: 2.5 is 3, and -2.5 is -3. That is the rule a spreadsheet's
+`ROUND` follows, and it keeps a rounding symmetric, so a negative amount rounds
+to the negative of what its positive would. `rounded up` and `rounded down` name
+a direction instead, and follow it. A result that rounds to zero is written as
+0, without a sign.
+
+```solve
+round(2.5) // 3
+round(-2.5) // -3
+-2.5 rounded // -3
+-2.5 rounded up // -2
+-25 to nearest 10 // -30
+-0.4 rounded // 0
+```
+
 ## Significant figures
 
 Significant figures count from the first digit that is not zero, which is how a

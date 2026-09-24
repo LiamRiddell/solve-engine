@@ -66,6 +66,15 @@ function factorial(n: number): number {
 }
 
 /**
+ * The nearest whole number, a half away from zero, as the `round` builtin
+ * rounds (vm/ExactDecimals.ts's `roundHalfAwayFromZero`, #584). Written here
+ * rather than imported, since `symbolic/` does not import from `vm/`.
+ */
+function roundHalfAwayFromZero(x: number): number {
+	return x < 0 ? -Math.round(-x) : Math.round(x);
+}
+
+/**
  * A one-argument function's numeric form, keyed by the name a `call` node
  * records. A Map rather than an object, since the name comes from the
  * expression: an object lookup of `constructor` would find the prototype.
@@ -79,7 +88,7 @@ const UNARY: ReadonlyMap<string, (v: number) => number> = new Map(Object.entries
 	log: Math.log,
 	ceil: Math.ceil,
 	floor: Math.floor,
-	round: Math.round,
+	round: roundHalfAwayFromZero,
 	asin: Math.asin,
 	acos: Math.acos,
 	atan: Math.atan,
@@ -234,7 +243,7 @@ function compileCall(name: string, args: readonly RealFunction[]): RealFunction 
 				const [value, places] = args;
 				return x => {
 					const scale = Math.pow(10, Math.trunc(places(x)));
-					return Math.round(value(x) * scale) / scale;
+					return roundHalfAwayFromZero(value(x) * scale) / scale;
 				};
 			}
 			break;
@@ -444,7 +453,7 @@ function compileBoundedCall(name: string, args: readonly BoundedFunction[]): Bou
 				const [value, places] = args;
 				return x => {
 					const scale = Math.pow(10, Math.trunc(places(x).value));
-					return { value: Math.round(value(x).value * scale) / scale, error: 0 };
+					return { value: roundHalfAwayFromZero(value(x).value * scale) / scale, error: 0 };
 				};
 			}
 			break;

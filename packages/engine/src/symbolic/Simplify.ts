@@ -248,8 +248,12 @@ function foldCall(name: string, args: readonly Rational[]): Rational | null {
 		case "trunc":
 			return args.length === 1 ? { n: first.n / first.d, d: 1n } : null;
 		case "round":
-			// Matches Math.round: halfway cases go toward positive infinity.
-			return args.length === 1 ? { n: rationalFloor(rationalAdd(first, { n: 1n, d: 2n })), d: 1n } : null;
+			// A half goes away from zero, as the round builtin rounds (#584):
+			// floor(x + 1/2) for a non-negative x, its mirror for a negative one.
+			if (args.length !== 1) return null;
+			return first.n < 0n
+				? { n: -rationalFloor(rationalAdd(rationalNeg(first), { n: 1n, d: 2n })), d: 1n }
+				: { n: rationalFloor(rationalAdd(first, { n: 1n, d: 2n })), d: 1n };
 		case "sqrt": {
 			if (args.length !== 1 || first.n < 0n) return null;
 			const rootN = exactIntegerSqrt(first.n);

@@ -42,6 +42,25 @@ between two numbers is subtraction and waits for the power as usual.
 0 - 2^2 // -4
 ```
 
+A fractional power is a root: `8^(1/3)` is the cube root of eight, 2. A negative
+number has a real root when the root is odd, since -2 cubed is -8, and none when
+it is even, since no real number squared is negative. The engine reads the power
+as a fraction when it is written as one (`1/3`) or typed as a decimal (`0.2` is a
+fifth), so an odd root answers, and an even one is refused by name rather than
+answered with NaN (not a number).
+
+```solve-doc
+(-8)^(1/3) // -2
+(-32)^0.2 // -2
+(-8)^(2/3) // 4
+(-1)^0.5 // ERROR: (-1)^0.5 has no real value: a negative number to a fractional power has one only when the fraction's denominator is odd, as in (-8)^(1/3).
+```
+
+The boundary: `^` stays in the real numbers. The square root of a negative
+number has an exact complex answer, and `sqrt(-1)` gives it, `i`. A power that is
+not a fraction at all, such as `log(2)`, has no real value on a negative number
+either, and is refused the same way.
+
 ## Operators in words
 
 Most operators have a word form, which is often how a line reads more naturally.

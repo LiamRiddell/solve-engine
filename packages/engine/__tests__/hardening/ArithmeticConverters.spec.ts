@@ -14,11 +14,11 @@
  * exact fraction) the tolerance it is allowed is stated in the test rather
  * than assumed.
  *
- * Rounding is tested for the increments and directions, not for the half-way
- * cases of negative numbers: `-5.5 rounded` currently answers -5 because the
- * underlying primitive rounds halves toward positive infinity, while `5.5
- * rounded` answers 6, and whether "rounded" should be symmetric about zero is
- * a decision rather than a bug. It is reported rather than pinned here.
+ * Rounding is tested here for the increments and directions. The half-way
+ * cases of negative numbers were a decision left open, `-5.5 rounded` giving
+ * -5 while `5.5 rounded` gave 6; it was decided in #584 (a half goes away from
+ * zero, as `to N dp` already rounded) and is pinned in
+ * __tests__/bugs/Issue584_negativeHalfRounding.spec.ts.
  */
 
 import { describe, expect, test } from "@jest/globals";
