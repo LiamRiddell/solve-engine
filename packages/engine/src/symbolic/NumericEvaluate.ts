@@ -65,8 +65,12 @@ function factorial(n: number): number {
 	return total;
 }
 
-/** A one-argument function's numeric form, keyed by the name a `call` node records. */
-const UNARY: Readonly<Record<string, (v: number) => number>> = {
+/**
+ * A one-argument function's numeric form, keyed by the name a `call` node
+ * records. A Map rather than an object, since the name comes from the
+ * expression: an object lookup of `constructor` would find the prototype.
+ */
+const UNARY: ReadonlyMap<string, (v: number) => number> = new Map(Object.entries({
 	sqrt: Math.sqrt,
 	abs: Math.abs,
 	sin: Math.sin,
@@ -96,7 +100,7 @@ const UNARY: Readonly<Record<string, (v: number) => number>> = {
 	degtorad: v => (v * Math.PI) / 180,
 	radtodeg: v => (v * 180) / Math.PI,
 	fact: factorial,
-};
+}));
 
 /**
  * Compiles a tree into a function of `variable`.
@@ -204,18 +208,9 @@ function compile(node: SymbolicNode, variable: string, depth: number): RealFunct
 	}
 }
 
-/**
- * The entry a table holds under a function name, or undefined. An own-property
- * test, since the name comes from the expression: a plain lookup of `constructor`
- * or `toString` would find the object's prototype, not a function of the table.
- */
-function ownEntry<T>(table: Readonly<Record<string, T>>, name: string): T | undefined {
-	return Object.prototype.hasOwnProperty.call(table, name) ? table[name] : undefined;
-}
-
 /** A function application, by the name the `call` node records. */
 function compileCall(name: string, args: readonly RealFunction[]): RealFunction {
-	const unary = ownEntry(UNARY, name);
+	const unary = UNARY.get(name);
 	if (unary !== undefined && args.length === 1) {
 		const [arg] = args;
 		return x => unary(arg(x));
@@ -272,7 +267,7 @@ const EPSILON = Number.EPSILON;
  * the argument through to the result. `fu` is the function's value there, which
  * several slopes are cheapest to read from.
  */
-const UNARY_SLOPE: Readonly<Record<string, (u: number, fu: number) => number>> = {
+const UNARY_SLOPE: ReadonlyMap<string, (u: number, fu: number) => number> = new Map(Object.entries({
 	sqrt: (_u, fu) => 0.5 / fu,
 	abs: () => 1,
 	sin: u => Math.cos(u),
@@ -302,7 +297,7 @@ const UNARY_SLOPE: Readonly<Record<string, (u: number, fu: number) => number>> =
 	log2: u => 1 / (u * Math.LN2),
 	degtorad: () => Math.PI / 180,
 	radtodeg: () => 180 / Math.PI,
-};
+}));
 
 /** `|slope| * error`, reading a zero error as contributing nothing even where the slope is infinite. */
 function carried(slope: number, error: number): number {
@@ -419,8 +414,8 @@ function compileBounded(node: SymbolicNode, variable: string, depth: number): Bo
 
 /** A function application with error bounds, by the name the `call` node records. */
 function compileBoundedCall(name: string, args: readonly BoundedFunction[]): BoundedFunction {
-	const unary = ownEntry(UNARY, name);
-	const slope = ownEntry(UNARY_SLOPE, name);
+	const unary = UNARY.get(name);
+	const slope = UNARY_SLOPE.get(name);
 	if (unary !== undefined && slope !== undefined && args.length === 1) {
 		const [arg] = args;
 		return x => {
