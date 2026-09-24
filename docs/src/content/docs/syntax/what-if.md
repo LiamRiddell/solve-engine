@@ -126,7 +126,7 @@ line 3 for qty from 1 to 10 step 4             // [100, 500, 900]
 ```solve-doc
 length = 2 m                                   // 2.00 m
 width = 3 m                                    // 3.00 m
-length * width                                 // 6.00 m2
+length * width                                 // 6.00 m²
 line 3 for length from 1 m to 3 m step 50 cm   // [3, 4.50, 6, 7.50, 9]
 line 3 for length from 1 m to 2 m step 30 cm   // [3, 3.90, 4.80, 5.70]
 ```
