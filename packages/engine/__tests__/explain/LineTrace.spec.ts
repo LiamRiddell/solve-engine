@@ -114,6 +114,17 @@ describe("the lines a result came from", () => {
 		]);
 	});
 
+	test("a what-if or a sweep reads the line it re-runs", () => {
+		// The what-if and sweep rules fuse `line N` into one token carrying N;
+		// the trace reads it as the reference it is.
+		expect(rows(trace([":d = 100", "d * 2", "line 2 with d = 5"], 3)).map((r) => [r[1], r[2]])).toEqual([
+			[3, ""],
+			[2, "line 2"],
+			[1, "d"],
+		]);
+		expect(rows(trace([":d = 100", "d * 2", "line 2 for d from 1 to 3 step 1"], 3)).map((r) => [r[1], r[2]])[1]).toEqual([2, "line 2"]);
+	});
+
 	test("a category tag reads every line carrying it", () => {
 		expect(formatLineTrace(trace(["40 #food", "12 #fuel", "20 #food", "total of #food"], 4))).toBe(
 			"60 (line 4) <- 40 (line 1), 20 (line 3)",

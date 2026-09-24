@@ -101,7 +101,15 @@ levels deep and lists at most two hundred lines, and a line whose own inputs
 were cut off ends in `<- [...]`. A [table column](/syntax/table-columns/) is
 read from the table's text rather than from other lines' answers, so it lists
 no inputs, and a `global` variable shared from another document is shown only
-where this document defines it.
+where this document defines it. A [table lookup](/syntax/table-lookups/) reads
+its table the same way and lists none either, and a
+[section total](/syntax/sections/) is listed as a line of its own without the
+lines under its heading.
+
+A [what-if or a sweep](/syntax/what-if/) lists the line it re-runs, with that
+line's answer as the note shows it, not the answer under the what-if's inputs:
+the trace describes the note as written, and the inputs a what-if holds fixed
+are on its own line to read.
 
 Like [line references](/syntax/line-references/), this form only works inside a
 document, since it reads other lines. The single-expression entry point has no

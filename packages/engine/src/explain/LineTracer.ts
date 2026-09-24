@@ -77,6 +77,8 @@ const NO_READS: LineReads = { defines: [], writes: new Set(), reads: [] };
 const ABOVE_TOKENS: ReadonlySet<string> = new Set(["TOTAL_ABOVE", "SUM_ABOVE", "AVERAGE_ABOVE"]);
 /** The call tokens that read an explicit span, `sum(line 1 : line 3)`. */
 const RANGE_TOKENS: ReadonlySet<string> = new Set(["SUM_RANGE_CALL", "AVERAGE_RANGE_CALL"]);
+/** The what-if and sweep tokens, whose value is the line they re-run (`line 4 with ...`). */
+const WHAT_IF_TOKENS: ReadonlySet<string> = new Set(["WHAT_IF", "SWEEP"]);
 /** The category-tag aggregate tokens, whose value is the tag name. */
 const TAG_TOKENS: ReadonlySet<string> = new Set(["TAG_SUM", "TAG_AVERAGE", "TAG_COUNT"]);
 
@@ -163,7 +165,9 @@ function readLine(
 					for (let n = Math.max(1, Math.min(from, to)); n <= last; n++) lines.push(n);
 					reads.push({ order: offset + i, kind: "lines", lines, via: `line ${from} : line ${to}` });
 				}
-			} else if (t.type === "LINE_REF" && !inRange.has(i)) {
+			} else if ((t.type === "LINE_REF" && !inRange.has(i)) || WHAT_IF_TOKENS.has(t.type)) {
+				// A what-if or a sweep fuses its `line N` into one token that
+				// carries N, and reads that line as a reference does.
 				const n = parseInt(t.value, 10);
 				reads.push({ order: offset + i, kind: "lines", lines: [n], via: `line ${n}` });
 			} else if (t.type === "PREV") {

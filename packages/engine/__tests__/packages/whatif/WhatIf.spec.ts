@@ -416,3 +416,16 @@ describe("the host API, engine.whatIf", () => {
 		expect(() => engine.whatIf("x = 1\nx * 2\nx * 3", { x: 2 })).toThrow(expect.objectContaining({ code: "DOCUMENT_TOO_LARGE" }));
 	});
 });
+
+describe("a sweep over a name that is also a unit letter", () => {
+	test("sweeps the variable rather than reading `d from` as days from", () => {
+		// `d`, `s` and `h` are time units, and `d from` was fused into a date
+		// offset before the sweep could claim its input's name.
+		expect(both([":d = 100", "d * 2", "line 2 for d from 1 to 3 step 1"])[2]).toBe("[2, 4, 6]");
+		expect(both([":s = 1", "s + 1", "line 2 for s from 1 to 3 step 1"])[2]).toBe("[2, 3, 4]");
+	});
+
+	test("and a date offset still reads as one", () => {
+		expect(both(["30 days from 3 March 2026"])[0]).toBe("Thursday, April 2, 2026");
+	});
+});
