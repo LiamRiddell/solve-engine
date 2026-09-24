@@ -2201,12 +2201,15 @@ function mapInvoke(stack: Value[], op: OpCode, kind: number, ref: number, collec
 
     const resultData: MatrixEntry[] = checkedArray<MatrixEntry>(collectionLength, "matrix cells");
     let mapError: Value | undefined;
+    // The builtin is found by the index the bytecode carries, and called only
+    // when a function sits there.
+    const mapBuiltin = kind === 1 ? builtinFunctions[ref] : undefined;
     for (let i = 0; i < collectionLength; i++) {
       const args: Value[] = new Array(collectionCount);
       for (let j = 0; j < collectionCount; j++) args[j] = cellArrays[j][i];
 
       const resultVal = kind === 1
-        ? (builtinFunctions[ref]?.(args) ?? errorValue("UNKNOWN_BUILTIN_FUNCTION", `map: unknown builtin function index ${ref}`))
+        ? (typeof mapBuiltin === "function" ? mapBuiltin(args) : errorValue("UNKNOWN_BUILTIN_FUNCTION", `map: unknown builtin function index ${ref}`))
         : invokeFrameBody(paramNames, program!, args, vm, pipeline, expression, context, !!symbolicTolerant);
 
       const resultFault = faultedOperand(resultVal);
@@ -2373,10 +2376,12 @@ function reduceInvoke(stack: Value[], op: OpCode, kind: number, ref: number, has
     }
 
     let reduceError: Value | undefined;
+    // As in map: called only when a function sits at the index.
+    const reduceBuiltin = kind === 1 ? builtinFunctions[ref] : undefined;
     for (let i = startIdx; i < cells.length; i++) {
       const args = [acc, cells[i]];
       const resultVal = kind === 1
-        ? (builtinFunctions[ref]?.(args) ?? errorValue("UNKNOWN_BUILTIN_FUNCTION", `reduce: unknown builtin function index ${ref}`))
+        ? (typeof reduceBuiltin === "function" ? reduceBuiltin(args) : errorValue("UNKNOWN_BUILTIN_FUNCTION", `reduce: unknown builtin function index ${ref}`))
         : invokeFrameBody(paramNames, program!, args, vm, pipeline, expression, context, !!symbolicTolerant);
 
       const stepFault = faultedOperand(resultVal);
