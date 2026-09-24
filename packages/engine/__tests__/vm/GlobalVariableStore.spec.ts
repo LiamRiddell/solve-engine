@@ -261,6 +261,47 @@ describe("GlobalVariableStore", () => {
 	});
 });
 
+describe("GlobalVariableStore scratch runs (#566)", () => {
+	let store: GlobalVariableStore;
+
+	beforeEach(() => {
+		store = new GlobalVariableStore();
+	});
+
+	test("a write inside a scratch run is read back, notifies nobody, and is gone when the run ends", () => {
+		store.set("g", numberValue(1));
+		let notified = 0;
+		store.subscribe(() => notified++);
+
+		store.beginScratch();
+		store.set("g", numberValue(5));
+		store.set("h", numberValue(6));
+		expect(store.get("g")!.toNumber()).toBe(5);
+		expect(store.has("h")).toBe(true);
+		store.endScratch();
+
+		expect(store.get("g")!.toNumber()).toBe(1);
+		expect(store.has("h")).toBe(false);
+		expect(notified).toBe(0);
+	});
+
+	test("a nested run does not end the outer one", () => {
+		store.beginScratch();
+		store.beginScratch();
+		store.set("g", numberValue(5));
+		store.endScratch();
+		expect(store.get("g")!.toNumber()).toBe(5);
+		store.endScratch();
+		expect(store.has("g")).toBe(false);
+	});
+
+	test("a stray end with no run open changes nothing, and writes after it are real", () => {
+		store.endScratch();
+		store.set("g", numberValue(2));
+		expect(store.get("g")!.toNumber()).toBe(2);
+	});
+});
+
 describe("globalDagKey", () => {
 	test("prefixes the name with 'global:'", () => {
 		expect(globalDagKey("hello")).toBe("global:hello");

@@ -12,6 +12,8 @@ import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/Bytecode
 import { seededStream, programKey, documentRandomSeed } from "@solve-js/engine/SeededRandom";
 import { summariseChecks } from "@solve-js/engine/CheckSummary";
 import { createVM, executeBytecode } from "@solve-js/vm/VM";
+import { createScratchVM } from "@solve-js/vm/ScratchVM";
+import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import { resolveHolidayPredicate } from "@solve-js/vm/HolidayCalendar";
 import type { EvalResult, LineExecutionContext } from "@solve-js/vm/VM";
 import type { DocumentModel } from "@solve-js/engine/DocumentModel";
@@ -532,6 +534,15 @@ export class ExpressionEngine {
      */
     private lineContext: LineExecutionContext | null = null;
 
+    /**
+     * The scratch state a run inside {@link withScratchState} writes to, or
+     * `null` outside one. Its dependency graph takes the edges a cross-line
+     * read records, and its context is the one that run's lines are handed,
+     * so neither the document's graph nor the pass's shared context is
+     * touched. Both are built on first use and dropped with the run.
+     */
+    private scratch: { dag: DependencyGraph | null; lineContext: LineExecutionContext | null } | null = null;
+
     /** The seed the host gave (`EngineOptions.random` or {@link setRandomSeed}), as text. */
     private optionRandomSeed: string | undefined;
 
@@ -757,6 +768,15 @@ export class ExpressionEngine {
         const doc = this.documentModel;
         const scan = doc ? null : this.batchScanResults;
         const parsed = doc ? null : this.batchParsedLines;
+        if (this.scratch !== null) {
+            // A scratch run has a context of its own, so the pass's shared one
+            // keeps the line number it was left on. See withScratchState.
+            const scratchContext = this.scratch.lineContext ?? this.buildLineContext(doc, scan, parsed, lineNumber);
+            this.scratch.lineContext = scratchContext;
+            scratchContext.lineIndex = lineNumber;
+            scratchContext.scope = this.context.scope;
+            return scratchContext;
+        }
         let context = this.lineContext;
         if (context === null || this.lineContextDoc !== doc || this.lineContextScan !== scan || this.lineContextParsed !== parsed) {
             context = this.buildLineContext(doc, scan, parsed, lineNumber);
@@ -794,7 +814,13 @@ export class ExpressionEngine {
         // Only on the incremental path. The batch pass rebuilds every line from
         // scratch and has nothing that asks the graph what to re-run, so the
         // registration there would be cost with no reader.
-        const dag = this.dag;
+        //
+        // Inside a scratch run the edges go to the run's own graph, which is
+        // dropped with it: an explained `line 9 + 1` reads line 9 exactly as
+        // before, and the document's graph never learns of a reader at line -1.
+        // Without a document no closure below records an edge, so no graph is
+        // built for one.
+        const dag = this.scratch !== null && doc ? (this.scratch.dag ??= new DependencyGraph()) : this.dag;
         // Assigned before anything can call the closure below, which reads the
         // line number the pass is currently on rather than the one this context
         // was built for: one context serves a whole pass by mutation.
@@ -3161,7 +3187,9 @@ export class ExpressionEngine {
      * Under `effects: 'check'` the match is made and nothing is registered. The
      * registration is not harmless to repeat: it overwrites the owning line id,
      * so a definition checked from outside the document (id -1) was no longer
-     * removed when its real line was deleted.
+     * removed when its real line was deleted. Inside a scratch run
+     * ({@link withScratchState}) the line answers `<name> defined` and likewise
+     * registers nothing.
      */
     private tryDefineUserUnit(tokens: Token[], definedByLineId: number, effects: EffectMode = "apply"): Value | null {
         // Shortest definition is NUMBER IDENT EQUALS NUMBER UNIT.
@@ -3191,6 +3219,10 @@ export class ExpressionEngine {
         // other construct that merely starts the same way.
         if (i !== tokens.length) return null;
         if (effects === "check") return CHECKED_NOT_RUN;
+        // Inside a scratch run the line answers and registers nothing. A new
+        // definition recompiles every line of the document (below), which no
+        // scratch copy could take back, and the answer does not depend on it.
+        if (this.scratch !== null) return lineMessage(`${nameWords.join(' ')} defined`);
 
         const changed = this.userUnits.define(nameWords, ratioToken.value, baseToken.value, definedByLineId);
         // A user unit is expanded at parse time, so the compiled bytecode for
@@ -5278,6 +5310,14 @@ export class ExpressionEngine {
      * calls), comes back with an empty `steps` array and the answer in
      * `result`, rather than an error.
      *
+     * Explaining a line changes nothing. A derivation has to run the line, and
+     * a line such as `total += 5` or `:x = 30` does something when it runs, so
+     * the run happens in scratch state that is discarded afterwards (see
+     * {@link withScratchState}). The answer is the one the line gives against
+     * the document as it stands, every time: explaining `total += 5` with the
+     * total at 5 answers 10, and the total is still 5 afterwards. Until #566 it
+     * was 10, then 15, then 20.
+     *
      * @param expression - The raw line to explain.
      * @returns The ordered derivation and final value.
      * @throws {EngineError} When the line does not evaluate at all, or resolves
@@ -5290,7 +5330,7 @@ export class ExpressionEngine {
         // so the derivation reads the same token stream the answer came from.
         const exprTokens = tokens.filter((t) => t.type !== "COMMENT");
         const normalized = this.normalizer.normalize(exprTokens);
-        return buildExplanation({
+        return this.withScratchState(() => buildExplanation({
             expression,
             tokens: normalized,
             evaluate: (source) => this.evaluateIsolated(source),
@@ -5300,17 +5340,81 @@ export class ExpressionEngine {
             // so nothing is displaced: the reader who saw no explanation now
             // sees the one fact the line turned on.
             readings: this.readDates(expression),
-        });
+        }));
+    }
+
+    /**
+     * Run `work` against scratch state, and put everything back afterwards.
+     *
+     * For a caller that has to run a line without the line's effect reaching
+     * the document, which is {@link explainLine}: a derivation is built from
+     * the values a line arrives at, so the line must run, and a running total,
+     * an assignment, a function definition or an equation changes something
+     * when it runs. What each of those writes, and where it goes instead:
+     *
+     * - Variables, functions and equations live on the VM. `work` runs on a
+     *   {@link createScratchVM} over the document's VM, which reads the
+     *   document's values and keeps its own writes, and is dropped afterwards.
+     * - A `global :name` is process-wide, shared with every open document.
+     *   The store holds the run's writes aside and tells nobody (see
+     *   `GlobalVariableStore.beginScratch`).
+     * - A cross-line read records an edge in the dependency graph. The run's
+     *   lines get a context of their own over a graph of their own (see
+     *   {@link makeLineContext}), so the document's graph and the pass's
+     *   shared context are untouched.
+     * - A unit definition answers without registering (see
+     *   {@link tryDefineUserUnit}), since registering recompiles the document.
+     * - The running-total names, the random-draw bookkeeping and the active
+     *   query client are engine fields, saved here and put back.
+     *
+     * What it still writes are the compile caches, memos keyed by the text
+     * that change no answer. Synchronous by construction: an async line is
+     * refused by its caller, so nothing else runs while scratch state is in
+     * place. A nested call runs inside the scratch already open.
+     *
+     * @param work - The run to make in scratch state.
+     * @returns Whatever `work` returns.
+     */
+    private withScratchState<T>(work: () => T): T {
+        if (this.scratch !== null) return work();
+
+        const vm = this.vm;
+        const accumulatorNames = [...this.accumulatorNames];
+        const linesDrawingRandom = [...this.linesDrawingRandom];
+        const randomProgram = this.randomProgram;
+        const randomStream = this.randomStream;
+        const randomLine = this.randomLine;
+        const activeQueryClient = getActiveQueryClient();
+
+        this.scratch = { dag: null, lineContext: null };
+        this.vm = createScratchVM(vm);
+        sharedGlobalVariableStore.beginScratch();
+        try {
+            return work();
+        } finally {
+            sharedGlobalVariableStore.endScratch();
+            this.vm = vm;
+            this.scratch = null;
+            this.accumulatorNames.clear();
+            for (const name of accumulatorNames) this.accumulatorNames.add(name);
+            this.linesDrawingRandom.clear();
+            for (const line of linesDrawingRandom) this.linesDrawingRandom.add(line);
+            this.randomProgram = randomProgram;
+            this.randomStream = randomStream;
+            this.randomLine = randomLine;
+            setActiveQueryClient(activeQueryClient);
+        }
     }
 
     /**
      * Evaluate a self-contained sub-expression without touching document state.
      *
-     * Used only by {@link explainLine}. Unlike `evaluateExpression`, this never
-     * writes to the line cache or the dependency graph: it is handed the spans
-     * of a single line's own sub-expressions, and evaluating those to build a
-     * derivation must not disturb the document the line belongs to. An async
-     * (pending) result is rejected, a derivation cannot represent one.
+     * Used only by {@link explainLine}, inside its {@link withScratchState}.
+     * Unlike `evaluateExpression`, this never writes to the line cache or the
+     * dependency graph: it is handed the spans of a single line's own
+     * sub-expressions, and evaluating those to build a derivation must not
+     * disturb the document the line belongs to. An async (pending) result is
+     * rejected, a derivation cannot represent one.
      */
     private evaluateIsolated(expression: string): Value {
         const { tokens, hasParens } = this.lexToTokens(expression);

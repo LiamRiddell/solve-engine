@@ -111,6 +111,31 @@ diary where most lines are already unambiguous; showing it on none leaves the
 reader to guess. See [date literals](/syntax/date-literals/) for the orders
 themselves and `getDateReading()`.
 
+## Explaining changes nothing
+
+A host calls `explainLine` whenever the reader points at a line, so it has to be
+safe to call as often as that. Some lines change the document when they run: a
+running total (`total += 5`) adds to its total, an assignment (`:x = 30`) sets a
+variable, a unit definition (`1 sprint = 2 weeks`) adds a unit, and a global
+(`global :rate = 0.2`) is shared with every open document. A derivation has to
+run the line to know the values it arrives at, so the run happens in a scratch
+copy of the document's state that is thrown away afterwards. However often a
+line is explained, no variable, total, function, equation, unit or global moves.
+
+```ts
+engine.parseDocument("total += 5");
+
+engine.explainLine("total += 5").result.toNumber(); // 10
+engine.explainLine("total += 5").result.toNumber(); // 10
+engine.evaluateExpression("total").toNumber();      // 5
+```
+
+The answer is the one the line gives against the document as it stands, the
+same one `evaluateExpression` returns for it (which, unlike `explainLine`, keeps
+the change). For a running total that is the next total, not the total at the
+line's own place in the document: with the total at 5, explaining `total += 5`
+answers 10.
+
 ## When there is nothing to break down
 
 A bare literal has no derivation, and neither does a line built from a construct
