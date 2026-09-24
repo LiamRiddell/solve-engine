@@ -125,7 +125,7 @@ line 2 + 1   // ERROR: Line 2 has not been evaluated yet (forward reference, or 
 
 ## Related, document-aware forms
 
-Seven other forms read the whole note the same way, each with its own page:
+Eight other forms read the whole note the same way, each with its own page:
 
 - [Category tags](/syntax/category-tags/): label a line with `#tag` and total,
   average or count every line carrying it, or break the note down by tag.
@@ -141,3 +141,5 @@ Seven other forms read the whole note the same way, each with its own page:
   commission schedule, to an amount.
 - [What-if and sweeps](/syntax/what-if/): ask what a line would say if an input
   were different, or list its answers across a range of inputs.
+- [Tracing inputs](/syntax/tracing-inputs/): ask which lines fed a result,
+  `inputs of line 4`, and which lines fed those.

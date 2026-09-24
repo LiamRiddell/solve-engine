@@ -16,6 +16,7 @@ import { CASH_FLOW_PLUGIN_FUNCTIONS } from "./parselets/CashFlowPluginFunctions"
 import { inYearDollarsNormalizerRule } from "./normalizer/InYearDollarsNormalizerRule";
 import { recurringScheduleNormalizerRule } from "./normalizer/RecurringScheduleNormalizerRule";
 import { billSplitNormalizerRule, billSplitPrefixNormalizerRule } from "./normalizer/BillSplitNormalizerRule";
+import { explainFinance } from "./FinanceExplain";
 
 // CALL_BUILTIN indices. See VMBuiltins.ts for the handler implementations.
 const COMPOUND_FV = 51, COMPOUND_INTEREST = 52;
@@ -91,6 +92,10 @@ const SAVINGS_PAYMENT = 99, SAVINGS_PERIODS = 100;
  */
 export const FINANCE_PACKAGE: IEnginePackage = {
   name: "solve-finance",
+  // `present value of $1,000 after 5 years at 5%` explains as the growth
+  // factor and the division by it, in the builtins' own numbers. See
+  // FinanceExplain.ts.
+  explain: explainFinance,
   phrases: {
     "compound interest on": "COMPOUND_INTEREST_ON",
     "interest on": "INTEREST_ON",

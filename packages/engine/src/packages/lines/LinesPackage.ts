@@ -6,6 +6,8 @@ import { AboveAggregateParselet } from "./parselets/AboveAggregateParselet";
 import { SectionAggregateParselet } from "./parselets/SectionAggregateParselet";
 import { lineRefNormalizerRule, rangeCallNormalizerRule } from "./normalizer/LineRefNormalizerRule";
 import { sectionAggregateNormalizerRule } from "./normalizer/SectionAggregateNormalizerRule";
+import { inputsOfNormalizerRule } from "./normalizer/InputsOfNormalizerRule";
+import { InputsOfParselet } from "./parselets/InputsOfParselet";
 import {
   prevHandler, lineRefHandler, sumRangeHandler, averageRangeHandler,
   totalAboveHandler, averageAboveHandler,
@@ -59,7 +61,9 @@ export const LINES_PACKAGE: IEnginePackage = {
     "sum above": "SUM_ABOVE",
     "average above": "AVERAGE_ABOVE",
   },
-  normalizerRules: [lineRefNormalizerRule(), rangeCallNormalizerRule(), sectionAggregateNormalizerRule()],
+  // `inputs of line N` fuses only before a line reference, below the line-ref
+  // rule so the LINE_REF it looks for already exists. See InputsOfNormalizerRule.ts.
+  normalizerRules: [lineRefNormalizerRule(), rangeCallNormalizerRule(), sectionAggregateNormalizerRule(), inputsOfNormalizerRule()],
   prefixParselets: {
     PREV: new PrevParselet(),
     LINE_REF: new LineRefParselet(),
@@ -71,6 +75,7 @@ export const LINES_PACKAGE: IEnginePackage = {
     SECTION_SUM: new SectionAggregateParselet("sectionSum"),
     SECTION_AVERAGE: new SectionAggregateParselet("sectionAverage"),
     SECTION_COUNT: new SectionAggregateParselet("sectionCount"),
+    INPUTS_OF: new InputsOfParselet(),
   },
   pluginFunctions: {
     prev: prevHandler,
@@ -82,5 +87,8 @@ export const LINES_PACKAGE: IEnginePackage = {
     sectionSum: sectionSumHandler,
     sectionAverage: sectionAverageHandler,
     sectionCount: sectionCountHandler,
+    // `inputs of line N` has no entry of its own: it reaches its handler
+    // through lineRef. See TRACE_INPUTS in LinesPluginFunctions.ts for why.
   },
+  tokenCategories: { INPUTS_OF: "keyword" },
 };

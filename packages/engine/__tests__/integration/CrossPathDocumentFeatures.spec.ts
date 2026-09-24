@@ -647,6 +647,49 @@ describe("what-if and sweeps across entry points", () => {
   });
 });
 
+describe("inputs of line N across entry points", () => {
+  // Issue #522. The trace is built from each line's text and answer, which
+  // both document passes hold alike, so the two agree value for value.
+  const mortgage = [":rate = 4%", ":deposit = 100000", "", ":payment = monthly repayment on deposit over 25 years at rate", "inputs of line 4"];
+
+  test("the issue's example, in both document passes, agree", () => {
+    const expected = "payment 527.84 (line 4) <- deposit 100,000 (line 2), rate 4.00% (line 1)";
+    expect(batch(mortgage)[4]).toBe(expected);
+    expect(incremental(mortgage)[4]).toBe(expected);
+  });
+
+  test("followed upwards through positions, above and tags, value for value", () => {
+    const doc = ["10", "20", "total above", "line 3 * 2 #kept", "5 #kept", "total of #kept", "inputs of line 6"];
+    const expected = "65 (line 6) <- 60 (line 4) <- [30 (line 3) <- [10 (line 1), 20 (line 2)]], 5 (line 5)";
+    expect(batch(doc)[6]).toBe(expected);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("a cycle is a named error, the same in both passes", () => {
+    const doc = ["line 2 + 5", "prev + 5", "inputs of line 2"];
+    const out = batch(doc);
+    expect(out[2]).toBe("ERROR: Line 1 reads line 2, which leads back to line 1: lines that read each other have no answer to trace");
+    expect(incremental(doc)).toEqual(out);
+  });
+
+  test("a forward reference is a named error, the same in both passes", () => {
+    const below = ["120", "inputs of line 3", "prev * 2"];
+    expect(batch(below)[1]).toBe(
+      "ERROR: Line 3 is not above this line, so its answer has not been worked out yet: a trace reads the lines above it",
+    );
+    expect(incremental(below)).toEqual(batch(below));
+    const within = ["line 2 + 1", "7", "inputs of line 1"];
+    expect(batch(within)[2]).toBe(
+      "ERROR: Line 1 reads line 2, which is below it, so the order its answer was worked out in cannot be traced",
+    );
+    expect(incremental(within)).toEqual(batch(within));
+  });
+
+  test("the single-expression path refuses with a document error", () => {
+    expectNeedsDocument("inputs of line 1");
+  });
+});
+
 describe("evaluateDocument leaves the engine as it found it", () => {
   test("the borrowed engine's document model is restored", () => {
     const engine = newTrackedEngine();

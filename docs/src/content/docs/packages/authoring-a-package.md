@@ -129,6 +129,7 @@ a clear message rather than failing mysteriously later.
 | `asyncResolvers` | External data sources | [Async data source](/guide/async-data-sources/) |
 | `tokenCategories` | Highlighting categories for new tokens | [Highlighting and completions](/packages/highlighting-and-completions/) |
 | `completionItems` | Editor completion candidates | [Highlighting and completions](/packages/highlighting-and-completions/) |
+| `explain` | Describe the package's own calls, conversions and phrases as readable steps when a host explains a line | [Explaining your steps](/packages/explaining-steps/) |
 
 Each field has a hands-on guide in the **How-to** column: this table is the map,
 and each guide walks its extension point end to end.

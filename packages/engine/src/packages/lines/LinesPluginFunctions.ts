@@ -1,8 +1,9 @@
-import { Value, ValueType, numberValue, uomValue, errorValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, uomValue, errorValue, stringValue } from "@solve-js/vm/Value";
 import { isCheckResult } from "@solve-js/packages/conditionals/CheckFunctions";
 import { nonNumericKind, unifyQuantities } from "@solve-js/vm/VMConversion";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { headingOf, isSummaryLine, sectionKey } from "./SectionReader";
+import { formatLineTrace, traceProblem } from "@solve-js/explain/LineTracer";
 
 /**
  * Cross-line data access, `prev`, `line<N>`, `sum(line X : line Y)`
@@ -21,6 +22,18 @@ import { headingOf, isSummaryLine, sectionKey } from "./SectionReader";
  * and exactly the class of bug this codebase treats as its worst. See
  * `checkLineValue()` below, every handler routes through it.
  */
+
+/**
+ * The second argument `inputs of line N` passes to `lineRef`, asking for the
+ * line's trace rather than its value.
+ *
+ * The form shares `lineRef`'s plugin slot instead of registering a function of
+ * its own. Plugin functions are numbered in the order packages register, and
+ * a seeded random draw is keyed on its line's compiled bytes, which carry
+ * those numbers: a new function here, registered ahead of the random package,
+ * would renumber `pick`, `coin` and `uuid` and change every seeded draw.
+ */
+export const TRACE_INPUTS = 1;
 
 function checkLineValue(v: Value | undefined, lineNumber: number): Value | null {
   if (v === undefined) {
@@ -76,6 +89,8 @@ export function prevHandler(_args: Value[], context?: LineExecutionContext): Val
  * missing or a referenced line has no numeric result.
  */
 export function lineRefHandler(args: Value[], context?: LineExecutionContext): Value {
+  // `inputs of line N` shares this function's plugin slot; see TRACE_INPUTS.
+  if (args.length === 2 && args[1].toNumber() === TRACE_INPUTS) return inputsOfHandler(args, context);
   const ctxError = requireContext(context);
   if (ctxError) return ctxError;
   const targetLine = args[0].toNumber();
@@ -487,4 +502,54 @@ export function sectionCountHandler(args: Value[], context?: LineExecutionContex
   const ctxError = requireSectionContext(context);
   if (ctxError) return ctxError;
   return aggregateSection(context!, String(args[0].value), "count");
+}
+
+/**
+ * `inputs of line N`, the lines that fed line N's answer, followed upwards,
+ * as one line of text: `payment 527.84 (line 4) <- deposit 100,000 (line 2),
+ * rate 4.00% (line 1)`.
+ *
+ * A trace reads lines that have already been worked out, so it only looks up:
+ * line N must be above the asking line, and a line in the trace that reads a
+ * line below itself (a forward reference) stops it with a named error rather
+ * than a guess, as do two lines that read each other (a cycle). Both document
+ * passes refuse the same way, so they agree on every document.
+ *
+ * @param args - A single Number, the line to trace.
+ * @param context - Per-line execution context. Supplies the trace; without a
+ * document the handler returns a `LINE_REF_NO_DOCUMENT` error.
+ * @returns The trace as a String, or an error Value naming what stopped it.
+ */
+export function inputsOfHandler(args: Value[], context?: LineExecutionContext): Value {
+  if (!context?.traceLine) {
+    return errorValue("LINE_REF_NO_DOCUMENT", "Tracing a line's inputs needs a document to read, and the single-expression entry point has none");
+  }
+  const target = args[0].toNumber();
+  const asking = context.lineIndex;
+  if (target >= asking) {
+    return errorValue(
+      "TRACE_FORWARD_REFERENCE",
+      `Line ${target} is not above this line, so its answer has not been worked out yet: a trace reads the lines above it`,
+    );
+  }
+  if (target < 1) {
+    return errorValue("LINE_NOT_YET_EVALUATED", `There is no line ${target} to trace`);
+  }
+  const trace = context.traceLine(target);
+  const problem = traceProblem(trace);
+  if (problem?.kind === "cycle") {
+    return errorValue(
+      "TRACE_CYCLE",
+      problem.line === problem.reader
+        ? `Line ${problem.line} reads its own answer, so it has no inputs to trace`
+        : `Line ${problem.reader} reads line ${problem.line}, which leads back to line ${problem.reader}: lines that read each other have no answer to trace`,
+    );
+  }
+  if (problem?.kind === "forward") {
+    return errorValue(
+      "TRACE_FORWARD_REFERENCE",
+      `Line ${problem.reader} reads line ${problem.line}, which is below it, so the order its answer was worked out in cannot be traced`,
+    );
+  }
+  return stringValue(formatLineTrace(trace));
 }

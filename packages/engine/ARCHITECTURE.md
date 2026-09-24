@@ -214,9 +214,21 @@ same force-multipliers the built-in packages use internally, not just `pluginFun
   line — see `packages/knowledge/`'s `KnowledgeQueryParselet.ts` for the reference
   consumer. Zero cost when unused (a `length === 0` guard before the check ever runs).
 
-Four extension points now cover the SDK surface beyond `pluginFunctions`/`normalizerRules`
-(`PhrasePattern`, `createQueryResolver`, `asConverters`, `rawLinePatterns`) — each was
-added because a real built-in package needed it first, not speculatively.
+- **`IEnginePackage.explain`** (`api/PackageRegistry.ts`, types in `explain/Explanation.ts`):
+  lets a package describe its own steps for `ExpressionEngine.explainLine()`. The VM
+  reports each call (builtin, plugin, `as` converter, unit/rate/currency conversion) to
+  `LineExecutionContext.observeCall`, which is set only on the explain run and read once
+  per program, so ordinary evaluation pays one comparison per call site. A plugin or
+  converter call is offered only to its registering package; a builtin or conversion to
+  every package, latest-registered first. An answer must end on `call.result` itself or
+  it is discarded. The built-in hooks (`packages/uom/UomExplain.ts`,
+  `packages/function/FunctionExplain.ts`, `packages/finance/FinanceExplain.ts`) compute
+  every number through the same functions the VM used (`vm/FinanceFormulas.ts` exists so
+  the finance builtins and their explanations share one formula).
+
+Five extension points now cover the SDK surface beyond `pluginFunctions`/`normalizerRules`
+(`PhrasePattern`, `createQueryResolver`, `asConverters`, `rawLinePatterns`, `explain`) — each
+was added because a real built-in package needed it first, not speculatively.
 
 ### 5.2 Package compatibility checking (`api/PackageCompatibility.ts`)
 

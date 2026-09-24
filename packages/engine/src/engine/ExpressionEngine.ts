@@ -106,8 +106,10 @@ import {
     DATETIME_LITERAL_UNREADABLE_TYPE,
 } from "@solve-js/packages/datetime/normalizer/DateLiteralNormalizerRule";
 import { monthNameDateNormalizerRule } from "@solve-js/packages/datetime/normalizer/MonthNameDateNormalizerRule";
-import { buildExplanation } from "@solve-js/explain";
-import type { Explanation } from "@solve-js/explain";
+import { buildExplanation, buildLineTrace, EXPLAIN_CONTEXT, DEFAULT_TRACE_OPTIONS } from "@solve-js/explain";
+import type { Explanation, ExplanationStep, ExplainCall, LineTrace, ObservedSpan, TraceSource } from "@solve-js/explain";
+import type { ObservedCall } from "@solve-js/vm/VM";
+import { builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
 import {
     type DiagnosticPipelineResult,
     type PipelineStageResult,
@@ -996,8 +998,119 @@ export class ExpressionEngine {
                 : scan
                   ? (tag: string) => this.batchLinesCarryingTag(scan, tag)
                   : undefined,
+            // The `inputs of line N` form. Both document paths read the same
+            // text and the same answers, so the trace agrees through both. An
+            // answer is read through `readLineResult`, the closure `line N`
+            // reads through, so on the incremental path the asking line takes
+            // an edge to every line it traced and re-runs when one changes.
+            // Lines at or below the asker are never followed: from inside a
+            // pass they have not been worked out.
+            traceLine: readLineResult !== undefined && (doc !== null || (scan !== null && parsed !== null))
+                ? (n: number) => buildLineTrace(
+                      doc ? this.traceSourceFromModel(doc, readLineResult) : this.traceSourceFromBatch(scan!, parsed!, readLineResult),
+                      (expression) => this.traceTokens(expression),
+                      n,
+                      { ...DEFAULT_TRACE_OPTIONS, followForward: false },
+                  )
+                : undefined,
         };
         return context;
+    }
+
+    /**
+     * The incremental document as the tracer reads it.
+     *
+     * @param doc - The document model.
+     * @param readResult - How a line's answer is read; the context's own
+     * closure when tracing from inside a line, so the read takes its edge.
+     */
+    private traceSourceFromModel(doc: DocumentModel, readResult: (n: number) => Value | undefined): TraceSource {
+        return {
+            lineCount: doc.lineCount,
+            expressions: (n) => doc.getLineAt(n)?.expressions ?? [],
+            result: (n) => readResult(n) ?? null,
+            isBoundary: (n) => {
+                const state = doc.getLineAt(n);
+                return !state || state.isEmpty || /^\s*#/.test(state.text);
+            },
+            taggedLines: (tag) => doc.linesCarryingTag(tag),
+        };
+    }
+
+    /**
+     * The batch pass's document as the tracer reads it, over the scan and the
+     * results the pass has built so far.
+     */
+    private traceSourceFromBatch(scan: ScanLineResult[], parsed: ParsedLine[], readResult: (n: number) => Value | undefined): TraceSource {
+        return {
+            lineCount: scan.length,
+            expressions: (n) => {
+                const line = parsed[n - 1];
+                if (!line) return [];
+                return line.expression !== null ? [line.expression] : line.inlineSolves.map((s) => s.expression);
+            },
+            result: (n) => readResult(n) ?? null,
+            isBoundary: (n) => {
+                const sr = scan[n - 1];
+                return !sr || sr.classification.skip || /^\s*#/.test(sr.text);
+            },
+            taggedLines: (tag) => this.batchLinesCarryingTag(scan, tag),
+        };
+    }
+
+    /**
+     * A host's `ParsingResult` as the tracer reads it, for {@link traceLine}
+     * on a document parsed earlier.
+     */
+    private traceSourceFromParsed(lines: readonly ParsedLine[]): TraceSource {
+        let tagIndex: Map<string, number[]> | null = null;
+        return {
+            lineCount: lines.length,
+            expressions: (n) => {
+                const line = lines[n - 1];
+                if (!line) return [];
+                return line.expression !== null ? [line.expression] : line.inlineSolves.map((s) => s.expression);
+            },
+            result: (n) => lines[n - 1]?.result ?? null,
+            isBoundary: (n) => {
+                const line = lines[n - 1];
+                return !line || line.isEmpty || /^\s*#/.test(line.text);
+            },
+            taggedLines: (tag) => {
+                if (tagIndex === null) {
+                    tagIndex = new Map();
+                    for (const line of lines) {
+                        if (line.text.indexOf("#") < 0) continue;
+                        for (const name of memberTagsOf(line.text)) {
+                            const members = tagIndex.get(name);
+                            if (members === undefined) tagIndex.set(name, [line.lineNumber]);
+                            else members.push(line.lineNumber);
+                        }
+                    }
+                }
+                return tagIndex.get(tag.toLowerCase()) ?? [];
+            },
+        };
+    }
+
+    /**
+     * The normalised tokens a line's expression was compiled from, for the
+     * tracer. Taken from the compile cache when the line has been compiled
+     * (the usual case, and free), and otherwise lexed and normalised here
+     * without compiling or running anything, so tracing a line never changes
+     * the document it reads.
+     *
+     * @returns The tokens, or `null` when the expression does not tokenise.
+     */
+    private traceTokens(expression: string): readonly Token[] | null {
+        const front = this.compiledFrontHalf.get(expression);
+        if (front !== undefined) return front.normalizedTokens;
+        try {
+            const { tokens } = this.lexToTokens(expression, undefined, false);
+            return this.normalizer.normalize(tokens.filter((t) => t.type !== "COMMENT"));
+        } catch {
+            return null;
+        }
     }
 
     /**
@@ -2735,8 +2848,11 @@ export class ExpressionEngine {
      * `makeLineContext()`). Defaults to -1 (the existing "no real
      * document" sentinel) for any caller that doesn't have a real line
      * number to pass.
+     * @param observeCall - Receives every call the VM makes, for
+     * {@link explainLine} only. The shared per-pass context is copied rather
+     * than given the observer, so no other evaluation can see it.
      */
-    private executeRaw(program: BytecodeProgram, lineNumber: number = -1): EvalResult {
+    private executeRaw(program: BytecodeProgram, lineNumber: number = -1, observeCall?: (call: ObservedCall) => void): EvalResult {
         const stackBefore = this.vm.getStack().length;
 
         // See armCancellation: a fresh keystroke-linked controller for a line
@@ -2745,7 +2861,9 @@ export class ExpressionEngine {
 
         setActiveQueryClient(this.queryClient);
         this.beginLineRandom(program, lineNumber);
-        const result = executeBytecode(program, this.vm, undefined, undefined, this.makeLineContext(lineNumber));
+        const lineContext = this.makeLineContext(lineNumber);
+        const context = observeCall === undefined ? lineContext : { ...lineContext, observeCall };
+        const result = executeBytecode(program, this.vm, undefined, undefined, context);
 
         // Stack cleanup
         while (this.vm.getStack().length > stackBefore) {
@@ -5655,10 +5773,15 @@ export class ExpressionEngine {
         // so the derivation reads the same token stream the answer came from.
         const exprTokens = tokens.filter((t) => t.type !== "COMMENT");
         const normalized = this.normalizer.normalize(exprTokens);
+        // Which package registered each plugin or converter call, so only that
+        // package is asked to describe it. Keyed by the call object, which is
+        // made fresh for every observation.
+        const owners = new Map<ExplainCall, string>();
         return this.withScratchState(() => buildExplanation({
             expression,
             tokens: normalized,
-            evaluate: (source) => this.evaluateIsolated(source),
+            evaluate: (source) => this.evaluateObserved(source, owners),
+            describeCall: (call) => this.describeCall(call, owners.get(call)),
             locale: this.localeCode,
             // How each date literal was read, ahead of the arithmetic that
             // used it. A date line derived to an empty step list before this,
@@ -5732,6 +5855,146 @@ export class ExpressionEngine {
     }
 
     /**
+     * Where a line's answer came from: the lines it read, and the lines those
+     * read, followed upwards through the document.
+     *
+     * A line reads another by a variable it uses (`deposit`, resolved to the
+     * nearest line above that defines it), by position (`line 2`, `prev`,
+     * `total above`, `sum(line 1 : line 3)`) or by a category tag (`total of
+     * #food`). The trace is built from the document's text and answers, so it
+     * is the same whichever pass produced them, and it never evaluates or
+     * changes anything.
+     *
+     * By default it reads the document this engine is attached to (the model a
+     * `ThreeTierEvaluator` wires up, which is what a live editor has). Pass the
+     * result of `parseDocument` or `evaluateDocument` as `options.document` to
+     * trace a document evaluated in one pass instead.
+     *
+     * Two lines that read each other come back with the repeated line marked
+     * `cycle` and not followed again; a line that reads one below it is marked
+     * `forward`. The trace stops `maxDepth` levels down (ten by default) and
+     * after `maxLines` lines in all (two hundred), marking the line it stopped
+     * at `truncated`.
+     *
+     * @param lineNumber - The 1-based line to trace.
+     * @param options - The document to read, and how far to follow it.
+     * @returns The trace, rooted at `lineNumber`.
+     * @throws {EngineError} `TRACE_NO_DOCUMENT` when there is no document to
+     * read, `TRACE_NO_SUCH_LINE` when the line is not in it.
+     */
+    traceLine(
+        lineNumber: number,
+        options: { document?: ParsingResult; maxDepth?: number; maxLines?: number } = {},
+    ): LineTrace {
+        let source: TraceSource;
+        if (options.document !== undefined) {
+            source = this.traceSourceFromParsed(options.document.lines);
+        } else if (this.documentModel !== null) {
+            const doc = this.documentModel;
+            source = this.traceSourceFromModel(doc, (n) => doc.getLineAt(n)?.result ?? undefined);
+        } else {
+            throw ErrorFactory.execution(
+                "TRACE_NO_DOCUMENT",
+                "traceLine needs a document: attach one through a ThreeTierEvaluator, or pass a parseDocument result as options.document",
+            );
+        }
+        if (!Number.isInteger(lineNumber) || lineNumber < 1 || lineNumber > source.lineCount) {
+            throw ErrorFactory.execution(
+                "TRACE_NO_SUCH_LINE",
+                `There is no line ${lineNumber} to trace: the document has ${source.lineCount} line${source.lineCount === 1 ? "" : "s"}`,
+                { lineNumber, lineCount: source.lineCount },
+            );
+        }
+        return buildLineTrace(source, (expression) => this.traceTokens(expression), lineNumber, {
+            maxDepth: options.maxDepth ?? DEFAULT_TRACE_OPTIONS.maxDepth,
+            maxLines: options.maxLines ?? DEFAULT_TRACE_OPTIONS.maxLines,
+            followForward: true,
+        });
+    }
+
+    /**
+     * Evaluate a span for {@link explainLine}, recording every call it makes.
+     *
+     * The VM reports each call to the observer attached here, and only here, so
+     * this is the one evaluation in the engine that pays for recording them.
+     *
+     * @param expression - A self-contained span of the line being explained.
+     * @param owners - Filled with the registering package of each plugin or converter call.
+     * @returns The span's value and the calls it made, in the order it made them.
+     */
+    private evaluateObserved(expression: string, owners: Map<ExplainCall, string>): ObservedSpan {
+        const calls: ExplainCall[] = [];
+        const value = this.evaluateIsolated(expression, (observed) => {
+            const call = this.toExplainCall(observed, owners);
+            if (call !== null) calls.push(call);
+        });
+        return { value, calls };
+    }
+
+    /**
+     * Name an observed call the way a package's `explain` hook matches it: a
+     * builtin by its function name, a plugin function by the name its package
+     * registered it under, a converter or a conversion as the VM reported it.
+     * The registering package of a plugin or converter call is noted in `owners`.
+     */
+    private toExplainCall(observed: ObservedCall, owners: Map<ExplainCall, string>): ExplainCall | null {
+        const { kind, args, result } = observed;
+        if (kind === "builtin") return { kind, name: builtinFunctionName(observed.index), args, result };
+        if (kind === "conversion") return { kind, name: observed.name, args, result };
+        if (kind === "plugin") {
+            const owner = this.context.pluginFunctionOwners[observed.index];
+            const contribution = owner === undefined ? undefined : this.packageContributions.get(owner);
+            if (contribution === undefined) return null;
+            const at = contribution.pluginFunctionIndices.indexOf(observed.index);
+            const call: ExplainCall = { kind, name: contribution.pluginFunctionNames[at] ?? "", args, result };
+            owners.set(call, owner!);
+            return call;
+        }
+        // converter: owned by whichever package registered the name.
+        const name = observed.name;
+        const call: ExplainCall = { kind, name, args, result };
+        for (const [pkgName, contribution] of this.packageContributions) {
+            if (contribution.asConverterNames.some((n) => n.toLowerCase() === name)) owners.set(call, pkgName);
+        }
+        return call;
+    }
+
+    /**
+     * Ask the registered packages to describe one call.
+     *
+     * A plugin function or a converter is offered only to the package that
+     * registered it. A builtin or a conversion belongs to the engine, so it is
+     * offered to every package with an `explain` hook, the most recently
+     * registered first (the same "later registration wins" rule a clashing
+     * plugin name follows), and the first valid answer is used. An answer is
+     * valid when it is a non-empty list whose last step carries `call.result`
+     * itself; a hook that throws, or answers anything else, has declined.
+     *
+     * @param call - The call to describe.
+     * @param owner - The registering package, for a plugin or converter call.
+     * @returns The steps, or `undefined` when no package describes the call.
+     */
+    private describeCall(call: ExplainCall, owner: string | undefined): readonly ExplanationStep[] | undefined {
+        const ownedByPackage = call.kind === "plugin" || call.kind === "converter";
+        const packages = [...this.registeredPackages.values()];
+        for (let i = packages.length - 1; i >= 0; i--) {
+            const pkg = packages[i];
+            if (pkg.explain === undefined) continue;
+            if (ownedByPackage && pkg.name !== owner) continue;
+            let steps: readonly ExplanationStep[] | undefined;
+            try {
+                steps = pkg.explain(call, EXPLAIN_CONTEXT);
+            } catch {
+                continue;
+            }
+            if (Array.isArray(steps) && steps.length > 0 && steps[steps.length - 1].value === call.result) {
+                return steps.slice();
+            }
+        }
+        return undefined;
+    }
+
+    /**
      * Evaluate a self-contained sub-expression without touching document state.
      *
      * Used only by {@link explainLine}, inside its {@link withScratchState}.
@@ -5740,15 +6003,18 @@ export class ExpressionEngine {
      * sub-expressions, and evaluating those to build a derivation must not
      * disturb the document the line belongs to. An async (pending) result is
      * rejected, a derivation cannot represent one.
+     *
+     * @param expression - The span to evaluate.
+     * @param observeCall - Receives every call the VM makes while evaluating it.
      */
-    private evaluateIsolated(expression: string): Value {
+    private evaluateIsolated(expression: string, observeCall?: (call: ObservedCall) => void): Value {
         const { tokens, hasParens } = this.lexToTokens(expression);
         const prep = this.prepareExpression(expression, tokens, hasParens, undefined, -1);
         if (prep.kind === "empty") return numberValue(0);
         if (prep.kind === "error") throw prep.error;
         if (prep.kind === "symbolic-solve") return prep.value;
 
-        const result = this.executeRaw(prep.program, -1);
+        const result = this.executeRaw(prep.program, -1, observeCall);
         if (result.type === "error") throw result.error;
         if (result.type === "pending") {
             throw ErrorFactory.execution(

@@ -26,7 +26,9 @@ export type {
 	WhatIfOverrides,
 } from "./ExpressionEngine";
 
-export type { Explanation, ExplanationStep } from "@solve-js/explain";
+export type { Explanation, ExplanationStep, ExplainCall, ExplainContext, ExplainHook, LineTrace } from "@solve-js/explain";
+// A trace as the one line of text `inputs of line N` answers with.
+export { formatLineTrace } from "@solve-js/explain";
 
 // The calendar the engine computes dates with, the `calendar` option's type,
 // and the `Date` backend that option defaults to.

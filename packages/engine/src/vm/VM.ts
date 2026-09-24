@@ -31,6 +31,7 @@ import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
 import { resolveZoneName } from "@solve-js/calendar/ZoneNames";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
+import type { LineTrace } from "@solve-js/explain/Explanation";
 
 /**
  * Create a new VM instance with the given opcode registry and configurable limits.
@@ -437,6 +438,70 @@ export interface LineExecutionContext {
      * current line to find the nearest table and read one of its columns.
      */
     getLineText?: (lineNumber: number) => string | undefined;
+    /**
+     * Receives every call the VM makes while this line runs: a built-in
+     * function, a package's plugin function, an `as` converter, or a unit or
+     * currency conversion, each with its arguments and the value it pushed.
+     *
+     * Set only by `ExpressionEngine.explainLine()`, which runs the line once
+     * more with this attached so a derivation can name each step with the
+     * engine's own numbers. Absent on every ordinary evaluation, where the VM
+     * reads it once per program and never calls anything, so evaluation costs
+     * the same with or without explaining.
+     */
+    observeCall?: (call: ObservedCall) => void;
+    /**
+     * The lines that fed line `lineNumber`'s answer, followed upwards, for the
+     * `inputs of line N` form. A forward reference (a line reading a line below
+     * it) is reported in the trace and not followed, since from inside a pass
+     * the line below has not been worked out. Absent when there is no document
+     * to trace in. See `ExpressionEngine.traceLine()`.
+     */
+    traceLine?: (lineNumber: number) => LineTrace;
+}
+
+/**
+ * One call the VM made, as reported to {@link LineExecutionContext.observeCall}.
+ *
+ * `kind` says what ran, and `index` or `name` which one: a built-in function by
+ * its `CALL_BUILTIN` index, a plugin function by its registry index, an `as`
+ * converter by its name, and a conversion by the table that answered it
+ * (`"measure"`, `"currency"` or `"rate"`). `args` are the values the call was
+ * given, in the order it declares them, and `result` is the value it pushed.
+ * A conversion's single argument is the source quantity in its own unit; the
+ * target unit is `result.unit`.
+ */
+export interface ObservedCall {
+    /** What ran. */
+    readonly kind: "builtin" | "plugin" | "converter" | "conversion";
+    /** The builtin or plugin registry index; -1 for a converter or a conversion. */
+    readonly index: number;
+    /** The converter's name, or the conversion's table; empty for a builtin or plugin call. */
+    readonly name: string;
+    /** The arguments, in declaration order. */
+    readonly args: readonly Value[];
+    /** The value the call pushed. */
+    readonly result: Value;
+}
+
+/**
+ * Report a conversion to an attached observer.
+ *
+ * Kept out of the dispatch loop's cases so each of them adds one guarded call
+ * rather than an object literal, and called only when an observer is attached.
+ *
+ * @param observe - The line's observer.
+ * @param table - Which conversion answered: `"measure"`, `"currency"` or `"rate"`.
+ * @param source - The quantity converted, in its own unit.
+ * @param stack - The VM stack, whose top is the converted value just pushed.
+ */
+function observeConversion(
+    observe: (call: ObservedCall) => void,
+    table: string,
+    source: Value,
+    stack: Value[],
+): void {
+    observe({ kind: "conversion", index: -1, name: table, args: [source], result: stack[stack.length - 1] });
 }
 
 /**
@@ -2543,6 +2608,11 @@ export function executeBytecode(
     // No function call, no argument evaluation, zero overhead.
     const shouldTrace = pipeline?.hasCollectors ?? false;
 
+    // Read once per program, the same way: undefined on every evaluation except
+    // an explain run, so each call site below pays one comparison against a
+    // local and nothing else. See LineExecutionContext.observeCall.
+    const observeCall = context?.observeCall;
+
     // Hoist arena check to a local constant, avoids a function call at
     // every HALT/STORE_VAR/fallback-return in the dispatch loop.
     // The arena is only active during scroll execution (ThreeTierEvaluator
@@ -3646,6 +3716,7 @@ export function executeBytecode(
               return { type: 'pending', queryKey: cacheKey, resolver: result, packageId, signal };
             }
             stack.push(result);
+            if (observeCall !== undefined) observeCall({ kind: "plugin", index: fnIdx, name: "", args, result });
           }
           break;
         }
@@ -3692,6 +3763,7 @@ export function executeBytecode(
             // The line context goes through for the few builtins that draw
             // randomness from it (`random()`, `roll`); every other ignores it.
             stack.push(routeSymbolically ? symbolicBuiltin(fnIdx, ordered) : fn(ordered, context));
+            if (observeCall !== undefined) observeCall({ kind: "builtin", index: fnIdx, name: "", args: ordered, result: stack[stack.length - 1] });
           } else {
             // The arguments are gone and nothing replaced them, which used to
             // leave the next opcode reading a neighbour's operand as its own.
@@ -3997,6 +4069,7 @@ export function executeBytecode(
             // date computes through this engine's calendar backend, exactly
             // as a plugin function does.
             stack.push(converter(value, context));
+            if (observeCall !== undefined) observeCall({ kind: "converter", index: -1, name, args: [value], result: stack[stack.length - 1] });
           }
           break;
         }
@@ -4062,12 +4135,14 @@ export function executeBytecode(
           const measure = getMeasure(fromUnit);
           if (measure && getMeasure(toUnit) === measure) {
             stack.push(uomValue(convertUnit(val, fromUnit, toUnit), toUnit));
+            if (observeCall !== undefined) observeConversion(observeCall, "measure", uomValue(val, fromUnit), stack);
           } else if (sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit)) {
             // Asked only once the measure table has declined: a `100 cm to m`
             // has no reason to consult the currency tables at all.
             const converted = sharedCurrencyExchange.convertSync(val, fromUnit, toUnit);
             if (converted !== null) {
               stack.push(uomValue(converted, toUnit));
+              if (observeCall !== undefined) observeConversion(observeCall, "currency", uomValue(val, fromUnit), stack);
             } else {
               // No live rate cached yet (or the fetch failed). Pushing the
               // unconverted value under its original unit would silently
@@ -4085,6 +4160,7 @@ export function executeBytecode(
             const rate = convertRate(val, fromUnit, toUnit);
             if (rate !== null) {
               stack.push(uomValue(rate, toUnit));
+              if (observeCall !== undefined) observeConversion(observeCall, "rate", uomValue(val, fromUnit), stack);
             } else {
               stack.push(incompatibleConversionError(fromUnit, toUnit));
             }
@@ -4124,11 +4200,13 @@ export function executeBytecode(
             const measure = getMeasure(fromUnit);
             if (measure && getMeasure(toUnit) === measure) {
               stack.push(uomValue(convertUnit(val, fromUnit, toUnit), toUnit));
+              if (observeCall !== undefined) observeConversion(observeCall, "measure", left, stack);
             } else if (sharedCurrencyExchange.isCurrency(fromUnit) && sharedCurrencyExchange.isCurrency(toUnit)) {
               // Deferred past the measure check, as in UOM_CONVERT_TO above.
               const converted = sharedCurrencyExchange.convertSync(val, fromUnit, toUnit);
               if (converted !== null) {
                 stack.push(uomValue(converted, toUnit));
+                if (observeCall !== undefined) observeConversion(observeCall, "currency", left, stack);
               } else {
                 // See the matching comment in UOM_CONVERT_TO, pushing the
                 // original value here would silently pass off a missing
@@ -4141,6 +4219,7 @@ export function executeBytecode(
               const rate = convertRate(val, fromUnit, toUnit);
               if (rate !== null) {
                 stack.push(uomValue(rate, toUnit));
+                if (observeCall !== undefined) observeConversion(observeCall, "rate", left, stack);
               } else {
                 stack.push(incompatibleConversionError(fromUnit, toUnit));
               }
