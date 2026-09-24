@@ -80,7 +80,7 @@ describe("npv of <flows> at <rate>", () => {
 		expect(v.type).toBe(ValueType.Uom);
 		expect(v.unit).toBe("USD");
 		expect(v.exact).toBeDefined();
-		expect(shown("npv of -$1,000, $300, $400, $500 at 10%")).toBe("$-21.04");
+		expect(shown("npv of -$1,000, $300, $400, $500 at 10%")).toBe("-$21.04");
 		expect(value("npv of -£5,000, £1,500, £2,000, £2,500 at 8%").unit).toBe("GBP");
 	});
 

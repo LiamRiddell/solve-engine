@@ -40,8 +40,10 @@ describe("digit grouping on quantities and money", () => {
 		expect(formatValue(uomValue(1000, "days"))).toBe("= 1,000 days");
 	});
 
-	test("a negative amount keeps its sign in front of the grouped digits", () => {
-		expect(formatValue(uomValue(-1234.5, "USD"))).toBe("= $-1,234.50");
+	test("a negative amount keeps its sign in front of the symbol and the grouped digits", () => {
+		// The sign leads, as money is written: it used to land between the
+		// symbol and the digits, $-1,234.50 (#554).
+		expect(formatValue(uomValue(-1234.5, "USD"))).toBe("= -$1,234.50");
 	});
 
 	test("an exact money literal still rounds from its decimal, then groups", () => {

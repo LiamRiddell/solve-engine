@@ -1,4 +1,5 @@
 import { Value, ValueType, type ChartData, type MatrixData, type RangeData } from "@solve-js/vm/Value";
+import { formatValue } from "@solve-js/format/FormatEngine";
 
 /** A sparkline's series is capped so the chart data stays small across the worker. */
 export const SPARKLINE_MAX_SAMPLES = 32;
@@ -55,7 +56,11 @@ export function sparklineChart(value: Value): ChartData | null {
 	const series = downsample(full, SPARKLINE_MAX_SAMPLES);
 	const min = Math.min(...full);
 	const max = Math.max(...full);
-	const label = full.length <= SPARKLINE_MAX_SAMPLES ? `[${full.join(", ")}]` : `sparkline of ${full.length} values`;
+	// A list is labelled the way it reads on its own line, at the same decimal
+	// places, rather than by its raw digits: [1.23, 2.50] and not
+	// [1.23456, 2.5] (#558). A range is whole numbers either way.
+	const shown = value.type === ValueType.Matrix ? formatValue(value).replace(/^=\s*/, "") : `[${full.join(", ")}]`;
+	const label = full.length <= SPARKLINE_MAX_SAMPLES ? shown : `sparkline of ${full.length} values`;
 	return {
 		kind: "sparkline",
 		points: series.map((v, i) => [i, v] as const),

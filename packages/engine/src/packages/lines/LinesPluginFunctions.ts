@@ -130,6 +130,12 @@ function aggregateRange(from: number, to: number, context: LineExecutionContext,
     for (let n = first; n <= last; n++) context.noteLineRead(n);
   }
   for (let n = from; step > 0 ? n <= to : n >= to; n += step) {
+    // A blank line or a heading inside the range has no figure to add, as a
+    // spreadsheet's SUM passes over an empty cell. It used to be read as a
+    // forward reference, so pressing Enter inside a summed range turned the
+    // sum into an error (#562). Only a line inside the document is passed
+    // over; a range past its end still reports that line.
+    if (lineCount !== undefined && n >= 1 && n <= lineCount && context.isLineBoundary?.(n)) continue;
     const v = context.getLineResult!(n);
     const err = checkLineValue(v, n);
     if (err) return err;
@@ -137,6 +143,9 @@ function aggregateRange(from: number, to: number, context: LineExecutionContext,
       return errorValue("LINE_RANGE_NON_NUMERIC", `Line ${n} is not a plain number or unit value — cannot include it in a sum/total/average range`);
     }
     values.push(v!);
+  }
+  if (values.length === 0) {
+    return errorValue("LINE_RANGE_EMPTY", `Lines ${from} to ${to} hold no figures to ${isAverage ? "average" : "add up"}: every line in the range is blank or a heading.`);
   }
   return combineQuantities(values, isAverage);
 }

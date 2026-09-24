@@ -417,8 +417,12 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
     // conversion, whose rate is a double) keep the toFixed rendering above.
     const moneyText = exact ? localiseFixedDecimal(decimalToFixed(exact, dp), loc, useGrouping) : formatted;
     const sep = currencyDisplay.spaced ? " " : "";
+    // A prefix symbol goes after the sign, as money is written: -$5.00, not
+    // $-5.00, which is what putting the symbol in front of the signed amount
+    // text produced (#554). A suffix symbol follows the amount either way.
+    const negative = moneyText.startsWith("-");
     const withSymbol = currencyDisplay.position === "prefix"
-      ? `${currencyDisplay.symbol}${sep}${moneyText}`
+      ? `${negative ? "-" : ""}${currencyDisplay.symbol}${sep}${negative ? moneyText.slice(1) : moneyText}`
       : `${moneyText}${sep}${currencyDisplay.symbol}`;
     return `= ${withSymbol}`;
   }
