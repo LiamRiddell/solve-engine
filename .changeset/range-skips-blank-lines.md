@@ -20,4 +20,4 @@ Fixes #562 and #563.
 
 ## Verification
 
-The cross-path spec pins a span over a blank line and a heading, an empty span and a span past the end through `parseDocument` and `evaluateDocument`, which agree. The line references page gains both as proven examples. `npm run verify:ci` passes: TESTS tests across SUITES suites, with the bundled-consumer contract.
+The cross-path spec pins a span over a blank line and a heading, an empty span and a span past the end through `parseDocument` and `evaluateDocument`, which agree. The line references page gains both as proven examples. `npm run verify:ci` passes: 10,723 tests across 518 suites, with the bundled-consumer contract.

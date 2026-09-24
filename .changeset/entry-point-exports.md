@@ -20,4 +20,4 @@ Fixes #556 and #557.
 
 ## Verification
 
-A new spec checks that every package a syntax page names, and every package in `BUILTIN_PACKAGES`, is exported from `solve-engine/packages`, and that `errorValue` is exported from `solve-engine/vm`. Every value import in the docs' TypeScript examples was checked against the built entry points. `npm run verify:ci` passes: TESTS tests across SUITES suites, with the bundled-consumer contract.
+A new spec checks that every package a syntax page names, and every package in `BUILTIN_PACKAGES`, is exported from `solve-engine/packages`, and that `errorValue` is exported from `solve-engine/vm`. Every value import in the docs' TypeScript examples was checked against the built entry points. `npm run verify:ci` passes: 10,723 tests across 518 suites, with the bundled-consumer contract.

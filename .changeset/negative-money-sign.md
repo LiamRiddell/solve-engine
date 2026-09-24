@@ -20,4 +20,4 @@ Fixes #554.
 
 ## Verification
 
-The grouping spec and the cash-flow spec now pin the sign first, the notation spec adds the compact form, and the currency page gains a negative amount as a proven example. `npm run verify:ci` passes: TESTS tests across SUITES suites, with the bundled-consumer contract.
+The grouping spec and the cash-flow spec now pin the sign first, the notation spec adds the compact form, and the currency page gains a negative amount as a proven example. `npm run verify:ci` passes: 10,723 tests across 518 suites, with the bundled-consumer contract.

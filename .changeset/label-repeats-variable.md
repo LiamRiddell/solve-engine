@@ -17,4 +17,4 @@ Fixes #561.
 
 ## Verification
 
-The labelled-line spec pins the repeated name and a real equation beside it. `npm run verify:ci` passes: TESTS tests across SUITES suites, with the bundled-consumer contract.
+The labelled-line spec pins the repeated name and a real equation beside it. `npm run verify:ci` passes: 10,723 tests across 518 suites, with the bundled-consumer contract.

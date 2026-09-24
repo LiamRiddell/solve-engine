@@ -17,4 +17,4 @@ Fixes #558.
 
 ## Verification
 
-The chart spec pins the label against the list's own display, and the charts page gains a fractional list as a proven example. `npm run verify:ci` passes: TESTS tests across SUITES suites, with the bundled-consumer contract.
+The chart spec pins the label against the list's own display, and the charts page gains a fractional list as a proven example. `npm run verify:ci` passes: 10,723 tests across 518 suites, with the bundled-consumer contract.
