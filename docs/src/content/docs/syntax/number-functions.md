@@ -30,6 +30,28 @@ max(1 km, 500 m) // 1.00 km
 max(25/12/2026, 1/1/2027) // Friday, January 1, 2027
 ```
 
+A function that changes a quantity's size without changing what it measures
+keeps its unit: the rounding family (`round`, `floor`, `ceil`, `trunc`), `abs`,
+and `hypot`, the long side of a right-angled triangle, whose short sides are
+read in a shared unit. A function that counts, such as `fact`, `gcd` or
+`combination`, takes plain numbers, and refuses a quantity by name rather than
+counting its bare number.
+
+```solve-doc
+trunc(3.7 m) // 3.00 m
+hypot(3 m, 400 cm) // 5.00 m
+fact(3 m) // ERROR: fact takes a plain number, not a length
+```
+
+`root(n, x)` is the nth root of x. A negative number has a real root of odd
+degree, since -2 cubed is -8, and none of even degree, which is refused by name
+as `(-1)^0.5` is.
+
+```solve-doc
+root(3, -8) // -2
+root(2, -4) // ERROR: root(2, -4) has no real value: a negative number has a real root only of odd degree, as in root(3, -8).
+```
+
 ## Trigonometry
 
 `sin`, `cos` and `tan` relate an angle to the sides of a right-angled triangle:
@@ -50,7 +72,9 @@ sine of a length has no meaning, and read as its bare number the answer would
 depend on which unit happened to be written: one metre and a hundred centimetres
 would give different sines. The logarithms, `exp`, and the inverse and hyperbolic
 functions take a plain number and refuse any quantity the same way. A ratio of
-two lengths is a plain number, so it is accepted.
+two lengths is a plain number, so it is accepted. The degree forms, `sind`,
+`cosd` and `tand`, read a bare number as degrees and an angle in its own unit,
+so `sind(1 rad)` is the sine of one radian.
 
 ```solve-doc
 sin(1 m) // ERROR: sin takes an angle or a plain number, not a length

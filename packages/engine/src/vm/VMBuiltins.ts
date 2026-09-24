@@ -97,6 +97,44 @@ function quantityRefused(name: string, value: Value, angles: boolean): Value | n
 }
 
 /**
+ * {@link quantityRefused} over every argument, for a function that takes only
+ * plain numbers: the counting functions, the bit functions and the inverse
+ * degree functions (#592).
+ */
+function quantitiesRefused(name: string, args: Value[]): Value | null {
+    for (const arg of args) {
+        const refused = quantityRefused(name, arg, false);
+        if (refused !== null) return refused;
+    }
+    return null;
+}
+
+/**
+ * The argument of a function that takes degrees (`sind`, `degtorad`), in
+ * radians. A plain number is degrees; an angle quantity is converted from its
+ * own unit, so `sind(1 rad)` is the sine of one radian rather than of one
+ * degree (#592). A caller refuses any other quantity first.
+ */
+function degreeArgumentInRadians(value: Value): number {
+    if (value.type === ValueType.Uom && value.unit !== undefined) return angleInRadians(value);
+    return value.toNumber() * Math.PI / 180;
+}
+
+/**
+ * The refusal for an argument list that mixes a quantity with a plain number,
+ * or null. `atan2` and `hypot` read their arguments together, as two sides
+ * of a triangle, so both have to be plain or both measure one thing (#592).
+ */
+function mixedQuantityRefused(name: string, args: Value[]): Value | null {
+    const quantities = args.filter((a) => a.type === ValueType.Uom && a.unit !== undefined).length;
+    if (quantities === 0 || quantities === args.length) return null;
+    return errorValue(
+        "FUNCTION_TAKES_NUMBER",
+        `${name} takes plain numbers, or quantities that all measure one thing, not a mix of the two`,
+    );
+}
+
+/**
  * The refusal for `tan` at an odd multiple of a right angle, or null anywhere
  * else.
  *
@@ -605,7 +643,15 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     11: (args) => quantityRefused("asin", args[0], false) ?? outsideDomain("asin", args[0].toNumber(), withinUnit, "numbers from -1 to 1") ?? numberValue(Math.asin(args[0].toNumber())),
     12: (args) => quantityRefused("acos", args[0], false) ?? outsideDomain("acos", args[0].toNumber(), withinUnit, "numbers from -1 to 1") ?? numberValue(Math.acos(args[0].toNumber())),
     13: (args) => quantityRefused("atan", args[0], false) ?? numberValue(Math.atan(args[0].toNumber())),
-    14: (args) => numberValue(Math.atan2(args[0].toNumber(), args[1].toNumber())),
+    // atan2 and hypot read two sides of a triangle, so quantities are read in a
+    // shared unit and two kinds are refused; see mixedQuantityRefused().
+    14: (args) => {
+        const mixed = mixedQuantityRefused("atan2", args);
+        if (mixed !== null) return mixed;
+        const sides = unifyQuantities(args, "compared");
+        if (sides instanceof Value) return sides;
+        return numberValue(Math.atan2(sides.magnitudes[0], sides.magnitudes[1]));
+    },
     15: (args) => quantityRefused("sinh", args[0], false) ?? numberValue(Math.sinh(args[0].toNumber())),
     16: (args) => quantityRefused("cosh", args[0], false) ?? numberValue(Math.cosh(args[0].toNumber())),
     17: (args) => quantityRefused("tanh", args[0], false) ?? numberValue(Math.tanh(args[0].toNumber())),
@@ -618,17 +664,26 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (args[0].type === ValueType.Uom && args[0].unit !== undefined) return rootQuantity(args[0], 3, "cbrt");
         return numberValue(Math.cbrt(args[0].toNumber()));
     },
-    22: (args) => numberValue(Math.clz32(args[0].toNumber())),
+    22: (args) => quantitiesRefused("clz32", args) ?? numberValue(Math.clz32(args[0].toNumber())),
     23: (args) => quantityRefused("expm1", args[0], false) ?? numberValue(Math.expm1(args[0].toNumber())),
     24: (args) => quantityRefused("exp", args[0], false) ?? numberValue(Math.exp(args[0].toNumber())),
-    25: (args) => numberValue(Math.fround(args[0].toNumber())),
+    25: (args) => quantitiesRefused("fround", args) ?? numberValue(Math.fround(args[0].toNumber())),
     // hypot: left as .map()+spread (unlike min/max above), Math.hypot uses
     // a numerically-stable scaling algorithm internally to avoid overflow
     // for very large/small inputs; a naive manual reimplementation risks
     // silently changing results at the extremes, so the tiny array
     // allocation here is the safer trade.
-    26: (args) => numberValue(Math.hypot(...args.map(a => a.toNumber()))),
-    27: (args) => numberValue(Math.imul(args[0].toNumber(), args[1].toNumber())),
+    // A hypotenuse of lengths is a length, so quantities of one kind keep the
+    // first one's unit (#592).
+    26: (args) => {
+        const mixed = mixedQuantityRefused("hypot", args);
+        if (mixed !== null) return mixed;
+        const sides = unifyQuantities(args, "combined in a hypotenuse");
+        if (sides instanceof Value) return sides;
+        const length = Math.hypot(...sides.magnitudes);
+        return sides.unit !== undefined ? uomValue(length, sides.unit) : numberValue(length);
+    },
+    27: (args) => quantitiesRefused("imul", args) ?? numberValue(Math.imul(args[0].toNumber(), args[1].toNumber())),
     28: (args) => quantityRefused("log10", args[0], false) ?? outsideDomain("log10", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log10(args[0].toNumber())),
     29: (args) => quantityRefused("log1p", args[0], false) ?? outsideDomain("log1p", args[0].toNumber(), (x) => x > -1, "numbers greater than -1") ?? numberValue(Math.log1p(args[0].toNumber())),
     30: (args) => quantityRefused("log2", args[0], false) ?? outsideDomain("log2", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log2(args[0].toNumber())),
@@ -645,6 +700,13 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
       }
       if (args[1].type === ValueType.Matrix) {
         return errorValue("MATRIX_POWER_UNSUPPORTED", `pow: a matrix may only be the base, as in "pow([1,2;3,4], 2)".`);
+      }
+      // An exponent has no unit, as `^` says (#535, #592).
+      if (args[1].type === ValueType.Uom && args[1].unit !== undefined) {
+        return errorValue(
+          "UNIT_IN_EXPONENT",
+          `An exponent cannot carry a unit (${args[1].unit}): a power counts multiplications. For a quantity in scientific notation, write the unit after the power, as in "10^3 m".`,
+        );
       }
       // A quantity base answers what `^` answers for it: `pow(3 m, 2)` is 9 m2.
       if (args[0].type === ValueType.Uom && args[0].unit !== undefined) {
@@ -667,9 +729,11 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     },
     32: (_args, context) => numberValue(drawRandom(context)), // takes no arguments, unlike its neighbours
     33: (args) => numberValue(Math.sign(args[0].toNumber())),
-    34: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "trunc") ?? numberValue(Math.trunc(args[0].toNumber())),
-    35: (args) => numberValue(args[0].toNumber() * Math.PI / 180),
-    36: (args) => numberValue(args[0].toNumber() * 180 / Math.PI),
+    // trunc keeps a unit, as the rest of the rounding family does (#592).
+    34: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "trunc") ?? keepUnit(args[0], Math.trunc(args[0].toNumber())),
+    // An angle quantity is read in its own unit; see degreeArgumentInRadians().
+    35: (args) => quantityRefused("degtorad", args[0], true) ?? numberValue(degreeArgumentInRadians(args[0])),
+    36: (args) => quantityRefused("radtodeg", args[0], true) ?? numberValue(angleInRadians(args[0]) * 180 / Math.PI),
     // 37: diceRoll(from, to), random integer in range [from, to] inclusive.
     // A reversed range (from > to) used to silently produce values outside
     // [to, from] via a negative-length Math.random() spread (e.g.
@@ -685,7 +749,11 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     },
     // gcd(a, b), Euclidean algorithm. Negative inputs are treated by
     // magnitude (gcd is conventionally defined over non-negative integers).
+    // The counting functions take whole numbers, so a quantity is refused
+    // rather than counted by its bare number (#592).
     38: (args) => {
+        const gcdRefused = quantitiesRefused("gcd", args);
+        if (gcdRefused !== null) return gcdRefused;
         // Double Euclid is exact on doubles, so only an operand carrying an
         // exact integer needs the bigint form.
         if (args[0].rational !== undefined || args[1].rational !== undefined) {
@@ -703,6 +771,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // Whole operands take the exact form, whose answer can pass the safe
     // range where `(a / g) * b` would round; see vm/ExactIntegers.ts.
     39: (args) => {
+        const lcmRefused = quantitiesRefused("lcm", args);
+        if (lcmRefused !== null) return lcmRefused;
         const exact = exactGcdOrLcm(args[0], args[1], "lcm");
         if (exact) return exact;
         const a = Math.trunc(Math.abs(args[0].toNumber()));
@@ -728,6 +798,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // early exit bounds the trip count without a separate estimate, and
     // without ever refusing a permutation that does have an answer.
     40: (args) => {
+        const permutationRefused = quantitiesRefused("permutation", args);
+        if (permutationRefused !== null) return permutationRefused;
         const fractional = notWholeCount("permutation", args);
         if (fractional) return fractional;
         const n = args[0].toNumber();
@@ -765,6 +837,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // double can hold it never comes back, and the largest run this can now
     // take is the thousand-odd steps C(n, k) needs to cross that line.
     41: (args) => {
+        const combinationRefused = quantitiesRefused("combination", args);
+        if (combinationRefused !== null) return combinationRefused;
         const fractional = notWholeCount("combination", args);
         if (fractional) return fractional;
         const n = args[0].toNumber();
@@ -867,16 +941,16 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // not a numeric type.
     // An exact integer past the safe range converts from its own digits, as
     // `as hex` does; see baseConversionOperand() in vm/ExactIntegers.ts.
-    48: (args) => hexValue(baseConversionOperand(args[0])),
+    48: (args) => quantitiesRefused("hex", args) ?? hexValue(baseConversionOperand(args[0])),
     // bin(n). Same call-syntax shape as hex() above, e.g. bin(10) -> "0b1010".
-    49: (args) => hexValue(baseConversionOperand(args[0]), "bin"),
+    49: (args) => quantitiesRefused("bin", args) ?? hexValue(baseConversionOperand(args[0]), "bin"),
     // int(x), coerce ANY value (Number, Percentage, Uom, String, Hex, ...)
     // to a plain integer Number, truncating any fractional part toward
     // zero (Math.trunc semantics: int(5.7) -> 5, int(-5.7) -> -5). Distinct
     // from the Converters package's `x as number` (TO_NUMBER opcode),
     // which only strips a unit/percentage wrapper and keeps any decimal
     // part (e.g. "5.7 as number" -> 5.7), int() additionally truncates.
-    50: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "trunc") ?? numberValue(Math.trunc(args[0].toNumber())),
+    50: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "trunc") ?? keepUnit(args[0], Math.trunc(args[0].toNumber())),
 
     // ── Finance (packages/finance/) ──────────────────────────────────────
     // All finance builtins preserve the principal/amount argument's Uom
@@ -1077,6 +1151,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // usual floating-point pow() rounding, same precision class as every
     // other builtin here.
     61: (args) => {
+        // The degree counts how many times a root multiplies, so it has no unit (#592).
+        if (args[0].type === ValueType.Uom && args[0].unit !== undefined) {
+            return errorValue("FUNCTION_TAKES_NUMBER", `root takes a plain number as its degree, not ${describeQuantity(args[0].unit)}`);
+        }
         const n = args[0].toNumber();
         // A quantity has a root with a unit only for an area (n = 2) or a
         // volume (n = 3); see sqrt and cbrt above.
@@ -1085,6 +1163,22 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
             return errorValue("UNIT_ROOT_UNSUPPORTED", `root: a quantity in ${args[1].unit} has no ${n}th root with a unit; only an area or a volume has a length as its root.`);
         }
         const x = args[1].toNumber();
+        // A negative number's root: real for an odd whole degree, refused by
+        // name otherwise, the rule `^` follows (#588, #592).
+        if (x < 0 && Number.isFinite(x)) {
+            const degree = Math.abs(n);
+            if (Number.isInteger(degree) && degree % 2 === 1) {
+                let magnitude = Math.pow(-x, 1 / degree);
+                // The whole root where there is one, so root(3, -8) is exactly -2.
+                const whole = Math.round(magnitude);
+                if (Math.pow(whole, degree) === -x) magnitude = whole;
+                return numberValue(n > 0 ? -magnitude : -1 / magnitude);
+            }
+            return errorValue(
+                "POWER_NO_REAL_VALUE",
+                `root(${Number(n.toPrecision(12))}, ${Number(x.toPrecision(12))}) has no real value: a negative number has a real root only of odd degree, as in root(3, -8).`,
+            );
+        }
         return numberValue(power(x, 1 / n));
     },
 
@@ -1095,6 +1189,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // returning a silently-wrong (or silently-infinite) result past that
     // point would be worse than a clear error.
     62: (args) => {
+        const factRefused = quantitiesRefused("fact", args);
+        if (factRefused !== null) return factRefused;
         const n = args[0].toNumber();
         if (!Number.isInteger(n) || n < 0) {
             return errorValue("INVALID_FACTORIAL_INPUT", `fact: ${n} is not a non-negative integer`);
@@ -1322,12 +1418,14 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // The "d" spellings take and return degrees rather than radians, which is
     // the convention every scientific calculator uses. sin(90 degrees) is the
     // other way to say the same thing; both exist because both get typed.
-    87: (args) => numberValue(exactSine(args[0].toNumber() * Math.PI / 180)),
-    88: (args) => numberValue(exactCosine(args[0].toNumber() * Math.PI / 180)),
-    89: (args) => exactTangent(args[0].toNumber() * Math.PI / 180),
-    90: (args) => outsideDomain("asind", args[0].toNumber(), withinUnit, "numbers from -1 to 1") ?? numberValue(Math.asin(args[0].toNumber()) * 180 / Math.PI),
-    91: (args) => outsideDomain("acosd", args[0].toNumber(), withinUnit, "numbers from -1 to 1") ?? numberValue(Math.acos(args[0].toNumber()) * 180 / Math.PI),
-    92: (args) => numberValue(Math.atan(args[0].toNumber()) * 180 / Math.PI),
+    // The degree forms read an angle quantity in its own unit, and refuse any
+    // other quantity (#592); see degreeArgumentInRadians().
+    87: (args) => quantityRefused("sind", args[0], true) ?? numberValue(exactSine(degreeArgumentInRadians(args[0]))),
+    88: (args) => quantityRefused("cosd", args[0], true) ?? numberValue(exactCosine(degreeArgumentInRadians(args[0]))),
+    89: (args) => quantityRefused("tand", args[0], true) ?? exactTangent(degreeArgumentInRadians(args[0])),
+    90: (args) => quantitiesRefused("asind", args) ?? outsideDomain("asind", args[0].toNumber(), withinUnit, "numbers from -1 to 1") ?? numberValue(Math.asin(args[0].toNumber()) * 180 / Math.PI),
+    91: (args) => quantitiesRefused("acosd", args) ?? outsideDomain("acosd", args[0].toNumber(), withinUnit, "numbers from -1 to 1") ?? numberValue(Math.acos(args[0].toNumber()) * 180 / Math.PI),
+    92: (args) => quantitiesRefused("atand", args) ?? numberValue(Math.atan(args[0].toNumber()) * 180 / Math.PI),
     // daysCount(n) -> n labelled as days. "days in Q3" is a count of days
     // and should say so; a bare 92 loses what was being counted.
     93: (args) => uomValue(args[0].toNumber(), "days"),
