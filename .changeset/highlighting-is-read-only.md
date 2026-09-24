@@ -33,7 +33,7 @@ A running total's name is also painted as the variable it is. The lexer, which s
 | `b += 5` | `b` unit | `b` variable |
 | `s -= 2 kg` | `s` unit | `s` variable, `kg` unit |
 
-The boundary: only the check is read-only. `compileExpression` still applies a line's effect, because the incremental evaluator compiles through it and depends on the effect happening. `explainLine`, which a host puts behind a hover, evaluates the line to build its derivation and is not covered here. The name fix covers a running total's name only; a unit-letter name on the left of a bare assignment (`b = 5`) or in a function's parameters (`g(t) = t + 1`) is still painted with the lexer's category. Highlighting costs the same as before: over a 200-line document, both builds in one process, interleaved, a full pass from an empty cache took a median of 0.51 to 0.55 ms before and 0.47 to 0.54 ms now, across three runs of eleven.
+The boundary: only the check is read-only. `compileExpression` still applies a line's effect, because the incremental evaluator compiles through it and depends on the effect happening. `explainLine`, which a host puts behind a hover, has to run the line to build its derivation, so a check cannot serve it; it runs in discarded scratch state instead, a change of its own (#566). The name fix covers a running total's name only; a unit-letter name on the left of a bare assignment (`b = 5`) or in a function's parameters (`g(t) = t + 1`) is still painted with the lexer's category. Highlighting costs the same as before: over a 200-line document, both builds in one process, interleaved, a full pass from an empty cache took a median of 0.51 to 0.55 ms before and 0.47 to 0.54 ms now, across three runs of eleven.
 
 Fixes #559.
 

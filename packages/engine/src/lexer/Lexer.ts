@@ -165,21 +165,51 @@ export class Lexer {
     this.currentState = state;
   }
 
-  getHighlightTokens(lineText: string): {type: string; value: string; offset: number; col: number; length: number; category: TokenCategory | undefined}[] {
-    const classification = this.expressionLexer.classifyLine(lineText);
-
-    // For blockquote lines, strip the "> " prefix and tokenize the expression content.
-    // This lets expressions inside blockquotes (e.g., "> 1 + 2") get syntax highlighted
-    // while pure structural lines (headings, code fences) remain unhighlighted.
-    if (classification.skip && lineText.startsWith("> ")) {
-      return this.collectHighlightTokens(lineText.slice(2));
+  /**
+   * Where the part of a line worth highlighting starts, or -1 when the line is
+   * markdown structure with nothing to highlight (a heading, a fence, a rule).
+   *
+   * Two markers are set aside, and every span is still measured on the line as
+   * written, so a host colours the characters it thinks it is colouring:
+   *
+   * - A blockquote's `> `. The evaluator skips a quoted line, but its content
+   *   is still painted, so `> 1 + 2` reads as the sum it quotes.
+   * - A list marker (`- `, `* `, `+ `, `1. `, and a task's `- [ ] `), the same
+   *   one the evaluator starts past (`LineClassification.contentOffset`), so
+   *   `- 100 + 20` is painted as the `100 + 20` it evaluates, not as a minus.
+   *   Inside a blockquote too: `> - 1 + 2` starts at the `1`.
+   *
+   * Spans on a quoted line used to be measured from the text after the `> `,
+   * two columns short of the characters they named (#567).
+   *
+   * @param lineText - One line of source.
+   * @param classification - The line's classification, when the caller already has it.
+   * @returns The offset to highlight from, or -1 for nothing.
+   */
+  highlightContentStart(lineText: string, classification: LineClassification = this.expressionLexer.classifyLine(lineText)): number {
+    let start = 0;
+    let content = classification;
+    if (content.skip) {
+      if (!lineText.startsWith("> ")) return -1;
+      start = 2;
+      content = this.expressionLexer.classifyLine(lineText.slice(2));
     }
+    if (content.contentOffset !== undefined) start += content.contentOffset;
+    return start;
+  }
 
-    if (classification.skip) {
-      return [];
-    }
-
-    return this.collectHighlightTokens(lineText);
+  /**
+   * Every token on a line worth painting, each with its category and its span
+   * on the line as written.
+   *
+   * @param lineText - One line of source.
+   * @param from - Where to start, from {@link highlightContentStart} unless the
+   *   caller already has it; -1 paints nothing.
+   * @returns The tokens, in order, offsets measured on `lineText`.
+   */
+  getHighlightTokens(lineText: string, from: number = this.highlightContentStart(lineText)): {type: string; value: string; offset: number; col: number; length: number; category: TokenCategory | undefined}[] {
+    if (from < 0) return [];
+    return this.collectHighlightTokens(lineText, from);
   }
 
   /**
@@ -190,18 +220,15 @@ export class Lexer {
    * normalizer between the two. See `LanguageService.getSemanticTokens`.
    *
    * @param lineText - One line of source.
+   * @param from - As for {@link getHighlightTokens}.
    * @returns Every token on the line that is worth painting, unreduced.
    */
-  getHighlightTokenObjects(lineText: string): Token[] {
-    const classification = this.expressionLexer.classifyLine(lineText);
-    if (classification.skip && lineText.startsWith("> ")) {
-      return this.collectTokenObjects(lineText.slice(2));
-    }
-    if (classification.skip) return [];
-    return this.collectTokenObjects(lineText);
+  getHighlightTokenObjects(lineText: string, from: number = this.highlightContentStart(lineText)): Token[] {
+    if (from < 0) return [];
+    return this.collectTokenObjects(lineText, from);
   }
 
-  private collectTokenObjects(lineText: string): Token[] {
+  private collectTokenObjects(lineText: string, from: number): Token[] {
     // Scanned into an array this method owns rather than through
     // resetExpression(), which has nothing to hand back when the line faults
     // part way. Highlighting is painted while the line is still being typed,
@@ -211,7 +238,7 @@ export class Lexer {
     this.currentState = LexerState.Main;
     this.hasPeeked = false;
     this.peekedToken = undefined;
-    this.expressionLexer.reset(lineText);
+    this.expressionLexer.reset(lineText, from);
     const raw: Token[] = [];
     try {
       this.expressionLexer.tokenizeInto(raw);
@@ -230,8 +257,8 @@ export class Lexer {
     return result;
   }
 
-  private collectHighlightTokens(lineText: string): {type: string; value: string; offset: number; col: number; length: number; category: TokenCategory | undefined}[] {
-    return this.collectTokenObjects(lineText).map(token => ({
+  private collectHighlightTokens(lineText: string, from: number): {type: string; value: string; offset: number; col: number; length: number; category: TokenCategory | undefined}[] {
+    return this.collectTokenObjects(lineText, from).map(token => ({
       type: token.type,
       value: token.value,
       offset: token.offset,

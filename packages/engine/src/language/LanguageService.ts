@@ -259,19 +259,19 @@ export class LanguageService {
 	 * at its own offset, and an inserted one does not.
 	 *
 	 * @param lineText - The raw line.
+	 * @param from - Where the line's content starts, from `Lexer.highlightContentStart`.
 	 * @returns Spans in the same shape `Lexer.getHighlightTokens` returns.
 	 */
 	private classifyNormalized(
 		lineText: string,
+		from: number,
 	): { type: string; value: string; offset: number; col: number; length: number; category: TokenCategory | undefined }[] {
-		const lexer = this.engine!.getLexer();
-		const raw = lexer.getHighlightTokenObjects(lineText);
+		const raw = this.engine!.getLexer().getHighlightTokenObjects(lineText, from);
 		if (raw.length === 0) return [];
 
-		// Offsets from a blockquote line are relative to the stripped text, so
-		// the text this checks against has to be stripped the same way.
-		const source =
-			lineText.startsWith("> ") && lexer.classifyLine(lineText).skip ? lineText.slice(2) : lineText;
+		// Offsets are measured on the line as written, past any marker too, so
+		// the text each token is checked against is the whole line.
+		const source = lineText;
 
 		let normalized: Token[];
 		try {
@@ -344,15 +344,19 @@ export class LanguageService {
 		}
 
 		const lexer = this.engine.getLexer();
+		const classification = lexer.classifyLine(lineText);
+		// Past a blockquote's `> ` and a list marker, the same place the
+		// evaluator starts a list item. Every span is still measured on the
+		// line as written (#567).
+		const contentStart = lexer.highlightContentStart(lineText, classification);
 		const lexed = this.normalizeForHighlighting
-			? this.classifyNormalized(lineText)
-			: lexer.getHighlightTokens(lineText);
+			? this.classifyNormalized(lineText, contentStart)
+			: lexer.getHighlightTokens(lineText, contentStart);
 		if (lexed.length === 0) {
 			this.putCache(lineNumber, lineText, []);
 			return [];
 		}
 
-		const classification = lexer.classifyLine(lineText);
 		const tokens: SemanticToken[] = [];
 
 		if (classification.hasInlineSolve) {
@@ -375,13 +379,9 @@ export class LanguageService {
 				tokens.push({ from, to, category: token.category });
 			}
 		} else {
-			// Blockquote content is stripped of its "> " prefix before being
-			// tokenized (see Lexer.getHighlightTokens), token offsets are
-			// already relative to the stripped text, so the parse check must
-			// run against that same substring to match.
-			const text = lineText.startsWith("> ") && classification.skip
-				? lineText.slice(2)
-				: lineText;
+			// The parse check reads what was tokenized: the line past its
+			// markers, which for a list item is the text the evaluator runs.
+			const text = contentStart > 0 ? lineText.slice(contentStart) : lineText;
 			if (this.parsesAsExpression(text)) {
 				const runningTotalName = runningTotalNameOffset(lexed);
 				for (const token of lexed) {

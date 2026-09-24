@@ -35,6 +35,14 @@ unit. The service checks that such a line is well formed and leaves it there,
 so an editor can highlight on every keystroke, as often as it likes, and no
 value in the document moves. Running the line is the evaluator's job alone.
 
+Every span is measured on the line exactly as it was handed over, so its `from`
+and `to` name the characters to colour, with no offset to add. Markdown in
+front of an expression is looked past and left uncoloured: a quote marker
+(`> 1 + 2`), a bullet (`- 100 + 20`, `* 5 kg`), a numbered item (`1. 12 km`)
+and a task box (`- [ ] total += 5`). A bullet's `-` is markup, not a minus sign,
+which is also why the engine evaluates `- 100 + 20` as 120. Written with no
+space after it, `-100 + 20` is arithmetic, and its minus is coloured as one.
+
 ## Checking a line parses
 
 For deciding whether to decorate a line at all, there is a non-throwing check
