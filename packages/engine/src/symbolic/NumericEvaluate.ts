@@ -204,9 +204,18 @@ function compile(node: SymbolicNode, variable: string, depth: number): RealFunct
 	}
 }
 
+/**
+ * The entry a table holds under a function name, or undefined. An own-property
+ * test, since the name comes from the expression: a plain lookup of `constructor`
+ * or `toString` would find the object's prototype, not a function of the table.
+ */
+function ownEntry<T>(table: Readonly<Record<string, T>>, name: string): T | undefined {
+	return Object.prototype.hasOwnProperty.call(table, name) ? table[name] : undefined;
+}
+
 /** A function application, by the name the `call` node records. */
 function compileCall(name: string, args: readonly RealFunction[]): RealFunction {
-	const unary = UNARY[name];
+	const unary = ownEntry(UNARY, name);
 	if (unary !== undefined && args.length === 1) {
 		const [arg] = args;
 		return x => unary(arg(x));
@@ -410,8 +419,8 @@ function compileBounded(node: SymbolicNode, variable: string, depth: number): Bo
 
 /** A function application with error bounds, by the name the `call` node records. */
 function compileBoundedCall(name: string, args: readonly BoundedFunction[]): BoundedFunction {
-	const unary = UNARY[name];
-	const slope = UNARY_SLOPE[name];
+	const unary = ownEntry(UNARY, name);
+	const slope = ownEntry(UNARY_SLOPE, name);
 	if (unary !== undefined && slope !== undefined && args.length === 1) {
 		const [arg] = args;
 		return x => {

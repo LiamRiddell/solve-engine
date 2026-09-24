@@ -201,9 +201,11 @@ describe("the work is bounded", () => {
 		expect(Date.now() - started).toBeLessThan(3000);
 	});
 
-	test("the native engine is not asked: the same pattern on a short text agrees with it", () => {
+	test("the native engine is not asked: the same pattern on a short text answers as it does", () => {
+		// JavaScript's RegExp finds no match here either. Its answer is written
+		// out rather than computed, since this is the pattern shape that makes
+		// a backtracking engine exponential.
 		expect(first("(a+)+$", "aaaa!")).toBeNull();
-		expect(/(a+)+$/.exec("aaaa!")).toBeNull();
 	});
 
 	test("a search past its budget stops with PatternBudgetExceeded", () => {
@@ -318,19 +320,22 @@ function disagreementsWithRegExp(seed: number, cases: number, emptyLoops: boolea
 describe("agreement with RegExp", () => {
 	test("an optional loop pass that matches nothing is refused, as JavaScript refuses it", () => {
 		// Each is a pattern where a loop's body can match nothing; JavaScript then
-		// tries the body's next way of matching rather than stopping.
-		for (const [source, text] of [
-			["(a|)*b", "aab"],
-			["(a*)*", "b"],
-			["(a*)?", "b"],
-			["(a{0,2}?\\w*?)+", "xAA B1"],
-			["(\\w*?)+", "abc"],
-			["(?:x*)*y", "xxy"],
-			["(a*)+b", "aab"],
-			["(a*){2,3}", "aaa"],
-		] as const) {
-			const native = new RegExp(source).exec(text);
-			expect(first(source, text)).toEqual(native === null ? null : { index: native.index, groups: Array.from(native) });
+		// tries the body's next way of matching rather than stopping. The
+		// expected answers are JavaScript's own, taken from RegExp once and
+		// written out, since several of these are backtracking-exponential
+		// shapes that should not be run through a native engine in a test.
+		const cases: ReadonlyArray<readonly [string, string, (string | undefined)[]]> = [
+			["(a|)*b", "aab", ["aab", "a"]],
+			["(a*)*", "b", ["", undefined]],
+			["(a*)?", "b", ["", undefined]],
+			["(a{0,2}?\\w*?)+", "xAA B1", ["xAA", "A"]],
+			["(\\w*?)+", "abc", ["abc", "c"]],
+			["(?:x*)*y", "xxy", ["xxy"]],
+			["(a*)+b", "aab", ["aab", "aa"]],
+			["(a*){2,3}", "aaa", ["aaa", ""]],
+		];
+		for (const [source, text, groups] of cases) {
+			expect(first(source, text)).toEqual({ index: 0, groups });
 		}
 	});
 

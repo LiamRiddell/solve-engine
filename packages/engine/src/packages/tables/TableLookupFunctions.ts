@@ -172,7 +172,8 @@ function plainNumber(n: number): string {
 /** An amount as a message shows it: `$45,000`, `45,000` or `1,200 CHF`. */
 function describeAmount(n: number, currency: string | undefined): string {
   if (currency === undefined) return plainNumber(n);
-  const display = CURRENCY_DISPLAY[currency];
+  // An own-property test: the code comes from the table, not from a fixed list.
+  const display = Object.prototype.hasOwnProperty.call(CURRENCY_DISPLAY, currency) ? CURRENCY_DISPLAY[currency] : undefined;
   if (display && display.position === "prefix" && !display.spaced) {
     return `${n < 0 ? "-" : ""}${display.symbol}${plainNumber(Math.abs(n))}`;
   }
