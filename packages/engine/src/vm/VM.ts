@@ -1884,6 +1884,12 @@ function toScientificString(n: number): string {
 // a `return` here. Measure the loop before growing it (run a spec in band under
 // `node --print-bytecode --print-bytecode-filter=executeBytecode`), and move a
 // body out rather than let it cross the ceiling again.
+//
+// A local benchmark can understate the cost. Node 22, which the benchmark job
+// runs, leaves an oversized function unoptimised; newer versions still compile
+// it with Maglev, their middle tier, and lose only about a tenth. Run the suite
+// under `node --no-maglev` to see what Node 22 sees: past the ceiling, `vm`
+// measured 3.2 times slower that way, against 1.1 times with Maglev on.
 
 /** `N working days after/before/from <date>` (DATE_WORKDAY_OFFSET), moved out of the dispatch loop. */
 function workdayOffset(stack: Value[], workdayDirection: number, vm: VM): void {
