@@ -43,7 +43,7 @@
  * operation takes the plain fast path again.
  */
 
-import { Value, ValueType, numberValue, numberValueExact, numberValueRational } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueExact, numberValueRational, errorValue } from "@solve-js/vm/Value";
 import { decimalCompare, decimalToString, type DecimalData } from "@solve-js/decimal";
 import { rational, rationalToNumber, type Rational } from "@solve-js/symbolic";
 import { bigIntPow, exactIntegerValue, exactIntegerArithmetic, exactIntegerRemainder } from "@solve-js/vm/ExactIntegers";
@@ -272,11 +272,67 @@ export function exactArithmetic(l: Value, r: Value, approx: number, op: "add" | 
  * @returns The result to push.
  */
 export function exactPowerArithmetic(l: Value, r: Value, approx: number): Value {
+	// NaN fails both range tests on the fast path, so it arrives here too.
+	if (approx !== approx) return negativeBaseRoot(l, r) ?? numberValue(approx);
 	if (l.exact !== undefined) {
 		const exact = exactDecimalPower(l, r);
 		if (exact !== null) return exact;
 	}
 	return approx <= SAFE_LIMIT && approx >= -SAFE_LIMIT ? numberValue(approx) : exactIntegerArithmetic(l, r, approx, "pow");
+}
+
+/**
+ * The nearest whole number to `x`, a half away from zero: 2.5 is 3 and -2.5 is
+ * -3. `Math.round` takes a half towards positive infinity, so -2.5 was -2 while
+ * `round(-2.5, 0)` and `-2.5 to 0 dp` were -3 (#584). This is the rule those
+ * already followed, and a spreadsheet's `ROUND`.
+ */
+export function roundHalfAwayFromZero(x: number): number {
+	return x < 0 ? -round(-x) : round(x);
+}
+
+/** A number as a message writes it: at most twelve significant figures. */
+function shownNumber(x: number): string {
+	return String(Number(x.toPrecision(12)));
+}
+
+/**
+ * A negative base to a fractional power, which a double answers with NaN: its
+ * real root where it has one, a refusal by name where it does not, or null
+ * when the base is not a negative number and the NaN is someone else's.
+ *
+ * A negative number has a real root of odd degree (`(-8)^(1/3)` is -2, since
+ * -2 cubed is -8) and none of even degree, so the exponent has to be known as a
+ * fraction to tell which it is. It is one when it carries a fraction's sidecar
+ * (`1/3`) or was typed as a decimal (`0.2` is 1/5); `(-8)^(2/3)` is then the
+ * cube root squared, 4. An exponent known only as a double, or one whose
+ * fraction has an even denominator (`0.5` is 1/2), has no real answer and is
+ * refused, as `log(-1)` is (#510, #588). `sqrt(-1)` answers `i`: `^` stays
+ * in the real numbers.
+ *
+ * @param l - The base.
+ * @param r - The exponent.
+ */
+export function negativeBaseRoot(l: Value, r: Value): Value | null {
+	if (l.type !== ValueType.Number || r.type !== ValueType.Number) return null;
+	const base = l.toNumber();
+	const exponent = r.toNumber();
+	if (!(base < 0) || !Number.isFinite(base) || !Number.isFinite(exponent)) return null;
+	const fraction = r.rational ?? rationalOfExactDecimal(r);
+	if (fraction !== null && fraction.d % 2n === 1n) {
+		const degree = Number(fraction.d);
+		let rootOf = Math.pow(-base, 1 / degree);
+		// Take the whole root where there is one, so `(-8)^(1/3)` is exactly -2
+		// rather than the nearest double to 8^0.333...
+		const whole = round(rootOf);
+		if (Math.pow(whole, degree) === -base) rootOf = whole;
+		const magnitude = Math.pow(rootOf, Number(fraction.n));
+		return numberValue(fraction.n % 2n === 0n ? magnitude : -magnitude);
+	}
+	return errorValue(
+		"POWER_NO_REAL_VALUE",
+		`(${shownNumber(base)})^${shownNumber(exponent)} has no real value: a negative number to a fractional power has one only when the fraction's denominator is odd, as in (-8)^(1/3).`,
+	);
 }
 
 /**
@@ -518,10 +574,11 @@ export function roundExactDecimalToWhole(v: Value, mode: "floor" | "ceil" | "tru
 		case "floor": whole = remainder < 0n ? truncated - 1n : truncated; break;
 		case "ceil": whole = remainder > 0n ? truncated + 1n : truncated; break;
 		case "round": {
-			// floor(x + 1/2): a half goes up, towards positive infinity.
+			// A half goes away from zero, the rule `to N dp` rounds by (#584):
+			// 2.5 is 3 and -2.5 is -3.
 			const doubled = 2n * remainder;
 			if (remainder > 0n) whole = doubled >= divisor ? truncated + 1n : truncated;
-			else whole = -doubled > divisor ? truncated - 1n : truncated;
+			else whole = -doubled >= divisor ? truncated - 1n : truncated;
 			break;
 		}
 	}

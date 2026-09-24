@@ -90,7 +90,8 @@ describe("call folding is conservative", () => {
 		expect(simplified(callNode("floor", [half]))).toBe("-2");
 		expect(simplified(callNode("ceil", [half]))).toBe("-1");
 		expect(simplified(callNode("trunc", [half]))).toBe("-1");
-		expect(simplified(callNode("round", [half]))).toBe("-1");
+		// A half goes away from zero, as the round builtin rounds (#584).
+		expect(simplified(callNode("round", [half]))).toBe("-2");
 		expect(simplified(callNode("abs", [half]))).toBe("1.5");
 		expect(simplified(callNode("sign", [half]))).toBe("-1");
 	});

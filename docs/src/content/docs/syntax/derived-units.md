@@ -39,6 +39,16 @@ feet and pound-force (`lbf`) compose just as kilograms, metres and newtons do.
 5 lb * 9.8 m/s^2 // 22.23 N
 ```
 
+An acceleration is written in metres per second squared, `m/s^2` or `m/s²`, and
+that is the one acceleration unit the engine holds. It converts to itself, and
+anything else asked of it is refused in words: an acceleration is not a force
+until a mass multiplies it.
+
+```solve-doc
+9.81 m/s² in m/s^2 // 9.81 m/s²
+9.81 m/s^2 in N // ERROR: an acceleration cannot be converted to a force
+```
+
 A power used for a time of a minute or more is named in watt-hours, with the
 power's own prefix: a 2 kW heater for three hours uses 6 kilowatt-hours, the
 figure a bill charges for, rather than 21,600,000 joules. Dividing such an energy

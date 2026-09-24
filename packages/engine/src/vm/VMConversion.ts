@@ -317,6 +317,9 @@ export function describeMeasure(unit: string): string | undefined {
     // Currencies are not in the measure table (getMeasure returns undefined for
     // them), so they are named here before the table lookup.
     if (sharedCurrencyExchange.isCurrency(unit)) return "money";
+    // Nor is acceleration, which has a dimension but no measure (uom/Dimensions.ts);
+    // unnamed, its internal spelling `mps2` reached the reader (#590).
+    if (unit === "mps2") return "acceleration";
     const measure = getMeasure(unit);
     if (measure === undefined) return undefined;
     return measureNoun(measure);
@@ -329,6 +332,16 @@ export function describeMeasure(unit: string): string | undefined {
 function withMeasureArticle(noun: string): string {
     if (UNCOUNTABLE_MEASURES.has(noun)) return noun;
     return /^[aeiou]/.test(noun) ? `an ${noun}` : `a ${noun}`;
+}
+
+/**
+ * What a quantity in `unit` is, with its article, for a sentence that names
+ * it ("not a length", "not money"), or "a quantity in <unit>" for a unit with
+ * no single dimension to name (a compound rate).
+ */
+export function describeQuantity(unit: string): string {
+    const noun = describeMeasure(unit);
+    return noun === undefined ? `a quantity in ${unit}` : withMeasureArticle(noun);
 }
 
 /**

@@ -55,8 +55,13 @@ that have no unit at all, are on their own page,
 A power on a unit is the unit's own, so `5 m^2` is five square metres. Only a
 length has a square or a cube with a unit, so a power written on any other unit
 is refused rather than answered with the bare number. Acceleration in metres per
-second squared, `m/s^2`, is a unit in its own right; see
-[derived units](/syntax/derived-units/).
+second squared, `m/s^2`, is a unit in its own right, and so is `m/s²`, the way
+the engine writes it back; see [derived units](/syntax/derived-units/).
+
+```solve
+9.81 m/s² // 9.81 m/s²
+10 kg * 9.81 m/s² // 98.10 N
+```
 
 ```solve-doc
 5 kg^2 // ERROR: "kg^2" is not a unit: a power on a unit makes an area or a volume, so it applies only to a length the unit table spells squared or cubed, such as m^2 or ft^3.

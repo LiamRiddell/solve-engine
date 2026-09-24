@@ -74,9 +74,11 @@ describe("a bare number is still radians", () => {
 	});
 });
 
-describe("a non-angle unit is left alone", () => {
-	test("so it does not silently rescale something unrelated", () => {
-		expect(num("sin(1 metre)")).toBeCloseTo(Math.sin(1), 10);
+describe("a quantity that is not an angle is refused (#587)", () => {
+	test("rather than read as its bare number, which depended on the unit written", () => {
+		const code = (source: string) => newTrackedEngine().evaluateExpression(source).errorCode;
+		expect(code("sin(1 metre)")).toBe("FUNCTION_TAKES_NUMBER");
+		expect(code("sin(100 cm)")).toBe("FUNCTION_TAKES_NUMBER");
 	});
 });
 

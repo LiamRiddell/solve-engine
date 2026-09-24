@@ -45,6 +45,19 @@ tan(45 degrees) // 1
 sin(pi/2) // 1
 ```
 
+An angle is what these take, so a quantity that is not an angle is refused. The
+sine of a length has no meaning, and read as its bare number the answer would
+depend on which unit happened to be written: one metre and a hundred centimetres
+would give different sines. The logarithms, `exp`, and the inverse and hyperbolic
+functions take a plain number and refuse any quantity the same way. A ratio of
+two lengths is a plain number, so it is accepted.
+
+```solve-doc
+sin(1 m) // ERROR: sin takes an angle or a plain number, not a length
+log(10 kg) // ERROR: log takes a plain number, not a mass
+sin(1 m / 2 m) // 0.48
+```
+
 The angles people actually type, 0, 30, 45, 60 and 90 degrees and their
 multiples, and the same angles written with π, give exact answers. A computer
 holds none of those angles exactly (π itself has no exact binary form), so the

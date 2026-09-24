@@ -160,9 +160,9 @@ describe("rounding reads the exact value", () => {
 		expect(shown("ceil(0.1 * 3 * 10)")).toBe("3");
 		expect(shown("trunc(-2.99999999999999999)")).toBe("-2");
 		expect(shown("floor(2.99999999999999999)")).toBe("2");
-		// round(x) keeps the rule it always had: a half goes up.
+		// round(x) takes a half away from zero, as round(x, n) and `to N dp` do (#584).
 		expect(shown("round(2.5)")).toBe("3");
-		expect(shown("round(-2.5)")).toBe("-2");
+		expect(shown("round(-2.5)")).toBe("-3");
 	});
 
 	test("abs, min and max keep the exact decimal", () => {

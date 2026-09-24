@@ -13,6 +13,9 @@ import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 import { isFixedOffset, longDateInZone, timeOfDayInZone } from "@solve-js/calendar/IntlZone";
 
 function formatNumber(value: number, locale: ILocale, settings: FormattingSettings, decimalPlaces?: number, exact?: DecimalData): string {
+  // A zero is written without a sign. IEEE's negative zero is kept on the value,
+  // where `1 / (0 * -1)` can tell it apart, but `-0` is no use to a reader (#585).
+  if (value === 0) value = 0;
   const sep = settings.floatResult.enableSeperator;
   const loc = settings.numberResult.decimalSeparatorLocale;
   // An explicit precision (`3.14159 to 4 dp`, `round(1.5, 2)`) shows EXACTLY that
@@ -464,7 +467,8 @@ function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings): st
   const dp = settings.floatResult.decimalPlaces;
   const sep = settings.floatResult.enableSeperator;
   const loc = settings.numberResult.decimalSeparatorLocale;
-  return autoFormatIntegerOrFloat(entry, dp, sep, loc);
+  // A zero entry is written without a sign, as a zero result is (#585).
+  return autoFormatIntegerOrFloat(entry === 0 ? 0 : entry, dp, sep, loc);
 }
 
 /**
@@ -535,7 +539,10 @@ function formatPercentage(value: number, locale: ILocale, settings: FormattingSe
   // formatting; without this every percentage-change result displayed as
   // e.g. "0.25%" instead of "25.00%".
   const dp = settings.percentageResult.decimalPlaces;
-  const formatted = (value * 100).toFixed(dp);
+  let formatted = (value * 100).toFixed(dp);
+  // A proportion that rounds to zero at these places is written without a
+  // sign, as a zero is (#585): `-0.001%` is 0.00%, not -0.00%.
+  if (Number(formatted) === 0) formatted = formatted.replace("-", "");
   return `= ${formatted}${locale.display.percentageSuffix}`;
 }
 
