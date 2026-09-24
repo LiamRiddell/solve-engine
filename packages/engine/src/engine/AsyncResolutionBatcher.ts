@@ -1,4 +1,6 @@
+import type { QueryClient } from "@tanstack/query-core";
 import type { DependencyGraph } from "@solve-js/vm/DependencyGraph";
+import { getActiveQueryClient, setActiveQueryClient } from "@solve-js/services/DataQueryService";
 import type { LineCache, LineCacheEntry } from "@solve-js/cache/LineCache";
 import { type Value, errorValue } from "@solve-js/vm/Value";
 import { executeBytecode } from "@solve-js/vm/VM";
@@ -175,6 +177,25 @@ export class AsyncResolutionBatcher {
 	 * as it was, which is what a host driving the batcher on its own gets.
 	 */
 	checkpointer: VMCheckpointer | null = null;
+
+	/**
+	 * The query cache of the engine that owns this batcher, published for the
+	 * length of a re-run.
+	 *
+	 * A package's plugin function reads a resolved value back through
+	 * `getActiveQueryClient()`, which is a single module-level slot the engine
+	 * sets when it runs a line. A re-run here used to leave the slot as it was,
+	 * so it read whichever cache was published last. For an engine whose first
+	 * line fetches, nothing had been published yet (a line that goes pending at
+	 * preflight never runs), and the re-run answered "No cached result". With a
+	 * second engine in the process it read that engine's cache instead, and
+	 * reported the other engine's price as this line's answer.
+	 *
+	 * Set by the engine at construction. Null leaves the slot untouched, which
+	 * is what a host driving the batcher on its own, with no cache of its own,
+	 * gets.
+	 */
+	queryClient: QueryClient | null = null;
 
 	/**
 	 * Whether {@link warnIfUnwired} has already fired.
@@ -800,6 +821,26 @@ export class AsyncResolutionBatcher {
 	}
 
 	private reExecuteMainThread(
+		ordered: number[],
+		allQueryKeys: string[],
+		entryMap?: Map<number, LineCacheEntry | undefined>,
+	): number[] {
+		// The owning engine's cache is published for the re-run and the previous
+		// one put back afterwards, so a plugin function reads this engine's
+		// resolved values and nothing outside the re-run sees the slot move. See
+		// {@link queryClient}.
+		if (this.queryClient === null) return this.reExecuteLines(ordered, allQueryKeys, entryMap);
+		const previous = getActiveQueryClient();
+		setActiveQueryClient(this.queryClient);
+		try {
+			return this.reExecuteLines(ordered, allQueryKeys, entryMap);
+		} finally {
+			setActiveQueryClient(previous);
+		}
+	}
+
+	/** The body of {@link reExecuteMainThread}, run with the owning engine's query cache published. */
+	private reExecuteLines(
 		ordered: number[],
 		allQueryKeys: string[],
 		entryMap?: Map<number, LineCacheEntry | undefined>,

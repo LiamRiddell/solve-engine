@@ -50,6 +50,26 @@ const CATEGORY_TIER: Partial<Record<TokenCategory, number>> = {
 /** Bounded cache size. See the eviction-policy note on `LanguageService.cache`. */
 const MAX_CACHED_LINES = 2000;
 
+/**
+ * The offset of a running total's name (`total` in `total += 5`), or -1 when
+ * the line is not one.
+ *
+ * The name is always a variable, whatever the lexer made of it on its own: the
+ * engine reads `b += 5` as adding to a variable called `b` (see
+ * `ExpressionEngine.tryCompoundAssignment`), where the lexer, which sees one
+ * word at a time, reads a lone `b` as the unit bit.
+ *
+ * @param lexed - The line's highlight tokens, in order.
+ */
+function runningTotalNameOffset(lexed: readonly { type: string; offset: number }[]): number {
+	const name = lexed[0];
+	const operator = lexed[1];
+	if (name === undefined || operator === undefined) return -1;
+	if (name.type !== "IDENT" && name.type !== "UNIT") return -1;
+	if (operator.type !== "PLUS_EQUALS" && operator.type !== "MINUS_EQUALS") return -1;
+	return name.offset;
+}
+
 interface CacheEntry {
 	text: string;
 	tokens: SemanticToken[];
@@ -132,9 +152,11 @@ export interface LanguageServiceOptions {
  * not something the engine would ever accept as an expression. Surfacing
  * per-token colors for that case looks like the editor mistook prose for
  * code. So a line's tokens are only surfaced once the line as a whole
- * parses successfully (via `ExpressionEngine.compileExpression`, the same
+ * parses successfully (via `ExpressionEngine.tryCompileExpression`, the same
  * parse pipeline, and the same bytecode cache, real evaluation uses; no
- * separate/duplicated grammar check). A single bare word ("hello", a valid
+ * separate/duplicated grammar check). That check is read-only: a line is
+ * compiled, never run, so highlighting cannot change what the document
+ * holds. A single bare word ("hello", a valid
  * variable reference) or a keyword-only line ("pi") still parses and still
  * highlights, only genuinely ungrammatical text is suppressed, unless it's
  * a known variable elsewhere in the document (see `variableNameSource`).
@@ -237,19 +259,19 @@ export class LanguageService {
 	 * at its own offset, and an inserted one does not.
 	 *
 	 * @param lineText - The raw line.
+	 * @param from - Where the line's content starts, from `Lexer.highlightContentStart`.
 	 * @returns Spans in the same shape `Lexer.getHighlightTokens` returns.
 	 */
 	private classifyNormalized(
 		lineText: string,
+		from: number,
 	): { type: string; value: string; offset: number; col: number; length: number; category: TokenCategory | undefined }[] {
-		const lexer = this.engine!.getLexer();
-		const raw = lexer.getHighlightTokenObjects(lineText);
+		const raw = this.engine!.getLexer().getHighlightTokenObjects(lineText, from);
 		if (raw.length === 0) return [];
 
-		// Offsets from a blockquote line are relative to the stripped text, so
-		// the text this checks against has to be stripped the same way.
-		const source =
-			lineText.startsWith("> ") && lexer.classifyLine(lineText).skip ? lineText.slice(2) : lineText;
+		// Offsets are measured on the line as written, past any marker too, so
+		// the text each token is checked against is the whole line.
+		const source = lineText;
 
 		let normalized: Token[];
 		try {
@@ -322,15 +344,19 @@ export class LanguageService {
 		}
 
 		const lexer = this.engine.getLexer();
+		const classification = lexer.classifyLine(lineText);
+		// Past a blockquote's `> ` and a list marker, the same place the
+		// evaluator starts a list item. Every span is still measured on the
+		// line as written (#567).
+		const contentStart = lexer.highlightContentStart(lineText, classification);
 		const lexed = this.normalizeForHighlighting
-			? this.classifyNormalized(lineText)
-			: lexer.getHighlightTokens(lineText);
+			? this.classifyNormalized(lineText, contentStart)
+			: lexer.getHighlightTokens(lineText, contentStart);
 		if (lexed.length === 0) {
 			this.putCache(lineNumber, lineText, []);
 			return [];
 		}
 
-		const classification = lexer.classifyLine(lineText);
 		const tokens: SemanticToken[] = [];
 
 		if (classification.hasInlineSolve) {
@@ -353,17 +379,15 @@ export class LanguageService {
 				tokens.push({ from, to, category: token.category });
 			}
 		} else {
-			// Blockquote content is stripped of its "> " prefix before being
-			// tokenized (see Lexer.getHighlightTokens), token offsets are
-			// already relative to the stripped text, so the parse check must
-			// run against that same substring to match.
-			const text = lineText.startsWith("> ") && classification.skip
-				? lineText.slice(2)
-				: lineText;
+			// The parse check reads what was tokenized: the line past its
+			// markers, which for a list item is the text the evaluator runs.
+			const text = contentStart > 0 ? lineText.slice(contentStart) : lineText;
 			if (this.parsesAsExpression(text)) {
+				const runningTotalName = runningTotalNameOffset(lexed);
 				for (const token of lexed) {
 					if (!token.category) continue;
-					tokens.push({ from: token.offset, to: token.offset + token.length, category: token.category });
+					const category = token.offset === runningTotalName ? "variable" : token.category;
+					tokens.push({ from: token.offset, to: token.offset + token.length, category });
 				}
 			}
 		}
@@ -502,6 +526,12 @@ export class LanguageService {
 	 * reuses the engine's existing bytecode cache, so text that's already
 	 * been evaluated (or previously highlight-checked) is a cache hit here
 	 * too.
+	 *
+	 * Compile-only includes the lines that do their work while compiling: a
+	 * running total, a bare assignment, an equation, a unit definition. They
+	 * are checked, not run, so highlighting never changes a value the
+	 * document holds. Before #559 they ran, and each highlight of
+	 * `total += 5` added another 5 to the total.
 	 *
 	 * Deliberately calls the non-throwing `tryCompileExpression` rather than
 	 * try/catching `compileExpression`. This runs on every visible line on

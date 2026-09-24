@@ -12,11 +12,20 @@ A colon prefix marks a definition explicitly.
 :subtotal * 2 // 200
 ```
 
-A bare name also works.
+A bare name also works, and behaves as the colon form does while the note is
+edited: change the value a name is given, and every line that uses it follows.
 
 ```solve
 count = 10
 count + 5 // 15
+```
+
+That includes another bare definition, so changing `deposit` below updates
+`payment`.
+
+```solve-doc
+deposit = 100
+payment = deposit * 40 // 4,000
 ```
 
 A name can be a letter that is also a unit symbol, `m` for mass or `s` for

@@ -12,6 +12,8 @@ import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/Bytecode
 import { seededStream, programKey, documentRandomSeed } from "@solve-js/engine/SeededRandom";
 import { summariseChecks } from "@solve-js/engine/CheckSummary";
 import { createVM, executeBytecode } from "@solve-js/vm/VM";
+import { createScratchVM } from "@solve-js/vm/ScratchVM";
+import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import { resolveHolidayPredicate } from "@solve-js/vm/HolidayCalendar";
 import type { EvalResult, LineExecutionContext } from "@solve-js/vm/VM";
 import type { DocumentModel } from "@solve-js/engine/DocumentModel";
@@ -256,6 +258,46 @@ function lineMessage(text: string): Value {
 }
 
 /**
+ * What the symbolic grammar made of a line: its answer, and the name it
+ * assigned when the line was a bare assignment (`payment = deposit * 40`).
+ *
+ * The name is what lets the line say what it writes. Every other symbolic
+ * shape (a stored equation, a `=>` simplification or solve) sets no variable,
+ * and reports `null`.
+ */
+interface SymbolicOutcome {
+	/** The line's answer. */
+	value: Value;
+	/** The variable the line set, or null when it set none. */
+	assigned: string | null;
+}
+
+/**
+ * Whether a line with an effect of its own runs that effect or is only checked.
+ *
+ * Some line shapes do their work while being compiled rather than by leaving
+ * bytecode behind: a running total (`total += 5`) reads, adds and stores; a bare
+ * assignment (`x = 3`) stores; an equation (`x^2 - 4 = 0`) is kept for a later
+ * `x =>`; a unit definition (`1 sprint = 2 weeks`) registers the unit. The
+ * evaluation paths `'apply'` those effects, which is what the line means.
+ *
+ * `'check'` is for a caller that only asks whether the line is well formed,
+ * {@link ExpressionEngine.tryCompileExpression}, which the language service
+ * calls for every visible line on every keystroke. It walks the same shape
+ * matching and compiles the same operands, so it gives the same answer about
+ * the line's form, but it executes nothing and stores nothing. Applying there
+ * meant colouring `total += 5` added another 5 to the total (#559).
+ */
+type EffectMode = "apply" | "check";
+
+/**
+ * What an effectful line shape answers when it was only checked: its operands
+ * compiled and nothing ran. Never shown to anyone, since the one caller that
+ * checks reads only whether the line matched, not what it would answer.
+ */
+const CHECKED_NOT_RUN: Value = new Value(ValueType.String, "checked, not run");
+
+/**
  * Core expression evaluation engine, the top-level orchestrator.
  *
  * Owns the full evaluation pipeline: lexing, parsing, bytecode compilation,
@@ -492,6 +534,15 @@ export class ExpressionEngine {
      */
     private lineContext: LineExecutionContext | null = null;
 
+    /**
+     * The scratch state a run inside {@link withScratchState} writes to, or
+     * `null` outside one. Its dependency graph takes the edges a cross-line
+     * read records, and its context is the one that run's lines are handed,
+     * so neither the document's graph nor the pass's shared context is
+     * touched. Both are built on first use and dropped with the run.
+     */
+    private scratch: { dag: DependencyGraph | null; lineContext: LineExecutionContext | null } | null = null;
+
     /** The seed the host gave (`EngineOptions.random` or {@link setRandomSeed}), as text. */
     private optionRandomSeed: string | undefined;
 
@@ -717,6 +768,15 @@ export class ExpressionEngine {
         const doc = this.documentModel;
         const scan = doc ? null : this.batchScanResults;
         const parsed = doc ? null : this.batchParsedLines;
+        if (this.scratch !== null) {
+            // A scratch run has a context of its own, so the pass's shared one
+            // keeps the line number it was left on. See withScratchState.
+            const scratchContext = this.scratch.lineContext ?? this.buildLineContext(doc, scan, parsed, lineNumber);
+            this.scratch.lineContext = scratchContext;
+            scratchContext.lineIndex = lineNumber;
+            scratchContext.scope = this.context.scope;
+            return scratchContext;
+        }
         let context = this.lineContext;
         if (context === null || this.lineContextDoc !== doc || this.lineContextScan !== scan || this.lineContextParsed !== parsed) {
             context = this.buildLineContext(doc, scan, parsed, lineNumber);
@@ -754,7 +814,13 @@ export class ExpressionEngine {
         // Only on the incremental path. The batch pass rebuilds every line from
         // scratch and has nothing that asks the graph what to re-run, so the
         // registration there would be cost with no reader.
-        const dag = this.dag;
+        //
+        // Inside a scratch run the edges go to the run's own graph, which is
+        // dropped with it: an explained `line 9 + 1` reads line 9 exactly as
+        // before, and the document's graph never learns of a reader at line -1.
+        // Without a document no closure below records an edge, so no graph is
+        // built for one.
+        const dag = this.scratch !== null && doc ? (this.scratch.dag ??= new DependencyGraph()) : this.dag;
         // Assigned before anything can call the closure below, which reads the
         // line number the pass is currently on rather than the one this context
         // was built for: one context serves a whole pass by mutation.
@@ -1030,6 +1096,22 @@ export class ExpressionEngine {
      * cross between documents.
      */
     private readonly userUnits = new UserUnitTable();
+    /**
+     * The line that stored each equation, by the equation's unknown, one map per
+     * kind: `a * x = 10` stores both a matrix and a scalar equation for `x`,
+     * `x^2 - a = 0` a scalar one. The value is the line's persistent id, or -1
+     * when there is no document model.
+     *
+     * The VM keeps equations by unknown alone, so without this nothing could say
+     * which line an equation belonged to, and editing that line away left the
+     * equation stored: `x =>` below it went on solving it (#569). See
+     * {@link undefineEquationsFrom}, the same arrangement {@link userUnits} has
+     * with its defining line.
+     */
+    private readonly equationOwners = {
+        matrix: new Map<string, number>(),
+        scalar: new Map<string, number>(),
+    };
     /** TanStack Query client, injected into resolvers for cache reads/writes. */
     readonly queryClient: QueryClient;
     // Bytecode cache, avoids re-parsing identical expressions.
@@ -1342,6 +1424,11 @@ export class ExpressionEngine {
         );
         this.queryClient = createQueryClient();
         this.batcher = new AsyncResolutionBatcher(this.dag, this.lineCache, this.vm);
+        // The batcher re-runs lines when a value lands, outside any evaluation
+        // this engine makes, so it publishes this engine's cache itself for the
+        // length of the re-run. Without it the re-run read whichever cache was
+        // published last, or none at all.
+        this.batcher.queryClient = this.queryClient;
         // Only stand up the background refresher when the host asked for it: a
         // headless or batch host wants no timers. When null, every value stays
         // pull-only, exactly as before. It feeds the same batcher the pull path
@@ -1499,6 +1586,52 @@ export class ExpressionEngine {
      */
     undefineUserUnitsFrom(lineId: number): boolean {
         return this.userUnits.undefineFrom(lineId);
+    }
+
+    /**
+     * Drop every equation a line stored (`a * x = 10`, `x^2 - a = 0`), for a
+     * line about to be compiled again, edited into one with nothing to
+     * evaluate, or deleted.
+     *
+     * An equation is kept in the VM by its unknown, and outlived the line that
+     * stored it: edit `a * x = 10` into a heading and `x =>` below it went on
+     * answering 5 where a fresh pass answers `x`. A line that still stores the
+     * equation stores it again as it runs.
+     *
+     * Only an equation the line is still the owner of goes. When two lines
+     * store one for the same unknown, the later to run owns it, so dropping the
+     * other line's leaves it in place.
+     *
+     * @param lineId - The persistent id of the line.
+     */
+    undefineEquationsFrom(lineId: number): void {
+        if (lineId < 0) return;
+        const { matrix, scalar } = this.equationOwners;
+        if (matrix.size > 0) {
+            for (const [variable, owner] of matrix) {
+                if (owner !== lineId) continue;
+                matrix.delete(variable);
+                this.vm.deleteEquation(variable);
+            }
+        }
+        if (scalar.size > 0) {
+            for (const [variable, owner] of scalar) {
+                if (owner !== lineId) continue;
+                scalar.delete(variable);
+                this.vm.deleteScalarEquation(variable);
+            }
+        }
+    }
+
+    /**
+     * Remember that the line at `lineNumber` stored an equation for `variable`.
+     *
+     * @param kind - Which of the VM's two equation stores it went into.
+     * @param variable - The equation's unknown.
+     * @param lineNumber - The 1-based line that stored it.
+     */
+    private noteEquationOwner(kind: "matrix" | "scalar", variable: string, lineNumber: number): void {
+        this.equationOwners[kind].set(variable, this.documentModel?.getLineAt(lineNumber)?.lineId ?? -1);
     }
 
     /**
@@ -2903,9 +3036,18 @@ export class ExpressionEngine {
         return result.value;
     }
 
-    /** Compiles and executes `tokens` in symbolic-tolerant mode, the "just simplify this" `=>` fallback when there's no stored equation to solve. `lineNumber` (1-based, `-1` outside a document) is forwarded so a bare assignment's RHS can resolve cross-line references. */
-    private simplifySymbolically(tokens: Token[], lineNumber: number = -1): Value {
-        return this.executeSymbolicTolerant(this.compileAdHoc(tokens), lineNumber);
+    /**
+     * Compiles and executes `tokens` in symbolic-tolerant mode, the "just
+     * simplify this" `=>` fallback when there's no stored equation to solve.
+     * `lineNumber` (1-based, `-1` outside a document) is forwarded so a bare
+     * assignment's RHS can resolve cross-line references. Under `effects:
+     * 'check'` it compiles and does not execute, since running a program is
+     * free to draw randomness and read other lines, which a check must not.
+     */
+    private simplifySymbolically(tokens: Token[], lineNumber: number = -1, effects: EffectMode = "apply"): Value {
+        const program = this.compileAdHoc(tokens);
+        if (effects === "check") return CHECKED_NOT_RUN;
+        return this.executeSymbolicTolerant(program, lineNumber);
     }
 
     /**
@@ -3046,8 +3188,15 @@ export class ExpressionEngine {
      * `tokens` are already normalized, so the implicit-multiply pass has usually
      * inserted a STAR between the coefficient and the name (`1 * sprint`); it is
      * tolerated and skipped.
+     *
+     * Under `effects: 'check'` the match is made and nothing is registered. The
+     * registration is not harmless to repeat: it overwrites the owning line id,
+     * so a definition checked from outside the document (id -1) was no longer
+     * removed when its real line was deleted. Inside a scratch run
+     * ({@link withScratchState}) the line answers `<name> defined` and likewise
+     * registers nothing.
      */
-    private tryDefineUserUnit(tokens: Token[], definedByLineId: number): Value | null {
+    private tryDefineUserUnit(tokens: Token[], definedByLineId: number, effects: EffectMode = "apply"): Value | null {
         // Shortest definition is NUMBER IDENT EQUALS NUMBER UNIT.
         if (tokens.length < 5) return null;
         if (tokens[0].type !== 'NUMBER' || Number(tokens[0].value) !== 1) return null;
@@ -3074,6 +3223,11 @@ export class ExpressionEngine {
         // A definition is the whole line: anything trailing means this is some
         // other construct that merely starts the same way.
         if (i !== tokens.length) return null;
+        if (effects === "check") return CHECKED_NOT_RUN;
+        // Inside a scratch run the line answers and registers nothing. A new
+        // definition recompiles every line of the document (below), which no
+        // scratch copy could take back, and the answer does not depend on it.
+        if (this.scratch !== null) return lineMessage(`${nameWords.join(' ')} defined`);
 
         const changed = this.userUnits.define(nameWords, ratioToken.value, baseToken.value, definedByLineId);
         // A user unit is expanded at parse time, so the compiled bytecode for
@@ -3125,7 +3279,7 @@ export class ExpressionEngine {
      * first use. The colon (`:name`) and `global :name` grammars are untouched:
      * they lex their own leading token, never IDENT/UNIT, so they decline here.
      */
-    private tryCompoundAssignment(tokens: Token[], lineNumber: number = -1): Value | null {
+    private tryCompoundAssignment(tokens: Token[], lineNumber: number = -1, effects: EffectMode = "apply"): Value | null {
         if (tokens.length < 2) return null;
         const nameTok = tokens[0];
         const opTok = tokens[1];
@@ -3142,16 +3296,6 @@ export class ExpressionEngine {
         }
 
         const name = nameTok.value;
-        // Remember this name is an accumulator, so a batch document pass can
-        // reset it before re-evaluating (see parseDocument): the seed below
-        // only fires when the name is undefined, which after the first pass it
-        // no longer is, so without the reset the total would read its own
-        // previous pass's value and double-count on every keystroke.
-        this.accumulatorNames.add(name);
-        // A first `+=`/`-=` on an unknown name seeds 0, so a ledger can open
-        // straight into `spent += 10` without an UNDEFINED_VARIABLE.
-        if (this.vm.getVar(name) === undefined) this.vm.setVar(name, numberValue(0));
-
         const op = opTok.type === 'PLUS_EQUALS' ? { type: 'PLUS', text: '+' } : { type: 'MINUS', text: '-' };
         // `name <op> ( rhs )`: the accumulator is read as an ordinary IDENT so a
         // unit-letter name (`b`, `s`) loads its variable rather than a unit, and
@@ -3164,6 +3308,25 @@ export class ExpressionEngine {
             ...rhs,
             createFusedToken('RPAREN', ')', [opTok]),
         ];
+
+        // A check compiles the accumulation and stops. Everything past this
+        // point is the effect: remembering the name, seeding it, running the
+        // step and storing the new total. Running it here is what made every
+        // highlight of `total += 5` add another 5 (#559).
+        if (effects === "check") {
+            this.compileAdHoc(accTokens);
+            return CHECKED_NOT_RUN;
+        }
+
+        // Remember this name is an accumulator, so a batch document pass can
+        // reset it before re-evaluating (see parseDocument): the seed below
+        // only fires when the name is undefined, which after the first pass it
+        // no longer is, so without the reset the total would read its own
+        // previous pass's value and double-count on every keystroke.
+        this.accumulatorNames.add(name);
+        // A first `+=`/`-=` on an unknown name seeds 0, so a ledger can open
+        // straight into `spent += 10` without an UNDEFINED_VARIABLE.
+        if (this.vm.getVar(name) === undefined) this.vm.setVar(name, numberValue(0));
 
         const accumulatorProgram = this.compileAdHoc(accTokens);
         this.beginLineRandom(accumulatorProgram, lineNumber);
@@ -3199,7 +3362,7 @@ export class ExpressionEngine {
         return this.accumulatorNames;
     }
 
-    private trySymbolicGrammar(normalizedTokens: Token[], lineNumber: number = -1): Value | null {
+    private trySymbolicGrammar(normalizedTokens: Token[], lineNumber: number = -1, effects: EffectMode = "apply"): SymbolicOutcome | null {
         if (normalizedTokens.length === 0) return null;
 
         const last = normalizedTokens[normalizedTokens.length - 1];
@@ -3215,6 +3378,9 @@ export class ExpressionEngine {
                 const name = beforeTokens[0].value;
                 const equation = this.vm.getEquation(name);
                 const scalar = this.vm.getScalarEquation(name);
+                // Solving runs the stored equation's programs, compiled when it
+                // was stored, so a check has nothing left to compile.
+                if (effects === "check" && (equation || scalar)) return { value: CHECKED_NOT_RUN, assigned: null };
                 if (equation) {
                     const solved = this.solveEquation(equation, lineNumber);
                     // A product chain of names is stored as a matrix equation
@@ -3226,13 +3392,13 @@ export class ExpressionEngine {
                     // perfectly good answer. Every other failure (a missing
                     // factor, a singular matrix) still surfaces unchanged.
                     const isNotMatrix = solved.type === ValueType.Error && solved.value === 'EQUATION_FACTOR_NOT_MATRIX';
-                    if (!isNotMatrix || !scalar) return solved;
+                    if (!isNotMatrix || !scalar) return { value: solved, assigned: null };
                 }
                 if (scalar) {
-                    return this.solveScalarEquation(scalar, lineNumber);
+                    return { value: this.solveScalarEquation(scalar, lineNumber), assigned: null };
                 }
             }
-            return this.simplifySymbolically(beforeTokens, lineNumber);
+            return { value: this.simplifySymbolically(beforeTokens, lineNumber, effects), assigned: null };
         }
 
         // An algebra verb (`expand(...)`, and the later phases' `factor`/
@@ -3243,7 +3409,7 @@ export class ExpressionEngine {
         // still wins, and before the COLON/GLOBAL guard so the existing
         // assignment grammars stay untouched.
         if (containsSymbolicCall(normalizedTokens)) {
-            return this.simplifySymbolically(normalizedTokens, lineNumber);
+            return { value: this.simplifySymbolically(normalizedTokens, lineNumber, effects), assigned: null };
         }
 
         // Already the colon-prefixed (`:name = value`) or `global :name`
@@ -3267,20 +3433,28 @@ export class ExpressionEngine {
             // (`x^2-4 = 0`), which is a strictly narrower attempt made only
             // after every existing shape has declined. See
             // {@link tryStoreScalarEquation} for what it refuses to swallow.
-            return this.tryStoreScalarEquation(normalizedTokens, eqIdx);
+            const stored = this.tryStoreScalarEquation(normalizedTokens, eqIdx, lineNumber, effects);
+            return stored === null ? null : { value: stored, assigned: null };
         }
 
         const rhsTokens = normalizedTokens.slice(eqIdx + 1);
 
         if (names.length === 1) {
-            const result = this.simplifySymbolically(rhsTokens, lineNumber);
-            this.vm.setVar(names[0], result);
-            return result;
+            const result = this.simplifySymbolically(rhsTokens, lineNumber, effects);
+            if (effects === "apply") this.vm.setVar(names[0], result);
+            return { value: result, assigned: names[0] };
         }
 
         const freeVar = names[names.length - 1];
         const factorNames = names.slice(0, -1);
+        // A check compiles both sides, as storing would, and stores neither.
+        if (effects === "check") {
+            this.compileAdHoc(rhsTokens);
+            this.compileAdHoc(normalizedTokens.slice(0, eqIdx));
+            return { value: CHECKED_NOT_RUN, assigned: null };
+        }
         this.vm.defineEquation(freeVar, factorNames, this.compileAdHoc(rhsTokens));
+        this.noteEquationOwner("matrix", freeVar, lineNumber);
         // Also stored as a scalar equation, so that `a*n = 10` with a numeric
         // `a` still has an answer. Which of the two kinds applies depends on
         // whether the factors are matrices, and that is not known until solve
@@ -3288,7 +3462,8 @@ export class ExpressionEngine {
         // about to ask about anyway. The matrix kind is always tried first, so
         // this cannot change what an existing document does.
         this.vm.defineScalarEquation(freeVar, this.compileAdHoc(normalizedTokens.slice(0, eqIdx)), this.compileAdHoc(rhsTokens));
-        return lineMessage(`${freeVar} stored as an equation — solve with "${freeVar} =>"`);
+        this.noteEquationOwner("scalar", freeVar, lineNumber);
+        return { value: lineMessage(`${freeVar} stored as an equation — solve with "${freeVar} =>"`), assigned: null };
     }
 
     /**
@@ -3319,9 +3494,11 @@ export class ExpressionEngine {
      *
      * @param normalizedTokens - The whole line's normalized tokens.
      * @param eqIdx - Index of the first `EQUALS` token.
+     * @param lineNumber - The 1-based line storing it, recorded as its owner.
+     * @param effects - `'check'` compiles both sides and stores nothing.
      * @returns A confirmation value when stored, or `null` to decline.
      */
-    private tryStoreScalarEquation(normalizedTokens: Token[], eqIdx: number): Value | null {
+    private tryStoreScalarEquation(normalizedTokens: Token[], eqIdx: number, lineNumber: number, effects: EffectMode = "apply"): Value | null {
         if (normalizedTokens[1]?.type === 'LPAREN') return null;
         if (eqIdx === 0 || eqIdx === normalizedTokens.length - 1) return null;
 
@@ -3338,7 +3515,11 @@ export class ExpressionEngine {
         if (unknowns.length !== 1) return null;
 
         const variable = unknowns[0];
-        this.vm.defineScalarEquation(variable, this.compileAdHoc(lhsTokens), this.compileAdHoc(rhsTokens));
+        const lhsProgram = this.compileAdHoc(lhsTokens);
+        const rhsProgram = this.compileAdHoc(rhsTokens);
+        if (effects === "check") return CHECKED_NOT_RUN;
+        this.vm.defineScalarEquation(variable, lhsProgram, rhsProgram);
+        this.noteEquationOwner("scalar", variable, lineNumber);
         return lineMessage(`${variable} stored as an equation — solve with "${variable} =>"`);
     }
 
@@ -3470,6 +3651,11 @@ export class ExpressionEngine {
      * to also cover normalize/complexity-check/cache-lookup, which measurably
      * produced negative-allocation readings (a GC sweep landing inside the
      * wider window) in `AllocationTracker.spec.ts` well over half the time.
+     *
+     * `effects` is `'apply'` on every evaluation path. `'check'` (see
+     * {@link EffectMode}) is for {@link tryCompileExpression}: an effectful
+     * line is matched and its operands compiled, and its `'symbolic-solve'`
+     * result carries a placeholder value, since nothing ran to produce one.
      */
     private prepareExpression(
         expression: string,
@@ -3477,6 +3663,7 @@ export class ExpressionEngine {
         hasParens: boolean | undefined,
         onFusion?: (fusion: TokenFusion) => void,
         lineNumber: number = -1,
+        effects: EffectMode = "apply",
     ):
         | { kind: 'empty' }
         | { kind: 'error'; stage: 'length' | 'complexity' | 'parse'; error: EngineError; reads?: string[]; writes?: string[]; normalizedTokens?: Token[] }
@@ -3558,29 +3745,44 @@ export class ExpressionEngine {
         // visible line on every keystroke. `total =` is a line half-typed on
         // the way to `total = 5`, and it took the editor down.
         let symbolicResult: Value | null;
-        // A compound assignment (`total += 5`) reads and writes its own name,
-        // unlike the other symbolic shapes whose effect the DAG deliberately
-        // cannot track. It MUST surface those reads/writes: without a write
-        // registered, the incremental evaluator never checkpoints the line, so
-        // its own value is never reset before a re-run and the running total
-        // double-counts on every edit; and dependent lines never re-evaluate.
-        let compoundReadsWrites: { reads: string[]; writes: string[] } | null = null;
+        // A line through this channel reads names like any other, and an
+        // assignment, compound (`total += 5`) or bare (`payment = deposit *
+        // 40`), writes one as `:name = ...` does. Both MUST be surfaced.
+        // Without a write registered, the incremental evaluator never
+        // checkpoints the line, so its own value is never reset before a
+        // re-run (a running total double-counts on every edit), a name defined
+        // twice holds the later value at the earlier line, and a line whose
+        // definition was edited away goes on reading it. Without the reads, the
+        // line is not known to depend on anything, and a `=>` line or an
+        // equation's solve keeps its answer from before an edit above it. A
+        // user-unit definition records neither: it reads no name, and what it
+        // defines is a unit, tracked by the unit table rather than the graph.
+        let symbolicReadsWrites: { reads: string[]; writes: string[] } | null = null;
         try {
             // A user-unit definition (`1 sprint = 2 weeks`) is an effectful line
             // like the symbolic shapes below, so it rides the same non-bytecode
             // channel. Checked first, so it claims its narrow pattern before the
             // scalar-equation grammar sees the bare `=`.
             const definingLineId = this.documentModel?.getLineAt(lineNumber)?.lineId ?? -1;
-            symbolicResult = this.tryDefineUserUnit(normalizedTokens, definingLineId);
+            symbolicResult = this.tryDefineUserUnit(normalizedTokens, definingLineId, effects);
             if (symbolicResult === null) {
-                const compound = this.tryCompoundAssignment(normalizedTokens, lineNumber);
+                const compound = this.tryCompoundAssignment(normalizedTokens, lineNumber, effects);
                 if (compound !== null) {
                     symbolicResult = compound;
-                    compoundReadsWrites = extractReadsAndWrites(normalizedTokens);
+                    symbolicReadsWrites = extractReadsAndWrites(normalizedTokens);
                 }
             }
             if (symbolicResult === null) {
-                symbolicResult = this.trySymbolicGrammar(normalizedTokens, lineNumber);
+                const symbolic = this.trySymbolicGrammar(normalizedTokens, lineNumber, effects);
+                if (symbolic !== null) {
+                    symbolicResult = symbolic.value;
+                    // Only the one name a bare assignment set is a write, not
+                    // every name followed by an `=`: a stored equation's
+                    // unknown (`a * x = 10`) is read at solve time, never
+                    // assigned here, and a right-hand side is simplified.
+                    const { reads } = extractReadsAndWrites(normalizedTokens);
+                    symbolicReadsWrites = { reads, writes: symbolic.assigned === null ? [] : [symbolic.assigned] };
+                }
             }
         } catch (e) {
             // reads/writes supplied for the same reason the main parse's catch
@@ -3591,7 +3793,7 @@ export class ExpressionEngine {
             return { kind: 'error', stage: 'parse', error: normalizeUnknownError(e), reads, writes, normalizedTokens };
         }
         if (symbolicResult !== null) {
-            return { kind: 'symbolic-solve', normalizedTokens, value: symbolicResult, reads: compoundReadsWrites?.reads, writes: compoundReadsWrites?.writes };
+            return { kind: 'symbolic-solve', normalizedTokens, value: symbolicResult, reads: symbolicReadsWrites?.reads, writes: symbolicReadsWrites?.writes };
         }
         if (failed) {
             return { kind: 'error', stage: 'parse', error: failed.error, reads: failed.reads, writes: failed.writes, normalizedTokens };
@@ -3772,15 +3974,11 @@ export class ExpressionEngine {
             throw prep.error;
         }
         if (prep.kind === 'symbolic-solve') {
-            // Most symbolic shapes carry no DAG registration: a stored
-            // equation/bare-assignment's effect (vm.equations, vm.setVar) isn't
-            // reads/writes-trackable the same way ordinary bytecode is, so the
-            // line won't auto-re-evaluate if some unrelated line later changes
-            // one of its factor variables. A disclosed limitation of that
-            // narrow grammar (see trySymbolicGrammar()'s own doc comment). The
-            // exception is a compound assignment, which surfaces real
-            // reads/writes (see prepareExpression) so its running total is
-            // checkpointed and its dependents re-evaluate.
+            // The line has no program, but it still reports the names it reads,
+            // and an assignment (`total += 5`, `x = y * 2`) the name it writes
+            // (see prepareExpression), so the incremental evaluator knows to run
+            // it again and checkpoints what it stored. A user-unit definition
+            // reports neither.
             this.storeLineResult(lineNumber, prep.value, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, prep.reads ?? [], prep.writes ?? [], expression);
             return prep.value;
         }
@@ -5117,6 +5315,14 @@ export class ExpressionEngine {
      * calls), comes back with an empty `steps` array and the answer in
      * `result`, rather than an error.
      *
+     * Explaining a line changes nothing. A derivation has to run the line, and
+     * a line such as `total += 5` or `:x = 30` does something when it runs, so
+     * the run happens in scratch state that is discarded afterwards (see
+     * {@link withScratchState}). The answer is the one the line gives against
+     * the document as it stands, every time: explaining `total += 5` with the
+     * total at 5 answers 10, and the total is still 5 afterwards. Until #566 it
+     * was 10, then 15, then 20.
+     *
      * @param expression - The raw line to explain.
      * @returns The ordered derivation and final value.
      * @throws {EngineError} When the line does not evaluate at all, or resolves
@@ -5129,7 +5335,7 @@ export class ExpressionEngine {
         // so the derivation reads the same token stream the answer came from.
         const exprTokens = tokens.filter((t) => t.type !== "COMMENT");
         const normalized = this.normalizer.normalize(exprTokens);
-        return buildExplanation({
+        return this.withScratchState(() => buildExplanation({
             expression,
             tokens: normalized,
             evaluate: (source) => this.evaluateIsolated(source),
@@ -5139,17 +5345,81 @@ export class ExpressionEngine {
             // so nothing is displaced: the reader who saw no explanation now
             // sees the one fact the line turned on.
             readings: this.readDates(expression),
-        });
+        }));
+    }
+
+    /**
+     * Run `work` against scratch state, and put everything back afterwards.
+     *
+     * For a caller that has to run a line without the line's effect reaching
+     * the document, which is {@link explainLine}: a derivation is built from
+     * the values a line arrives at, so the line must run, and a running total,
+     * an assignment, a function definition or an equation changes something
+     * when it runs. What each of those writes, and where it goes instead:
+     *
+     * - Variables, functions and equations live on the VM. `work` runs on a
+     *   {@link createScratchVM} over the document's VM, which reads the
+     *   document's values and keeps its own writes, and is dropped afterwards.
+     * - A `global :name` is process-wide, shared with every open document.
+     *   The store holds the run's writes aside and tells nobody (see
+     *   `GlobalVariableStore.beginScratch`).
+     * - A cross-line read records an edge in the dependency graph. The run's
+     *   lines get a context of their own over a graph of their own (see
+     *   {@link makeLineContext}), so the document's graph and the pass's
+     *   shared context are untouched.
+     * - A unit definition answers without registering (see
+     *   {@link tryDefineUserUnit}), since registering recompiles the document.
+     * - The running-total names, the random-draw bookkeeping and the active
+     *   query client are engine fields, saved here and put back.
+     *
+     * What it still writes are the compile caches, memos keyed by the text
+     * that change no answer. Synchronous by construction: an async line is
+     * refused by its caller, so nothing else runs while scratch state is in
+     * place. A nested call runs inside the scratch already open.
+     *
+     * @param work - The run to make in scratch state.
+     * @returns Whatever `work` returns.
+     */
+    private withScratchState<T>(work: () => T): T {
+        if (this.scratch !== null) return work();
+
+        const vm = this.vm;
+        const accumulatorNames = [...this.accumulatorNames];
+        const linesDrawingRandom = [...this.linesDrawingRandom];
+        const randomProgram = this.randomProgram;
+        const randomStream = this.randomStream;
+        const randomLine = this.randomLine;
+        const activeQueryClient = getActiveQueryClient();
+
+        this.scratch = { dag: null, lineContext: null };
+        this.vm = createScratchVM(vm);
+        sharedGlobalVariableStore.beginScratch();
+        try {
+            return work();
+        } finally {
+            sharedGlobalVariableStore.endScratch();
+            this.vm = vm;
+            this.scratch = null;
+            this.accumulatorNames.clear();
+            for (const name of accumulatorNames) this.accumulatorNames.add(name);
+            this.linesDrawingRandom.clear();
+            for (const line of linesDrawingRandom) this.linesDrawingRandom.add(line);
+            this.randomProgram = randomProgram;
+            this.randomStream = randomStream;
+            this.randomLine = randomLine;
+            setActiveQueryClient(activeQueryClient);
+        }
     }
 
     /**
      * Evaluate a self-contained sub-expression without touching document state.
      *
-     * Used only by {@link explainLine}. Unlike `evaluateExpression`, this never
-     * writes to the line cache or the dependency graph: it is handed the spans
-     * of a single line's own sub-expressions, and evaluating those to build a
-     * derivation must not disturb the document the line belongs to. An async
-     * (pending) result is rejected, a derivation cannot represent one.
+     * Used only by {@link explainLine}, inside its {@link withScratchState}.
+     * Unlike `evaluateExpression`, this never writes to the line cache or the
+     * dependency graph: it is handed the spans of a single line's own
+     * sub-expressions, and evaluating those to build a derivation must not
+     * disturb the document the line belongs to. An async (pending) result is
+     * rejected, a derivation cannot represent one.
      */
     private evaluateIsolated(expression: string): Value {
         const { tokens, hasParens } = this.lexToTokens(expression);
@@ -5183,11 +5453,25 @@ export class ExpressionEngine {
      * Uses the bytecode cache, repeated compilations of the same expression
      * return the cached program with zero allocation.
      *
+     * "Without execution" holds for an ordinary line, whose work is its
+     * bytecode. A line that does its work while compiling (a running total, a
+     * bare assignment, an equation, a unit definition) does it here, since the
+     * incremental evaluator compiles through this method and depends on that;
+     * {@link tryCompileExpression} is the read-only check.
+     *
+     * A line with no program to compile (a stored equation, a unit definition,
+     * a bare assignment) does its work here instead, so the line it sits on is
+     * what that work is recorded against. Without `lineNumber` an equation
+     * stored out of view belonged to no line, and editing that line away left
+     * it stored (#569).
+     *
      * @param expression - The raw expression string to compile.
+     * @param lineNumber - The 1-based document line the expression sits on, or
+     * -1 (the default) when it belongs to none.
      * @returns Object with compiled `program`, lexed `tokens`, and extracted `reads`/`writes`.
      * @throws ErrorFactory on parse failure or safety check failure.
      */
-	compileExpression(expression: string): {
+	compileExpression(expression: string, lineNumber: number = -1): {
 		program: BytecodeProgram;
 		tokens: Token[];
 		reads: string[];
@@ -5197,7 +5481,7 @@ export class ExpressionEngine {
 		const { hasParens } = lexed;
 
 		// Shared front-half: safety → normalize → complexity → cache/compile.
-		const prep = this.prepareExpression(expression, lexed.tokens, hasParens);
+		const prep = this.prepareExpression(expression, lexed.tokens, hasParens, undefined, lineNumber);
 		// On a cache hit nothing was lexed, so the tokens reported are the
 		// normalised ones the cached program was compiled from.
 		const tokens = lexed.compiled && prep.kind === 'ready' ? prep.normalizedTokens : lexed.tokens;
@@ -5244,9 +5528,10 @@ export class ExpressionEngine {
 			// same "nothing to compile" shape as the 'empty' case above.
 			// External tooling asking for the compiled program of a `=>`
 			// line gets an empty one; a disclosed limitation of this
-			// narrow grammar, not an oversight. A compound assignment is the
-			// exception: it carries real reads/writes so the incremental
-			// evaluator checkpoints its running total and re-runs dependents.
+			// narrow grammar, not an oversight. The reads still come back, and
+			// an assignment (`total += 5`, `x = y * 2`) its write, so the
+			// incremental evaluator knows to run the line again and checkpoints
+			// what it stored.
 			return {
 				program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
 				tokens: prep.normalizedTokens,
@@ -5296,6 +5581,23 @@ export class ExpressionEngine {
 	 * A catch costs nothing on the path that does not throw, so the "no" answer
 	 * this method exists to make cheap stays cheap. Anything that does throw
 	 * was already paying for the Error it constructed.
+	 *
+	 * It is also read-only, a second contract the language service relies on,
+	 * and one it had not kept. A line that does its work while compiling (a
+	 * running total `total += 5`, a bare assignment `x = 3`, an equation, a
+	 * unit definition) used to do that work here too, so each highlight of
+	 * `total += 5` added another 5 (#559). Those shapes are now matched and
+	 * their operands compiled with nothing executed or stored (see
+	 * {@link EffectMode}), so no variable, running total, equation, user
+	 * unit, random draw or cached line result changes. What it still writes
+	 * are the compile caches, memos keyed by the text that change no answer.
+	 *
+	 * Because nothing runs, a well-formed line whose value would be an error
+	 * (`total += nope`, with `nope` never defined) answers `true`, the same as
+	 * `5 + nope` always has: the question is whether the line parses, not what
+	 * it evaluates to. {@link compileExpression} is unchanged and still applies
+	 * a line's effect, since the incremental evaluator compiles through it and
+	 * relies on the effect happening.
 	 */
 	tryCompileExpression(expression: string): boolean {
 		try {
@@ -5312,7 +5614,7 @@ export class ExpressionEngine {
 	/** The body of {@link tryCompileExpression}, which owns the contract. */
 	private tryCompileExpressionUnguarded(expression: string): boolean {
 		const { tokens, hasParens } = this.lexToTokens(expression);
-		const prep = this.prepareExpression(expression, tokens, hasParens);
+		const prep = this.prepareExpression(expression, tokens, hasParens, undefined, -1, "check");
 		return prep.kind !== 'error';
 	}
 
@@ -5448,6 +5750,9 @@ export class ExpressionEngine {
          this.clearCompiledCache();
          this.vm.reset();
          this.userUnits.clear();
+         // The reset above emptied both equation stores; their owners go too.
+         this.equationOwners.matrix.clear();
+         this.equationOwners.scalar.clear();
          this.accumulatorNames.clear();
          this.lastTelemetry = null;
          this.lineContext = null;

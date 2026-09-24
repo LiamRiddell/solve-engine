@@ -86,12 +86,47 @@ export class GlobalVariableStore {
 		}
 	}
 
+	/**
+	 * Writes made while a scratch run is open, or `null` outside one. See
+	 * {@link beginScratch}.
+	 */
+	private scratchValues: Map<string, Value> | null = null;
+
+	/** How many scratch runs are open, so a nested one does not end the outer. */
+	private scratchDepth = 0;
+
+	/**
+	 * Open a scratch run: from here until the matching {@link endScratch}, a
+	 * write lands in a map of its own, is read back by {@link get} and
+	 * {@link has}, and notifies nobody. Closing the outermost run discards it.
+	 *
+	 * For `ExpressionEngine.explainLine`, which runs a line to derive its answer
+	 * and must leave everything as it found it (#566). Explaining `global :rate
+	 * = 0.3` would otherwise change the rate in every open document, and tell
+	 * each of them to re-evaluate. The store is process-wide, so this is safe
+	 * only because a scratch run is synchronous: nothing else runs while one is
+	 * open.
+	 */
+	beginScratch(): void {
+		if (this.scratchDepth === 0) this.scratchValues = new Map();
+		this.scratchDepth += 1;
+	}
+
+	/** Close a scratch run and, at the outermost close, discard its writes. See {@link beginScratch}. */
+	endScratch(): void {
+		if (this.scratchDepth === 0) return;
+		this.scratchDepth -= 1;
+		if (this.scratchDepth === 0) this.scratchValues = null;
+	}
+
 	get(name: string): Value | undefined {
+		const scratch = this.scratchValues;
+		if (scratch !== null && scratch.has(name)) return scratch.get(name);
 		return this.values.get(name);
 	}
 
 	has(name: string): boolean {
-		return this.values.has(name);
+		return this.scratchValues?.has(name) === true || this.values.has(name);
 	}
 
 	/**
@@ -114,6 +149,11 @@ export class GlobalVariableStore {
 	 * changed, so there is nothing for a listener to react to.
 	 */
 	set(name: string, value: Value): void {
+		if (this.scratchValues !== null) {
+			// A scratch write is read back and then discarded, so nobody is told.
+			this.scratchValues.set(name, value);
+			return;
+		}
 		const previous = this.values.get(name);
 		if (previous !== undefined && sameValue(previous, value)) {
 			// Nothing observable changed, so nobody is told. The newer object
@@ -186,6 +226,8 @@ export class GlobalVariableStore {
 		this.notifyDepth = 0;
 		this.pendingNotifications = null;
 		this.passDepth = 0;
+		this.scratchValues = null;
+		this.scratchDepth = 0;
 	}
 }
 

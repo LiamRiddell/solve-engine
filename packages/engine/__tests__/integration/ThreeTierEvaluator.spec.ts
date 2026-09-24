@@ -195,6 +195,63 @@ describe("ThreeTierEvaluator — Tier 2 (Execute from Cached Bytecode)", () => {
 		expect(line2.result).not.toBeNull();
 		expect(line2.result!.toNumber()).toBe(12);
 	});
+
+	test("a clean bare assignment has no program to run, so it goes back through Tier 1 (#555)", () => {
+		// `payment = deposit * 40` is carried out while it compiles and leaves
+		// an empty program, so Tier 2 would run nothing and keep 4,000.
+		const bareDoc = createDoc(["deposit = 100", "payment = deposit * 40", ":colon = deposit * 40"]);
+		const bareEvaluator = new ThreeTierEvaluator(bareDoc, createEngine());
+		try {
+			bareEvaluator.evaluate({ startLine: 1, endLine: 3 });
+			bareDoc.editLine(1, "deposit = 150");
+			const result = bareEvaluator.evaluate({ startLine: 1, endLine: 3 });
+
+			const [line1, line2, line3] = result.lines;
+			expect(line1.tier).toBe(EvalTier.Tier1); // edited
+			expect(line2.tier).toBe(EvalTier.Tier1); // clean, but nothing cached to run
+			expect(line3.tier).toBe(EvalTier.Tier2); // clean, runs its program
+			expect(line2.result!.toNumber()).toBe(6000);
+			expect(line3.result!.toNumber()).toBe(6000);
+			expect(bareDoc.getLineAt(2)!.reads).toContain("deposit");
+			expect(bareDoc.getLineAt(2)!.writes).toEqual(["payment"]);
+		} finally {
+			bareEvaluator.terminateWorker();
+		}
+	});
+
+	test("a clean => line and an equation's solve go back through Tier 1 too (#565)", () => {
+		const solveDoc = createDoc([":a = 2", "a + 1 =>", "a * x = 10", "x =>"]);
+		const solveEvaluator = new ThreeTierEvaluator(solveDoc, createEngine());
+		try {
+			solveEvaluator.evaluate({ startLine: 1, endLine: 4 });
+			solveDoc.editLine(1, ":a = 5");
+			const result = solveEvaluator.evaluate({ startLine: 1, endLine: 4 });
+
+			expect(result.lines.map((l) => l.tier)).toEqual([EvalTier.Tier1, EvalTier.Tier1, EvalTier.Tier1, EvalTier.Tier1]);
+			expect(result.lines[1].result!.toNumber()).toBe(6);
+			expect(result.lines[3].result!.toNumber()).toBe(2);
+			// Reads, and no write: a stored equation does not assign its unknown.
+			expect(solveDoc.getLineAt(3)!.reads).toEqual(["a", "x"]);
+			expect(solveDoc.getLineAt(3)!.writes).toEqual([]);
+		} finally {
+			solveEvaluator.terminateWorker();
+		}
+	});
+
+	test("a clean unit definition is not run again: it depends on nothing above it", () => {
+		const unitDoc = createDoc(["1 sprint = 2 weeks", "3 sprints in weeks"]);
+		const unitEvaluator = new ThreeTierEvaluator(unitDoc, createEngine());
+		try {
+			unitEvaluator.evaluate({ startLine: 1, endLine: 2 });
+			const result = unitEvaluator.evaluate({ startLine: 1, endLine: 2 });
+
+			expect(result.lines[0].tier).toBe(EvalTier.Tier2);
+			expect(result.lines[1].tier).toBe(EvalTier.Tier2);
+			expect(formatValue(result.lines[1].result!)).toBe("= 6 weeks");
+		} finally {
+			unitEvaluator.terminateWorker();
+		}
+	});
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -254,6 +311,41 @@ describe("ThreeTierEvaluator — Tier 3 (Compile-Only for Invisible Lines)", () 
 
 		// Line 3 uses x — VM should have x=10 from Tier 3 execution of line 2
 		expect(result.resultMap.get(3)![0].toNumber()).toBe(20);
+	});
+
+	test("an equation stored out of view goes when its line is edited out of view (#569)", () => {
+		// Tier 3 compiles the line without a position before this, so the
+		// equation belonged to no line and nothing could drop it.
+		const eqDoc = createDoc([":a = 2", "a * x = 10", "1", "2", "x =>"]);
+		const eqEvaluator = new ThreeTierEvaluator(eqDoc, createEngine());
+		try {
+			const before = eqEvaluator.evaluate({ startLine: 4, endLine: 5 });
+			expect(before.resultMap.get(5)![0].toNumber()).toBe(5);
+
+			eqDoc.editLine(2, "3 + 3");
+			const after = eqEvaluator.evaluate({ startLine: 4, endLine: 5 });
+
+			expect(eqDoc.getLineAt(2)!.dirty).toBe(true); // still out of view
+			expect(formatValue(after.resultMap.get(5)![0])).toBe("x");
+		} finally {
+			eqEvaluator.terminateWorker();
+		}
+	});
+
+	test("an invisible bare assignment has run once compiled, and is clean like a colon definition (#555)", () => {
+		const bareDoc = createDoc(["x = 10", "x * 2"]);
+		const bareEvaluator = new ThreeTierEvaluator(bareDoc, createEngine());
+		try {
+			const result = bareEvaluator.evaluate({ startLine: 2, endLine: 2 });
+
+			const line1 = bareDoc.getLineAt(1)!;
+			expect(line1.isVariableDef).toBe(true);
+			expect(line1.dirty).toBe(false);
+			expect(line1.results[0][0].toNumber()).toBe(10);
+			expect(result.resultMap.get(2)![0].toNumber()).toBe(20);
+		} finally {
+			bareEvaluator.terminateWorker();
+		}
 	});
 
 	test("backgroundCompile processes only invisible dirty lines", () => {
@@ -918,6 +1010,26 @@ describe("ThreeTierEvaluator — setViewport() (Phase 5.2e)", () => {
 		expect(result.tierCounts.tier2).toBe(2);
 		expect(result.tierCounts.tier1).toBe(0);
 		expect(result.tierCounts.tier3).toBe(0);
+	});
+
+	test("a bare definition above the viewport does not send each scroll back to line 1 (#555)", () => {
+		// A bare assignment is a definition now that it records its write, and a
+		// dirty definition above the viewport makes setViewport start from line
+		// 1. Tier 3 counts it as run, so the scroll stays on the visible lines.
+		const doc = createDoc(["x = 5", ...Array.from({ length: 40 }, (_, i) => `x + ${i}`)]);
+		const evaluator = new ThreeTierEvaluator(doc, createEngine());
+		try {
+			evaluator.evaluate({ startLine: 20, endLine: 30 });
+			expect(doc.getLineAt(1)!.dirty).toBe(false);
+
+			const result = evaluator.setViewport({ startLine: 21, endLine: 31 });
+
+			expect(result.lines.length).toBe(11); // the visible lines, nothing above
+			expect(result.tierCounts.tier3).toBe(0);
+			expect(result.resultMap.get(25)![0].toNumber()).toBe(5 + 23);
+		} finally {
+			evaluator.terminateWorker();
+		}
 	});
 
 	test("edit at a line AFTER viewport: does NOT trigger fallback", () => {

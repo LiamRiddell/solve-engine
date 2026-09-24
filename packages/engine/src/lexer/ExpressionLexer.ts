@@ -836,13 +836,24 @@ export class ExpressionLexer {
     }
   }
 
-  reset(input: string): void {
+  /**
+   * Point the lexer at a new input.
+   *
+   * @param input - The text to tokenize.
+   * @param from - Where tokenizing starts. Offsets and columns stay those of
+   *   `input`, so a caller that starts past a marker (a blockquote's `> `, a
+   *   list's `- `) still gets spans on the line as written, the way
+   *   {@link scanDocument} does for a list item.
+   */
+  reset(input: string, from = 0): void {
     this.input = input;
-    this.pos = 0;
+    this.pos = from;
     this.len = input.length;
     this.line = 1;
     this.lineStartPos = 0;
-    this.pendingRawLineToken = this.pluginRawLinePatterns.length > 0 ? this.matchRawLine(input) : null;
+    // A raw-line pattern is matched against what is being tokenized, not the
+    // marker in front of it.
+    this.pendingRawLineToken = this.pluginRawLinePatterns.length > 0 ? this.matchRawLine(from === 0 ? input : input.slice(from)) : null;
   }
 
   /**

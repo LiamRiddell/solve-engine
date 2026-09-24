@@ -28,6 +28,8 @@
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { evaluateDocument } from "@solve-js/engine/evaluateDocument";
+import { DocumentModel } from "@solve-js/engine/DocumentModel";
+import { ThreeTierEvaluator, type EvalLineResult } from "@solve-js/engine/ThreeTierEvaluator";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { ValueType } from "@solve-js/vm/Value";
 import type { ParsingResult } from "@solve-js/types/ParsingResult";
@@ -56,6 +58,59 @@ function batch(lines: string[]): string[] {
 function incremental(lines: string[]): string[] {
   const engine = newTrackedEngine();
   return readLines(evaluateDocument(engine, lines.join("\n"), { inputType: "markdown" }));
+}
+
+/** One line of a live evaluator's pass, in the same form {@link readLines} gives a document result. */
+function readEvalLine(line: EvalLineResult): string {
+  if (line.error) return `ERROR: ${line.error}`;
+  if (!line.result) return "";
+  const formatted = formatValue(line.result).replace(/^=\s*/, "");
+  return line.result.type === ValueType.Error ? `ERROR: ${formatted}` : formatted;
+}
+
+/**
+ * Evaluate a document in a live evaluator, edit it, and evaluate it again, the
+ * way an editor does on each keystroke.
+ *
+ * @returns What the evaluator shows after the edit, and the edited text, which
+ * a fresh `parseDocument` of must agree with.
+ */
+function editThenEvaluate(lines: string[], edits: ReadonlyArray<readonly [number, string]>): { shown: string[]; edited: string[] } {
+  const doc = new DocumentModel();
+  doc.setDocument(lines.join("\n"));
+  const evaluator = new ThreeTierEvaluator(doc, newTrackedEngine());
+  try {
+    evaluator.evaluate({ startLine: 1, endLine: doc.lineCount });
+    const edited = [...lines];
+    for (const [lineNumber, text] of edits) {
+      doc.editLine(lineNumber, text);
+      edited[lineNumber - 1] = text;
+    }
+    const pass = evaluator.evaluate({ startLine: 1, endLine: doc.lineCount });
+    return { shown: pass.lines.map(readEvalLine), edited };
+  } finally {
+    evaluator.terminateWorker();
+  }
+}
+
+/**
+ * Evaluate a document in a live evaluator, delete one line the way an editor
+ * does (a structural change), and evaluate it again.
+ *
+ * @returns What the evaluator shows after the deletion, and the remaining text.
+ */
+function deleteThenEvaluate(lines: string[], lineNumber: number): { shown: string[]; edited: string[] } {
+  const doc = new DocumentModel();
+  doc.setDocument(lines.join("\n"));
+  const evaluator = new ThreeTierEvaluator(doc, newTrackedEngine());
+  try {
+    evaluator.evaluate({ startLine: 1, endLine: doc.lineCount });
+    evaluator.applyTransaction([{ startLine: lineNumber, deleteCount: 1, insertLines: [] }]);
+    const pass = evaluator.evaluate({ startLine: 1, endLine: doc.lineCount });
+    return { shown: pass.lines.map(readEvalLine), edited: lines.filter((_, i) => i !== lineNumber - 1) };
+  } finally {
+    evaluator.terminateWorker();
+  }
 }
 
 /** Evaluate one line through the single-expression entry point, without ever throwing out. */
@@ -359,6 +414,193 @@ describe("goal seek across entry points", () => {
 
   test("the single-expression path refuses with a document error", () => {
     expectNeedsDocument("solve line 1 for x = 5");
+  });
+});
+
+describe("bare assignments across entry points (#555)", () => {
+  // A bare assignment (`payment = deposit * 40`) is carried out while it
+  // compiles and leaves no program behind, so the live evaluator had nothing to
+  // re-run once the line was clean, and it recorded neither what the line read
+  // nor what it wrote. An edit above it left its old answer on screen while the
+  // colon form beside it updated.
+
+  test("the reported case: an edit above a bare assignment reaches it", () => {
+    const { shown, edited } = editThenEvaluate(
+      ["deposit = 100", "payment = deposit * 40", ":colon = deposit * 40"],
+      [[1, "deposit = 150"]],
+    );
+    expect(shown).toEqual(["150", "6,000", "6,000"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("a chain of bare assignments follows an edit at its root", () => {
+    const { shown, edited } = editThenEvaluate(
+      ["price = 20", "qty = 3", "cost = price * qty", "cost * 2"],
+      [[1, "price = 25"]],
+    );
+    expect(shown).toEqual(["25", "3", "75", "150"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("a name assigned twice holds the earlier value at the earlier line", () => {
+    // The line between the two used to read 7, the value the second
+    // assignment left in the VM on the previous pass.
+    const { shown, edited } = editThenEvaluate(["x = 5", "x + 1", "x = 7"], [[2, "x + 2"]]);
+    expect(shown).toEqual(["5", "7", "7"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("an assignment that reads its own name does not climb on a re-run", () => {
+    const { shown, edited } = editThenEvaluate(["x = 5", "x = x + 1", "x * 10"], [[1, "x = 6"]]);
+    expect(shown).toEqual(["6", "7", "70"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("a bare assignment edited away no longer defines its name", () => {
+    const { shown, edited } = editThenEvaluate(["x = 5", "x + 1"], [[1, "# heading"]]);
+    expect(shown).toEqual(["", "ERROR: Undefined variable: x"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("both document passes agree on a document of bare assignments", () => {
+    const doc = ["deposit = 100", "payment = deposit * 40", "deposit = 150", "payment", "payment = deposit * 40", "payment"];
+    expect(batch(doc)).toEqual(["100", "4,000", "150", "4,000", "6,000", "6,000"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+});
+
+describe("list markers across entry points (#560)", () => {
+  // A list marker is markup: `- 100 * 2` is a bullet holding `100 * 2`. The
+  // batch pass set the marker aside and the incremental pass read the `-` as a
+  // minus, so the same note showed opposite signs depending on the entry point,
+  // and the other markers did not evaluate there at all.
+
+  test("the reported case: a bullet holding a line reference and one holding arithmetic", () => {
+    const doc = ["20", "- line 1 + 1", "- 100 * 2"];
+    expect(batch(doc)).toEqual(["20", "21", "200"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("every marker, and a task item, is set aside the same way by both passes", () => {
+    const doc = ["1. 3 * 3", "* 5 + 5", "+ 2 + 2", "- [ ] 4 + 4", "- [x] 4 * 4", "  - 100 + 20"];
+    expect(batch(doc)).toEqual(["9", "10", "4", "8", "16", "120"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("a minus with no space after it is still arithmetic in both passes", () => {
+    const doc = ["-100 + 20", "- -5 * 2"];
+    expect(batch(doc)).toEqual(["-80", "-10"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("an edited bullet is read the same way by the live evaluator", () => {
+    const { shown, edited } = editThenEvaluate(["20", "- line 1 + 1"], [[1, "30"], [2, "- line 1 * 2"]]);
+    expect(shown).toEqual(["30", "60"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("the single-expression path reads its text as an expression, not markdown", () => {
+    // No document, so no markdown: the line reference inside is refused with
+    // the same structured error it gets anywhere else on this path.
+    expectNeedsDocument("- line 1 + 1");
+  });
+});
+
+describe("=> lines and equation solves across entry points (#565)", () => {
+  // A `=>` line, a stored equation and its solve are carried out while they
+  // compile and leave no program behind, and they recorded nothing they read,
+  // so once clean the live evaluator ran nothing for them: an edit above left
+  // the old answer on screen, where a fresh pass of the edited text gives the
+  // new one.
+
+  test("the reported case: a => line follows an edit above it", () => {
+    const { shown, edited } = editThenEvaluate([":a = 2", "a + 1 =>"], [[1, ":a = 3"]]);
+    expect(shown).toEqual(["3", "4"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("the reported case: an equation's solve reads the edited factor", () => {
+    const { shown, edited } = editThenEvaluate([":a = 2", "a * x = 10", "x =>"], [[1, ":a = 5"]]);
+    expect(shown[2]).toBe("2");
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("a scalar equation's solve follows an edit too", () => {
+    const { shown, edited } = editThenEvaluate([":a = 4", "x^2 - a = 0", "x =>"], [[1, ":a = 9"]]);
+    expect(shown[2]).toBe("[-3, 3]");
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("a => line reading a bare assignment follows it", () => {
+    const { shown, edited } = editThenEvaluate(["a = 2", "a * 10 =>"], [[1, "a = 3"]]);
+    expect(shown).toEqual(["3", "30"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("a => line reading a position follows the line it reads", () => {
+    const { shown, edited } = editThenEvaluate(["2", "line 1 * 2 =>"], [[1, "5"]]);
+    expect(shown).toEqual(["5", "10"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("an algebra verb follows an edit above it", () => {
+    const { shown, edited } = editThenEvaluate([":a = 1", "expand((x + a)^2)"], [[1, ":a = 2"]]);
+    expect(shown).toEqual(["2", "x^2+4x+4"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("both document passes agree on a document of => lines and solves", () => {
+    const doc = [":a = 2", "a + 1 =>", "a * x = 10", "x =>", "line 1 * 2 =>", "expand((x + a)^2)"];
+    expect(batch(doc)).toEqual(["2", "3", 'x stored as an equation — solve with "x =>"', "5", "4", "x^2+4x+4"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("the single-expression path refuses a position read inside a => line", () => {
+    expectNeedsDocument("line 1 * 2 =>");
+  });
+});
+
+describe("a stored equation goes with its line (#569)", () => {
+  // The VM keeps an equation by its unknown, and nothing removed it when the
+  // line that stored it changed, so the live evaluator went on solving an
+  // equation the note no longer held.
+  const note = [":a = 2", "a * x = 10", "x =>"];
+
+  test("the reported case: the equation's line edited away", () => {
+    const { shown, edited } = editThenEvaluate(note, [[2, "# heading"]]);
+    expect(shown).toEqual(["2", "", "x"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("the equation's line deleted", () => {
+    const { shown, edited } = deleteThenEvaluate(note, 2);
+    expect(shown).toEqual(["2", "x"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("a scalar equation's line edited into an ordinary expression, and deleted", () => {
+    const scalar = [":a = 4", "x^2 - a = 0", "x =>"];
+    const edit = editThenEvaluate(scalar, [[2, "a + 1"]]);
+    expect(edit.shown).toEqual(["4", "5", "x"]);
+    expect(edit.shown).toEqual(batch(edit.edited));
+    const deletion = deleteThenEvaluate(scalar, 2);
+    expect(deletion.shown).toEqual(["4", "x"]);
+    expect(deletion.shown).toEqual(batch(deletion.edited));
+  });
+
+  test("an equation edited to another unknown leaves the first unknown unsolved", () => {
+    const { shown, edited } = editThenEvaluate([...note, "y =>"], [[2, "a * y = 10"]]);
+    expect(shown.slice(2)).toEqual(["x", "5"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("with two lines storing one, editing the later away keeps the earlier", () => {
+    // The equation belongs to whichever line stored it last, so dropping the
+    // other line's leaves it in place.
+    const { shown, edited } = editThenEvaluate([...note, "a * x = 20", "x =>"], [[4, "# gone"]]);
+    expect(shown[2]).toBe("5");
+    expect(shown[4]).toBe("5");
+    expect(shown).toEqual(batch(edited));
   });
 });
 
