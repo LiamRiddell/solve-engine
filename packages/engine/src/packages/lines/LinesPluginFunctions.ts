@@ -30,10 +30,9 @@ import { formatLineTrace, traceProblem } from "@solve-js/explain/LineTracer";
  * line's trace rather than its value.
  *
  * The form shares `lineRef`'s plugin slot instead of registering a function of
- * its own. Plugin functions are numbered in the order packages register, and
- * a seeded random draw is keyed on its line's compiled bytes, which carry
- * those numbers: a new function here, registered ahead of the random package,
- * would renumber `pick`, `coin` and `uuid` and change every seeded draw.
+ * its own, since it reads the same target line through the same context. (A
+ * seeded random draw keys a plugin call by the function's name, so a new
+ * function would not have moved any draw either.)
  */
 export const TRACE_INPUTS = 1;
 
@@ -83,9 +82,7 @@ export function prevHandler(_args: Value[], context?: LineExecutionContext): Val
  * stand: on its own, as either end of a range, or as goal seek's target.
  *
  * It rides the existing `lineRef` call rather than a plugin function of its
- * own, deliberately. A new plugin function takes a new index, and every
- * package registered after this one would move up by one, which changes their
- * compiled bytecode and with it every seeded random draw keyed on it. No line
+ * own, so every place a line reference can stand accepts it unchanged. No line
  * can be written as `line -1` (the minus is an operator, not part of the
  * reference), so the number is free to mean "deleted".
  */

@@ -15,12 +15,10 @@ import { TRACE_INPUTS } from "../LinesPluginFunctions";
  * lines package's `lineRef` plugin function with a second argument,
  * {@link TRACE_INPUTS}, which routes it to the tracing handler.
  *
- * Why not a plugin function of its own: plugin functions are numbered in the
- * order packages register them, and a seeded random draw is keyed on its
- * line's compiled bytes, which include those numbers. A new function in this
- * package, registered ahead of the random package, would renumber `pick`,
- * `coin` and `uuid` and so change every seeded draw in every note. Sharing an
- * existing slot adds the form without moving anything.
+ * It shares `lineRef`'s slot rather than taking a plugin function of its own,
+ * since it reads the same target through the same line context. (A seeded
+ * random draw keys a plugin call by the function's name, so a new function
+ * would not have moved any draw either.)
  *
  * The number goes through the constant pool (`PUSH_NUMBER`), not a raw byte,
  * so a document past line 255 traces the same as one before it; see
