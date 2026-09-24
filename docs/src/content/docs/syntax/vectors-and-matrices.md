@@ -18,6 +18,14 @@ which is what the engine returns as text. In this notepad the answer column
 renders it as a stacked, column-aligned grid instead, one row per line, since a
 grid is easier to read; the two are the same matrix.
 
+Each cell holds one number, a `true` or `false`, or an unknown. A list inside a
+list, a piece of text or a date has no place in a cell, so the literal is refused
+rather than storing it as a zero:
+
+```solve-doc
+[(1, 2), 3] // ERROR: A list cannot hold a list inside it: each cell holds one number. Write the values side by side, as in [1, 2, 3].
+```
+
 A numeric vector can be drawn as a sparkline with `[...] as sparkline`; see
 [charts](/syntax/charts/).
 

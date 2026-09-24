@@ -32,15 +32,29 @@ describe.each(SYMBOLIC_FUNCTIONS.map(fn => [fn.word, fn] as const))("algebra ver
 		expect(registered).toContain(fn.tokenType);
 	});
 
-	test("its builtin index has a live implementation", () => {
-		expect(typeof builtinFunctions[fn.builtinIndex]).toBe("function");
+	test("names exactly one implementation, a builtin index or a plugin function", () => {
+		expect([fn.builtinIndex, fn.pluginFunction].filter(part => part !== undefined)).toHaveLength(1);
 	});
 
-	test("its builtin index is exempt from the VM's symbolic interception", () => {
+	test("its implementation is live", () => {
+		// A builtin index must have an entry in the builtin table; a plugin
+		// function must be registered by the package under the name the
+		// parselet emits.
+		if (fn.builtinIndex !== undefined) {
+			expect(typeof builtinFunctions[fn.builtinIndex]).toBe("function");
+		} else {
+			expect(typeof SYMBOLIC_PACKAGE.pluginFunctions?.[fn.pluginFunction!]).toBe("function");
+		}
+	});
+
+	test("a builtin verb's index is exempt from the VM's symbolic interception", () => {
 		// An algebra verb must receive the expression containing unknowns rather
 		// than be told it cannot be applied to one. vm/SymbolicOps.ts holds that
 		// exemption set separately because vm/ may not import from packages/, so
-		// this is the check that the two stay in agreement.
+		// this is the check that the two stay in agreement. A plugin function is
+		// never intercepted, so a verb implemented as one needs no exemption; the
+		// entry-point test below is what shows it receives its expression.
+		if (fn.builtinIndex === undefined) return;
 		expect(SYMBOLIC_NATIVE_BUILTINS.has(fn.builtinIndex)).toBe(true);
 	});
 

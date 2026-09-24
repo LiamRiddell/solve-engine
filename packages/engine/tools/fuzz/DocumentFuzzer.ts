@@ -48,6 +48,13 @@ const NAME_COUNT = 4;
 const TAGS = ["food", "travel"] as const;
 
 /**
+ * The same reasoning again, for the headings a section total finds by name. Two
+ * names at two levels, so a section can hold a subsection, an edit can rename a
+ * heading into or out of a match, and two headings can share a name.
+ */
+const SECTIONS = ["Trip", "Home"] as const;
+
+/**
  * One line's worth of text, given a source of randomness.
  *
  * Each entry is a shape rather than a fixed string, so a session gets varied
@@ -106,6 +113,14 @@ const SHAPES: readonly LineShape[] = [
 	(rng) => `${rng.range(1, 20)} #${TAGS[rng.int(TAGS.length)]}`,
 	(rng) => `${rng.range(1, 20)} #${TAGS[rng.int(TAGS.length)]}`,
 	(rng) => `total of #${TAGS[rng.int(TAGS.length)]}`,
+	// Every tag at once, which reads every tagged line wherever it sits.
+	() => `total by tag`,
+
+	// Named headings, and the section totals that find their block by name.
+	(rng) => `# ${SECTIONS[rng.int(SECTIONS.length)]}`,
+	(rng) => `## ${SECTIONS[rng.int(SECTIONS.length)]}`,
+	(rng) => `total of section "${SECTIONS[rng.int(SECTIONS.length)]}"`,
+	(rng) => `count of section "${SECTIONS[rng.int(SECTIONS.length)]}"`,
 
 	// A line reference, which reads one specific position.
 	(rng) => `line ${rng.range(1, 6)} + ${rng.range(1, 9)}`,
@@ -191,10 +206,14 @@ const POSITIONAL_SHAPES: readonly LineShape[] = [
 	(rng) => `prev + ${rng.range(1, 5)}`,
 	() => `total above`,
 	() => `average above`,
+	// A section total reads positions and the text of the headings, and keeps
+	// nothing between passes, so it belongs here too.
+	(rng) => `total of section "${SECTIONS[rng.int(SECTIONS.length)]}"`,
 	(rng) => `${rng.range(1, 50)}% of ${rng.range(10, 400)}`,
 	(rng) => `${rng.range(1, 40)} km in miles`,
 	(rng) => `${rng.range(1, 255)} as hex`,
 	() => `# a heading`,
+	(rng) => `# ${SECTIONS[rng.int(SECTIONS.length)]}`,
 	() => ``,
 ];
 

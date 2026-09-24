@@ -5,7 +5,10 @@ import { TEXT_PLUGIN_FUNCTIONS } from "./TextPluginFunctions";
 import { textUpper, textLower, textTitle, textSlug } from "./TextOps";
 import { unaryTextParselet, booleanTextInfixParselet, repeatTextParselet } from "./parselets/TextParselets";
 import { TextCallParselet } from "./parselets/TextCallParselet";
+import { extractListParselet, extractAggregateParselet } from "./parselets/ExtractionParselets";
 import { TEXT_CALL_FUNCTIONS } from "./TextFunctionNames";
+import { TEXT_EXTRACTION_FUNCTIONS } from "./TextExtractionFunctions";
+import { extractAggregateRules } from "./ExtractAggregateRule";
 
 /** An `as`-converter over text: text in, reshaped text out, an error for a non-string. */
 function textConverter(name: string, fn: (t: string) => string): (value: Value) => Value {
@@ -35,6 +38,13 @@ function textConverter(name: string, fn: (t: string) => string): (value: Value) 
  * is 42); and "times" in `X repeated N times` is optional, because it is the
  * word form of "*" (`8 times 9` is 72) and is recognised here only as a trailing
  * flourish on the count.
+ *
+ * It also reads values out of pasted text (issue #520): `numbers in X` and
+ * `amounts in X` list the numbers and the amounts of money a text holds, in the
+ * engine's number format; `total of numbers in X` and the other aggregates read
+ * them directly; `match`, `matches` and `matchcount` take a regular expression,
+ * run by the package's own linear-time matcher (see TextPattern.ts), never by
+ * `RegExp`; and `field(json, "path")` reads one value out of JSON.
  */
 export const TEXT_PACKAGE: IEnginePackage = {
 	name: "solve-text",
@@ -45,6 +55,8 @@ export const TEXT_PACKAGE: IEnginePackage = {
 		"lines in": "LINES_IN",
 		"starts with": "STARTS_WITH",
 		"ends with": "ENDS_WITH",
+		"numbers in": "NUMBERS_IN",
+		"amounts in": "AMOUNTS_IN",
 	},
 	lexerVocabulary: {
 		keywords: {
@@ -62,6 +74,9 @@ export const TEXT_PACKAGE: IEnginePackage = {
 		TRIM: unaryTextParselet("textTrim", BindingPower.Prefix),
 		REVERSE: unaryTextParselet("textReverse", BindingPower.Prefix),
 		TEXT_CALL: new TextCallParselet(),
+		NUMBERS_IN: extractListParselet("textNumbers"),
+		AMOUNTS_IN: extractListParselet("textAmounts"),
+		TEXT_EXTRACT_AGGREGATE: extractAggregateParselet,
 	},
 	infixParselets: {
 		CONTAINS: booleanTextInfixParselet("textContains"),
@@ -77,7 +92,8 @@ export const TEXT_PACKAGE: IEnginePackage = {
 	},
 	// `length(...)`, `upper(...)`, ... fused to TEXT_CALL by the engine's shared rule.
 	callFusions: Object.fromEntries(Object.keys(TEXT_CALL_FUNCTIONS).map((n) => [n, "TEXT_CALL"])),
-	pluginFunctions: TEXT_PLUGIN_FUNCTIONS,
+	pluginFunctions: { ...TEXT_PLUGIN_FUNCTIONS, ...TEXT_EXTRACTION_FUNCTIONS },
+	normalizerRules: extractAggregateRules(),
 	tokenCategories: {
 		LENGTH_OF: "function",
 		WORDS_IN: "function",
@@ -86,6 +102,9 @@ export const TEXT_PACKAGE: IEnginePackage = {
 		TRIM: "function",
 		REVERSE: "function",
 		TEXT_CALL: "function",
+		NUMBERS_IN: "function",
+		AMOUNTS_IN: "function",
+		TEXT_EXTRACT_AGGREGATE: "function",
 		CONTAINS: "operator",
 		STARTS_WITH: "operator",
 		ENDS_WITH: "operator",

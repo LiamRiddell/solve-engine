@@ -32,6 +32,7 @@ import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { findInlineSolvesInLine } from "@solve-js/engine/ExpressionEngineSafety";
+import { summariseChecks } from "@solve-js/engine/CheckSummary";
 import { Value, ValueType } from "@solve-js/vm/Value";
 import type {
 	ParsedLine,
@@ -149,7 +150,9 @@ export function evaluateDocument(
 			});
 		}
 
-		return { lines, totalLines: lineCount, errors };
+		// The check lines' pass and fail count, as parseDocument reports it.
+		const checks = summariseChecks(lines);
+		return checks ? { lines, totalLines: lineCount, errors, checks } : { lines, totalLines: lineCount, errors };
 	} finally {
 		// Drop this pass's evaluator (unsubscribes it from the shared global
 		// store) and put back whatever document and checkpointer the host had

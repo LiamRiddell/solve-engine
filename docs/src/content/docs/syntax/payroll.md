@@ -72,6 +72,8 @@ Budget moves is one table beside its neighbours.
 same boundary the [tax](/syntax/tax/) rule draws, and the same one the pound
 requirement above draws: a rate that is not shipped is not assumed, rather than
 quietly giving a Scottish salary an English answer, or a dollar salary a British
-one. `after 20% tax` is the form for every case the table does not describe. The
+one. `after 20% tax` is the form for every case the table does not describe, and
+any set of income tax bands, Scotland's or another country's, can be written as a
+table and applied with [banded rates](/syntax/banded-rates/). The
 figures cover a straightforward employee on the standard tax code; a different
 code, pension contributions, or student loan repayments change the real number.

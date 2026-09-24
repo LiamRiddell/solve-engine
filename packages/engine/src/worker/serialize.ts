@@ -158,5 +158,6 @@ export function serializeParsingResult(result: ParsingResult, settings?: Formatt
 	// The diagnostics report is already the engine's own JSON form, so it
 	// crosses unchanged; present only when the host asked for it.
 	if (result.diagnostics !== undefined) dto.diagnostics = result.diagnostics;
+	if (result.checks !== undefined) dto.checks = { ...result.checks };
 	return dto;
 }

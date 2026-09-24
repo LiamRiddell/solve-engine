@@ -142,6 +142,17 @@ lines[2].result?.toNumber(); // 120
 lines[2].result?.unit;       // "USD"
 ```
 
+A whole document parsed with `parseDocument` also reports its
+[checks](/syntax/conditionals/#checks), the lines that assert something must hold,
+as `result.checks`, a `{ passed, failed }` count present only when the document
+has any. A host can read it to flag a note whose checks have started failing
+without reading any error text.
+
+```ts
+const result = engine.parseDocument(":budget = $1950\n:spent = $2010\ncheck :spent <= :budget");
+result.checks; // { passed: 0, failed: 1 }
+```
+
 Variables defined on one line are visible to the lines below it, which is what
 makes a document more than a list of separate expressions.
 

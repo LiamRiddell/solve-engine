@@ -250,6 +250,7 @@ export default defineConfig({
               items: [
                 { slug: "syntax/numerals" },
                 { slug: "syntax/big-integers" },
+                { slug: "syntax/number-theory" },
                 { slug: "syntax/complex" },
                 { slug: "syntax/constants" },
               ],
@@ -286,6 +287,7 @@ export default defineConfig({
               items: [
                 { slug: "syntax/vectors-and-matrices" },
                 { slug: "syntax/statistics" },
+                { slug: "syntax/probability-distributions" },
               ],
             },
             {
@@ -299,6 +301,7 @@ export default defineConfig({
                 { slug: "syntax/splitting-a-bill" },
                 { slug: "syntax/interest-and-inflation" },
                 { slug: "syntax/savings-goals" },
+                { slug: "syntax/cash-flow" },
                 { slug: "syntax/payroll" },
                 { slug: "syntax/shopping" },
                 { slug: "syntax/stocks" },
@@ -321,6 +324,7 @@ export default defineConfig({
                 { slug: "syntax/working-days" },
                 { slug: "syntax/displaying-dates" },
                 { slug: "syntax/time" },
+                { slug: "syntax/time-zones" },
                 { slug: "syntax/timesheets" },
               ],
             },
@@ -361,6 +365,7 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { slug: "syntax/text-operations" },
+                { slug: "syntax/pasted-text" },
                 { slug: "syntax/text-encoding" },
                 { slug: "syntax/hashing" },
                 { slug: "syntax/networking" },
@@ -378,6 +383,7 @@ export default defineConfig({
               label: "Everyday",
               collapsed: true,
               items: [
+                { slug: "syntax/coordinates" },
                 { slug: "syntax/dice" },
                 { slug: "syntax/random" },
               ],
@@ -399,7 +405,10 @@ export default defineConfig({
                 { slug: "syntax/variables" },
                 { slug: "syntax/line-references" },
                 { slug: "syntax/category-tags" },
+                { slug: "syntax/sections" },
                 { slug: "syntax/table-columns" },
+                { slug: "syntax/table-lookups" },
+                { slug: "syntax/banded-rates" },
                 { slug: "syntax/map-reduce-and-aggregates" },
                 { slug: "syntax/conditionals" },
                 { slug: "syntax/goal-seek" },

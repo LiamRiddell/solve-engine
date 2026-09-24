@@ -289,6 +289,7 @@ export const TokenTypes = {
   IM_FN: "IM_FN",
   CANCEL_FN: "CANCEL_FN",
   APART_FN: "APART_FN",
+  LIMIT_FN: "LIMIT_FN",
   // The imaginary-literal suffix, fused from a number followed immediately by
   // `i`. Same registration reasoning as the verbs above.
   IMAGINARY: "IMAGINARY",
@@ -321,6 +322,11 @@ export const TokenTypes = {
   // would otherwise be a heading/comment; the colour package's parselet turns
   // it into a colour value. See ExpressionLexer.matchHexColourEnd().
   HEX_COLOUR: "HEX_COLOUR",
+  // An angle in degrees, minutes and seconds (`51°30'27"`) or in degrees with a
+  // compass letter (`51.5074°N`), recognised by the lexer after a number where
+  // the `"` would otherwise open a string; the geo package's parselet turns it
+  // into an angle or, paired with a second one, a place. See GeoAngleLiteral.ts.
+  GEO_ANGLE: "GEO_ANGLE",
   // A bounded mid-line `#tag` annotation (`1200 #housing`). Stripped from
   // evaluation by the tags package's strip rule, or consumed by its aggregate
   // rule (`total of #housing`). A line-start `#` is a heading, and `# ` (space)

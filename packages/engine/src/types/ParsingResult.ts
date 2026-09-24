@@ -78,6 +78,12 @@ export interface ParsingResult {
     errors: string[];
     /** Stage-by-stage trace, present only when diagnostics were requested. */
     diagnostics?: DiagnosticReportJSON;
+    /**
+     * How many `check` lines passed and failed, present only when the document
+     * has any (#506). A failed check is also an error line above; this is the
+     * count a host reads to flag a broken template without parsing messages.
+     */
+    checks?: { passed: number; failed: number };
 }
 
 /** How a document should be parsed. */

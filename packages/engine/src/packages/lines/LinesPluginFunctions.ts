@@ -1,11 +1,14 @@
 import { Value, ValueType, numberValue, uomValue, errorValue } from "@solve-js/vm/Value";
-import { unifyQuantities } from "@solve-js/vm/VMConversion";
+import { isCheckResult } from "@solve-js/packages/conditionals/CheckFunctions";
+import { nonNumericKind, unifyQuantities } from "@solve-js/vm/VMConversion";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
+import { headingOf, isSummaryLine, sectionKey } from "./SectionReader";
 
 /**
  * Cross-line data access, `prev`, `line<N>`, `sum(line X : line Y)`
- * `total(line X : line Y)`, `average(line X : line Y)`, and `total above`/
- * `sum above`/`average above`.
+ * `total(line X : line Y)`, `average(line X : line Y)`, `total above`/
+ * `sum above`/`average above`, and the section aggregates `total of section
+ * "Travel"` / `sum of` / `average of` / `count of`.
  *
  * Every handler here follows the SAME short-circuit discipline, which is
  * the actual load-bearing correctness requirement of this whole package
@@ -194,6 +197,9 @@ function aggregateAbove(context: LineExecutionContext, isAverage: boolean): Valu
   for (let n = context.lineIndex - 1; n >= 1; n--) {
     if (boundaryCheck(n)) break;
     const v = context.getLineResult!(n);
+    // A check line is a statement about the column, not one of its values,
+    // passed or failed alike (#506).
+    if (isCheckResult(v)) continue;
     const err = checkLineValue(v, n);
     if (err) return err;
     if (v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
@@ -244,4 +250,228 @@ export function averageAboveHandler(_args: Value[], context?: LineExecutionConte
   const ctxError = requireContext(context);
   if (ctxError) return ctxError;
   return aggregateAbove(context!, true);
+}
+
+// ── Sections ──────────────────────────────────────────────────────────────
+
+/** What a section aggregate does with the figures it gathers. */
+type SectionMode = "sum" | "average" | "count";
+
+/** A heading found in the document, and the line it sits on. */
+interface PlacedHeading {
+  readonly line: number;
+  readonly level: number;
+  readonly name: string;
+}
+
+/** How many heading names a "not found" message lists before it counts the rest. */
+const HEADINGS_LISTED = 6;
+
+/**
+ * A section aggregate reads the document's text as well as its results, since
+ * it finds its block by a heading, which has no result of its own.
+ */
+function requireSectionContext(context: LineExecutionContext | undefined): Value | null {
+  if (!context?.getLineResult || !context.getLineText || !context.isLineBoundary) {
+    return errorValue(
+      "SECTION_NO_DOCUMENT",
+      "A section total reads the lines under a heading, so it needs a document, which the single-expression path does not have.",
+    );
+  }
+  return null;
+}
+
+/** Items joined the way a sentence lists them: `a`, `a and b`, `a, b and c`. */
+function listed(items: readonly string[]): string {
+  if (items.length <= 1) return items.join("");
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+/**
+ * The refusal for a name no heading carries, naming the headings there are, so
+ * a slip in the name is a one-look fix rather than a silent zero.
+ */
+function sectionNotFound(name: string, headings: readonly PlacedHeading[]): Value {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const heading of headings) {
+    const key = sectionKey(heading.name);
+    if (key === "" || seen.has(key)) continue;
+    seen.add(key);
+    names.push(`"${heading.name}"`);
+  }
+  if (names.length === 0) {
+    return errorValue("SECTION_NOT_FOUND", `No heading is named "${name}": this note has no headings.`);
+  }
+  if (names.length === 1) {
+    return errorValue("SECTION_NOT_FOUND", `No heading is named "${name}". The only heading in this note is ${names[0]}.`);
+  }
+  const shown = names.length > HEADINGS_LISTED
+    ? [...names.slice(0, HEADINGS_LISTED), `${names.length - HEADINGS_LISTED} more`]
+    : names;
+  return errorValue("SECTION_NOT_FOUND", `No heading is named "${name}". The headings in this note are ${listed(shown)}.`);
+}
+
+/**
+ * The refusal for a name two or more headings carry. Either block could be the
+ * one meant, and adding both would answer a question nobody asked, so neither
+ * is chosen.
+ */
+function sectionAmbiguous(matches: readonly PlacedHeading[]): Value {
+  const lines = matches.map((h) => String(h.line));
+  return errorValue(
+    "SECTION_AMBIGUOUS",
+    `${matches.length} headings are named "${matches[0].name}" (lines ${listed(lines)}), so the section is unclear. Give each its own name.`,
+  );
+}
+
+/**
+ * {@link checkLineValue} for a line inside a section, with one reading added.
+ *
+ * The batch pass leaves a line that failed (a sentence of prose, a slip) with
+ * no result at all, where the incremental pass holds an error Value for it.
+ * Every line above this one has already run in either pass, so a line above
+ * with nothing to read is one that failed, and is reported as the incremental
+ * pass reports it. Below this line, nothing has run yet.
+ */
+function checkSectionMember(v: Value | undefined, lineNumber: number, lineIndex: number): Value | null {
+  if (v === undefined && lineNumber < lineIndex) {
+    return errorValue("LINE_RESULT_ERROR", `Line ${lineNumber} has an error`);
+  }
+  return checkLineValue(v, lineNumber);
+}
+
+/**
+ * The refusal for a line that is not a number or a quantity, naming the line,
+ * its section and what it is. The same code the inline aggregates refuse with.
+ */
+function sectionNonNumeric(v: Value, lineNumber: number, heading: string, verb: string): Value {
+  const kind = nonNumericKind(v);
+  const message = kind === undefined
+    ? `Line ${lineNumber}, under "${heading}", is not a plain number or quantity, so it cannot be ${verb}.`
+    : `Line ${lineNumber}, under "${heading}", is ${kind}, so it cannot be ${verb}: only numbers and quantities can.`;
+  return errorValue("AGGREGATE_NON_NUMERIC", message);
+}
+
+/**
+ * `total of section "Travel"` and its siblings: the figures under the heading
+ * named, down to the next heading at the same level or above.
+ *
+ * One walk collects the document's headings, because all of them are needed:
+ * the one asked for can sit anywhere, a second heading with the same name has
+ * to be noticed, and the block ends at the next heading at its level or above.
+ * The lines of the block are then read the way `total above` reads its own:
+ * blank lines, headings and other markdown are passed over, a line that is
+ * itself a summary is left out (see {@link isSummaryLine}), and an unreadable or
+ * non-numeric line stops the answer with an error naming it.
+ *
+ * The block is declared to the dependency graph before any of it is read, for
+ * the reason the range gives: the read stops at the first line it cannot use.
+ * The two headings that bound it are declared too. They have no result, so they
+ * can never close a cycle, and declaring them makes an edit that moves the
+ * block's edges reach this line.
+ */
+function aggregateSection(context: LineExecutionContext, name: string, mode: SectionMode): Value {
+  const getText = context.getLineText!;
+  const getResult = context.getLineResult!;
+  const isBoundary = context.isLineBoundary!;
+  const wanted = sectionKey(name);
+
+  const headings: PlacedHeading[] = [];
+  let lastLine = 0;
+  for (let n = 1; ; n++) {
+    const text = getText(n);
+    if (text === undefined) break; // past the end of the document
+    lastLine = n;
+    // A heading starts with `#`, and most lines hold none.
+    if (text.indexOf("#") === -1) continue;
+    const heading = headingOf(text);
+    if (heading !== null) headings.push({ line: n, level: heading.level, name: heading.name });
+  }
+
+  const matches = wanted === "" ? [] : headings.filter((h) => sectionKey(h.name) === wanted);
+  if (matches.length === 0) return sectionNotFound(name, headings);
+  if (matches.length > 1) return sectionAmbiguous(matches);
+  const open = matches[0];
+  const close = headings.find((h) => h.line > open.line && h.level <= open.level);
+  const end = close === undefined ? lastLine + 1 : close.line;
+
+  const members: number[] = [];
+  for (let n = open.line + 1; n < end; n++) {
+    if (n === context.lineIndex) continue; // the query line, when it sits inside its own section
+    if (isBoundary(n)) continue; // a blank line, a subheading, a comment
+    if (isSummaryLine(getText(n) ?? "")) continue;
+    members.push(n);
+  }
+  if (context.noteLineRead) {
+    context.noteLineRead(open.line);
+    for (const n of members) context.noteLineRead(n);
+    if (close !== undefined) context.noteLineRead(close.line);
+  }
+
+  const verb = mode === "average" ? "averaged" : "added";
+  const values: Value[] = [];
+  for (const n of members) {
+    const v = getResult(n);
+    // A check line is a statement about the section, not one of its figures,
+    // passed or failed alike, as `total above` treats it (#506).
+    if (isCheckResult(v)) continue;
+    const err = checkSectionMember(v, n, context.lineIndex);
+    if (err) return err;
+    // `count of section` is "how many figures sit under the heading", so a
+    // line that is not a number still counts; only sum and average add.
+    if (mode !== "count" && v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
+      return sectionNonNumeric(v!, n, open.name, verb);
+    }
+    values.push(v!);
+  }
+
+  if (mode === "count") return numberValue(values.length);
+  if (values.length === 0) {
+    return errorValue("SECTION_EMPTY", `The section "${open.name}" has no figures to ${mode === "average" ? "average" : "add up"}.`);
+  }
+  return combineQuantities(values, mode === "average");
+}
+
+/**
+ * `total of section "Travel"` / `sum of section "Travel"`: the sum of every
+ * figure under the heading, in the unit the first one is written in.
+ *
+ * @param args - A single String holding the heading's name.
+ * @param context - Per-line execution context. Supplies the document's text and
+ * cached results; without them the handler returns a SECTION_NO_DOCUMENT error.
+ * @returns The total, or an error Value naming what stopped it.
+ */
+export function sectionSumHandler(args: Value[], context?: LineExecutionContext): Value {
+  const ctxError = requireSectionContext(context);
+  if (ctxError) return ctxError;
+  return aggregateSection(context!, String(args[0].value), "sum");
+}
+
+/**
+ * `average of section "Travel"`: the mean of the figures under the heading.
+ *
+ * @param args - A single String holding the heading's name.
+ * @param context - Per-line execution context. Supplies the document's text and
+ * cached results; without them the handler returns a SECTION_NO_DOCUMENT error.
+ * @returns The mean, or an error Value naming what stopped it.
+ */
+export function sectionAverageHandler(args: Value[], context?: LineExecutionContext): Value {
+  const ctxError = requireSectionContext(context);
+  if (ctxError) return ctxError;
+  return aggregateSection(context!, String(args[0].value), "average");
+}
+
+/**
+ * `count of section "Travel"`: how many figures sit under the heading.
+ *
+ * @param args - A single String holding the heading's name.
+ * @param context - Per-line execution context. Supplies the document's text and
+ * cached results; without them the handler returns a SECTION_NO_DOCUMENT error.
+ * @returns The count, or an error Value naming what stopped it.
+ */
+export function sectionCountHandler(args: Value[], context?: LineExecutionContext): Value {
+  const ctxError = requireSectionContext(context);
+  if (ctxError) return ctxError;
+  return aggregateSection(context!, String(args[0].value), "count");
 }

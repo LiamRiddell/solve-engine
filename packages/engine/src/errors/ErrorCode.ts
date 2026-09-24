@@ -151,15 +151,39 @@ export const CoreErrorCodes = {
   SYMBOLIC_UNSUPPORTED_FUNCTION: "SYMBOLIC_UNSUPPORTED_FUNCTION",
   /** The rational-root search exceeding `FACTOR_MAX_ROOT_CANDIDATES`. The candidate set is the product of two divisor sets, so a highly-composite coefficient escapes quickly. */
   SYMBOLIC_FACTOR_LIMIT_EXCEEDED: "SYMBOLIC_FACTOR_LIMIT_EXCEEDED",
-  /** An equation outside what the solver attempts: not a polynomial, above the degree ceiling, or non-linear in the unknown while another unknown is present. */
+  /** An equation outside what the solver attempts: above the degree ceiling, non-linear in the unknown while another unknown is present, or not a polynomial and not evaluable numerically either (another unknown in it, an imaginary constant, a function with no numeric form). A non-polynomial equation in one unknown is solved numerically instead (see `symbolic/NumericSolve.ts`). */
   SYMBOLIC_SOLVE_UNSUPPORTED: "SYMBOLIC_SOLVE_UNSUPPORTED",
   /** Some but not all of an equation's roots were found. Reported rather than returned, because a partial list of roots looks exactly like a complete one. */
   SYMBOLIC_SOLVE_INCOMPLETE: "SYMBOLIC_SOLVE_INCOMPLETE",
+  /** A numerically solved equation whose two sides never cross in the range searched. Not "no solution": a search that found nothing has not shown there is nothing, and the message names the range and what the search cannot see. */
+  SYMBOLIC_SOLVE_NO_ROOT_FOUND: "SYMBOLIC_SOLVE_NO_ROOT_FOUND",
+  /** A numerically solved equation with more roots in the range than `NUMERIC_ROOTS_MAX`, as a periodic one has, or whose two sides compare equal across a whole stretch. Declined rather than listed, because a list cut off at the edge of the search would read as complete. */
+  SYMBOLIC_SOLVE_TOO_MANY_ROOTS: "SYMBOLIC_SOLVE_TOO_MANY_ROOTS",
+  /** A bound of `integral`, an end of `solve`'s search range, or `limit`'s point that is not a plain finite number: it carries a unit, still contains an unknown, is not a number, or (for `solve` and `limit`) is infinite. */
+  SYMBOLIC_BOUND_INVALID: "SYMBOLIC_BOUND_INVALID",
+  /** `integral(f, x, a)` or `solve(eq, x, a)`: one number after the unknown where the form takes two. A parse error naming the form, rather than a missing closing parenthesis. */
+  SYMBOLIC_REQUIRES_BOTH_BOUNDS: "SYMBOLIC_REQUIRES_BOTH_BOUNDS",
+  /** `limit(f, x)` with no point for the unknown to approach. */
+  SYMBOLIC_REQUIRES_LIMIT_POINT: "SYMBOLIC_REQUIRES_LIMIT_POINT",
+  /** A definite integral with an infinite bound, or whose integrand has no finite value somewhere in the range (`1/x` from 0 to 1). Improper integrals are refused by name rather than evaluated. */
+  SYMBOLIC_INTEGRAL_IMPROPER: "SYMBOLIC_INTEGRAL_IMPROPER",
+  /** A definite integral whose numeric estimate did not settle within the quadrature's budget, which is what an integrand growing without bound inside the range, and so a diverging integral, looks like. */
+  SYMBOLIC_INTEGRAL_UNSETTLED: "SYMBOLIC_INTEGRAL_UNSETTLED",
+  /** A limit where the expression grows without bound (`1/x^2` at 0). */
+  SYMBOLIC_LIMIT_DIVERGES: "SYMBOLIC_LIMIT_DIVERGES",
+  /** A limit whose left and right sides settle on different values (`abs(x)/x` at 0). The message names both. */
+  SYMBOLIC_LIMIT_SIDES_DISAGREE: "SYMBOLIC_LIMIT_SIDES_DISAGREE",
+  /** A limit whose values never settle on one number (`sin(1/x)` at 0). */
+  SYMBOLIC_LIMIT_UNSETTLED: "SYMBOLIC_LIMIT_UNSETTLED",
+  /** A limit of an expression with no real value near the point on either side. */
+  SYMBOLIC_LIMIT_UNDEFINED: "SYMBOLIC_LIMIT_UNDEFINED",
+  /** A limit of an expression that cannot be evaluated numerically: another unknown in it, an imaginary constant, or a function with no numeric form. */
+  SYMBOLIC_LIMIT_UNSUPPORTED: "SYMBOLIC_LIMIT_UNSUPPORTED",
   /** `solve`'s second argument not being a bare name. */
   SOLVE_REQUIRES_VARIABLE_NAME: "SOLVE_REQUIRES_VARIABLE_NAME",
   /** A derivative order outside 0..`DERIVATIVE_MAX_ORDER`. */
   SYMBOLIC_DERIVATIVE_ORDER_LIMIT: "SYMBOLIC_DERIVATIVE_ORDER_LIMIT",
-  /** An expression with no known elementary antiderivative. Reported rather than approximated, since a wrong integral is indistinguishable from a right one at the point of use. */
+  /** An indefinite integral with no known elementary antiderivative, reported rather than approximated, since a wrong integral is indistinguishable from a right one at the point of use. For a definite integral, one with no antiderivative that also cannot be evaluated numerically (another unknown in it, or a function with no numeric form). */
   SYMBOLIC_INTEGRAL_UNSUPPORTED: "SYMBOLIC_INTEGRAL_UNSUPPORTED",
   /** A Taylor degree outside 0..`TAYLOR_MAX_DEGREE`. */
   SYMBOLIC_TAYLOR_DEGREE_LIMIT: "SYMBOLIC_TAYLOR_DEGREE_LIMIT",

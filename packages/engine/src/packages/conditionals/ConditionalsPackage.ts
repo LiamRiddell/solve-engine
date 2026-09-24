@@ -5,6 +5,9 @@ import { ComparisonParselet } from "./parselets/ComparisonParselet";
 import { LogicalParselet } from "./parselets/LogicalParselet";
 import { BooleanLiteralParselet } from "./parselets/BooleanLiteralParselet";
 import { IfThenElseParselet } from "./parselets/IfThenElseParselet";
+import { checkParselet } from "./parselets/CheckParselet";
+import { checkLineNormalizerRule, approxOperatorNormalizerRule } from "./normalizer/CheckNormalizerRules";
+import { checkComparison } from "./CheckFunctions";
 
 /**
  * Comparisons (`==`, `!=`, `<`, `>`, `<=`, `>=`), boolean logic (`true`/
@@ -43,6 +46,24 @@ export const CONDITIONALS_PACKAGE: IEnginePackage = {
     TRUE: new BooleanLiteralParselet(true),
     FALSE: new BooleanLiteralParselet(false),
     IF: new IfThenElseParselet(),
+    // `check <a> <comparison> <b>` (#506); see CheckParselet.ts.
+    CHECK: checkParselet,
+  },
+  // `within` and `≈` only mean something in a check. As phrases they are
+  // single tokens before implicit multiplication can read `0.5 within` as a
+  // product.
+  phrases: {
+    within: "WITHIN",
+    "≈": "APPROX",
+  },
+  normalizerRules: [checkLineNormalizerRule(), approxOperatorNormalizerRule()],
+  pluginFunctions: {
+    checkComparison,
+  },
+  tokenCategories: {
+    CHECK: "keyword",
+    WITHIN: "keyword",
+    APPROX: "operator",
   },
   infixParselets: {
     EQUALITY: new ComparisonParselet(OpCode.EQ),

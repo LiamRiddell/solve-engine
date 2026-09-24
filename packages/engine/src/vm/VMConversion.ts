@@ -64,6 +64,19 @@ const NON_NUMERIC_KINDS: Partial<Record<ValueType, string>> = {
 };
 
 /**
+ * How a reader would name a value with no numeric reading ("text", "a
+ * bracketed list"), or undefined when the value reads as a number honestly.
+ * The same set {@link nonNumericOperand} refuses in an aggregate, for the other
+ * places that must not take the accidental reading or that word their own
+ * refusal: a conversion, a list cell, a section total that names the line.
+ *
+ * @param v - The value to name.
+ */
+export function nonNumericKind(v: Value): string | undefined {
+    return NON_NUMERIC_KINDS[v.type];
+}
+
+/**
  * Refuses an aggregate's operand that has no numeric reading, or null when
  * every operand has one.
  *
@@ -80,10 +93,11 @@ export function nonNumericOperand(values: readonly Value[], verb: string): Value
         const kind = NON_NUMERIC_KINDS[v.type];
         if (kind === undefined) continue;
         // A quoted name in a total or an average is most likely a section the
-        // reader wanted to add up, which is what a tag does.
-        const tagPhrase = verb === "added" ? "total of #tag" : verb === "averaged" ? "average of #tag" : undefined;
-        const hint = v.type === ValueType.String && tagPhrase !== undefined
-            ? ` To gather lines by name, tag them and use "${tagPhrase}".`
+        // reader wanted to add up: the lines under a heading of that name, or
+        // the lines carrying a tag.
+        const opener = verb === "added" ? "total" : verb === "averaged" ? "average" : undefined;
+        const hint = v.type === ValueType.String && opener !== undefined
+            ? ` To gather the lines under a heading, write ${opener} of section "${String(v.value)}"; to gather tagged lines, use "${opener} of #tag".`
             : v.type === ValueType.Matrix
                 ? ` List the values with commas instead, as in "total of 1, 2, 3".`
                 : "";
@@ -747,6 +761,20 @@ export function binaryOp(
     if (r.type === ValueType.Error) return r;
     if (l.type === ValueType.Pending) return l;
     if (r.type === ValueType.Pending) return r;
+
+    // Text in arithmetic. `toNumber()` reads text through `parseFloat`, so a
+    // quoted time plus a number, `"11:00 PM" + 2`, answered 13 and `"hello" +
+    // 5` answered 5: the text's leading digits, or 0, passed off as its value.
+    // Text joins to text in ADD before this point; everything else that
+    // reaches here with text on either side is refused by name. Issue #549.
+    if (l.type === ValueType.String || r.type === ValueType.String) {
+        return errorValue(
+            "TEXT_ARITHMETIC",
+            symbolicOp === "add"
+                ? `Text and a number cannot be added: + joins text only to other text. To add a number held as text, convert it first with "as number".`
+                : "Text cannot be used in arithmetic: only numbers and quantities can. To use a number held as text, convert it first with \"as number\".",
+        );
+    }
 
     // Symbolic dispatch, either operand carries a free-variable formula.
     // Builds the corresponding SymbolicNode (the non-symbolic side, if

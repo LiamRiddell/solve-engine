@@ -32,37 +32,38 @@ Measured against **radian**.
 | radian | `radians`, `rad`, `rads` | 1 |
 | degree | `degrees`, `deg`, `degs` | 0.0174533 |
 | gradian | `gradians`, `gon`, `gons`, `grad`, `grads` | 0.015708 |
-| arcminute | `arcminutes`, `arcmin`, `arcmins` | 0.000290888 |
-| arcsecond | `arcseconds`, `arcsec`, `arcsecs` | 0.00000484814 |
+| arcminute | `arcminutes`, `minutes of arc`, `arcmin`, `arcmins` | 0.000290888 |
+| arcsecond | `arcseconds`, `seconds of arc`, `arcsec`, `arcsecs` | 0.00000484814 |
 
 ## Area
 
-Measured against **m2**.
+Measured against **square meter**.
 
 | Unit | Spellings | Relative size |
 | --- | --- | --- |
-| Pm2 | `Pm2` | 1e+30 |
-| Tm2 | `Tm2` | 1e+24 |
-| Gm2 | `Gm2` | 1000000000000000000 |
-| Mm2 | `Mm2` | 1000000000000 |
-| mi2 | `mi2` | 2589990 |
-| km2 | `km2` | 1000000 |
-| hm2 | `hectare`, `hectares`, `ha` | 10000 |
+| square petameter | `square petametre`, `square petameters`, `square petametres`, `Pm2` | 1e+30 |
+| square terameter | `square terametre`, `square terameters`, `square terametres`, `Tm2` | 1e+24 |
+| square gigameter | `square gigametre`, `square gigameters`, `square gigametres`, `Gm2` | 1000000000000000000 |
+| square megameter | `square megametre`, `square megameters`, `square megametres`, `Mm2` | 1000000000000 |
+| square mile | `square miles`, `sq mi`, `mi2` | 2589990 |
+| square kilometer | `square kilometre`, `square kilometers`, `square kilometres`, `km2` | 1000000 |
+| square hectometer | `square hectometre`, `square hectometers`, `square hectometres`, `hm2`, `hectare`, `hectares`, `ha` | 10000 |
 | acre | `acres`, `ac` | 4046.86 |
 | decare | `decares`, `daa` | 1000 |
 | mu | `mu` | 666.667 |
-| dam2 | `dam2` | 100 |
+| square decameter | `square decametre`, `square decameters`, `square decametres`, `dam2` | 100 |
 | deciare | `deciares`, `da` | 10 |
-| m2 | `centiare`, `centiares`, `ca` | 1 |
-| yd2 | `yd2` | 0.836127 |
-| ft2 | `ft2` | 0.092903 |
-| dm2 | `dm2` | 0.01 |
-| in2 | `in2` | 0.00064516 |
-| cm2 | `cm2` | 0.0001 |
-| mm2 | `mm2` | 0.000001 |
-| nm2 | `nm2` | 1e-18 |
-| pm2 | `pm2` | 1e-24 |
-| fm2 | `fm2` | 1e-30 |
+| square meter | `square meters`, `square metre`, `square metres`, `m2`, `centiare`, `centiares`, `ca` | 1 |
+| square yard | `square yards`, `sq yd`, `yd2` | 0.836127 |
+| square foot | `square feet`, `sq ft`, `ft2` | 0.092903 |
+| square decimeter | `square decimetre`, `square decimeters`, `square decimetres`, `dm2` | 0.01 |
+| square inch | `square inches`, `sq in`, `in2` | 0.00064516 |
+| square centimeter | `square centimetre`, `square centimeters`, `square centimetres`, `cm2` | 0.0001 |
+| square millimeter | `square millimetre`, `square millimeters`, `square millimetres`, `mm2` | 0.000001 |
+| square micrometer | `square micrometre`, `square micrometers`, `square micrometres` | 1e-12 |
+| square nanometer | `square nanometre`, `square nanometers`, `square nanometres`, `nm2` | 1e-18 |
+| square picometer | `square picometre`, `square picometers`, `square picometres`, `pm2` | 1e-24 |
+| square femtometer | `square femtometre`, `square femtometers`, `square femtometres`, `fm2` | 1e-30 |
 
 ## Data
 
@@ -119,33 +120,34 @@ Measured against **joule**.
 
 | Unit | Spellings | Relative size |
 | --- | --- | --- |
-| PW h | `PWh` | 3600000000000000000 |
-| TW h | `TWh` | 3600000000000000 |
+| petawatt-hour | `petawatt-hours`, `PW h`, `PWh` | 3600000000000000000 |
+| terawatt-hour | `terawatt-hours`, `TW h`, `TWh` | 3600000000000000 |
 | petajoule | `petajoules`, `PJ` | 1000000000000000 |
-| GW h | `GWh` | 3600000000000 |
+| gigawatt-hour | `gigawatt-hours`, `GW h`, `GWh` | 3600000000000 |
 | terajoule | `terajoules`, `TJ` | 1000000000000 |
-| MW h | `MWh` | 3600000000 |
+| megawatt-hour | `megawatt-hours`, `MW h`, `MWh` | 3600000000 |
 | gigajoule | `gigajoules`, `GJ` | 1000000000 |
-| kW h | `kWh` | 3600000 |
+| kilowatt-hour | `kilowatt-hours`, `kW h`, `kWh` | 3600000 |
 | megajoule | `megajoules`, `MJ` | 1000000 |
-| hW h | `hWh` | 360000 |
-| daW h | `daWh` | 36000 |
-| W h | `Wh` | 3600 |
+| hectowatt-hour | `hectowatt-hours`, `hW h`, `hWh` | 360000 |
+| decawatt-hour | `decawatt-hours`, `daW h`, `daWh` | 36000 |
+| watt-hour | `W h`, `Wh` | 3600 |
 | kilojoule | `kilojoules`, `kJ` | 1000 |
-| dW h | `dWh` | 360 |
+| deciwatt-hour | `deciwatt-hours`, `dW h`, `dWh` | 360 |
 | hectojoule | `hectojoules`, `hJ` | 100 |
-| cW h | `cWh` | 36 |
+| centiwatt-hour | `centiwatt-hours`, `cW h`, `cWh` | 36 |
 | decajoule | `decajoules`, `daJ` | 10 |
-| mW h | `mWh` | 3.6 |
+| milliwatt-hour | `milliwatt-hours`, `mW h`, `mWh` | 3.6 |
 | joule | `joules`, `J` | 1 |
 | decijoule | `decijoules`, `dJ` | 0.1 |
 | centijoule | `centijoules`, `cJ` | 0.01 |
+| microwatt-hour | `microwatt-hours` | 0.0036 |
 | millijoule | `millijoules`, `mJ` | 0.001 |
-| nW h | `nWh` | 0.0000036 |
+| nanowatt-hour | `nanowatt-hours`, `nW h`, `nWh` | 0.0000036 |
 | microjoule | `microjoules` | 0.000001 |
-| pW h | `pWh` | 3.6e-9 |
+| picowatt-hour | `picowatt-hours`, `pW h`, `pWh` | 3.6e-9 |
 | nanojoule | `nanojoules`, `nJ` | 1e-9 |
-| fW h | `fWh` | 3.6e-12 |
+| femtowatt-hour | `femtowatt-hours`, `fW h`, `fWh` | 3.6e-12 |
 | picojoule | `picojoules`, `pJ` | 1e-12 |
 | femtojoule | `femtojoules`, `fJ` | 1e-15 |
 
@@ -159,13 +161,13 @@ Measured against **newton**.
 | teranewton | `teranewtons`, `TN` | 1000000000000 |
 | giganewton | `giganewtons`, `GN` | 1000000000 |
 | meganewton | `meganewtons`, `MN` | 1000000 |
-| megapond | `tf`, `Mp` | 9806.65 |
+| tonne-force | `metric ton-force`, `megagram-force`, `megapond`, `tf`, `Mp` | 9806.65 |
 | kip | `klb`, `kipf`, `klbf` | 4448.22 |
 | kilonewton | `kilonewtons`, `kN` | 1000 |
 | hectonewton | `hectonewtons`, `hN` | 100 |
 | decanewton | `decanewtons`, `daN` | 10 |
-| kilopond | `kiloponds`, `kgf`, `kp` | 9.80665 |
-| lbf | `lbf` | 4.44822 |
+| kilogram-force | `kilopond`, `kiloponds`, `kgf`, `kp` | 9.80665 |
+| pound of force | `pound-force`, `lbf` | 4.44822 |
 | newton | `newtons`, `N` | 1 |
 | poundal | `poundals`, `pdl` | 0.138255 |
 | decinewton | `decinewtons`, `dN` | 0.1 |
@@ -212,9 +214,9 @@ Measured against **lux**.
 | phot | `ph` | 10000 |
 | kilolux | `klx` | 1000 |
 | hectolux | `hlx` | 100 |
-| fc | `fc` | 10.764 |
+| foot-candle | `foot candle`, `fc`, `ft-c` | 10.764 |
 | decalux | `dalx` | 10 |
-| lux | `lx` | 1 |
+| lux | `lx`, `lumen per square meter` | 1 |
 | decilux | `dlx` | 0.1 |
 | centilux | `clx` | 0.01 |
 | millilux | `mlx` | 0.001 |
@@ -230,13 +232,13 @@ Measured against **meter**.
 | Unit | Spellings | Relative size |
 | --- | --- | --- |
 | parsec | `parsecs`, `pc` | 30856800000000000 |
-| ly | `ly` | 9460730000000000 |
+| light-year | `light-years`, `ly` | 9460730000000000 |
 | petameter | `petametre`, `petameters`, `petametres`, `Pm` | 1000000000000000 |
 | terameter | `terametre`, `terameters`, `terametres`, `Tm` | 1000000000000 |
 | gigameter | `gigametre`, `gigameters`, `gigametres`, `Gm` | 1000000000 |
 | megameter | `megametre`, `megameters`, `megametres`, `Mm` | 1000000 |
 | league | `leagues` | 4828.03 |
-| NM | `nmi` | 1852 |
+| nautical mile | `nautical miles`, `NM`, `nmi` | 1852 |
 | mile | `miles`, `mi` | 1609.34 |
 | kilometer | `kilometre`, `kilometers`, `kilometres`, `km` | 1000 |
 | furlong | `furlongs` | 201.168 |
@@ -247,6 +249,7 @@ Measured against **meter**.
 | rod | `rods` | 5.0292 |
 | meter | `meters`, `metre`, `metres`, `m` | 1 |
 | yard | `yards`, `yd` | 0.9144 |
+| US survey foot | `US survey feet` | 0.304801 |
 | foot | `feet`, `ft` | 0.3048 |
 | hand | `hands` | 0.1016 |
 | decimeter | `decimetre`, `decimeters`, `decimetres`, `dm` | 0.1 |
@@ -262,24 +265,25 @@ Measured against **meter**.
 
 ## Luminance
 
-Measured against **cd/m2**.
+Measured against **candela per square meter**.
 
 | Unit | Spellings | Relative size |
 | --- | --- | --- |
-| Pcd/m2 | `Pcd/m2` | 1000000000000000 |
-| Tcd/m2 | `Tcd/m2` | 1000000000000 |
-| Gcd/m2 | `Gcd/m2` | 1000000000 |
-| Mcd/m2 | `Mcd/m2` | 1000000 |
-| kcd/m2 | `kcd/m2` | 1000 |
-| hcd/m2 | `hcd/m2` | 100 |
-| dacd/m2 | `dacd/m2` | 10 |
-| cd/m2 | `nit`, `nits`, `nt` | 1 |
-| dcd/m2 | `dcd/m2` | 0.1 |
-| ccd/m2 | `ccd/m2` | 0.01 |
-| mcd/m2 | `mcd/m2` | 0.001 |
-| ncd/m2 | `ncd/m2` | 1e-9 |
-| pcd/m2 | `pcd/m2` | 1e-12 |
-| fcd/m2 | `fcd/m2` | 1e-15 |
+| petacandela per square meter | `petacandelas per square meter`, `petacandela per square metre`, `petacandelas per square metre`, `Pcd/m2` | 1000000000000000 |
+| teracandela per square meter | `teracandelas per square meter`, `teracandela per square metre`, `teracandelas per square metre`, `Tcd/m2` | 1000000000000 |
+| gigacandela per square meter | `gigacandelas per square meter`, `gigacandela per square metre`, `gigacandelas per square metre`, `Gcd/m2` | 1000000000 |
+| megacandela per square meter | `megacandelas per square meter`, `megacandela per square metre`, `megacandelas per square metre`, `Mcd/m2` | 1000000 |
+| kilocandela per square meter | `kilocandelas per square meter`, `kilocandela per square metre`, `kilocandelas per square metre`, `kcd/m2` | 1000 |
+| hectocandela per square meter | `hectocandelas per square meter`, `hectocandela per square metre`, `hectocandelas per square metre`, `hcd/m2` | 100 |
+| decacandela per square meter | `decacandelas per square meter`, `decacandela per square metre`, `decacandelas per square metre`, `dacd/m2` | 10 |
+| candela per square meter | `candelas per square meter`, `candela per square metre`, `candelas per square metre`, `cd/m2`, `nit`, `nits`, `nt` | 1 |
+| decicandela per square meter | `decicandelas per square meter`, `decicandela per square metre`, `decicandelas per square metre`, `dcd/m2` | 0.1 |
+| centicandela per square meter | `centicandelas per square meter`, `centicandela per square metre`, `centicandelas per square metre`, `ccd/m2` | 0.01 |
+| millicandela per square meter | `millicandelas per square meter`, `millicandela per square metre`, `millicandelas per square metre`, `mcd/m2` | 0.001 |
+| microcandela per square meter | `microcandelas per square meter`, `microcandela per square metre`, `microcandelas per square metre` | 0.000001 |
+| nanocandela per square meter | `nanocandelas per square meter`, `nanocandela per square metre`, `nanocandelas per square metre`, `ncd/m2` | 1e-9 |
+| picocandela per square meter | `picocandelas per square meter`, `picocandela per square metre`, `picocandelas per square metre`, `pcd/m2` | 1e-12 |
+| femtocandela per square meter | `femtocandelas per square meter`, `femtocandela per square metre`, `femtocandelas per square metre`, `fcd/m2` | 1e-15 |
 
 ## Luminous intensity
 
@@ -313,15 +317,17 @@ Measured against **gram**.
 | petagram | `petagrams`, `Pg`, `gigatonne`, `gigatonnes`, `Gt` | 1000000000000000 |
 | teragram | `teragrams`, `Tg`, `megatonne`, `megatonnes`, `Mt` | 1000000000000 |
 | gigagram | `gigagrams`, `Gg`, `kilotonne`, `kilotonnes`, `kt` | 1000000000 |
-| megagram | `megagrams`, `Mg`, `tonne`, `tonnes`, `t` | 1000000 |
+| long ton | `long tons`, `imperial ton`, `imperial tons`, `displacement ton`, `displacement tons` | 1016050 |
+| megagram | `megagrams`, `Mg`, `tonne`, `tonnes`, `metric ton`, `metric tons`, `t` | 1000000 |
+| short ton | `short tons`, `US ton`, `US tons` | 907185 |
 | centner | `centners` | 100000 |
-| cwt | `cwt` | 50800 |
-| cental | `cental` | 45360 |
+| long hundredweight | `imperial hundredweight`, `cwt` | 50800 |
+| short hundredweight | `cental` | 45360 |
 | stone | `stones`, `st` | 6350.29 |
 | kilogram | `kilograms`, `kg` | 1000 |
 | pound | `pounds`, `lb`, `lbs` | 453.592 |
 | hectogram | `hectograms`, `hg` | 100 |
-| oz t | `toz` | 31.1035 |
+| troy ounce | `oz t`, `toz` | 31.1035 |
 | ounce | `ounces`, `oz` | 28.3495 |
 | decagram | `decagrams`, `dag` | 10 |
 | gram | `grams`, `g` | 1 |
@@ -346,7 +352,7 @@ Measured against **watt**.
 | gigawatt | `gigawatts`, `GW` | 1000000000 |
 | megawatt | `megawatts`, `MW` | 1000000 |
 | kilowatt | `kilowatts`, `kW` | 1000 |
-| horsepower | `hp` | 745.7 |
+| horsepower | `mechanical horsepower`, `hp` | 745.7 |
 | hectowatt | `hectowatts`, `hW` | 100 |
 | decawatt | `decawatts`, `daW` | 10 |
 | watt | `watts`, `W` | 1 |
@@ -377,10 +383,10 @@ Measured against **pascal**.
 | atmosphere | `atmospheres`, `atm` | 101325 |
 | bar | `bars` | 100000 |
 | decibar | `decibars`, `dbar` | 10000 |
-| psi | `lbf/in2` | 6894.76 |
-| inHg | `Hg` | 3386.39 |
+| pound per square inch | `pounds per square inch`, `psi`, `lbf/in2` | 6894.76 |
+| inch of mercury | `inches of mercury`, `inHg`, `Hg` | 3386.39 |
 | kilopascal | `kilopascals`, `kPa`, `centibar`, `centibars`, `cbar` | 1000 |
-| inAq | `Aq` | 249.089 |
+| inch of water | `inches of water`, `inAq`, `Aq` | 249.089 |
 | torr | `torrs`, `Torr` | 133.322 |
 | hectopascal | `hectopascals`, `hPa`, `millibar`, `millibars`, `mbar` | 100 |
 | decapascal | `decapascals`, `daPa` | 10 |
@@ -451,7 +457,7 @@ Measured against **second**.
 | second | `seconds`, `s` | 1 |
 | decisecond | `deciseconds`, `ds` | 0.1 |
 | centisecond | `centiseconds`, `cs` | 0.01 |
-| TU | `TU` | 0.001024 |
+| time unit | `TU` | 0.001024 |
 | millisecond | `milliseconds`, `ms` | 0.001 |
 | microsecond | `microseconds` | 0.000001 |
 | nanosecond | `nanoseconds`, `ns` | 1e-9 |
@@ -461,46 +467,60 @@ Measured against **second**.
 
 ## Volume
 
-Measured against **stere**.
+Measured against **cubic meter**.
 
 | Unit | Spellings | Relative size |
 | --- | --- | --- |
-| Pm3 | `Pm3` | 1e+45 |
-| Tm3 | `Tm3` | 1e+36 |
-| Gm3 | `Gm3` | 1e+27 |
-| Mm3 | `Mm3` | 1000000000000000000 |
+| cubic petameter | `cubic petameters`, `Pm3` | 1e+45 |
+| cubic terameter | `cubic terameters`, `Tm3` | 1e+36 |
+| cubic gigameter | `cubic gigameters`, `Gm3` | 1e+27 |
+| cubic megameter | `cubic megameters`, `Mm3` | 1000000000000000000 |
 | petaliter | `petaliters`, `petalitre`, `petalitres`, `Pl`, `PL` | 1000000000000 |
-| mi3 | `mi3` | 4168180000 |
-| km3 | `teraliter`, `teraliters`, `teralitre`, `teralitres`, `Tl`, `TL` | 1000000000 |
-| hm3 | `gigaliter`, `gigaliters`, `gigalitre`, `gigalitres`, `Gl`, `GL` | 1000000 |
-| ac ft | `ac ft` | 1233.48 |
-| dam3 | `megaliter`, `megaliters`, `megalitre`, `megalitres`, `Ml`, `ML` | 1000 |
-| MTON | `MTON` | 1.133 |
-| stere | `steres`, `m3`, `kiloliter`, `kiloliters`, `kilolitre`, `kilolitres`, `kl`, `kL` | 1 |
-| yd3 | `yd3` | 0.764555 |
+| cubic mile | `cubic miles`, `cu mi`, `mi3` | 4168180000 |
+| cubic kilometer | `cubic kilometers`, `km3`, `teraliter`, `teraliters`, `teralitre`, `teralitres`, `Tl`, `TL` | 1000000000 |
+| cubic hectometer | `cubic hectometers`, `hm3`, `gigaliter`, `gigaliters`, `gigalitre`, `gigalitres`, `Gl`, `GL` | 1000000 |
+| acre-foot | `acre-feet`, `ac ft` | 1233.48 |
+| cubic decameter | `cubic decameters`, `dam3`, `megaliter`, `megaliters`, `megalitre`, `megalitres`, `Ml`, `ML` | 1000 |
+| measurement ton | `measurement tons`, `MTON` | 1.133 |
+| cubic meter | `cubic meters`, `cubic metre`, `cubic metres`, `stere`, `steres`, `m3`, `kiloliter`, `kiloliters`, `kilolitre`, `kilolitres`, `kl`, `kL` | 1 |
+| cubic yard | `cubic yards`, `cu yd`, `yd3` | 0.764555 |
+| imperial barrel | `imperial barrels`, `imp bbl` | 0.163659 |
+| US dry barrel | `US dry barrels`, `US dry bbl` | 0.1156 |
 | hectoliter | `hectoliters`, `hectolitre`, `hectolitres`, `hl`, `hL` | 0.1 |
-| ft3 | `ft3` | 0.0283168 |
+| imperial bushel | `imperial bushels`, `imp bsh`, `imp bu` | 0.0363687 |
+| US bushel | `US bushels`, `US bsh`, `US bu` | 0.0352391 |
+| cubic foot | `cubic feet`, `cu ft`, `ft3` | 0.0283168 |
 | decaliter | `decaliters`, `decalitre`, `decalitres`, `dal`, `daL` | 0.01 |
-| pk | `pk` | 0.00909218 |
-| gallon | `gallons`, `gal` | 0.00378541 |
-| dm3 | `liter`, `liters`, `litre`, `litres`, `l` | 0.001 |
-| quart | `quarts`, `qt` | 0.000946353 |
-| pint | `pints`, `pt` | 0.000473176 |
+| imperial peck | `imperial pecks`, `pk`, `imp pk` | 0.00909218 |
+| US peck | `US pk` | 0.00880977 |
+| imperial gallon | `imperial gallons`, `imp gal` | 0.00454609 |
+| US dry gallon | `US dry gal` | 0.00440488 |
+| gallon | `gallons`, `US liquid gallon`, `US liquid gallons`, `gal` | 0.00378541 |
+| board foot | `board feet` | 0.00235974 |
+| imperial quart | `imperial quarts`, `imp qt` | 0.00113652 |
+| US dry quart | `US dry qt` | 0.00110122 |
+| cubic decimeter | `cubic decimeters`, `dm3`, `liter`, `liters`, `litre`, `litres`, `l` | 0.001 |
+| quart | `quarts`, `US liquid quart`, `US liquid quarts`, `qt` | 0.000946353 |
+| imperial pint | `imperial pints`, `imp pt` | 0.000568261 |
+| US dry pint | `US dry pt` | 0.00055061 |
+| pint | `pints`, `US liquid pint`, `US liquid pints`, `pt` | 0.000473176 |
+| US legal cup | `US legal cups`, `US lc` | 0.00024 |
 | cup | `cups` | 0.000236588 |
 | deciliter | `deciliters`, `decilitre`, `decilitres`, `dl`, `dL` | 0.0001 |
-| fl oz | `fl oz` | 0.0000295735 |
-| in3 | `in3` | 0.0000163871 |
-| tablespoon | `tablespoons`, `tbsp` | 0.0000147868 |
+| US fluid ounce | `US fluid ounces`, `fl oz` | 0.0000295735 |
+| imperial fluid ounce | `imperial fluid ounces`, `imp fl oz` | 0.0000284131 |
+| cubic inch | `cubic inches`, `cu in`, `in3` | 0.0000163871 |
+| tablespoon | `tablespoons`, `US tablespoon`, `US tablespoons`, `tbsp` | 0.0000147868 |
 | centiliter | `centiliters`, `centilitre`, `centilitres`, `cl`, `cL` | 0.00001 |
-| teaspoon | `teaspoons`, `tsp` | 0.00000492892 |
-| cm3 | `milliliter`, `milliliters`, `millilitre`, `millilitres`, `ml`, `mL` | 0.000001 |
-| mm3 | `microliter`, `microliters`, `microlitre`, `microlitres` | 1e-9 |
+| teaspoon | `teaspoons`, `US teaspoon`, `US teaspoons`, `tsp` | 0.00000492892 |
+| cubic centimeter | `cubic centimeters`, `cm3`, `milliliter`, `milliliters`, `millilitre`, `millilitres`, `ml`, `mL` | 0.000001 |
+| cubic millimeter | `cubic millimeters`, `mm3`, `microliter`, `microliters`, `microlitre`, `microlitres` | 1e-9 |
 | nanoliter | `nanoliters`, `nanolitre`, `nanolitres`, `nl`, `nL` | 1e-12 |
 | picoliter | `picoliters`, `picolitre`, `picolitres`, `pl`, `pL` | 1e-15 |
-| femtoliter | `femtoliters`, `femtolitre`, `femtolitres`, `fl`, `fL` | 1e-18 |
-| nm3 | `nm3` | 1e-27 |
-| pm3 | `pm3` | 1e-36 |
-| fm3 | `fm3` | 1e-45 |
+| cubic micrometer | `cubic micrometers`, `femtoliter`, `femtoliters`, `femtolitre`, `femtolitres`, `fl`, `fL` | 1e-18 |
+| cubic nanometer | `cubic nanometers`, `nm3` | 1e-27 |
+| cubic picometer | `cubic picometers`, `pm3` | 1e-36 |
+| cubic femtometer | `cubic femtometers`, `fm3` | 1e-45 |
 
 ## Speed
 
@@ -639,7 +659,7 @@ Measured against **kmpl**.
 
 ## Spellings that are not listed
 
-The conversion tables carry 1518 spellings in total, and 454 of
+The conversion tables carry 1518 spellings in total, and 149 of
 them are missing above. Most are multi-word forms like `sq ft` and `cu yd`,
 which the tables can resolve but the lexer cannot tokenize, so they are
 unavailable when typing an expression. They are excluded here rather than listed

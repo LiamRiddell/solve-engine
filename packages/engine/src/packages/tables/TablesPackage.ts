@@ -14,6 +14,15 @@ import {
   tableColumnSpreadHandler,
   tableColumnModeHandler,
 } from "./TablesPluginFunctions";
+import {
+  TableLookupParselet,
+  ThroughBandsParselet,
+  TABLE_ROW_LOOKUP_FN,
+  TABLE_BAND_LOOKUP_FN,
+  TABLE_THROUGH_BANDS_FN,
+} from "./parselets/TableLookupParselets";
+import { tableLookupNormalizerRule, TABLE_LOOKUP_TOKEN } from "./normalizer/TableLookupNormalizerRule";
+import { tableRowLookupHandler, tableBandLookupHandler, tableThroughBandsHandler } from "./TableLookupFunctions";
 
 /**
  * Read a markdown table's column as data: `sum of column "cost" in table
@@ -44,6 +53,17 @@ import {
  *   is a clear error (except `count`, which is then zero).
  * - Currency and units in cells: not read yet. A cell carrying a `$` or a unit
  *   is treated as non-numeric and skipped. Plain numbers first, on purpose.
+ *
+ * Lookups and banded rates (issue #507) read the same nearest table:
+ * `column "cost" for "food"` answers one cell by its row's label,
+ * `column "rate" for 45,000 in bands above` answers the cell of the band an
+ * amount falls in, and `45,000 through bands above` is the progressive total
+ * across the bands. Their cells are read as numbers, money or percentages (see
+ * `TableCells.ts`), since a price list or a rate schedule is written that way;
+ * the column aggregates above are unchanged and still read plain numbers only.
+ * `column` is fused only when a quoted name follows it
+ * (`TableLookupNormalizerRule.ts`), and `through bands` is a phrase, so neither
+ * word becomes a keyword.
  */
 export const TABLES_PACKAGE: IEnginePackage = {
   name: "solve-tables",
@@ -68,7 +88,11 @@ export const TABLES_PACKAGE: IEnginePackage = {
     "sample variance of column": "TABLE_COLUMN_SAMPLE_VARIANCE",
     "spread of column": "TABLE_COLUMN_SPREAD",
     "mode of column": "TABLE_COLUMN_MODE",
+    // The progressive total across a band table (#507).
+    "through bands": "TABLE_THROUGH_BANDS",
+    "through the bands": "TABLE_THROUGH_BANDS",
   },
+  normalizerRules: [tableLookupNormalizerRule()],
   prefixParselets: {
     TABLE_COLUMN_SUM: new ColumnAggregateParselet("TABLE_COLUMN_SUM"),
     TABLE_COLUMN_AVERAGE: new ColumnAggregateParselet("TABLE_COLUMN_AVERAGE"),
@@ -82,6 +106,10 @@ export const TABLES_PACKAGE: IEnginePackage = {
     TABLE_COLUMN_SAMPLE_VARIANCE: new ColumnAggregateParselet("TABLE_COLUMN_SAMPLE_VARIANCE"),
     TABLE_COLUMN_SPREAD: new ColumnAggregateParselet("TABLE_COLUMN_SPREAD"),
     TABLE_COLUMN_MODE: new ColumnAggregateParselet("TABLE_COLUMN_MODE"),
+    [TABLE_LOOKUP_TOKEN]: new TableLookupParselet(),
+  },
+  infixParselets: {
+    TABLE_THROUGH_BANDS: new ThroughBandsParselet(),
   },
   pluginFunctions: {
     TABLE_COLUMN_SUM: tableColumnSumHandler,
@@ -96,5 +124,12 @@ export const TABLES_PACKAGE: IEnginePackage = {
     TABLE_COLUMN_SAMPLE_VARIANCE: tableColumnSampleVarianceHandler,
     TABLE_COLUMN_SPREAD: tableColumnSpreadHandler,
     TABLE_COLUMN_MODE: tableColumnModeHandler,
+    [TABLE_ROW_LOOKUP_FN]: tableRowLookupHandler,
+    [TABLE_BAND_LOOKUP_FN]: tableBandLookupHandler,
+    [TABLE_THROUGH_BANDS_FN]: tableThroughBandsHandler,
+  },
+  tokenCategories: {
+    [TABLE_LOOKUP_TOKEN]: "function",
+    TABLE_THROUGH_BANDS: "operator",
   },
 };

@@ -237,6 +237,8 @@ const rawExampleData: ExampleCategory[] = [
       { name: "Solve, irrational root", expression: "solve(x^2-2=0, x)", description: "An irrational root is given as a square root in lowest form, not a decimal" },
       { name: "No real solutions", expression: "solve(x^2+1=0, x)", description: "Both roots are complex, and complex numbers are out of scope, so this says so rather than inventing one" },
       { name: "Solve for one unknown", expression: "solve(a*x+b=0, x)", description: "Solving in terms of another unknown works when the equation is linear in the one being solved for" },
+      { name: "Solve numerically", expression: "solve(cos(x) = x, x)", description: "No formula exists for this root, so it is found by search and checked against both sides before it is shown. The answer is approximate" },
+      { name: "Solve within a range", expression: "solve(sin(x) = 0.5, x, 0, 3)", description: "Two numbers after the unknown name where to search, which is how to list the roots of an equation that repeats forever" },
       { name: "Exact coefficients", expression: "0.1x + 0.2x =>", description: "Coefficients are exact rationals, so this is 0.3x rather than 0.30000000000000004x" },
     ]
   },
@@ -259,7 +261,7 @@ const rawExampleData: ExampleCategory[] = [
   },
   {
     name: "Calculus",
-    description: "Symbolic derivatives, integrals, Taylor series and Jacobians",
+    description: "Symbolic derivatives, integrals, limits, Taylor series and Jacobians",
     examples: [
       { name: "Derivative", expression: "der(x^3, x)", description: "Genuinely symbolic, not a finite-difference approximation, so the answer is exact" },
       { name: "Second derivative", expression: "der(x^3, x, 2)", description: "A third argument repeats the differentiation" },
@@ -268,6 +270,9 @@ const rawExampleData: ExampleCategory[] = [
       { name: "Integral", expression: "integral(x^2, x)", description: "The indefinite integral, without a constant of integration" },
       { name: "Integral of a polynomial", expression: "integral(3x^2+2x+1, x)", description: "The power rule, applied term by term" },
       { name: "Integral, standard form", expression: "integral(cos(x), x)", description: "A small table covers exp, sin, cos and log of a linear argument. Anything outside it, such as integral(exp(x^2), x), reports that it has no elementary antiderivative rather than returning something approximate" },
+      { name: "Definite integral", expression: "integral(x^2, x, 0, 3)", description: "The area under the curve between two bounds, exact through the antiderivative" },
+      { name: "Definite integral, numeric", expression: "integral(exp(x^2), x, 0, 1)", description: "With no antiderivative the area is found by adaptive quadrature, to within one part in ten billion, and is approximate" },
+      { name: "Limit", expression: "limit(sin(x)/x, x, 0)", description: "The value an expression settles towards at a point where it has none of its own" },
       { name: "Taylor series", expression: "taylor(exp(x), x=0, 4)", description: "Coefficients are exact, since each is a derivative at the point divided by a factorial" },
       { name: "Taylor of sine", expression: "taylor(sin(x), x=0, 5)", description: "Only odd powers survive, as they should" },
       { name: "Jacobian", expression: "jacobian(x*y, x+y)", description: "One row per function; the variables are taken from the functions themselves, in alphabetical order" },

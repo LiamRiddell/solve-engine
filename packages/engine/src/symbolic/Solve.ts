@@ -60,6 +60,12 @@
  * A quintic's radicals, which by Abel-Ruffini do not exist in general, and the
  * cyclotomic forms that do exist for the special cases such as `x^5-1`. Those
  * nest deeply enough that four accurate decimals are the more useful answer.
+ *
+ * An equation that is not a polynomial at all (`cos(x) = x`, `2^x = 10`). This
+ * module refuses it and marks the refusal `nonPolynomial`; `NumericSolve.ts`
+ * then searches the real line for where its two sides cross, which is a
+ * different kind of answer with its own stated limits, and `vm/SymbolicOps.ts`
+ * is where the two are joined.
  */
 
 import {
@@ -133,8 +139,17 @@ export type SolveOutcome =
 	| { kind: "identity" }
 	/** True for no value of the variable, as for `x=x+1`. */
 	| { kind: "contradiction" }
-	/** Outside what this module attempts, with the reason stated. */
-	| { kind: "unsupported"; readonly reason: string };
+	/**
+	 * Outside what this module attempts, with the reason stated.
+	 *
+	 * `nonPolynomial` marks the one refusal a numeric search can take over:
+	 * an equation that is not a polynomial at all, such as `cos(x) = x`. The
+	 * others (a degree above the ceiling, a second unknown) stay refusals,
+	 * because a real-line search would report part of a polynomial's complex
+	 * roots as though it were all of them, or has no number to put in place of
+	 * the second unknown. See `NumericSolve.ts`.
+	 */
+	| { kind: "unsupported"; readonly reason: string; readonly nonPolynomial?: boolean };
 
 /** Evaluates descending-order coefficients at a rational point, by Horner's method. */
 function evaluateRational(descending: readonly Rational[], x: Rational): Rational {
@@ -276,6 +291,7 @@ export function solveForVariable(lhs: SymbolicNode, rhs: SymbolicNode, variable:
 		return {
 			kind: "unsupported",
 			reason: "this is not a polynomial equation (it divides by an unknown, or calls a function of one)",
+			nonPolynomial: true,
 		};
 	}
 

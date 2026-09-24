@@ -35,6 +35,38 @@ export function readVariableName(parser: Parser, verb: string): string {
 	return token.value;
 }
 
+/**
+ * Parses the optional pair of numbers some verbs take after the unknown: the
+ * bounds of `integral(x^2, x, 0, 3)`, the range of `solve(cos(x) = x, x, 0, 1)`.
+ *
+ * Called with the parser just past the unknown's name. Nothing is read unless a
+ * comma follows, and once one does, both numbers are required: a lone bound has
+ * no meaning, and reading it as one would leave the reader's second number to be
+ * reported, confusingly, as a missing closing parenthesis. Each is an ordinary
+ * value expression, emitted inline, and the unknown is not bound inside it: a
+ * bound is a number, not a function of the variable it bounds.
+ *
+ * @param parser - The parser, positioned after the unknown's name.
+ * @param builder - The builder to emit the two expressions into.
+ * @param verb - The calling verb's name, for the error message.
+ * @param example - A complete call showing the form, for the error message.
+ * @returns True when the pair was present and emitted, false when there was none.
+ * @throws {EngineError} `SYMBOLIC_REQUIRES_BOTH_BOUNDS` when only one is written.
+ */
+export function parseOptionalBounds(parser: Parser, builder: BytecodeBuilder, verb: string, example: string): boolean {
+	if (!parser.match("COMMA")) return false;
+	parser.parseExpression(BindingPower.Lowest, builder);
+	if (!parser.match("COMMA")) {
+		throw ErrorFactory.parsing(
+			"SYMBOLIC_REQUIRES_BOTH_BOUNDS",
+			`${verb} takes two numbers after the unknown, a lower and an upper one, as in ${example}.`,
+			{ found: parser.peek()?.type ?? "end of input" },
+		);
+	}
+	parser.parseExpression(BindingPower.Lowest, builder);
+	return true;
+}
+
 /** Emits an already-read unknown's name as the String argument the algebra builtins read it as. */
 export function emitVariableName(builder: BytecodeBuilder, name: string): void {
 	builder.emitOpcode(OpCode.PUSH_STRING);

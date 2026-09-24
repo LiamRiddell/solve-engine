@@ -12,6 +12,8 @@ import { ReParselet } from "./parselets/ReParselet";
 import { ImParselet } from "./parselets/ImParselet";
 import { CancelParselet } from "./parselets/CancelParselet";
 import { ApartParselet } from "./parselets/ApartParselet";
+import { LimitParselet } from "./parselets/LimitParselet";
+import { SYMBOLIC_LIMIT_FN, limitHandler } from "./LimitPluginFunction";
 import { imaginaryLiteralNormalizerRule } from "./normalizer/ImaginaryLiteralNormalizerRule";
 import { symbolicCallNormalizerRule } from "./normalizer/SymbolicCallNormalizerRule";
 import {
@@ -44,8 +46,17 @@ export interface SymbolicFunctionSurface {
 	readonly word: string;
 	/** The token type the normalizer fuses it into when it is followed by `(`. */
 	readonly tokenType: string;
-	/** The `CALL_BUILTIN` index its parselet emits. */
-	readonly builtinIndex: number;
+	/**
+	 * The `CALL_BUILTIN` index its parselet emits, for a verb implemented in
+	 * the builtin table. Exactly one of this and {@link pluginFunction} is set.
+	 */
+	readonly builtinIndex?: number;
+	/**
+	 * The plugin function its parselet emits a call to, for a verb implemented
+	 * in the package's own `pluginFunctions` rather than the builtin table, so it
+	 * claims no index in that shared number space. `limit` is the first.
+	 */
+	readonly pluginFunction?: string;
 	/** A working example, executed by the parity spec through every public entry point. */
 	readonly example: string;
 	/** That example's expected formatted result. */
@@ -152,6 +163,14 @@ export const SYMBOLIC_FUNCTIONS: readonly SymbolicFunctionSurface[] = [
 		expected: "4/(x-1)-1/(x+1)",
 		docPage: "splitting-fractions.md",
 	},
+	{
+		word: "limit",
+		tokenType: "LIMIT_FN",
+		pluginFunction: SYMBOLIC_LIMIT_FN,
+		example: "limit(sin(x)/x, x, 0)",
+		expected: "= 1",
+		docPage: "calculus.md",
+	},
 ];
 
 /**
@@ -182,6 +201,10 @@ export const SYMBOLIC_PACKAGE: IEnginePackage = {
 		IM_FN: new ImParselet(),
 		CANCEL_FN: new CancelParselet(),
 		APART_FN: new ApartParselet(),
+		LIMIT_FN: new LimitParselet(),
+	},
+	pluginFunctions: {
+		[SYMBOLIC_LIMIT_FN]: limitHandler,
 	},
 	tokenCategories: {
 		EXPAND_FN: "keyword",
@@ -197,6 +220,7 @@ export const SYMBOLIC_PACKAGE: IEnginePackage = {
 		IM_FN: "keyword",
 		CANCEL_FN: "keyword",
 		APART_FN: "keyword",
+		LIMIT_FN: "keyword",
 	},
 };
 

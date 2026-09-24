@@ -15,6 +15,7 @@
  */
 
 import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
+import { OpCode } from "@solve-js/parser/OpCode";
 
 /** FNV-1a over a string, as an unsigned 32-bit integer. */
 function hash32(text: string): number {
@@ -46,9 +47,36 @@ export function seededStream(seed: string, key: string): () => number {
 /**
  * A key for a line's compiled program: its opcodes, numbers and strings. Two
  * lines that compile alike share a key, and so draw alike under one seed.
+ *
+ * A plugin function call is keyed by the function's name, not by the index
+ * in its opcode. The index is allocated process-wide, in the order packages
+ * first register, so it depends on what else the process registered first and
+ * on the engine version's package list. Keying on it made a seeded `uuid`
+ * answer differently in a process that had registered another package first,
+ * and again after an upgrade added a package. The name is the same in every
+ * engine that can run the line.
  */
 export function programKey(program: BytecodeProgram): string {
-	return `${Array.from(program.opcodes).join(",")}|${Array.from(program.numbers).join(",")}|${program.strings.join("\u0001")}`;
+	const opcodes = Array.from(program.opcodes);
+	const calls = program.pluginCalls;
+	if (calls !== undefined) {
+		// From the last call back, so dropping a wide call's second index byte
+		// does not move a position still to be visited. A wide call is keyed as
+		// the narrow one, since which form is emitted depends on the index too.
+		for (let i = calls.at.length - 1; i >= 0; i--) {
+			const at = calls.at[i];
+			if (opcodes[at - 1] === OpCode.CALL_PLUGIN_WIDE) {
+				opcodes[at - 1] = OpCode.CALL_PLUGIN;
+				opcodes.splice(at, 2, 0);
+			} else {
+				opcodes[at] = 0;
+			}
+		}
+	}
+	const key = `${opcodes.join(",")}|${Array.from(program.numbers).join(",")}|${program.strings.join("\u0001")}`;
+	// A program with no plugin call keeps the key it has always had, so its
+	// seeded draws are unchanged.
+	return calls === undefined ? key : `${key}|${calls.names.join("\u0001")}`;
 }
 
 /** A line that seeds the document's draws: `random seed 42`. */

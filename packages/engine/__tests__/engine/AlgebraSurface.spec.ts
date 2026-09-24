@@ -73,7 +73,12 @@ describe("verbs compose with the rest of the language", () => {
 
 	test("a verb applied to a concrete value still evaluates numerically", () => {
 		expect(evaluate("expand(2+3)")).toBe("= 5");
-		expect(evaluate("factor(12)")).toBe("= 12");
+	});
+
+	test("factor of a whole number is its prime factorisation (#514)", () => {
+		// It used to hand the number back unchanged, 12, since factor() only
+		// knew polynomials.
+		expect(evaluate("factor(12)")).toBe("= 2^2 * 3");
 	});
 });
 
@@ -84,10 +89,18 @@ describe("error paths report rather than guess", () => {
 		expect(String(value.value)).toBe("SYMBOLIC_INTEGRAL_UNSUPPORTED");
 	});
 
-	test("solving a non-polynomial equation", () => {
-		const value = rawValue("solve(sin(x)=0, x)");
+	test("solving a non-polynomial equation that still has another unknown in it", () => {
+		// A non-polynomial equation in one unknown is solved numerically now;
+		// with a second unknown there is no number to search with.
+		const value = rawValue("solve(sin(x)=a, x)");
 		expect(value.type).toBe(ValueType.Error);
 		expect(String(value.value)).toBe("SYMBOLIC_SOLVE_UNSUPPORTED");
+	});
+
+	test("solving an equation with infinitely many roots and no range", () => {
+		const value = rawValue("solve(sin(x)=0, x)");
+		expect(value.type).toBe(ValueType.Error);
+		expect(String(value.value)).toBe("SYMBOLIC_SOLVE_TOO_MANY_ROOTS");
 	});
 
 	test("a derivative order beyond the ceiling", () => {

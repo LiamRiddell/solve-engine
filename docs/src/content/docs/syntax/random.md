@@ -61,10 +61,10 @@ draw in the note becomes repeatable.
 
 ```solve-doc
 random seed 42
-uuid // 3735de41-7ba2-430d-8b81-afba841149a5
-random hex 8 // 8fc405d9
-pick("north", "south", "east", "west") // north
-shuffle [1, 2, 3, 4, 5] // [2, 1, 5, 3, 4]
+uuid // 218d5e25-71f0-4f2f-920c-f6f25498daa0
+random hex 8 // c9b83768
+pick("north", "south", "east", "west") // east
+shuffle [1, 2, 3, 4, 5] // [2, 3, 4, 1, 5]
 coin // tails
 ```
 

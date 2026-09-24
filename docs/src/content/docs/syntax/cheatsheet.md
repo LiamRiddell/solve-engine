@@ -70,6 +70,8 @@ median of 1, 5, 3 // 3
 larger of 10 and 4 // 10
 half of 50 // 25
 clamp 15 between 1 and 10 // 10
+binompdf(10, 0.5, 3) // 0.12
+normalinv(0.975) // 1.96
 ```
 
 ## Conversions
@@ -178,6 +180,7 @@ expand((x+1)*(x+2)) // x^2+3x+2
 factor(x^2-4) // (x-2)*(x+2)
 solve(x^2-4=0, x) // [-2, 2]
 solve(2x+6=0, x) // -3
+solve(cos(x) = x, x) // 0.74
 cancel((x^2-1)/(x-1)) // x+1
 apart((3x+5)/(x^2-1)) // 4/(x-1)-1/(x+1)
 ```
@@ -204,6 +207,8 @@ solve(x^2+1=0, x) // [-i, i]
 ```solve
 der(x^3, x) // 3x^2
 integral(x^2, x) // 1/3x^3
+integral(x^2, x, 0, 3) // 9
+limit(sin(x)/x, x, 0) // 1
 taylor(sin(x), x=0, 5) // 1/120x^5-1/6x^3+x
 jacobian(x*y, x+y) // [y, x; 1, 1]
 ```
@@ -221,6 +226,8 @@ $120 + 18% split 3 ways // $47.20 each
 split $100 between 3 // $33.33 each, with 1 share paying $33.34
 how long to save $10,000 at $500 monthly // 20 months
 how much per month to save $12,000 in 2 years // $500.00
+npv of -1000, 300, 400, 500 at 10% // -21.04
+irr of -1000, 300, 400, 500 // 8.90%
 ```
 
 The term and the rate read in either order, so `at 4% over 25 years` and
@@ -241,6 +248,11 @@ Results depend on the current date, so these are shown rather than asserted.
 | `days until 25/12/2026` | the number of days, as a duration |
 | `9:00am + 3 hours` | `12:00:00 PM` on the current day |
 | `7:30 to 20:45` | `795 minutes` |
+| `3pm London in Tokyo and New York` | the time in each city, today |
+| `overlap of 9am to 5pm in London and New York` | the hours the two share, today |
+
+Add `on 23 September 2026` to a time zone line to fix the day. See
+[time zones](/syntax/time-zones/).
 
 ## Bigger integers
 
@@ -278,6 +290,21 @@ document, so they are shown rather than asserted. See
 | `sum of #grocery` | a synonym for `total of` |
 | `average of #grocery` | the mean of the tagged lines |
 | `count of #grocery` | how many lines carry the tag |
+| `total by tag` | every tag's total and its share of the whole, as text |
 
 A tag name starts with a letter, keeping it clear of `#c0ffee` and other
 [colour](/syntax/colours/) literals.
+
+## Sections
+
+The lines under a markdown heading, down to the next heading at the same level
+or above, are its section; these add them up by the heading's name, from
+anywhere below the block. They read the whole document, so they are shown
+rather than asserted. See [sections](/syntax/sections/).
+
+| Expression | Meaning |
+| --- | --- |
+| `total of section "Travel"` | the sum of the figures under `# Travel` |
+| `sum of section "Travel"` | a synonym for `total of` |
+| `average of section "Travel"` | the mean of those figures |
+| `count of section "Travel"` | how many figures there are |

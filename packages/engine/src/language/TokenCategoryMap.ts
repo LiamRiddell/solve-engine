@@ -101,6 +101,7 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	IM_FN: "keyword",
 	CANCEL_FN: "keyword",
 	APART_FN: "keyword",
+	LIMIT_FN: "keyword",
 	TIME_IN: "keyword",
 	DATE_IN: "keyword",
 	TIME_DIFFERENCE_BETWEEN: "keyword",
@@ -269,6 +270,10 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	// like any function.
 	HEX_COLOUR: "colour",
 	COLOUR_CALL: "function",
+
+	// An angle as a map writes one (`51°30'27"N`), lexed as one literal and
+	// read by the geo package (packages/geo/). It is a number to the eye.
+	GEO_ANGLE: "number",
 
 	// Datetime literals/durations
 	DATETIME_LITERAL: "datetime",

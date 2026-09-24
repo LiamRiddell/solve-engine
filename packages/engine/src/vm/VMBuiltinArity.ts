@@ -111,11 +111,13 @@ const BUILTIN_ARITY: Record<number, BuiltinArity> = {
   66: { name: "dot",        min: 2, max: 2 },
   67: { name: "expand",     min: 1, max: 1 },
   68: { name: "factor",     min: 1, max: 1 },
-  // solve pushes the two sides of the equation and then the unknown's name.
-  69: { name: "solve",      min: 3, max: 3 },
+  // solve pushes the two sides of the equation and then the unknown's name,
+  // then optionally the two ends of a range to search.
+  69: { name: "solve",      min: 3, max: 5 },
   // der's order of differentiation is optional and defaults to 1.
   70: { name: "der",        min: 2, max: 3 },
-  71: { name: "integral",   min: 2, max: 2 },
+  // integral's two bounds are optional; with them it is the definite integral.
+  71: { name: "integral",   min: 2, max: 4 },
   72: { name: "taylor",     min: 4, max: 4 },
   // jacobian differentiates however many functions it is handed.
   73: { name: "jacobian",   min: 1, max: Infinity },
@@ -160,6 +162,11 @@ const BUILTIN_ARITY: Record<number, BuiltinArity> = {
   // Not reachable by name, only through `<value> to <n> sf`; see
   // converters/parselets/RoundingParselets.ts.
   108: { name: "roundToSignificant", min: 2, max: 2 },
+  // Number theory (#514).
+  109: { name: "isprime", min: 1, max: 1 },
+  110: { name: "nextprime", min: 1, max: 1 },
+  111: { name: "modpow", min: 3, max: 3 },
+  112: { name: "modinv", min: 2, max: 2 },
 };
 
 /** "1 argument" / "2 arguments", so the message reads as English either way. */

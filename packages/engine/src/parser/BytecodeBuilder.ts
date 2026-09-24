@@ -63,6 +63,15 @@ export interface BytecodeProgram {
 	 */
 	hasAsync: boolean;
 	/**
+	 * The plugin functions this program calls, by name, and where each call's
+	 * index bytes start in {@link opcodes}. A plugin function's index depends on
+	 * which packages are registered and in what order, so anything that must
+	 * identify a program across engines (the seeded random key, see
+	 * engine/SeededRandom.ts) reads the names instead. Absent when the program
+	 * calls none, and on a program restored from a snapshot.
+	 */
+	pluginCalls?: { at: number[]; names: string[] };
+	/**
 	 * User-defined-function bodies compiled alongside this program (one
 	 * entry per `name(params) = body` definition on this line). See
 	 * {@link BytecodeBuilder.emitUserFunctionBody}. `OpCode.DEFINE_USER_FUNCTION`'s
@@ -157,6 +166,10 @@ export class BytecodeBuilder {
 	private _hasAsync = false;
 	private userFunctionBodies: UserFunctionDef[] = [];
 	private anonymousBodies: AnonymousBodyDef[] = [];
+	/** Where each plugin call's index bytes start; see BytecodeProgram.pluginCalls. */
+	private pluginCallAt: number[] = [];
+	/** The plugin function each entry of {@link pluginCallAt} names. */
+	private pluginCallNames: string[] = [];
 
 	/**
 	 * The per-engine `plugin function name -> registry index` map, wired in by
@@ -202,9 +215,13 @@ export class BytecodeBuilder {
 		}
 		if (index <= 0xff) {
 			this.emitOpcode(OpCode.CALL_PLUGIN);
+			this.pluginCallAt.push(this.opcodes.length);
+			this.pluginCallNames.push(name);
 			this.emitIndex(index);
 		} else {
 			this.emitOpcode(OpCode.CALL_PLUGIN_WIDE);
+			this.pluginCallAt.push(this.opcodes.length);
+			this.pluginCallNames.push(name);
 			this.emitIndex(index & 0xff); // low byte
 			this.emitIndex((index >> 8) & 0xff); // high byte
 		}
@@ -371,6 +388,7 @@ export class BytecodeBuilder {
 			hasAsync: this._hasAsync,
 			userFunctionBodies: this.userFunctionBodies.length > 0 ? [...this.userFunctionBodies] : undefined,
 			anonymousBodies: this.anonymousBodies.length > 0 ? [...this.anonymousBodies] : undefined,
+			pluginCalls: this.pluginCallNames.length > 0 ? { at: [...this.pluginCallAt], names: [...this.pluginCallNames] } : undefined,
 		};
 	}
 
@@ -413,6 +431,7 @@ export class BytecodeBuilder {
 			hasAsync: this._hasAsync,
 			userFunctionBodies: this.userFunctionBodies.length > 0 ? [...this.userFunctionBodies] : undefined,
 			anonymousBodies: this.anonymousBodies.length > 0 ? [...this.anonymousBodies] : undefined,
+			pluginCalls: this.pluginCallNames.length > 0 ? { at: [...this.pluginCallAt], names: [...this.pluginCallNames] } : undefined,
 		};
 	}
 
@@ -438,5 +457,9 @@ export class BytecodeBuilder {
 		this._hasAsync = false;
 		if (this.userFunctionBodies.length > 0) this.userFunctionBodies.length = 0;
 		if (this.anonymousBodies.length > 0) this.anonymousBodies.length = 0;
+		if (this.pluginCallNames.length > 0) {
+			this.pluginCallAt.length = 0;
+			this.pluginCallNames.length = 0;
+		}
 	}
 }

@@ -24,10 +24,34 @@ A plus joins text to text, end to end.
 "hello" + " world" // hello world
 ```
 
-The two sides must both be text to join. `"a" + "b"` is `ab`; when one side is a
-number the `+` is arithmetic, not a join, and the text is read as a number, so
-`"5" + 5` is `10` and `"hello" + 5` is `5` (the non-numeric text reads as `0`).
-Keep both sides quoted for a text join.
+The two sides must both be text to join. When one side is a number there is no
+answer the engine could give honestly: `"5" + 5` could mean 10 or `55`, and a
+time written as text, `"11:00 PM"`, is not a number of hours to add 2 to. So
+arithmetic with text on either side is refused by name, for `-`, `*` and `/` as
+well as `+`.
+
+```solve-doc
+"11:00 PM" + 2 // ERROR: Text and a number cannot be added: + joins text only to other text. To add a number held as text, convert it first with "as number".
+"5" * 2 // ERROR: Text cannot be used in arithmetic: only numbers and quantities can. To use a number held as text, convert it first with "as number".
+```
+
+To join, quote both sides. To do arithmetic with a number that arrives as text,
+from a pasted value or a decoded field, convert it first with `as number`, which
+reads text only when the whole of it is a number:
+
+```solve
+("5" as number) + 5 // 10
+"1,234.5" as number // 1,234.50
+```
+
+```solve-doc
+"11:00 PM" as number // ERROR: "11:00 PM" is not a number: "as number" reads text that is a number and nothing else.
+```
+
+Earlier
+versions read the text as a number instead, its leading digits or 0, so
+`"11:00 PM" + 2` answered 13, which is why it is now an error rather than a
+guess.
 
 ## Measuring text
 
@@ -93,7 +117,10 @@ replace("banana", "a", "@") // b@n@n@
 ```
 
 The replacement is literal: `find` is matched exactly, character for character,
-with no pattern matching. (Regular expressions are a possible later addition.)
+with no pattern matching. To find text by its shape rather than its exact
+characters, a pattern (a regular expression) does it: see `match` on the
+[pasted text page](/syntax/pasted-text/), which also reads the numbers, the
+amounts of money and the fields of JSON out of a piece of text.
 
 ## Changing case
 

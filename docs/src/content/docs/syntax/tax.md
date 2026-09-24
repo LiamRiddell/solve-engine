@@ -34,3 +34,7 @@ tax in $0.09 at 20% // $0.02
 
 No tax rate is ever assumed. You state it, because the correct rate depends on
 where you are and what you are buying.
+
+A tax whose rate changes with the amount, as an income tax's bands do, is stated
+as a table of bands rather than a single rate: see
+[banded rates](/syntax/banded-rates/).

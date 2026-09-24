@@ -3,7 +3,7 @@ title: Trigger words
 description: Why ordinary English words are not keywords, and what that means for your notes.
 ---
 
-> **Packages:** `MATHPHRASES_PACKAGE`, `MAPREDUCE_PACKAGE`, `FINANCE_PACKAGE`, `TAGS_PACKAGE`, `LINES_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register them explicitly (see [choosing packages](/getting-started/installation/)).
+> **Packages:** `MATHPHRASES_PACKAGE`, `MAPREDUCE_PACKAGE`, `FINANCE_PACKAGE`, `TAGS_PACKAGE`, `LINES_PACKAGE`, `TABLES_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register them explicitly (see [choosing packages](/getting-started/installation/)).
 
 The most common worry about a calculator that reads prose is that it will start
 mangling the prose. This page explains why that mostly does not happen.
@@ -67,6 +67,32 @@ and out of the other things `#` already means:
 The words `total`, `sum`, `count` and `average` in `total of #grocery` are, as
 above, recognised only as part of that whole phrase, so a variable named `total`
 and the prose "the total of the day" keep working.
+
+## `column` needs a quoted name
+
+`column` begins a [table lookup](/syntax/table-lookups/) only when a quoted
+column name follows it, as in `column "cost" for "food"`. Anywhere else it is an
+ordinary name, so a variable called `column` still works:
+
+```solve
+:column = 5
+column * 2 // 10
+```
+
+`through` is the same: it starts the [banded rates](/syntax/banded-rates/) total
+only in the whole phrase `through bands`.
+
+## `section` and `tag` need the rest of their phrase
+
+`total of section "Travel"` reads the lines under a heading (see
+[sections](/syntax/sections/)) only when a quoted name follows `section`, and
+`total by tag` needs all three of its words. Neither `section` nor `tag` is a
+keyword on its own, so a variable of either name keeps working:
+
+```solve
+:section = 5
+total of section + 1 // 6
+```
 
 ## Labels are preserved
 

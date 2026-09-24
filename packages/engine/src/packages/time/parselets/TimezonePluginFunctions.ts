@@ -1,9 +1,11 @@
-import { Value, stringValue } from "@solve-js/vm/Value";
+import { Value, ValueType, errorValue, stringValue } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { calendarOf } from "@solve-js/calendar/DateCalendar";
+import { utcMs } from "@solve-js/calendar/Gregorian";
 import {
-  zonedWallClockToUtcMs, formatTimeInZone, formatDateInZone,
-  dayShiftBetweenZones, resolveOffsetMinutes,
+  formatTimeInZone, formatDateInZone, resolveOffsetMinutes,
+  wallClockInstants, describeMinutes, dayShiftSuffix, zoneLabel,
 } from "../timezones/ZoneMath";
 
 /**
@@ -21,6 +23,11 @@ import {
  */
 
 export const ZONE_CONVERT_FN = "zoneConvert";
+/**
+ * Plugin name for a clock time converted into several zones, or on a named
+ * date: `3pm London on 23 September 2026 in Tokyo, New York and Sydney`.
+ */
+export const ZONE_CONVERT_AT_FN = "zoneConvertAt";
 /** Plugin name for `time in <zone>`, the current wall clock there. */
 export const TIME_IN_ZONE_FN = "timeInZone";
 /** Plugin name for `date in <zone>`, which can differ from the local date. */
@@ -29,11 +36,102 @@ export const DATE_IN_ZONE_FN = "dateInZone";
 export const TIME_DIFFERENCE_FN = "timeDifference";
 
 /**
+ * The codes the timezone forms refuse with, as Error values rather than
+ * thrown errors: each is a well-formed line asking a question that has no
+ * single answer.
+ */
+export const TimezoneErrorCodes = {
+  /** `1:30am London on 29 March 2026 in Tokyo`: the clocks went forward over 1:30, so it never happened in London that day. */
+  TIME_ZONE_SKIPPED_TIME: "TIME_ZONE_SKIPPED_TIME",
+  /** `1:30am London on 25 October 2026 in Tokyo`: the clocks went back over 1:30, so it happened twice and names no one moment. */
+  TIME_ZONE_REPEATED_TIME: "TIME_ZONE_REPEATED_TIME",
+  /** `3pm London on 5 in Tokyo`: the `on` clause was given something that is not a date. */
+  TIME_ZONE_EXPECTED_DATE: "TIME_ZONE_EXPECTED_DATE",
+  /** `overlap of 9am to 5pm in London`: one place has nothing to overlap with. */
+  OVERLAP_NEEDS_TWO_ZONES: "OVERLAP_NEEDS_TWO_ZONES",
+  /** `overlap of 9am to 9am in London and Paris`: hours that start where they end have no length. */
+  OVERLAP_HOURS_EMPTY: "OVERLAP_HOURS_EMPTY",
+} as const;
+
+/** A zone reference and the name the reader called it by, as a form's arguments carry them. */
+export interface NamedZone {
+  /** IANA zone identifier, or a fixed-offset encoding. See `ZoneMath.ts`. */
+  zoneRef: string;
+  /** The name as the reader typed it, title-cased. See `ZoneReference.ts`. */
+  label: string;
+}
+
+/**
+ * Read `(zoneRef, label)` pairs from a plugin call's arguments, from `start`
+ * to the end. The parselets push each zone as those two strings, in the order
+ * the reader wrote them.
+ */
+export function namedZonesFrom(args: Value[], start: number): NamedZone[] {
+  const zones: NamedZone[] = [];
+  for (let i = start; i + 1 < args.length; i += 2) {
+    zones.push({ zoneRef: args[i].value as string, label: args[i + 1].value as string });
+  }
+  return zones;
+}
+
+/**
+ * The calendar day an `on <date>` argument names, read in the backend's zone,
+ * or the refusal when the argument is not a date at all.
+ */
+export function calendarDayOf(dateArg: Value, calendar: CalendarBackend): { year: number; month0: number; day: number } | Value {
+  if (dateArg.type !== ValueType.Datetime) {
+    return errorValue(
+      TimezoneErrorCodes.TIME_ZONE_EXPECTED_DATE,
+      `"on" takes a date, as in "on 23 September 2026"`,
+    );
+  }
+  const f = calendar.fields(dateArg.toNumber());
+  return { year: f.year, month0: f.month0, day: f.day };
+}
+
+/** A wall clock and a calendar day written out for a message: `1:30 AM` and `March 29, 2026`. */
+function describeReading(year: number, month0: number, day: number, minutes: number, calendar: CalendarBackend): { time: string; date: string } {
+  // Written through UTC so no zone's own transition can move the reading.
+  return {
+    time: calendar.formatTimeInZone("UTC", utcMs(year, month0, day, 0, minutes)),
+    date: calendar.formatDateInZone("UTC", utcMs(year, month0, day)),
+  };
+}
+
+/**
+ * The one instant a wall-clock reading names in a zone, or the refusal when it
+ * names none or two.
+ *
+ * A reading inside the hour the clocks skip, or the hour they repeat, is a
+ * question with no single answer, so it is refused with the reason rather than
+ * answered with a guess: the conversion would otherwise quietly move a meeting
+ * by an hour on the one day it matters.
+ */
+function instantOfReading(
+  year: number, month0: number, day: number, minutes: number,
+  source: NamedZone, calendar: CalendarBackend,
+): number | Value {
+  const instants = wallClockInstants(year, month0, day, minutes, source.zoneRef, calendar);
+  if (instants.length === 1) return instants[0];
+  const { time, date } = describeReading(year, month0, day, minutes, calendar);
+  return instants.length === 0
+    ? errorValue(
+      TimezoneErrorCodes.TIME_ZONE_SKIPPED_TIME,
+      `${time} did not happen in ${source.label} on ${date}: the clocks went forward past it`,
+    )
+    : errorValue(
+      TimezoneErrorCodes.TIME_ZONE_REPEATED_TIME,
+      `${time} happened twice in ${source.label} on ${date}, when the clocks went back, so it names no single moment`,
+    );
+}
+
+/**
  * `<clock-time> <sourceZone> in <targetZone>` -> targetZone's wall-clock
  * for that instant, e.g. "6pm Sydney in Chicago" -> "1:00 AM (-1 day)".
  * Anchored to today's (system-local) calendar date, matching
  * `ClockTimeParselet`'s own "today" convention for the bare (no zone)
- * form.
+ * form. A reading today's daylight-saving change skips or repeats in the
+ * source zone is refused; see {@link instantOfReading}.
  */
 export function zoneConvertHandler(args: Value[], context?: LineExecutionContext): Value {
   const totalMinutes = args[0].toNumber();
@@ -42,17 +140,42 @@ export function zoneConvertHandler(args: Value[], context?: LineExecutionContext
   const calendar = calendarOf(context);
 
   const today = calendar.fields(calendar.now());
-  const utcMs = zonedWallClockToUtcMs(
-    today.year, today.month0, today.day,
-    Math.floor(totalMinutes / 60), totalMinutes % 60,
-    sourceZoneRef, calendar,
-  );
+  const source = { zoneRef: sourceZoneRef, label: zoneLabel(sourceZoneRef) };
+  const at = instantOfReading(today.year, today.month0, today.day, totalMinutes, source, calendar);
+  if (typeof at !== "number") return at;
 
-  const time = formatTimeInZone(utcMs, targetZoneRef, calendar);
-  const dayShift = dayShiftBetweenZones(utcMs, targetZoneRef, sourceZoneRef, calendar);
-  if (dayShift === 0) return stringValue(time);
-  const sign = dayShift > 0 ? "+" : "";
-  return stringValue(`${time} (${sign}${dayShift} day${Math.abs(dayShift) === 1 ? "" : "s"})`);
+  return stringValue(formatTimeInZone(at, targetZoneRef, calendar) + dayShiftSuffix(at, targetZoneRef, sourceZoneRef, calendar));
+}
+
+/**
+ * `<clock-time> <sourceZone> [on <date>] in <zone>, <zone> and <zone> [on
+ * <date>]` -> the wall clock in each target zone at that instant.
+ *
+ * Arguments: `[minutes, sourceZoneRef, sourceLabel, date, ...(zoneRef,
+ * label) per target]`. The date is the `on` clause's value, or `now` when the
+ * line has none, so an undated line reads today exactly as
+ * {@link zoneConvertHandler} does.
+ *
+ * One target answers as that form does, the time and any day shift. Several
+ * answer as a list, each time labelled with the name the reader used, since a
+ * bare column of times would leave the reader to count which is which. The day
+ * shift is against the source zone's date, the day the reader named.
+ */
+export function zoneConvertAtHandler(args: Value[], context?: LineExecutionContext): Value {
+  const totalMinutes = args[0].toNumber();
+  const source: NamedZone = { zoneRef: args[1].value as string, label: args[2].value as string };
+  const calendar = calendarOf(context);
+  const day = calendarDayOf(args[3], calendar);
+  if (day instanceof Value) return day;
+  const targets = namedZonesFrom(args, 4);
+
+  const at = instantOfReading(day.year, day.month0, day.day, totalMinutes, source, calendar);
+  if (typeof at !== "number") return at;
+
+  const readings = targets.map((target) =>
+    formatTimeInZone(at, target.zoneRef, calendar) + dayShiftSuffix(at, target.zoneRef, source.zoneRef, calendar));
+  if (targets.length === 1) return stringValue(readings[0]);
+  return stringValue(targets.map((target, i) => `${target.label} ${readings[i]}`).join(", "));
 }
 
 /** `time in <city>` -> that zone's current wall-clock time, e.g. "3:45 PM". */
@@ -100,11 +223,5 @@ export function timeDifferenceHandler(args: Value[], context?: LineExecutionCont
   }
   const ahead = diff > 0 ? label2 : label1;
   const behind = diff > 0 ? label1 : label2;
-  const absDiff = Math.abs(diff);
-  const hours = Math.floor(absDiff / 60);
-  const minutes = absDiff % 60;
-  const parts: string[] = [];
-  if (hours > 0) parts.push(`${hours} hour${hours === 1 ? "" : "s"}`);
-  if (minutes > 0) parts.push(`${minutes} minute${minutes === 1 ? "" : "s"}`);
-  return stringValue(`${ahead} is ${parts.join(" ")} ahead of ${behind}`);
+  return stringValue(`${ahead} is ${describeMinutes(Math.abs(diff))} ahead of ${behind}`);
 }

@@ -1,10 +1,10 @@
 /**
  * The whole-document forms, proven through every entry point that can reach them.
  *
- * Category tags, line references, table columns and goal seek are not ordinary
- * expressions: each reads, or re-runs, other lines, so the answer depends on the
- * entry point the host called. The engine has three, and they do not agree by
- * accident:
+ * Category tags, line references, sections, table columns, table lookups and
+ * bands, and goal seek are not ordinary expressions: each reads, or re-runs,
+ * other lines, so the answer depends on the entry point the host called. The
+ * engine has three, and they do not agree by accident:
  *
  * - `evaluateLine` / `evaluateExpression` — one expression, no document. A
  *   whole-document form has nothing to read here, so the contract is that it
@@ -122,10 +122,81 @@ describe("category tags across entry points", () => {
     expect(incremental(doc)[2]).toBe("2,000");
   });
 
+  test("the breakdown by tag, in both document passes, agrees", () => {
+    const doc = ["$40 #food", "$25 #food", "$30 #transport", "total by tag"];
+    expect(batch(doc)[3]).toBe("food $65.00 (68%) · transport $30.00 (32%)");
+    expect(incremental(doc)).toEqual(batch(doc));
+    const sum = ["$40 #food", "$25 #food", "$30 #transport", "sum by tag"];
+    expect(incremental(sum)).toEqual(batch(sum));
+  });
+
+  test("a breakdown's refusals agree too", () => {
+    const untagged = ["10", "20", "total by tag"];
+    expect(batch(untagged)[2]).toContain("ERROR:");
+    expect(incremental(untagged)).toEqual(batch(untagged));
+    const mixed = ["$40 #food", "5 km #run", "total by tag"];
+    expect(batch(mixed)[2]).toContain("ERROR:");
+    expect(incremental(mixed)).toEqual(batch(mixed));
+  });
+
   test("the single-expression path refuses with a document error", () => {
     expectNeedsDocument("total of #grocery");
     expectNeedsDocument("average of #grocery");
     expectNeedsDocument("count of #grocery");
+    expectNeedsDocument("total by tag");
+    expectNeedsDocument("sum by tag");
+  });
+});
+
+describe("sections across entry points", () => {
+  const budget = [
+    "# Travel",
+    "## Flights",
+    "Outbound: $300",
+    "Return: $150",
+    "## Hotels",
+    "Rome: $220",
+    "Subtotal: total above",
+    "",
+    "# Food",
+    "Groceries: $40",
+    "",
+    "# Summary",
+  ];
+
+  test("total, sum, average and count, in both document passes, agree", () => {
+    const doc = [
+      ...budget,
+      'total of section "Travel"',
+      'sum of section "Flights"',
+      'average of section "Travel"',
+      'count of section "Travel"',
+      'total of section "food"',
+    ];
+    expect(batch(doc).slice(12)).toEqual(["$670.00", "$450.00", "$223.33", "3", "$40.00"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("the refusals agree too: not found, ambiguous, empty, non-numeric, a failed line", () => {
+    const docs = [
+      [...budget, 'total of section "Travle"'],
+      ["## Travel", "$1", "# 2026", "## Travel", "$2", 'total of section "Travel"'],
+      ["# Travel", "# Summary", 'total of section "Travel"'],
+      ["# Travel", "$450", '"booked"', "# Summary", 'total of section "Travel"'],
+      ["# Travel", "Flights are booked for May", "$450", "# Summary", 'total of section "Travel"'],
+    ];
+    for (const doc of docs) {
+      const last = doc.length - 1;
+      expect(batch(doc)[last]).toContain("ERROR:");
+      expect(incremental(doc)).toEqual(batch(doc));
+    }
+  });
+
+  test("the single-expression path refuses with a document error", () => {
+    expectNeedsDocument('total of section "Travel"');
+    expectNeedsDocument('sum of section "Travel"');
+    expectNeedsDocument('average of section "Travel"');
+    expectNeedsDocument('count of section "Travel"');
   });
 });
 
@@ -188,6 +259,46 @@ describe("table columns across entry points", () => {
     // an expression with. In a document it is skipped; alone it is a parse error,
     // which is the honest answer for input that was never an expression.
     expect(single("| item | cost |").threw).toBe(true);
+  });
+});
+
+describe("table lookups and bands across entry points", () => {
+  const budget = ["| item | cost |", "| ---- | ---- |", "| rent | 1200 |", "| food | 300 |", "| taxi | 12 |", ""];
+  const bands = ["| from | rate |", "| ---- | ---- |", "| 0 | 0% |", "| 10,000 | 20% |", "| 40,000 | 40% |", ""];
+
+  test("an exact lookup reads the same cell through both passes", () => {
+    const doc = [...budget, 'column "cost" for "food"', 'column "cost" for "rent" in table above * 2'];
+    expect(batch(doc).slice(6)).toEqual(["300", "2,400"]);
+    expect(incremental(doc).slice(6)).toEqual(["300", "2,400"]);
+  });
+
+  test("a band lookup and a progressive total agree through both passes", () => {
+    const doc = [...bands, 'column "rate" for 45,000 in bands above', "45,000 through bands above", "$45,000 through bands above"];
+    const expected = ["40.00%", "8,000", "$8,000.00"];
+    expect(batch(doc).slice(6)).toEqual(expected);
+    expect(incremental(doc).slice(6)).toEqual(expected);
+  });
+
+  test("money stays exact to the penny through both passes", () => {
+    // $10.10 at 15% is $1.515, a half-cent the till rounds up; a double rounds it down.
+    const doc = ["| from | rate |", "| ---- | ---- |", "| 0 | 15% |", "", "$10.10 through bands above"];
+    expect(batch(doc)[4]).toBe("$1.52");
+    expect(incremental(doc)[4]).toBe("$1.52");
+  });
+
+  test("a refusal is the same refusal through both passes", () => {
+    const missing = [...budget, 'column "cost" for "fuel"'];
+    expect(batch(missing)[6]).toContain("ERROR:");
+    expect(incremental(missing)[6]).toBe(batch(missing)[6]);
+    const notFromZero = ["| from | rate |", "| ---- | ---- |", "| 10 | 5% |", "", "100 through bands above"];
+    expect(batch(notFromZero)[4]).toContain("ERROR:");
+    expect(incremental(notFromZero)[4]).toBe(batch(notFromZero)[4]);
+  });
+
+  test("the single-expression path refuses with a document error", () => {
+    expectNeedsDocument('column "cost" for "food"');
+    expectNeedsDocument('column "rate" for 45,000 in bands above');
+    expectNeedsDocument("45,000 through bands above");
   });
 });
 

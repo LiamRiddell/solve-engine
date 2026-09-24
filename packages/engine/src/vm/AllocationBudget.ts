@@ -68,6 +68,9 @@ let calls = 0;
 /** The in-flight evaluation's call ceiling, read from its VM when the evaluation opened. */
 let callLimit = Number.POSITIVE_INFINITY;
 
+/** How many outermost evaluations have opened. Read through {@link currentEvaluation}. */
+let evaluationSerial = 0;
+
 /**
  * The refusal itself, built in one place so the wording of the engine's most
  * likely "this is too big" message is not reinvented per site.
@@ -93,6 +96,7 @@ function exceeded(requested: number, what: string, alreadyUsed: number): Error {
  */
 export function beginEvaluation(vm: VM): void {
 	if (depth++ === 0) {
+		evaluationSerial++;
 		used = 0;
 		limit = vm.getMaxAllocatedElements();
 		calls = 0;
@@ -207,6 +211,23 @@ export function chargeFunctionCall(): void {
 			context: { calls, callLimit },
 		});
 	}
+}
+
+/**
+ * Which evaluation is in flight: a number that changes each time an outermost
+ * evaluation opens, and 0 outside any.
+ *
+ * For a package that bounds some work of its own per evaluation rather than per
+ * call, the way the element tally here is kept. The text package's pattern
+ * matcher counts its steps this way, so that a line calling `matchcount` fifty
+ * times spends one allowance rather than fifty: per-call caps do not compose,
+ * which is the whole lesson of this module. A tally keyed by this number resets
+ * itself when the number changes, with no hook into the VM of its own.
+ *
+ * @returns The serial of the outermost evaluation in flight, or 0.
+ */
+export function currentEvaluation(): number {
+	return depth === 0 ? 0 : evaluationSerial;
 }
 
 /**

@@ -19,7 +19,7 @@ import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/Di
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, compareRationalOperands, uncertainOp, toleranceSpread } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind } from "@solve-js/vm/VMConversion";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
@@ -1583,6 +1583,27 @@ function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
  * untouched, so `2 ^ 100000` is still Infinity, exactly as IEEE 754 says.
  */
 const MAX_EXACT_POW_BITS = 65536;
+
+/** A number written as text: digits with optional commas grouping thousands, a decimal part and an exponent. */
+const NUMBER_TEXT = /^[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
+
+/**
+ * The number a piece of text spells, or the Error that says it spells none.
+ * The whole text must be the number, spaces at either end aside, so `"12abc"`
+ * is refused rather than read as 12.
+ *
+ * @param text - The text to read.
+ */
+function numberFromText(text: string): Value {
+    const trimmed = text.trim();
+    if (!NUMBER_TEXT.test(trimmed)) {
+        return errorValue(
+            "TEXT_NOT_A_NUMBER",
+            `"${text.length > 40 ? `${text.slice(0, 40)}...` : text}" is not a number: "as number" reads text that is a number and nothing else.`,
+        );
+    }
+    return numberValue(Number(trimmed.replace(/,/g, "")));
+}
 
 /**
  * The variables an undefined variable could have been meant as. The unit
@@ -3287,6 +3308,14 @@ export function executeBytecode(
           const v = safePop(stack);
           const toNumberFault = faultedOperand(v);
           if (toNumberFault) { stack.push(toNumberFault); break; }
+          if (v.type === ValueType.String) {
+            // Text reads as a number only when it is one, whole. Through
+            // `toNumber()` it went by `parseFloat`: `"11:00 PM" as number` was
+            // 11, `"1,234.5"` was 1 and `"hello"` was 0. This is the conversion
+            // the text arithmetic refusal points at, so it must not guess either.
+            stack.push(numberFromText(v.value as string));
+            break;
+          }
           stack.push(numberValue(v.toNumber()));
           break;
         }
@@ -3530,7 +3559,17 @@ export function executeBytecode(
             // registration would overwrite it.
             stack.push(datetimeInZone(left, toUnit, vm));
           } else {
-            stack.push(uomValue(left.toNumber(), toUnit));
+            // A value with no single amount, a list, a piece of text, a
+            // colour, read as the zero `toNumber()` reports for it and came
+            // back labelled with the unit: `(1, 2) in miles` answered `0.00
+            // miles`. Refused by name, as an aggregate refuses it. Issue #547.
+            const kind = nonNumericKind(left);
+            stack.push(kind === undefined
+              ? uomValue(left.toNumber(), toUnit)
+              : errorValue(
+                "CONVERT_NON_NUMERIC",
+                `${kind[0].toUpperCase()}${kind.slice(1)} has no single amount to convert to ${toUnit}: only a number or a quantity can be converted.`,
+              ));
           }
           break;
         }
@@ -3776,6 +3815,20 @@ export function executeBytecode(
           for (let i = count - 1; i >= 0; i--) {
             const cellVal = safePop(stack);
             if (cellFault === null) cellFault = faultedOperand(cellVal);
+            // A cell with no numeric reading was the same silent zero: a pair
+            // inside a list, `[(1, 2), 3]`, answered `[0, 3]`, and a date
+            // became its epoch milliseconds. A cell holds one number, so the
+            // literal is refused by name. An unknown stays, it is a formula
+            // cell. Issue #546.
+            const kind = cellVal.type === ValueType.Symbolic ? undefined : nonNumericKind(cellVal);
+            if (cellFault === null && kind !== undefined) {
+              cellFault = errorValue(
+                "MATRIX_CELL_NON_NUMERIC",
+                cellVal.type === ValueType.Matrix
+                  ? "A list cannot hold a list inside it: each cell holds one number. Write the values side by side, as in [1, 2, 3]."
+                  : `${kind[0].toUpperCase()}${kind.slice(1)} cannot be a cell of a list: each cell holds one number.`,
+              );
+            }
             rowMajor[i] = cellVal.type === ValueType.Boolean ? (cellVal.value as boolean)
               : cellVal.type === ValueType.Symbolic ? (cellVal.value as SymbolicNodeType)
               : cellVal.toNumber();

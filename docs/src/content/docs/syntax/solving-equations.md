@@ -8,8 +8,10 @@ description: Finding the values of an unknown that make an equation true, exactl
 Solving an equation means finding the values of the unknown that make it true:
 the `x` for which `2x+6=0`, or the two roots of `x^2-4=0`. The engine gives an
 exact answer wherever one exists, a square root rather than a decimal, and falls
-back to accurate decimals only when no exact form can be written. Like the other
-algebra forms, this does not need a trailing arrow.
+back to accurate decimals only when no exact form can be written. An equation
+the algebra has no method for at all, such as `cos(x) = x`, is
+[solved numerically](#equations-with-no-exact-method). Like the other algebra
+forms, this does not need a trailing arrow.
 
 `solve` takes an equation and the unknown to solve for.
 
@@ -138,6 +140,104 @@ real line.
 solve(x^5-1=0, x) // [1, -0.8090169944-0.5877852523i, -0.8090169944+0.5877852523i, 0.3090169944-0.9510565163i, 0.3090169944+0.9510565163i]
 ```
 
+## Equations with no exact method
+
+Everything above is a polynomial equation: powers of the unknown, multiplied by
+numbers and added up. Mix the unknown with a function of itself, as `cos(x) = x`
+or `2^x = 10` do, and there is usually no formula for the answer at all. There
+is still an answer: a value of `x` where the two sides are equal. On one side of
+it the left-hand side is the larger, on the other side the smaller, so taking
+two values that straddle it and halving the gap between them, again and again,
+traps it to as many digits as the engine carries. That is a numeric root, found
+by search rather than by algebra.
+
+```solve
+solve(cos(x) = x, x) // 0.74
+solve(2^x = 10, x) // 3.32
+solve(e^x = 10, x) // 2.30
+solve(log(x) = 2, x) // 7.39
+solve(1000*1.05^n = 2000, n) // 14.21
+```
+
+A numeric root is approximate, in the same sense as the roots of a quintic in
+the section above: a decimal accurate to the precision of a double, not an exact
+form. Every one is checked before it is shown. The candidate is substituted back
+into both sides, and it is reported only if they agree there to within a few
+parts in a billion. That check is what keeps a place where the curve jumps, or
+shoots off to infinity, from being taken for a root: `1/x` changes sign at zero
+without ever being zero there.
+
+Several roots come back as a row, in ascending order.
+
+```solve
+solve(exp(x) = x + 2, x) // [-1.84, 1.15]
+```
+
+The equation can also be written on its own line and solved with an arrow,
+exactly as a polynomial one can.
+
+```solve
+2^x = 10
+x => // 3.32
+```
+
+### Where the search looks
+
+Without further instruction the search runs from -1,000,000 to 1,000,000,
+looking closely near zero and more coarsely further out, which is where the
+roots of everyday equations sit. Two numbers after the unknown name a range to
+search instead. That is how to reach a root further out, and how to list the
+roots of an equation that repeats forever, as anything built on `sin` or `cos`
+does.
+
+```solve
+solve(sin(x) = 0.5, x, 0, 3) // [0.52, 2.62]
+solve(log(x) = 20, x, 0, 1e9) // 485,165,195.41
+```
+
+The ends of a range count as inside it. `pi` can only be written to the
+precision of a double, so the sine of it is not quite zero, and the search looks
+a hair past each end so that a root sitting on one is still found.
+
+```solve
+solve(sin(x) = 0, x, 0, pi) // [0, 3.14]
+```
+
+A range works for every equation, not only the numeric ones: the roots outside
+it are left out. For a polynomial every root is known, so an empty range is a
+real answer.
+
+```solve
+solve(x^2 = 4, x, 0, 10) // 2
+solve(x^2 = 4, x, 5, 10) // no solution between 5 and 10
+```
+
+### What the search cannot see, and says
+
+More than ten roots in the range are declined rather than listed, because a
+list cut off at the edge of the search would read as the whole answer.
+
+```solve
+solve(sin(x) = 0.5, x) // More than 10 roots lie between -1000000 and 1000000, so this equation may have infinitely many, as one built on sin or cos does. Name a narrower range after the unknown, as in solve(sin(x) = 0.5, x, 0, 3).
+```
+
+Finding nothing is reported as finding nothing, never as "no solution", which
+is a stronger claim than a search can make. The search looks for places where
+the two sides cross. A root where they only touch without crossing, such as
+`cos(x) = 1` at zero, is found only if the search happens to land on it
+exactly; two roots closer together than the search's spacing can be missed; and
+a root outside the range is not looked for.
+
+```solve
+solve(log(x) = 20, x) // No root was found between -1000000 and 1000000: the two sides never cross there. This equation is solved numerically, which finds crossings, so a root where the sides only touch, or one outside the range searched, is not found. To search elsewhere, name a range after the unknown, as in solve(log(x) = 20, x, 0, 1e9).
+```
+
+A search needs a number for everything but the unknown, so an equation that is
+not a polynomial and still has a second unknown in it is refused. Nor does the
+search isolate the unknown when it could: `2^x = 10` could be rearranged into
+`x = log(10)/log(2)`, but it is answered with the decimal, since the solver does
+not yet undo a function to reach the unknown inside it.
+
 ## A partial answer is never given as a whole one
 
 The number of roots an equation has is its degree, and the solver knows that
@@ -164,8 +264,8 @@ solve(a*x+b=0, x) // -b/a
 
 ## If you do not want these words
 
-`factor`, `solve`, `expand`, `der`, `derivative`, `integral`, `taylor` and
-`jacobian` are only treated as functions when the very next character is an
+`factor`, `solve`, `expand`, `der`, `derivative`, `integral`, `limit`, `taylor`
+and `jacobian` are only treated as functions when the very next character is an
 opening parenthesis, so they remain usable as ordinary variable names.
 
 ```solve

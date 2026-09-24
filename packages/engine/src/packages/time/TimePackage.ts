@@ -5,12 +5,14 @@ import { FpsRateParselet } from "./parselets/FpsRateParselet";
 import { LaptimeParselet } from "./parselets/LaptimeParselet";
 import { timeOrDateInZoneParselet } from "./parselets/TimeInZoneParselet";
 import { TimeDifferenceParselet } from "./parselets/TimeDifferenceParselet";
+import { HoursOverlapParselet } from "./parselets/HoursOverlapParselet";
 import { VideoTimecodeParselet } from "./parselets/VideoTimecodeParselet";
 import { FrameCountParselet } from "./parselets/FrameCountParselet";
 import {
-  ZONE_CONVERT_FN, TIME_IN_ZONE_FN, DATE_IN_ZONE_FN, TIME_DIFFERENCE_FN,
-  zoneConvertHandler, timeInZoneHandler, dateInZoneHandler, timeDifferenceHandler,
+  ZONE_CONVERT_FN, ZONE_CONVERT_AT_FN, TIME_IN_ZONE_FN, DATE_IN_ZONE_FN, TIME_DIFFERENCE_FN,
+  zoneConvertHandler, zoneConvertAtHandler, timeInZoneHandler, dateInZoneHandler, timeDifferenceHandler,
 } from "./parselets/TimezonePluginFunctions";
+import { HOURS_OVERLAP_FN, hoursOverlapHandler } from "./parselets/OverlapPluginFunctions";
 import { clockTimeNormalizerRule } from "./normalizer/ClockTimeNormalizerRule";
 import { paceNotationNormalizerRule } from "./normalizer/PaceNotationNormalizerRule";
 import { clockTimeIntervalNormalizerRule } from "./normalizer/ClockTimeIntervalNormalizerRule";
@@ -48,7 +50,10 @@ import { toTimespanString, toLaptimeString } from "./TimespanConverters";
  * laptime`) is a `converters` package (Phase 1c) concern. This package
  * only produces the underlying `Uom` values.
  *
- * Also: timezone conversion (`6pm Sydney in Chicago`), current
+ * Also: timezone conversion (`6pm Sydney in Chicago`), into several zones
+ * at once and on a named day (`3pm London on 23 September 2026 in Tokyo, New
+ * York and Sydney`), the shared stretch of the same hours across zones
+ * (`overlap of 9am to 5pm in London and New York`), current
  * time/date-in-a-zone queries (`time in Paris`, `date in Vancouver`), and
  * zone-offset deltas (`time difference between Seattle and Moscow`). See
  * `timezones/CityZones.ts`/`ZoneMath.ts`. Built entirely on native
@@ -78,6 +83,7 @@ export const TIME_PACKAGE: IEnginePackage = {
     "time in": "TIME_IN",
     "date in": "DATE_IN",
     "time difference between": "TIME_DIFFERENCE_BETWEEN",
+    "overlap of": "OVERLAP_OF",
     ...Object.fromEntries(Object.keys(MULTI_WORD_CITY_ZONES).map((phrase) => [phrase, "CITY_NAME"])),
   },
   prefixParselets: {
@@ -88,6 +94,7 @@ export const TIME_PACKAGE: IEnginePackage = {
     TIME_IN: timeOrDateInZoneParselet(TIME_IN_ZONE_FN),
     DATE_IN: timeOrDateInZoneParselet(DATE_IN_ZONE_FN),
     TIME_DIFFERENCE_BETWEEN: new TimeDifferenceParselet(),
+    OVERLAP_OF: new HoursOverlapParselet(),
     VIDEO_TIMECODE: new VideoTimecodeParselet(),
     FRAME_COUNT: new FrameCountParselet(),
   },
@@ -104,8 +111,15 @@ export const TIME_PACKAGE: IEnginePackage = {
   ],
   pluginFunctions: {
     [ZONE_CONVERT_FN]: zoneConvertHandler,
+    [ZONE_CONVERT_AT_FN]: zoneConvertAtHandler,
     [TIME_IN_ZONE_FN]: timeInZoneHandler,
     [DATE_IN_ZONE_FN]: dateInZoneHandler,
     [TIME_DIFFERENCE_FN]: timeDifferenceHandler,
+    [HOURS_OVERLAP_FN]: hoursOverlapHandler,
+  },
+  tokenCategories: {
+    // The phrase is the keyword, as `time in` is; a bare `overlap` stays a
+    // variable. The other timezone phrases are declared in the core map.
+    OVERLAP_OF: "keyword",
   },
 };

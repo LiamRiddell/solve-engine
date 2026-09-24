@@ -13,7 +13,8 @@ import type { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
 import { evaluateDocument } from "@solve-js/engine/evaluateDocument";
 import { formatValue } from "@solve-js/format/FormatEngine";
-import { seededStream, documentRandomSeed } from "@solve-js/engine/SeededRandom";
+import { seededStream, documentRandomSeed, programKey } from "@solve-js/engine/SeededRandom";
+import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 
 const answers = (engine: ExpressionEngine, text: string): string[] =>
 	engine.parseDocument(text).lines.map((line) => (line.result ? formatValue(line.result) : `ERROR ${line.error}`));
@@ -129,5 +130,28 @@ describe("every entry point agrees", () => {
 		const a = createEngine({ random: { seed: 5 } }).evaluateLine(1, "roll(1, 1000)");
 		const b = createEngine({ random: { seed: 5 } }).evaluateLine(1, "roll(1, 1000)");
 		expect(formatValue(b)).toBe(formatValue(a));
+	});
+});
+
+describe("the key a line's stream starts from", () => {
+	/** A program that calls one plugin function, compiled under a given index. */
+	const calling = (index: number, name = "randomUuid") => {
+		const builder = new BytecodeBuilder(new Map([[name, index]]));
+		builder.emitPluginCall(name, 0);
+		return builder.build();
+	};
+
+	test("names a plugin function rather than its index", () => {
+		// The index is allocated process-wide in the order packages first
+		// register, so the same line compiles to a different index in a process
+		// that registered another package first, or in a version with a longer
+		// package list. The key, and so every seeded draw, must not move with it.
+		expect(programKey(calling(3))).toBe(programKey(calling(40)));
+		// Past 255 the call takes the wide opcode and a second index byte.
+		expect(programKey(calling(3))).toBe(programKey(calling(300)));
+	});
+
+	test("and still tells two different functions apart", () => {
+		expect(programKey(calling(3, "randomHex"))).not.toBe(programKey(calling(3)));
 	});
 });

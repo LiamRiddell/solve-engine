@@ -61,7 +61,12 @@ query("name=John+Doe&page=2") // {"name":"John Doe","page":"2"}
 ```
 
 Both also have a `from` spelling, `"..." from jwt` and `"..." from query`, to
-match the decoders above.
+match the decoders above. To read one value out of the JSON either returns, use
+`field`, on the [pasted text page](/syntax/pasted-text/):
+
+```solve
+field(query("name=John+Doe&page=2"), "name") // John Doe
+```
 
 ## Notes
 

@@ -9,11 +9,11 @@ Randomness came straight from `Math.random`, so a roll, a `pick`, a `shuffle`, a
 | document | before | now |
 | --- | --- | --- |
 | `random seed 42`, `roll(1, 6)` | error: Expected token type "LPAREN", then a fresh roll | random draws seeded with 42, then 1 on every run |
-| `random seed 42`, `pick("north", "south", "east", "west")` | a different option each run | north on every run |
-| `random seed 42`, `uuid` | a different identifier each run | 3735de41-7ba2-430d-8b81-afba841149a5 on every run |
+| `random seed 42`, `pick("north", "south", "east", "west")` | a different option each run | east on every run |
+| `random seed 42`, `uuid` | a different identifier each run | 218d5e25-71f0-4f2f-920c-f6f25498daa0 on every run |
 | `roll(1, 6)` with no seed | a fresh roll each run | a fresh roll each run |
 
-Each line draws from its own stream, worked out from the seed and the line's compiled program, so a draw changes only when its own line is edited or the seed changes: adding or editing other lines leaves it where it was, and two lines written the same way still draw separately. The `random seed` line seeds the whole document wherever it sits, and takes precedence over the host's seed. When the seed in force changes, the lines that drew under the old one are dropped from the cache and draw again, in a batch pass and in the incremental evaluator alike. Unseeded, draws come from `Math.random` exactly as before.
+Each line draws from its own stream, worked out from the seed and the line's compiled program, with a package function named rather than numbered so the draws do not depend on which packages a process happened to register first. A draw changes only when its own line is edited or the seed changes: adding or editing other lines leaves it where it was, and two lines written the same way still draw separately. The `random seed` line seeds the whole document wherever it sits, and takes precedence over the host's seed. When the seed in force changes, the lines that drew under the old one are dropped from the cache and draw again, in a batch pass and in the incremental evaluator alike. Unseeded, draws come from `Math.random` exactly as before.
 
 Draws reach the engine through the line's execution context, the way the clock already does through the calendar backend, so a builtin or a package that draws randomness reads `context.random()` rather than `Math.random`. The dice and randomness pages, which could show no fixed answer until now, gain proven examples and leave the documentation spec's unprovable list.
 

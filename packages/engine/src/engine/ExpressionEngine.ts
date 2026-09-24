@@ -10,6 +10,7 @@ import { PrecedenceParser } from "@solve-js/parser/PrecedenceParser";
 import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { seededStream, programKey, documentRandomSeed } from "@solve-js/engine/SeededRandom";
+import { summariseChecks } from "@solve-js/engine/CheckSummary";
 import { createVM, executeBytecode } from "@solve-js/vm/VM";
 import { resolveHolidayPredicate } from "@solve-js/vm/HolidayCalendar";
 import type { EvalResult, LineExecutionContext } from "@solve-js/vm/VM";
@@ -2452,6 +2453,10 @@ export class ExpressionEngine {
                 }
             }
         }
+
+        // The check lines' pass and fail count, for a host; see CheckSummary.ts.
+        const checks = summariseChecks(processedLines);
+        if (checks) result.checks = checks;
 
         const includeDiagnostics = options.includeDiagnostics ?? false;
         if (includeDiagnostics) {
