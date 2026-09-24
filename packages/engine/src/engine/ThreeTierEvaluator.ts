@@ -679,9 +679,13 @@ export class ThreeTierEvaluator {
 				// lines that used it here rather than at the end of a pass,
 				// because this runs before the next pass begins and that
 				// comparison would see the unit already gone.
-				if (this.engine.undefineUserUnitsFrom(this.doc.getLineAt(lineNum)?.lineId ?? -1)) {
+				const deletedLineId = this.doc.getLineAt(lineNum)?.lineId ?? -1;
+				if (this.engine.undefineUserUnitsFrom(deletedLineId)) {
 					this.engine.invalidateForRemovedUserUnits();
 				}
+				// And any equation it stored, which `x =>` below would otherwise
+				// go on solving (#569).
+				this.engine.undefineEquationsFrom(deletedLineId);
 				// And its cached bytecode. The dependency graph was already
 				// pruned here; the LineCache was not, so a deleted line kept its
 				// entry until the whole cache was dropped on a document switch.
@@ -1312,7 +1316,7 @@ export class ThreeTierEvaluator {
 	 * drops its own definitions as it is compiled again, which a line nothing
 	 * compiles never reaches. Whether that has to reach the lines that used the
 	 * unit is decided once at the end of the pass, by comparing the units in
-	 * scope before and after it.
+	 * scope before and after it. So does any equation it stored (#569).
 	 */
 	private deregisterIfDirty(state: LineState, lineNumber: number): void {
 		if (!state.dirty) return;
@@ -1321,6 +1325,7 @@ export class ThreeTierEvaluator {
 		state.writes = [];
 		this.registerWithTags(lineNumber, [], []);
 		this.engine.undefineUserUnitsFrom(state.lineId);
+		this.engine.undefineEquationsFrom(state.lineId);
 		// And its checkpoint, for the same reason Tier 1 drops one for a line
 		// that wrote nothing: a heading defines nothing.
 		this.checkpointer?.dropCheckpointAt(lineNumber);
@@ -1390,6 +1395,9 @@ export class ThreeTierEvaluator {
 		// the pass compares the units in scope before and after itself, so
 		// dropping and re-adding the same one invalidates nothing.
 		this.engine.undefineUserUnitsFrom(state.lineId);
+		// A stored equation the same way: `a * x = 10` stores it again as it
+		// runs, and a line edited into anything else no longer has one (#569).
+		this.engine.undefineEquationsFrom(state.lineId);
 
 		const allResults: Value[][] = [];
 		const allBytecodes: BytecodeProgram[] = [];
@@ -1500,7 +1508,7 @@ export class ThreeTierEvaluator {
 			} else {
 				// Fallback: LineCache missed, compile expression ourselves
 				try {
-					const { program, reads, writes } = this.engine.compileExpression(expression);
+					const { program, reads, writes } = this.engine.compileExpression(expression, lineNumber);
 					allBytecodes.push(program);
 					for (const r of reads) allReads.add(r);
 					for (const w of writes) allWrites.add(w);
@@ -1791,6 +1799,10 @@ export class ThreeTierEvaluator {
 		// that read its own name climbed by its step on every pass, for as long
 		// as it stayed out of view. See `ExpressionEngine.restoreToPrefix`.
 		for (const written of state.writes) this.engine.restoreToPrefix(written, lineNumber);
+		// And an equation it stored, as Tier 1 drops one: a line edited out of
+		// view is compiled here, and compiling stores the equation again only
+		// if the line still states it (#569).
+		this.engine.undefineEquationsFrom(state.lineId);
 		const definedEarlierOnThisLine = new Set<string>();
 		const selfReading: string[] = [];
 
@@ -1802,7 +1814,7 @@ export class ThreeTierEvaluator {
 
 			let compiled: { program: BytecodeProgram; reads: string[]; writes: string[] };
 			try {
-				compiled = this.engine.compileExpression(expression);
+				compiled = this.engine.compileExpression(expression, lineNumber);
 			} catch (e) {
 				const errorMessage = e instanceof Error ? e.message : String(e);
 				if (!firstError) firstError = errorMessage;

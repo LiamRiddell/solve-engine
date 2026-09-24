@@ -271,10 +271,14 @@ export interface VM {
 	defineEquation(variable: string, factorNames: string[], rhsProgram: BytecodeProgram): void;
 	getEquation(variable: string): EquationDef | undefined;
 	hasEquation(variable: string): boolean;
+	/** Remove the bare equation stored for `variable`, for the line that stored it being edited or deleted. */
+	deleteEquation(variable: string): void;
 	/** Register (or redefine) a stored scalar equation (`x^2-4 = 0`), keyed by its unknown. See {@link ScalarEquationDef}. */
 	defineScalarEquation(variable: string, lhsProgram: BytecodeProgram, rhsProgram: BytecodeProgram): void;
 	getScalarEquation(variable: string): ScalarEquationDef | undefined;
 	hasScalarEquation(variable: string): boolean;
+	/** Remove the scalar equation stored for `variable`, for the line that stored it being edited or deleted. */
+	deleteScalarEquation(variable: string): void;
 	reset(): void;
 	/** The innermost call frame's bindings, or `undefined` when no call is in progress. Read-only, for building a frame that extends the current one rather than replacing it (see `BIND_UNKNOWN`'s handler). */
 	getCallFrame(): ReadonlyMap<string, Value> | undefined;

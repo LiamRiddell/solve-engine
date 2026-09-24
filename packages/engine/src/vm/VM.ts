@@ -217,11 +217,16 @@ export function createVM(
       },
       getEquation(variable: string) { return equations.get(variable); },
       hasEquation(variable: string) { return equations.has(variable); },
+      // The one way a stored equation leaves, as deleteUserFunction is for a
+      // function. Without it an equation outlived the line that stored it, and
+      // `x =>` went on solving it after that line was edited away.
+      deleteEquation(variable: string) { equations.delete(variable); },
       defineScalarEquation(variable: string, lhsProgram: BytecodeProgram, rhsProgram: BytecodeProgram) {
         scalarEquations.set(variable, { variable, lhsProgram, rhsProgram });
       },
       getScalarEquation(variable: string) { return scalarEquations.get(variable); },
       hasScalarEquation(variable: string) { return scalarEquations.has(variable); },
+      deleteScalarEquation(variable: string) { scalarEquations.delete(variable); },
       reset() {
         stack.length = 0;
         variables.clear();

@@ -313,6 +313,25 @@ describe("ThreeTierEvaluator — Tier 3 (Compile-Only for Invisible Lines)", () 
 		expect(result.resultMap.get(3)![0].toNumber()).toBe(20);
 	});
 
+	test("an equation stored out of view goes when its line is edited out of view (#569)", () => {
+		// Tier 3 compiles the line without a position before this, so the
+		// equation belonged to no line and nothing could drop it.
+		const eqDoc = createDoc([":a = 2", "a * x = 10", "1", "2", "x =>"]);
+		const eqEvaluator = new ThreeTierEvaluator(eqDoc, createEngine());
+		try {
+			const before = eqEvaluator.evaluate({ startLine: 4, endLine: 5 });
+			expect(before.resultMap.get(5)![0].toNumber()).toBe(5);
+
+			eqDoc.editLine(2, "3 + 3");
+			const after = eqEvaluator.evaluate({ startLine: 4, endLine: 5 });
+
+			expect(eqDoc.getLineAt(2)!.dirty).toBe(true); // still out of view
+			expect(formatValue(after.resultMap.get(5)![0])).toBe("x");
+		} finally {
+			eqEvaluator.terminateWorker();
+		}
+	});
+
 	test("an invisible bare assignment has run once compiled, and is clean like a colon definition (#555)", () => {
 		const bareDoc = createDoc(["x = 10", "x * 2"]);
 		const bareEvaluator = new ThreeTierEvaluator(bareDoc, createEngine());

@@ -93,6 +93,26 @@ function editThenEvaluate(lines: string[], edits: ReadonlyArray<readonly [number
   }
 }
 
+/**
+ * Evaluate a document in a live evaluator, delete one line the way an editor
+ * does (a structural change), and evaluate it again.
+ *
+ * @returns What the evaluator shows after the deletion, and the remaining text.
+ */
+function deleteThenEvaluate(lines: string[], lineNumber: number): { shown: string[]; edited: string[] } {
+  const doc = new DocumentModel();
+  doc.setDocument(lines.join("\n"));
+  const evaluator = new ThreeTierEvaluator(doc, newTrackedEngine());
+  try {
+    evaluator.evaluate({ startLine: 1, endLine: doc.lineCount });
+    evaluator.applyTransaction([{ startLine: lineNumber, deleteCount: 1, insertLines: [] }]);
+    const pass = evaluator.evaluate({ startLine: 1, endLine: doc.lineCount });
+    return { shown: pass.lines.map(readEvalLine), edited: lines.filter((_, i) => i !== lineNumber - 1) };
+  } finally {
+    evaluator.terminateWorker();
+  }
+}
+
 /** Evaluate one line through the single-expression entry point, without ever throwing out. */
 function single(expr: string): { threw: boolean; type: ValueType | null; message: string } {
   const engine = newTrackedEngine();
@@ -537,6 +557,50 @@ describe("=> lines and equation solves across entry points (#565)", () => {
 
   test("the single-expression path refuses a position read inside a => line", () => {
     expectNeedsDocument("line 1 * 2 =>");
+  });
+});
+
+describe("a stored equation goes with its line (#569)", () => {
+  // The VM keeps an equation by its unknown, and nothing removed it when the
+  // line that stored it changed, so the live evaluator went on solving an
+  // equation the note no longer held.
+  const note = [":a = 2", "a * x = 10", "x =>"];
+
+  test("the reported case: the equation's line edited away", () => {
+    const { shown, edited } = editThenEvaluate(note, [[2, "# heading"]]);
+    expect(shown).toEqual(["2", "", "x"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("the equation's line deleted", () => {
+    const { shown, edited } = deleteThenEvaluate(note, 2);
+    expect(shown).toEqual(["2", "x"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("a scalar equation's line edited into an ordinary expression, and deleted", () => {
+    const scalar = [":a = 4", "x^2 - a = 0", "x =>"];
+    const edit = editThenEvaluate(scalar, [[2, "a + 1"]]);
+    expect(edit.shown).toEqual(["4", "5", "x"]);
+    expect(edit.shown).toEqual(batch(edit.edited));
+    const deletion = deleteThenEvaluate(scalar, 2);
+    expect(deletion.shown).toEqual(["4", "x"]);
+    expect(deletion.shown).toEqual(batch(deletion.edited));
+  });
+
+  test("an equation edited to another unknown leaves the first unknown unsolved", () => {
+    const { shown, edited } = editThenEvaluate([...note, "y =>"], [[2, "a * y = 10"]]);
+    expect(shown.slice(2)).toEqual(["x", "5"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("with two lines storing one, editing the later away keeps the earlier", () => {
+    // The equation belongs to whichever line stored it last, so dropping the
+    // other line's leaves it in place.
+    const { shown, edited } = editThenEvaluate([...note, "a * x = 20", "x =>"], [[4, "# gone"]]);
+    expect(shown[2]).toBe("5");
+    expect(shown[4]).toBe("5");
+    expect(shown).toEqual(batch(edited));
   });
 });
 

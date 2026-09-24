@@ -1045,6 +1045,22 @@ export class ExpressionEngine {
      * cross between documents.
      */
     private readonly userUnits = new UserUnitTable();
+    /**
+     * The line that stored each equation, by the equation's unknown, one map per
+     * kind: `a * x = 10` stores both a matrix and a scalar equation for `x`,
+     * `x^2 - a = 0` a scalar one. The value is the line's persistent id, or -1
+     * when there is no document model.
+     *
+     * The VM keeps equations by unknown alone, so without this nothing could say
+     * which line an equation belonged to, and editing that line away left the
+     * equation stored: `x =>` below it went on solving it (#569). See
+     * {@link undefineEquationsFrom}, the same arrangement {@link userUnits} has
+     * with its defining line.
+     */
+    private readonly equationOwners = {
+        matrix: new Map<string, number>(),
+        scalar: new Map<string, number>(),
+    };
     /** TanStack Query client, injected into resolvers for cache reads/writes. */
     readonly queryClient: QueryClient;
     // Bytecode cache, avoids re-parsing identical expressions.
@@ -1514,6 +1530,52 @@ export class ExpressionEngine {
      */
     undefineUserUnitsFrom(lineId: number): boolean {
         return this.userUnits.undefineFrom(lineId);
+    }
+
+    /**
+     * Drop every equation a line stored (`a * x = 10`, `x^2 - a = 0`), for a
+     * line about to be compiled again, edited into one with nothing to
+     * evaluate, or deleted.
+     *
+     * An equation is kept in the VM by its unknown, and outlived the line that
+     * stored it: edit `a * x = 10` into a heading and `x =>` below it went on
+     * answering 5 where a fresh pass answers `x`. A line that still stores the
+     * equation stores it again as it runs.
+     *
+     * Only an equation the line is still the owner of goes. When two lines
+     * store one for the same unknown, the later to run owns it, so dropping the
+     * other line's leaves it in place.
+     *
+     * @param lineId - The persistent id of the line.
+     */
+    undefineEquationsFrom(lineId: number): void {
+        if (lineId < 0) return;
+        const { matrix, scalar } = this.equationOwners;
+        if (matrix.size > 0) {
+            for (const [variable, owner] of matrix) {
+                if (owner !== lineId) continue;
+                matrix.delete(variable);
+                this.vm.deleteEquation(variable);
+            }
+        }
+        if (scalar.size > 0) {
+            for (const [variable, owner] of scalar) {
+                if (owner !== lineId) continue;
+                scalar.delete(variable);
+                this.vm.deleteScalarEquation(variable);
+            }
+        }
+    }
+
+    /**
+     * Remember that the line at `lineNumber` stored an equation for `variable`.
+     *
+     * @param kind - Which of the VM's two equation stores it went into.
+     * @param variable - The equation's unknown.
+     * @param lineNumber - The 1-based line that stored it.
+     */
+    private noteEquationOwner(kind: "matrix" | "scalar", variable: string, lineNumber: number): void {
+        this.equationOwners[kind].set(variable, this.documentModel?.getLineAt(lineNumber)?.lineId ?? -1);
     }
 
     /**
@@ -3282,7 +3344,7 @@ export class ExpressionEngine {
             // (`x^2-4 = 0`), which is a strictly narrower attempt made only
             // after every existing shape has declined. See
             // {@link tryStoreScalarEquation} for what it refuses to swallow.
-            const stored = this.tryStoreScalarEquation(normalizedTokens, eqIdx);
+            const stored = this.tryStoreScalarEquation(normalizedTokens, eqIdx, lineNumber);
             return stored === null ? null : { value: stored, assigned: null };
         }
 
@@ -3297,6 +3359,7 @@ export class ExpressionEngine {
         const freeVar = names[names.length - 1];
         const factorNames = names.slice(0, -1);
         this.vm.defineEquation(freeVar, factorNames, this.compileAdHoc(rhsTokens));
+        this.noteEquationOwner("matrix", freeVar, lineNumber);
         // Also stored as a scalar equation, so that `a*n = 10` with a numeric
         // `a` still has an answer. Which of the two kinds applies depends on
         // whether the factors are matrices, and that is not known until solve
@@ -3304,6 +3367,7 @@ export class ExpressionEngine {
         // about to ask about anyway. The matrix kind is always tried first, so
         // this cannot change what an existing document does.
         this.vm.defineScalarEquation(freeVar, this.compileAdHoc(normalizedTokens.slice(0, eqIdx)), this.compileAdHoc(rhsTokens));
+        this.noteEquationOwner("scalar", freeVar, lineNumber);
         return { value: lineMessage(`${freeVar} stored as an equation — solve with "${freeVar} =>"`), assigned: null };
     }
 
@@ -3335,9 +3399,10 @@ export class ExpressionEngine {
      *
      * @param normalizedTokens - The whole line's normalized tokens.
      * @param eqIdx - Index of the first `EQUALS` token.
+     * @param lineNumber - The 1-based line storing it, recorded as its owner.
      * @returns A confirmation value when stored, or `null` to decline.
      */
-    private tryStoreScalarEquation(normalizedTokens: Token[], eqIdx: number): Value | null {
+    private tryStoreScalarEquation(normalizedTokens: Token[], eqIdx: number, lineNumber: number): Value | null {
         if (normalizedTokens[1]?.type === 'LPAREN') return null;
         if (eqIdx === 0 || eqIdx === normalizedTokens.length - 1) return null;
 
@@ -3355,6 +3420,7 @@ export class ExpressionEngine {
 
         const variable = unknowns[0];
         this.vm.defineScalarEquation(variable, this.compileAdHoc(lhsTokens), this.compileAdHoc(rhsTokens));
+        this.noteEquationOwner("scalar", variable, lineNumber);
         return lineMessage(`${variable} stored as an equation — solve with "${variable} =>"`);
     }
 
@@ -5210,11 +5276,19 @@ export class ExpressionEngine {
      * Uses the bytecode cache, repeated compilations of the same expression
      * return the cached program with zero allocation.
      *
+     * A line with no program to compile (a stored equation, a unit definition,
+     * a bare assignment) does its work here instead, so the line it sits on is
+     * what that work is recorded against. Without `lineNumber` an equation
+     * stored out of view belonged to no line, and editing that line away left
+     * it stored (#569).
+     *
      * @param expression - The raw expression string to compile.
+     * @param lineNumber - The 1-based document line the expression sits on, or
+     * -1 (the default) when it belongs to none.
      * @returns Object with compiled `program`, lexed `tokens`, and extracted `reads`/`writes`.
      * @throws ErrorFactory on parse failure or safety check failure.
      */
-	compileExpression(expression: string): {
+	compileExpression(expression: string, lineNumber: number = -1): {
 		program: BytecodeProgram;
 		tokens: Token[];
 		reads: string[];
@@ -5224,7 +5298,7 @@ export class ExpressionEngine {
 		const { hasParens } = lexed;
 
 		// Shared front-half: safety → normalize → complexity → cache/compile.
-		const prep = this.prepareExpression(expression, lexed.tokens, hasParens);
+		const prep = this.prepareExpression(expression, lexed.tokens, hasParens, undefined, lineNumber);
 		// On a cache hit nothing was lexed, so the tokens reported are the
 		// normalised ones the cached program was compiled from.
 		const tokens = lexed.compiled && prep.kind === 'ready' ? prep.normalizedTokens : lexed.tokens;
@@ -5476,6 +5550,9 @@ export class ExpressionEngine {
          this.clearCompiledCache();
          this.vm.reset();
          this.userUnits.clear();
+         // The reset above emptied both equation stores; their owners go too.
+         this.equationOwners.matrix.clear();
+         this.equationOwners.scalar.clear();
          this.accumulatorNames.clear();
          this.lastTelemetry = null;
          this.lineContext = null;

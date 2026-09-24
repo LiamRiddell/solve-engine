@@ -23,6 +23,16 @@ Each row is a note, then one edit, then the answer the evaluator shows for the n
 
 In each row the answer now is the one `parseDocument` gives for the edited text, and the colon line in the first row was already 6,000.
 
+A stored equation is kept by its unknown, apart from the line that stored it, so it outlived that line: edited away or deleted, the equation stayed, and `x =>` below went on solving it. Each equation, of either kind (the product-chain `a * x = 10` and the scalar `x^2 - a = 0`), now records the line that stored it, and goes when that line is edited, emptied or deleted, as a unit definition goes with its line. A line that still states it stores it again as it runs, and when two lines store one for the same unknown, it belongs to the later to run, so removing the other leaves it in place.
+
+| note, then the change | line | before | now |
+| --- | --- | --- | --- |
+| `:a = 2` / `a * x = 10` / `x =>`, then line 2 to `# heading` | `x =>` | 5 | x |
+| `:a = 2` / `a * x = 10` / `x =>`, then line 2 deleted | `x =>` | 5 | x |
+| `:a = 4` / `x^2 - a = 0` / `x =>`, then line 2 to `a + 1` | `x =>` | [-2, 2] | x |
+
+For this, `ExpressionEngine.compileExpression` takes an optional line number (the line a stored equation or a unit definition compiled out of view belongs to), and the `VM` interface gains `deleteEquation` and `deleteScalarEquation`.
+
 A markdown list marker is markup: `- 100 * 2` is a bullet holding `100 * 2`. The batch pass has set the marker aside since 1.0.2, but the incremental pass read the whole line, so `-` became a minus and the other markers did not evaluate at all. It now reads a list line from past the marker, using the same classification the batch pass slices by, so the two cannot disagree about what counts as one. Each row sits below a line holding `20`:
 
 | line | `parseDocument` | `evaluateDocument` before | now |
@@ -35,10 +45,10 @@ A markdown list marker is markup: `- 100 * 2` is a bullet holding `100 * 2`. The
 
 A minus with no space after it is still arithmetic in both passes: `-100 + 20` is -80.
 
-The boundary. A unit definition (`1 sprint = 2 weeks`) also has no program, but reads nothing and answers the same whatever is above it, so a clean one is not run again. A bare assignment or a `=>` line that reads a name defined only below it now takes the incremental path's tolerance of a forward reference, which the colon form already had: `y = a * 2` above `a = 3` answers `2a` on the first pass, as `parseDocument` does, and 6 once the note has run again. A stored equation stays stored in the live evaluator after the line that stored it is edited away, so `x =>` below it goes on solving it where a fresh pass answers `x`; that is where the equation is kept rather than when its solve runs, and is outside this change. The single-expression path (`evaluateLine`) reads its text as an expression, not as markdown, so `- 100 * 2` is still -200 there.
+The boundary. A unit definition (`1 sprint = 2 weeks`) also has no program, but reads nothing and answers the same whatever is above it, so a clean one is not run again. A bare assignment or a `=>` line that reads a name defined only below it now takes the incremental path's tolerance of a forward reference, which the colon form already had: `y = a * 2` above `a = 3` answers `2a` on the first pass, as `parseDocument` does, and 6 once the note has run again. An equation stored below a solve is read by it the same way: in `:a = 2` / `x =>` / `a * x = 20`, the solve answers `x` on the first pass, as `parseDocument` does, and 10 once the note has run again. The single-expression path (`evaluateLine`) reads its text as an expression, not as markdown, so `- 100 * 2` is still -200 there.
 
-Fixes #555, #560 and #565.
+Fixes #555, #560, #565 and #569.
 
 ## Verification
 
-`CrossPathDocumentFeatures.spec.ts` gains every form in its shape: each edit case through a live `ThreeTierEvaluator` matched against a fresh `parseDocument` of the edited text, both document passes agreeing value for value, and the single-expression refusal for a line reference inside a bullet and inside a `=>` line. The list-marker suite runs its table through `evaluateDocument` too, and the evaluator suite pins the tier each kind of line takes, that a clean unit definition is not run again, and that a bare definition out of view does not send each scroll back to line 1. The differential document fuzzer's shapes gain bare assignments and `=>` lines: on seed 1 the bare assignments reported 29 disagreements before their fix and the `=>` lines 8 before theirs, none after, and six seeds (2,400 editing sessions) report none. `npm run verify` passes: TESTS tests across SUITES suites, with the bundled-consumer contract.
+`CrossPathDocumentFeatures.spec.ts` gains every form in its shape: each edit or deletion through a live `ThreeTierEvaluator` matched against a fresh `parseDocument` of the edited text, both document passes agreeing value for value, and the single-expression refusal for a line reference inside a bullet and inside a `=>` line. The list-marker suite runs its table through `evaluateDocument` too, and the evaluator suite pins the tier each kind of line takes, that a clean unit definition is not run again, that a bare definition out of view does not send each scroll back to line 1, and that an equation stored out of view goes when its line is edited out of view. The differential document fuzzer's shapes gain bare assignments, `=>` lines, stored equations and their solves: on seed 1 each group reported disagreements before its fix (29, 8 and 1) and none after, and six seeds (2,400 editing sessions) report none. `npm run verify` passes: TESTS tests across SUITES suites, with the bundled-consumer contract.
