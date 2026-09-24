@@ -195,6 +195,29 @@ describe("ThreeTierEvaluator — Tier 2 (Execute from Cached Bytecode)", () => {
 		expect(line2.result).not.toBeNull();
 		expect(line2.result!.toNumber()).toBe(12);
 	});
+
+	test("a clean bare assignment has no program to run, so it goes back through Tier 1 (#555)", () => {
+		// `payment = deposit * 40` is carried out while it compiles and leaves
+		// an empty program, so Tier 2 would run nothing and keep 4,000.
+		const bareDoc = createDoc(["deposit = 100", "payment = deposit * 40", ":colon = deposit * 40"]);
+		const bareEvaluator = new ThreeTierEvaluator(bareDoc, createEngine());
+		try {
+			bareEvaluator.evaluate({ startLine: 1, endLine: 3 });
+			bareDoc.editLine(1, "deposit = 150");
+			const result = bareEvaluator.evaluate({ startLine: 1, endLine: 3 });
+
+			const [line1, line2, line3] = result.lines;
+			expect(line1.tier).toBe(EvalTier.Tier1); // edited
+			expect(line2.tier).toBe(EvalTier.Tier1); // clean, but nothing cached to run
+			expect(line3.tier).toBe(EvalTier.Tier2); // clean, runs its program
+			expect(line2.result!.toNumber()).toBe(6000);
+			expect(line3.result!.toNumber()).toBe(6000);
+			expect(bareDoc.getLineAt(2)!.reads).toContain("deposit");
+			expect(bareDoc.getLineAt(2)!.writes).toEqual(["payment"]);
+		} finally {
+			bareEvaluator.terminateWorker();
+		}
+	});
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -254,6 +277,22 @@ describe("ThreeTierEvaluator — Tier 3 (Compile-Only for Invisible Lines)", () 
 
 		// Line 3 uses x — VM should have x=10 from Tier 3 execution of line 2
 		expect(result.resultMap.get(3)![0].toNumber()).toBe(20);
+	});
+
+	test("an invisible bare assignment has run once compiled, and is clean like a colon definition (#555)", () => {
+		const bareDoc = createDoc(["x = 10", "x * 2"]);
+		const bareEvaluator = new ThreeTierEvaluator(bareDoc, createEngine());
+		try {
+			const result = bareEvaluator.evaluate({ startLine: 2, endLine: 2 });
+
+			const line1 = bareDoc.getLineAt(1)!;
+			expect(line1.isVariableDef).toBe(true);
+			expect(line1.dirty).toBe(false);
+			expect(line1.results[0][0].toNumber()).toBe(10);
+			expect(result.resultMap.get(2)![0].toNumber()).toBe(20);
+		} finally {
+			bareEvaluator.terminateWorker();
+		}
 	});
 
 	test("backgroundCompile processes only invisible dirty lines", () => {
@@ -918,6 +957,26 @@ describe("ThreeTierEvaluator — setViewport() (Phase 5.2e)", () => {
 		expect(result.tierCounts.tier2).toBe(2);
 		expect(result.tierCounts.tier1).toBe(0);
 		expect(result.tierCounts.tier3).toBe(0);
+	});
+
+	test("a bare definition above the viewport does not send each scroll back to line 1 (#555)", () => {
+		// A bare assignment is a definition now that it records its write, and a
+		// dirty definition above the viewport makes setViewport start from line
+		// 1. Tier 3 counts it as run, so the scroll stays on the visible lines.
+		const doc = createDoc(["x = 5", ...Array.from({ length: 40 }, (_, i) => `x + ${i}`)]);
+		const evaluator = new ThreeTierEvaluator(doc, createEngine());
+		try {
+			evaluator.evaluate({ startLine: 20, endLine: 30 });
+			expect(doc.getLineAt(1)!.dirty).toBe(false);
+
+			const result = evaluator.setViewport({ startLine: 21, endLine: 31 });
+
+			expect(result.lines.length).toBe(11); // the visible lines, nothing above
+			expect(result.tierCounts.tier3).toBe(0);
+			expect(result.resultMap.get(25)![0].toNumber()).toBe(5 + 23);
+		} finally {
+			evaluator.terminateWorker();
+		}
 	});
 
 	test("edit at a line AFTER viewport: does NOT trigger fallback", () => {

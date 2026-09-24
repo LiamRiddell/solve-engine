@@ -256,6 +256,21 @@ function lineMessage(text: string): Value {
 }
 
 /**
+ * What the symbolic grammar made of a line: its answer, and the name it
+ * assigned when the line was a bare assignment (`payment = deposit * 40`).
+ *
+ * The name is what lets the line say what it reads and writes. Every other
+ * symbolic shape (a stored equation, a `=>` simplification) sets no variable,
+ * and reports `null`.
+ */
+interface SymbolicOutcome {
+	/** The line's answer. */
+	value: Value;
+	/** The variable the line set, or null when it set none. */
+	assigned: string | null;
+}
+
+/**
  * Core expression evaluation engine, the top-level orchestrator.
  *
  * Owns the full evaluation pipeline: lexing, parsing, bytecode compilation,
@@ -3199,7 +3214,7 @@ export class ExpressionEngine {
         return this.accumulatorNames;
     }
 
-    private trySymbolicGrammar(normalizedTokens: Token[], lineNumber: number = -1): Value | null {
+    private trySymbolicGrammar(normalizedTokens: Token[], lineNumber: number = -1): SymbolicOutcome | null {
         if (normalizedTokens.length === 0) return null;
 
         const last = normalizedTokens[normalizedTokens.length - 1];
@@ -3226,13 +3241,13 @@ export class ExpressionEngine {
                     // perfectly good answer. Every other failure (a missing
                     // factor, a singular matrix) still surfaces unchanged.
                     const isNotMatrix = solved.type === ValueType.Error && solved.value === 'EQUATION_FACTOR_NOT_MATRIX';
-                    if (!isNotMatrix || !scalar) return solved;
+                    if (!isNotMatrix || !scalar) return { value: solved, assigned: null };
                 }
                 if (scalar) {
-                    return this.solveScalarEquation(scalar, lineNumber);
+                    return { value: this.solveScalarEquation(scalar, lineNumber), assigned: null };
                 }
             }
-            return this.simplifySymbolically(beforeTokens, lineNumber);
+            return { value: this.simplifySymbolically(beforeTokens, lineNumber), assigned: null };
         }
 
         // An algebra verb (`expand(...)`, and the later phases' `factor`/
@@ -3243,7 +3258,7 @@ export class ExpressionEngine {
         // still wins, and before the COLON/GLOBAL guard so the existing
         // assignment grammars stay untouched.
         if (containsSymbolicCall(normalizedTokens)) {
-            return this.simplifySymbolically(normalizedTokens, lineNumber);
+            return { value: this.simplifySymbolically(normalizedTokens, lineNumber), assigned: null };
         }
 
         // Already the colon-prefixed (`:name = value`) or `global :name`
@@ -3267,7 +3282,8 @@ export class ExpressionEngine {
             // (`x^2-4 = 0`), which is a strictly narrower attempt made only
             // after every existing shape has declined. See
             // {@link tryStoreScalarEquation} for what it refuses to swallow.
-            return this.tryStoreScalarEquation(normalizedTokens, eqIdx);
+            const stored = this.tryStoreScalarEquation(normalizedTokens, eqIdx);
+            return stored === null ? null : { value: stored, assigned: null };
         }
 
         const rhsTokens = normalizedTokens.slice(eqIdx + 1);
@@ -3275,7 +3291,7 @@ export class ExpressionEngine {
         if (names.length === 1) {
             const result = this.simplifySymbolically(rhsTokens, lineNumber);
             this.vm.setVar(names[0], result);
-            return result;
+            return { value: result, assigned: names[0] };
         }
 
         const freeVar = names[names.length - 1];
@@ -3288,7 +3304,7 @@ export class ExpressionEngine {
         // about to ask about anyway. The matrix kind is always tried first, so
         // this cannot change what an existing document does.
         this.vm.defineScalarEquation(freeVar, this.compileAdHoc(normalizedTokens.slice(0, eqIdx)), this.compileAdHoc(rhsTokens));
-        return lineMessage(`${freeVar} stored as an equation — solve with "${freeVar} =>"`);
+        return { value: lineMessage(`${freeVar} stored as an equation — solve with "${freeVar} =>"`), assigned: null };
     }
 
     /**
@@ -3558,13 +3574,17 @@ export class ExpressionEngine {
         // visible line on every keystroke. `total =` is a line half-typed on
         // the way to `total = 5`, and it took the editor down.
         let symbolicResult: Value | null;
-        // A compound assignment (`total += 5`) reads and writes its own name,
-        // unlike the other symbolic shapes whose effect the DAG deliberately
-        // cannot track. It MUST surface those reads/writes: without a write
-        // registered, the incremental evaluator never checkpoints the line, so
-        // its own value is never reset before a re-run and the running total
-        // double-counts on every edit; and dependent lines never re-evaluate.
-        let compoundReadsWrites: { reads: string[]; writes: string[] } | null = null;
+        // An assignment through this channel, a compound one (`total += 5`) or
+        // a bare one (`payment = deposit * 40`), reads and writes names like
+        // `:name = ...` does, unlike the other symbolic shapes (a stored
+        // equation, a `=>` simplification), which set no variable. It MUST
+        // surface those reads/writes: without a write registered, the
+        // incremental evaluator never checkpoints the line, so its own value is
+        // never reset before a re-run (a running total double-counts on every
+        // edit), a name defined twice holds the later value at the earlier
+        // line, and a line whose definition was edited away goes on reading
+        // it. Without the reads, the line is not known to depend on anything.
+        let assignmentReadsWrites: { reads: string[]; writes: string[] } | null = null;
         try {
             // A user-unit definition (`1 sprint = 2 weeks`) is an effectful line
             // like the symbolic shapes below, so it rides the same non-bytecode
@@ -3576,11 +3596,19 @@ export class ExpressionEngine {
                 const compound = this.tryCompoundAssignment(normalizedTokens, lineNumber);
                 if (compound !== null) {
                     symbolicResult = compound;
-                    compoundReadsWrites = extractReadsAndWrites(normalizedTokens);
+                    assignmentReadsWrites = extractReadsAndWrites(normalizedTokens);
                 }
             }
             if (symbolicResult === null) {
-                symbolicResult = this.trySymbolicGrammar(normalizedTokens, lineNumber);
+                const symbolic = this.trySymbolicGrammar(normalizedTokens, lineNumber);
+                if (symbolic !== null) {
+                    symbolicResult = symbolic.value;
+                    // The one name the line set, not every name followed by
+                    // an `=`: the right-hand side is simplified, never assigned.
+                    if (symbolic.assigned !== null) {
+                        assignmentReadsWrites = { reads: extractReadsAndWrites(normalizedTokens).reads, writes: [symbolic.assigned] };
+                    }
+                }
             }
         } catch (e) {
             // reads/writes supplied for the same reason the main parse's catch
@@ -3591,7 +3619,7 @@ export class ExpressionEngine {
             return { kind: 'error', stage: 'parse', error: normalizeUnknownError(e), reads, writes, normalizedTokens };
         }
         if (symbolicResult !== null) {
-            return { kind: 'symbolic-solve', normalizedTokens, value: symbolicResult, reads: compoundReadsWrites?.reads, writes: compoundReadsWrites?.writes };
+            return { kind: 'symbolic-solve', normalizedTokens, value: symbolicResult, reads: assignmentReadsWrites?.reads, writes: assignmentReadsWrites?.writes };
         }
         if (failed) {
             return { kind: 'error', stage: 'parse', error: failed.error, reads: failed.reads, writes: failed.writes, normalizedTokens };
@@ -3773,13 +3801,12 @@ export class ExpressionEngine {
         }
         if (prep.kind === 'symbolic-solve') {
             // Most symbolic shapes carry no DAG registration: a stored
-            // equation/bare-assignment's effect (vm.equations, vm.setVar) isn't
-            // reads/writes-trackable the same way ordinary bytecode is, so the
-            // line won't auto-re-evaluate if some unrelated line later changes
-            // one of its factor variables. A disclosed limitation of that
-            // narrow grammar (see trySymbolicGrammar()'s own doc comment). The
-            // exception is a compound assignment, which surfaces real
-            // reads/writes (see prepareExpression) so its running total is
+            // equation's effect (vm.equations) isn't reads/writes-trackable the
+            // same way ordinary bytecode is, so the line won't auto-re-evaluate
+            // if some unrelated line later changes one of its factor variables.
+            // A disclosed limitation of that narrow grammar. The exception is an
+            // assignment, compound (`total += 5`) or bare (`x = y * 2`), which
+            // surfaces real reads/writes (see prepareExpression) so its value is
             // checkpointed and its dependents re-evaluate.
             this.storeLineResult(lineNumber, prep.value, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, prep.reads ?? [], prep.writes ?? [], expression);
             return prep.value;
@@ -5244,9 +5271,10 @@ export class ExpressionEngine {
 			// same "nothing to compile" shape as the 'empty' case above.
 			// External tooling asking for the compiled program of a `=>`
 			// line gets an empty one; a disclosed limitation of this
-			// narrow grammar, not an oversight. A compound assignment is the
-			// exception: it carries real reads/writes so the incremental
-			// evaluator checkpoints its running total and re-runs dependents.
+			// narrow grammar, not an oversight. An assignment, compound
+			// (`total += 5`) or bare (`x = y * 2`), is the exception: it carries
+			// real reads/writes so the incremental evaluator checkpoints its
+			// value and re-runs dependents.
 			return {
 				program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
 				tokens: prep.normalizedTokens,

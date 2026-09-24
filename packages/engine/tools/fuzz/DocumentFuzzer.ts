@@ -92,6 +92,11 @@ const SHAPES: readonly LineShape[] = [
 	(rng) => `v${rng.int(NAME_COUNT)} + ${rng.range(1, 9)}`,
 	(rng) => `v${rng.int(NAME_COUNT)} * v${rng.int(NAME_COUNT)}`,
 	(rng) => `v${rng.int(NAME_COUNT)}`,
+	// The same definitions without the colon. A bare assignment is carried out
+	// while it compiles and leaves no program behind, so it is the shape a clean
+	// line keeps a stale answer in when nothing re-runs it (#555).
+	(rng) => `v${rng.int(NAME_COUNT)} = ${rng.range(1, 50)}`,
+	(rng) => `v${rng.int(NAME_COUNT)} = v${rng.int(NAME_COUNT)} + ${rng.range(1, 9)}`,
 
 	// A running total, whose value is a fold over the lines above it. Two of
 	// its steps read a position rather than a literal: a total that reads a

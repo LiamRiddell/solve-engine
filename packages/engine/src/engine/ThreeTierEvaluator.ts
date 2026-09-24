@@ -114,6 +114,24 @@ function readsItself(reads: readonly string[], name: string): boolean {
 }
 
 /**
+ * Whether a line defines a name through an expression that has no program to
+ * run it again.
+ *
+ * A bare assignment (`payment = deposit * 40`) and a running total
+ * (`total += 5`) are carried out by the engine while they are compiled, and
+ * leave an empty program behind. Tier 2 re-runs a clean line by executing its
+ * programs, so for such a line it ran nothing: the name kept whatever the VM
+ * last held, and the line kept its answer from before an edit above it, while
+ * `:colon = deposit * 40` beside it updated. A line like this goes back through
+ * the full pipeline instead, which is what a pass from scratch does with it.
+ */
+function definesWithoutProgram(state: LineState): boolean {
+	if (state.writes.length === 0) return false;
+	for (const program of state.bytecodes) if (program.opcodes.length === 0) return true;
+	return false;
+}
+
+/**
  * Orchestrates three-tier evaluation over a persistent DocumentModel.
  *
  * ── Tier assignment ─────────────────────────────────────────────────
@@ -1226,6 +1244,11 @@ export class ThreeTierEvaluator {
 		}
 
 		// Line is clean
+		if (inViewport && definesWithoutProgram(state)) {
+			// ── Tier 1 again: a definition with no program to re-run ──
+			// Tier 2 would run nothing for it; see definesWithoutProgram.
+			return this.evaluateTier1(state, lineNumber, expressions, inlineSolveCount, baseResult);
+		}
 		if (inViewport && state.bytecodes.length > 0) {
 			// ── Tier 2: Visible + Cached → Execute from bytecode ────
 			return this.evaluateTier2(state, lineNumber, baseResult);
@@ -1796,6 +1819,19 @@ export class ThreeTierEvaluator {
 						if (!definedEarlierOnThisLine.has(w)) this.engine.restoreToPrefix(w, lineNumber);
 					}
 				}
+			} else if (writes.length > 0) {
+				// An assignment with no program (`x = y * 2`, `total += 5`) is
+				// carried out while it compiles, so it has already run, just now,
+				// and its answer is the value it stored. Counted as run, the line
+				// is clean like any definition executed here. Left dirty, it was
+				// compiled again on every pass and, as a dirty definition above
+				// the viewport, sent every scroll back to a pass from line 1.
+				const stored = this.engine.getVM().getVar(writes[0]);
+				if (stored !== undefined) {
+					lastResult = isArenaActive() ? persistentValue(stored) : stored;
+					if (lastResult.type === ValueType.Pending) anyPending = true;
+					for (const w of writes) definedEarlierOnThisLine.add(w);
+				}
 			}
 		}
 
@@ -1957,7 +1993,8 @@ export class ThreeTierEvaluator {
 	/**
 	 * Extract all evaluable expressions from a LineState.
 	 *
-	 * For full-line expressions: returns `{ expressions: [trimmedText], inlineSolveCount: 0 }`.
+	 * For full-line expressions: returns `{ expressions: [trimmedText], inlineSolveCount: 0 }`,
+	 * the text taken from past any markdown list marker.
 	 * For inline solve lines: returns `{ expressions: [...allSolves], inlineSolveCount: N }`.
 	 * For pre-extracted (cached) expressions: returns the cached array.
 	 *
@@ -1983,7 +2020,16 @@ export class ThreeTierEvaluator {
 			};
 		}
 
-		// Full-line expression
-		return { expressions: [trimmed], inlineSolveCount: 0 };
+		// Full-line expression, read from past any list marker, as the batch
+		// pass reads it. `- 100 * 2` is a bullet holding `100 * 2`, but `-` is
+		// also a prefix operator, so the whole line answered -200 here and 200
+		// through parseDocument, and `1. 3 * 3`, `* 5 + 5` and `- [ ] 4 + 4`
+		// did not evaluate at all. The classification is the lexer's own, the
+		// one the batch pass slices by, so the two cannot disagree about what
+		// counts as a marker.
+		const contentOffset = sharedLexer.classifyLine(state.text).contentOffset;
+		if (contentOffset === undefined) return { expressions: [trimmed], inlineSolveCount: 0 };
+		const content = state.text.slice(contentOffset).trim();
+		return { expressions: content.length > 0 ? [content] : [], inlineSolveCount: 0 };
 	}
 }

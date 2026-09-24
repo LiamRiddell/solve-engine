@@ -18,11 +18,19 @@
 import { describe, expect, test } from "@jest/globals";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { evaluateDocument } from "@solve-js/engine/evaluateDocument";
 
 /** The first line's result, through the markdown document path. */
 function evaluateMarkdown(line: string): unknown {
 	const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 	const [parsed] = engine.parseDocument(line, { inputType: "markdown" }).lines;
+	return parsed.result?.value ?? parsed.error;
+}
+
+/** The first line's result, through the incremental document path. */
+function evaluateIncrementally(line: string): unknown {
+	const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
+	const [parsed] = evaluateDocument(engine, line).lines;
 	return parsed.result?.value ?? parsed.error;
 }
 
@@ -56,6 +64,26 @@ describe("a list marker is not an operator", () => {
 
 	test("a ticked task item too", () => {
 		expect(evaluateMarkdown("- [x] 100 + 20")).toBe(120);
+	});
+});
+
+describe("the incremental pass sets the marker aside too (#560)", () => {
+	// It read the whole line, so `- 100 + 20` was -80 there and 120 through
+	// parseDocument, and the other markers did not evaluate at all.
+	test.each([
+		["- 100 + 20", 120],
+		["* 100 + 20", 120],
+		["+ 100 + 20", 120],
+		["1. 100 + 20", 120],
+		["123. 100 + 20", 120],
+		["  - 100 + 20", 120],
+		["\t- 100 + 20", 120],
+		["- [ ] 100 + 20", 120],
+		["- [x] 100 + 20", 120],
+		["-100 + 20", -80],
+	])("%j evaluates to %i", (line, expected) => {
+		expect(evaluateIncrementally(line)).toBe(expected);
+		expect(evaluateIncrementally(line)).toBe(evaluateMarkdown(line));
 	});
 });
 
