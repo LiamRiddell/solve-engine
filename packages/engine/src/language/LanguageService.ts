@@ -4,6 +4,16 @@ import { getTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import type { Token } from "@solve-js/lexer/Token";
 import { knownUnits } from "@solve-js/lexer/units";
 import { getMeasure } from "@solve-js/uom/UomConverter";
+import {
+	DocumentReferences,
+	type DocumentPosition,
+	type LineResults,
+	type LineShift,
+	type LineShiftResult,
+	type RenameResult,
+	type VariableHover,
+	type VariableReference,
+} from "@solve-js/language/DocumentReferences";
 
 /** A single classified span within a line, the entire output contract of the language service. */
 export interface SemanticToken {
@@ -215,6 +225,10 @@ export class LanguageService {
 	// conversion tables took it past a thousand, and the warm completion
 	// benchmarks regressed roughly 2.9x until this was added.
 	private staticCompletionIndex: Map<string, IndexedCompletionCandidate[]> | null = null;
+
+	// Built on the first reference query, so a host that only highlights and
+	// completes never constructs it.
+	private documentReferences: DocumentReferences | null = null;
 
 	constructor(engine?: ExpressionEngine | null, options?: LanguageServiceOptions) {
 		this.engine = engine ?? null;
@@ -508,6 +522,94 @@ export class LanguageService {
 
 		this.staticCompletionIndex = index;
 		return index;
+	}
+
+	// ── Reference-aware editing ─────────────────────────────────────────────
+	// Whole-document queries. Each takes the document's full text, reads it the
+	// way the engine's batch pass does (a line is code only when it parses), and
+	// returns positions or edits without evaluating anything. See
+	// DocumentReferences.ts for the reading and its boundary.
+
+	/**
+	 * Every place the variable at `position` is named, its definitions and its
+	 * reads, in document order. A word in prose is never included, since only
+	 * a line that parses holds variables. Empty when `position` is not on one.
+	 *
+	 * @param text - The whole document.
+	 * @param position - A one-based line and a zero-based character on it.
+	 */
+	findReferences(text: string, position: DocumentPosition): VariableReference[] {
+		return this.references()?.findReferences(text, position) ?? [];
+	}
+
+	/**
+	 * Go to definition: the definition the variable at `position` reads, which
+	 * is the last one above it (or the occurrence itself, where it defines the
+	 * name). Null when `position` is not on a variable or nothing above defines
+	 * it, which is when the engine reports the name as undefined.
+	 *
+	 * @param text - The whole document.
+	 * @param position - A one-based line and a zero-based character on it.
+	 */
+	getDefinition(text: string, position: DocumentPosition): VariableReference | null {
+		return this.references()?.getDefinition(text, position) ?? null;
+	}
+
+	/**
+	 * What to show when the pointer rests on a variable: the occurrence, the
+	 * definition it reads with that line's text, and the value, read from the
+	 * results the host already has. Nothing is evaluated here. Null when
+	 * `position` is not on a variable.
+	 *
+	 * @param text - The whole document.
+	 * @param position - A one-based line and a zero-based character on it.
+	 * @param results - The document's results (`parseDocument`'s return value,
+	 *   or a function from a line number to its value), for the hover's value.
+	 */
+	getHover(text: string, position: DocumentPosition, results?: LineResults): VariableHover | null {
+		return this.references()?.getHover(text, position, results) ?? null;
+	}
+
+	/**
+	 * Rename the variable at `position`, editing only the places it is named.
+	 * Returns the edits, or a named refusal: not a variable, a global, a
+	 * `newName` that is a keyword, a unit or not a name, a `newName` the
+	 * document already uses, or a rename that would change how a line reads.
+	 *
+	 * @param text - The whole document.
+	 * @param position - A one-based line and a zero-based character on it.
+	 * @param newName - The name to give the variable, without a `:` sigil.
+	 */
+	rename(text: string, position: DocumentPosition, newName: string): RenameResult {
+		const references = this.references();
+		if (references === null) {
+			return { ok: false, code: "RENAME_NO_ENGINE", message: "No engine is attached to this language service, so no line can be read as code." };
+		}
+		return references.rename(text, position, newName);
+	}
+
+	/**
+	 * The edits that keep absolute `line N` references on the lines they meant
+	 * after lines are inserted or deleted, as a spreadsheet keeps a reference
+	 * on its row. A reference into a deleted line becomes `line deleted`, which
+	 * answers with a named error, and is listed in the result.
+	 *
+	 * @param text - The whole document, after the change.
+	 * @param change - Which lines were inserted or deleted.
+	 */
+	shiftLineReferences(text: string, change: LineShift): LineShiftResult {
+		const references = this.references();
+		if (references === null) {
+			return { ok: false, code: "LINE_SHIFT_NO_ENGINE", message: "No engine is attached to this language service, so no line can be read as code." };
+		}
+		return references.shiftLineReferences(text, change);
+	}
+
+	/** The reference machinery for this service's engine, built on first use; null without an engine. */
+	private references(): DocumentReferences | null {
+		if (this.engine === null) return null;
+		if (this.documentReferences === null) this.documentReferences = new DocumentReferences(this.engine);
+		return this.documentReferences;
 	}
 
 	private isKnownVariable(name: string): boolean {

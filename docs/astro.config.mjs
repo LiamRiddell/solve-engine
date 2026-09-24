@@ -464,6 +464,9 @@ export default defineConfig({
                 { slug: "guide/formatting" },
                 { slug: "guide/dates-on-temporal" },
                 { slug: "guide/editor-integration" },
+                // Straight after the editor page it builds on: the whole-document
+                // half of the same language service.
+                { slug: "guide/reference-aware-editing" },
                 // After formatting, because choosing a zone is a decision about
                 // what a date MEANS in this host, and the page is read once the
                 // dates are already on screen and reading wrongly.

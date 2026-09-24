@@ -86,7 +86,7 @@ import { abortLogger } from "@solve-js/utilities/AbortControllerLogger";
 import { TokenNormalizer, BUILTIN_PHRASES, implicitMultiplyRule } from "@solve-js/normalizer";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import type { TokenFusion } from "@solve-js/normalizer";
-import { UserUnitTable } from "@solve-js/packages/uom/UserUnitTable";
+import { UserUnitTable, type DocumentUnit } from "@solve-js/packages/uom/UserUnitTable";
 import { userUnitExpansionRule } from "@solve-js/packages/uom/normalizer/UserUnitNormalizerRule";
 import { callFusionRule } from "@solve-js/normalizer/CallFusionRule";
 import { dateLiteralNormalizerRule } from "@solve-js/packages/datetime/normalizer/DateLiteralNormalizerRule";
@@ -302,6 +302,85 @@ type EffectMode = "apply" | "check";
 const CHECKED_NOT_RUN: Value = new Value(ValueType.String, "checked, not run");
 
 /**
+ * The parts of a `1 <name> = <n> <unit>` user-unit definition, or null when the
+ * tokens are not one.
+ *
+ * The shape alone, with no effect: {@link ExpressionEngine}'s own definition
+ * handler registers the unit from it, and {@link ExpressionEngine.readExpressionTokens}
+ * uses it to know that the words on such a line name a unit rather than a
+ * variable. Sharing the one matcher is what keeps the two from disagreeing
+ * about which lines define a unit.
+ *
+ * @param tokens - One expression's normalised tokens.
+ * @returns The name's words and the ratio and base tokens, or null.
+ */
+function userUnitDefinitionShape(
+	tokens: readonly Token[],
+): { nameWords: string[]; ratioToken: Token; baseToken: Token } | null {
+	// Shortest definition is NUMBER IDENT EQUALS NUMBER UNIT.
+	if (tokens.length < 5) return null;
+	if (tokens[0].type !== 'NUMBER' || Number(tokens[0].value) !== 1) return null;
+
+	let i = 1;
+	// The implicit-multiply STAR between the coefficient and the name.
+	if (tokens[i].type === 'STAR') i++;
+
+	const nameWords: string[] = [];
+	while (i < tokens.length && tokens[i].type === 'IDENT') {
+		nameWords.push(tokens[i].value);
+		i++;
+	}
+	if (nameWords.length === 0) return null;
+
+	if (tokens[i]?.type !== 'EQUALS') return null;
+	i++;
+	if (tokens[i]?.type !== 'NUMBER') return null;
+	const ratioToken = tokens[i];
+	i++;
+	if (tokens[i]?.type !== 'UNIT') return null;
+	const baseToken = tokens[i];
+	i++;
+	// A definition is the whole line: anything trailing means this is some
+	// other construct that merely starts the same way.
+	if (i !== tokens.length) return null;
+	return { nameWords, ratioToken, baseToken };
+}
+
+/**
+ * Whether `tokens[0..end)` is a name or a product of names (`x`, `a * n`), the
+ * left-hand side the engine's equation grammar claims before its parser runs.
+ */
+function isNameProduct(tokens: readonly Token[], end: number): boolean {
+	for (let i = 0; i < end; i++) {
+		const type = tokens[i].type;
+		const ok = i % 2 === 0 ? type === 'IDENT' || type === 'UNIT' : type === 'STAR';
+		if (!ok) return false;
+	}
+	return end % 2 === 1;
+}
+
+/**
+ * The part of one expression the engine reads as code, as
+ * {@link ExpressionEngine.readExpressionTokens} returns it.
+ */
+export interface ExpressionTokens {
+	/** The expression's normalised tokens, with offsets into the text that was read. */
+	readonly tokens: readonly Token[];
+	/**
+	 * The index of the first token the parser reads. Nonzero only when the
+	 * line opens with a label the parser set aside ("rent: 1200" starts at the
+	 * token after the colon), since a label is prose, not code.
+	 */
+	readonly start: number;
+	/**
+	 * The unit the expression defines when it is a user-unit definition
+	 * (`1 sprint = 2 weeks`), whose words name a unit rather than a variable;
+	 * null otherwise.
+	 */
+	readonly unit: DocumentUnit | null;
+}
+
+/**
  * Core expression evaluation engine, the top-level orchestrator.
  *
  * Owns the full evaluation pipeline: lexing, parsing, bytecode compilation,
@@ -398,6 +477,14 @@ export class ExpressionEngine {
     private lexer: Lexer;
     private registry: ParseletRegistry;
     private parser: PrecedenceParser;
+    /**
+     * How many leading tokens the last top-level {@link parseExpression} call
+     * set aside as a label ("pi approximation: 355/113"), 0 when it read them
+     * all. Written by that method and read only by
+     * {@link readExpressionTokens}, straight after a parse it made itself, so
+     * a stale value from some other parse is never observed.
+     */
+    private parsedLabelEnd = 0;
     private localeCode: string;
     private vm: VM;
     /**
@@ -3282,6 +3369,9 @@ export class ExpressionEngine {
      * call for the measurement.
      */
     private parseExpression(builder: BytecodeBuilder, tokens: Token[], hasParens?: boolean, allowLabelFallback = true): void {
+        // Only the top-level call resets it: the label retries below pass
+        // `false`, and the one that succeeds records where the label ended.
+        if (allowLabelFallback) this.parsedLabelEnd = 0;
         this.parser.setBuilder(builder);
         // When autoBalanceParens is disabled, skip the O(n) paren-count scan
         // by always passing false, the parser will fail naturally on unmatched
@@ -3404,6 +3494,7 @@ export class ExpressionEngine {
                     // levels reached are exactly the ones this loop visits
                     // itself, in the same rightmost-first order.
                     this.parseExpression(builder, tokens.slice(i + 1), hasParens, false);
+                    this.parsedLabelEnd = i + 1;
                     return;
                 } catch {
                     // This colon's fragment didn't parse cleanly either
@@ -3629,32 +3720,9 @@ export class ExpressionEngine {
      * registers nothing.
      */
     private tryDefineUserUnit(tokens: Token[], definedByLineId: number, effects: EffectMode = "apply"): Value | null {
-        // Shortest definition is NUMBER IDENT EQUALS NUMBER UNIT.
-        if (tokens.length < 5) return null;
-        if (tokens[0].type !== 'NUMBER' || Number(tokens[0].value) !== 1) return null;
-
-        let i = 1;
-        // The implicit-multiply STAR between the coefficient and the name.
-        if (tokens[i].type === 'STAR') i++;
-
-        const nameWords: string[] = [];
-        while (i < tokens.length && tokens[i].type === 'IDENT') {
-            nameWords.push(tokens[i].value);
-            i++;
-        }
-        if (nameWords.length === 0) return null;
-
-        if (tokens[i]?.type !== 'EQUALS') return null;
-        i++;
-        if (tokens[i]?.type !== 'NUMBER') return null;
-        const ratioToken = tokens[i];
-        i++;
-        if (tokens[i]?.type !== 'UNIT') return null;
-        const baseToken = tokens[i];
-        i++;
-        // A definition is the whole line: anything trailing means this is some
-        // other construct that merely starts the same way.
-        if (i !== tokens.length) return null;
+        const shape = userUnitDefinitionShape(tokens);
+        if (shape === null) return null;
+        const { nameWords, ratioToken, baseToken } = shape;
         if (effects === "check") return CHECKED_NOT_RUN;
         // Inside a scratch run the line answers and registers nothing. A new
         // definition recompiles every line of the document (below), which no
@@ -6202,6 +6270,136 @@ export class ExpressionEngine {
 		const { tokens, hasParens } = this.lexToTokens(expression);
 		const prep = this.prepareExpression(expression, tokens, hasParens, undefined, -1, "check");
 		return prep.kind !== 'error';
+	}
+
+	/**
+	 * The tokens of one expression that the engine reads as code, at the
+	 * offsets they were written.
+	 *
+	 * For a host tool that points at words in the source: which `tax` on a line
+	 * is a variable, which `line 3` is a reference. Prose lexes into perfectly
+	 * good tokens as well (`tax is due in April` is four identifiers and a
+	 * keyword), so lexing cannot answer that. What decides it is whether the
+	 * line parses, and this settles that the way evaluation does: the same
+	 * lexer, normaliser and parser, the same label fallback, and the same
+	 * length and complexity limits.
+	 *
+	 * Unlike {@link tryCompileExpression}, it has no side effects. The
+	 * statements the engine runs while compiling rather than compiling to a
+	 * program (a running total `total += 5`, a bare `tax = 20%`, an equation, a
+	 * unit definition, a trailing `=>`) are recognised here by their shape,
+	 * each side parsed on its own, and never run. Asking about a document
+	 * therefore never moves a running total or defines a unit in the engine a
+	 * host is also evaluating with. The one place the two can differ is a line
+	 * whose label is followed by a definition (`rent: :rent = 1200`), which the
+	 * engine's equation grammar claims before its parser sees it; here the
+	 * parser's reading, past the label, is the one reported.
+	 *
+	 * @param expression - One expression as a document pass evaluates it: a
+	 *   line's text past any list marker, or the inside of an inline solve.
+	 * @param units - Units the note defines above this expression, read as
+	 *   defined for this call only, so `3 sprints` below `1 sprint = 2 weeks`
+	 *   is a quantity even on an engine that has never evaluated the note. A
+	 *   unit the engine already holds is left as it is.
+	 * @returns The normalised tokens and the first one the parser reads, or
+	 *   null when the text is not an expression: prose, a half-typed line, or a
+	 *   line over the length or complexity limit.
+	 */
+	readExpressionTokens(expression: string, units: readonly DocumentUnit[] = []): ExpressionTokens | null {
+		if (expression.length > this.config.validation.maxExpressionLength) return null;
+		let tokens: Token[];
+		try {
+			// Lexed afresh even when the expression is compiled and cached: the
+			// cached tokens are not guaranteed to be the ones a fresh read of this
+			// text produces once a user unit has been defined or dropped since.
+			const raw = this.lexToTokens(expression, undefined, false).tokens;
+			if (raw.length === 0) return null;
+			// The note's own units are in place for the normaliser, which is the
+			// one stage that reads them, and gone again before this returns.
+			tokens = this.userUnits.withUnits(units, () => this.normalizer.normalize(raw));
+		} catch {
+			// An unterminated string, or a rule that cannot read a half-typed
+			// line: either way, not an expression.
+			return null;
+		}
+		if (tokens.length === 0) return null;
+		if (!checkExpressionComplexity(tokens, this.config.validation).passed) return null;
+
+		let hasParens = false;
+		for (const t of tokens) {
+			if (t.type === 'LPAREN' || t.type === 'RPAREN') {
+				hasParens = true;
+				break;
+			}
+		}
+
+		// A unit definition is claimed before anything else, as it is when the
+		// engine compiles, and its name may be several words (`1 story point =
+		// 4 hours`), which neither side would parse as on its own.
+		const unit = userUnitDefinitionShape(tokens);
+		if (unit !== null) {
+			return {
+				tokens,
+				start: 0,
+				unit: { nameWords: unit.nameWords, ratioText: unit.ratioToken.value, baseUnit: unit.baseToken.value },
+			};
+		}
+
+		// `total =` is an assignment still being typed. The parser alone would
+		// read it, tolerating the trailing `=` the way it does for `355/113=`,
+		// but the equation grammar claims a name (or a product of names) before
+		// `=` first, and an empty right-hand side is an error there.
+		const last = tokens.length - 1;
+		if (tokens[last].type === 'EQUALS' && last > 0 && isNameProduct(tokens, last)) return null;
+
+		if (this.parsesWhole(tokens, hasParens)) return { tokens, start: this.parsedLabelEnd, unit: null };
+		if (this.readsAsStatement(tokens, hasParens)) return { tokens, start: 0, unit: null };
+		return null;
+	}
+
+	/**
+	 * Whether the parser reads every one of `tokens` (a label aside), without
+	 * running anything. Compiles into a throwaway builder, the same way
+	 * {@link compileAdHoc} does, so the pooled builders and the bytecode cache
+	 * are untouched.
+	 */
+	private parsesWhole(tokens: Token[], hasParens: boolean): boolean {
+		try {
+			this.parseExpression(new BytecodeBuilder(this.pluginFunctionIndexByName), tokens, hasParens);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	/**
+	 * Whether `tokens` have the shape of a statement the engine runs while
+	 * compiling (see {@link prepareExpression}'s symbolic branch), with every
+	 * side parsing on its own. The shape is checked, never run: see
+	 * {@link readExpressionTokens} for why.
+	 */
+	private readsAsStatement(tokens: Token[], hasParens: boolean): boolean {
+		const last = tokens.length - 1;
+		// `x =>`, `x^2 - 4 =>`: solve or simplify what precedes the arrow.
+		if (tokens[last].type === 'THEREFORE') {
+			if (last === 0) return false;
+			const before = tokens.slice(0, last);
+			if (before.length === 1 && (before[0].type === 'IDENT' || before[0].type === 'UNIT')) return true;
+			return this.parsesWhole(before, hasParens);
+		}
+		const first = tokens[0].type;
+		// `total += 5`, `spent -= 10`: a running total.
+		if ((first === 'IDENT' || first === 'UNIT') && (tokens[1]?.type === 'PLUS_EQUALS' || tokens[1]?.type === 'MINUS_EQUALS')) {
+			return tokens.length > 2 && this.parsesWhole(tokens.slice(2), hasParens);
+		}
+		// The colon and global definitions, and goal seek, own their `=` and
+		// are read by the parser; nothing else here applies to them.
+		if (first === 'COLON' || first === 'GLOBAL' || first === 'GOAL_SEEK') return false;
+		// `tax = 20%`, `x^2 - 4 = 0`: a bare assignment or an equation. A unit
+		// definition was recognised before this was reached.
+		const eq = tokens.findIndex((t) => t.type === 'EQUALS');
+		if (eq <= 0 || eq === last) return false;
+		return this.parsesWhole(tokens.slice(0, eq), hasParens) && this.parsesWhole(tokens.slice(eq + 1), hasParens);
 	}
 
 	/**

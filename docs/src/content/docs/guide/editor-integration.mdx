@@ -43,6 +43,15 @@ and a task box (`- [ ] total += 5`). A bullet's `-` is markup, not a minus sign,
 which is also why the engine evaluates `- 100 + 20` as 120. Written with no
 space after it, `-100 + 20` is arithmetic, and its minus is coloured as one.
 
+## References, rename and moving lines
+
+The same service reads a whole document for the features that follow a name
+across lines: find every reference to a variable, go to its definition, show its
+value on hover, rename it without touching prose that shares the word, and keep
+`line N` references on their lines when lines are inserted or deleted. Each
+returns positions or text edits for the editor to apply. See
+[reference-aware editing](/guide/reference-aware-editing/).
+
 ## Checking a line parses
 
 For deciding whether to decorate a line at all, there is a non-throwing check

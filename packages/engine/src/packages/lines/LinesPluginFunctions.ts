@@ -76,6 +76,30 @@ export function prevHandler(_args: Value[], context?: LineExecutionContext): Val
   return err ?? v!;
 }
 
+/**
+ * The line number `line deleted` compiles to, wherever a line reference can
+ * stand: on its own, as either end of a range, or as goal seek's target.
+ *
+ * It rides the existing `lineRef` call rather than a plugin function of its
+ * own, deliberately. A new plugin function takes a new index, and every
+ * package registered after this one would move up by one, which changes their
+ * compiled bytecode and with it every seeded random draw keyed on it. No line
+ * can be written as `line -1` (the minus is an operator, not part of the
+ * reference), so the number is free to mean "deleted".
+ */
+export const DELETED_LINE_NUMBER = -1;
+
+/**
+ * The answer for `line deleted`: the same named error in every context, a
+ * document or not, since there is no line to read either way. See
+ * `DELETED_LINE_REF` in `normalizer/LineRefNormalizerRule.ts` for why a
+ * deleted reference is written this way rather than left pointing at whichever
+ * line took its place.
+ */
+function deletedLineError(): Value {
+  return errorValue("LINE_REFERENCE_DELETED", "This reference pointed at a line that has been deleted");
+}
+
 /** `line<N>` / `line N`, an arbitrary line's cached result by 1-based number. */
 /**
  * An arbitrary line's cached result, by one-based line number.
@@ -86,11 +110,14 @@ export function prevHandler(_args: Value[], context?: LineExecutionContext): Val
  * rather than guessing, since line references are meaningless outside a
  * document.
  * @returns The computed Value, or an error Value when the context is
- * missing or a referenced line has no numeric result.
+ * missing or a referenced line has no numeric result. `line deleted`
+ * ({@link DELETED_LINE_NUMBER}) answers with its named error first, with or
+ * without a document.
  */
 export function lineRefHandler(args: Value[], context?: LineExecutionContext): Value {
   // `inputs of line N` shares this function's plugin slot; see TRACE_INPUTS.
   if (args.length === 2 && args[1].toNumber() === TRACE_INPUTS) return inputsOfHandler(args, context);
+  if (args[0].toNumber() === DELETED_LINE_NUMBER) return deletedLineError();
   const ctxError = requireContext(context);
   if (ctxError) return ctxError;
   const targetLine = args[0].toNumber();

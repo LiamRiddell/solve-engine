@@ -38,6 +38,11 @@ import {
  *   implemented in this pass, `l` is too common a variable name; ship
  *   `line<N>` first, add a narrower `l<N>` form later if real usage wants
  *   it.
+ * - `line deleted`, normalizer-fused into the same `LINE_REF` token, is what
+ *   a reference becomes when its line is deleted and a host keeps references
+ *   in step (`LanguageService.shiftLineReferences`). It answers with the
+ *   named `LINE_REFERENCE_DELETED` error. Two identifiers side by side had no
+ *   reading before, so it takes nothing that already meant something.
  * - `sum(`/`total(`/`average(`, normalizer-fused ONLY when immediately
  *   followed by `LPAREN`, so `:sum = 100` and MathPhrases' existing
  *   `"total of X, Y"` phrase (no paren after "of") are both unaffected.

@@ -34,6 +34,8 @@ import { evaluateDocument } from "@solve-js/engine/evaluateDocument";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator, type EvalLineResult } from "@solve-js/engine/ThreeTierEvaluator";
 import { formatValue } from "@solve-js/format/FormatEngine";
+import { LanguageService } from "@solve-js/language/LanguageService";
+import { applyTextEdits, type LineShift } from "@solve-js/language/DocumentReferences";
 import { ValueType } from "@solve-js/vm/Value";
 import type { ParsingResult } from "@solve-js/types/ParsingResult";
 import { newTrackedEngine } from "@tools/trackedEngine";
@@ -313,6 +315,73 @@ describe("line references across entry points", () => {
     expectNeedsDocument("line 1");
     expectNeedsDocument("total above");
     expectNeedsDocument("sum(line 1 : line 3)");
+  });
+});
+
+describe("line references kept on their lines across an insertion or a deletion (#524)", () => {
+  // A host keeps `line N` on the line it meant by applying the edits the
+  // language service returns. The contract is that the answers survive it:
+  // every line that was there before answers the same afterwards, through both
+  // document passes, and the two passes still agree value for value.
+
+  /** The document after `change`, with the service's edits applied. */
+  function keptInStep(changed: string[], change: LineShift): string[] {
+    const service = new LanguageService(newTrackedEngine());
+    const result = service.shiftLineReferences(changed.join("\n"), change);
+    if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
+    return applyTextEdits(changed.join("\n"), result.edits).split("\n");
+  }
+
+  test("a line inserted at the top: `line 1 + line 2` becomes `line 2 + line 3`, same answer", () => {
+    const before = ["10", "20", "line 1 + line 2"];
+    const after = keptInStep(["", ...before], { kind: "insert", line: 1, count: 1 });
+    expect(after[3]).toBe("line 2 + line 3");
+    expect(batch(before)[2]).toBe("30");
+    expect(batch(after)[3]).toBe("30");
+    expect(incremental(after)[3]).toBe("30");
+  });
+
+  test("an insertion in the middle keeps every earlier answer, both passes", () => {
+    const before = ["10", "20", "line 1 + line 2", "sum(line 1 : line 2)", "line3 * 2", "average(line 4 : line 3)"];
+    const after = keptInStep(["10", "20", "a note inserted here", ...before.slice(2)], { kind: "insert", line: 3, count: 1 });
+    expect(after).toEqual(["10", "20", "a note inserted here", "line 1 + line 2", "sum(line 1 : line 2)", "line4 * 2", "average(line 5 : line 4)"]);
+    // Old line i is new line i + 1 from line 3 down.
+    const moved = (answers: string[]) => [...answers.slice(0, 2), ...answers.slice(3)];
+    expect(moved(batch(after))).toEqual(batch(before));
+    expect(moved(incremental(after))).toEqual(incremental(before));
+    expect(incremental(after)).toEqual(batch(after));
+  });
+
+  test("goal seek's target moves with its line, and still solves through the incremental pass", () => {
+    const before = [":x = 0", "x * 2 + 10", "solve line 2 for x = 30"];
+    const after = keptInStep(["# Working", ...before], { kind: "insert", line: 1, count: 1 });
+    expect(after[3]).toBe("solve line 3 for x = 30");
+    expect(incremental(before)[2]).toBe("10");
+    expect(incremental(after)[3]).toBe("10");
+    // The batch pass refuses goal seek before and after alike.
+    expect(batch(after)[3]).toBe(batch(before)[2]);
+  });
+
+  test("a deletion: what moved is renumbered, a range shrinks, a reference into the gone line is a named error", () => {
+    const before = ["10", "20", "30", "line 3 - line 1", "sum(line 1 : line 3)", "line 2 * 2"];
+    const after = keptInStep(["10", "30", "line 3 - line 1", "sum(line 1 : line 3)", "line 2 * 2"], { kind: "delete", line: 2, count: 1 });
+    expect(after).toEqual(["10", "30", "line 2 - line 1", "sum(line 1 : line 2)", "line deleted * 2"]);
+    expect(batch(before)[3]).toBe("20");
+    const deleted = "ERROR: This reference pointed at a line that has been deleted";
+    expect(batch(after).slice(2)).toEqual(["20", "40", deleted]);
+    expect(incremental(after)).toEqual(batch(after));
+  });
+
+  test("`line deleted` is the same named error through every entry point", () => {
+    const doc = ["10", "line deleted + 5", "sum(line deleted : line deleted)", "solve line deleted for x = 3"];
+    const deleted = "ERROR: This reference pointed at a line that has been deleted";
+    expect(batch(doc).slice(1)).toEqual([deleted, deleted, deleted]);
+    expect(incremental(doc)).toEqual(batch(doc));
+    // No document to read either way: a structured error, never a throw or a number.
+    const { threw, type, message } = single("line deleted + 5");
+    expect(threw).toBe(false);
+    expect(type).toBe(ValueType.Error);
+    expect(message).toBe("This reference pointed at a line that has been deleted");
   });
 });
 

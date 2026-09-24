@@ -17,6 +17,7 @@ updates when that line changes.
 | `average(line 1 : line 4)` | the mean of a span |
 | `total above` | the total of every line above |
 | `average above` | the same, averaged |
+| `line deleted` | a reference whose line was deleted; answers with an error |
 
 `prev` reads the line immediately above, and `line N` reads any earlier line by
 its number:
@@ -93,6 +94,28 @@ sum(line 1 : line 3)   // 40
 These forms only work inside a document, since they refer to other lines. They
 return an error through the single-expression entry point, which has no document
 to refer to.
+
+## When lines are inserted or deleted
+
+`line 3` is an absolute number: it means the third line, whatever is on it. Type
+a new line at the top of the note and everything moves down one, so the line
+that `line 3` meant is now line 4. An editor built on the engine can keep
+references on their lines as the note changes, the way a spreadsheet keeps a
+cell reference on its row when a row is inserted above it, by asking the
+engine's language service which numbers to update (see
+[reference-aware editing](/guide/reference-aware-editing/)).
+
+A reference to a line that has been deleted has no right number to become, so it
+is rewritten as `line deleted`. That answers with an error which says so, rather
+than quietly reading whichever line moved up into the gap:
+
+```solve-doc
+10
+line deleted + 5   // ERROR: This reference pointed at a line that has been deleted
+```
+
+`prev`, `total above` and `average above` are relative, so they are never
+rewritten: they read whatever is above them now.
 
 ## Two lines that read each other
 

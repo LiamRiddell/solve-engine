@@ -4,6 +4,21 @@ export {
 	type LanguageServiceOptions,
 	type CompletionItem,
 } from "./LanguageService";
+export {
+	DocumentReferences,
+	applyTextEdits,
+	type DocumentPosition,
+	type LineSpan,
+	type VariableReference,
+	type TextEdit,
+	type VariableHover,
+	type LineResults,
+	type RenameRefusalCode,
+	type RenameResult,
+	type LineShift,
+	type DeletedLineReference,
+	type LineShiftResult,
+} from "./DocumentReferences";
 export type { TokenCategory } from "./TokenCategory";
 export {
 	getTokenCategory,

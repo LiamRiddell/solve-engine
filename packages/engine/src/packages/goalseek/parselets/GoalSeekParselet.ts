@@ -73,6 +73,21 @@ export class GoalSeekParselet implements PrefixParselet {
 
 		parser.consume("EQUALS");
 
+		// `solve line deleted for x = 900`: the line to solve against has been
+		// deleted, so there is nothing to seek. The target is still read, so the
+		// line parses whole, but into a builder that is thrown away, and the line
+		// answers with the lines package's named error instead, through its
+		// `lineRef` call with the deleted sentinel. The spelling and the number
+		// mirror `DELETED_LINE_REF` and `DELETED_LINE_NUMBER` in packages/lines,
+		// the same way this package already names `LINE_REF`.
+		if (lineRef.value === "deleted") {
+			parser.parseExpression(BindingPower.Lowest, new BytecodeBuilder(builder.pluginIndexMap));
+			builder.emitOpcode(OpCode.PUSH_NUMBER);
+			builder.emitNumber(-1);
+			builder.emitPluginCall("lineRef", 1);
+			return;
+		}
+
 		// Push the two known arguments first, then let the target parse inline so
 		// the stack ends as [line, variable, target] for the CALL_PLUGIN below.
 		builder.emitOpcode(OpCode.PUSH_NUMBER);

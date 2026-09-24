@@ -25,6 +25,8 @@ function looksLikeLineRef(token: Token | undefined, next: Token | undefined): bo
   if (token.type === "IDENT") {
     if (/^line\d+$/i.test(token.value)) return true;
     if (/^line$/i.test(token.value) && next?.type === "NUMBER" && /^\d+$/.test(next.value)) return true;
+    // `line deleted`, the form a reference takes once its line is deleted.
+    if (/^line$/i.test(token.value) && next?.type === "IDENT" && next.value.toLowerCase() === "deleted") return true;
   }
   return false;
 }

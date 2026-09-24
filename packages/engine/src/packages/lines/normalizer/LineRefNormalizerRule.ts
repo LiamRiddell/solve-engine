@@ -8,6 +8,23 @@ const SUM_RANGE_CALL_TYPE_ID = tokenTypeId("SUM_RANGE_CALL");
 const AVERAGE_RANGE_CALL_TYPE_ID = tokenTypeId("AVERAGE_RANGE_CALL");
 
 /**
+ * The value a `LINE_REF` carries for `line deleted`, in place of a number.
+ *
+ * `line deleted` is what a reference becomes when the line it pointed at is
+ * deleted and a host keeps its references in step (see the language service's
+ * `shiftLineReferences`). Leaving the old number would silently read whatever
+ * line moved up into its place, and there is no right number to write instead,
+ * so the reference says what happened and answers with a named error.
+ *
+ * It fuses into the same `LINE_REF` token a numbered reference does, so every
+ * grammar that takes a line reference (a range's ends, goal seek's target)
+ * accepts it unchanged, and each parselet that would read the number checks for
+ * this value first. The goal seek parselet and the map-reduce `sum(` guard, in
+ * packages of their own, mirror the spelling rather than import it.
+ */
+export const DELETED_LINE_REF = "deleted";
+
+/**
  * Fuses `line1` (glued, `ExpressionLexer.tokenizeIdentifier()` already
  * consumes trailing digits into one IDENT token, so "line1" lexes as a
  * SINGLE token, not two) and `line 1` (spaced, two tokens, IDENT "line"
@@ -77,6 +94,16 @@ export function lineRefNormalizerRule(): NormalizerRule {
 					return {
 						consumed: 2,
 						replacement: [makeLineRefToken(next.value, token)],
+						ruleName: "lines:line-ref",
+					};
+				}
+				// `line deleted`: a reference whose line is gone. Two identifiers
+				// side by side had no reading before (`line deleted` was a parse
+				// error), so this takes nothing that already meant something.
+				if (next && next.type === "IDENT" && next.value.toLowerCase() === DELETED_LINE_REF) {
+					return {
+						consumed: 2,
+						replacement: [makeLineRefToken(DELETED_LINE_REF, token)],
 						ruleName: "lines:line-ref",
 					};
 				}
