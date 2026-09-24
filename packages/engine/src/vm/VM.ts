@@ -1870,14 +1870,527 @@ function toScientificString(n: number): string {
     return `${trimmed}e${exponent}`;
 }
 
+// ── Opcode bodies kept out of the dispatch loop ─────────────────────────────
+//
+// V8 will not optimise a function whose bytecode is longer than
+// `--max-optimized-bytecode-size` (61,440 bytes). executeBytecode is one very
+// large function, and compiled the way Jest compiles it (ES6) it had reached
+// 61,055 bytes, 385 short of that ceiling, so the next feature to add a few
+// lines to any opcode pushed the whole loop past it: every instruction, `1 + 2`
+// included, then ran unoptimised, which the benchmark suite reported as `vm`
+// three times slower. The bodies below are the rarely used opcodes, moved here
+// verbatim. Their operand reads (`ip++`) stay in the loop, in the same order,
+// so the instruction stream is consumed exactly as before; a body's `break` is
+// a `return` here. Measure the loop before growing it (run a spec in band under
+// `node --print-bytecode --print-bytecode-filter=executeBytecode`), and move a
+// body out rather than let it cross the ceiling again.
+
+/** `N working days after/before/from <date>` (DATE_WORKDAY_OFFSET), moved out of the dispatch loop. */
+function workdayOffset(stack: Value[], workdayDirection: number, vm: VM): void {
+    const anchorValue = safePop(stack), countValue = safePop(stack);
+    const offsetFault = faultedOperand(countValue, anchorValue);
+    if (offsetFault) { stack.push(offsetFault); return; }
+    if (anchorValue.type !== ValueType.Datetime) {
+      stack.push(errorValue(
+        CoreErrorCodes.WORKDAY_OFFSET_EXPECTED_DATE,
+        `"working days after/before/from" expects a date to count from, got ${ValueType[anchorValue.type] ?? "an unsupported value"}`,
+      ));
+      return;
+    }
+    stack.push(datetimeValue(addBusinessDays(anchorValue.toNumber(), workdayDirection * countValue.toNumber(), vm)));
+}
+
+/** `working days between <date> and <date>` (DATE_WORKDAYS_BETWEEN), moved out of the dispatch loop. */
+function workdaysBetween(stack: Value[], vm: VM): void {
+    // "working days between <date> and <date>": the count of working days
+    // in the inclusive span, order-independent. Stack: [start, end], end
+    // on top (WorkdaysBetweenParselet compiles the second endpoint last).
+    const endValue = safePop(stack), startValue = safePop(stack);
+    const betweenFault = faultedOperand(startValue, endValue);
+    if (betweenFault) { stack.push(betweenFault); return; }
+    if (startValue.type !== ValueType.Datetime || endValue.type !== ValueType.Datetime) {
+      stack.push(errorValue(
+        CoreErrorCodes.WORKDAYS_BETWEEN_EXPECTED_DATES,
+        `"working days between" expects two dates, got ${ValueType[startValue.type] ?? "an unsupported value"} and ${ValueType[endValue.type] ?? "an unsupported value"}`,
+      ));
+      return;
+    }
+    // Bounded by the full configured offset range in calendar days, so a
+    // span of millennia is refused rather than walked a day at a time.
+    const spanLimitDays = Math.ceil((vm.getMaxDateOffsetYears() - vm.getMinDateOffsetYears()) * 366);
+    const workdayCount = countBusinessDaysBetween(startValue.toNumber(), endValue.toNumber(), (ms) => vm.isHoliday(ms), spanLimitDays, vm.context.calendar);
+    if (workdayCount === null) {
+      stack.push(errorValue(
+        CoreErrorCodes.WORKDAYS_BETWEEN_RANGE_TOO_LARGE,
+        `The two dates are more than ${vm.getMaxDateOffsetYears() - vm.getMinDateOffsetYears()} years apart, past the working-day count's limit`,
+      ));
+      return;
+    }
+    stack.push(numberValue(workdayCount));
+}
+
+/** `next <weekday>` and `last <weekday>` (DATE_NEXT_WEEKDAY, DATE_LAST_WEEKDAY), moved out of the dispatch loop. */
+function nextOrLastWeekday(stack: Value[], op: OpCode, vm: VM): void {
+    // Stack: [now, targetDayIndex], targetDayIndex on top (0=Sunday..6=Saturday).
+    // Computes the actual next/previous occurrence of that weekday,
+    // NOT a blind ±7-day offset, "next Monday" from a Monday lands
+    // 7 days ahead (next week's Monday), not today; "last Monday"
+    // from a Monday lands 7 days back, not today. Time-of-day is
+    // preserved from `now` (matches "today"/"now" both resolving to
+    // the current instant elsewhere in this file, not midnight).
+    const targetDayValue = safePop(stack);
+    const nowValue = safePop(stack);
+    const weekdayFault = faultedOperand(nowValue, targetDayValue);
+    if (weekdayFault) { stack.push(weekdayFault); return; }
+    const targetDay = targetDayValue.toNumber();
+    const now = nowValue.toNumber();
+    const currentDay = vm.context.calendar.fields(now).weekday;
+    let diffDays = op === OpCode.DATE_NEXT_WEEKDAY
+      ? (targetDay - currentDay + 7) % 7
+      : (currentDay - targetDay + 7) % 7;
+    if (diffDays === 0) diffDays = 7;
+    // Stepped as calendar days rather than added as milliseconds: a
+    // week that contains a daylight-saving transition is not 7 x
+    // 86,400,000 ms long, and being an hour out is enough to land on the
+    // day before or after the weekday that was asked for. See
+    // addCalendarDays() above.
+    stack.push(datetimeValue(addCalendarDays(now, op === OpCode.DATE_NEXT_WEEKDAY ? diffDays : -diffDays, vm.context.calendar)));
+}
+
+/** A clock time today, `9:00am` (CLOCK_TIME_TODAY), moved out of the dispatch loop. */
+function clockTimeToday(stack: Value[], vm: VM): void {
+    // "9:00am"/"16:00", anchored to TODAY's calendar date, not a
+    // relative offset from `now` (so it stays correct regardless of
+    // what time it currently is, "9:00am" always means 9am today).
+    const minutesValue = safePop(stack);
+    const clockFault = faultedOperand(minutesValue);
+    if (clockFault) { stack.push(clockFault); return; }
+    const totalMinutes = minutesValue.toNumber();
+    const clockCalendar = vm.context.calendar;
+    const clockToday = clockCalendar.fields(clockCalendar.now());
+    // A clock time is a wall-clock READING in the backend's own zone, not
+    // a fixed instant: "6pm" names six in the evening wherever it is read,
+    // which is what lets "6pm in Chicago" mean six in Chicago.
+    stack.push(datetimeValue(clockCalendar.localWallClock(clockToday.year, clockToday.month0, clockToday.day, totalMinutes), "datetime"));
+}
+
+/** A matrix or list literal (MAT_NEW), moved out of the dispatch loop. */
+function matrixLiteral(stack: Value[], rows: number, cols: number): void {
+    const count = rows * cols;
+    // Cells were pushed in ROW-MAJOR reading order (matching how a
+    // literal like `[1,2;3,4]` is textually written), pop in
+    // reverse to restore that order, then transpose once into the
+    // column-major storage MatrixData actually uses.
+    const rowMajor = checkedArray<MatrixEntry>(count, "matrix cells");
+    // A MatrixEntry is a number, a boolean or a symbolic node, so a
+    // faulted cell has nowhere to live inside the matrix and became a
+    // zero cell nothing could tell apart from a real one. The whole
+    // literal fails instead, the way one bad cell fails a map() (see
+    // MAP_INVOKE's own check).
+    let cellFault: Value | null = null;
+    for (let i = count - 1; i >= 0; i--) {
+      const cellVal = safePop(stack);
+      if (cellFault === null) cellFault = faultedOperand(cellVal);
+      // A cell with no numeric reading was the same silent zero: a pair
+      // inside a list, `[(1, 2), 3]`, answered `[0, 3]`, and a date
+      // became its epoch milliseconds. A cell holds one number, so the
+      // literal is refused by name. An unknown stays, it is a formula
+      // cell. Issue #546.
+      const kind = cellVal.type === ValueType.Symbolic ? undefined : nonNumericKind(cellVal);
+      if (cellFault === null && kind !== undefined) {
+        cellFault = errorValue(
+          "MATRIX_CELL_NON_NUMERIC",
+          cellVal.type === ValueType.Matrix
+            ? "A list cannot hold a list inside it: each cell holds one number. Write the values side by side, as in [1, 2, 3]."
+            : `${kind[0].toUpperCase()}${kind.slice(1)} cannot be a cell of a list: each cell holds one number.`,
+        );
+      }
+      rowMajor[i] = cellVal.type === ValueType.Boolean ? (cellVal.value as boolean)
+        : cellVal.type === ValueType.Symbolic ? (cellVal.value as SymbolicNodeType)
+        : cellVal.toNumber();
+    }
+    if (cellFault) { stack.push(cellFault); return; }
+    stack.push(matrixValue(rows, cols, rowMajorToColumnMajor(rows, cols, rowMajor)));
+}
+
+/** `m[i]` (MAT_INDEX1), moved out of the dispatch loop. */
+function matrixIndex1(stack: Value[]): void {
+    const indexVal = safePop(stack), matrixVal = safePop(stack);
+    // Pending as well as Error, here and in the three cases below: a
+    // value that has not arrived yet indexes no better than one that
+    // failed, and toNumber() reports zero for both. These checked only
+    // Error, so an index still loading read as cell 0.
+    const index1Fault = faultedOperand(matrixVal, indexVal);
+    if (index1Fault) { stack.push(index1Fault); return; }
+    if (matrixVal.type !== ValueType.Matrix) {
+      stack.push(errorValue("MATRIX_INDEX_NOT_A_MATRIX", `Cannot index a non-matrix value with "[...]".`));
+      return;
+    }
+    const m = matrixVal.value as MatrixData;
+    const index = Math.trunc(indexVal.toNumber());
+    if (index < 0 || index >= m.data.length) {
+      stack.push(errorValue(
+        "MATRIX_INDEX_OUT_OF_BOUNDS",
+        `Index ${index} is out of bounds for a ${m.rows}x${m.cols} matrix (valid range: 0-${m.data.length - 1}).`,
+      ));
+      return;
+    }
+    const cell = matIndex(m, index);
+    stack.push(matrixEntryToValue(cell));
+}
+
+/** `m[r, c]` (MAT_INDEX2), moved out of the dispatch loop. */
+function matrixIndex2(stack: Value[]): void {
+    const colVal = safePop(stack), rowVal = safePop(stack), matrixVal = safePop(stack);
+    const index2Fault = faultedOperand(matrixVal, rowVal, colVal);
+    if (index2Fault) { stack.push(index2Fault); return; }
+    if (matrixVal.type !== ValueType.Matrix) {
+      stack.push(errorValue("MATRIX_INDEX_NOT_A_MATRIX", `Cannot index a non-matrix value with "[...]".`));
+      return;
+    }
+    const m = matrixVal.value as MatrixData;
+    const row = Math.trunc(rowVal.toNumber());
+    const col = Math.trunc(colVal.toNumber());
+    if (!inBounds(m, row, col)) {
+      stack.push(errorValue(
+        "MATRIX_INDEX_OUT_OF_BOUNDS",
+        `[${row}, ${col}] is out of bounds for a ${m.rows}x${m.cols} matrix.`,
+      ));
+      return;
+    }
+    const cell = matAt(m, row, col);
+    stack.push(matrixEntryToValue(cell));
+}
+
+/** A range literal, `0:3` (RANGE_NEW), moved out of the dispatch loop. */
+function rangeLiteral(stack: Value[]): void {
+    const maxVal = safePop(stack), minVal = safePop(stack);
+    const rangeFault = faultedOperand(minVal, maxVal);
+    if (rangeFault) { stack.push(rangeFault); return; }
+    if (minVal.type !== ValueType.Number || maxVal.type !== ValueType.Number) {
+      stack.push(errorValue("INVALID_RANGE_BOUND", `A range's bounds must be plain numbers (e.g. "0:3").`));
+      return;
+    }
+    const min = minVal.value as number;
+    const max = maxVal.value as number;
+    if (!Number.isInteger(min) || !Number.isInteger(max)) {
+      stack.push(errorValue("NON_INTEGER_RANGE_BOUND", `A range's bounds must be whole numbers, got "${min}:${max}".`));
+      return;
+    }
+    if (min > max) {
+      stack.push(errorValue(
+        "DESCENDING_RANGE",
+        `A range's min (${min}) cannot be greater than its max (${max}) — did you mean "${max}:${min}"?`,
+      ));
+      return;
+    }
+    stack.push(rangeValue(min, max));
+}
+
+/** `m[0:1, 1:2]` (MAT_SLICE), moved out of the dispatch loop. */
+function matrixSlice(stack: Value[]): void {
+    const colRangeVal = safePop(stack), rowRangeVal = safePop(stack), matrixVal = safePop(stack);
+    const sliceFault = faultedOperand(matrixVal, rowRangeVal, colRangeVal);
+    if (sliceFault) { stack.push(sliceFault); return; }
+    if (matrixVal.type !== ValueType.Matrix) {
+      stack.push(errorValue("MATRIX_INDEX_NOT_A_MATRIX", `Cannot slice a non-matrix value with "[...]".`));
+      return;
+    }
+    if (rowRangeVal.type !== ValueType.Range || colRangeVal.type !== ValueType.Range) {
+      stack.push(errorValue("INVALID_MATRIX_SLICE_BOUND", `Matrix slicing needs range bounds (e.g. "a[0:1, 1:2]").`));
+      return;
+    }
+    const m = matrixVal.value as MatrixData;
+    const rowRange = rowRangeVal.value as RangeData;
+    const colRange = colRangeVal.value as RangeData;
+    if (rowRange.min < 0 || rowRange.max >= m.rows || colRange.min < 0 || colRange.max >= m.cols) {
+      stack.push(errorValue(
+        "MATRIX_INDEX_OUT_OF_BOUNDS",
+        `Slice [${rowRange.min}:${rowRange.max}, ${colRange.min}:${colRange.max}] is out of bounds for a ${m.rows}x${m.cols} matrix.`,
+      ));
+      return;
+    }
+    const newRows = rowRange.max - rowRange.min + 1;
+    const newCols = colRange.max - colRange.min + 1;
+    const data = checkedArray<MatrixEntry>(newRows * newCols, "matrix cells");
+    for (let r = 0; r < newRows; r++) {
+      for (let c = 0; c < newCols; c++) {
+        data[r + c * newRows] = matAt(m, rowRange.min + r, colRange.min + c);
+      }
+    }
+    stack.push(matrixValue(newRows, newCols, data));
+}
+
+/** `map(...)` (MAP_INVOKE), moved out of the dispatch loop. */
+function mapInvoke(stack: Value[], op: OpCode, kind: number, ref: number, collectionCount: number, strings: string[], anonymousBodies: Bytecode["anonymousBodies"], vm: VM, pipeline: DiagnosticPipeline | undefined, expression: string | undefined, context: LineExecutionContext | undefined, symbolicTolerant: boolean | undefined): void {
+    requireKnownBodyKind(kind, ref, op);
+
+    // Collections were pushed in declared param order, pop in
+    // reverse to restore that order (same convention as MAT_NEW's
+    // row-major restore).
+    const rawCollections: Value[] = new Array(collectionCount);
+    for (let i = collectionCount - 1; i >= 0; i--) rawCollections[i] = safePop(stack);
+
+    let paramNames: string[] = [];
+    let program: BytecodeProgram | undefined;
+    if (kind === 0) {
+      const def = anonymousBodies?.[ref];
+      if (!def) {
+        throw ErrorFactory.internal(
+          "INTERNAL_MISSING_ANONYMOUS_BODY",
+          `Internal error: MAP_INVOKE referenced missing anonymous body index ${ref}`,
+          { ref },
+        );
+      }
+      paramNames = def.params;
+      program = def.program;
+    } else if (kind === 2) {
+      const name = pooledString(strings, ref, op);
+      const fn = vm.getUserFunction(name);
+      if (!fn) {
+        stack.push(errorValue("UNDEFINED_FUNCTION", `map: undefined function "${name}"`));
+        return;
+      }
+      if (fn.params.length !== collectionCount) {
+        stack.push(errorValue(
+          "FUNCTION_ARITY_MISMATCH",
+          `map: "${name}" expects ${fn.params.length} argument(s) but ${collectionCount} collection(s) were given`,
+        ));
+        return;
+      }
+      paramNames = fn.params;
+      program = fn.program;
+    }
+
+    // Resolve every collection into a flat array of per-cell Values
+    // (a Matrix's own cells, or a materialized Range), all must
+    // agree on length (this is a ZIP, not a cartesian product).
+    let collectionLength = -1;
+    const cellArrays: Value[][] = new Array(collectionCount);
+    let mapEarlyError: Value | undefined;
+    for (let i = 0; i < collectionCount; i++) {
+      const resolved = collectionToValues(rawCollections[i], vm.getMaxCollectionSize());
+      if (!Array.isArray(resolved)) { mapEarlyError = resolved; break; }
+      // Charged after the fact, which is safe only because
+      // `maxCollectionSize` has already bounded this one expansion to
+      // something survivable. The tally is what stops the SECOND and
+      // third: individually legal collections are legal together, and
+      // nothing else counts them. Delete this line if
+      // `collectionToValues()` ever charges before expanding, which is
+      // the better place for it (it knows the length before it allocates)
+      // and would make this a double charge.
+      chargeAllocation(resolved.length, "collection elements");
+      if (collectionLength === -1) {
+        collectionLength = resolved.length;
+      } else if (resolved.length !== collectionLength) {
+        mapEarlyError = errorValue(
+          "MAP_COLLECTION_LENGTH_MISMATCH",
+          `map: all collections must have the same length (got ${collectionLength} and ${resolved.length}).`,
+        );
+        break;
+      }
+      cellArrays[i] = resolved;
+    }
+    if (mapEarlyError) { stack.push(mapEarlyError); return; }
+
+    const resultData: MatrixEntry[] = checkedArray<MatrixEntry>(collectionLength, "matrix cells");
+    let mapError: Value | undefined;
+    for (let i = 0; i < collectionLength; i++) {
+      const args: Value[] = new Array(collectionCount);
+      for (let j = 0; j < collectionCount; j++) args[j] = cellArrays[j][i];
+
+      const resultVal = kind === 1
+        ? (builtinFunctions[ref]?.(args) ?? errorValue("UNKNOWN_BUILTIN_FUNCTION", `map: unknown builtin function index ${ref}`))
+        : invokeFrameBody(paramNames, program!, args, vm, pipeline, expression, context, !!symbolicTolerant);
+
+      const resultFault = faultedOperand(resultVal);
+      if (resultFault) { mapError = resultFault; break; }
+      resultData[i] = resultVal.type === ValueType.Boolean ? (resultVal.value as boolean)
+        : resultVal.type === ValueType.Symbolic ? (resultVal.value as SymbolicNodeType)
+        : resultVal.toNumber();
+    }
+    if (mapError) { stack.push(mapError); return; }
+
+    // A mapped matrix keeps the shape it was given. `resultData` is
+    // filled in the same order `collectionToValues()` read the cells
+    // out, which for a Matrix is its own column-major storage order,
+    // so handing that array straight back with the source dimensions
+    // puts every result in the cell its input came from. Without this
+    // `map(x*2, [1,2;3,4])` answered a 1x4 row reading [2,6,4,8]: not
+    // just the wrong shape but the storage order leaking into what the
+    // user sees, since 6 is the image of 3, the cell BELOW 1. A Range
+    // (and a 1xN literal) is a row either way.
+    const firstCollection = rawCollections[0];
+    const sourceShape = firstCollection?.type === ValueType.Matrix ? (firstCollection.value as MatrixData) : undefined;
+    if (sourceShape && sourceShape.rows * sourceShape.cols === collectionLength) {
+      stack.push(matrixValue(sourceShape.rows, sourceShape.cols, resultData));
+    } else {
+      stack.push(matrixValue(1, collectionLength, resultData));
+    }
+}
+
+/** `plot <expr> from a to b` (PLOT_INVOKE), moved out of the dispatch loop. */
+function plotInvoke(stack: Value[], op: OpCode, bodyRef: number, exprRef: number, strings: string[], anonymousBodies: Bytecode["anonymousBodies"], vm: VM, pipeline: DiagnosticPipeline | undefined, expression: string | undefined, context: LineExecutionContext | undefined, symbolicTolerant: boolean | undefined): void {
+    const exprText = pooledString(strings, exprRef, op);
+    // Pushed in textual order (from, then to), pop in reverse.
+    const to = safePop(stack).toNumber();
+    const from = safePop(stack).toNumber();
+
+    const def = anonymousBodies?.[bodyRef];
+    if (!def) {
+      throw ErrorFactory.internal(
+        "INTERNAL_MISSING_ANONYMOUS_BODY",
+        `Internal error: PLOT_INVOKE referenced missing anonymous body index ${bodyRef}`,
+        { ref: bodyRef },
+      );
+    }
+    if (!Number.isFinite(from) || !Number.isFinite(to)) {
+      stack.push(errorValue("PLOT_INVALID_RANGE", `plot: the range bounds must be finite numbers (got ${from} to ${to})`));
+      return;
+    }
+
+    // Sample the body at PLOT_SAMPLES evenly-spaced points, binding `x` to
+    // each, and keep only the points that come back finite so a curve with
+    // a hole (a pole in 1/x, a domain edge) still draws the rest.
+    const points: [number, number][] = [];
+    // How many samples faulted (a gap-class throw, or an Error value),
+    // and the last fault, so a plot with no value anywhere reports the
+    // fault rather than drawing nothing. An Error value used to read as
+    // zero through toNumber(), so `plot x + (5 kg to m)` drew a flat
+    // line at zero.
+    let faulted = 0;
+    let lastFault: Value | undefined;
+    for (let i = 0; i < PLOT_SAMPLES; i++) {
+      const x = from + (i / (PLOT_SAMPLES - 1)) * (to - from);
+      let sample: Value;
+      try {
+        sample = invokeFrameBody(def.params, def.program, [numberValue(x)], vm, pipeline, expression, context, !!symbolicTolerant);
+      } catch (e) {
+        // A fault of this one point is a gap; see PLOT_SAMPLE_GAP_CODES
+        // for why anything else is the expression's fault, and rethrown.
+        const fault = normalizeUnknownError(e);
+        if (!PLOT_SAMPLE_GAP_CODES.has(fault.code)) throw e;
+        faulted++;
+        lastFault = errorValue(fault.code, fault.message);
+        continue;
+      }
+      if (sample.type === ValueType.Error || sample.type === ValueType.Pending) {
+        faulted++;
+        lastFault = sample;
+        continue;
+      }
+      const y = sample.toNumber();
+      if (Number.isFinite(y)) points.push([x, y]);
+    }
+    if (faulted === PLOT_SAMPLES && lastFault !== undefined) {
+      // Every point faulted, one way or another: there is no curve to
+      // draw, and an empty chart would hide the reason.
+      stack.push(errorValue(
+        String(lastFault.value),
+        `plot: ${exprText} has no value at any point over [${from}, ${to}]: ${String(lastFault.unit)}`,
+      ));
+      return;
+    }
+    const ys = points.map((p) => p[1]);
+    const yMin = ys.length ? Math.min(...ys) : 0;
+    const yMax = ys.length ? Math.max(...ys) : 0;
+    const boundLabel = (n: number) => (Number.isInteger(n) ? String(n) : String(Number(n.toFixed(2))));
+    stack.push(chartValue({
+      kind: "plot",
+      points,
+      label: `${exprText} over [${boundLabel(from)}, ${boundLabel(to)}]`,
+      domain: [from, to],
+      range: [yMin, yMax],
+      expr: exprText,
+    }));
+}
+
+/** `reduce(...)` (REDUCE_INVOKE), moved out of the dispatch loop. */
+function reduceInvoke(stack: Value[], op: OpCode, kind: number, ref: number, hasInitial: number, strings: string[], anonymousBodies: Bytecode["anonymousBodies"], vm: VM, pipeline: DiagnosticPipeline | undefined, expression: string | undefined, context: LineExecutionContext | undefined, symbolicTolerant: boolean | undefined): void {
+    requireKnownBodyKind(kind, ref, op);
+
+    // Pushed in textual order (collection, then optional initial)
+    // pop in reverse.
+    const initialVal = hasInitial ? safePop(stack) : undefined;
+    const collectionVal = safePop(stack);
+
+    let paramNames: string[] = [];
+    let program: BytecodeProgram | undefined;
+    if (kind === 0) {
+      const def = anonymousBodies?.[ref];
+      if (!def) {
+        throw ErrorFactory.internal(
+          "INTERNAL_MISSING_ANONYMOUS_BODY",
+          `Internal error: REDUCE_INVOKE referenced missing anonymous body index ${ref}`,
+          { ref },
+        );
+      }
+      paramNames = def.params;
+      program = def.program;
+    } else if (kind === 2) {
+      const name = pooledString(strings, ref, op);
+      const fn = vm.getUserFunction(name);
+      if (!fn) {
+        stack.push(errorValue("UNDEFINED_FUNCTION", `reduce: undefined function "${name}"`));
+        return;
+      }
+      if (fn.params.length !== 2) {
+        stack.push(errorValue(
+          "FUNCTION_ARITY_MISMATCH",
+          `reduce: "${name}" must take exactly 2 arguments (accumulator, element), got ${fn.params.length}`,
+        ));
+        return;
+      }
+      paramNames = fn.params;
+      program = fn.program;
+    }
+
+    const cells = collectionToValues(collectionVal, vm.getMaxCollectionSize());
+    if (!Array.isArray(cells)) { stack.push(cells); return; }
+    // Same post-charge, and the same note, as MAP_INVOKE above.
+    chargeAllocation(cells.length, "collection elements");
+
+    let acc: Value;
+    let startIdx: number;
+    if (initialVal !== undefined) {
+      const initialFault = faultedOperand(initialVal);
+      if (initialFault) { stack.push(initialFault); return; }
+      acc = initialVal;
+      startIdx = 0;
+    } else {
+      if (cells.length === 0) {
+        stack.push(errorValue("REDUCE_EMPTY_COLLECTION", `reduce: cannot reduce an empty collection without an initial value.`));
+        return;
+      }
+      acc = cells[0];
+      startIdx = 1;
+    }
+
+    let reduceError: Value | undefined;
+    for (let i = startIdx; i < cells.length; i++) {
+      const args = [acc, cells[i]];
+      const resultVal = kind === 1
+        ? (builtinFunctions[ref]?.(args) ?? errorValue("UNKNOWN_BUILTIN_FUNCTION", `reduce: unknown builtin function index ${ref}`))
+        : invokeFrameBody(paramNames, program!, args, vm, pipeline, expression, context, !!symbolicTolerant);
+
+      const stepFault = faultedOperand(resultVal);
+      if (stepFault) { reduceError = stepFault; break; }
+      acc = resultVal;
+    }
+    if (reduceError) { stack.push(reduceError); return; }
+
+    stack.push(acc);
+}
+
 /**
  * Execute bytecode with optional diagnostic pipeline integration.
  *
  * Performance notes:
  * - Uses a `switch(op)` statement for dispatch. V8 compiles dense integer
  *   switches (OpCode values 0–200) into a jump table with O(1) dispatch.
- *   All handler code is inlined directly in the switch cases, allowing
- *   TurboFan to optimize across opcode boundaries.
+ *   The common handlers are inlined in the switch cases; the rarely used ones
+ *   are module-level helpers (see the note above them), because V8 will not
+ *   optimise this function at all once its bytecode passes 61,440 bytes.
  * - ADD/SUB/MUL/DIV and the six comparisons open with an inlined plain-number
  *   branch: two Numbers carrying no rational or uncertainty sidecar (>90% of
  *   arithmetic ops) are answered before any helper (fault propagation,
@@ -3664,19 +4177,7 @@ export function executeBytecode(
         // §8.7  Time, clock-time-of-day (OpCode 120)
         // ═══════════════════════════════════════════════════════════════
         case OpCode.CLOCK_TIME_TODAY: {
-          // "9:00am"/"16:00", anchored to TODAY's calendar date, not a
-          // relative offset from `now` (so it stays correct regardless of
-          // what time it currently is, "9:00am" always means 9am today).
-          const minutesValue = safePop(stack);
-          const clockFault = faultedOperand(minutesValue);
-          if (clockFault) { stack.push(clockFault); break; }
-          const totalMinutes = minutesValue.toNumber();
-          const clockCalendar = vm.context.calendar;
-          const clockToday = clockCalendar.fields(clockCalendar.now());
-          // A clock time is a wall-clock READING in the backend's own zone, not
-          // a fixed instant: "6pm" names six in the evening wherever it is read,
-          // which is what lets "6pm in Chicago" mean six in Chicago.
-          stack.push(datetimeValue(clockCalendar.localWallClock(clockToday.year, clockToday.month0, clockToday.day, totalMinutes), "datetime"));
+          clockTimeToday(stack, vm);
           break;
         }
 
@@ -3724,73 +4225,16 @@ export function executeBytecode(
           // addBusinessDays() as `<date> + N workdays`, so the two forms and
           // the holiday calendar stay in lockstep.
           const workdayDirection = operandByte(opcodes, ip++, op, "workday offset direction") === 1 ? -1 : 1;
-          const anchorValue = safePop(stack), countValue = safePop(stack);
-          const offsetFault = faultedOperand(countValue, anchorValue);
-          if (offsetFault) { stack.push(offsetFault); break; }
-          if (anchorValue.type !== ValueType.Datetime) {
-            stack.push(errorValue(
-              CoreErrorCodes.WORKDAY_OFFSET_EXPECTED_DATE,
-              `"working days after/before/from" expects a date to count from, got ${ValueType[anchorValue.type] ?? "an unsupported value"}`,
-            ));
-            break;
-          }
-          stack.push(datetimeValue(addBusinessDays(anchorValue.toNumber(), workdayDirection * countValue.toNumber(), vm)));
+          workdayOffset(stack, workdayDirection, vm);
           break;
         }
         case OpCode.DATE_WORKDAYS_BETWEEN: {
-          // "working days between <date> and <date>": the count of working days
-          // in the inclusive span, order-independent. Stack: [start, end], end
-          // on top (WorkdaysBetweenParselet compiles the second endpoint last).
-          const endValue = safePop(stack), startValue = safePop(stack);
-          const betweenFault = faultedOperand(startValue, endValue);
-          if (betweenFault) { stack.push(betweenFault); break; }
-          if (startValue.type !== ValueType.Datetime || endValue.type !== ValueType.Datetime) {
-            stack.push(errorValue(
-              CoreErrorCodes.WORKDAYS_BETWEEN_EXPECTED_DATES,
-              `"working days between" expects two dates, got ${ValueType[startValue.type] ?? "an unsupported value"} and ${ValueType[endValue.type] ?? "an unsupported value"}`,
-            ));
-            break;
-          }
-          // Bounded by the full configured offset range in calendar days, so a
-          // span of millennia is refused rather than walked a day at a time.
-          const spanLimitDays = Math.ceil((vm.getMaxDateOffsetYears() - vm.getMinDateOffsetYears()) * 366);
-          const workdayCount = countBusinessDaysBetween(startValue.toNumber(), endValue.toNumber(), (ms) => vm.isHoliday(ms), spanLimitDays, vm.context.calendar);
-          if (workdayCount === null) {
-            stack.push(errorValue(
-              CoreErrorCodes.WORKDAYS_BETWEEN_RANGE_TOO_LARGE,
-              `The two dates are more than ${vm.getMaxDateOffsetYears() - vm.getMinDateOffsetYears()} years apart, past the working-day count's limit`,
-            ));
-            break;
-          }
-          stack.push(numberValue(workdayCount));
+          workdaysBetween(stack, vm);
           break;
         }
         case OpCode.DATE_NEXT_WEEKDAY:
         case OpCode.DATE_LAST_WEEKDAY: {
-          // Stack: [now, targetDayIndex], targetDayIndex on top (0=Sunday..6=Saturday).
-          // Computes the actual next/previous occurrence of that weekday,
-          // NOT a blind ±7-day offset, "next Monday" from a Monday lands
-          // 7 days ahead (next week's Monday), not today; "last Monday"
-          // from a Monday lands 7 days back, not today. Time-of-day is
-          // preserved from `now` (matches "today"/"now" both resolving to
-          // the current instant elsewhere in this file, not midnight).
-          const targetDayValue = safePop(stack);
-          const nowValue = safePop(stack);
-          const weekdayFault = faultedOperand(nowValue, targetDayValue);
-          if (weekdayFault) { stack.push(weekdayFault); break; }
-          const targetDay = targetDayValue.toNumber();
-          const now = nowValue.toNumber();
-          const currentDay = vm.context.calendar.fields(now).weekday;
-          let diffDays = op === OpCode.DATE_NEXT_WEEKDAY
-            ? (targetDay - currentDay + 7) % 7
-            : (currentDay - targetDay + 7) % 7;
-          if (diffDays === 0) diffDays = 7;
-          // Stepped as calendar days rather than added as milliseconds: a
-          // week that contains a daylight-saving transition is not 7 x
-          // 86,400,000 ms long, and being an hour out is enough to land on the
-          // day before or after the weekday that was asked for. See
-          // addCalendarDays() above.
-          stack.push(datetimeValue(addCalendarDays(now, op === OpCode.DATE_NEXT_WEEKDAY ? diffDays : -diffDays, vm.context.calendar)));
+          nextOrLastWeekday(stack, op, vm);
           break;
         }
 
@@ -3805,149 +4249,27 @@ export function executeBytecode(
         case OpCode.MAT_NEW: {
           const rows = operandByte(opcodes, ip++, op, "row count");
           const cols = operandByte(opcodes, ip++, op, "column count");
-          const count = rows * cols;
-          // Cells were pushed in ROW-MAJOR reading order (matching how a
-          // literal like `[1,2;3,4]` is textually written), pop in
-          // reverse to restore that order, then transpose once into the
-          // column-major storage MatrixData actually uses.
-          const rowMajor = checkedArray<MatrixEntry>(count, "matrix cells");
-          // A MatrixEntry is a number, a boolean or a symbolic node, so a
-          // faulted cell has nowhere to live inside the matrix and became a
-          // zero cell nothing could tell apart from a real one. The whole
-          // literal fails instead, the way one bad cell fails a map() (see
-          // MAP_INVOKE's own check).
-          let cellFault: Value | null = null;
-          for (let i = count - 1; i >= 0; i--) {
-            const cellVal = safePop(stack);
-            if (cellFault === null) cellFault = faultedOperand(cellVal);
-            // A cell with no numeric reading was the same silent zero: a pair
-            // inside a list, `[(1, 2), 3]`, answered `[0, 3]`, and a date
-            // became its epoch milliseconds. A cell holds one number, so the
-            // literal is refused by name. An unknown stays, it is a formula
-            // cell. Issue #546.
-            const kind = cellVal.type === ValueType.Symbolic ? undefined : nonNumericKind(cellVal);
-            if (cellFault === null && kind !== undefined) {
-              cellFault = errorValue(
-                "MATRIX_CELL_NON_NUMERIC",
-                cellVal.type === ValueType.Matrix
-                  ? "A list cannot hold a list inside it: each cell holds one number. Write the values side by side, as in [1, 2, 3]."
-                  : `${kind[0].toUpperCase()}${kind.slice(1)} cannot be a cell of a list: each cell holds one number.`,
-              );
-            }
-            rowMajor[i] = cellVal.type === ValueType.Boolean ? (cellVal.value as boolean)
-              : cellVal.type === ValueType.Symbolic ? (cellVal.value as SymbolicNodeType)
-              : cellVal.toNumber();
-          }
-          if (cellFault) { stack.push(cellFault); break; }
-          stack.push(matrixValue(rows, cols, rowMajorToColumnMajor(rows, cols, rowMajor)));
+          matrixLiteral(stack, rows, cols);
           break;
         }
 
         case OpCode.MAT_INDEX1: {
-          const indexVal = safePop(stack), matrixVal = safePop(stack);
-          // Pending as well as Error, here and in the three cases below: a
-          // value that has not arrived yet indexes no better than one that
-          // failed, and toNumber() reports zero for both. These checked only
-          // Error, so an index still loading read as cell 0.
-          const index1Fault = faultedOperand(matrixVal, indexVal);
-          if (index1Fault) { stack.push(index1Fault); break; }
-          if (matrixVal.type !== ValueType.Matrix) {
-            stack.push(errorValue("MATRIX_INDEX_NOT_A_MATRIX", `Cannot index a non-matrix value with "[...]".`));
-            break;
-          }
-          const m = matrixVal.value as MatrixData;
-          const index = Math.trunc(indexVal.toNumber());
-          if (index < 0 || index >= m.data.length) {
-            stack.push(errorValue(
-              "MATRIX_INDEX_OUT_OF_BOUNDS",
-              `Index ${index} is out of bounds for a ${m.rows}x${m.cols} matrix (valid range: 0-${m.data.length - 1}).`,
-            ));
-            break;
-          }
-          const cell = matIndex(m, index);
-          stack.push(matrixEntryToValue(cell));
+          matrixIndex1(stack);
           break;
         }
 
         case OpCode.MAT_INDEX2: {
-          const colVal = safePop(stack), rowVal = safePop(stack), matrixVal = safePop(stack);
-          const index2Fault = faultedOperand(matrixVal, rowVal, colVal);
-          if (index2Fault) { stack.push(index2Fault); break; }
-          if (matrixVal.type !== ValueType.Matrix) {
-            stack.push(errorValue("MATRIX_INDEX_NOT_A_MATRIX", `Cannot index a non-matrix value with "[...]".`));
-            break;
-          }
-          const m = matrixVal.value as MatrixData;
-          const row = Math.trunc(rowVal.toNumber());
-          const col = Math.trunc(colVal.toNumber());
-          if (!inBounds(m, row, col)) {
-            stack.push(errorValue(
-              "MATRIX_INDEX_OUT_OF_BOUNDS",
-              `[${row}, ${col}] is out of bounds for a ${m.rows}x${m.cols} matrix.`,
-            ));
-            break;
-          }
-          const cell = matAt(m, row, col);
-          stack.push(matrixEntryToValue(cell));
+          matrixIndex2(stack);
           break;
         }
 
         case OpCode.RANGE_NEW: {
-          const maxVal = safePop(stack), minVal = safePop(stack);
-          const rangeFault = faultedOperand(minVal, maxVal);
-          if (rangeFault) { stack.push(rangeFault); break; }
-          if (minVal.type !== ValueType.Number || maxVal.type !== ValueType.Number) {
-            stack.push(errorValue("INVALID_RANGE_BOUND", `A range's bounds must be plain numbers (e.g. "0:3").`));
-            break;
-          }
-          const min = minVal.value as number;
-          const max = maxVal.value as number;
-          if (!Number.isInteger(min) || !Number.isInteger(max)) {
-            stack.push(errorValue("NON_INTEGER_RANGE_BOUND", `A range's bounds must be whole numbers, got "${min}:${max}".`));
-            break;
-          }
-          if (min > max) {
-            stack.push(errorValue(
-              "DESCENDING_RANGE",
-              `A range's min (${min}) cannot be greater than its max (${max}) — did you mean "${max}:${min}"?`,
-            ));
-            break;
-          }
-          stack.push(rangeValue(min, max));
+          rangeLiteral(stack);
           break;
         }
 
         case OpCode.MAT_SLICE: {
-          const colRangeVal = safePop(stack), rowRangeVal = safePop(stack), matrixVal = safePop(stack);
-          const sliceFault = faultedOperand(matrixVal, rowRangeVal, colRangeVal);
-          if (sliceFault) { stack.push(sliceFault); break; }
-          if (matrixVal.type !== ValueType.Matrix) {
-            stack.push(errorValue("MATRIX_INDEX_NOT_A_MATRIX", `Cannot slice a non-matrix value with "[...]".`));
-            break;
-          }
-          if (rowRangeVal.type !== ValueType.Range || colRangeVal.type !== ValueType.Range) {
-            stack.push(errorValue("INVALID_MATRIX_SLICE_BOUND", `Matrix slicing needs range bounds (e.g. "a[0:1, 1:2]").`));
-            break;
-          }
-          const m = matrixVal.value as MatrixData;
-          const rowRange = rowRangeVal.value as RangeData;
-          const colRange = colRangeVal.value as RangeData;
-          if (rowRange.min < 0 || rowRange.max >= m.rows || colRange.min < 0 || colRange.max >= m.cols) {
-            stack.push(errorValue(
-              "MATRIX_INDEX_OUT_OF_BOUNDS",
-              `Slice [${rowRange.min}:${rowRange.max}, ${colRange.min}:${colRange.max}] is out of bounds for a ${m.rows}x${m.cols} matrix.`,
-            ));
-            break;
-          }
-          const newRows = rowRange.max - rowRange.min + 1;
-          const newCols = colRange.max - colRange.min + 1;
-          const data = checkedArray<MatrixEntry>(newRows * newCols, "matrix cells");
-          for (let r = 0; r < newRows; r++) {
-            for (let c = 0; c < newCols; c++) {
-              data[r + c * newRows] = matAt(m, rowRange.min + r, colRange.min + c);
-            }
-          }
-          stack.push(matrixValue(newRows, newCols, data));
+          matrixSlice(stack);
           break;
         }
 
@@ -3963,188 +4285,14 @@ export function executeBytecode(
           const kind = operandByte(opcodes, ip++, op, "body kind");
           const ref = operandByte(opcodes, ip++, op, "body reference");
           const collectionCount = operandByte(opcodes, ip++, op, "collection count");
-          requireKnownBodyKind(kind, ref, op);
-
-          // Collections were pushed in declared param order, pop in
-          // reverse to restore that order (same convention as MAT_NEW's
-          // row-major restore).
-          const rawCollections: Value[] = new Array(collectionCount);
-          for (let i = collectionCount - 1; i >= 0; i--) rawCollections[i] = safePop(stack);
-
-          let paramNames: string[] = [];
-          let program: BytecodeProgram | undefined;
-          if (kind === 0) {
-            const def = anonymousBodies?.[ref];
-            if (!def) {
-              throw ErrorFactory.internal(
-                "INTERNAL_MISSING_ANONYMOUS_BODY",
-                `Internal error: MAP_INVOKE referenced missing anonymous body index ${ref}`,
-                { ref },
-              );
-            }
-            paramNames = def.params;
-            program = def.program;
-          } else if (kind === 2) {
-            const name = pooledString(strings, ref, op);
-            const fn = vm.getUserFunction(name);
-            if (!fn) {
-              stack.push(errorValue("UNDEFINED_FUNCTION", `map: undefined function "${name}"`));
-              break;
-            }
-            if (fn.params.length !== collectionCount) {
-              stack.push(errorValue(
-                "FUNCTION_ARITY_MISMATCH",
-                `map: "${name}" expects ${fn.params.length} argument(s) but ${collectionCount} collection(s) were given`,
-              ));
-              break;
-            }
-            paramNames = fn.params;
-            program = fn.program;
-          }
-
-          // Resolve every collection into a flat array of per-cell Values
-          // (a Matrix's own cells, or a materialized Range), all must
-          // agree on length (this is a ZIP, not a cartesian product).
-          let collectionLength = -1;
-          const cellArrays: Value[][] = new Array(collectionCount);
-          let mapEarlyError: Value | undefined;
-          for (let i = 0; i < collectionCount; i++) {
-            const resolved = collectionToValues(rawCollections[i], vm.getMaxCollectionSize());
-            if (!Array.isArray(resolved)) { mapEarlyError = resolved; break; }
-            // Charged after the fact, which is safe only because
-            // `maxCollectionSize` has already bounded this one expansion to
-            // something survivable. The tally is what stops the SECOND and
-            // third: individually legal collections are legal together, and
-            // nothing else counts them. Delete this line if
-            // `collectionToValues()` ever charges before expanding, which is
-            // the better place for it (it knows the length before it allocates)
-            // and would make this a double charge.
-            chargeAllocation(resolved.length, "collection elements");
-            if (collectionLength === -1) {
-              collectionLength = resolved.length;
-            } else if (resolved.length !== collectionLength) {
-              mapEarlyError = errorValue(
-                "MAP_COLLECTION_LENGTH_MISMATCH",
-                `map: all collections must have the same length (got ${collectionLength} and ${resolved.length}).`,
-              );
-              break;
-            }
-            cellArrays[i] = resolved;
-          }
-          if (mapEarlyError) { stack.push(mapEarlyError); break; }
-
-          const resultData: MatrixEntry[] = checkedArray<MatrixEntry>(collectionLength, "matrix cells");
-          let mapError: Value | undefined;
-          for (let i = 0; i < collectionLength; i++) {
-            const args: Value[] = new Array(collectionCount);
-            for (let j = 0; j < collectionCount; j++) args[j] = cellArrays[j][i];
-
-            const resultVal = kind === 1
-              ? (builtinFunctions[ref]?.(args) ?? errorValue("UNKNOWN_BUILTIN_FUNCTION", `map: unknown builtin function index ${ref}`))
-              : invokeFrameBody(paramNames, program!, args, vm, pipeline, expression, context, !!symbolicTolerant);
-
-            const resultFault = faultedOperand(resultVal);
-            if (resultFault) { mapError = resultFault; break; }
-            resultData[i] = resultVal.type === ValueType.Boolean ? (resultVal.value as boolean)
-              : resultVal.type === ValueType.Symbolic ? (resultVal.value as SymbolicNodeType)
-              : resultVal.toNumber();
-          }
-          if (mapError) { stack.push(mapError); break; }
-
-          // A mapped matrix keeps the shape it was given. `resultData` is
-          // filled in the same order `collectionToValues()` read the cells
-          // out, which for a Matrix is its own column-major storage order,
-          // so handing that array straight back with the source dimensions
-          // puts every result in the cell its input came from. Without this
-          // `map(x*2, [1,2;3,4])` answered a 1x4 row reading [2,6,4,8]: not
-          // just the wrong shape but the storage order leaking into what the
-          // user sees, since 6 is the image of 3, the cell BELOW 1. A Range
-          // (and a 1xN literal) is a row either way.
-          const firstCollection = rawCollections[0];
-          const sourceShape = firstCollection?.type === ValueType.Matrix ? (firstCollection.value as MatrixData) : undefined;
-          if (sourceShape && sourceShape.rows * sourceShape.cols === collectionLength) {
-            stack.push(matrixValue(sourceShape.rows, sourceShape.cols, resultData));
-          } else {
-            stack.push(matrixValue(1, collectionLength, resultData));
-          }
+          mapInvoke(stack, op, kind, ref, collectionCount, strings, anonymousBodies, vm, pipeline, expression, context, symbolicTolerant);
           break;
         }
 
         case OpCode.PLOT_INVOKE: {
           const bodyRef = operandByte(opcodes, ip++, op, "plot body reference");
           const exprRef = operandByte(opcodes, ip++, op, "plot expression");
-          const exprText = pooledString(strings, exprRef, op);
-          // Pushed in textual order (from, then to), pop in reverse.
-          const to = safePop(stack).toNumber();
-          const from = safePop(stack).toNumber();
-
-          const def = anonymousBodies?.[bodyRef];
-          if (!def) {
-            throw ErrorFactory.internal(
-              "INTERNAL_MISSING_ANONYMOUS_BODY",
-              `Internal error: PLOT_INVOKE referenced missing anonymous body index ${bodyRef}`,
-              { ref: bodyRef },
-            );
-          }
-          if (!Number.isFinite(from) || !Number.isFinite(to)) {
-            stack.push(errorValue("PLOT_INVALID_RANGE", `plot: the range bounds must be finite numbers (got ${from} to ${to})`));
-            break;
-          }
-
-          // Sample the body at PLOT_SAMPLES evenly-spaced points, binding `x` to
-          // each, and keep only the points that come back finite so a curve with
-          // a hole (a pole in 1/x, a domain edge) still draws the rest.
-          const points: [number, number][] = [];
-          // How many samples faulted (a gap-class throw, or an Error value),
-          // and the last fault, so a plot with no value anywhere reports the
-          // fault rather than drawing nothing. An Error value used to read as
-          // zero through toNumber(), so `plot x + (5 kg to m)` drew a flat
-          // line at zero.
-          let faulted = 0;
-          let lastFault: Value | undefined;
-          for (let i = 0; i < PLOT_SAMPLES; i++) {
-            const x = from + (i / (PLOT_SAMPLES - 1)) * (to - from);
-            let sample: Value;
-            try {
-              sample = invokeFrameBody(def.params, def.program, [numberValue(x)], vm, pipeline, expression, context, !!symbolicTolerant);
-            } catch (e) {
-              // A fault of this one point is a gap; see PLOT_SAMPLE_GAP_CODES
-              // for why anything else is the expression's fault, and rethrown.
-              const fault = normalizeUnknownError(e);
-              if (!PLOT_SAMPLE_GAP_CODES.has(fault.code)) throw e;
-              faulted++;
-              lastFault = errorValue(fault.code, fault.message);
-              continue;
-            }
-            if (sample.type === ValueType.Error || sample.type === ValueType.Pending) {
-              faulted++;
-              lastFault = sample;
-              continue;
-            }
-            const y = sample.toNumber();
-            if (Number.isFinite(y)) points.push([x, y]);
-          }
-          if (faulted === PLOT_SAMPLES && lastFault !== undefined) {
-            // Every point faulted, one way or another: there is no curve to
-            // draw, and an empty chart would hide the reason.
-            stack.push(errorValue(
-              String(lastFault.value),
-              `plot: ${exprText} has no value at any point over [${from}, ${to}]: ${String(lastFault.unit)}`,
-            ));
-            break;
-          }
-          const ys = points.map((p) => p[1]);
-          const yMin = ys.length ? Math.min(...ys) : 0;
-          const yMax = ys.length ? Math.max(...ys) : 0;
-          const boundLabel = (n: number) => (Number.isInteger(n) ? String(n) : String(Number(n.toFixed(2))));
-          stack.push(chartValue({
-            kind: "plot",
-            points,
-            label: `${exprText} over [${boundLabel(from)}, ${boundLabel(to)}]`,
-            domain: [from, to],
-            range: [yMin, yMax],
-            expr: exprText,
-          }));
+          plotInvoke(stack, op, bodyRef, exprRef, strings, anonymousBodies, vm, pipeline, expression, context, symbolicTolerant);
           break;
         }
 
@@ -4152,79 +4300,7 @@ export function executeBytecode(
           const kind = operandByte(opcodes, ip++, op, "body kind");
           const ref = operandByte(opcodes, ip++, op, "body reference");
           const hasInitial = operandByte(opcodes, ip++, op, "initial-value flag");
-          requireKnownBodyKind(kind, ref, op);
-
-          // Pushed in textual order (collection, then optional initial)
-          // pop in reverse.
-          const initialVal = hasInitial ? safePop(stack) : undefined;
-          const collectionVal = safePop(stack);
-
-          let paramNames: string[] = [];
-          let program: BytecodeProgram | undefined;
-          if (kind === 0) {
-            const def = anonymousBodies?.[ref];
-            if (!def) {
-              throw ErrorFactory.internal(
-                "INTERNAL_MISSING_ANONYMOUS_BODY",
-                `Internal error: REDUCE_INVOKE referenced missing anonymous body index ${ref}`,
-                { ref },
-              );
-            }
-            paramNames = def.params;
-            program = def.program;
-          } else if (kind === 2) {
-            const name = pooledString(strings, ref, op);
-            const fn = vm.getUserFunction(name);
-            if (!fn) {
-              stack.push(errorValue("UNDEFINED_FUNCTION", `reduce: undefined function "${name}"`));
-              break;
-            }
-            if (fn.params.length !== 2) {
-              stack.push(errorValue(
-                "FUNCTION_ARITY_MISMATCH",
-                `reduce: "${name}" must take exactly 2 arguments (accumulator, element), got ${fn.params.length}`,
-              ));
-              break;
-            }
-            paramNames = fn.params;
-            program = fn.program;
-          }
-
-          const cells = collectionToValues(collectionVal, vm.getMaxCollectionSize());
-          if (!Array.isArray(cells)) { stack.push(cells); break; }
-          // Same post-charge, and the same note, as MAP_INVOKE above.
-          chargeAllocation(cells.length, "collection elements");
-
-          let acc: Value;
-          let startIdx: number;
-          if (initialVal !== undefined) {
-            const initialFault = faultedOperand(initialVal);
-            if (initialFault) { stack.push(initialFault); break; }
-            acc = initialVal;
-            startIdx = 0;
-          } else {
-            if (cells.length === 0) {
-              stack.push(errorValue("REDUCE_EMPTY_COLLECTION", `reduce: cannot reduce an empty collection without an initial value.`));
-              break;
-            }
-            acc = cells[0];
-            startIdx = 1;
-          }
-
-          let reduceError: Value | undefined;
-          for (let i = startIdx; i < cells.length; i++) {
-            const args = [acc, cells[i]];
-            const resultVal = kind === 1
-              ? (builtinFunctions[ref]?.(args) ?? errorValue("UNKNOWN_BUILTIN_FUNCTION", `reduce: unknown builtin function index ${ref}`))
-              : invokeFrameBody(paramNames, program!, args, vm, pipeline, expression, context, !!symbolicTolerant);
-
-            const stepFault = faultedOperand(resultVal);
-            if (stepFault) { reduceError = stepFault; break; }
-            acc = resultVal;
-          }
-          if (reduceError) { stack.push(reduceError); break; }
-
-          stack.push(acc);
+          reduceInvoke(stack, op, kind, ref, hasInitial, strings, anonymousBodies, vm, pipeline, expression, context, symbolicTolerant);
           break;
         }
 
