@@ -191,7 +191,8 @@ currencyExchangeService.primeRates("USD", { GBP: 0.741 }, {
   publishedAt: Date.parse("2026-09-23T16:02:00Z"),
 });
 engine.explainLine("10 USD in GBP").steps.map((s) => s.description);
-// ["USD/GBP from Treasury feed (supplied by the host), fetched 2026-09-23 16:02 UTC"]
+// ["1 USD is 0.741 GBP", "10 times 0.741",
+//  "USD/GBP from Treasury feed (supplied by the host), fetched 2026-09-23 16:02 UTC"]
 ```
 
 A rate the engine fetched itself reads `(live)`, and a rate for a past day names
