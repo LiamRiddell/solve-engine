@@ -4,7 +4,7 @@ import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decim
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand } from "@solve-js/vm/VMConversion";
 import { withSources, type ValueSource } from "@solve-js/vm/Provenance";
-import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact } from "@solve-js/vm/MoneyExact";
+import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact, valueInUnit, moneyForCount } from "@solve-js/vm/MoneyExact";
 import { transpose, determinant, inverse, matrixMultiply, matrixPower, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
 import { symbolicToValue, valueToSymbolic, solveEquationValues, definiteIntegralValue, readSearchRange } from "@solve-js/vm/SymbolicOps";
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
@@ -32,6 +32,7 @@ import { raiseQuantity, rootQuantity, unitPowerUnsupported } from "@solve-js/vm/
 import { termInYears, growthFactor, periodicGrowthFactor, amortizeLoan } from "@solve-js/vm/FinanceFormulas";
 import { exactIntegerArithmetic, exactIntegerValue, exactGcdOrLcm, wholeNumberUnchanged, baseConversionOperand, exactIntegerOf } from "@solve-js/vm/ExactIntegers";
 import { isPrime, nextPrime, modPow, modInverse, factorInteger, formatFactorisation, FACTOR_LIMIT } from "@solve-js/vm/NumberTheory";
+import { exactDecimalPower, exactDecimalTotal, absExactDecimal, roundExactDecimalToWhole, roundRationalToPlaces, compareExactDecimals } from "@solve-js/vm/ExactDecimals";
 
 /**
  * A duration in seconds, shown in the largest whole time unit that keeps the
@@ -263,11 +264,21 @@ function extremum(args: Value[], wantLargest: boolean): Value {
                 named ?? `Cannot compare incompatible units: ${bestUnit ?? "?"} and ${otherUnit ?? "?"}`,
             );
         }
-        if (wantLargest ? rv > lv : rv < lv) best = a;
+        // Two decimals are ordered on their exact values, so two that share a
+        // nearest double still have a larger one. See vm/ExactDecimals.ts.
+        const exactOrder = best.exact !== undefined || a.exact !== undefined ? compareExactDecimals(best, a) : null;
+        const better = exactOrder !== null
+            ? (wantLargest ? exactOrder < 0 : exactOrder > 0)
+            : (wantLargest ? rv > lv : rv < lv);
+        if (better) best = a;
     }
     if (hasNaN) return numberValue(NaN);
     if (best === undefined) return numberValue(wantLargest ? -Infinity : Infinity);
-    return best.type === ValueType.Uom ? best : numberValue(best.toNumber());
+    if (best.type === ValueType.Uom) return best;
+    // The winner keeps its exact decimal, so `max(0.1, 0.2) + 0.1 == 0.3`.
+    const winner = numberValue(best.toNumber());
+    if (best.type === ValueType.Number && best.exact !== undefined) winner.exact = best.exact;
+    return winner;
 }
 
 /**
@@ -308,7 +319,8 @@ function keepUnit(operand: Value, magnitude: number): Value {
  * and the function `round(x, N)` (builtin 8's two-argument form). Rounds from the
  * exact decimal where the value carries one, so `1.005 to 2 dp` and
  * `round(1.005, 2)` are `1.01`, half away from zero, not the `1.00` a double
- * (1.00499...) rounds down to. Without an exact decimal it rounds the double,
+ * (1.00499...) rounds down to, and from the exact fraction where the value
+ * carries one of those instead. Without either it rounds the double,
  * guarding the point past 2^53 where a double has no fractional digits left to
  * round (scaling further only adds error, so `1e21 to 2 dp` is `1e21`). The
  * unit, if any, rides along.
@@ -321,6 +333,13 @@ function roundToPlaces(source: Value, places: number): Value {
         const whole = withPlaces(source, source.toNumber(), p);
         whole.rational = source.rational;
         return whole;
+    }
+    // A fraction rounds from the fraction, half away from zero, the rule an
+    // exact decimal follows below: `(201/200) to 2 dp` is 1.01, where the double
+    // (1.00499...) rounded down to 1.00. The rounded value is an exact decimal.
+    if (source.type === ValueType.Number && source.rational !== undefined) {
+        const rounded = roundRationalToPlaces(source.rational, p);
+        return withPlaces(source, decimalToNumber(rounded), p, rounded);
     }
     if (source.exact !== undefined) {
         const rounded = decimalRound(source.exact, p);
@@ -526,8 +545,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // valid alias for det(a) (index 64), reusing the SAME implementation
     // not a separate one. Plain-number abs is unaffected. An exact integer past
     // the safe range stays exact here and through the rounding family below;
-    // see wholeNumberUnchanged() in vm/ExactIntegers.ts.
-    1: (args) => args[0].type === ValueType.Matrix ? determinant(args[0].value as MatrixData) : wholeNumberUnchanged(args[0], true) ?? keepUnit(args[0], Math.abs(args[0].toNumber())),
+    // see wholeNumberUnchanged() in vm/ExactIntegers.ts. An exact decimal stays
+    // exact the same way, and the rounding family rounds it from its decimal
+    // rather than its double; see vm/ExactDecimals.ts.
+    1: (args) => args[0].type === ValueType.Matrix ? determinant(args[0].value as MatrixData) : wholeNumberUnchanged(args[0], true) ?? absExactDecimal(args[0]) ?? keepUnit(args[0], Math.abs(args[0].toNumber())),
     // sin/cos/tan accept an angle with a unit; see angleInRadians().
     // Exact at the special angles; see specialAngleDegrees().
     2: (args) => numberValue(exactSine(angleInRadians(args[0]))),
@@ -539,14 +560,14 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // rather than answering NaN or an infinity; see outsideDomain().
     5: (args) => outsideDomain("log", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log(args[0].toNumber())),
     // round/ceil/floor keep a unit for the same reason abs does; see keepUnit().
-    6: (args) => wholeNumberUnchanged(args[0], false) ?? keepUnit(args[0], Math.ceil(args[0].toNumber())),
-    7: (args) => wholeNumberUnchanged(args[0], false) ?? keepUnit(args[0], Math.floor(args[0].toNumber())),
+    6: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "ceil") ?? keepUnit(args[0], Math.ceil(args[0].toNumber())),
+    7: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "floor") ?? keepUnit(args[0], Math.floor(args[0].toNumber())),
     8: (args) =>
         args.length >= 2
             ? // round(x, n): round to n decimal places and display at that precision.
               roundToPlaces(args[0], args[1].toNumber())
             : // round(x): nearest whole number, the way it always was.
-              wholeNumberUnchanged(args[0], false) ?? keepUnit(args[0], Math.round(args[0].toNumber())),
+              wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "round") ?? keepUnit(args[0], Math.round(args[0].toNumber())),
     // min/max: see extremum() for why the winner is carried around as a Value
     // rather than as a running number.
     9: (args) => extremum(args, false),
@@ -603,6 +624,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
       // The spelled-out form of `^` answers what `^` answers, edge cases
       // included, and a whole-number result past the safe range exactly as
       // `^` does. See power() in vm/VMConversion.ts and vm/ExactIntegers.ts.
+      // A decimal base to a whole power is exact, as `^` is: `pow(1.1, 2)` is
+      // exactly 1.21. See vm/ExactDecimals.ts.
+      const exactPower = exactDecimalPower(args[0], args[1]);
+      if (exactPower !== null) return exactPower;
       const raised = power(args[0].toNumber(), args[1].toNumber());
       return raised <= Number.MAX_SAFE_INTEGER && raised >= -Number.MAX_SAFE_INTEGER
         ? numberValue(raised)
@@ -610,7 +635,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     },
     32: (_args, context) => numberValue(drawRandom(context)), // takes no arguments, unlike its neighbours
     33: (args) => numberValue(Math.sign(args[0].toNumber())),
-    34: (args) => wholeNumberUnchanged(args[0], false) ?? numberValue(Math.trunc(args[0].toNumber())),
+    34: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "trunc") ?? numberValue(Math.trunc(args[0].toNumber())),
     35: (args) => numberValue(args[0].toNumber() * Math.PI / 180),
     36: (args) => numberValue(args[0].toNumber() * 180 / Math.PI),
     // 37: diceRoll(from, to), random integer in range [from, to] inclusive.
@@ -740,6 +765,9 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // MathPhrases package's "average of X, Y, Z" (packages/mathphrases/).
     42: (args) => {
         if (args.length === 0) return numberValue(0);
+        // A list of decimals has an exact mean; see vm/ExactDecimals.ts.
+        const exactMean = exactDecimalTotal(args, true);
+        if (exactMean !== null) return exactMean;
         const unified = unifyQuantities(args, "averaged");
         if (unified instanceof Value) return unified;
         const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);
@@ -761,6 +789,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     },
     // total(...), sum of any number of arguments.
     44: (args) => {
+        // A list of decimals has an exact total: `total of 0.1, 0.2` is exactly
+        // 0.3, the sum `0.1 + 0.2` is. See vm/ExactDecimals.ts.
+        const exactTotal = exactDecimalTotal(args, false);
+        if (exactTotal !== null) return exactTotal;
         const unified = unifyQuantities(args, "added");
         if (unified instanceof Value) return unified;
         return quantity(unified.magnitudes.reduce((acc, n) => acc + n, 0), unified.unit, unified.sources);
@@ -812,7 +844,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // from the Converters package's `x as number` (TO_NUMBER opcode),
     // which only strips a unit/percentage wrapper and keeps any decimal
     // part (e.g. "5.7 as number" -> 5.7), int() additionally truncates.
-    50: (args) => wholeNumberUnchanged(args[0], false) ?? numberValue(Math.trunc(args[0].toNumber())),
+    50: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "trunc") ?? numberValue(Math.trunc(args[0].toNumber())),
 
     // ── Finance (packages/finance/) ──────────────────────────────────────
     // All finance builtins preserve the principal/amount argument's Uom
@@ -1326,8 +1358,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
             return errorValue("INVALID_RATE_UNIT", `${numerator}/${denominator}: that is already a rate`);
         }
         // A bare number over a unit is a countless rate, "30/week", which the
-        // rate machinery already renders without a numerator unit.
-        return uomValue(source.toNumber(), `${numerator}/${denominator}`);
+        // rate machinery already renders without a numerator unit. A price
+        // ("0.15 USD per kWh") keeps the exact decimal its amount had, as
+        // "$0.15/kWh" does; see vm/MoneyExact.ts.
+        return valueInUnit(source, `${numerator}/${denominator}`);
     },
     // atRate(quantity, rate) -> whichever of the two the question implies.
     //
@@ -1367,7 +1401,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (leftEntry !== undefined && denominatorEntry !== undefined && leftEntry[0] === denominatorEntry[0]) {
             const inDenominator = left.toNumber() * leftEntry[1] / denominatorEntry[1];
             const total = inDenominator * rate.toNumber();
-            return numerator === "" ? numberValue(total) : uomValue(total, numerator);
+            // A price per unit comes to the money the plain product does:
+            // "12.3 kg at $0.15/kg" is exactly $1.845, as "$0.15 * 12.3" is (#579).
+            if (numerator === "") return numberValue(total);
+            return moneyForCount(rate, numerator, inDenominator) ?? uomValue(total, numerator);
         }
 
         // "$500 at $20/hour": the left side is the numerator, so divide.
@@ -1379,7 +1416,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         // A bare number counts denominators too: "30 at $30/hour".
         if (leftUnit === undefined) {
             const total = left.toNumber() * rate.toNumber();
-            return numerator === "" ? numberValue(total) : uomValue(total, numerator);
+            if (numerator === "") return numberValue(total);
+            return moneyForCount(rate, numerator, left.toNumber()) ?? uomValue(total, numerator);
         }
 
         return errorValue("INCOMPATIBLE_UNITS", `at: ${leftUnit} matches neither side of ${rate.unit}`);

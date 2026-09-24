@@ -1,7 +1,8 @@
 import { Value, ValueType, numberValue, uomValue, errorValue, stringValue } from "@solve-js/vm/Value";
 import { isCheckResult } from "@solve-js/packages/conditionals/CheckFunctions";
 import { nonNumericKind, unifyQuantities } from "@solve-js/vm/VMConversion";
-import { withSources } from "@solve-js/vm/Provenance";
+import { sourcesOfValues, withSources } from "@solve-js/vm/Provenance";
+import { exactDecimalTotal } from "@solve-js/vm/ExactDecimals";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { headingOf, isSummaryLine, sectionKey } from "./SectionReader";
 import { formatLineTrace, traceProblem } from "@solve-js/explain/LineTracer";
@@ -29,10 +30,9 @@ import { formatLineTrace, traceProblem } from "@solve-js/explain/LineTracer";
  * line's trace rather than its value.
  *
  * The form shares `lineRef`'s plugin slot instead of registering a function of
- * its own. Plugin functions are numbered in the order packages register, and
- * a seeded random draw is keyed on its line's compiled bytes, which carry
- * those numbers: a new function here, registered ahead of the random package,
- * would renumber `pick`, `coin` and `uuid` and change every seeded draw.
+ * its own, since it reads the same target line through the same context. (A
+ * seeded random draw keys a plugin call by the function's name, so a new
+ * function would not have moved any draw either.)
  */
 export const TRACE_INPUTS = 1;
 
@@ -82,9 +82,7 @@ export function prevHandler(_args: Value[], context?: LineExecutionContext): Val
  * stand: on its own, as either end of a range, or as goal seek's target.
  *
  * It rides the existing `lineRef` call rather than a plugin function of its
- * own, deliberately. A new plugin function takes a new index, and every
- * package registered after this one would move up by one, which changes their
- * compiled bytecode and with it every seeded random draw keyed on it. No line
+ * own, so every place a line reference can stand accepts it unchanged. No line
  * can be written as `line -1` (the minus is an operator, not part of the
  * reference), so the number is free to mean "deleted".
  */
@@ -137,6 +135,12 @@ export function lineRefHandler(args: Value[], context?: LineExecutionContext): V
  * first one in the column, since that is the one the reader wrote first.
  */
 function combineQuantities(values: Value[], isAverage: boolean): Value {
+  // A column of decimals totals exactly, so `total above` over 0.1 and 0.2 is
+  // the 0.3 a later `== 0.3` agrees with. See vm/ExactDecimals.ts. The exact
+  // total carries the column's sources as the double one below does: an exact
+  // column is all plain numbers, so there is no conversion rate to add.
+  const exact = exactDecimalTotal(values, isAverage);
+  if (exact !== null) return withSources(exact, sourcesOfValues(values));
   const unified = unifyQuantities(values, isAverage ? "averaged" : "added");
   if (unified instanceof Value) return unified;
   const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);

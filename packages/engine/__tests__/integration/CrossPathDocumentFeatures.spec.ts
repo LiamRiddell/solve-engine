@@ -176,6 +176,12 @@ describe("category tags across entry points", () => {
     expect(incremental(doc)[2]).toBe("$65.00");
   });
 
+  test("tagged decimals total exactly, in both passes (#511)", () => {
+    const doc = ["0.1 #tip", "0.2 #tip", "total of #tip", "total of #tip == 0.3", "average of #tip == 0.15"];
+    expect(batch(doc).slice(2)).toEqual(["0.30", "true", "true"]);
+    expect(incremental(doc).slice(2)).toEqual(["0.30", "true", "true"]);
+  });
+
   test("a keyword-named tag still aggregates (issue #213)", () => {
     const doc = ["1200 #assuming", "800 #assuming", "total of #assuming"];
     expect(batch(doc)[2]).toBe("2,000");
@@ -310,6 +316,12 @@ describe("line references across entry points", () => {
     expect(incremental(doc).slice(3)).toEqual(["60", "20"]);
   });
 
+  test("a column of decimals totals exactly, both passes (#511)", () => {
+    const doc = ["0.1", "0.2", "total above", "line 3 == 0.3", "sum(line 1 : line 2) == 0.3", "average(line 1 : line 2) == 0.15"];
+    expect(batch(doc).slice(2)).toEqual(["0.30", "true", "true", "true"]);
+    expect(incremental(doc).slice(2)).toEqual(["0.30", "true", "true", "true"]);
+  });
+
   test("the single-expression path refuses with a document error", () => {
     expectNeedsDocument("prev");
     expectNeedsDocument("line 1");
@@ -406,6 +418,12 @@ describe("table columns across entry points", () => {
     ];
     const out = batch(doc);
     expect(out.slice(6)).toEqual(["12", "1,200", "3", "300"]);
+  });
+
+  test("a column of decimal cells sums and averages exactly (#511)", () => {
+    const decimals = ["| item | tip |", "| ---- | --- |", "| a | 0.1 |", "| b | 0.2 |"];
+    const doc = [...decimals, "", 'sum of column "tip" above', 'sum of column "tip" above == 0.3', 'average of column "tip" above == 0.15'];
+    expect(batch(doc).slice(5)).toEqual(["0.30", "true", "true"]);
   });
 
   test("the single-expression path refuses with a document error", () => {

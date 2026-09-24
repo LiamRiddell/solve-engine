@@ -13,7 +13,7 @@ description: Percent of, increase and decrease, change between values, and solvi
 ## Increase and decrease
 
 ```solve
-increase 100 by 10% // 110.00
+increase 100 by 10% // 110
 ```
 
 ## Successive change: up, down, then

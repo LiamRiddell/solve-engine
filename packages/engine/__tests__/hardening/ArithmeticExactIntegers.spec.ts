@@ -98,9 +98,14 @@ describe("where exactness stops, and why", () => {
 		expect(evaluate("10^16 + 1 - 10^16").toNumber()).toBe(1);
 	});
 
-	test("a fractional operand keeps the double path", () => {
+	test("a fractional operand gives no exact integer unless the answer is whole", () => {
+		// 2^60 + 0.5 is not a whole number, so it carries no exact integer.
 		expect(exactInteger("2^60 + 0.5")).toBeUndefined();
-		expect(exactInteger("2^60 * 0.5")).toBeUndefined();
+		// DECIDED (#511), reversing what this line used to pin. A decimal is now
+		// the exact fraction it was written as (0.5 is 1/2), so 2^60 * 0.5 is
+		// exactly 2^59, the answer 2^60 * (1/2) already gave.
+		expect(exactInteger("2^60 * 0.5")).toBe(1n << 59n);
+		expect(exactInteger("2^60 * (1/2)")).toBe(1n << 59n);
 		expect(exactInteger("2^-60")).toBeUndefined();
 	});
 
@@ -121,7 +126,9 @@ describe("where exactness stops, and why", () => {
 	test("within the safe range nothing changes at all", () => {
 		expect(exactInteger("2 + 3")).toBeUndefined();
 		expect(exactInteger("2^52 + 1")).toBeUndefined();
-		expect(evaluate("0.1 + 0.2").toNumber()).toBe(0.30000000000000004);
+		// A decimal sum is exact (#511) and carries no integer either.
+		expect(evaluate("0.1 + 0.2").toNumber()).toBe(0.3);
+		expect(exactInteger("0.1 + 0.2")).toBeUndefined();
 		// An exact value that comes back inside the range keeps its sidecar,
 		// as a fraction does, and reads exactly as the double would.
 		expect(shown("2^53 - 1")).toBe("= 9,007,199,254,740,991");

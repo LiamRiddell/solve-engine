@@ -61,7 +61,11 @@ describe("the six ordering relations agree with each other", () => {
 		["-1", "1", false, true, true, true, false, false],
 		["-2", "-1", false, true, true, true, false, false],
 		["0", "-0", true, false, false, true, false, true],
-		["0.1 + 0.2", "0.3", false, true, false, false, true, true],
+		// Decimals compare on their exact values (#511), so this pair is equal.
+		["0.1 + 0.2", "0.3", true, false, false, true, false, true],
+		// Scientific notation is still read as floating point, where the same
+		// sum lands one ulp above three tenths.
+		["1e-1 + 2e-1", "3e-1", false, true, false, false, true, true],
 		["1 / 0", "1e308", false, true, false, false, true, true],
 	];
 
@@ -96,12 +100,23 @@ describe("comparison happens after arithmetic", () => {
 		expect(bool("2 ^ 3 >= 8")).toBe(true);
 	});
 
-	test("and floating point error is visible through it", () => {
-		// The reason `0.1 + 0.2 == 0.3` is false is worth having pinned
-		// somewhere a reader will find it, because it is the single most
-		// common bug report against any calculator.
-		expect(bool("0.1 + 0.2 == 0.3")).toBe(false);
-		expect(bool("0.1 + 0.2 > 0.3")).toBe(true);
+	test("and a decimal compares on the value it was written as", () => {
+		// DECIDED (#511), reversing what this test used to pin. `0.1 + 0.2 ==
+		// 0.3` was false, because both sides were doubles and the sum lands one
+		// ulp above the double nearest 0.3. It is the single most common bug
+		// report against any calculator, and the answer on screen (0.30) said
+		// otherwise. Decimals are now exact, so the comparison agrees with it.
+		// See vm/ExactDecimals.ts.
+		expect(bool("0.1 + 0.2 == 0.3")).toBe(true);
+		expect(bool("0.1 + 0.2 > 0.3")).toBe(false);
+	});
+
+	test("and floating point error is still visible where floating point is used", () => {
+		// Scientific notation and an irrational stay doubles, and there the
+		// error comes through exactly as a double makes it.
+		expect(bool("1e-1 + 2e-1 == 3e-1")).toBe(false);
+		expect(bool("1e-1 + 2e-1 > 3e-1")).toBe(true);
+		expect(bool("sqrt(2) * sqrt(2) == 2")).toBe(false);
 	});
 });
 

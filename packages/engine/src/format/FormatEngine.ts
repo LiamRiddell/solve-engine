@@ -12,7 +12,7 @@ import { formatSymbolic, type SymbolicNode } from "@solve-js/symbolic";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 import { isFixedOffset, longDateInZone, timeOfDayInZone } from "@solve-js/calendar/IntlZone";
 
-function formatNumber(value: number, locale: ILocale, settings: FormattingSettings, decimalPlaces?: number): string {
+function formatNumber(value: number, locale: ILocale, settings: FormattingSettings, decimalPlaces?: number, exact?: DecimalData): string {
   const sep = settings.floatResult.enableSeperator;
   const loc = settings.numberResult.decimalSeparatorLocale;
   // An explicit precision (`3.14159 to 4 dp`, `round(1.5, 2)`) shows EXACTLY that
@@ -20,6 +20,13 @@ function formatNumber(value: number, locale: ILocale, settings: FormattingSettin
   // an integer with none. The value was already rounded to this precision when
   // it was set (see VMBuiltins' roundToPlaces, exact where an exact decimal was
   // there), so rendering it to the same place count reproduces that rounding.
+  //
+  // Where that rounding was exact, the digits come from the decimal rather than
+  // the double, the way money's do: `(0.1 + 0.2) to 17 dp` is 0.3 to seventeen
+  // places, and the double nearest 0.3 would print as 0.29999999999999999.
+  if (decimalPlaces !== undefined && exact !== undefined && Number.isFinite(value)) {
+    return `${locale.display.resultPrefix}${localiseFixedDecimal(decimalToFixed(exact, decimalPlaces), loc || "en-US", sep)}`;
+  }
   if (decimalPlaces !== undefined && Number.isFinite(value)) {
     const formatted = value.toLocaleString(loc || "en-US", {
       minimumFractionDigits: decimalPlaces,
@@ -440,9 +447,14 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   //
   // An exact currency with no symbol in the display table above (one of the
   // less common ISO codes) still rounds from its decimal here, so "1.005 UYW"
-  // reads the same way "$1.005" does. Non-currency Uoms never carry an exact,
-  // so this leaves "1.50 kg" exactly as it was.
-  const genericText = exact ? localiseFixedDecimal(decimalToFixed(exact, dp), loc, useGrouping) : formatted;
+  // reads the same way "$1.005" does. A price per unit carries its decimal too
+  // (see vm/MoneyExact.ts) and rounds from it the same way, so "$1.005/kg" is
+  // 1.01 USD/kg, except below the decimal budget: a tenth of a cent a
+  // kilowatt-hour is a real price, so it keeps its significant digits as any
+  // small quantity does, where "$0.001" on its own is not a payable amount.
+  // Every other Uom carries no exact, so this leaves "1.50 kg" as it was.
+  const perUnitBelowBudget = tooSmall !== undefined && unit !== undefined && unit.includes("/");
+  const genericText = exact && !perUnitBelowBudget ? localiseFixedDecimal(decimalToFixed(exact, dp), loc, useGrouping) : formatted;
   return `= ${genericText} ${unit || ""}`.trim();
 }
 
@@ -604,7 +616,7 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
       if (value.rational !== undefined && value.rational.d === 1n && !Number.isSafeInteger(value.value as number)) {
         return formatExactInteger(value.rational.n, locale, us, value.decimalPlaces);
       }
-      return formatNumber(value.value as number, locale, us, value.decimalPlaces);
+      return formatNumber(value.value as number, locale, us, value.decimalPlaces, value.exact);
     case ValueType.Hex:
       return formatHex(value.value as number | bigint, us, value.unit);
     case ValueType.BigInt:

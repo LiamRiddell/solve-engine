@@ -145,7 +145,7 @@ describe("the answer is text", () => {
 
   test("the words stay ordinary outside the whole phrase", () => {
     const out = readLines(newTrackedEngine().parseDocument([":total = 5", "total + 1", "increase 100 by 10%"].join("\n")));
-    expect(out).toEqual(["5", "6", "110.00"]);
+    expect(out).toEqual(["5", "6", "110"]);
   });
 });
 

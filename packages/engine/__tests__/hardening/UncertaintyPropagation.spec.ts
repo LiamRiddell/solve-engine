@@ -148,7 +148,10 @@ describe("what must keep working: a value with no tolerance is a plain number", 
 
 	test("a plain double keeps its full underlying precision, only the display rounds", () => {
 		// The 2-dp display is unchanged; the value itself is the usual double.
-		expect(evaluate("0.1 + 0.2").toNumber()).toBe(0.30000000000000004);
+		// Scientific notation is still a double; a decimal written with a point
+		// is exact (#511), so it reads as the double nearest its exact value.
+		expect(evaluate("1e-1 + 2e-1").toNumber()).toBe(0.30000000000000004);
+		expect(evaluate("0.1 + 0.2").toNumber()).toBe(0.3);
 	});
 
 	test("no plain result grows an uncertainty sidecar", () => {

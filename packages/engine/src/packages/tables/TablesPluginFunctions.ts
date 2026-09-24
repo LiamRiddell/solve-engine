@@ -1,6 +1,8 @@
-import { Value, ValueType, numberValue, errorValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueExact, errorValue } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
-import { findTableAbove, columnIndex, numericColumn } from "./TableReader";
+import { decimalFromLiteral } from "@solve-js/decimal";
+import { exactDecimalTotal } from "@solve-js/vm/ExactDecimals";
+import { findTableAbove, columnIndex, numericColumn, parseNumericCell, type MarkdownTable } from "./TableReader";
 
 /**
  * Runtime handlers for `sum of column "name" above` and its siblings.
@@ -179,7 +181,30 @@ function aggregateColumn(
     );
   }
 
+  // A column of decimals totals exactly, the way a column of lines does, so
+  // `sum of column "cost" above == 0.3` agrees with the 0.30 it shows. The
+  // other reductions read the doubles. See vm/ExactDecimals.ts.
+  if (op === "sum" || op === "average") {
+    const exact = exactDecimalTotal(exactCells(table, index), op === "average");
+    if (exact !== null) return exact;
+  }
   return numberValue(reduce(op, cells));
+}
+
+/**
+ * A column's plain-number cells as Values, each decimal cell carrying the
+ * decimal it was written as, the way a decimal typed on a line does. The same
+ * cells {@link numericColumn} reads, in the same order.
+ */
+function exactCells(table: MarkdownTable, colIndex: number): Value[] {
+  const out: Value[] = [];
+  for (const row of table.rows) {
+    const value = parseNumericCell(row[colIndex]);
+    if (value === null) continue;
+    const text = row[colIndex]!.trim().replace(/,/g, "");
+    out.push(text.includes(".") ? numberValueExact(value, decimalFromLiteral(text)) : numberValue(value));
+  }
+  return out;
 }
 
 function columnName(args: Value[]): string {

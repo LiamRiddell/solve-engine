@@ -55,7 +55,8 @@ export function moneyExactMagnitude(operand: Value, unit: string): DecimalData |
  * its shortest round-tripping string, or null for a value that is not (a computed
  * irrational, or scientific-notation extreme). Wider than
  * {@link decimalFromNumberIfExact} (integers only), and used only to recover a
- * percentage's intended decimal, where the printed proportion is the meaning.
+ * percentage's intended decimal, where the printed proportion is the meaning,
+ * and a count of units priced in money (see {@link countDecimal}).
  */
 export function decimalFromShortDecimal(n: number): DecimalData | null {
 	if (!Number.isFinite(n)) return null;
@@ -100,6 +101,94 @@ export function scaleMoneyByInteger(amount: Value, factor: bigint, unit: string)
 	if (base === null) return null;
 	const result = decimalMultiply(base, decimalFromInteger(factor));
 	return uomValueExact(decimalToNumber(result), unit, result);
+}
+
+/**
+ * The exact decimal a price per unit should carry, or null when it has none.
+ *
+ * A rate whose numerator is a currency (`$0.15/kWh`, `£12/hour`) is a price,
+ * and it keeps the decimal it was typed as for the same reason money does: the
+ * bill it gives is money, and `12.3 kWh * $0.15/kWh` has to come to the same
+ * cent as `$0.15 * 12.3`. The amount's exact value is found the way
+ * {@link moneyExactMagnitude} finds it. Any other rate (`km/h`, `30/week`) and
+ * every plain unit return null and stay the doubles they were.
+ */
+function moneyRateExactMagnitude(operand: Value, unit: string): DecimalData | null {
+	const slash = unit.indexOf("/");
+	if (slash <= 0 || slash === unit.length - 1) return null;
+	if (!sharedCurrencyExchange.isCurrency(unit.slice(0, slash))) return null;
+	return operand.exact ?? decimalFromNumberIfExact(operand.toNumber());
+}
+
+/**
+ * An amount given a unit, carrying the exact decimal where the unit is money or
+ * a price per unit, and a plain quantity otherwise.
+ *
+ * What a unit written after a number makes (`$0.15`, `$0.15/kWh`, `12.3 kWh`),
+ * and what `0.15 USD per kWh` makes of an amount of money. Only money and a
+ * price per unit keep the decimal; a length, a mass or a speed stays a double,
+ * the boundary vm/ExactDecimals.ts draws for units other than money.
+ *
+ * @param operand - The amount, a number or an amount of money.
+ * @param unit - The unit it is given.
+ * @returns The value in that unit.
+ */
+export function valueInUnit(operand: Value, unit: string): Value {
+	const exact = moneyExactMagnitude(operand, unit) ?? moneyRateExactMagnitude(operand, unit);
+	return exact !== null ? uomValueExact(operand.toNumber(), unit, exact) : uomValue(operand.toNumber(), unit);
+}
+
+/**
+ * The most significant digits a double is sure to hold (IEEE 754's `DBL_DIG`).
+ * A count that prints in more is a double's own rounding, not a decimal anyone
+ * wrote, so {@link countDecimal} leaves it to floating point.
+ */
+const DOUBLE_DIGITS = 15;
+
+/**
+ * The decimal a count of units stands for, or null.
+ *
+ * A quantity other than money holds a double (see vm/ExactDecimals.ts), so the
+ * decimal is recovered from it as a percentage's is (see
+ * {@link decimalFromShortDecimal}): `12.3 kWh` is 12.3. Only a whole number or a
+ * decimal of at most {@link DOUBLE_DIGITS} significant digits is taken; a third
+ * of a unit prints as 0.3333333333333333, which is the double's rounding of a
+ * fraction, and treating it as that decimal would put `(1/3) kWh * $30/kWh` a
+ * hair under the $10 it has always equalled.
+ */
+function countDecimal(n: number): DecimalData | null {
+	if (Number.isSafeInteger(n)) return decimalFromInteger(BigInt(n));
+	const d = decimalFromShortDecimal(n);
+	if (d === null) return null;
+	return (d.coef < 0n ? -d.coef : d.coef).toString().length <= DOUBLE_DIGITS ? d : null;
+}
+
+/**
+ * The money a count comes to at a price, kept exact, or null.
+ *
+ * Every spelling of a price times a quantity lands here: a price per unit times
+ * what it is per (`12.3 kWh * $0.15/kWh`, `12.3 kg at $0.15/kg`,
+ * `$0.15 per kg * 12.3 kg`) and an amount of money times a count
+ * (`$0.15 * 12.3 kWh`). Each is the plain product `$0.15 * 12.3`, which is
+ * exactly $1.845 and shows $1.85, where the doubles give 1.845's nearest double,
+ * a hair under the half cent, and showed $1.84.
+ *
+ * Null, so the caller keeps its double, when the price carries no exact decimal
+ * (a rate worked out by dividing, or an amount converted between currencies),
+ * when the answer is not money, and when the count has no short decimal (see
+ * {@link countDecimal}).
+ *
+ * @param price - The price: an amount of money, or a price per unit.
+ * @param currency - The currency the answer is in.
+ * @param count - How many of what the price is for, in the unit it is per.
+ * @returns The exact amount, or null.
+ */
+export function moneyForCount(price: Value, currency: string, count: number): Value | null {
+	if (price.exact === undefined || !sharedCurrencyExchange.isCurrency(currency)) return null;
+	const counted = countDecimal(count);
+	if (counted === null) return null;
+	const amount = decimalMultiply(price.exact, counted);
+	return uomValueExact(decimalToNumber(amount), currency, amount);
 }
 
 /**

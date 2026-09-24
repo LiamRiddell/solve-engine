@@ -33,7 +33,7 @@ complete expression.
 
 ```solve
 10% of 250 // 25
-increase 100 by 10% // 110.00
+increase 100 by 10% // 110
 100 to 150 // 50.00%
 5% of what is 6 // 120
 ```

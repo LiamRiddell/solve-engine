@@ -1,7 +1,7 @@
 import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, chartValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData } from "@solve-js/vm/Value";
 import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
-import { moneyExactMagnitude, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
+import { valueInUnit, moneyForCount, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { tryDimensionalCompose } from "@solve-js/uom/Dimensions";
@@ -19,7 +19,7 @@ import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/Di
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, currencyRateSources } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, currencyRateSources } from "@solve-js/vm/VMConversion";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
@@ -28,7 +28,8 @@ import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import type { ScopeId } from "@solve-js/vm/CellScope";
 import { raiseQuantity, unitPowerUnsupported, multiplyLengths, divideLengths } from "@solve-js/vm/QuantityPowers";
 import { multiplyRates, divideRates, refuseLikeProduct, reciprocalOf } from "@solve-js/vm/UnitAlgebra";
-import { bigIntPow, exactIntegerArithmetic, exactIntegerRemainder, baseConversionOperand } from "@solve-js/vm/ExactIntegers";
+import { bigIntPow, baseConversionOperand } from "@solve-js/vm/ExactIntegers";
+import { exactArithmetic, exactPowerArithmetic, exactRemainder, scaleByPercentExact, multiplyByPercentExact } from "@solve-js/vm/ExactDecimals";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
@@ -1181,7 +1182,10 @@ function moneyTimesQuantity(l: Value, r: Value): Value | null {
     // Exactly one side. Money times money is not a thing either.
     if (leftIsMoney === rightIsMoney) return null;
 
-    return uomValue(l.toNumber() * r.toNumber(), leftIsMoney ? leftUnit : rightUnit);
+    // Exact where the money is, so "$0.15 * 12.3 kWh" is the $1.85 that
+    // "$0.15 * 12.3" is. See vm/MoneyExact.ts.
+    const [money, count] = leftIsMoney ? [l, r] : [r, l];
+    return moneyForCount(money, money.unit!, count.toNumber()) ?? uomValue(l.toNumber() * r.toNumber(), money.unit!);
 }
 
 /**
@@ -1235,7 +1239,9 @@ function combinePercentage(l: Value, r: Value, sign: 1 | -1): Value | null {
         // silently dropped.
         const scaled = l.toNumber() * factor;
         if (l.uncertainty !== undefined) return numberValueUncertain(scaled, Math.abs(l.uncertainty * factor));
-        return numberValue(scaled);
+        // Formed in base ten, the way money's is: "100 + 10%" is exactly 110,
+        // where the doubles give 110.00000000000001. See vm/ExactDecimals.ts.
+        return scaleByPercentExact(l, r.toNumber(), sign) ?? numberValue(scaled);
     }
     // A Uom with no unit string is not something this can scale meaningfully,
     // so it falls through to the ordinary path rather than inventing one. Money
@@ -1285,6 +1291,22 @@ function multiplyMoneyByScalarExact(l: Value, r: Value): Value | null {
         return scalar.rational.d === 1n ? scaleMoneyByInteger(money, scalar.rational.n, money.unit) : null;
     }
     return scaleMoneyExact(money, scalar.toNumber(), money.unit);
+}
+
+/**
+ * An exact product with a scalar, or null: money times a number or a
+ * percentage (see {@link multiplyMoneyByScalarExact}), or a plain number times a
+ * percentage, `10% of 0.1`, which is exact for the same reason (see
+ * vm/ExactDecimals.ts). Every other multiply keeps its own path. One call from
+ * MUL, so the dispatch loop does not grow (see the note on the size of
+ * `executeBytecode` above the opcode bodies kept out of it).
+ */
+function multiplyScalarExact(l: Value, r: Value): Value | null {
+    const money = multiplyMoneyByScalarExact(l, r);
+    if (money !== null) return money;
+    if (l.type === ValueType.Percentage && r.type === ValueType.Number) return multiplyByPercentExact(r, l.toNumber());
+    if (r.type === ValueType.Percentage && l.type === ValueType.Number) return multiplyByPercentExact(l, r.toNumber());
+    return null;
 }
 
 /**
@@ -1922,7 +1944,13 @@ function multiplyRateByMatchingUom(rate: Value, multiplier: Value): Value {
     }
     const multiplierInDenominatorUnit = convertUnit(multiplier.toNumber(), multiplier.unit!, denominator);
     const total = rate.toNumber() * multiplierInDenominatorUnit;
-    return numerator ? uomValue(total, numerator) : numberValue(total);
+    if (!numerator) return numberValue(total);
+    // A price per unit comes to the money the plain product does:
+    // "12.3 kWh * $0.15/kWh" is exactly $1.845, as "$0.15 * 12.3" is (#579).
+    // Not for a count that reached the rate's unit through an exchange rate,
+    // which is a double, as a converted amount of money is.
+    const crossedCurrencies = multiplier.unit !== denominator && sharedCurrencyExchange.isCurrency(denominator);
+    return (crossedCurrencies ? null : moneyForCount(rate, numerator, multiplierInDenominatorUnit)) ?? uomValue(total, numerator);
 }
 
 // ── Converters (`as <type>`) formatting helpers ───────────────────────────
@@ -2862,10 +2890,13 @@ export function executeBytecode(
             const sum = (l.value as number) + (r.value as number);
             // One comparison keeps the plain case plain. A sum outside the
             // safe range (or a NaN) takes the exact-integer path, which gives
-            // `2^53 + 1` its last digit. See vm/ExactIntegers.ts.
-            stack.push(sum <= SAFE_INTEGER_LIMIT && sum >= -SAFE_INTEGER_LIMIT
+            // `2^53 + 1` its last digit (see vm/ExactIntegers.ts), and an operand
+            // carrying an exact decimal keeps the sum exact, so "0.1 + 0.2" is
+            // exactly 0.3 (see vm/ExactDecimals.ts). Two whole numbers pay two
+            // property tests for the second; the work is in the helper.
+            stack.push(sum <= SAFE_INTEGER_LIMIT && sum >= -SAFE_INTEGER_LIMIT && l.exact === undefined && r.exact === undefined
               ? numberValue(sum)
-              : exactIntegerArithmetic(l, r, sum, "add"));
+              : exactArithmetic(l, r, sum, "add"));
             break;
           }
           carry = combineSources(l.sources, r.sources);
@@ -2904,7 +2935,10 @@ export function executeBytecode(
             // operand's period before adding.
             stack.push(uomValue(ratePeriodAdd + r.toNumber(), r.unit!));
           } else if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(numberValue((l.value as number) + (r.value as number)));
+            // Two numbers the plain case above passed over (one carries its
+            // sources, say) add the way that case adds them, so a sourced
+            // decimal stays exact. See vm/ExactDecimals.ts.
+            stack.push(exactArithmetic(l, r, (l.value as number) + (r.value as number), "add"));
           } else if (l.type === ValueType.Boolean && r.type === ValueType.Boolean) {
             // The word "and" is a synonym for arithmetic "+" ("5 and 3" = 8)
             // and also the boolean conjunction ("true and false"). It has its
@@ -2961,9 +2995,9 @@ export function executeBytecode(
               && l.uncertainty === undefined && r.uncertainty === undefined
               && l.sources === undefined && r.sources === undefined) {
             const difference = (l.value as number) - (r.value as number);
-            stack.push(difference <= SAFE_INTEGER_LIMIT && difference >= -SAFE_INTEGER_LIMIT
+            stack.push(difference <= SAFE_INTEGER_LIMIT && difference >= -SAFE_INTEGER_LIMIT && l.exact === undefined && r.exact === undefined
               ? numberValue(difference)
-              : exactIntegerArithmetic(l, r, difference, "sub"));
+              : exactArithmetic(l, r, difference, "sub"));
             break;
           }
           carry = combineSources(l.sources, r.sources);
@@ -2990,7 +3024,8 @@ export function executeBytecode(
           } else if (ratePeriodSub !== null) {
             stack.push(uomValue(ratePeriodSub - r.toNumber(), r.unit!));
           } else if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(numberValue((l.value as number) - (r.value as number)));
+            // As in ADD: a sourced decimal subtracts exactly.
+            stack.push(exactArithmetic(l, r, (l.value as number) - (r.value as number), "sub"));
           } else if (l.type === ValueType.Datetime) {
             if (r.type === ValueType.Datetime) {
               // "now - now" used to unconditionally re-wrap the result as
@@ -3040,9 +3075,9 @@ export function executeBytecode(
               && l.uncertainty === undefined && r.uncertainty === undefined
               && l.sources === undefined && r.sources === undefined) {
             const product = (l.value as number) * (r.value as number);
-            stack.push(product <= SAFE_INTEGER_LIMIT && product >= -SAFE_INTEGER_LIMIT
+            stack.push(product <= SAFE_INTEGER_LIMIT && product >= -SAFE_INTEGER_LIMIT && l.exact === undefined && r.exact === undefined
               ? numberValue(product)
-              : exactIntegerArithmetic(l, r, product, "mul"));
+              : exactArithmetic(l, r, product, "mul"));
             break;
           }
           carry = combineSources(l.sources, r.sources);
@@ -3072,10 +3107,12 @@ export function executeBytecode(
           // rational check so "$3 * 2/7" keeps its exact fraction; ahead of
           // binaryOp, which would read both as bare doubles and drop the sidecar,
           // so "50% of 1% of $3" (a computed 0.005 factor) rounds like a till.
-          const moneyScalar = multiplyMoneyByScalarExact(l, r);
+          // A plain number's share ("10% of 0.1") is exact the same way.
+          const moneyScalar = multiplyScalarExact(l, r);
           if (moneyScalar) { stack.push(moneyScalar); break; }
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(numberValue((l.value as number) * (r.value as number)));
+            // As in ADD: a sourced decimal multiplies exactly.
+            stack.push(exactArithmetic(l, r, (l.value as number) * (r.value as number), "mul"));
           } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
             // Genuinely different from +/-/comparisons (which stay
             // element-wise, via binaryOp() below), scalar broadcast vs.
@@ -3143,8 +3180,10 @@ export function executeBytecode(
               && l.uncertainty === undefined && r.uncertainty === undefined
               && l.sources === undefined && r.sources === undefined) {
             const a = l.value as number, b = r.value as number;
-            if (Number.isInteger(a) && Number.isInteger(b)) {
-              const ratDiv = exactRationalOp(l, r, "div");
+            // A decimal operand's quotient is exact too: "0.3 / 0.1" is 3, and
+            // "0.1 / 3" the fraction 1/30. See vm/ExactDecimals.ts.
+            if (l.exact !== undefined || r.exact !== undefined || (Number.isInteger(a) && Number.isInteger(b))) {
+              const ratDiv = exactQuotient(l, r);
               if (ratDiv) { stack.push(ratDiv); break; }
             }
             stack.push(numberValue(a / b));
@@ -3210,8 +3249,10 @@ export function executeBytecode(
             // "1.5 / 0.25" and "1/0" keep the doubles binaryOp gives and "100n /
             // 3n" stays exact integer division. The reduced result's nearest
             // double equals the plain "a / b" quotient, so "10 / 4" is 2.5 and
-            // every existing division result is unchanged.
-            const ratDiv = exactRationalOp(l, r, "div");
+            // every existing division result is unchanged. Two plain numbers,
+            // one of them a decimal, take the decimal quotient the plain case
+            // above gives, so a sourced "0.3 / 0.1" is still exactly 3.
+            const ratDiv = exactQuotient(l, r);
             if (ratDiv) { stack.push(ratDiv); break; }
             // The bigint arm refuses a zero divisor rather than letting V8's
             // own RangeError out. See bigIntDivisionByZero() for why this is
@@ -3230,8 +3271,9 @@ export function executeBytecode(
           // An operand carrying an exact integer takes its remainder from that
           // integer, not from the double it rounds to: `3^40 mod 7` is 4, where
           // the double's low digits answered 6. See vm/ExactIntegers.ts.
-          if (l.rational !== undefined || r.rational !== undefined) {
-            const exactMod = exactIntegerRemainder(l, r);
+          // A decimal takes its remainder in base ten: "0.5 mod 0.2" is 0.1.
+          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
+            const exactMod = exactRemainder(l, r);
             if (exactMod) { stack.push(exactMod); break; }
           }
           stack.push(binaryOp(l, r, (a, b) => a % b, (a, b) => { if (b === 0n) throw bigIntDivisionByZero(); return a % b; }));
@@ -3259,9 +3301,10 @@ export function executeBytecode(
           // double. See vm/ExactIntegers.ts.
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
             const raised = power(l.value as number, r.value as number);
-            stack.push(raised <= SAFE_INTEGER_LIMIT && raised >= -SAFE_INTEGER_LIMIT
+            // A decimal base to a whole power is exact too ("1.1 ^ 2" is 1.21).
+            stack.push(raised <= SAFE_INTEGER_LIMIT && raised >= -SAFE_INTEGER_LIMIT && l.exact === undefined
               ? numberValue(raised)
-              : exactIntegerArithmetic(l, r, raised, "pow"));
+              : exactPowerArithmetic(l, r, raised));
             break;
           }
           // A Matrix operand means matrix exponentiation, which is repeated
@@ -3535,9 +3578,10 @@ export function executeBytecode(
           // The plain case first: two bare numbers compare as doubles, which
           // is what the Number arm below does once every helper has declined.
           // A comparison reads the centre of a measurement, so only the
-          // rational sidecar has to be absent for the double compare to be
-          // the right answer.
-          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined) {
+          // rational and exact-decimal sidecars have to be absent for the
+          // double compare to be the right answer. Where one is present the
+          // branch below decides on it, so "0.1 + 0.2 == 0.3" is true.
+          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) === (r.value as number)));
             break;
           }
@@ -3546,7 +3590,7 @@ export function executeBytecode(
           // Equal fractions are equal on the value, not on whichever doubles
           // they rounded to: "1/49 * 49 == 1" is true. Gated on a rational being
           // present, so "1 == 1" keeps its double compare below.
-          if (l.rational !== undefined || r.rational !== undefined) {
+          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
             const cmp = compareRationalOperands(l, r);
             if (cmp !== null) { stack.push(boolValue(cmp === 0)); break; }
           }
@@ -3587,14 +3631,14 @@ export function executeBytecode(
         case OpCode.NEQ: {
           const r = safePop(stack), l = safePop(stack);
           // The plain case first, as in EQ.
-          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined) {
+          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) !== (r.value as number)));
             break;
           }
           const neqFault = faultedOperand(l, r);
           if (neqFault) { stack.push(neqFault); break; }
           // The negation of EQ's rational branch, fraction for fraction.
-          if (l.rational !== undefined || r.rational !== undefined) {
+          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
             const cmp = compareRationalOperands(l, r);
             if (cmp !== null) { stack.push(boolValue(cmp !== 0)); break; }
           }
@@ -3628,13 +3672,13 @@ export function executeBytecode(
         case OpCode.LT: {
           const r = safePop(stack), l = safePop(stack);
           // The plain case first, as in EQ.
-          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined) {
+          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) < (r.value as number)));
             break;
           }
           const ltFault = faultedOperand(l, r);
           if (ltFault) { stack.push(ltFault); break; }
-          if (l.rational !== undefined || r.rational !== undefined) {
+          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
             const cmp = compareRationalOperands(l, r);
             if (cmp !== null) { stack.push(boolValue(cmp < 0)); break; }
           }
@@ -3657,13 +3701,13 @@ export function executeBytecode(
         case OpCode.LTE: {
           const r = safePop(stack), l = safePop(stack);
           // The plain case first, as in EQ.
-          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined) {
+          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) <= (r.value as number)));
             break;
           }
           const lteFault = faultedOperand(l, r);
           if (lteFault) { stack.push(lteFault); break; }
-          if (l.rational !== undefined || r.rational !== undefined) {
+          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
             const cmp = compareRationalOperands(l, r);
             if (cmp !== null) { stack.push(boolValue(cmp <= 0)); break; }
           }
@@ -3685,13 +3729,13 @@ export function executeBytecode(
         case OpCode.GT: {
           const r = safePop(stack), l = safePop(stack);
           // The plain case first, as in EQ.
-          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined) {
+          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) > (r.value as number)));
             break;
           }
           const gtFault = faultedOperand(l, r);
           if (gtFault) { stack.push(gtFault); break; }
-          if (l.rational !== undefined || r.rational !== undefined) {
+          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
             const cmp = compareRationalOperands(l, r);
             if (cmp !== null) { stack.push(boolValue(cmp > 0)); break; }
           }
@@ -3713,13 +3757,13 @@ export function executeBytecode(
         case OpCode.GTE: {
           const r = safePop(stack), l = safePop(stack);
           // The plain case first, as in EQ.
-          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined) {
+          if (l.type === ValueType.Number && r.type === ValueType.Number && l.rational === undefined && r.rational === undefined && l.exact === undefined && r.exact === undefined) {
             stack.push(boolValue((l.value as number) >= (r.value as number)));
             break;
           }
           const gteFault = faultedOperand(l, r);
           if (gteFault) { stack.push(gteFault); break; }
-          if (l.rational !== undefined || r.rational !== undefined) {
+          if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
             const cmp = compareRationalOperands(l, r);
             if (cmp !== null) { stack.push(boolValue(cmp >= 0)); break; }
           }
@@ -4232,15 +4276,13 @@ export function executeBytecode(
             ));
             break;
           }
-          // Money keeps its exact decimal from here on. The amount either
-          // arrived as a decimal literal (exact sidecar already set) or is a
-          // whole number, either of which has an exact decimal; a fractional
-          // double amount ("$sqrt(2)") has none and stays an ordinary float
-          // Uom. Only currencies carry the sidecar, so every other unit (km,
-          // kg, ...) is unchanged.
-          const money = moneyExactMagnitude(operand, unit);
-          if (money) stack.push(uomValueExact(operand.toNumber(), unit, money));
-          else stack.push(uomValue(operand.toNumber(), unit));
+          // Money keeps its exact decimal from here on, and so does a price
+          // per unit ("$0.15/kWh"). The amount either arrived as a decimal
+          // literal (exact sidecar already set) or is a whole number, either
+          // of which has an exact decimal; a fractional double amount
+          // ("$sqrt(2)") has none and stays an ordinary float Uom. Every other
+          // unit (km, kg, km/h, ...) is unchanged. See vm/MoneyExact.ts.
+          stack.push(valueInUnit(operand, unit));
           break;
         }
         case OpCode.UOM_CONVERT_TO: {

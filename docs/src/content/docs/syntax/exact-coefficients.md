@@ -12,11 +12,11 @@ the `0.30000000000000004x` that ordinary floating point would give. Like the
 other algebra forms, this reads with a trailing arrow to show the simplified
 result.
 
-The exactness is a property of a term's coefficient, not of a bare number. A
-plain `0.1 + 0.2` is still ordinary floating point (`0.30000000000000004`); it is
-the coefficient carried by a variable term that stays exact. Money is the other
-place the engine keeps exact decimals, to the cent (see
-[money precision](/syntax/money-precision/)).
+A bare number is exact too: a plain `0.1 + 0.2` is exactly 0.3 (see
+[decimals](/syntax/decimals/)), and money keeps its decimals exact to the cent
+(see [money precision](/syntax/money-precision/)). This page is about the
+coefficient, the number in front of a variable term, which stays an exact
+fraction all the way through the algebra.
 
 ```solve
 0.1x + 0.2x => // 0.3x

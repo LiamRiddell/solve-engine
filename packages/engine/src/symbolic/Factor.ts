@@ -83,7 +83,7 @@ export const FACTOR_MAX_ROOT_CANDIDATES = 4_096;
  * on the results is ever reached.
  *
  * That is not hypothetical arithmetic. A goal seek reads its target as an exact
- * rational, and an ordinary floating-point sum is not a tidy one: `0.1 + 0.2` is
+ * rational, and a floating-point sum is not a tidy one: `1e-1 + 2e-1` is
  * `0.30000000000000004`, which clears to a denominator around 10^17, whose
  * square root is about 1.7 billion candidates. A four-line document froze for
  * twelve seconds on it, and a subnormal target never came back at all, in one
@@ -193,7 +193,7 @@ export function rationalRoots(descending: readonly Rational[]): readonly Rationa
 	// A line has one root and it is closed form: `bx + c` is zero at `-c/b`.
 	// Reaching for the theorem here means factoring both coefficients to
 	// rediscover a division, and a goal seek's trailing coefficient is whatever
-	// rational its target cleared to. `0.1 + 0.2` is `0.30000000000000004`,
+	// rational its target cleared to. `1e-1 + 2e-1` is `0.30000000000000004`,
 	// whose denominator is around 10^17, so the search that was about to start
 	// had 1.7 billion candidates in it and the document froze for twelve
 	// seconds before refusing. This answers it exactly, immediately.

@@ -29,6 +29,17 @@ and `as decimal` for the decimal.
 (1/3 + 1/7) as fraction // 10/21
 ```
 
-Only a fraction written with `/` is exact. A decimal literal is still floating
-point, so `0.1 + 0.2` stays `0.30000000000000004`, and transcendental work
-(`sqrt`, `sin`, a non-integer power) stays floating point too.
+A decimal written with a point is exact as well (see
+[decimals](/syntax/decimals/)), and the two meet cleanly. A decimal reads as the
+fraction it is, so a fraction plus a decimal is still an exact fraction, and a
+division of decimals that never ends, such as `0.1 / 3`, is kept as the fraction
+1/30, the same way `1/3` is kept.
+
+```solve
+(1/3 + 0.1) as fraction // 13/30
+(0.1 / 3) as fraction // 1/30
+0.1 / 3 * 3 == 0.1 // true
+```
+
+Transcendental work (`sqrt`, `sin`, a non-integer power) stays floating point,
+because its answers have no exact fraction to keep.
