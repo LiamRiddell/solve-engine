@@ -1,14 +1,8 @@
 import type { Token } from "@solve-js/lexer/Token";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
-import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { isPhysicalTimeRate } from "@solve-js/uom/UomConverter";
-
-/** Whether a token is a unit spelling the engine knows. */
-function isUnit(token: Token | undefined): boolean {
-	if (token === undefined || token.type !== "UNIT") return false;
-	return UNIT_TABLE[(token.value ?? "").toLowerCase()] !== undefined;
-}
+import { isDenominatorUnit } from "./BareRateDenominatorNormalizerRule";
 
 /** Words that introduce a rate denominator, matching the bare-denominator rule. */
 const PER_WORDS = new Set(["per", "a", "an", "each", "every"]);
@@ -30,7 +24,7 @@ function hasRateAhead(tokens: readonly Token[], from: number): boolean {
 		const word = (token.text ?? token.value ?? "").toLowerCase();
 		const introducesDenominator =
 			token.type === "SLASH" || (token.type === "IDENT" && PER_WORDS.has(word));
-		if (introducesDenominator && isUnit(tokens[i + 1])) return true;
+		if (introducesDenominator && isDenominatorUnit(tokens[i + 1])) return true;
 	}
 	return false;
 }

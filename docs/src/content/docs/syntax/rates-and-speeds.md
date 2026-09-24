@@ -38,6 +38,20 @@ to the whole quotient rather than to the number just before it.
 120 km / 2 hours in kph // 60.00 kph
 ```
 
+## Cancelling a rate
+
+A rate multiplied by what it is per leaves the other half: a speed for a time is
+a distance. Dividing a distance by a speed cancels the other way and leaves a
+time. The single-word speeds cancel as the slash spellings do.
+[Multiplying and dividing units](/syntax/unit-algebra/) has the full set,
+prices and coverage rates included.
+
+```solve
+60 km/h * 2 h // 120.00 km
+120 km / 60 km/h // 2.00 h
+60 mph * 30 min // 30.00 mi
+```
+
 ## Drive time
 
 A distance *at* a speed is a duration: how long the journey takes. The answer

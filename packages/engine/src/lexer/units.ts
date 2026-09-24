@@ -61,15 +61,21 @@ const EXCLUDED_UNIT_SPELLINGS: ReadonlyMap<string, string> = new Map([
 /**
  * Whether a spelling can be a single UNIT token at all.
  *
- * The lexer reads a unit as one run of `[A-Za-z0-9_]`, so the 465 spellings
- * containing a space, a slash, a prime or a non-ASCII character cannot be
- * tokenized however well the converter understands them. `square metres`,
- * `cd/m2` and `µm²` all remain reachable through the conversion API (notably
- * the cooking package's free-text target unit), just not by typing them in an
- * expression.
+ * The lexer reads a unit as one run of `[A-Za-z0-9_]`, so a spelling containing
+ * a space, a slash, a prime or a non-ASCII character cannot be a single token
+ * however well the converter understands it. `cd/m2` and `µm²` remain reachable
+ * through the conversion API (notably the cooking package's free-text target
+ * unit), just not by typing them in an expression. A two-word spelling such as
+ * `square metres` or `sq ft` is joined by the multi-word unit normalizer rule.
+ *
+ * The one non-ASCII character admitted is a closing superscript two or three on
+ * an ASCII symbol, so `m²`, `ft²` and `m³` are units as typed. The lexer already
+ * reads the superscript as part of the word, and the table holds each one as an
+ * alias of the digit form (`m²` and `m2` are one entry), which is also the
+ * spelling a worked-out area or volume is printed with (see uom/UnitPowers.ts).
  */
 function isTokenizableSpelling(spelling: string): boolean {
-  return /^[A-Za-z0-9_]+$/.test(spelling);
+  return /^[A-Za-z0-9_]+[²³]?$/.test(spelling);
 }
 
 /**

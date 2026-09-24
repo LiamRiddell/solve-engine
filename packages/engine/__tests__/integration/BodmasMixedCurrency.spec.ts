@@ -367,8 +367,10 @@ describe("BODMAS: Edge cases — zero, negatives, large numbers", () => {
     expect(evalNum("0 * ($1000 + £500)")).toBe(0);
   });
 
-  test("$0 + $0 * $999 = 0", () => {
-    expect(evalNum("$0 + $0 * $999")).toBe(0);
+  test("$0 + $0 * 999 = 0", () => {
+    // The multiply still binds first. Money times money has no unit, so the
+    // scalar is a plain number (#513).
+    expect(evalNum("$0 + $0 * 999")).toBe(0);
   });
 
   test("-100 + 50 = -50", () => {

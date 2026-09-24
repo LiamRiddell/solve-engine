@@ -13,6 +13,10 @@
  *   b(n) = n * n   then   b(b(...b(9n)...))        a bigint, doubling in size
  *   m(x) = x * x   then   m(m(...m($9)...))        the exact decimal behind money
  *
+ * The third no longer grows at all: money times money has no unit, so it is
+ * refused at the first multiply (#513). The charge on the decimal stays, as the
+ * backstop for any other route to a large one.
+ *
  * Each is now charged against the running tally on birth, the same backstop
  * `matrixValue()` already had, so the doubling chain is stopped long before it is
  * fatal. `^` and `<<` on a bigint refuse at their own bit ceiling before they ever
@@ -64,12 +68,15 @@ describe("a value that doubles each call is charged like any other allocation", 
 		}
 	});
 
-	test("the exact decimal behind same-currency money is bounded, and ordinary money is not", () => {
+	test("the exact decimal behind same-currency money cannot double, and ordinary money is exact", () => {
 		const engine = newTrackedEngine();
 		try {
 			engine.evaluateLine(1, "m(x) = x * x");
 			const tower = `${"m(".repeat(28)}$9${")".repeat(28)}`;
-			expect(errorFrom(engine, tower, 2)?.code).toBe("ALLOCATION_LIMIT_EXCEEDED");
+			// Money times money has no unit (#513), so the squaring chain is
+			// refused at its first step, before any exact decimal can grow. It
+			// used to run until the allocation charge on the decimal stopped it.
+			expect(engine.evaluateLine(2, tower).errorCode).toBe("UNIT_PRODUCT_UNSUPPORTED");
 			// The exact-money arithmetic people actually write stays exact and cheap.
 			expect(engine.evaluateLine(3, "$0.10 + $0.20").toNumber()).toBeCloseTo(0.3, 10);
 		} finally {

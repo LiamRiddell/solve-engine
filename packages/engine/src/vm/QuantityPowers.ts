@@ -1,16 +1,22 @@
 /**
- * Powers, roots and products of a quantity that carries a unit.
+ * Powers, roots, products and quotients of a quantity that carries a unit.
  *
- * Lengths multiply into areas and volumes: `5 m * 3 m` is 15 m2 and
- * `2 m * 3 m * 4 m` is 24 m3 (see {@link multiplyLengths}).
+ * Lengths multiply into areas and volumes: `5 m * 3 m` is 15 m² and
+ * `2 m * 3 m * 4 m` is 24 m³ (see {@link multiplyLengths}). Dividing takes them
+ * back down: `15 m² / 3 m` is 5 m and `24 m³ / 6 m²` is 4 m (see
+ * {@link divideLengths}).
  *
  * A length squared is an area and a length cubed is a volume, so `(3 m)^2` is
- * 9 m2 and `sqrt(16 m2)` is 4 m. Those are the only powers of a unit the engine
+ * 9 m² and `sqrt(16 m²)` is 4 m. Those are the only powers of a unit the engine
  * can name: the unit table holds areas and volumes, and nothing for a mass
  * squared, a time squared or a currency squared. Every other power or root of a
  * quantity is refused by name rather than answered with the bare number, which
  * is what `^`, `pow`, `sqrt` and `cbrt` used to do: they dropped the unit and
  * reported, for example, `(3 m)^2` as 9 and `sqrt(16 m2)` as 4.
+ *
+ * An area or volume worked out here is spelled with a superscript (`m²`), the
+ * way it is printed. The table holds `m²` and `m2` as one unit, so the two
+ * convert, compare and add as one.
  *
  * This is the run-time half. A power written on a unit literal (`5 m^2`) never
  * reaches it: `UomLiteralParselet` takes that power onto the unit at parse time,
@@ -23,7 +29,10 @@ import { poweredUnit, rootUnit, measureForPower } from "@solve-js/uom/UnitPowers
 import { getMeasure, convertUnit } from "@solve-js/uom/UomConverter";
 
 /** The base unit of each measure a power or root lands in. */
-const BASE_UNIT_FOR_POWER: Readonly<Record<number, string>> = { 1: "m", 2: "m2", 3: "m3" };
+const BASE_UNIT_FOR_POWER: Readonly<Record<number, string>> = { 1: "m", 2: "m²", 3: "m³" };
+
+/** How close an exponent must be to a third to be read as a cube root. */
+const ROOT_EXPONENT_TOLERANCE = 1e-12;
 
 /**
  * The error for a power the engine cannot give a unit to.
@@ -43,10 +52,11 @@ export function unitPowerUnsupported(unit: string, exponent: string): Value {
  * Raise a quantity to a power.
  *
  * A length to the power 2 or 3 becomes an area or a volume, in the matching
- * square or cube unit where the table has one (`ft` gives `ft2`) and in square
- * or cubic metres where it does not (`furlong`). A power of 1 leaves the
- * quantity as it is, and a power of 0 is the plain number 1. Anything else is a
- * `UNIT_POWER_UNSUPPORTED` error.
+ * square or cube unit where the table has one (`ft` gives `ft²`) and in square
+ * or cubic metres where it does not (`furlong`). A power of a half on an area,
+ * or a third on a volume, is its square or cube root, so `(9 m²)^0.5` is 3 m
+ * as `sqrt(9 m²)` is. A power of 1 leaves the quantity as it is, and a power of
+ * 0 is the plain number 1. Anything else is a `UNIT_POWER_UNSUPPORTED` error.
  *
  * @param base - A value of type Uom, with its unit set.
  * @param power - The exponent.
@@ -56,6 +66,8 @@ export function raiseQuantity(base: Value, power: number): Value {
 	const unit = base.unit ?? "";
 	if (power === 1) return base;
 	if (power === 0) return numberValue(1);
+	if (power === 0.5 && getMeasure(unit) === "area") return rootQuantity(base, 2, "^");
+	if (Math.abs(power - 1 / 3) < ROOT_EXPONENT_TOLERANCE && getMeasure(unit) === "volume") return rootQuantity(base, 3, "^");
 	const magnitude = base.toNumber();
 	if ((power === 2 || power === 3) && getMeasure(unit) === "length") {
 		const spelled = poweredUnit(unit, power);
@@ -175,4 +187,59 @@ export function multiplyLengths(l: Value, r: Value): Value | undefined {
 		"UNIT_PRODUCT_UNSUPPORTED",
 		`A quantity in ${l.unit} times one in ${r.unit} has no unit: lengths multiply into an area or a volume, and a product of more than three lengths is not a unit.`,
 	);
+}
+
+/**
+ * The length a length, area or volume is measured in: a length is its own, and
+ * an area or volume spelled as a power of one gives that one (`m²` gives `m`).
+ * `undefined` for an area or volume with a name of its own (`ha`, `L`).
+ */
+function lengthBasis(unit: string, dimension: number): string | undefined {
+	return dimension === 1 ? unit : rootUnit(unit, dimension);
+}
+
+/** A length raised to `power` as a unit spelling: the length itself for 1. */
+function powerOfLength(length: string, power: number): string | undefined {
+	return power === 1 ? length : poweredUnit(length, power);
+}
+
+/**
+ * The quotient of an area or volume by a length or area that leaves a length or
+ * an area; `undefined` when the pair is not that, so the caller keeps its own
+ * rule (a length over an area, a reciprocal length, stays the rate `m/m²` it
+ * always was).
+ *
+ * An area over a length is a length, a volume over an area is a length, and a
+ * volume over a length is an area: `15 m² / 3 m` is 5 m, and `24 m³ / 6 m²` is
+ * 4 m. The general divide read these as rates, so the first was `5.00 m2/m`. The
+ * answer is measured in the length the dividend is a power of, the same rule
+ * multiplication follows, or the divisor's where the dividend has a name of its
+ * own (`1 ha / 50 m` is 200 m), and in metres where neither has one.
+ *
+ * @param l - The dividend.
+ * @param r - The divisor.
+ * @returns The length or area, or `undefined` if not applicable.
+ */
+export function divideLengths(l: Value, r: Value): Value | undefined {
+	if (l.type !== ValueType.Uom || r.type !== ValueType.Uom || l.unit === undefined || r.unit === undefined) return undefined;
+	const left = getMeasure(l.unit);
+	const right = getMeasure(r.unit);
+	const leftDimension = left === undefined ? undefined : GEOMETRIC_DIMENSION[left];
+	const rightDimension = right === undefined ? undefined : GEOMETRIC_DIMENSION[right];
+	if (leftDimension === undefined || rightDimension === undefined || leftDimension <= rightDimension) return undefined;
+	const dimension = leftDimension - rightDimension;
+
+	const basis = lengthBasis(l.unit, leftDimension) ?? lengthBasis(r.unit, rightDimension);
+	if (basis !== undefined) {
+		const dividendUnit = powerOfLength(basis, leftDimension);
+		const divisorUnit = powerOfLength(basis, rightDimension);
+		const resultUnit = powerOfLength(basis, dimension);
+		if (dividendUnit !== undefined && divisorUnit !== undefined && resultUnit !== undefined) {
+			const quotient = convertUnit(l.toNumber(), l.unit, dividendUnit) / convertUnit(r.toNumber(), r.unit, divisorUnit);
+			return uomValue(quotient, resultUnit);
+		}
+	}
+	// No length to measure in, or one with no square or cube spelling: metres.
+	const quotient = convertUnit(l.toNumber(), l.unit, BASE_UNIT_FOR_POWER[leftDimension]) / convertUnit(r.toNumber(), r.unit, BASE_UNIT_FOR_POWER[rightDimension]);
+	return uomValue(quotient, BASE_UNIT_FOR_POWER[dimension]);
 }

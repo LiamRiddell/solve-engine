@@ -39,60 +39,28 @@ The left operand decides the result unit.
 1 km + 500 m // 1.50 km
 ```
 
-## Squares and cubes
+## Multiplying and dividing
 
-An area is a length times a length, so it is measured in square units: a room
-5 metres by 3 metres covers 15 square metres, written `m2`. A volume is three
-lengths multiplied, measured in cubic units such as `m3` or litres. Multiplying
-lengths gives exactly that, with the left operand's unit setting the answer's, the
-same rule addition follows.
-
-```solve
-5 m * 3 m // 15.00 m2
-2 m * 3 m * 4 m // 24.00 m3
-5 m * 3 ft // 4.57 m2
-5 m2 * 3 m // 15.00 m3
-```
-
-An area or volume can also be written as a power on the unit: `m^2` is square
-metres and `m^3` is cubic metres. The power belongs to the unit it is written on. `5 m^2` is five square metres,
-the way a physics book reads it, not five metres squared, which would be 25
-square metres. To square a whole quantity, put it in brackets.
+Adding needs two quantities of the same kind. Multiplying and dividing combine
+kinds instead: a length times a length is an area, and a price per kilogram
+times a number of kilograms is an amount of money. Those rules, and the products
+that have no unit at all, are on their own page,
+[multiplying and dividing units](/syntax/unit-algebra/).
 
 ```solve
-5 m^2 // 5.00 m2
-10 m^3 in litres // 10,000.00 litres
-5 m^2 in ft2 // 53.82 ft2
-(3 m)^2 // 9.00 m2
+5 m * 3 m // 15.00 m²
+3 kg * $5/kg // $15.00
 ```
 
-A square root takes an area back to a length, and a cube root takes a volume
-back to one. An area with a name of its own, such as a hectare, answers in
-metres.
-
-```solve
-sqrt(16 m2) // 4.00 m
-cbrt(27 m3) // 3.00 m
-sqrt(1 ha) // 100.00 m
-```
-
-Only a length has a square or a cube with a unit, so a power or root of anything
-else is an error rather than the bare number. A kilogram squared, a currency
-squared or a metre to the fourth power has no unit to report, and answering 25
-for `5 kg^2` would drop the unit without saying so. An area times an area is a
-metre to the fourth power too, so it is refused the same way.
+A power on a unit is the unit's own, so `5 m^2` is five square metres. Only a
+length has a square or a cube with a unit, so a power written on any other unit
+is refused rather than answered with the bare number. Acceleration in metres per
+second squared, `m/s^2`, is a unit in its own right; see
+[derived units](/syntax/derived-units/).
 
 ```solve-doc
 5 kg^2 // ERROR: "kg^2" is not a unit: a power on a unit makes an area or a volume, so it applies only to a length the unit table spells squared or cubed, such as m^2 or ft^3.
-sqrt(16 m) // ERROR: sqrt: a quantity in m has no square root with a unit; only an area has a length as its root.
-5 m2 * 3 m2 // ERROR: A quantity in m2 times one in m2 has no unit: lengths multiply into an area or a volume, and a product of more than three lengths is not a unit.
 ```
-
-The boundary: this covers a length squared or cubed, and nothing wider. The
-superscript `m²` is not accepted as typed input (write `m2` or `m^2`), and a
-fuller algebra of units, such as a speed squared, is a later addition.
-Acceleration in metres per second squared, `m/s^2`, is a unit in its own right;
-see [derived units](/syntax/derived-units/).
 
 ## A unit after a power of ten
 

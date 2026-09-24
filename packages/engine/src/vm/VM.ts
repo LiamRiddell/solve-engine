@@ -26,7 +26,8 @@ import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import type { ScopeId } from "@solve-js/vm/CellScope";
-import { raiseQuantity, unitPowerUnsupported, multiplyLengths } from "@solve-js/vm/QuantityPowers";
+import { raiseQuantity, unitPowerUnsupported, multiplyLengths, divideLengths } from "@solve-js/vm/QuantityPowers";
+import { multiplyRates, divideRates, refuseLikeProduct } from "@solve-js/vm/UnitAlgebra";
 import { bigIntPow, exactIntegerArithmetic, exactIntegerRemainder, baseConversionOperand } from "@solve-js/vm/ExactIntegers";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
@@ -3092,11 +3093,12 @@ export function executeBytecode(
             stack.push(matrixMultiply(l.value as MatrixData, r.value as MatrixData));
           } else if (l.type === ValueType.Uom && isRateUnit(l.unit) && r.type === ValueType.Uom && r.unit) {
             // "30 fps × 3 minutes" -> "5,400 frames" via plain "×"/"*"
-            // no package needs to route through RATE_MUL explicitly.
-            stack.push(multiplyRateByMatchingUom(l, r));
+            // no package needs to route through RATE_MUL explicitly. Two rates
+            // that chain (`$30/h * 8 h/day`) are asked first; see UnitAlgebra.ts.
+            stack.push(multiplyRates(l, r) ?? multiplyRateByMatchingUom(l, r));
           } else if (r.type === ValueType.Uom && isRateUnit(r.unit) && l.type === ValueType.Uom && l.unit) {
             // Commutative: "3 minutes × 30 fps" too.
-            stack.push(multiplyRateByMatchingUom(r, l));
+            stack.push(multiplyRates(l, r) ?? multiplyRateByMatchingUom(r, l));
           } else {
             // "$30 × 4 days" is $120: an amount of money multiplied by a
             // count of something. Without this the unit system refused it
@@ -3114,11 +3116,17 @@ export function executeBytecode(
             // which names nothing, falls through.
             const composed = tryDimensionalCompose(l, r, true);
             if (composed) { stack.push(composed); break; }
-            // Lengths multiply into an area or a volume: `5 m * 3 m` is 15 m2.
+            // Lengths multiply into an area or a volume: `5 m * 3 m` is 15 m².
             // The general multiply below keeps only the left operand's unit,
             // which reported that product as 15 m. See vm/QuantityPowers.ts.
             const geometric = multiplyLengths(l, r);
-            stack.push(geometric ?? binaryOp(l, r, (a, b) => a * b, (a, b) => a * b, "mul"));
+            if (geometric) { stack.push(geometric); break; }
+            // A named rate meeting what it is per (`60 mph * 2 h` is 120 mi), and
+            // a like product that has no unit (`2 kg * 3 kg`), which the general
+            // multiply would report in the left operand's unit. See
+            // vm/UnitAlgebra.ts.
+            const cancelled = multiplyRates(l, r) ?? refuseLikeProduct(l, r);
+            stack.push(cancelled ?? binaryOp(l, r, (a, b) => a * b, (a, b) => a * b, "mul"));
           }
           break;
         }
@@ -3173,6 +3181,13 @@ export function executeBytecode(
               // names one; otherwise it stays the rate it was.
               const composed = tryDimensionalCompose(l, r, false);
               if (composed) { stack.push(composed); break; }
+              // Units that cancel: an area over a length is a length, and a
+              // quantity over a rate for it is what the rate is per
+              // (`20 m² / (5 m²/l)` is 4 l). A compound rate that cancels
+              // nothing is refused rather than joined with a second slash. See
+              // vm/QuantityPowers.ts and vm/UnitAlgebra.ts.
+              const cancelled = divideLengths(l, r) ?? divideRates(l, r);
+              if (cancelled) { stack.push(cancelled); break; }
               // Genuinely different measures (e.g. "90 km / 3 day")
               // construct a Rate rather than erroring, now that this
               // codebase has a compound/derived-unit representation (see

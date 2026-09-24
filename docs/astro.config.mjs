@@ -345,6 +345,7 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { slug: "syntax/unit-arithmetic" },
+                { slug: "syntax/unit-algebra" },
                 { slug: "syntax/cooking" },
                 { slug: "syntax/converting-units" },
                 { slug: "syntax/unit-representations" },

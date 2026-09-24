@@ -6,10 +6,11 @@
  *
  * The obvious implementation is to dump `UNIT_TABLE`. That would be wrong, and
  * quietly so. Being in the table means the conversion API can resolve a
- * spelling; it does not mean the lexer can tokenize one. Multi-word spellings
- * are the clearest case: `sq ft` and `cu yd` are real table entries and both
- * fail to parse, because the lexer sees an identifier and stops. Some
- * single-word entries fail too, `turn` among them.
+ * spelling; it does not mean the lexer can tokenize one. Spellings with a
+ * character an expression cannot type as part of a unit are the clearest case:
+ * `µm` and `W⋅h` are real table entries and both fail to parse. (Multi-word
+ * spellings such as `sq ft` and `US survey foot` parse, fused by
+ * `uom:multi-word-unit`.) Some single-word entries fail too, `turn` among them.
  *
  * Worse than failing is nearly working. `1 fl oz` used to parse, but as `1 fl`
  * applied to a unit `oz`, so it evaluated to one fluid-ounce-shaped lie:
@@ -330,10 +331,11 @@ ${sections.join("\n\n")}
 ## Spellings that are not listed
 
 The conversion tables carry ${entries.length} spellings in total, and ${skipped} of
-them are missing above. Most are multi-word forms like \`sq ft\` and \`cu yd\`,
-which the tables can resolve but the lexer cannot tokenize, so they are
-unavailable when typing an expression. They are excluded here rather than listed
-and quietly broken.
+them are missing above. Most carry a character an expression cannot type as
+part of a unit, such as the micro sign in \`µm\` or the dot in \`W⋅h\`, and a few
+are ordinary words the lexer leaves to English, such as \`turn\` and \`point\`.
+The tables can resolve them but an expression cannot spell them, so they are
+excluded here rather than listed and quietly broken.
 `;
 
 const next = page.replace(/\r\n/g, "\n");
