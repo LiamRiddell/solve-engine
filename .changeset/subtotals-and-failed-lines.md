@@ -25,4 +25,4 @@ Fixes #551 and #552.
 
 ## Verification
 
-The cross-path spec gains both cases, each run through `parseDocument` and `evaluateDocument` and required to agree. The line references page gains the subtotal as a proven example, and an existing test whose comment already asked for the average over the figures alone (60/3), while its assertion pinned 120/4, now asserts what its comment says. The operators page also gains a sentence on `-2^2`, which is 4 here as in a spreadsheet, and the brackets that make it -4. `npm run verify:ci` passes: TESTS tests across SUITES suites, with the bundled-consumer contract.
+The cross-path spec gains both cases, each run through `parseDocument` and `evaluateDocument` and required to agree. The line references page gains the subtotal as a proven example, and an existing test whose comment already asked for the average over the figures alone (60/3), while its assertion pinned 120/4, now asserts what its comment says. The operators page also gains a sentence on `-2^2`, which is 4 here as in a spreadsheet, and the brackets that make it -4. `npm run verify:ci` passes: 10,713 tests across 517 suites, with the bundled-consumer contract.
