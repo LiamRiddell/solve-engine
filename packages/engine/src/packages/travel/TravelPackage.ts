@@ -1,6 +1,7 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { errorValue, isRateUnit, splitRateUnit, uomValue, Value, ValueType } from "@solve-js/vm/Value";
+import { describeMeasure } from "@solve-js/vm/VMConversion";
 import { isFuelEconomyUnit, litresForTrip } from "./TripCost";
 import { TripFuelParselet } from "./parselets/TripFuelParselet";
 
@@ -73,7 +74,7 @@ function tripCost(args: Value[]): Value {
 	if (getMeasure(denominator) !== "volume") {
 		return errorValue(
 			TravelErrorCodes.TRIP_EXPECTED_FUEL_PRICE,
-			`fuel is priced by volume, and "${price.unit}" is priced by ${getMeasure(denominator) ?? denominator}`,
+			`fuel is priced by volume, and "${price.unit}" is priced by ${describeMeasure(denominator) ?? denominator}`,
 		);
 	}
 	const volumeAtThePump = denominator === "litre" ? answer.litres : convertUnit(answer.litres, "litre", denominator);

@@ -259,20 +259,40 @@ export function compareUom(l: Value, r: Value): { lv: number; rv: number; equal:
 /**
  * The dimension nouns that do not read as their measure-kind name. A quantity
  * of `time` reads as a duration in a sentence ("a duration cannot be converted
- * to a length"), and the generated measure table spells luminous intensity as
- * one camelCase token. Every other kind (length, mass, area, ...) already reads
- * as the noun, so it is used unchanged.
+ * to a length"), and the measure tables key every two-word kind as one camelCase
+ * token (`fuelEconomy`, `dataRate`), which is an identifier rather than a word:
+ * "fuelEconomy and length cannot be multiplied" (#571). Every other kind
+ * (length, mass, area, ...) already reads as the noun, so it is used unchanged,
+ * and a kind added later without an entry here is split into words by
+ * {@link measureNoun} rather than printed as its key.
  */
 const MEASURE_NOUNS: Readonly<Record<string, string>> = {
     time: "duration",
     luminousIntensity: "luminous intensity",
+    dataRate: "data rate",
+    cssLength: "CSS length",
+    fuelEconomy: "fuel economy",
+    fuelConsumption: "fuel consumption",
+    volumeFlowRate: "volume flow rate",
+    partsPer: "proportion",
+    apparentPower: "apparent power",
+    reactivePower: "reactive power",
+    reactiveEnergy: "reactive energy",
 };
+
+/**
+ * The noun for a measure kind: its entry in {@link MEASURE_NOUNS}, or the key
+ * split into lowercase words, so no key ever reaches a sentence as written.
+ */
+function measureNoun(measure: string): string {
+    return MEASURE_NOUNS[measure] ?? measure.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+}
 
 /**
  * The dimensions that are uncountable, so they take no indefinite article in
  * the conversion sentence: "money", not "a money".
  */
-const UNCOUNTABLE_MEASURES: ReadonlySet<string> = new Set(["money", "data"]);
+const UNCOUNTABLE_MEASURES: ReadonlySet<string> = new Set(["money", "data", "fuel consumption"]);
 
 /** The past participle each combining op reads as in the mismatch sentence. */
 const COMBINE_VERBS: Readonly<Record<string, string>> = {
@@ -297,7 +317,7 @@ export function describeMeasure(unit: string): string | undefined {
     if (sharedCurrencyExchange.isCurrency(unit)) return "money";
     const measure = getMeasure(unit);
     if (measure === undefined) return undefined;
-    return MEASURE_NOUNS[measure] ?? measure;
+    return measureNoun(measure);
 }
 
 /**
