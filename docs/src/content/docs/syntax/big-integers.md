@@ -91,3 +91,13 @@ prints its digits without grouping.
 7n / 2n // 3
 1n << 40 // 1099511627776
 ```
+
+A big integer and an exact result are the same number when their digits are,
+so the two combine and compare on those digits: the `n` form of `3^40` is
+`3^40`.
+
+```solve
+3^40 - 12157665459056928801n // 0
+3^40 == 12157665459056928801n // true
+(2^53 + 1) & 1n // 1
+```

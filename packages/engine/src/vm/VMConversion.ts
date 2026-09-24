@@ -6,6 +6,7 @@ import { sameShape } from "@solve-js/vm/MatrixOps";
 import { type SymbolicNode, type Rational, simplifySymbolic, rational, rationalAdd, rationalSub, rationalMul, rationalDiv, rationalToNumber, rationalCompare, isRationalZero } from "@solve-js/symbolic";
 import { valueToSymbolic } from "@solve-js/vm/SymbolicOps";
 import { rationalOfExactDecimal, exactDecimalDivide, compareExactDecimals } from "@solve-js/vm/ExactDecimals";
+import { exactIntegerOf } from "@solve-js/vm/ExactIntegers";
 import { ErrorFactory, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
 import { combineSources, sourcesOfValues, type ValueSource } from "@solve-js/vm/Provenance";
 
@@ -403,9 +404,12 @@ export function incomparableUnitsError(l: Value, r: Value): Value {
 /**
  * Read an operand as a bigint without rounding it through a double first.
  *
- * An already-BigInt operand hands over its raw bigint; anything else converts
- * via `toNumber()`, which is lossless because a value that was only ever a
- * double has no extra precision to lose. Going through `toNumber()`
+ * An already-BigInt operand hands over its raw bigint, and so does a Number
+ * carrying an exact whole number past 2^53 (`3^40`), whose double is only the
+ * nearest one: read through `toNumber()`, `3^40 - 12157665459056928801n`
+ * answered -33 (#583). Anything else converts via `toNumber()`, which is
+ * lossless because a value that was only ever a double has no extra precision
+ * to lose. Going through `toNumber()`
  * unconditionally is what made every bitwise operator, every comparison and
  * `^` destroy the digits that are the whole point of the type, e.g.
  * `12345678901234567891n & 1n` answered 0 because the left operand became
@@ -420,6 +424,8 @@ export function incomparableUnitsError(l: Value, r: Value): Value {
  */
 export function toBigIntOperand(v: Value): bigint {
     if (v.type === ValueType.BigInt) return v.value as bigint;
+    const exact = exactIntegerOf(v, false);
+    if (exact !== null) return exact;
     const n = v.toNumber();
     if (!Number.isInteger(n)) {
         // Covers NaN and both infinities as well as fractions, all of which
@@ -482,9 +488,11 @@ export function compareBigIntOperands(l: Value, r: Value): -1 | 0 | 1 | null {
     return 0;
 }
 
-/** An operand's exact bigint image, or null when it has none. */
+/** An operand's exact bigint image, or null when it has none: an exact whole number past 2^53 gives its own digits, not its double's. */
 function exactBigInt(v: Value): bigint | null {
     if (v.type === ValueType.BigInt) return v.value as bigint;
+    const exact = exactIntegerOf(v, false);
+    if (exact !== null) return exact;
     const n = v.toNumber();
     // Rules out Infinity and NaN as well as fractions.
     return Number.isInteger(n) ? BigInt(n) : null;
