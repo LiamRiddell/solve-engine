@@ -111,10 +111,11 @@ describe("money rides along, and stays exact where the amount is exact", () => {
     expect(value.value).toBe(0.3);
   });
 
-  test("the boundary is the currency: a bare decimal series is still a float", () => {
-    // Stated so the exactness above reads as a currency guarantee, not a
-    // schedule one. A plain number behaves as it does everywhere in the engine.
-    expect(evaluate("0.10 weekly for 3 weeks").value).toBe(0.30000000000000004);
+  test("a bare decimal series is exact too, as a plain decimal is everywhere", () => {
+    // DECIDED (#511), reversing what this test used to pin (the double
+    // 0.30000000000000004). A plain number still behaves as it does everywhere
+    // in the engine, and a decimal is now exact everywhere in the engine.
+    expect(evaluate("0.10 weekly for 3 weeks").value).toBe(0.3);
   });
 });
 

@@ -162,18 +162,31 @@ describe("the fraction value carries an exact rational and stays a Number", () =
 });
 
 describe("what must keep working", () => {
-	test("a bare decimal sum between two plain numbers is still the double it was", () => {
-		// The boundary: "0.1 + 0.2" is not a fraction written with "/", so it is
-		// not made exact, and the famous double answer is the right one to keep.
+	test("a bare decimal sum is an exact decimal, not a fraction", () => {
+		// DECIDED (#511), reversing what this test used to pin (the double
+		// 0.30000000000000004). "0.1 + 0.2" is not a fraction written with "/",
+		// so it carries no rational; it carries its exact decimal instead, and
+		// reads as the double nearest 0.3. See vm/ExactDecimals.ts.
 		const value = evaluate("0.1 + 0.2");
 		expect(value.type).toBe(ValueType.Number);
 		expect(value.rational).toBeUndefined();
-		expect(value.value).toBe(0.30000000000000004);
+		expect(value.exact).toEqual({ coef: 3n, scale: 1 });
+		expect(value.value).toBe(0.3);
 	});
 
-	test("a decimal literal times three keeps its double drift", () => {
-		expect(evaluate("0.1 * 3").toNumber()).toBe(0.30000000000000004);
-		expect(evaluate("0.1 + 0.1 + 0.1").toNumber()).toBe(0.30000000000000004);
+	test("a decimal literal times three has no drift", () => {
+		// DECIDED (#511): three tenths, exactly. Scientific notation is still a
+		// double and keeps the drift.
+		expect(evaluate("0.1 * 3").toNumber()).toBe(0.3);
+		expect(evaluate("0.1 + 0.1 + 0.1").toNumber()).toBe(0.3);
+		expect(evaluate("1e-1 * 3").toNumber()).toBe(0.30000000000000004);
+	});
+
+	test("a fraction meeting a decimal stays an exact fraction", () => {
+		// The decimal reads as the fraction it is (0.1 is 1/10), so the rational
+		// path keeps the sum exact rather than dropping to doubles.
+		expect(evaluate("1/3 + 0.1").rational).toEqual({ n: 13n, d: 30n });
+		expect(evaluate("1/3 < 0.34").value).toBe(true);
 	});
 
 	test("a plain integer sum never becomes a fraction, so its float association holds", () => {

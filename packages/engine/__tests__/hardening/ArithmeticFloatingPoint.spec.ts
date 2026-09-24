@@ -1,19 +1,22 @@
 /**
  * IEEE 754 behaviour, pinned deliberately rather than by accident.
  *
- * A decimal, and any number typed past 2^53, is a JavaScript double here, so
- * the engine inherits every double's quirks for it: 0.1 + 0.2 is not 0.3,
- * integers typed above 2^53 have gaps in them, and dividing by zero is a value
- * rather than an error. None of that is a defect. What would be a defect is any
- * of it being *different* from a double, because then an answer computed here
- * could not be reproduced anywhere else, and there would be no rule a reader
- * could apply to predict it.
+ * A number in scientific notation, an irrational result, and any number typed
+ * past 2^53 is a JavaScript double here, so the engine inherits every double's
+ * quirks for it: 1e-1 + 2e-1 is not 3e-1, integers typed above 2^53 have gaps in
+ * them, and dividing by zero is a value rather than an error. None of that is a
+ * defect. What would be a defect is any of it being *different* from a double,
+ * because then an answer computed here could not be reproduced anywhere else,
+ * and there would be no rule a reader could apply to predict it.
  *
- * Two results are exact rather than doubles, each by a rule with a stated
- * boundary: a quotient of whole numbers carries its exact fraction, and a
+ * Three results are exact rather than doubles, each by a rule with a stated
+ * boundary: a quotient of whole numbers carries its exact fraction; a
  * whole-number result of `+`, `-`, `*` or `^` past 2^53, from whole operands
- * within it, carries its exact integer (vm/ExactIntegers.ts). "The integer
- * precision ceiling" below pins where that second line falls.
+ * within it, carries its exact integer (vm/ExactIntegers.ts); and a decimal
+ * written with a point keeps its exact decimal through arithmetic, so
+ * `0.1 + 0.2` is 0.3 (vm/ExactDecimals.ts, #511). "The integer precision
+ * ceiling" below pins where the second line falls, and the representation-error
+ * pins reach a double through scientific notation for the third.
  *
  * So the expectations below are exact, never `toBeCloseTo`. Each one is the
  * value the same expression produces in plain JavaScript, computed
@@ -39,21 +42,21 @@ function evaluate(source: string) {
 const num = (source: string) => evaluate(source).toNumber();
 
 describe("representation error survives the pipeline unchanged", () => {
-	test("0.1 + 0.2 is the double, not the decimal", () => {
-		// 0.1 and 0.2 are both inexact in binary, and their sum lands one ulp
+	test("1e-1 + 2e-1 is the double, not the decimal", () => {
+		// 1e-1 and 2e-1 are both inexact in binary, and their sum lands one ulp
 		// above 0.3. Any other answer here means something rounded on the way
 		// through, which would make the engine's arithmetic unpredictable
 		// rather than more accurate.
-		expect(num("0.1 + 0.2")).toBe(0.30000000000000004);
-		expect(num("0.1 + 0.2") === 0.3).toBe(false);
+		expect(num("1e-1 + 2e-1")).toBe(0.30000000000000004);
+		expect(num("1e-1 + 2e-1") === 0.3).toBe(false);
 	});
 
 	test("and the same error appears through multiplication", () => {
-		expect(num("0.1 * 3")).toBe(0.30000000000000004);
+		expect(num("1e-1 * 3")).toBe(0.30000000000000004);
 	});
 
 	test("subtraction cancels down to a visible error too", () => {
-		expect(num("1 - 0.9")).toBe(0.09999999999999998);
+		expect(num("1 - 9e-1")).toBe(0.09999999999999998);
 	});
 
 	test("a third is the double nearest a third", () => {
@@ -61,7 +64,20 @@ describe("representation error survives the pipeline unchanged", () => {
 		// Three of them do not make one, and pretending otherwise here would
 		// mean the engine had rounded the division.
 		expect(num("1 / 3 * 3")).toBe(1);
-		expect(num("0.1 + 0.1 + 0.1")).toBe(0.30000000000000004);
+		expect(num("1e-1 + 1e-1 + 1e-1")).toBe(0.30000000000000004);
+	});
+
+	test("a decimal written with a point is exact, and its double is the nearest one", () => {
+		// DECIDED (#511), reversing what the tests above pinned with decimal
+		// literals. `0.1 + 0.2` answered 0.30000000000000004, which showed as
+		// 0.30 and then compared unequal to 0.3 on the next line. A decimal now
+		// keeps the value it was written as, and the double it reads as is the
+		// nearest one to the exact answer, not the drifted one. Scientific
+		// notation above is where the double behaviour is still pinned.
+		expect(num("0.1 + 0.2")).toBe(0.3);
+		expect(num("0.1 * 3")).toBe(0.3);
+		expect(num("1 - 0.9")).toBe(0.1);
+		expect(num("0.1 + 0.1 + 0.1")).toBe(0.3);
 	});
 });
 

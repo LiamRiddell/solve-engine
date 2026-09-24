@@ -409,10 +409,10 @@ export class Value {
 	 * literals set it to a {@link DecimalData} so that same-currency arithmetic
 	 * and display can be exact ("$0.10 + $0.20" is "$0.30", not
 	 * "$0.30000000000000004"), while `value` stays the nearest double so every
-	 * existing consumer that reads `.value` or `toNumber()` is unchanged. The
-	 * plain Number-times-Number fast paths deliberately ignore it, which is why
-	 * a bare "0.1 + 0.2" still answers the double it always did: exactness is
-	 * carried only where a unit-bearing operand asks for it. Cleared by
+	 * existing consumer that reads `.value` or `toNumber()` is unchanged. Plain
+	 * numbers carry it through arithmetic as money does (see vm/ExactDecimals.ts),
+	 * so "0.1 + 0.2" is exactly 0.3; the plain fast paths leave only for an
+	 * operand that carries it, so two whole numbers never pay for it. Cleared by
 	 * {@link recycle} so a reused arena Value never inherits a stale exact.
 	 */
 	public exact?: DecimalData;
@@ -428,9 +428,10 @@ export class Value {
 	 * - 1/6 - 1/6 - 1/6" is exactly 0 rather than the 1.6e-16 the doubles drift
 	 * to. `value` still holds the nearest double, recomputed from the exact
 	 * rational so accumulation error never creeps in, which is why the default
-	 * display and every `.value`/`toNumber()` reader are unchanged. Only a
-	 * fraction written with "/" carries it, so a decimal literal ("0.1") and a
-	 * transcendental result ("sqrt(2)") stay the plain doubles they were.
+	 * display and every `.value`/`toNumber()` reader are unchanged. A fraction
+	 * written with "/" carries it, and so does a division of decimals that never
+	 * ends ("0.1 / 3" is 1/30); a decimal that ends carries {@link exact}
+	 * instead, and a transcendental result ("sqrt(2)") carries neither.
 	 * Cleared by {@link recycle} alongside {@link exact}.
 	 */
 	public rational?: Rational;
@@ -825,9 +826,10 @@ export function numberValue(n: number): Value {
  *
  * The type stays {@link ValueType.Number} and `value` stays the nearest double,
  * so this Value behaves exactly like any other number everywhere it is read as
- * one. The `exact` sidecar only matters when it later meets a currency: that is
- * what lets "$0.70 * 1.10" be exact while "0.1 + 0.2" stays the double it was.
- * Decimal-point literals are compiled to this (see the PUSH_DECIMAL opcode).
+ * one. The `exact` sidecar is what keeps later arithmetic exact: "$0.70 * 1.10"
+ * against money, and "0.1 + 0.2" between plain numbers (see vm/ExactDecimals.ts).
+ * Decimal-point literals are compiled to this (see the PUSH_DECIMAL opcode), and
+ * so is an exact decimal result.
  */
 export function numberValueExact(n: number, exact: DecimalData): Value {
 	chargeAllocation(bigIntAllocationBytes(exact.coef), "decimal bytes");

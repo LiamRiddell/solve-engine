@@ -125,12 +125,16 @@ describe("the money value carries an exact decimal, and stays a Uom", () => {
 });
 
 describe("what must keep working", () => {
-	test("a bare decimal sum between two plain numbers is still the double it was", () => {
-		// The whole boundary rests on this. "0.1 + 0.2" is not money, so it is
-		// not made exact, and the famous double answer is the right one to keep.
+	test("a bare decimal sum between two plain numbers is exact too, and stays a Number", () => {
+		// DECIDED (#511), reversing what this test used to pin. The boundary here
+		// was the currency: "0.1 + 0.2" was not money, so it stayed the double
+		// 0.30000000000000004. Plain decimals now have the same exact arithmetic
+		// money has (vm/ExactDecimals.ts), and the sum is still a plain Number,
+		// never money, which is what this test still guards.
 		const value = evaluate("0.1 + 0.2");
 		expect(value.type).toBe(ValueType.Number);
-		expect(value.value).toBe(0.30000000000000004);
+		expect(value.unit).toBeUndefined();
+		expect(value.value).toBe(0.3);
 	});
 
 	test("a plain decimal literal is an ordinary Number that reads as itself", () => {

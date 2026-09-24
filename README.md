@@ -92,7 +92,7 @@ suffix: units participate in the calculation and the result keeps the right one.
 
 ```solve
 15% of 2400                   // 360
-increase 100 by 10%           // 110.00
+increase 100 by 10%           // 110
 100 to 150                    // 50.00%
 5% of what is 6               // 120
 ```

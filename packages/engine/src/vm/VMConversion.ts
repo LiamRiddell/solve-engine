@@ -5,6 +5,7 @@ import { decimalAdd, decimalSubtract, decimalMultiply, decimalDivide, decimalIsZ
 import { sameShape } from "@solve-js/vm/MatrixOps";
 import { type SymbolicNode, type Rational, simplifySymbolic, rational, rationalAdd, rationalSub, rationalMul, rationalDiv, rationalToNumber, rationalCompare, isRationalZero } from "@solve-js/symbolic";
 import { valueToSymbolic } from "@solve-js/vm/SymbolicOps";
+import { rationalOfExactDecimal, exactDecimalDivide, compareExactDecimals } from "@solve-js/vm/ExactDecimals";
 import { ErrorFactory, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
 import { combineSources, sourcesOfValues, type ValueSource } from "@solve-js/vm/Provenance";
 
@@ -531,9 +532,9 @@ export function power(base: number, exponent: number): number {
  * A currency operand hands over the sidecar its literal or a prior exact result
  * set. A plain scalar (the `3` in `$1.10 * 3`, the `1.10` in `$0.70 * 1.10`)
  * hands over its own exact decimal: a whole number always has one, and a
- * decimal-point literal carries one too, which is what lets a fractional
- * multiplier stay exact against money without the bare `1.005 * 100` between
- * two plain numbers changing at all. A fractional double with no sidecar (a
+ * decimal-point literal or an exact decimal result carries one too, which is
+ * what lets a fractional multiplier stay exact against money, as the same
+ * multiplier stays exact between plain numbers. A fractional double with no sidecar (a
  * `sqrt` result) has no exact decimal and returns null, dropping that operation
  * back to the float path.
  */
@@ -599,9 +600,12 @@ function exactMoneyOp(l: Value, r: Value, op: "add" | "sub" | "mul" | "div"): Va
  *
  * A value that already carries a `rational` sidecar hands it over. A plain
  * whole number (the "14" in "2/7 * 14", the "3" in "1/3 * 3") has the exact
- * rational n/1. Everything else has none: a non-integer double with no sidecar
- * (a decimal literal, a `sqrt` result) returns null so the operation drops to
- * the float path, and a bigint returns null so "100n / 3n" stays exact INTEGER
+ * rational n/1, and a plain number carrying an exact decimal has the fraction
+ * that decimal is (0.1 is 1/10), so "1/3 + 0.1" is exactly 13/30 and a fraction
+ * compares with a decimal on their values. Everything else has none: a
+ * non-integer double with no sidecar (a `sqrt` result) returns null so the
+ * operation drops to the float path, money keeps its currency by never
+ * converting here, and a bigint returns null so "100n / 3n" stays exact INTEGER
  * division (33n) rather than becoming the fraction 100/3. NaN and the
  * infinities fail the integer test and return null with everything else.
  */
@@ -610,6 +614,7 @@ function operandRational(v: Value): Rational | null {
     if ((v.type === ValueType.Number || v.type === ValueType.Hex) && typeof v.value === "number" && Number.isInteger(v.value)) {
         return rational(BigInt(v.value));
     }
+    if (v.exact !== undefined) return rationalOfExactDecimal(v);
     return null;
 }
 
@@ -658,6 +663,23 @@ export function exactRationalOp(l: Value, r: Value, op: "add" | "sub" | "mul" | 
     const approx = rationalToNumber(result);
     if (!Number.isFinite(approx)) return null;
     return numberValueRational(approx, result);
+}
+
+/**
+ * The exact quotient of two plain numbers, or null: the decimal quotient where
+ * either carries an exact decimal (see vm/ExactDecimals.ts's
+ * `exactDecimalDivide`: exact where it terminates, the exact fraction where it
+ * does not), and otherwise the fraction integer division seeds (see
+ * {@link exactRationalOp}). The VM's plain `/` makes one call here for both, so
+ * its dispatch loop does not grow.
+ *
+ * @param l - The dividend.
+ * @param r - The divisor.
+ * @returns The exact quotient, or null to keep the double.
+ */
+export function exactQuotient(l: Value, r: Value): Value | null {
+    if (l.exact !== undefined || r.exact !== undefined) return exactDecimalDivide(l, r);
+    return exactRationalOp(l, r, "div");
 }
 
 /**
@@ -766,10 +788,16 @@ export function uncertainOp(l: Value, r: Value, op: "add" | "sub" | "mul" | "div
  * they rounded to, so "1/49 * 49 == 1" is true and two distinct fractions that
  * share a nearest double still compare unequal. Returns null when either side
  * has no rational image, leaving the caller's ordinary double comparison in
- * place. The call sites gate on a rational actually being present first, so a
- * plain "1 < 2" never reaches here.
+ * place. The call sites gate on a rational or an exact decimal actually being
+ * present first, so a plain "1 < 2" never reaches here.
+ *
+ * Where neither side carries a fraction the comparison is on the exact
+ * decimals instead (see vm/ExactDecimals.ts's `compareExactDecimals`), so
+ * "0.1 + 0.2 == 0.3" is decided on 0.3 against 0.3, and two decimals that share
+ * a nearest double still compare on their digits.
  */
 export function compareRationalOperands(l: Value, r: Value): -1 | 0 | 1 | null {
+    if (l.rational === undefined && r.rational === undefined) return compareExactDecimals(l, r);
     const lr = operandRational(l);
     if (lr === null) return null;
     const rr = operandRational(r);

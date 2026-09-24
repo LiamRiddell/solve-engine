@@ -89,11 +89,18 @@ describe("modulo of things that are not whole", () => {
 		expect(num("5 mod 1.5")).toBe(0.5);
 	});
 
-	test("and inherits representation error like any other arithmetic", () => {
-		// 0.3 is not exactly three tenths, so the remainder against a tenth is
-		// a hair under a tenth rather than zero. Answering 0 here would mean
-		// the engine had rounded behind the reader's back.
-		expect(num("0.3 mod 0.1")).toBe(0.09999999999999998);
+	test("and is exact for a decimal, where the double drifts", () => {
+		// DECIDED (#511), reversing what this test used to pin. As a double, 0.3
+		// is not exactly three tenths, so the remainder against a tenth was a
+		// hair under a tenth. A decimal is now the value it was written as, so
+		// three tenths leave nothing over. See vm/ExactDecimals.ts.
+		expect(num("0.3 mod 0.1")).toBe(0);
+		expect(num("0.5 mod 0.2")).toBe(0.1);
+	});
+
+	test("and inherits representation error where floating point is still used", () => {
+		// Scientific notation is still a double, and so is its remainder.
+		expect(num("3e-1 mod 1e-1")).toBe(0.09999999999999998);
 	});
 });
 

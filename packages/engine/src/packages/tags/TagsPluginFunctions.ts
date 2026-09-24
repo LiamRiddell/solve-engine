@@ -1,6 +1,7 @@
 import { Value, ValueType, numberValue, uomValue, errorValue, stringValue } from "@solve-js/vm/Value";
 import { unifyQuantities } from "@solve-js/vm/VMConversion";
 import { withSources } from "@solve-js/vm/Provenance";
+import { exactDecimalTotal } from "@solve-js/vm/ExactDecimals";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { lineCarriesTag, tagEdgesOf } from "./TagScanner";
@@ -115,6 +116,9 @@ function aggregateTagged(context: LineExecutionContext, tag: string, mode: TagMo
  * gives.
  */
 function combineTagged(values: Value[], isAverage: boolean): Value {
+  // Tagged decimals total exactly, as a column does. See vm/ExactDecimals.ts.
+  const exact = exactDecimalTotal(values, isAverage);
+  if (exact !== null) return exact;
   const unified = unifyQuantities(values, isAverage ? "averaged" : "added");
   if (unified instanceof Value) return unified;
   const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);

@@ -29,6 +29,14 @@ $0.10 + 15% // $0.12
 
 Exactness holds wherever a currency is involved, a currency against a plain
 number included, and that includes adding a percentage: `$0.10 + 15%` is
-`$0.115`, which the half-cent rule rounds up. A bare decimal on its own is an ordinary floating-point number,
-and a conversion between two currencies goes through a live rate, which is not
-exact.
+`$0.115`, which the half-cent rule rounds up.
+
+A bare decimal follows the same rules without a currency, so the two agree:
+`0.1 + 0.2 == 0.3` is true, and `100 + 10%` is exactly 110. See
+[decimals](/syntax/decimals/) for what that covers and where it ends. A
+conversion between two currencies goes through a live rate, which is not exact.
+
+```solve
+0.1 + 0.2 == 0.3 // true
+0.70 * 1.10 // 0.77
+```
