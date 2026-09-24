@@ -78,6 +78,18 @@ sum(line 1 : line 3)       // 60
 average(line 1 : line 3)   // 20
 ```
 
+A blank line or a heading inside the span has no figure to add and is passed
+over, the way a spreadsheet's `SUM` passes over an empty cell, so pressing Enter
+inside a summed block does not break the sum. A line of prose inside it is still
+an error, since it is a line that failed rather than one left empty:
+
+```solve-doc
+10
+
+30
+sum(line 1 : line 3)   // 40
+```
+
 These forms only work inside a document, since they refer to other lines. They
 return an error through the single-expression entry point, which has no document
 to refer to.
@@ -102,8 +114,14 @@ error. The same holds for a cycle that runs through a name (`:a = line 2 + 1`
 above `a + 1`) or a running total (`spent += line 2` above `spent += 9`): every
 line on it reports it, and none takes a number from the others.
 
-A plain reference to a line further down is not a cycle: `line 2 + 1` above `7`
-is `8`, because line 2 has an answer of its own once it has been read.
+A reference to a line further down is refused too, cycle or not. A note is
+read from the top, so from where line 1 stands, line 2 has not been evaluated
+yet. Put the line that is read above the line that reads it:
+
+```solve-doc
+line 2 + 1   // ERROR: Line 2 has not been evaluated yet (forward reference, or out of range)
+7
+```
 
 ## Related, document-aware forms
 

@@ -799,7 +799,10 @@ export class ExpressionEngine {
 
         context = {
             lineIndex: lineNumber,
-            getLineCount: doc ? () => doc.lineCount : undefined,
+            // The batch pass knows its line count too, from the scan it is
+            // walking; without it a range could not tell a blank line inside
+            // the document from a line past its end (#562).
+            getLineCount: doc ? () => doc.lineCount : scan ? () => scan.length : undefined,
             getLineResult: readLineResult,
             // The edge without the read; see the field's own doc comment.
             noteLineRead: doc

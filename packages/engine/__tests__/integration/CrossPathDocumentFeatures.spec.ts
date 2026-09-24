@@ -230,6 +230,20 @@ describe("line references across entry points", () => {
     expect(incremental(doc).slice(1)).toEqual(expected.slice(1));
   });
 
+  test("a blank line or a heading inside a span is passed over, both passes (#562)", () => {
+    // A blank line used to read as a forward reference and fail the sum.
+    const doc = ["10", "", "30", "# Mid", "20", "sum(line 1 : line 5)", "average(line 1 : line 5)"];
+    expect(batch(doc).slice(5)).toEqual(["60", "20"]);
+    expect(incremental(doc).slice(5)).toEqual(["60", "20"]);
+    // A span with no figures at all says so, and a span past the end is still refused.
+    const empty = ["", "", "sum(line 1 : line 2)"];
+    expect(batch(empty)[2]).toMatch(/^ERROR: Lines 1 to 2 hold no figures/);
+    expect(incremental(empty)[2]).toBe(batch(empty)[2]);
+    const past = ["10", "sum(line 1 : line 9)"];
+    expect(batch(past)[1]).toMatch(/Line 2 has not been evaluated yet/);
+    expect(incremental(past)[1]).toBe(batch(past)[1]);
+  });
+
   test("an explicit span reaches across a boundary, both passes", () => {
     const doc = ["10", "20", "30", "sum(line 1 : line 3)", "average(line 1 : line 3)"];
     expect(batch(doc).slice(3)).toEqual(["60", "20"]);
