@@ -666,20 +666,29 @@ export function exactRationalOp(l: Value, r: Value, op: "add" | "sub" | "mul" | 
 }
 
 /**
- * The exact quotient of two plain numbers, or null: the decimal quotient where
- * either carries an exact decimal (see vm/ExactDecimals.ts's
- * `exactDecimalDivide`: exact where it terminates, the exact fraction where it
- * does not), and otherwise the fraction integer division seeds (see
- * {@link exactRationalOp}). The VM's plain `/` makes one call here for both, so
- * its dispatch loop does not grow.
+ * The exact quotient of two values, or null: the decimal quotient where both
+ * are plain numbers and either carries an exact decimal (see
+ * vm/ExactDecimals.ts's `exactDecimalDivide`: exact where it terminates, the
+ * exact fraction where it does not), and otherwise the fraction division
+ * seeds or keeps (see {@link exactRationalOp}). The VM's `/` makes one call
+ * here from its plain case and one from its general arm, so its dispatch loop
+ * does not grow, and a plain number that reaches the general arm only because
+ * it carries its sources (see vm/Provenance.ts) is divided as the plain case
+ * divides it. A fraction, a measurement, a currency amount or a number in
+ * another base keeps the fraction path it had.
  *
  * @param l - The dividend.
  * @param r - The divisor.
  * @returns The exact quotient, or null to keep the double.
  */
 export function exactQuotient(l: Value, r: Value): Value | null {
-    if (l.exact !== undefined || r.exact !== undefined) return exactDecimalDivide(l, r);
+    if ((l.exact !== undefined || r.exact !== undefined) && isPlainNumber(l) && isPlainNumber(r)) return exactDecimalDivide(l, r);
     return exactRationalOp(l, r, "div");
+}
+
+/** A Number carrying neither a fraction nor an uncertainty, the operand the decimal quotient is for. */
+function isPlainNumber(v: Value): boolean {
+    return v.type === ValueType.Number && v.rational === undefined && v.uncertainty === undefined;
 }
 
 /**

@@ -2926,7 +2926,10 @@ export function executeBytecode(
             // operand's period before adding.
             stack.push(uomValue(ratePeriodAdd + r.toNumber(), r.unit!));
           } else if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(numberValue((l.value as number) + (r.value as number)));
+            // Two numbers the plain case above passed over (one carries its
+            // sources, say) add the way that case adds them, so a sourced
+            // decimal stays exact. See vm/ExactDecimals.ts.
+            stack.push(exactArithmetic(l, r, (l.value as number) + (r.value as number), "add"));
           } else if (l.type === ValueType.Boolean && r.type === ValueType.Boolean) {
             // The word "and" is a synonym for arithmetic "+" ("5 and 3" = 8)
             // and also the boolean conjunction ("true and false"). It has its
@@ -3012,7 +3015,8 @@ export function executeBytecode(
           } else if (ratePeriodSub !== null) {
             stack.push(uomValue(ratePeriodSub - r.toNumber(), r.unit!));
           } else if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(numberValue((l.value as number) - (r.value as number)));
+            // As in ADD: a sourced decimal subtracts exactly.
+            stack.push(exactArithmetic(l, r, (l.value as number) - (r.value as number), "sub"));
           } else if (l.type === ValueType.Datetime) {
             if (r.type === ValueType.Datetime) {
               // "now - now" used to unconditionally re-wrap the result as
@@ -3098,7 +3102,8 @@ export function executeBytecode(
           const moneyScalar = multiplyScalarExact(l, r);
           if (moneyScalar) { stack.push(moneyScalar); break; }
           if (l.type === ValueType.Number && r.type === ValueType.Number) {
-            stack.push(numberValue((l.value as number) * (r.value as number)));
+            // As in ADD: a sourced decimal multiplies exactly.
+            stack.push(exactArithmetic(l, r, (l.value as number) * (r.value as number), "mul"));
           } else if (l.type === ValueType.Matrix && r.type === ValueType.Matrix) {
             // Genuinely different from +/-/comparisons (which stay
             // element-wise, via binaryOp() below), scalar broadcast vs.
@@ -3235,8 +3240,10 @@ export function executeBytecode(
             // "1.5 / 0.25" and "1/0" keep the doubles binaryOp gives and "100n /
             // 3n" stays exact integer division. The reduced result's nearest
             // double equals the plain "a / b" quotient, so "10 / 4" is 2.5 and
-            // every existing division result is unchanged.
-            const ratDiv = exactRationalOp(l, r, "div");
+            // every existing division result is unchanged. Two plain numbers,
+            // one of them a decimal, take the decimal quotient the plain case
+            // above gives, so a sourced "0.3 / 0.1" is still exactly 3.
+            const ratDiv = exactQuotient(l, r);
             if (ratDiv) { stack.push(ratDiv); break; }
             // The bigint arm refuses a zero divisor rather than letting V8's
             // own RangeError out. See bigIntDivisionByZero() for why this is

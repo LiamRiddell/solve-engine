@@ -11,10 +11,11 @@
  * exact answer, so `toNumber()` is pinned with `toBe` against that double.
  */
 
-import { describe, expect, test } from "@jest/globals";
+import { afterEach, describe, expect, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { evaluateDocument } from "@solve-js/engine/evaluateDocument";
+import { currencyExchangeService } from "@solve-js/uom/CurrencyExchange";
 import { ValueType, type Value } from "@solve-js/vm/Value";
 import { EXACT_DECIMAL_DIGITS } from "@solve-js/vm/ExactDecimals";
 
@@ -231,6 +232,53 @@ describe("what a result carries", () => {
 	});
 });
 
+describe("a figure that carries its sources (#512)", () => {
+	// A primed table, so a converted amount carries a record without reaching
+	// the network. Ten dollars at 0.9 is nine euros, a whole number, so read as
+	// a number it has an exact decimal and carries the USD/EUR rate's record.
+	// A sourced operand leaves the plain fast paths, which is where the exact
+	// path used to be left behind.
+	const prime = (): void => {
+		currencyExchangeService.primeRates("USD", { EUR: 0.9 }, { provider: "Test Bank", publishedAt: Date.UTC(2026, 8, 23, 16, 2) });
+	};
+	const NINE = "((10 USD in EUR) as number)";
+	afterEach(() => currencyExchangeService.clearRates());
+
+	test.each([
+		// Each double is what floating point gave: 1.3499999999999999,
+		// 8.700000000000001, 1000.0000000000001 and 0.1999999999999995.
+		[`${NINE} * 0.15`, 1.35, "1.35"],
+		[`${NINE} - 0.1 - 0.2`, 8.7, "8.70"],
+		[`${NINE} / 0.009`, 1000, "1,000"],
+		[`${NINE} mod 0.4`, 0.2, "0.20"],
+	])("%s is exact and keeps the rate's record", (source, double, text) => {
+		prime();
+		const v = evaluate(source);
+		expect(v.toNumber()).toBe(double);
+		expect(formatValue(v).replace(/^=\s*/, "")).toBe(text);
+		expect(v.sources?.map((s) => s.subject)).toEqual(["USD/EUR"]);
+	});
+
+	test("so a comparison on a sourced decimal agrees with the answer on screen", () => {
+		prime();
+		expect(shown(`${NINE} * 0.15 == 1.35`)).toBe("true");
+	});
+
+	test("an exact total carries the sources of what it added, through both document passes", () => {
+		prime();
+		const doc = [`${NINE} #fx`, "0.15 #fx", "total of #fx", "", NINE, "0.15", "total above", "average above"];
+		const read = (result: { lines: { result?: Value }[] }) =>
+			[2, 6, 7].map((i) => {
+				const v = result.lines[i].result!;
+				return `${formatValue(v).replace(/^=\s*/, "")} ${v.exact === undefined ? "double" : "exact"} ${v.sources?.map((s) => s.subject).join(",")}`;
+			});
+		const batch = read(newTrackedEngine().parseDocument(doc.join("\n"), { inputType: "markdown" }));
+		const incremental = read(evaluateDocument(newTrackedEngine(), doc.join("\n"), { inputType: "markdown" }));
+		expect(batch).toEqual(["9.15 exact USD/EUR", "9.15 exact USD/EUR", "4.58 exact USD/EUR"]);
+		expect(incremental).toEqual(batch);
+	});
+});
+
 describe("the boundary", () => {
 	test("an irrational stays in floating point", () => {
 		expect(shown("sqrt(2) * sqrt(2) == 2")).toBe("false");
@@ -276,6 +324,18 @@ describe("the boundary", () => {
 		expect(num("0.5 / 0")).toBe(Infinity);
 		expect(Number.isNaN(num("0.5 mod 0"))).toBe(true);
 		expect(num("0.0 ^ -1")).toBe(Infinity);
+	});
+
+	test("a unit other than money keeps the double, and unit algebra answers as it did (#513)", () => {
+		// An area, a reciprocal and a rate cancelling read their operands as
+		// doubles, as they did before plain decimals were exact.
+		expect(shown("2.5 m * 1.2 m")).toBe("3.00 m²");
+		expect(evaluate("1.1 m * 1.1 m").exact).toBeUndefined();
+		expect(shown("1.5 / (0.5 m)")).toBe("3.00 /m");
+		expect(shown("2.4 m² / (0.3 m²/l)")).toBe("8.00 l");
+		// Money reached through a price per unit is the product it was.
+		expect(shown("3 kg * $5/kg")).toBe("$15.00");
+		expect(shown("$12.50/h * 7.5 h")).toBe("$93.75");
 	});
 
 	test("a measurement with an uncertainty keeps the double", () => {

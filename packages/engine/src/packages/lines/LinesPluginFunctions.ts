@@ -1,7 +1,7 @@
 import { Value, ValueType, numberValue, uomValue, errorValue, stringValue } from "@solve-js/vm/Value";
 import { isCheckResult } from "@solve-js/packages/conditionals/CheckFunctions";
 import { nonNumericKind, unifyQuantities } from "@solve-js/vm/VMConversion";
-import { withSources } from "@solve-js/vm/Provenance";
+import { sourcesOfValues, withSources } from "@solve-js/vm/Provenance";
 import { exactDecimalTotal } from "@solve-js/vm/ExactDecimals";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { headingOf, isSummaryLine, sectionKey } from "./SectionReader";
@@ -139,9 +139,11 @@ export function lineRefHandler(args: Value[], context?: LineExecutionContext): V
  */
 function combineQuantities(values: Value[], isAverage: boolean): Value {
   // A column of decimals totals exactly, so `total above` over 0.1 and 0.2 is
-  // the 0.3 a later `== 0.3` agrees with. See vm/ExactDecimals.ts.
+  // the 0.3 a later `== 0.3` agrees with. See vm/ExactDecimals.ts. The exact
+  // total carries the column's sources as the double one below does: an exact
+  // column is all plain numbers, so there is no conversion rate to add.
   const exact = exactDecimalTotal(values, isAverage);
-  if (exact !== null) return exact;
+  if (exact !== null) return withSources(exact, sourcesOfValues(values));
   const unified = unifyQuantities(values, isAverage ? "averaged" : "added");
   if (unified instanceof Value) return unified;
   const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);
