@@ -1,5 +1,6 @@
 import { Value, ValueType, numberValue, uomValue, errorValue, stringValue } from "@solve-js/vm/Value";
 import { unifyQuantities } from "@solve-js/vm/VMConversion";
+import { withSources } from "@solve-js/vm/Provenance";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { lineCarriesTag, tagEdgesOf } from "./TagScanner";
@@ -118,8 +119,8 @@ function combineTagged(values: Value[], isAverage: boolean): Value {
   if (unified instanceof Value) return unified;
   const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);
   const result = isAverage ? sum / values.length : sum;
-  if (unified.unit === undefined) return numberValue(result);
-  const combined = uomValue(result, unified.unit);
+  if (unified.unit === undefined) return withSources(numberValue(result), unified.sources);
+  const combined = withSources(uomValue(result, unified.unit), unified.sources);
   // A total of clock-time spans is still a span; see the same rule in
   // `LinesPluginFunctions.combineQuantities`.
   if (values.every((v) => v.datetimeSpan === true)) combined.datetimeSpan = true;

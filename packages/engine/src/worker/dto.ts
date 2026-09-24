@@ -13,6 +13,7 @@
  */
 
 import type { ValueType, ColourFormat, DatetimeGrain } from "@solve-js/vm/Value";
+import type { ValueSource, FrozenMark } from "@solve-js/vm/Provenance";
 import type { DiagnosticReportJSON } from "@solve-js/diagnostics";
 
 /**
@@ -138,6 +139,16 @@ export interface SerializedWorkerValue {
 	 * See `Value.zone`.
 	 */
 	zone?: string;
+	/**
+	 * Where the live figures behind this value came from, present only when it
+	 * carries any: each record's provider, kind, fetch time, and when relevant
+	 * its subject, its day and its freeze time. See `Value.sources`. Every field
+	 * is a string or a number, so the DTO's `structuredClone`/`JSON` guarantee
+	 * is unaffected.
+	 */
+	sources?: ValueSource[];
+	/** Present only on a frozen answer: when it was frozen and the key it is stored under. See `Value.frozen`. */
+	frozen?: FrozenMark;
 }
 
 /**

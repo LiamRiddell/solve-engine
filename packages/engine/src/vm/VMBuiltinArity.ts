@@ -190,6 +190,20 @@ export function builtinFunctionNames(): string[] {
 }
 
 /**
+ * The name of the builtin at `index`, as its arity error spells it
+ * (`sqrt`, `presentValue`, `loanRepayment`).
+ *
+ * Read when a line is explained, so a package describing a step matches the
+ * call by a name rather than by a number that means nothing outside the VM.
+ *
+ * @param index - The builtin index, the first operand of `OpCode.CALL_BUILTIN`.
+ * @returns The name, or an empty string for an index this table does not list.
+ */
+export function builtinFunctionName(index: number): string {
+  return BUILTIN_ARITY[index]?.name ?? "";
+}
+
+/**
  * Checks a builtin call's argument count before the implementation runs.
  *
  * @param index - The builtin index, the first operand of `OpCode.CALL_BUILTIN`.

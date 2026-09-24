@@ -27,5 +27,10 @@ A weather lookup reaches the network, so its first result is a pending value (th
 request returns. See [async and live data](/guide/async-and-live-data/) for how a
 host drives that loop itself.
 
+Each value records that it came from Open-Meteo and when it was fetched, so an
+app can say how old a reading is. Ending a line with `frozen` keeps the reading it
+first answered with, for a note that records the weather on a day rather than
+following it; see [frozen answers](/syntax/frozen-answers/).
+
 The values are live and change with the weather, so they are not pinned as
 build-time assertions the way a fixed calculation is.

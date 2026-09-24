@@ -15,7 +15,10 @@
  *   Those are point-in-time and must be re-fetched, not restored stale, so the
  *   snapshot omits every line and variable backed by an async resolver. See
  *   {@link ExpressionEngine.toJSON}, which filters them out before this module
- *   ever sees them.
+ *   ever sees them. The one exception is the opt-in one: a line the reader
+ *   froze (`10 USD in GBP frozen`) is carried with its answer, its date and its
+ *   sources, in {@link EngineSnapshot.frozen}, because keeping that answer is
+ *   what the line asked for.
  * - Package-contributed state (a package's own caches or globals). Core state
  *   only for now; a package opt-in is a follow-up. See the guide.
  *
@@ -34,6 +37,8 @@ import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-
 import type { DecimalData } from "@solve-js/decimal";
 import type { Rational } from "@solve-js/symbolic";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import type { ValueSource, SourceKind } from "@solve-js/vm/Provenance";
+import type { FrozenDirective, FrozenRecord } from "@solve-js/vm/FrozenValues";
 
 /**
  * The magic string every snapshot carries, so a host handing `fromJSON` an
@@ -100,6 +105,18 @@ export interface SerializedRational {
 }
 
 /**
+ * The sidecars any serialised value may carry alongside its type-specific
+ * fields: its provenance (`src`, see `vm/Provenance.ts`) and, for a frozen
+ * answer, its frozen mark (`fz`). Both are optional and absent on a snapshot
+ * written before they existed, which is why they need no
+ * {@link SNAPSHOT_VERSION} bump: an older snapshot restores exactly as it did.
+ */
+export interface SerializedValueSidecars {
+	src?: ValueSource[];
+	fz?: { at: number; key: string };
+}
+
+/**
  * A {@link Value} in JSON-safe form, discriminated by its {@link ValueType}
  * on the `t` field. Only the types a session can leave in a variable, a
  * function result, or a cached line are represented; {@link ValueType.Pending}
@@ -107,7 +124,7 @@ export interface SerializedRational {
  * {@link ValueType.Symbolic} plus symbolic matrix cells are refused with a
  * clear error (deferred, see the module doc).
  */
-export type SerializedValue =
+export type SerializedValue = SerializedValueSidecars & (
 	| { t: ValueType.Number; v: SerializedNumber; exact?: SerializedDecimal; rational?: SerializedRational }
 	| { t: ValueType.Hex; v: SerializedNumber | string; big?: boolean; base?: string }
 	| { t: ValueType.BigInt; v: string }
@@ -118,7 +135,8 @@ export type SerializedValue =
 	| { t: ValueType.Matrix; rows: number; cols: number; data: (SerializedNumber | boolean)[] }
 	| { t: ValueType.Range; min: SerializedNumber; max: SerializedNumber }
 	| { t: ValueType.Boolean; v: boolean }
-	| { t: ValueType.Error; code: string; message: string };
+	| { t: ValueType.Error; code: string; message: string }
+);
 
 /** A {@link BytecodeProgram} with its typed arrays copied to plain arrays and non-finite constants named. */
 export interface SerializedBytecode {
@@ -129,6 +147,8 @@ export interface SerializedBytecode {
 	constants?: [number, number][];
 	userFunctionBodies?: SerializedUserFunction[];
 	anonymousBodies?: SerializedAnonymousBody[];
+	/** A frozen line's directive (see `vm/FrozenValues.ts`), carried so a restored line still answers from the store. */
+	frozen?: FrozenDirective;
 }
 
 /** A {@link UserFunctionDef}: name, parameter names, and the body compiled to its own program. */
@@ -156,6 +176,17 @@ export interface SerializedLineCacheEntry {
 }
 
 /**
+ * One frozen answer, as a snapshot carries it: the key it is stored under, when
+ * it was frozen, the day that was, and the answer itself with its sources.
+ */
+export interface SerializedFrozenRecord {
+	key: string;
+	at: number;
+	day: string;
+	value: SerializedValue;
+}
+
+/**
  * A complete, JSON-safe snapshot of an engine's session state.
  *
  * Produced by {@link ExpressionEngine.toJSON} and consumed by
@@ -179,6 +210,12 @@ export interface EngineSnapshot {
 	lineCache: SerializedLineCacheEntry[];
 	/** The expression-keyed bytecode cache, a pure recompilation cache, carried so a warm start skips re-parsing unchanged expressions. */
 	bytecodeCache: { expression: string; program: SerializedBytecode }[];
+	/**
+	 * The answers this engine's `frozen` lines keep, so a restored document
+	 * reads the same answers with no network. Absent on a snapshot written
+	 * before frozen lines existed, which restores with none.
+	 */
+	frozen?: SerializedFrozenRecord[];
 }
 
 /**
@@ -239,6 +276,15 @@ function unsupportedValue(type: ValueType, where: string): never {
  *   value (or a symbolic matrix cell), the one class this v1 format defers.
  */
 export function serializeValue(value: Value, where: string): SerializedValue {
+	const out = serializeValueBody(value, where);
+	// Plain copies, so the snapshot shares nothing with the live value.
+	if (value.sources !== undefined) out.src = value.sources.map((s) => ({ ...s }));
+	if (value.frozen !== undefined) out.fz = { at: value.frozen.at, key: value.frozen.key };
+	return out;
+}
+
+/** The type-specific half of {@link serializeValue}. */
+function serializeValueBody(value: Value, where: string): SerializedValue {
 	switch (value.type) {
 		case ValueType.Number: {
 			const out: Extract<SerializedValue, { t: ValueType.Number }> = { t: ValueType.Number, v: encodeNumber(value.value as number) };
@@ -306,6 +352,14 @@ function serializeMatrixCell(cell: MatrixEntry, where: string): SerializedNumber
 
 /** Reverse {@link serializeValue}. Builds a fresh {@link Value}; never touches the arena, so it is safe to call outside evaluation. */
 export function deserializeValue(sv: SerializedValue): Value {
+	const value = deserializeValueBody(sv);
+	if (sv.src !== undefined) value.sources = sv.src.map((s) => ({ ...s }));
+	if (sv.fz !== undefined) value.frozen = { at: sv.fz.at, key: sv.fz.key };
+	return value;
+}
+
+/** The type-specific half of {@link deserializeValue}. */
+function deserializeValueBody(sv: SerializedValue): Value {
 	switch (sv.t) {
 		case ValueType.Number: {
 			const v = new Value(ValueType.Number, decodeNumber(sv.v));
@@ -357,6 +411,18 @@ export function deserializeValue(sv: SerializedValue): Value {
 	}
 }
 
+// ── Frozen answers ──────────────────────────────────────────────────────────
+
+/** Turn one frozen answer into its JSON-safe form. */
+export function serializeFrozenRecord(record: FrozenRecord): SerializedFrozenRecord {
+	return { key: record.key, at: record.at, day: record.day, value: serializeValue(record.value, `frozen "${record.key}"`) };
+}
+
+/** Reverse {@link serializeFrozenRecord}. */
+export function deserializeFrozenRecord(sr: SerializedFrozenRecord): FrozenRecord {
+	return { key: sr.key, at: sr.at, day: sr.day, value: deserializeValue(sr.value) };
+}
+
 // ── Bytecode serialisation ──────────────────────────────────────────────────
 
 /** Turn a compiled {@link BytecodeProgram} into its JSON-safe form, recursively for nested function and anonymous bodies. */
@@ -372,6 +438,7 @@ export function serializeBytecode(program: BytecodeProgram): SerializedBytecode 
 	if (program.anonymousBodies) {
 		out.anonymousBodies = program.anonymousBodies.map((b) => ({ params: b.params.slice(), program: serializeBytecode(b.program) }));
 	}
+	if (program.frozen) out.frozen = { ...program.frozen };
 	return out;
 }
 
@@ -388,6 +455,7 @@ export function deserializeBytecode(sb: SerializedBytecode): BytecodeProgram {
 	if (sb.anonymousBodies) {
 		program.anonymousBodies = sb.anonymousBodies.map((b): AnonymousBodyDef => ({ params: b.params.slice(), program: deserializeBytecode(b.program) }));
 	}
+	if (sb.frozen) program.frozen = { ...sb.frozen };
 	return program;
 }
 
@@ -523,6 +591,37 @@ function assertRationalShape(value: unknown, where: string): void {
 	}
 }
 
+const SOURCE_KINDS: ReadonlySet<SourceKind> = new Set<SourceKind>(["live", "primed", "historical"]);
+
+function isOptionalString(value: unknown): boolean {
+	return value === undefined || typeof value === "string";
+}
+
+function isIsoDay(value: unknown): boolean {
+	return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+/** Check a value's optional provenance and frozen mark, the sidecars every type may carry. */
+function assertSidecarShape(sv: Record<string, unknown>, where: string): void {
+	if (sv.src !== undefined) {
+		if (!Array.isArray(sv.src)) malformed(`${where}.src`, "an array of sources", sv.src);
+		sv.src.forEach((s, i) => {
+			const at = `${where}.src[${i}]`;
+			if (!isRecord(s) || typeof s.provider !== "string" || !SOURCE_KINDS.has(s.kind as SourceKind) || !Number.isFinite(s.fetchedAt)) {
+				malformed(at, 'a source with a provider, a kind of "live", "primed" or "historical", and a fetchedAt time', s);
+			}
+			if (!isOptionalString(s.subject) || !isOptionalString(s.asOf) || (s.frozenAt !== undefined && !Number.isFinite(s.frozenAt))) {
+				malformed(at, "a source whose subject and asOf are strings and whose frozenAt is a time", s);
+			}
+		});
+	}
+	if (sv.fz !== undefined) {
+		if (!isRecord(sv.fz) || !Number.isFinite(sv.fz.at) || typeof sv.fz.key !== "string") {
+			malformed(`${where}.fz`, "a frozen mark as { at: time, key: string }", sv.fz);
+		}
+	}
+}
+
 /**
  * Check one serialised value against its type tag, so {@link deserializeValue}
  * never meets a field of the wrong kind: `BigInt("abc")` throws a raw
@@ -531,6 +630,7 @@ function assertRationalShape(value: unknown, where: string): void {
  */
 function assertValueShape(sv: unknown, where: string): void {
 	if (!isRecord(sv)) malformed(where, "a serialised value object", sv);
+	assertSidecarShape(sv, where);
 	switch (sv.t) {
 		case ValueType.Number:
 			if (!isSerializedNumber(sv.v)) malformed(`${where}.v`, "a number", sv.v);
@@ -613,6 +713,12 @@ function assertBytecodeShape(sb: unknown, where: string, depth: number): void {
 		if (!Array.isArray(sb.userFunctionBodies)) malformed(`${where}.userFunctionBodies`, "an array of functions", sb.userFunctionBodies);
 		sb.userFunctionBodies.forEach((fn, i) => assertUserFunctionShape(fn, `${where}.userFunctionBodies[${i}]`, depth + 1));
 	}
+	if (sb.frozen !== undefined) {
+		const f = sb.frozen;
+		if (!isRecord(f) || typeof f.key !== "string" || (f.on !== undefined && !isIsoDay(f.on)) || !isOptionalString(f.write)) {
+			malformed(`${where}.frozen`, "a frozen directive as { key, on?: YYYY-MM-DD, write? }", f);
+		}
+	}
 	if (sb.anonymousBodies !== undefined) {
 		if (!Array.isArray(sb.anonymousBodies)) malformed(`${where}.anonymousBodies`, "an array of bodies", sb.anonymousBodies);
 		sb.anonymousBodies.forEach((body, i) => {
@@ -658,4 +764,15 @@ function assertSnapshotBody(candidate: Record<string, unknown>): void {
 		if (!isRecord(cached) || typeof cached.expression !== "string") malformed(at, "an { expression, program } pair", cached);
 		assertBytecodeShape(cached.program, `${at}.program`, 1);
 	});
+
+	if (candidate.frozen !== undefined) {
+		if (!Array.isArray(candidate.frozen)) malformed("frozen", "an array of frozen answers", candidate.frozen);
+		candidate.frozen.forEach((record, i) => {
+			const at = `frozen[${i}]`;
+			if (!isRecord(record) || typeof record.key !== "string" || !Number.isFinite(record.at) || !isIsoDay(record.day)) {
+				malformed(at, "a frozen answer as { key, at: time, day: YYYY-MM-DD, value }", record);
+			}
+			assertValueShape(record.value, `${at}.value`);
+		});
+	}
 }

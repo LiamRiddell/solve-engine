@@ -15,11 +15,14 @@ import { createVM, executeBytecode } from "@solve-js/vm/VM";
 import { createScratchVM } from "@solve-js/vm/ScratchVM";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import { resolveHolidayPredicate } from "@solve-js/vm/HolidayCalendar";
-import type { EvalResult, LineExecutionContext } from "@solve-js/vm/VM";
+import type { EvalResult, LineExecutionContext, LineRerun } from "@solve-js/vm/VM";
+import { firstGlobalWrite, lineMentions, copyFetchedData, targetAnswer, overrideValue, type WhatIfOverrides } from "@solve-js/engine/WhatIfRun";
 import type { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { BackgroundRefreshManager } from "@solve-js/engine/BackgroundRefreshManager";
 import { registerAsConverter, unregisterAsConverter, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { createEngineContext } from "@solve-js/engine/EngineContext";
+import { splitFrozenSuffix, frozenDirectiveFor } from "@solve-js/engine/FrozenSuffix";
+import type { FrozenRecord } from "@solve-js/vm/FrozenValues";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import type { CalendarOption } from "@solve-js/calendar/resolveCalendar";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
@@ -39,6 +42,8 @@ import {
     deserializeBytecode,
     serializeUserFunction,
     deserializeUserFunction,
+    serializeFrozenRecord,
+    deserializeFrozenRecord,
     type EngineSnapshot,
     type SerializedValue,
     type SerializedLineCacheEntry,
@@ -85,7 +90,7 @@ import { abortLogger } from "@solve-js/utilities/AbortControllerLogger";
 import { TokenNormalizer, BUILTIN_PHRASES, implicitMultiplyRule } from "@solve-js/normalizer";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import type { TokenFusion } from "@solve-js/normalizer";
-import { UserUnitTable } from "@solve-js/packages/uom/UserUnitTable";
+import { UserUnitTable, type DocumentUnit } from "@solve-js/packages/uom/UserUnitTable";
 import { userUnitExpansionRule } from "@solve-js/packages/uom/normalizer/UserUnitNormalizerRule";
 import { callFusionRule } from "@solve-js/normalizer/CallFusionRule";
 import { dateLiteralNormalizerRule } from "@solve-js/packages/datetime/normalizer/DateLiteralNormalizerRule";
@@ -105,8 +110,10 @@ import {
     DATETIME_LITERAL_UNREADABLE_TYPE,
 } from "@solve-js/packages/datetime/normalizer/DateLiteralNormalizerRule";
 import { monthNameDateNormalizerRule } from "@solve-js/packages/datetime/normalizer/MonthNameDateNormalizerRule";
-import { buildExplanation } from "@solve-js/explain";
-import type { Explanation } from "@solve-js/explain";
+import { buildExplanation, buildLineTrace, EXPLAIN_CONTEXT, DEFAULT_TRACE_OPTIONS } from "@solve-js/explain";
+import type { Explanation, ExplanationStep, ExplainCall, LineTrace, ObservedSpan, TraceSource } from "@solve-js/explain";
+import type { ObservedCall } from "@solve-js/vm/VM";
+import { builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
 import {
     type DiagnosticPipelineResult,
     type PipelineStageResult,
@@ -123,6 +130,7 @@ import {
 // Re-export for consumers (playground imports these from ExpressionEngine)
 export type { CacheSnapshot, BatcherMetrics, CheckpointSnapshot, BytecodeCacheEntry, LineCacheEntryInfo, AsyncCachePackageInfo };
 export type { DagSnapshot } from "@solve-js/vm/DependencyGraph";
+export type { WhatIfOverrides } from "@solve-js/engine/WhatIfRun";
 // The snapshot/restore surface, re-exported so `toJSON`/`fromJSON` callers can
 // import their types from the same module as `ExpressionEngine`.
 export {
@@ -140,7 +148,12 @@ export type {
     SerializedDecimal,
     SerializedRational,
     SerializedNumber,
+    SerializedValueSidecars,
+    SerializedFrozenRecord,
 } from "@solve-js/engine/EngineSnapshot";
+// What a frozen line keeps, and what a live value records about its source.
+export type { FrozenRecord } from "@solve-js/vm/FrozenValues";
+export type { ValueSource, SourceKind, FrozenMark } from "@solve-js/vm/Provenance";
 
 /**
  * Options for {@link ExpressionEngine.fromJSON}, restoring a snapshot onto a
@@ -298,6 +311,85 @@ type EffectMode = "apply" | "check";
 const CHECKED_NOT_RUN: Value = new Value(ValueType.String, "checked, not run");
 
 /**
+ * The parts of a `1 <name> = <n> <unit>` user-unit definition, or null when the
+ * tokens are not one.
+ *
+ * The shape alone, with no effect: {@link ExpressionEngine}'s own definition
+ * handler registers the unit from it, and {@link ExpressionEngine.readExpressionTokens}
+ * uses it to know that the words on such a line name a unit rather than a
+ * variable. Sharing the one matcher is what keeps the two from disagreeing
+ * about which lines define a unit.
+ *
+ * @param tokens - One expression's normalised tokens.
+ * @returns The name's words and the ratio and base tokens, or null.
+ */
+function userUnitDefinitionShape(
+	tokens: readonly Token[],
+): { nameWords: string[]; ratioToken: Token; baseToken: Token } | null {
+	// Shortest definition is NUMBER IDENT EQUALS NUMBER UNIT.
+	if (tokens.length < 5) return null;
+	if (tokens[0].type !== 'NUMBER' || Number(tokens[0].value) !== 1) return null;
+
+	let i = 1;
+	// The implicit-multiply STAR between the coefficient and the name.
+	if (tokens[i].type === 'STAR') i++;
+
+	const nameWords: string[] = [];
+	while (i < tokens.length && tokens[i].type === 'IDENT') {
+		nameWords.push(tokens[i].value);
+		i++;
+	}
+	if (nameWords.length === 0) return null;
+
+	if (tokens[i]?.type !== 'EQUALS') return null;
+	i++;
+	if (tokens[i]?.type !== 'NUMBER') return null;
+	const ratioToken = tokens[i];
+	i++;
+	if (tokens[i]?.type !== 'UNIT') return null;
+	const baseToken = tokens[i];
+	i++;
+	// A definition is the whole line: anything trailing means this is some
+	// other construct that merely starts the same way.
+	if (i !== tokens.length) return null;
+	return { nameWords, ratioToken, baseToken };
+}
+
+/**
+ * Whether `tokens[0..end)` is a name or a product of names (`x`, `a * n`), the
+ * left-hand side the engine's equation grammar claims before its parser runs.
+ */
+function isNameProduct(tokens: readonly Token[], end: number): boolean {
+	for (let i = 0; i < end; i++) {
+		const type = tokens[i].type;
+		const ok = i % 2 === 0 ? type === 'IDENT' || type === 'UNIT' : type === 'STAR';
+		if (!ok) return false;
+	}
+	return end % 2 === 1;
+}
+
+/**
+ * The part of one expression the engine reads as code, as
+ * {@link ExpressionEngine.readExpressionTokens} returns it.
+ */
+export interface ExpressionTokens {
+	/** The expression's normalised tokens, with offsets into the text that was read. */
+	readonly tokens: readonly Token[];
+	/**
+	 * The index of the first token the parser reads. Nonzero only when the
+	 * line opens with a label the parser set aside ("rent: 1200" starts at the
+	 * token after the colon), since a label is prose, not code.
+	 */
+	readonly start: number;
+	/**
+	 * The unit the expression defines when it is a user-unit definition
+	 * (`1 sprint = 2 weeks`), whose words name a unit rather than a variable;
+	 * null otherwise.
+	 */
+	readonly unit: DocumentUnit | null;
+}
+
+/**
  * Core expression evaluation engine, the top-level orchestrator.
  *
  * Owns the full evaluation pipeline: lexing, parsing, bytecode compilation,
@@ -394,6 +486,14 @@ export class ExpressionEngine {
     private lexer: Lexer;
     private registry: ParseletRegistry;
     private parser: PrecedenceParser;
+    /**
+     * How many leading tokens the last top-level {@link parseExpression} call
+     * set aside as a label ("pi approximation: 355/113"), 0 when it read them
+     * all. Written by that method and read only by
+     * {@link readExpressionTokens}, straight after a parse it made itself, so
+     * a stale value from some other parse is never observed.
+     */
+    private parsedLabelEnd = 0;
     private localeCode: string;
     private vm: VM;
     /**
@@ -496,6 +596,25 @@ export class ExpressionEngine {
 
     /** The most nesting {@link makeLineContext}'s `evaluateLineWithBinding` allows before refusing, so the bisection re-runs can never compound. */
     private static readonly GOAL_SEEK_MAX_NESTING_DEPTH = 1;
+
+    /**
+     * The names a what-if holds fixed, and their values, or `null` outside one.
+     *
+     * Set only on the scratch engine a what-if re-runs lines in (see
+     * {@link openLineRerun}), and only for the length of one pass. Every line of
+     * that pass starts with these put back, so a line that would set one
+     * (`deposit = 100000`) leaves it at the override for every line below, and a
+     * line that reads one reads the override.
+     */
+    private pinnedVariables: ReadonlyMap<string, Value> | null = null;
+
+    /**
+     * How many what-if re-runs enclose this engine: 0 for an ordinary engine,
+     * one more than its parent's for a scratch engine a what-if line opened. A
+     * what-if line inside a re-run is refused rather than opening a re-run of
+     * its own, so a what-if whose span holds another cannot recurse.
+     */
+    private whatIfDepth = 0;
 
     /**
      * Batch cross-line source, set only for the duration of a
@@ -921,6 +1040,28 @@ export class ExpressionEngine {
                   }
                 : undefined,
             goalSeekMaxIterations: this.config.vm.maxGoalSeekIterations,
+            // Both document paths re-run from the lines' text, so a what-if
+            // answers the same through either; see {@link openLineRerun}.
+            rerunLines: doc || scan
+                ? (n: number) => {
+                      const count = doc ? doc.lineCount : scan!.length;
+                      const last = Number.isInteger(n) ? Math.min(Math.max(n, 0), count) : 0;
+                      // Every line in the span is read, by its text, so an edit to
+                      // any of them has to re-run the line asking. Declared the way
+                      // an aggregate declares its span, on the incremental path,
+                      // which is the one that asks the graph what to re-run.
+                      if (doc) {
+                          for (let i = 1; i <= last; i++) {
+                              if (i !== context.lineIndex) dag.registerLinePositionDependency(context.lineIndex, i);
+                          }
+                      }
+                      const texts: string[] = [];
+                      for (let i = 1; i <= last; i++) {
+                          texts.push((doc ? doc.getLineAt(i)?.text : scan![i - 1]?.text) ?? "");
+                      }
+                      return this.openLineRerun(texts, n, count, context.lineIndex);
+                  }
+                : undefined,
             networkEnabled: this.config.network.enabled,
             calendar: this.context.calendar,
             // Read through the engine on every draw rather than captured, since
@@ -953,8 +1094,119 @@ export class ExpressionEngine {
                 : scan
                   ? (tag: string) => this.batchLinesCarryingTag(scan, tag)
                   : undefined,
+            // The `inputs of line N` form. Both document paths read the same
+            // text and the same answers, so the trace agrees through both. An
+            // answer is read through `readLineResult`, the closure `line N`
+            // reads through, so on the incremental path the asking line takes
+            // an edge to every line it traced and re-runs when one changes.
+            // Lines at or below the asker are never followed: from inside a
+            // pass they have not been worked out.
+            traceLine: readLineResult !== undefined && (doc !== null || (scan !== null && parsed !== null))
+                ? (n: number) => buildLineTrace(
+                      doc ? this.traceSourceFromModel(doc, readLineResult) : this.traceSourceFromBatch(scan!, parsed!, readLineResult),
+                      (expression) => this.traceTokens(expression),
+                      n,
+                      { ...DEFAULT_TRACE_OPTIONS, followForward: false },
+                  )
+                : undefined,
         };
         return context;
+    }
+
+    /**
+     * The incremental document as the tracer reads it.
+     *
+     * @param doc - The document model.
+     * @param readResult - How a line's answer is read; the context's own
+     * closure when tracing from inside a line, so the read takes its edge.
+     */
+    private traceSourceFromModel(doc: DocumentModel, readResult: (n: number) => Value | undefined): TraceSource {
+        return {
+            lineCount: doc.lineCount,
+            expressions: (n) => doc.getLineAt(n)?.expressions ?? [],
+            result: (n) => readResult(n) ?? null,
+            isBoundary: (n) => {
+                const state = doc.getLineAt(n);
+                return !state || state.isEmpty || /^\s*#/.test(state.text);
+            },
+            taggedLines: (tag) => doc.linesCarryingTag(tag),
+        };
+    }
+
+    /**
+     * The batch pass's document as the tracer reads it, over the scan and the
+     * results the pass has built so far.
+     */
+    private traceSourceFromBatch(scan: ScanLineResult[], parsed: ParsedLine[], readResult: (n: number) => Value | undefined): TraceSource {
+        return {
+            lineCount: scan.length,
+            expressions: (n) => {
+                const line = parsed[n - 1];
+                if (!line) return [];
+                return line.expression !== null ? [line.expression] : line.inlineSolves.map((s) => s.expression);
+            },
+            result: (n) => readResult(n) ?? null,
+            isBoundary: (n) => {
+                const sr = scan[n - 1];
+                return !sr || sr.classification.skip || /^\s*#/.test(sr.text);
+            },
+            taggedLines: (tag) => this.batchLinesCarryingTag(scan, tag),
+        };
+    }
+
+    /**
+     * A host's `ParsingResult` as the tracer reads it, for {@link traceLine}
+     * on a document parsed earlier.
+     */
+    private traceSourceFromParsed(lines: readonly ParsedLine[]): TraceSource {
+        let tagIndex: Map<string, number[]> | null = null;
+        return {
+            lineCount: lines.length,
+            expressions: (n) => {
+                const line = lines[n - 1];
+                if (!line) return [];
+                return line.expression !== null ? [line.expression] : line.inlineSolves.map((s) => s.expression);
+            },
+            result: (n) => lines[n - 1]?.result ?? null,
+            isBoundary: (n) => {
+                const line = lines[n - 1];
+                return !line || line.isEmpty || /^\s*#/.test(line.text);
+            },
+            taggedLines: (tag) => {
+                if (tagIndex === null) {
+                    tagIndex = new Map();
+                    for (const line of lines) {
+                        if (line.text.indexOf("#") < 0) continue;
+                        for (const name of memberTagsOf(line.text)) {
+                            const members = tagIndex.get(name);
+                            if (members === undefined) tagIndex.set(name, [line.lineNumber]);
+                            else members.push(line.lineNumber);
+                        }
+                    }
+                }
+                return tagIndex.get(tag.toLowerCase()) ?? [];
+            },
+        };
+    }
+
+    /**
+     * The normalised tokens a line's expression was compiled from, for the
+     * tracer. Taken from the compile cache when the line has been compiled
+     * (the usual case, and free), and otherwise lexed and normalised here
+     * without compiling or running anything, so tracing a line never changes
+     * the document it reads.
+     *
+     * @returns The tokens, or `null` when the expression does not tokenise.
+     */
+    private traceTokens(expression: string): readonly Token[] | null {
+        const front = this.compiledFrontHalf.get(expression);
+        if (front !== undefined) return front.normalizedTokens;
+        try {
+            const { tokens } = this.lexToTokens(expression, undefined, false);
+            return this.normalizer.normalize(tokens.filter((t) => t.type !== "COMMENT"));
+        } catch {
+            return null;
+        }
     }
 
     /**
@@ -1030,6 +1282,281 @@ export class ExpressionEngine {
             return errorValue("GOAL_SEEK_TARGET_ERROR", normalizeUnknownError(e).message);
         } finally {
             this.goalSeekDepth--;
+        }
+    }
+
+    /**
+     * Open a re-run of a document's lines up to `targetLine`, the primitive
+     * behind {@link LineExecutionContext.rerunLines}. See {@link LineRerun}.
+     *
+     * The lines are re-run from their text, as a batch pass over the span, in a
+     * scratch engine built like this one (same packages, configuration, locale,
+     * calendar and random seed) and thrown away when the session closes. Two
+     * things follow. Nothing this engine holds is touched: not its variables,
+     * not its cached results, not its dependency graph, not the document model
+     * a host wired. And the answer does not depend on which document pass
+     * asked, since both hand over the same text, so a what-if agrees through
+     * `parseDocument` and the incremental evaluator by construction.
+     *
+     * Names this engine is itself holding fixed (when it is the scratch engine
+     * of the host's {@link whatIf}) carry into the re-run, under the line's own
+     * overrides, so a what-if line inside a scenario answers within that
+     * scenario.
+     *
+     * @param texts - The lines from 1 to the target, as written.
+     * @param targetLine - The line whose answer is wanted.
+     * @param lineCount - How many lines the document has, for the range check.
+     * @param ownLine - The line asking, left out of the check that an input is used.
+     * @returns The session, or an error Value saying why none could open.
+     */
+    private openLineRerun(texts: readonly string[], targetLine: number, lineCount: number, ownLine: number): LineRerun | Value {
+        if (!Number.isInteger(targetLine) || targetLine < 1 || targetLine > lineCount) {
+            return errorValue("WHAT_IF_LINE_OUT_OF_RANGE", `There is no line ${targetLine} to re-run: the document has ${lineCount} line${lineCount === 1 ? "" : "s"}.`);
+        }
+        if (this.whatIfDepth >= 1) {
+            return errorValue(
+                "WHAT_IF_NESTED",
+                "A what-if or sweep cannot run inside another one's re-run of the document. Name a line that does not itself hold one.",
+            );
+        }
+        const tokenize = (text: string) => this.tokensOrNone(text);
+        const globalLine = firstGlobalWrite(texts, tokenize);
+        if (globalLine !== -1) {
+            return errorValue(
+                "WHAT_IF_WRITES_GLOBAL",
+                `Line ${globalLine} sets a global variable, which other documents read, so a what-if will not re-run it.`,
+            );
+        }
+
+        const scratch = this.createScenarioEngine(this.whatIfDepth + 1);
+        const input = texts.join("\n");
+        const inherited = this.pinnedVariables;
+        const liveData = this.config.network.enabled;
+        let closed = false;
+        return {
+            run: (overrides) => {
+                const pins = inherited === null ? overrides : new Map([...inherited, ...overrides]);
+                try {
+                    return targetAnswer(this.runScenario(scratch, input, pins), targetLine, liveData);
+                } catch (e) {
+                    // The pass itself refusing, rather than a line in it failing,
+                    // which each line reports on its own. Reported on the asking
+                    // line as a value, the way every failure of a line is.
+                    return errorValue("WHAT_IF_TARGET_ERROR", normalizeUnknownError(e).message);
+                }
+            },
+            uses: (name) => texts.some((text, i) => i + 1 !== ownLine && lineMentions(text, name, tokenize)),
+            close: () => {
+                if (closed) return;
+                closed = true;
+                this.disposeScenarioEngine(scratch);
+            },
+        };
+    }
+
+    /**
+     * Build the scratch engine a what-if re-runs lines in: the same packages,
+     * configuration, locale, calendar and random seed as this engine, so every
+     * line reads there as it reads here, with two differences. It never fetches
+     * (live data off, no background refresh), since a what-if is a question
+     * about the document rather than a reason to go to the network; it starts
+     * with whatever this engine has already fetched instead. And it knows how
+     * deeply it is nested, so a what-if inside it is refused.
+     *
+     * @param depth - The {@link whatIfDepth} the scratch engine runs at.
+     */
+    private createScenarioEngine(depth: number): ExpressionEngine {
+        const config: EngineConfigOverride = {
+            ...this.config,
+            network: { ...this.config.network, enabled: false },
+            backgroundRefresh: { ...this.config.backgroundRefresh, enabled: false },
+        };
+        const seed = this.effectiveRandomSeed();
+        const scratch = new ExpressionEngine({
+            locale: this.localeCode,
+            config,
+            packages: [...this.registeredPackages.values()],
+            calendar: this.context.calendar,
+            random: seed === undefined ? undefined : { seed },
+        });
+        scratch.whatIfDepth = depth;
+        copyFetchedData(this.queryClient, scratch.queryClient);
+        return scratch;
+    }
+
+    /**
+     * One pass of a scratch engine over `input`, with `pins` held fixed.
+     *
+     * Starts from nothing each time (variables, functions, cached results, the
+     * dependency graph), so a sweep's second value is not read against state
+     * its first value left: a line that failed at one value would otherwise
+     * keep the definition it made at the one before, where a fresh pass has
+     * nothing.
+     *
+     * @param scratch - A scratch engine from {@link createScenarioEngine}.
+     * @param input - The lines to run, newline-separated.
+     * @param pins - The names to hold fixed.
+     * @returns The pass's result.
+     * @throws Whatever {@link parseDocument} throws for the pass as a whole.
+     */
+    private runScenario(scratch: ExpressionEngine, input: string, pins: ReadonlyMap<string, Value>): ParsingResult {
+        // The scratch engine's lines publish its query client for the plugin
+        // functions they call, and a what-if line runs inside this engine's own
+        // evaluation, which goes on after it returns: put back what was there.
+        const activeClient = getActiveQueryClient();
+        try {
+            scratch.vm.reset();
+            scratch.dag.clear();
+            scratch.lineCache.clear();
+            scratch.pinnedVariables = pins;
+            return scratch.parseDocument(input, { inputType: "markdown" });
+        } finally {
+            scratch.pinnedVariables = null;
+            setActiveQueryClient(activeClient);
+        }
+    }
+
+    /**
+     * A line's tokens for the what-if checks, or none when the line does not
+     * tokenise (an unterminated string, say). Those checks read other lines
+     * than the one asking, and a line that cannot be read has no name in it and
+     * sets no global; its own failure is reported on its own line.
+     */
+    private tokensOrNone(text: string): Token[] {
+        try {
+            return this.tokenizeForClassification(text);
+        } catch {
+            return [];
+        }
+    }
+
+    /**
+     * Refuse a document longer than one pass will process, before any of it is
+     * scanned. Every other limit bounds what a single line may ask for, and a
+     * document's cost is its line count whatever the lines say: two hundred
+     * thousand lines of `1 + 1` exhausted the heap on the per-line records
+     * alone, which is a process abort no host can catch. See
+     * `constants/Configuration.ts`'s `performance.maxDocumentLines`.
+     *
+     * @param input - The document text.
+     * @throws `DOCUMENT_TOO_LARGE` past `performance.maxDocumentLines`.
+     */
+    private assertDocumentSize(input: string): void {
+        const maxLines = this.config.performance.maxDocumentLines;
+        if (countLines(input, maxLines) > maxLines) {
+            throw ErrorFactory.execution(
+                "DOCUMENT_TOO_LARGE",
+                `This document has more than ${maxLines.toLocaleString("en-US")} lines, which is the most the engine will process in one pass`,
+                { maxLines },
+            );
+        }
+    }
+
+    /** Release a scratch engine: its query cache's timers, its batcher, its caches. */
+    private disposeScenarioEngine(scratch: ExpressionEngine): void {
+        const activeClient = getActiveQueryClient();
+        scratch.clear();
+        setActiveQueryClient(activeClient === scratch.queryClient ? null : activeClient);
+    }
+
+    /**
+     * Put every held name back before a line of a what-if pass runs.
+     *
+     * @param pins - The names held fixed, see {@link pinnedVariables}.
+     */
+    private applyPins(pins: ReadonlyMap<string, Value>): void {
+        for (const [name, value] of pins) this.vm.setVar(name, value);
+    }
+
+    /**
+     * After a line of a what-if pass, the held value it overwrote, or `null`.
+     *
+     * A line that sets a held name has just replaced it, and is put back at once
+     * so a later expression on the same line reads the override too. The value
+     * is returned so the line can read as the override: in a scenario where
+     * `deposit` is 150,000, the line `deposit = 100000` says 150,000, which is
+     * what every line below it now reads.
+     *
+     * @param pins - The names held fixed.
+     */
+    private restorePins(pins: ReadonlyMap<string, Value>): Value | null {
+        let overwritten: Value | null = null;
+        for (const [name, value] of pins) {
+            if (this.vm.getVar(name) === value) continue;
+            this.vm.setVar(name, value);
+            overwritten ??= value;
+        }
+        return overwritten;
+    }
+
+    /**
+     * Evaluate a whole document as it would read if some of its inputs were
+     * different, without touching this engine or the document.
+     *
+     * The host's side of the what-if forms: `engine.whatIf(text, { price: 120
+     * })` answers what `engine.parseDocument(text)` would answer if `price`
+     * held 120 on every line, including the line that sets it. It returns the
+     * same {@link ParsingResult} shape, so a host reads a scenario exactly as it
+     * reads the document, and nothing about this engine changes: the pass runs
+     * in a scratch engine built like this one and thrown away afterwards, so
+     * this engine's variables and cached results are as they were.
+     *
+     * Each override is a number, an expression in text (`"$120"`, `"5%"`,
+     * `"3 kg"`, evaluated on its own so a unit is kept), or a `Value`.
+     *
+     * The run is the batch pass, so it reads a document the way
+     * {@link parseDocument} does: a goal seek in it reports that pass's refusal.
+     * It never fetches live data; a line waiting on data this engine has not
+     * already fetched reports so.
+     *
+     * @param input - The document text, newline-separated.
+     * @param overrides - The inputs to hold fixed, by variable name.
+     * @returns The per-line results with the overrides in force.
+     * @throws `WHAT_IF_OVERRIDE_INVALID` when an override is not a variable name
+     * or its value is not a value (an expression that fails, a non-finite
+     * number); `WHAT_IF_INPUT_NOT_USED` when no line uses an overridden name;
+     * `WHAT_IF_WRITES_GLOBAL` when a line sets a `global :name`, which a scenario
+     * would write where other documents read it; and `DOCUMENT_TOO_LARGE` as
+     * {@link parseDocument} does.
+     */
+    whatIf(input: string, overrides: WhatIfOverrides): ParsingResult {
+        this.assertDocumentSize(input);
+        const texts = input.split("\n");
+        const tokenize = (text: string) => this.tokensOrNone(text);
+        const globalLine = firstGlobalWrite(texts, tokenize);
+        if (globalLine !== -1) {
+            throw ErrorFactory.validation(
+                "WHAT_IF_WRITES_GLOBAL",
+                `Line ${globalLine} sets a global variable, which other documents read, so a what-if will not run it.`,
+                { line: globalLine },
+            );
+        }
+
+        const activeClient = getActiveQueryClient();
+        const scratch = this.createScenarioEngine(this.whatIfDepth);
+        try {
+            const pins = new Map<string, Value>();
+            for (const [name, raw] of Object.entries(overrides)) {
+                const nameTokens = tokenize(name);
+                const isName = nameTokens.length === 1 && (nameTokens[0].type === "IDENT" || nameTokens[0].type === "UNIT") && nameTokens[0].value === name;
+                if (!isName) {
+                    throw ErrorFactory.validation("WHAT_IF_OVERRIDE_INVALID", `"${name}" is not a variable name a document can use.`, { name });
+                }
+                const value = overrideValue(name, raw, (expression) => scratch.evaluateExpression(expression));
+                if (!texts.some((text) => lineMentions(text, name, tokenize))) {
+                    throw ErrorFactory.validation(
+                        "WHAT_IF_INPUT_NOT_USED",
+                        `No line of this document uses ${name}, so overriding it cannot change any answer.`,
+                        { name },
+                    );
+                }
+                pins.set(name, value);
+            }
+            return this.runScenario(scratch, input, pins);
+        } finally {
+            this.disposeScenarioEngine(scratch);
+            // Evaluating a text override ran in the scratch engine too.
+            setActiveQueryClient(activeClient);
         }
     }
 
@@ -2403,6 +2930,13 @@ export class ExpressionEngine {
         unlink?.();
 
         this.registerLineWithTags(lineNumber, expression, reads, writes);
+        // A frozen line answered from the store (or refused for a day it holds
+        // nothing for) never reads its source again, so it stops being one of
+        // the source's consumers: the batcher no longer re-runs it when the
+        // value lands, and a background refresh with no other reader stops.
+        if (program.frozen !== undefined && (result.value.frozen !== undefined || result.value.errorCode === "FROZEN_VALUE_MISSING")) {
+            this.dag.dropDataSourceReads(lineNumber);
+        }
         this.storeLineResult(lineNumber, result.value, program, reads, writes, expression);
         return result.value;
     }
@@ -2417,8 +2951,11 @@ export class ExpressionEngine {
      * `makeLineContext()`). Defaults to -1 (the existing "no real
      * document" sentinel) for any caller that doesn't have a real line
      * number to pass.
+     * @param observeCall - Receives every call the VM makes, for
+     * {@link explainLine} only. The shared per-pass context is copied rather
+     * than given the observer, so no other evaluation can see it.
      */
-    private executeRaw(program: BytecodeProgram, lineNumber: number = -1): EvalResult {
+    private executeRaw(program: BytecodeProgram, lineNumber: number = -1, observeCall?: (call: ObservedCall) => void): EvalResult {
         const stackBefore = this.vm.getStack().length;
 
         // See armCancellation: a fresh keystroke-linked controller for a line
@@ -2427,7 +2964,9 @@ export class ExpressionEngine {
 
         setActiveQueryClient(this.queryClient);
         this.beginLineRandom(program, lineNumber);
-        const result = executeBytecode(program, this.vm, undefined, undefined, this.makeLineContext(lineNumber));
+        const lineContext = this.makeLineContext(lineNumber);
+        const context = observeCall === undefined ? lineContext : { ...lineContext, observeCall };
+        const result = executeBytecode(program, this.vm, undefined, undefined, context);
 
         // Stack cleanup
         while (this.vm.getStack().length > stackBefore) {
@@ -2545,20 +3084,7 @@ export class ExpressionEngine {
      * with precise coordinate mapping for inline solves.
      */
     parseDocument(input: string, options: UnifiedParsingOptions = { inputType: 'markdown' }): ParsingResult {
-        // Refused before the scan rather than during it. Every limit above this
-        // one bounds what a single LINE may ask for, and a document's cost is
-        // its line count whatever the lines say: two hundred thousand lines of
-        // `1 + 1` exhausted the heap on the per-line records alone, which is a
-        // process abort no host can catch. See
-        // `constants/Configuration.ts`'s `performance.maxDocumentLines`.
-        const maxLines = this.config.performance.maxDocumentLines;
-        if (countLines(input, maxLines) > maxLines) {
-            throw ErrorFactory.execution(
-                "DOCUMENT_TOO_LARGE",
-                `This document has more than ${maxLines.toLocaleString("en-US")} lines, which is the most the engine will process in one pass`,
-                { maxLines },
-            );
-        }
+        this.assertDocumentSize(input);
         // Fresh unit definitions for this pass. A host re-parses the whole
         // document on each keystroke, so rebuilding the table top-to-bottom is
         // what keeps a renamed or deleted definition from lingering. Only drop
@@ -2743,6 +3269,10 @@ export class ExpressionEngine {
                 error: null,
             };
 
+            // A what-if pass holds some names fixed; see pinnedVariables. Null on
+            // every ordinary pass, which is the whole cost there.
+            const pins = this.pinnedVariables;
+
             if (scanResult.error) {
                 // The tokeniser refused this line (an unterminated string). It
                 // is reported the way a parse error is, and nothing is
@@ -2750,6 +3280,7 @@ export class ExpressionEngine {
                 parsedLine.error = scanResult.error.message;
             } else if (!isEmpty) {
                 const isVariableAssignment = lineText.trim().startsWith(':');
+                if (pins !== null) this.applyPins(pins);
 
                 if (hasInlineSolves && !isVariableAssignment) {
                     for (const solve of inlineSolves) {
@@ -2759,6 +3290,8 @@ export class ExpressionEngine {
                             const errorMessage = error instanceof Error ? error.message : String(error);
                             solve.error = errorMessage;
                         }
+                        const held = pins === null ? null : this.restorePins(pins);
+                        if (held !== null && solve.result) solve.result = held;
                     }
                 } else {
                     // Sliced from the same offset the tokens were, or the text
@@ -2780,6 +3313,8 @@ export class ExpressionEngine {
                             const errorMessage = error instanceof Error ? error.message : String(error);
                             parsedLine.error = errorMessage;
                         }
+                        const held = pins === null ? null : this.restorePins(pins);
+                        if (held !== null && parsedLine.result !== null) parsedLine.result = held;
                     }
                 }
             }
@@ -2850,6 +3385,9 @@ export class ExpressionEngine {
      * call for the measurement.
      */
     private parseExpression(builder: BytecodeBuilder, tokens: Token[], hasParens?: boolean, allowLabelFallback = true): void {
+        // Only the top-level call resets it: the label retries below pass
+        // `false`, and the one that succeeds records where the label ended.
+        if (allowLabelFallback) this.parsedLabelEnd = 0;
         this.parser.setBuilder(builder);
         // When autoBalanceParens is disabled, skip the O(n) paren-count scan
         // by always passing false, the parser will fail naturally on unmatched
@@ -2972,6 +3510,7 @@ export class ExpressionEngine {
                     // levels reached are exactly the ones this loop visits
                     // itself, in the same rightmost-first order.
                     this.parseExpression(builder, tokens.slice(i + 1), hasParens, false);
+                    this.parsedLabelEnd = i + 1;
                     return;
                 } catch {
                     // This colon's fragment didn't parse cleanly either
@@ -3197,32 +3736,9 @@ export class ExpressionEngine {
      * registers nothing.
      */
     private tryDefineUserUnit(tokens: Token[], definedByLineId: number, effects: EffectMode = "apply"): Value | null {
-        // Shortest definition is NUMBER IDENT EQUALS NUMBER UNIT.
-        if (tokens.length < 5) return null;
-        if (tokens[0].type !== 'NUMBER' || Number(tokens[0].value) !== 1) return null;
-
-        let i = 1;
-        // The implicit-multiply STAR between the coefficient and the name.
-        if (tokens[i].type === 'STAR') i++;
-
-        const nameWords: string[] = [];
-        while (i < tokens.length && tokens[i].type === 'IDENT') {
-            nameWords.push(tokens[i].value);
-            i++;
-        }
-        if (nameWords.length === 0) return null;
-
-        if (tokens[i]?.type !== 'EQUALS') return null;
-        i++;
-        if (tokens[i]?.type !== 'NUMBER') return null;
-        const ratioToken = tokens[i];
-        i++;
-        if (tokens[i]?.type !== 'UNIT') return null;
-        const baseToken = tokens[i];
-        i++;
-        // A definition is the whole line: anything trailing means this is some
-        // other construct that merely starts the same way.
-        if (i !== tokens.length) return null;
+        const shape = userUnitDefinitionShape(tokens);
+        if (shape === null) return null;
+        const { nameWords, ratioToken, baseToken } = shape;
         if (effects === "check") return CHECKED_NOT_RUN;
         // Inside a scratch run the line answers and registers nothing. A new
         // definition recompiles every line of the document (below), which no
@@ -3426,6 +3942,12 @@ export class ExpressionEngine {
 
         const eqIdx = normalizedTokens.findIndex(t => t.type === 'EQUALS');
         if (eqIdx === -1) return null;
+
+        // A what-if (`line 4 with deposit = 150000`) owns its `=` signs the same
+        // way, wherever it sits on the line: `(line 4 with x = 5) - line 4`
+        // would otherwise reach the scalar-equation detector below with `x` as
+        // an unknown and be stored as an equation.
+        if (normalizedTokens.some(t => t.type === 'WHAT_IF')) return null;
 
         const names = this.parseFactorChain(normalizedTokens.slice(0, eqIdx));
         if (names === null) {
@@ -3799,7 +4321,24 @@ export class ExpressionEngine {
             return { kind: 'error', stage: 'parse', error: failed.error, reads: failed.reads, writes: failed.writes, normalizedTokens };
         }
 
-        const { reads, writes } = extractReadsAndWrites(normalizedTokens);
+        // ══ FROZEN SUFFIX ══
+        // `<expression> frozen` compiles the expression alone and marks the
+        // program, so the VM answers it from the frozen store. Taken only when
+        // the expression before the word compiles on its own; a line that just
+        // ends in a variable called `frozen` compiles whole below, as it always
+        // did. Reads and writes come from the expression, so the word is never
+        // taken for a variable the line depends on. See engine/FrozenSuffix.ts.
+        let frozenLine: { program: BytecodeProgram | null; operand: Token[] } | null;
+        try {
+            frozenLine = this.compileFrozenSuffix(normalizedTokens, hasParens, compiledProgram);
+        } catch (e) {
+            const error = normalizeUnknownError(e);
+            const { reads, writes } = extractReadsAndWrites(normalizedTokens);
+            this.rememberFailedParse(expression, { error, normalizedTokens, reads, writes });
+            return { kind: 'error', stage: 'parse', error, reads, writes, normalizedTokens };
+        }
+
+        const { reads, writes } = extractReadsAndWrites(frozenLine?.operand ?? normalizedTokens);
 
         // ══ BYTECODE CACHE / PARSE+COMPILE ══
         // Reached with a cached program only when its front half is missing
@@ -3809,6 +4348,11 @@ export class ExpressionEngine {
             this.compiledFrontHalf.set(expression, { normalizedTokens, reads, writes });
             this.touchCompiled(expression, compiledProgram);
             return { kind: 'ready', normalizedTokens, reads, writes, program: compiledProgram, cached: true };
+        }
+
+        if (frozenLine?.program) {
+            this.cacheBytecode(expression, frozenLine.program, { normalizedTokens, reads, writes });
+            return { kind: 'ready', normalizedTokens, reads, writes, program: frozenLine.program, cached: false };
         }
 
         // Get a pooled builder, avoids 4 heap allocations per expression
@@ -3854,6 +4398,43 @@ export class ExpressionEngine {
     }
 
     /**
+     * Compile a line that ends in `frozen`, or report that it does not.
+     *
+     * Returns `null` when the line has no suffix, or when what precedes the word
+     * does not compile on its own (the caller then compiles the whole line, as
+     * it always did). For a program restored from a snapshot, which is already
+     * compiled, it returns only the operand tokens, so the caller can read the
+     * line's dependencies from them rather than from the suffix.
+     *
+     * @throws A date literal's own error for `frozen on <a day that does not
+     * exist>`, and `FROZEN_UNSUPPORTED` for a line with no single answer to
+     * keep. See `engine/FrozenSuffix.ts`.
+     */
+    private compileFrozenSuffix(
+        tokens: Token[],
+        hasParens: boolean | undefined,
+        compiled: BytecodeProgram | undefined,
+    ): { program: BytecodeProgram | null; operand: Token[] } | null {
+        const suffix = splitFrozenSuffix(tokens, this.context.calendar);
+        if (suffix === null) return null;
+        if (compiled) return compiled.frozen !== undefined ? { program: null, operand: suffix.operand } : null;
+
+        const builder = this.builderPool[this.builderPoolIndex++ % this.builderPool.length];
+        builder.reset();
+        let program: BytecodeProgram;
+        try {
+            this.parseExpression(builder, suffix.operand, hasParens);
+            program = builder.build();
+        } catch {
+            // Not a freeze: the expression before the word does not stand on
+            // its own, so the word belongs to the line.
+            return null;
+        }
+        program.frozen = frozenDirectiveFor(program, suffix);
+        return { program, operand: suffix.operand };
+    }
+
+    /**
      * Shared async-resolver preflight check, run before VM execution.
      *
      * Skipped outright for a line no registered resolver could intercept
@@ -3887,6 +4468,12 @@ export class ExpressionEngine {
         writes: string[],
     ): { kind: 'pending'; value: Value } | { kind: 'proceed' } {
         if (!this.mayResolve(program)) {
+            return { kind: 'proceed' };
+        }
+        // A frozen line that will be answered from the store (or refused for a
+        // day it has no value for) never runs, so there is nothing to fetch,
+        // and fetching is exactly what freezing promises not to do.
+        if (program.frozen !== undefined && this.context.frozenValues.outcome(program.frozen, this.context.calendar).kind !== "evaluate") {
             return { kind: 'proceed' };
         }
 
@@ -5335,10 +5922,15 @@ export class ExpressionEngine {
         // so the derivation reads the same token stream the answer came from.
         const exprTokens = tokens.filter((t) => t.type !== "COMMENT");
         const normalized = this.normalizer.normalize(exprTokens);
+        // Which package registered each plugin or converter call, so only that
+        // package is asked to describe it. Keyed by the call object, which is
+        // made fresh for every observation.
+        const owners = new Map<ExplainCall, string>();
         return this.withScratchState(() => buildExplanation({
             expression,
             tokens: normalized,
-            evaluate: (source) => this.evaluateIsolated(source),
+            evaluate: (source) => this.evaluateObserved(source, owners),
+            describeCall: (call) => this.describeCall(call, owners.get(call)),
             locale: this.localeCode,
             // How each date literal was read, ahead of the arithmetic that
             // used it. A date line derived to an empty step list before this,
@@ -5412,6 +6004,146 @@ export class ExpressionEngine {
     }
 
     /**
+     * Where a line's answer came from: the lines it read, and the lines those
+     * read, followed upwards through the document.
+     *
+     * A line reads another by a variable it uses (`deposit`, resolved to the
+     * nearest line above that defines it), by position (`line 2`, `prev`,
+     * `total above`, `sum(line 1 : line 3)`) or by a category tag (`total of
+     * #food`). The trace is built from the document's text and answers, so it
+     * is the same whichever pass produced them, and it never evaluates or
+     * changes anything.
+     *
+     * By default it reads the document this engine is attached to (the model a
+     * `ThreeTierEvaluator` wires up, which is what a live editor has). Pass the
+     * result of `parseDocument` or `evaluateDocument` as `options.document` to
+     * trace a document evaluated in one pass instead.
+     *
+     * Two lines that read each other come back with the repeated line marked
+     * `cycle` and not followed again; a line that reads one below it is marked
+     * `forward`. The trace stops `maxDepth` levels down (ten by default) and
+     * after `maxLines` lines in all (two hundred), marking the line it stopped
+     * at `truncated`.
+     *
+     * @param lineNumber - The 1-based line to trace.
+     * @param options - The document to read, and how far to follow it.
+     * @returns The trace, rooted at `lineNumber`.
+     * @throws {EngineError} `TRACE_NO_DOCUMENT` when there is no document to
+     * read, `TRACE_NO_SUCH_LINE` when the line is not in it.
+     */
+    traceLine(
+        lineNumber: number,
+        options: { document?: ParsingResult; maxDepth?: number; maxLines?: number } = {},
+    ): LineTrace {
+        let source: TraceSource;
+        if (options.document !== undefined) {
+            source = this.traceSourceFromParsed(options.document.lines);
+        } else if (this.documentModel !== null) {
+            const doc = this.documentModel;
+            source = this.traceSourceFromModel(doc, (n) => doc.getLineAt(n)?.result ?? undefined);
+        } else {
+            throw ErrorFactory.execution(
+                "TRACE_NO_DOCUMENT",
+                "traceLine needs a document: attach one through a ThreeTierEvaluator, or pass a parseDocument result as options.document",
+            );
+        }
+        if (!Number.isInteger(lineNumber) || lineNumber < 1 || lineNumber > source.lineCount) {
+            throw ErrorFactory.execution(
+                "TRACE_NO_SUCH_LINE",
+                `There is no line ${lineNumber} to trace: the document has ${source.lineCount} line${source.lineCount === 1 ? "" : "s"}`,
+                { lineNumber, lineCount: source.lineCount },
+            );
+        }
+        return buildLineTrace(source, (expression) => this.traceTokens(expression), lineNumber, {
+            maxDepth: options.maxDepth ?? DEFAULT_TRACE_OPTIONS.maxDepth,
+            maxLines: options.maxLines ?? DEFAULT_TRACE_OPTIONS.maxLines,
+            followForward: true,
+        });
+    }
+
+    /**
+     * Evaluate a span for {@link explainLine}, recording every call it makes.
+     *
+     * The VM reports each call to the observer attached here, and only here, so
+     * this is the one evaluation in the engine that pays for recording them.
+     *
+     * @param expression - A self-contained span of the line being explained.
+     * @param owners - Filled with the registering package of each plugin or converter call.
+     * @returns The span's value and the calls it made, in the order it made them.
+     */
+    private evaluateObserved(expression: string, owners: Map<ExplainCall, string>): ObservedSpan {
+        const calls: ExplainCall[] = [];
+        const value = this.evaluateIsolated(expression, (observed) => {
+            const call = this.toExplainCall(observed, owners);
+            if (call !== null) calls.push(call);
+        });
+        return { value, calls };
+    }
+
+    /**
+     * Name an observed call the way a package's `explain` hook matches it: a
+     * builtin by its function name, a plugin function by the name its package
+     * registered it under, a converter or a conversion as the VM reported it.
+     * The registering package of a plugin or converter call is noted in `owners`.
+     */
+    private toExplainCall(observed: ObservedCall, owners: Map<ExplainCall, string>): ExplainCall | null {
+        const { kind, args, result } = observed;
+        if (kind === "builtin") return { kind, name: builtinFunctionName(observed.index), args, result };
+        if (kind === "conversion") return { kind, name: observed.name, args, result };
+        if (kind === "plugin") {
+            const owner = this.context.pluginFunctionOwners[observed.index];
+            const contribution = owner === undefined ? undefined : this.packageContributions.get(owner);
+            if (contribution === undefined) return null;
+            const at = contribution.pluginFunctionIndices.indexOf(observed.index);
+            const call: ExplainCall = { kind, name: contribution.pluginFunctionNames[at] ?? "", args, result };
+            owners.set(call, owner!);
+            return call;
+        }
+        // converter: owned by whichever package registered the name.
+        const name = observed.name;
+        const call: ExplainCall = { kind, name, args, result };
+        for (const [pkgName, contribution] of this.packageContributions) {
+            if (contribution.asConverterNames.some((n) => n.toLowerCase() === name)) owners.set(call, pkgName);
+        }
+        return call;
+    }
+
+    /**
+     * Ask the registered packages to describe one call.
+     *
+     * A plugin function or a converter is offered only to the package that
+     * registered it. A builtin or a conversion belongs to the engine, so it is
+     * offered to every package with an `explain` hook, the most recently
+     * registered first (the same "later registration wins" rule a clashing
+     * plugin name follows), and the first valid answer is used. An answer is
+     * valid when it is a non-empty list whose last step carries `call.result`
+     * itself; a hook that throws, or answers anything else, has declined.
+     *
+     * @param call - The call to describe.
+     * @param owner - The registering package, for a plugin or converter call.
+     * @returns The steps, or `undefined` when no package describes the call.
+     */
+    private describeCall(call: ExplainCall, owner: string | undefined): readonly ExplanationStep[] | undefined {
+        const ownedByPackage = call.kind === "plugin" || call.kind === "converter";
+        const packages = [...this.registeredPackages.values()];
+        for (let i = packages.length - 1; i >= 0; i--) {
+            const pkg = packages[i];
+            if (pkg.explain === undefined) continue;
+            if (ownedByPackage && pkg.name !== owner) continue;
+            let steps: readonly ExplanationStep[] | undefined;
+            try {
+                steps = pkg.explain(call, EXPLAIN_CONTEXT);
+            } catch {
+                continue;
+            }
+            if (Array.isArray(steps) && steps.length > 0 && steps[steps.length - 1].value === call.result) {
+                return steps.slice();
+            }
+        }
+        return undefined;
+    }
+
+    /**
      * Evaluate a self-contained sub-expression without touching document state.
      *
      * Used only by {@link explainLine}, inside its {@link withScratchState}.
@@ -5420,15 +6152,25 @@ export class ExpressionEngine {
      * sub-expressions, and evaluating those to build a derivation must not
      * disturb the document the line belongs to. An async (pending) result is
      * rejected, a derivation cannot represent one.
+     *
+     * @param expression - The span to evaluate.
+     * @param observeCall - Receives every call the VM makes while evaluating it.
      */
-    private evaluateIsolated(expression: string): Value {
+    private evaluateIsolated(expression: string, observeCall?: (call: ObservedCall) => void): Value {
+        // Explaining a line must not freeze it: a frozen line answers from the
+        // store when it has an answer, and otherwise answers live unrecorded.
+        return this.context.frozenValues.withoutRecording(() => this.evaluateIsolatedRecorded(expression, observeCall));
+    }
+
+    /** The body of {@link evaluateIsolated}, run with frozen recording switched off. */
+    private evaluateIsolatedRecorded(expression: string, observeCall?: (call: ObservedCall) => void): Value {
         const { tokens, hasParens } = this.lexToTokens(expression);
         const prep = this.prepareExpression(expression, tokens, hasParens, undefined, -1);
         if (prep.kind === "empty") return numberValue(0);
         if (prep.kind === "error") throw prep.error;
         if (prep.kind === "symbolic-solve") return prep.value;
 
-        const result = this.executeRaw(prep.program, -1);
+        const result = this.executeRaw(prep.program, -1, observeCall);
         if (result.type === "error") throw result.error;
         if (result.type === "pending") {
             throw ErrorFactory.execution(
@@ -5619,6 +6361,166 @@ export class ExpressionEngine {
 	}
 
 	/**
+	 * The tokens of one expression that the engine reads as code, at the
+	 * offsets they were written.
+	 *
+	 * For a host tool that points at words in the source: which `tax` on a line
+	 * is a variable, which `line 3` is a reference. Prose lexes into perfectly
+	 * good tokens as well (`tax is due in April` is four identifiers and a
+	 * keyword), so lexing cannot answer that. What decides it is whether the
+	 * line parses, and this settles that the way evaluation does: the same
+	 * lexer, normaliser and parser, the same label fallback, and the same
+	 * length and complexity limits.
+	 *
+	 * Unlike {@link tryCompileExpression}, it has no side effects. The
+	 * statements the engine runs while compiling rather than compiling to a
+	 * program (a running total `total += 5`, a bare `tax = 20%`, an equation, a
+	 * unit definition, a trailing `=>`) are recognised here by their shape,
+	 * each side parsed on its own, and never run. Asking about a document
+	 * therefore never moves a running total or defines a unit in the engine a
+	 * host is also evaluating with.
+	 *
+	 * @param expression - One expression as a document pass evaluates it: a
+	 *   line's text past any list marker, or the inside of an inline solve.
+	 * @param units - Units the note defines above this expression, read as
+	 *   defined for this call only, so `3 sprints` below `1 sprint = 2 weeks`
+	 *   is a quantity even on an engine that has never evaluated the note. A
+	 *   unit the engine already holds is left as it is.
+	 * @returns The normalised tokens and the first one the parser reads, or
+	 *   null when the text is not an expression: prose, a half-typed line, or a
+	 *   line over the length or complexity limit.
+	 */
+	readExpressionTokens(expression: string, units: readonly DocumentUnit[] = []): ExpressionTokens | null {
+		if (expression.length > this.config.validation.maxExpressionLength) return null;
+		let tokens: Token[];
+		try {
+			// Lexed afresh even when the expression is compiled and cached: the
+			// cached tokens are not guaranteed to be the ones a fresh read of this
+			// text produces once a user unit has been defined or dropped since.
+			const raw = this.lexToTokens(expression, undefined, false).tokens;
+			if (raw.length === 0) return null;
+			// The note's own units are in place for the normaliser, which is the
+			// one stage that reads them, and gone again before this returns.
+			tokens = this.userUnits.withUnits(units, () => this.normalizer.normalize(raw));
+		} catch {
+			// An unterminated string, or a rule that cannot read a half-typed
+			// line: either way, not an expression.
+			return null;
+		}
+		if (tokens.length === 0) return null;
+		if (!checkExpressionComplexity(tokens, this.config.validation).passed) return null;
+		// A trailing `frozen` (or `frozen on <day>`) is the engine's own suffix,
+		// set aside before the line compiles, so the rest is what is read here.
+		// A malformed suffix (`frozen on tuesday`) does not compile, so it is
+		// not code either.
+		let frozen: ReturnType<typeof splitFrozenSuffix>;
+		try {
+			frozen = splitFrozenSuffix(tokens, this.context.calendar);
+		} catch {
+			return null;
+		}
+		if (frozen !== null) {
+			// As compiling does: when the part before the word does not stand on
+			// its own, the word belongs to the line and nothing is set aside;
+			// when it does but has no single answer to keep (a function
+			// definition), the line does not compile, so it is not code.
+			const operand = [...frozen.operand];
+			let program: BytecodeProgram | null = null;
+			try {
+				const builder = new BytecodeBuilder(this.pluginFunctionIndexByName);
+				this.parseExpression(builder, operand, operand.some((t) => t.type === 'LPAREN' || t.type === 'RPAREN'));
+				program = builder.build();
+			} catch {
+				program = null;
+			}
+			if (program !== null) {
+				try {
+					frozenDirectiveFor(program, frozen);
+				} catch {
+					return null;
+				}
+				tokens = operand;
+			}
+		}
+
+		let hasParens = false;
+		for (const t of tokens) {
+			if (t.type === 'LPAREN' || t.type === 'RPAREN') {
+				hasParens = true;
+				break;
+			}
+		}
+
+		// A unit definition is claimed before anything else, as it is when the
+		// engine compiles, and its name may be several words (`1 story point =
+		// 4 hours`), which neither side would parse as on its own.
+		const unit = userUnitDefinitionShape(tokens);
+		if (unit !== null) {
+			return {
+				tokens,
+				start: 0,
+				unit: { nameWords: unit.nameWords, ratioText: unit.ratioToken.value, baseUnit: unit.baseToken.value },
+			};
+		}
+
+		// `total =` is an assignment still being typed. The parser alone would
+		// read it, tolerating the trailing `=` the way it does for `355/113=`,
+		// but the equation grammar claims a name (or a product of names) before
+		// `=` first, and an empty right-hand side is an error there.
+		const last = tokens.length - 1;
+		if (tokens[last].type === 'EQUALS' && last > 0 && isNameProduct(tokens, last)) return null;
+
+		if (this.parsesWhole(tokens, hasParens)) return { tokens, start: this.parsedLabelEnd, unit: null };
+		if (this.readsAsStatement(tokens, hasParens)) return { tokens, start: 0, unit: null };
+		return null;
+	}
+
+	/**
+	 * Whether the parser reads every one of `tokens` (a label aside), without
+	 * running anything. Compiles into a throwaway builder, the same way
+	 * {@link compileAdHoc} does, so the pooled builders and the bytecode cache
+	 * are untouched.
+	 */
+	private parsesWhole(tokens: Token[], hasParens: boolean): boolean {
+		try {
+			this.parseExpression(new BytecodeBuilder(this.pluginFunctionIndexByName), tokens, hasParens);
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
+	/**
+	 * Whether `tokens` have the shape of a statement the engine runs while
+	 * compiling (see {@link prepareExpression}'s symbolic branch), with every
+	 * side parsing on its own. The shape is checked, never run: see
+	 * {@link readExpressionTokens} for why.
+	 */
+	private readsAsStatement(tokens: Token[], hasParens: boolean): boolean {
+		const last = tokens.length - 1;
+		// `x =>`, `x^2 - 4 =>`: solve or simplify what precedes the arrow.
+		if (tokens[last].type === 'THEREFORE') {
+			if (last === 0) return false;
+			const before = tokens.slice(0, last);
+			if (before.length === 1 && (before[0].type === 'IDENT' || before[0].type === 'UNIT')) return true;
+			return this.parsesWhole(before, hasParens);
+		}
+		const first = tokens[0].type;
+		// `total += 5`, `spent -= 10`: a running total.
+		if ((first === 'IDENT' || first === 'UNIT') && (tokens[1]?.type === 'PLUS_EQUALS' || tokens[1]?.type === 'MINUS_EQUALS')) {
+			return tokens.length > 2 && this.parsesWhole(tokens.slice(2), hasParens);
+		}
+		// The colon and global definitions, and goal seek, own their `=` and
+		// are read by the parser; nothing else here applies to them.
+		if (first === 'COLON' || first === 'GLOBAL' || first === 'GOAL_SEEK') return false;
+		// `tax = 20%`, `x^2 - 4 = 0`: a bare assignment or an equation. A unit
+		// definition was recognised before this was reached.
+		const eq = tokens.findIndex((t) => t.type === 'EQUALS');
+		if (eq <= 0 || eq === last) return false;
+		return this.parsesWhole(tokens.slice(0, eq), hasParens) && this.parsesWhole(tokens.slice(eq + 1), hasParens);
+	}
+
+	/**
 	 * Execute pre-compiled bytecode against the engine's shared VM.
 	 * Used by Tier 2 (scroll into view) to re-execute cached bytecode
 	 * without re-lexing, re-parsing, or re-compiling.
@@ -5744,6 +6646,9 @@ export class ExpressionEngine {
 		// later execution read a cache this engine no longer owns.
 		if (getActiveQueryClient() === this.queryClient) setActiveQueryClient(null);
 
+         // Frozen answers belong to the document, like everything else here:
+         // another document freezing the same expression keeps its own.
+         this.context.frozenValues.clear();
          this.dag.clear();
          this.lineCache.clear();
          this.scopeManager.clear();
@@ -5779,7 +6684,10 @@ export class ExpressionEngine {
      *   data-source dependency, or an async plugin call in its bytecode) is
      *   dropped from the line cache, and any variable whose most-recent
      *   definition was such a line is dropped too. An in-flight (Pending) value
-     *   is likewise never written.
+     *   is likewise never written. A `frozen` line is the opt-in exception:
+     *   its stored answer is written to {@link EngineSnapshot.frozen}, and the
+     *   line and the variable it defines are carried, so the restored document
+     *   reads the same answer with no network.
      * - **Package-contributed state.** Core state only for v1; a package opt-in
      *   is a follow-up.
      * - **Symbolic (algebra) values.** Deferred: a variable holding one makes
@@ -5814,7 +6722,21 @@ export class ExpressionEngine {
         // carried, matching the value the live VM actually holds.
         const lineEntries = this.lineCache.snapshotEntries();
         const latestWriter = new Map<string, { line: number; async: boolean }>();
+        const frozenStore = this.context.frozenValues;
         for (const { line, entry } of lineEntries) {
+            // A frozen line whose answer is stored is the opt-in exception: its
+            // answer is the one the reader asked to keep, not a point-in-time
+            // value to re-fetch, so it and the variable it defines are carried.
+            const frozenDirective = entry.bytecode.frozen;
+            if (frozenDirective !== undefined && frozenStore.has(frozenDirective.key) && entry.result.type !== ValueType.Pending) {
+                asyncLines.delete(line);
+                const writeVar = entry.writeVariable;
+                if (writeVar) {
+                    const prev = latestWriter.get(writeVar);
+                    if (!prev || line >= prev.line) latestWriter.set(writeVar, { line, async: false });
+                }
+                continue;
+            }
             const isAsync = asyncLines.has(line) || entry.bytecode.hasAsync;
             if (isAsync) asyncLines.add(line);
             const writeVar = entry.writeVariable;
@@ -5877,7 +6799,7 @@ export class ExpressionEngine {
             program: serializeBytecode(program),
         }));
 
-        return {
+        const snapshot: EngineSnapshot = {
             format: SNAPSHOT_FORMAT,
             version: SNAPSHOT_VERSION,
             engineVersion: ENGINE_VERSION,
@@ -5887,6 +6809,10 @@ export class ExpressionEngine {
             lineCache,
             bytecodeCache,
         };
+        // Written only when there is something to carry, so a document with no
+        // frozen line produces the same snapshot it always did.
+        if (frozenStore.size > 0) snapshot.frozen = frozenStore.entries().map(serializeFrozenRecord);
+        return snapshot;
     }
 
     /**
@@ -5927,6 +6853,11 @@ export class ExpressionEngine {
      * entry point is the static {@link ExpressionEngine.fromJSON}.
      */
     private restoreSnapshot(snapshot: EngineSnapshot): void {
+        // First, so a restored frozen line, and anything that re-runs it, finds
+        // its answer stored rather than fetching.
+        for (const record of snapshot.frozen ?? []) {
+            this.context.frozenValues.restore(deserializeFrozenRecord(record));
+        }
         for (const [name, sv] of Object.entries(snapshot.variables)) {
             this.vm.setVar(name, deserializeValue(sv));
         }
@@ -5956,6 +6887,44 @@ export class ExpressionEngine {
         for (const { expression, program } of snapshot.bytecodeCache) {
             this.bytecodeCache.set(expression, deserializeBytecode(program));
         }
+    }
+
+    /**
+     * The answers this engine's `frozen` lines keep, in the order they were
+     * frozen.
+     *
+     * Each record names the key its line is stored under (the expression
+     * without its suffix, as written), when it was frozen, the day that was,
+     * and the answer, which carries its {@link Value.frozen} mark and its
+     * {@link Value.sources}. The snapshot carries the same records (see
+     * {@link EngineSnapshot.frozen}); this is the live view of them.
+     *
+     * @returns A copy of the list; changing it changes nothing in the engine.
+     */
+    getFrozenValues(): FrozenRecord[] {
+        return this.context.frozenValues.entries();
+    }
+
+    /**
+     * Forget frozen answers, so their lines freeze afresh the next time they
+     * are evaluated.
+     *
+     * A line that names its day (`frozen on 2026-09-23`) is refused once its
+     * answer is forgotten, unless that day is today, rather than frozen at
+     * today's figure: forgetting an answer does not change what the line says.
+     * Results already handed to the host are not changed; re-evaluate the
+     * document to see the lines answer again.
+     *
+     * @param key - One answer's key, as a frozen value carries it in
+     * `value.frozen.key`. Omit it to forget every answer.
+     * @returns How many answers were forgotten.
+     */
+    unfreeze(key?: string): number {
+        const store = this.context.frozenValues;
+        if (key !== undefined) return store.delete(key) ? 1 : 0;
+        const count = store.size;
+        store.clear();
+        return count;
     }
 
     //#endregion

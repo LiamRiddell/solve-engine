@@ -56,6 +56,19 @@ export function dateOffsetNormalizerRule(priority = 62): NormalizerRule {
 			const unitToken = tokens[pos];
 			if (unitToken?.type !== "UNIT") return null;
 			if (getMeasure(unitToken.value ?? "") !== "time") return null;
+			// After `line N for`, the word is a sweep's input name, not a unit:
+			// `line 2 for d from 1 to 3 step 1` sweeps a variable `d`, and read
+			// as "days from" it failed to parse (#505).
+			// The rule may see `line 2` fused into a LINE_REF or still as its
+			// two words, depending on which rule reached it first.
+			const before = tokens[pos - 1];
+			const isFor = before?.type === "FOR_DURATION" || (before?.type === "IDENT" && (before.value ?? "").toLowerCase() === "for");
+			const lineRefBefore =
+				tokens[pos - 2]?.type === "LINE_REF" ||
+				(tokens[pos - 2]?.type === "NUMBER" && (tokens[pos - 3]?.value ?? "").toLowerCase() === "line");
+			if (isFor && lineRefBefore) return null;
+			// Or already opened as a sweep, whose token stands for `line N for`.
+			if (before?.type === "SWEEP") return null;
 
 			const connector = tokens[pos + 1];
 			if (connector === undefined) return null;

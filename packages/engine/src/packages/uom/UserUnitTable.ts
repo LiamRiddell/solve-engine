@@ -61,6 +61,19 @@ function pluralInsensitiveKey(words: readonly string[]): string {
   return [...words.slice(0, -1), singular].join(" ");
 }
 
+/**
+ * A unit as a document defines it, `1 <nameWords> = <ratioText> <baseUnit>`,
+ * before it is registered anywhere.
+ */
+export interface DocumentUnit {
+  /** The name, one word or several (`story point`). */
+  readonly nameWords: readonly string[];
+  /** The multiplier, as the lexer produced it. */
+  readonly ratioText: string;
+  /** The built-in unit the ratio is expressed in. */
+  readonly baseUnit: string;
+}
+
 /** A registered name matched against a run of identifier tokens. */
 export interface UserUnitMatch {
   /** The definition to expand to. */
@@ -141,6 +154,38 @@ export class UserUnitTable {
       removed = true;
     }
     return removed;
+  }
+
+  /**
+   * Run `read` with `units` defined as well, then take them away again.
+   *
+   * For reading a document's text without evaluating it (the language
+   * service's references and rename): a line below `1 sprint = 2 weeks` reads
+   * `3 sprints` as a quantity only once `sprint` is defined, and a reading must
+   * not define it for real. A name already in the table is left as it is, so a
+   * definition the engine holds from evaluating the note is never replaced, and
+   * exactly the names this added are removed afterwards.
+   *
+   * @param units - Definitions to add for the length of `read`.
+   * @param read - The work to do with them in place.
+   * @returns Whatever `read` returns.
+   */
+  withUnits<T>(units: readonly DocumentUnit[], read: () => T): T {
+    if (units.length === 0) return read();
+    const added: string[] = [];
+    const longestBefore = this.longestName;
+    for (const unit of units) {
+      const key = pluralInsensitiveKey(unit.nameWords);
+      if (this.byKey.has(key)) continue;
+      this.define(unit.nameWords, unit.ratioText, unit.baseUnit);
+      added.push(key);
+    }
+    try {
+      return read();
+    } finally {
+      for (const key of added) this.byKey.delete(key);
+      this.longestName = longestBefore;
+    }
   }
 
   /** Every registered name, for telling whether a pass removed one. */

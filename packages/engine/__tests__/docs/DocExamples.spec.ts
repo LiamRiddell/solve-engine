@@ -49,6 +49,19 @@ import { blockHasTable, collectAll, groupExamples } from "@tools/docExampleColle
  * network data) must not carry an expected value, since there is no stable one.
  */
 
+/**
+ * The engine every example runs on: the full built-in set, with the network
+ * switched off.
+ *
+ * A line that reaches the network has no stable answer, so it carries no expected
+ * value and is evaluated only for what it does to the lines after it. Running it
+ * with live data off means the build never makes a request on its behalf, and no
+ * proven line can depend on one without failing here.
+ */
+function docsEngine() {
+  return newTrackedEngine({ config: { network: { enabled: false } } });
+}
+
 const REPO_ROOT = path.resolve(__dirname, "../../../..");
 const DOCS_ROOT = path.join(REPO_ROOT, "docs/src/content/docs");
 
@@ -128,7 +141,7 @@ describe("documented examples evaluate as documented", () => {
       .join(" | ");
 
     test(`[line ${gi}] ${label.slice(0, 100)}`, () => {
-      const engine = newTrackedEngine();
+      const engine = docsEngine();
       group.forEach((ex, i) => {
         const value = engine.evaluateLine(i + 1, ex.expression);
         if (ex.expected === null) return;
@@ -156,7 +169,7 @@ describe("documented examples evaluate as documented", () => {
     const relative = path.relative(REPO_ROOT, block.file).replace(/\\/g, "/");
 
     test(`[doc ${bi}] ${relative}: ${label.slice(0, 80)}`, () => {
-      const engine = newTrackedEngine();
+      const engine = docsEngine();
       const source = block.rows.map((r) => r.expression).join("\n");
       const result = blockHasTable(block)
         ? engine.parseDocument(source, { inputType: "markdown" })

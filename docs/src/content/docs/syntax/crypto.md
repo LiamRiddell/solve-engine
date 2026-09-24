@@ -40,3 +40,8 @@ US dollars above.
 Without a `fetchPrice`, `crypto("BTC")` returns a clearly named
 `CRYPTO_NOT_CONFIGURED` error rather than a faked or zero price: a number the
 caller did not provide is never guessed.
+
+Each price records the provider it came from and when it was fetched, and every
+line computed from it carries that record; pass `provider` with your service's
+name so the record can name it. To keep a price from moving, end the line with
+`frozen`; see [frozen answers](/syntax/frozen-answers/).

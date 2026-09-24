@@ -207,6 +207,20 @@ function goalSeekUnknownIndex(tokens: Token[], at: number): number {
 }
 
 /**
+ * How one name on a line is used, as {@link extractReadsAndWrites} reports it
+ * to a caller that wants positions as well as names.
+ *
+ * - `definition`: the line writes the name (`:tax = 20%`, `tax = 20%`,
+ *   `total += 5`, `f(x) = 2x`). A compound assignment also reads it; it is
+ *   reported once, as the definition it is.
+ * - `read`: any other use.
+ * - `seek`: a goal seek's unknown (`solve line 4 for rate = 900`). The graph
+ *   records it as neither, since the seek binds it in its own frame, but it
+ *   still names the document's variable: renaming `rate` has to rename it too.
+ */
+export type NameUse = "definition" | "read" | "seek";
+
+/**
  * Extract variable reads and writes from a token stream.
  *
  * Handles both IDENT and UNIT tokens as potential variable references.
@@ -231,17 +245,51 @@ function goalSeekUnknownIndex(tokens: Token[], at: number): number {
  * a write, although `rate =` has the shape of a definition: the seek binds it
  * in its own call frame and the document's variable is untouched. See
  * {@link goalSeekUnknownIndex}.
+ *
+ * The same is true of a what-if's inputs (`line 4 with deposit = 150000`) and a
+ * sweep's input (`line 4 for rate from 3% to 6% step 1%`): each is a name the
+ * form holds fixed in a scratch re-run, never a write to the document's own
+ * variable, and never a read of it either. The value an input is given is an
+ * ordinary expression, and its reads count as usual.
+ *
+ * `onName`, when given, is told the position of every name as it is decided,
+ * so a caller that needs spans (the language service's references and rename)
+ * reads them from these exact rules rather than a second copy that could
+ * drift. The graph's callers omit it and pay nothing.
+ *
+ * @param tokens - One expression's normalised tokens.
+ * @param onName - Called with each name's token index, its graph key (a
+ *   global's key carries the `global:` prefix) and how it is used.
+ * @returns The names read and written, as graph keys.
  */
-export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; writes: string[] } {
+export function extractReadsAndWrites(
+    tokens: Token[],
+    onName?: (index: number, key: string, use: NameUse) => void,
+): { reads: string[]; writes: string[] } {
     const reads: string[] = [];
     const writes: string[] = [];
     const functionParamNames = collectFunctionParamNames(tokens);
-    // Token positions that name a goal seek's unknown, never a document read
-    // or write. Allocated only when a seek is found, which is almost never.
-    let goalSeekUnknowns: Set<number> | null = null;
+    // Token positions that name a goal seek's unknown or a sweep's input, never
+    // a document read or write. Allocated only when one is found, which is
+    // almost never.
+    let formInputs: Set<number> | null = null;
+    // Whether a what-if has opened, after which a name directly before `=` is
+    // one of its inputs rather than a definition.
+    let inWhatIf = false;
 
     for (let i = 0; i < tokens.length; i++) {
         const t = tokens[i];
+        if (t.type === "WHAT_IF") {
+            inWhatIf = true;
+            continue;
+        }
+        if (t.type === "SWEEP") {
+            // `line N for <name> from ...`: the swept name follows the opener.
+            const swept = tokens[i + 1];
+            if (swept !== undefined && isVarName(swept)) (formInputs ??= new Set()).add(i + 1);
+            continue;
+        }
+        if (inWhatIf && isVarName(t) && tokens[i + 1]?.type === "EQUALS") continue;
         if (t.type === "GOAL_SEEK") {
             // `solve line N for x = 900` varies `x` inside the seek's own call
             // frame and stores nothing: the document's `x`, if there is one,
@@ -255,7 +303,7 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
             // is undefined. The same shape the parselet reads: the line
             // reference, `for`, then the unknown.
             const unknown = goalSeekUnknownIndex(tokens, i);
-            if (unknown !== -1) (goalSeekUnknowns ??= new Set()).add(unknown);
+            if (unknown !== -1) (formInputs ??= new Set()).add(unknown);
             continue;
         }
         if (t.type === "GLOBAL") {
@@ -269,9 +317,11 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
             if (i + 2 < tokens.length && tokens[i + 1].type === "COLON" && isVarName(tokens[i + 2])) {
                 const key = globalDagKey(tokens[i + 2].value);
                 reads.push(key);
-                if (i + 3 < tokens.length && tokens[i + 3].type === "EQUALS") {
+                const defines = i + 3 < tokens.length && tokens[i + 3].type === "EQUALS";
+                if (defines) {
                     writes.push(key);
                 }
+                onName?.(i + 2, key, defines ? "definition" : "read");
             }
             continue;
         }
@@ -286,16 +336,22 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
                 reads.push(varName);
                 // Colon-prefix variable definition: :name = expr
                 // COLON + IDENT/UNIT are separate tokens, so EQUALS is at i+2.
-                if (i + 2 < tokens.length && tokens[i + 2].type === "EQUALS") {
+                const defines = i + 2 < tokens.length && tokens[i + 2].type === "EQUALS";
+                if (defines) {
                     writes.push(varName);
                 }
+                onName?.(i + 1, varName, defines ? "definition" : "read");
             }
         }
         if (isVarName(t)) {
             // Skip if already consumed by preceding COLON handler above.
             if (i > 0 && tokens[i - 1].type === "COLON") continue;
-            // A goal seek's unknown; see the GOAL_SEEK branch above.
-            if (goalSeekUnknowns !== null && goalSeekUnknowns.has(i)) continue;
+            // A goal seek's unknown or a sweep's input; see the GOAL_SEEK and
+            // SWEEP branches above.
+            if (formInputs !== null && formInputs.has(i)) {
+                onName?.(i, t.value, "seek");
+                continue;
+            }
             // Skip UNIT tokens acting as a quantity/conversion unit name
             // rather than a variable (see isUnitLiteralContext above).
             if (t.type === "UNIT" && i > 0 && isUnitLiteralContext(tokens[i - 1])) continue;
@@ -310,6 +366,7 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
                 if (closeIdx !== null && tokens[closeIdx + 1]?.type === "EQUALS") {
                     reads.push(t.value);
                     writes.push(t.value);
+                    onName?.(i, t.value, "definition");
                     continue;
                 }
                 // else: a CALL (or malformed), falls through below, same as
@@ -320,9 +377,11 @@ export function extractReadsAndWrites(tokens: Token[]): { reads: string[]; write
             // assignment (`total += 5` / `total -= 5`) both reads and writes its
             // own name, so the read above stands and the write is added here too.
             const next = tokens[i + 1]?.type;
-            if (next === "EQUALS" || next === "PLUS_EQUALS" || next === "MINUS_EQUALS") {
+            const defines = next === "EQUALS" || next === "PLUS_EQUALS" || next === "MINUS_EQUALS";
+            if (defines) {
                 writes.push(t.value);
             }
+            onName?.(i, t.value, defines ? "definition" : "read");
         }
     }
     return { reads, writes };

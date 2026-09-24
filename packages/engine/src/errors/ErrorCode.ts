@@ -85,6 +85,10 @@ export const CoreErrorCodes = {
   SYMBOLIC_ASYNC_UNSUPPORTED: "SYMBOLIC_ASYNC_UNSUPPORTED",
   /** `explainLine()` asked to derive a line that resolves data asynchronously (a live-data or async-plugin line). A derivation is a sequence of settled intermediate values, which a pending result has none of, so the line is refused rather than explained with a hole in it. */
   EXPLAIN_ASYNC_UNSUPPORTED: "EXPLAIN_ASYNC_UNSUPPORTED",
+  /** `traceLine()` called with no document to read: the engine has no attached document model and no `parseDocument` result was passed as `options.document`. A trace follows one line into the lines above it, so without a document there is nothing to follow. */
+  TRACE_NO_DOCUMENT: "TRACE_NO_DOCUMENT",
+  /** `traceLine()` asked for a line number the document does not have (below 1, past the last line, or not a whole number). */
+  TRACE_NO_SUCH_LINE: "TRACE_NO_SUCH_LINE",
   /** `pushCallFrame()`'s recursion guard, a nested `CALL_USER_FUNCTION` re-enters `executeBytecode()`, so `maxInstructions` alone can't catch e.g. `f(x) = f(x)`; this is the dedicated backstop. `recoverable: true` (the default for `.execution()`), ordinary user-written infinite recursion, not an engine bug; the guard exists precisely so it surfaces as a clear error instead of overflowing the native call stack uncatchably. */
   FUNCTION_RECURSION_LIMIT_EXCEEDED: "FUNCTION_RECURSION_LIMIT_EXCEEDED",
   /** The companion to the code above, and the half it could never see: how MANY user-defined-function calls one evaluation makes, rather than how deeply they nest. A twenty-two-line doubling chain nests twenty-two deep (legal) and makes two million calls (a fatal heap abort). Counted in `vm/AllocationBudget.ts`, because the tally has to survive `executeBytecode()` re-entering itself. Recoverable. */
@@ -218,6 +222,21 @@ export const CoreErrorCodes = {
   INVALID_TIME_LITERAL: "INVALID_TIME_LITERAL",
   /** A live-data form evaluated on an engine whose host switched the network off (`network.enabled: false`, see `constants/Configuration.ts`'s `NetworkConfig`). A recoverable Error value, raised by the VM for a currency conversion with no primed rate and for a plugin function that returned a promise, and by `createQueryResolver`'s plugin function when its preflight was skipped. Names the setting, so the reader knows it is policy rather than an outage. */
   NETWORK_DISABLED: "NETWORK_DISABLED",
+
+  // ── What-if (engine/ExpressionEngine.ts's `whatIf`, engine/WhatIfRun.ts) ──
+  /** `engine.whatIf(text, overrides)` was given an override whose name is not a variable name, or whose value is not a finite number, text that evaluates on its own, or a `Value`. Thrown, since it is the host's argument that is wrong rather than a line of the note. */
+  WHAT_IF_OVERRIDE_INVALID: "WHAT_IF_OVERRIDE_INVALID",
+  /** A what-if overrides a name no line it re-runs mentions, which cannot change any answer and is almost always a misspelling. Thrown by `engine.whatIf`; returned as an Error value by the `line N with ...` and sweep forms. */
+  WHAT_IF_INPUT_NOT_USED: "WHAT_IF_INPUT_NOT_USED",
+  /** A what-if would re-run a line that sets a `global :name`. A global is shared with every other document in the process, so the scenario's value would reach them; refused rather than re-run. Thrown by `engine.whatIf`; returned as an Error value by the line forms. */
+  WHAT_IF_WRITES_GLOBAL: "WHAT_IF_WRITES_GLOBAL",
+  // ── Frozen answers (engine/FrozenSuffix.ts, vm/VM.ts, vm/FrozenValues.ts) ──
+  /** A line ending `frozen on <day>` whose engine holds no value frozen that day, and the day is not today. A recoverable Error value, raised by the VM in place of running the line: a frozen answer is never fetched again, so the line is refused rather than frozen at today's figure. The message names the day, and the day of the value that is stored when there is one. */
+  FROZEN_VALUE_MISSING: "FROZEN_VALUE_MISSING",
+  /** `frozen` on a line with no single answer to keep: a function definition, a global cell write, or a definition part-way through the line. Raised at compile time, naming the shape. */
+  FROZEN_UNSUPPORTED: "FROZEN_UNSUPPORTED",
+  /** `frozen on` followed by something that is not a single date at the end of the line (`frozen on tuesday`, a bare `frozen on`). Raised at compile time, with an example of the form. A day that does not exist (`frozen on 2026-02-30`) reports the date literal's own error instead. */
+  FROZEN_DATE_EXPECTED: "FROZEN_DATE_EXPECTED",
 
   // ── Temporal calendar backend (temporal/TemporalCalendar.ts) ──
   /** `createTemporalCalendar()` was handed something that is not a usable `Temporal` implementation: no `Now.instant`, `Now.timeZoneId`, `Instant.fromEpochMilliseconds` or `PlainDateTime.from`. Raised at construction, naming the missing member, rather than letting the first date computation fail on it obscurely. */

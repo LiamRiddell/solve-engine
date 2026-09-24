@@ -25,6 +25,7 @@ import type { Value } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { OpRegistry } from "@solve-js/vm/OpRegistry";
+import { FrozenValueStore } from "@solve-js/vm/FrozenValues";
 import { mintScope, type ScopeId } from "@solve-js/vm/CellScope";
 import { resolveCalendar, type CalendarOption } from "@solve-js/calendar/resolveCalendar";
 
@@ -134,6 +135,17 @@ export interface EngineContext {
 	 * whose Release D makes it the key that keeps two documents' cells apart.
 	 */
 	readonly scope: ScopeId;
+
+	/**
+	 * The answers this engine's `frozen` lines keep, keyed by expression.
+	 *
+	 * Per engine, unlike the shared exchange-rate cache, because a frozen answer
+	 * belongs to a document rather than to the world: two documents freezing
+	 * the same expression on different days must each keep their own. Held on
+	 * the context because the VM is where a frozen line is answered, on every
+	 * path that runs one. See `vm/FrozenValues.ts`.
+	 */
+	readonly frozenValues: FrozenValueStore;
 }
 
 /** What {@link createEngineContext} takes: the settings a context carries on the engine's behalf. */
@@ -158,6 +170,7 @@ export function createEngineContext(options: EngineContextOptions = {}): EngineC
 		networkEnabled: options.networkEnabled ?? true,
 		calendar: resolveCalendar(options.calendar),
 		scope: mintScope(),
+		frozenValues: new FrozenValueStore(),
 	};
 }
 

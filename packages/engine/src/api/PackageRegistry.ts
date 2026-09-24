@@ -7,6 +7,7 @@ import type { TokenCategory } from "@solve-js/language/TokenCategory";
 import type { CompletionItem } from "@solve-js/language/LanguageService";
 import type { PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import type { AsConverter } from "@solve-js/vm/VMBuiltins";
+import type { ExplainHook } from "@solve-js/explain/Explanation";
 
 /**
  * Package descriptor for registering a complete provider with the engine.
@@ -192,5 +193,31 @@ export interface IEnginePackage {
    * ```
    */
   asConverters?: Record<string, AsConverter>;
+  /**
+   * Describe this package's own steps when a host explains a line
+   * (`ExpressionEngine.explainLine()`), so a conversion, a function call or a
+   * phrase reads as a derivation rather than as a bare answer.
+   *
+   * Called with each call the line made, in the order it made them, and the
+   * arguments and result the engine actually used. Return the steps that turn
+   * the one into the other, the last carrying `call.result` itself, or
+   * `undefined` to decline. A plugin function or an `as` converter is offered
+   * only to the package that registered it; a built-in function or a
+   * conversion is offered to every package, the most recently registered
+   * first, and the first to answer describes it. See {@link ExplainHook} for
+   * the full contract.
+   *
+   * Never called during ordinary evaluation, so a package pays nothing for
+   * describing itself until someone asks.
+   *
+   * @example
+   * ```ts
+   * explain: (call, { format }) =>
+   *   call.kind === "plugin" && call.name === "double"
+   *     ? [{ description: `${format(call.args[0])} doubled`, value: call.result }]
+   *     : undefined,
+   * ```
+   */
+  explain?: ExplainHook;
 }
 

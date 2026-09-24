@@ -4,11 +4,62 @@ import type { Value } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { DEFAULT_FORMATTING_SETTINGS } from "@solve-js/format/FormattingSettings";
 import { getLocale } from "@solve-js/constants/locales";
-import type { Explanation, ExplanationStep } from "./Explanation";
+import type { Explanation, ExplanationStep, ExplainCall } from "./Explanation";
 import type { DateReading } from "@solve-js/packages/datetime/DateReading";
+import type { ValueSource } from "@solve-js/vm/Provenance";
 
 /**
- * Evaluate a standalone sub-expression and return its value.
+ * An instant as a reader-facing UTC stamp, `2026-09-23 16:02 UTC`.
+ *
+ * UTC rather than the reader's zone so a derivation reads the same wherever it
+ * is produced; a host that wants local time has the epoch value on the
+ * answer's `sources` and `frozen` fields to format itself.
+ */
+function utcStamp(epochMs: number): string {
+	const iso = new Date(epochMs).toISOString();
+	return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
+}
+
+/** One provenance record as a derivation step's sentence. */
+function describeSource(source: ValueSource): string {
+	const what = source.subject !== undefined ? `${source.subject} from ${source.provider}` : `From ${source.provider}`;
+	const how = source.kind === "live"
+		? "live"
+		: source.kind === "primed"
+			? "supplied by the host"
+			: `the figure for ${source.asOf ?? "a past day"}`;
+	const frozen = source.frozenAt !== undefined ? `, frozen ${utcStamp(source.frozenAt)}` : "";
+	return `${what} (${how}), fetched ${utcStamp(source.fetchedAt)}${frozen}`;
+}
+
+/**
+ * The steps that say where an answer's live figures came from, and whether it
+ * is frozen. Each carries the line's own answer, because a source is a fact
+ * about the answer rather than an intermediate value of its own, the same shape
+ * a date reading's note takes.
+ */
+function provenanceSteps(result: Value): ExplanationStep[] {
+	const steps: ExplanationStep[] = [];
+	if (result.frozen !== undefined) {
+		steps.push({ description: `Frozen ${utcStamp(result.frozen.at)}: this answer is kept, not fetched again`, value: result });
+	}
+	for (const source of result.sources ?? []) steps.push({ description: describeSource(source), value: result });
+	return steps;
+}
+
+/**
+ * A span's value, with every call the engine made while working it out, in
+ * the order it made them.
+ */
+export interface ObservedSpan {
+	/** The span's value, the same object evaluation returned. */
+	readonly value: Value;
+	/** The calls made on the way, innermost first (arguments run before the call that takes them). */
+	readonly calls: readonly ExplainCall[];
+}
+
+/**
+ * Evaluate a standalone sub-expression and return its value, with the calls it made.
  *
  * Supplied by the engine so the explainer reuses real evaluation rather than
  * re-deriving arithmetic: every value in a derivation is the value the engine
@@ -16,7 +67,14 @@ import type { DateReading } from "@solve-js/packages/datetime/DateReading";
  * with respect to document state (it is only ever handed self-contained
  * sub-expressions of the line being explained).
  */
-export type EvaluateSpan = (source: string) => Value;
+export type EvaluateSpan = (source: string) => ObservedSpan;
+
+/**
+ * Ask the registered packages to describe one call, as `explainLine` does:
+ * the steps from its arguments to its result, or `undefined` when no package
+ * describes it. See `IEnginePackage.explain`.
+ */
+export type DescribeCall = (call: ExplainCall) => readonly ExplanationStep[] | undefined;
 
 /**
  * Binding powers for the operators the derivation understands, mirrored from
@@ -85,12 +143,36 @@ function connective(type: string): string {
 
 // A parse node. `leaf` is a run of operand tokens (a number, "$80", "5 km",
 // "20%") shown by its source text. `binary` is an operation that becomes one
-// step. `wrap` is a parenthesised group or a signed group, transparent for step
-// emission but shown by its computed value when it stands as an operand.
+// step. `wrap` is a parenthesised group or a signed group: a group adds no step
+// of its own, a minus in front of one adds "the negative of", and either is
+// shown by its computed value when it stands as an operand. `call`
+// is a function call, `sqrt(16)`: its arguments are derived first, then the
+// package that owns the function describes the call itself, and it is shown by
+// its computed value when it stands as an operand.
 type Node =
 	| { kind: "leaf"; start: number; end: number }
 	| { kind: "binary"; op: string; left: Node; right: Node; start: number; end: number }
-	| { kind: "wrap"; child: Node; start: number; end: number };
+	| { kind: "wrap"; child: Node; start: number; end: number; negate: boolean }
+	| { kind: "call"; args: Node[]; start: number; end: number };
+
+/**
+ * How many calls a node makes: one per function call in it, arguments included.
+ * Compared with the calls the whole line actually made, so a call hidden where
+ * the tree does not show one (and so would go undescribed) sends the line to
+ * the fallback instead of into a derivation with a gap in it.
+ */
+function callCount(node: Node): number {
+	switch (node.kind) {
+		case "leaf":
+			return 0;
+		case "wrap":
+			return callCount(node.child);
+		case "binary":
+			return callCount(node.left) + callCount(node.right);
+		case "call":
+			return 1 + node.args.reduce((sum, arg) => sum + callCount(arg), 0);
+	}
+}
 
 /**
  * End offset of a token in the original source, exclusive.
@@ -221,17 +303,28 @@ class Parser {
 		// the first character of a signed literal ("-5").
 		const signStart = first.offset;
 		let sawSign = false;
+		let minuses = 0;
 		while (
 			this.peek() &&
 			(this.peek()!.type === TokenTypes.PLUS || this.peek()!.type === TokenTypes.MINUS)
 		) {
-			this.next();
+			if (this.next().type === TokenTypes.MINUS) minuses++;
 			sawSign = true;
 		}
+		const negate = minuses % 2 === 1;
 
 		if (sawSign && this.peek() && this.peek()!.type === TokenTypes.LPAREN) {
 			const group = this.parseGroup();
-			return { kind: "wrap", child: group, start: signStart, end: group.end };
+			return { kind: "wrap", child: group, start: signStart, end: group.end, negate };
+		}
+
+		// A function call: a word that is not operand material, directly followed
+		// by its argument list (`sqrt(16)`, `round(x, 2)`). A leading sign stays
+		// outside it, as a signed group does.
+		const callee = this.peek();
+		if (callee && isBoundary(callee.type) && this.tokens[this.pos + 1]?.type === TokenTypes.LPAREN) {
+			const call = this.parseCall();
+			return sawSign ? { kind: "wrap", child: call, start: signStart, end: call.end, negate } : call;
 		}
 
 		// Greedy operand run: everything up to the next operator or parenthesis.
@@ -254,7 +347,27 @@ class Parser {
 			throw new Error("explain: unbalanced parentheses");
 		}
 		this.next(); // RPAREN
-		return { kind: "wrap", child: inner, start: open.offset, end: tokenEnd(close) };
+		return { kind: "wrap", child: inner, start: open.offset, end: tokenEnd(close), negate: false };
+	}
+
+	/** `name(arg, arg, ...)`, each argument an expression of its own. */
+	private parseCall(): Node {
+		const name = this.next(); // the function word
+		this.next(); // LPAREN
+		const args: Node[] = [];
+		if (this.peek()?.type !== TokenTypes.RPAREN) {
+			args.push(this.parseExpression(0));
+			while (this.peek()?.type === TokenTypes.COMMA) {
+				this.next();
+				args.push(this.parseExpression(0));
+			}
+		}
+		const close = this.peek();
+		if (!close || close.type !== TokenTypes.RPAREN) {
+			throw new Error("explain: unbalanced call");
+		}
+		this.next(); // RPAREN
+		return { kind: "call", args, start: name.offset, end: tokenEnd(close) };
 	}
 }
 
@@ -264,7 +377,8 @@ class Parser {
  * Values come from re-evaluating each operation's own span through the engine,
  * cached per node so a span is never evaluated twice. Descriptions read an
  * operand as its source text when it is a literal, or as its running value when
- * it is the result of the steps above it.
+ * it is the result of the steps above it. A function call is described by the
+ * package that owns it, from the call the engine made while evaluating it.
  */
 class Builder {
 	private readonly steps: ExplanationStep[] = [];
@@ -273,6 +387,7 @@ class Builder {
 	constructor(
 		private readonly source: string,
 		private readonly evaluate: EvaluateSpan,
+		private readonly describeCall: DescribeCall,
 		locale: string,
 	) {
 		this.resultPrefix = getLocale(locale).display.resultPrefix;
@@ -288,6 +403,17 @@ class Builder {
 		if (node.kind === "leaf") return;
 		if (node.kind === "wrap") {
 			this.emit(node.child);
+			// A minus in front of a group or a call is an operation of its own:
+			// without this step `-(2 + 3)` derived to 5 and answered -5, a last
+			// step that disagreed with the answer.
+			if (node.negate) {
+				this.steps.push({ description: `the negative of ${this.operand(node.child)}`, value: this.valueOf(node) });
+			}
+			return;
+		}
+		if (node.kind === "call") {
+			for (const arg of node.args) this.emit(arg);
+			this.steps.push(...this.callSteps(node));
 			return;
 		}
 		// binary
@@ -297,6 +423,26 @@ class Builder {
 			description: this.describe(node),
 			value: this.valueOf(node),
 		});
+	}
+
+	/**
+	 * The steps a call node contributes: the owning package's account of the
+	 * call itself. Its arguments have already been derived above it, so only
+	 * the last call its span made is described, which in evaluation order is
+	 * always the node's own call (an argument's call runs before the call that
+	 * takes its result). A call that no package describes, or whose last call
+	 * is not what the span answered, throws, and the line falls back rather
+	 * than being derived with a gap where the call was.
+	 */
+	private callSteps(node: Extract<Node, { kind: "call" }>): readonly ExplanationStep[] {
+		const span = this.observe(node);
+		const own = span.calls[span.calls.length - 1];
+		if (own === undefined || own.result !== span.value) {
+			throw new Error("explain: call not accounted for");
+		}
+		const steps = this.describeCall(own);
+		if (steps === undefined) throw new Error("explain: call not described");
+		return steps;
 	}
 
 	private describe(node: Extract<Node, { kind: "binary" }>): string {
@@ -314,19 +460,24 @@ class Builder {
 		if (node.kind === "leaf") {
 			return this.source.slice(node.start, node.end).trim();
 		}
-		// A group or an operation is shown by the value it carries.
+		// A group, a call or an operation is shown by the value it carries.
 		return this.render(this.valueOf(node));
 	}
 
 	/** A node's value, evaluated once from its own span and then cached. */
 	private valueOf(node: Node): Value {
+		return this.observe(node).value;
+	}
+
+	/** A node's value and the calls that produced it, evaluated once and cached. */
+	private observe(node: Node): ObservedSpan {
 		const cached = this.cache.get(node);
 		if (cached) return cached;
-		const value = this.evaluate(this.source.slice(node.start, node.end));
-		this.cache.set(node, value);
-		return value;
+		const span = this.evaluate(this.source.slice(node.start, node.end));
+		this.cache.set(node, span);
+		return span;
 	}
-	private readonly cache = new Map<Node, Value>();
+	private readonly cache = new Map<Node, ObservedSpan>();
 
 	/** Format a value for inline display, without the result prefix ("= "). */
 	private render(value: Value): string {
@@ -338,12 +489,51 @@ class Builder {
 }
 
 /**
+ * The derivation of a line the arithmetic tree cannot hold (`5 km in miles`, a
+ * finance phrase), told as the chain of calls the line made.
+ *
+ * Accepted only when the calls account for the whole answer: the last call's
+ * result is the line's answer, and every earlier call's result is an argument
+ * of a later one, so no operation happened between them that the steps would
+ * leave out. `round(5 km in miles + 1 mile, 1)` fails the second test (the sum
+ * between the conversion and the rounding is not a call) and gets no steps
+ * rather than a derivation that skips a step. Every call must also be
+ * described by a package.
+ *
+ * @returns The steps, or `null` when the calls do not tell the whole story.
+ */
+function chainSteps(line: ObservedSpan, describeCall: DescribeCall): ExplanationStep[] | null {
+	const { calls, value } = line;
+	if (calls.length === 0) return null;
+	if (calls[calls.length - 1].result !== value) return null;
+	for (let i = 0; i < calls.length - 1; i++) {
+		const produced = calls[i].result;
+		let consumed = false;
+		for (let j = i + 1; j < calls.length && !consumed; j++) consumed = calls[j].args.includes(produced);
+		if (!consumed) return null;
+	}
+	const steps: ExplanationStep[] = [];
+	for (const call of calls) {
+		const described = describeCall(call);
+		if (described === undefined) return null;
+		steps.push(...described);
+	}
+	return steps;
+}
+
+/**
  * Build a derivation for a single line.
  *
  * `tokens` are the engine's normalized tokens for `expression` (offsets index
- * back into `expression`), and `evaluate` runs a self-contained sub-expression
- * through the engine. When the line cannot be broken down, the answer is still
- * returned with an empty step list.
+ * back into `expression`), `evaluate` runs a self-contained sub-expression
+ * through the engine and reports the calls it made, and `describeCall` asks the
+ * registered packages to describe one of those calls. When the line cannot be
+ * broken down, the answer is still returned with an empty step list.
+ *
+ * Arithmetic is derived from the token tree, with each function call in it
+ * described by its package. A line the tree cannot hold (a conversion, a
+ * finance phrase) is derived from the calls it made instead, when those calls
+ * account for the whole answer; see {@link chainSteps}.
  *
  * `readings` are the line's date literals, from `ExpressionEngine.readDates`.
  * The ones worth remarking on lead the derivation, because how a date was read
@@ -355,10 +545,11 @@ export function buildExplanation(params: {
 	expression: string;
 	tokens: Token[];
 	evaluate: EvaluateSpan;
+	describeCall: DescribeCall;
 	locale: string;
 	readings?: DateReading[];
 }): Explanation {
-	const { expression, tokens, evaluate, locale, readings = [] } = params;
+	const { expression, tokens, evaluate, describeCall, locale, readings = [] } = params;
 
 	/**
 	 * One step per literal whose reading a reader should be told about: a
@@ -369,26 +560,36 @@ export function buildExplanation(params: {
 	const readingSteps = (result: Value): ExplanationStep[] =>
 		readings.filter((r) => r.needsNote).map((r) => ({ description: r.note, value: result }));
 
+	// The whole line once, with its calls: the answer, the fallback's material,
+	// and the count the tree's calls are checked against.
+	const line = evaluate(expression);
+
 	const terminal = (): Explanation => {
-		const result = evaluate(expression);
-		return { expression, steps: readingSteps(result), result };
+		const chain = chainSteps(line, describeCall) ?? [];
+		return { expression, steps: [...readingSteps(line.value), ...chain, ...provenanceSteps(line.value)], result: line.value };
 	};
 
 	let root: Node;
 	try {
 		root = new Parser(tokens).parseAll();
 	} catch {
-		// The line uses a construct this slice does not derive. Report the
-		// answer alone rather than a partial or misleading breakdown.
+		// The line uses a construct the tree does not model. Derive it from its
+		// calls if they tell the whole story, else report the answer alone.
 		return terminal();
 	}
+	// A call the tree does not show would go undescribed; see callCount.
+	if (callCount(root) !== line.calls.length) return terminal();
 
 	try {
-		const { steps, result } = new Builder(expression, evaluate, locale).build(root);
-		return { expression, steps: [...readingSteps(result), ...steps], result };
+		const { steps, result } = new Builder(expression, evaluate, describeCall, locale).build(root);
+		// Where the answer's live figures came from closes the derivation: the
+		// steps above say how the line combined them, these say whose they were.
+		return { expression, steps: [...readingSteps(result), ...steps, ...provenanceSteps(result)], result };
 	} catch {
-		// A span failed to evaluate on its own (an unmodelled grouping). The
-		// whole line may still evaluate, so report the answer without steps.
+		// A span failed to evaluate on its own (an unmodelled grouping), or a
+		// call in the tree has no description. The whole line may still
+		// evaluate, so fall back rather than report a partial breakdown.
 		return terminal();
 	}
 }
+

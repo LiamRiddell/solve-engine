@@ -3,7 +3,7 @@ title: Trigger words
 description: Why ordinary English words are not keywords, and what that means for your notes.
 ---
 
-> **Packages:** `MATHPHRASES_PACKAGE`, `MAPREDUCE_PACKAGE`, `FINANCE_PACKAGE`, `TAGS_PACKAGE`, `LINES_PACKAGE`, `TABLES_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register them explicitly (see [choosing packages](/getting-started/installation/)).
+> **Packages:** `MATHPHRASES_PACKAGE`, `MAPREDUCE_PACKAGE`, `FINANCE_PACKAGE`, `TAGS_PACKAGE`, `LINES_PACKAGE`, `TABLES_PACKAGE`, `WHATIF_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register them explicitly (see [choosing packages](/getting-started/installation/)).
 
 The most common worry about a calculator that reads prose is that it will start
 mangling the prose. This page explains why that mostly does not happen.
@@ -92,6 +92,24 @@ keyword on its own, so a variable of either name keeps working:
 ```solve
 :section = 5
 total of section + 1 // 6
+```
+
+## `with`, `for` and `step` after a line reference
+
+A [what-if or a sweep](/syntax/what-if/) opens with a line reference, and its
+words keep their ordinary meaning everywhere else. `line 3 with` starts a what-if
+only when a name and an `=` follow it; `line 3 with 10` is still line three plus
+ten, since `with` is a spelling of `+`. `step` is read as a sweep's step only
+after `line N for <name> from <start> to <end>`, so a variable named `step` keeps
+working, even inside a sweep's own range:
+
+```solve-doc
+step = 2                            // 2
+x = 5                               // 5
+x * step                            // 10
+line 3 with 10                      // 20
+line 3 with x = 1                   // 2
+line 3 for x from 1 to 3 step 1     // [2, 4, 6]
 ```
 
 ## Labels are preserved

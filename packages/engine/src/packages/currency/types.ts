@@ -18,4 +18,11 @@ export interface CurrencyPackageConfig {
 	 * rather than falling back to today's rate.
 	 */
 	historicalRateProvider?: HistoricalRateProvider;
+
+	/**
+	 * The name of the service behind {@link historicalRateProvider}, recorded on
+	 * every historical conversion so a host can say whose rate it was (see
+	 * `vm/Provenance.ts`). Defaults to `"host"`.
+	 */
+	historicalProviderName?: string;
 }

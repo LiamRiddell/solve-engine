@@ -6,6 +6,29 @@ import { sameShape } from "@solve-js/vm/MatrixOps";
 import { type SymbolicNode, type Rational, simplifySymbolic, rational, rationalAdd, rationalSub, rationalMul, rationalDiv, rationalToNumber, rationalCompare, isRationalZero } from "@solve-js/symbolic";
 import { valueToSymbolic } from "@solve-js/vm/SymbolicOps";
 import { ErrorFactory, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
+import { combineSources, sourcesOfValues, type ValueSource } from "@solve-js/vm/Provenance";
+
+/**
+ * The provenance record of the exchange rate an operation between two
+ * currencies used, or `undefined` when no rate was involved.
+ *
+ * {@link unifyUom} reads the right operand in the left's currency, so this asks
+ * the exchange for the same pair in the same direction, and the record names
+ * the table that actually served it. Two amounts in one currency, or anything
+ * that is not two amounts of money, involve no rate and answer `undefined`
+ * after at most two comparisons, which is why callers can ask unconditionally
+ * on their unit-bearing paths.
+ *
+ * @param l - The left operand, whose currency the result is read in.
+ * @param r - The right operand, converted into the left's currency.
+ * @returns The rate's one-record list, or `undefined`.
+ */
+export function currencyRateSources(l: Value, r: Value): readonly ValueSource[] | undefined {
+    if (l.type !== ValueType.Uom || r.type !== ValueType.Uom) return undefined;
+    if (l.unit === r.unit || l.unit === undefined || r.unit === undefined) return undefined;
+    if (!sharedCurrencyExchange.isCurrency(l.unit) || !sharedCurrencyExchange.isCurrency(r.unit)) return undefined;
+    return sharedCurrencyExchange.rateSourcesSync(r.unit, l.unit);
+}
 
 /**
  * Unify two Value operands that may carry units of measurement.
@@ -123,11 +146,17 @@ export function nonNumericOperand(values: readonly Value[], verb: string): Value
  * names the two dimensions the way the ordering opcodes and `min`/`max` do. A
  * value with no numeric reading at all (text, a date, a bracketed list) is
  * refused the same way; see {@link nonNumericOperand}.
+ *
+ * `sources` is every provenance record the values carry, plus the record of
+ * any exchange rate used to read one currency in another, so an aggregate
+ * built from rate-dependent lines can say it is rate-dependent too. Undefined
+ * when nothing in the list came from a live figure.
  */
-export function unifyQuantities(values: readonly Value[], verb: string): { magnitudes: number[]; unit: string | undefined } | Value {
+export function unifyQuantities(values: readonly Value[], verb: string): { magnitudes: number[]; unit: string | undefined; sources: readonly ValueSource[] | undefined } | Value {
     const nonNumeric = nonNumericOperand(values, verb);
     if (nonNumeric) return nonNumeric;
     const magnitudes: number[] = new Array(values.length);
+    let sources = sourcesOfValues(values);
     let anchor: Value | undefined;
     for (let i = 0; i < values.length; i++) {
         const v = values[i];
@@ -152,8 +181,10 @@ export function unifyQuantities(values: readonly Value[], verb: string): { magni
             );
         }
         magnitudes[i] = rv;
+        const rate = currencyRateSources(anchor, v);
+        if (rate !== undefined) sources = combineSources(sources, rate);
     }
-    return { magnitudes, unit: anchor?.unit };
+    return { magnitudes, unit: anchor?.unit, sources };
 }
 
 /**
@@ -855,6 +886,11 @@ export function binaryOp(
             return errorValue("INCOMPATIBLE_UNITS", named ?? `Cannot combine incompatible units: ${lUnit ?? "?"} and ${rUnit ?? "?"}`);
         }
         const combined = uomValue(op(lv, rv), unit!);
+        // Two currencies met through an exchange rate, so the answer depends
+        // on it. The operands' own records are merged by the VM, which does
+        // that for every opcode in one place; only the rate is new here.
+        const rateSources = currencyRateSources(l, r);
+        if (rateSources !== undefined) combined.sources = rateSources;
         // A span of time stays a span when it is added to another span, or
         // scaled by a plain number: two shifts added together are a shift, and
         // half a shift is a shift, so both still read as a clock. A span

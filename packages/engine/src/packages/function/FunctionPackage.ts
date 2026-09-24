@@ -1,6 +1,7 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { FunctionCallParselet } from "./parselets/FunctionCallParselet";
 import { FactorialParselet, ChooseParselet } from "./parselets/FactorialAndChooseParselets";
+import { explainFunctionCall } from "./FunctionExplain";
 
 /** Built-in function call syntax, e.g. `sqrt(2)`, `sin(pi)`, dispatches recognized function names to CALL_BUILTIN opcodes. */
 export const FUNCTION_PACKAGE: IEnginePackage = {
@@ -20,4 +21,6 @@ export const FUNCTION_PACKAGE: IEnginePackage = {
   tokenCategories: {
     CHOOSE: "operator",
   },
+  // `sqrt(16)` explains as "the square root of 16". See FunctionExplain.ts.
+  explain: explainFunctionCall,
 };

@@ -3,6 +3,7 @@ import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand } from "@solve-js/vm/VMConversion";
+import { withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact } from "@solve-js/vm/MoneyExact";
 import { transpose, determinant, inverse, matrixMultiply, matrixPower, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
 import { symbolicToValue, valueToSymbolic, solveEquationValues, definiteIntegralValue, readSearchRange } from "@solve-js/vm/SymbolicOps";
@@ -26,8 +27,9 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/finance/data/CpiTable";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
-import { isPhysicalTimeRate, quantityAtRateSeconds, convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
+import { isPhysicalTimeRate, quantityAtRateSeconds } from "@solve-js/uom/UomConverter";
 import { raiseQuantity, rootQuantity, unitPowerUnsupported } from "@solve-js/vm/QuantityPowers";
+import { termInYears, growthFactor, periodicGrowthFactor, amortizeLoan } from "@solve-js/vm/FinanceFormulas";
 import { exactIntegerArithmetic, exactIntegerValue, exactGcdOrLcm, wholeNumberUnchanged, baseConversionOperand, exactIntegerOf } from "@solve-js/vm/ExactIntegers";
 import { isPrime, nextPrime, modPow, modInverse, factorInteger, formatFactorisation, FACTOR_LIMIT } from "@solve-js/vm/NumberTheory";
 
@@ -271,8 +273,8 @@ function extremum(args: Value[], wantLargest: boolean): Value {
  * read a whole list in one unit, so `total of $4.99, $12.50` keeps the
  * currency the list opened in.
  */
-function quantity(magnitude: number, unit: string | undefined): Value {
-    return unit === undefined ? numberValue(magnitude) : uomValue(magnitude, unit);
+function quantity(magnitude: number, unit: string | undefined, sources?: readonly ValueSource[]): Value {
+    return withSources(unit === undefined ? numberValue(magnitude) : uomValue(magnitude, unit), sources);
 }
 
 /**
@@ -496,51 +498,6 @@ function variance(nums: number[], sample: boolean): number {
     const denom = sample ? n - 1 : n;
     if (denom <= 0) return 0;
     return sumOfSquares(nums) / denom;
-}
-
-/**
- * Registry of built-in mathematical functions.
- * Indexed by the number pushed as an operand of OpCode.CALL_BUILTIN.
- */
-/**
- * The term of a finance form, in years.
- *
- * A term is written as an ordinary quantity (`over 45 days`, `over 18 months`),
- * and every finance builtin wants years. Reading the magnitude and ignoring the
- * unit charged 45 days as 45 years: £74,209.08 of interest on a £2,400 invoice,
- * and `over 1 month` answering the same as `over 1 year`.
- *
- * A bare number is still years, which is what the documented phrase forms and
- * every function-call spelling pass. A quantity that is not a duration is
- * refused by measure, because a term in kilograms is a mistake rather than a
- * number.
- *
- * A month here is a twelfth of a year, which is the financial convention and
- * not the engine's general one: `18 months in years` answers 1.48, because the
- * unit table makes a month thirty days. A lender does not. "18 months at 8%"
- * means a year and a half to anyone who has been quoted one, and a 300-month
- * mortgage is a 25-year mortgage exactly, which the thirty-day month misses by
- * four months. Every other duration goes through the table, where a year is
- * 365 days. Both conventions are stated on the page.
- *
- * @param value - The term operand as the parser left it.
- * @returns The term in years, or the error Value to return in its place.
- */
-const MONTHS_PER_YEAR = 12;
-
-/** Every spelling of a month the unit table accepts, singular and plural. */
-const MONTH_UNITS = new Set(["month", "months", "mo", "mos", "mth", "mths"]);
-
-function termInYears(value: Value): number | Value {
-	if (value.type !== ValueType.Uom || value.unit === undefined) return value.toNumber();
-	if (getMeasure(value.unit) !== "time") {
-		return errorValue(
-			"INVALID_TERM",
-			`a term is a length of time, and "${value.unit}" is not: write it as days, months or years`,
-		);
-	}
-	if (MONTH_UNITS.has(value.unit)) return value.toNumber() / MONTHS_PER_YEAR;
-	return convertUnit(value.toNumber(), value.unit, "year");
 }
 
 /**
@@ -781,7 +738,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const unified = unifyQuantities(args, "averaged");
         if (unified instanceof Value) return unified;
         const sum = unified.magnitudes.reduce((acc, n) => acc + n, 0);
-        return quantity(sum / unified.magnitudes.length, unified.unit);
+        return quantity(sum / unified.magnitudes.length, unified.unit, unified.sources);
     },
     // median(...), middle value; average of the two middle values for an
     // even argument count.
@@ -794,13 +751,14 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         return quantity(
             sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid],
             unified.unit,
+            unified.sources,
         );
     },
     // total(...), sum of any number of arguments.
     44: (args) => {
         const unified = unifyQuantities(args, "added");
         if (unified instanceof Value) return unified;
-        return quantity(unified.magnitudes.reduce((acc, n) => acc + n, 0), unified.unit);
+        return quantity(unified.magnitudes.reduce((acc, n) => acc + n, 0), unified.unit, unified.sources);
     },
     // count(...), number of arguments passed.
     45: (args) => numberValue(args.length),
@@ -875,7 +833,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (1 + rate <= 0) {
             return errorValue("INVALID_RATE", `compoundInterest: rate ${rate} makes (1 + rate) non-positive`);
         }
-        const fv = principal * Math.pow(1 + rate, years);
+        const fv = principal * growthFactor(rate, years);
         return args[0].type === ValueType.Uom ? uomValue(fv, args[0].unit!) : numberValue(fv);
     },
     // compoundInterestEarned(principal, rate, years) -> FV - principal, the
@@ -889,7 +847,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (1 + rate <= 0) {
             return errorValue("INVALID_RATE", `interestEarned: rate ${rate} makes (1 + rate) non-positive`);
         }
-        const interest = principal * (Math.pow(1 + rate, years) - 1);
+        const interest = principal * (growthFactor(rate, years) - 1);
         return args[0].type === ValueType.Uom ? uomValue(interest, args[0].unit!) : numberValue(interest);
     },
     // compoundInterestRate(principal, futureValue, years) -> the rate (as a
@@ -1437,7 +1395,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (1 + rate / perYear <= 0) {
             return errorValue("INVALID_RATE", `compounding: rate ${rate} makes each period non-positive`);
         }
-        const fv = principal * Math.pow(1 + rate / perYear, perYear * years);
+        const fv = principal * periodicGrowthFactor(rate, perYear, years);
         return args[0].type === ValueType.Uom ? uomValue(fv, args[0].unit!) : numberValue(fv);
     },
     // compoundInterestEarnedEvery(principal, rate, years, periodsPerYear)
@@ -1451,7 +1409,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (perYear <= 0 || 1 + rate / perYear <= 0) {
             return errorValue("INVALID_RATE", `compounding: rate ${rate} over ${perYear} periods per year is not usable`);
         }
-        const interest = principal * (Math.pow(1 + rate / perYear, perYear * years) - 1);
+        const interest = principal * (periodicGrowthFactor(rate, perYear, years) - 1);
         return args[0].type === ValueType.Uom ? uomValue(interest, args[0].unit!) : numberValue(interest);
     },
     // presentValue(futureValue, rate, years) -> FV / (1 + r)^y, what a sum
@@ -1464,7 +1422,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (1 + rate <= 0) {
             return errorValue("INVALID_RATE", `presentValue: rate ${rate} makes (1 + rate) non-positive`);
         }
-        const pv = future / Math.pow(1 + rate, years);
+        const pv = future / growthFactor(rate, years);
         return args[0].type === ValueType.Uom ? uomValue(pv, args[0].unit!) : numberValue(pv);
     },
     // returnOnInvestment(invested, returned) -> (returned - invested) /
@@ -1722,31 +1680,6 @@ function symbolicVariableName(value: Value | undefined, verb: string): string | 
         return errorValue("SYMBOLIC_REQUIRES_VARIABLE_NAME", `${verb} needs the name of an unknown.`);
     }
     return value.value as string;
-}
-
-/**
- * Standard amortizing-loan math shared by the loanRepayment/loanInterest/
- * monthlyPayment builtins (indices 55-57, above). Always amortizes monthly
- * (the standard mortgage convention), `annualRate` is the nominal annual
- * rate as a decimal fraction (e.g. 0.06 for 6%).
- *
- * A zero rate is handled as a special case (plain principal/periods split)
- * since the closed-form annuity formula divides by rate and would
- * otherwise produce a NaN from 0/0.
- */
-function amortizeLoan(
-    principal: number,
-    annualRate: number,
-    years: number,
-): { monthlyPayment: number; totalRepayment: number; totalInterest: number } {
-    const n = years * 12;
-    const rMonthly = annualRate / 12;
-    const monthlyPayment = rMonthly === 0
-        ? principal / n
-        : (principal * rMonthly) / (1 - Math.pow(1 + rMonthly, -n));
-    const totalRepayment = monthlyPayment * n;
-    const totalInterest = totalRepayment - principal;
-    return { monthlyPayment, totalRepayment, totalInterest };
 }
 
 /**

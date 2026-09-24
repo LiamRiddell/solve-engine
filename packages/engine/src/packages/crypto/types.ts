@@ -20,6 +20,13 @@ export interface CryptoPackageConfig {
 	 */
 	fetchPrice?: (coin: string, signal: AbortSignal) => Promise<CryptoQuote>;
 
+	/**
+	 * The provider's name, recorded on every price this package fetches so a
+	 * host can say where a figure came from and when (see `vm/Provenance.ts`).
+	 * Defaults to `"host"`, since the fetch is the host's own.
+	 */
+	provider?: string;
+
 	/** Query staleTime for a price, in ms. Default 60s; crypto moves continuously. */
 	staleTimeMs?: number;
 

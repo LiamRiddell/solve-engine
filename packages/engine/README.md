@@ -235,6 +235,11 @@ running engine does **not** satisfy causes `registerPackage()` to **throw**, not
   `50% as decimal`) to the built-in `converters` package's grammar: `{ myUnit: (value) =>
   /* ... */ }`. No lexer keyword registration needed, any bare word after "as" that isn't
   one of the built-in names resolves against this registry at runtime.
+- **`IEnginePackage.explain`**, describe the package's own calls (a plugin function, an
+  `as` converter, or a builtin its phrases reach) as readable steps when a host calls
+  `explainLine()`. Handed each call with the arguments and result the engine used, it
+  returns the steps between them, the last carrying the call's own result. Never called
+  during ordinary evaluation.
 
 See `ARCHITECTURE.md`'s §5.1 for the full reasoning behind each, including a real
 regression (and its fix pattern) worth reading before picking a keyword for your own

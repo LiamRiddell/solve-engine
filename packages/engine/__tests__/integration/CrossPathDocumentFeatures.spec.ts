@@ -2,9 +2,9 @@
  * The whole-document forms, proven through every entry point that can reach them.
  *
  * Category tags, line references, sections, table columns, table lookups and
- * bands, and goal seek are not ordinary expressions: each reads, or re-runs,
- * other lines, so the answer depends on the entry point the host called. The
- * engine has three, and they do not agree by accident:
+ * bands, goal seek, and what-if and sweeps are not ordinary expressions: each
+ * reads, or re-runs, other lines, so the answer depends on the entry point the
+ * host called. The engine has three, and they do not agree by accident:
  *
  * - `evaluateLine` / `evaluateExpression` — one expression, no document. A
  *   whole-document form has nothing to read here, so the contract is that it
@@ -14,10 +14,13 @@
  * - `parseDocument` — the batch pass. It reads earlier lines' results and skips
  *   markdown, so tags, line references and table columns resolve. What it cannot
  *   do is re-run a line with a variable bound to a trial value, so goal seek
- *   refuses here too, by the same structured Error rather than a guess.
+ *   refuses here too, by the same structured Error rather than a guess. A
+ *   what-if and a sweep are different: they re-run the lines above their
+ *   target from the lines' text, in a scratch engine of their own, so they
+ *   need nothing this pass lacks and resolve here too.
  * - `evaluateDocument` — the incremental pass. It adds the re-run primitive, so
  *   goal seek resolves; and it agrees with `parseDocument`, value for value, on
- *   every form both support.
+ *   every form both support, the what-if forms included.
  *
  * These tests pin all three at once, because a feature that passes through one
  * entry point and silently misbehaves through another is exactly the drift a
@@ -31,6 +34,8 @@ import { evaluateDocument } from "@solve-js/engine/evaluateDocument";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator, type EvalLineResult } from "@solve-js/engine/ThreeTierEvaluator";
 import { formatValue } from "@solve-js/format/FormatEngine";
+import { LanguageService } from "@solve-js/language/LanguageService";
+import { applyTextEdits, type LineShift } from "@solve-js/language/DocumentReferences";
 import { ValueType } from "@solve-js/vm/Value";
 import type { ParsingResult } from "@solve-js/types/ParsingResult";
 import { newTrackedEngine } from "@tools/trackedEngine";
@@ -310,6 +315,73 @@ describe("line references across entry points", () => {
     expectNeedsDocument("line 1");
     expectNeedsDocument("total above");
     expectNeedsDocument("sum(line 1 : line 3)");
+  });
+});
+
+describe("line references kept on their lines across an insertion or a deletion (#524)", () => {
+  // A host keeps `line N` on the line it meant by applying the edits the
+  // language service returns. The contract is that the answers survive it:
+  // every line that was there before answers the same afterwards, through both
+  // document passes, and the two passes still agree value for value.
+
+  /** The document after `change`, with the service's edits applied. */
+  function keptInStep(changed: string[], change: LineShift): string[] {
+    const service = new LanguageService(newTrackedEngine());
+    const result = service.shiftLineReferences(changed.join("\n"), change);
+    if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
+    return applyTextEdits(changed.join("\n"), result.edits).split("\n");
+  }
+
+  test("a line inserted at the top: `line 1 + line 2` becomes `line 2 + line 3`, same answer", () => {
+    const before = ["10", "20", "line 1 + line 2"];
+    const after = keptInStep(["", ...before], { kind: "insert", line: 1, count: 1 });
+    expect(after[3]).toBe("line 2 + line 3");
+    expect(batch(before)[2]).toBe("30");
+    expect(batch(after)[3]).toBe("30");
+    expect(incremental(after)[3]).toBe("30");
+  });
+
+  test("an insertion in the middle keeps every earlier answer, both passes", () => {
+    const before = ["10", "20", "line 1 + line 2", "sum(line 1 : line 2)", "line3 * 2", "average(line 4 : line 3)"];
+    const after = keptInStep(["10", "20", "a note inserted here", ...before.slice(2)], { kind: "insert", line: 3, count: 1 });
+    expect(after).toEqual(["10", "20", "a note inserted here", "line 1 + line 2", "sum(line 1 : line 2)", "line4 * 2", "average(line 5 : line 4)"]);
+    // Old line i is new line i + 1 from line 3 down.
+    const moved = (answers: string[]) => [...answers.slice(0, 2), ...answers.slice(3)];
+    expect(moved(batch(after))).toEqual(batch(before));
+    expect(moved(incremental(after))).toEqual(incremental(before));
+    expect(incremental(after)).toEqual(batch(after));
+  });
+
+  test("goal seek's target moves with its line, and still solves through the incremental pass", () => {
+    const before = [":x = 0", "x * 2 + 10", "solve line 2 for x = 30"];
+    const after = keptInStep(["# Working", ...before], { kind: "insert", line: 1, count: 1 });
+    expect(after[3]).toBe("solve line 3 for x = 30");
+    expect(incremental(before)[2]).toBe("10");
+    expect(incremental(after)[3]).toBe("10");
+    // The batch pass refuses goal seek before and after alike.
+    expect(batch(after)[3]).toBe(batch(before)[2]);
+  });
+
+  test("a deletion: what moved is renumbered, a range shrinks, a reference into the gone line is a named error", () => {
+    const before = ["10", "20", "30", "line 3 - line 1", "sum(line 1 : line 3)", "line 2 * 2"];
+    const after = keptInStep(["10", "30", "line 3 - line 1", "sum(line 1 : line 3)", "line 2 * 2"], { kind: "delete", line: 2, count: 1 });
+    expect(after).toEqual(["10", "30", "line 2 - line 1", "sum(line 1 : line 2)", "line deleted * 2"]);
+    expect(batch(before)[3]).toBe("20");
+    const deleted = "ERROR: This reference pointed at a line that has been deleted";
+    expect(batch(after).slice(2)).toEqual(["20", "40", deleted]);
+    expect(incremental(after)).toEqual(batch(after));
+  });
+
+  test("`line deleted` is the same named error through every entry point", () => {
+    const doc = ["10", "line deleted + 5", "sum(line deleted : line deleted)", "solve line deleted for x = 3"];
+    const deleted = "ERROR: This reference pointed at a line that has been deleted";
+    expect(batch(doc).slice(1)).toEqual([deleted, deleted, deleted]);
+    expect(incremental(doc)).toEqual(batch(doc));
+    // No document to read either way: a structured error, never a throw or a number.
+    const { threw, type, message } = single("line deleted + 5");
+    expect(threw).toBe(false);
+    expect(type).toBe(ValueType.Error);
+    expect(message).toBe("This reference pointed at a line that has been deleted");
   });
 });
 
@@ -601,6 +673,89 @@ describe("a stored equation goes with its line (#569)", () => {
     expect(shown[2]).toBe("5");
     expect(shown[4]).toBe("5");
     expect(shown).toEqual(batch(edited));
+  });
+});
+
+describe("what-if and sweeps across entry points", () => {
+  // Line 4 reads payment, which line 3 computes from deposit: the input
+  // reaches the target only through the line between.
+  const mortgage = [
+    "deposit = 100000",
+    "rate = 4%",
+    "payment = monthly repayment on deposit over 25 years at rate",
+    "payment * 12",
+  ];
+  const doc = [...mortgage, "line 4 with deposit = 150000", "line 4 for rate from 3% to 6% step 1%"];
+
+  test("both document passes re-run the lines between, and agree value for value", () => {
+    const fromBatch = batch(doc);
+    expect(fromBatch.slice(4)).toEqual(["9,501.06", "[5,690.54, 6,334.04, 7,015.08, 7,731.62]"]);
+    expect(incremental(doc)).toEqual(fromBatch);
+  });
+
+  test("the lines they re-run answer as they do without them, both passes", () => {
+    const plain = [...mortgage, "line 3", "deposit"];
+    const withForms = [...doc, "line 3", "deposit"];
+    const expected = batch(plain);
+    for (const out of [batch(withForms), incremental(withForms)]) {
+      expect([...out.slice(0, 4), ...out.slice(6)]).toEqual(expected);
+    }
+  });
+
+  test("a refusal is the same named error through both passes", () => {
+    const refused = [...mortgage, "line 4 with depsoit = 150000", "line 4 for rate from 3% to 6% step 0"];
+    const fromBatch = batch(refused);
+    expect(fromBatch[4]).toContain("ERROR:");
+    expect(fromBatch[5]).toContain("ERROR:");
+    expect(incremental(refused)).toEqual(fromBatch);
+  });
+
+  test("the single-expression path refuses with a document error", () => {
+    expectNeedsDocument("line 4 with deposit = 150000");
+    expectNeedsDocument("line 4 for rate from 3% to 6% step 1%");
+  });
+});
+
+describe("inputs of line N across entry points", () => {
+  // Issue #522. The trace is built from each line's text and answer, which
+  // both document passes hold alike, so the two agree value for value.
+  const mortgage = [":rate = 4%", ":deposit = 100000", "", ":payment = monthly repayment on deposit over 25 years at rate", "inputs of line 4"];
+
+  test("the issue's example, in both document passes, agree", () => {
+    const expected = "payment 527.84 (line 4) <- deposit 100,000 (line 2), rate 4.00% (line 1)";
+    expect(batch(mortgage)[4]).toBe(expected);
+    expect(incremental(mortgage)[4]).toBe(expected);
+  });
+
+  test("followed upwards through positions, above and tags, value for value", () => {
+    const doc = ["10", "20", "total above", "line 3 * 2 #kept", "5 #kept", "total of #kept", "inputs of line 6"];
+    const expected = "65 (line 6) <- 60 (line 4) <- [30 (line 3) <- [10 (line 1), 20 (line 2)]], 5 (line 5)";
+    expect(batch(doc)[6]).toBe(expected);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("a cycle is a named error, the same in both passes", () => {
+    const doc = ["line 2 + 5", "prev + 5", "inputs of line 2"];
+    const out = batch(doc);
+    expect(out[2]).toBe("ERROR: Line 1 reads line 2, which leads back to line 1: lines that read each other have no answer to trace");
+    expect(incremental(doc)).toEqual(out);
+  });
+
+  test("a forward reference is a named error, the same in both passes", () => {
+    const below = ["120", "inputs of line 3", "prev * 2"];
+    expect(batch(below)[1]).toBe(
+      "ERROR: Line 3 is not above this line, so its answer has not been worked out yet: a trace reads the lines above it",
+    );
+    expect(incremental(below)).toEqual(batch(below));
+    const within = ["line 2 + 1", "7", "inputs of line 1"];
+    expect(batch(within)[2]).toBe(
+      "ERROR: Line 1 reads line 2, which is below it, so the order its answer was worked out in cannot be traced",
+    );
+    expect(incremental(within)).toEqual(batch(within));
+  });
+
+  test("the single-expression path refuses with a document error", () => {
+    expectNeedsDocument("inputs of line 1");
   });
 });
 

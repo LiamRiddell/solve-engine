@@ -87,6 +87,7 @@ export function createKnowledgePackage(config: KnowledgePackageConfig = {}): IEn
 		namespace: "knowledge",
 		pluginFunctionIndex: fnIdx,
 		staleTimeMs: config.staleTimeMs ?? 5 * 60 * 1000,
+		provider: config.provider ?? "host",
 		fetchQuery: async (query: string, signal: AbortSignal): Promise<Value> => {
 			if (!config.answerQuery) {
 				return errorValue(

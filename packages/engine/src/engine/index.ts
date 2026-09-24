@@ -15,6 +15,7 @@ export type {
 	EngineOptions,
 	EngineRestoreOptions,
 	EngineSnapshot,
+	ExpressionTokens,
 	SerializedValue,
 	SerializedBytecode,
 	SerializedUserFunction,
@@ -23,9 +24,22 @@ export type {
 	SerializedDecimal,
 	SerializedRational,
 	SerializedNumber,
+	WhatIfOverrides,
+	SerializedValueSidecars,
+	SerializedFrozenRecord,
+	FrozenRecord,
+	ValueSource,
+	SourceKind,
+	FrozenMark,
 } from "./ExpressionEngine";
 
-export type { Explanation, ExplanationStep } from "@solve-js/explain";
+export type { Explanation, ExplanationStep, ExplainCall, ExplainContext, ExplainHook, LineTrace } from "@solve-js/explain";
+// A trace as the one line of text `inputs of line N` answers with.
+export { formatLineTrace } from "@solve-js/explain";
+
+// A unit a note defines, as `ExpressionEngine.readExpressionTokens` takes and
+// reports it.
+export type { DocumentUnit } from "@solve-js/packages/uom/UserUnitTable";
 
 // The calendar the engine computes dates with, the `calendar` option's type,
 // and the `Date` backend that option defaults to.

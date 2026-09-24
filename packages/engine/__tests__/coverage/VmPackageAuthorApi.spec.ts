@@ -63,9 +63,11 @@ function packageAround(
 	const parselet: PrefixParselet = {
 		category: "Guard test",
 		parse(_parser: Parser, _token: Token, builder: BytecodeBuilder): void {
-			builder.emitOpcode(OpCode.CALL_PLUGIN);
-			builder.emitIndex(index);
-			builder.emitIndex(0);
+			// By name, as a package author writes it: the builder picks the
+			// narrow or the wide opcode from the index, which passes 255 once
+			// enough packages have registered in the process.
+			void index;
+			builder.emitPluginCall(keyword, 0);
 		},
 	};
 

@@ -1,5 +1,6 @@
 import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import type { FrozenDirective } from "@solve-js/vm/FrozenValues";
 
 /**
  * `BytecodeProgram.opcodes` is a `Uint8Array`, every operand written into
@@ -90,6 +91,16 @@ export interface BytecodeProgram {
 	 * a real `f(x) = ...` definition does.
 	 */
 	anonymousBodies?: AnonymousBodyDef[];
+	/**
+	 * Present when the line ends in `frozen` (or `frozen on <day>`): the key its
+	 * answer is stored under, the day it names, and the variable it defines.
+	 *
+	 * Set by the engine after the rest of the line compiles, never by a
+	 * parselet, and read by `executeBytecode`, which answers from the engine's
+	 * frozen store instead of running the program whenever it can. Carried in a
+	 * snapshot with the program. See `vm/FrozenValues.ts`.
+	 */
+	frozen?: FrozenDirective;
 }
 
 /**

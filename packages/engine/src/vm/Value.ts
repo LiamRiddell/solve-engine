@@ -2,6 +2,7 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { chargeAllocation } from "@solve-js/vm/AllocationBudget";
 import type { SymbolicNode, Rational } from "@solve-js/symbolic";
 import type { DecimalData } from "@solve-js/decimal";
+import type { ValueSource, FrozenMark } from "@solve-js/vm/Provenance";
 
 /**
  * A single matrix cell. `boolean` covers element-wise comparison results
@@ -524,6 +525,34 @@ export class Value {
 	 * somebody typed. Cleared by {@link recycle} alongside the other sidecars.
 	 */
 	public datetimeSpan?: boolean;
+	/**
+	 * Where the live figures behind this value came from: the provider, how the
+	 * engine came by each one, and when.
+	 *
+	 * A provenance sidecar, the same shape as the others and kept off the same
+	 * paths: `value` is untouched, so every reader of the number is unchanged,
+	 * and a value computed only from what the reader typed carries nothing. It is
+	 * set where a live figure enters (a currency conversion reads the rate
+	 * table's record, `createQueryResolver` stamps what it fetched) and merged by
+	 * arithmetic, so `(10 USD in GBP) * 3` carries the rate's record and a host
+	 * can mark the line as rate-dependent. The ADD/SUB/MUL/DIV fast paths decline
+	 * a value carrying it, exactly as they decline a rational or an uncertainty.
+	 * The list is shared, never mutated, so a value copied by {@link clone}
+	 * shares it safely. See `vm/Provenance.ts`. Cleared by {@link recycle}
+	 * alongside the other sidecars.
+	 */
+	public sources?: readonly ValueSource[];
+	/**
+	 * That this value is a frozen answer: when it was frozen, and the key it is
+	 * stored under.
+	 *
+	 * Set only on what a `frozen` line answers with (see
+	 * `engine/FrozenValues.ts`), and deliberately not carried by arithmetic: a
+	 * value computed from a frozen one is new, and says so through
+	 * {@link sources}, whose records carry the freeze date. Cleared by
+	 * {@link recycle}.
+	 */
+	public frozen?: FrozenMark;
 
 	constructor(
 		type: ValueType,
@@ -571,6 +600,10 @@ export class Value {
 		this.grain = undefined;
 		this.zone = undefined;
 		this.datetimeSpan = undefined;
+		// Provenance clears too: a reused Value that once held a converted
+		// amount must not tell a host that a plain number came from a rate.
+		this.sources = undefined;
+		this.frozen = undefined;
 	}
 
 	/**

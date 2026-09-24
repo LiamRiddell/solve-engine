@@ -432,6 +432,41 @@ export class DependencyGraph {
    }
 
   /**
+   * Forget every external data source a line was recorded as reading.
+   *
+   * A data-source read is pinned (see {@link registerLineDataSourceDependency}):
+   * it was discovered while the line ran, so re-registering the line from its
+   * text keeps it. That is right for a live line and wrong for a frozen one,
+   * which reads its answer from the engine's store and never the source again.
+   * Left in place, the pinned read kept the line a consumer of the query, so the
+   * batcher re-ran it whenever the value landed and a background refresh kept
+   * fetching for it. Only data-source keys are dropped: they are never part of a
+   * cycle, so no other edge, and no cycle bookkeeping, changes.
+   *
+   * @param lineNumber - The 1-based line whose data-source reads to drop.
+   * @returns How many were dropped.
+   */
+  dropDataSourceReads(lineNumber: number): number {
+    const pinned = this.pinnedReads.get(lineNumber);
+    if (pinned === undefined) return 0;
+    const prefix = edgeKey("datasource", "");
+    let dropped = 0;
+    for (const key of Array.from(pinned)) {
+      if (!key.startsWith(prefix)) continue;
+      pinned.delete(key);
+      this.lineReads.get(lineNumber)?.delete(key);
+      const consumers = this.consumers.get(key);
+      if (consumers !== undefined) {
+        consumers.delete(lineNumber);
+        if (consumers.size === 0) this.consumers.delete(key);
+      }
+      dropped++;
+    }
+    if (pinned.size === 0) this.pinnedReads.delete(lineNumber);
+    return dropped;
+  }
+
+  /**
    * Register a line's dependency on an external data source (e.g., currency rate, OSRS GE price).
    *
    * When the data source updates, {@link getAffectedLinesByDataSource} returns all lines

@@ -77,6 +77,11 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 	// dropped them would answer a different question from the synchronous one.
 	if (value.grain !== undefined) dto.grain = value.grain;
 	if (value.zone !== undefined) dto.zone = value.zone;
+	// Provenance and the frozen mark cross as plain copies, for the same reason:
+	// a worker result that dropped them could not tell a host where a converted
+	// amount's rate came from, or that the answer is frozen.
+	if (value.sources !== undefined) dto.sources = value.sources.map((s) => ({ ...s }));
+	if (value.frozen !== undefined) dto.frozen = { at: value.frozen.at, key: value.frozen.key };
 
 	const raw = value.value;
 	if (typeof raw === "bigint") {

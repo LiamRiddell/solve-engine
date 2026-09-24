@@ -6,6 +6,8 @@ import { AboveAggregateParselet } from "./parselets/AboveAggregateParselet";
 import { SectionAggregateParselet } from "./parselets/SectionAggregateParselet";
 import { lineRefNormalizerRule, rangeCallNormalizerRule } from "./normalizer/LineRefNormalizerRule";
 import { sectionAggregateNormalizerRule } from "./normalizer/SectionAggregateNormalizerRule";
+import { inputsOfNormalizerRule } from "./normalizer/InputsOfNormalizerRule";
+import { InputsOfParselet } from "./parselets/InputsOfParselet";
 import {
   prevHandler, lineRefHandler, sumRangeHandler, averageRangeHandler,
   totalAboveHandler, averageAboveHandler,
@@ -36,6 +38,11 @@ import {
  *   implemented in this pass, `l` is too common a variable name; ship
  *   `line<N>` first, add a narrower `l<N>` form later if real usage wants
  *   it.
+ * - `line deleted`, normalizer-fused into the same `LINE_REF` token, is what
+ *   a reference becomes when its line is deleted and a host keeps references
+ *   in step (`LanguageService.shiftLineReferences`). It answers with the
+ *   named `LINE_REFERENCE_DELETED` error. Two identifiers side by side had no
+ *   reading before, so it takes nothing that already meant something.
  * - `sum(`/`total(`/`average(`, normalizer-fused ONLY when immediately
  *   followed by `LPAREN`, so `:sum = 100` and MathPhrases' existing
  *   `"total of X, Y"` phrase (no paren after "of") are both unaffected.
@@ -59,7 +66,9 @@ export const LINES_PACKAGE: IEnginePackage = {
     "sum above": "SUM_ABOVE",
     "average above": "AVERAGE_ABOVE",
   },
-  normalizerRules: [lineRefNormalizerRule(), rangeCallNormalizerRule(), sectionAggregateNormalizerRule()],
+  // `inputs of line N` fuses only before a line reference, below the line-ref
+  // rule so the LINE_REF it looks for already exists. See InputsOfNormalizerRule.ts.
+  normalizerRules: [lineRefNormalizerRule(), rangeCallNormalizerRule(), sectionAggregateNormalizerRule(), inputsOfNormalizerRule()],
   prefixParselets: {
     PREV: new PrevParselet(),
     LINE_REF: new LineRefParselet(),
@@ -71,6 +80,7 @@ export const LINES_PACKAGE: IEnginePackage = {
     SECTION_SUM: new SectionAggregateParselet("sectionSum"),
     SECTION_AVERAGE: new SectionAggregateParselet("sectionAverage"),
     SECTION_COUNT: new SectionAggregateParselet("sectionCount"),
+    INPUTS_OF: new InputsOfParselet(),
   },
   pluginFunctions: {
     prev: prevHandler,
@@ -82,5 +92,8 @@ export const LINES_PACKAGE: IEnginePackage = {
     sectionSum: sectionSumHandler,
     sectionAverage: sectionAverageHandler,
     sectionCount: sectionCountHandler,
+    // `inputs of line N` has no entry of its own: it reaches its handler
+    // through lineRef. See TRACE_INPUTS in LinesPluginFunctions.ts for why.
   },
+  tokenCategories: { INPUTS_OF: "keyword" },
 };

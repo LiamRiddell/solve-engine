@@ -394,6 +394,9 @@ export default defineConfig({
               items: [
                 { slug: "syntax/weather" },
                 { slug: "syntax/knowledge" },
+                // Keeping any live answer fixed: it applies to every page in
+                // this group, and to currency, stocks and crypto beside money.
+                { slug: "syntax/frozen-answers" },
               ],
             },
             {
@@ -412,7 +415,9 @@ export default defineConfig({
                 { slug: "syntax/map-reduce-and-aggregates" },
                 { slug: "syntax/conditionals" },
                 { slug: "syntax/goal-seek" },
+                { slug: "syntax/tracing-inputs" },
                 { slug: "syntax/trigger-words" },
+                { slug: "syntax/what-if" },
               ],
             },
             {
@@ -458,9 +463,13 @@ export default defineConfig({
                 { slug: "guide/embedding" },
                 { slug: "guide/typescript-usage" },
                 { slug: "guide/explaining-lines" },
+                { slug: "guide/tracing-lines" },
                 { slug: "guide/formatting" },
                 { slug: "guide/dates-on-temporal" },
                 { slug: "guide/editor-integration" },
+                // Straight after the editor page it builds on: the whole-document
+                // half of the same language service.
+                { slug: "guide/reference-aware-editing" },
                 // After formatting, because choosing a zone is a decision about
                 // what a date MEANS in this host, and the page is read once the
                 // dates are already on screen and reading wrongly.
@@ -482,6 +491,7 @@ export default defineConfig({
                 { slug: "packages/units-and-keywords" },
                 { slug: "packages/functions-and-operators" },
                 { slug: "packages/as-converters" },
+                { slug: "packages/explaining-steps" },
                 { slug: "packages/highlighting-and-completions" },
                 { slug: "packages/testing-a-package" },
               ],

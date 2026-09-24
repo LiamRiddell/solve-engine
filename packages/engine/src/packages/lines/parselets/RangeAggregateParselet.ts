@@ -3,6 +3,8 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { DELETED_LINE_REF } from "../normalizer/LineRefNormalizerRule";
+import { DELETED_LINE_NUMBER } from "../LinesPluginFunctions";
 
 /**
  * `sum(line 1 : line 4)` / `total(line 1 : line 4)` / `average(line 1 :
@@ -39,6 +41,18 @@ export class RangeAggregateParselet implements PrefixParselet {
     parser.consume("COLON");
     const toToken = parser.consume("LINE_REF");
     parser.consume("RPAREN");
+
+    // A range with a deleted end has lost the line it was measured from, so
+    // there is no span left to add up. A host keeping references in step
+    // shrinks a range whose inside was deleted, and writes both ends as
+    // `line deleted` only when none of it survived. The single-reference call
+    // with the deleted sentinel carries the named error.
+    if (fromToken.value === DELETED_LINE_REF || toToken.value === DELETED_LINE_REF) {
+      builder.emitOpcode(OpCode.PUSH_NUMBER);
+      builder.emitNumber(DELETED_LINE_NUMBER);
+      builder.emitPluginCall("lineRef", 1);
+      return;
+    }
 
     const from = parseInt(fromToken.value, 10);
     const to = parseInt(toToken.value, 10);

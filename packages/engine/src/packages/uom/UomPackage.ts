@@ -20,6 +20,7 @@ import { COOKING_CONVERT_FN, cookingConvertHandler } from "./parselets/CookingPl
 import { ingredientNameNormalizerRule } from "./normalizer/IngredientNameNormalizerRule";
 import { multiWordUnitNormalizerRule } from "./normalizer/MultiWordUnitNormalizerRule";
 import { compoundUnitNormalizerRule } from "./normalizer/CompoundUnitNormalizerRule";
+import { explainConversion } from "./UomExplain";
 
 /**
  * Units of measurement: `10 km`, `10 km to miles`, `convert 10 km to miles`,
@@ -37,6 +38,9 @@ import { compoundUnitNormalizerRule } from "./normalizer/CompoundUnitNormalizerR
  */
 export const UOM_PACKAGE: IEnginePackage = {
   name: "solve-uom",
+  // `5 km in miles` explains as the factor and the multiplication by it. See
+  // UomExplain.ts.
+  explain: explainConversion,
   prefixParselets: {
     CONVERT: new ConvertParselet(),
     UOM_POSSIBILITIES_QUERY: new PossibilitiesParselet(),

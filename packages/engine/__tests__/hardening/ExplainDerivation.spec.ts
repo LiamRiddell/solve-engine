@@ -196,19 +196,22 @@ describe("a line with nothing to break down returns the answer without steps", (
 	});
 
 	test("an unmodelled construct still reports its answer, without steps", () => {
-		// Function calls are deferred: the derivation cannot break `sqrt(16)`
-		// down, so it reports the answer alone rather than a partial account.
+		// A comparison is not modelled: the derivation reports the answer alone
+		// rather than a partial account of the arithmetic inside it.
 		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
-		const explanation = engine.explainLine("sqrt(16) + 2");
+		const explanation = engine.explainLine("(2 + 3) > 4");
 		expect(explanation.steps).toEqual([]);
-		expect(explanation.result.toNumber()).toBe(6);
+		expect(explanation.result.toNumber()).toBe(1);
 	});
 
-	test("a conversion is deferred the same way", () => {
+	test("a conversion inside arithmetic the tree cannot hold is not half-derived", () => {
+		// `3 kg in g` alone derives (issue #522, see explain/ExplainHook.spec.ts);
+		// with arithmetic after it, the conversion's steps would leave the sum
+		// out, so the line reports its answer alone.
 		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
-		const explanation = engine.explainLine("3 kg in g");
+		const explanation = engine.explainLine("(3 kg in g) + 1 g");
 		expect(explanation.steps).toEqual([]);
-		expect(explanation.result.toNumber()).toBeCloseTo(3000, 6);
+		expect(explanation.result.toNumber()).toBeCloseTo(3001, 6);
 	});
 });
 
@@ -222,6 +225,10 @@ describe("the answer and the derivation never disagree", () => {
 		"$0.10 + $0.20",
 		"5 km + 300 m",
 		"sqrt(16) + 2",
+		"-(2 + 3)",
+		"-sqrt(16)",
+		"3 kg in g",
+		"present value of $1,000 after 5 years at 5%",
 	])("`%s`: result matches evaluateExpression, and equals the last step", (line) => {
 		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		const explanation = engine.explainLine(line);
