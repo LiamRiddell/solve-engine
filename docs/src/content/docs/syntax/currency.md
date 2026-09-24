@@ -15,6 +15,14 @@ $100 + $50 // $150.00
 10 dollars // $10.00
 ```
 
+An amount below zero is written with its sign first, the way a statement shows a
+debit: the minus comes before the symbol, not between the symbol and the digits.
+
+```solve
+$50 - $80 // -$30.00
+-£3.50 // -£3.50
+```
+
 Symbols and words are both recognised. One symbol can stand for several
 currencies: `$` is the US dollar by default, and also the Canadian, Australian
 and other dollars. Write the currency's three-letter code after the amount to say

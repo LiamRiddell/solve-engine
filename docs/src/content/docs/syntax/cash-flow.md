@@ -74,9 +74,9 @@ Amounts of money keep their currency, and a plain number among them is read in
 that currency, the way `$1,000 + 300` is.
 
 ```solve
-npv of -$1,000, $300, $400, $500 at 10% // $-21.04
+npv of -$1,000, $300, $400, $500 at 10% // -$21.04
 npv of -£5,000, £1,500, £2,000, £2,500 at 8% // £88.15
-npv of -$1,000, 300, 400, 500 at 10% // $-21.04
+npv of -$1,000, 300, 400, 500 at 10% // -$21.04
 ```
 
 A series can also be one bracketed list, or a variable holding one, which is

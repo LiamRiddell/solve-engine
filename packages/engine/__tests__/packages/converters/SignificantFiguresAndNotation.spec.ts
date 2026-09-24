@@ -99,6 +99,9 @@ describe("as compact", () => {
 	test("the reported case, and money and units", () => {
 		expect(shown("3 million + 10% as compact")).toBe("= 3.3M");
 		expect(shown("$3300000 as compact")).toBe("= $3.3M");
+		// A negative amount keeps its currency, sign first, as the full form writes
+		// it; it used to fall back to the code, -1.5k USD (#554).
+		expect(shown("-$1500 as compact")).toBe("= -$1.5k");
 		expect(shown("5000 m as compact")).toBe("= 5k m");
 	});
 

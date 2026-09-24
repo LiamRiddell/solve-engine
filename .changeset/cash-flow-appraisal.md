@@ -9,7 +9,7 @@ The finance package worked on one sum at a time (`present value of`, `roi`, the 
 | expression | before | now |
 | --- | --- | --- |
 | `npv of -1000, 300, 400, 500 at 10%` | error: unexpected token `,` | -21.04 |
-| `npv of -$1,000, $300, $400, $500 at 10%` | error: unexpected token `,` | $-21.04 |
+| `npv of -$1,000, $300, $400, $500 at 10%` | error: unexpected token `,` | -$21.04 |
 | `npv of -100, 110 at 10%` | error: unexpected token `,` | 0 |
 | `irr of -1000, 300, 400, 500` | error: unexpected token `,` | 8.90% |
 | `irr of -100, 230, -132` | error: unexpected token `,` | error: 2 internal rates of return, 10.00% and 20.00% |

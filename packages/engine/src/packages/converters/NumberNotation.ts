@@ -74,7 +74,10 @@ function notation(name: string, write: (n: number) => string): (value: Value) =>
 		if (value.type === ValueType.Uom && value.unit !== undefined) {
 			const text = write(value.toNumber());
 			const currency = CURRENCY_DISPLAY[value.unit.toUpperCase()];
-			if (currency?.position === "prefix" && !text.startsWith("-")) return stringValue(`${currency.symbol}${text}`);
+			// The sign goes before a prefix symbol, as the full form writes it (#554).
+			if (currency?.position === "prefix") {
+				return stringValue(text.startsWith("-") ? `-${currency.symbol}${text.slice(1)}` : `${currency.symbol}${text}`);
+			}
 			return stringValue(`${text} ${value.unit}`);
 		}
 		return errorValue("AS_CONVERTER_EXPECTED_NUMBER", `as ${name} expects a number or a quantity`);
