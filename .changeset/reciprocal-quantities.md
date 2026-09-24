@@ -28,4 +28,4 @@ Fixes #570.
 
 ## Verification
 
-The unit algebra suite gains the reciprocals above, the cancellation back to a number, a variable holding a quantity, the refused temperature, and the fractions that stay amounts. The multiplying and dividing units page gains a proven section on reciprocals and loses the boundary note that described the old reading. `npm run verify:ci` passes: 11,356 tests across 526 suites, with the bundled-consumer contract.
+The unit algebra suite gains the reciprocals above, the cancellation back to a number, a variable holding a quantity, the refused temperature, and the fractions that stay amounts. The multiplying and dividing units page gains a proven section on reciprocals and loses the boundary note that described the old reading. `npm run verify:ci` passes: 11,654 tests across 535 suites, with the bundled-consumer contract.

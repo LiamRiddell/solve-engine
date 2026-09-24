@@ -24,4 +24,4 @@ Fixes #571.
 
 ## Verification
 
-A new suite names every measure in both unit tables through its representative unit, checks that the table of representatives covers every measure so a new one cannot slip past, and sweeps sums, products and conversions of each against a length and a mass, asserting that no refusal contains a camelCase measure key. `npm run verify:ci` passes: 11,356 tests across 526 suites, with the bundled-consumer contract.
+A new suite names every measure in both unit tables through its representative unit, checks that the table of representatives covers every measure so a new one cannot slip past, and sweeps sums, products and conversions of each against a length and a mass, asserting that no refusal contains a camelCase measure key. `npm run verify:ci` passes: 11,654 tests across 535 suites, with the bundled-consumer contract.
