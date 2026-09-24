@@ -486,6 +486,60 @@ describe("list markers across entry points (#560)", () => {
   });
 });
 
+describe("=> lines and equation solves across entry points (#565)", () => {
+  // A `=>` line, a stored equation and its solve are carried out while they
+  // compile and leave no program behind, and they recorded nothing they read,
+  // so once clean the live evaluator ran nothing for them: an edit above left
+  // the old answer on screen, where a fresh pass of the edited text gives the
+  // new one.
+
+  test("the reported case: a => line follows an edit above it", () => {
+    const { shown, edited } = editThenEvaluate([":a = 2", "a + 1 =>"], [[1, ":a = 3"]]);
+    expect(shown).toEqual(["3", "4"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("the reported case: an equation's solve reads the edited factor", () => {
+    const { shown, edited } = editThenEvaluate([":a = 2", "a * x = 10", "x =>"], [[1, ":a = 5"]]);
+    expect(shown[2]).toBe("2");
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("a scalar equation's solve follows an edit too", () => {
+    const { shown, edited } = editThenEvaluate([":a = 4", "x^2 - a = 0", "x =>"], [[1, ":a = 9"]]);
+    expect(shown[2]).toBe("[-3, 3]");
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("a => line reading a bare assignment follows it", () => {
+    const { shown, edited } = editThenEvaluate(["a = 2", "a * 10 =>"], [[1, "a = 3"]]);
+    expect(shown).toEqual(["3", "30"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("a => line reading a position follows the line it reads", () => {
+    const { shown, edited } = editThenEvaluate(["2", "line 1 * 2 =>"], [[1, "5"]]);
+    expect(shown).toEqual(["5", "10"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("an algebra verb follows an edit above it", () => {
+    const { shown, edited } = editThenEvaluate([":a = 1", "expand((x + a)^2)"], [[1, ":a = 2"]]);
+    expect(shown).toEqual(["2", "x^2+4x+4"]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("both document passes agree on a document of => lines and solves", () => {
+    const doc = [":a = 2", "a + 1 =>", "a * x = 10", "x =>", "line 1 * 2 =>", "expand((x + a)^2)"];
+    expect(batch(doc)).toEqual(["2", "3", 'x stored as an equation — solve with "x =>"', "5", "4", "x^2+4x+4"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("the single-expression path refuses a position read inside a => line", () => {
+    expectNeedsDocument("line 1 * 2 =>");
+  });
+});
+
 describe("evaluateDocument leaves the engine as it found it", () => {
   test("the borrowed engine's document model is restored", () => {
     const engine = newTrackedEngine();

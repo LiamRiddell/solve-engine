@@ -259,8 +259,8 @@ function lineMessage(text: string): Value {
  * What the symbolic grammar made of a line: its answer, and the name it
  * assigned when the line was a bare assignment (`payment = deposit * 40`).
  *
- * The name is what lets the line say what it reads and writes. Every other
- * symbolic shape (a stored equation, a `=>` simplification) sets no variable,
+ * The name is what lets the line say what it writes. Every other symbolic
+ * shape (a stored equation, a `=>` simplification or solve) sets no variable,
  * and reports `null`.
  */
 interface SymbolicOutcome {
@@ -3574,17 +3574,19 @@ export class ExpressionEngine {
         // visible line on every keystroke. `total =` is a line half-typed on
         // the way to `total = 5`, and it took the editor down.
         let symbolicResult: Value | null;
-        // An assignment through this channel, a compound one (`total += 5`) or
-        // a bare one (`payment = deposit * 40`), reads and writes names like
-        // `:name = ...` does, unlike the other symbolic shapes (a stored
-        // equation, a `=>` simplification), which set no variable. It MUST
-        // surface those reads/writes: without a write registered, the
-        // incremental evaluator never checkpoints the line, so its own value is
-        // never reset before a re-run (a running total double-counts on every
-        // edit), a name defined twice holds the later value at the earlier
-        // line, and a line whose definition was edited away goes on reading
-        // it. Without the reads, the line is not known to depend on anything.
-        let assignmentReadsWrites: { reads: string[]; writes: string[] } | null = null;
+        // A line through this channel reads names like any other, and an
+        // assignment, compound (`total += 5`) or bare (`payment = deposit *
+        // 40`), writes one as `:name = ...` does. Both MUST be surfaced.
+        // Without a write registered, the incremental evaluator never
+        // checkpoints the line, so its own value is never reset before a
+        // re-run (a running total double-counts on every edit), a name defined
+        // twice holds the later value at the earlier line, and a line whose
+        // definition was edited away goes on reading it. Without the reads, the
+        // line is not known to depend on anything, and a `=>` line or an
+        // equation's solve keeps its answer from before an edit above it. A
+        // user-unit definition records neither: it reads no name, and what it
+        // defines is a unit, tracked by the unit table rather than the graph.
+        let symbolicReadsWrites: { reads: string[]; writes: string[] } | null = null;
         try {
             // A user-unit definition (`1 sprint = 2 weeks`) is an effectful line
             // like the symbolic shapes below, so it rides the same non-bytecode
@@ -3596,18 +3598,19 @@ export class ExpressionEngine {
                 const compound = this.tryCompoundAssignment(normalizedTokens, lineNumber);
                 if (compound !== null) {
                     symbolicResult = compound;
-                    assignmentReadsWrites = extractReadsAndWrites(normalizedTokens);
+                    symbolicReadsWrites = extractReadsAndWrites(normalizedTokens);
                 }
             }
             if (symbolicResult === null) {
                 const symbolic = this.trySymbolicGrammar(normalizedTokens, lineNumber);
                 if (symbolic !== null) {
                     symbolicResult = symbolic.value;
-                    // The one name the line set, not every name followed by
-                    // an `=`: the right-hand side is simplified, never assigned.
-                    if (symbolic.assigned !== null) {
-                        assignmentReadsWrites = { reads: extractReadsAndWrites(normalizedTokens).reads, writes: [symbolic.assigned] };
-                    }
+                    // Only the one name a bare assignment set is a write, not
+                    // every name followed by an `=`: a stored equation's
+                    // unknown (`a * x = 10`) is read at solve time, never
+                    // assigned here, and a right-hand side is simplified.
+                    const { reads } = extractReadsAndWrites(normalizedTokens);
+                    symbolicReadsWrites = { reads, writes: symbolic.assigned === null ? [] : [symbolic.assigned] };
                 }
             }
         } catch (e) {
@@ -3619,7 +3622,7 @@ export class ExpressionEngine {
             return { kind: 'error', stage: 'parse', error: normalizeUnknownError(e), reads, writes, normalizedTokens };
         }
         if (symbolicResult !== null) {
-            return { kind: 'symbolic-solve', normalizedTokens, value: symbolicResult, reads: assignmentReadsWrites?.reads, writes: assignmentReadsWrites?.writes };
+            return { kind: 'symbolic-solve', normalizedTokens, value: symbolicResult, reads: symbolicReadsWrites?.reads, writes: symbolicReadsWrites?.writes };
         }
         if (failed) {
             return { kind: 'error', stage: 'parse', error: failed.error, reads: failed.reads, writes: failed.writes, normalizedTokens };
@@ -3800,14 +3803,11 @@ export class ExpressionEngine {
             throw prep.error;
         }
         if (prep.kind === 'symbolic-solve') {
-            // Most symbolic shapes carry no DAG registration: a stored
-            // equation's effect (vm.equations) isn't reads/writes-trackable the
-            // same way ordinary bytecode is, so the line won't auto-re-evaluate
-            // if some unrelated line later changes one of its factor variables.
-            // A disclosed limitation of that narrow grammar. The exception is an
-            // assignment, compound (`total += 5`) or bare (`x = y * 2`), which
-            // surfaces real reads/writes (see prepareExpression) so its value is
-            // checkpointed and its dependents re-evaluate.
+            // The line has no program, but it still reports the names it reads,
+            // and an assignment (`total += 5`, `x = y * 2`) the name it writes
+            // (see prepareExpression), so the incremental evaluator knows to run
+            // it again and checkpoints what it stored. A user-unit definition
+            // reports neither.
             this.storeLineResult(lineNumber, prep.value, { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false }, prep.reads ?? [], prep.writes ?? [], expression);
             return prep.value;
         }
@@ -5271,10 +5271,10 @@ export class ExpressionEngine {
 			// same "nothing to compile" shape as the 'empty' case above.
 			// External tooling asking for the compiled program of a `=>`
 			// line gets an empty one; a disclosed limitation of this
-			// narrow grammar, not an oversight. An assignment, compound
-			// (`total += 5`) or bare (`x = y * 2`), is the exception: it carries
-			// real reads/writes so the incremental evaluator checkpoints its
-			// value and re-runs dependents.
+			// narrow grammar, not an oversight. The reads still come back, and
+			// an assignment (`total += 5`, `x = y * 2`) its write, so the
+			// incremental evaluator knows to run the line again and checkpoints
+			// what it stored.
 			return {
 				program: { opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false },
 				tokens: prep.normalizedTokens,

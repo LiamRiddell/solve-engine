@@ -97,6 +97,9 @@ const SHAPES: readonly LineShape[] = [
 	// line keeps a stale answer in when nothing re-runs it (#555).
 	(rng) => `v${rng.int(NAME_COUNT)} = ${rng.range(1, 50)}`,
 	(rng) => `v${rng.int(NAME_COUNT)} = v${rng.int(NAME_COUNT)} + ${rng.range(1, 9)}`,
+	// A `=>` line leaves no program behind either, and defines nothing, so it
+	// is the reader that kept a stale answer when nothing re-ran it (#565).
+	(rng) => `v${rng.int(NAME_COUNT)} + ${rng.range(1, 9)} =>`,
 
 	// A running total, whose value is a fold over the lines above it. Two of
 	// its steps read a position rather than a literal: a total that reads a

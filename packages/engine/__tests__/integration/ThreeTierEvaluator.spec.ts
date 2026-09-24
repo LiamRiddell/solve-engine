@@ -218,6 +218,40 @@ describe("ThreeTierEvaluator — Tier 2 (Execute from Cached Bytecode)", () => {
 			bareEvaluator.terminateWorker();
 		}
 	});
+
+	test("a clean => line and an equation's solve go back through Tier 1 too (#565)", () => {
+		const solveDoc = createDoc([":a = 2", "a + 1 =>", "a * x = 10", "x =>"]);
+		const solveEvaluator = new ThreeTierEvaluator(solveDoc, createEngine());
+		try {
+			solveEvaluator.evaluate({ startLine: 1, endLine: 4 });
+			solveDoc.editLine(1, ":a = 5");
+			const result = solveEvaluator.evaluate({ startLine: 1, endLine: 4 });
+
+			expect(result.lines.map((l) => l.tier)).toEqual([EvalTier.Tier1, EvalTier.Tier1, EvalTier.Tier1, EvalTier.Tier1]);
+			expect(result.lines[1].result!.toNumber()).toBe(6);
+			expect(result.lines[3].result!.toNumber()).toBe(2);
+			// Reads, and no write: a stored equation does not assign its unknown.
+			expect(solveDoc.getLineAt(3)!.reads).toEqual(["a", "x"]);
+			expect(solveDoc.getLineAt(3)!.writes).toEqual([]);
+		} finally {
+			solveEvaluator.terminateWorker();
+		}
+	});
+
+	test("a clean unit definition is not run again: it depends on nothing above it", () => {
+		const unitDoc = createDoc(["1 sprint = 2 weeks", "3 sprints in weeks"]);
+		const unitEvaluator = new ThreeTierEvaluator(unitDoc, createEngine());
+		try {
+			unitEvaluator.evaluate({ startLine: 1, endLine: 2 });
+			const result = unitEvaluator.evaluate({ startLine: 1, endLine: 2 });
+
+			expect(result.lines[0].tier).toBe(EvalTier.Tier2);
+			expect(result.lines[1].tier).toBe(EvalTier.Tier2);
+			expect(formatValue(result.lines[1].result!)).toBe("= 6 weeks");
+		} finally {
+			unitEvaluator.terminateWorker();
+		}
+	});
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

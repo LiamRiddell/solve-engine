@@ -82,13 +82,6 @@ export interface EvalResult {
 // ── ThreeTierEvaluator ──────────────────────────────────────────────────
 
 /**
- * Whether a definition's right-hand side reads the name it defines.
- *
- * `extractReadsAndWrites` records every `:name = ...` as reading `name` once,
- * a convention the graph relies on, so one occurrence says nothing. A second
- * is the right-hand side.
- */
-/**
  * The names these programs define as functions, from the bodies compiled
  * alongside them.
  *
@@ -107,6 +100,13 @@ function functionsDefinedBy(bytecodes: readonly BytecodeProgram[]): Set<string> 
 	return names;
 }
 
+/**
+ * Whether a definition's right-hand side reads the name it defines.
+ *
+ * `extractReadsAndWrites` records every `:name = ...` as reading `name` once,
+ * a convention the graph relies on, so one occurrence says nothing. A second
+ * is the right-hand side.
+ */
 function readsItself(reads: readonly string[], name: string): boolean {
 	let seen = 0;
 	for (const read of reads) if (read === name && ++seen === 2) return true;
@@ -114,19 +114,17 @@ function readsItself(reads: readonly string[], name: string): boolean {
 }
 
 /**
- * Whether a line defines a name through an expression that has no program to
- * run it again.
+ * Whether any of a line's expressions left no program to run it again.
  *
- * A bare assignment (`payment = deposit * 40`) and a running total
- * (`total += 5`) are carried out by the engine while they are compiled, and
- * leave an empty program behind. Tier 2 re-runs a clean line by executing its
- * programs, so for such a line it ran nothing: the name kept whatever the VM
- * last held, and the line kept its answer from before an edit above it, while
- * `:colon = deposit * 40` beside it updated. A line like this goes back through
- * the full pipeline instead, which is what a pass from scratch does with it.
+ * The engine carries out a bare assignment (`payment = deposit * 40`), a
+ * running total (`total += 5`), a `=>` line, a stored equation, an equation's
+ * solve (`x =>`) and a unit definition while it compiles them, and leaves an
+ * empty program behind. Tier 2 re-runs a clean line by executing its programs,
+ * so for such a line it runs nothing. See
+ * {@link ThreeTierEvaluator.mustRerunWithoutProgram} for which of them go back
+ * through the full pipeline instead.
  */
-function definesWithoutProgram(state: LineState): boolean {
-	if (state.writes.length === 0) return false;
+function hasExpressionWithoutProgram(state: LineState): boolean {
 	for (const program of state.bytecodes) if (program.opcodes.length === 0) return true;
 	return false;
 }
@@ -1244,9 +1242,9 @@ export class ThreeTierEvaluator {
 		}
 
 		// Line is clean
-		if (inViewport && definesWithoutProgram(state)) {
-			// ── Tier 1 again: a definition with no program to re-run ──
-			// Tier 2 would run nothing for it; see definesWithoutProgram.
+		if (inViewport && this.mustRerunWithoutProgram(state, lineNumber)) {
+			// ── Tier 1 again: a line with no program to re-run ──────
+			// Tier 2 would run nothing for it; see mustRerunWithoutProgram.
 			return this.evaluateTier1(state, lineNumber, expressions, inlineSolveCount, baseResult);
 		}
 		if (inViewport && state.bytecodes.length > 0) {
@@ -1256,6 +1254,40 @@ export class ThreeTierEvaluator {
 
 		// Clean, not in viewport, or no bytecode → skip
 		return { ...baseResult, tier: EvalTier.Skipped, result: null, error: null };
+	}
+
+	/**
+	 * Whether a clean line has to go back through the full pipeline, because it
+	 * has no program for Tier 2 to run and its answer can change with the lines
+	 * above it.
+	 *
+	 * Tier 2 runs every clean visible line that has a program, on every pass,
+	 * whatever it reads, since a name's value is a property of the position it
+	 * is read at and the graph cannot say when that changed. A line with no
+	 * program (see {@link hasExpressionWithoutProgram}) has to be run the same
+	 * way, and without this Tier 2 ran nothing for it: `payment = deposit * 40`
+	 * kept 4,000 after `deposit` was edited, while `:colon = deposit * 40`
+	 * beside it updated (#555), and `a + 1 =>` and `x =>` below `:a = 2` kept
+	 * their answers after it was edited (#565).
+	 *
+	 * The condition is that the line depends on something: it writes a name, or
+	 * reads a name, a position or a category tag. A unit definition
+	 * (`1 sprint = 2 weeks`) does none of these, and is left alone: it answers
+	 * the same whatever is above it, and defining it again on every pass would
+	 * be work for nothing. The names and writes come from the line's own
+	 * record, which survives a structural edit that clears the graph; a
+	 * positional reader is marked dirty by such an edit, so asking the graph
+	 * for its positions is safe.
+	 *
+	 * @param state - A clean line.
+	 * @param lineNumber - Its 1-based position.
+	 * @returns True when the line must run through Tier 1.
+	 */
+	private mustRerunWithoutProgram(state: LineState, lineNumber: number): boolean {
+		if (!hasExpressionWithoutProgram(state)) return false;
+		if (state.writes.length > 0 || state.reads.length > 0) return true;
+		if (this.dag.positionsReadBy(lineNumber).length > 0) return true;
+		return withTagEdges(state.text, [], []).reads.length > 0;
 	}
 
 	/**
