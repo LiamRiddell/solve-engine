@@ -93,6 +93,62 @@ describe("money times or over a plain count stays money and stays exact", () => 
 	});
 });
 
+describe("a price per unit comes to the cent the plain product does (#579)", () => {
+	// 12.3 * 0.15 is exactly 1.845. Its nearest double sits a hair under the
+	// half cent, so every per-unit spelling showed $1.84 while the plain product
+	// showed $1.85. Each spelling is pinned against the plain product itself.
+	const plain = "$0.15 * 12.3";
+
+	test.each([
+		"12.3 kWh * $0.15/kWh",
+		"$0.15/kWh * 12.3 kWh",
+		"12.3 kg at $0.15/kg",
+		"12.3 at $0.15/kg",
+		"$0.15 per kg * 12.3 kg",
+		"0.15 USD per kWh * 12.3 kWh",
+		"$0.15 * 12.3 kWh",
+		"12300 Wh * $0.15/kWh",
+	])("%s is the plain product, $1.85", (expr) => {
+		expect(display(plain)).toBe("= $1.85");
+		expect(display(expr)).toBe(display(plain));
+		expect(evaluate(expr).exact).toEqual(evaluate(plain).exact);
+		expect(evaluate(`${expr} == $1.845`).value).toBe(true);
+	});
+
+	test("a half-cent price rounds as the amount on its own does", () => {
+		expect(display("$1.005")).toBe("= $1.01");
+		expect(display("$1.005 per kg * 1 kg")).toBe("= $1.01");
+	});
+
+	test("a price per unit keeps its decimal and is still shown as a rate", () => {
+		const price = evaluate("$0.15/kWh");
+		expect(display("$0.15/kWh")).toBe("= 0.15 USD/kWh");
+		expect(price.type).toBe(ValueType.Uom);
+		expect(price.exact).toEqual({ coef: 15n, scale: 2 });
+		// A rate that is not a price has nothing to keep.
+		expect(evaluate("0.5 km/h").exact).toBeUndefined();
+	});
+
+	test("a price per unit on its own rounds a half cent as money does, and keeps a price below a cent", () => {
+		expect(display("$1.005/kg")).toBe("= 1.01 USD/kg");
+		// A tenth of a cent a unit is a real price; on its own it is not payable.
+		expect(display("$0.001/kWh")).toBe("= 0.001 USD/kWh");
+		expect(display("$0.001")).toBe("= $0.00");
+	});
+
+	test("a count that is a double's rounding of a fraction keeps the double", () => {
+		// A third of a kilowatt-hour prints as 0.3333333333333333, sixteen digits,
+		// which is the double's rounding and not a decimal anyone wrote.
+		expect(display("(1/3) kWh * $30/kWh")).toBe("= $10.00");
+		expect(evaluate("(1/3) kWh * $30/kWh == $10").value).toBe(true);
+		expect(evaluate("(1/3) kWh * $30/kWh").exact).toBeUndefined();
+	});
+
+	test("a price worked out by dividing is a double, as it was", () => {
+		expect(evaluate("$1.20 / 0.4 kg * 1 kg").exact).toBeUndefined();
+	});
+});
+
 describe("comparison is on the value, not on whichever doubles it landed on", () => {
 	test("equal to the cent", () => {
 		expect(evaluate("$0.1 + $0.2 == $0.3").value).toBe(true);

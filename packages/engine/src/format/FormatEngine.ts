@@ -447,9 +447,14 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   //
   // An exact currency with no symbol in the display table above (one of the
   // less common ISO codes) still rounds from its decimal here, so "1.005 UYW"
-  // reads the same way "$1.005" does. Non-currency Uoms never carry an exact,
-  // so this leaves "1.50 kg" exactly as it was.
-  const genericText = exact ? localiseFixedDecimal(decimalToFixed(exact, dp), loc, useGrouping) : formatted;
+  // reads the same way "$1.005" does. A price per unit carries its decimal too
+  // (see vm/MoneyExact.ts) and rounds from it the same way, so "$1.005/kg" is
+  // 1.01 USD/kg, except below the decimal budget: a tenth of a cent a
+  // kilowatt-hour is a real price, so it keeps its significant digits as any
+  // small quantity does, where "$0.001" on its own is not a payable amount.
+  // Every other Uom carries no exact, so this leaves "1.50 kg" as it was.
+  const perUnitBelowBudget = tooSmall !== undefined && unit !== undefined && unit.includes("/");
+  const genericText = exact && !perUnitBelowBudget ? localiseFixedDecimal(decimalToFixed(exact, dp), loc, useGrouping) : formatted;
   return `= ${genericText} ${unit || ""}`.trim();
 }
 

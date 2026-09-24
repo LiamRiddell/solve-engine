@@ -1,7 +1,7 @@
 import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, chartValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData } from "@solve-js/vm/Value";
 import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
-import { moneyExactMagnitude, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
+import { valueInUnit, moneyForCount, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { tryDimensionalCompose } from "@solve-js/uom/Dimensions";
@@ -1182,7 +1182,10 @@ function moneyTimesQuantity(l: Value, r: Value): Value | null {
     // Exactly one side. Money times money is not a thing either.
     if (leftIsMoney === rightIsMoney) return null;
 
-    return uomValue(l.toNumber() * r.toNumber(), leftIsMoney ? leftUnit : rightUnit);
+    // Exact where the money is, so "$0.15 * 12.3 kWh" is the $1.85 that
+    // "$0.15 * 12.3" is. See vm/MoneyExact.ts.
+    const [money, count] = leftIsMoney ? [l, r] : [r, l];
+    return moneyForCount(money, money.unit!, count.toNumber()) ?? uomValue(l.toNumber() * r.toNumber(), money.unit!);
 }
 
 /**
@@ -1941,7 +1944,13 @@ function multiplyRateByMatchingUom(rate: Value, multiplier: Value): Value {
     }
     const multiplierInDenominatorUnit = convertUnit(multiplier.toNumber(), multiplier.unit!, denominator);
     const total = rate.toNumber() * multiplierInDenominatorUnit;
-    return numerator ? uomValue(total, numerator) : numberValue(total);
+    if (!numerator) return numberValue(total);
+    // A price per unit comes to the money the plain product does:
+    // "12.3 kWh * $0.15/kWh" is exactly $1.845, as "$0.15 * 12.3" is (#579).
+    // Not for a count that reached the rate's unit through an exchange rate,
+    // which is a double, as a converted amount of money is.
+    const crossedCurrencies = multiplier.unit !== denominator && sharedCurrencyExchange.isCurrency(denominator);
+    return (crossedCurrencies ? null : moneyForCount(rate, numerator, multiplierInDenominatorUnit)) ?? uomValue(total, numerator);
 }
 
 // ── Converters (`as <type>`) formatting helpers ───────────────────────────
@@ -4267,15 +4276,13 @@ export function executeBytecode(
             ));
             break;
           }
-          // Money keeps its exact decimal from here on. The amount either
-          // arrived as a decimal literal (exact sidecar already set) or is a
-          // whole number, either of which has an exact decimal; a fractional
-          // double amount ("$sqrt(2)") has none and stays an ordinary float
-          // Uom. Only currencies carry the sidecar, so every other unit (km,
-          // kg, ...) is unchanged.
-          const money = moneyExactMagnitude(operand, unit);
-          if (money) stack.push(uomValueExact(operand.toNumber(), unit, money));
-          else stack.push(uomValue(operand.toNumber(), unit));
+          // Money keeps its exact decimal from here on, and so does a price
+          // per unit ("$0.15/kWh"). The amount either arrived as a decimal
+          // literal (exact sidecar already set) or is a whole number, either
+          // of which has an exact decimal; a fractional double amount
+          // ("$sqrt(2)") has none and stays an ordinary float Uom. Every other
+          // unit (km, kg, km/h, ...) is unchanged. See vm/MoneyExact.ts.
+          stack.push(valueInUnit(operand, unit));
           break;
         }
         case OpCode.UOM_CONVERT_TO: {

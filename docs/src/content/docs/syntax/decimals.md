@@ -128,22 +128,14 @@ as floating point on purpose. There, Solve uses floating point, as it always has
   [matrix](/syntax/vectors-and-matrices/) are floating point. A comparison of two
   quantities with units allows for the tiny rounding a unit conversion introduces
   (see [unit arithmetic](/syntax/unit-arithmetic/)), so `0.1 km + 0.2 km == 0.3 km`
-  is still true.
-- **Prices per unit.** A price per unit, such as `$0.15/kWh`, is a rate, which
-  is a unit other than money until it is multiplied out (see
-  [multiplying and dividing units](/syntax/unit-algebra/)). The bill it gives is
-  worked out in floating point, so a half cent can land on either side:
-  `12.3 kWh * $0.15/kWh` shows $1.84, where `$0.15 * 12.3` is exactly $1.845 and
-  shows $1.85, the half cent rounded away from zero as
-  [money](/syntax/money-precision/) always rounds it.
+  is still true. A price per unit, such as `$0.15/kWh`, is money, so the bill it
+  gives is exact (see [money precision](/syntax/money-precision/)).
 
 ```solve
 sqrt(2) * sqrt(2) == 2 // false
 1e-1 + 2e-1 == 3e-1 // false
 1.05 ^ 30 // 4.32
 0.1 km + 0.2 km == 0.3 km // true
-12.3 kWh * $0.15/kWh // $1.84
-$0.15 * 12.3 // $1.85
 ```
 
 ## Numbers too small for two decimal places

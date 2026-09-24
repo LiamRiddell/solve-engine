@@ -4,7 +4,7 @@ import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decim
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand } from "@solve-js/vm/VMConversion";
 import { withSources, type ValueSource } from "@solve-js/vm/Provenance";
-import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact } from "@solve-js/vm/MoneyExact";
+import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact, valueInUnit, moneyForCount } from "@solve-js/vm/MoneyExact";
 import { transpose, determinant, inverse, matrixMultiply, matrixPower, symbolicToEntry, rowMajorToColumnMajor } from "@solve-js/vm/MatrixOps";
 import { symbolicToValue, valueToSymbolic, solveEquationValues, definiteIntegralValue, readSearchRange } from "@solve-js/vm/SymbolicOps";
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
@@ -1358,8 +1358,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
             return errorValue("INVALID_RATE_UNIT", `${numerator}/${denominator}: that is already a rate`);
         }
         // A bare number over a unit is a countless rate, "30/week", which the
-        // rate machinery already renders without a numerator unit.
-        return uomValue(source.toNumber(), `${numerator}/${denominator}`);
+        // rate machinery already renders without a numerator unit. A price
+        // ("0.15 USD per kWh") keeps the exact decimal its amount had, as
+        // "$0.15/kWh" does; see vm/MoneyExact.ts.
+        return valueInUnit(source, `${numerator}/${denominator}`);
     },
     // atRate(quantity, rate) -> whichever of the two the question implies.
     //
@@ -1399,7 +1401,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (leftEntry !== undefined && denominatorEntry !== undefined && leftEntry[0] === denominatorEntry[0]) {
             const inDenominator = left.toNumber() * leftEntry[1] / denominatorEntry[1];
             const total = inDenominator * rate.toNumber();
-            return numerator === "" ? numberValue(total) : uomValue(total, numerator);
+            // A price per unit comes to the money the plain product does:
+            // "12.3 kg at $0.15/kg" is exactly $1.845, as "$0.15 * 12.3" is (#579).
+            if (numerator === "") return numberValue(total);
+            return moneyForCount(rate, numerator, inDenominator) ?? uomValue(total, numerator);
         }
 
         // "$500 at $20/hour": the left side is the numerator, so divide.
@@ -1411,7 +1416,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         // A bare number counts denominators too: "30 at $30/hour".
         if (leftUnit === undefined) {
             const total = left.toNumber() * rate.toNumber();
-            return numerator === "" ? numberValue(total) : uomValue(total, numerator);
+            if (numerator === "") return numberValue(total);
+            return moneyForCount(rate, numerator, left.toNumber()) ?? uomValue(total, numerator);
         }
 
         return errorValue("INCOMPATIBLE_UNITS", `at: ${leftUnit} matches neither side of ${rate.unit}`);

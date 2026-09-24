@@ -98,7 +98,10 @@ unit price and a quantity make a bill.
 A price written straight after an amount belongs to it, so `$5/kg` is one rate
 wherever it stands in a line: `3 kg * $5/kg` is fifteen dollars, not fifteen
 dollars per kilogram. The single-word rates, such as `mph`, `mpg` and `Mbps`,
-cancel in the same way as the ones written with a slash.
+cancel in the same way as the ones written with a slash. A price per unit is
+money, so the bill is exact to the cent: `12.3 kWh * $0.15/kWh` is exactly
+$1.845, shown as $1.85, the same as `$0.15 * 12.3` (see
+[money precision](/syntax/money-precision/)).
 
 Dividing a quantity by a rate for it cancels the other half, and answers how many
 of the thing the rate is per: how many litres of paint a wall needs, how long a
