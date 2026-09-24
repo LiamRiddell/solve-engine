@@ -21,4 +21,4 @@ Fixes #576.
 
 ## Verification
 
-A new spec pins each case, and the category map spec now asserts the conversion words as keywords. `npm run verify:ci` passes: TESTS tests across SUITES suites, with the bundled-consumer contract.
+A new spec pins each case, and the category map spec now asserts the conversion words as keywords. `npm run verify:ci` passes: 11,248 tests across 532 suites, with the bundled-consumer contract.
