@@ -207,6 +207,10 @@ export function saveEntry(directory: string, entry: CorpusEntry): boolean {
 /** How big an input is, for deciding which of two reproducers to keep. */
 function inputSize(fuzzCase: FuzzCase): number {
 	if (fuzzCase.kind === "expression") return fuzzCase.source.length;
+	// A document or cross-path case has no program: this used to read one and
+	// throw when a second reproducer of a document finding arrived.
+	if (fuzzCase.kind === "document") return fuzzCase.lines.join("\n").length + fuzzCase.actions.length;
+	if (fuzzCase.kind === "crosspath") return fuzzCase.lines.join("\n").length;
 	const { opcodes, numbers, strings } = fuzzCase.program;
 	return opcodes.length + numbers.length + strings.length;
 }

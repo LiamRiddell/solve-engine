@@ -39,6 +39,7 @@ import { failureSignature, knownOpenSignatures, loadCorpus } from "@tools/fuzz/C
 import { generateExpressionCase } from "@tools/fuzz/ExpressionFuzzer";
 import { buildMutationPool, generateBytecodeCase } from "@tools/fuzz/BytecodeFuzzer";
 import { buildVocabulary } from "@tools/fuzz/Vocabulary";
+import { generateCrossPathCase } from "@tools/fuzz/CrossPathFuzzer";
 import { runCase, type OracleOptions } from "@tools/fuzz/Oracle";
 import { isFailure, type FuzzCase, type OutcomeKind } from "@tools/fuzz/FuzzCase";
 
@@ -95,6 +96,14 @@ function isKnown(outcome: { kind: OutcomeKind; detail: string }, input: FuzzCase
  */
 const VETTED_BYTECODE_SEEDS = { start: 700_000, count: 4000 };
 const VETTED_EXPRESSION_SEEDS = { start: 800_000, count: 600 };
+/**
+ * Cross-path seeds with no disagreement between the two whole-document passes
+ * (#688). The first soak over seeds 1000 onward found #803 at 1143, 1512 and
+ * 1527; those findings are in the corpus, reduced, and fixed. With #803 fixed a
+ * soak of seeds 1000 to 2499 found nothing, so that is the range vetted here.
+ * The block's time budget, not the count, is what usually ends it.
+ */
+const VETTED_CROSSPATH_SEEDS = { start: 1000, count: 1500 };
 
 /**
  * Wall-clock budget for each bounded block, checked between cases.
@@ -109,6 +118,7 @@ const BLOCK_BUDGET_MS = 2500;
 /** A one-line rendering of a case, for an assertion message. */
 function describeCase(fuzzCase: FuzzCase): string {
 	if (fuzzCase.kind === "expression") return `expression ${JSON.stringify(fuzzCase.source)}`;
+	if (fuzzCase.kind === "crosspath" || fuzzCase.kind === "document") return `${fuzzCase.kind} ${JSON.stringify(fuzzCase.lines)}`;
 	const { opcodes, numbers, strings } = fuzzCase.program;
 	return `bytecode opcodes=[${opcodes.join(",")}] numbers=${JSON.stringify(numbers)} strings=${JSON.stringify(strings)}`;
 }
@@ -119,7 +129,7 @@ describe("fuzz corpus", () => {
 	test("the corpus directory is readable and its entries are well formed", () => {
 		for (const entry of entries) {
 			expect(entry.id).toMatch(/^[0-9a-f]{8}$/);
-			expect(entry.input.kind === "bytecode" || entry.input.kind === "expression").toBe(true);
+			expect(["bytecode", "expression", "document", "crosspath"]).toContain(entry.input.kind);
 			expect(["open", "fixed"]).toContain(entry.status);
 		}
 	});
@@ -240,7 +250,35 @@ describe("bounded expression fuzz", () => {
 	});
 });
 
+describe("bounded cross-path fuzz", () => {
+	test("parseDocument and evaluateDocument agree on every vetted seed, and neither throws", () => {
+		// A disagreement fails here too, unlike the blocks above: it is the one
+		// finding this generator exists to report (#688).
+		const forbidden = new Set<OutcomeKind>([...FORBIDDEN, "disagreement"]);
+		const deadline = Date.now() + BLOCK_BUDGET_MS;
+		let executed = 0;
+		for (let i = 0; i < VETTED_CROSSPATH_SEEDS.count; i++) {
+			if (Date.now() > deadline) break;
+			const seed = VETTED_CROSSPATH_SEEDS.start + i;
+			const fuzzCase = generateCrossPathCase(seed);
+			const outcome = runCase(fuzzCase, null, BOUNDED_LIMITS);
+			executed++;
+			if (forbidden.has(outcome.kind) && !isKnown(outcome, fuzzCase)) {
+				throw new Error(
+					`seed ${seed} produced ${outcome.kind}: ${outcome.detail}\n  ${describeCase(fuzzCase)}\n` +
+					`  reduce it with: npm run fuzz -- --generator=crosspath --seed=${seed} --count=1`,
+				);
+			}
+		}
+		expect(executed).toBeGreaterThan(20);
+	});
+});
+
 describe("the generators stay deterministic", () => {
+	test("the same seed produces the same cross-path document", () => {
+		expect(JSON.stringify(generateCrossPathCase(4242))).toBe(JSON.stringify(generateCrossPathCase(4242)));
+	});
+
 	test("the same seed produces the same bytecode case", () => {
 		const first = generateBytecodeCase(4242);
 		const second = generateBytecodeCase(4242);

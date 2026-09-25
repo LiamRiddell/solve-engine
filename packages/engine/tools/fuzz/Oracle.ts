@@ -24,6 +24,7 @@ import { resetAllocationTracking } from "@solve-js/vm/AllocationBudget";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import type { UserFunctionDef, AnonymousBodyDef, BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { runDocumentCase } from "@tools/fuzz/DocumentOracle";
+import { runCrossPathCase } from "@tools/fuzz/CrossPathOracle";
 import type { FuzzCase, Outcome, SerializedBody, SerializedProgram } from "@tools/fuzz/FuzzCase";
 
 /**
@@ -365,6 +366,7 @@ function firstFrames(thrown: unknown): string | undefined {
 export function runCase(fuzzCase: FuzzCase, engine: ExpressionEngine | null, options: OracleOptions = {}): Outcome {
 	if (fuzzCase.kind === "bytecode") return runBytecodeCase(fuzzCase.program, options);
 	if (fuzzCase.kind === "document") return runDocumentCase(fuzzCase, { slowMs: DOCUMENT_SLOW_MS });
+	if (fuzzCase.kind === "crosspath") return runCrossPathCase(fuzzCase);
 	if (!engine) throw new Error("an expression case needs an engine");
 	return runExpressionCase(fuzzCase.source, engine, options);
 }

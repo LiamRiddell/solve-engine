@@ -1,0 +1,19 @@
+{
+	"id": "f7c4f41e",
+	"seed": 1512,
+	"generator": "crosspath",
+	"outcome": "disagreement",
+	"detail": "line 1: parseDocument says \"0\", evaluateDocument says \"error: Line 3 has not been evaluated yet (forward reference, or out of range)\"",
+	"found": "2026-09-25",
+	"shrinkSteps": 12,
+	"input": {
+		"kind": "crosspath",
+		"lines": [
+			"count of section \"Home\"",
+			"# Home",
+			"// note 5"
+		]
+	},
+	"status": "fixed",
+	"note": "Fixed by #803: a line below the reader was classified from its text on the batch pass and from its evaluation state on the incremental one, so a comment or a table row the incremental pass had not reached read as a figure still to come. A line it has not reached is now read from its text, as the batch pass reads it. The detail is this reduced input's; the soak recorded the unreduced one's."
+}

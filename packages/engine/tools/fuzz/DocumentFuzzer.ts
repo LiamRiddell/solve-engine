@@ -190,7 +190,7 @@ const SHAPES: readonly LineShape[] = [
  * @param rng - The session's random source.
  * @returns A line of document text.
  */
-function lineText(rng: Prng): string {
+export function lineText(rng: Prng): string {
 	return SHAPES[rng.int(SHAPES.length)](rng);
 }
 
