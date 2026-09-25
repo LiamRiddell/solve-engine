@@ -23,6 +23,24 @@ function computeTotalMinutes(hour: number, minute: number, ampm: string | undefi
   return hour * 60 + minute;
 }
 
+/**
+ * An hour, or an hour and its minutes written after a point, as the number
+ * before an am/pm marker: `3`, or `3.30` in the British style. Read from the
+ * source text, since the number the lexer made of `3.30` is 3.3 and its
+ * minutes are gone; `parseInt` of that dropped them, so `3.30pm` answered
+ * 3:00 PM. Only two digits after the point are minutes. Any other fraction
+ * (`3.5pm`: half past, or five past?) has no single reading, so the time is
+ * not read at all rather than read as the hour.
+ *
+ * @param text - The number as written.
+ * @returns The hour and minute, or null when the number is not one of those two spellings.
+ */
+function hourAndMinute(text: string): { hour: number; minute: number } | null {
+  const spelled = /^(\d{1,2})(?:\.(\d{2}))?$/.exec(text);
+  if (spelled === null) return null;
+  return { hour: Number(spelled[1]), minute: spelled[2] === undefined ? 0 : Number(spelled[2]) };
+}
+
 function isAmPmToken(token: { type: string; value: string } | undefined): token is { type: string; value: string } {
   return !!token && token.type === "IDENT" && /^(am|pm)$/i.test(token.value);
 }
@@ -51,7 +69,7 @@ function fusedClockTime(source: Token[], totalMinutes: number): Token {
  * Two source shapes:
  * - `NUMBER COLON NUMBER [am|pm]`, `9:00am`, `9:00 am`, `16:00` (24h
  *   no am/pm).
- * - `NUMBER am|pm`, the bare-hour form, `4pm`.
+ * - `NUMBER am|pm`, the bare-hour form, `4pm`, and `3.30pm` with its minutes after a point.
  *
  * "am"/"pm" are matched as plain `IDENT` tokens (case-insensitively)
  * deliberately NOT added to the locale keywordMap, so this doesn't change
@@ -109,7 +127,9 @@ export function clockTimeNormalizerRule(priority = 65): NormalizerRule {
       // Pattern: NUMBER am|pm (bare hour, e.g. "4pm")
       const bareAmPmToken = tokens[pos + 1];
       if (isAmPmToken(bareAmPmToken)) {
-        const totalMinutes = computeTotalMinutes(hour, 0, bareAmPmToken.value);
+        const spelled = hourAndMinute(hourToken.text ?? hourToken.value);
+        if (spelled === null) return null;
+        const totalMinutes = computeTotalMinutes(spelled.hour, spelled.minute, bareAmPmToken.value);
         if (totalMinutes === null) return null;
         return {
           consumed: 2,

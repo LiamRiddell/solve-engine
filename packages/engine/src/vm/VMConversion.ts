@@ -836,6 +836,70 @@ export function compareRationalOperands(l: Value, r: Value): -1 | 0 | 1 | null {
 }
 
 /**
+ * The refusal for a date or time in arithmetic that has no meaning for one:
+ * multiplying, dividing, a remainder, a power, a negation.
+ *
+ * A date or time is a moment, not an amount, and it is held as its epoch
+ * milliseconds, so reading it as a number gave answers like 5,370,888,600,000
+ * for `1:30 * 3`. The message points at the lengths of time the engine reads,
+ * since a reader who writes `1:30 * 3` most likely meant ninety minutes.
+ *
+ * @param op - The operation, for the message; a remainder or a power passes none.
+ * @returns The `INVALID_DATETIME_OP` error Value.
+ */
+export function datetimeArithmeticRefused(op?: "add" | "sub" | "mul" | "div" | "neg"): Value {
+    const done = op === "mul" ? "multiplied" : op === "div" ? "divided" : op === "neg" ? "negated" : "used in this arithmetic";
+    return errorValue(
+        "INVALID_DATETIME_OP",
+        `A date or time cannot be ${done}: it is a moment, not an amount. A length of time is written 1h30m, 90 minutes or 1:30:00.`,
+    );
+}
+
+/**
+ * The refusal for a unit written after a date or time: `1:30 hours` read half
+ * past one today as 1,790,296,200,000 hours, and `1:30 hours in minutes` went
+ * on to convert it. A clock time names a moment, not a length, so it takes no
+ * unit, and the message points at the spellings of a length of time.
+ *
+ * @param unit - The unit written after it, for the message.
+ * @returns The `INVALID_DATETIME_OP` error Value.
+ */
+export function datetimeTakesNoUnit(unit: string): Value {
+    return errorValue(
+        "INVALID_DATETIME_OP",
+        `A date or time cannot take a unit, ${unit}: it is a moment, not an amount. A length of time is written 1h30m, 90 minutes or 1:30:00.`,
+    );
+}
+
+/**
+ * The refusal for a date or time converted to a form of a number that has no
+ * reading for it, or null when `v` is not one: `1 Jan 2026 as %` answered
+ * 176722560000000.00%. `as number` and `to timestamp` stay, since they ask
+ * for the number, and the message points at them.
+ *
+ * @param v - The value being converted.
+ * @param target - The form, for the message ("a percentage").
+ * @returns The `INVALID_DATETIME_OP` error Value, or null.
+ */
+export function datetimeConversionRefused(v: Value, target: string): Value | null {
+    if (v.type !== ValueType.Datetime) return null;
+    return errorValue(
+        "INVALID_DATETIME_OP",
+        `A date or time cannot be written as ${target}: it is a moment, not an amount. For its number, write "as number", or "to timestamp" for seconds since 1970.`,
+    );
+}
+
+/**
+ * Whether a value is a length of time a reader typed in a unit a clock shows
+ * without loss: a time quantity in anything but milliseconds.
+ *
+ * @param v - The value.
+ */
+function isTypedLengthOfTime(v: Value): boolean {
+    return v.type === ValueType.Uom && v.unit !== undefined && v.unit !== "ms" && getMeasure(v.unit) === "time";
+}
+
+/**
  * Apply a numeric binary operation with type-aware dispatch.
  * Handles BigInt, UoM, Vector, Symbolic, and plain Number operands.
  *
@@ -884,6 +948,13 @@ export function binaryOp(
                 : "Text cannot be used in arithmetic: only numbers and quantities can. To use a number held as text, convert it first with \"as number\".",
         );
     }
+
+    // A date or time in arithmetic. ADD and SUB move a date by a length of time
+    // before this point; anything else that reaches here with a date or time
+    // on either side read it as its epoch milliseconds, so `1:30 * 3` answered
+    // 5,370,888,600,000 on 25 September 2026. Refused by name, as the
+    // aggregates already refuse the same values.
+    if (l.type === ValueType.Datetime || r.type === ValueType.Datetime) return datetimeArithmeticRefused(symbolicOp);
 
     // Symbolic dispatch, either operand carries a free-variable formula.
     // Builds the corresponding SymbolicNode (the non-symbolic side, if
@@ -978,7 +1049,24 @@ export function binaryOp(
         const scaled =
             (l.datetimeSpan === true && r.type === ValueType.Number) ||
             (r.datetimeSpan === true && l.type === ValueType.Number);
-        if (bothSpans || scaled) combined.datetimeSpan = true;
+        // A span with a length of time added or taken away is still a span:
+        // `(9:30 - 8:30) + 30 minutes` is an hour and a half, and came back as
+        // 5,400,000.00 ms, a unit nobody wrote. A typed quantity in milliseconds
+        // is the exception, since a clock shows whole seconds and would drop
+        // them: `(9:30 - 8:30) + 40ms` stays in the milliseconds it was given.
+        const lengthened = (symbolicOp === "add" || symbolicOp === "sub") && (
+            (l.datetimeSpan === true && isTypedLengthOfTime(r)) ||
+            (r.datetimeSpan === true && isTypedLengthOfTime(l)));
+        if (lengthened && unit !== "ms") {
+            // The unit came from the typed side (`30 minutes + (9:30 - 8:30)`
+            // unified to minutes), and a span shows on a clock only from
+            // milliseconds, so both orders read the same.
+            const span = uomValue(convertUnit(combined.toNumber(), unit!, "ms"), "ms");
+            span.datetimeSpan = true;
+            if (combined.sources !== undefined) span.sources = combined.sources;
+            return span;
+        }
+        if (bothSpans || scaled || lengthened) combined.datetimeSpan = true;
         return combined;
     }
 

@@ -255,11 +255,14 @@ function formatDatetime(value: number, locale: ILocale, settings: FormattingSett
 
 /**
  * Renders a millisecond duration as clock-style `H:MM` (or `H:MM:SS` when
- * there's a non-zero seconds component). `ms` is never a user-typeable
- * unit (confirmed: it appears nowhere in `lexer/units.ts`), it's only
- * ever produced by subtracting two clock times/datetimes (`9:30 - 8:30`,
- * `VM.ts`'s Datetime SUB case), so this is a safe, narrow special case,
- * not a general change to how durations display.
+ * there's a non-zero seconds component), rounded to the whole second.
+ *
+ * Only for a value marked as a span (`datetimeSpan`), which subtracting two
+ * clock times or datetimes produces (`9:30 - 8:30`, VM.ts's Datetime SUB), and
+ * which keeps through adding spans, scaling one, or adding or taking away a
+ * length of time (see binaryOp in vm/VMConversion.ts). A reader can type `ms`
+ * (`40ms + 120ms` is 160 ms), and such a quantity carries no mark, so it keeps
+ * its milliseconds rather than being rounded onto a clock.
  */
 function formatMsDuration(ms: number): string {
   const sign = ms < 0 ? "-" : "";

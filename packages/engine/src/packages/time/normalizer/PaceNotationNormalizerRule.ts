@@ -30,6 +30,11 @@ const MAX_SECONDS = 59;
  * `1:30/100m` is the standard swim pace and its denominator is a hundred
  * metres rather than one.
  *
+ * A minute unit between the seconds and the slash (`5:30 min/km`, the unit
+ * health.md has a reader convert a pace to) and `per` in place of the slash
+ * (`5:30 per km`) read the same way. Without them the rule declined, the
+ * literal became a time of day, and `5:30 min/km` answered its epoch.
+ *
  * A three-part literal is left alone. `1:30:00/km` already reads as an hour and
  * a half per kilometre, through the ordinary duration path, and it does not need
  * this rule to arrive at the right answer.
@@ -40,6 +45,20 @@ const MAX_SECONDS = 59;
  *
  * @module PaceNotationNormalizerRule
  */
+
+/** The spellings of a minute a reader writes after a pace's seconds. */
+const MINUTE_UNITS: ReadonlySet<string> = new Set(["min", "mins", "minute", "minutes"]);
+
+/** Whether a token is a minute unit, as a unit or as a plain word (`mins` lexes as one). */
+function isMinuteUnit(token: Token | undefined): boolean {
+	if (token === undefined || (token.type !== "UNIT" && token.type !== "IDENT")) return false;
+	return MINUTE_UNITS.has((token.text ?? token.value ?? "").toLowerCase());
+}
+
+/** Whether a token is `per`, which introduces the distance as the slash does: `5:30 per km`. */
+function isPerWord(token: Token | undefined): boolean {
+	return token?.type === "IDENT" && (token.text ?? token.value ?? "").toLowerCase() === "per";
+}
 
 /** The rule: see the module comment for why the denominator decides. */
 export function paceNotationNormalizerRule(priority = 76): NormalizerRule {
@@ -57,15 +76,22 @@ export function paceNotationNormalizerRule(priority = 76): NormalizerRule {
 			if (tokens[pos + 1]?.type !== "COLON") return null;
 			const seconds = tokens[pos + 2];
 			if (seconds?.type !== "NUMBER") return null;
-			if (tokens[pos + 3]?.type !== "SLASH") return null;
+
+			// The minute unit a reader may write before the slash, `5:30 min/km`:
+			// taken with the literal, since minutes and seconds are what its two
+			// parts already are. Only a minute unit; `5:30 h/km` would give the
+			// literal a second meaning, and is left to be refused.
+			const withMinutes = isMinuteUnit(tokens[pos + 3]) ? 1 : 0;
+			const introducer = tokens[pos + 3 + withMinutes];
+			if (introducer?.type !== "SLASH" && !isPerWord(introducer)) return null;
 
 			// A three-part literal (`1:30:00/km`) is somebody else's shape, and it
 			// already reads correctly.
-			if (tokens[pos + 4]?.type === "COLON") return null;
+			if (tokens[pos + 4 + withMinutes]?.type === "COLON") return null;
 
 			// `1:30/100m` puts a magnitude in front of the distance unit.
-			const afterSlash = tokens[pos + 4];
-			const unitToken = afterSlash?.type === "NUMBER" ? tokens[pos + 5] : afterSlash;
+			const afterSlash = tokens[pos + 4 + withMinutes];
+			const unitToken = afterSlash?.type === "NUMBER" ? tokens[pos + 5 + withMinutes] : afterSlash;
 			if (unitToken?.type !== "UNIT") return null;
 			if (getMeasure(unitToken.value ?? "") !== "length") return null;
 
@@ -76,7 +102,7 @@ export function paceNotationNormalizerRule(priority = 76): NormalizerRule {
 
 			const total = String(minutesPart * SECONDS_PER_MINUTE + secondsPart);
 			return {
-				consumed: 3,
+				consumed: 3 + withMinutes,
 				replacement: [
 					new LexerToken("NUMBER", NUMBER_ID, total, total, minutes.offset, 0, minutes.line, minutes.col),
 					new LexerToken("UNIT", UNIT_ID, "seconds", "seconds", minutes.offset, 0, minutes.line, minutes.col),

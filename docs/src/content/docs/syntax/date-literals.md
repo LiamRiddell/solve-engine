@@ -18,7 +18,13 @@ month may be spelled out.
 2024-5-3 // Friday, May 3, 2024
 25.12.2023 // Monday, December 25, 2023
 March 9, 2024 // Saturday, March 9, 2024
+25 Dec 2026 // Friday, December 25, 2026
+1 Oct 2026 // Thursday, October 1, 2026
 ```
+
+A spelled month may be written in full or shortened, `Dec` or `December`. `oct`
+and `dec` are also the names of the octal and decimal conversions, and they stay
+those straight after `as`, `in` or `to`, so `255 as dec` is still 255.
 
 Write a literal as one run of characters, with no spaces around its
 separators. That is what tells a date from the arithmetic it is spelled
@@ -133,8 +139,10 @@ rather than answering a day count built on one that does not exist.
 Before this behaviour existed, each of those lines answered a number instead:
 `12/25/2023` was 0.00, `31/04/2026` was 0.00, `2026-02-29` was 1,995, and
 `29 February 2026` was a fourteen-digit number, 29 multiplied by the instant
-of the 1st of February. If a document relied on one of them,
-`date.onAmbiguous` puts every one of those numbers back:
+of the 1st of February. If a document relied on one of the first three,
+`date.onAmbiguous` puts those numbers back. The fourth stays refused, since its
+old number multiplied a date, and a date is refused in multiplication
+everywhere: a moment has no size to multiply.
 
 ```ts
 new ExpressionEngine({ config: { date: { onAmbiguous: "arithmetic" } } });

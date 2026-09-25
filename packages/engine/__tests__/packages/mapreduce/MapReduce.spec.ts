@@ -151,8 +151,8 @@ describe("regression guards", () => {
     // against the identical unparenthesized expression rather than a
     // magic number (same convention as LabeledLine.spec.ts's own
     // "produces the identical result with or without a label" guards).
-    const parenthesized = engine().evaluateExpression("(9:00) + 5");
-    const plain = engine().evaluateExpression("9:00 + 5");
+    const parenthesized = engine().evaluateExpression("(9:00) + 5 minutes");
+    const plain = engine().evaluateExpression("9:00 + 5 minutes");
     expect(parenthesized.value).toBe(plain.value);
     expect(parenthesized.type).toBe(ValueType.Datetime);
   });

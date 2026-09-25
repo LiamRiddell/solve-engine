@@ -223,8 +223,9 @@ two mistakes have different fixes. An ordinary number is untouched.
 ```
 
 A signed offset does not work after a date: `2026-04-03 in GMT+9` is read as
-`(2026-04-03 in GMT) + 9`, which adds nine milliseconds rather than shifting
-nine hours, so write `in Tokyo` or `in JST` instead. A host that wants the whole
+`(2026-04-03 in GMT) + 9`, and since a bare 9 does not say whether it means
+days, hours or minutes, the line is refused rather than moved. Write `in Tokyo`
+or `in JST` instead. A host that wants the whole
 document computed in one zone can pin it: see
 [dates on Temporal](/guide/dates-on-temporal/#choosing-a-zone-without-temporal).
 

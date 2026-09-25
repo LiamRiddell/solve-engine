@@ -3,6 +3,8 @@ import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
+import { isWorkdayUnit } from "@solve-js/uom/UomConverter";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 
 /**
  * `<TimeUnit> until <Datetime>` / `<TimeUnit> since <Datetime>` (wiki:
@@ -31,6 +33,18 @@ export class UntilSinceParselet implements PrefixParselet {
 
   parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     const unit = token.value; // the fused UNIT token's original text, e.g. "days"
+
+    // A span in workdays would go through the 7/5 rate shim (5 workdays are 7
+    // calendar days), which knows no weekends or holidays: `workdays until 25
+    // December 2026` answered 64.58 on 25 September. The count lives in the
+    // `between` form, which walks the calendar, so this spelling is refused
+    // with a pointer to it rather than answered with the ratio.
+    if (isWorkdayUnit(unit)) {
+      throw ErrorFactory.parsing(
+        "WORKDAYS_UNTIL_UNSUPPORTED",
+        `"${unit} ${this.direction}" is not counted on the calendar. Write "workdays between today and <date>" for the count of working days.`,
+      );
+    }
 
     if (this.direction === "until") {
       parser.parseExpression(0, builder); // target datetime

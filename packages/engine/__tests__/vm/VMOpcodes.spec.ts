@@ -429,26 +429,35 @@ describe("VM — Matrix operations", () => {
 });
 
 describe("VM — Datetime operations", () => {
-  test("DATE_ADD adds milliseconds to datetime", () => {
+  test("DATE_ADD moves a datetime by a length of time", () => {
     const vm = freshVM();
     const base = Date.now();
-    const result = executeBytecode(
-      bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.DATE_ADD, OpCode.HALT], [base, 5000]),
-      vm
-    );
+    vm.push(datetimeValue(base));
+    vm.push(uomValue(5, "s"));
+    const result = executeBytecode(bc([OpCode.DATE_ADD, OpCode.HALT]), vm);
     expect(unwrapEvalResult(result).type).toBe(ValueType.Datetime);
     expect(unwrapEvalResult(result).toNumber()).toBe(base + 5000);
   });
 
-  test("DATE_SUB subtracts milliseconds from datetime", () => {
+  test("DATE_SUB moves a datetime back by a length of time", () => {
     const vm = freshVM();
     const base = Date.now();
-    const result = executeBytecode(
-      bc([OpCode.PUSH_NUMBER, 0, OpCode.PUSH_NUMBER, 1, OpCode.DATE_SUB, OpCode.HALT], [base, 3000]),
-      vm
-    );
+    vm.push(datetimeValue(base));
+    vm.push(uomValue(3, "s"));
+    const result = executeBytecode(bc([OpCode.DATE_SUB, OpCode.HALT]), vm);
     expect(unwrapEvalResult(result).type).toBe(ValueType.Datetime);
     expect(unwrapEvalResult(result).toNumber()).toBe(base - 3000);
+  });
+
+  // A bare number used to be read as milliseconds, so `1 Jan 2026 + 5` was
+  // five milliseconds past midnight. Nothing says which unit it means.
+  test.each([OpCode.DATE_ADD, OpCode.DATE_SUB])("opcode %d refuses a bare number as a duration", (opcode) => {
+    const vm = freshVM();
+    vm.push(datetimeValue(Date.now()));
+    vm.push(numberValue(5000));
+    const result = unwrapEvalResult(executeBytecode(bc([opcode, OpCode.HALT]), vm));
+    expect(result.type).toBe(ValueType.Error);
+    expect(result.errorCode).toBe("INVALID_DATETIME_OP");
   });
 
   test("DATE_NOW pushes current timestamp", () => {
@@ -461,7 +470,7 @@ describe("VM — Datetime operations", () => {
     expect((unwrapEvalResult(result).value as number)).toBeLessThanOrEqual(after);
   });
 
-  test("ADD with Datetime + number milliseconds", () => {
+  test("ADD of a Datetime and a bare number refuses: the number names no unit", () => {
     const vm = freshVM();
     // Pre-populate stack with a Datetime value, then run bytecode that pushes a number and ADDs
     const dtValue = datetimeValue(1000);
@@ -470,6 +479,14 @@ describe("VM — Datetime operations", () => {
       bc([OpCode.PUSH_NUMBER, 0, OpCode.ADD, OpCode.HALT], [5000]),
       vm
     );
+    expect(unwrapEvalResult(result).errorCode).toBe("INVALID_DATETIME_OP");
+  });
+
+  test("ADD of a Datetime and a time quantity moves it", () => {
+    const vm = freshVM();
+    vm.push(datetimeValue(1000));
+    vm.push(uomValue(5, "s"));
+    const result = executeBytecode(bc([OpCode.ADD, OpCode.HALT]), vm);
     expect(unwrapEvalResult(result).type).toBe(ValueType.Datetime);
     expect(unwrapEvalResult(result).toNumber()).toBe(6000);
   });

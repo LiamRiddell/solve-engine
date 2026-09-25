@@ -178,6 +178,9 @@ export enum OpCode {
 	// so existing bytecode and snapshots are unchanged. See BytecodeBuilder's
 	// emitPluginCall and the VM's shared CALL_PLUGIN / CALL_PLUGIN_WIDE case.
 	CALL_PLUGIN_WIDE = 161,
+	// `a to b`: the percentage change from a to b, or the span between them when
+	// both are dates. Pops both, pushes one. See percentChange() in vm/VM.ts.
+	PERCENT_CHANGE = 162,
 }
 
 // Reverse lookup built once at module load, getOpCodeName() is called once
