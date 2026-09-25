@@ -157,6 +157,49 @@ superseded, because the user kept typing, or the engine was cleared. Pass it to
 that has moved on. This is what stops a slow response from overwriting a newer
 answer.
 
+## Limiting requests in flight
+
+A document can ask for hundreds of values at once: a pasted list of places, each
+on its own line, is one weather lookup per line. Started together, those are
+hundreds of connections to one service from the reader's own address, which a
+service may throttle or block, and which a hostile document could use on
+purpose. A resolver built with `createQueryResolver` runs at most six fetches at
+once and queues the rest, in the order they were asked for. `maxConcurrent` sets
+the number:
+
+```ts
+const { resolver, pluginFunction } = createQueryResolver({
+  namespace: "tides",
+  pluginFunctionIndex: TIDES_FN,
+  fetchQuery: (port, signal) => fetchTide(port, signal),
+  maxConcurrent: 2,          // this service allows two connections per client
+  timeoutMs: 8_000,
+});
+```
+
+The contract for a queued fetch:
+
+- **The timeout starts when the fetch does.** `timeoutMs` counts the request,
+  not its wait for a slot, so a long queue does not time out requests that never
+  ran.
+- **A fetch that ignores its signal still gives its slot back at the deadline.**
+  The resolver stops waiting for it then, and the line gets the timeout error; a
+  request already sent cannot be recalled.
+- **A query asked for again while it waits shares the one fetch**, as it does
+  once running, because the query key is the deduplication.
+- **A query cancelled while it waits leaves the queue** and never fetches: the
+  signal `fetchQuery` would have been given aborts first, as it does when the
+  query client cancels the query.
+
+The limit is one per resolver, shared by every engine in the process that
+registers the package. It is a positive whole number, or `Infinity` to switch it
+off, and any other value is refused when the package is built.
+
+The boundary: this bounds how many requests run together, not how many run. A
+document of 500 places still makes 500 lookups, six at a time; a rate per minute
+is not part of it. A resolver you write by hand, without `createQueryResolver`,
+has no limit unless it keeps one of its own.
+
 ## Refreshing on a schedule
 
 By default a resolved value refreshes only when its line is re-evaluated and has

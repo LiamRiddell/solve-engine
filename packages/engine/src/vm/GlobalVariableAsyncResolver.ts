@@ -8,6 +8,18 @@ import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import { nextInstruction } from "@solve-js/parser/OperandWidth";
 
 /**
+ * One engine's wait on one undeclared name: the promise every line of that
+ * engine reading the name shares, and what settles it.
+ */
+interface Wait {
+	readonly name: string;
+	readonly promise: Promise<Value>;
+	readonly resolve: (value: Value) => void;
+	/** The engine's waits this one is filed under, so settling it can remove it. */
+	readonly waits: Map<string, Wait>;
+}
+
+/**
  * Async resolver for `global :name` reads that aren't yet known, i.e. no
  * currently-loaded document has run `global :name = value` for this name.
  *
@@ -46,25 +58,48 @@ export class GlobalVariableAsyncResolver implements IAsyncResolver {
 	readonly watchedOpcodes: readonly OpCode[] = [OpCode.LOAD_GLOBAL_VAR];
 
 	/**
-	 * In-flight (not-yet-resolved) promises, keyed by variable name.
+	 * Each engine's in-flight waits, by name, keyed by the engine's query
+	 * client.
 	 *
-	 * Without this, every re-evaluation of a still-pending line (every
-	 * keystroke elsewhere in the document, every scroll, every unrelated
-	 * evaluate() call) would call preflight() again and, without dedup
-	 * create a BRAND NEW GlobalVariableStore subscription each time. Since
-	 * "never declared" is an explicitly supported, indefinitely-pending
-	 * outcome (no timeout), those listeners would never naturally clean
-	 * themselves up, growing unboundedly. This cache means repeated
-	 * preflight() calls for the same still-missing name return the exact
-	 * same promise (and therefore the same single subscription) every time.
+	 * Repeated preflight() calls for a name still missing return the same
+	 * promise: every re-evaluation of a pending line (every keystroke, every
+	 * scroll) asks again, and "never declared" is a supported outcome that
+	 * pends for ever, so a new wait per call would grow without bound.
 	 *
-	 * TanStack Query's fetchQuery() gives currency/OSRS this same dedup
-	 * for free; this resolver doesn't use TanStack Query (its "cache" is
-	 * GlobalVariableStore, not a network response), so it needs its own.
+	 * The waits are the engine's, not this resolver's (#695). One resolver
+	 * serves every engine, and a wait's promise carries the engine's
+	 * continuation, so a map on the resolver itself held every engine that ever
+	 * read an undeclared name: 40,000 reads kept 137 MB and the engine alive
+	 * after it was dropped. Keyed weakly by the engine's query client, an
+	 * engine's waits go when the engine does.
 	 */
-	private pending = new Map<string, Promise<Value>>();
+	private readonly waitsByEngine = new WeakMap<object, Map<string, Wait>>();
 
-	preflight(_tokens: Token[], bytecode: BytecodeProgram, packageId: string, signal: AbortSignal, _queryClient: QueryClient): AsyncCheckResult | null {
+	/**
+	 * Every live wait by name, held weakly, so a write finds the waits on its
+	 * name in one lookup. A wait whose engine has gone is pruned by
+	 * {@link forgotten}, or passed over when its name is written.
+	 */
+	private readonly waitsByName = new Map<string, Set<WeakRef<Wait>>>();
+
+	/** Prunes a collected wait from {@link waitsByName}. */
+	private readonly forgotten = new FinalizationRegistry<{ name: string; ref: WeakRef<Wait> }>(({ name, ref }) => this.unfile(name, ref));
+
+	/**
+	 * The resolver's one subscription to the store, held while anything waits.
+	 *
+	 * One per name used to be the rule, and the store calls every listener on
+	 * every write, so each write cost as much as the number of names waited on
+	 * anywhere in the process: 2,000 writes took 1.1 s beside 40,000 waits
+	 * against 0.16 s in a fresh process (#695). One subscription dispatches
+	 * through {@link waitsByName} instead.
+	 */
+	private unsubscribe: (() => void) | null = null;
+
+	/** The one listener {@link unsubscribe} removes, kept so subscribing twice is one subscription. */
+	private readonly onWrite = (name: string, value: Value): void => this.settle(name, value);
+
+	preflight(_tokens: Token[], bytecode: BytecodeProgram, packageId: string, signal: AbortSignal, queryClient: QueryClient): AsyncCheckResult | null {
 		const { opcodes, strings } = bytecode;
 		const len = opcodes.length;
 		let i = 0;
@@ -102,10 +137,10 @@ export class GlobalVariableAsyncResolver implements IAsyncResolver {
 			i = nextInstruction(opcodes, i);
 		}
 
-		return missing === null ? null : this.pendingResultFor(missing, packageId, signal);
+		return missing === null ? null : this.pendingResultFor(missing, packageId, signal, queryClient);
 	}
 
-	private pendingResultFor(varNames: string[], packageId: string, signal: AbortSignal): AsyncCheckResult {
+	private pendingResultFor(varNames: string[], packageId: string, signal: AbortSignal, owner: object): AsyncCheckResult {
 		// Deduplicated and ordered, so a line reading the same name twice waits
 		// once, and two lines reading the same pair produce the same key
 		// whichever order they read them in. The key is a DAG data-source
@@ -121,7 +156,7 @@ export class GlobalVariableAsyncResolver implements IAsyncResolver {
 		// A name nobody ever declares leaves this pending for ever, exactly as
 		// a single one always has: there is deliberately no timeout here, and
 		// that is unchanged.
-		const waits = names.map((name) => this.promiseFor(name));
+		const waits = names.map((name) => this.promiseFor(name, owner));
 		const resolver = waits.length === 1 ? waits[0] : Promise.all(waits).then((values) => values[values.length - 1]);
 
 		return {
@@ -136,36 +171,85 @@ export class GlobalVariableAsyncResolver implements IAsyncResolver {
 	}
 
 	/**
-	 * The shared in-flight promise for one name, created on first demand.
+	 * The engine's in-flight promise for one name, created on first demand.
 	 *
-	 * Kept per NAME rather than per line or per call so the dedup described on
-	 * {@link pending} still holds when several lines, in several documents,
-	 * wait on the same undeclared name: they all receive this promise and
-	 * therefore this single store subscription.
+	 * Kept per name rather than per line or per call, so several lines in
+	 * several of the engine's documents waiting on one undeclared name share
+	 * this promise.
+	 *
+	 * @param varName - The undeclared name.
+	 * @param owner - The engine's query client, which the wait lives and dies with.
 	 */
-	private promiseFor(varName: string): Promise<Value> {
-		let resolver = this.pending.get(varName);
-		if (!resolver) {
-			resolver = new Promise<Value>((resolve) => {
-				const unsubscribe = sharedGlobalVariableStore.subscribe((name, value) => {
-					if (name !== varName) return;
-					unsubscribe();
-					this.pending.delete(varName);
-					resolve(value);
-				});
-			});
-			this.pending.set(varName, resolver);
+	private promiseFor(varName: string, owner: object): Promise<Value> {
+		let waits = this.waitsByEngine.get(owner);
+		if (waits === undefined) {
+			waits = new Map();
+			this.waitsByEngine.set(owner, waits);
 		}
-		return resolver;
+		const known = waits.get(varName);
+		if (known !== undefined) return known.promise;
+
+		let resolve!: (value: Value) => void;
+		const promise = new Promise<Value>((settle) => {
+			resolve = settle;
+		});
+		const wait: Wait = { name: varName, promise, resolve, waits };
+		waits.set(varName, wait);
+		const ref = new WeakRef(wait);
+		let refs = this.waitsByName.get(varName);
+		if (refs === undefined) {
+			refs = new Set();
+			this.waitsByName.set(varName, refs);
+		}
+		refs.add(ref);
+		this.forgotten.register(wait, { name: varName, ref });
+		// Subscribing the same function again is a no-op while it is subscribed
+		// (the store keeps a Set), and puts it back if the store was reset.
+		this.unsubscribe = sharedGlobalVariableStore.subscribe(this.onWrite);
+		return promise;
 	}
 
+	/** A name has been written: settle every live wait on it, in any engine. */
+	private settle(name: string, value: Value): void {
+		const refs = this.waitsByName.get(name);
+		if (refs === undefined) return;
+		this.waitsByName.delete(name);
+		for (const ref of refs) {
+			const wait = ref.deref();
+			if (wait === undefined) continue;
+			wait.waits.delete(name);
+			wait.resolve(value);
+		}
+		this.releaseIfIdle();
+	}
+
+	/** Removes one collected wait from the name index. */
+	private unfile(name: string, ref: WeakRef<Wait>): void {
+		const refs = this.waitsByName.get(name);
+		if (refs === undefined) return;
+		refs.delete(ref);
+		if (refs.size === 0) this.waitsByName.delete(name);
+		this.releaseIfIdle();
+	}
+
+	/** Drops the store subscription when nothing waits, so an idle resolver costs a write nothing. */
+	private releaseIfIdle(): void {
+		if (this.waitsByName.size > 0 || this.unsubscribe === null) return;
+		this.unsubscribe();
+		this.unsubscribe = null;
+	}
+
+	/**
+	 * Called when one engine's registry unregisters or clears this resolver.
+	 *
+	 * The resolver is one instance shared by every engine, so it ends no wait
+	 * here: the waits belong to the engines, and another engine's must go on.
+	 * Clearing a shared map on one engine's teardown used to cut every
+	 * engine's dedup. An engine's waits go with the engine (see
+	 * {@link waitsByEngine}), and a name that is written settles every wait
+	 * on it.
+	 */
 	destroy(): void {
-		// The underlying GlobalVariableStore subscriptions self-remove on
-		// resolve; nothing here needs to force-unsubscribe in-flight ones
-		// letting an already-pending global keep waiting even after this
-		// particular resolver instance is torn down (e.g. package
-		// unregister/re-register elsewhere) is harmless, since the
-		// subscription only ever touches sharedGlobalVariableStore itself.
-		this.pending.clear();
+		// Nothing to release: see above.
 	}
 }
