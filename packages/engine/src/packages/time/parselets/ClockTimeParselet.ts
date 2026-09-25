@@ -6,7 +6,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { tryConsumeZoneReference, consumeZoneList, checkZoneCount, emitNamedZones } from "./shared/ZoneReference";
 import { nextIsOnClause, tryParseOnDate } from "./shared/OnDate";
-import { ZONE_CONVERT_FN, ZONE_CONVERT_AT_FN } from "./TimezonePluginFunctions";
+import { ZONE_CONVERT_FN, ZONE_CONVERT_AT_FN, CLOCK_TIME_ON_DATE_FN } from "./TimezonePluginFunctions";
 
 /**
  * `9:00am` / `16:00` / `4pm`, a clock-time-of-day literal, anchored to
@@ -98,6 +98,15 @@ export class ClockTimeParselet implements PrefixParselet {
 
     builder.emitOpcode(OpCode.PUSH_NUMBER);
     builder.emitNumber(totalMinutes);
+
+    // `3pm on 23 September 2026`: the time on the day named, the same instant
+    // as `2026-09-23T15:00` (#692). The date is any expression that gives
+    // one, as in the zone forms above.
+    if (tryParseOnDate(parser, builder)) {
+      builder.emitPluginCall(CLOCK_TIME_ON_DATE_FN, 2);
+      return;
+    }
+
     builder.emitOpcode(OpCode.CLOCK_TIME_TODAY);
   }
 }

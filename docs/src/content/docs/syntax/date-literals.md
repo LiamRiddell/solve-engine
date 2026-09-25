@@ -38,6 +38,62 @@ subtraction.
 Spacing decides it on its own, so a padded chain like `2024 - 05 - 03` is
 subtraction too.
 
+## A date with a time of day
+
+A meeting, a deadline or a train is a day and a time on that day. Write the
+time after the date, on its own or after `at`, or write the time first and the
+day after `on`. Each reads as that moment: the same one the ISO form
+`2026-01-04T14:30` names, so the spellings always agree.
+
+```solve
+2026-01-04 14:30 // Sunday, January 4, 2026, 2:30:00 PM
+23 September 2026 3pm // Wednesday, September 23, 2026, 3:00:00 PM
+23 September 2026 at 3pm // Wednesday, September 23, 2026, 3:00:00 PM
+3pm on 23 September 2026 // Wednesday, September 23, 2026, 3:00:00 PM
+25/12/2026 9:30am // Friday, December 25, 2026, 9:30:00 AM
+2026-01-04 14:30:15 // Sunday, January 4, 2026, 2:30:15 PM
+```
+
+The time is written the way a clock time is anywhere else in Solve: 24-hour
+`14:30`, `3pm`, `9:30am`, `3.30pm`, or with seconds, `14:30:15`. Midnight is
+`12am` or `00:00`, and a moment at midnight shows as the day alone.
+
+Once written, the moment behaves like any other date and time: add a length of
+time to it, or measure the time between two of them.
+
+```solve
+23 September 2026 3pm + 90 minutes // Wednesday, September 23, 2026, 4:30:00 PM
+hours between 2026-01-04 9am and 2026-01-10 5pm // 152 hours
+```
+
+After `on`, anything that gives a date will do, a name included, so a note can
+set the day once and put several times on it:
+
+```solve-doc
+launch = 23 September 2026
+3pm on launch // Wednesday, September 23, 2026, 3:00:00 PM
+5:30pm on launch // Wednesday, September 23, 2026, 5:30:00 PM
+```
+
+A time that does not exist on the clock is refused by name rather than read as
+something else, and a month with no day takes no time, since there is no day to
+put it on:
+
+```solve-doc
+2026-01-04 24:00 // ERROR: "24:00" is not a valid time
+February 2026 3pm // ERROR: Unexpected token after expression: "3pm"
+```
+
+On the days the clocks change, a time in the hour that is skipped or repeated
+lands where the ISO form puts it. To read the moment in another zone, name the
+zone the time is in, as in `3pm London on 23 September 2026 in Tokyo` (see
+[time zones](/syntax/time-zones/)).
+
+The boundary: a day named in words and then a time, `tomorrow 3pm`, is not read
+this way. It belongs with the spoken relative dates, and until then the
+time-first spelling covers it, since `on` takes a relative date as readily as
+a fixed one (`3pm on tomorrow`).
+
 ## Choosing the input order
 
 An all-numeric date can mean two different days. `03/04/2026` is the 3rd of

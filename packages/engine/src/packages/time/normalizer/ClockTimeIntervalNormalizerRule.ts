@@ -1,5 +1,17 @@
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
+import type { Token } from "@solve-js/lexer/Token";
+
+/**
+ * The fused interval, its text what was written (`9am to 5pm`), so a message
+ * that quotes it does not show its minutes, `540:1020` (#692). The minutes
+ * are the value the parselet reads.
+ */
+function intervalToken(source: Token[], minutes: string): Token {
+  const token = createFusedToken("CLOCK_TIME_INTERVAL", minutes, source);
+  token.text = source.map((t) => t.text ?? "").join(" ");
+  return token;
+}
 
 /**
  * Fuses `CLOCK_TIME TO CLOCK_TIME` (e.g. `7:30 to 20:45`) into a single
@@ -40,7 +52,7 @@ export function clockTimeIntervalNormalizerRule(priority = 66): NormalizerRule {
 
       return {
         consumed: 3,
-        replacement: [createFusedToken("CLOCK_TIME_INTERVAL", `${start.value}:${end.value}`, tokens.slice(pos, pos + 3))],
+        replacement: [intervalToken(tokens.slice(pos, pos + 3), `${start.value}:${end.value}`)],
         ruleName: "time:clock-time-interval",
       };
     },
