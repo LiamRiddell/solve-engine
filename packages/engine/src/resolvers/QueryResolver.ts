@@ -7,6 +7,7 @@ import type { LineExecutionContext } from "@solve-js/vm/VM";
 import type { IAsyncResolver, AsyncCheckResult } from "@solve-js/resolvers/ResolverRegistry";
 import { getActiveQueryClient } from "@solve-js/services/DataQueryService";
 import { createTimeoutSignal } from "@solve-js/utilities/TimeoutSignal";
+import { createConcurrencyLimit, settledOrAborted } from "@solve-js/utilities/ConcurrencyLimit";
 import { nextInstruction } from "@solve-js/parser/OperandWidth";
 
 /**
@@ -70,8 +71,26 @@ export interface QueryResolverOptions {
 	 * is independent of `staleTimeMs`, which continues to govern the pull path.
 	 */
 	refetchIntervalMs?: number;
-	/** Hard timeout for `fetchQuery`, an unresponsive API must not block re-evaluation indefinitely. Default 10s. */
+	/**
+	 * Hard timeout for `fetchQuery`, an unresponsive API must not block
+	 * re-evaluation indefinitely. Default 10s. The clock starts when the fetch
+	 * does, not while it waits for a slot (see {@link maxConcurrent}), and the
+	 * wait ends at the deadline even for a `fetchQuery` that ignores its signal.
+	 */
 	timeoutMs?: number;
+	/**
+	 * The most fetches this resolver runs at once; the rest wait their turn, in
+	 * the order they were asked for. Default 6, the number of connections a
+	 * browser opens to one host. A positive whole number, or `Infinity` for no
+	 * limit.
+	 *
+	 * A pasted or hostile document of 500 places used to start 500 requests to
+	 * one service at once, all from the reader's own address (#696). This bounds
+	 * how many run together, not how many run: the 500 still run, six at a time.
+	 * A query asked for again while it waits shares the one fetch, and one whose
+	 * signal aborts while it waits leaves the queue without fetching.
+	 */
+	maxConcurrent?: number;
 	/**
 	 * How long a FAILED fetch's error result stays cached before the next
 	 * evaluation retries it. Without this, a transient outage would either
@@ -119,15 +138,24 @@ export function createQueryResolver(opts: QueryResolverOptions): QueryResolverPa
 	const timeoutMs = opts.timeoutMs ?? 10_000;
 	const failureCooldownMs = opts.failureCooldownMs ?? 30_000;
 	const onError = opts.onError ?? defaultOnError(opts.namespace);
+	// One limit per resolver, shared by every engine that registers the package.
+	const slots = createConcurrencyLimit(opts.maxConcurrent ?? 6);
 
 	const queryKeyFor = (query: string) => [opts.namespace, query] as const;
 
 	const provider = opts.provider ?? opts.namespace;
 
 	async function fetchAndCache(query: string, signal: AbortSignal, queryClient: QueryClient): Promise<Value> {
-		const { signal: fetchSignal, cleanup } = createTimeoutSignal(signal, timeoutMs, `${opts.namespace} query`);
+		let release: (() => void) | undefined;
+		let cleanup = (): void => {};
 		try {
-			const value = await opts.fetchQuery(query, fetchSignal);
+			// A slot first, so the timeout below counts the fetch and not the wait.
+			// A free one is taken in this turn, so an uncontended fetch starts
+			// exactly when it did before the limit; only a full set waits.
+			release = slots.tryAcquire() ?? (await slots.acquire(signal));
+			const timed = createTimeoutSignal(signal, timeoutMs, `${opts.namespace} query`);
+			cleanup = timed.cleanup;
+			const value = await settledOrAborted(opts.fetchQuery(query, timed.signal), timed.signal);
 			// Stamped once, as it arrives and before it is cached, so every line
 			// that reads it gets the same record. A fault is not a figure and
 			// carries none; a package that set its own sources keeps them.
@@ -163,6 +191,7 @@ export function createQueryResolver(opts: QueryResolverOptions): QueryResolverPa
 			return failedValue;
 		} finally {
 			cleanup();
+			release?.();
 		}
 	}
 

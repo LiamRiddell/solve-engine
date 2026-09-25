@@ -142,7 +142,7 @@ a clear message rather than failing mysteriously later.
 | `pluginFunctions` | Functions the virtual machine can call | [Functions and operators](/packages/functions-and-operators/) |
 | `normalizerRules` / `phrases` / `callFusions` | Token-stream rewrites: phrase fusion, `name(` function-call words, and the `shape` a rule declares so it is only tried where it can fire | [Recognising phrases and words](/packages/recognising-phrases/) |
 | `asConverters` | Targets for the `as` conversion form | [Custom as converters](/packages/as-converters/) |
-| `asyncResolvers` | External data sources, and the record of where each fetched value came from | [Async data source](/guide/async-data-sources/) |
+| `asyncResolvers` | External data sources: the fetch, how many run at once, and the record of where each fetched value came from | [Async data source](/guide/async-data-sources/) |
 | `tokenCategories` | Highlighting categories for new tokens | [Highlighting and completions](/packages/highlighting-and-completions/) |
 | `completionItems` | Editor completion candidates | [Highlighting and completions](/packages/highlighting-and-completions/) |
 | `explain` | Describe the package's own calls, conversions and phrases as readable steps when a host explains a line | [Explaining your steps](/packages/explaining-steps/) |
