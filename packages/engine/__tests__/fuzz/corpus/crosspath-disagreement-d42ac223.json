@@ -1,0 +1,21 @@
+{
+	"id": "d42ac223",
+	"seed": 1143,
+	"generator": "crosspath",
+	"outcome": "disagreement",
+	"detail": "line 2: parseDocument says \"error: Lines 5 to 4 hold no figures to add up: every line in the range is blank or a heading.\", evaluateDocument says \"error: Line 5 has not been evaluated yet (forward reference, or out of range)\"",
+	"found": "2026-09-25",
+	"shrinkSteps": 0,
+	"input": {
+		"kind": "crosspath",
+		"lines": [
+			"sum(line 2 : line 4)",
+			"sum(line 5 : line 4)",
+			"spent += prev",
+			"",
+			"| ---- | ---- |"
+		]
+	},
+	"status": "fixed",
+	"note": "Fixed by #803: a line below the reader was classified from its text on the batch pass and from its evaluation state on the incremental one, so a comment or a table row the incremental pass had not reached read as a figure still to come. A line it has not reached is now read from its text, as the batch pass reads it. The detail is this reduced input's; the soak recorded the unreduced one's."
+}

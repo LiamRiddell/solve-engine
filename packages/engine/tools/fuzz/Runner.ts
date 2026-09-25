@@ -22,6 +22,7 @@ import { buildVocabulary, type Vocabulary } from "@tools/fuzz/Vocabulary";
 import { generateExpressionCase, generateSeedExpressions } from "@tools/fuzz/ExpressionFuzzer";
 import { buildMutationPool, generateBytecodeCase } from "@tools/fuzz/BytecodeFuzzer";
 import { generateDocumentCase } from "@tools/fuzz/DocumentFuzzer";
+import { generateCrossPathCase } from "@tools/fuzz/CrossPathFuzzer";
 import { runCase, type OracleOptions } from "@tools/fuzz/Oracle";
 import { isFailure, type FuzzCase, type Outcome } from "@tools/fuzz/FuzzCase";
 
@@ -31,7 +32,7 @@ import { isFailure, type FuzzCase, type Outcome } from "@tools/fuzz/FuzzCase";
 export { runCase } from "@tools/fuzz/Oracle";
 
 /** Which generator a run is exercising. */
-export type Generator = "bytecode" | "expression" | "document";
+export type Generator = "bytecode" | "expression" | "document" | "crosspath";
 
 /** Parsed command line. */
 interface RunnerArgs {
@@ -229,6 +230,7 @@ export function caseForSeed(generator: Generator, seed: number, context: RunCont
 	// vocabulary and the check below would refuse a context that is complete
 	// for it. Asked first for that reason, not for speed.
 	if (generator === "document") return generateDocumentCase(seed);
+	if (generator === "crosspath") return generateCrossPathCase(seed);
 	if (!context.vocabulary) throw new Error("this context was built without generators");
 	if (generator === "expression") return generateExpressionCase(seed, context.vocabulary);
 	return generateBytecodeCase(seed, {

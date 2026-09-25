@@ -124,8 +124,19 @@ export interface DocumentCase {
 	viewport?: { startLine: number; endLine: number };
 }
 
+/**
+ * A case that asks one text of both whole-document entry points,
+ * `parseDocument` and `evaluateDocument`, and compares their answers (#688).
+ * It has no history: the text is all of it.
+ */
+export interface CrossPathCase {
+	kind: "crosspath";
+	/** The document, one entry per line. */
+	lines: string[];
+}
+
 /** Any kind of generated input. */
-export type FuzzCase = BytecodeCase | ExpressionCase | DocumentCase;
+export type FuzzCase = BytecodeCase | ExpressionCase | DocumentCase | CrossPathCase;
 
 /**
  * How a case ended.
@@ -158,7 +169,7 @@ export type OutcomeKind =
 	/**
 	 * Answered a line differently from a pass over the same text.
 	 *
-	 * Only the document generator produces this, and it is the one outcome here
+	 * Only the document and cross-path generators produce this, and it is the one outcome here
 	 * that is not about surviving: the engine returned, promptly, without
 	 * throwing, and gave a different answer than it gives when asked the same
 	 * question with no editing history behind it. For an engine whose promise is

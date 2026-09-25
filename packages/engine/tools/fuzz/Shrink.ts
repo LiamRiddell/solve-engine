@@ -21,7 +21,7 @@
  * @module Shrink
  */
 
-import type { DocumentCase, FuzzCase, Outcome, SerializedBody, SerializedProgram } from "@tools/fuzz/FuzzCase";
+import type { CrossPathCase, DocumentCase, FuzzCase, Outcome, SerializedBody, SerializedProgram } from "@tools/fuzz/FuzzCase";
 
 /**
  * Whether a candidate still reproduces the failure being shrunk.
@@ -91,6 +91,7 @@ export function caseSize(fuzzCase: FuzzCase): number {
 	// makes a document reproduction hard to read is how many things are
 	// happening, not how long the lines are.
 	if (fuzzCase.kind === "document") return fuzzCase.lines.length + fuzzCase.actions.length;
+	if (fuzzCase.kind === "crosspath") return fuzzCase.lines.length;
 	return programSize(fuzzCase.program);
 }
 
@@ -265,8 +266,20 @@ function* documentCandidates(fuzzCase: DocumentCase): Generator<DocumentCase> {
 	}
 }
 
+/** A cross-path document with one line fewer, the last line first, never below one line. */
+function* crossPathCandidates(fuzzCase: CrossPathCase): Generator<CrossPathCase> {
+	for (let i = fuzzCase.lines.length - 1; i >= 0; i--) {
+		if (fuzzCase.lines.length <= 1) break;
+		yield { kind: "crosspath", lines: fuzzCase.lines.filter((_, k) => k !== i) };
+	}
+}
+
 /** Every smaller candidate for any kind of case. */
 function* candidates(fuzzCase: FuzzCase): Generator<FuzzCase> {
+	if (fuzzCase.kind === "crosspath") {
+		yield* crossPathCandidates(fuzzCase);
+		return;
+	}
 	if (fuzzCase.kind === "document") {
 		const original = caseSize(fuzzCase);
 		for (const candidate of documentCandidates(fuzzCase)) {

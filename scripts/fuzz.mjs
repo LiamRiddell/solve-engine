@@ -49,7 +49,7 @@ for (const arg of process.argv.slice(2)) {
 }
 
 const options = {
-	generators: args.has("generator") ? [args.get("generator")] : ["bytecode", "expression", "document"],
+	generators: args.has("generator") ? [args.get("generator")] : ["bytecode", "expression", "document", "crosspath"],
 	seed: args.has("seed") ? Number(args.get("seed")) : null,
 	count: Number(args.get("count") ?? 20000),
 	minutes: args.has("minutes") ? Number(args.get("minutes")) : 0,
@@ -150,6 +150,10 @@ async function buildRunner() {
  * instead, where this ceiling never binds.
  */
 function countFor(generator) {
+	// A cross-path case is two engines and two passes, no editing session, so
+	// it affords more cases than a document case and far fewer than an
+	// expression.
+	if (generator === "crosspath") return Math.min(options.count, 2000);
 	return generator === "document" ? Math.min(options.count, 400) : options.count;
 }
 
@@ -386,6 +390,7 @@ function observedFailureDetail(kind, generator, result) {
 function describeCase(fuzzCase) {
 	if (!fuzzCase) return "(unknown)";
 	if (fuzzCase.kind === "expression") return JSON.stringify(fuzzCase.source);
+	if (fuzzCase.kind === "crosspath") return `${fuzzCase.lines.length} lines: ${JSON.stringify(fuzzCase.lines)}`;
 	if (fuzzCase.kind === "document") {
 		const actions = fuzzCase.actions.map((a) =>
 			a.kind === "view" ? `view(${a.at}-${a.end})` :
