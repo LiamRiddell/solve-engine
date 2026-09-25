@@ -30,10 +30,18 @@ engine.evaluateExpression("vat(100)"); // 120
 ```
 
 That is the whole thing. From the declaration, `defineFunction` allocates the
-plugin function index, registers the name as a keyword so it tokenises, builds
-the `name(args)` parselet, and wraps `call` in a handler that checks the call
-before running it. `call` receives plain JavaScript values and returns one; the
-engine does the unwrapping and wrapping.
+plugin function index, declares the name as a [call word](/packages/recognising-phrases/#function-call-words-callfusions),
+builds the `name(args)` parselet, highlights the call as a function, offers it
+in completion with its signature (`vat(amount: number): number`), and wraps
+`call` in a handler that checks the call before running it. `call` receives
+plain JavaScript values and returns one; the engine does the unwrapping and
+wrapping.
+
+A call word becomes the call only where an opening parenthesis follows it, so
+the name stays an ordinary word everywhere else. With `vat` defined, a reader
+can still write `:vat = 0.2`, `vat * 100` or a `vat:` label, and `vat(100)`
+on the next line is still the call. The match ignores case, so `VAT(100)` is
+the same call.
 
 The checks come for free, and they raise the engine's own structured errors
 rather than anything you hand-roll:
@@ -57,6 +65,14 @@ arguments are a fixed-length list, and both arguments and the return are one of
 `number`, `string`, or `boolean`. A `number` argument accepts a plain number or
 a based literal such as `0xFF`; a value with a unit, a percentage, or a date is
 a different kind of value and is refused rather than quietly reinterpreted.
+
+The name has to be one the engine reads as a plain word. A name it already
+reads as something else, a unit (`kg`), a keyword (`in`) or a built-in function
+(`sqrt`), could never become the call, so registering it is refused with
+`PLUGIN_CALL_FUSION_UNREACHABLE`. `createEngine` logs the refusal and carries on
+without that function. A name another package already uses as a call word, such
+as `md5`, is allowed: the engine warns, the later registration is in force, and
+unregistering it hands the word back.
 
 Anything past that keeps using the full contract below, unchanged:
 

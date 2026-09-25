@@ -7,11 +7,6 @@ import { executeBytecode } from "@solve-js/vm/VM";
 import type { VM } from "@solve-js/vm/OpRegistry";
 import type { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { normalizeUnknownError } from "@solve-js/errors/EngineError";
-import {
-	ExecutionPool,
-	WORKER_OFFLOAD_THRESHOLD,
-	reconstructValue,
-} from "@solve-js/engine/ExecutionPool";
 
 // ── Event types ────────────────────────────────────────────────────────
 
@@ -99,19 +94,6 @@ export class AsyncResolutionBatcher {
 	private lineCache: LineCache;
 	private vm: VM;
 
-	/**
-	 * Worker pool for offloading VM re-execution when the affected line
-	 * count exceeds WORKER_OFFLOAD_THRESHOLD (50). Lazily created on
-	 * first dispatch; cleared on clearAll().
-	 */
-	private executionPool: ExecutionPool | null = null;
-
-	/**
-	 * Number of flushes actually dispatched to the worker pool (as opposed
-	 * to falling back to the main thread because Worker is unavailable).
-	 * Exposed via {@link workerOffloadCount} for the Workers diagnostic tab.
-	 */
-	private workerOffloadDispatchCount = 0;
 
 	// ── Web Streams API integration ──────────────────────────────────
 
@@ -412,9 +394,18 @@ export class AsyncResolutionBatcher {
 		return this._eventStream?.locked ? 1 : 0;
 	}
 
-	/** Number of flushes that were actually dispatched to the worker pool. */
+	/**
+	 * Number of flushes dispatched to a worker pool: always 0.
+	 *
+	 * A re-run of more than fifty lines used to go to the internal execution
+	 * pool, whose workers run each line in a bare VM with no variables, no
+	 * packages and no line context, so `price * qty` came back as "Undefined
+	 * variable: price" once a refresh touched enough lines (#661). Every re-run
+	 * is on the main thread now. Kept so the Workers diagnostic tab and
+	 * {@link BatcherMetrics} keep their shape.
+	 */
 	get workerOffloadCount(): number {
-		return this.workerOffloadDispatchCount;
+		return 0;
 	}
 
 	/** Remove all listeners and cancel pending batch. Called on engine clear. */
@@ -443,12 +434,6 @@ export class AsyncResolutionBatcher {
 		// used again does not pay for a stream on the way out.
 		this._eventStream = null;
 
-		if (this.executionPool) {
-			this.executionPool.clear();
-			this.executionPool = null;
-		}
-
-		this.workerOffloadDispatchCount = 0;
 	}
 
 	// ── Private: flush ────────────────────────────────────────────────
@@ -570,28 +555,10 @@ export class AsyncResolutionBatcher {
 		// on the subgraph of affected lines.
 		const ordered = this.topologicalSort(Array.from(allAffected));
 
-		// Step 4: Re-execute all affected lines.
-		// For ≤50 lines: main-thread synchronous loop (fast, no worker overhead).
-		// For >50 lines: offload to worker pool to avoid UI freeze.
-		if (ordered.length > WORKER_OFFLOAD_THRESHOLD) {
-			// Build a Map for fast entry lookup in the worker dispatch path.
-			const entryMap = new Map<number, ReturnType<LineCache["getEntryForLine"]>>();
-			for (const lineNumber of ordered) {
-				entryMap.set(lineNumber, this.lineCache.getEntryForLine(lineNumber));
-			}
-			// .catch() is required, not optional: reExecuteViaWorkerPool() is an
-			// async method dispatched with `void` (fire-and-forget), without a
-			// handler here, a rejection (a worker crash, `executionPool.executeBatch`
-			// throwing) becomes an unhandled promise rejection, the async
-			// equivalent of the uncaught-exception risk `add()`'s queueMicrotask
-			// backstop guards against for the synchronous path.
-			void this.reExecuteViaWorkerPool(ordered, entryMap, allQueryKeys).catch((e) => {
-				const engineError = normalizeUnknownError(e);
-				console.error(`[AsyncResolutionBatcher] reExecuteViaWorkerPool() failed unexpectedly: ${engineError.format()}`);
-			});
-			return;
-		}
-
+		// Step 4: Re-execute all affected lines, on the main thread whatever the
+		// count. A batch past fifty lines used to go to the internal execution
+		// pool, whose workers hold none of the document's variables or packages,
+		// so every line that read a name failed there (#661).
 		this.reExecuteMainThread(ordered, allQueryKeys);
 	}
 
@@ -684,89 +651,13 @@ export class AsyncResolutionBatcher {
 		return ordered;
 	}
 
-	// ── Private: worker-pool re-execution ─────────────────────────────
-
-	/**
-	 * Offload VM re-execution to the worker pool for large batches.
-	 *
-	 * Called when ordered.length > WORKER_OFFLOAD_THRESHOLD (50).
-	 * Clones bytecode ArrayBuffers, dispatches to workers, and asynchronously
-	 * patches results back into LineCache before notifying listeners.
-	 *
-	 * Handles pending results: lines that return { type: 'pending' } from the
-	 * worker are NOT marked as updated, the engine's resolveAsync will handle
-	 * them when the async resolver completes.
-	 *
-	 * Safety: checks this.cleared before applying results, if the engine was
-	 * cleared while the worker batch was in-flight, results are discarded.
-	 */
-	private async reExecuteViaWorkerPool(
-		ordered: number[],
-		entryMap: Map<number, ReturnType<LineCache["getEntryForLine"]>>,
-		allQueryKeys: string[],
-	): Promise<void> {
-		// Lazily create the pool on first use.
-		if (!this.executionPool) {
-			this.executionPool = new ExecutionPool();
-		}
-
-		const results = this.executionPool.executeBatch(ordered, entryMap);
-
-		// If workers are unavailable (Node.js, SSR, test env without jsdom
-		// worker support), executeBatch returns undefined. Fall back to
-		// main-thread execution.
-		if (!results) {
-			this.reExecuteMainThread(ordered, allQueryKeys, entryMap);
-			return;
-		}
-
-		this.workerOffloadDispatchCount++;
-
-		// Await worker results.
-		const workerResults = await results;
-
-		// Guard: if engine was cleared while the worker batch was in-flight,
-		// discard results, the LineCache/DAG are stale.
-		if (this.cleared) return;
-
-		// Patch results back into LineCache.
-		const updatedLineNumbers: number[] = [];
-		for (const wr of workerResults) {
-			const entry = entryMap.get(wr.lineNumber);
-			if (!entry) continue;
-
-			if (wr.isPending) {
-				// Don't mark as updated, will be resolved in a future batch.
-				continue;
-			}
-
-			// Reconstruct Value from serialized result.
-			const value = reconstructValue(wr);
-			entry.result = value;
-			this.warnIfUnwired();
-			this.onLineResult?.(wr.lineNumber, value);
-			updatedLineNumbers.push(wr.lineNumber);
-		}
-
-		// Notify listeners (only if not cleared during await).
-		if (this.cleared) return;
-		if (updatedLineNumbers.length > 0 || allQueryKeys.length > 0) {
-			this.notifyListeners({
-				type: "lines-updated",
-				lineNumbers: updatedLineNumbers,
-				affectedQueryKeys: allQueryKeys,
-			});
-		}
-	}
-
 	// ── Private: main-thread re-execution ────────────────────────────
 
 	/**
 	 * Execute ordered lines on the main thread, update LineCache, and notify
 	 * listeners. Returns the list of line numbers that actually changed.
 	 *
-	 * Used by both flush() (≤50 lines) and reExecuteViaWorkerPool() (fallback
-	 * when workers are unavailable). Extracted to avoid code duplication.
+	 * Every flush() re-runs its lines here, however many there are (#661).
 	 *
 	 * **Per-line containment (fatal-bug fix)**: `executeBytecode()` used to
 	 * run here with NO try/catch anywhere in this method's call chain, and

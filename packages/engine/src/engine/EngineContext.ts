@@ -28,6 +28,7 @@ import { OpRegistry } from "@solve-js/vm/OpRegistry";
 import { FrozenValueStore } from "@solve-js/vm/FrozenValues";
 import { mintScope, type ScopeId } from "@solve-js/vm/CellScope";
 import { resolveCalendar, type CalendarOption } from "@solve-js/calendar/resolveCalendar";
+import { PluginCallCache } from "@solve-js/vm/PluginCallCache";
 
 /**
  * A function a package contributes to the VM, reachable from bytecode through
@@ -95,6 +96,14 @@ export interface EngineContext {
 	 * nowhere.
 	 */
 	readonly pluginFunctionOwners: Record<number, string>;
+
+	/**
+	 * What each asynchronous plugin call settled to, or the promise still in
+	 * flight, keyed by the function's index and its arguments. The VM answers a
+	 * re-execution from it rather than calling the handler again (#660); see
+	 * {@link PluginCallCache}.
+	 */
+	readonly pluginCalls: PluginCallCache;
 
 	/**
 	 * Whether this engine may fetch live data, from `network.enabled` in the
@@ -167,6 +176,7 @@ export function createEngineContext(options: EngineContextOptions = {}): EngineC
 		pluginFunctions: {},
 		opRegistry: new OpRegistry(),
 		pluginFunctionOwners: {},
+		pluginCalls: new PluginCallCache(),
 		networkEnabled: options.networkEnabled ?? true,
 		calendar: resolveCalendar(options.calendar),
 		scope: mintScope(),

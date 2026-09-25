@@ -50,6 +50,7 @@ export type CompatibilityConflictKind =
   | "converterName"
   | "pluginFunctionName"
   | "lexerKeyword"
+  | "callFusionName"
   | "lexerOperator"
   | "asyncResolverNamespace"
   | "tokenCategory"
@@ -198,6 +199,23 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
       }
     }
   }
+  // Call words (callFusions): the engine keeps every claim and the newest is in
+  // force, so a second package naming the same word for a different token takes
+  // the call over, and unregistering it hands the word back (#659). A warning,
+  // since a host adding its own `md5(` may mean it.
+  if (existingPkg.callFusions && candidate.callFusions) {
+    for (const [word, tokenType] of Object.entries(candidate.callFusions)) {
+      const existingTokenType = existingPkg.callFusions[word];
+      if (existingTokenType !== undefined && existingTokenType !== tokenType) {
+        conflicts.push({
+          kind: "callFusionName",
+          severity: "warning",
+          detail: `Both "${existingPkg.name}" (-> "${existingTokenType}") and "${candidate.name}" (-> "${tokenType}") declare the call word "${word}(", so the later registration is in force, and unregistering it hands the word back.`,
+          packages: [existingPkg.name, candidate.name],
+        });
+      }
+    }
+  }
   if (existingVocab?.operators && candidateVocab?.operators) {
     for (const [op, tokenType] of Object.entries(candidateVocab.operators)) {
       const existingTokenType = existingVocab.operators[op];
@@ -289,7 +307,7 @@ export function checkPackageCompatibility(
  * The engine builds one of these across construction. For each candidate it
  * gathers only the already-registered packages that share at least one
  * collision-capable key (a parselet token type, a phrase, a converter name, a
- * plugin-function name, a normalizer-rule name, a lexer keyword or operator, an
+ * plugin-function name, a normalizer-rule name, a lexer keyword, call word or operator, an
  * async-resolver namespace, or a token-category token type), then runs the
  * unchanged {@link checkOnePackagePair} against exactly those. A package that
  * shares no key with the candidate can produce no conflict, so skipping it is
@@ -304,6 +322,7 @@ export class PackageCompatibilityIndex {
   private readonly pluginFnOwners = new Map<string, IEnginePackage>();
   private readonly ruleOwners = new Map<string, IEnginePackage>();
   private readonly keywordOwners = new Map<string, IEnginePackage>();
+  private readonly callFusionOwners = new Map<string, IEnginePackage>();
   private readonly operatorOwners = new Map<string, IEnginePackage>();
   private readonly resolverOwners = new Map<string, IEnginePackage>();
   private readonly categoryOwners = new Map<string, IEnginePackage>();
@@ -325,6 +344,7 @@ export class PackageCompatibilityIndex {
     if (candidate.pluginFunctions) for (const k of Object.keys(candidate.pluginFunctions)) gather(this.pluginFnOwners, k);
     if (candidate.normalizerRules) for (const r of candidate.normalizerRules) gather(this.ruleOwners, r.name);
     if (candidate.lexerVocabulary?.keywords) for (const k of Object.keys(candidate.lexerVocabulary.keywords)) gather(this.keywordOwners, k);
+    if (candidate.callFusions) for (const k of Object.keys(candidate.callFusions)) gather(this.callFusionOwners, k);
     if (candidate.lexerVocabulary?.operators) for (const k of Object.keys(candidate.lexerVocabulary.operators)) gather(this.operatorOwners, k);
     if (candidate.asyncResolvers) for (const r of candidate.asyncResolvers) gather(this.resolverOwners, r.namespace);
     if (candidate.tokenCategories) for (const k of Object.keys(candidate.tokenCategories)) gather(this.categoryOwners, k);
@@ -346,6 +366,7 @@ export class PackageCompatibilityIndex {
     if (pkg.pluginFunctions) for (const k of Object.keys(pkg.pluginFunctions)) claim(this.pluginFnOwners, k);
     if (pkg.normalizerRules) for (const r of pkg.normalizerRules) claim(this.ruleOwners, r.name);
     if (pkg.lexerVocabulary?.keywords) for (const k of Object.keys(pkg.lexerVocabulary.keywords)) claim(this.keywordOwners, k);
+    if (pkg.callFusions) for (const k of Object.keys(pkg.callFusions)) claim(this.callFusionOwners, k);
     if (pkg.lexerVocabulary?.operators) for (const k of Object.keys(pkg.lexerVocabulary.operators)) claim(this.operatorOwners, k);
     if (pkg.asyncResolvers) for (const r of pkg.asyncResolvers) claim(this.resolverOwners, r.namespace);
     if (pkg.tokenCategories) for (const k of Object.keys(pkg.tokenCategories)) claim(this.categoryOwners, k);
@@ -355,7 +376,7 @@ export class PackageCompatibilityIndex {
   rebuild(pkgs: Iterable<IEnginePackage>): void {
     for (const m of [
       this.prefixOwners, this.infixOwners, this.phraseOwners, this.converterOwners,
-      this.pluginFnOwners, this.ruleOwners, this.keywordOwners, this.operatorOwners,
+      this.pluginFnOwners, this.ruleOwners, this.keywordOwners, this.callFusionOwners, this.operatorOwners,
       this.resolverOwners, this.categoryOwners,
     ]) m.clear();
     for (const pkg of pkgs) this.add(pkg);

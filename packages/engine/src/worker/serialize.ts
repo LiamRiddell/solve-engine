@@ -71,6 +71,9 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 	}
 
 	if (value.unit !== undefined) dto.unit = value.unit;
+	// An error keeps its code in `value`, which no other field carries, so a
+	// host on the far side of the boundary could branch only on the message.
+	if (value.type === ValueType.Error) dto.errorCode = value.value as string;
 	if (value.timedOut !== undefined) dto.timedOut = value.timedOut;
 	// The two datetime sidecars cross as themselves: both are plain JSON
 	// scalars, so the clone guarantee is untouched, and a worker result that

@@ -27,6 +27,13 @@ export interface CompileRequestItem {
 	lineId: number;
 	expression: string;
 	textHash: number;
+	/**
+	 * The line's text when the compile was dispatched. Kept on the main thread,
+	 * not sent, and compared when the result arrives: two texts can share a hash,
+	 * so the hash alone could store bytecode compiled for text the line no longer
+	 * has (#664).
+	 */
+	text?: string;
 }
 
 /** Compiled bytecode returned from a worker, or the error that stopped it. */
@@ -34,6 +41,8 @@ export interface CompileResponseItem {
 	lineId: number;
 	/** Hash of the expression text when the compile was dispatched (for safety validation). */
 	compiledAgainstHash: number;
+	/** The line's text when the compile was dispatched, when the request carried it (see {@link CompileRequestItem.text}). */
+	compiledAgainstText?: string;
 	program: BytecodeProgram;
 	reads: string[];
 	writes: string[];
@@ -74,6 +83,8 @@ export class CompilationWorkerManager {
 		{
 			resolve: (results: CompileResponseItem[]) => void;
 			reject: (error: Error) => void;
+			/** Each line's text at dispatch, by lineId, to check the results against. */
+			texts: Map<number, string>;
 		}
 	>();
 
@@ -109,7 +120,10 @@ export class CompilationWorkerManager {
 
 			const results: CompileResponseItem[] = [];
 			for (const raw of data.results as WorkerCompileResult[]) {
-				results.push(this.reconstructResult(raw));
+				const result = this.reconstructResult(raw);
+				const text = pending.texts.get(raw.lineId);
+				if (text !== undefined) result.compiledAgainstText = text;
+				results.push(result);
 			}
 			pending.resolve(results);
 		};
@@ -145,13 +159,18 @@ export class CompilationWorkerManager {
 		const worker = this.ensureWorker();
 		const id = this.nextId++;
 
+		// The text stays here: the worker compiles the expression, and the text
+		// is what the result is checked against when it comes back.
+		const texts = new Map<number, string>();
+		for (const item of items) if (item.text !== undefined) texts.set(item.lineId, item.text);
+
 		return new Promise<CompileResponseItem[]>((resolve, reject) => {
-			this.pending.set(id, { resolve, reject });
+			this.pending.set(id, { resolve, reject, texts });
 
 			worker.postMessage({
 				type: "COMPILE_BATCH",
 				id,
-				items,
+				items: items.map(({ lineId, expression, textHash }) => ({ lineId, expression, textHash })),
 			});
 		});
 	}
@@ -194,8 +213,10 @@ export class CompilationWorkerManager {
 			const state = doc.getLineById(result.lineId);
 			if (!state) continue;
 
-			// Validate that the line text hasn't changed since dispatch.
+			// Validate that the line text hasn't changed since dispatch: the hash
+			// first, then the text itself, since two texts can share a hash (#664).
 			if (state.textHash !== result.compiledAgainstHash) continue;
+			if (result.compiledAgainstText !== undefined && state.text !== result.compiledAgainstText) continue;
 
 			// Batch by lineId
 			let batch = byLineId.get(result.lineId);

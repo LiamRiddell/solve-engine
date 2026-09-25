@@ -12,6 +12,7 @@ import {
   boolValue,
 } from "@solve-js/vm/Value";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import type { CompletionItem } from "@solve-js/language/LanguageService";
 
 /**
  * A higher-level, declarative way to contribute a single `name(args)`
@@ -62,9 +63,12 @@ export interface FunctionSpec<
   R extends FunctionValueType = FunctionValueType,
 > {
   /**
-   * The call name, a single identifier (`/^[a-z_][a-z0-9_]*$/i`). Registered
-   * as a lexer keyword, so it is matched case-insensitively and cannot collide
-   * with a built-in keyword (that collision throws at registration time).
+   * The call name, a single identifier (`/^[a-z_][a-z0-9_]*$/i`). It becomes
+   * the call only where `(` follows it, matched case-insensitively, and stays
+   * an ordinary word everywhere else, so `:price = 5` and a `price:` label
+   * keep working beside `price(10)`. A name the engine already reads as
+   * something else (a keyword, a built-in function, a unit) could never become
+   * the call, so registering it throws `PLUGIN_CALL_FUSION_UNREACHABLE`.
    */
   name: string;
   /** The parameters, in order. A fixed-length list: variadic and optional args are out of scope (see {@link defineFunction}). */
@@ -92,6 +96,25 @@ export const DefineFunctionErrorCodes = {
   /** The `call` implementation returned a value that did not match `returns`. Raised at evaluation time, an authoring bug rather than a user one. */
   DEFINE_FUNCTION_RETURN_TYPE: "DEFINE_FUNCTION_RETURN_TYPE",
 } as const;
+
+/**
+ * The prefix a declared function's plugin-function name carries. Plugin-function
+ * names are engine-wide and the built-in packages use plain words (the tags
+ * package's `sum`), so a function called `sum` would have taken over `total of
+ * #a` (#659). The prefix is internal: an explain hook sees the declared name
+ * (see {@link declaredFunctionName}).
+ */
+export const DEFINED_FUNCTION_PREFIX = "define:";
+
+/**
+ * The name a package author declared, from a plugin-function name: a declared
+ * function's without its {@link DEFINED_FUNCTION_PREFIX}, any other unchanged.
+ *
+ * @param pluginName - The name the function is registered under.
+ */
+export function declaredFunctionName(pluginName: string): string {
+  return pluginName.startsWith(DEFINED_FUNCTION_PREFIX) ? pluginName.slice(DEFINED_FUNCTION_PREFIX.length) : pluginName;
+}
 
 /** A single identifier: a letter or underscore, then letters, digits, or underscores. */
 const NAME_PATTERN = /^[a-z_][a-z0-9_]*$/i;
@@ -218,7 +241,7 @@ class DefinedFunctionParselet implements PrefixParselet {
   readonly category = "Function";
 
   constructor(
-    private readonly fnName: string,
+    private readonly pluginName: string,
   ) {}
 
   parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
@@ -236,7 +259,7 @@ class DefinedFunctionParselet implements PrefixParselet {
 
     parser.consume("RPAREN");
 
-    builder.emitPluginCall(this.fnName, argCount);
+    builder.emitPluginCall(this.pluginName, argCount);
   }
 }
 
@@ -272,6 +295,12 @@ function makeHandler(spec: FunctionSpec): (args: Value[]) => Value {
     const result = (spec.call as (...a: (number | string | boolean)[]) => unknown)(...jsArgs);
     return wrapReturn(result, spec.returns, spec.name);
   };
+}
+
+/** The completion entry for a declared function: its name, and the signature as the detail. */
+function completionItem(spec: FunctionSpec): CompletionItem {
+  const params = spec.args.map((arg) => `${arg.name}: ${arg.type}`).join(", ");
+  return { label: spec.name, category: "function", detail: `${spec.name}(${params}): ${spec.returns}` };
 }
 
 /** Reject a spec that could not produce a working function, before any engine sees it. */
@@ -332,8 +361,10 @@ function validateSpec(spec: FunctionSpec): void {
  * This is the higher-level API from issue #102. It derives, from the
  * declaration alone, everything the low-level contract asks an author to write
  * by hand: a named plugin function (the engine assigns its `CALL_PLUGIN`
- * index), a lexer keyword so the name tokenises, a call-syntax parselet emitting
- * that call by name, and a handler that checks arity and argument types (yielding
+ * index), a call word that becomes the call only where `(` follows it (the
+ * built-in `sha256(` shape, through `callFusions`), a call-syntax parselet
+ * emitting that call by name, a `function` highlight and a completion entry
+ * carrying the signature, and a handler that checks arity and argument types (yielding
  * the engine's own structured errors) before invoking `call` and wrapping its
  * result. Anything needing custom parsing keeps writing a raw parselet exactly
  * as before, this sits on top of that contract and does not change it.
@@ -376,19 +407,25 @@ export function defineFunction<
   // type; the name pattern guarantees it forms one. Distinct from the
   // built-in FUNC type, so this never routes through the builtin name map.
   const tokenType = `DEFINE_FN_${name.toUpperCase()}`;
+  // Prefixed so it cannot be a built-in's plugin-function name; see
+  // DEFINED_FUNCTION_PREFIX.
+  const pluginName = `${DEFINED_FUNCTION_PREFIX}${name}`;
 
   return {
     name: `solve-fn-${name}`,
-    lexerVocabulary: {
-      // Lowercased because the lexer lowercases input before lookup, so the
-      // call is matched case-insensitively.
-      keywords: { [name.toLowerCase()]: tokenType },
-    },
+    // A call word, not a keyword (#659). A keyword claimed the name on every
+    // line, so `:price = 5`, `price * 2` and a `price:` label stopped parsing
+    // once `price` was defined. A fusion fires only where `(` follows and never
+    // after `:`, the way the built-in `sha256(` works. Lower-cased because the
+    // engine matches call words case-insensitively.
+    callFusions: { [name.toLowerCase()]: tokenType },
+    tokenCategories: { [tokenType]: "function" },
+    completionItems: [completionItem(spec as FunctionSpec)],
     prefixParselets: {
-      [tokenType]: new DefinedFunctionParselet(name),
+      [tokenType]: new DefinedFunctionParselet(pluginName),
     },
     pluginFunctions: {
-      [name]: makeHandler(spec as FunctionSpec),
+      [pluginName]: makeHandler(spec as FunctionSpec),
     },
   };
 }

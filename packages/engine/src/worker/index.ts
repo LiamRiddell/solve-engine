@@ -29,7 +29,7 @@ export {
 	eventTargetTransport,
 	messagePortTransport,
 } from "./transport";
-export type { WorkerTransport } from "./transport";
+export type { WorkerTransport, EventTargetLike, MessagePortLike } from "./transport";
 
 export {
 	serializeValue,

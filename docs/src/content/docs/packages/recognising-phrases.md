@@ -83,8 +83,16 @@ function) and the original text as its raw value; a matching `prefixParselet` on
 the token type does the actual call parsing (see
 [Functions and operators](/packages/functions-and-operators/)). The `:name = ...`
 variable case is handled for you: a word after a `:` is left alone.
-Two packages may declare the same word; the one registered last is in force, and
-unregistering it hands the word back to the other.
+Two packages may declare the same word for different token types; the engine
+warns (the `callFusionName` compatibility conflict), the one registered last is
+in force, and unregistering it hands the word back to the other.
+
+The word has to reach the rule as a plain word. One the lexer already reads as
+something else, a unit, a keyword or a built-in function, never does, so its
+call could never fire; registering it throws `PLUGIN_CALL_FUSION_UNREACHABLE`
+and the package is not registered. The check reads the lexer as it stands when
+the package registers, so a unit or keyword a later package adds under the same
+word is not caught.
 
 The boundary is deliberately narrow. `callFusions` is only the plain `word (`
 shape with that one `:` guard. If your rule needs a different lookbehind, a deeper

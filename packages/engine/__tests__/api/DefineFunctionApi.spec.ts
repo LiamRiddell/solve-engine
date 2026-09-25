@@ -158,8 +158,8 @@ describe("defineFunction: the declared function evaluates", () => {
       }),
     );
 
-    // The lexer lowercases before keyword lookup, so casing at the call site
-    // does not matter.
+    // The call word is matched on its lower-cased text, so casing at the call
+    // site does not matter (#659).
     expect(evaluate(engine, "VAT(100)").toNumber()).toBeCloseTo(120, 10);
   });
 });

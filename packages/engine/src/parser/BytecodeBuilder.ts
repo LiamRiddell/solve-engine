@@ -68,8 +68,8 @@ export interface BytecodeProgram {
 	 * index bytes start in {@link opcodes}. A plugin function's index depends on
 	 * which packages are registered and in what order, so anything that must
 	 * identify a program across engines (the seeded random key, see
-	 * engine/SeededRandom.ts) reads the names instead. Absent when the program
-	 * calls none, and on a program restored from a snapshot.
+	 * engine/SeededRandom.ts) and a snapshot restore (#658) read the names
+	 * instead. Absent when the program calls none.
 	 */
 	pluginCalls?: { at: number[]; names: string[] };
 	/**

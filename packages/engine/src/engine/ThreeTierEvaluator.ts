@@ -2061,6 +2061,7 @@ export class ThreeTierEvaluator {
 					lineId: state.lineId,
 					expression,
 					textHash: state.textHash,
+					text: state.text,
 				});
 			}
 		}

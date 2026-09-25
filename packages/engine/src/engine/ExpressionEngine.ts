@@ -1,5 +1,6 @@
 //#region Imports
 
+import { declaredFunctionName } from "@solve-js/api/defineFunction";
 import { VM, type EquationDef, type ScalarEquationDef } from "@solve-js/vm/OpRegistry";
 import { matrixMultiply, inverse } from "@solve-js/vm/MatrixOps";
 import { DependencyGraph, isPrefixedEdgeKey } from "@solve-js/vm/DependencyGraph";
@@ -39,9 +40,13 @@ import {
     serializeValue,
     deserializeValue,
     serializeBytecode,
-    deserializeBytecode,
     serializeUserFunction,
-    deserializeUserFunction,
+    namesEveryPluginCall,
+    assertPluginCallsLinkable,
+    restoreBytecode,
+    type PluginCallNamer,
+    type PluginCallLinker,
+    type SerializedPluginCall,
     serializeFrozenRecord,
     deserializeFrozenRecord,
     type EngineSnapshot,
@@ -55,6 +60,7 @@ import { QueryClient } from "@tanstack/query-core";
 import { createQueryClient, setActiveQueryClient, getActiveQueryClient } from "@solve-js/services/DataQueryService";
 import { memberTagsOf, withTagEdges } from "@solve-js/packages/tags/TagScanner";
 import { ErrorFactory, EngineError, normalizeUnknownError } from "@solve-js/errors/UnifiedErrorFramework";
+import type { SourceSpan } from "@solve-js/errors/EngineError";
 import { countLines } from "@solve-js/utilities/Strings";
 import {
 	ResolverRegistry,
@@ -387,6 +393,83 @@ export interface ExpressionTokens {
 	 * null otherwise.
 	 */
 	readonly unit: DocumentUnit | null;
+}
+
+
+/** Where an expression began: the first token's offset, line and column. */
+interface SpanBase {
+    readonly offset: number;
+    readonly line: number;
+    readonly col: number;
+}
+
+/** A remembered parse failure: see ExpressionEngine's `failedParses`. */
+interface FailedParse {
+    error: EngineError;
+    normalizedTokens: Token[];
+    reads: string[];
+    writes: string[];
+    /** Where the expression began when it failed, so a replay can move the span. */
+    base: SpanBase | null;
+    /**
+     * The span as it was when the text failed, copied: the error itself is
+     * handed to the caller, which may change it.
+     */
+    span: SourceSpan | undefined;
+}
+
+/**
+ * Where a standalone expression begins. A replay of a remembered failure is not
+ * lexed again (lexToTokens skips it), so its token list is empty, and an empty
+ * list only reaches a replay from the standalone entry points, whose lexer
+ * starts here.
+ */
+const STANDALONE_BASE: SpanBase = { offset: 0, line: 1, col: 1 };
+
+/** Where an expression's tokens begin, or null when it has none. */
+function spanBaseOf(tokens: readonly Token[]): SpanBase | null {
+    const first = tokens[0];
+    return first === undefined ? null : { offset: first.offset, line: first.line, col: first.col };
+}
+
+/**
+ * A remembered parse failure given back for a new evaluation of the same text:
+ * a new error, its span moved from where the text failed first to where it is
+ * now (#663).
+ *
+ * The cache kept the error first thrown, span included, so `3 + * 4` failed
+ * standalone after a document had held it reported the document's line 4 and
+ * offset 22 rather than line 1, column 5. The span is kept relative to the
+ * expression's first token and rebased onto the current one; a caller that
+ * mutates the error it is given cannot change the next replay, since each gets
+ * its own.
+ *
+ * @param failure - The remembered failure.
+ * @param base - Where the expression begins in this evaluation.
+ */
+function replayedParseError(failure: FailedParse, base: SpanBase | null): EngineError {
+    const { error, span } = failure;
+    let rebased = span;
+    if (span !== undefined && failure.base !== null && base !== null) {
+        const lineShift = (span.line ?? failure.base.line) - failure.base.line;
+        rebased = {
+            start: span.start - failure.base.offset + base.offset,
+            end: span.end - failure.base.offset + base.offset,
+            ...(span.line !== undefined ? { line: base.line + lineShift } : {}),
+            ...(span.col !== undefined ? { col: lineShift === 0 ? span.col - failure.base.col + base.col : span.col } : {}),
+        };
+    }
+    return new EngineError(error.category, {
+        code: error.code,
+        message: error.message,
+        expected: error.expected,
+        found: error.found,
+        suggestion: error.suggestion,
+        recoverable: error.recoverable,
+        span: rebased,
+        context: error.context,
+        cause: error.cause,
+    });
 }
 
 /**
@@ -1433,6 +1516,23 @@ export class ExpressionEngine {
     }
 
     /**
+     * What the lexer reads a package's call word as, or null when it is a plain
+     * word the call-fusion rule can fuse. Registration refuses a word that is
+     * not (#659): a unit, a keyword or a built-in function never reaches the
+     * rule, so its call would never fire.
+     */
+    private callWordReadAs(name: string): string | null {
+        this.lexer.resetExpression(name);
+        const tokens = Array.from(this.lexer);
+        if (tokens.length === 1 && tokens[0].type === "IDENT") return null;
+        if (tokens.length !== 1) return "more than one word";
+        const type = tokens[0].type;
+        if (type === "UNIT") return "a unit";
+        if (type === "FUNC") return "a built-in function";
+        return `the keyword ${type}`;
+    }
+
+    /**
      * A line's tokens for the what-if checks, or none when the line does not
      * tokenise (an unterminated string, say). Those checks read other lines
      * than the one asking, and a line that cannot be read has no name in it and
@@ -1694,13 +1794,13 @@ export class ExpressionEngine {
      * only after the effectful-grammar tries, which still run because they
      * read the VM (a stored equation, a running total), so nothing that
      * depends on document state is skipped: only the pure front half and the
-     * parse that is known to fail. The error object is the one first thrown,
-     * so its timestamp is the first failure's. Cleared with the compiled
+     * parse that is known to fail. A replay gets a new error with its span moved
+     * to where the text is now (see replayedParseError, #663). Cleared with the compiled
      * caches, because the vocabulary and parselet changes that would change
      * a program can change whether a line parses at all. Bounded by the same
      * `defaultCacheSize` as the programs.
      */
-    private failedParses: Map<string, { error: EngineError; normalizedTokens: Token[]; reads: string[]; writes: string[] }> = new Map();
+    private failedParses: Map<string, FailedParse> = new Map();
 
     /** Whether `expression` can be answered without lexing or normalising: both compiled caches hold it, or its parse is known to fail. */
     private frontHalfCached(expression: string): boolean {
@@ -1777,7 +1877,7 @@ export class ExpressionEngine {
     }
 
     /** Remember a parse failure, evicting the least recently used when full: bounded like the program cache. */
-    private rememberFailedParse(expression: string, failure: { error: EngineError; normalizedTokens: Token[]; reads: string[]; writes: string[] }): void {
+    private rememberFailedParse(expression: string, failure: FailedParse): void {
         if (this.failedParses.size >= this.config.performance.defaultCacheSize) {
             const leastRecent = this.failedParses.keys().next().value;
             if (leastRecent !== undefined) this.failedParses.delete(leastRecent);
@@ -1786,7 +1886,7 @@ export class ExpressionEngine {
     }
 
     /** Mark a remembered parse failure as just used; the same move, and the same guard, as {@link touchCompiled}. */
-    private touchFailedParse(expression: string, failure: { error: EngineError; normalizedTokens: Token[]; reads: string[]; writes: string[] }): void {
+    private touchFailedParse(expression: string, failure: FailedParse): void {
         if (this.failedParses.size < this.config.performance.defaultCacheSize) return;
         this.failedParses.delete(expression);
         this.failedParses.set(expression, failure);
@@ -1796,6 +1896,12 @@ export class ExpressionEngine {
     // reference with every BytecodeBuilder and the parser so a parselet emits a
     // plugin call by name (builder.emitPluginCall) and never sees the index.
     private pluginFunctionIndexByName = new Map<string, number>();
+    // Which packages claim each plugin-function name, in registration order. The
+    // newest claim is the one pluginFunctionIndexByName holds; unregistering a
+    // package hands the name back to the previous claimant. Deleting the name
+    // outright left the other package's calls unresolvable (#659: a function
+    // named `sum` added and removed again broke `total of #a`).
+    private pluginFunctionClaims = new Map<string, Array<{ pkg: string; index: number }>>();
     // Pre-allocated BytecodeBuilder pool
     private builderPool: BytecodeBuilder[] = [
         new BytecodeBuilder(this.pluginFunctionIndexByName),
@@ -2295,6 +2401,22 @@ export class ExpressionEngine {
         // catches per-package so one bad package can't take down engine
         // construction, see that loop's own comment) sees a package that
         // registered NOTHING, not a partially-registered one.
+        if (pkg.callFusions) {
+            // The fusion rule reads a plain word. A call word the lexer already
+            // reads as a keyword, a built-in function or a unit never reaches
+            // it, so the call would register and never fire (#659). Refused
+            // here, before anything is written, like a keyword collision.
+            for (const name of Object.keys(pkg.callFusions)) {
+                const readAs = this.callWordReadAs(name);
+                if (readAs !== null) {
+                    throw ErrorFactory.config({
+                        code: "PLUGIN_CALL_FUSION_UNREACHABLE",
+                        message: `Package "${pkg.name}" declares the call word "${name}", but the engine already reads "${name}" as ${readAs}, so "${name}(" could never become the call. Choose another name.`,
+                        context: { package: pkg.name, word: name, readAs },
+                    });
+                }
+            }
+        }
         if (pkg.lexerVocabulary) {
             this.lexer.registerVocabulary(pkg.lexerVocabulary);
         }
@@ -2316,6 +2438,9 @@ export class ExpressionEngine {
                 this.context.pluginFunctions[index] = handler;
                 this.context.pluginFunctionOwners[index] = pkg.name;
                 this.pluginFunctionIndexByName.set(name, index);
+                const claims = this.pluginFunctionClaims.get(name);
+                if (claims) claims.push({ pkg: pkg.name, index });
+                else this.pluginFunctionClaims.set(name, [{ pkg: pkg.name, index }]);
                 contribution.pluginFunctionIndices.push(index);
                 contribution.pluginFunctionNames.push(name);
             }
@@ -2421,9 +2546,17 @@ export class ExpressionEngine {
         for (const index of contribution.pluginFunctionIndices) {
             delete this.context.pluginFunctions[index];
             delete this.context.pluginFunctionOwners[index];
+            this.context.pluginCalls.forget(index);
         }
         for (const name of contribution.pluginFunctionNames) {
-            this.pluginFunctionIndexByName.delete(name);
+            const remaining = (this.pluginFunctionClaims.get(name) ?? []).filter((claim) => claim.pkg !== packageName);
+            if (remaining.length === 0) {
+                this.pluginFunctionClaims.delete(name);
+                this.pluginFunctionIndexByName.delete(name);
+            } else {
+                this.pluginFunctionClaims.set(name, remaining);
+                this.pluginFunctionIndexByName.set(name, remaining[remaining.length - 1].index);
+            }
         }
         for (const namespace of contribution.resolverNamespaces) {
             this.resolverRegistry.unregister(namespace);
@@ -3019,7 +3152,9 @@ export class ExpressionEngine {
 
         try {
             // The resolved value is not needed here, only the fact that it
-            // settled: the batcher re-reads it from the cache on re-evaluation.
+            // settled: the batcher re-reads it from the cache on re-evaluation
+            // (the query cache, or for a plugin function's own promise the
+            // context's plugin-call cache, #660).
             await resolver;
             // A key that succeeds has no history worth keeping: an outage
             // followed by a recovery should not count towards a later one.
@@ -4337,7 +4472,7 @@ export class ExpressionEngine {
             return { kind: 'symbolic-solve', normalizedTokens, value: symbolicResult, reads: symbolicReadsWrites?.reads, writes: symbolicReadsWrites?.writes };
         }
         if (failed) {
-            return { kind: 'error', stage: 'parse', error: failed.error, reads: failed.reads, writes: failed.writes, normalizedTokens };
+            return { kind: 'error', stage: 'parse', error: replayedParseError(failed, spanBaseOf(tokens) ?? STANDALONE_BASE), reads: failed.reads, writes: failed.writes, normalizedTokens };
         }
 
         // ══ FROZEN SUFFIX ══
@@ -4353,7 +4488,7 @@ export class ExpressionEngine {
         } catch (e) {
             const error = normalizeUnknownError(e);
             const { reads, writes } = extractReadsAndWrites(normalizedTokens);
-            this.rememberFailedParse(expression, { error, normalizedTokens, reads, writes });
+            this.rememberFailedParse(expression, { error, normalizedTokens, reads, writes, base: spanBaseOf(tokens), span: error.span === undefined ? undefined : { ...error.span } });
             return { kind: 'error', stage: 'parse', error, reads, writes, normalizedTokens };
         }
 
@@ -4408,7 +4543,7 @@ export class ExpressionEngine {
             // learn what this line references and can re-evaluate it once
             // those variables become defined.
             const error = normalizeUnknownError(e);
-            this.rememberFailedParse(expression, { error, normalizedTokens, reads, writes });
+            this.rememberFailedParse(expression, { error, normalizedTokens, reads, writes, base: spanBaseOf(tokens), span: error.span === undefined ? undefined : { ...error.span } });
             return { kind: 'error', stage: 'parse', error, reads, writes, normalizedTokens };
         }
 
@@ -6114,7 +6249,9 @@ export class ExpressionEngine {
             const contribution = owner === undefined ? undefined : this.packageContributions.get(owner);
             if (contribution === undefined) return null;
             const at = contribution.pluginFunctionIndices.indexOf(observed.index);
-            const call: ExplainCall = { kind, name: contribution.pluginFunctionNames[at] ?? "", args, result };
+            // The name the package declared: a defineFunction package registers
+            // its function under a prefixed name (#659), which its hook never sees.
+            const call: ExplainCall = { kind, name: declaredFunctionName(contribution.pluginFunctionNames[at] ?? ""), args, result };
             owners.set(call, owner!);
             return call;
         }
@@ -6709,17 +6846,16 @@ export class ExpressionEngine {
      *   reads the same answer with no network.
      * - **Package-contributed state.** Core state only for v1; a package opt-in
      *   is a follow-up.
-     * - **Symbolic (algebra) values.** Deferred: a variable holding one makes
-     *   this method throw {@link SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE}
-     *   (refused by name rather than dropped silently), and a cached line whose
-     *   result is symbolic is skipped (it re-evaluates on restore, algebra is
-     *   synchronous).
+     * - **Values the format cannot hold yet.** A symbolic (algebra) result, a
+     *   colour, a bill split, a chart and an IP subnet: {@link serializeValue}
+     *   refuses each with {@link SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE},
+     *   and this method catches the refusal and leaves that variable or cached
+     *   line out rather than failing the whole snapshot. After `fromJSON` the
+     *   name is undefined until the host re-evaluates the document (#665).
      *
      * The result survives `JSON.stringify` then `JSON.parse` unchanged.
      *
      * @returns A snapshot safe to store and hand back to `fromJSON`.
-     * @throws {@link SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE} if a variable
-     *   holds a value this v1 format cannot represent (a symbolic value).
      */
     toJSON(): EngineSnapshot {
         // Async-backed lines: a line carries a DAG data-source dependency the
@@ -6741,6 +6877,14 @@ export class ExpressionEngine {
         // carried, matching the value the live VM actually holds.
         const lineEntries = this.lineCache.snapshotEntries();
         const latestWriter = new Map<string, { line: number; async: boolean }>();
+        // Each plugin call is written by the package and name behind its index,
+        // so a restore relinks it rather than trusting an index that means
+        // something else in another process (#658).
+        const named = new Map<number, SerializedPluginCall>();
+        for (const [name, claims] of this.pluginFunctionClaims) {
+            for (const claim of claims) named.set(claim.index, { pkg: claim.pkg, name });
+        }
+        const namer: PluginCallNamer = (index) => named.get(index);
         const frozenStore = this.context.frozenValues;
         for (const { line, entry } of lineEntries) {
             // A frozen line whose answer is stored is the opt-in exception: its
@@ -6772,11 +6916,12 @@ export class ExpressionEngine {
             try {
                 variables[name] = serializeValue(value, `variable "${name}"`);
             } catch (e) {
-                // A value kind this v1 format defers (a symbolic result, or a
-                // split/colour value held in a variable) is skipped rather than
+                // A value kind this v1 format defers (a symbolic result, a
+                // colour, a split, a chart, an IP subnet) is skipped rather than
                 // aborting the whole snapshot, exactly as the line cache below
-                // does. The variable re-establishes when its line re-evaluates
-                // on restore; only that one binding is left out of the snapshot.
+                // does. Only that one binding is left out; on the restored
+                // engine the name is undefined until the host re-evaluates the
+                // document, which defines it again.
                 if (e instanceof EngineError && e.code === SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE) continue;
                 throw e;
             }
@@ -6785,12 +6930,18 @@ export class ExpressionEngine {
         // A user-defined function body that calls an async plugin is refused at
         // definition time (FUNCTION_BODY_MUST_BE_SYNCHRONOUS), so every stored
         // function is pure compiled bytecode and safe to carry.
-        const userFunctions = this.vm.getUserFunctionDefs().map(serializeUserFunction);
+        // A function whose body calls an index no registered package holds
+        // could not be relinked anywhere, so it is left out, as is a cached line
+        // or program below that does the same.
+        const userFunctions = this.vm.getUserFunctionDefs()
+            .filter((fn) => namesEveryPluginCall(fn.program, namer))
+            .map((fn) => serializeUserFunction(fn, namer));
 
         const lineCache: SerializedLineCacheEntry[] = [];
         for (const { line, expression, entry } of lineEntries) {
             if (asyncLines.has(line)) continue; // async result, re-fetch on restore
             if (entry.result.type === ValueType.Pending) continue; // still in flight
+            if (!namesEveryPluginCall(entry.bytecode, namer)) continue; // calls an unregistered index
             let result: SerializedValue;
             try {
                 result = serializeValue(entry.result, `line ${line}`);
@@ -6807,16 +6958,18 @@ export class ExpressionEngine {
                 line,
                 expression,
                 result,
-                bytecode: serializeBytecode(entry.bytecode),
+                bytecode: serializeBytecode(entry.bytecode, namer),
                 reads: entry.readVariables.slice(),
                 writeVar: entry.writeVariable,
             });
         }
 
-        const bytecodeCache = Array.from(this.bytecodeCache.entries()).map(([expression, program]) => ({
-            expression,
-            program: serializeBytecode(program),
-        }));
+        const bytecodeCache = Array.from(this.bytecodeCache.entries())
+            .filter(([, program]) => namesEveryPluginCall(program, namer))
+            .map(([expression, program]) => ({
+                expression,
+                program: serializeBytecode(program, namer),
+            }));
 
         const snapshot: EngineSnapshot = {
             format: SNAPSHOT_FORMAT,
@@ -6852,8 +7005,14 @@ export class ExpressionEngine {
      *   {@link EngineRestoreOptions}.
      * @returns A ready engine that behaves as though it had evaluated the
      *   original document.
+     * Each plugin call a restored program makes is relinked by the package and
+     * name the snapshot records, so the packages may be passed in any order, and
+     * after any other engine in the process has registered its own (#658).
+     *
      * @throws {@link SnapshotErrorCodes.SNAPSHOT_VERSION_MISMATCH} for a missing
-     *   or mismatched envelope, and
+     *   or mismatched envelope,
+     *   {@link SnapshotErrorCodes.SNAPSHOT_PACKAGE_MISSING} when the snapshot
+     *   calls a plugin function none of `packages` provides, and
      *   {@link SnapshotErrorCodes.SNAPSHOT_MALFORMED} for internally
      *   inconsistent contents.
      */
@@ -6872,6 +7031,19 @@ export class ExpressionEngine {
      * entry point is the static {@link ExpressionEngine.fromJSON}.
      */
     private restoreSnapshot(snapshot: EngineSnapshot): void {
+        // A version 2 snapshot names every plugin call, and is refused here,
+        // before anything is written, when it calls a function no registered
+        // package provides. A version 1 snapshot names none: its programs that
+        // call a plugin function are left out below and recompile when their
+        // lines are next evaluated (#658).
+        const link: PluginCallLinker | null = snapshot.version === 1
+            ? null
+            : (call) => this.pluginFunctionClaims.get(call.name)?.find((claim) => claim.pkg === call.pkg)?.index;
+        if (link !== null) {
+            snapshot.userFunctions.forEach((fn, i) => assertPluginCallsLinkable(fn.program, link, `userFunctions[${i}].program`));
+            snapshot.lineCache.forEach((e, i) => assertPluginCallsLinkable(e.bytecode, link, `lineCache[${i}].bytecode`));
+            snapshot.bytecodeCache.forEach((c, i) => assertPluginCallsLinkable(c.program, link, `bytecodeCache[${i}].program`));
+        }
         // First, so a restored frozen line, and anything that re-runs it, finds
         // its answer stored rather than fetching.
         for (const record of snapshot.frozen ?? []) {
@@ -6881,13 +7053,15 @@ export class ExpressionEngine {
             this.vm.setVar(name, deserializeValue(sv));
         }
         for (const fn of snapshot.userFunctions) {
-            const def = deserializeUserFunction(fn);
-            this.vm.defineUserFunction(def.name, def.params, def.program);
+            const program = restoreBytecode(fn.program, link);
+            if (program !== null) this.vm.defineUserFunction(fn.name, fn.params.slice(), program);
         }
         for (const e of snapshot.lineCache) {
+            const bytecode = restoreBytecode(e.bytecode, link);
+            if (bytecode === null) continue; // re-evaluates on the next pass instead
             const entry = new LineCacheEntry(
                 deserializeValue(e.result),
-                deserializeBytecode(e.bytecode),
+                bytecode,
                 e.reads.slice(),
                 e.writeVar,
             );
@@ -6904,7 +7078,8 @@ export class ExpressionEngine {
             this.registerLineWithTags(e.line, e.expression, e.reads, e.writeVar ? [e.writeVar] : []);
         }
         for (const { expression, program } of snapshot.bytecodeCache) {
-            this.bytecodeCache.set(expression, deserializeBytecode(program));
+            const restored = restoreBytecode(program, link);
+            if (restored !== null) this.bytecodeCache.set(expression, restored);
         }
     }
 
