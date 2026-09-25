@@ -1,5 +1,207 @@
 # solve-engine
 
+## 2.42.0
+
+### Minor Changes
+
+- 30a1d5c: The everyday spellings of the list aggregates are read: `sum of`, `mean of`, `min of`, `max of`, `product of`, the calls `sum(1, 2, 3)` and `mean(...)`, and `count above`, `max above` and the rest
+  
+  The engine had `total of`, `average of`, `median of`, `total above`, `sum above` and `average above`, but not the neighbouring spellings a spreadsheet or another notepad uses, and each failed with a parser message (#703).
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `sum of 1, 2, 3` | throws `Unexpected token after expression: ","` | 6 |
+  | `max of 1, 2, 3` | throws `Expected token type "LPAREN" but got "OF" ("of")` | 3 |
+  | `product of 2, 3 and 4` | throws `Unexpected token after expression: ","` | 24 |
+  | `sum(1, 2, 3)` | throws `Expected token type "RPAREN" but got "COMMA" (",")` | 6 |
+  | `mean(1, 2, 3)` | throws `Undefined function: mean` | 2 |
+  | `max above`, after lines of 10, 20 and 30 | `Expected token type "LPAREN" but got "IDENT" ("above")` | 30 |
+  
+  The list phrases: `sum of` is `total of`, `mean of` and `avg of` are `average of`, and `min of`, `max of` and `product of` give the least value, the greatest and the values multiplied together. Units work as they do for the other lists (`product of 2 m, 3 m` is `6.00 m²`), and mixed measures are refused by name.
+  
+  The calls: `sum(...)`, `total(...)`, `average(...)`, `mean(...)`, `median(...)` and `stdev(...)` over plain values. `stdev(...)` is the population standard deviation, the same as `stdev of` in this engine; a spreadsheet's `STDEV` is the sample form, written `sample stdev of`.
+  
+  The block above: `avg above` and `mean above` for the average, and `count above`, `min above`, `max above` and `median above`. Each walks the block as `total above` does, passing over comments and subtotals, and each is a summary line itself, so the next one reads past it.
+  
+  The boundary: the calls keep the readings the same brackets already had. `sum(x, [10, 20, 30])` and `sum(10*x, 0:9)` are still map-reduce (a two-argument `sum` whose first argument is a bare name, or whose second is a list, a range or a name), and `average(line 1 : line 4)` is still a line range. `mean`, `median` and `stdev` stay ordinary names wherever no bracket follows them (`mean = 4` is a variable); a function of one's own under one of those three names is refused by name, since the call would never reach it, and an empty call such as `mean()` is refused rather than answered 0. `min` stays the minute and `max(...)` the function; each is claimed as a phrase only before `of` or `above`. The statistics and line-references pages gain proven examples.
+  
+  ## Verification
+  
+  `Issue703_aggregateSpellings.spec.ts` holds 42 tests. Each list spelling gives the answer of the form it mirrors, with money and units in the unit written first, mixed measures refused, and `min` and `max` keeping their other meanings where no `of` follows. Each call gives its answer, `stdev(...)` agrees with `stdev of`, map-reduce keeps `sum(x, [10, 20, 30])`, `sum(10*x, 0:9)` and `sum(x, 0:3)`, a line range keeps its call, `mean` and `median` stay names without a bracket, and an empty call and a function of one's own under these names are refused by name. Each `above` form reads its block in both document passes, is a summary line the next one reads past, leaves a subtotal out, keeps units and refuses mixed measures, and stops at a blank line and a heading as `total above` does. The adversarial cases: prototype words as calls and phrases, an unclosed call, and sixty values. `CrossPathDocumentFeatures.spec.ts` holds the cross-path case for the new `above` forms: the block in both passes, an edit reaching each in a live editor, and the single-expression refusal.
+  
+  The full suite (`npm run test:full`) passed, 15,825 of 15,829 tests in 617 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (2,888 tests in 90 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,404 documented examples). `executeBytecode` is unchanged at 47,528 bytecode bytes on Node 24.16.0.
+- d89e0c4: Currency is read the way it is written, and every amount the engine writes can be typed back: `100 €`, `12.00 kr`, `A$100`, `R12.00` and `100 usd`
+  
+  The engine wrote ten currencies with a symbol after the amount or in letters, and could read none of them back: `12 SEK` showed `12.00 kr`, and `12.00 kr + 1 SEK` was an undefined variable (#693). It also read a symbol only before the amount, a dollar only as `$`, and a code only in capitals, where much of the world writes `100 €`, `A$100` or `100 usd` (#707).
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `12.00 kr + 1 SEK` | `Undefined variable: kr` | 13.00 kr |
+  | `100 €` | throws `Unexpected token after expression: "€"` | €100.00 |
+  | `1,000 ₹` | throws `Unexpected token after expression: "₹"` | ₹1,000.00 |
+  | `A$100 + $5 AUD` | throws `Unexpected token after expression: "$"` | $105.00 |
+  | `R1,234.56` | throws `Unexpected token after expression: ","` | R1,234.56 |
+  | `100 usd` | `Undefined variable: usd` | $100.00 |
+  
+  Each newly read form:
+  
+  - **A symbol after the amount**, with or without a space: `100 €`, `100 $`, `100 £`, `100 ¥`, `12 ₽`, `12 ₩`, `1,000 ₹`, `12 ₺`, `12 ₴`, `12 ₪`, `12₫`, `12 ₦` and `12 ₱`, each the same money as the symbol before it.
+  - **The letters written after an amount**: `kr` (the Swedish krona), `zł` (zloty), `Ft` (forint), `Kč` (koruna) and `Fr` (Swiss franc), matched exactly as written, so `ft` stays the foot.
+  - **A dollar named by its country**, written touching the `$`: `A$`, `C$`, `US$`, `HK$`, `NZ$`, `S$`, `MX$` and `R$`.
+  - **The rand as the engine writes it**, the `R` touching an amount with its cents: `R12.00`, `R1,234.56`.
+  - **Thirty-two codes in lower case**: `usd`, `eur`, `gbp`, `jpy`, `cny`, `chf`, `cad`, `aud`, `nzd`, `hkd`, `sgd`, `sek`, `nok`, `dkk`, `pln`, `czk`, `huf`, `inr`, `krw`, `brl`, `mxn`, `zar`, `ils`, `thb`, `aed`, `sar`, `myr`, `idr`, `vnd`, `ngn`, `uah` and `twd`.
+  
+  Of the twenty symbols the engine writes, eight read back before this change. All twenty read back now. Three are written for several currencies, and read as the default each already had or was given: `$` the US dollar, `¥` the yen, and `kr` the Swedish krona, as the word `krona` does.
+  
+  The boundary: those three defaults mean an amount written for one of the others reads back as the default (`12 NOK` is written `12.00 kr`, which reads as kronor), so a note keeps the code where the currency matters; changing what the engine writes for them is not part of this. A bare `R` is not read as the rand, since people use it as a name, so `12 R` still multiplies by `R`, and `R12` without cents can still name a resistor. The prefixed dollars are read only when the letters touch the `$`, so `A` stays the ampere and `C` the coulomb, and `A $100` is left as written. The lower-case codes are a chosen list rather than every code folded to lower case, because several codes are words or units in lower case (`cup`, `try`, `mad`, `top`, `bob`, `all`, `pen`); `rub` and `php` are left out as a verb and a language. A spec asserts that none of the new spellings was already a unit, a keyword or a function. The currency page gains a section with proven examples.
+  
+  ## Verification
+  
+  `Issue693_707_currencyAsWritten.spec.ts` holds 108 tests. Every code in the display table is written for 12, 1,234.56 and -12 and typed back, reading back as itself or as its symbol's default. Each suffix symbol is read with and without a space, with a thousands group and negative, and reads as the same symbol before the amount; one with another amount after it is left as written. Each letter symbol and each prefixed dollar is read, the letters exactly as written (`Ft` beside `ft`), and a name `Fr`, `A` or `C` defined above still works. The rand is read in the shapes the engine writes and not after an amount or without its cents, so `R = 5` then `12 R` is still 60. Each of the 32 lower-case codes is read, a spec asserts none was already a unit, a keyword or a function, and `try`, `rub`, `php`, `cup` and `Usd` are left alone. The adversarial cases: prototype words as symbols and before a dollar, a symbol after something that is not an amount, and a long line of suffix amounts. The unit-vocabulary spec knows the letter symbols are currencies, and a hardening test that recorded `100 usd in eur` as unreadable now records it read.
+  
+  The full suite (`npm run test:full`) passed, 15,742 of 15,746 tests in 615 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (2,878 tests in 90 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,385 documented examples). `executeBytecode` is unchanged at 47,528 bytecode bytes on Node 24.16.0.
+- c4dd8c9: A date takes a time of day the way people write one: `2026-01-04 14:30`, `23 September 2026 at 3pm` and `3pm on 23 September 2026`
+  
+  A date and a time together could be written only in the ISO form, `2026-01-04T14:30` (#692). The way people write a meeting or a deadline, a date and then a time, threw, and the message quoted the clock time's minutes since midnight rather than anything the reader typed.
+  
+  A calendar date followed by a clock time, bare or after `at`, and a clock time followed by `on` and a date, now read as that moment: the same instant the ISO form names, with the same wall-clock grain, so it goes wherever that form goes.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `2026-01-04 14:30` | throws `Unexpected token after expression: "870"` | Sunday, January 4, 2026, 2:30:00 PM |
+  | `23 September 2026 at 3pm` | throws `Unexpected token after expression: "at"` | Wednesday, September 23, 2026, 3:00:00 PM |
+  | `3pm on 23 September 2026` | throws `Unexpected token after expression: "on"` | Wednesday, September 23, 2026, 3:00:00 PM |
+  | `2026-01-04 14:30:15` | throws `Unexpected token after expression: "52215"` | Sunday, January 4, 2026, 2:30:15 PM |
+  | `hours between 2026-01-04 9am and 2026-01-10 5pm` | throws `Expected token type "AND_CONJ" but got "CLOCK_TIME" ("540")` | 152 hours |
+  
+  The time is any clock time the engine reads on its own (`14:30`, `3pm`, `9:30am`, `3.30pm`), or `HH:MM:SS` for seconds. After `on`, anything that gives a date works, a name or `today` included, as it already did in the time-zone forms. On the days the clocks change, a time in the skipped or repeated hour lands where the ISO form puts it, since the instant is found through the same parser.
+  
+  Two answers that were wrong change with it. A date followed by a time that does not exist on the clock was read as a label and answered with what followed the colon; it is now refused, as the same time on its own already was. And a line with a stray token after it quotes that token as it was written, where a clock time, a clock interval or an `HH:MM:SS` reading quoted the engine's own number for it.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `2026-01-04 24:00` | 0 | `"24:00" is not a valid time` |
+  | `tomorrow 3pm` | throws `Unexpected token after expression: "900"` | throws `Unexpected token after expression: "3pm"` |
+  | `2026-01-04 9am to 5pm` | throws `Unexpected token after expression: "540:1020"` | throws `Unexpected token after expression: "9am to 5pm"` |
+  
+  The boundary: a day named in words and then a time, `tomorrow 3pm`, is not read this way; it belongs with the spoken relative dates, and `3pm on tomorrow` covers it meanwhile. A month with no day (`February 2026 3pm`) takes no time, since there is no day to put it on. The date-first order does not take a source zone (`23 September 2026 3pm London in Tokyo`); the time-zone form, `3pm London on 23 September 2026 in Tokyo`, does. `readDates` describes the date as before, with the time left out of its reading. The date-literals page gains a section with proven examples.
+  
+  ## Verification
+  
+  `Issue692_dateWithTimeOfDay.spec.ts` holds forty-four tests. Fourteen spellings each give the answer of the `T` literal for that day and time, with its wall-clock grain and instant, and eight forms carry it on as the `T` literal does: a duration added, a subtraction, `days between` and `hours between`, a zone, `frozen`. On both clock changes a time in the skipped or repeated hour lands where the `T` literal's does, and the three entry points agree. After `on`, a name for a date and `today` both work. What must not break is held: `at` before a rate, `on` after a percentage, a clock interval, a spaced subtraction, a date alone as a label, a date followed by a plain number or `13pm`, and a whole month, which takes no time. `24:00`, `25:00` and `9:60` after a date are refused by name, where the first answered 0. The trailing-token message quotes what was typed for a clock time, an interval and `HH:MM:SS`. The adversarial cases: `on` with nothing or not a date after it, a date that failed, prototype words, fifty times after one date, `wallTimeOn` out of range, and `readDates` describing the date as before.
+  
+  The full suite (`npm run test:full`) passed, 15,629 of 15,633 tests in 614 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (2,873 tests in 90 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,371 documented examples). `executeBytecode` is unchanged at 47,528 bytecode bytes on Node 24.16.0.
+- 0c9cd59: One pass over a note has a work budget: sweeps, what-ifs, goal seek and span totals share a million line runs, set by `vm.maxLineRunsPerPass`
+  
+  Every limit counted work inside one expression, and the forms that reach across lines were capped one line at a time: a sweep at 100,000 line re-runs, goal seek at its probes, and a span aggregate (`total above`, a section, a tag, a table column) not at all (#711). Twenty sweep lines, each inside its own cap, made one `parseDocument` re-run 2,000,000 lines, and a host re-parses on every keystroke.
+  
+  One count per pass now bounds them, in line runs. A what-if or sweep charges each line it re-runs, a goal-seek probe one, and a span aggregate its reads at sixteen to a run, the ratio measured between a re-run (about 5.2 µs) and a read (about 0.3 µs). The line whose work would cross the budget is refused with `PASS_WORK_BUDGET_EXCEEDED`, naming the budget and the setting, and the lines above it keep their answers.
+  
+  | note, with `vm.maxLineRunsPerPass` at 500 | before | now |
+  | --- | --- | --- |
+  | five lines, then eight sweeps of line 5 over twenty values (100 line runs each) | all eight sweeps run | the first five run; the sixth, seventh and eighth are refused |
+  | the same note with the default budget | all eight run | all eight run |
+  | 100 lines, then one sweep of line 100 over 1,000 values, with the default | runs, 100,000 line runs | runs, as before |
+  
+  The default is a million line runs, about five seconds of work on the machine it was measured on: ten sweeps at their own cap, or a ledger with a running total after each of about 4,000 entries. Both document passes charge alike and refuse the same line. A line in view re-runs from its program on every pass, so it is charged against the work above it as that work stands, and the incremental evaluator counts a line it does not run (out of view) at the work it recorded when it last ran. So a live editor gives the answer a fresh pass gives, after an edit above and in a viewport scrolled below the sweeps.
+  
+  The boundary: this bounds time, not memory, and it does not make a span aggregate faster; it stops an extreme note from holding the host. The per-line caps stay as they were. Goal seek's probes are charged on the incremental path only, the one that runs them. A tag total is charged as a scan of the whole note on both passes, which is what the batch pass does and what the incremental index saves, so the two agree. The live-data re-run after a value lands carries no cross-line forms, so it spends nothing. A package whose handler re-runs lines charges them through `context.spendWork`, which the functions-and-operators guide describes; the security page's limits table and the what-if page state the budget.
+  
+  ## Verification
+  
+  `Issue711_passWorkBudget.spec.ts` holds nineteen tests. The line that crosses the budget is refused and the lines above keep their answers, with the refusal naming the budget and the setting; the default runs a sweep at its own cap untouched. A what-if, a sweep, `total above`, a section total, a tag total, a table column and goal seek's probes are each charged. The incremental path agrees with a fresh pass after an edit that frees budget above, after one that spends more, after a heavy line is deleted and re-typed twenty times, in a viewport below the sweeps, and for a sweep definition above the viewport that runs out of view after an edit, which is charged once (counting its old record on top once refused the line in view). The single-expression path charges nothing. `CrossPathDocumentFeatures.spec.ts` holds the cross-path case: both document passes refuse the same line, and the single-expression path has no document to spend on.
+  
+  The full suite (`npm run test:full`) passed, 15,581 of 15,585 tests in 613 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (2,869 tests in 90 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,363 documented examples). `executeBytecode` is unchanged at 47,528 bytecode bytes on Node 24.16.0.
+- 30a1d5c: Percentages can be written in words: `15 percent of 60`, `50 increased by 20%`, `reduce 50 by 20%`, `percent change from 50 to 75` and `75 is what % more than 50`
+  
+  `percent` was read only as a converter's name, after `as`, so a reader who wrote the word instead of the sign got a parse error on the commonest percentage question, and the sentences people use for a change by a percentage were missing (#705).
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `15 percent of 60` | throws `Unexpected token after expression: "percent"` | 9 |
+  | `20 is what percent of 80` | throws `Expected "%" after "is what", as in "20 is what % of 200"` | 25.00% |
+  | `50 increased by 20%` | throws `Unexpected token after expression: "by"` | 60 |
+  | `reduce 50 by 20%` | throws `Unexpected token after expression: "50"` | 40 |
+  | `percent change from 50 to 75` | throws `No prefix parselet found for token: CONVERTER_NAME ("percent")` | 50.00% |
+  | `75 is what % more than 50` | throws `Unexpected token after expression: "more"` | 50.00% |
+  
+  Each gives the answer of the symbol form it mirrors: `percent` and `percentage` after a number, a bracket or a name are the `%` sign; `increased by`, `decreased by` and `reduced by` are `increase by` and `decrease by` (so `+ 20%` and `- 20%`); `reduce` is `decrease`; `percent change from A to B` is `A to B as %`; and `A is what % more than B` is the change from B to A as a percentage of B, with `less than` for the fall. A change from zero is refused in words as it is in symbols. Money and units carry through (`$50 increased by 20%` is `$60.00`).
+  
+  The boundary: after `as`, `in` or `to`, `percent` and `percentage` still ask for a number as a percentage (`0.25 as percent` is `25.00%`). `reduce` is also map-reduce's call, so it is read as `decrease` only before an amount and a `by` with a percentage after it; `reduce(...)` with a bracket is map-reduce as before, and `reduce 50 by 20`, with no percentage, is left unread rather than given the decrease form's reading of a bare factor. `100 percent sure` is not a number. The percentages page gains proven examples of each form.
+  
+  ## Verification
+  
+  `Issue705_percentInWords.spec.ts` holds 31 tests. Each worded form gives the answer of the symbol form it mirrors, `less than` gives the fall and a value above gives a negative one, money, a unit and a negative change carry through, and a zero base is refused in words as in symbols. What must not break is held: `as percent`, `as percentage` and `in percent`, the `increase` and `decrease` forms and the other `by` phrases, `reduce` without a percentage and `reduce` as a name, `percent` in prose, and a name before `percent`. The adversarial cases: prototype words before `percent` and after `is what %`, and `more` without `than`.
+  
+  The full suite (`npm run test:full`) passed, 15,825 of 15,829 tests in 617 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (2,888 tests in 90 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,404 documented examples). `executeBytecode` is unchanged at 47,528 bytecode bytes on Node 24.16.0.
+- 6ceb4bd: A live-data resolver runs at most six fetches at once, and `createQueryResolver` takes `maxConcurrent`
+  
+  `createQueryResolver`, which the weather, stocks, crypto and knowledge packages are built on, started each fetch the moment a line asked for it (#696). A pasted or hostile document of 500 places opened 500 connections to one weather service at once, then 500 more, all from the reader's own address.
+  
+  | 500 lines `weather in Town0` to `weather in Town499`, `fetch` stubbed | before | now |
+  | --- | --- | --- |
+  | geocoding requests in flight at once | 500 | 6 |
+  | forecast requests in flight at once | 500 | 6 |
+  | requests in all | 1,000 | 1,000 |
+  
+  A resolver now runs at most six fetches together and queues the rest in the order they were asked for. `maxConcurrent` sets the number, a positive whole number or `Infinity` for no limit; any other value is refused when the package is built. A queued fetch's `timeoutMs` starts when the fetch does, so a long queue does not time out requests that never ran. A query asked for again while it waits shares the one fetch, and one cancelled while it waits never fetches. A fetch that ignores its signal still gives its slot back at the deadline, with the timeout error for its line, where before it could hold the line pending for ever.
+  
+  The boundary: this bounds how many requests run together, not how many run, and it is not a rate per minute. The limit is one per resolver, shared by every engine in the process. A resolver written by hand, without `createQueryResolver`, keeps whatever limit it keeps of its own. The async data source guide shows the option with a worked example, and the package-authoring routing table points to it.
+  
+  ## Verification
+  
+  `Issue696_queryResolverConcurrency.spec.ts` holds eighteen tests. The limit hands out its slots in arrival order, `tryAcquire` takes a free one in the same turn, a release called twice frees one slot, and a waiter whose signal aborts leaves the queue; `Infinity` is no limit, and zero, negatives, fractions, `NaN` and `-Infinity` are refused. The resolver runs a thousand queries six at a time by default, in order, honours `maxConcurrent`, and refuses an invalid one when the package is built. A queued fetch's timeout starts when it runs, a fetch that never settles frees its slot at the deadline, a query asked for twice while it waits fetches once, and one cancelled while it waits never fetches. An uncontended fetch still starts in the turn that asked for it, so a first pass reads a cached value as before, and prototype words as queries queue like any other. Through the weather package with `fetch` stubbed, a document of 60 places keeps at most six requests in flight and every place answers; the tree before this change had all 60 in flight at once.
+  
+  The full suite (`npm run test:full`) passed, 15,536 of 15,540 tests in 611 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (2,865 tests in 90 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,363 documented examples).
+- 0c9cd59: What a note keeps is bounded: its answers hold at most ten million elements, set by `vm.maxRetainedElements`
+  
+  Each line's answer stays in memory while the note is open, and every limit counted one line at a time: `vm.maxAllocatedElements` stops one evaluation making more than two million elements, and nothing stopped many lines keeping that much between them (#694). Five hundred lines of `:m = map(10*x, 0:99999)`, 13 KB of text, each inside every per-line limit, kept 50,000,000 elements and 385 MB of heap.
+  
+  One count per pass now bounds it, in elements: a list or matrix counts its cells, text one element to eight characters, and any other answer one. The line whose answer would take the note past the ceiling is refused with `DOCUMENT_ELEMENT_LIMIT_EXCEEDED`, naming its size and the setting, and a name it assigned is let go, so the value is not kept through a variable either. The lines above keep their answers.
+  
+  | 500 lines, `:m0 = map(10*x, 0:99999)` to `:m499 = ...`, default settings | before | now |
+  | --- | --- | --- |
+  | lists kept | 500 | 100 |
+  | elements kept | 50,000,000 | 10,000,000 |
+  | heap the note holds | 385 MB | 80 MB |
+  | lines refused | none | 101 to 500 |
+  
+  Measured on one Windows 11 machine under Node 24.16, heap after two collections with the engine still held.
+  
+  Ten million is a hundred 100,000-element lists, or five lines at `vm.maxAllocatedElements`; an ordinary note of numbers, text and small tables is nowhere near it. The count starts again on every pass, so an edited or deleted line stops counting when it does, and both document passes count alike and refuse the same line. A line waiting on a live value keeps nothing until the value lands; its re-run is then charged against what the whole note keeps, and an answer no larger than the one it replaces is always kept, so a background refresh never refuses a line.
+  
+  The boundary: this bounds memory, not time. A line is refused once its answer is known, so the work of making it is done, within the per-line limits; the 500-line note takes as long as it did. The re-run after a live value lands is charged against the whole note rather than its position, so near the ceiling it can refuse a line a fresh pass would keep; the next pass counts every line in place again. The single-expression path keeps no note and is not counted. The security page's limits table states the setting.
+  
+  ## Verification
+  
+  `Issue694_retainedElementsBudget.spec.ts` holds twenty-two tests. A list counts its cells, text its length in eights and anything else one, and the refusal names the line, its size and the setting. The line that crosses the ceiling is refused, its name let go (a line reading it answers `Undefined variable`) while the kept names stay; an answer that reaches the ceiling exactly is kept and one element more is refused; re-parsing a note twenty-five times refuses nothing new; the default answers 2,000 ordinary lines in full; and a refused line assigning each prototype word lets go of that name only. The incremental path agrees with a fresh pass after an edit that shrinks a line above, after a heavy line is edited back and forth or deleted and re-inserted twenty times, after the refused line is moved to the top, in a viewport below the heavy lines, and for a definition above the viewport that runs out of view after an edit. A line waiting on a `global` value is refused on its re-run at the line a fresh pass refuses, with its name let go; a re-run no larger than the answer it replaces is kept fifty times over; and before any pass a re-run keeps its answer. `CrossPathDocumentFeatures.spec.ts` holds the cross-path case: both document passes refuse the same line, and the single-expression path keeps its answer.
+  
+  The full suite (`npm run test:full`) passed, 15,581 of 15,585 tests in 613 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (2,869 tests in 90 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,363 documented examples). `executeBytecode` is unchanged at 47,528 bytecode bytes on Node 24.16.0.
+
+### Patch Changes
+
+- 6ceb4bd: A `global :name` that nothing declares no longer keeps a listener per read, or its engine, for ever
+  
+  A `global :name` read waits until some note declares the name, and a name nobody declares waits for ever: that is the design. Each wait subscribed its own listener to the process-wide store of globals, and the resolver, one instance shared by every engine, kept each waiting promise in a map of its own (#695). So a note reading 40,000 undeclared names left 40,000 listeners that every later write, from any engine, called in turn, and the promises carried the engine's continuation, so a dropped engine was never collected.
+  
+  | after one engine reads 40,000 undeclared names and is dropped | before | now |
+  | --- | --- | --- |
+  | the resolver's listeners on the store | 40,000 | 0, once the engine is collected (1 while it waits) |
+  | the engine | kept, with 152 MB of heap | collected, 9 MB of heap |
+  | another engine's 2,000 writes | 511 to 700 ms | 19 to 31 ms |
+  
+  Measured on one Windows 11 machine under Node 24.16 with `--expose-gc`, three runs each; the same 2,000 writes take 16 to 50 ms in a fresh process.
+  
+  The resolver now holds one subscription, and dispatches a write through its waits by name. Each engine's waits are kept weakly by that engine's query client, so they go when the engine does, and the subscription goes when nothing waits. A name nobody declares still waits for ever, several lines of one engine waiting on one name still share one promise, and a write settles every engine's wait on its name.
+  
+  The boundary: one engine's teardown no longer ends other engines' waits, as clearing the shared map used to; an engine's own waits end with it, or when the name is written. The values the store keeps for names that have been written are unchanged, since keeping them process-wide is the design the 3.0 Workspace revisits.
+  
+  ## Verification
+  
+  `Issue695_globalWaitsGoWithTheirEngine.spec.ts` holds ten tests. One subscription serves a thousand undeclared names and several engines, and it goes when nothing waits. The waits keep their behaviour: lines of one engine share a promise, a write settles every engine's wait on its name and no other, one engine's teardown ends no other's, a wait survives the store being reset under it, and a name nobody declares still pends. Through real engines, forty thousand undeclared reads add one listener, and a dropped engine is collected with its waits gone from the store (run under `--expose-gc`, as the full suite is). The collection test fails on the tree before this change.
+  
+  The full suite (`npm run test:full`) passed, 15,536 of 15,540 tests in 611 suites with 4 skipped, and `npm run verify:ci` passed end to end, including the three-zone temporal run (2,865 tests in 90 suites each) and the bundled-consumer contract (25 checks against an installed copy, including 1,363 documented examples).
+
 ## 2.41.0
 
 ### Minor Changes
