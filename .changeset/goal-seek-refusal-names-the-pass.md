@@ -16,4 +16,4 @@ The goal-seek page now names the entry points that solve goal seek and the two t
 
 ## Verification
 
-A new spec pins each entry point's answer, and the goal-seek and cross-path suites pass unchanged, since they assert the code and that the batch refusal mentions a document. The full suite is 13,792 tests in 565 suites, all passing (four skipped), and `npm run verify:ci` passes, now including `lint:ci-parity` and `lint:dispatch-size` (47,474 bytes on Node 24, 13,966 under the ceiling), the three-zone `test:temporal` run and the bundled-consumer contract.
+A new spec pins each entry point's answer, and the goal-seek and cross-path suites pass unchanged, since they assert the code and that the batch refusal mentions a document. The full suite is 13,793 tests in 565 suites, all passing (four skipped), and `npm run verify:ci` passes, now including `lint:ci-parity` and `lint:dispatch-size` (47,474 bytes on Node 24, 13,966 under the ceiling), the three-zone `test:temporal` run and the bundled-consumer contract.

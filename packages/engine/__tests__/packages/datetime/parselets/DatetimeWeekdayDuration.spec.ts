@@ -22,12 +22,14 @@ import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
+import { createEngineContext } from "@solve-js/engine/EngineContext";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
 import { Value, ValueType } from "@solve-js/vm/Value";
 import { TokenNormalizer } from "@solve-js/normalizer";
 import { untilSinceNormalizerRule } from "@solve-js/packages/datetime/normalizer/UntilSinceNormalizerRule";
 
 const normalizer = new TokenNormalizer();
+const DATE_CONTEXT = createEngineContext({ calendar: "date" });
 normalizer.register(untilSinceNormalizerRule());
 
 function tokenize(lexer: Lexer, input: string) {
@@ -55,7 +57,10 @@ function parseAndExecute(input: string): Value {
   const program = builder.build();
   const vmUint8 = new Uint8Array(program.opcodes);
   const vmFloat64 = new Float64Array(program.numbers);
-  const vm = createVM(sharedOpRegistry);
+  // The Date backend, pinned: these tests fix `now` by mocking Date.now, which
+  // native Temporal's clock does not read, so on Node 26 the default backend
+  // computed from the real day (#621).
+  const vm = createVM(sharedOpRegistry, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, DATE_CONTEXT);
   const result = executeBytecode(
     { opcodes: vmUint8, numbers: vmFloat64, strings: program.strings },
     vm

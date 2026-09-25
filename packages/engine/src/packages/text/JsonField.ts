@@ -95,6 +95,37 @@ function fault(code: string, message: string): FieldReading {
 	return { kind: "fault", code, message };
 }
 
+/**
+ * The deepest a JSON text may nest before `field(...)` refuses it.
+ *
+ * Without a limit of its own the answer depended on the runtime: Node 22's
+ * `JSON.parse` gives up somewhere past ten thousand levels, and Node 26's reads
+ * a hundred thousand and writes it back out, so the same line was refused on
+ * one and answered with a 200,000-character text on the other. Five hundred
+ * and twelve levels is far past any API's answer, and inside what every
+ * runtime reads and writes.
+ */
+const MAX_JSON_DEPTH = 512;
+
+/** Whether a text nests brackets deeper than {@link MAX_JSON_DEPTH}, outside its strings. */
+function nestsTooDeep(text: string): boolean {
+	let depth = 0;
+	let inString = false;
+	for (let i = 0; i < text.length; i++) {
+		const c = text.charCodeAt(i);
+		if (inString) {
+			if (c === 92) i++; // a backslash escapes the next character
+			else if (c === 34) inString = false;
+			continue;
+		}
+		if (c === 34) inString = true;
+		else if (c === 91 || c === 123) {
+			if (++depth > MAX_JSON_DEPTH) return true;
+		} else if (c === 93 || c === 125) depth--;
+	}
+	return false;
+}
+
 /** JSON.parse, or undefined when the text is not a JSON object or list. */
 function tryParse(text: string): unknown {
 	if (!text.startsWith("{") && !text.startsWith("[")) return undefined;
@@ -137,6 +168,9 @@ export function readJsonField(text: string, path: string): FieldReading {
 	const steps = parsePath(path);
 	if (steps === null) {
 		return fault(FIELD_FAULT_CODES.BAD_PATH, `"${path}" is not a field path: name the fields with dots between them, and a list entry by its position in brackets, as in "items[0].price"`);
+	}
+	if (nestsTooDeep(text)) {
+		return fault(FIELD_FAULT_CODES.NOT_JSON, `field(...) reads JSON nested at most ${MAX_JSON_DEPTH} levels deep, and this text nests deeper`);
 	}
 	const root = parseJson(text.trim());
 	if (root === undefined) {
