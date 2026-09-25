@@ -17,7 +17,10 @@ updates when that line changes.
 | `sum(line 1 : line 4)` | the total of a span of lines |
 | `average(line 1 : line 4)` | the mean of a span |
 | `total above` | the total of every line above |
-| `average above` | the same, averaged |
+| `average above` | the same, averaged (also `avg above` and `mean above`) |
+| `count above` | how many figures are above |
+| `min above`, `max above` | the least and the greatest figure above |
+| `median above` | the figure in the middle |
 | `line deleted` | a reference whose line was deleted; answers with an error |
 
 `prev` reads the line immediately above, and `line N` reads any earlier line by
@@ -47,6 +50,22 @@ ans * 2   // 20
 30
 total above   // 60
 ```
+
+The same block can be asked other questions: how many figures it holds, the
+least and the greatest of them, and the one in the middle. Each of these lines is
+a summary itself, so the next one reads past it to the figures:
+
+```solve-doc
+10
+20
+30
+count above    // 3
+max above      // 30
+median above   // 20
+```
+
+A column that carries units answers in the unit written at its top, as a total
+does, and a column mixing measures is refused rather than compared.
 
 Some calculators read a bare `sum` or `total` line as the column above. Here the
 word on its own is a name like any other, so a note that never defines it gets

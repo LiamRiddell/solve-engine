@@ -1131,3 +1131,27 @@ describe("what a note keeps across entry points (#694)", () => {
     expect(value.type).toBe(ValueType.Matrix);
   });
 });
+
+describe("the other questions of the block above, across entry points (#703)", () => {
+  // `count`, `min`, `max` and `median above`, and `avg` and `mean above` for
+  // the average, walk the block as `total above` does: the batch pass and the
+  // incremental one agree, and the single-expression path has no block.
+  const forms = ["avg above", "mean above", "count above", "min above", "max above", "median above"];
+
+  test("each reads the current block, and both passes agree", () => {
+    const doc = ["10", "20", "", "5", "15", "25", ...forms];
+    const expected = ["10", "20", "", "5", "15", "25", "15", "15", "3", "5", "25", "15"];
+    expect(batch(doc)).toEqual(expected);
+    expect(incremental(doc)).toEqual(expected);
+  });
+
+  test("an edit inside the block reaches every one of them in a live editor", () => {
+    const { shown, edited } = editThenEvaluate(["5", "15", "25", ...forms], [[2, "100"]]);
+    expect(shown).toEqual(batch(edited));
+    expect(shown.slice(3)).toEqual(["43.33", "43.33", "3", "5", "100", "25"]);
+  });
+
+  test("the single-expression path has no block, and says so", () => {
+    for (const form of forms) expectNeedsDocument(form);
+  });
+});

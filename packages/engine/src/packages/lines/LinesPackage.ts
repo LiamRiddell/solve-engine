@@ -11,6 +11,7 @@ import { InputsOfParselet } from "./parselets/InputsOfParselet";
 import {
   prevHandler, lineRefHandler, sumRangeHandler, averageRangeHandler,
   totalAboveHandler, averageAboveHandler,
+  countAboveHandler, minAboveHandler, maxAboveHandler, medianAboveHandler,
   sectionSumHandler, sectionAverageHandler, sectionCountHandler,
 } from "./LinesPluginFunctions";
 
@@ -65,6 +66,15 @@ export const LINES_PACKAGE: IEnginePackage = {
     "total above": "TOTAL_ABOVE",
     "sum above": "SUM_ABOVE",
     "average above": "AVERAGE_ABOVE",
+    // The other spellings, and the other questions of the same block (#703).
+    // `min` is also the minute and `max` a function, so each is fused as a
+    // phrase, only before `above`.
+    "avg above": "AVERAGE_ABOVE",
+    "mean above": "AVERAGE_ABOVE",
+    "count above": "COUNT_ABOVE",
+    "min above": "MIN_ABOVE",
+    "max above": "MAX_ABOVE",
+    "median above": "MEDIAN_ABOVE",
   },
   // `inputs of line N` fuses only before a line reference, below the line-ref
   // rule so the LINE_REF it looks for already exists. See InputsOfNormalizerRule.ts.
@@ -74,9 +84,13 @@ export const LINES_PACKAGE: IEnginePackage = {
     LINE_REF: new LineRefParselet(),
     SUM_RANGE_CALL: new RangeAggregateParselet(false),
     AVERAGE_RANGE_CALL: new RangeAggregateParselet(true),
-    TOTAL_ABOVE: new AboveAggregateParselet(false),
-    SUM_ABOVE: new AboveAggregateParselet(false),
-    AVERAGE_ABOVE: new AboveAggregateParselet(true),
+    TOTAL_ABOVE: new AboveAggregateParselet("total"),
+    SUM_ABOVE: new AboveAggregateParselet("total"),
+    AVERAGE_ABOVE: new AboveAggregateParselet("average"),
+    COUNT_ABOVE: new AboveAggregateParselet("count"),
+    MIN_ABOVE: new AboveAggregateParselet("min"),
+    MAX_ABOVE: new AboveAggregateParselet("max"),
+    MEDIAN_ABOVE: new AboveAggregateParselet("median"),
     SECTION_SUM: new SectionAggregateParselet("sectionSum"),
     SECTION_AVERAGE: new SectionAggregateParselet("sectionAverage"),
     SECTION_COUNT: new SectionAggregateParselet("sectionCount"),
@@ -89,11 +103,15 @@ export const LINES_PACKAGE: IEnginePackage = {
     averageRange: averageRangeHandler,
     totalAbove: totalAboveHandler,
     averageAbove: averageAboveHandler,
+    countAbove: countAboveHandler,
+    minAbove: minAboveHandler,
+    maxAbove: maxAboveHandler,
+    medianAbove: medianAboveHandler,
     sectionSum: sectionSumHandler,
     sectionAverage: sectionAverageHandler,
     sectionCount: sectionCountHandler,
     // `inputs of line N` has no entry of its own: it reaches its handler
     // through lineRef. See TRACE_INPUTS in LinesPluginFunctions.ts for why.
   },
-  tokenCategories: { INPUTS_OF: "keyword" },
+  tokenCategories: { INPUTS_OF: "keyword", COUNT_ABOVE: "keyword", MIN_ABOVE: "keyword", MAX_ABOVE: "keyword", MEDIAN_ABOVE: "keyword" },
 };

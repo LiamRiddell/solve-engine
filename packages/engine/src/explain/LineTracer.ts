@@ -86,7 +86,7 @@ interface LineReads {
 const NO_READS: LineReads = { defines: [], writes: new Set(), reads: [] };
 
 /** The aggregate tokens that read a block of lines above them. */
-const ABOVE_TOKENS: ReadonlySet<string> = new Set(["TOTAL_ABOVE", "SUM_ABOVE", "AVERAGE_ABOVE"]);
+const ABOVE_TOKENS: ReadonlySet<string> = new Set(["TOTAL_ABOVE", "SUM_ABOVE", "AVERAGE_ABOVE", "COUNT_ABOVE", "MIN_ABOVE", "MAX_ABOVE", "MEDIAN_ABOVE"]);
 /** The call tokens that read an explicit span, `sum(line 1 : line 3)`. */
 const RANGE_TOKENS: ReadonlySet<string> = new Set(["SUM_RANGE_CALL", "AVERAGE_RANGE_CALL"]);
 /** The what-if and sweep tokens, whose value is the line they re-run (`line 4 with ...`). */

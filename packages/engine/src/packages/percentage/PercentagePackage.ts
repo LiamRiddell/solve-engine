@@ -11,6 +11,8 @@ import { IncreaseByParselet } from "./parselets/IncreaseByParselet";
 import { PercentageChangeParselet } from "./parselets/PercentageChangeParselet";
 import { UpDownParselet } from "./parselets/UpDownParselet";
 import { percentUpDownNormalizerRule } from "./normalizer/PercentUpDownNormalizerRule";
+import { percentWordNormalizerRule, reduceByNormalizerRule } from "./normalizer/PercentWordNormalizerRules";
+import { PercentChangeFromParselet } from "./parselets/PercentChangeFromParselet";
 
 /**
  * Percentage syntax: `50%`, `50% of 200`, `100 to 150` (percentage change),
@@ -42,6 +44,9 @@ export const PERCENTAGE_PACKAGE: IEnginePackage = {
     "on what": "ON_WHAT",
     "on what is": "ON_WHAT_IS",
     "off what is": "OFF_WHAT_IS",
+    // The change as a percentage, asked in words (#705).
+    "percent change from": "PERCENT_CHANGE_FROM",
+    "percentage change from": "PERCENT_CHANGE_FROM",
   },
   infixParselets: {
     PERCENT: new PercentParselet(),
@@ -64,9 +69,16 @@ export const PERCENTAGE_PACKAGE: IEnginePackage = {
   prefixParselets: {
     INCREASE: new IncreaseDecreaseParselet(1),
     DECREASE: new IncreaseDecreaseParselet(-1),
+    PERCENT_CHANGE_FROM: new PercentChangeFromParselet(),
   },
   normalizerRules: [
     percentOnOffNormalizerRule(),
     percentUpDownNormalizerRule(),
+    // `15 percent of 60` and `reduce 50 by 20%` (#705).
+    percentWordNormalizerRule(),
+    reduceByNormalizerRule(),
   ],
+  tokenCategories: {
+    PERCENT_CHANGE_FROM: "keyword",
+  },
 };

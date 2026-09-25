@@ -10,6 +10,44 @@ average of 10, 20, 30 // 20
 median of 1, 5, 3 // 3
 ```
 
+## The spreadsheet spellings
+
+The same questions go by other names in a spreadsheet or another notepad, and
+those names are read too. `sum of` is `total of`, `mean of` and `avg of` are
+`average of`, and `min of`, `max of` and `product of` give the least value,
+the greatest, and all of them multiplied together.
+
+```solve
+sum of 1, 2, 3 // 6
+mean of 1, 2, 3 // 2
+min of 4, 2, 9 // 2
+max of $5, $7 and $3 // $7.00
+product of 2 m, 3 m // 6.00 m²
+```
+
+A spreadsheet writes the values in brackets after the name instead, and that
+works as well:
+
+```solve
+sum(1, 2, 3) // 6
+average(4, 8) // 6
+mean(1, 2, 3) // 2
+median(1, 5, 3) // 3
+stdev(1, 2, 3) // 0.82
+```
+
+`stdev(...)` is the population standard deviation, the same as `stdev of` and
+`standard deviation of` on this page. A spreadsheet's `STDEV` is the sample
+form, which is written `sample stdev of` (see [spread and shape](#spread-and-shape)).
+
+Two other readings of the same brackets are kept. A call that names each
+element and then gives the list is [map-reduce](/syntax/map-reduce-and-aggregates/)
+(`sum(x, [10, 20, 30])`), and a call over lines is a
+[line range](/syntax/line-references/) (`average(line 1 : line 4)`). `mean`,
+`median` and `stdev` stay ordinary names wherever no bracket follows them, so
+`mean = 4` is still a variable; a function of your own under one of those three
+names is refused by name, since the call would never reach it.
+
 ## A list that carries units
 
 A list of quantities answers in a unit rather than as a bare number, and the

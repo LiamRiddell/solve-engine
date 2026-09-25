@@ -23,4 +23,8 @@ export const BUILTIN_PHRASES: Record<string, string> = {
 	// out: "3 multiplied by 4". Same tokens, so no new parselets.
 	"multiplied by": "MULTIPLY_BY",
 	"divided by": "DIVIDE_BY",
+	// And for a change by a percentage: "50 increased by 20%" (#705).
+	"increased by": "INCREASE_BY",
+	"decreased by": "DECREASE_BY",
+	"reduced by": "DECREASE_BY",
 };

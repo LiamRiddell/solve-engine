@@ -94,7 +94,7 @@ export function sectionKey(name: string): string {
  */
 const SUMMARY_PHRASE = new RegExp(
   [
-    String.raw`(?:^|[^0-9A-Za-z_])(?:total|sum|average)\s+above(?![0-9A-Za-z_])`,
+    String.raw`(?:^|[^0-9A-Za-z_])(?:total|sum|average|avg|mean|count|min|max|median)\s+above(?![0-9A-Za-z_])`,
     String.raw`(?:^|[^0-9A-Za-z_])(?:total|sum|average|count)\s+of\s+section\s*"`,
     String.raw`(?:^|[^0-9A-Za-z_])(?:total|sum|average|count)\s+of\s+#[A-Za-z]`,
     String.raw`(?:^|[^0-9A-Za-z_])(?:total|sum)\s+by\s+tag(?![0-9A-Za-z_])`,

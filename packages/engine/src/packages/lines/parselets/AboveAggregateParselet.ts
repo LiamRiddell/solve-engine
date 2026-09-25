@@ -20,9 +20,14 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
  */
 export class AboveAggregateParselet implements PrefixParselet {
   readonly category = "Lines";
-  constructor(private readonly isAverage: boolean) {}
+  /**
+   * @param mode - What the aggregate does with the block: `total`, `average`,
+   * `count`, `min`, `max` or `median`. It names the plugin function,
+   * `<mode>Above`.
+   */
+  constructor(private readonly mode: "total" | "average" | "count" | "min" | "max" | "median") {}
 
   parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
-    builder.emitPluginCall(this.isAverage ? "averageAbove" : "totalAbove", 0);
+    builder.emitPluginCall(`${this.mode}Above`, 0);
   }
 }
