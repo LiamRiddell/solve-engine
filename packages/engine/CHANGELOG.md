@@ -1,5 +1,917 @@
 # solve-engine
 
+## 2.41.0
+
+### Minor Changes
+
+- 0b876a4: `ans` is the line above, and a bare `sum` or `total` says to write `total above`
+  
+  Numi, Numbr, NumPad and SpeedCrunch users write `ans` for the previous answer and a bare `sum` or `total` under a column. The engine spells those `prev` and `total above`, and answered both habits with an undefined variable that gave no hint (#668).
+  
+  | note | before | now |
+  | --- | --- | --- |
+  | `10`, `ans * 2` | Undefined variable: ans | 20 |
+  | `ans = 5`, `ans * 2` | 10 | 10 |
+  | `10`, `20`, `sum` | Undefined variable: sum | Undefined variable: sum. To add up the lines above, write "total above". |
+  | `ans * 2` through `evaluateExpression` | throws Undefined variable: ans | the error value `prev` gives outside a document |
+  
+  `ans` means the line above only when nothing in the note is named `ans`: a note that defines it gets its variable, as before. Where `prev` has nothing to read (the first line, after a blank line or a heading, after a line that failed) `ans` gives the same answer `prev` does, and it takes the same dependency on the line above, so an edit to that line reaches it in a live editor. Both document passes agree.
+  
+  What this does not do: a bare `sum` or `total` does not become a total. A note full of prose must never start producing numbers from a word, so reading the bare word as the column is its own, larger feature. `Ans` and `ANS` are ordinary names, as other variables are.
+  
+  The line-references page lists `ans` and says what a bare `sum` does.
+  
+  ## Verification
+  
+  `Issue668_ansAndBareTotals.spec.ts` has 16 tests: `ans` reading the line above, a variable named `ans` winning, an edit above reaching it in a live editor, and the single-expression refusal; adversarial cases where `prev` has nothing to read, an `ans` defined below its first use, and `Ans` and `ANS` as ordinary names; and a bare `sum` or `total` in four spellings, a defined one, and a near miss that keeps its own suggestion. `CrossPathDocumentFeatures.spec.ts` runs `ans`, a defined `ans` and the places `prev` has nothing to read through `parseDocument` and `evaluateDocument` and asserts they agree; the single-expression refusal is pinned in the issue spec.
+  
+  The engine suite is 14,209 tests in 588 suites, all passing (four skipped), and `npm run verify:ci` passes on the branch, including the docs proofs, the three-zone `test:temporal` run, `lint:dispatch-size` (47,331 bytes on Node 24, 14,109 under the ceiling) and the bundled-consumer contract.
+- def27fc: Eight faults a host meets at the engine's edges: a defined function takes over its name, a promise from a plugin never settles, a restored snapshot calls the wrong function, and five smaller ones
+  
+  These are the survey's host-facing faults (#658 to #665): each is something an embedding application, a package author or a worker host runs into, rather than a reader typing a line.
+  
+  **`defineFunction` no longer claims its name everywhere (#659).** The name was registered as a lexer keyword, which is unconditional, so with `price` defined every other use of the word stopped parsing. It is now a call word, the built-in `sha256(` shape: the call only where `(` follows, never after `:`, matched without regard to case.
+  
+  | with `price` defined | before | now |
+  | --- | --- | --- |
+  | `price(100)` | = 120 | = 120 |
+  | `:price = 5` | Expected identifier or unit after colon, got DEFINE_FN_PRICE | = 5 |
+  | `price * 2` (after `:price = 5`) | Expected token type "LPAREN" but got "STAR" | = 10 |
+  | `price: 3` | Expected token type "LPAREN" but got "COLON" | = 3 |
+  
+  The call highlights as a function and appears in completion with its signature (`price(x: number): number`). A name the engine already reads as something else, a unit (`kg`), a keyword (`in`) or a built-in function (`sqrt`), could never become the call, so registering it is refused with `PLUGIN_CALL_FUSION_UNREACHABLE`; that refusal applies to any package's `callFusions`, and `createEngine` logs it and carries on without the package. Two packages declaring the same call word for different tokens now raise a `callFusionName` compatibility warning; the later one is in force, as before. Building the adversarial cases found a second fault underneath: plugin-function names are engine-wide, so a defined function called `sum`, `average` or `count` took over the tags package's function of that name, and `total of #a` failed, while defined and after it was removed. A defined function's internal name is now prefixed, and unregistering any package hands a shared plugin-function name back to the previous claimant instead of deleting it for both.
+  
+  **A plugin function's promise settles (#660).** A handler may return a promise, and the engine awaited it only to learn that it had settled; the re-run called the handler again, got a new promise, and the line stayed pending for good. The settled value is now kept under the call's key, the function and each argument's type, value and unit.
+  
+  | `slowdouble(21)`, a handler resolving after 20 ms | before | now |
+  | --- | --- | --- |
+  | through the documented `lines-updated` loop | still pending after 16 evaluations, 31 handler calls | = 42 on the second evaluation, two handler calls in all |
+  
+  Once the promise has settled, the re-run asks the handler once more, because handlers read the contract two ways. One stores what it fetched and answers the re-run itself, as the historical exchange rate does; that answer is used, as before. One with no store of its own returns another promise, and is answered with what the first one settled to and not called again for that argument list. A re-evaluation while the promise is in flight, or a second line with the same arguments, shares the one call. A rejection settles to `PLUGIN_CALL_FAILED` with its message, and a promise resolving to something that is not a value to `PLUGIN_RESULT_NOT_A_VALUE`. A settled answer is kept for the engine's life (a thousand calls at most) and dropped when its package is unregistered: a raw handler has no refresh and no retry, which is what `createQueryResolver` is for. A synchronous handler builds no key and pays nothing.
+  
+  **A restored snapshot relinks its plugin calls by name (#658).** A plugin function's index is handed out process-wide in registration order, and a snapshot carried bytecode with those indices baked in, so the same packages in another order, or another engine registered first, ran another function. Snapshots are now format version 2: each call a compiled program makes is recorded by package and function name, and `fromJSON` points it at that function on the restored engine.
+  
+  | restored in another process | before | now |
+  | --- | --- | --- |
+  | `zbeta(21)`, packages passed as `zbeta, zalpha` | = 1,021 (`zalpha`'s answer) | = 42 |
+  | the `zalpha` package left out | `zalpha(21)` = 42 | refused: `SNAPSHOT_PACKAGE_MISSING` |
+  
+  A version 1 snapshot still restores: it names no calls, so its cached lines that call a plugin function are left out and recompile when next evaluated. A call compiled with a one-byte index that the restoring engine holds past 255 is left out the same way, since it cannot be widened in place.
+  
+  **The internal worker offload no longer re-runs lines without their variables (#661).** When live data landed and more than fifty lines depended on it, the batcher sent their bytecode to the internal execution pool, whose workers hold none of the document's variables or packages. With a worker factory registered, every `price * qty` came back as "Undefined variable: price". A re-run of any size now stays on the main thread, and answers as it does with no factory (`$33.00` for the survey's document). Compilation still moves to the worker; performance.mdx says so and no longer claims execution does.
+  
+  **The worker DTO carries an error's code (#662).** `5 kg in m` crossed the worker boundary as its message alone. `SerializedWorkerValue` has an optional `errorCode` (`INCOMPATIBLE_UNITS`), set only on an error, so a host branches on the code rather than the words. `EventTargetLike` accepts a DOM `Worker`, a `DedicatedWorkerGlobalScope` and a `MessagePort` under `strict`, where the guide's `eventTargetTransport(worker)` used to fail to compile, and it and `MessagePortLike` are exported.
+  
+  **A replayed parse error has its own span (#663).** The engine remembers a text that failed to parse, and replayed the error first thrown, span included. `3 + * 4` evaluated on its own after a document had held it on line 4 reported line 4, offset 22; it now reports line 1, column 5, as a fresh engine does, and each replay is its own error object.
+  
+  **`editLine` compares the text, not only its hash (#664).** djb2 gives `ab` and `bA` one hash, so editing `total = ab * 2` to `total = bA * 2` returned false and kept `= 6`; it now returns true and gives `= 200`. A worker's compile result is checked against the line's text as well, and `isBytecodeValid` takes the text as an optional third argument.
+  
+  **The snapshot guide says what `toJSON` leaves out (#665).** It said a variable holding a symbolic value makes `toJSON()` throw. It never did: a symbolic value, a colour, a bill split, a chart or an IP subnet has no snapshot form yet, and the variable or cached line holding one is left out, undefined on the restored engine until the document is re-evaluated. The docs and doc comments now say so, and a spec pins it.
+  
+  What these do not cover: package-contributed state in a snapshot, serialising symbolic values, cancellation or refresh for a raw plugin handler, and the compile offload's own worker path. The per-engine plugin-function index allocator is part of the 3.0 work; relinking by name is what makes its order irrelevant to a snapshot.
+  
+  ## Verification
+  
+  A spec for each issue pins its before/now lines and adversarial cases: a snapshot restored in a separate Node process with the packages reversed, with one missing and after another engine registered first; a hand-edited snapshot; a promise that never settles, one that rejects and one that resolves to something that is not a value; djb2 collision pairs through editLine and the worker boundary; a DOM Worker, a worker scope and a MessagePort type-checked under strict with the DOM and WebWorker libs; and a defined function named after a unit, a keyword, a built-in and another package's call word. The full suite is 14,001 tests in 579 suites, all passing (four skipped), and `npm run verify:ci` passes, including `lint:dispatch-size` (47,481 bytes on Node 24, 13,959 under the ceiling), the three-zone `test:temporal` run and the bundled-consumer contract.
+- 0b876a4: `ln(x)` is the natural logarithm, and the docs say which base `log` uses
+  
+  `ln` was an undefined function, and nothing on the reader pages said that `log` is the natural logarithm, so `log(100)` giving 4.61 read as a wrong answer to anyone expecting a calculator's base-10 key (#667).
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `ln(e)` | Undefined function: ln | 1 |
+  | `ln(100)` | Undefined function: ln | 4.61, the same as `log(100)` |
+  | `ln(0)` | Undefined function: ln | refused: ln(0) has no real value: ln is only defined for positive numbers. |
+  | `ln = 4`, then `ln * 2` | 8 | 8 |
+  
+  `ln` becomes the call only where a bracket follows it, the way `sha256(` does, so a note that already uses `ln` as a variable keeps working. It has its own builtin index over the same implementation as `log`, so a refusal, an arity error and an explanation all name `ln` as the line wrote it, and the algebra reads it as the logarithm it knows.
+  
+  `log x base n` is exact at a power now. It divided two natural logarithms, so `log 1000 base 10` came out as 2.9999999999999996 and showed as 3.00; base 10 and base 2 now use their own logarithms, and a result a hair from a whole number that really is the power (`log 81 base 3`) is that whole number.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `log 1000 base 10` | 3.00 | 3 |
+  | `log 81 base 3` | 4.00 | 4 |
+  
+  What stays: `log` is still base e, since making it base 10 would change every note that uses it. A two-argument `log(x, base)` is not added, because tools disagree on the argument order; `log 8 base 2` already names a base in words, and `log10` and `log2` name the common two. `ln 10` without a bracket is not read.
+  
+  The number-functions page has a section on logarithms that says all of this.
+  
+  ## Verification
+  
+  `Issue667_lnAndLogBase.spec.ts` has 25 tests: `ln` beside `log`, `log10` and `log2` and inside `map`, its explanation and its completion; `log x base n` at powers of 10, 2 and 3 and at a non-power (`log 2 base 10`), its refusals, its explanation and its symbolic change of base; and adversarial cases: `ln` of zero, of a negative number and of a mass, and with no argument or two, each refused under the name it was written with; `ln` as a variable name wherever no bracket follows, on both document passes; and the algebra reading `ln` as the logarithm.
+  
+  The engine suite is 14,209 tests in 588 suites, all passing (four skipped), and `npm run verify:ci` passes on the branch, including the docs proofs, the three-zone `test:temporal` run, `lint:dispatch-size` (47,331 bytes on Node 24, 14,109 under the ceiling) and the bundled-consumer contract.
+- 0b876a4: `≤`, `≥`, `√`, `∞` and `π` are read, as `×`, `÷`, `±` and `≠` already were
+  
+  People paste and type the mathematical symbols: `≥` from a phone keyboard, `π` and `√` from a formula. The engine read the multiplication, division, plus-minus and not-equal signs, but each of these failed in its own way (#669).
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `3 ≥ 2` | Unexpected token after expression: "2" | true |
+  | `3 ≤ 2` | Unexpected token after expression: "2" | false |
+  | `√16 + 9` | Undefined variable: √16 | 13 |
+  | `√(9 + 16)` | Undefined variable: √ | 5 |
+  | `π * 2` | Undefined variable: π | 6.28 |
+  | `1/∞` | Undefined variable: ∞ | 0 |
+  
+  `≤` and `≥` are the `<=` and `>=` operators, and highlight as comparisons. `√` is a square root that binds as tightly as a minus sign, so `√16 + 9` is 13 and `2√3` is two times the root of three; it calls the builtin `sqrt` does, so a quantity and a negative number answer as `sqrt(...)` does. `∞` is infinity, and meets the refusals the functions already give it (`sin(∞)` has no real value).
+  
+  `π` is pi only while nothing in the note is named `π`: `π = 3` then `π * 2` is still 6, on both document passes, as it was.
+  
+  What is not added: the word `infinity`, which is ordinary English in a line of prose.
+  
+  The operators page lists the new symbols beside the ones already read.
+  
+  ## Verification
+  
+  `Issue669_mathSymbols.spec.ts` has 26 tests: `≤` and `≥` between numbers and between names with no spaces; `√` over a number, a bracket, a quantity, itself and a negative number, and on its own; `∞` and `π`, with the refusals the functions already give infinity and a variable named `π` kept on both passes; and adversarial cases: the word `infinity` as a name, a comparison with nothing on its right, and highlighting that matches the ASCII spellings.
+  
+  The engine suite is 14,209 tests in 588 suites, all passing (four skipped), and `npm run verify:ci` passes on the branch, including the docs proofs, the three-zone `test:temporal` run, `lint:dispatch-size` (47,331 bytes on Node 24, 14,109 under the ceiling) and the bundled-consumer contract.
+- 0b876a4: `*=` and `/=` beside `+=` and `-=`, for a balance that grows by a rate
+  
+  The running-total forms stopped at `+=` and `-=`, so a balance grown by a rate, or a quantity halved in place, could not be written the same way (#670).
+  
+  | note | before | now |
+  | --- | --- | --- |
+  | `bal = $100`, `bal *= 1.05` | No prefix parselet found for token: EQUALS | $105.00 |
+  | `a = 8`, `a /= 2` | No prefix parselet found for token: EQUALS | 4 |
+  | `len = 10 m`, `len /= 4` | No prefix parselet found for token: EQUALS | 2.50 m |
+  | `y *= 2`, with nothing named `y` | No prefix parselet found for token: EQUALS | Undefined variable: y |
+  
+  They are read exactly as `+=` and `-=` are: the right-hand side keeps its own brackets (`q *= 2 + 1` multiplies by 3), the arithmetic is the ordinary multiplication and division, so money stays exact to the penny and a unit stays its unit, and the line answers with the new value. Tracing, renaming and highlighting treat the new lines as they treat a running total, and highlighting one runs nothing.
+  
+  What differs from `+=`: a first `*=` or `/=` on a name that has not been set is refused as an undefined variable, since starting from zero would make every product zero. `%=` and `^=` are not added.
+  
+  The variables page shows a balance grown by a rate.
+  
+  ## Verification
+  
+  `Issue670_starAndSlashEquals.spec.ts` has 19 tests: the lexer reading both operators while a comment and a plain division stay untouched; running products and quotients over numbers, money (exact to the penny) and quantities, a trace and a rename; and adversarial cases: a first use on an unknown name, division by zero, a missing right-hand side, a number on the left, a length on the right, and highlighting a running product, which runs nothing.
+  
+  The engine suite is 14,209 tests in 588 suites, all passing (four skipped), and `npm run verify:ci` passes on the branch, including the docs proofs, the three-zone `test:temporal` run, `lint:dispatch-size` (47,331 bytes on Node 24, 14,109 under the ceiling) and the bundled-consumer contract.
+- 28702fa: Time abbreviations after a number: `$15/hr`, `30 mins` and `10 secs` are units, and so is anything with a micro sign, such as `5 µs`
+  
+  An hourly rate is usually written `$15/hr` and a meeting `30 mins`. The engine refused both as undefined variables, although it already read the same spellings inside a compact duration: `1hr30min` gave 90 minutes (#666). The unit tables did not spell them, and they are the vocabulary the lexer, the rate and duration rules and the conversions all read. They now carry seven abbreviations, each another name for a unit they already had: `hr` and `hrs` for the hour, `mins` for the minute, `sec` and `secs` for the second, `wks` for the week and `yrs` for the year.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `$15/hr` | error: Undefined variable: hr | 15.00 USD/hr |
+  | `30 mins` | error: Undefined variable: mins. Did you mean min? | 30.00 mins |
+  | `10 secs` | error: Undefined variable: secs | 10.00 secs |
+  | `3 yrs in months` | error: Undefined variable: yrs | 36.50 months |
+  | `2 hours in mins` | refused: "mins" is not a unit. Did you mean min? | 120.00 mins |
+  | `90 minutes in hr` | refused: "hr" is not a unit. | 1.50 hr |
+  | `$15/hr * 37.5 hrs` | error: Undefined variable: hr | $562.50 |
+  | `1hr 30min` | error: Unexpected token after expression: "30" | 90.00 min |
+  | `1hr30min` | 90 minutes | 90 minutes |
+  
+  The abbreviations are added by the table generator from a short, justified list, at the ratio of the unit each one names, so `hr` agrees with `h` to the bit. It checks that `convert`, the package the table is mirrored from, still lacks each one, so an upstream release that adds a spelling fails the generator rather than leaving two definitions. They are lower case only, as every unit spelling is, so `HR` and `Hrs` stay names.
+  
+  **The micro sign is admitted.** The tables spell every micro unit with both characters a keyboard gives for the prefix, the micro sign (U+00B5) and the Greek small letter mu (U+03BC), but the lexer admitted only ASCII spellings, so `5 µs`, `5 µm` and `250 µg` were all undefined variables while `5 microseconds` worked. A leading micro sign on a spelling the table has is now read as the unit.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `5 µs in ns` | error: Undefined variable: µs | 5,000.00 ns |
+  | `5 μs in ns` | error: Undefined variable: μs | 5,000.00 ns |
+  | `3 µm in nm` | error: Undefined variable: µm | 3,000.00 nm |
+  | `250 µg in mg` | error: Undefined variable: µg | 0.25 mg |
+  | `5 µs + 1 ms` | error: Undefined variable: µs | 1,005.00 µs |
+  
+  A micro unit as a conversion target already worked (`1 mL in µL` gave 1,000.00 µL), because the word after `in` is read as a unit name directly. `us` is not read as microseconds, because it is also an ordinary word, and a micro sign on anything the table does not spell (`5 µx`) is still an undefined variable.
+  
+  **A variable with one of these names.** A unit spelling has always been read as a unit when it stands straight after a value, and as your variable where a name stands on its own. The new spellings follow that rule, so two documents that used one as a variable after a value now read the unit, as `h` already did:
+  
+  | document | before | now |
+  | --- | --- | --- |
+  | `hr = 2` then `$15/hr` | $7.50 | 15.00 USD/hr |
+  | `mins = 4` then `30 mins` | 120 | 30.00 mins |
+  | `hr = 2` then `hr * 3` | 6 | 6 |
+  | `h = 2` then `$15/h` | 15.00 USD/h | 15.00 USD/h |
+  
+  Both passes agree on every line above. After a slash with a plain value before it, a defined variable is divided by, for every unit spelling and these seven with them (#642, in its own entry): with `hr = 2`, `30 / hr` is 15.
+  
+  **A misspelt target is offered units of the same measure.** With `mins` in the table, `5 km in mies` would have offered `miles or mins`, since both are one letter away. Converting from a unit, the refusal now names only the near spellings that measure the same thing, when there are any: `5 km in mies` still offers `miles`, and `5 kg in mies`, with no mass that close, offers both.
+  
+  The boundary: `m` is still metres outside a compact duration, and `mo` and `d` are unchanged. `60 mph for 2 hours` and `5 ms to ?` fail the same way with the new spellings as with the old, which is a separate question. The time page gains a short-spellings section and the converting-units page a section on the micro sign, both with proven examples, and the unit reference lists the new spellings and the micro ones it could not list before.
+  
+  ## Verification
+  
+  `Issue666_timeAbbreviations.spec.ts` has 134 tests: each abbreviation after a number, after a slash and as a conversion target, agreeing with the unit it names to the bit; the compact forms; the micro sign in both characters, as a prefix only; a rate's count keeping a symbol singular; what did not change (`30 min`, `2 wk`, `90m`, capitals, `sec(1)`); a variable of the same name at the start of a line, after a value and as a global, through both document passes; prose; the suggestion filter, with direct tests of `unknownUnitError`; and an adversarial sweep of nine forms over each spelling, answered honestly. `ConvertParity.spec.ts` checks each added spelling against the upstream unit it names in every sweep, and pins the seven as the only additions; `UnitVocabulary.spec.ts` pins the micro sign. The unit reference is regenerated and `lint:units` passes.
+  
+  The engine suite is 15,164 tests in 602 suites, all passing (four skipped), and `npm run verify:ci` passes on the branch, including `lint:units`, the docs proofs, the three-zone `test:temporal` run, `lint:dispatch-size` (47,528 bytes on Node 24, 13,912 under the ceiling) and the bundled-consumer contract.
+
+### Patch Changes
+
+- d4b35f1: A clock sum after a minus is read left to right
+  
+  The rule that adds bare clock times (`8:15 + 7:45`) fused any run of them joined by `+`, without looking at what came before it. After a minus that took the wrong times: in `17:30 - 9:00 + 0:45` it fused `9:00 + 0:45` into 585 minutes, and the line read as `17:30 - 585 minutes`, a time of day (#628). A run is now fused only where a sum can start (the start of an expression, or after a bracket, an `=`, a comma or another `+`), and a run added to a clock subtraction is a length of time added to that shift, which stays a span.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `17:30 - 9:00 + 0:45` | 7:45 AM today | 9:15 |
+  | `18:00 - 12:55 + 1:00 + 0:30` | 3:35 AM today | 6:35 |
+  | `(9:30 - 8:30) + 1:00` | 2:00 AM today | 2:00 |
+  
+  The sums the rule was written for are unchanged (`8:15 + 7:45 + 8:30` is 1,470 minutes), and so is a bracket that asks for the other reading: `17:30 - (9:00 + 0:45)` is still a time of day, 9:45 before half past five. After a `*` or `/` the run is left to precedence, so `2 * 1:00 + 0:30` multiplies a time of day, which is refused by name.
+  
+  The timesheets page shows a shift with overtime added.
+  
+  ## Verification
+  
+  A new spec pins each shape through both document passes, including a column of them under `total above`, the boundary cases, and every operator in front of a run; the time suites pass unchanged. It shipped with the percentages fixes, under the same full-suite run: 13,905 tests in 571 suites.
+- d1ffc5e: Dates and times: Oct and Dec are months, a dotted time keeps its minutes, a moment is refused in arithmetic, a pace may carry its minute unit, and a date moves only by a length of time
+  
+  Nine date and time faults from the 2026-09-25 survey. Most gave a number that looked like an answer and was not one: a date's epoch milliseconds, or a date left where it was.
+  
+  **Oct and Dec are months (#623).** `oct` and `dec` also name the octal and decimal conversions, so they lexed as those, and the month-name rule never saw them. The rule now takes them too, except straight after `as`, `in` or `to`, where they are still the conversion.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `1 Oct 2026` | error: Unexpected token after expression: "Oct" | Thursday, October 1, 2026 |
+  | `25 Dec 2026` | error: Unexpected token after expression: "Dec" | Friday, December 25, 2026 |
+  | `255 as dec` | 255 | 255 |
+  
+  **A dotted time keeps its minutes (#624).** `3.30pm` read its hour from the number the lexer made of `3.30`, which is 3.3, so it was 3:00 PM. The hour and minutes are now read from the text. Only two digits after the point are minutes: `3.5pm` could mean half past or five past, so it is not read as a time at all.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `3.30pm` | 3:00 PM today | 3:30 PM today |
+  | `10.45am` | 10:00 AM today | 10:45 AM today |
+  
+  **A date or time is refused in arithmetic (#625).** Only `+` and `-` guarded a date, so everything else read it as its epoch milliseconds. Multiplying, dividing, a remainder, a power, a negation, the numeric functions, `% of`, `as %`, and a unit written after a clock time are each refused by name now, with a pointer to the ways a length of time is written. Figures from 25 September 2026 at about 15:00 in London, since each carried the day's date:
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `1:30 * 3` | 5,370,888,600,000 | A date or time cannot be multiplied: it is a moment, not an amount. A length of time is written 1h30m, 90 minutes or 1:30:00. |
+  | `round(1:30)` | 1,790,296,200,000 | round takes a number, not a date or time: ... |
+  | `1:30 hours in minutes` | 107,417,772,000,000 minutes | A date or time cannot take a unit, hours: ... |
+  | `1 Jan 2026 as %` | 176722560000000.00% | A date or time cannot be written as a percentage: ... |
+  
+  Comparisons, `min` and `max`, `as number`, `to timestamp` and spans are unchanged, since they ask about order or for the number: `9:00 > 8:00` is true, `1 Jan 2026 as number` is 1,767,225,600,000 and `(9:30 - 8:30) * 3` is 3:00. A host with `date.onAmbiguous: "arithmetic"` no longer gets the fourteen-digit answer for `29 February 2026`, which was 29 times the instant of 1 February; it gets the multiplication refusal.
+  
+  **A pace may carry its minute unit, or `per` (#626).** The pace rule wanted the slash straight after the seconds.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `5:30 min/km` | 29838510000:00:00 /km | 5:30 /km |
+  | `5:30 min per km` | 29838510000:00:00 /km | 5:30 /km |
+  | `10 km at 5:30 min/km` | 17,903,106,000,000.00 min | 3,300 seconds |
+  
+  Only a minute unit is read this way; `5:30 h/km` is refused as a clock time with a unit.
+  
+  **A date moves only by a length of time (#627).** A unit that is not a time was read as nothing and a bare number as milliseconds, so the date came back unchanged or a few milliseconds on.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `1 Jan 2026 + 5 kg` | Thursday, January 1, 2026 | A date or time moves by a length of time, such as 5 days, 2 weeks or 3 hours, not by a mass. |
+  | `1 Jan 2026 + 5` | Thursday, January 1, 2026, 12:00:00 AM | A date or time moves by a length of time, and a plain number does not say whether it means days, hours or minutes. Write the unit, as in + 5 days. |
+  
+  A bare number is refused rather than read as days, since nothing on the line says which unit it means. `+ 5 days`, `+ 5 workdays`, `+ 1 month`, `+ 1h30m` and a span from subtracting two times all move a date as before. `2026-04-03 in GMT+9`, read as `(2026-04-03 in GMT) + 9`, is now this refusal rather than nine milliseconds; the time-zones page says so.
+  
+  **A span stays a span with a length of time added (#629).** Only two spans added together, or a span scaled by a number, kept the clock display.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `(9:30 - 8:30) + 30 minutes` | 5,400,000.00 ms | 1:30 |
+  | `30 minutes + (9:30 - 8:30)` | 90 minutes | 1:30 |
+  
+  A typed quantity in milliseconds keeps its milliseconds: `(9:30 - 8:30) + 40ms` is 3,600,040.00 ms, since a clock shows whole seconds.
+  
+  **`workdays between` counts the calendar (#630).** It fell to the generic `<unit> between`, whose workday is a fixed seven fifths of a day.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `workdays between 01/01/2024 and 31/01/2024` | 21.43 workdays | 23 |
+  | `how many working days between 01/01/2024 and 31/01/2024` | error: Unexpected token after expression: "many" | 23 |
+  | `workdays until 25 December 2026` | 64.58 workdays (on 25 September 2026) | refused, pointing at `workdays between today and <date>` |
+  
+  **`to` between two dates is the span (#631).** `a to b` compiled `b / a - 1` whatever the operands were. A new opcode decides when the line runs, since either side can be a variable.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `1 Jan 2026 to 1 Mar 2026` | 0.29% | 59 days |
+  | `2 April 2026 to 6 September 2026` | 0.76% | 157 days |
+  | `1 Mar 2026 to 1 Jan 2026` | -0.29% | -59 days |
+  | `1 Jan 2026 to 5` | -100.00% | refused |
+  
+  Two numbers give the percentage change exactly as before (`10 to 20` is 100.00%), through the same opcodes.
+  
+  **`as iso8601` reads a timestamp in seconds (#632).** It read every number as milliseconds.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `1710000000 as iso8601` | 1970-01-20T20:00:00+01:00 | 2024-03-09T16:00:00+00:00 |
+  | `5 kg as iso8601` | 1970-01-01T01:00:00+01:00 | refused by name |
+  
+  It now reads its argument as `to date` does: a date as it is, a number through the same seconds-or-milliseconds threshold, text through the ISO 8601 parser. A timestamp past the dates a JavaScript date can hold, about 273,000 years either side of 1970, is refused by both (`DATE_OUT_OF_RANGE`), where `(2^53) as iso8601` wrote `NaN-NaN-NaNTNaN:NaN:NaN-NaN:NaN` and `(2^53) to date` showed `Invalid Date, Invalid Date`; the adversarial sweep's numeric edges found it.
+  
+  What these deliberately leave for later: a clock sum after a minus (`17:30 - 9:00 + 0:45`, #628) needs a bare `0:45` told apart from `0:45am` when the line runs, and is its own change; so are signed UTC offsets after a time and a date with a time of day. `today` as the current instant and date minus date as elapsed time stay as they are, held for 3.0.
+  
+  The time, timesheets, health, time-zones, date-arithmetic, working-days and date-literals pages describe each change, with proven examples.
+  
+  ## Verification
+  
+  New tests pin each issue under `__tests__/bugs` (#623 to #627 and #629 to #632), each with an adversarial section: every arithmetic form and numeric function against a clock time, an am/pm time, a date literal, an ISO date-time, `today` and `now`, on either side and held in a variable; the boundaries that must not move (comparisons, `min` and `max`, `as number`, spans); a pace with every minute spelling, `per`, and the shapes that are not a pace; a date plus each kind of non-duration; a span plus each time unit, typed milliseconds and a variable; the edges of a working-day window and a host holiday calendar; `to` between dates, variables and a date against a number; and timestamps at the seconds threshold and past the calendar. Unit tests cover the new helpers (`datetimeArithmeticRefused`, `datetimeTakesNoUnit`, `datetimeConversionRefused`, `datetimeArgumentRefused`, `asIso8601`) and the new `PERCENT_CHANGE` opcode on hand-built bytecode. The adversarial sweep gains a dates group of eight forms over its numeric edges, which found the out-of-range timestamp. Nine existing tests that pinned the old readings (a bare number as milliseconds, a non-duration ignored, the fourteen-digit `onAmbiguous` answer, a nine-millisecond UTC offset) now pin the refusals. The VM dispatch loop is 47,326 bytes, 476 over main and well under the 61,440 ceiling.
+  
+  The full suite is 13,763 tests in 563 suites, all passing (four skipped), and `npm run verify:ci` passes, including `smoke:globals`, the three-zone `test:temporal` run and the bundled-consumer contract.
+- 3e0edc9: A one-character first line is its own line, a what-if reads `:name` as the input, and the ESM build loads where Node's globals do not exist
+  
+  Three faults found by the survey before 2.40.0 and listed as known issues in its release notes.
+  
+  **A one-character first line is its own line (#609).** The lexer's one-character fast path built its token from the whole input, and a document scan narrows only the line's end, so a first line of one character took the whole document as its text. The two document passes disagreed, and the bad program was reused for a later line on the same engine.
+  
+  | document | before (parseDocument) | now (both passes) |
+  | --- | --- | --- |
+  | `e`, then `5` | error: Undefined variable: e, followed by the rest of the document | 2.72, then 5 |
+  | `e`, then `total above` | error: Line 1 has an error | 2.72, then 2.72 |
+  | `x`, then `5` | error: Undefined variable: x, followed by the rest of the document | error: Undefined variable: x, then 5 |
+  
+  **A what-if, a sweep and a goal seek read `:name` as the input (#608).** A reader who defined `:price = 100` writes `line 2 with :price = 300`. The colon kept the what-if from being recognised, `with` stayed the English word for `+`, and the line added the assignment and overwrote the variable.
+  
+  | line, after `:price = 100` and `:total = :price * 1.2` | before | now |
+  | --- | --- | --- |
+  | `line 2 with :price = 300` | 420, and `:price` became 300 | 360, and `:price` stays 100 |
+  | `line 2 for :price from 100 to 300 step 100` | error: Expected token type "AT" but got "FROM" | [120, 240, 360] |
+  
+  **The ESM build loads where Node's globals do not exist (#610).** Value.ts read `process.env.NODE_ENV` at module scope, unguarded, so every entry point threw "process is not defined" on import in a browser tab or a module Web Worker loaded without a bundler. The read is now guarded, as the engine's other reads of `process` are. This was true of 2.39.0 too; a bundler that defines `process.env.NODE_ENV` was never affected.
+  
+  A new check, `npm run smoke:globals`, imports every ESM entry point of the build twice, once as Node has it and once with `process`, `Buffer` and `global` removed, and fails if an entry loads only with them. It runs in `verify` and `verify:ci`, and was shown to fail on the unguarded read.
+  
+  The what-if page carries a proven example of the colon form.
+  
+  ## Verification
+  
+  New tests pin each shape of one-character first line through both passes, that a later line on the same engine is not poisoned, and that the answer does not depend on what the engine did before; the colon form of a what-if, a joined input, a sweep and a goal seek, each agreeing with its bare spelling through both passes; and that `with` still means `+` where no name and `=` follow. The full suite is 11,948 tests in 548 suites, all passing (four skipped), and `npm run verify:ci` passes, including `smoke:globals`, the three-zone `test:temporal` run and the bundled-consumer contract.
+- 5c2a031: The goal-seek refusal says which pass gave it
+  
+  `parseDocument` refused goal seek with the single-expression entry point's sentence, "The single-expression entry point has no document to solve against", which is wrong for a caller that passed a whole document (#617). The batch pass has a document; what it cannot do is re-run a line. The refusal now says so, and names the passes that can. The code, `GOAL_SEEK_NO_DOCUMENT`, is unchanged.
+  
+  | entry point | before | now |
+  | --- | --- | --- |
+  | `parseDocument` | Goal seek only works inside a document, since it re-runs another line. The single-expression entry point has no document to solve against. | Goal seek re-runs another line, which the batch pass (parseDocument) cannot do: it evaluates each line once. evaluateDocument and a live editor can solve it. |
+  | `evaluateLine` | the same sentence | unchanged |
+  | `evaluateDocument` | solves it | solves it |
+  
+  The goal-seek page now names the entry points that solve goal seek and the two that refuse it.
+  
+  ## Verification
+  
+  A new spec pins each entry point's answer, and the goal-seek and cross-path suites pass unchanged, since they assert the code and that the batch refusal mentions a document. The full suite is 13,793 tests in 565 suites, all passing (four skipped), and `npm run verify:ci` passes, now including `lint:ci-parity` and `lint:dispatch-size` (47,474 bytes on Node 24, 13,966 under the ceiling), the three-zone `test:temporal` run and the bundled-consumer contract.
+- 5cda73b: An infinite angle and a remainder with no value are refused by name, and the normal distribution's far tails answer 0 and 1
+  
+  **An infinite angle, a remainder by zero and a remainder of an infinity are refused (#600).** Each has no value, and JavaScript's maths answered NaN for all of them, which `number-functions.md` calls "not an answer". They are now refused by name, as the functions outside their domain have been since #510.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `sin(1/0)` | NaN | error: sin(Infinity) has no real value: sin is only defined for finite angles. |
+  | `5 mod 0` | NaN | error: 5 mod 0 has no value: nothing is left over from a division by zero, because it never ends. |
+  | `(1/0) mod 3` | NaN | error: Infinity mod 3 has no value: an infinite number has no remainder. |
+  | `5 mod (1/0)` | 5 | 5 |
+  | `sin(1e300)` | a number | a number |
+  
+  **The normal distribution's far tails answer 0 and 1 (#601).** The exponential the tails are built from split its argument with `Math.trunc(x * 4096)`, which overflows near the top of the double range, so `normalcdf(1e308)` came out NaN. Past 40 standard deviations the exponential has underflowed to zero anyway, so it now answers 0 there without the arithmetic.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `normalcdf(1e308)` | NaN | 1 |
+  | `normalcdf(-1e308)` | NaN | 0 |
+  | `normalpdf(1e308)` | NaN | 0 |
+  | `normalcdf(-10)` | 7.62e-24 | 7.62e-24 |
+  
+  The boundary: `0/0` stays NaN and `1/0` stays infinity, the floating-point standard's defined answers, and a form fed `0/0` passes its NaN on (`sin(0/0)` is NaN) rather than blaming the function. A whole-number remainder by zero (`10n mod 0n`) keeps its own named error.
+  
+  Both were found by the new adversarial sweep. The number-functions and operators pages carry proven examples.
+  
+  ## Verification
+  
+  New tests pin each refusal and its message, finite angles up to the largest double, every sign of a finite remainder, exact and unit remainders, an infinity reached through a variable and a line reference, and the normal distribution finite at every power of ten up to the largest double. The existing modulo tests that pinned NaN now pin the refusal. `npm run verify:ci` passes.
+- 5c2a031: `field(...)` refuses JSON nested more than 512 levels deep, the same on every runtime
+  
+  `field(...)` left the depth of a JSON text to the runtime's own `JSON.parse` and `JSON.stringify`, so the answer depended on the Node version. A text nested a hundred thousand levels deep was refused as `TEXT_NOT_JSON` on Node 22 and 24, and the new Node 26 job found it was not refused that way there (#621).
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `field(("[" repeated 100000 times) + ("]" repeated 100000 times), "[0]")` | refused on Node 22 and 24, not on Node 26 | refused on every runtime: field(...) reads JSON nested at most 512 levels deep, and this text nests deeper |
+  | `field(("[" repeated 512 times) + "1" + ("]" repeated 512 times), "[0]")` | answered | answered |
+  
+  The engine now counts the nesting itself before parsing. Five hundred and twelve levels is far past any API's answer and inside what every runtime reads and writes. Brackets inside a JSON string are text and do not count. The code is `TEXT_NOT_JSON`, as before.
+  
+  ## Verification
+  
+  The text suite pins the limit on either side of 512 and a string full of brackets, and the Node 26 job in CI runs it there.
+- 775decc: Both document passes count lines as an editor does, and a CRLF line's text leaves out the `\r`
+  
+  `parseDocument` dropped the empty line after a trailing line break, and returned no lines for an empty note. `evaluateDocument`, which reads the note through the same line model an editor host uses, kept them, so the two passes disagreed on how many lines a note had, and a host indexing results by the editor's line number read a different list from each (#613). `evaluateDocument` also kept the `\r` of a CRLF line ending in the line's `text`, and counted it in the line's end offset.
+  
+  | note | before: `parseDocument` | before: `evaluateDocument` | now: both |
+  | --- | --- | --- | --- |
+  | `""` | no lines | one empty line | one empty line |
+  | `"1\n2\ntotal above\n"` | 3 lines | 4 lines, the last empty | 4 lines, the last empty |
+  | `"1\r\n2\r\n"` | 2 lines, text `1` and `2` | 3 lines, text `1\r`, `2\r` and empty | 3 lines, text `1`, `2` and empty, at the same offsets |
+  
+  The lines above the new last line read as they did. A line that names the new last line now finds an empty line there, as `evaluateDocument` already did: `line 4 with x = 1` at the end of a three-line note that ends in a line break said "There is no line 4 to re-run: the document has 3 lines." through `parseDocument`, and now says line 4 is not a calculation through both passes. `evaluateLines` returns one `ParsedLine` per line given even when the last is empty (`["1", ""]` gave one, and `[""]` none), and still none for no lines.
+  
+  A lone `\r`, the line ending of classic Mac OS, still ends a line in `parseDocument` only; `evaluateDocument`'s line model splits on `\n`. No host this engine targets writes one, and changing the model's split would move the character offsets a host passes to it for an edit.
+  
+  The TypeScript guide says how lines are counted.
+  
+  ## Verification
+  
+  New tests pin the count for an empty note, notes of only line breaks of both kinds, a trailing line break after answers, errors, a heading and `total above`, and CRLF notes, each through both passes with their text and offsets; `evaluateLines` of no lines, one empty line and a trailing empty line; a what-if naming the new last line; and inline solves on CRLF lines. The cross-path suite gains CRLF notes with a trailing line break for a line reference, a category tag, a section and a what-if. The adversarial sweep's four pinned #613 documents now pass and run in the ordinary set. Four existing tests that pinned the old count (the lexer's empty document and trailing line break, and the engine's empty document) now pin the editor's count. The full suite is 13,360 tests in 554 suites, all passing (four skipped), and `npm run verify:ci` passes, including `smoke:globals`, the three-zone `test:temporal` run and the bundled-consumer contract.
+- 2c2a052: A form that reads a line below it gives the same answer on both document passes
+  
+  A section total, a count or a line range can read lines below the line that asks. Each asks of every line whether it has a figure. The batch pass knew the answer for every line from its scan; the incremental pass knew it for a line only once it had evaluated that line, so a comment or a table row below the reader read as a figure still to come (#803).
+  
+  | note | `parseDocument` | `evaluateDocument`, before | `evaluateDocument`, now |
+  | --- | --- | --- | --- |
+  | `count of section "Home"`, `# Home`, `// note 5` | 0 | Line 3 has not been evaluated yet | 0 |
+  | `total of section "Trip"`, `## Trip`, `// note 4` | The section "Trip" has no figures to add up. | Line 3 has not been evaluated yet | The section "Trip" has no figures to add up. |
+  | `sum(line 5 : line 4)` over a blank line and a table separator | Lines 5 to 4 hold no figures to add up | Line 5 has not been evaluated yet | Lines 5 to 4 hold no figures to add up |
+  
+  A line the incremental pass has not reached is now read from its text, the way the batch pass reads it: a blank line, a heading, a comment, a quote, a fence or a table row has no figure. A live editor whose viewport stops above the comment gives the same answer. A figure below the reader is still a forward reference on both passes.
+  
+  The cross-path fuzz generator found these on its first run.
+  
+  ## Verification
+  
+  `Issue803_linesBelowTheReader.spec.ts` has 15 tests: unit tests for `hasNoFigure` over each line kind, a table row, a row holding an inline solve and past either end; a section below holding only a comment; a section below holding a comment and a figure, where the figure is still a forward reference; a range reaching down over a table; and a live editor that has not scrolled to the comment yet, which gives the batch answer. `CrossPathDocumentFeatures.spec.ts` gains the section count and the line range over lines below the reader, asserting both passes agree value for value.
+  
+  The engine suite is 14,062 tests in 582 suites, all passing (four skipped), and `npm run verify:ci` passes on the branch rebased onto main after #808, including the docs proofs, the three-zone `test:temporal` run, `lint:dispatch-size` (47,481 bytes on Node 24, 13,959 under the ceiling) and the bundled-consumer contract.
+- 610a61d: Locales: a German engine refuses a dot decimal rather than reading it a hundred times too large, a regional tag reads as its language, native digits run past the decimal mark, and Indian grouping is read beside the rupee
+  
+  Four locale faults from the 2026-09-25 survey, and a fifth found while fixing them. Most gave a number that looked like an answer and was not one.
+  
+  **A German engine refuses a dot decimal (#654).** German groups thousands with a point, and the parser removed every point from a literal whatever followed it, so `2.5` was 25 and `$9.99` was $999.00. A German thousands group is always three digits, so a point followed by one, two, or four or more digits is an English decimal typed into a German engine. The engine cannot use it either way without guessing, so it is now refused with `INVALID_NUMBER_LITERAL`, naming the locale, at both parse sites. Under `createEngine({ locale: "de" })`, with results written in the default settings:
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `2.5` | 25 | refused: "2.5" is not a number in the de locale: "." groups thousands there, so it is followed by exactly three digits, as in 2.500 (two thousand five hundred). |
+  | `$9.99` | $999.00 | refused |
+  | `1.5 km` | 15.00 km | refused |
+  | `0.5` | 5 | refused |
+  | `12.5%` | 125.00% | refused |
+  | `9.99 EUR` | €999.00 | refused |
+  | `2.500` | 2,500 | 2,500 |
+  | `1.234.567` | 1,234,567 | 1,234,567 |
+  | `17.11.2025` | Monday, November 17, 2025 | Monday, November 17, 2025 |
+  
+  What stays: `2.500` is two thousand five hundred and `1.234.567` over a million, since a three-digit group is how German writes them, and a dotted date is a date. English and French engines read `2.5` as before. Reading `2,5` as two and a half is the decimal comma, which this does not add: `2,5` is refused in every engine, as it was, and a German engine writes a fraction as a division (`5/2`) until it is read. Pasted text keeps its own reading, so `numbers in "preis 9.99"` is still 9 and 99 under `de`.
+  
+  **A regional tag reads as its language (#655).** `getLocale` looked a code up as an exact key of a plain object. `de-DE`, which is what a browser reports, missed `de` and read as English, and a code naming an inherited property (`toString`, `constructor`, `__proto__`, `hasOwnProperty`) returned what the object inherits, which crashed engine construction. A tag now falls back by its language subtag before falling back to English, in any case and with `-` or `_` between the subtags, and a code is looked up as an own key or not at all.
+  
+  | `locale` | line | before | now |
+  | --- | --- | --- | --- |
+  | `de-DE` | `€1.250` | €1.25 | €1,250.00 |
+  | `de-DE` | `1.000 + 1` | 2 | 1,001 |
+  | `de-DE` | `1.5 + 1` | 2.50 | refused, as under `de` |
+  | `toString` | `createEngine({ locale })` | TypeError: Cannot convert undefined or null to object | an English engine |
+  
+  `formatValue` wrote a regional tag's digits through `Intl` but took its weekday and month names from the language pack's code, which is `en` for any tag without a pack of its own. The names now come from the full tag wherever `Intl` has data for it. With `decimalSeparatorLocale` set:
+  
+  | tag | `2025-11-17` before | now |
+  | --- | --- | --- |
+  | `de-DE` | Monday, November 17, 2025 | Montag, 17. November 2025 |
+  | `fr-FR` | Monday, November 17, 2025 | lundi 17 novembre 2025 |
+  | `en-GB` | Monday, November 17, 2025 | Monday, 17 November 2025 |
+  
+  A tag `Intl` has no data for (`xx`) keeps its language pack's names, English for a code with none, as before, so a date does not follow the machine the engine runs on. The subtag chooses the language pack and nothing else about reading, with Indian grouping (below) the one exception, and no language is added.
+  
+  **A second decimal mark is refused where the comma marks the decimal.** Found while fixing #655: a German or French engine turned the first comma of `1,234,567` into its decimal point, and `parseFloat` stopped at the second, so it answered 1.234. That reading had reached only `de` and `fr` engines; with regional tags falling back to their language it would have reached every `de-DE` and `fr-FR` host, which read the line as English until now, so it is refused in the same change, by the same code.
+  
+  | `locale` | line | before | now |
+  | --- | --- | --- | --- |
+  | `de` | `1,234,567` | 1.23 | refused: "1,234,567" is not a number in the de locale: "," marks the decimal there, so it appears once, with only digits after it. |
+  | `fr` | `1,234.56` | 1.23 | refused |
+  | `de-DE` | `1,234,567` | 1,234,567, read as English | refused |
+  
+  What stays: `1,000` is one in German and French, as it was, and `1.234,567` is one thousand two hundred and thirty-four and a bit in German.
+  
+  **The two readings that slipped past (#805, #806).** An English engine read the mirror of #654, a German number typed into it, by dropping its comma, and a German engine let two shapes through: a first group longer than three digits, and a frame rate, whose parselet read its number the English way.
+  
+  | `locale` | line | before | now |
+  | --- | --- | --- | --- |
+  | `en` | `1.234,567` | 1.23 | refused: "1.234,567" is not a number in the en locale: "." marks the decimal there, and the digits after it are not grouped. |
+  | `de` | `12345.678` | 12,345,678 | refused: "12345.678" is not a number in the de locale: "." groups thousands there, in threes, as in 12.345.678. |
+  | `de` | `2.5 fps` | 2.50 frames/s | refused, as `2.5` is |
+  | `de` | `2.500 fps` | 2.50 frames/s | 2,500.00 frames/s |
+  
+  A list or a call written without spaces is unchanged (`[1.5,234]` is `[1.50, 234]` in English), since a comma there is a separator.
+  
+  **Native digits run past the decimal mark (#656).** `localiseFixedDecimal`, which writes every quantity, every amount of money and an exact number to a fixed place count, localised the whole part through `Intl` and appended the fraction as the ASCII it arrived in. The fraction's digits now follow the tag's numbering system, leading zeros kept, and so does the whole part when grouping is off, which had the same gap. With `decimalSeparatorLocale` set:
+  
+  | tag | line | before | now |
+  | --- | --- | --- | --- |
+  | `ar-EG` | `3.5 days` | ٣٫50 days | ٣٫٥٠ days |
+  | `ar-EG` | `£1234.5` | £١٬٢٣٤٫50 | £١٬٢٣٤٫٥٠ |
+  | `ar-EG` | `3.14159 to 2 dp` | ٣٫14 | ٣٫١٤ |
+  | `bn` | `3.5 days` | ৩.50 days | ৩.৫০ days |
+  | `mr` | `£1234.5` | £१,२३४.50 | £१,२३४.५० |
+  | `fa` | `3.5 days` | ۳٫50 days | ۳٫۵۰ days |
+  | `ar-EG`, grouping off | `£1234.5` | £1234٫50 | £١٢٣٤٫٥٠ |
+  
+  The digits follow whatever numbering system `Intl` picks for the tag, so `ar-EG-u-nu-latn` still gives `3.50 days`. This is display only: typed native digits (`٣٫٥`) are not read.
+  
+  **Indian grouping is read beside the rupee (#657).** In India a hundred thousand is one lakh, written `1,00,000`. The lexer and text extraction read a thousands group only as exactly three digits, so `₹1,00,000` was refused at its first comma and `amounts in "₹1,00,000"` answered `[1]`. The grouping (a first group of one or two digits, then groups of two, then a final three) is now read after `₹` or before `INR` in any engine whose pack groups thousands with a comma, and everywhere in an engine whose tag names India as its region (`en-IN`, `hi-IN`).
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `amounts in "₹1,00,000"` | [1] | [100,000] |
+  | `numbers in "₹1,00,000"` | [1, 0] | [100,000] |
+  | `amounts in "rent ₹12,34,567.89"` | [12] | [1,234,567.89] |
+  | `₹1,00,000` | refused: Unexpected token after expression: "," | ₹100,000.00 |
+  | `1,00,000 INR` | refused: Unexpected token after expression: "," | ₹100,000.00 |
+  | `12,34,567` under `en-IN` | refused: Unexpected token after expression: "," | 1,234,567 |
+  
+  What stays: a bare `12,34,567` in an English engine with no rupee marker is refused, since outside the convention a group of two digits is not a group and a refusal is safer than a guess. A comma inside a call or a bracket separates arguments and elements, so `[1,00,000]` is three numbers under `en-IN` too. A German or French engine does not read the grouping, since its comma is the decimal mark, and a mixed `1,00,000,000` is refused everywhere.
+  
+  A new Locales page in the developer guide says what each language pack accepts typed, how a tag is resolved, where Indian grouping is read, and how the formatting tag writes digits and dates. The currency and pasted-text pages show Indian grouping, the pasted-text page says where a typed line and pasted text read differently, and the embedding and formatting guides point to the new page.
+  
+  **Five pages said more about locales than the engine does (#675).** The embedding guide says `locale` decides the keywords and how numbers are read, and that the order of an ambiguous date is `config.date.inputOrder`: `03/04/2026` is 3 April in a German engine as in an English one. The introduction no longer promises a currency display setting, or settings that default from the engine, since `formatValue` never sees one. The pasted-text page says a typed line in a German engine does not yet accept a decimal comma, where pasted text does. The export tables describe `solve-engine/constants` as configuration defaults and the engine version, which is all it exports.
+  
+  `UnifiedParsingOptions.localeCode` is deprecated, and goes in 3.0. `parseDocument` never read it: the engine reads keywords and numbers in the `locale` it was created with, so `parseDocument("1.000 + 1", { inputType: "markdown", localeCode: "de" })` on an English engine answers 2. The worker option of the same name is a different one, and is read.
+  
+  ## Verification
+  
+  A spec per issue under `__tests__/bugs`, with unit tests for the new helpers and, for #654 to #657, an adversarial section: 65 tests for #654 (`isDotDecimal`, `unreadableInLocale`, `localeLiteralRefusal`, both parse tiers refusing together, whole documents, a literal of a hundred thousand digits, a tag of any length); 103 for #655 (`getLocale`, `groupsInLakhs`, `hasSecondDecimalMark`, every prototype word, `__PROTO__`, a non-string and a very long tag as a locale, and dates written through the full tag); 26 for #656 (`localiseFixedDecimal` across numbering systems, a tag `Intl` refuses, a prototype-named tag, a ten-thousand-digit fraction); 73 for #657 (`lakhGroupEnd`, `rupeeMarked`, English and `en-IN` engines, text extraction, whole documents, a long run of pairs); 22 for #805 and #806 (`unreadableInLocale`, `readLocaleNumber`, and the frame-rate form under both locales); and 9 for #675, one per corrected page claim, so a page that drifts from the engine again has a failing test beside it. `AdversarialFeatureSweep.spec.ts` gains Indian grouping in its money group.
+  
+  The engine suite is 15,502 tests in 608 suites, all passing (four skipped), and `npm run verify:ci` passes on the branch rebased onto main after #813, including the docs proofs, `lint:sidebar` for the new Locales page, the three-zone `test:temporal` run, `lint:dispatch-size` (47,528 bytes on Node 24, 13,912 under the ceiling) and the bundled-consumer contract.
+- d4b35f1: Percentages: one scale with permille and ppm, `as % of` asks for the rate, `on` and `off` take the percentage before them, a change needs a base with a size, and a percentage is formatted like any other figure
+  
+  Five percentage faults from the 2026-09-25 survey. Each gave a confident answer to a sum people type often.
+  
+  **Percent is on the parts-per scale (#633).** A percent is one part in a hundred, a permille one in a thousand and a part per million one in a million, but percent sat outside that scale. `in %` left the `%` for the postfix operator, which divided by a hundred again; `as %` read a quantity's magnitude and dropped its unit; and `of` multiplied a parts-per quantity by its magnitude.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `20/80 in %` | 0.25% | 25.00% |
+  | `0.25 to %` | error: No prefix parselet found for token: PERCENT | 25.00% |
+  | `100 ppm as %` | 10000.00% | 0.01% |
+  | `0.5% in ppm` | 0.01 ppm | 5,000.00 ppm |
+  | `2 permille of $5000` | $10,000.00 | $10.00 |
+  | `5 km as %` | 500.00% | refused: a length is not a proportion |
+  
+  Only `of` reads a parts-per quantity as a rate; `*` keeps its unit, so `2 permille * 5000` is still 10,000 permille, the same amount as 10.
+  
+  **`as % of` asks for the rate (#634).** `40 as % of 50` converted 40 to 4000% and took that of 50. `as %`, `as percent` and `as a %` with a base now ask what `is what %` asks, through the same code.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `40 as % of 50` | 2,000 | 80.00% |
+  | `$60 as % on $50` | $3,050.00 | 20.00% |
+  | `$40 as a % of $50` | error: Unknown converter "as a" | 80.00% |
+  
+  **`on` and `off` take the percentage just before them (#635).** They bound below arithmetic on their left, so the rate was whatever had been built there, and a chain grouped to the left. The rate is now the percentage before the word, the base is everything after it, and a chain groups to the right. `explainLine` follows the same grouping.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `5 + 20% off 100` | -500 | 85 |
+  | `10% off 20% off $100` | $82.00 | $72.00 |
+  | `10% on 10% on 100` | 111.00 | 121 |
+  
+  The base still reaches to the end: `10% off 100 + 100` is 180.
+  
+  **A percentage change needs a base with a size and a sign (#636).** A change from zero divided by zero, and a change from a negative base picked a sign for a question with two conventional answers.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `0 to 10` | Infinity% | refused (`PERCENT_CHANGE_FROM_ZERO`) |
+  | `0 to 0` | NaN% | refused (`PERCENT_CHANGE_FROM_ZERO`) |
+  | `-100 to -50` | -50.00% | refused, naming both readings (`PERCENT_CHANGE_NEGATIVE_BASE`) |
+  | `40 is what % of 0` | Infinity% | refused (`PERCENTAGE_NOT_FINITE`) |
+  
+  `10 to 0` is still -100.00%, a fall to nothing from a positive base, and `1/0` is still ∞: only a percentage of a value that is not finite is refused.
+  
+  **A percentage is formatted like any other figure (#637).** The formatter used `toFixed` alone.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `0.001%` | 0.00% | 0.001% |
+  | `-0.001%` | 0.00% | -0.001% |
+  | `1234567%` | 1234567.00% | 1,234,567.00% |
+  | `1/8 as %`, formatted for de-DE | 12.50% | 12,50% |
+  
+  A zero is still written without a sign (#585).
+  
+  The percentages page is rebuilt around these forms, and also documents the ones it did not show (#683): discounts and markups, what percentage one number is of another, the original before a markup, and percent beside permille and ppm. The decimals page shows a percentage under the too-small rule.
+  
+  ## Verification
+  
+  A spec for each issue pins its before/now lines and adversarial cases: a parts-per quantity in every conversion form, a percentage of a quantity, chains of `on` and `off`, a change from zero, a negative and a non-finite base, and percentages at the edges of the formatter (a tiny value, a huge one, a negative zero, a de-DE decimal mark). The full suite is 13,905 tests in 571 suites, all passing (four skipped), and `npm run verify:ci` passes, including `lint:dispatch-size`, the three-zone `test:temporal` run and the bundled-consumer contract.
+- 261bcb8: Goal seek refuses a target that re-runs the note, re-runs no longer fill the value pool, a trace shows a large value short, and a sweep says when its steps together reach the budget
+  
+  Four faults found by the survey before 2.40.0 and listed as known issues in its release notes. Each let a short note spend far more time or memory than its answer needed, and each is now bounded or refused by name.
+  
+  **Goal seek refuses a target that holds a what-if or a sweep (#604).** A what-if already refuses to re-run a line holding another what-if, so one question cannot set off another. Goal seek was the exception: it re-runs its target up to a hundred times, and a sweep on the target re-ran the whole note on every one of those runs. It now answers with a named refusal on its first probe. It refuses whether or not the algebra could have inverted the line, so the answer does not depend on the line's shape.
+  
+  | note, through `evaluateDocument` | before | now |
+  | --- | --- | --- |
+  | a 1,000-step sweep of line 73, then `solve line 74 for k = 3000.5` | 12,166 ms, 371 MB still held afterwards, then "did not converge" | the whole note in 350 ms, and "Goal seek cannot target a line that holds a what-if or a sweep, since every one of its probes would re-run the document again. Target a line without one." |
+  | six such goal-seek lines | 75,921 ms, 2,232 MB held | each refused by name |
+  
+  A target that only reads a what-if line's answer, rather than holding the what-if, still solves. The batch pass refused goal seek before and still does.
+  
+  **Re-runs no longer fill the value pool (#605).** The engine keeps a small pool of reusable values for the lines on screen, so scrolling allocates nothing. A what-if or sweep's re-runs, goal seek's probes and reads of a table column all ran while the pool was on, and every value they made stayed in it for as long as the note was open. Re-runs and probes now make ordinary values, and the pool stops growing at 16,384, about twenty times what the heaviest example in these docs uses.
+  
+  | note, through `evaluateDocument` | values held before | now |
+  | --- | --- | --- |
+  | 100 lines, then one 1,000-step sweep | 200,205 | 1,205 |
+  | the same 100 lines, then five such sweeps | 1,000,229 | 5,229 |
+  | a 1,000-row table, then 1,000 reads of its column | 1,003,001 | 16,384 |
+  
+  **A trace shows a large value short (#606).** `inputs of line N` formatted every traced value in full before it checked the trace's length, and a 100,000-element list is 787,929 characters that took about 2.3 s to format, once for each line of the trace holding it. A list of more than ten values now shows its first ten and a count, a matrix of more than a hundred cells shows its shape, and a text of more than eighty characters shows its first eighty and a count. The cut comes before the formatting, so the work is bounded as well as the text.
+  
+  | note | before | now |
+  | --- | --- | --- |
+  | five lines each holding `map(x*1, 1:100000)`, then `inputs of line 5` | 12,079 ms, then refused as too long | 112 ms: `z [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, and 99,990 more] (line 5) <- ...` |
+  | `v = map(x*1, 1:100000)`, then `inputs of line 1` | 3,201 ms and 787,929 characters | `v [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, and 99,990 more] (line 1) reads no other line` |
+  
+  `engine.traceLine()` returns values rather than text and is unchanged.
+  
+  **A sweep says when its steps together reach the budget (#607).** A line may create at most 2,000,000 list items and matrix cells, and make a limited number of user-defined-function calls. A sweep's steps share those budgets, as they must, or a thousand steps could use a thousand times what a line may. The refusal blamed the step the running total happened to reach, which answered on its own, and said "has no answer" twice. It now says what happened.
+  
+  | after `:k = 1` and `sum(x, map(x*1, 1:99999)) * k` | before | now |
+  | --- | --- | --- |
+  | `line 2 for k from 1 to 20 step 1` | With k at 7, line 2 has no answer: Line 2 has no answer with these inputs: Evaluating this expression would materialise 99,999 collection elements, past the limit of 2,000,000 elements for one evaluation | This sweep stopped with k at 7: this sweep's re-runs of line 2 share this line's limit of 2,000,000 materialised elements, and together they reached it. Use a larger step or a shorter range. |
+  | `line 2 with k = 7` | 34,999,650,000 | 34,999,650,000 |
+  
+  A sweep whose steps leave no room for its list of answers says that too, where it used to report the list's few cells as if they alone were past the limit. A step that is over a budget by itself is still reported as that step's failure, now with "has no answer" said once. The budgets are unchanged, and a single what-if, which runs once, keeps its message.
+  
+  The goal-seek, what-if and tracing-inputs pages describe each change, with proven examples of the goal-seek refusal and the short form of a trace.
+  
+  ## Verification
+  
+  New tests pin the goal-seek refusal through all three entry points in the cross-path suite, with adversarial cases for a sweep inside a function call, a what-if in brackets, two and six goal-seek lines on one target under a time bound, and the boundary where a target reads a sweep line's answer; the pool's ceiling, its reset and the helper that turns it off, and its size after each of the survey's notes, a what-if with several inputs and a goal seek; the short form of a trace for lists, columns, matrices and text, at the edge of each limit and across characters outside the Basic Multilingual Plane; and the sweep's wording with the budget crossed on a middle step, at the final list and by function calls, against a step that is over the budget by itself. The full suite is 11,994 tests in 552 suites, all passing (four skipped), and `npm run verify:ci` passes, including `smoke:globals`, the three-zone `test:temporal` run and the bundled-consumer contract.
+- 0b876a4: Twice-yearly compounding is read, and `compounded monthly` means `compounding monthly`
+  
+  `compounding semi-annually` was refused, and the refusal named `semi-annually` among the intervals it accepts: the hyphen split the word before the interval was looked up, so the lookup saw `semi` (#801). `compounded monthly`, the commoner English, was left as a token the line could not place.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `interest on 1000 over 3 years at 5% compounding semi-annually` | refused: compounding semi: expected one of annually, yearly, semi-annually, ... | 159.69 |
+  | `... compounding semiannually` | refused | 159.69 |
+  | `... compounding half-yearly` | refused | 159.69 |
+  | `... compounded monthly` | Unexpected token after expression: "compounded" | 161.47, the same as `compounding monthly` |
+  
+  `compounded` is read only in that position, after a rate, so it stays free as a variable name. Every interval the refusal lists is one the engine reads, and a spec checks it.
+  
+  What stays refused: `biannually`, which some readers take to mean every two years, and `twice yearly`, a two-word form the tail does not read.
+  
+  The interest page lists the intervals read and shows semi-annual compounding and `compounded`, proven.
+  
+  ## Verification
+  
+  `Issue801_semiAnnualCompounding.spec.ts` has 11 tests: the four spellings, the result sitting between annual and quarterly, the growth form, `compounded` after a rate and as an ordinary name elsewhere; and adversarial cases: a half-written interval, a hyphenated word that is not one, and a check that every interval the refusal lists is one the engine reads.
+  
+  The engine suite is 14,209 tests in 588 suites, all passing (four skipped), and `npm run verify:ci` passes on the branch, including the docs proofs, the three-zone `test:temporal` run, `lint:dispatch-size` (47,331 bytes on Node 24, 14,109 under the ceiling) and the bundled-consumer contract.
+- 2c2a052: A table column's summaries read its money cells, as `total above` reads the same figures on lines
+  
+  `total of column "cost" above` and the other column summaries read plain numbers only. A money cell was dropped without a word, a column of money was refused outright, a comma in the wrong place was read as thousands grouping, and a percentage vanished (#651). The lookup beside them already read those cells; the summaries now read them the same way.
+  
+  | table | form | before | now |
+  | --- | --- | --- | --- |
+  | `$500`, `$200` | `total of column "cost" above` | error: no plain-number cells to aggregate | $700.00 |
+  | `500`, `$200`, `1,200` | `total of column "cost" above` | 1,700 | $1,900.00 |
+  | `500`, `$200`, `1,200` | `count of column "cost" above` | 2 | 3 |
+  | `12,57`, `1` | `total of column "cost" above` | 1,258 | 1 |
+  | `20%`, `1` | `total of column "cost" above` | 1 | refused: the cell on line 3 is a percentage |
+  
+  A money column totals in the currency written first, and a plain number joins it as an amount in that currency, which is what `total above` gives for `500`, `$200` and `1,200` typed as lines. Two currencies are refused by name, as `total above` refuses `$500` over `£200`. The minimum, maximum, median, spread, mode and standard deviation are in the currency too; the variance of a money column is refused, since it would be in square dollars. `12,57` is not grouped in threes, so it is text and skipped, as a lookup already treated it. A percentage is counted by `count` and refused by the summaries that add or compare, rather than dropped.
+  
+  What this does not cover: a cell with a unit (`5 km`) is still not read, and the refusal for a column of them now says so. A column of plain numbers, decimals included, totals exactly as before.
+  
+  The table-columns page shows a money column and says which cells are read.
+  
+  ## Verification
+  
+  `Issue651_tableColumnsReadMoney.spec.ts` pins every summary over a money column in 16 tests, with adversarial cases: a 20,000-row money column, a symbol with no amount, misgrouped money (`$1,2`), a negative amount, an ISO code beside a symbol, the variance refused by name, a percentage cell under `count` and `max`, a column of units and a column of text. `CrossPathDocumentFeatures.spec.ts` runs a money column, two currencies, a percentage and misplaced grouping through `parseDocument` and `evaluateDocument` and asserts they agree; the single-expression refusal of each column form was already pinned in the same file. Two existing tests that pinned the old reading now pin the new one: a money cell beside a plain number in `ColumnAggregate.spec.ts` totals $1,250.00 rather than 1,200, and the column aggregates beside a lookup in `TableLookups.spec.ts` give $1,250.00 and $625.00.
+  
+  The engine suite is 14,062 tests in 582 suites, all passing (four skipped), and `npm run verify:ci` passes on the branch rebased onto main after #808, including the docs proofs, the three-zone `test:temporal` run, `lint:dispatch-size` (47,481 bytes on Node 24, 13,959 under the ceiling) and the bundled-consumer contract.
+- b980ee8: Every row of a markdown table is markup on both document paths, not only its separator row
+  
+  The line classifier sees one line at a time, and a line starting with a pipe is a table row only because of the separator row in its block, so the classifier recognised the `|---|` row alone. Every other row went to the expression path and reported an error, on both `parseDocument` and `evaluateDocument`, and a line under a table was blamed on its last row (#616). The docs, and four comments in the engine, already said the rows were skipped.
+  
+  | note | before | now |
+  | --- | --- | --- |
+  | a four-line table, then `total of column "cost" above` | each header and data row: No prefix parselet found for token: BIT_OR ("\|"), three entries in `errors` | no result and no error on any row; the total is 700 as before |
+  | `10`, a three-line table, then `total above` | Line 4 has an error | No lines above to aggregate: the table ends the block, as a heading does |
+  
+  The rule, the same on both paths: a pipe row is table markup when its block of pipe rows holds a separator row with a header above it. The batch pass decides it after the scan, walking each block once. The incremental pass decides it when a row is classified, walking the block once and keeping the answer until the document changes, and an edit that can change the answer (a separator added or removed, a pipe row becoming or ceasing to be one, a line inserted or deleted beside one) sends the block back to be classified, so typing a table in a live editor reads the header as markup once the separator is under it. A cell edit inside a table leaves the other rows as they were.
+  
+  What stays: a pipe row with no separator in its block is an expression, since `|` is bitwise or (`5 | 3` is 7), and a raw row alone through `evaluateLine` is still a parse error, as the cross-path suite pins. A row holding an inline solve is read like prose holding one, so the solve is still worked out.
+  
+  The table-columns page says what makes the rows a table.
+  
+  ## Verification
+  
+  A new spec unit-tests every table-block helper and the scan's classification, runs the survey's notes through both passes, and covers inline solves in cells, indented tables, two tables, a CRLF table at the end of a note, pipe rows with no separator, prototype-named cells a 2,000-row table under a time bound, and a count of the line reads a live pass over a 20,000-row table makes, which a row-by-row walk to the separator would have made quadratic (it took the existing 130,000-row column spec to seven minutes before the walk was made once per block). The cross-path suite gains six cases, among them live edits that add and remove a separator and a deletion that joins two pipe blocks, and the adversarial sweep gains three table documents. The full suite is 13,788 tests in 564 suites, all passing (four skipped), and `npm run verify:ci` passes, including `smoke:globals`, the three-zone `test:temporal` run and the bundled-consumer contract.
+- 2c2a052: `total above` passes over a comment in its column instead of stopping at it
+  
+  `total above` and `average above` add up the figures directly above them, and a blank line or a heading ends the column. They also stopped at every other line the classifier skips, so a comment in the middle of a column cut the total short (#652). A line range already passed over such a line.
+  
+  | note | before | now |
+  | --- | --- | --- |
+  | `rent: $500`, `// remember to check`, `food: $200`, `total above` | $200.00 | $700.00 |
+  | the same with `average above` | $200.00 | $350.00 |
+  | `rent: $500`, `> quoted note`, `food: $200`, `total above` | $200.00 | $700.00 |
+  
+  A comment, a blockquote and a wiki link have no figure and are passed over. A blank line, a heading, a horizontal rule, a code or math fence and a markdown table still end the block, and a pipe row that is not part of a table is an expression that counts (`10`, `5 | 3`, `20` totals 37). `inputs of line N` names the same lines the total read, and both document passes agree.
+  
+  What stays: the section, tag and line-range forms read lines exactly as before, and a prose line that fails as an expression still fails the total that reads it.
+  
+  The line-references page shows a comment inside a column.
+  
+  ## Verification
+  
+  `Issue652_totalAbovePassesOverComments.spec.ts` has 21 tests: unit tests for `endsFigureBlock` over a blank line, headings, a rule, each fence, a comment, a quote, a wiki link and a figure, past either end of the document, and a pipe row inside and outside a table; and adversarial cases: a comment that holds a figure, a column of nothing but comments, a comment between a heading and the figures, a line starting with a tag, 10,000 comment lines inside a column, and a failed prose line, which still fails the total. `CrossPathDocumentFeatures.spec.ts` runs a column with a comment in it, and `inputs of line N` over it, through both document passes and asserts they agree, with a comment and a blank line typed into a live column; the single-expression refusal was already pinned in the same file.
+  
+  The engine suite is 14,062 tests in 582 suites, all passing (four skipped), and `npm run verify:ci` passes on the branch rebased onto main after #808, including the docs proofs, the three-zone `test:temporal` run, `lint:dispatch-size` (47,481 bytes on Node 24, 13,959 under the ceiling) and the bundled-consumer contract.
+- 28702fa: A variable named like a unit is divided by after a slash: with `t = 5`, `100 / t` is 20
+  
+  `t`, `d`, `s`, `h` and `m` are among the commonest variable names, and each is also a unit symbol. After a slash with no number after it, the engine read one as a rate's unit however the document defined it, so `100 / t` with `t = 5` was a hundred per tonne while `100 * t` and `100 / (t)` read the variable (#642). The rule that fuses `/ t` into a rate reads the text alone and cannot know which names are defined, so the choice is now made when the line runs: a variable of that name defined above the line is divided by, and otherwise the rate is built as before.
+  
+  | document | before | now |
+  | --- | --- | --- |
+  | `t = 5` then `100 / t` | 100.00 /t | 20 |
+  | `distance = 120`, `t = 2`, then `speed = distance / t` | 120.00 /t | 60 |
+  | `s = 2` then `100 / s` | 100.00 /s | 50 |
+  | `h = 4` then `100 / h` | 100.00 /h | 25 |
+  | `kg = 2` then `10 / kg` | 10.00 /kg | 5 |
+  | `f(t) = 100 / t` then `f(4)` | 100.00 /t | 25 |
+  | `100 / t` with no `t` defined | 100.00 /t | 100.00 /t |
+  
+  The division is the ordinary one: `100 / t` gives what `100 / (t)` gives for any value of `t`, a quantity, money or a list included. Both document passes agree, and because the answer now depends on another line, the dependency graph records the name as a read: typing `t = 5` above the line, changing it or deleting it changes the line's answer in a live editor, as it does for any other variable. Renaming `t` carries `100 / t` with it where `t` is defined above it; a `100 / t` above the definition is still the unit, so a rename leaves it alone.
+  
+  The boundary: a unit written before the slash keeps the rate whatever the name holds, as variables.md documents that a unit after a value is a unit. With `h = 4`, `$15 / h` is still 15.00 USD/h, `60 km / h` 60.00 km/h and `100 per h` a rate, since the word `per` says rate in so many words. A variable defined below the line is not read, as with any variable, and `100 / t` on its own, with no document to define `t`, is the rate. The capitals `N`, `W`, `J`, `K` and `F` were already left to the variable reading and are unchanged.
+  
+  The variables page shows both readings with proven examples.
+  
+  ## Verification
+  
+  `Issue642_unitNamedVariableAfterSlash.spec.ts` has 104 tests: a defined name after a slash for each common unit spelling and the capitals, a function parameter, a global and a quantity in the variable; `100 / t` against `100 / (t)` for fourteen kinds of value, a quantity, money, a list, text and a boolean among them; the forms that keep the rate; the dependency graph's read of the name; `RATE_OR_DIVIDE` in the VM, with a malformed stream and an unregistered rate builtin refused; and an adversarial sweep over eleven names, `constructor` and `__proto__` included. `CrossPathDocumentFeatures.spec.ts` gains 10 tests: both passes agree, a live edit that adds, changes, renames away or deletes the definition changes the line, a rename through the language service carries the denominator where the name is defined above it and leaves it where it is not, and the single-expression path reads the rate. `OperandWidth.spec.ts` compiles `100 / t` into its corpus.
+  
+  The engine suite is 15,164 tests in 602 suites, all passing (four skipped), and `npm run verify:ci` passes on the branch, including `lint:units`, the docs proofs, the three-zone `test:temporal` run, `lint:dispatch-size` (47,528 bytes on Node 24, 13,912 under the ceiling) and the bundled-consumer contract.
+- 28702fa: Units and money: a shape's area is squared, a tolerance, a list and a constant are refused where their unit was lost, statistics and health read units, temperatures add as steps, `in` reaches a converter, a decimal is its own fraction, fiat and crypto rates coexist, and inflation is US dollars only
+  
+  Twelve faults from the 2026-09-25 survey of units, quantities and money. Each gave a confident answer in a unit that was wrong, or dropped a unit without saying so.
+  
+  **A shape's dimensions carry their units (#638).** The geometry parselet read only the number of `radius 5 m`, so the stranded `m` labelled the whole answer, and in front of a comma it stopped the line parsing. Each dimension is now read with its unit, the dimensions are put into one length unit (the first one written), and the answer takes the power its measure has: a length for a perimeter, the square for an area, the cube for a volume.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `area of circle radius 5 m` | 78.54 m | 78.54 m² |
+  | `area of circle radius 5 m in cm²` | refused: a length cannot be converted to an area | 785,398.16 cm² |
+  | `area of circle radius 5 m in cm` | 7,853.98 cm | refused: an area cannot be converted to a length |
+  | `volume of sphere radius 2 m` | 33.51 m | 33.51 m³ |
+  | `area of rectangle width 3 m, height 4 m` | error: Unexpected token after expression: "," | 12.00 m² |
+  | `area of circle radius 5 kg` | 78.54 kg | refused: a radius is a length, not a mass |
+  
+  A dimension with no unit beside one with a unit is read in that unit, as `total of 1 km, 500` reads it, so `width 3 m, height 4` is 12.00 m². A length with no square or cube spelling of its own answers in square or cubic metres, as `(5 furlong)^2` does, rather than being refused: `area of square side 2 furlong` is 161,874.26 m². Bare dimensions answer plain numbers as before.
+  
+  **A value with a tolerance cannot be converted or meet a quantity (#639).** A tolerance is read without the unit of the value it is on, as the uncertainty page documents, so `5 m +/- 1 cm` is the plain `5 ± 0.01`. A later `in mm` labelled that bare 5 as millimetres, and a quantity in `+`, `-`, `*` or `/` gave the answer its unit and dropped the spread. Both are refused by name (`UNCERTAINTY_WITHOUT_UNIT`), and so is a unit written straight after such a value.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `(5 m +/- 1 cm) in mm` | 5.00 mm | refused, pointing at `(5 m in mm) +/- 10` |
+  | `(20 C +/- 1 F) in F` | 20.00 F | refused |
+  | `(5 +/- 0.1) in km` | 5.00 km | refused |
+  | `(5 +/- 0.1) km` | 5.00 km | refused |
+  | `(5 m +/- 1 cm) + 2 m` | 7.00 m | refused |
+  | `(5 +/- 0.1) * 2 m` | 10.00 m | refused |
+  
+  The engine cannot tell a centre whose unit was dropped from one that never had one, so a unitless measurement is refused the same way. Scalar arithmetic is unchanged (`(5 m +/- 1 cm) * 2` is 10 ± 0.02), and so is the conversion of the tolerance into the centre's unit. Carrying the unit through, so that `(5 m +/- 1 cm) in mm` is 5,000 ± 10 mm, changes what the page documents and is left to its own change.
+  
+  **A list given a unit is refused, not read as zero (#640).** A unit written straight after a list, and a quantity combined with one, read the list as the 0 `toNumber()` reports for it. The first is refused with the sentence `in` has given since #547 (`CONVERT_NON_NUMERIC`), the second with `QUANTITY_NON_NUMERIC`.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `[1, 2, 3] km` | 0.00 km | refused |
+  | `$[4, 5]` | $0.00 | refused |
+  | `[1, 2] * 1 km` | 0.00 km | refused |
+  | `[1, 2] + 1 km` | 1.00 km | refused |
+  | `1 km - [1, 2]` | 1.00 km | refused |
+  | `[1, 2] * 2` | [2, 4] | [2, 4] |
+  
+  A range and a colour beside a quantity are refused the same way. Text and a date keep their own refusals. Lists that carry a unit, so that `[1, 2] * 1 km` becomes a list of lengths, are a designed feature this leaves open.
+  
+  **A list literal in two units is refused (#641).** A cell stores a quantity's amount and drops its unit, so two units could not both be read right. A literal whose cells are in two different units is refused by name (`MATRIX_CELL_UNITS_DIFFER`), naming both.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `[1 km, 500 m]` | [1, 500] | refused, pointing at `in km` |
+  | `[1 kg, 3 m]` | [1, 3] | refused: mass and length are not one measure |
+  | `[$1, 2 kg]` | [1, 2] | refused |
+  | `[1 km, 2 km]` | [1, 2] | [1, 2] |
+  | `[1 km, 500]` | [1, 500] | [1, 500] |
+  
+  A list in one unit keeps its bare magnitudes, since nothing in it is misread; two spellings of one unit (`km` and `kilometres`) are one unit. A bare number beside a quantity is read in its unit, the rule the aggregates follow.
+  
+  **Standard deviation, variance and mode read units (#643).** Each read its arguments' bare magnitudes. They now read them in the first one's unit, as `spread` does, and answer in it.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `standard deviation of 1 kg, 1000 g` | 499.50 | 0.00 kg |
+  | `standard deviation of $10, $20, $30` | 8.16 | $8.16 |
+  | `mode of 1 kg, 1000 g, 2 kg` | 1 | 1.00 kg |
+  | `standard deviation of 1 kg, 2 m` | 0.50 | refused: mass and length cannot be used in a standard deviation |
+  | `variance of 2 m, 4 m` | 1 | 1.00 m² |
+  | `variance of 1 kg, 1000 g` | 249,500.25 | refused (`UNIT_POWER_UNSUPPORTED`) |
+  | `standard deviation of 1/0, 1000` | NaN | refused (`STATISTIC_NOT_FINITE`) |
+  
+  A variance is in the square of the data's unit, which the engine spells only for a length. For any other quantity, money and temperatures included, the choice made is to refuse by name, as the power operator refuses `(2 kg)^2`, and to point at the standard deviation, which is the same spread in a unit the engine can write. A list with an infinity in it, which gave NaN, is refused as well. Plain numbers are otherwise unchanged. A table column of quantities is still refused by the column form, which reads plain-number cells only.
+  
+  **`bmi`, `pace` and `speed` convert the units they are given (#644).** Each read a quantity's magnitude in the unit it assumes, so 175 cm was 175 metres and one hour was one minute. A quantity is converted into the function's unit now, and one that measures something else is refused with `HEALTH_BAD_INPUT`.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `bmi(70 kg, 175 cm)` | 0.00229 | 22.86 |
+  | `bmi(154 lb, 69 in)` | 0.03 | 22.74 |
+  | `speed(10 km, 1 h)` | 600.00 km/h | 10.00 km/h |
+  | `speed(10 mi, 1 h)` | 600.00 km/h | 16.09 km/h |
+  | `pace(10 mi, 80 min)` | 8:00 /km | 4:58 /km |
+  | `bmi(70 kg, -175 cm)` | 0.00229 | refused: the height cannot be negative |
+  
+  A bare number keeps the documented unit, so `speed(10, 1)` is still 600.00 km/h. A negative figure is refused with or without a unit. `pace` still answers per kilometre when the distance is in miles.
+  
+  **Temperatures across scales (#645).** A conversion between offset scales that lands within the comparison tolerance of zero is zero, so the value and not only its display is the shared point. And `+` reads a right-hand temperature on another scale as a step, converted the way a tolerance's width is.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `32 °F in °C` | 5.68e-14 °C | 0.00 °C |
+  | `20 °C + 10 °F` | 7.78 °C | 25.56 °C |
+  | `20 °C + 10 K` | -243.15 °C | 30.00 °C |
+  | `68 °F + 10 °C` | 118.00 °F | 86.00 °F |
+  | `10 °F + 20 °C` | 78.00 °F | 46.00 °F |
+  
+  Same-scale sums are unchanged, and a genuine small reading is left alone (`32.0018 °F in °C` is 0.001 °C). Subtraction, and converting a difference afterwards, keep their documented reading and are held for 3.0: `20 °C - 10 °F` is still 32.22 °C.
+  
+  **A bare number takes only a unit or a converter after `in` (#646).** A package's converters (`roman`, `words`, `ordinal`) lex as ordinary words, so `in` never reached them, and a plain number was given any word after `in` as its unit. `in` now reaches every converter a package registered, as `as` does, and a word that is neither a unit nor a converter is refused with the `UNKNOWN_UNIT` sentence a quantity already had.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `2024 in roman` | 2,024.00 roman | MMXXIV |
+  | `42 in words` | 42.00 words | forty-two |
+  | `5 in widgets` | 5.00 widgets | refused: "widgets" is not a unit. |
+  | `5 in Tokyo` | 5.00 Tokyo | refused |
+  | `5 in km` | 5.00 km | 5.00 km |
+  
+  `to` is deliberately not rewritten the same way. A word after `to` is a percentage change to a variable (`start to n`), and a package converter is often named like one (the derived units register `n`, `v` and `w`), so `2024 to roman` still reads a variable called `roman`. The converters stay process-wide, as `as` reads them. The developer guide for `asConverters` describes the `in` spelling and its limits.
+  
+  **A typed decimal is the fraction it spells (#647).** `as fraction` guessed at the double nearest the decimal with a continued fraction, which for six-digit decimals landed on near misses. It now renders the value's exact decimal. The choice made is the rule fractions.md states, a decimal reads as the fraction it is, always, so a decimal that only approximates a simple fraction is not rounded onto it.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `0.333333 as fraction` | 333332/999997 | 333333/1000000 |
+  | `3.14159 as fraction` | 76149/24239 | 314159/100000 |
+  | `0.0001234 as fraction` | 3/24311 | 617/5000000 |
+  | `0.3333333 as fraction` | 1/3 | 3333333/10000000 |
+  | `0.2857142857 as fraction` | 2/7 | 2857142857/10000000000 |
+  | `0.125 as fraction` | 1/8 | 1/8 |
+  
+  A value with no exact form keeps the continued-fraction guess: `sqrt(2) as fraction` is still 47321/33461.
+  
+  **`boltzmann` carries J/K, and the unitless constants refuse a quantity (#648).** The physical constants without an engine unit were plain numbers, which take the unit of the quantity they meet.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `boltzmann` | 1.38e-23 | 1.38e-23 J/K |
+  | `boltzmann * 300 K` | 4.14e-21 K | 4.14e-21 J |
+  | `planck * 5e14 Hz` | 3.31e-19 Hz | refused (`CONSTANT_UNIT_UNSUPPORTED`) |
+  | `gas constant * 300 K` | 2,494.34 K | refused |
+  | `avogadro * 2` | 1,204,428,152,000,000,000,000,000 | 1,204,428,152,000,000,000,000,000 |
+  
+  `planck`, `elementary charge`, `gas constant` and `avogadro` need a dimension the engine does not have yet (charge, the mole, a product of units). They stay plain numbers marked with their unit, and a quantity meeting one in arithmetic or a conversion is refused. A value already computed from one (`planck * 2`) is an ordinary number, so the refusal covers the constant as written or held in a variable. A snapshot keeps the mark (an optional `uu` field on a serialised number, so no format version bump), so a variable holding `planck` is refused the same way after `fromJSON`. They gain their units with the everyday-units feature.
+  
+  **Fiat and crypto rates no longer overwrite each other (#649).** Both fetch paths stored their result under the base currency and replaced whatever table was there, so of `$100 in EUR` and `$100 in BTC` in one note, whichever landed second cost the other its rate, and a host's primed table was lost to the first live fetch for its base. Each source now keeps its own table. With `fetch` stubbed (Frankfurter USD to EUR at 0.9, CoinGecko bitcoin at $50,000):
+  
+  | note | before | now |
+  | --- | --- | --- |
+  | `$100 in EUR`, then `$100 in BTC` | CURRENCY_RATE_UNAVAILABLE, 0.002 BTC | €90.00, 0.002 BTC |
+  | `$100 in BTC`, then `$100 in EUR` | 0.002 BTC, CURRENCY_RATE_UNAVAILABLE | 0.002 BTC, €90.00 |
+  | host primed USD to EUR at 0.9, Frankfurter stub at 0.8 | €80.00, CURRENCY_RATE_UNAVAILABLE | €90.00, 0.002 BTC |
+  
+  A pair two fresh tables both hold is served by the rule the single table per base gave: the base stored first, and within a base the table stored most recently, so no rate that used to be served moves. Freshness windows, the providers and the triangulation rules are unchanged; whether a live fetch should ever override a host's own rate is left as it was.
+  
+  **Inflation adjusts US dollars only (#650).** The bundled table is the US consumer price index (CPI-U), and every form applied it to whatever it was given, keeping the unit.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `what is £100 from 1990` | £254.55 | refused (`INFLATION_EXPECTED_USD`), naming the US index |
+  | `what is 100 kg from 1990` | 254.55 kg | refused |
+  | `what is 100 from 1990` | 254.55 | refused |
+  | `inflationAdjust(£100, 1990, 2020)` | £198.01 | refused |
+  | `inflationAdjust($100, 1990, 2020)` | $198.01 | $198.01 |
+  
+  The `from <year>` forms run to the current year (2026 on this run). The choice for a bare number follows payroll, which refuses a bare salary: it would assume dollars without saying so, and is refused pointing at `$100`. Indices for other countries are not bundled; the stated-rate `value of ... assuming N% inflation` form does not use the index and still takes any currency.
+  
+  The geometry, uncertainty, vectors and matrices, statistics, health, converting units, unit arithmetic, numerals, time zones, fractions, other representations, constants, currency and interest and inflation pages describe each change with proven examples, and the `asConverters` guide and the live-data guide cover `in` and the side-by-side rate tables.
+  
+  ## Verification
+  
+  New tests pin each issue under `__tests__/bugs` (#638 to #641 and #643 to #650), each with an adversarial section: a mass, a duration, money, a list and an area as a shape's side, metres beside centimetres, a unit on one dimension only, zero and negative dimensions, and a quantity from a variable and from a line reference; every operator with a tolerance, a list or a constant on either side of a quantity, a percentage tolerance, a temperature centre and money; two spellings of one unit, two currencies, a temperature pair, a matrix with `;` rows and a sweep over lengths; temperatures across every pair of scales in both directions and a genuine small reading the snap must leave alone; a converter a host registered, words naming inherited properties and a very long rate after `in`; decimals past a double's digits and past the exact-decimal limit; both orders of arrival of a fiat and a crypto rate, two crypto pairs from one base, a primed table beside a live fetch, a stale table, a failed fetch and provenance per line; and every inflation form with pounds, euros, a converted amount, a mass and a bare number. Each checks both document passes agree. Unit tests cover the new and changed helpers (`readDimensions`, `measureInUnit`, `asPowerOfLength`, `noSingleAmount`, `quantityOperandRefused`, `unitAfterValue`, `plainValueInUnit`, `namesAUnit`, `unknownUnitError`, `toleranceHasNoUnit`, `toleranceMeetsQuantity`, `uncertainOp`, `sameUnit`, `cellUnitsDiffer`, `spreadStatistic`, `modeOf`, `readHealthInput`, `temperatureStep`, `hasOffset` and the offset snap in `convertUnit`, `fractionOfExactDecimal`, `unspelledUnitRefused`, `inflationAmountRefused`, the converter preposition rule, and the exchange's tables through its public methods). The adversarial sweep gains a units-and-money group of fifteen forms over its numeric edges, which found the NaN standard deviation of a list with an infinity in it. Five existing tests that pinned the old readings now pin the new ones: `5 in Tokyo`, which was labelled as a unit and is refused, and four inflation tests written with a bare amount, now written in dollars, with the bare amount's refusal pinned beside them. The time-zones page's `5 in Tokyo` example shows the refusal.
+  
+  The engine suite is 15,164 tests in 602 suites, all passing (four skipped), and `npm run verify:ci` passes on the branch, including `lint:units`, the docs proofs, the three-zone `test:temporal` run, `lint:dispatch-size` (47,528 bytes on Node 24, 13,912 under the ceiling) and the bundled-consumer contract.
+
 ## 2.40.0
 
 ### Minor Changes
