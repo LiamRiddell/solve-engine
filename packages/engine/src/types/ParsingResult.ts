@@ -96,7 +96,15 @@ export interface UnifiedParsingOptions {
      * input already known to be expressions.
      */
     inputType: 'markdown' | 'raw' | 'code';
-    /** Locale for keywords and number formatting. Defaults to English. */
+    /**
+     * Ignored, and to be removed in 3.0. The engine reads keywords and numbers
+     * in the `locale` it was created with, which a single parse cannot change:
+     * `parseDocument("1.000 + 1", { inputType: "markdown", localeCode: "de" })`
+     * on an English engine answers 2, not 1,001. The worker's own
+     * `WorkerEngineOptions.localeCode` is a different option, and is read.
+     *
+     * @deprecated The engine's `locale` option decides this.
+     */
     localeCode?: string;
     /** Include line offsets and positions. Costs a little to compute. */
     includeLineInfo?: boolean;

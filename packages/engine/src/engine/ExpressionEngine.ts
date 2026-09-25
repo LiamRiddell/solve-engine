@@ -201,7 +201,13 @@ export interface EngineRestoreOptions {
  * convenience.
  */
 export interface EngineOptions {
-    /** BCP-47 locale. Defaults to `"en"`. */
+    /**
+     * BCP-47 locale, choosing the language pack the engine reads keywords and
+     * typed numbers with. Defaults to `"en"`. A tag with no pack of its own
+     * reads as its language's (`de-DE` and `de-AT` as `de`), and any other code
+     * as English; an Indian-region tag (`en-IN`) also reads Indian digit
+     * grouping (`12,34,567`) everywhere.
+     */
     locale?: string;
     /** Packages to register. None when omitted, so nothing but what you pass is bundled. */
     packages?: IEnginePackage[];

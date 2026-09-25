@@ -58,7 +58,7 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"planck * X Hz",
 		"inflationAdjust($X, 1990, 2020)",
 	],
-	money: ["$X * 3", "$X split 3 ways", "X% of $200"],
+	money: ["$X * 3", "$X split 3 ways", "X% of $200", "₹1,00,000 * X", "X INR + 12,34,567 INR"],
 	finance: ["npv of -1000, X, 400 at 10%", "irr of -1000, X, 400"],
 	distributions: ["normalcdf(X)", "binompdf(10, 0.5, X)"],
 	solving: ["solve(x^2 = X, x)", "integral(x, x, 0, X)"],

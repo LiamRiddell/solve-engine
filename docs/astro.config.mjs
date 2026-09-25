@@ -501,6 +501,9 @@ export default defineConfig({
                 { slug: "guide/explaining-lines" },
                 { slug: "guide/tracing-lines" },
                 { slug: "guide/formatting" },
+                // After formatting: a locale is both halves, how the engine reads
+                // a typed number and how the formatter writes one back.
+                { slug: "guide/locales" },
                 { slug: "guide/dates-on-temporal" },
                 { slug: "guide/editor-integration" },
                 // Straight after the editor page it builds on: the whole-document

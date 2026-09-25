@@ -44,6 +44,28 @@ $5 CAD in CAD // $5.00
 ¥500 CNY in CNY // ¥500.00
 ```
 
+## Indian grouping
+
+In India a hundred thousand is one lakh, written `1,00,000`, and ten million is
+one crore, `1,00,00,000`: the last three digits form a group, and every group
+before them is two digits. An amount written this way is read beside the rupee
+sign or after it the code `INR`, and is the same amount the ordinary grouping
+gives:
+
+```solve
+₹1,00,000 // ₹100,000.00
+₹1,00,00,000 // ₹10,000,000.00
+12,34,567 INR // ₹1,234,567.00
+₹12,34,567.89 // ₹1,234,567.89
+```
+
+Without a rupee marker, `12,34,567` is refused in an English engine, because
+outside the Indian convention a group of two digits is not a group and a
+refusal is safer than a guess. An engine created with an Indian tag such as
+`en-IN` reads the grouping everywhere, and a host that formats results with
+`en-IN` gets them back the same way (`₹12,34,567.89`); see
+[locales](/guide/locales/#indian-grouping).
+
 Conversion between currencies reaches the
 network and resolves asynchronously. See
 [async and live data](/guide/async-and-live-data/).

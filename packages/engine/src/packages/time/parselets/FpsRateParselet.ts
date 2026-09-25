@@ -1,3 +1,4 @@
+import { readLocaleNumber } from "@solve-js/parser/LocaleNumberLiteral";
 import { PrefixParselet } from "@solve-js/parser/Parselet";
 import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
@@ -16,7 +17,8 @@ export class FpsRateParselet implements PrefixParselet {
 
   parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     builder.emitOpcode(OpCode.PUSH_NUMBER);
-    builder.emitNumber(parseFloat(token.value));
+    // Read in the engine's locale, as a bare number is (#806).
+    builder.emitNumber(readLocaleNumber(token.value, parser.getLocaleCode()));
     builder.emitOpcode(OpCode.PUSH_STRING);
     builder.emitString("frames/s");
     builder.emitOpcode(OpCode.UOM_CONVERT);

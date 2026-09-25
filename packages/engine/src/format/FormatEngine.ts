@@ -178,6 +178,41 @@ function formatBigInt(value: bigint): string {
   return `= ${sign}~${mantissa.toFixed(3)}e+${exponent} (an exact integer of about ${(exponent + 1).toLocaleString("en-US")} digits, too large to print)`;
 }
 
+/** The locale a date's names are written in, per host tag; see {@link dateNamesLocale}. */
+const dateNamesByTag = new Map<string, string>();
+
+/** Past this length a tag is not remembered: no real tag is this long, and a host string of any size should not be kept. */
+const MAX_REMEMBERED_TAG = 64;
+
+/**
+ * The locale a spelled-out date's weekday and month names come from: the
+ * host's full tag, the one its digits are written in, wherever Intl has data
+ * for it, so `de-DE` gets German names and `en-GB` its own day-first order.
+ *
+ * It used to be the language pack's code, which is `en` for every tag without
+ * a pack of its own, so `de-DE` showed German digits beside English month
+ * names (#655). A tag Intl has no data for (`xx`), or cannot read at all
+ * (`__proto__`), keeps the pack's names, English for both, as it always did:
+ * Intl would otherwise answer an unknown tag in whatever locale the runtime
+ * happens to run in. That is the guard `calendar/HostLocale.ts` uses for the
+ * same reason.
+ *
+ * @param tag - `numberResult.decimalSeparatorLocale`, or `en-US` when it is empty.
+ * @param pack - The language pack the tag chose.
+ */
+function dateNamesLocale(tag: string, pack: ILocale): string {
+  const remembered = dateNamesByTag.get(tag);
+  if (remembered !== undefined) return remembered;
+  let chosen = pack.code;
+  try {
+    if (Intl.DateTimeFormat.supportedLocalesOf([tag]).length > 0) chosen = tag;
+  } catch {
+    // A tag Intl cannot parse keeps the pack's names.
+  }
+  if (tag.length <= MAX_REMEMBERED_TAG) dateNamesByTag.set(tag, chosen);
+  return chosen;
+}
+
 function formatString(value: string): string {
   return `= ${value}`;
 }
@@ -228,11 +263,13 @@ function formatDatetime(value: number, locale: ILocale, settings: FormattingSett
   const millisecond = named ? 0 : calendar.fields(value).millisecond;
   const isMidnight = d.hour === 0 && d.minute === 0 && d.second === 0 && millisecond === 0;
 
-  // The spelled-out default, localised through the locale's own names.
+  // The spelled-out default, localised through the host's own tag where Intl
+  // has names for it; see dateNamesLocale.
   if (format === "long") {
-    const dateStr = named ? longDateInZone(zone, value, locale.code) : calendar.formatLongDate(value, locale.code);
+    const tag = dateNamesLocale(settings.numberResult.decimalSeparatorLocale || "en-US", locale);
+    const dateStr = named ? longDateInZone(zone, value, tag) : calendar.formatLongDate(value, tag);
     if (isMidnight) return `= ${dateStr}`;
-    const timeStr = named ? timeOfDayInZone(zone, value, locale.code) : calendar.formatTimeOfDay(value, locale.code);
+    const timeStr = named ? timeOfDayInZone(zone, value, tag) : calendar.formatTimeOfDay(value, tag);
     return `= ${dateStr}, ${timeStr}`;
   }
 
@@ -344,9 +381,46 @@ function decimalMark(loc: string): string {
   return mark;
 }
 
+/** The ten digits each locale writes, looked up once per locale; null where they are the ASCII ones. */
+const nativeDigitsByLocale = new Map<string, readonly string[] | null>();
+
+/**
+ * The digits 0 to 9 as `loc` writes them, from Intl's own rendering, so they
+ * follow whatever numbering system Intl picks for the tag: Arabic-Indic for
+ * `ar-EG`, Bengali for `bn`, and ASCII again for `ar-EG-u-nu-latn`.
+ *
+ * @param loc - An Intl locale tag.
+ * @returns The ten digits, or null when they are `0` to `9` already.
+ */
+function nativeDigits(loc: string): readonly string[] | null {
+  let digits = nativeDigitsByLocale.get(loc);
+  if (digits === undefined) {
+    const format = new Intl.NumberFormat(loc, { useGrouping: false });
+    const written = Array.from({ length: 10 }, (_, d) => format.format(d));
+    digits = written.every((text, d) => text === String(d)) ? null : written;
+    nativeDigitsByLocale.set(loc, digits);
+  }
+  return digits;
+}
+
+/**
+ * ASCII digits rewritten one for one in `loc`'s numbering system, leading
+ * zeros kept, which is what a fraction needs: `05` stays two digits.
+ *
+ * @param ascii - A run of the digits `0` to `9` and nothing else.
+ * @param loc - An Intl locale tag.
+ */
+function localiseDigits(ascii: string, loc: string): string {
+  const digits = nativeDigits(loc);
+  if (digits === null) return ascii;
+  let out = "";
+  for (let i = 0; i < ascii.length; i++) out += digits[ascii.charCodeAt(i) - 48];
+  return out;
+}
+
 /**
  * Write a fixed-decimal string (`"1234567.50"`) the way `loc` writes numbers:
- * its decimal mark, and its digit grouping when `useGrouping` is on.
+ * its digits, its decimal mark, and its digit grouping when `useGrouping` is on.
  *
  * Every quantity and every money amount used to be rendered with a bare
  * `toFixed`, so a plain `52000` showed as `52,000` while `£52000` showed as
@@ -358,14 +432,20 @@ function decimalMark(loc: string): string {
  * `Intl` so grouping follows the locale's own rule (Indian lakhs included)
  * rather than a hand-written every-three-digits. Anything that is not plain
  * digits, an `Infinity` or an exponent form, is returned as it came.
+ *
+ * The fraction's digits, and the integer's when it is not grouped, are mapped
+ * into the locale's numbering system too. They used to be appended as the ASCII
+ * they arrived in, so under `ar-EG` `3.5 days` showed `٣٫50 days`, native
+ * digits stopping at the decimal mark, while a plain `1234.5` was native
+ * throughout (#656).
  */
-function localiseFixedDecimal(fixed: string, loc: string, useGrouping: boolean): string {
+export function localiseFixedDecimal(fixed: string, loc: string, useGrouping: boolean): string {
   const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(fixed);
   if (!match) return fixed;
   const [, sign, integer, fraction] = match;
-  const integerText = useGrouping ? BigInt(integer).toLocaleString(loc, { useGrouping: true }) : integer;
+  const integerText = useGrouping ? BigInt(integer).toLocaleString(loc, { useGrouping: true }) : localiseDigits(integer, loc);
   if (fraction === undefined) return `${sign}${integerText}`;
-  return `${sign}${integerText}${decimalMark(loc)}${fraction}`;
+  return `${sign}${integerText}${decimalMark(loc)}${localiseDigits(fraction, loc)}`;
 }
 
 function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings, exact?: DecimalData, isDatetimeSpan?: boolean, explicitPlaces?: number): string {

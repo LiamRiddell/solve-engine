@@ -67,14 +67,23 @@ numbers in "Meeting on 23/09 at 14:05" // [23, 9, 14, 5]
 
 `1.234,56` is one number to a German reader and two to an English one. Rather
 than guess from the text, `numbers in` reads it in the number format the engine
-is configured with, the same one it reads typed numbers in. An engine created
-with `createEngine({ locale: "de" })` marks the decimal with a comma and groups
-thousands with a point, so it reads `Kaffee 3,20, Mittag 12,50` as 3.20 and
-12.50, and `1.234,56` as one thousand two hundred and thirty-four and a bit. A
-French engine groups with a space, including the narrow no-break space that a
-number copied from a French web page carries. An English engine reads
-`1.234,56` as 1.234 and 56, because that is what those characters mean in
-English.
+is configured with: the language pack its `locale` names, so a regional tag such
+as `de-DE` reads as `de`. An engine created with `createEngine({ locale: "de" })`
+marks the decimal with a comma and groups thousands with a point, so it reads
+`Kaffee 3,20, Mittag 12,50` as 3.20 and 12.50, and `1.234,56` as one thousand
+two hundred and thirty-four and a bit. A French engine groups with a space,
+including the narrow no-break space that a number copied from a French web page
+carries. An English engine reads `1.234,56` as 1.234 and 56, because that is
+what those characters mean in English.
+
+Pasted text and a typed line do not read numbers the same way. A typed line in a
+German engine does not yet accept a decimal comma: `3,20 + 12,50` is refused
+there, where the same figures in pasted text are read. And a typed `9.99` in a
+German engine is refused, because a German thousands group is always three
+digits and anything else after a point is a decimal written the English way,
+which the engine will not guess at; in pasted text the same characters are read
+as the numbers they could be, so `numbers in "preis 9.99"` is 9 and 99. See
+[locales](/guide/locales/) for what each language pack accepts typed.
 
 ## Amounts of money
 
@@ -101,6 +110,18 @@ sign makes the amount negative.
 ```solve
 total of amounts in "Rent EUR 950, bills 120 EUR, fees €12.50" // €1,082.50
 amounts in "-£5 refund, £20 charge" // [-5, 20]
+```
+
+An amount in rupees may use Indian grouping, where a hundred thousand (one
+lakh) is written `1,00,000`: the last three digits form a group and every group
+before them is two. It is read beside the `₹` sign or before the code `INR`,
+and, in an engine created with an Indian tag such as `en-IN`, wherever it
+appears. Elsewhere `12,34,567` is read in the ordinary way, as 12 and 34,567.
+
+```solve
+amounts in "rent ₹12,34,567.89" // [1,234,567.89]
+total of amounts in "rent ₹12,34,567.89, deposit ₹1,00,000" // ₹1,334,567.89
+numbers in "12,34,567" // [12, 34,567]
 ```
 
 A sign that sits between two numbers belongs to the one it touches, so `2 £5`

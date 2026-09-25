@@ -11,7 +11,8 @@
  * soon as it has found more numbers than the caller allows, so a pasted log of
  * any size costs at most one read up to the limit.
  */
-import { getLocale } from "@solve-js/constants/locales";
+import { getLocale, groupsInLakhs } from "@solve-js/constants/locales";
+import { lakhGroupEnd, rupeeMarked } from "@solve-js/lexer/LakhGrouping";
 import { CURRENCY_DISPLAY, CURRENCY_SYMBOL_ALIASES } from "@solve-js/uom/CurrencyAliases";
 
 /** How numbers are written: the decimal mark and the characters that group thousands. */
@@ -20,6 +21,13 @@ export interface NumberFormat {
 	readonly decimal: string;
 	/** Each character accepted between groups of three digits. Empty when grouping is not read. */
 	readonly groups: readonly string[];
+	/**
+	 * Whether Indian grouping (`1,00,000`, `12,34,567`) is read wherever it
+	 * appears, as an Indian-region engine (`en-IN`) reads it. Absent or false,
+	 * it is read only beside a rupee marker, `₹` before the number or `INR`
+	 * after it, and only when `,` is one of the {@link groups}.
+	 */
+	readonly lakhs?: boolean;
 }
 
 /** One number found in the text. */
@@ -44,13 +52,19 @@ export interface TooManyNumbers {
  * it too, since they are what a formatted French number carries (`1 234,56`
  * copied from a page usually has a narrow no-break space in it, not a space).
  *
- * @param localeCode - The engine's locale code, `en`, `de` or `fr`.
+ * An Indian-region tag (`en-IN`) also reads Indian grouping throughout; see
+ * {@link NumberFormat.lakhs}.
+ *
+ * @param localeCode - The engine's locale tag: `en`, `de`, `fr`, or a
+ * regional tag such as `de-DE`, which reads as its language does.
  */
 export function numberFormatFor(localeCode: string): NumberFormat {
 	const display = getLocale(localeCode).display;
 	const group = display.thousandsSeparator;
 	const groups = group === " " ? [" ", " ", " "] : group ? [group] : [];
-	return { decimal: display.decimalSeparator, groups };
+	return groupsInLakhs(localeCode)
+		? { decimal: display.decimalSeparator, groups, lakhs: true }
+		: { decimal: display.decimalSeparator, groups };
 }
 
 /** Whether a UTF-16 unit is an ASCII digit. */
@@ -167,6 +181,17 @@ function numberSpans(text: string, format: NumberFormat, limit: number): Span[] 
 				if (g === null || !threeDigitsAt(text, i + g.length)) break;
 				whole += text.slice(i + g.length, i + g.length + 3);
 				i += g.length + 3;
+			}
+		}
+		// Indian grouping, `1,00,000` and `12,34,567`: a first group of one or
+		// two digits, then groups of two, then three, which the loop above
+		// stopped at. Read beside a rupee marker, or everywhere for an
+		// Indian-region engine, as the lexer reads it (lexer/LakhGrouping.ts).
+		if (whole.length >= 1 && whole.length <= 2 && text.charCodeAt(i) === 0x2c && groups.includes(",")) {
+			const lakhEnd = lakhGroupEnd(text, i);
+			if (lakhEnd !== -1 && (format.lakhs === true || rupeeMarked(text, start, lakhEnd, 1))) {
+				whole = text.slice(start, lakhEnd).split(",").join("");
+				i = lakhEnd;
 			}
 		}
 		let fraction = "";
