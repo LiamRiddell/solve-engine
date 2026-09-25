@@ -132,12 +132,22 @@ describe("through real engines", () => {
 
 	const gc = (globalThis as { gc?: () => void }).gc;
 	(typeof gc === "function" ? test : test.skip)("a dropped engine waiting on an undeclared name is collected, and its waits leave the store", async () => {
-		// The engines' shared resolver, and the names it holds waits for. Asked
-		// about this engine's names only: the listener count is process-wide,
-		// and in the full serial run another file's late async work can add a
-		// wait of its own while this one waits for its finalizers.
-		const resolver = GLOBAL_VARIABLES_PACKAGE.asyncResolvers![0] as unknown as { waitsByName: Map<string, unknown> };
-		const droppedNamesHeld = () => [...resolver.waitsByName.keys()].filter((name) => name.startsWith("dropped")).length;
+		// The engines' shared resolver, and the waits it holds by name. Asked
+		// about this engine's names only, and about whether its waits are still
+		// alive rather than whether the index has been tidied: the listener
+		// count is process-wide, and the finalizers that tidy the index run on
+		// V8's schedule, which a loaded heap in the full serial run delays past
+		// any wait a test can afford. A wait that is collected is gone, whether
+		// or not its entry has been swept yet.
+		const resolver = GLOBAL_VARIABLES_PACKAGE.asyncResolvers![0] as unknown as { waitsByName: Map<string, Set<WeakRef<object>>> };
+		const liveDroppedWaits = () => {
+			let live = 0;
+			for (const [name, refs] of resolver.waitsByName) {
+				if (!name.startsWith("dropped")) continue;
+				for (const r of refs) if (r.deref() !== undefined) live++;
+			}
+			return live;
+		};
 		let ref: WeakRef<object> | undefined;
 		(() => {
 			const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
@@ -149,13 +159,10 @@ describe("through real engines", () => {
 			gc!();
 		}
 		expect(ref!.deref()).toBeUndefined();
-		// The finalizers that prune the name index run after a collection, on
-		// their own schedule; give them turns, generously, since a loaded heap
-		// in the full run delays them.
-		for (let i = 0; i < 200 && droppedNamesHeld() > 0; i++) {
+		for (let i = 0; i < 10 && liveDroppedWaits() > 0; i++) {
+			await later(0);
 			gc!();
-			await later(10);
 		}
-		expect(droppedNamesHeld()).toBe(0);
+		expect(liveDroppedWaits()).toBe(0);
 	});
 });

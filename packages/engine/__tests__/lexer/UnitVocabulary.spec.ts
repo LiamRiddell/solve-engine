@@ -9,6 +9,7 @@
  * picometres, which is exactly what happened while this was being written.
  */
 
+import { CURRENCY_LETTER_SYMBOLS } from "@solve-js/uom/CurrencyAliases";
 import { describe, expect, test } from "@jest/globals";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { knownUnits, isKnownUnit, excludedUnitSpellings } from "@solve-js/lexer/units";
@@ -37,7 +38,9 @@ describe("the vocabulary is derived from the conversion tables", () => {
         !(unit in EXTENDED_UNITS) &&
         unit !== "workday" &&
         unit !== "workdays" &&
-        // Currencies are deliberately not units, see units.ts.
+        // Currencies are deliberately not units, see units.ts: the codes, the
+        // words, and the letters written after an amount (`12 zł`, #693).
+        !Object.prototype.hasOwnProperty.call(CURRENCY_LETTER_SYMBOLS, unit) &&
         !/^[A-Z]{3,4}$/.test(unit) &&
         !/^[a-z]+$/.test(unit)
     );

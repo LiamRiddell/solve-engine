@@ -44,6 +44,75 @@ $5 CAD in CAD // $5.00
 ¥500 CNY in CNY // ¥500.00
 ```
 
+## Writing money as it is written
+
+Much of the world writes the symbol after the amount, `100 €` or `12 kr`, and
+a dollar is often named by its country, `A$` for the Australian dollar. Both
+are read, and so is every amount Solve writes, so an answer copied from one line
+can be typed into another and mean the same money.
+
+A symbol after the amount is the same money as the symbol before it, with or
+without a space:
+
+```solve
+100 € // €100.00
+1,000 ₹ // ₹1,000.00
+12 ₽ // 12.00 ₽
+-100 € // -€100.00
+```
+
+Some currencies are written with letters after the amount, and those letters
+read back the same way. `kr` is written for the Swedish, Norwegian and Danish
+crowns and reads as the Swedish krona, the way `$` reads as the US dollar;
+write `NOK` or `DKK` for the others. The letters are matched exactly as
+written, so `Ft` is the forint and `ft` stays the foot.
+
+```solve
+12.00 kr + 1 SEK // 13.00 kr
+12 zł // 12.00 zł
+12 Ft // 12.00 Ft
+12 Kč // 12.00 Kč
+12 Fr // 12.00 Fr
+```
+
+A dollar named by its country has the letters touching the `$`: `A$` (Australian),
+`C$` (Canadian), `US$`, `HK$` (Hong Kong), `NZ$` (New Zealand), `S$`
+(Singapore), `MX$` (Mexican) and `R$` (the Brazilian real). The answer is
+written with a plain `$`, as every dollar is, and stays in the currency named:
+
+```solve
+A$100 + $5 AUD // $105.00
+R$12.00 // R$12.00
+```
+
+The rand is written `R12.00`, and read in that form: the sign touching an
+amount with its cents. A bare `R` stays a name, since people use it for a
+resistance, a radius or the gas constant, so `12 R` multiplies by whatever `R`
+is, and `R12` without cents can be the name of a resistor.
+
+```solve
+R12.00 + R1,234.56 // R1,246.56
+```
+
+The common codes can be typed in lower case, `100 usd` or `50 eur`. Several
+codes are words or units in lower case (`cup` is the cooking unit, `try` and
+`mad` are words), so only a chosen list is read that way: `usd`, `eur`,
+`gbp`, `jpy`, `cny`, `chf`, `cad`, `aud`, `nzd`, `hkd`, `sgd`,
+`sek`, `nok`, `dkk`, `pln`, `czk`, `huf`, `inr`, `krw`, `brl`,
+`mxn`, `zar`, `ils`, `thb`, `aed`, `sar`, `myr`, `idr`, `vnd`,
+`ngn`, `uah` and `twd`. Any other code is written in capitals.
+
+```solve
+100 usd // $100.00
+50 eur + 50 EUR // €100.00
+```
+
+The boundary: a symbol several currencies share reads as its default, so an
+amount the engine writes for one of the others reads back as the default. `12
+AUD` is written `$12.00`, which reads as US dollars; `12 NOK` is written `12.00
+kr`, which reads as Swedish kronor; `12 CNY` is written `¥12.00`, which reads
+as yen. Keep the code (`12 AUD`) where the currency matters.
+
 ## Indian grouping
 
 In India a hundred thousand is one lakh, written `1,00,000`, and ten million is
