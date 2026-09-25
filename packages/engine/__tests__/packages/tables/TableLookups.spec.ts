@@ -217,10 +217,11 @@ describe("`column` stays an ordinary word", () => {
     expect(out.map((o) => o.text)).toEqual(["5", "10"]);
   });
 
-  test("the column aggregates are unchanged, and still skip a money cell", () => {
+  test("the column aggregates read a money cell the way a lookup does (#651)", () => {
+    // They used to skip it, which left the fee out of the total.
     const table = ["| item | cost |", "| --- | --- |", "| rent | 1200 |", "| fee | $50 |", ""];
-    expect(valueOf([...table, 'sum of column "cost" above'])).toBe("1,200");
-    expect(valueOf([...table, 'average of column "cost" above'])).toBe("1,200");
+    expect(valueOf([...table, 'sum of column "cost" above'])).toBe("$1,250.00");
+    expect(valueOf([...table, 'average of column "cost" above'])).toBe("$625.00");
   });
 });
 

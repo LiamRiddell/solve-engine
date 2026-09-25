@@ -236,22 +236,27 @@ export function averageRangeHandler(args: Value[], context?: LineExecutionContex
 /**
  * `total above` / `sum above` / `average above`, aggregate every line's
  * result from the current line's immediate predecessor backward, stopping
- * at (not including) the nearest blank line or `#` heading.
+ * at (not including) the nearest blank line, `#` heading, rule, fence or
+ * table, and passing over a line with no figure, such as a comment (#652).
  */
 function aggregateAbove(context: LineExecutionContext, isAverage: boolean): Value {
   const boundaryCheck = context.isLineBoundary;
   if (!boundaryCheck) {
     return errorValue("LINE_REF_NO_DOCUMENT", "\"above\" aggregation requires a real document");
   }
+  const endsBlock = context.isBlockEnd ?? boundaryCheck;
   const values: Value[] = [];
   // The block is declared before it is read, for the reason the range gives:
   // the walk stops at the first line it cannot use, and the graph has to
   // know the rest of the block regardless.
   if (context.noteLineRead) {
-    for (let n = context.lineIndex - 1; n >= 1 && !boundaryCheck(n); n--) context.noteLineRead(n);
+    for (let n = context.lineIndex - 1; n >= 1 && !endsBlock(n); n--) context.noteLineRead(n);
   }
   for (let n = context.lineIndex - 1; n >= 1; n--) {
-    if (boundaryCheck(n)) break;
+    if (endsBlock(n)) break;
+    // A line with no figure inside the block, a comment or a blockquote, is
+    // passed over, as a line range passes over it.
+    if (boundaryCheck(n)) continue;
     const v = context.getLineResult!(n);
     // A check line is a statement about the column, not one of its values,
     // passed or failed alike (#506).

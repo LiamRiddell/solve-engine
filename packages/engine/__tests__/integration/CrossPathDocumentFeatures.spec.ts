@@ -288,6 +288,64 @@ describe("line references across entry points", () => {
     expect(incremental(doc)).toEqual(expected);
   });
 
+  test("total above passes over a comment or a blockquote in its column, both passes (#652)", () => {
+    // Both used to end the block, so the total read only the line below them.
+    const comment = ["rent: $500", "// remember to check", "food: $200", "total above", "average above"];
+    expect(batch(comment).slice(3)).toEqual(["$700.00", "$350.00"]);
+    expect(incremental(comment)).toEqual(batch(comment));
+    const quote = ["rent: $500", "> quoted note", "food: $200", "total above"];
+    expect(batch(quote)[3]).toBe("$700.00");
+    expect(incremental(quote)).toEqual(batch(quote));
+  });
+
+  test("a blank line, a heading, a rule, a fence and a table still end the block, both passes (#652)", () => {
+    const enders: Array<[string, string[]]> = [
+      ["a blank line", [""]],
+      ["a heading", ["# Next"]],
+      ["a rule", ["---"]],
+      ["a code fence", ["```", "```"]],
+      ["a table", ["| a | b |", "|---|---|", "| x | 1 |"]],
+    ];
+    for (const [, lines] of enders) {
+      const doc = ["10", ...lines, "20", "total above"];
+      expect(batch(doc)[doc.length - 1]).toBe("20");
+      expect(incremental(doc)).toEqual(batch(doc));
+    }
+    // A pipe row with no separator is an expression, and counts.
+    const or = ["10", "5 | 3", "20", "total above"];
+    expect(batch(or)[3]).toBe("37");
+    expect(incremental(or)).toEqual(batch(or));
+  });
+
+  test("the trace of a total names the figures it passed a comment for, both passes (#652)", () => {
+    const doc = ["rent: $500", "// remember to check", "food: $200", "total above", "inputs of line 4"];
+    expect(batch(doc)[4]).toBe("$700.00 (line 4) <- $500.00 (line 1), $200.00 (line 3)");
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("a comment typed into a live column keeps the total, and a blank line typed there ends it (#652)", () => {
+    const { shown } = editThenEvaluate(["rent: $500", "x", "food: $200", "total above"], [[2, "// remember to check"]]);
+    expect(shown[3]).toBe("$700.00");
+    const blank = editThenEvaluate(["rent: $500", "x", "food: $200", "total above"], [[2, ""]]);
+    expect(blank.shown[3]).toBe("$200.00");
+    expect(blank.shown).toEqual(batch(blank.edited));
+  });
+
+  test("a form that reads a comment or a table row below it gets one answer on both passes (#803)", () => {
+    // The incremental pass read a line below the reader as a figure still to
+    // come until the evaluator reached it; the batch pass knew it was a comment.
+    const section = ['count of section "Home"', "# Home", "// note 5"];
+    expect(batch(section)[0]).toBe("0");
+    expect(incremental(section)).toEqual(batch(section));
+    const empty = ['total of section "Trip"', "## Trip", "// note 4"];
+    expect(batch(empty)[0]).toBe('ERROR: The section "Trip" has no figures to add up.');
+    expect(incremental(empty)).toEqual(batch(empty));
+    const range = ["sum(line 2 : line 4)", "sum(line 5 : line 4)", "spent += prev", "", "| ---- | ---- |"];
+    expect(incremental(range)).toEqual(batch(range));
+    const table = ["sum(line 3 : line 5)", "", "| a | b |", "|---|---|", "| x | 1 |", "10"];
+    expect(incremental(table)).toEqual(batch(table));
+  });
+
   test("a reference to a line that failed says so, the same in both passes (#552)", () => {
     // The batch pass used to call the failed line "not evaluated yet".
     const doc = ["this is prose", "line 1 + 1", "prev"];
@@ -424,6 +482,29 @@ describe("table columns across entry points", () => {
     const decimals = ["| item | tip |", "| ---- | --- |", "| a | 0.1 |", "| b | 0.2 |"];
     const doc = [...decimals, "", 'sum of column "tip" above', 'sum of column "tip" above == 0.3', 'average of column "tip" above == 0.15'];
     expect(batch(doc).slice(5)).toEqual(["0.30", "true", "true"]);
+  });
+
+  test("a money column totals in its currency, the way total above does, both passes (#651)", () => {
+    const money = ["| item | cost |", "|---|---|", "| rent | 500 |", "| food | $200 |", "| car | 1,200 |", ""];
+    const doc = [...money, 'total of column "cost" above', 'count of column "cost" above', 'max of column "cost" above'];
+    expect(batch(doc).slice(6)).toEqual(["$1,900.00", "3", "$1,200.00"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+    // The same figures typed as lines give the same total.
+    expect(batch(["500", "$200", "1,200", "total above"])[3]).toBe("$1,900.00");
+  });
+
+  test("two currencies, a percentage and misplaced grouping, both passes (#651)", () => {
+    const two = ["| item | cost |", "|---|---|", "| a | $500 |", "| b | £200 |", "", 'total of column "cost" above'];
+    expect(batch(two)[5]).toBe("ERROR: Cannot combine incompatible units: USD and GBP");
+    expect(incremental(two)).toEqual(batch(two));
+    const percent = ["| item | cost |", "|---|---|", "| a | 20% |", "| b | 1 |", "", 'total of column "cost" above', 'count of column "cost" above'];
+    expect(batch(percent)[5]).toMatch(/^ERROR: The "cost" cell on line 3 is a percentage, 20%/);
+    expect(batch(percent)[6]).toBe("2");
+    expect(incremental(percent)).toEqual(batch(percent));
+    // `12,57` is not grouped as a thousand, so it is text and skipped.
+    const grouped = ["| item | cost |", "|---|---|", "| a | 12,57 |", "| b | 1 |", "", 'total of column "cost" above'];
+    expect(batch(grouped)[5]).toBe("1");
+    expect(incremental(grouped)).toEqual(batch(grouped));
   });
 
   test("the single-expression path refuses with a document error", () => {

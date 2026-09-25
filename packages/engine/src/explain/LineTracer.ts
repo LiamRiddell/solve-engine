@@ -37,8 +37,14 @@ export interface TraceSource {
 	expressions(line: number): readonly string[];
 	/** A line's answer, or `null` when it has none. */
 	result(line: number): Value | null;
-	/** Whether a line is blank or a heading, where `total above` stops. */
+	/** Whether a line has no figure: blank, a heading, or a line the classifier skips. */
 	isBoundary(line: number): boolean;
+	/**
+	 * Whether a line ends the block `total above` reads: blank, a heading, a
+	 * rule, a fence or a table (#652). A source without it stops the block at
+	 * {@link isBoundary}, as the tracer did before.
+	 */
+	endsBlock?(line: number): boolean;
 	/** The lines carrying `#tag`, ascending. */
 	taggedLines(tag: string): readonly number[];
 	/** A line's raw text, or `undefined` past the end of the document. */
@@ -230,8 +236,9 @@ function readLine(
 				reads.push({ order: offset + i, kind: "lines", lines: [line - 1], via: "prev" });
 			} else if (ABOVE_TOKENS.has(t.type)) {
 				const lines: number[] = [];
-				for (let n = line - 1; n >= 1 && !source.isBoundary(n); n--) {
-					if (!steppedOver(source, n)) lines.unshift(n);
+				const endsBlock = (n: number) => (source.endsBlock ? source.endsBlock(n) : source.isBoundary(n));
+				for (let n = line - 1; n >= 1 && !endsBlock(n); n--) {
+					if (!source.isBoundary(n) && !steppedOver(source, n)) lines.unshift(n);
 				}
 				reads.push({ order: offset + i, kind: "lines", lines, via: "above" });
 			} else if (SECTION_TOKENS.has(t.type)) {

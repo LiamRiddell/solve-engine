@@ -379,8 +379,21 @@ export interface LineExecutionContext {
      * document paths maintain an index instead, and answer from it here.
      */
     getTaggedLines?: (tag: string) => readonly number[] | undefined;
-    /** Whether line `lineNumber` is a blank line or a `#` heading, the stopping condition for "total above"/"sum above"/"average above" aggregation. */
+    /**
+     * Whether line `lineNumber` has no figure to read: a blank line, a `#`
+     * heading, or a line the classifier skips (a comment, a blockquote, table
+     * markup). A line range passes over such a line; the section and tag
+     * forms read it the same way.
+     */
     isLineBoundary?: (lineNumber: number) => boolean;
+    /**
+     * Whether line `lineNumber` ends the block of figures `total above` and
+     * `average above` read: a blank line, a heading, a rule, a fence or a table
+     * (see lexer/BlockBoundary). A line with no figure that does not end the
+     * block, a comment or a blockquote, is passed over (#652). When absent the
+     * aggregates stop at {@link isLineBoundary}, as they did before.
+     */
+    isBlockEnd?: (lineNumber: number) => boolean;
     /**
      * The variables another line's expression reads, by 1-based line number, or
      * `undefined` when the line has no evaluated expression (forward reference,
