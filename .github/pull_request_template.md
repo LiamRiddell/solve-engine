@@ -14,8 +14,11 @@ Closes #
      and passes after, or there is nothing holding it in place. -->
 
 - [ ] A test covers the behaviour that changed, and fails without the change
+- [ ] Unit tests of each helper, class or module function the change adds or alters, not only of the note that exposed it
 - [ ] A regression test named after the defect, if this is a fix (see `__tests__/bugs`)
 - [ ] Existing tests that assert the old behaviour are updated rather than deleted
+- [ ] Adversarial tests beside the ordinary ones: security (inherited-property words, input sized to exhaust time or memory, look-alike characters), realistic breakage (typos, other features meeting this one, both document passes), and edge cases (zero, -0, 2^53, empty lines, CRLF), using `tools/adversarial.ts`
+- [ ] A new form has a template in `__tests__/hardening/AdversarialFeatureSweep.spec.ts`, and any open bug it exposes is an issue pinned as a one-assertion `test.failing`
 
 <!-- `npm run verify` deliberately skips four suites to keep the dev loop fast:
      heavy/MemoryLeak, LexerFuzz, LexerVocabularyFuzz and LongDocumentRobustness.
