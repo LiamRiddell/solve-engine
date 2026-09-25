@@ -2,13 +2,14 @@ import type { QueryClient } from "@tanstack/query-core";
 import type { Token } from "@solve-js/lexer";
 import type { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
-import { errorValue, ValueType, type Value } from "@solve-js/vm/Value";
+import { errorValue, Value, ValueType } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import type { IAsyncResolver, AsyncCheckResult } from "@solve-js/resolvers/ResolverRegistry";
 import { getActiveQueryClient } from "@solve-js/services/DataQueryService";
 import { createTimeoutSignal } from "@solve-js/utilities/TimeoutSignal";
 import { createConcurrencyLimit, settledOrAborted } from "@solve-js/utilities/ConcurrencyLimit";
 import { nextInstruction } from "@solve-js/parser/OperandWidth";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 
 /**
  * Generic async resolver for the common "single query string in, single
@@ -36,11 +37,23 @@ export interface QueryResolverOptions {
 	/** Unique namespace for cache-key scoping and diagnostics (e.g. "weather"). */
 	namespace: string;
 	/**
-	 * The `CALL_PLUGIN` index this resolver watches for, must be the same
-	 * index the package's parselet emits and registers `pluginFunction`
-	 * under (via `allocatePluginFunctionIndex()`).
+	 * The name of the package the resolver belongs to, with {@link functionName}:
+	 * the plugin function it answers for, named the way a parselet names it to
+	 * `emitPluginCall` (#717). Registration refuses the package when its
+	 * `pluginFunctions` does not declare that name, where the resolver would
+	 * otherwise wait for a call that never comes.
 	 */
-	pluginFunctionIndex: number;
+	packageName?: string;
+	/** The plugin function's name, with {@link packageName}. */
+	functionName?: string;
+	/**
+	 * The `CALL_PLUGIN` index this resolver watches for, the older way to name
+	 * the function, kept for the packages built on it: the same index the
+	 * package's parselet emits and registers `pluginFunction` under (via
+	 * `allocatePluginFunctionIndex()` or `pluginFunctionIndexFor()`). Give
+	 * either this or {@link packageName} with {@link functionName}.
+	 */
+	pluginFunctionIndex?: number;
 	/**
 	 * Perform the live fetch for `query` and return the resolved `Value`.
 	 * Receives an `AbortSignal` that fires on caller cancellation OR the
@@ -125,6 +138,28 @@ function defaultOnError(namespace: string): (query: string, error: unknown) => V
 }
 
 /**
+ * The `CALL_PLUGIN` index a resolver watches, from the name its package gives
+ * the function or from the index given directly, refusing options that give
+ * both, or half a name, or neither.
+ */
+function watchedFunctionIndex(opts: QueryResolverOptions): number {
+	const named = opts.packageName !== undefined || opts.functionName !== undefined;
+	if (named && opts.pluginFunctionIndex !== undefined) {
+		throw new RangeError(`createQueryResolver("${opts.namespace}"): give the function by packageName and functionName, or by pluginFunctionIndex, not both.`);
+	}
+	if (named) {
+		if (typeof opts.packageName !== "string" || opts.packageName === "" || typeof opts.functionName !== "string" || opts.functionName === "") {
+			throw new RangeError(`createQueryResolver("${opts.namespace}"): packageName and functionName name the function together; give both, as non-empty strings.`);
+		}
+		return pluginFunctionIndexFor(`${opts.packageName}:${opts.functionName}`);
+	}
+	if (typeof opts.pluginFunctionIndex !== "number" || !Number.isInteger(opts.pluginFunctionIndex) || opts.pluginFunctionIndex < 0) {
+		throw new RangeError(`createQueryResolver("${opts.namespace}"): name the plugin function the resolver answers for, with packageName and functionName.`);
+	}
+	return opts.pluginFunctionIndex;
+}
+
+/**
  * Build an async resolver and its plugin function together.
  *
  * The two halves have to agree on a cache key, and writing them separately is
@@ -134,6 +169,7 @@ function defaultOnError(namespace: string): (query: string, error: unknown) => V
  * @returns The resolver and the plugin function to register alongside it.
  */
 export function createQueryResolver(opts: QueryResolverOptions): QueryResolverPackage {
+	const pluginFunctionIndex = watchedFunctionIndex(opts);
 	const staleTimeMs = opts.staleTimeMs ?? 5 * 60 * 1000;
 	const timeoutMs = opts.timeoutMs ?? 10_000;
 	const failureCooldownMs = opts.failureCooldownMs ?? 30_000;
@@ -156,6 +192,11 @@ export function createQueryResolver(opts: QueryResolverOptions): QueryResolverPa
 			const timed = createTimeoutSignal(signal, timeoutMs, `${opts.namespace} query`);
 			cleanup = timed.cleanup;
 			const value = await settledOrAborted(opts.fetchQuery(query, timed.signal), timed.signal);
+			// A fetch that resolves to anything but a Value is a fault in the package,
+			// answered as a failed fetch is, rather than cached as the figure (#717).
+			if (!(value instanceof Value)) {
+				throw new TypeError(`${opts.namespace}: fetchQuery resolved to ${value === null ? "null" : typeof value}, not a Value`);
+			}
 			// Stamped once, as it arrives and before it is cached, so every line
 			// that reads it gets the same record. A fault is not a figure and
 			// carries none; a package that set its own sources keeps them.
@@ -198,6 +239,12 @@ export function createQueryResolver(opts: QueryResolverOptions): QueryResolverPa
 	const resolver: IAsyncResolver = {
 		namespace: opts.namespace,
 
+		// The function it answers for, when named: registration checks the
+		// package declares it (#717).
+		...(opts.packageName !== undefined && opts.functionName !== undefined
+			? { pluginFunction: { package: opts.packageName, name: opts.functionName } }
+			: {}),
+
 		// The scan below keys on the plugin call, so a program without one is
 		// never this resolver's and the engine need not ask. See
 		// IAsyncResolver.watchedOpcodes.
@@ -222,7 +269,7 @@ export function createQueryResolver(opts: QueryResolverOptions): QueryResolverPa
 					const argCount = opcodes[i + 2];
 
 					if (
-						fnIdx === opts.pluginFunctionIndex &&
+						fnIdx === pluginFunctionIndex &&
 						argCount >= 1 &&
 						i >= 2 &&
 						opcodes[i - 2] === OpCode.PUSH_STRING

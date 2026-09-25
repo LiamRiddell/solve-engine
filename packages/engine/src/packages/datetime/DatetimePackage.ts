@@ -21,7 +21,7 @@ import { AgeParselet } from "./parselets/AgeParselet";
 import {
   workdaysInDuration, weekdayOnDate, toDateFromAny, toTimestampFromAny,
   monthOnDate, weekOnDate, isWeekendOnDate, isWorkdayOnDate, spanBetweenDates, weekdaysBetween,
-  datetimeLiteralGrain, asIso8601,
+  datetimeLiteralGrain, asIso8601, asDate, asTimestamp, asTime,
 } from "./parselets/DatetimeTimestampPluginFunctions";
 import {
   nthWeekdayOfMonthFn, monthAnchorShift, ageBetween, dateLiteralFault,
@@ -35,6 +35,14 @@ import { workdayRateDenominatorNormalizerRule } from "./normalizer/WorkdayRateDe
 import { DaysInPeriodParselet } from "./parselets/DaysInPeriodParselet";
 import { daysInPeriodNormalizerRule } from "./normalizer/DaysInPeriodNormalizerRule";
 import { dailyNoteLinkNormalizerRule } from "./normalizer/DailyNoteLinkNormalizerRule";
+import {
+  agoNormalizerRule, thisWeekdayNormalizerRule, periodEdgeNormalizerRule,
+  THIS_WEEKDAY, PERIOD_START, PERIOD_END,
+} from "./normalizer/SpokenDateRules";
+import {
+  PeriodAnchorParselet, PeriodEdgeParselet, ThisWeekdayParselet, PERIOD_EDGE_FN, THIS_WEEKDAY_FN,
+} from "./parselets/SpokenDateParselets";
+import { periodEdgeHandler, thisWeekdayHandler, monthThisYearHandler } from "./parselets/SpokenDateFunctions";
 
 /**
  * Date/time keywords: `now`, `today`, `tomorrow`, `yesterday`,
@@ -198,6 +206,14 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     "next month": "MONTH_ANCHOR_NEXT",
     "this month": "MONTH_ANCHOR_THIS",
     "last month": "MONTH_ANCHOR_LAST",
+    // The week and year anchors (#704), each the first day of its period as
+    // `next month` is the first of its month. A week starts on Monday.
+    "next week": "WEEK_ANCHOR_NEXT",
+    "this week": "WEEK_ANCHOR_THIS",
+    "last week": "WEEK_ANCHOR_LAST",
+    "next year": "YEAR_ANCHOR_NEXT",
+    "this year": "YEAR_ANCHOR_THIS",
+    "last year": "YEAR_ANCHOR_LAST",
   },
   prefixParselets: {
     DAYS_IN_PERIOD: new DaysInPeriodParselet(),
@@ -232,6 +248,24 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     MONTH_ANCHOR_NEXT: new RelativeMonthParselet(1),
     MONTH_ANCHOR_THIS: new RelativeMonthParselet(0),
     MONTH_ANCHOR_LAST: new RelativeMonthParselet(-1),
+    WEEK_ANCHOR_NEXT: new PeriodAnchorParselet("week", 1),
+    WEEK_ANCHOR_THIS: new PeriodAnchorParselet("week", 0),
+    WEEK_ANCHOR_LAST: new PeriodAnchorParselet("week", -1),
+    YEAR_ANCHOR_NEXT: new PeriodAnchorParselet("year", 1),
+    YEAR_ANCHOR_THIS: new PeriodAnchorParselet("year", 0),
+    YEAR_ANCHOR_LAST: new PeriodAnchorParselet("year", -1),
+    [PERIOD_START]: new PeriodEdgeParselet("start"),
+    [PERIOD_END]: new PeriodEdgeParselet("end"),
+    [THIS_WEEKDAY]: new ThisWeekdayParselet(false),
+    // A weekday name inside a date expression is the coming one (`friday + 2
+    // days`); alone on a line it stays text, see ThisWeekdayParselet.
+    MONDAY: new ThisWeekdayParselet(true),
+    TUESDAY: new ThisWeekdayParselet(true),
+    WEDNESDAY: new ThisWeekdayParselet(true),
+    THURSDAY: new ThisWeekdayParselet(true),
+    FRIDAY: new ThisWeekdayParselet(true),
+    SATURDAY: new ThisWeekdayParselet(true),
+    SUNDAY: new ThisWeekdayParselet(true),
   },
   infixParselets: {
     WORKDAYS_AFTER: new WorkdayOffsetParselet("forward"),
@@ -264,6 +298,11 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     nthWeekdayNormalizerRule(),
     daysInPeriodNormalizerRule(),
     dailyNoteLinkNormalizerRule(),
+    // The spoken relative dates (#704): `3 days ago`, `this friday`, `end of
+    // month`. Each claims its words only as the whole phrase.
+    agoNormalizerRule(),
+    thisWeekdayNormalizerRule(),
+    periodEdgeNormalizerRule(),
   ],
   pluginFunctions: {
     workdaysInDuration,
@@ -281,12 +320,20 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     monthAnchorShift,
     ageBetween,
     dateLiteralFault,
+    [PERIOD_EDGE_FN]: periodEdgeHandler,
+    [THIS_WEEKDAY_FN]: thisWeekdayHandler,
+    monthThisYear: monthThisYearHandler,
   },
   asConverters: {
     // The execution context is passed through so each converter reads the
     // date through the same calendar backend the plugin functions do.
     // A date, a Unix timestamp or ISO text, read as `to date` reads them.
     iso8601: asIso8601,
+    // The `as` spellings of `to date` and `to timestamp` (#701), and the
+    // time of day alone (#708).
+    date: asDate,
+    timestamp: asTimestamp,
+    time: asTime,
     // The same three fields the "what X is it" questions answer, in the
     // composable form: `next friday + 2 weeks as weekday`. Question phrases
     // only ever take a bare date expression, whereas `as` binds after a
@@ -303,6 +350,23 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     MONTH_ANCHOR_NEXT: "datetime",
     MONTH_ANCHOR_THIS: "datetime",
     MONTH_ANCHOR_LAST: "datetime",
+    WEEK_ANCHOR_NEXT: "datetime",
+    WEEK_ANCHOR_THIS: "datetime",
+    WEEK_ANCHOR_LAST: "datetime",
+    YEAR_ANCHOR_NEXT: "datetime",
+    YEAR_ANCHOR_THIS: "datetime",
+    YEAR_ANCHOR_LAST: "datetime",
+    [PERIOD_START]: "datetime",
+    [PERIOD_END]: "datetime",
+    [THIS_WEEKDAY]: "datetime",
+    // A weekday name reads as a date inside an expression (#704).
+    MONDAY: "datetime",
+    TUESDAY: "datetime",
+    WEDNESDAY: "datetime",
+    THURSDAY: "datetime",
+    FRIDAY: "datetime",
+    SATURDAY: "datetime",
+    SUNDAY: "datetime",
     AGE_OF: "keyword",
     // An editor colours a refused date as datetime syntax too: the reader
     // typed a date, and the run is one token whether it could be read or not.

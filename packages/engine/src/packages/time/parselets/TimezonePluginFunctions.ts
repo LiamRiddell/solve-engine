@@ -222,7 +222,13 @@ export function dateInZoneHandler(args: Value[], context?: LineExecutionContext)
  * DST transition, so this is a live "right now" answer, not a fixed
  * constant.
  *
- * Takes 4 args: [zoneRef1, zoneRef2, displayName1, displayName2]. The
+ * With `on <date>` (#697) both offsets are taken on that day instead, at noon
+ * in the first place: a date names a day, not a moment, and on the day a place
+ * changes its clocks the gap changes during it, so the answer states the
+ * moment it read. Noon is clear of every clock change in use.
+ *
+ * Takes 4 args: [zoneRef1, zoneRef2, displayName1, displayName2], and a fifth,
+ * the date, when the line has an `on` clause. The
  * display names are the user's OWN typed text (see
  * `ZoneReference.ts`'s `displayName`), not derived from the resolved
  * zone, "Seattle" and "Los Angeles" both resolve to the same IANA zone
@@ -235,16 +241,33 @@ export function timeDifferenceHandler(args: Value[], context?: LineExecutionCont
   const label1 = args[2].value as string;
   const label2 = args[3].value as string;
   const calendar = calendarOf(context);
-  const now = calendar.now();
+  let at = calendar.now();
+  let onDay = "";
+  if (args.length > 4) {
+    // A date that failed (`on 29 February 2027`) says why, rather than that it is not a date.
+    if (args[4].type === ValueType.Error) return args[4];
+    const day = calendarDayOf(args[4], calendar);
+    if (day instanceof Value) return day;
+    const noon = instantOfReading(day.year, day.month0, day.day, NOON_MINUTES, { zoneRef: zoneRef1, label: label1 }, calendar);
+    if (typeof noon !== "number") return noon;
+    at = noon;
+    onDay = describeReading(day.year, day.month0, day.day, NOON_MINUTES, calendar).date;
+  }
 
-  const offset1 = resolveOffsetMinutes(zoneRef1, now, calendar);
-  const offset2 = resolveOffsetMinutes(zoneRef2, now, calendar);
+  const offset1 = resolveOffsetMinutes(zoneRef1, at, calendar);
+  const offset2 = resolveOffsetMinutes(zoneRef2, at, calendar);
   const diff = offset2 - offset1;
 
   if (diff === 0) {
-    return stringValue(`${label2} and ${label1} currently share the same UTC offset`);
+    return stringValue(onDay === ""
+      ? `${label2} and ${label1} currently share the same UTC offset`
+      : `${label2} and ${label1} share the same UTC offset on ${onDay}`);
   }
   const ahead = diff > 0 ? label2 : label1;
   const behind = diff > 0 ? label1 : label2;
-  return stringValue(`${ahead} is ${describeMinutes(Math.abs(diff))} ahead of ${behind}`);
+  const gap = `${ahead} is ${describeMinutes(Math.abs(diff))} ahead of ${behind}`;
+  return stringValue(onDay === "" ? gap : `${gap} on ${onDay}`);
 }
+
+/** Noon, as minutes after midnight: the moment a dated time difference reads its offsets at. */
+const NOON_MINUTES = 720;

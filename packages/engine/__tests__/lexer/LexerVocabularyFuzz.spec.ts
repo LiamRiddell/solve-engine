@@ -1022,7 +1022,8 @@ describe("LexerVocabulary Fuzz — safety boundaries", () => {
   test("plugin registrations don't affect unicode identifier fallback", () => {
     const plugin: LexerVocabulary = {
       keywords: { alpha: "ALPHA_KW", beta: "BETA_KW" },
-      units: ["\u03BC", "\u03A9"],
+      // \u03BE and \u03C8: not units of the engine's own. \u03A9 was, until #706 made it the ohm.
+      units: ["\u03BE", "\u03C8"],
     };
 
     // Note: single-char non-ASCII unicode (α, β, γ) hits the 1-char fast path

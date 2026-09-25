@@ -401,11 +401,13 @@ hours to a date, or taking them away.
 ```
 
 **[Relative dates](/syntax/relative-dates/)**: a day named by its relation to
-today, such as tomorrow or next friday.
+today, such as tomorrow, next friday, three days ago or the end of the month.
 
 ```solve
 tomorrow // Thursday, March 12, 2026, 12:00:00 PM
 next friday // Friday, March 13, 2026, 12:00:00 PM
+3 days ago // Sunday, March 8, 2026, 12:00:00 PM
+end of month // Tuesday, March 31, 2026
 ```
 
 **[Relative months](/syntax/relative-months/)**: a month named by its relation
@@ -439,6 +441,14 @@ days until 25/12/2026 // 288.50 days
 weeks between 01/01/2024 and 01/06/2024 // 21.71 weeks
 ```
 
+**[Timestamps](/syntax/timestamps/)**: a Unix timestamp, a count of seconds
+since 1970, read as the date it names, and a date written as one.
+
+```solve
+1710000000 as date // Saturday, March 9, 2024, 4:00:00 PM
+2024-03-09 as timestamp // 1,709,942,400
+```
+
 **[Working days](/syntax/working-days/)**: counting only the days that are not
 weekends (nor public holidays, when the host application supplies them).
 
@@ -452,11 +462,12 @@ or written in numbers is a setting in the host application, not something a line
 writes, so it has no line here.
 
 **[Time](/syntax/time/)**: clock times, durations, and the span between two
-times, with frame rates and timecode. A clock time on its own is that time
-today, so the answer carries the date.
+times, with frame rates and timecode. A clock time is shown as the time of day,
+with the days it has moved beside it when it crosses midnight.
 
 ```solve
-9:00am + 3 hours // Wednesday, March 11, 2026, 12:00:00 PM
+9:00am + 3 hours // 12:00:00 PM
+11pm + 2 hours // 1:00:00 AM (+1 day)
 7:30 to 20:45 // 795 minutes
 2h 30m // 150 minutes
 ```
@@ -576,6 +587,44 @@ named physical unit, such as volts times amps into watts.
 
 ```solve
 230 V * 13 A as W // 2,990.00 W
+```
+
+**[Electricity](/syntax/electricity/)**: volts, amps, ohms and amp-hours, with
+Ohm's law, and the energy a battery holds.
+
+```solve
+12 V / 2 A // 6.00 Ω
+3000 mAh * 3.7 V // 11.10 Wh
+```
+
+**[Energy units](/syntax/energy-units/)**: calories and kilocalories, BTU,
+therms and electronvolts, beside joules and kilowatt-hours.
+
+```solve
+2000 kcal in kJ // 8,368.00 kJ
+1 therm in kWh // 29.31 kWh
+```
+
+**[Pressure](/syntax/pressure/)**: pascals, bar, psi, atmospheres and
+millimetres of mercury, from tyres to blood pressure.
+
+```solve
+32 psi in bar // 2.21 bar
+120 mmHg in kPa // 16.00 kPa
+```
+
+**[Distances in space](/syntax/distances-in-space/)**: the astronomical unit,
+the light-year and the parsec.
+
+```solve
+1 AU in km // 149,597,870.70 km
+```
+
+**[Moles](/syntax/moles/)**: the mole and the millimole, chemistry's count of
+particles.
+
+```solve
+1 mol in mmol // 1,000.00 mmol
 ```
 
 **[Surveying & older units](/syntax/surveying-units/)**: furlongs, chains, rods

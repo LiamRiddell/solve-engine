@@ -135,10 +135,16 @@ export interface SerializedWorkerValue {
 	/**
 	 * What a {@link ValueType.Datetime} anchors, present only when the engine
 	 * recorded it: `"date"` for a calendar day, `"datetime"` for a wall-clock
-	 * reading, `"instant"` for a fixed point. See `Value.grain`. A plain JSON
-	 * string, so the DTO's `structuredClone`/`JSON` guarantee is unaffected.
+	 * reading, `"instant"` for a fixed point, `"time"` for a time of day. See
+	 * `Value.grain`. A plain JSON string, so the DTO's `structuredClone`/`JSON`
+	 * guarantee is unaffected.
 	 */
 	grain?: DatetimeGrain;
+	/**
+	 * For a time of day, an instant on the day it is counted from, in epoch
+	 * milliseconds, present only when recorded. See `Value.timeAnchor`.
+	 */
+	timeAnchor?: number;
 	/**
 	 * The zone a Datetime should be read in, present only when the line named
 	 * one: an IANA name (`"Asia/Tokyo"`) or a fixed offset (`"UTCOFFSET:540"`).

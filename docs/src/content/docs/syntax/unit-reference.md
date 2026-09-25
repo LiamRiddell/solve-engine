@@ -29,6 +29,7 @@ Measured against **radian**.
 
 | Unit | Spellings | Relative size |
 | --- | --- | --- |
+| revolution | `revolutions` | 6.28319 |
 | radian | `radians`, `rad`, `rads` | 1 |
 | degree | `degrees`, `deg`, `degs` | 0.0174533 |
 | gradian | `gradians`, `gon`, `gons`, `grad`, `grads` | 0.015708 |
@@ -127,16 +128,20 @@ Measured against **joule**.
 | terajoule | `terajoules`, `TJ` | 1000000000000 |
 | megawatt-hour | `megawatt-hours`, `MW h`, `MWh` | 3600000000 |
 | gigajoule | `gigajoules`, `GJ` | 1000000000 |
+| therm | `therms` | 105506000 |
 | kilowatt-hour | `kilowatt-hours`, `kW h`, `kWh` | 3600000 |
 | megajoule | `megajoules`, `MJ` | 1000000 |
 | hectowatt-hour | `hectowatt-hours`, `hW h`, `hWh` | 360000 |
 | decawatt-hour | `decawatt-hours`, `daW h`, `daWh` | 36000 |
+| kcal | `kilocalorie`, `kilocalories`, `Cal`, `Calorie`, `Calories` | 4184 |
 | watt-hour | `W h`, `Wh` | 3600 |
+| BTU | `Btu` | 1055.06 |
 | kilojoule | `kilojoules`, `kJ` | 1000 |
 | deciwatt-hour | `deciwatt-hours`, `dW h`, `dWh` | 360 |
 | hectojoule | `hectojoules`, `hJ` | 100 |
 | centiwatt-hour | `centiwatt-hours`, `cW h`, `cWh` | 36 |
 | decajoule | `decajoules`, `daJ` | 10 |
+| cal | `calorie`, `calories` | 4.184 |
 | milliwatt-hour | `milliwatt-hours`, `mW h`, `mWh` | 3.6 |
 | joule | `joules`, `J` | 1 |
 | decijoule | `decijoules`, `dJ` | 0.1 |
@@ -147,9 +152,13 @@ Measured against **joule**.
 | microjoule | `microjoules`, `μJ`, `µJ` | 0.000001 |
 | picowatt-hour | `picowatt-hours`, `pW h`, `pWh` | 3.6e-9 |
 | nanojoule | `nanojoules`, `nJ` | 1e-9 |
+| GeV | `GeV` | 1.60218e-10 |
 | femtowatt-hour | `femtowatt-hours`, `fW h`, `fWh` | 3.6e-12 |
 | picojoule | `picojoules`, `pJ` | 1e-12 |
+| MeV | `MeV` | 1.60218e-13 |
 | femtojoule | `femtojoules`, `fJ` | 1e-15 |
+| keV | `keV` | 1.60218e-16 |
+| eV | `eV` | 1.60218e-19 |
 
 ## Force
 
@@ -194,6 +203,7 @@ Measured against **hertz**.
 | decahertz | `daHz` | 10 |
 | hertz | `Hz` | 1 |
 | decihertz | `dHz` | 0.1 |
+| rpm | `RPM` | 0.0166667 |
 | centihertz | `cHz` | 0.01 |
 | millihertz | `mHz` | 0.001 |
 | microhertz | `μHz`, `µHz` | 0.000001 |
@@ -235,6 +245,7 @@ Measured against **meter**.
 | light-year | `light-years`, `ly` | 9460730000000000 |
 | petameter | `petametre`, `petameters`, `petametres`, `Pm` | 1000000000000000 |
 | terameter | `terametre`, `terameters`, `terametres`, `Tm` | 1000000000000 |
+| AU | `AU` | 149597870700 |
 | gigameter | `gigametre`, `gigameters`, `gigametres`, `Gm` | 1000000000 |
 | megameter | `megametre`, `megameters`, `megametres`, `Mm` | 1000000 |
 | league | `leagues` | 4828.03 |
@@ -387,6 +398,7 @@ Measured against **pascal**.
 | inch of mercury | `inches of mercury`, `inHg`, `Hg` | 3386.39 |
 | kilopascal | `kilopascals`, `kPa`, `centibar`, `centibars`, `cbar` | 1000 |
 | inch of water | `inches of water`, `inAq`, `Aq` | 249.089 |
+| mmHg | `mmHg` | 133.322 |
 | torr | `torrs`, `Torr` | 133.322 |
 | hectopascal | `hectopascals`, `hPa`, `millibar`, `millibars`, `mbar` | 100 |
 | decapascal | `decapascals`, `daPa` | 10 |
@@ -499,7 +511,7 @@ Measured against **cubic meter**.
 | board foot | `board feet` | 0.00235974 |
 | imperial quart | `imperial quarts`, `imp qt` | 0.00113652 |
 | US dry quart | `US dry qt` | 0.00110122 |
-| cubic decimeter | `cubic decimeters`, `dm3`, `dm³`, `liter`, `liters`, `litre`, `litres`, `l` | 0.001 |
+| cubic decimeter | `cubic decimeters`, `dm3`, `dm³`, `liter`, `liters`, `litre`, `litres`, `l`, `L` | 0.001 |
 | quart | `quarts`, `US liquid quart`, `US liquid quarts`, `qt` | 0.000946353 |
 | imperial pint | `imperial pints`, `imp pt` | 0.000568261 |
 | US dry pint | `US dry pt` | 0.00055061 |
@@ -529,7 +541,7 @@ Measured against **mps**.
 | Unit | Spellings | Relative size |
 | --- | --- | --- |
 | mps | `mps` | 1 |
-| kn | `kn` | 0.514444 |
+| kn | `knot`, `knots` | 0.514444 |
 | mph | `mph` | 0.44704 |
 | ft_s | `ft_s` | 0.3048 |
 | kph | `kph` | 0.277778 |
@@ -574,7 +586,7 @@ Measured against **V**.
 | Unit | Spellings | Relative size |
 | --- | --- | --- |
 | kV | `kV` | 1000 |
-| V | `V` | 1 |
+| V | `volt`, `volts` | 1 |
 | mV | `mV` | 0.001 |
 
 ## Current
@@ -584,8 +596,28 @@ Measured against **A**.
 | Unit | Spellings | Relative size |
 | --- | --- | --- |
 | kA | `kA` | 1000 |
-| A | `A` | 1 |
+| A | `amp`, `amps`, `ampere`, `amperes` | 1 |
 | mA | `mA` | 0.001 |
+
+## Resistance
+
+Measured against **ohm**.
+
+| Unit | Spellings | Relative size |
+| --- | --- | --- |
+| MΩ | `MΩ` | 1000000 |
+| kΩ | `kΩ` | 1000 |
+| ohm | `ohms`, `Ω`, `Ω` | 1 |
+
+## Charge
+
+Measured against **coulomb**.
+
+| Unit | Spellings | Relative size |
+| --- | --- | --- |
+| Ah | `Ah` | 3600 |
+| mAh | `mAh` | 3.6 |
+| coulomb | `coulombs` | 1 |
 
 ## Apparent power
 
@@ -657,9 +689,18 @@ Measured against **kmpl**.
 | ppb | `ppb` | 1e-9 |
 | ppt | `ppt` | 1e-12 |
 
+## Amount of substance
+
+Measured against **mol**.
+
+| Unit | Spellings | Relative size |
+| --- | --- | --- |
+| mol | `mol` | 1 |
+| mmol | `mmol` | 0.001 |
+
 ## Spellings that are not listed
 
-The conversion tables carry 1525 spellings in total, and 50 of
+The conversion tables carry 1570 spellings in total, and 49 of
 them are missing above. Most carry a character an expression cannot type as
 part of a unit, such as the dot in `W⋅h` or the full stops in `fl. oz.`, and a few
 are ordinary words the lexer leaves to English, such as `turn` and `point`.

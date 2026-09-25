@@ -117,10 +117,14 @@ export type ChartKind = "sparkline" | "plot";
  *   instant follows from the zone it is read in.
  * - `instant`: a fixed point on the timeline, named without depending on a
  *   zone (`2026-04-03T10:30:00Z`, `...+09:00`, `now`).
+ * - `time`: a time of day, as a clock time names one (`9:00am`, `16:00`), or
+ *   a value written `as time` (#708). A wall-clock reading like `datetime`,
+ *   held on the day it was written for so arithmetic keeps working, and shown
+ *   as the time alone, with the days it has moved from that day beside it.
  *
  * See {@link Value.grain} for why the number cannot answer this on its own.
  */
-export type DatetimeGrain = "date" | "datetime" | "instant";
+export type DatetimeGrain = "date" | "datetime" | "instant" | "time";
 
 /**
  * A chart specification: the DATA to draw, never pixels. One shape holds every
@@ -568,6 +572,17 @@ export class Value {
 	 */
 	public zone?: string;
 	/**
+	 * For a time of day (grain `"time"`, #708), an instant on the day it is
+	 * counted from, in epoch milliseconds: today's midnight for a clock time, the
+	 * value's own instant for one written `as time`. The formatter shows the time alone and
+	 * the days it has moved from this one beside it (`1:00:00 AM (+1 day)` for
+	 * `11pm + 2 hours`), so the shift is fixed when the time is written rather
+	 * than counted from whatever day it is displayed on. Carried through
+	 * duration arithmetic with the grain. Cleared by {@link recycle} alongside
+	 * the other sidecars.
+	 */
+	public timeAnchor?: number;
+	/**
 	 * That this quantity is the gap between two datetimes, rather than a
 	 * duration someone wrote down.
 	 *
@@ -675,6 +690,7 @@ export class Value {
 		// the arena hands out next.
 		this.grain = undefined;
 		this.zone = undefined;
+		this.timeAnchor = undefined;
 		this.datetimeSpan = undefined;
 		// Provenance clears too: a reused Value that once held a converted
 		// amount must not tell a host that a plain number came from a rate.
@@ -732,6 +748,7 @@ export class Value {
 		if (this.decimalPlaces !== undefined) out.decimalPlaces = this.decimalPlaces;
 		if (this.grain !== undefined) out.grain = this.grain;
 		if (this.zone !== undefined) out.zone = this.zone;
+		if (this.timeAnchor !== undefined) out.timeAnchor = this.timeAnchor;
 		if (this.datetimeSpan !== undefined) out.datetimeSpan = this.datetimeSpan;
 		if (this.timedOut !== undefined) out.timedOut = this.timedOut;
 		if (this.sources !== undefined) out.sources = this.sources;
@@ -1274,16 +1291,36 @@ export function boolValue(b: boolean): Value {
  * (the opcode or the literal shape says so), never guessed from the number, so
  * an omitted grain means "not recorded" rather than "a calendar day".
  *
+ * An instant past the calendar's range (see {@link DATE_RANGE_MS}), or not a
+ * number at all, is refused here rather than carried on to show as `Invalid
+ * Date` or throw where it is formatted: `99999999999 days ago` is a date no
+ * calendar holds.
+ *
  * @param n - The instant, in epoch milliseconds.
  * @param grain - What the instant anchors, when the caller knows.
  * @param zone - The zone reference the instant was named in, when the line named one.
- * @returns The Datetime value.
+ * @param timeAnchor - For a time of day, an instant on the day it is counted from. See {@link Value.timeAnchor}.
+ * @returns The Datetime value, or a `DATE_OUT_OF_RANGE` error Value.
  */
-export function datetimeValue(n: number, grain?: DatetimeGrain, zone?: string): Value {
+export function datetimeValue(n: number, grain?: DatetimeGrain, zone?: string, timeAnchor?: number): Value {
+	if (!(n >= -DATE_RANGE_MS && n <= DATE_RANGE_MS)) return dateOutOfRange();
 	const v = _arenaActive && _arena ? _arena.acquire(ValueType.Datetime, n) : new Value(ValueType.Datetime, n);
 	if (grain !== undefined) v.grain = grain;
 	if (zone !== undefined) v.zone = zone;
+	if (timeAnchor !== undefined) v.timeAnchor = timeAnchor;
 	return v;
+}
+
+/**
+ * How far either side of 1970 an instant can be, in milliseconds: 100,000,000
+ * days, the range of a JavaScript `Date` and of `Temporal.Instant`, from 271821
+ * BC to AD 275760.
+ */
+export const DATE_RANGE_MS = 8.64e15;
+
+/** The refusal for a date past {@link DATE_RANGE_MS}. */
+export function dateOutOfRange(): Value {
+	return errorValue("DATE_OUT_OF_RANGE", "That date is past the range a calendar holds, which runs from 271821 BC to AD 275760.");
 }
 
 /** Create a Percentage-typed Value (stored as fraction, e.g. 0.5 for 50%). */

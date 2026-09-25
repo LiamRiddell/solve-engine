@@ -262,6 +262,7 @@ function sameValue(a: Value, b: Value): boolean {
 	if (a.uncertainty !== b.uncertainty) return false;
 	if (a.grain !== b.grain) return false;
 	if (a.zone !== b.zone) return false;
+	if (a.timeAnchor !== b.timeAnchor) return false;
 	if ((a.datetimeSpan ?? false) !== (b.datetimeSpan ?? false)) return false;
 	if (!structurallyEqual(a.exact, b.exact, { left: MAX_COMPARED_NODES })) return false;
 	if (!structurallyEqual(a.rational, b.rational, { left: MAX_COMPARED_NODES })) return false;

@@ -284,6 +284,10 @@ export const CoreErrorCodes = {
   PACKAGE_ENGINE_VERSION_MISMATCH: "PACKAGE_ENGINE_VERSION_MISMATCH",
   /** A package's declared `IEnginePackage.engineVersion` isn't a parseable semver range at all (a typo in the package's own descriptor). */
   PACKAGE_ENGINE_VERSION_INVALID_RANGE: "PACKAGE_ENGINE_VERSION_INVALID_RANGE",
+  /** A package was registered with no `name`, or an empty one, so nothing could name it to unregister it or report on it (#719). */
+  PACKAGE_NAME_MISSING: "PACKAGE_NAME_MISSING",
+  /** A package's `createQueryResolver` watches for a plugin function the package does not declare, or was built for another package, so the call it waits for would never come (#719). */
+  PACKAGE_RESOLVER_FUNCTION_MISSING: "PACKAGE_RESOLVER_FUNCTION_MISSING",
   /** `OpRegistry.allocateOpcode()`'s dynamic opcode pool (started at 201) exhausted, too many packages calling it. */
   OPCODE_POOL_EXHAUSTED: "OPCODE_POOL_EXHAUSTED",
   /** `VMBuiltins.allocatePluginFunctionIndex()`'s index pool (up to 65536, two opcode-stream bytes) exhausted. */
@@ -321,6 +325,8 @@ export const DatetimeErrorCodes = {
   DATETIME_NOT_CONVERTIBLE: "DATETIME_NOT_CONVERTIBLE",
   /** `dateCalendarInZone("Europe/Atlantis")`: the zone-bound `Date` backend factory, given a zone this runtime's `Intl` cannot format with. Raised at construction rather than per line, because a backend that cannot compute in the zone it was asked for must not silently answer in another one. */
   DATE_ZONE_UNKNOWN: "DATE_ZONE_UNKNOWN",
+  /** `date: { weekend: ["fri"] }`: `date.weekend` or `date.firstDayOfWeek` named something that is not a day of the week. Raised at construction, because a weekend quietly ignored is every working-day answer quietly wrong (#702). */
+  DATE_WEEKDAY_INVALID: "DATE_WEEKDAY_INVALID",
 } as const;
 
 /** Every code from {@link DatetimeErrorCodes}. */

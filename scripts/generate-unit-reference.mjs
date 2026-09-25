@@ -235,8 +235,14 @@ function readExtended(kinds) {
 	const byName = new Map(Object.entries(kinds).map(([id, name]) => [name, Number(id)]));
 	let nextId = Math.max(...Object.keys(kinds).map(Number)) + 1;
 
-	for (const match of source.matchAll(/^\s+([A-Za-z_][A-Za-z0-9_]*):\s*\{\s*measure:\s*"([^"]+)",\s*toBase:\s*([^}]+)\}/gm)) {
-		const [, spelling, measure, ratio] = match;
+	// A key is a bare identifier, which may hold a letter outside ASCII (`Ω`,
+	// `kΩ`), or a quoted string for a spelling best written as an escape (the
+	// OHM SIGN, `"\u2126"`), read back through JSON so the escape is decoded.
+	const entryPattern =
+		/^\s+(?:([\p{L}_][\p{L}\p{N}_]*)|"((?:[^"\\]|\\.)*)"):\s*\{\s*measure:\s*"([^"]+)",\s*toBase:\s*([^}]+)\}/gmu;
+	for (const match of source.matchAll(entryPattern)) {
+		const [, bare, quoted, measure, ratio] = match;
+		const spelling = bare ?? JSON.parse(`"${quoted}"`);
 		if (!byName.has(measure)) {
 			byName.set(measure, nextId);
 			extraKinds[nextId] = measure;

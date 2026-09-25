@@ -56,6 +56,22 @@ allowance is a plural. A few table entries have only the singular (`troy ounce`,
 `watt-hour`), and the plural a reader writes reads as that unit. A symbol takes
 no plural, so `kW h` is the kilowatt-hour and `kW hs` is not a unit.
 
+## Litres with a capital L
+
+The litre is written `l` or `L`, and the capital is the symbol most bottles and
+cartons print, since a lower-case `l` is easily read as the digit one. Both are
+the same unit, as are `ml` and `mL`.
+
+```solve
+2 L in ml // 2,000.00 ml
+1.5L + 500 ml // 2.00 L
+500 ml in L // 0.50 L
+```
+
+The boundary: the capital is a unit only straight after a number, so a variable
+named `L` keeps working on its own line and after an operator (see
+[variables](/syntax/variables/)). No other single capital letter is added.
+
 ## Micro, with either µ or μ
 
 The micro prefix means a millionth: a microsecond is a millionth of a second, a
