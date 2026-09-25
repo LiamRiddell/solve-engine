@@ -112,7 +112,7 @@ in the job log. Two things to know when regenerating:
 - **The size stat is built from `dist`.** Regenerate `packageSize.json` only
   after a clean `npm run build`, or the check fails on a stale number. The
   tarball is packed under a pinned npm, so that figure is the same on every
-  machine; the gzip figure is measured on the Node version in `.nvmrc`, and a
+  machine; the brotli figure is measured on the Node version in `.nvmrc`, and a
   different Node can compress the same bytes to a slightly different count.
 - **The test stats are read from the last full run.** `stats:tests` reads the
   report `npm run test:full` writes, so run the full suite first.

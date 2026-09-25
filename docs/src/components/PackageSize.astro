@@ -33,7 +33,7 @@ const mb = (bytes: number) => `${(bytes / 1_000_000).toFixed(1)} MB`;
  * a named import. Either way the point being made is that there is no
  * meaningful difference, and rendering "-60 bytes" would just look like a bug.
  */
-const importGap = Math.abs(sizes.importEverythingGzip - sizes.importOneGzip);
+const importGap = Math.abs(sizes.importEverythingBrotli - sizes.importOneBrotli);
 ---
 
 <div class="band size-band not-content">
@@ -41,7 +41,7 @@ const importGap = Math.abs(sizes.importEverythingGzip - sizes.importOneGzip);
     <span class="band__eyebrow">Size</span>
 
     <p class="size-band__figure">
-      <span class="size-band__number">{kb(sizes.importOneGzip)}</span>
+      <span class="size-band__number">{kb(sizes.importOneBrotli)}</span>
       <span class="size-band__unit">minified and compressed with brotli</span>
     </p>
 

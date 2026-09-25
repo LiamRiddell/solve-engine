@@ -236,7 +236,7 @@ jobs:
       # to be committed, so a jump arrives as a reviewable diff on a file whose
       # whole content is numbers, instead of arriving silently. The tarball is
       # packed under one pinned npm wherever this runs (see the script), and
-      # the gzip figure on this job's Node 22, the version `.nvmrc` names, is
+      # the brotli figure on this job's Node 22, the version `.nvmrc` names, is
       # the one the committed file records.
       - run: npm run lint:size
 
@@ -354,6 +354,11 @@ jobs:
       # a job holding `id-token: write`, so that would be unreviewed code able
       # to mint a publishing credential for this package.
       - run: npm run lint:actions
+
+      # Each with: input is one its action declares. GitHub ignores an undeclared
+      # input rather than failing the step, so a renamed one silently reverts to the
+      # action's default (#691). Reads .github/action-inputs.json, no network.
+      - run: npm run lint:action-inputs
 
       # The engine's standalone Jest config agrees with the root one; it reads
       # two config files and needs no install.

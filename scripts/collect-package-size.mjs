@@ -14,9 +14,12 @@
  * Two different questions get two different answers here, because conflating
  * them is how size claims become misleading:
  *
- *   · what reaches a browser, which is the bundled, minified, gzipped cost of
- *     importing the engine. This is the number that matters to somebody
- *     shipping it, and it comes from size-limit, which does a real bundle.
+ *   · what reaches a browser, which is the bundled, minified cost of
+ *     importing the engine, compressed with brotli. This is the number that
+ *     matters to somebody shipping it, and it comes from size-limit, which does
+ *     a real bundle and compresses with brotli by default. The fields are
+ *     named for it (`importOneBrotli`); they were named `...Gzip` while
+ *     holding this brotli figure (#802).
  *   · what npm downloads and puts on disk, which is much larger and almost
  *     entirely type declarations and the second module format. Quoting only
  *     this would be alarming and useless; quoting only the first would be
@@ -52,9 +55,9 @@ const PACK_NPM = "npm@10.9.9";
 
 /**
  * The Node line the committed figures are measured on, from `.nvmrc`. The
- * gzipped sizes come from size-limit, which compresses with the running
- * Node's zlib; a different zlib can compress the same bytes to a slightly
- * different count. Reported rather than enforced: a mismatch is the likeliest
+ * compressed sizes come from size-limit, which compresses with brotli through
+ * the running Node's zlib; a different zlib can compress the same bytes to a
+ * slightly different count. Reported rather than enforced: a mismatch is the likeliest
  * explanation for a stale check, and the message says so.
  */
 function expectedNodeMajor() {
@@ -101,8 +104,8 @@ function bundled() {
 	}
 
 	return {
-		importOneGzip: single.size,
-		importEverythingGzip: whole.size,
+		importOneBrotli: single.size,
+		importEverythingBrotli: whole.size,
 	};
 }
 
@@ -243,8 +246,8 @@ function readCommitted() {
  * deterministic, not to widen the gate until the difference fits.
  */
 const EXACT = [
-	"importOneGzip",
-	"importEverythingGzip",
+	"importOneBrotli",
+	"importEverythingBrotli",
 	"tarballBytes",
 	"unpackedBytes",
 	"fileCount",
@@ -272,7 +275,7 @@ if (process.argv.includes("--check")) {
 		const toolchainNote =
 			expected !== null && running !== expected
 				? `\nMeasured on Node ${process.versions.node}; the committed figures are produced on Node ${expected} (.nvmrc). ` +
-					"A different zlib can gzip the same bytes to a different count, so regenerate on the pinned Node before trusting a gzip difference."
+					"A different zlib can compress the same bytes to a different count, so regenerate on the pinned Node before trusting a difference in the brotli figures."
 				: "";
 		console.error(
 			"docs/src/data/packageSize.json is out of date.\n" +
@@ -284,8 +287,8 @@ if (process.argv.includes("--check")) {
 		);
 		process.exit(1);
 	}
-	console.log(`Package size is current: ${sizes.importOneGzip} bytes gzipped.`);
+	console.log(`Package size is current: ${sizes.importOneBrotli} bytes, minified and compressed with brotli.`);
 } else {
 	fs.writeFileSync(TARGET, next);
-	console.log(`Wrote ${path.relative(ROOT, TARGET)}: ${sizes.importOneGzip} bytes gzipped.`);
+	console.log(`Wrote ${path.relative(ROOT, TARGET)}: ${sizes.importOneBrotli} bytes, minified and compressed with brotli.`);
 }

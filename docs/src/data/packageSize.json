@@ -1,6 +1,6 @@
 {
-  "importOneGzip": 137435,
-  "importEverythingGzip": 215849,
+  "importOneBrotli": 137435,
+  "importEverythingBrotli": 215849,
   "tarballBytes": 4789265,
   "unpackedBytes": 17110522,
   "fileCount": 309
