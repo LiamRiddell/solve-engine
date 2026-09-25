@@ -8,6 +8,7 @@ import {
   createHistoricalCurrencyPluginFunction,
 } from "@solve-js/uom/HistoricalCurrency";
 import type { CurrencyPackageConfig } from "./types";
+import { suffixCurrencySymbolRule, prefixedDollarRule, randAmountRule } from "./normalizer/CurrencyInputRules";
 
 /**
  * Currency: `$10`, `£10`, `€10`, `¥10`, `₽10`, `₩10`, `₹10`, `₺10`, `₴10`,
@@ -51,6 +52,9 @@ export function createCurrencyPackage(config: CurrencyPackageConfig = {}): IEngi
     infixParselets: {
       IN: new InParselet(),
     },
+    // Currency as it is written after an amount, with its country before a
+    // dollar, and the rand as the engine writes it (#693, #707).
+    normalizerRules: [suffixCurrencySymbolRule(), prefixedDollarRule(), randAmountRule()],
     pluginFunctions: {
       // Historical conversions (`<money> in <currency> on <date>`) compile to a
       // CALL_PLUGIN at this shared index (see uom/HistoricalCurrency.ts). One

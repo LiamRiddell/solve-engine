@@ -199,13 +199,14 @@ describe("currency spellings that do work", () => {
 		expect(evaluate("1 BTC in USD").type).toBe(ValueType.Pending);
 	});
 
-	test("a code is case sensitive as a source and forgiving as a target", () => {
-		// Recorded rather than judged. `100 usd in eur` fails at tokenization
-		// because the lexer's list is uppercase, while `$100 in usd` succeeds
-		// because the target goes through `isCurrency`, which upper-cases. Worth
-		// knowing about before the vocabularies above get reconciled.
-		expect(throwsOnEvaluation("100 usd in eur")).toBe(true);
+	test("a curated lower-case code reads as a source and as a target", () => {
+		// `100 usd in eur` used to fail at tokenization, because the lexer's
+		// list was upper case while a target went through `isCurrency`, which
+		// upper-cases. The common codes are read in lower case on both sides
+		// now (#707); the rest are still upper case only.
+		expect(throwsOnEvaluation("100 usd in eur")).toBe(false);
 		expect(display("$100 in usd")).toBe("$100.00");
+		expect(throwsOnEvaluation("100 kwd in eur")).toBe(true);
 	});
 
 	test("money and a physical unit cannot be added", () => {

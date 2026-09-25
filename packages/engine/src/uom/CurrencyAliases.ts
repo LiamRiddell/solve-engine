@@ -39,6 +39,62 @@ export const CURRENCY_SYMBOL_ALIASES: Record<string, string> = {
   "₫": "VND",
   "₦": "NGN",
   "₱": "PHP",
+  // A dollar with its country before it, written touching (`A$100`, #707).
+  // Never lexed as one token: the currency package's prefixed-dollar rule
+  // fuses the letters and the `$` when they touch and an amount follows, so
+  // `A` stays the ampere and `C` the coulomb everywhere else.
+  "A$": "AUD",
+  "C$": "CAD",
+  "US$": "USD",
+  "HK$": "HKD",
+  "NZ$": "NZD",
+  "S$": "SGD",
+  "MX$": "MXN",
+  "R$": "BRL",
+};
+
+/**
+ * The letter symbols written after an amount (`12 kr`, `12 zł`, #693), matched
+ * exactly as written: `Ft` is the forint, and `ft` stays the foot. These are
+ * what the engine writes for those currencies (see {@link CURRENCY_DISPLAY}),
+ * so an answer can be typed back.
+ *
+ * `kr` is written for three currencies, and reads as the Swedish krona, as the
+ * word `krona` does; the Norwegian and Danish krone are named by their codes,
+ * `NOK` and `DKK`, the same way `$` reads as the US dollar and the others are
+ * named by code. `Fr` is the Swiss franc, the only franc written that way.
+ *
+ * Deliberately NOT included: the rand's `R`, a letter people use as a name
+ * (the gas constant, a resistance, a radius) and so never read as money after
+ * an amount. The rand is read in the form the engine writes it, `R12.00`,
+ * by the currency package's rand rule.
+ */
+export const CURRENCY_LETTER_SYMBOLS: Record<string, string> = {
+  kr: "SEK",
+  "zł": "PLN",
+  Ft: "HUF",
+  "Kč": "CZK",
+  Fr: "CHF",
+};
+
+/**
+ * ISO codes in lower case, the way many people type them (`100 usd`, #707).
+ *
+ * A curated list, not a case-folding of every code: several codes are words or
+ * units in lower case (`cup` is the cooking unit, `try`, `mad`, `top`,
+ * `bob`, `all`, `pen`, `gel`, `mop` and `cop` are words), and `rub` and
+ * `php` are read as a verb and a language often enough to leave alone. Each
+ * code here was chosen by name, and a spec asserts that none of them was a
+ * unit, a keyword or a function before it was added.
+ */
+export const CURRENCY_LOWERCASE_CODES: Record<string, string> = {
+  usd: "USD", eur: "EUR", gbp: "GBP", jpy: "JPY", cny: "CNY",
+  chf: "CHF", cad: "CAD", aud: "AUD", nzd: "NZD", hkd: "HKD",
+  sgd: "SGD", sek: "SEK", nok: "NOK", dkk: "DKK", pln: "PLN",
+  czk: "CZK", huf: "HUF", inr: "INR", krw: "KRW", brl: "BRL",
+  mxn: "MXN", zar: "ZAR", ils: "ILS", thb: "THB", aed: "AED",
+  sar: "SAR", myr: "MYR", idr: "IDR", vnd: "VND", ngn: "NGN",
+  uah: "UAH", twd: "TWD",
 };
 
 /**
@@ -122,6 +178,9 @@ export function resolveCurrencyAlias(text: string): string | undefined {
   // the VM then reads back as a non-string.
   const lower = text.toLowerCase();
   if (Object.prototype.hasOwnProperty.call(CURRENCY_SYMBOL_ALIASES, text)) return CURRENCY_SYMBOL_ALIASES[text];
+  // Exact case: `Ft` is the forint, `ft` the foot; `usd` is a code, `Usd` is not.
+  if (Object.prototype.hasOwnProperty.call(CURRENCY_LETTER_SYMBOLS, text)) return CURRENCY_LETTER_SYMBOLS[text];
+  if (Object.prototype.hasOwnProperty.call(CURRENCY_LOWERCASE_CODES, text)) return CURRENCY_LOWERCASE_CODES[text];
   if (Object.prototype.hasOwnProperty.call(CURRENCY_WORD_ALIASES, lower)) return CURRENCY_WORD_ALIASES[lower];
   return undefined;
 }

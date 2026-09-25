@@ -18,6 +18,7 @@
  * cup, `B` is bytes and `b` is bits). Nothing here normalizes or aliases.
  */
 
+import { CURRENCY_LETTER_SYMBOLS, CURRENCY_LOWERCASE_CODES } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { EXTENDED_UNITS } from "@solve-js/uom/ExtendedUnits";
 
@@ -195,6 +196,11 @@ export const knownUnits: ReadonlySet<string> = new Set([
   ...WORKDAY_UNITS,
   ...CURRENCY_CODES,
   ...CURRENCY_WORD_FORMS,
+  // The letter symbols the engine writes after an amount (`12 kr`) and the
+  // curated lower-case codes (`100 usd`), each resolved to its code by the
+  // alias table they come from (#693, #707).
+  ...Object.keys(CURRENCY_LETTER_SYMBOLS),
+  ...Object.keys(CURRENCY_LOWERCASE_CODES),
 ]);
 
 /** The exclusion list, exported so the vocabulary spec can assert each entry. */
