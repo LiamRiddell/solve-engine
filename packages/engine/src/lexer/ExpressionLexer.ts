@@ -879,7 +879,7 @@ export class ExpressionLexer {
    * restored and `this.pos` advances past the newline.
    *
    * @param text The full document text (with newlines).
-   * @returns Array of ScanLineResult, one per line, in document order.
+   * @returns Array of ScanLineResult, one per line, in document order: at least one, since an empty document is one empty line, and a document ending in a line break has an empty line after it.
    */
   scanDocument(text: string): ScanLineResult[] {
     this.input = text;
@@ -892,7 +892,11 @@ export class ExpressionLexer {
     const input = this.input;
     const docLen = this.len;
 
-    while (this.pos < docLen) {
+    // `<=`, not `<`: a document that ends in a line break has an empty last
+    // line after it, and an empty document is one empty line, as an editor
+    // counts them and as DocumentModel (the incremental pass) does. The loop
+    // ends below, at the first line that runs to the end of the text.
+    while (this.pos <= docLen) {
       const lineStart = this.pos;
 
       // ── Find end of current line (newline boundary) ───────────────
@@ -1002,16 +1006,16 @@ export class ExpressionLexer {
 
       // ── Advance past newline ─────────────────────────────────────
       this.pos = lineEnd;
-      if (this.pos < docLen) {
-        const nlChar = input.charCodeAt(this.pos);
-        if (nlChar === 13) {  // \r
-          this.pos++;
-          if (this.pos < docLen && input.charCodeAt(this.pos) === 10) {
-            this.pos++;  // skip \n in \r\n
-          }
-        } else if (nlChar === 10) {  // \n
-          this.pos++;
+      // The last line: no line break follows it.
+      if (lineEnd === docLen) break;
+      const nlChar = input.charCodeAt(this.pos);
+      if (nlChar === 13) {  // \r
+        this.pos++;
+        if (this.pos < docLen && input.charCodeAt(this.pos) === 10) {
+          this.pos++;  // skip \n in \r\n
         }
+      } else if (nlChar === 10) {  // \n
+        this.pos++;
       }
       this.line++;
       this.lineStartPos = this.pos;

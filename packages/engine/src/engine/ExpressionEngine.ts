@@ -3190,6 +3190,9 @@ export class ExpressionEngine {
         this.resetAccumulators();
         // The document's own random seed, as in parseDocument.
         this.applyDocumentRandomSeed(lines);
+        // No lines, no results. Joined, [] and [""] are both "", which the scan
+        // reads as one empty line, right for [""] only.
+        if (lines.length === 0) return [];
         // Rejoin lines and scan in a single pass, scanDocument() handles
         // classification + tokenization for all lines in one character walk.
         const documentText = lines.join('\n');

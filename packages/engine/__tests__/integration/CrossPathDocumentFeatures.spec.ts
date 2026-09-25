@@ -575,6 +575,28 @@ describe("bare assignments across entry points (#555)", () => {
   });
 });
 
+describe("line endings and a trailing line break across entry points (#613)", () => {
+  // `batch` and `incremental` join lines with "\n", so a CRLF document is
+  // written with "\r" at the end of each line, and a trailing line break as a
+  // final empty line.
+  test.each([
+    ["a line reference", ["1\r", "2\r", "total above\r", ""]],
+    ["a category tag", ["40 #food\r", "20 #food\r", "total of #food\r", ""]],
+    ["a section", ["# Travel\r", "100\r", "250\r", "\r", "total of section \"Travel\"\r", ""]],
+    ["a what-if", ["x = 5\r", "x * 2\r", "line 2 with x = 1\r", ""]],
+  ])("%s reads the same through both passes, with the empty last line", (_form, doc) => {
+    const out = batch(doc);
+    expect(out).toHaveLength(doc.length);
+    expect(out[out.length - 1]).toBe("");
+    expect(incremental(doc)).toEqual(out);
+  });
+
+  test("the answers are the ones the same document gives without the \\r", () => {
+    expect(batch(["1\r", "2\r", "total above\r", ""])).toEqual(batch(["1", "2", "total above", ""]));
+    expect(batch(["1", "2", "total above", ""])).toEqual(["1", "2", "3", ""]);
+  });
+});
+
 describe("list markers across entry points (#560)", () => {
   // A list marker is markup: `- 100 * 2` is a bullet holding `100 * 2`. The
   // batch pass set the marker aside and the incremental pass read the `-` as a

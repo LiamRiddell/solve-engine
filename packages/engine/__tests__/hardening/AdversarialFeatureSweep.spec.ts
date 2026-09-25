@@ -18,32 +18,18 @@
  * so the fix turns it red and it is moved into the passing set.
  */
 
-import { describe, expect, test } from "@jest/globals";
+import { describe, test } from "@jest/globals";
 import {
 	DOCUMENT_EDGES,
 	NUMERIC_EDGES,
 	PROTOTYPE_WORDS,
 	RESOURCE_PROBES,
 	TEXT_EDGES,
-	documentProblems,
 	expectHonestDocument,
 	expectHonestLine,
 	expectPrototypeUntouched,
 	fill,
 } from "@tools/adversarial";
-
-/**
- * Documents the sweep found open bugs in, each naming its issue. They run as
- * one-assertion `test.failing` cases: while the bug is open the assertion
- * fails and the test passes; the fix makes it pass, which fails the test, and
- * the case is then deleted from here and runs in the ordinary set.
- */
-const KNOWN_OPEN_DOCUMENTS: Readonly<Record<string, number>> = {
-	"": 613,
-	"\n": 613,
-	"\n\n\n": 613,
-	"1\n2\ntotal above\n": 613,
-};
 
 /** One-line forms, each with `X` where an edge value goes. Grouped by the feature they exercise. */
 const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
@@ -71,13 +57,6 @@ describe("every form stays honest over the numeric edges", () => {
 	}
 });
 
-describe("known open bugs the sweep found, pinned until they are fixed", () => {
-	const documents = Object.entries(KNOWN_OPEN_DOCUMENTS);
-	test.failing.each(documents)("the document %j (#%d)", (text) => {
-		expect(documentProblems(text).problems).toEqual([]);
-	});
-});
-
 describe("text edges are read as text, not acted on", () => {
 	test.each(TEXT_EDGES)("the line %j", (line) => {
 		expectHonestLine(line);
@@ -89,7 +68,8 @@ describe("text edges are read as text, not acted on", () => {
 });
 
 describe("document edges agree through both passes", () => {
-	test.each(DOCUMENT_EDGES.filter((text) => !(text in KNOWN_OPEN_DOCUMENTS)))("the document %j", (text) => {
+	// The four trailing-newline documents were pinned open here until #613.
+	test.each(DOCUMENT_EDGES)("the document %j", (text) => {
 		expectHonestDocument(text);
 	});
 });

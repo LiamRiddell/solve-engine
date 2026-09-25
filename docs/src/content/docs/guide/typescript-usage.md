@@ -165,6 +165,13 @@ lines[2].result?.toNumber(); // 120
 lines[2].result?.unit;       // "USD"
 ```
 
+`parseDocument` takes the whole note as one string and returns a `ParsingResult`
+with one `ParsedLine` for every line, counted as an editor counts them: a note
+that ends in a line break has an empty last line after it, an empty note is one
+empty line, and a line ending in `\r\n` has the `\r` left out of its `text`.
+`evaluateDocument` counts the same way, so a host can index either result by the
+editor's line number.
+
 A whole document parsed with `parseDocument` also reports its
 [checks](/syntax/conditionals/#checks), the lines that assert something must hold,
 as `result.checks`, a `{ passed, failed }` count present only when the document
