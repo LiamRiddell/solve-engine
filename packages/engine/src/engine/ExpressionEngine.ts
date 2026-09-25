@@ -2345,9 +2345,10 @@ export class ExpressionEngine {
      *
      * @param value - The line's answer.
      * @param lineNumber - The line.
-     * @param writes - The names it assigned.
+     * @param writes - The names it assigned, or how to find them: a re-run reads
+     * them from its program, which is worth doing only for a line refused.
      */
-    private keepLineResult(value: Value, lineNumber: number, writes: readonly string[]): Value {
+    private keepLineResult(value: Value, lineNumber: number, writes: readonly string[] | (() => readonly string[])): Value {
         if (!this.passOpen || lineNumber < 1) return value;
         const size = keptElements(value);
         const limit = this.config.vm.maxRetainedElements;
@@ -2357,7 +2358,7 @@ export class ExpressionEngine {
             return value;
         }
         this.recordKept(lineNumber, 0);
-        for (const name of writes) this.vm.deleteVar(name);
+        for (const name of typeof writes === "function" ? writes() : writes) this.vm.deleteVar(name);
         return keptElementsRefusal(lineNumber, size, limit);
     }
 
@@ -3375,7 +3376,7 @@ export class ExpressionEngine {
         // A re-run of a document line keeps its answer as the first run did,
         // within the same bound (#694); an explanation keeps nothing.
         if (result.type === 'value' && observeCall === undefined) {
-            const kept = this.keepLineResult(result.value, lineNumber, storedNames(program));
+            const kept = this.keepLineResult(result.value, lineNumber, () => storedNames(program));
             if (kept !== result.value) return { type: 'value', value: kept };
         }
 
@@ -3881,8 +3882,18 @@ export class ExpressionEngine {
                 // Reading "24:00" as the label "24" and the expression "00"
                 // is never what was meant, so it is an error rather than an
                 // answer.
-                let labelIsAllNumeric = true;
-                for (let j = 0; j < i; j++) {
+                //
+                // A date in front changes nothing: `2026-01-04 24:00` is a date
+                // and a time of day that does not exist, and read as the label
+                // "2026-01-04 24" it answered 0 (#692). A date on its own before
+                // the colon (`2026-01-04: 45`) is still a label.
+                let start = 0;
+                if (tokens[0].type === "DATETIME_LITERAL") {
+                    start = 1;
+                    if (tokens[1]?.type === "RATE_AT" || tokens[1]?.type === "AT") start = 2;
+                }
+                let labelIsAllNumeric = i > start;
+                for (let j = start; j < i; j++) {
                     const type = tokens[j].type;
                     if (type !== "NUMBER" && type !== "COLON") {
                         labelIsAllNumeric = false;
@@ -3894,7 +3905,7 @@ export class ExpressionEngine {
                     // source, which this level does not have. Everything up
                     // to and including the field after the colon, so
                     // "24:00 + 1" names "24:00" and not the whole line.
-                    const literal = tokens.slice(0, i + 2).map((t) => t.value).join("");
+                    const literal = tokens.slice(start, i + 2).map((t) => t.value).join("");
                     throw ErrorFactory.parsing(
                         "INVALID_TIME_LITERAL",
                         `"${literal}" is not a valid time`,
@@ -3932,9 +3943,12 @@ export class ExpressionEngine {
                 }
             }
 
+            // The message quotes what the reader typed. A fused token's value is
+            // the engine's own reading of it: a clock time's is its minutes
+            // since midnight, so `tomorrow 3pm` quoted "900" (#692).
             throw ErrorFactory.parsing({
                 code: "UNEXPECTED_TRAILING_TOKEN",
-                message: `Unexpected token after expression: "${leftover.value}"`,
+                message: `Unexpected token after expression: "${leftover.text || leftover.value}"`,
                 context: { tokenType: leftover.type, tokenValue: leftover.value },
                 span: { start: leftover.offset, end: leftover.sourceEnd ?? leftover.offset + leftover.text.length, line: leftover.line, col: leftover.col },
             });

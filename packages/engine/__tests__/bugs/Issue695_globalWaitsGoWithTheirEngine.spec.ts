@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
+import { GLOBAL_VARIABLES_PACKAGE } from "@solve-js/packages/globals/GlobalVariablesPackage";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import { GlobalVariableAsyncResolver } from "@solve-js/vm/GlobalVariableAsyncResolver";
 import { OpCode } from "@solve-js/parser/OpCode";
@@ -131,7 +132,12 @@ describe("through real engines", () => {
 
 	const gc = (globalThis as { gc?: () => void }).gc;
 	(typeof gc === "function" ? test : test.skip)("a dropped engine waiting on an undeclared name is collected, and its waits leave the store", async () => {
-		const before = listenerCount();
+		// The engines' shared resolver, and the names it holds waits for. Asked
+		// about this engine's names only: the listener count is process-wide,
+		// and in the full serial run another file's late async work can add a
+		// wait of its own while this one waits for its finalizers.
+		const resolver = GLOBAL_VARIABLES_PACKAGE.asyncResolvers![0] as unknown as { waitsByName: Map<string, unknown> };
+		const droppedNamesHeld = () => [...resolver.waitsByName.keys()].filter((name) => name.startsWith("dropped")).length;
 		let ref: WeakRef<object> | undefined;
 		(() => {
 			const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
@@ -144,11 +150,12 @@ describe("through real engines", () => {
 		}
 		expect(ref!.deref()).toBeUndefined();
 		// The finalizers that prune the name index run after a collection, on
-		// their own schedule; give them a few turns.
-		for (let i = 0; i < 20 && listenerCount() > before; i++) {
+		// their own schedule; give them turns, generously, since a loaded heap
+		// in the full run delays them.
+		for (let i = 0; i < 200 && droppedNamesHeld() > 0; i++) {
 			gc!();
 			await later(10);
 		}
-		expect(listenerCount()).toBe(before);
+		expect(droppedNamesHeld()).toBe(0);
 	});
 });

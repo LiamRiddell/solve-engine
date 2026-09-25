@@ -9,8 +9,8 @@ import { HoursOverlapParselet } from "./parselets/HoursOverlapParselet";
 import { VideoTimecodeParselet } from "./parselets/VideoTimecodeParselet";
 import { FrameCountParselet } from "./parselets/FrameCountParselet";
 import {
-  ZONE_CONVERT_FN, ZONE_CONVERT_AT_FN, TIME_IN_ZONE_FN, DATE_IN_ZONE_FN, TIME_DIFFERENCE_FN,
-  zoneConvertHandler, zoneConvertAtHandler, timeInZoneHandler, dateInZoneHandler, timeDifferenceHandler,
+  ZONE_CONVERT_FN, ZONE_CONVERT_AT_FN, TIME_IN_ZONE_FN, DATE_IN_ZONE_FN, TIME_DIFFERENCE_FN, CLOCK_TIME_ON_DATE_FN,
+  zoneConvertHandler, zoneConvertAtHandler, timeInZoneHandler, dateInZoneHandler, timeDifferenceHandler, clockTimeOnDateHandler,
 } from "./parselets/TimezonePluginFunctions";
 import { HOURS_OVERLAP_FN, hoursOverlapHandler } from "./parselets/OverlapPluginFunctions";
 import { clockTimeNormalizerRule } from "./normalizer/ClockTimeNormalizerRule";
@@ -115,6 +115,7 @@ export const TIME_PACKAGE: IEnginePackage = {
     [TIME_IN_ZONE_FN]: timeInZoneHandler,
     [DATE_IN_ZONE_FN]: dateInZoneHandler,
     [TIME_DIFFERENCE_FN]: timeDifferenceHandler,
+    [CLOCK_TIME_ON_DATE_FN]: clockTimeOnDateHandler,
     [HOURS_OVERLAP_FN]: hoursOverlapHandler,
   },
   tokenCategories: {

@@ -1,4 +1,5 @@
-import { Value, ValueType, errorValue, stringValue } from "@solve-js/vm/Value";
+import { Value, ValueType, datetimeValue, errorValue, stringValue } from "@solve-js/vm/Value";
+import { wallTimeOn } from "@solve-js/calendar/WallTime";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { calendarOf } from "@solve-js/calendar/DateCalendar";
@@ -34,6 +35,8 @@ export const TIME_IN_ZONE_FN = "timeInZone";
 export const DATE_IN_ZONE_FN = "dateInZone";
 /** Plugin name for the offset between two zones, as a duration. */
 export const TIME_DIFFERENCE_FN = "timeDifference";
+/** Plugin name for a clock time on a named day, `3pm on 23 September 2026`. */
+export const CLOCK_TIME_ON_DATE_FN = "clockTimeOnDate";
 
 /**
  * The codes the timezone forms refuse with, as Error values rather than
@@ -45,7 +48,7 @@ export const TimezoneErrorCodes = {
   TIME_ZONE_SKIPPED_TIME: "TIME_ZONE_SKIPPED_TIME",
   /** `1:30am London on 25 October 2026 in Tokyo`: the clocks went back over 1:30, so it happened twice and names no one moment. */
   TIME_ZONE_REPEATED_TIME: "TIME_ZONE_REPEATED_TIME",
-  /** `3pm London on 5 in Tokyo`: the `on` clause was given something that is not a date. */
+  /** `3pm London on 5 in Tokyo`, or `3pm on 5`: the `on` clause was given something that is not a date. */
   TIME_ZONE_EXPECTED_DATE: "TIME_ZONE_EXPECTED_DATE",
   /** `overlap of 9am to 5pm in London`: one place has nothing to overlap with. */
   OVERLAP_NEEDS_TWO_ZONES: "OVERLAP_NEEDS_TWO_ZONES",
@@ -176,6 +179,26 @@ export function zoneConvertAtHandler(args: Value[], context?: LineExecutionConte
     formatTimeInZone(at, target.zoneRef, calendar) + dayShiftSuffix(at, target.zoneRef, source.zoneRef, calendar));
   if (targets.length === 1) return stringValue(readings[0]);
   return stringValue(targets.map((target, i) => `${target.label} ${readings[i]}`).join(", "));
+}
+
+/**
+ * `3pm on 23 September 2026` -> that day at that time, the instant the ISO
+ * literal `2026-09-23T15:00` names and with its wall-clock grain (#692), so
+ * it goes wherever that literal goes: into a zone, a duration added, between
+ * two dates.
+ *
+ * Arguments: `[minutes, date]`. A date that failed passes its error through;
+ * anything else that is not a date is refused as the zone forms refuse it.
+ */
+export function clockTimeOnDateHandler(args: Value[], context?: LineExecutionContext): Value {
+  if (args[1]?.type === ValueType.Error) return args[1];
+  const calendar = calendarOf(context);
+  if (args[1]?.type !== ValueType.Datetime) return calendarDayOf(args[1], calendar) as Value;
+  const at = wallTimeOn(args[1].toNumber(), args[0].toNumber() * 60, calendar);
+  if (at === null) {
+    return errorValue(TimezoneErrorCodes.TIME_ZONE_EXPECTED_DATE, `"on" takes a date from the year 0 to 9999, as in "on 23 September 2026"`);
+  }
+  return datetimeValue(at, "datetime");
 }
 
 /** `time in <city>` -> that zone's current wall-clock time, e.g. "3:45 PM". */

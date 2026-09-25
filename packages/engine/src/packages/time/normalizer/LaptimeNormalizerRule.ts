@@ -49,11 +49,13 @@ export function laptimeNormalizerRule(priority = 70): NormalizerRule {
       if (minutes < 0 || minutes > 59 || seconds < 0 || seconds >= 60) return null;
 
       const totalSeconds = hours * 3600 + minutes * 60 + seconds;
-      return {
-        consumed: 5,
-        replacement: [createFusedToken("LAPTIME", String(totalSeconds), tokens.slice(pos, pos + 5))],
-        ruleName: "time:laptime",
-      };
+      const source = tokens.slice(pos, pos + 5);
+      const fused = createFusedToken("LAPTIME", String(totalSeconds), source);
+      // The text is what was written, so a message that quotes the token says
+      // `14:30:15` rather than its seconds, 52215 (#692). Nothing reads it as a
+      // payload; the seconds are in `value`.
+      fused.text = source.map((t) => t.text ?? "").join("");
+      return { consumed: 5, replacement: [fused], ruleName: "time:laptime" };
     },
   };
 }
