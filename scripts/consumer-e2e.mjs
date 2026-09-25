@@ -23,7 +23,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { collectExamples, collectDocBlocks, groupExamples } from "../tools/docExampleCorpus.mjs";
+import { collectExamples, collectDocBlocks, groupExamples, DOCS_NOW, DOCS_ZONE } from "../tools/docExampleCorpus.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENGINE = path.join(ROOT, "packages/engine");
@@ -243,13 +243,21 @@ fs.writeFileSync(path.join(scratch, "corpus.json"), JSON.stringify(groups));
 fs.writeFileSync(
 	path.join(scratch, "probe-docs.mjs"),
 	[
-		'import { createEngine } from "solve-engine";',
-		'import { formatValue } from "solve-engine/format";',
+		'import { createEngine, dateCalendarInZone } from "solve-engine";',
+		'import { formatValue, DEFAULT_FORMATTING_SETTINGS } from "solve-engine/format";',
 		'import { readFileSync } from "node:fs";',
+		`const DOCS_NOW = ${DOCS_NOW};`,
+		`const DOCS_ZONE = ${JSON.stringify(DOCS_ZONE)};`,
+		"// The documented instant and zone (#686), so a line relative to today has",
+		"// the answer the docs prove. A Proxy rather than a copy: the backend is a",
+		"// class, and its methods are on the prototype.",
+		"const inner = dateCalendarInZone(DOCS_ZONE);",
+		"const calendar = new Proxy(inner, { get: (target, key) => (key === \"now\" ? () => DOCS_NOW : typeof target[key] === \"function\" ? target[key].bind(target) : target[key]) });",
+		"const settings = { ...DEFAULT_FORMATTING_SETTINGS, calendar };",
 		'const groups = JSON.parse(readFileSync("corpus.json", "utf8"));',
 		"const results = [];",
 		"for (const group of groups) {",
-		'  const engine = createEngine("en");',
+		'  const engine = createEngine({ locale: "en", calendar });',
 		"  group.forEach((example, index) => {",
 		"    let actual = null;",
 		"    try {",
@@ -258,7 +266,7 @@ fs.writeFileSync(
 		// the regex needs to survive one round of escaping to reach the probe as
 		// `\s`. Written singly it reaches the probe as `s`, which matches the
 		// letter and leaves the leading space on every result.
-		'      if (example.expected !== null) actual = formatValue(value).replace(/^=\\s*/, "");',
+		'      if (example.expected !== null) actual = formatValue(value, settings).replace(/^=\\s*/, "");',
 		'    } catch (error) { actual = "threw: " + error.message; }',
 		"    if (example.expected !== null) results.push({ file: example.file, line: example.line, expression: example.expression, expected: example.expected, actual });",
 		"  });",
@@ -281,15 +289,23 @@ fs.writeFileSync(path.join(scratch, "docblocks.json"), JSON.stringify(docBlocks)
 fs.writeFileSync(
 	path.join(scratch, "probe-docblocks.mjs"),
 	[
-		'import { createEngine } from "solve-engine";',
+		'import { createEngine, dateCalendarInZone } from "solve-engine";',
 		'import { ValueType } from "solve-engine";',
 		'import { evaluateDocument } from "solve-engine/engine";',
-		'import { formatValue } from "solve-engine/format";',
+		'import { formatValue, DEFAULT_FORMATTING_SETTINGS } from "solve-engine/format";',
 		'import { readFileSync } from "node:fs";',
+		`const DOCS_NOW = ${DOCS_NOW};`,
+		`const DOCS_ZONE = ${JSON.stringify(DOCS_ZONE)};`,
+		"// The documented instant and zone (#686), so a line relative to today has",
+		"// the answer the docs prove. A Proxy rather than a copy: the backend is a",
+		"// class, and its methods are on the prototype.",
+		"const inner = dateCalendarInZone(DOCS_ZONE);",
+		"const calendar = new Proxy(inner, { get: (target, key) => (key === \"now\" ? () => DOCS_NOW : typeof target[key] === \"function\" ? target[key].bind(target) : target[key]) });",
+		"const settings = { ...DEFAULT_FORMATTING_SETTINGS, calendar };",
 		'const blocks = JSON.parse(readFileSync("docblocks.json", "utf8"));',
 		"const results = [];",
 		"for (const block of blocks) {",
-		'  const engine = createEngine("en");',
+		'  const engine = createEngine({ locale: "en", calendar });',
 		'  const source = block.rows.map(row => row.expression).join("\\n");',
 		'  const hasTable = block.rows.some(row => row.expression.startsWith("|"));',
 		"  let parsed = null;",
@@ -309,7 +325,7 @@ fs.writeFileSync(
 		// parse error, and the docs mark both the same way. Without this the two
 		// harnesses disagreed about a refused date: the in-repo one wrote
 		// "ERROR: ..." and this one wrote the bare sentence.
-		'    else if (parsedLine && parsedLine.result) { const shown = formatValue(parsedLine.result).replace(/^=\\s*/, ""); actual = parsedLine.result.type === ValueType.Error ? "ERROR: " + shown : shown; }',
+		'    else if (parsedLine && parsedLine.result) { const shown = formatValue(parsedLine.result, settings).replace(/^=\\s*/, ""); actual = parsedLine.result.type === ValueType.Error ? "ERROR: " + shown : shown; }',
 		'    else actual = "(no result)";',
 		"    results.push({ file: block.file, line: row.line, expression: row.expression, expected: row.expected, actual });",
 		"  });",

@@ -50,6 +50,17 @@ A temperature between two marks is read as the nearer one, within ten degrees, w
 300C in gas mark // 300C is not a gas setting: the dial runs from gas 1/4 (110C) to gas 9 (240C)
 ```
 
+## Which cup
+
+A `cup` is the US customary cup, 236.59 millilitres, the one American recipes
+and most online converters mean. The metric cup (250 millilitres, used in
+Australia and elsewhere) and the old imperial cup are not spelled yet, so a
+recipe written in either is best converted through its millilitres.
+
+```solve
+1 cup in ml // 236.59 ml
+```
+
 ## Mixed numbers
 
 A recipe is written in mixed numbers rather than decimals, so a whole number and

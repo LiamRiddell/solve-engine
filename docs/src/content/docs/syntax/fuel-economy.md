@@ -22,6 +22,36 @@ step, and it is done for you:
 30 mpg in km/l // 12.75 km/l
 ```
 
-`mpg` is miles per US gallon (the gallon the engine ships). Going between two
-distance-per-fuel forms, `mpg` and `km/l`, is an ordinary rescale, since both
-count the same way up; it is only the mpg-to-`l/100km` pairing that turns over.
+Going between two distance-per-fuel forms, `mpg` and `km/l`, is an ordinary
+rescale, since both count the same way up; it is only the mpg-to-`l/100km`
+pairing that turns over.
+
+## US and imperial gallons
+
+There are two gallons. The US gallon is about 3.79 litres; the imperial gallon,
+the one British and Irish fuel economy figures are quoted in, is about 4.55
+litres, a fifth larger. The engine has both: `gallon` and `gal` on their own
+are the US gallon, and `imperial gallon` is the larger one.
+
+```solve
+1 gallon in litres // 3.79 litres
+1 imperial gallon in litres // 4.55 litres
+1 imperial gallon in gallons // 1.20 gallons
+```
+
+`mpg` is miles per US gallon, and there is no imperial `mpg`. A UK figure is
+therefore written as miles per imperial gallon, which the engine converts
+through the ratio of the two gallons, so 50 UK mpg is 41.63 US mpg:
+
+```solve
+50 miles / 1 imperial gallon in mpg // 41.63 mpg
+50 miles / 1 imperial gallon in l/100km // 5.65 l/100km
+```
+
+The boundary: a UK figure typed as `mpg` is read as US miles per gallon, so the
+car appears to use less fuel than it does (4.70 litres per 100 km rather than
+5.65), and a spelling such as `mpg uk` is refused rather than read as imperial.
+
+```solve
+50 mpg in l/100km // 4.70 l/100km
+```

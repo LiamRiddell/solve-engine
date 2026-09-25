@@ -23,6 +23,16 @@ $50 - $80 // -$30.00
 -£3.50 // -£3.50
 ```
 
+`pounds` and `lb` are the unit of mass, not sterling, since a line like `10
+pounds in kg` is far more often weight than money. Write British pounds with
+their symbol or their code, `£10` or `10 GBP`. A mass asked for in money is
+refused by name, rather than converted at some rate.
+
+```solve
+10 pounds in kg // 4.54 kg
+10 GBP // £10.00
+```
+
 Symbols and words are both recognised. One symbol can stand for several
 currencies: `$` is the US dollar by default, and also the Canadian, Australian
 and other dollars. Write the currency's three-letter code after the amount to say

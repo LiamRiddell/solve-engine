@@ -5,17 +5,30 @@ description: Clock times, durations, intervals, frame rates and timecode.
 
 > **Package:** `TIME_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
 
+Time comes in two kinds, and this page covers both: a point in the day, such as
+half past three, and a length of time, such as two and a half hours. It also
+covers the gap between two clock times, and the frame rates and timecode that
+video uses.
+
 ## Clock times
 
-| Expression | Result |
-| --- | --- |
-| `9:00am + 3 hours` | `12:00:00 PM` |
-| `16:00` | a time value |
-| `3.30pm` | half past three in the afternoon |
+A clock time is a point in the day, in the twelve-hour form with `am` or `pm`
+or the twenty-four-hour form. It is read as that time today, so adding a length
+of time moves it forward and the answer is a date and a time. The answers shown
+are for Wednesday 11 March 2026 in London, the fixed date these pages are
+checked against; the notepad uses your own today.
+
+```solve
+9:00am + 3 hours // Wednesday, March 11, 2026, 12:00:00 PM
+16:00 // Wednesday, March 11, 2026, 4:00:00 PM
+3.30pm // Wednesday, March 11, 2026, 3:30:00 PM
+```
 
 The minutes may follow a point instead of a colon, as British timetables write
 them, so `3.30pm` is `3:30pm`. Only two digits after the point are minutes:
 `3.5pm` could mean half past or five past, so it is not read as a time at all.
+
+A clock time is shown as the full date and time, not as the time of day alone.
 
 ## Durations
 
@@ -59,6 +72,10 @@ not two minutes and thirty hours, it is the undefined variable it always was.
 Intervals crossing midnight are handled, so `4pm to 3am` is eleven hours rather
 than a negative span.
 
+```solve
+4pm to 3am // 660 minutes
+```
+
 Clock times added together are lengths rather than times of day, which is the
 timesheet sum: `8:15 + 7:45 + 8:30` is the week so far. That, the span and the
 hourly rate are on [timesheets](/syntax/timesheets/).
@@ -71,8 +88,23 @@ page: see [time zones](/syntax/time-zones/).
 
 ## Frame rates and timecode
 
-| Expression | Result |
-| --- | --- |
-| `30 fps` | a rate value |
-| `01:02:03:04 at 30 fps` | a video timecode |
-| `01:02:03:04 at 30 fps in frames` | the frame count |
+Video is a run of still frames, shown at a frame rate such as 30 frames per
+second (`30 fps`). A timecode names one frame by where it falls: hours,
+minutes, seconds and then the frame within that second, so `01:02:03:04` at
+30 fps is the fifth frame of the second at one hour, two minutes and three
+seconds (frames count from zero). Editing software and edit lists work in
+frame counts, which is why a timecode is converted to one.
+
+```solve
+30 fps // 30.00 frames/s
+01:02:03:04 at 30 fps in frames // 111,694.00 frames
+111694 frames at 30 fps // 01:02:03:04
+```
+
+A timecode on its own is shown as its frame count labelled with its rate, not yet
+in the notation it was written in. The count is plain timecode: the drop-frame
+form broadcast video uses at 29.97 fps is not implemented.
+
+```solve
+01:02:03:04 at 30 fps // 111,694.00 timecode@30
+```

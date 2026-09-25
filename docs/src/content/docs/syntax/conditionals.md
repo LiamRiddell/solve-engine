@@ -77,12 +77,40 @@ Things that cannot be compared, such as a length and a mass, are refused as
 incomparable rather than reported as a failed check, and text can only be
 checked for being equal or not.
 
-## A known limitation
+## `and` between comparisons
 
-The word `and` shares a binding power with addition, so an unparenthesised
-comparison on both sides does not group the way you would expect. Parenthesise,
-or use the symbol form.
+A line that joins two comparisons with `and` asks whether both hold. Each
+comparison is worked out first and `and` then combines the two answers, so the
+line reads the way it is said, with no brackets needed. The symbol form `&&`
+groups the same way.
 
 ```solve
-(10 > 5) and (3 < 4) // true
+10 >= 5 and 3 > 1 // true
+10 >= 5 and 3 > 4 // false
+10 >= 5 && 3 > 1 // true
+```
+
+It works the same with variables, which is where the form is usually met:
+
+```solve
+x = 10
+y = 5
+x >= y and y > 1 // true
+x >= y and y > 7 // false
+```
+
+`and` is also the word form of addition, so between two plain numbers it adds:
+
+```solve
+2 and 3 // 5
+```
+
+The boundary: `and` means "both are true" only when both sides are true or
+false answers. With a number on one side and a comparison on the other it is
+still an addition, counting `true` as 1 and `false` as 0, so `2 and 3 > 1` is
+`2 + 1`. Brackets make the intended reading explicit:
+
+```solve
+2 and 3 > 1 // 3
+(2 and 3) > 1 // true
 ```

@@ -2,10 +2,16 @@ import { describe, expect, test } from "@jest/globals";
 import * as fs from "fs";
 import * as path from "path";
 import { formatValue } from "@solve-js/format/FormatEngine";
+import { DEFAULT_FORMATTING_SETTINGS, type FormattingSettings } from "@solve-js/format/FormattingSettings";
 import { evaluateDocument } from "@solve-js/engine/evaluateDocument";
+import { dateCalendarInZone } from "@solve-js/calendar/DateCalendar";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
+import type { Value } from "@solve-js/vm/Value";
 import { ValueType } from "@solve-js/vm/Value";
 import { newTrackedEngine } from "@tools/trackedEngine";
-import { blockHasTable, collectAll, groupExamples } from "@tools/docExampleCollector";
+import { RecordingCalendar } from "@tools/recordingCalendar";
+import { calendarUnderTest, temporalCalendarForTests } from "@tools/temporalTestKit";
+import { DOCS_NOW, DOCS_ZONE, blockHasTable, collectAll, groupExamples } from "@tools/docExampleCollector";
 
 /**
  * Evaluates every example in the published documentation and asserts it still
@@ -45,13 +51,25 @@ import { blockHasTable, collectAll, groupExamples } from "@tools/docExampleColle
  * cannot leak into each other. A ```solve-doc block keeps its blank lines: there
  * they are document boundaries the aggregates read, not example separators.
  *
- * Anything non-deterministic (dates relative to now, random numbers, live
+ * A date relative to today is proven against a fixed today (see
+ * {@link DOCS_NOW}); the reader's notepad strips the expected value and shows
+ * their own. Anything else that is not deterministic (random numbers, live
  * network data) must not carry an expected value, since there is no stable one.
  */
 
 /**
+ * The calendar the examples run on: the backend this run is proving (the
+ * `Date` one, or `Temporal` under `SOLVE_CALENDAR=temporal`) in
+ * {@link DOCS_ZONE}, with its clock stopped at {@link DOCS_NOW}.
+ */
+function docsCalendar(): CalendarBackend {
+  const inner = calendarUnderTest() === "temporal" ? temporalCalendarForTests({ timeZone: DOCS_ZONE }) : dateCalendarInZone(DOCS_ZONE);
+  return new RecordingCalendar(DOCS_NOW, inner);
+}
+
+/**
  * The engine every example runs on: the full built-in set, with the network
- * switched off.
+ * switched off, on the {@link docsCalendar}.
  *
  * A line that reaches the network has no stable answer, so it carries no expected
  * value and is evaluated only for what it does to the lines after it. Running it
@@ -59,7 +77,10 @@ import { blockHasTable, collectAll, groupExamples } from "@tools/docExampleColle
  * proven line can depend on one without failing here.
  */
 function docsEngine() {
-  return newTrackedEngine({ config: { network: { enabled: false } } });
+  const calendar = docsCalendar();
+  const engine = newTrackedEngine({ config: { network: { enabled: false } }, calendar });
+  const settings: FormattingSettings = { ...DEFAULT_FORMATTING_SETTINGS, calendar };
+  return { engine, show: (value: Value): string => formatValue(value, settings).replace(/^=\s*/, "") };
 }
 
 const REPO_ROOT = path.resolve(__dirname, "../../../..");
@@ -107,8 +128,6 @@ describe("documented examples evaluate as documented", () => {
       ["stocks.md", "prices come from a host-supplied network provider"],
       ["crypto.md", "prices come from a host-supplied network provider"],
       ["knowledge.md", "answers come from a host-supplied provider"],
-      ["relative-dates.md", "now, today, tomorrow and next weekday resolve against today, so no output is reproducible"],
-      ["relative-months.md", "this, next and last month resolve against the current month, so no output is reproducible"],
       ["displaying-dates.md", "the output form is a host formatting setting, not an expression, so there is no line to assert"],
     ]);
 
@@ -141,15 +160,14 @@ describe("documented examples evaluate as documented", () => {
       .join(" | ");
 
     test(`[line ${gi}] ${label.slice(0, 100)}`, () => {
-      const engine = docsEngine();
+      const { engine, show } = docsEngine();
       group.forEach((ex, i) => {
         const value = engine.evaluateLine(i + 1, ex.expression);
         if (ex.expected === null) return;
 
         // formatValue prefixes results with a display marker that belongs to
-        // the editor gutter, not to the value, so it is stripped before
-        // comparison.
-        const actual = formatValue(value).replace(/^=\s*/, "");
+        // the editor gutter, not to the value, so show() strips it.
+        const actual = show(value);
         expect(`${ex.expression} // ${actual}`).toBe(`${ex.expression} // ${ex.expected}`);
       });
     });
@@ -169,7 +187,7 @@ describe("documented examples evaluate as documented", () => {
     const relative = path.relative(REPO_ROOT, block.file).replace(/\\/g, "/");
 
     test(`[doc ${bi}] ${relative}: ${label.slice(0, 80)}`, () => {
-      const engine = docsEngine();
+      const { engine, show } = docsEngine();
       const source = block.rows.map((r) => r.expression).join("\n");
       const result = blockHasTable(block)
         ? engine.parseDocument(source, { inputType: "markdown" })
@@ -182,7 +200,7 @@ describe("documented examples evaluate as documented", () => {
         if (parsed?.error) {
           value = `ERROR: ${parsed.error}`;
         } else if (parsed?.result) {
-          const formatted = formatValue(parsed.result).replace(/^=\s*/, "");
+          const formatted = show(parsed.result);
           // A returned failure lands in `result` as an error-typed Value; mark
           // it so a drifted example reads as a failure, not a stray message.
           value = parsed.result.type === ValueType.Error ? `ERROR: ${formatted}` : formatted;

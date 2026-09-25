@@ -19,8 +19,12 @@ is an ordinary date that composes further.
 last Friday of November 2026 // Friday, November 27, 2026
 ```
 
+A relative month resolves against the current date. The answer shown is for 11
+March 2026, the fixed date these pages are checked against, and the notepad
+gives yours.
+
 ```solve
-1st Monday of next month
+1st Monday of next month // Monday, April 6, 2026
 ```
 
 An occurrence the month does not have is refused, never wrapped into the next

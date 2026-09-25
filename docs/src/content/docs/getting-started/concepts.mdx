@@ -4,6 +4,7 @@ description: Lines, values, packages and the pipeline, in the order they matter.
 ---
 
 import Explainer from "../../../components/Explainer.tsx";
+import stats from "../../../data/testStats.json";
 
 Five ideas cover almost everything.
 
@@ -26,13 +27,18 @@ on data that has not arrived, which is not the same as zero.
 
 ## Packages
 
-Every piece of syntax comes from a package, including arithmetic. A package can
+Almost every piece of syntax comes from a package, including the word forms of
+arithmetic (`5 and 3`). A package can
 contribute vocabulary to the lexer, parsing rules, functions the virtual machine
 can call, normalisation rules, and conversion targets.
 
-`createEngine()` registers forty-six packages; three more (stocks, crypto and
-knowledge) are opt-in because they need you to supply how to fetch the data. A bare
-`new ExpressionEngine()` registers none, so you pass exactly the packages you want.
+`createEngine()` registers all {stats.builtinPackages} built-in packages; three
+more (stocks, crypto and knowledge) are opt-in because they need you to supply
+how to fetch the data. A bare `new ExpressionEngine()` registers none, so you
+pass exactly the packages you want. The operators themselves (`+`, `-`, `*`,
+`/`, `^`, `%`) are read by the parser's own core rather than a package, so a
+bare engine still answers `2 + 2` while refusing units, functions and money;
+[Upgrading to 2.0](/guide/upgrading-to-2/) shows what that looks like.
 
 ## The pipeline
 
@@ -50,11 +56,31 @@ skips the first four stages entirely.
 
 ## Incremental evaluation
 
-A dependency graph records which lines read which variables. When a line
-changes, only the lines that transitively depend on it are recomputed. Editing
-one line of a large document does not re-evaluate the document.
+Evaluating a document again after an edit does not have to mean running every
+line again, but whether it does depends on which entry point a host calls.
+
+- **`parseDocument`**, the batch pass [Embedding](/guide/embedding/) teaches,
+  runs every line on every call. The bytecode cache above still lets an
+  unchanged line skip the first four stages, so a second pass costs less than
+  the first, but every line executes.
+- **`evaluateDocument`** stands up a fresh incremental evaluator for one pass
+  and discards it, so it too runs every line. It exists for the forms that
+  need to re-run a line, such as goal seek, not for speed.
+- **A long-lived `ThreeTierEvaluator`**, the object an editor keeps for the life
+  of a document and tells about each edit and about which lines are on screen,
+  is the incremental one. A dependency graph records which lines read which
+  variables, and after an edit the evaluator runs the edited line, the lines
+  that transitively depend on it, and the visible lines, down to the bottom of
+  the screen. An unchanged line above the screen is left alone, and the lines
+  below it wait until they are scrolled to.
+  [Performance](/guide/performance/#incremental-re-evaluation) has the measured
+  difference.
+
+The explainer below walks that last case through one keystroke:
 
 <Explainer id="incremental" client:load />
 
-That, plus the bytecode cache, is what makes it viable to run the whole pipeline
-on every keystroke.
+The boundary: the saving comes from the lines that are off screen. Asked for
+every line of the document after an edit, a `ThreeTierEvaluator` runs every
+line, because a variable's value depends on where in the note it is read, and
+running the lines in order from the top is what keeps it right.

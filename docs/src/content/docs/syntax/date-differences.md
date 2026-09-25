@@ -6,20 +6,18 @@ description: The span between two dates, or the time until or since one.
 > **Package:** `DATETIME_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
 
 A date difference measures the span between two dates, in whichever unit you
-ask for, or the time until or since a single date reckoned from now. The
-`between` of two fixed dates is proven here; a duration to or from now moves
-with the day.
+ask for, or the time until or since a single date reckoned from now.
 
-A `between` of two fixed dates is proven; a duration to or from now moves with
-the day.
+A duration to or from now moves with the day. The answers shown for those are
+for noon on Wednesday 11 March 2026 in London, the fixed moment these pages are checked against, and the notepad gives yours.
 
 ```solve
 weeks between 01/01/2024 and 01/06/2024 // 21.71 weeks
 ```
 
 ```solve
-days until 25/12/2026
-days since 01/01/2023
+days until 25/12/2026 // 288.50 days
+days since 01/01/2023 // 1,165.50 days
 ```
 
 ## Counting a weekday
@@ -44,8 +42,8 @@ whichever weekday you meant.
 `until` and `since` count against today rather than a second date.
 
 ```solve
-mondays until 25/12/2026
-sundays since 01/01/2026
+mondays until 25/12/2026 // 41
+sundays since 01/01/2026 // 10
 ```
 
 ### Both ends are included

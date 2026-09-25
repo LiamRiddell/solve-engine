@@ -22,6 +22,7 @@ tested.
 | `solve-engine/language` | Completions, token categories, highlighting |
 | `solve-engine/packages` | Built-in packages and their configuration |
 | `solve-engine/constants` | Locales and configuration defaults |
+| `solve-engine/errors` | `EngineError`, the structured error type a failure throws, its taxonomy, and the result type |
 | `solve-engine/worker` | Off-main-thread evaluation: the worker proxy, transports and result DTO |
 | `solve-engine/engine-worker` | The worker entry the engine's own offloaded compile and execute pools run, started by a host through `setEngineWorkerFactory`. Its own bundle, carrying every built-in package |
 | `solve-engine/testing` | A test kit for package authors: `createTestEngine`, `expectExpression`, `expectPackage` |
@@ -38,7 +39,6 @@ package or building tooling.
 | `solve-engine/parser` | Parselets, binding powers, bytecode builder |
 | `solve-engine/normalizer` | Phrase fusion and normalisation rules |
 | `solve-engine/resolvers` | Async resolver contracts |
-| `solve-engine/errors` | Structured errors and the result type |
 | `solve-engine/utilities` | Shared helpers |
 | `solve-engine/uom` | Unit definitions and conversion |
 | `solve-engine/services` | Data query plumbing |

@@ -7,9 +7,9 @@ description: Adding and subtracting days, weeks and hours from a date.
 
 Adding a span to a date moves it forward, and subtracting one moves it back, so
 you can ask what day falls twenty days after a fixed date, or three hours after
-now. The forms anchored to a fixed date are proven here; the ones relative to
-now resolve against the current date, so they compute rather than being
-asserted.
+now. A form relative to now resolves against the current date. The answers
+shown for those are worked out for noon on Wednesday 11 March 2026 in London, the fixed moment these pages are checked against, and the notepad works them out for
+your own now.
 
 A day count crosses month and year boundaries; the relative forms resolve
 against now.
@@ -19,8 +19,8 @@ against now.
 ```
 
 ```solve
-now + 3 hours
-today - 1 week
+now + 3 hours // Wednesday, March 11, 2026, 3:00:00 PM
+today - 1 week // Wednesday, March 4, 2026, 12:00:00 PM
 ```
 
 ## The same sum in words
@@ -40,7 +40,7 @@ the operators above in words, so they answer the same thing.
 date the engine reads, including a relative one:
 
 ```solve
-3 days from today
+3 days from today // Saturday, March 14, 2026, 12:00:00 PM
 ```
 
 The connector is only read this way when a span is in front of it, which is what

@@ -160,7 +160,7 @@ export const EXPLAINERS: Record<string, Explainer> = {
       },
       {
         title: "Recompute",
-        summary: "Four lines, not seven.",
+        summary: "The four dependants, recomputed.",
         figure: {
           kind: "lines",
           lines: quote(
@@ -174,7 +174,7 @@ export const EXPLAINERS: Record<string, Explainer> = {
             "cached",
           ),
         },
-        note: "The three untouched lines are served from the line-result cache without executing anything. On a document of two hundred lines this is the difference between a responsive editor and a laggy one.",
+        note: "In a long-lived evaluator, the three untouched lines keep their answers without executing anything while they are off screen; a line on screen runs again, from bytecode that is already compiled. So the saving grows with how much of the note is out of view: on a document of two hundred lines it is the difference between a responsive editor and a laggy one. A batch parseDocument call runs every line.",
       },
     ],
   },
@@ -227,7 +227,7 @@ export const EXPLAINERS: Record<string, Explainer> = {
             { label: "Execute", skipped: true },
           ],
         },
-        note: "Line results are cached separately from bytecode. When the dependency graph says a line cannot have changed, its previous result is returned and nothing runs at all.",
+        note: "A long-lived incremental evaluator keeps line results separately from bytecode. When the dependency graph says a line off screen cannot have changed, its previous result stands and nothing runs at all. A batch parseDocument call has no line cache, and executes every line.",
       },
       {
         title: "Together",
@@ -241,7 +241,7 @@ export const EXPLAINERS: Record<string, Explainer> = {
             { label: "Bytecode cache", detail: "programs for the ones that must run again" },
           ],
         },
-        note: "The graph decides what has to happen, the line cache answers everything else for free, and the bytecode cache means even the lines that do run rarely pay to be compiled.",
+        note: "In a live editor, the graph decides what has to happen off screen, the line cache answers the lines it clears for free, and the bytecode cache means even the lines that do run rarely pay to be compiled.",
       },
     ],
   },
