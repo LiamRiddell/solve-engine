@@ -46,6 +46,10 @@ export class WhatIfParselet implements PrefixParselet {
 
 		const names = new Set<string>();
 		for (;;) {
+			// A name may be written with the colon a definition takes (`:price`), which
+		// reaches here as a COLON before it; it names the same variable (the
+		// what-if form added the colon's assignment to the line instead).
+			if (parser.peek()?.type === "COLON") parser.consume();
 			const nameToken = parser.peek();
 			if (!nameToken || (nameToken.type !== "IDENT" && nameToken.type !== "UNIT")) {
 				throw ErrorFactory.parsing(
@@ -81,13 +85,14 @@ export class WhatIfParselet implements PrefixParselet {
 			// a name and an `=`; anything else is left for the ordinary grammar,
 			// which reports trailing input the way it does for any expression.
 			const joiner = parser.peek();
-			const nextName = parser.peekAt(1);
+			const colon = parser.peekAt(1)?.type === "COLON" ? 1 : 0;
+			const nextName = parser.peekAt(1 + colon);
 			const isJoined =
 				!!joiner &&
 				(joiner.type === "AND_CONJ" || joiner.type === "COMMA") &&
 				!!nextName &&
 				(nextName.type === "IDENT" || nextName.type === "UNIT") &&
-				parser.peekAt(2)?.type === "EQUALS";
+				parser.peekAt(2 + colon)?.type === "EQUALS";
 			if (!isJoined) break;
 			parser.consume();
 		}

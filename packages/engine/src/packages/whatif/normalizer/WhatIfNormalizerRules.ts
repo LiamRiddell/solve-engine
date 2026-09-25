@@ -19,6 +19,19 @@ function isName(token: Token | undefined): boolean {
 	return token !== undefined && (token.type === "IDENT" || token.type === "UNIT");
 }
 
+/**
+ * The index just past a variable's name that starts at `i`, or -1 when none
+ * does. The name is written bare (`price`) or with the colon a definition takes
+ * (`:price`), which the lexer keeps as a separate COLON: a reader who defined
+ * `:price = 100` writes `line 2 with :price = 300`, and without this the
+ * colon kept the rule from firing, `with` stayed the word for `+`, and the
+ * line added the assignment (`= 420`, and `:price` overwritten).
+ */
+function afterName(tokens: Token[], i: number): number {
+	if (tokens[i]?.type === "COLON" && isName(tokens[i + 1])) return i + 2;
+	return isName(tokens[i]) ? i + 1 : -1;
+}
+
 /** Whether a token is the word `with`, which the English keyword map reads as addition. */
 function isWith(token: Token | undefined): boolean {
 	return token !== undefined && (token.type === "PLUS" || token.type === "IDENT") && token.value.toLowerCase() === "with";
@@ -64,7 +77,8 @@ export function whatIfNormalizerRule(priority = 75): NormalizerRule {
 			// The second half of a `line 1 : line 4` range is not a what-if target.
 			if (tokens[pos - 1]?.type === "COLON") return null;
 			if (!isWith(tokens[pos + 1])) return null;
-			if (!isName(tokens[pos + 2]) || tokens[pos + 3]?.type !== "EQUALS") return null;
+			const afterInput = afterName(tokens, pos + 2);
+			if (afterInput < 0 || tokens[afterInput]?.type !== "EQUALS") return null;
 			return {
 				consumed: 2,
 				replacement: [tokenAt(WHAT_IF_TOKEN, WHAT_IF_TYPE_ID, lineRef.value, lineRef)],
@@ -107,11 +121,12 @@ export function sweepNormalizerRule(priority = 75): NormalizerRule {
 			// `solve line 4 for rate = 900` is goal seek, which owns this shape.
 			if (tokens[pos - 1]?.type === "GOAL_SEEK") return null;
 			if (!isFor(tokens[pos + 1])) return null;
-			if (!isName(tokens[pos + 2]) || tokens[pos + 3]?.type !== "FROM") return null;
+			const afterInput = afterName(tokens, pos + 2);
+			if (afterInput < 0 || tokens[afterInput]?.type !== "FROM") return null;
 
 			const opener = tokenAt(SWEEP_TOKEN, SWEEP_TYPE_ID, lineRef.value, lineRef);
 			let depth = 0;
-			for (let i = pos + 4; i < tokens.length; i++) {
+			for (let i = afterInput + 1; i < tokens.length; i++) {
 				const t = tokens[i];
 				if (t.type === "LPAREN" || t.type === "LBRACKET") depth++;
 				else if (t.type === "RPAREN" || t.type === "RBRACKET") depth--;

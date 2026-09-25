@@ -1076,11 +1076,18 @@ export class ExpressionLexer {
     // ── 1-char fast path ────────────────────────────────────────────────
     if (len === 1) {
       const c0 = this.input.charCodeAt(0);
+      // The one character, not `this.input`: a document scan narrows only
+      // `len` to the line's end and leaves `input` as the whole document, so a
+      // one-character first line took the whole document as its token's text
+      // (`e` above `5` was "Undefined variable: e" followed by the rest of the
+      // document, and the compiled program was then reused for a later `e` on
+      // the same engine).
+      const one = this.input.charAt(0);
       const cc = ExpressionLexer.CHAR_CLASS[c0] ?? CharClass.SKIP;
 
       switch (cc) {
         case CharClass.DIGIT:
-          out.push(new LexerToken('NUMBER', TT_NUMBER, this.input, this.input, 0, 0, 1, 1));
+          out.push(new LexerToken('NUMBER', TT_NUMBER, one, one, 0, 0, 1, 1));
           tokenIndex++;
           break;
 
@@ -1093,7 +1100,7 @@ export class ExpressionLexer {
           break;
 
         case CharClass.ALPHA: {
-          const input = this.input;
+          const input = one;
           const identLower = input.toLowerCase();
           // Use pre-merged collections (built-in + plugin), single lookup each
           if (this.mergedUnits.has(input)) {
@@ -1113,7 +1120,7 @@ export class ExpressionLexer {
         case CharClass.OPERATOR: {
           const opType = OP_MAP[c0];
           if (opType) {
-            out.push(new LexerToken(opType, tokenTypeId(opType), this.input, this.input, 0, 0, 1, 1));
+            out.push(new LexerToken(opType, tokenTypeId(opType), one, one, 0, 0, 1, 1));
             tokenIndex++;
           }
           break;
@@ -1155,7 +1162,7 @@ export class ExpressionLexer {
             tokenIndex++;
           } else if (c0 >= 128) {
             // Unknown unicode, treat as IDENT for forward compatibility
-            out.push(new LexerToken('IDENT', TT_IDENT, this.input, this.input, 0, 0, 1, 1));
+            out.push(new LexerToken('IDENT', TT_IDENT, one, one, 0, 0, 1, 1));
             tokenIndex++;
           }
           break;

@@ -353,7 +353,11 @@ export function persistentValue(v: Value): Value {
 // the same scroll frame. It is a no-op outside development builds (matches
 // the existing `process.env.NODE_ENV === "development"` convention used by
 // the app-layer logger) so there is zero runtime cost in production.
-const isDevelopmentBuild = process.env.NODE_ENV === "development";
+//
+// Guarded, as AbortControllerLogger's read is: a browser tab or a module Web
+// Worker has no `process`, and an unguarded read at module scope made every
+// entry point of the ESM build throw "process is not defined" on import there.
+const isDevelopmentBuild = typeof process !== "undefined" && process.env?.NODE_ENV === "development";
 
 /**
  * Freeze a Value in development builds, catching accidental external

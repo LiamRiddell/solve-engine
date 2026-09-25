@@ -68,6 +68,17 @@ line 4 with discount = 25%    // $225.00
 line 4 with price = $120      // $324.00
 ```
 
+A variable defined with its colon, `:price = 100`, can be named either way in a
+what-if, a sweep or a goal seek: `:price` and `price` are the same input, and the
+note's own `:price` is left as it was.
+
+```solve-doc
+:price = 100                 // 100
+:total = :price * 1.2        // 120
+line 2 with :price = 300     // 360
+:price                       // 100
+```
+
 An input is held at its new value on every line of the re-run. The line that
 sets it is set aside for the question, so asking about that line itself answers
 with the new value, while the note's own `deposit` is untouched, as the last line
