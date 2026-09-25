@@ -246,6 +246,23 @@ const withinUnit = (x: number): boolean => x >= -1 && x <= 1;
 const positive = (x: number): boolean => x > 0;
 
 /**
+ * The logarithm of `x` to base `n`, exact where it can be.
+ *
+ * Change of base, `ln x / ln n`, is two roundings: `log 1000 base 10` came out
+ * as 2.9999999999999996 and showed as 3.00. The bases a reader writes most, 10
+ * and 2, have their own functions, which are exact at their powers, and an
+ * answer a hair from a whole number that really is the power (`3 ** 4 === 81`)
+ * is that whole number (#667).
+ */
+function logToBase(x: number, n: number): number {
+    if (n === 10) return Math.log10(x);
+    if (n === 2) return Math.log2(x);
+    const r = Math.log(x) / Math.log(n);
+    const whole = Math.round(r);
+    return whole !== r && Math.abs(r - whole) < 1e-9 && n ** whole === x ? whole : r;
+}
+
+/**
  * Whether an angle is finite, the domain of the trigonometric functions. The
  * sine of an infinite angle has no value; `Math.sin` answered NaN (#600).
  */
@@ -677,6 +694,14 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // The logarithms, exponentials, inverse and hyperbolic functions take a
     // plain number, so a quantity is refused; see quantityRefused().
     5: (args) => quantityRefused("log", args[0], false) ?? outsideDomain("log", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log(args[0].toNumber())),
+    // `ln` is the natural logarithm `log` is, under its own index so a
+    // refusal names what the reader wrote (#667).
+    // `log <x> base <n>`, emitted by the math-phrases package (#667).
+    114: (args) => quantityRefused("log", args[0], false) ?? quantityRefused("log", args[1], false)
+        ?? outsideDomain("log", args[0].toNumber(), positive, "positive numbers")
+        ?? outsideDomain("log", args[1].toNumber(), positive, "positive numbers")
+        ?? numberValue(logToBase(args[0].toNumber(), args[1].toNumber())),
+    113: (args) => quantityRefused("ln", args[0], false) ?? outsideDomain("ln", args[0].toNumber(), positive, "positive numbers") ?? numberValue(Math.log(args[0].toNumber())),
     // round/ceil/floor keep a unit for the same reason abs does; see keepUnit().
     6: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "ceil") ?? keepUnit(args[0], Math.ceil(args[0].toNumber())),
     7: (args) => wholeNumberUnchanged(args[0], false) ?? roundExactDecimalToWhole(args[0], "floor") ?? keepUnit(args[0], Math.floor(args[0].toNumber())),

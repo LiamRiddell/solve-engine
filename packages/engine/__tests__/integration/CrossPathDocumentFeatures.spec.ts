@@ -273,6 +273,21 @@ describe("line references across entry points", () => {
     expect(incremental(doc).slice(2)).toEqual(["80", "120"]);
   });
 
+  test("ans is the line above when nothing is named ans, both passes (#668)", () => {
+    expect(batch(["10", "ans * 2"])).toEqual(["10", "20"]);
+    expect(incremental(["10", "ans * 2"])).toEqual(batch(["10", "ans * 2"]));
+    // A defined ans is the variable, as it always was.
+    const named = ["ans = 5", "ans * 2", ":ans = 3", "ans"];
+    expect(batch(named)).toEqual(["5", "10", "3", "3"]);
+    expect(incremental(named)).toEqual(batch(named));
+    // Where prev has nothing to read, ans says the same.
+    for (const doc of [["ans"], ["10", "", "ans"], ["10", "# h", "ans"], ["this is prose", "ans"]]) {
+      const withPrev = doc.map((text) => (text === "ans" ? "prev" : text));
+      expect(batch(doc)).toEqual(batch(withPrev));
+      expect(incremental(doc)).toEqual(batch(doc));
+    }
+  });
+
   test("total above sums the current block only, both passes", () => {
     const doc = ["10", "20", "", "100", "total above"];
     expect(batch(doc)[4]).toBe("100");
@@ -382,6 +397,7 @@ describe("line references across entry points", () => {
 
   test("the single-expression path refuses with a document error", () => {
     expectNeedsDocument("prev");
+    expectNeedsDocument("ans * 2");
     expectNeedsDocument("line 1");
     expectNeedsDocument("total above");
     expectNeedsDocument("sum(line 1 : line 3)");

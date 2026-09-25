@@ -35,15 +35,21 @@ interest on 1000 over 3 years at 5% compounding monthly // 161.47
 interest on 1000 over 3 years at 5% compounding daily // 161.82
 ```
 
-The intervals read are `annually` (or `yearly`), `quarterly`, `monthly`,
-`fortnightly`, `weekly` and `daily`, and a day is a 365th of a year. A monthly
+The intervals read are `annually` (or `yearly`), `semi-annually` (or
+`semiannually` and `half-yearly`), `quarterly`, `monthly`, `fortnightly`,
+`weekly` and `daily`, and a day is a 365th of a year. The tail may also be
+written `compounded`, the commoner English.
+
+```solve
+interest on 1000 over 3 years at 5% compounding semi-annually // 159.69
+interest on 1000 over 3 years at 5% compounded monthly // 161.47
+``` A monthly
 repayment is already worked out month by month, with the yearly rate divided by
 twelve, the way a lender quotes it, so it takes no `compounding` tail.
 
-The boundary: `semi-annually` is not read today, since the hyphen splits the
-word before the interval is looked up, so twice-yearly compounding has no
-spelling yet. The tail is written `compounding`: `compounded monthly` is not
-read, and the line is refused rather than guessed at.
+The boundary: `biannually` is not read, since some readers take it to mean
+every two years rather than twice a year, and nor is the two-word `twice
+yearly`. A line using either is refused rather than guessed at.
 
 ## A term shorter than a year
 

@@ -182,7 +182,7 @@ function readLine(
 		const compound = new Set<string>();
 		for (let i = 0; i + 1 < tokens.length; i++) {
 			const next = tokens[i + 1].type;
-			if (next === "PLUS_EQUALS" || next === "MINUS_EQUALS") compound.add(tokens[i].value);
+			if (next === "PLUS_EQUALS" || next === "MINUS_EQUALS" || next === "STAR_EQUALS" || next === "SLASH_EQUALS") compound.add(tokens[i].value);
 		}
 		const remaining = extracted.reads.slice();
 		for (const w of extracted.writes) {

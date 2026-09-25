@@ -167,6 +167,10 @@ const BUILTIN_ARITY: Record<number, BuiltinArity> = {
   110: { name: "nextprime", min: 1, max: 1 },
   111: { name: "modpow", min: 3, max: 3 },
   112: { name: "modinv", min: 2, max: 2 },
+  113: { name: "ln", min: 1, max: 1 },
+  // `log <x> base <n>`: reached only through that phrase, so it is named for
+  // the function it is (#667).
+  114: { name: "log", min: 2, max: 2 },
 };
 
 /** "1 argument" / "2 arguments", so the message reads as English either way. */

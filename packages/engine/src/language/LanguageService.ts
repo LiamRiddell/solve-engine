@@ -93,12 +93,15 @@ function isClockColon(
  *
  * @param lexed - The line's highlight tokens, in order.
  */
+/** The four running-total operators (#670 added `*=` and `/=`). */
+const COMPOUND_ASSIGNMENTS: ReadonlySet<string> = new Set(["PLUS_EQUALS", "MINUS_EQUALS", "STAR_EQUALS", "SLASH_EQUALS"]);
+
 function runningTotalNameOffset(lexed: readonly { type: string; offset: number }[]): number {
 	const name = lexed[0];
 	const operator = lexed[1];
 	if (name === undefined || operator === undefined) return -1;
 	if (name.type !== "IDENT" && name.type !== "UNIT") return -1;
-	if (operator.type !== "PLUS_EQUALS" && operator.type !== "MINUS_EQUALS") return -1;
+	if (!COMPOUND_ASSIGNMENTS.has(operator.type)) return -1;
 	return name.offset;
 }
 

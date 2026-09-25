@@ -6,7 +6,7 @@ import type { Token } from "@solve-js/lexer/Token";
  */
 const VALUE_STARTS_AFTER: ReadonlySet<string> = new Set([
 	"PLUS", "MINUS", "STAR", "SLASH", "CARET", "PERCENT", "MOD", "PLUS_MINUS",
-	"LPAREN", "LBRACKET", "LBRACE", "COMMA", "EQUALS", "PLUS_EQUALS", "MINUS_EQUALS",
+	"LPAREN", "LBRACKET", "LBRACE", "COMMA", "EQUALS", "PLUS_EQUALS", "MINUS_EQUALS", "STAR_EQUALS", "SLASH_EQUALS",
 	"COLON", "SEMICOLON", "AND_CONJ", "OF", "BIT_AND", "BIT_OR", "BIT_NOT", "LSHIFT", "RSHIFT", "URSHIFT",
 ]);
 

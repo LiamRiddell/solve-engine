@@ -4,6 +4,7 @@ import { nonNumericKind, unifyQuantities } from "@solve-js/vm/VMConversion";
 import { sourcesOfValues, withSources } from "@solve-js/vm/Provenance";
 import { exactDecimalTotal } from "@solve-js/vm/ExactDecimals";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
+import { lineValueProblem as checkLineValue, noDocument as requireContext } from "@solve-js/vm/LineReads";
 import { headingOf, isSummaryLine, sectionKey } from "./SectionReader";
 import { formatLineTrace, traceProblem } from "@solve-js/explain/LineTracer";
 
@@ -35,26 +36,6 @@ import { formatLineTrace, traceProblem } from "@solve-js/explain/LineTracer";
  * function would not have moved any draw either.)
  */
 export const TRACE_INPUTS = 1;
-
-function checkLineValue(v: Value | undefined, lineNumber: number): Value | null {
-  if (v === undefined) {
-    return errorValue("LINE_NOT_YET_EVALUATED", `Line ${lineNumber} has not been evaluated yet (forward reference, or out of range)`);
-  }
-  if (v.type === ValueType.Pending) {
-    return errorValue("LINE_RESULT_PENDING", `Line ${lineNumber}'s result is still resolving`);
-  }
-  if (v.type === ValueType.Error) {
-    return errorValue("LINE_RESULT_ERROR", `Line ${lineNumber} has an error`);
-  }
-  return null; // no problem — safe to use v
-}
-
-function requireContext(context: LineExecutionContext | undefined): Value | null {
-  if (!context?.getLineResult) {
-    return errorValue("LINE_REF_NO_DOCUMENT", "Cross-line references require a real document — not available outside one (e.g. evaluateExpression()'s single-expression path)");
-  }
-  return null;
-}
 
 /** `prev`, the immediately-preceding line's cached result. */
 /**

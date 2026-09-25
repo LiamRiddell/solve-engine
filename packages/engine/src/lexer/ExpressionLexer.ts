@@ -30,6 +30,10 @@ const TT_INLINE_SOLVE_START = tokenTypeId('INLINE_SOLVE_START');
 const TT_LSHIFT = tokenTypeId('LSHIFT');
 const TT_MINUS = tokenTypeId('MINUS');
 const TT_NEQ = tokenTypeId('NEQ');
+const TT_LTE = tokenTypeId('LTE');
+const TT_GTE = tokenTypeId('GTE');
+const TT_SQRT_SIGN = tokenTypeId('SQRT_SIGN');
+const TT_INFINITY_SIGN = tokenTypeId('INFINITY_SIGN');
 const TT_NUMBER = tokenTypeId('NUMBER');
 const TT_PLUS_MINUS = tokenTypeId('PLUS_MINUS');
 const TT_POUND = tokenTypeId('POUND');
@@ -65,6 +69,12 @@ const SYMBOL_TOKENS: ReadonlyMap<number, SymbolToken> = new Map<number, SymbolTo
   [0x00F7, { type: 'SLASH', typeId: TT_SLASH, text: '\u00F7' }],
   [0x00B1, { type: 'PLUS_MINUS', typeId: TT_PLUS_MINUS, text: '\u00B1' }],
   [0x2260, { type: 'NEQ', typeId: TT_NEQ, text: '\u2260' }],
+  // The comparison, root and infinity symbols a phone keyboard or a pasted
+  // formula carries (#669). Without an entry each joined the word beside it.
+  [0x2264, { type: 'LTE', typeId: TT_LTE, text: '\u2264' }],
+  [0x2265, { type: 'GTE', typeId: TT_GTE, text: '\u2265' }],
+  [0x221A, { type: 'SQRT_SIGN', typeId: TT_SQRT_SIGN, text: '\u221A' }],
+  [0x221E, { type: 'INFINITY_SIGN', typeId: TT_INFINITY_SIGN, text: '\u221E' }],
   [0x00A3, { type: 'POUND', typeId: TT_POUND, text: '\u00A3' }],
   [0x20AC, { type: 'EURO', typeId: TT_EURO, text: '\u20AC' }],
   [0x00A5, { type: 'YEN', typeId: TT_YEN, text: '¥' }],
@@ -344,6 +354,8 @@ const TWO_CHAR_OPS: TwoCharOpMap = {
   124: { 124: 'LOGICAL_OR' }, // ||
   43: { 61: 'PLUS_EQUALS' },  // +=  (compound assignment, running totals)
   45: { 61: 'MINUS_EQUALS' }, // -=  (neither + nor - had a two-char op before)
+  42: { 61: 'STAR_EQUALS' },  // *=  (a running product: a balance grown by a rate, #670)
+  47: { 61: 'SLASH_EQUALS' }, // /=  (a running quotient, #670)
   // Note: ** is NOT a single token, the existing moo lexer emits two
   // separate STAR tokens, and the parser consumes them that way.
   // 42: { 42: 'EXPONENT' },  // **, disabled for moo compatibility
