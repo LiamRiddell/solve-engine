@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { getLocale } from "@solve-js/constants/locales";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { localeLiteralRefusal, unreadableInLocale } from "@solve-js/parser/LocaleNumberLiteral";
 
 /**
  * Matches a CHAINED thousands-grouped integer using "." as the group
@@ -66,6 +67,10 @@ export class NumberParselet implements PrefixParselet {
 				throw ErrorFactory.parsing("INVALID_NUMBER_LITERAL", `Invalid octal literal: "${raw}"`, { raw });
 			}
 		} else if (CHAINED_DOT_THOUSANDS_GROUPS.test(raw)) {
+			// Mirrors PrecedenceParser: a first group past three digits is refused (#806).
+			const chainedLocale = getLocale(parser.getLocaleCode());
+			const misgrouped = unreadableInLocale(raw, chainedLocale.display.decimalSeparator, chainedLocale.display.thousandsSeparator);
+			if (misgrouped !== null) throw localeLiteralRefusal(raw, parser.getLocaleCode(), misgrouped);
 			// The lexer accepts "." as a thousands-group separator
 			// independent of locale (see ExpressionLexer's number-scanning
 			// "Thousands separators" block), but the locale-based
@@ -83,6 +88,11 @@ export class NumberParselet implements PrefixParselet {
 			const locale = getLocale(parser.getLocaleCode());
 			const decimalSep = locale.display.decimalSeparator;
 			const thousandsSep = locale.display.thousandsSeparator;
+			// Mirrors PrecedenceParser: where the comma marks the decimal, a dot
+			// decimal under dot grouping (#654) and a second decimal mark are
+			// refused rather than guessed at. See parser/LocaleNumberLiteral.ts.
+			const unreadable = unreadableInLocale(raw, decimalSep, thousandsSep);
+			if (unreadable !== null) throw localeLiteralRefusal(raw, parser.getLocaleCode(), unreadable);
 
 			let normalized = raw;
 		// Replace thousands separator with nothing (split+join avoids per-call RegExp compilation)

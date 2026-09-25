@@ -44,7 +44,7 @@ subpath entries, so a bundler only pulls in the part you actually use.
 | `solve-engine/format` | `formatValue` and formatting settings |
 | `solve-engine/language` | Editor support: completions, token categories, highlighting |
 | `solve-engine/packages` | The built-in packages and their configuration types |
-| `solve-engine/constants` | Locale definitions and engine configuration defaults |
+| `solve-engine/constants` | Engine configuration defaults and the engine version |
 | `solve-engine/errors` | The structured error type and its taxonomy |
 
 A further set of entries exposes the pipeline internals for advanced use, listed

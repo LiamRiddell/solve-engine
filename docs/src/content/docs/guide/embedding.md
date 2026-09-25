@@ -9,8 +9,17 @@ import { createEngine } from "solve-engine";
 const engine = createEngine({ locale: "en" });
 ```
 
-The `locale` option decides decimal and thousands separators and the ambiguous
-date order.
+The `locale` option decides the language the engine reads its keywords in and
+how it reads numbers: which character marks the decimal and which groups
+thousands. It takes a language code (`en`, `de`, `fr`) or a full tag such as the
+`de-DE` a browser reports, which reads as its language; any other code reads as
+English. See [locales](/guide/locales/) for what each language pack accepts.
+
+The order of an ambiguous date such as `03/04/2026` is a separate setting,
+because it is a question of region rather than language: a German engine reads
+it as 3 April, as an English one does. It is `config.date.inputOrder`, and
+`'locale'` with `config.date.inputLocale` takes it from a region such as `en-US`
+(see [date literals](/syntax/date-literals/)).
 
 ## Configuration
 

@@ -421,8 +421,9 @@ const engine = createEngine({ extraPackages: [gamePackage] });
       <div>
 
 `formatValue` covers the common case, with settings for decimal places,
-thousands separators, currency display and date format, all defaulting from the
-engine's locale.
+thousands separators and the date format. It is a function of the value alone
+and never sees an engine, so its settings are English display unless the host
+passes its own.
 
 The leading `=` marker suits an editor gutter. Strip it anywhere else, which is
 what the notepads on this page do.

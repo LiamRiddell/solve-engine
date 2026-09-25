@@ -8,6 +8,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower, buildBindingPowerTable } from "@solve-js/parser/BindingPower";
 import { getLocale } from "@solve-js/constants/locales";
 import { bigIntLiteralDigits } from "@solve-js/parser/BigIntLiteral";
+import { localeLiteralRefusal, unreadableInLocale } from "@solve-js/parser/LocaleNumberLiteral";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 
@@ -530,6 +531,10 @@ export class PrecedenceParser {
             throw ErrorFactory.parsing({ code: "INVALID_NUMBER_LITERAL", message: `Invalid octal literal: "${raw}"`, context: { raw }, span: this.spanOf(token) });
           }
         } else if (CHAINED_DOT_THOUSANDS_GROUPS.test(raw)) {
+          // Under a dot-grouping locale a first group past three digits is not
+          // grouped (`12345.678.901`, #806); refused as the single-dot case is.
+          const misgrouped = unreadableInLocale(raw, this.decimalSeparator, this.thousandsSeparator);
+          if (misgrouped !== null) throw localeLiteralRefusal(raw, this.localeCode, misgrouped, this.spanOf(token));
           // The lexer accepts "." as a thousands-group separator
           // independent of locale (ExpressionLexer's number-scanning
           // "Thousands separators" block), but the locale-based
@@ -548,6 +553,13 @@ export class PrecedenceParser {
         } else {
           const decimalSep = this.decimalSeparator;
           const thousandsSep = this.thousandsSeparator;
+          // Where the comma marks the decimal, two shapes cannot be read without
+          // guessing: a dot decimal where "." groups thousands, which stripping
+          // below read as `2.5` giving 25 (#654), and a second decimal mark,
+          // `1,234,567` giving 1.234. Refused by name instead; see
+          // parser/LocaleNumberLiteral.ts, which NumberParselet shares.
+          const unreadable = unreadableInLocale(raw, decimalSep, thousandsSep);
+          if (unreadable !== null) throw localeLiteralRefusal(raw, this.localeCode, unreadable, this.spanOf(token));
           let normalized = raw;
           // Replace thousands separator with empty string (split+join avoids per-call RegExp compilation).
           // The indexOf guard stops that pair allocating an array and a string

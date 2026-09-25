@@ -21,7 +21,7 @@ tested.
 | `solve-engine/format` | `formatValue` and formatting settings |
 | `solve-engine/language` | Completions, token categories, highlighting |
 | `solve-engine/packages` | Built-in packages and their configuration |
-| `solve-engine/constants` | Locales and configuration defaults |
+| `solve-engine/constants` | Configuration defaults (`DEFAULT_CONFIG`, `ConfigManager`) and `ENGINE_VERSION` |
 | `solve-engine/errors` | `EngineError`, the structured error type a failure throws, its taxonomy, and the result type |
 | `solve-engine/worker` | Off-main-thread evaluation: the worker proxy, transports and result DTO |
 | `solve-engine/engine-worker` | The worker entry the engine's own offloaded compile and execute pools run, started by a host through `setEngineWorkerFactory`. Its own bundle, carrying every built-in package |

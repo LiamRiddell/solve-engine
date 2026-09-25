@@ -45,6 +45,28 @@ how a date is written out: `"long"`, the spelled-out default
 Every group's fields are listed in the
 [API reference](/api/format/interfaces/formattingsettings/).
 
+## The locale tag
+
+`numberResult.decimalSeparatorLocale` is the tag a result is written for, and it
+takes any tag the runtime's `Intl` knows, not only the engine's three language
+packs. It chooses the decimal mark and the digit grouping, the digits themselves
+(every digit of `3.5 days` is Arabic-Indic under `ar-EG`, the fraction included:
+`٣٫٥٠ days`), and the names of weekdays and months in a spelled-out date
+(`Montag, 17. November 2025` under `de-DE`).
+
+```ts
+formatValue(engine.evaluateExpression("£1234.5"), {
+  ...DEFAULT_FORMATTING_SETTINGS,
+  numberResult: { decimalSeparatorLocale: "de-DE" },
+}); // "= £1.234,50"
+```
+
+A tag `Intl` has no data for (`xx`) takes its weekday and month names from the
+language pack instead, English for a code with none, so a date does not change
+with the machine the engine runs on. A tag `Intl` cannot read at all makes
+formatting a number throw `Intl`'s `RangeError`, so a mistyped setting is seen. See
+[locales](/guide/locales/#writing-results) for the full table.
+
 ## Formatting yourself
 
 Nothing obliges you to use the built-in formatter. A value exposes its type, its

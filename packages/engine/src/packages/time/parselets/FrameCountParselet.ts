@@ -1,3 +1,4 @@
+import { readLocaleNumber } from "@solve-js/parser/LocaleNumberLiteral";
 import { PrefixParselet } from "@solve-js/parser/Parselet";
 import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
@@ -38,7 +39,8 @@ export class FrameCountParselet implements PrefixParselet {
         );
       }
       parser.consume();
-      const fps = parseFloat(fpsToken.value);
+      // Read in the engine's locale, as a bare number is (#806).
+      const fps = readLocaleNumber(fpsToken.value, parser.getLocaleCode());
 
       builder.emitOpcode(OpCode.PUSH_STRING);
       builder.emitString(framesToTimecodeString(frameCount, fps));

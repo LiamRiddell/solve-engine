@@ -1,10 +1,11 @@
 import { Token, tokenTypeId, registerAllTokenTypes } from '@solve-js/lexer/Token';
 import { knownUnits } from '@solve-js/lexer/units';
-import { getLocale, type ILocale } from '@solve-js/constants/locales';
+import { getLocale, groupsInLakhs, type ILocale } from '@solve-js/constants/locales';
 import { ErrorFactory, EngineError } from '@solve-js/errors/UnifiedErrorFramework';
 import type { TokenLookup } from '@solve-js/lexer/TokenClassRegistry';
 import { DEGREE_SIGN, scanGeoAngle } from '@solve-js/lexer/GeoAngleLiteral';
 import { isPipeRow, isSeparatorRowText } from '@solve-js/lexer/TableBlocks';
+import { lakhGroupEnd, rupeeMarked } from '@solve-js/lexer/LakhGrouping';
 
 // Bootstrap all token types at module load
 registerAllTokenTypes();
@@ -539,6 +540,18 @@ export class ExpressionLexer {
   private locale: ILocale;
 
   /**
+   * Whether this locale groups thousands with a comma, the one grouping
+   * character Indian grouping (`1,00,000`) is written with. Where the comma is
+   * the decimal mark instead (German, French), `₹1,00,000` is not read as
+   * lakhs, since that engine would read the comma as a decimal. See
+   * lexer/LakhGrouping.ts.
+   */
+  private readonly commaGroups: boolean;
+
+  /** Whether Indian grouping is read everywhere, not only beside a rupee marker: an Indian-region locale such as `en-IN`. */
+  private readonly lakhsThroughout: boolean;
+
+  /**
    * Inline solve spans collected during the most recent tokenization pass.
    * Populated by tokenizeInto() and consumed by scanDocument().
    */
@@ -607,6 +620,8 @@ export class ExpressionLexer {
   constructor(localeCode = 'en', _lookup?: TokenLookup) {
     this.localeCode = localeCode;
     this.locale = getLocale(localeCode);
+    this.commaGroups = this.locale.display.thousandsSeparator === ',';
+    this.lakhsThroughout = groupsInLakhs(localeCode);
     this.keywordMap = new Map<string, string>();
     for (const [k, v] of Object.entries(this.locale.keywordMap)) {
       this.keywordMap.set(k.toLowerCase(), v);
@@ -1461,6 +1476,7 @@ export class ExpressionLexer {
     }
 
     // ── Thousands separators, coalesce with digits ────────────────────
+    const groupsFrom = pos;
     while (hasIntPart && pos < len && (input.charCodeAt(pos) === 44 || input.charCodeAt(pos) === 46)) {
       // A comma inside a call or bracket is an argument/element separator, not a
       // thousands group: `rgb(255,255,255)` is three numbers and `[100,200,300]`
@@ -1505,6 +1521,25 @@ export class ExpressionLexer {
         }
       }
       break;
+    }
+
+    // ── Indian grouping: 1,00,000 (one lakh) and 12,34,567 ─────────────
+    // A first group of one or two digits, then groups of two, then a final
+    // three, which the loop above stopped at because `,00` is not a group of
+    // three. Read beside a rupee marker (`₹1,00,000`, `1,00,000 INR`) or
+    // everywhere in an Indian-region locale, and nowhere else: outside that
+    // convention `12,34` is not a group, and a refusal is safer than a guess.
+    // A comma in a call or a bracket stays a separator, as above.
+    if (
+      hasIntPart &&
+      pos === groupsFrom &&
+      pos - start <= 2 &&
+      this.commaGroups &&
+      input.charCodeAt(pos) === 44 &&
+      !(this.groupingStack.length > 0 && this.groupingStack[this.groupingStack.length - 1])
+    ) {
+      const lakhEnd = lakhGroupEnd(input, pos);
+      if (lakhEnd !== -1 && (this.lakhsThroughout || rupeeMarked(input, start, lakhEnd, Infinity))) pos = lakhEnd;
     }
 
     // ── Decimal part (.xxx) ───────────────────────────────────────────
