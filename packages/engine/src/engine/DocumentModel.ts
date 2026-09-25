@@ -6,6 +6,7 @@ import { DEFAULT_CONFIG } from "@solve-js/constants/Configuration";
 import { countLines } from "@solve-js/utilities/Strings";
 import { memberTagsOf } from "@solve-js/packages/tags/TagScanner";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { isPipeRow, isSeparatorRowText, pipeBlockAround } from "@solve-js/lexer/TableBlocks";
 
 // ── LineState ──────────────────────────────────────────────────────────────
 
@@ -158,6 +159,18 @@ export class DocumentModel {
 	 */
 	private _positionCache: Map<number, number> | null = null;
 
+	/** See {@link revision}. */
+	private _revision = 0;
+
+	/**
+	 * A count bumped by every change to the document's text or line order, so a
+	 * caller can keep something it derived from the text for as long as the text
+	 * is unchanged: the evaluator keeps a table block's answer this way (#616).
+	 */
+	get revision(): number {
+		return this._revision;
+	}
+
 	/**
 	 * Lazy order cache: 0-based position → lineId, the reverse of
 	 * {@link _positionCache} and the order the tree holds.
@@ -248,6 +261,7 @@ export class DocumentModel {
 		}
 		this.lines.clear();
 		this.orderTree.clear();
+		this._revision++;
 		this._positionCache = null;
 		this._orderedIds = null;
 		this.dirtyLineIds.clear();
@@ -310,9 +324,13 @@ export class DocumentModel {
 
 		// Sort descending by startLine so earlier changes don't shift later indices
 		const sorted = [...changes].sort((a, b) => b.startLine - a.startLine);
+		// Lines whose table block a change may have made or broken (#616), kept
+		// by id because positions move as the changes are applied.
+		const tableAnchors: number[] = [];
 
 		for (const change of sorted) {
 			const startIdx = change.startLine - 1; // convert to 0-based
+			this.noteTableAnchors(change, startIdx, tableAnchors);
 
 			// Create new LineState entries for inserted lines
 			const newIds: number[] = [];
@@ -364,8 +382,71 @@ export class DocumentModel {
 		// Invalidate position cache, positions shifted for all lines
 		this._positionCache = null;
 		this._orderedIds = null;
+		this._revision++;
+
+		for (const lineId of tableAnchors) {
+			const position = this.getLinePosition(lineId);
+			if (position !== -1) this.reclassifyPipeBlock(position);
+		}
 
 		return { inserted, removed };
+	}
+
+	/**
+	 * The lines to reclassify after `change`, when it can change which rows are
+	 * a table: it inserts or deletes a pipe row, or it lands between two pipe
+	 * rows, joining or splitting a block (#616). Collected before the change is
+	 * applied, while the deleted lines can still be read.
+	 *
+	 * @param change - The change about to be applied.
+	 * @param startIdx - Its first line, 0-based.
+	 * @param anchors - Where the ids to reclassify around are collected.
+	 */
+	private noteTableAnchors(change: LineChange, startIdx: number, anchors: number[]): void {
+		const idAt = (index: number): number | undefined =>
+			index >= 0 && index < this.orderTree.length ? this.orderTree.getRange(index, index)[0] : undefined;
+		const textAt = (index: number): string | undefined => {
+			const id = idAt(index);
+			return id === undefined ? undefined : this.lines.get(id)?.text;
+		};
+		let touchesPipe = change.insertLines.some(isPipeRow);
+		for (let i = 0; i < change.deleteCount && !touchesPipe; i++) touchesPipe = isPipeRow(textAt(startIdx + i));
+		const before = startIdx - 1;
+		const after = startIdx + change.deleteCount;
+		if (!touchesPipe && !(isPipeRow(textAt(before)) && isPipeRow(textAt(after)))) return;
+		const beforeId = idAt(before);
+		const afterId = idAt(after);
+		if (beforeId !== undefined) anchors.push(beforeId);
+		if (afterId !== undefined) anchors.push(afterId);
+		// The inserted lines are given ids when the change is applied; the
+		// neighbours on either side reach every block they can join.
+	}
+
+	/**
+	 * Send every row of the pipe block around `position` back to be classified:
+	 * dirty, with its compiled state cleared and its emptiness read again from
+	 * its text. A row is a table row because of the separator in its block, so an
+	 * edit that adds or removes a separator, or joins or splits a block, changes
+	 * what every row in it is (#616). Does nothing when the line is not a pipe
+	 * row.
+	 *
+	 * @param position - A 1-based line in the block.
+	 */
+	private reclassifyPipeBlock(position: number): void {
+		const block = pipeBlockAround((n) => this.getLineAt(n)?.text, position);
+		if (block === null) return;
+		for (let n = block.first; n <= block.last; n++) {
+			const state = this.getLineAt(n);
+			if (!state) continue;
+			state.expressions = [];
+			state.bytecodes = [];
+			state.results = [];
+			state.result = null;
+			state.inlineSolveCount = 0;
+			state.isEmpty = state.text.trim().length === 0;
+			state.dirty = true;
+			this.dirtyLineIds.add(state.lineId);
+		}
 	}
 
 	/**
@@ -409,6 +490,8 @@ export class DocumentModel {
 
 		const newHash = djb2Hash(newText);
 		if (newHash === state.textHash) return false;
+		const oldText = state.text;
+		this._revision++;
 
 		if (this.tagIndex !== null) {
 			this.unindexTags(state.lineId, state.text);
@@ -424,6 +507,14 @@ export class DocumentModel {
 		state.dirty = true;
 		this.dirtyLineIds.add(state.lineId);
 		state.isEmpty = newText.trim().length === 0;
+		// A cell edited inside a table changes nothing about the rest of it; a
+		// line becoming or ceasing to be a pipe row, or a separator, can make or
+		// break the table around it, on either side (#616).
+		if (isPipeRow(oldText) !== isPipeRow(newText) || isSeparatorRowText(oldText) !== isSeparatorRowText(newText)) {
+			this.reclassifyPipeBlock(lineNumber - 1);
+			this.reclassifyPipeBlock(lineNumber);
+			this.reclassifyPipeBlock(lineNumber + 1);
+		}
 		return true;
 	}
 
@@ -841,6 +932,7 @@ export class DocumentModel {
 	clear(): void {
 		this.lines.clear();
 		this.orderTree.clear();
+		this._revision++;
 		this._positionCache = null;
 		this._orderedIds = null;
 		this.nextLineId = 1;

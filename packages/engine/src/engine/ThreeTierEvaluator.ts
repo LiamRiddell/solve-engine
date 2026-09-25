@@ -9,6 +9,7 @@ import { Value, ValueType, enableValueArena, disableValueArena, errorValue, pers
 import { DependencyGraph, isPrefixedEdgeKey } from "@solve-js/vm/DependencyGraph";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { isEmptyLine } from "@solve-js/engine/ExpressionEngineSafety";
+import { isPipeRow, tableBlockAt } from "@solve-js/lexer/TableBlocks";
 // Deliberately the shared lexer, not an engine's own.
 //
 // `classifyLine` and `findInlineSolves` are character-level scans for headings,
@@ -1210,7 +1211,8 @@ export class ThreeTierEvaluator {
 		}
 
 		// Skip empty/markdown-only lines
-		if (state.isEmpty || isEmptyLine(state.text)) {
+		// A table row is markup too, though only its block says so (#616).
+		if (state.isEmpty || isEmptyLine(state.text) || this.isTableRow(lineNumber)) {
 			this.deregisterIfDirty(state, lineNumber);
 			state.isEmpty = true;
 			this.doc.markClean(state.lineId);
@@ -1293,6 +1295,38 @@ export class ThreeTierEvaluator {
 		if (this.dag.positionsReadBy(lineNumber).length > 0) return true;
 		return withTagEdges(state.text, [], []).reads.length > 0;
 	}
+
+	/**
+	 * Whether line `position` is a row of a markdown table, which is markup and
+	 * never evaluated. Only its block says so (see lexer/TableBlocks), so this
+	 * reads the lines around it; the batch pass decides the same thing in
+	 * ExpressionLexer.scanDocument. A cell edit keeps the rest of the table as it
+	 * was, and DocumentModel sends a block back to be classified when an edit can
+	 * change which of its rows are a table (#616).
+	 *
+	 * The block's answer is kept until the document changes, so a pass over a
+	 * long table walks it once. Asking row by row walked back to the separator
+	 * from each row, and a 130,000-row table took seven minutes.
+	 *
+	 * @param position - The 1-based line.
+	 */
+	private isTableRow(position: number): boolean {
+		const text = this.doc.getLineAt(position)?.text;
+		if (!isPipeRow(text)) return false;
+		let block = this.tableBlock;
+		if (block === null || block.revision !== this.doc.revision || position < block.first || position > block.last) {
+			const found = tableBlockAt((n) => this.doc.getLineAt(n)?.text, position);
+			if (found === null) return false;
+			block = this.tableBlock = { revision: this.doc.revision, ...found };
+		}
+		if (!block.isTable) return false;
+		// A row holding an inline solve is read like prose holding one: its
+		// solves are worked out, as the batch pass does.
+		return !sharedLexer.classifyLine(text ?? "").hasInlineSolve;
+	}
+
+	/** The last pipe block {@link isTableRow} classified, and the document revision it holds for. */
+	private tableBlock: { revision: number; first: number; last: number; isTable: boolean } | null = null;
 
 	/**
 	 * A line edited into something with nothing to evaluate stops defining.
@@ -2013,7 +2047,7 @@ export class ThreeTierEvaluator {
 			if (state.bytecodes.length > 0 && !state.isVariableDef) continue;
 
 			// Skip empty/markdown-only lines
-			if (state.isEmpty || isEmptyLine(state.text)) continue;
+			if (state.isEmpty || isEmptyLine(state.text) || this.isTableRow(pos)) continue;
 
 			const { expressions } = this.extractExpressions(state);
 			if (expressions.length === 0) continue;

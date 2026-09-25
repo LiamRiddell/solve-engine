@@ -28,9 +28,10 @@ import { tableRowLookupHandler, tableBandLookupHandler, tableThroughBandsHandler
  * Read a markdown table's column as data: `sum of column "cost" in table
  * above`, `average of column "cost" above`.
  *
- * A markdown table is the one block the evaluator classifies and then skips,
- * so a note can hold a table of numbers and none of them can be totalled from
- * where they sit. This package addresses the nearest table above the query
+ * A markdown table is markup the evaluator skips, on both document paths (see
+ * lexer/TableBlocks; until #616 only its separator row was skipped and every
+ * other row reported an error), so a note can hold a table of numbers and none
+ * of them can be totalled from where they sit. This package addresses the nearest table above the query
  * line, names one of its columns, and reduces that column's numeric cells,
  * reusing the same cross-line plumbing the lines package built for `total
  * above` (a per-line `LineExecutionContext`, extended with `getLineText` so

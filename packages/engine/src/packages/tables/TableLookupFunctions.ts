@@ -44,7 +44,8 @@ import { TablesErrorCodes } from "./TablesPluginFunctions";
  *
  * Like the column aggregates beside them, every handler resolves at execution
  * time from the {@link LineExecutionContext}: the nearest table above is read
- * back from source text, since the evaluator skips a table's rows.
+ * back from source text, since both document paths skip a table's rows (see
+ * lexer/TableBlocks).
  *
  * The error discipline is the package's: a lookup that finds nothing, finds two
  * rows it cannot choose between, or reads a band table that does not say what a
