@@ -1,7 +1,7 @@
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { chargeAllocation } from "@solve-js/vm/AllocationBudget";
 import type { SymbolicNode, Rational } from "@solve-js/symbolic";
-import type { DecimalData } from "@solve-js/decimal";
+import { decimalToString, type DecimalData } from "@solve-js/decimal";
 import type { ValueSource, FrozenMark } from "@solve-js/vm/Provenance";
 
 /**
@@ -379,6 +379,24 @@ export function freezeIfDev<T extends Value>(value: T): T {
 }
 
 /**
+ * A payload made JSON-safe for {@link Value.toJSON}: every bigint, at any depth,
+ * as its decimal string. A symbolic tree's constants and a matrix's entries can
+ * hold bigints, so the walk goes into arrays and plain objects; anything else
+ * is returned as it is. The walk is bounded by the payload, which the engine
+ * already bounds.
+ */
+function jsonSafe(x: unknown): unknown {
+	if (typeof x === "bigint") return x.toString();
+	if (Array.isArray(x)) return x.map(jsonSafe);
+	if (x !== null && typeof x === "object") {
+		const out: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(x)) out[k] = jsonSafe(v);
+		return out;
+	}
+	return x;
+}
+
+/**
  * Universal runtime value for the solve-js VM.
  *
  * Carries a {@link ValueType} discriminant, a polymorphic `value` payload,
@@ -629,6 +647,37 @@ export class Value {
 		const copy = new Value(this.type, this.value, this.unit);
 		Object.assign(copy, this);
 		return copy;
+	}
+
+	/**
+	 * The value as plain JSON, for a host that logs, stores or posts a result.
+	 *
+	 * `JSON.stringify` of a Value used to throw "Do not know how to serialize a
+	 * BigInt" as soon as the value carried an exact sidecar, which every decimal
+	 * literal did and, since exact decimals and exact large integers, most
+	 * computed answers do (#598). This writes the fields a host already reads
+	 * (`type`, `value`, `unit`), then each sidecar that is set, with every
+	 * bigint as its decimal string: `exact` as the decimal it stands for
+	 * (`"0.3"`) and `rational` as `"n/d"`. The private cached number is left
+	 * out. It is for reading, not a snapshot format; `engine.toJSON()` is the
+	 * one that restores.
+	 *
+	 * @returns A JSON-safe object describing this value.
+	 */
+	toJSON(): Record<string, unknown> {
+		const out: Record<string, unknown> = { type: this.type, value: jsonSafe(this.value) };
+		if (this.unit !== undefined) out.unit = this.unit;
+		if (this.exact !== undefined) out.exact = decimalToString(this.exact);
+		if (this.rational !== undefined) out.rational = `${this.rational.n}/${this.rational.d}`;
+		if (this.uncertainty !== undefined) out.uncertainty = this.uncertainty;
+		if (this.decimalPlaces !== undefined) out.decimalPlaces = this.decimalPlaces;
+		if (this.grain !== undefined) out.grain = this.grain;
+		if (this.zone !== undefined) out.zone = this.zone;
+		if (this.datetimeSpan !== undefined) out.datetimeSpan = this.datetimeSpan;
+		if (this.timedOut !== undefined) out.timedOut = this.timedOut;
+		if (this.sources !== undefined) out.sources = this.sources;
+		if (this.frozen !== undefined) out.frozen = this.frozen;
+		return out;
 	}
 
 	isNumber(): this is Value & { value: number } {

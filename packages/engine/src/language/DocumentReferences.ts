@@ -52,6 +52,15 @@ import type { Value } from "@solve-js/vm/Value";
 /** A line break as the batch document scan recognises one: `\r\n`, `\r` or `\n`. */
 const LINE_BREAK = /\r\n|\r|\n/g;
 
+/**
+ * The tokens that name a line by its number. A what-if (`line 4 with x = 5`)
+ * and a sweep (`line 4 for x from 1 to 3 step 1`) fuse their `line N` into one
+ * token that keeps N and the reference's own offset, so they are renumbered as
+ * a plain reference is; without them an inserted line left both pointing at the
+ * old line (#596).
+ */
+const LINE_NUMBER_TOKENS: ReadonlySet<string> = new Set(["LINE_REF", "WHAT_IF", "SWEEP"]);
+
 /** The spelling a reference takes once its line is deleted. See the lines package's `DELETED_LINE_REF`. */
 const DELETED_REFERENCE_TEXT = "line deleted";
 
@@ -632,7 +641,7 @@ export class DocumentReferences {
 		}
 
 		for (let i = 0; i < tokens.length; i++) {
-			if (tokens[i].type !== "LINE_REF") continue;
+			if (!LINE_NUMBER_TOKENS.has(tokens[i].type)) continue;
 			const site = lineRefSite(expression, tokens[i], base);
 			const opensRange =
 				tokens[i - 1]?.type === "LPAREN" &&

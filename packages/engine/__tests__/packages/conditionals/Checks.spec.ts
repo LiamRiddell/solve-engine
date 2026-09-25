@@ -47,6 +47,15 @@ describe("a passing check", () => {
 		expect(shown(source)).toBe("= ✓");
 	});
 
+	// #595: a check across an offset conversion agrees with `==`, whose margin
+	// scales with the sides as written: 32 F in Celsius is 5.7e-14, not 0.
+	test.each(["check 0 C == 32 F", "check 32 F == 0 C", "check 100 C == 212 F", "check 0 C >= 32 F", "check 0 C <= 32 F"])(
+		"%s is a tick, as the operator says",
+		(source) => {
+			expect(shown(source)).toBe("= ✓");
+		},
+	);
+
 	test("an approximate check says how close it was", () => {
 		expect(shown("check 22/7 ≈ pi within 0.1%")).toBe("= ✓ (differs by 0.04%)");
 		expect(shown("check 22/7 ~= pi within 0.1%")).toBe("= ✓ (differs by 0.04%)");
@@ -122,6 +131,18 @@ describe("the host's count", () => {
 
 	test("evaluateDocument agrees", () => {
 		expect(evaluateDocument(createEngine() as unknown as ExpressionEngine, text).checks).toEqual({ passed: 2, failed: 1 });
+	});
+
+	// #594: only a line written with `check` counts. Text that begins with a
+	// tick is text, and a variable called `check` is a variable.
+	test("text that begins with a tick is not a check, in either pass", () => {
+		const text = '"✓ shipped"\nx = "✓ ok"\ncheck 1 == 2';
+		expect(newTrackedEngine().parseDocument(text).checks).toEqual({ passed: 0, failed: 1 });
+		expect(evaluateDocument(createEngine() as unknown as ExpressionEngine, text).checks).toEqual({ passed: 0, failed: 1 });
+	});
+
+	test("a variable called check, holding a tick, is not counted", () => {
+		expect(newTrackedEngine().parseDocument('check = "✓"\ncheck 1 == 1').checks).toEqual({ passed: 1, failed: 0 });
 	});
 
 	test("a document with no checks has no count", () => {

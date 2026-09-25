@@ -68,7 +68,8 @@ check 5 m ≈ 5.01 m within 1 cm // ✓ (differs by 0.01 m)
 A check line is a statement about the numbers around it, not one of them, so a
 `total above` beneath it steps over it, passed or failed. A program embedding the
 engine gets a count of passed and failed checks on the parse result (`checks`), so
-it can flag a note whose checks have started failing.
+it can flag a note whose checks have started failing. Only a line written with
+`check` is counted: a piece of text that happens to begin with a tick is text.
 
 The boundary: `check` only means this at the start of a line that compares two
 things, so a variable called `check` (a restaurant bill, say) keeps working.

@@ -1130,6 +1130,7 @@ export class ExpressionEngine {
                 return !state || state.isEmpty || /^\s*#/.test(state.text);
             },
             taggedLines: (tag) => doc.linesCarryingTag(tag),
+            lineText: (n) => doc.getLineAt(n)?.text,
         };
     }
 
@@ -1151,6 +1152,7 @@ export class ExpressionEngine {
                 return !sr || sr.classification.skip || /^\s*#/.test(sr.text);
             },
             taggedLines: (tag) => this.batchLinesCarryingTag(scan, tag),
+            lineText: (n) => scan[n - 1]?.text,
         };
     }
 
@@ -1168,6 +1170,7 @@ export class ExpressionEngine {
                 return line.expression !== null ? [line.expression] : line.inlineSolves.map((s) => s.expression);
             },
             result: (n) => lines[n - 1]?.result ?? null,
+            lineText: (n) => lines[n - 1]?.text,
             isBoundary: (n) => {
                 const line = lines[n - 1];
                 return !line || line.isEmpty || /^\s*#/.test(line.text);

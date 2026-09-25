@@ -98,13 +98,25 @@ inputs of line 3   // ERROR: Line 3 is not above this line, so its answer has no
 
 A very long chain is cut short rather than listed in full: the trace goes ten
 levels deep and lists at most two hundred lines, and a line whose own inputs
-were cut off ends in `<- [...]`. A [table column](/syntax/table-columns/) is
-read from the table's text rather than from other lines' answers, so it lists
-no inputs, and a `global` variable shared from another document is shown only
-where this document defines it. A [table lookup](/syntax/table-lookups/) reads
-its table the same way and lists none either, and a
-[section total](/syntax/sections/) is listed as a line of its own without the
-lines under its heading.
+were cut off ends in `<- [...]`. A `global` variable shared from another
+document is shown only where this document defines it.
+
+A [section total](/syntax/sections/) lists the lines under its heading, and a
+[table column](/syntax/table-columns/) or [table lookup](/syntax/table-lookups/)
+lists the rows of the table above it, each named by its first cell. A lookup
+reads one row, but the key it looks up can itself come from another line, so
+the trace lists the rows it chose among rather than guessing which one it
+picked. A total leaves out the check lines and the subtotals it steps over, and
+so does its trace.
+
+```solve-doc
+# Travel
+train = 12
+taxi = 7
+# Food
+t = total of section "Travel"
+inputs of line 5   // t 19 (line 5) <- train 12 (line 2), taxi 7 (line 3)
+```
 
 A [what-if or a sweep](/syntax/what-if/) lists the line it re-runs, with that
 line's answer as the note shows it, not the answer under the what-if's inputs:

@@ -73,6 +73,29 @@ formatValue(value); // "= 9,007,199,254,740,993"
 Read `rational.n` when every digit matters. A result crossing the worker boundary
 keeps the digits in its formatted `text`; its `number` is the double.
 
+A number written with a decimal point, and an exact answer worked out from one,
+carries `value.exact` instead of `rational`: the decimal as a whole-number
+coefficient and a count of places. `0.1 + 0.2` has an `exact` standing for 0.3,
+where its double is 0.30000000000000004.
+
+## Sending a value as JSON
+
+A `Value` goes through `JSON.stringify`, for a host that logs a result, stores it,
+or posts it to another process. It writes `type`, `value` and `unit`, then each
+exact value that is set, with its digits as a string, since JSON has no place for
+a number that size:
+
+```ts
+JSON.stringify(engine.evaluateExpression("0.1 + 0.2"));
+// {"type":0,"value":0.3,"exact":"0.3"}
+JSON.stringify(engine.evaluateExpression("3^40"));
+// {"type":0,"value":12157665459056929000,"rational":"12157665459056928801/1"}
+```
+
+This shape is for reading. To save an engine's state and restore it later, use
+`engine.toJSON()` and `ExpressionEngine.fromJSON()` (see
+[embedding](/guide/embedding/)).
+
 ## Errors are values, not exceptions
 
 Most failures the engine meets while a document is being written come back as
