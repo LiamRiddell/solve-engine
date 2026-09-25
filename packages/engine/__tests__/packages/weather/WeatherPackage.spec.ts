@@ -29,6 +29,17 @@
  * a server-side failure from EITHER endpoint is treated the same as an
  * outage; a genuine bug in the code under test (a 4xx, a malformed response)
  * still fails the test normally.
+ *
+ * The live cases now run only with SOLVE_LIVE_NETWORK=1 set (#620). They ran in
+ * every gate, the publish gate included, and a slow host failed them even so:
+ * a request that stalls is aborted by the client's 10 s timeout with a
+ * DOMException, which none of the outage checks recognised, and Open-Meteo's
+ * rate limit (429) failed a local gate on 25 September 2026. A scheduled job
+ * (.github/workflows/live-network.yml) runs them with the flag set, where a
+ * timeout and a 429 count as the outages they are. Without the flag they report
+ * themselves skipped and assert what they can offline; the client's error
+ * branches, the timeout included, are driven through a stubbed fetch in
+ * __tests__/coverage/WeatherClientOffline.spec.ts.
  */
 import { describe, expect, test } from "@jest/globals";
 import { QueryClient } from "@tanstack/query-core";
@@ -69,6 +80,12 @@ let openMeteoReachable: boolean | null = null;
 
 async function isOpenMeteoReachable(): Promise<boolean> {
 	if (openMeteoReachable !== null) return openMeteoReachable;
+	// Off unless asked for: see the header. A run without the flag never
+	// touches the network.
+	if (!LIVE_NETWORK) {
+		openMeteoReachable = false;
+		return false;
+	}
 	try {
 		// Deliberately short: an unreachable host should cost a second, not the
 		// 20s timeout each live test carries.
@@ -82,9 +99,13 @@ async function isOpenMeteoReachable(): Promise<boolean> {
 	return openMeteoReachable;
 }
 
+/** Whether the live cases may call Open-Meteo: only with SOLVE_LIVE_NETWORK=1 set. */
+const LIVE_NETWORK = process.env.SOLVE_LIVE_NETWORK === "1";
+
 /** Reports the outage once, in a form that is obvious in a CI log. */
 function reportOffline(what: string): void {
-	console.warn(`[weather] SKIPPED "${what}": Open-Meteo is unreachable from this environment.`);
+	const why = LIVE_NETWORK ? "Open-Meteo is unreachable from this environment" : "the live network cases are off (set SOLVE_LIVE_NETWORK=1 to run them)";
+	console.warn(`[weather] SKIPPED "${what}": ${why}.`);
 }
 
 /**
@@ -100,10 +121,13 @@ function reportOffline(what: string): void {
  * malformed-response error, or any non-EngineError still fails normally).
  */
 function isTransientFetchError(err: unknown): boolean {
+	// A stalled request, aborted by the client's own timeout (#620).
+	if (err instanceof DOMException && err.name === "TimeoutError") return true;
 	if (!(err instanceof EngineError)) return false;
 	if (err.code !== WeatherErrorCodes.GEOCODING_API_ERROR && err.code !== WeatherErrorCodes.FORECAST_API_ERROR) return false;
 	const status = err.context?.status;
-	return typeof status === "number" && status >= 500;
+	// 429 is Open-Meteo's rate limit: an outage for this run, not a bug.
+	return typeof status === "number" && (status >= 500 || status === 429);
 }
 
 /**
@@ -114,7 +138,7 @@ function isTransientFetchError(err: unknown): boolean {
  * test below needs its own transient check rather than a try/catch.
  */
 function isTransientResolvedError(value: Value): boolean {
-	return value.type === ValueType.Error && /returned 5\d\d/.test(String(value.unit ?? ""));
+	return value.type === ValueType.Error && /returned (5\d\d|429)|timed out after/.test(String(value.unit ?? ""));
 }
 
 function buildQueryBytecode(query: string, fnIdx: number) {

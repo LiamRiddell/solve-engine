@@ -19,7 +19,10 @@ permissions:
 # for wall-clock time; the script keeps it in one place, so what CI checks and
 # what a contributor can check locally cannot drift. A gate added here without
 # being added to `verify:ci` is a gate contributors only meet after pushing,
-# which is how the local-green, CI-red round trips happened.
+# which is how the local-green, CI-red round trips happened. The other direction
+# is checked: `npm run lint:ci-parity` fails when a `verify:ci` script is run
+# by no job here, which is how `test:temporal` came to be met first by a
+# release (#619).
 jobs:
   verify:
     name: Verify on Node ${{ matrix.node }}
@@ -33,8 +36,12 @@ jobs:
       # `.npmrc` sets engine-strict. Testing a version the repository cannot
       # even `npm ci` on was never going to work, and claiming support for one
       # nothing exercises is worse than dropping it honestly.
+      #
+      # Node 26 ships Temporal unflagged, so there every default engine
+      # (`calendar: "auto"`) computes dates on the runtime's own Temporal rather
+      # than the Date backend, and no job ran it (#621).
       matrix:
-        node: [22, 24]
+        node: [22, 24, 26]
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -119,6 +126,72 @@ jobs:
       # total it did not produce.
       - run: npm run lint:stats
 
+      # The VM's dispatch loop measured as ts-jest compiles it, on the Node the
+      # benchmark job uses. Past V8's 61,440-byte ceiling the whole loop stops
+      # being optimised and the VM runs about three times slower (#575); this
+      # fails a little under it, so the crossing is seen before it lands (#689).
+      - run: npm run lint:dispatch-size
+
+  temporal:
+    name: Dates in three time zones
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The date suites on the Temporal adapter in Europe/London,
+      # America/New_York and Pacific/Auckland. Only the publish job ran it, so
+      # the first run to meet the Auckland leg was a release: 2.38.30 and 2.40.0
+      # both failed to publish on a date-relative test in the days before
+      # Auckland moved its clocks, while this workflow was green on the same
+      # commits (#619). A pull request opened in those days now meets the same
+      # failure.
+      - run: npm run test:temporal
+
+  temporal-native:
+    name: Dates on Node 26's own Temporal
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26
+          cache: npm
+
+      - run: npm ci
+
+      # The same date suites in the same three zones, on the runtime's own
+      # Temporal instead of temporal-polyfill. CI proved the adapter only
+      # against the polyfill, and a runtime Temporal that differs from what the
+      # adapter expects fails at module load for every consumer (#621).
+      - run: npm run test:temporal:native
+
+  changeset:
+    name: A source change carries a changeset
+    # Pull requests only, and not one labelled no-changeset: a refactor or a
+    # test-only change that should not reach the changelog opts out (#691).
+    if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'no-changeset')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole history, so the branch can be compared with its base.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      # Needs no install: it reads git and nothing else.
+      - run: npm run lint:changeset -- origin/${{ github.base_ref }}
+
   package:
     name: Package publishes correctly
     runs-on: ubuntu-24.04
@@ -179,9 +252,10 @@ jobs:
       fail-fast: false
       # The package claims Node >= 22 and the tarball is the thing a consumer
       # gets, so it is installed and used on each version the verify matrix
-      # tests, not only the oldest.
+      # tests, not only the oldest. On 26 that is the packed tarball with the
+      # runtime's own Temporal as its default date backend (#621).
       matrix:
-        node: [22, 24]
+        node: [22, 24, 26]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -280,3 +354,12 @@ jobs:
       # a job holding `id-token: write`, so that would be unreviewed code able
       # to mint a publishing credential for this package.
       - run: npm run lint:actions
+
+      # The engine's standalone Jest config agrees with the root one; it reads
+      # two config files and needs no install.
+      - run: npm run lint:jest-configs
+
+      # Every script in verify:ci is run by a job in a workflow a pull request
+      # triggers. The header of this file says the two cannot drift; this is
+      # what makes that true rather than hoped (#619).
+      - run: npm run lint:ci-parity

@@ -42,8 +42,16 @@ function passMs(text: string): number {
 	return Number(process.hrtime.bigint() - started) / 1e6;
 }
 
+/**
+ * A wall-clock ratio, which instrumentation breaks: under coverage the two
+ * sizes slow down unequally, and the ratio stops telling linear from quadratic
+ * (the daily coverage run failed on it, #690). Skipped there rather than
+ * widened, so the ordinary runs keep the limit that means something.
+ */
+const timed = process.env.SOLVE_COVERAGE === "1" ? test.skip : test;
+
 describe("cost of a pass", () => {
-	test("one total over N members is linear in N", () => {
+	timed("one total over N members is linear in N", () => {
 		// 0.08 s and 0.15 s here; before, this shape was already linear, so the
 		// point of the pair is that the index did not make it worse.
 		const small = passMs(membersThenOneTotal(10_000));
@@ -54,7 +62,7 @@ describe("cost of a pass", () => {
 		expect(large).toBeLessThan(small * 4 + 50);
 	});
 
-	test("aggregates over a growing document stay linear in the document", () => {
+	timed("aggregates over a growing document stay linear in the document", () => {
 		// The shape the walk was quadratic on, held to a fixed twenty totals so
 		// the aggregate work itself does not grow with the document. Before, ten
 		// thousand lines took 2.55 s and five thousand took 0.68 s, four times

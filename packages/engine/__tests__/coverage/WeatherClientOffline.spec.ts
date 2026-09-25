@@ -21,7 +21,7 @@
  * sixty-second coalescing cache cannot carry a result between tests.
  */
 
-import { afterEach, describe, expect, test } from "@jest/globals";
+import { afterEach, describe, expect, jest, test } from "@jest/globals";
 import { fetchCityWeather } from "@solve-js/packages/weather";
 import { WeatherErrorCodes } from "@solve-js/packages/weather/OpenMeteoClient";
 import { EngineError, ErrorCategory } from "@solve-js/errors/EngineError";
@@ -287,5 +287,32 @@ describe("the coalescing cache", () => {
 
 		expect(recovered.urls).toHaveLength(2);
 		expect(weather.resolvedName).toBe("Springfield");
+	});
+});
+
+describe("a stalled request (#620)", () => {
+	test("is aborted by the client's own timeout, with a DOMException naming the query", async () => {
+		// A request that never answers: the stub waits on its signal, the way a
+		// stalled connection does, and rejects with whatever aborted it.
+		const urls: string[] = [];
+		globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+			urls.push(String(input));
+			return new Promise<Response>((_resolve, reject) => {
+				init?.signal?.addEventListener("abort", () => reject(init.signal!.reason), { once: true });
+			});
+		}) as typeof fetch;
+		jest.useFakeTimers();
+		try {
+			const pending = fetchCityWeather("offlineville-timeout", liveSignal());
+			const caught = pending.catch((error: unknown) => error);
+			await jest.advanceTimersByTimeAsync(10_000);
+			const error = await caught;
+			expect(error).toBeInstanceOf(DOMException);
+			expect((error as DOMException).name).toBe("TimeoutError");
+			expect((error as DOMException).message).toBe("Open-Meteo weather query timed out after 10000ms");
+			expect(urls).toHaveLength(1);
+		} finally {
+			jest.useRealTimers();
+		}
 	});
 });

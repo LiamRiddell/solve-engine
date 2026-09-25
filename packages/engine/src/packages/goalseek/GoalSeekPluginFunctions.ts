@@ -81,9 +81,15 @@ export function goalSeekHandler(args: Value[], context?: LineExecutionContext): 
 	const probe = context?.evaluateLineWithBinding;
 	const getLineReads = context?.getLineReads;
 	if (!probe || !getLineReads) {
+		// Two callers reach here, and the message says which (#617): the batch
+		// pass has a document (it can count its lines) but evaluates each line
+		// once, and the single-expression entry point has no document at all.
+		// It used to give both the second sentence, which was wrong for the first.
 		return errorValue(
 			"GOAL_SEEK_NO_DOCUMENT",
-			"Goal seek only works inside a document, since it re-runs another line. The single-expression entry point has no document to solve against.",
+			context?.getLineCount
+				? "Goal seek re-runs another line, which the batch pass (parseDocument) cannot do: it evaluates each line once. evaluateDocument and a live editor can solve it."
+				: "Goal seek only works inside a document, since it re-runs another line. The single-expression entry point has no document to solve against.",
 		);
 	}
 

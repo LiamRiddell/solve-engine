@@ -19,6 +19,11 @@
 
 const full = require("./jest.full.config.cjs");
 
+// Tells a test that coverage is being measured. Instrumentation changes the
+// cost of two input sizes unequally, so a wall-clock ratio stops telling linear
+// from quadratic here, and those assertions skip rather than widen (#690).
+process.env.SOLVE_COVERAGE = "1";
+
 /** @type {import('jest').Config} */
 module.exports = {
 	...full,
