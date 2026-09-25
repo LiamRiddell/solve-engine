@@ -245,6 +245,12 @@ const withinUnit = (x: number): boolean => x >= -1 && x <= 1;
 const positive = (x: number): boolean => x > 0;
 
 /**
+ * Whether an angle is finite, the domain of the trigonometric functions. The
+ * sine of an infinite angle has no value; `Math.sin` answered NaN (#600).
+ */
+const finiteAngle = (x: number): boolean => Number.isFinite(x);
+
+/**
  * The plural spelling of a unit, when the count calls for one and the table
  * has it.
  *
@@ -616,11 +622,11 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // sin/cos/tan accept an angle with a unit; see angleInRadians().
     // Exact at the special angles; see specialAngleDegrees().
     // A quantity that is not an angle is refused; see quantityRefused().
-    2: (args) => quantityRefused("sin", args[0], true) ?? numberValue(exactSine(angleInRadians(args[0]))),
-    3: (args) => quantityRefused("cos", args[0], true) ?? numberValue(exactCosine(angleInRadians(args[0]))),
+    2: (args) => quantityRefused("sin", args[0], true) ?? outsideDomain("sin", angleInRadians(args[0]), finiteAngle, "finite angles") ?? numberValue(exactSine(angleInRadians(args[0]))),
+    3: (args) => quantityRefused("cos", args[0], true) ?? outsideDomain("cos", angleInRadians(args[0]), finiteAngle, "finite angles") ?? numberValue(exactCosine(angleInRadians(args[0]))),
     // tan refuses the odd multiples of a right angle and is exact at the other
     // special angles; see exactTangent().
-    4: (args) => quantityRefused("tan", args[0], true) ?? exactTangent(angleInRadians(args[0])),
+    4: (args) => quantityRefused("tan", args[0], true) ?? outsideDomain("tan", angleInRadians(args[0]), finiteAngle, "finite angles") ?? exactTangent(angleInRadians(args[0])),
     // The logarithms and inverse functions refuse a value outside their domain
     // rather than answering NaN or an infinity; see outsideDomain().
     // The logarithms, exponentials, inverse and hyperbolic functions take a
@@ -1420,9 +1426,9 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // other way to say the same thing; both exist because both get typed.
     // The degree forms read an angle quantity in its own unit, and refuse any
     // other quantity (#592); see degreeArgumentInRadians().
-    87: (args) => quantityRefused("sind", args[0], true) ?? numberValue(exactSine(degreeArgumentInRadians(args[0]))),
-    88: (args) => quantityRefused("cosd", args[0], true) ?? numberValue(exactCosine(degreeArgumentInRadians(args[0]))),
-    89: (args) => quantityRefused("tand", args[0], true) ?? exactTangent(degreeArgumentInRadians(args[0])),
+    87: (args) => quantityRefused("sind", args[0], true) ?? outsideDomain("sind", degreeArgumentInRadians(args[0]), finiteAngle, "finite angles") ?? numberValue(exactSine(degreeArgumentInRadians(args[0]))),
+    88: (args) => quantityRefused("cosd", args[0], true) ?? outsideDomain("cosd", degreeArgumentInRadians(args[0]), finiteAngle, "finite angles") ?? numberValue(exactCosine(degreeArgumentInRadians(args[0]))),
+    89: (args) => quantityRefused("tand", args[0], true) ?? outsideDomain("tand", degreeArgumentInRadians(args[0]), finiteAngle, "finite angles") ?? exactTangent(degreeArgumentInRadians(args[0])),
     90: (args) => quantitiesRefused("asind", args) ?? outsideDomain("asind", args[0].toNumber(), withinUnit, "numbers from -1 to 1") ?? numberValue(Math.asin(args[0].toNumber()) * 180 / Math.PI),
     91: (args) => quantitiesRefused("acosd", args) ?? outsideDomain("acosd", args[0].toNumber(), withinUnit, "numbers from -1 to 1") ?? numberValue(Math.acos(args[0].toNumber()) * 180 / Math.PI),
     92: (args) => quantitiesRefused("atand", args) ?? numberValue(Math.atan(args[0].toNumber()) * 180 / Math.PI),

@@ -322,7 +322,8 @@ describe("the boundary", () => {
 
 	test("a zero divisor keeps the double's answer", () => {
 		expect(num("0.5 / 0")).toBe(Infinity);
-		expect(Number.isNaN(num("0.5 mod 0"))).toBe(true);
+		// A remainder by zero has no value, and is refused by name (#600).
+		expect(evaluate("0.5 mod 0").errorCode).toBe("REMAINDER_UNDEFINED");
 		expect(num("0.0 ^ -1")).toBe(Infinity);
 	});
 

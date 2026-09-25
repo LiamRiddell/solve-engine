@@ -21,6 +21,14 @@ word form for each, so a line can be written whichever way reads more naturally.
 `%` is the percent operator, not modulo. Writing `17 % 5` is a parse error
 because `17 %` is already a complete expression. Use `mod` or `modulo`.
 
+`mod` gives the remainder left over after dividing, the 2 in "17 is three fives
+and 2 over". A remainder by zero has none, since the division never ends, and
+neither does a remainder of an infinite number, so both are refused by name.
+
+```solve-doc
+5 mod 0 // ERROR: 5 mod 0 has no value: nothing is left over from a division by zero, because it never ends.
+```
+
 `^` is the only operator that groups from the right. A tower of powers is
 worked out from the top down, as in mathematics: `2^3^2` means `2^(3^2)`, which
 is 2^9. Everything else groups from the left, so `10-3-2` is `(10-3)-2`.
