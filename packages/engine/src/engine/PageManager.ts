@@ -191,14 +191,14 @@ export class PageManager {
 	getPreloadTargets(
 		viewport: { startLine: number; endLine: number },
 		doc: DocumentModel
-	): Array<{ lineId: number; expression: string; textHash: number }> {
+	): Array<{ lineId: number; expression: string; textHash: number; text: string }> {
 		// Use the direction saved by the last maintainAfterEval call.
 		// We cannot re-detect because maintainAfterEval already updated
 		// lastViewportStart to the current viewport position.
 		const direction = this.savedDirection;
 		if (!direction) return [];
 
-		const items: Array<{ lineId: number; expression: string; textHash: number }> = [];
+		const items: Array<{ lineId: number; expression: string; textHash: number; text: string }> = [];
 		// Use viewport end page for downward preload start, start page for upward.
 		// This ensures we preload *beyond* the full viewport span, not just its start.
 		const viewportEndPage = PageManager.pageForLine(viewport.endLine);
@@ -241,6 +241,7 @@ export class PageManager {
 							lineId: state.lineId,
 							expression,
 							textHash: state.textHash,
+							text: state.text,
 						});
 					}
 				} else {
@@ -253,6 +254,7 @@ export class PageManager {
 								lineId: state.lineId,
 								expression: span.expression,
 								textHash: state.textHash,
+								text: state.text,
 							});
 						}
 					} else {
@@ -263,6 +265,7 @@ export class PageManager {
 								lineId: state.lineId,
 								expression,
 								textHash: state.textHash,
+								text: state.text,
 							});
 						}
 					}

@@ -58,6 +58,10 @@ export const CoreErrorCodes = {
   TOO_MANY_ANONYMOUS_BODIES: "TOO_MANY_ANONYMOUS_BODIES",
   /** New with the 2.0 descriptor redesign: a parselet emits a plugin call by NAME (`BytecodeBuilder.emitPluginCall(name, argCount)`) and the engine resolves that name to the index it assigned at registration. This fires when the name is absent from the builder's name->index map: the package used a `pluginFunctions` name it never declared, or the expression was parsed before that package registered. Not a user-input error; a package-authoring/registration fault. See `parser/BytecodeBuilder.ts`'s `emitPluginCall()`. */
   UNKNOWN_PLUGIN_FUNCTION: "UNKNOWN_PLUGIN_FUNCTION",
+  /** A plugin function's promise was rejected. The line reports the rejection's message rather than waiting again. */
+  PLUGIN_CALL_FAILED: "PLUGIN_CALL_FAILED",
+  /** A plugin function's promise resolved to something that is not a Value. An authoring fault, reported on the line. */
+  PLUGIN_RESULT_NOT_A_VALUE: "PLUGIN_RESULT_NOT_A_VALUE",
 
   // ── VM (vm/VM.ts, vm/OpRegistry.ts, vm/VMBuiltins.ts) ──
   EVALUATION_ERROR: "EVALUATION_ERROR",
@@ -249,8 +253,10 @@ export const CoreErrorCodes = {
   SNAPSHOT_VERSION_MISMATCH: "SNAPSHOT_VERSION_MISMATCH",
   /** A snapshot with the right envelope but internally inconsistent contents (an unrecognised number sentinel, an unknown value tag). Distinct from a version mismatch: the format is right, the payload is not. */
   SNAPSHOT_MALFORMED: "SNAPSHOT_MALFORMED",
-  /** A value the v1 snapshot format cannot yet represent (a symbolic/algebra value, a symbolic matrix cell). Deferred to a follow-up; refused by name rather than dropped silently. */
+  /** A value the snapshot format cannot yet represent (a symbolic value or matrix cell, a colour, a split, a chart, an IP subnet). `toJSON` catches it and leaves the value out (#665). */
   SNAPSHOT_UNSUPPORTED_VALUE: "SNAPSHOT_UNSUPPORTED_VALUE",
+  /** A snapshot calls a plugin function that no package registered on the restoring engine provides. Refused rather than restored, since the call would run whatever sits at its old index (#658). */
+  SNAPSHOT_PACKAGE_MISSING: "SNAPSHOT_PACKAGE_MISSING",
 
   // ── Config (constants/Configuration.ts) ──
   CONFIG_PATH_NOT_FOUND: "CONFIG_PATH_NOT_FOUND",
@@ -271,6 +277,8 @@ export const CoreErrorCodes = {
   /** A package registered an operator the scanner cannot read: not exactly two characters, or a first character the scanner does not class as an operator. It used to register and never fire. Recoverable. */
   PLUGIN_OPERATOR_UNSUPPORTED: "PLUGIN_OPERATOR_UNSUPPORTED",
   PLUGIN_KEYWORD_COLLISION: "PLUGIN_KEYWORD_COLLISION",
+  /** A package's `callFusions` names a word the engine already reads as something other than a plain word (a keyword, a built-in function, a unit), so the call could never fire. It used to register and stay silent. Recoverable. */
+  PLUGIN_CALL_FUSION_UNREACHABLE: "PLUGIN_CALL_FUSION_UNREACHABLE",
   PLUGIN_UNIT_COLLISION: "PLUGIN_UNIT_COLLISION",
   /** A package's declared `IEnginePackage.engineVersion` semver range doesn't satisfy the running engine's ENGINE_VERSION. See api/EngineVersionCompatibility.ts. */
   PACKAGE_ENGINE_VERSION_MISMATCH: "PACKAGE_ENGINE_VERSION_MISMATCH",

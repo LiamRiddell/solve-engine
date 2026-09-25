@@ -77,6 +77,12 @@ export interface SerializedWorkerValue {
 	nonFinite?: "Infinity" | "-Infinity" | "NaN";
 	/** Unit annotation for unit-of-measurement and non-decimal-base values, when present. */
 	unit?: string;
+	/**
+	 * The error's code (`INCOMPATIBLE_UNITS`, `UNDEFINED_FUNCTION`), present only for
+	 * {@link ValueType.Error}, so a host branches on the code the way it would on
+	 * a main-thread value's `errorCode`, rather than on the message text (#662).
+	 */
+	errorCode?: string;
 	/** Base-ten string for a `bigint` payload, so no `BigInt` ever crosses `JSON`. */
 	bigint?: string;
 	/** Matrix shape and cells, present only for {@link ValueType.Matrix}. */

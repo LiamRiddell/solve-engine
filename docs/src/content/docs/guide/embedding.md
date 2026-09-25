@@ -183,14 +183,26 @@ carried as ordinary arrays.
 ### Passing the same packages back
 
 `fromJSON` rebuilds the engine with the snapshot's own locale but, by default,
-no packages, exactly as the constructor does. Always pass the **same** `packages`
-set the snapshot was taken with (`BUILTIN_PACKAGES` for a full engine): a snapshot
-carries compiled bytecode whose plugin indices and operators only line up against
-the packages that were present when it was written.
+no packages, exactly as the constructor does. Pass the **same** `packages` set
+the snapshot was taken with (`BUILTIN_PACKAGES` for a full engine).
 
 ```ts
 const restored = ExpressionEngine.fromJSON(state, { packages: myPackages });
 ```
+
+The order of that list does not matter, and neither does what else the process
+has registered. A package function is reached through a number the process
+hands out as packages register, so the same function has a different number in
+another process, or when the packages arrive in another order. The snapshot
+therefore records each call by the package and function behind it, and
+`fromJSON` points each call at the function by that name on the restored engine.
+A snapshot that calls a function none of the packages provides is refused with
+`SNAPSHOT_PACKAGE_MISSING`, rather than restored to run whatever sits at the old
+number.
+
+Snapshots written before this (format version 1) still restore. They do not name
+their calls, so a cached line that calls a package function is left out and
+recompiles when it is next evaluated; everything else restores as before.
 
 `fromJSON` also accepts `config`, `diagnostics`, `calendar` and a `locale` override, all
 matching the constructor.
@@ -217,16 +229,19 @@ matching the constructor.
   [keeping an answer fixed](/guide/async-and-live-data/#keeping-an-answer-fixed).
 - **Not carried: package-contributed state.** Only core engine state is
   snapshotted for now; a package opt-in is planned.
-- **Deferred: symbolic (algebra) values.** A variable holding one makes
-  `toJSON()` throw a clear, coded error rather than dropping it silently; a
-  cached line whose result is symbolic is skipped and simply re-evaluates on
-  restore.
+- **Left out: values the format cannot hold yet.** A symbolic (algebra)
+  result, a colour, a bill split, a chart and an IP subnet have no snapshot form
+  yet. A variable or cached line holding one is left out of the snapshot, and
+  `toJSON()` does not throw: one algebra line should not make a whole notepad
+  impossible to save. After `fromJSON` the name is undefined until the host
+  re-evaluates the document, which defines it again; everything else in the
+  snapshot restores as usual.
 
 ### Refusing an incompatible snapshot
 
-Every snapshot carries a format version. `fromJSON` restores only the version it
-was built for and refuses anything else, or any object that is not a snapshot at
-all, with a coded `SNAPSHOT_VERSION_MISMATCH` error rather than restoring it
+Every snapshot carries a format version. `fromJSON` restores the versions it
+knows (1 and 2) and refuses anything else, or any object that is not a snapshot
+at all, with a coded `SNAPSHOT_VERSION_MISMATCH` error rather than restoring it
 wrongly.
 
 ```ts

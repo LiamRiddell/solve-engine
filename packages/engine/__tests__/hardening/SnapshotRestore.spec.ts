@@ -274,7 +274,8 @@ describe("a snapshot is plain JSON", () => {
 		engine.parseDocument(":x = 1");
 		const snapshot = engine.toJSON();
 		expect(snapshot.format).toBe("solve-engine/snapshot");
-		expect(snapshot.version).toBe(1);
+		// Version 2 names the plugin function behind every call (#658).
+		expect(snapshot.version).toBe(2);
 		expect(typeof snapshot.engineVersion).toBe("string");
 	});
 });

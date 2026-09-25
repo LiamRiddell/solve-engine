@@ -94,11 +94,28 @@ export function createLinkedTransports(): { client: WorkerTransport; host: Worke
 	return { client, host };
 }
 
-/** The `postMessage`/`onmessage`/event-listener shape a browser `Worker`, a worker's `self`, or a DOM `MessagePort` presents. */
-interface EventTargetLike {
+/**
+ * A message handler, compared bivariantly.
+ *
+ * Declared through a method so TypeScript compares its parameter both ways: a
+ * DOM `Worker`'s `onmessage` takes a full `MessageEvent`, and a plain
+ * function-typed property is compared contravariantly under `strict`, which
+ * refused a real `Worker` (#662).
+ */
+type MessageEventHandler = { bivarianceHack(event: { data: unknown }): void }["bivarianceHack"];
+
+/**
+ * The `postMessage`/`onmessage`/event-listener shape a browser `Worker`, a
+ * worker's `self`, or a DOM `MessagePort` presents.
+ *
+ * A DOM `Worker`, a `DedicatedWorkerGlobalScope` and a `MessagePort` each
+ * satisfy it under `strict` with the DOM or WebWorker lib. Exported so a host
+ * adapting something else can name the shape it has to present.
+ */
+export interface EventTargetLike {
 	postMessage(message: unknown): void;
 	addEventListener?(type: "message", handler: (event: { data: unknown }) => void): void;
-	onmessage?: ((event: { data: unknown }) => void) | null;
+	onmessage?: MessageEventHandler | null;
 	terminate?(): void;
 	close?(): void;
 	start?(): void;
@@ -134,8 +151,8 @@ export function eventTargetTransport(target: EventTargetLike): WorkerTransport {
 	};
 }
 
-/** The `postMessage`/`on("message")` shape a Node `worker_threads` `Worker`, `parentPort`, or `MessagePort` presents. */
-interface MessagePortLike {
+/** The `postMessage`/`on("message")` shape a Node `worker_threads` `Worker`, `parentPort`, or `MessagePort` presents. Exported so a host can name it. */
+export interface MessagePortLike {
 	postMessage(message: unknown): void;
 	on(event: "message", handler: (message: unknown) => void): void;
 	terminate?(): void;

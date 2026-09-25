@@ -98,8 +98,27 @@ need it. A handler that reads or steps a date takes the backend with
 `calendarOf(context)` from `solve-engine/engine` rather than reading
 `context.calendar` directly, because the context is optional (a direct call from
 a test passes none) and `calendarOf` answers the built-in `Date` backend in that
-case. A handler may return a `Promise<Value>` for data it has to fetch, but for
-that an [async data source](/guide/async-data-sources/) is usually the better fit.
+case.
+
+A handler may return a `Promise<Value>` for data it has to fetch. The line goes
+pending, and when the promise settles the engine announces the line
+(`lines-updated`) and re-evaluates it, calling the handler once more. A handler
+that stored what it fetched can answer that call directly, and its answer is
+used. A handler that returns another promise instead is answered with what the
+first one settled to, and is not called again for that argument list, so it is
+called at most twice per distinct argument list. A re-evaluation while the
+promise is still in flight gets the same promise, and two lines with the same
+arguments share the call. Arguments that differ in type or unit (`5`,
+`"5"`, `5 m`) are separate calls. A rejection settles to a `PLUGIN_CALL_FAILED`
+error carrying the rejection's message, and a promise that resolves to anything
+other than a Value settles to `PLUGIN_RESULT_NOT_A_VALUE`.
+
+What a call settled to is kept for the life of the engine (up to a thousand
+calls, oldest dropped first) and is dropped when the package is unregistered.
+A raw handler has no refresh cadence and no retry, so a value that goes stale,
+or a request that should be tried again after a failure, wants an
+[async data source](/guide/async-data-sources/) built on `createQueryResolver`,
+which pairs the fetch with its own cache and refresh interval.
 
 Check your own arguments, and return an `errorValue(code, message)` rather than
 throwing when they are wrong, as `doubleHandler` does above. A returned error is a

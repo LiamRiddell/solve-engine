@@ -39,6 +39,8 @@ import type { Rational } from "@solve-js/symbolic";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import type { ValueSource, SourceKind } from "@solve-js/vm/Provenance";
 import type { FrozenDirective, FrozenRecord } from "@solve-js/vm/FrozenValues";
+import { OpCode } from "@solve-js/parser/OpCode";
+import { OPERAND_BYTES } from "@solve-js/parser/OperandWidth";
 
 /**
  * The magic string every snapshot carries, so a host handing `fromJSON` an
@@ -49,15 +51,25 @@ export const SNAPSHOT_FORMAT = "solve-engine/snapshot" as const;
 
 /**
  * The snapshot layout version, bumped whenever the serialised shape changes in
- * a way an older reader cannot understand. `fromJSON` accepts only the exact
- * version it was built for and refuses anything else with a coded error, which
- * is the whole point of the field: a snapshot taken by a future (or older)
- * engine is rejected loudly instead of being restored wrongly. This is separate
+ * a way an older reader cannot understand. `fromJSON` accepts the versions it
+ * knows (see RESTORABLE_VERSIONS) and refuses anything else with a coded error,
+ * which is the whole point of the field: a snapshot taken by a future engine is
+ * rejected loudly instead of being restored wrongly. This is separate
  * from the engine's own semver (recorded alongside it as {@link
  * EngineSnapshot.engineVersion} for diagnostics), because the serialised shape
  * and the published API version do not have to move together.
  */
-export const SNAPSHOT_VERSION = 1 as const;
+export const SNAPSHOT_VERSION = 2 as const;
+
+/**
+ * The versions `fromJSON` restores. Version 2 names the plugin function behind
+ * every call a compiled program makes (see {@link SerializedPluginCall}, #658).
+ * Version 1 did not, so its index bytes meant whatever the writing process had
+ * registered at them; a version 1 program that calls a plugin function is left
+ * out on restore and recompiles when its line is next evaluated, and the rest of
+ * a version 1 snapshot restores as it always did.
+ */
+const RESTORABLE_VERSIONS: ReadonlySet<number> = new Set([1, SNAPSHOT_VERSION]);
 
 // ── JSON-safe number encoding ──────────────────────────────────────────────
 
@@ -120,9 +132,12 @@ export interface SerializedValueSidecars {
  * A {@link Value} in JSON-safe form, discriminated by its {@link ValueType}
  * on the `t` field. Only the types a session can leave in a variable, a
  * function result, or a cached line are represented; {@link ValueType.Pending}
- * is filtered out upstream (an in-flight async result), and
- * {@link ValueType.Symbolic} plus symbolic matrix cells are refused with a
- * clear error (deferred, see the module doc).
+ * is filtered out upstream (an in-flight async result). A symbolic value, a
+ * symbolic matrix cell, a colour, a split, a chart and an IP subnet have no form
+ * here: {@link serializeValue} refuses them with
+ * {@link SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE}, and
+ * `ExpressionEngine.toJSON` catches that refusal and leaves the variable or
+ * cached line out of the snapshot (#665).
  */
 export type SerializedValue = SerializedValueSidecars & (
 	| { t: ValueType.Number; v: SerializedNumber; exact?: SerializedDecimal; rational?: SerializedRational }
@@ -149,6 +164,30 @@ export interface SerializedBytecode {
 	anonymousBodies?: SerializedAnonymousBody[];
 	/** A frozen line's directive (see `vm/FrozenValues.ts`), carried so a restored line still answers from the store. */
 	frozen?: FrozenDirective;
+	/**
+	 * The plugin function behind each plugin call in {@link opcodes}, in the order
+	 * the calls appear. Written from version 2, and present only when the program
+	 * makes a call. A restore relinks each call by these names (#658).
+	 */
+	pluginCalls?: SerializedPluginCall[];
+}
+
+/**
+ * A plugin function a compiled program calls, named by the package that
+ * registered it and its name in that package (#658).
+ *
+ * A plugin function's index is allocated process-wide, in the order packages
+ * first register, so the index baked into a program means nothing in another
+ * process, or after the same packages are passed in another order: a restored
+ * `zbeta(21)` ran `zalpha` and answered 1,021. The snapshot names each call
+ * instead, and a restore relinks it against the restoring engine's own index,
+ * or refuses the snapshot when no registered package provides it.
+ */
+export interface SerializedPluginCall {
+	/** The package that registered the function, as `IEnginePackage.name`. */
+	pkg: string;
+	/** The function's name in that package's `pluginFunctions`. */
+	name: string;
 }
 
 /** A {@link UserFunctionDef}: name, parameter names, and the body compiled to its own program. */
@@ -227,8 +266,10 @@ export const SnapshotErrorCodes = {
 	SNAPSHOT_VERSION_MISMATCH: "SNAPSHOT_VERSION_MISMATCH",
 	/** A snapshot with the right envelope but internally inconsistent contents (a bad number sentinel, a missing field). */
 	SNAPSHOT_MALFORMED: "SNAPSHOT_MALFORMED",
-	/** A value the snapshot format cannot yet represent (a symbolic expression, a symbolic matrix cell). Deferred, see the module doc. */
+	/** A value the snapshot format cannot yet represent (a symbolic expression or matrix cell, a colour, a split, a chart, an IP subnet). `toJSON` catches it and leaves the value out. */
 	SNAPSHOT_UNSUPPORTED_VALUE: "SNAPSHOT_UNSUPPORTED_VALUE",
+	/** The snapshot calls a plugin function that no package registered on the restoring engine provides. Refused rather than restored, since the call would run whatever sits at its old index (#658). */
+	SNAPSHOT_PACKAGE_MISSING: "SNAPSHOT_PACKAGE_MISSING",
 } as const;
 
 // ── Value serialisation ─────────────────────────────────────────────────────
@@ -272,8 +313,10 @@ function unsupportedValue(type: ValueType, where: string): never {
  * @param where - A short human label for the value's origin (`variable "x"`, a
  *   line number), folded into the error message when the type is unsupported so
  *   the host learns which value refused rather than only that one did.
- * @throws {@link SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE} for a symbolic
- *   value (or a symbolic matrix cell), the one class this v1 format defers.
+ * @throws {@link SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE} for a value
+ *   this v1 format defers: a symbolic value or matrix cell, a colour, a split, a
+ *   chart or an IP subnet. `ExpressionEngine.toJSON` catches it and leaves the
+ *   value out of the snapshot.
  */
 export function serializeValue(value: Value, where: string): SerializedValue {
 	const out = serializeValueBody(value, where);
@@ -425,8 +468,49 @@ export function deserializeFrozenRecord(sr: SerializedFrozenRecord): FrozenRecor
 
 // ── Bytecode serialisation ──────────────────────────────────────────────────
 
-/** Turn a compiled {@link BytecodeProgram} into its JSON-safe form, recursively for nested function and anonymous bodies. */
-export function serializeBytecode(program: BytecodeProgram): SerializedBytecode {
+/** Where each plugin call's opcode sits in `opcodes`, in order, found by walking the instructions rather than trusting a recorded list. */
+function pluginCallSites(opcodes: ArrayLike<number>): number[] {
+	const sites: number[] = [];
+	for (let i = 0; i < opcodes.length; i += 1 + (OPERAND_BYTES[opcodes[i]] ?? 0)) {
+		const op = opcodes[i];
+		if (op === OpCode.CALL_PLUGIN || op === OpCode.CALL_PLUGIN_WIDE) sites.push(i);
+	}
+	return sites;
+}
+
+/** The plugin-function index the call whose opcode is at `site` carries. */
+function pluginIndexAt(opcodes: ArrayLike<number>, site: number): number {
+	return opcodes[site] === OpCode.CALL_PLUGIN_WIDE ? (opcodes[site + 1] | (opcodes[site + 2] << 8)) : opcodes[site + 1];
+}
+
+/** Names the plugin function at an index of the writing engine, or undefined when no registered package holds that index. */
+export type PluginCallNamer = (index: number) => SerializedPluginCall | undefined;
+
+/**
+ * Whether every plugin call in `program`, and in the bodies nested in it, names
+ * a function the writing engine has registered. A program that fails this could
+ * not be relinked anywhere, so `toJSON` leaves it out.
+ *
+ * @param program - The compiled program.
+ * @param namer - The writing engine's index-to-name lookup.
+ */
+export function namesEveryPluginCall(program: BytecodeProgram, namer: PluginCallNamer): boolean {
+	for (const site of pluginCallSites(program.opcodes)) {
+		if (namer(pluginIndexAt(program.opcodes, site)) === undefined) return false;
+	}
+	for (const fn of program.userFunctionBodies ?? []) if (!namesEveryPluginCall(fn.program, namer)) return false;
+	for (const body of program.anonymousBodies ?? []) if (!namesEveryPluginCall(body.program, namer)) return false;
+	return true;
+}
+
+/**
+ * Turn a compiled {@link BytecodeProgram} into its JSON-safe form, recursively for nested function and anonymous bodies.
+ *
+ * @param program - The compiled program.
+ * @param namer - Names each plugin call for {@link SerializedBytecode.pluginCalls}. Without it no call is named, and a
+ *   restore will not trust the program's plugin calls.
+ */
+export function serializeBytecode(program: BytecodeProgram, namer?: PluginCallNamer): SerializedBytecode {
 	const out: SerializedBytecode = {
 		opcodes: Array.from(program.opcodes),
 		numbers: Array.from(program.numbers, encodeNumber),
@@ -434,12 +518,122 @@ export function serializeBytecode(program: BytecodeProgram): SerializedBytecode 
 		hasAsync: program.hasAsync,
 	};
 	if (program.constants) out.constants = Array.from(program.constants.entries());
-	if (program.userFunctionBodies) out.userFunctionBodies = program.userFunctionBodies.map(serializeUserFunction);
+	if (program.userFunctionBodies) out.userFunctionBodies = program.userFunctionBodies.map((fn) => serializeUserFunction(fn, namer));
 	if (program.anonymousBodies) {
-		out.anonymousBodies = program.anonymousBodies.map((b) => ({ params: b.params.slice(), program: serializeBytecode(b.program) }));
+		out.anonymousBodies = program.anonymousBodies.map((b) => ({ params: b.params.slice(), program: serializeBytecode(b.program, namer) }));
 	}
 	if (program.frozen) out.frozen = { ...program.frozen };
+	if (namer) {
+		const sites = pluginCallSites(program.opcodes);
+		// An unnamed call is written as an empty name, which a restore refuses;
+		// `toJSON` checks namesEveryPluginCall first, so it does not write one.
+		if (sites.length > 0) out.pluginCalls = sites.map((site) => namer(pluginIndexAt(program.opcodes, site)) ?? { pkg: "", name: "" });
+	}
 	return out;
+}
+
+/** Resolves a named plugin call to the index the restoring engine holds it at, or undefined when no registered package provides it. */
+export type PluginCallLinker = (call: SerializedPluginCall) => number | undefined;
+
+/**
+ * Refuse the snapshot when a program in it calls a plugin function the restoring
+ * engine does not have, before anything is restored (#658).
+ *
+ * Also checks that a program names exactly as many calls as its opcodes make: a
+ * hand-edited snapshot that added a call, or dropped a name, is malformed rather
+ * than relinked out of step.
+ *
+ * @param sb - A program from a version 2 snapshot.
+ * @param link - The restoring engine's name-to-index lookup.
+ * @param where - The program's path in the snapshot, for the error.
+ * @throws {@link SnapshotErrorCodes.SNAPSHOT_PACKAGE_MISSING} or {@link SnapshotErrorCodes.SNAPSHOT_MALFORMED}.
+ */
+export function assertPluginCallsLinkable(sb: SerializedBytecode, link: PluginCallLinker, where: string): void {
+	const sites = pluginCallSites(sb.opcodes);
+	const calls = sb.pluginCalls ?? [];
+	if (calls.length !== sites.length) {
+		malformed(`${where}.pluginCalls`, `one named call for each of the program's ${sites.length} plugin calls`, sb.pluginCalls);
+	}
+	for (const call of calls) {
+		if (link(call) === undefined) {
+			throw ErrorFactory.validation({
+				code: SnapshotErrorCodes.SNAPSHOT_PACKAGE_MISSING,
+				message: `This snapshot calls the plugin function "${call.name}" from the package "${call.pkg}", which is not registered on this engine.`,
+				expected: `the package "${call.pkg}" among the packages passed to fromJSON`,
+				found: "no package providing it",
+				suggestion: "Restore with the same packages the snapshot was taken with, or re-evaluate the document from source.",
+				context: { location: where, package: call.pkg, function: call.name },
+			});
+		}
+	}
+	(sb.userFunctionBodies ?? []).forEach((fn, i) => assertPluginCallsLinkable(fn.program, link, `${where}.userFunctionBodies[${i}].program`));
+	(sb.anonymousBodies ?? []).forEach((body, i) => assertPluginCallsLinkable(body.program, link, `${where}.anonymousBodies[${i}].program`));
+}
+
+/**
+ * Rebuild a program for the restoring engine, relinking each plugin call by
+ * name, or null when it cannot be relinked and should be recompiled from its
+ * line instead (#658).
+ *
+ * `link` is null for a version 1 snapshot, whose programs name no calls: a v1
+ * program that calls a plugin function is not trusted and comes back null. For
+ * a version 2 program each call is relinked in order (run
+ * {@link assertPluginCallsLinkable} first, which refuses a missing package). A
+ * call compiled with a one-byte index that this engine holds past 255 comes back
+ * null too, since the call cannot be widened in place.
+ *
+ * @param sb - The serialised program.
+ * @param link - The restoring engine's name-to-index lookup, or null for a version 1 snapshot.
+ */
+export function restoreBytecode(sb: SerializedBytecode, link: PluginCallLinker | null): BytecodeProgram | null {
+	const opcodes = Uint8Array.from(sb.opcodes);
+	const sites = pluginCallSites(opcodes);
+	if (sites.length > 0) {
+		if (link === null || sb.pluginCalls === undefined) return null;
+		for (let i = 0; i < sites.length; i++) {
+			const index = link(sb.pluginCalls[i]);
+			const site = sites[i];
+			if (index === undefined) return null;
+			if (opcodes[site] === OpCode.CALL_PLUGIN_WIDE) {
+				opcodes[site + 1] = index & 0xff;
+				opcodes[site + 2] = (index >> 8) & 0xff;
+			} else if (index <= 0xff) {
+				opcodes[site + 1] = index;
+			} else {
+				return null;
+			}
+		}
+	}
+	const program: BytecodeProgram = {
+		opcodes,
+		numbers: Float64Array.from(sb.numbers, decodeNumber),
+		strings: sb.strings.slice(),
+		hasAsync: sb.hasAsync,
+	};
+	// The names a fresh compile records, so a restored program keys its seeded
+	// draws the way the same line compiled here would (see SeededRandom.ts).
+	if (sites.length > 0) program.pluginCalls = { at: sites.map((site) => site + 1), names: sb.pluginCalls!.map((call) => call.name) };
+	if (sb.constants) program.constants = new Map(sb.constants);
+	if (sb.userFunctionBodies) {
+		const bodies: UserFunctionDef[] = [];
+		for (const fn of sb.userFunctionBodies) {
+			const body = restoreBytecode(fn.program, link);
+			if (body === null) return null;
+			bodies.push({ name: fn.name, params: fn.params.slice(), program: body });
+		}
+		program.userFunctionBodies = bodies;
+	}
+	if (sb.anonymousBodies) {
+		const bodies: AnonymousBodyDef[] = [];
+		for (const b of sb.anonymousBodies) {
+			const body = restoreBytecode(b.program, link);
+			if (body === null) return null;
+			bodies.push({ params: b.params.slice(), program: body });
+		}
+		program.anonymousBodies = bodies;
+	}
+	if (sb.frozen) program.frozen = { ...sb.frozen };
+	return program;
 }
 
 /** Reverse {@link serializeBytecode}, rebuilding the typed arrays and nested bodies. */
@@ -459,9 +653,9 @@ export function deserializeBytecode(sb: SerializedBytecode): BytecodeProgram {
 	return program;
 }
 
-/** Serialise one user-defined function, body and all. */
-export function serializeUserFunction(fn: UserFunctionDef): SerializedUserFunction {
-	return { name: fn.name, params: fn.params.slice(), program: serializeBytecode(fn.program) };
+/** Serialise one user-defined function, body and all, naming its plugin calls with `namer` when one is given (see {@link serializeBytecode}). */
+export function serializeUserFunction(fn: UserFunctionDef, namer?: PluginCallNamer): SerializedUserFunction {
+	return { name: fn.name, params: fn.params.slice(), program: serializeBytecode(fn.program, namer) };
 }
 
 /** Reverse {@link serializeUserFunction}. */
@@ -512,11 +706,11 @@ export function assertRestorable(snapshot: unknown): asserts snapshot is EngineS
 		});
 	}
 
-	if (candidate.version !== SNAPSHOT_VERSION) {
+	if (typeof candidate.version !== "number" || !RESTORABLE_VERSIONS.has(candidate.version)) {
 		throw ErrorFactory.validation({
 			code: SnapshotErrorCodes.SNAPSHOT_VERSION_MISMATCH,
-			message: `This snapshot was written for format version ${candidate.version}, but this engine restores version ${SNAPSHOT_VERSION}.`,
-			expected: `snapshot version ${SNAPSHOT_VERSION}`,
+			message: `This snapshot was written for format version ${candidate.version}, but this engine restores versions 1 and ${SNAPSHOT_VERSION}.`,
+			expected: `snapshot version 1 or ${SNAPSHOT_VERSION}`,
 			found: `version ${candidate.version}`,
 			suggestion: "Regenerate the snapshot with a matching engine version, or re-evaluate the document from source.",
 			context: { snapshotVersion: candidate.version, readerVersion: SNAPSHOT_VERSION, engineVersion: candidate.engineVersion },
@@ -712,6 +906,10 @@ function assertBytecodeShape(sb: unknown, where: string, depth: number): void {
 	if (sb.userFunctionBodies !== undefined) {
 		if (!Array.isArray(sb.userFunctionBodies)) malformed(`${where}.userFunctionBodies`, "an array of functions", sb.userFunctionBodies);
 		sb.userFunctionBodies.forEach((fn, i) => assertUserFunctionShape(fn, `${where}.userFunctionBodies[${i}]`, depth + 1));
+	}
+	if (sb.pluginCalls !== undefined) {
+		const isCall = (call: unknown) => isRecord(call) && typeof call.pkg === "string" && typeof call.name === "string";
+		if (!Array.isArray(sb.pluginCalls) || !sb.pluginCalls.every(isCall)) malformed(`${where}.pluginCalls`, "an array of { pkg, name } calls", sb.pluginCalls);
 	}
 	if (sb.frozen !== undefined) {
 		const f = sb.frozen;

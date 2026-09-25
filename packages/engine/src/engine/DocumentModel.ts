@@ -482,14 +482,17 @@ export class DocumentModel {
 	 * If the text hash differs, marks the line dirty and clears its
 	 * bytecode/result so it gets re-evaluated.
 	 *
-	 * Returns true if the text actually changed (hash mismatch).
+	 * Returns true if the text actually changed.
 	 */
 	editLine(lineNumber: number, newText: string): boolean {
 		const state = this.getLineAt(lineNumber);
 		if (!state) return false;
 
+		// The hash is a fast pre-check, not the answer: djb2 gives `ab` and `bA`
+		// the same hash, so an edit from `total = ab * 2` to `total = bA * 2`
+		// used to be dropped as no change and kept the old answer (#664).
 		const newHash = djb2Hash(newText);
-		if (newHash === state.textHash) return false;
+		if (newHash === state.textHash && newText === state.text) return false;
 		const oldText = state.text;
 		this._revision++;
 
@@ -757,11 +760,18 @@ export class DocumentModel {
 	 * and response, the user may have edited the line. This method lets the
 	 * main thread check whether the bytecode is still applicable.
 	 *
-	 * @returns true if the line still exists and its text hash matches.
+	 * @param lineId - The line the bytecode was compiled for.
+	 * @param compiledAgainstHash - The line's text hash when the compile was dispatched.
+	 * @param compiledAgainstText - The line's text then. Pass it: two texts can
+	 *   share a hash (`ab` and `bA` do), so the hash alone can accept bytecode
+	 *   compiled for text the line no longer has (#664).
+	 * @returns true if the line still exists and its text is the one compiled.
 	 */
-	isBytecodeValid(lineId: number, compiledAgainstHash: number): boolean {
+	isBytecodeValid(lineId: number, compiledAgainstHash: number, compiledAgainstText?: string): boolean {
 		const state = this.lines.get(lineId);
-		return state !== undefined && state.textHash === compiledAgainstHash;
+		return state !== undefined
+			&& state.textHash === compiledAgainstHash
+			&& (compiledAgainstText === undefined || state.text === compiledAgainstText);
 	}
 
 	// ── State mutations ─────────────────────────────────────────────────

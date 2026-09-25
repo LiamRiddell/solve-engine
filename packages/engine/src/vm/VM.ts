@@ -17,7 +17,7 @@ import { builtinFunctions, asConverterRegistry, datetimeArgumentRefused } from "
 import { builtinArityError, builtinFunctionNames } from "@solve-js/vm/VMBuiltinArity";
 import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/DidYouMean";
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
-import type { EngineContext } from "@solve-js/engine/EngineContext";
+import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate } from "@solve-js/vm/VMConversion";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
@@ -2798,6 +2798,95 @@ function executeFrozen(
 }
 
 /**
+ * The handler registered at `index`, or undefined when there is none: an own
+ * entry that is a function. The index comes from bytecode, which a snapshot can
+ * carry in from storage, so nothing inherited is ever called.
+ *
+ * The `isNaN` check is the one CodeQL's js/unvalidated-dynamic-method-call reads
+ * as proof that the key is a number rather than a method name. The table changes
+ * as packages register, so the lookup cannot compare against a cached list of its
+ * own indices the way `builtinAt` does.
+ */
+function pluginHandlerAt(handlers: Record<number, PluginFunctionHandler>, index: number): PluginFunctionHandler | undefined {
+    if (isNaN(index)) return undefined;
+    if (!Object.prototype.hasOwnProperty.call(handlers, index)) return undefined;
+    const handler = handlers[index];
+    return typeof handler === "function" ? handler : undefined;
+}
+
+/**
+ * The key an asynchronous plugin call is recorded and awaited under. It names
+ * the type and unit of each argument as well as its value, so the number 5, the
+ * text "5" and a quantity of 5 of something do not share one answer.
+ */
+function pluginCallKey(fnIdx: number, args: Value[]): string {
+    return `plugin:${fnIdx}:${args.map(a => `${a.type}:${String(a.value ?? '')}${a.unit ? `:${a.unit}` : ''}`).join('|')}`;
+}
+
+/**
+ * Call a plugin function, answering from what an earlier call with the same
+ * arguments settled to when the function is one that returns promises (#660).
+ *
+ * A promise the handler returns is recorded in the context's plugin-call cache
+ * and handed back as a pending result, which the orchestrator awaits before it
+ * re-executes. A run that comes before the promise settles is handed the same
+ * promise, so two lines with the same arguments, or a line re-evaluated while
+ * it waits, share one call.
+ *
+ * Once it has settled, the re-execution calls the handler once more, because
+ * handlers read the contract two ways. One caches what it fetched and answers
+ * the re-run synchronously (the historical exchange rate does, reading the rate
+ * its promise stored); that answer is used, as it always was. The other has no
+ * cache and returns a new promise every time, which left the line pending for
+ * good: `slowdouble(21)` after sixteen evaluations and thirty-one calls. For
+ * that one the settled value is the answer, and the handler is not called again
+ * for that argument list. Only a function that has returned a promise builds a
+ * key, so a synchronous handler pays nothing for this.
+ *
+ * With live data switched off the promise is not awaited: the function has
+ * already run, so a request it started cannot be recalled, and the line gets
+ * NETWORK_DISABLED instead. The `.catch` keeps a rejection of the discarded
+ * promise from surfacing as an unhandled one.
+ */
+function callPlugin(
+    vm: VM,
+    fnIdx: number,
+    fn: PluginFunctionHandler,
+    args: Value[],
+    context: LineExecutionContext | undefined,
+): Value | Extract<EvalResult, { type: 'pending' }> {
+    const calls = vm.context.pluginCalls;
+    let key: string | undefined;
+    let result: Value | Promise<Value>;
+    if (calls.isAsync(fnIdx)) {
+        key = pluginCallKey(fnIdx, args);
+        const known = calls.lookup(key);
+        if (known?.settled !== undefined) {
+            if (known.promiseOnly) return known.settled;
+            const again = fn(args, context);
+            if (!(again instanceof Promise)) return again;
+            again.catch(() => undefined);
+            known.promiseOnly = true;
+            return known.settled;
+        }
+        result = known !== undefined ? known.promise : fn(args, context);
+    } else {
+        result = fn(args, context);
+    }
+    if (!(result instanceof Promise)) return result;
+    if (!vm.context.networkEnabled) {
+        result.catch(() => undefined);
+        return errorValue("NETWORK_DISABLED", "Live data is switched off for this engine (network.enabled is false), so the result of this call was not awaited");
+    }
+    key ??= pluginCallKey(fnIdx, args);
+    if (calls.lookup(key)?.promise !== result) calls.track(fnIdx, key, result);
+    // activeSignal is set by the engine before it calls executeBytecode; the
+    // owning package lets a failed or slow call be attributed, and is empty only
+    // for a handler installed directly into a context rather than registered.
+    return { type: 'pending', queryKey: key, resolver: result, packageId: vm.context.pluginFunctionOwners[fnIdx] ?? '', signal: vm.activeSignal! };
+}
+
+/**
  * Execute bytecode with optional diagnostic pipeline integration.
  *
  * Performance notes:
@@ -4010,7 +4099,7 @@ export function executeBytecode(
           const args: Value[] = [];
           for (let i = 0; i < argCount; i++) args.push(safePop(stack));
           args.reverse();
-          const fn = vm.context.pluginFunctions[fnIdx];
+          const fn = pluginHandlerAt(vm.context.pluginFunctions, fnIdx);
           // A plugin handler reads its arguments the same way a builtin does,
           // and none of them can do anything useful with an argument that
           // failed or has not arrived: the call would be made with a zero, or
@@ -4027,33 +4116,10 @@ export function executeBytecode(
             // which read as the function's answer.
             stack.push(errorValue("UNKNOWN_PLUGIN_FUNCTION", `Plugin function index ${fnIdx} is not registered with this engine`));
           } else {
-            const result = fn(args, context);
-            if (result instanceof Promise) {
-              if (!vm.context.networkEnabled) {
-                // The function has already run, so a request it started
-                // cannot be recalled; what the engine can do is refuse to
-                // wait for it. The `.catch` keeps a rejection of the
-                // discarded promise from surfacing as an unhandled one.
-                result.catch(() => undefined);
-                stack.push(errorValue("NETWORK_DISABLED", "Live data is switched off for this engine (network.enabled is false), so the result of this call was not awaited"));
-                break;
-              }
-              // Return pending result, no throw. The orchestrator checks
-              // result.type and handles async resolution outside the VM.
-              // The key names the type and unit of each argument as well as
-              // its value, so the number 5, the text "5" and a quantity of 5
-              // of something do not share one cached answer.
-              const cacheKey = `plugin:${fnIdx}:${args.map(a => `${a.type}:${String(a.value ?? '')}${a.unit ? `:${a.unit}` : ''}`).join('|')}`;
-              // activeSignal must be set by the engine before calling executeBytecode.
-              // If it's not (bug), we use a new signal that will never abort
-              // this is a safety net, not the expected path.
-              const signal = vm.activeSignal!;
-              // The owning package, so a failed or slow async call can be attributed.
-              // Falls back to the empty string only for a handler installed
-              // directly into a context rather than through registerPackage.
-              const packageId = vm.context.pluginFunctionOwners[fnIdx] ?? '';
-              return { type: 'pending', queryKey: cacheKey, resolver: result, packageId, signal };
-            }
+            const result = callPlugin(vm, fnIdx, fn, args, context);
+            // A promise the handler returned: the orchestrator awaits it
+            // outside the VM and re-executes (see callPlugin).
+            if (!(result instanceof Value)) return result;
             stack.push(result);
             if (observeCall !== undefined) observeCall({ kind: "plugin", index: fnIdx, name: "", args, result });
           }

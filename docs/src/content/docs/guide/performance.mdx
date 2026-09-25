@@ -91,16 +91,41 @@ import { startWorkerRuntime, eventTargetTransport } from "solve-engine/worker";
 startWorkerRuntime(eventTargetTransport(self));
 ```
 
+`eventTargetTransport` takes anything with the `EventTargetLike` shape: a DOM
+`Worker`, a worker's `self` and a `MessagePort` all fit it under `strict`, and
+the type is exported for a host adapting something else. The Node equivalent is
+`messagePortTransport`, for a `worker_threads` `Worker` or `parentPort`
+(`MessagePortLike`).
+
+A result that is an error carries its code in `errorCode` as well as its
+message in `text`, so a host tells `5 kg in m` (`INCOMPATIBLE_UNITS`) from any
+other failure without reading the words:
+
+```ts
+const value = await engine.evaluateExpression("5 kg in m");
+value.errorCode; // "INCOMPATIBLE_UNITS"
+value.text;      // "a mass cannot be converted to a length"
+```
+
+A value that is not an error has no `errorCode` key at all.
+
 ### Offloaded background compilation
 
 There is a second, narrower use of a worker inside the engine itself. While you
 read a document, the evaluator compiles the lines just past the viewport ahead
-of time, and can run batches of already-compiled bytecode, so scrolling does not
-pay for either. Both of those move to a worker when there is one.
+of time, so scrolling does not pay for it. That compilation moves to a worker
+when there is one.
+
+Running lines stays on the main thread. When live data lands and more than fifty
+lines depend on it, the engine used to send their compiled bytecode to the same
+workers, which hold none of the document's variables or packages, so a line such
+as `price * qty` came back as "Undefined variable: price". A re-run now happens
+on the main thread however many lines it touches, with the same answers as a
+host that registers no factory.
 
 There is no way for a library to make a worker on its own: the file a worker
 runs has to be a URL the host's bundler produced, and every bundler spells that
-differently. So the engine asks. Register a factory once and both paths use it.
+differently. So the engine asks. Register a factory once and the compile path uses it.
 
 ```ts
 import { setEngineWorkerFactory } from "solve-engine";
