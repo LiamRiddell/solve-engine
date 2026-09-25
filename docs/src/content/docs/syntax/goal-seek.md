@@ -45,6 +45,23 @@ through it, or the step limit, each ends in an error rather than a guess or a
 hang. Solutions outside that range, or relationships with several crossings, are
 out of scope for now.
 
+For the same reason, goal seek will not target a line that holds a
+[what-if or a sweep](/syntax/what-if/). Each of those works through the note
+again, and goal seek re-runs its target up to a hundred times, so one goal-seek
+line over a 1,000-step sweep would work through the note a hundred thousand
+times. It answers with a refusal instead, whether or not the algebra could have
+inverted the line, so the answer never depends on the line's shape. A target
+that only reads a what-if line's answer, rather than holding the what-if
+itself, is not affected.
+
+```solve-doc
+:k = 1                    // 1
+:x = 1                    // 1
+x * 2                     // 2
+(line 3 with x = 5) * k   // 10
+solve line 4 for k = 30   // ERROR: Goal seek cannot target a line that holds a what-if or a sweep, since every one of its probes would re-run the document again. Target a line without one.
+```
+
 Like [line references](/syntax/line-references/), goal seek only works inside a
 document, since it re-runs another line. The single-expression entry point has
 no document to solve against.

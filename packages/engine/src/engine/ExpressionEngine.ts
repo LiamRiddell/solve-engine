@@ -26,7 +26,7 @@ import type { FrozenRecord } from "@solve-js/vm/FrozenValues";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import type { CalendarOption } from "@solve-js/calendar/resolveCalendar";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
-import { Value, ValueType, numberValue, stringValue, pendingValue, freezeIfDev, errorValue, isArenaActive, persistentValue, type MatrixData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, stringValue, pendingValue, freezeIfDev, errorValue, isArenaActive, persistentValue, withoutValueArena, type MatrixData } from "@solve-js/vm/Value";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { PackageCompatibilityIndex } from "@solve-js/api/PackageCompatibility";
 import { assertEngineVersionCompatible } from "@solve-js/api/EngineVersionCompatibility";
@@ -1263,7 +1263,9 @@ export class ExpressionEngine {
                 // A fresh context, not the pass's shared one: this runs inside
                 // the goal-seek line's own evaluation, whose context must keep
                 // its line number for the cross-line reads it makes afterwards.
-                const result = executeBytecode(program, this.vm, undefined, undefined, this.buildLineContext(doc, null, null, targetLine), symbolicTolerant);
+                // Unpooled: a probe runs up to a hundred times, and its Values are
+                // not the scroll values the arena is for (withoutValueArena).
+                const result = withoutValueArena(() => executeBytecode(program, this.vm, undefined, undefined, this.buildLineContext(doc, null, null, targetLine), symbolicTolerant));
                 if (result.type === 'pending') {
                     return errorValue("GOAL_SEEK_ASYNC_UNSUPPORTED", `Line ${targetLine} depends on an async value (weather, stocks, currency, ...), which goal seek cannot re-run.`);
                 }
@@ -1320,6 +1322,16 @@ export class ExpressionEngine {
             return errorValue(
                 "WHAT_IF_NESTED",
                 "A what-if or sweep cannot run inside another one's re-run of the document. Name a line that does not itself hold one.",
+            );
+        }
+        // Goal seek probes its target up to a hundred times, and a what-if or
+        // sweep on the target would re-run the document on every probe (a
+        // 1,000-step sweep, a thousand scratch passes a probe). Refused on the
+        // first probe, which ends the search with this answer.
+        if (this.goalSeekDepth >= 1) {
+            return errorValue(
+                "WHAT_IF_IN_GOAL_SEEK",
+                "Goal seek cannot target a line that holds a what-if or a sweep, since every one of its probes would re-run the document again. Target a line without one.",
             );
         }
         const tokenize = (text: string) => this.tokensOrNone(text);
@@ -1412,7 +1424,8 @@ export class ExpressionEngine {
             scratch.dag.clear();
             scratch.lineCache.clear();
             scratch.pinnedVariables = pins;
-            return scratch.parseDocument(input, { inputType: "markdown" });
+            // Unpooled, as a goal-seek probe is: a sweep runs this once a step.
+            return withoutValueArena(() => scratch.parseDocument(input, { inputType: "markdown" }));
         } finally {
             scratch.pinnedVariables = null;
             setActiveQueryClient(activeClient);

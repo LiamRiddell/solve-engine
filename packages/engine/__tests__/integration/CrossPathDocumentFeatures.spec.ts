@@ -505,6 +505,22 @@ describe("goal seek across entry points", () => {
   test("the single-expression path refuses with a document error", () => {
     expectNeedsDocument("solve line 1 for x = 5");
   });
+
+  // A target holding a what-if or a sweep would re-run the document on every
+  // probe (#604). The incremental pass refuses it by name; the batch pass
+  // refuses goal seek as it always does; the single line has no document.
+  test("a target that holds a sweep is refused by name through the incremental pass (#604)", () => {
+    const doc = [":k = 1", ":x = 1", "x * 2", "round(sum(x, line 3 for x from 1 to 1000 step 1) * k)", "solve line 4 for k = 3000.5"];
+    const started = Date.now();
+    const out = incremental(doc);
+    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(out[3]).toBe("1,001,000");
+    expect(out[4]).toBe("ERROR: Goal seek cannot target a line that holds a what-if or a sweep, since every one of its probes would re-run the document again. Target a line without one.");
+    const refused = batch(doc);
+    expect(refused[3]).toBe(out[3]);
+    expect(refused[4].toLowerCase()).toContain("document");
+    expectNeedsDocument("solve line 1 for k = 5");
+  });
 });
 
 describe("bare assignments across entry points (#555)", () => {
