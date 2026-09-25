@@ -75,6 +75,80 @@ through every entry point in
 point behaves differently and a form that works through one and misbehaves
 through another is exactly the drift a per-feature test misses.
 
+## Unit tests for the parts
+
+A test of a whole note shows the answer a reader sees, and that is the test a
+change is judged by. It has two limits: it can only pass the helpers inside the
+engine the arguments a note happens to produce, and when it fails it points at
+the whole pipeline rather than the part that broke. So a change also tests its
+parts directly. Every helper, class or module function it adds or alters (a
+budget check, a pool of reusable values, a formatter, a normaliser rule, a
+parselet) gets unit tests of its own, calling it with ordinary, boundary and
+hostile arguments. A fix whose cause was one function has a test of that
+function, as well as of the note that exposed it.
+
+## Adversarial tests
+
+An ordinary test checks that a feature does what its author meant, for the input
+its author had in mind. An adversarial test does the opposite: it tries to break
+the feature, with the input nobody had in mind. Most of the defects found in this
+engine's recent reviews were of that kind. A check that compared exact values as
+doubles, a trace that missed a section, a sweep that could exhaust memory: each
+passed its own tests and failed the first time something unexpected reached it.
+So every bug fix and every feature ships adversarial tests beside its ordinary
+ones, in the same change.
+
+They attack from three sides:
+
+- **Security**: what a hostile document could carry. A word such as
+  `constructor` or `__proto__` wherever a word the reader typed is looked up,
+  since a plain object inherits properties with those names; input sized to
+  exhaust time or memory; characters that look like one thing and are another,
+  such as a zero-width space or a digit from another script; and text shaped
+  like markup or an injection, which must be read as text.
+- **Realistic breakage**: what real readers and hosts do. A typo, a unit that
+  does not fit, a value from another line rather than a literal, the feature
+  meeting the others (a check over it, a what-if through it, a trace of it), the
+  same document through the other entry point, an edit, a snapshot round trip.
+- **Edge cases**: the boundaries. Zero and negative zero, 2^53 and the 34-digit
+  decimal limit, the largest doubles, the quotients with no finite answer, empty
+  and blank lines, a stray carriage return or a trailing newline, a change of
+  clocks, a leap day, a month end.
+
+The engine's promise is that an answer is right or an honest refusal that names
+the problem. So, whatever the input, these are failures: a confident wrong number;
+a raw JavaScript error such as a `TypeError`; an internal name in what the reader
+sees, such as `[object Object]`; an unexplained NaN; a hang; the two document
+passes disagreeing; and a change to `Object.prototype`, which would affect every
+object in the host's process.
+
+The shared kit is `packages/engine/tools/adversarial.ts`. It holds the corpora of
+hostile and edge inputs, `fill()` to run one form over a whole corpus, and the
+checks that say what honest means:
+
+```ts
+import { NUMERIC_EDGES, PROTOTYPE_WORDS, expectHonestLine, expectPrototypeUntouched, fill } from "@tools/adversarial";
+
+test.each(fill("round(X, 2)", NUMERIC_EDGES))("rounding stays honest: %s", (line) => {
+  expectHonestLine(line);
+});
+
+test.each(fill("5 as X", PROTOTYPE_WORDS))("an inherited word is an unknown word: %s", (line) => {
+  expectPrototypeUntouched(() => expectHonestLine(line));
+});
+```
+
+`__tests__/hardening/AdversarialFeatureSweep.spec.ts` runs every form the engine
+reads over those corpora, single lines and cross-line documents alike, and a new
+form gets a template there in the same change. The honesty checks cannot know the
+right answer to an arbitrary input, so they are paired with ordinary assertions
+wherever the right answer is known.
+
+A known open bug found this way is filed as an issue and pinned as a
+`test.failing` with exactly one assertion, named after the issue. When the fix
+lands the test starts passing, which fails it, and it moves into the ordinary
+set. It is never deleted or weakened to make a run green.
+
 ## Documentation tests
 
 Every example in the syntax reference is executed when the suite runs, and

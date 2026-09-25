@@ -97,6 +97,59 @@ per-feature test that exercises only one entry point is not enough, because the
 drift this catches is a form that works through one path and misbehaves through
 another.
 
+## Unit tests for the parts (rule)
+
+A document-level test shows the answer a reader sees; it cannot reach the
+inputs a document never produces, and when it fails it points at the whole
+pipeline. So a change also tests its **parts** directly: every helper, class or
+module function it adds or alters (a budget check, a pool, a formatter, a
+normaliser rule, a parselet) gets unit tests of its own that call it with
+ordinary, boundary and hostile arguments, beside the document-level tests of the
+behaviour. A fix whose cause was one function has a test of that function, not
+only of the note that exposed it.
+
+## Adversarial tests (rule)
+
+A happy-path test proves a feature works for the input its author had in mind.
+Every bug fix and every feature also ships **adversarial** tests, which try to
+break it, in the same change. They attack from three sides, and a change is not
+finished until it has faced all three:
+
+- **Security.** What a hostile document could carry: a word that names an
+  inherited property (`constructor`, `__proto__`, `toString`) wherever a word the
+  reader typed reaches a lookup; input sized to exhaust time or memory (a long
+  sum, deep brackets, a huge range or power, thousands of lines); characters that
+  look like one thing and are another (zero-width, direction overrides, digits
+  from other scripts); markup- and injection-shaped text, which must be read as
+  text. The feature refuses by name within its budget, and `Object.prototype` is
+  unchanged afterwards.
+- **Realistic breakage.** What real readers and hosts do: a typo, a unit that
+  does not fit, a value from the line above rather than a literal, the feature
+  meeting the others (a check over it, a what-if through it, a tag or a section
+  around it, a trace of it), the same document through the other entry point,
+  an edit, a snapshot round trip. The answer is right or an honest refusal, and
+  the two document passes agree.
+- **Edge cases.** The boundaries: zero, negative zero and negatives, 2^53 and the
+  34-digit decimal limit, the largest and smallest doubles, the quotients with no
+  finite answer, empty and whitespace-only lines, CRLF and a trailing newline,
+  DST changes, leap days and month ends, locale separators.
+
+What counts as a failure, whatever the input: a confident wrong number, a raw
+JavaScript error (`TypeError`, `RangeError`), an internal name in what the reader
+sees (`[object Object]`, `eval_failed`, `mps2`), an unexplained NaN, a hang, the
+entry points disagreeing, and a changed `Object.prototype`.
+
+The kit is `packages/engine/tools/adversarial.ts`: the shared corpora
+(`PROTOTYPE_WORDS`, `NUMERIC_EDGES`, `TEXT_EDGES`, `DOCUMENT_EDGES`,
+`RESOURCE_PROBES`), `fill()` to run one form over a corpus, and the honesty
+checks (`expectHonestLine`, `expectHonestDocument`, `expectPrototypeUntouched`).
+A new form gets its template in `__tests__/hardening/AdversarialFeatureSweep.spec.ts`
+in the same change, as well as the feature-specific adversarial cases in its own
+spec. A known open bug found this way is filed as an issue and pinned as a
+one-assertion `test.failing` naming it (the shape `FailingTestShape.spec.ts`
+enforces), so the fix turns it red and it moves into the passing set; it is never
+deleted or weakened to make a run green.
+
 ## Feature placement in the docs (rule)
 
 Before documenting a new feature, look at where it belongs in the syntax
