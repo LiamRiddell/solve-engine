@@ -436,6 +436,52 @@ describe("table columns across entry points", () => {
     // which is the honest answer for input that was never an expression.
     expect(single("| item | cost |").threw).toBe(true);
   });
+
+  // Every row of a table is markup on both passes, not only its separator
+  // (#616): no result, no error, and a line under the table is not blamed on
+  // one of its rows.
+  test("every row is skipped, with no error, through both passes (#616)", () => {
+    const doc = [...table, "", 'sum of column "cost" above'];
+    const out = batch(doc);
+    expect(out.slice(0, 5)).toEqual(["", "", "", "", ""]);
+    expect(out[6]).toBe("1,512");
+    expect(incremental(doc)).toEqual(out);
+    const engine = newTrackedEngine();
+    expect(engine.parseDocument(doc.join("\n")).errors).toEqual([]);
+  });
+
+  test("a table ends the block for total above, as a heading does, through both passes (#616)", () => {
+    const doc = ["10", ...table, "total above"];
+    const out = batch(doc);
+    expect(out[6]).toMatch(/^ERROR: No lines above to aggregate/);
+    expect(incremental(doc)).toEqual(out);
+  });
+
+  test("pipe rows with no separator stay expressions: `|` is bitwise or", () => {
+    const doc = ["| 5", "5 | 3"];
+    expect(batch(doc)).toEqual(incremental(doc));
+    expect(batch(doc)[1]).toBe("7");
+  });
+
+  test("a live edit that adds the separator skips the rows typed before it (#616)", () => {
+    const typing = ["| item | cost |", "| rent | 1200 |", "", "1 + 1"];
+    const { shown, edited } = editThenEvaluate([typing[0], "x", typing[1], "", "1 + 1"], [[2, "| ---- | ---- |"]]);
+    expect(shown.slice(0, 3)).toEqual(["", "", ""]);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("a live edit that removes the separator makes the rows expressions again (#616)", () => {
+    const { shown, edited } = editThenEvaluate([...table, "", "1 + 1"], [[2, "plain text"]]);
+    expect(shown).toEqual(batch(edited));
+    expect(shown[0]).toMatch(/^ERROR:/);
+  });
+
+  test("a live deletion of the line splitting two pipe blocks reclassifies both (#616)", () => {
+    const lines = ["| item | cost |", "note", "| ---- | ---- |", "| rent | 1200 |"];
+    const { shown, edited } = deleteThenEvaluate(lines, 2);
+    expect(shown).toEqual(batch(edited));
+    expect(shown).toEqual(["", "", ""]);
+  });
 });
 
 describe("table lookups and bands across entry points", () => {

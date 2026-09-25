@@ -28,8 +28,14 @@ read as data instead:
 `sum of column "cost" in table above` all mean the same thing.
 
 The table's rows must start with a pipe, and the header needs a `|---|`
-separator under it. Every summary form the table above names, read from the same
-column:
+separator under it. That separator is what makes the rows a table: without it,
+a line starting with a pipe is an expression, since `|` is also bitwise or
+(`5 | 3` is 7). With it, every row is markup, answering nothing and reporting
+no error, and the table ends a block for `total above` the way a heading does.
+A cell may still hold an inline solve, which is worked out as it would be in a
+line of prose.
+
+Every summary form the table above names, read from the same column:
 
 ```solve-doc
 | item | cost |

@@ -4,6 +4,7 @@ import { getLocale, type ILocale } from '@solve-js/constants/locales';
 import { ErrorFactory, EngineError } from '@solve-js/errors/UnifiedErrorFramework';
 import type { TokenLookup } from '@solve-js/lexer/TokenClassRegistry';
 import { DEGREE_SIGN, scanGeoAngle } from '@solve-js/lexer/GeoAngleLiteral';
+import { isPipeRow, isSeparatorRowText } from '@solve-js/lexer/TableBlocks';
 
 // Bootstrap all token types at module load
 registerAllTokenTypes();
@@ -1021,7 +1022,43 @@ export class ExpressionLexer {
       this.lineStartPos = this.pos;
     }
 
+    this.markTableRows(results);
     return results;
+  }
+
+  /**
+   * Reclassify the rows of every markdown table in a scanned document as table
+   * markup, skipped like the separator row already is (#616).
+   *
+   * {@link classifyLine} sees one line at a time, and a pipe row is a table
+   * row only because of the separator row in its block (see lexer/TableBlocks),
+   * so this is the block-level step after the scan. Linear: each block of pipe
+   * rows is walked once. A row holding an inline solve is left as it is, read
+   * like prose holding one: its solves are worked out and nothing else on it.
+   */
+  private markTableRows(results: ScanLineResult[]): void {
+    let i = 0;
+    while (i < results.length) {
+      if (!isPipeRow(results[i].text)) {
+        i++;
+        continue;
+      }
+      let last = i;
+      while (last + 1 < results.length && isPipeRow(results[last + 1].text)) last++;
+      let isTable = false;
+      for (let k = i + 1; k <= last && !isTable; k++) isTable = isSeparatorRowText(results[k].text);
+      if (isTable) {
+        for (let k = i; k <= last; k++) {
+          const row = results[k];
+          if (row.classification.skip || row.classification.hasInlineSolve) continue;
+          row.classification = { type: 'table', skip: true, hasInlineSolve: false };
+          row.tokens = [];
+          delete row.error;
+          row.inlineSolves = [];
+        }
+      }
+      i = last + 1;
+    }
   }
 
   /**

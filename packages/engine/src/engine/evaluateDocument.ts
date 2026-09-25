@@ -22,10 +22,10 @@
  * - It builds a fresh model and evaluator per call and disposes the evaluator
  *   before returning, which suits occasional evaluation, not the keystroke loop
  *   a real editor runs against one long-lived `ThreeTierEvaluator`.
- * - Unlike `parseDocument`, it does not classify a markdown table's own rows as
- *   skippable: they reach the evaluator as expressions and error. A document
- *   that mixes a raw table with goal seek is the one case that wants both paths,
- *   the table read through `parseDocument` and the goal seek through here.
+ * - A markdown table's rows are markup here as in `parseDocument`: the
+ *   evaluator skips every row of a block with a separator row (see
+ *   lexer/TableBlocks), so a note holding a table and a goal seek reads both
+ *   through this one pass (#616).
  */
 import type { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
