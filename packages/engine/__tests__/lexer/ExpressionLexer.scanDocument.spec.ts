@@ -13,10 +13,16 @@ function tokenPairs(results: ReturnType<ExpressionLexer['scanDocument']>): [stri
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe('ExpressionLexer.scanDocument — basics', () => {
-  test('empty document returns empty array', () => {
+  // An empty document is one empty line, as an editor and DocumentModel count
+  // it, so both document passes agree on it (#613).
+  test('empty document is one empty line', () => {
     const lexer = new ExpressionLexer();
     const results = lexer.scanDocument('');
-    expect(results).toEqual([]);
+    expect(results).toHaveLength(1);
+    expect(results[0].text).toBe('');
+    expect(results[0].classification.skip).toBe(true);
+    expect(results[0].startOffset).toBe(0);
+    expect(results[0].endOffset).toBe(0);
   });
 
   test('single expression line', () => {
@@ -43,7 +49,8 @@ describe('ExpressionLexer.scanDocument — basics', () => {
   test('single empty line is skipped', () => {
     const lexer = new ExpressionLexer();
     const results = lexer.scanDocument('');
-    expect(results.length).toBe(0);
+    expect(results.length).toBe(1);
+    expect(results[0].classification.skip).toBe(true);
   });
 
   test('single whitespace-only line is skipped', () => {
@@ -87,15 +94,19 @@ describe('ExpressionLexer.scanDocument — multiple lines', () => {
     expect(results[3].tokens.length).toBeGreaterThan(0);
   });
 
-  test('trailing newline is consumed without producing empty last line', () => {
+  test('trailing newline starts an empty last line', () => {
     const lexer = new ExpressionLexer();
-    // Trailing \n does NOT create an extra empty line — it's just a terminator.
-    // Same behavior as most text editors: "a\n" is a single-line document.
+    // A trailing \n starts an empty last line, as an editor counts it and as
+    // DocumentModel (the incremental pass) does. Before #613 the batch pass
+    // dropped it, and the two passes disagreed on the line count.
     const results = lexer.scanDocument('1 + 2\n');
 
-    expect(results.length).toBe(1);
+    expect(results.length).toBe(2);
     expect(results[0].text).toBe('1 + 2');
     expect(results[0].classification.skip).toBe(false);
+    expect(results[1].text).toBe('');
+    expect(results[1].classification.skip).toBe(true);
+    expect(results[1].startOffset).toBe(6);
   });
 
   test('double newline produces empty middle line', () => {

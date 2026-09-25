@@ -96,10 +96,12 @@ export function evaluateDocument(
 
 		for (let n = 1; n <= lineCount; n++) {
 			const state = doc.getLineAt(n)!;
-			const text = state.text;
+			// The model splits on "\n" alone, so a CRLF line keeps its "\r".
+			// parseDocument's text and end offset stop before it, and so do these.
+			const text = state.text.endsWith("\r") ? state.text.slice(0, -1) : state.text;
 			const startPosition = offset;
 			const endPosition = offset + text.length;
-			offset = endPosition + 1; // + the newline that separated this line from the next
+			offset = startPosition + state.text.length + 1; // + the newline that separated this line from the next
 
 			const hasInlineSolves = state.inlineSolveCount > 0;
 			let inlineSolves: InlineSolvePosition[] = [];
