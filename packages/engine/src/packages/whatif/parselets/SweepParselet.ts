@@ -35,6 +35,10 @@ export class SweepParselet implements PrefixParselet {
 		// `DELETED_LINE_NUMBER` in packages/lines as goal seek does, and the
 		// handler answers with the deleted-line error rather than "line NaN".
 		const targetLine = token.value === "deleted" ? -1 : parseInt(token.value, 10);
+		// A name may be written with the colon a definition takes (`:price`), which
+		// reaches here as a COLON before it; it names the same variable (the
+		// what-if form added the colon's assignment to the line instead).
+		if (parser.peek()?.type === "COLON") parser.consume();
 		const nameToken = parser.peek();
 		if (!nameToken || (nameToken.type !== "IDENT" && nameToken.type !== "UNIT")) {
 			throw ErrorFactory.parsing(

@@ -61,6 +61,10 @@ export class GoalSeekParselet implements PrefixParselet {
 		// The unknown to vary. Requiring IDENT or UNIT gives the same
 		// reserved-word protection the algebra verbs rely on: a keyword lexes as
 		// its own token type and can never be taken for a variable name here.
+		// A name may be written with the colon a definition takes (`:price`), which
+		// reaches here as a COLON before it; it names the same variable (the
+		// what-if form added the colon's assignment to the line instead).
+		if (parser.peek()?.type === "COLON") parser.consume();
 		const variable = parser.peek();
 		if (!variable || (variable.type !== "IDENT" && variable.type !== "UNIT")) {
 			throw ErrorFactory.parsing(
