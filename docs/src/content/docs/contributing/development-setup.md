@@ -67,6 +67,7 @@ measured daily by its own workflow because the measurement is slow; run
 | `npm run lint:comments` | Comment style, over the whole tree. |
 | `npm run lint:docs` | Every public export carries a doc block. |
 | `npm run lint:actions` | Every GitHub Action in the workflows is pinned to a commit. |
+| `npm run lint:action-inputs` | Every `with:` input a workflow passes is one its action declares, read from `.github/action-inputs.json`. After moving a pin, refresh that list with `node scripts/check-action-inputs.mjs --update`. |
 | `npm run lint:licenses` | The runtime dependency and everything under it carry an allowlisted licence. |
 | `npm run audit:deps` | `npm audit` at high severity. The docs and playground lockfiles are audited in their own CI jobs. |
 | `npm run build` | tsup: ESM, CJS and declarations into `packages/engine/dist`. |

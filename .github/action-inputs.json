@@ -1,0 +1,177 @@
+{
+	"actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": {
+		"source": "action.yml",
+		"inputs": [
+			"allow-unsafe-pr-checkout",
+			"clean",
+			"fetch-depth",
+			"fetch-tags",
+			"filter",
+			"github-server-url",
+			"lfs",
+			"path",
+			"persist-credentials",
+			"ref",
+			"repository",
+			"set-safe-directory",
+			"show-progress",
+			"sparse-checkout",
+			"sparse-checkout-cone-mode",
+			"ssh-key",
+			"ssh-known-hosts",
+			"ssh-strict",
+			"ssh-user",
+			"submodules",
+			"token"
+		]
+	},
+	"actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346": {
+		"source": "action.yml",
+		"inputs": [
+			"artifact_name",
+			"error_count",
+			"preview",
+			"reporting_interval",
+			"timeout",
+			"token"
+		]
+	},
+	"actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3": {
+		"source": "action.yml",
+		"inputs": [
+			"base-url",
+			"debug",
+			"github-token",
+			"previews",
+			"result-encoding",
+			"retries",
+			"retry-exempt-status-codes",
+			"script",
+			"user-agent"
+		]
+	},
+	"actions/setup-node@820762786026740c76f36085b0efc47a31fe5020": {
+		"source": "action.yml",
+		"inputs": [
+			"architecture",
+			"cache",
+			"cache-dependency-path",
+			"check-latest",
+			"mirror",
+			"mirror-token",
+			"node-version",
+			"node-version-file",
+			"package-manager-cache",
+			"registry-url",
+			"scope",
+			"token"
+		]
+	},
+	"actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9": {
+		"source": "action.yml",
+		"inputs": [
+			"include-hidden-files",
+			"name",
+			"path",
+			"retention-days"
+		]
+	},
+	"changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51": {
+		"source": "action.yml",
+		"inputs": [
+			"commit-message",
+			"create-github-releases",
+			"cwd",
+			"github-token",
+			"pr-base-branch",
+			"pr-draft",
+			"pr-title",
+			"publish-script",
+			"push-git-tags",
+			"push-with-git-cli",
+			"version-script"
+		]
+	},
+	"github/codeql-action/analyze@v4": {
+		"source": "analyze/action.yml",
+		"inputs": [
+			"add-snippets",
+			"category",
+			"check_name",
+			"checkout_path",
+			"cleanup-level",
+			"expect-error",
+			"matrix",
+			"output",
+			"post-processed-sarif-path",
+			"ram",
+			"ref",
+			"sha",
+			"skip-queries",
+			"threads",
+			"token",
+			"upload",
+			"upload-database",
+			"wait-for-processing"
+		]
+	},
+	"github/codeql-action/init@v4": {
+		"source": "init/action.yml",
+		"inputs": [
+			"analysis-kinds",
+			"build-mode",
+			"check-run-id",
+			"config",
+			"config-file",
+			"db-location",
+			"debug",
+			"debug-artifact-name",
+			"debug-database-name",
+			"dependency-caching",
+			"external-repository-token",
+			"job-status",
+			"languages",
+			"matrix",
+			"packs",
+			"quality-queries",
+			"queries",
+			"ram",
+			"registries",
+			"setup-python-dependencies",
+			"source-root",
+			"threads",
+			"token",
+			"tools",
+			"trap-caching"
+		]
+	},
+	"peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1": {
+		"source": "action.yml",
+		"inputs": [
+			"add-paths",
+			"assignees",
+			"author",
+			"base",
+			"body",
+			"body-path",
+			"branch",
+			"branch-suffix",
+			"branch-token",
+			"commit-message",
+			"committer",
+			"delete-branch",
+			"draft",
+			"labels",
+			"maintainer-can-modify",
+			"milestone",
+			"path",
+			"push-to-fork",
+			"reviewers",
+			"sign-commits",
+			"signoff",
+			"team-reviewers",
+			"title",
+			"token"
+		]
+	}
+}
