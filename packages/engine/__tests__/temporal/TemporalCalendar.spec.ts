@@ -267,15 +267,26 @@ describe(`agrees with the Date backend in the process's zone (${hostZone}, ${tem
 	});
 
 	test("the named-zone methods throw the runtime's RangeError, as the contract states", () => {
+		// Matched by name, not by constructor: native Temporal throws the host
+		// realm's RangeError, which is not the one Jest's test realm holds, so
+		// `toThrow(RangeError)` refused a RangeError on Node 26 (#621).
+		const rangeError = (run: () => unknown): string | undefined => {
+			try {
+				run();
+				return undefined;
+			} catch (error) {
+				return (error as Error).name;
+			}
+		};
 		const instant = Date.UTC(2024, 0, 1, 16, 0);
-		expect(() => calendar.zoneOffsetMinutes("Mars/Olympus", instant)).toThrow(RangeError);
-		expect(() => calendar.fieldsInZone("Mars/Olympus", instant)).toThrow(RangeError);
-		expect(() => calendar.formatTimeInZone("Mars/Olympus", instant)).toThrow(RangeError);
-		expect(() => calendar.formatDateInZone("Mars/Olympus", instant)).toThrow(RangeError);
-		expect(() => calendar.zoneOffsetMinutes("UTC", Number.NaN)).toThrow(RangeError);
-		expect(() => calendar.fieldsInZone("UTC", Number.NaN)).toThrow(RangeError);
-		expect(() => calendar.formatTimeInZone("UTC", Number.NaN)).toThrow(RangeError);
-		expect(() => calendar.formatDateInZone("UTC", 8.7e15)).toThrow(RangeError);
+		expect(rangeError(() => calendar.zoneOffsetMinutes("Mars/Olympus", instant))).toBe("RangeError");
+		expect(rangeError(() => calendar.fieldsInZone("Mars/Olympus", instant))).toBe("RangeError");
+		expect(rangeError(() => calendar.formatTimeInZone("Mars/Olympus", instant))).toBe("RangeError");
+		expect(rangeError(() => calendar.formatDateInZone("Mars/Olympus", instant))).toBe("RangeError");
+		expect(rangeError(() => calendar.zoneOffsetMinutes("UTC", Number.NaN))).toBe("RangeError");
+		expect(rangeError(() => calendar.fieldsInZone("UTC", Number.NaN))).toBe("RangeError");
+		expect(rangeError(() => calendar.formatTimeInZone("UTC", Number.NaN))).toBe("RangeError");
+		expect(rangeError(() => calendar.formatDateInZone("UTC", 8.7e15))).toBe("RangeError");
 	});
 
 	test("the local methods answer NaN past the range and never throw", () => {

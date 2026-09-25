@@ -23,6 +23,12 @@ const require = createRequire(import.meta.url);
 
 const failures = [];
 
+// What the runtime had before anything of the engine loaded. Node 26 ships a
+// Temporal of its own, so "no global after import" is the wrong test there;
+// the promise is that importing the engine leaves the global as it found it.
+const temporalBefore = globalThis.Temporal;
+const temporalUntouched = () => globalThis.Temporal === temporalBefore;
+
 function check(label, fn) {
   try {
     fn();
@@ -107,9 +113,8 @@ check("temporal: the entry exports createTemporalCalendar", () => {
 
 check("temporal: importing the entry installs no global Temporal", () => {
   // A native runtime may have one; the entry must not be the reason.
-  if ("Temporal" in globalThis && process.execArgv.some((flag) => flag.includes("temporal"))) return;
-  if (typeof globalThis.Temporal !== "undefined" && Number.parseInt(process.versions.node, 10) < 26) {
-    throw new Error("globalThis.Temporal was defined after importing solve-engine/temporal on a Node without one");
+  if (!temporalUntouched()) {
+    throw new Error("globalThis.Temporal changed when solve-engine/temporal was imported");
   }
 });
 
@@ -155,9 +160,8 @@ check("temporal: the root entry carries the adapter but no polyfill", () => {
 check("temporal: importing the root entry installs no global Temporal", () => {
   // Reading globalThis.Temporal is how the default is chosen; defining it
   // would be the engine changing the runtime out from under its host.
-  if ("Temporal" in globalThis && process.execArgv.some((flag) => flag.includes("temporal"))) return;
-  if ("Temporal" in globalThis) {
-    throw new Error("globalThis.Temporal was defined after importing solve-engine on a Node without one");
+  if (!temporalUntouched()) {
+    throw new Error("globalThis.Temporal changed when solve-engine was imported");
   }
 });
 

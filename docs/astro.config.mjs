@@ -150,6 +150,10 @@ export default defineConfig({
         // Same parts as the default, arranged as one band rather than as three
         // columns aligned to the content beneath. See the component.
         Header: "./src/components/Header.astro",
+        // A line above each page saying which engine version the site
+        // describes, since it builds from main and npm can be behind. See the
+        // component and lib/releaseStatus (#618).
+        Banner: "./src/components/Banner.astro",
       },
       // Order matters and is a dependency chain, not a preference: tokens
       // define the palette, theme maps it onto Starlight's own variables, and

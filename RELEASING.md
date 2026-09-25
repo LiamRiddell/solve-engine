@@ -78,7 +78,8 @@ Publishing it runs the publish job, which:
 2. runs `npm run verify`, the same gate a contributor runs;
 3. runs `npm run test:consumer`, which installs the built tarball and uses it,
    because a version cannot be replaced once it is on the registry;
-4. publishes to the `latest` dist-tag over OIDC;
+4. publishes over OIDC: a version to `latest`, where npm refuses a version
+   lower than the one `latest` names, and a prerelease to `next`;
 5. tells `obsidian-solve` a release shipped, via a repository dispatch carrying
    the bare version.
 
@@ -108,11 +109,13 @@ package's trusted publisher *by filename*. An OIDC token minted by any other
 workflow is rejected. This is also why the release trigger lives in this file
 rather than a `release.yml` of its own.
 
-**A prerelease went to `latest`.** Every release publishes to `latest`,
-prerelease or not. There is no dist-tag derivation, because npm's OIDC
+**A release would move `latest` backwards.** The publish step passes no
+`--tag` for an ordinary version, so npm applies `latest` itself and refuses a
+version lower than the one already there. That is what makes re-running an old,
+cancelled release safe: it fails rather than taking `latest` back (#622). A
+prerelease goes to `next`. Each publish has one target, because npm's OIDC
 credential is scoped to the `npm publish` call itself and a following
-`npm dist-tag add` gets E401. If a narrower `latest` is ever wanted it needs
-either a stored token for the second call or two separate publishes.
+`npm dist-tag add` gets E401.
 
 **A changeset was consumed but its file stayed behind.** The file then folds a
 published entry into the *next* version's changelog. Before releasing, check

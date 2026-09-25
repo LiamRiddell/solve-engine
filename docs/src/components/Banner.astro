@@ -1,0 +1,36 @@
+---
+/**
+ * The page banner: a line saying which engine version the site describes, then
+ * Starlight's own banner for a page that sets one in its frontmatter.
+ *
+ * The site builds against main, which is ahead of npm between releases, and no
+ * page said so (#618). The line is worked out once per build (see
+ * lib/releaseStatus), so it is true on the day the site deployed and costs the
+ * reader nothing. It says the version npm installs when main has moved past
+ * it, and names that version when the two agree.
+ */
+import Default from "@astrojs/starlight/components/Banner.astro";
+import { releaseStatus } from "../lib/releaseStatus";
+
+const status = await releaseStatus();
+const ahead = status.latest !== status.engine || status.pending > 0;
+---
+
+<p class:list={["release-status", { ahead }]} data-pagefind-ignore>{status.sentence}</p>
+<Default />
+
+<style>
+	.release-status {
+		margin: 0;
+		padding: 0.35rem var(--sl-nav-pad-x);
+		font-size: var(--sl-text-xs);
+		line-height: var(--sl-line-height-headings);
+		text-align: center;
+		text-wrap: balance;
+		color: var(--sl-color-gray-3);
+		border-bottom: 1px solid var(--sl-color-hairline);
+	}
+	.release-status.ahead {
+		color: var(--sl-color-text);
+	}
+</style>

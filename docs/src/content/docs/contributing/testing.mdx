@@ -60,6 +60,18 @@ request, because the per-file coverage conversion makes the run several times
 slower than the suite itself. `npm run test:coverage` is the same check
 locally; run it for a change that removes tests.
 
+## Tests that call a real service
+
+A test that makes a real network call proves the integration works rather than
+only its mocked shape, and it also fails whenever the service is slow or
+rate-limits the caller, which is no fault of the change under test. So those
+calls run only with `SOLVE_LIVE_NETWORK=1` set: daily in the live-network
+workflow, and locally through `npm run test:live`. Without the flag each live
+case reports itself skipped and asserts what it can offline, and the client's
+error branches (a failed status, an empty result, a request that stalls until
+its timeout) are driven through a stubbed `fetch` in the gates. A new data
+source that calls a service follows the same pattern.
+
 ## Organisation
 
 Tests live beside the area they cover: lexer, parser, virtual machine, each

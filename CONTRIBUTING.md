@@ -24,9 +24,12 @@ unit reference, the sidebar, and the packed tarball installed into a scratch
 project and used. Continuous integration runs those same named scripts, split
 across jobs for speed, and a release runs the whole command again before
 anything reaches npm. If `verify:ci` passes locally, the pull request passes;
-the two cannot drift because they are the same list. The one gate outside it
-is the coverage floor, measured daily by its own workflow because the
-measurement is slow; `npm run test:coverage` runs it locally.
+`npm run lint:ci-parity`, part of the command, fails when one of its scripts
+is run by no pull-request job, so the two cannot drift. Two gates sit outside
+it: the coverage floor, measured daily by its own workflow because the
+measurement is slow (`npm run test:coverage` runs it locally), and the tests
+that call a real network service, run daily with `SOLVE_LIVE_NETWORK=1` set
+(`npm run test:live` locally), so a slow third party cannot fail a gate.
 
 Run it before pushing anything that touches the lexer vocabulary, a unit, the
 public exports, the docs examples or the bundle. It takes several minutes;
@@ -189,11 +192,11 @@ Target:  main
 The tag has to match `packages/engine/package.json` exactly, sit on `main`,
 and leave no changeset waiting, or the workflow refuses; so release the version
 commit rather than whatever is on `main` at the time. The workflow then runs
-`npm run verify:ci` against that commit before it publishes. Every release publishes to the `latest` dist-tag, prerelease or not:
-there is no stable line yet, so a beta is what a plain `npm install
-solve-engine` actually gets people, and `latest` sitting several versions
-behind was worse than that. A bare tag push, without a release, does not
-publish anything.
+`npm run verify:ci` against that commit before it publishes. A version
+publishes to the `latest` dist-tag, and npm refuses to move `latest` to a
+version lower than the one it names, so re-running an old release cannot take
+`latest` backwards. A prerelease (a version with a `-` part) publishes to
+`next`. A bare tag push, without a release, does not publish anything.
 
 ## Reporting problems
 

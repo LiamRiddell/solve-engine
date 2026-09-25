@@ -1,0 +1,41 @@
+name: Live network
+
+# The tests that call a real third-party service, run once a day rather than in
+# every gate (#620).
+#
+# The weather suite makes real Open-Meteo calls, and ran in every pull request,
+# in `npm run verify` and in the publish gate. A slow host failed it even with
+# the outage checks it had: a stalled request is aborted by the client's own
+# 10 s timeout with a DOMException none of them recognised, and Open-Meteo's
+# rate limit (429) failed a local gate on 25 September 2026. The live cases now
+# run only with SOLVE_LIVE_NETWORK=1 set, here, where a timeout and a 429 count
+# as outages and a 4xx, a malformed body or any other error still fails. The
+# gates keep the offline coverage, which drives the same client through a
+# stubbed fetch.
+on:
+  schedule:
+    - cron: "30 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  weather:
+    name: Weather against the real Open-Meteo
+    # Pinned rather than ubuntu-latest, like every other job here.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SOLVE_LIVE_NETWORK: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run test:live

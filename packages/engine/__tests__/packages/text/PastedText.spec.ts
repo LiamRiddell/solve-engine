@@ -279,6 +279,17 @@ describe("field", () => {
 		const deep = '("[" repeated 100000 times) + ("]" repeated 100000 times)';
 		expect(errorCode(`field(${deep}, "[0]")`)).toBe(TextExtractionErrorCodes.TEXT_NOT_JSON);
 	});
+
+	test("the depth limit is the engine's, the same on every runtime (#621)", () => {
+		// Node 26 reads a hundred thousand levels that Node 22 refuses, so the
+		// limit is set here rather than left to the runtime's JSON.parse.
+		const nested = (depth: number) => `("[" repeated ${depth} times) + "1" + ("]" repeated ${depth} times)`;
+		expect(errorCode(`field(${nested(513)}, "[0]")`)).toBe(TextExtractionErrorCodes.TEXT_NOT_JSON);
+		expect(value(`field(${nested(512)}, "[0]")`).type).not.toBe(ValueType.Error);
+		// Brackets inside a string are text, not nesting.
+		const inString = `"{\\"a\\": \\"" + ("[" repeated 2000 times) + "\\"}"`;
+		expect(value(`field(${inString}, "a")`).type).toBe(ValueType.String);
+	});
 });
 
 describe("in a document", () => {

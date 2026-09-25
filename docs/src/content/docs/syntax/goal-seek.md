@@ -63,5 +63,9 @@ solve line 4 for k = 30   // ERROR: Goal seek cannot target a line that holds a 
 ```
 
 Like [line references](/syntax/line-references/), goal seek only works inside a
-document, since it re-runs another line. The single-expression entry point has
-no document to solve against.
+document, since it re-runs another line. It also needs a way of evaluating the
+document that can re-run a line: `evaluateDocument` and a live editor built on
+the engine's incremental evaluator can, and they solve it. `parseDocument`, the
+batch pass, evaluates each line once and cannot, and the single-expression
+entry point has no document at all; each answers with a refusal that says which
+of the two it is.

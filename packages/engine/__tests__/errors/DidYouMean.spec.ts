@@ -126,9 +126,13 @@ describe("the search stays exact and cheap", () => {
 	}
 
 	test("the prefilter and the index never drop a real match", () => {
-		// Every unit spelling, each misspelt by a deletion, an insertion, a
-		// substitution and a transposition, searched through the index and by
-		// brute force. A deterministic generator, so a failure repeats.
+		// Every third unit spelling (every thirtieth outside the full run, where
+		// the whole sweep was a third of the fast loop's time, #690), each misspelt
+		// by a deletion, an insertion, a substitution and a transposition,
+		// searched through the index and by brute force. A deterministic
+		// generator, so a failure repeats.
+		const full = process.env.SOLVE_FULL_SUITE === "1";
+		const step = full ? 3 : 30;
 		const units = Object.keys(UNIT_TABLE);
 		const index = new NameIndex(units);
 		let state = 12345;
@@ -138,7 +142,7 @@ describe("the search stays exact and cheap", () => {
 		};
 		const letters = "abcdefghijklmnopqrstuvwxyz0123456789";
 		let checked = 0;
-		for (let u = 0; u < units.length; u += 3) {
+		for (let u = 0; u < units.length; u += step) {
 			const unit = units[u];
 			if (unit.length < 2) continue;
 			const at = next(unit.length);
@@ -153,7 +157,7 @@ describe("the search stays exact and cheap", () => {
 				checked++;
 			}
 		}
-		expect(checked).toBeGreaterThan(1000);
+		expect(checked).toBeGreaterThan(full ? 1000 : 100);
 	});
 
 	test("a long document's unknown names do not compare against every variable", () => {

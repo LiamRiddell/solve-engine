@@ -188,22 +188,28 @@ jobs:
       # so the last thing before publishing is to install it and use it.
       - run: npm run verify:ci
 
-      # Every release publishes straight to `latest`, prerelease or not. There
-      # is no stable line yet, so a beta is what a plain `npm install
-      # solve-engine` actually gets people, and that was the whole intent of
-      # also moving `latest` after publishing under its own prerelease tag
-      # (see git history for that attempt). It cannot work: npm's trusted
-      # publishing mints an OIDC-derived credential scoped to the `npm
-      # publish` call itself, and a second command in the same job, even
-      # `npm dist-tag add` run immediately after, gets E401. There is no
-      # dist-tag derivation left because of it, only this one target.
-      # Revisit once a real `1.0.0` ships and a narrower `latest` is wanted,
-      # which will need either a stored token for the second call or two
-      # separate publishes under different version ranges.
+      # An ordinary version publishes with no --tag, so npm applies `latest`
+      # itself, and npm refuses to point `latest` at a version lower than one
+      # already published. An explicit `--tag latest` switches that refusal off
+      # (npm's publish.js, `isDefaultTag`), which is what made re-running the
+      # cancelled 2.39.1 run able to move `latest` back from 2.40.0 (#622). A
+      # prerelease goes to `next`: npm refuses a prerelease under the default
+      # tag, and since 1.0 there is a stable line for `latest` to name. One
+      # target per publish either way: npm's trusted publishing scopes its OIDC
+      # credential to the `npm publish` call, so a following
+      # `npm dist-tag add` gets E401.
       - name: Publish
         run: |
-          echo "Publishing ${RELEASE_TAG} to the 'latest' dist-tag."
-          npm publish --workspace=packages/engine --tag latest
+          case "${RELEASE_TAG#solve-engine@}" in
+            *-*)
+              echo "Publishing prerelease ${RELEASE_TAG} to the 'next' dist-tag."
+              npm publish --workspace=packages/engine --tag next
+              ;;
+            *)
+              echo "Publishing ${RELEASE_TAG}; npm applies 'latest' and refuses a version lower than the one it names."
+              npm publish --workspace=packages/engine
+              ;;
+          esac
         # No NODE_AUTH_TOKEN and no --provenance. Trusted publishing
         # authenticates over OIDC, and it generates provenance attestations on
         # its own; passing the flag as well is redundant rather than harmful,

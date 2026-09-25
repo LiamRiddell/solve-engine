@@ -65,7 +65,7 @@ function countDocExamples(dir) {
 /**
  * Reads the totals out of Jest's report.
  *
- * @returns {{ tests: number, suites: number }} The counts.
+ * @returns {{ tests: number, suites: number, report: any }} The counts, and the report for the per-test budget.
  */
 function readReport() {
 	// Read and handle the failure, rather than asking whether the file exists
@@ -112,7 +112,37 @@ function readReport() {
 	return {
 		tests: report.numTotalTests,
 		suites: report.numTotalTestSuites,
+		report,
 	};
+}
+
+/**
+ * The longest one test may take, outside the ones known to be slow, before the
+ * check fails. One did-you-mean sweep grew to a third of the whole suite's time
+ * (53.7 of 158.6 s) with nothing noticing (#690); this is what notices the next.
+ */
+const TEST_BUDGET_MS = 20_000;
+
+/** Tests that are slow on purpose: the full sweeps, the memory soak, the fuzzers. */
+const KNOWN_SLOW = [/[\\/]heavy[\\/]/, /Fuzz/, /LongDocumentRobustness/, /DidYouMean\.spec/];
+
+/**
+ * The tests over {@link TEST_BUDGET_MS} that are not known to be slow.
+ *
+ * @param {any} report - Jest's JSON report.
+ * @returns {string[]} One line per test over the budget.
+ */
+function overBudget(report) {
+	const over = [];
+	for (const suite of report.testResults ?? []) {
+		if (KNOWN_SLOW.some((pattern) => pattern.test(suite.name))) continue;
+		for (const test of suite.assertionResults ?? []) {
+			if ((test.duration ?? 0) > TEST_BUDGET_MS) {
+				over.push(`  ${(test.duration / 1000).toFixed(1)} s  ${path.relative(ROOT, suite.name)} :: ${test.fullName}`);
+			}
+		}
+	}
+	return over;
 }
 
 /**
@@ -164,8 +194,9 @@ function readPackageShape() {
 	};
 }
 
+const { report, ...counts } = readReport();
 const stats = {
-	...readReport(),
+	...counts,
 	docExamples: countDocExamples(DOCS_ROOT),
 	builtinPackages: countBuiltinPackages(),
 	...readPackageShape(),
@@ -185,6 +216,15 @@ function readCommitted() {
 const current = readCommitted();
 
 if (process.argv.includes("--check")) {
+	const slow = overBudget(report);
+	if (slow.length > 0) {
+		console.error(
+			`${slow.length} test(s) took longer than ${TEST_BUDGET_MS / 1000} s, outside the suites known to be slow:\n` +
+				slow.join("\n") +
+				"\nMake the test cheaper, run a sample of it in the fast loop (see DidYouMean.spec.ts), or add its suite to KNOWN_SLOW with a reason.",
+		);
+		process.exit(1);
+	}
 	if (current !== next) {
 		console.error(
 			"docs/src/data/testStats.json is out of date.\n" +

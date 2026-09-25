@@ -19,6 +19,9 @@ import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { createEngineContext } from "@solve-js/engine/EngineContext";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
+import { temporalIsAvailable } from "@solve-js/calendar/resolveCalendar";
+import { TemporalCalendar } from "@solve-js/temporal/TemporalCalendar";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { RecordingCalendar } from "@tools/recordingCalendar";
 import type { IAsyncResolver } from "@solve-js/resolvers/ResolverRegistry";
 import { ValueType, numberValue } from "@solve-js/vm/Value";
@@ -27,6 +30,16 @@ import { DEFAULT_FORMATTING_SETTINGS } from "@solve-js/format/FormattingSettings
 
 const FIXED_NOW = Date.parse("2026-08-26T10:00:00Z");
 
+/**
+ * Whether a backend is the one an engine with no option picks: Temporal where
+ * the runtime has it (Node 26), the Date backend where it does not (Node 22 and
+ * 24). The default is "auto", so the answer is the runtime's, and a test that
+ * named only the Date backend failed on Node 26 (#621).
+ */
+function isTheDefault(calendar: CalendarBackend): boolean {
+	return temporalIsAvailable() ? calendar instanceof TemporalCalendar : calendar === DATE_CALENDAR;
+}
+
 function recordingEngine(): { engine: ExpressionEngine; calendar: RecordingCalendar } {
 	const calendar = new RecordingCalendar(FIXED_NOW);
 	const engine = newTrackedEngine({ calendar });
@@ -34,17 +47,17 @@ function recordingEngine(): { engine: ExpressionEngine; calendar: RecordingCalen
 }
 
 describe("the context carries the backend", () => {
-	test("createEngineContext defaults to the Date backend", () => {
-		expect(createEngineContext().calendar).toBe(DATE_CALENDAR);
+	test("createEngineContext defaults to the runtime's backend", () => {
+		expect(isTheDefault(createEngineContext().calendar)).toBe(true);
 		const custom = new RecordingCalendar(FIXED_NOW);
 		expect(createEngineContext({ calendar: custom }).calendar).toBe(custom);
 	});
 
-	test("an engine without the option computes with the Date backend", () => {
+	test("an engine without the option computes with the runtime's backend", () => {
 		// Built directly rather than through the tracked helper, which under
 		// `SOLVE_CALENDAR=temporal` supplies a backend of its own.
 		const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
-		expect(engine.getVM().context.calendar).toBe(DATE_CALENDAR);
+		expect(isTheDefault(engine.getVM().context.calendar)).toBe(true);
 		engine.clear();
 	});
 
@@ -53,7 +66,7 @@ describe("the context carries the backend", () => {
 		// Built directly, as above, so the run's own default backend is not in play.
 		const other = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
 		expect(engine.getVM().context.calendar).toBe(calendar);
-		expect(other.getVM().context.calendar).toBe(DATE_CALENDAR);
+		expect(isTheDefault(other.getVM().context.calendar)).toBe(true);
 		// The pinned clock belongs to the first engine only; the default backend
 		// reads the real run clock, so `other`'s `today` sits on the current day
 		// (within a day of now) rather than merely differing from the pinned instant.

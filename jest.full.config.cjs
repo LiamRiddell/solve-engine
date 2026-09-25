@@ -21,6 +21,11 @@
 
 const base = require("./jest.config.js");
 
+// Tells a test it is in the full run, where a slow exhaustive check belongs and
+// the fast loop runs a sample of it instead (#690). Set before the workers
+// start, so they inherit it.
+process.env.SOLVE_FULL_SUITE = "1";
+
 /** @type {import('jest').Config} */
 module.exports = {
 	...base,
