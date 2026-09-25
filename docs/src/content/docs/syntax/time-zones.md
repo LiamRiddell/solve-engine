@@ -20,14 +20,15 @@ Write a time, the place it is in, and `in` the place you want it shown in. The
 answer is the time the clocks there show at that same moment.
 
 ```solve
-3pm London in Tokyo
-6pm Sydney in Chicago
+3pm London in Tokyo // 12:00 AM (+1 day)
+6pm Sydney in Chicago // 2:00 AM
 ```
 
 On its own the line reads the time against today, so its answer can change with
-the calendar: a gap that is five hours this month may be four next month. Add
-`on` and a date to ask about a particular day, and the answer is fixed. The date
-can sit after the first place or at the end of the line.
+the calendar: a gap that is five hours this month may be four next month. The
+answers shown for a line without a date are for noon on Wednesday 11 March 2026 in London, the fixed moment these pages are checked against, and the notepad gives
+yours. Add `on` and a date to ask about a particular day, and the answer is
+fixed. The date can sit after the first place or at the end of the line.
 
 ```solve
 3pm London on 23 September 2026 in Tokyo // 11:00 PM
@@ -157,7 +158,7 @@ overlap of 5am to 11pm in London and Tokyo on 23 September 2026 // 12 hours: Lon
 Without `on`, the overlap is today's.
 
 ```solve
-overlap of 9am to 5pm in London and New York
+overlap of 9am to 5pm in London and New York // 4 hours: London 1:00 PM to 5:00 PM, New York 9:00 AM to 1:00 PM
 ```
 
 An overlap needs two places or more, and hours with a length, and says so when
@@ -184,12 +185,13 @@ What the overlap does not cover, deliberately:
 
 Three forms answer about the present moment, so their answers change as you
 read them: the time in a place, its date, which can be a day either side of
-yours, and how far apart two places are right now.
+yours, and how far apart two places are right now. The answers shown are for
+the same fixed moment.
 
 ```solve
-time in Paris
-date in Vancouver
-time difference between Seattle and Moscow
+time in Paris // 1:00 PM
+date in Vancouver // March 11, 2026
+time difference between Seattle and Moscow // Moscow is 10 hours ahead of Seattle
 ```
 
 ## A date or a time in a zone
@@ -209,7 +211,7 @@ A time of day works the same way, read against today, so its date is whatever
 today is.
 
 ```solve
-6pm in Chicago
+6pm in Chicago // Wednesday, March 11, 2026, 6:00:00 PM
 ```
 
 The result is a date, not a quantity. A name that is not a zone is refused

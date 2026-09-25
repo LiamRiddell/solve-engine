@@ -39,8 +39,10 @@ Open source, sponsored by [Oyren](https://oyren.ai/).
 expand((x+1)*(x+2))           // x^2+3x+2
 ```
 
-Every example in this file, and every example in the documentation, is executed
-by the test suite. If one of them stops being true, the build goes red.
+Every `solve` example in this file, and every `solve` and `solve-doc` example in
+the documentation, is executed by the test suite. If one of them stops being
+true, the build goes red. The TypeScript snippets, here and in the guides, are
+not yet executed.
 
 ## Install
 
@@ -188,8 +190,20 @@ mid-thought is the normal case, not the edge case.
   approximate.
 - **Not a spreadsheet.** Lines reference earlier lines. There are no sheets,
   no cells, and no circular references to resolve.
-- **Not arbitrary-precision by default.** Ordinary arithmetic uses doubles, and
-  a big-integer type is available where exactness matters.
+- **Not arbitrary-precision everywhere.** A typed decimal is held and compared
+  exactly, up to 34 significant digits, and so is a whole number, including one
+  past 2^53; a fraction such as `1/3` is kept as the exact fraction. Irrational
+  results (roots, logarithms, trigonometry), numbers written in scientific
+  notation, and quantities with a unit other than money use floating point, as
+  the [decimals](https://liamriddell.github.io/solve-engine/syntax/decimals/)
+  page sets out.
+
+```solve
+0.1 + 0.2 == 0.3          // true
+1/3 * 3                   // 1
+2^53 + 1                  // 9,007,199,254,740,993
+sqrt(2) * sqrt(2) == 2    // false
+```
 
 ## Security
 

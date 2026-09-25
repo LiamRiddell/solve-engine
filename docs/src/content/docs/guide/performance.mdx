@@ -5,6 +5,9 @@ description: What makes it fast, and what to avoid.
 
 import Explainer from "../../../components/Explainer.tsx";
 import BenchmarkStats from "../../../components/BenchmarkStats.astro";
+import sizes from "../../../data/packageSize.json";
+
+export const kb = (bytes) => `${Math.round(bytes / 1000)} kB`;
 
 The engine is built to run on every keystroke, which sets the performance bar.
 
@@ -19,12 +22,19 @@ real document it clears per second.
 <BenchmarkStats />
 
 The per-line rate rises from the small document to the medium one, because the
-fixed cost of standing an engine up is spread across more lines, and eases back
-on the largest documents as the working set stops fitting in the processor's
-cache. The number to take from the table is its size: an engine meant to run on
-every keystroke keeps pace with a document far larger than anyone types into
-one, and re-parsing an unchanged document is quicker still, since the bytecode is
-already compiled. The sections below are why.
+fixed cost of standing an engine up is spread across more lines. It eases back
+on the two largest documents, and there the warm re-parse is no faster than the
+cold one. That is the compile cache running out of room, not the processor: it
+holds 2,000 compiled lines by default (see [Caching, in layers](#caching-in-layers)
+below), each of the two largest benchmark documents holds more distinct lines
+than that, and a document that does not fit compiles most of its lines again on
+every pass. A host whose documents run that long raises
+`config.performance.defaultCacheSize` to hold them.
+
+The number to take from the table is its size: an engine meant to run on every
+keystroke keeps pace with a document far larger than anyone types into one, and
+re-parsing an unchanged document that fits in the cache is quicker still, since
+its bytecode is already compiled. The sections below are why.
 
 ## Bytecode, not tree walking
 
@@ -35,8 +45,11 @@ it makes the execution step easy to bound.
 ## Caching, in layers
 
 Compiled bytecode is cached by expression text, so an unchanged line skips
-lexing, normalising, parsing and compiling entirely. Line results are cached
-separately, so an unchanged line skips execution too.
+lexing, normalising, parsing and compiling entirely, on every entry point. Line
+results are cached separately, but only by a long-lived incremental evaluator
+(see [Incremental re-evaluation](#incremental-re-evaluation) below): there an
+unchanged line off screen skips execution too, while `parseDocument` executes
+every line on every call.
 
 A line that does not parse is remembered as well. A line being typed does not
 parse for most of its life, so its next evaluation skips the lexing, the
@@ -55,12 +68,37 @@ whatever the eviction order; a host with such documents raises the cap.
 
 ## Incremental re-evaluation
 
-A dependency graph records which lines read which variables, so editing a line
-recomputes only what transitively depends on it.
+Which lines run after an edit depends on the entry point:
+
+- `parseDocument` runs every line on each call, and skips only the compile
+  stages for text it has seen before.
+- `evaluateDocument` is a one-off pass: it builds a fresh evaluator for the
+  call, runs every line, and discards the evaluator.
+- A long-lived `ThreeTierEvaluator`, told about each edit and given the range
+  of lines on screen (the viewport), runs the edited line, the lines above the
+  viewport that transitively depend on it through the dependency graph, and the
+  visible lines. An unchanged line above the viewport is not run at all, and
+  the lines below it wait until they are scrolled into view.
+
+Measured over a 1,000-line note in which every line calls a counting function,
+after editing only its last line:
+
+| Path | Lines executed |
+| --- | --- |
+| `parseDocument`, same engine as the first pass | 1,000 |
+| `evaluateDocument` | 1,000 |
+| `ThreeTierEvaluator`, evaluating lines 1 to 1,000 | 1,000 |
+| `ThreeTierEvaluator`, evaluating the viewport, lines 981 to 1,000 | 20 |
+
+The boundary: an evaluator asked for the whole document runs the whole
+document. A variable's value depends on where in the note it is read, so the
+lines are run in order from the top, and the only lines that can be left alone
+are the ones nobody is looking at. Making `parseDocument` skip unchanged lines
+is not proposed, for the same reason.
 
 ## Off the main thread
 
-The caches and the dependency graph keep a re-parse small. They do not move the
+The caches keep a re-parse cheaper than a first parse. They do not move the
 first parse of a large document off the thread that asked for it, and on every
 keystroke that first parse, or a paste, is where jank comes from.
 
@@ -200,26 +238,38 @@ side-effect-free entry point, so a host that never imports it pays nothing.
 
 ## Bundle size, and tree-shaking
 
-Load-time performance is parse time, and parse time is bytes. The engine ships
-minified with `sideEffects: false`, and, since it registers only the packages
-you give it, a bundler drops the built-ins you never import.
+Load-time performance is parse time, and parse time is bytes: before the first
+line runs, a browser has to download the engine's JavaScript and parse it. The
+engine ships minified with `sideEffects: false`, and it registers only the
+packages you give it. Together those are meant to let a bundler tree-shake the
+build, which means leaving out the code nothing in your program refers to, such
+as the built-in packages you never import.
 
-That last part is the lever. An engine constructed with the full set carries all
-46 built-in packages; one constructed with a handful carries only those. The
-difference is real parsed JavaScript, not just transfer size:
+Two measured figures bound what an import costs. Both come from bundling the
+engine for real on every commit with size-limit, which bundles with rolldown and
+compresses the result with brotli, as a web server would send it, and both are
+read here from the same data the home page quotes rather than typed in:
 
-| Import | Parsed (minified) |
+| Import | Minified and compressed |
 | --- | --- |
-| `createEngine()`, every built-in | ~475 KB |
-| `new ExpressionEngine({ packages: [ARITHMETIC_PACKAGE] })`, arithmetic only | ~352 KB |
+| `import { ExpressionEngine }`, the core with no package registered | {kb(sizes.importOneGzip)} |
+| the whole root entry, close to what `createEngine()` pulls in | {kb(sizes.importEverythingGzip)} |
 
-The tree-shaking is what makes the second row possible: because nothing in the
-engine's own module graph references a package you did not import, the bundler is
-free to delete finance, colour, weather and the rest. `createEngine` is the
-opposite trade, one call that pulls everything, for when bundle size is not the
-concern. Each [syntax page](/syntax/cheatsheet/) names the package its feature
-needs, so a slim build registers exactly what it uses. See
-[choosing packages](/getting-started/installation/).
+An engine constructed with a handful of packages, such as
+`new ExpressionEngine({ packages: [ARITHMETIC_PACKAGE] })`, lands between the
+two, and where it lands depends on the bundler. Under rolldown it leaves out a
+real share of the built-ins it never imports. Under esbuild it saves almost
+nothing today: the built-in packages share chunks of the published build, and
+esbuild keeps those chunks whole, so an arithmetic-only engine bundles to
+nearly the size of `createEngine()`.
+
+The boundary: until the build is split so that each package stands on its own,
+a slim engine is not a size saving under esbuild, and a host bundling with it
+gains little by leaving packages out. The split, and a table generated from it
+for each bundler, are open work. `createEngine` stays the plain choice when
+bundle size is not the concern. Each [syntax page](/syntax/cheatsheet/) names
+the package its feature needs, so a slim build registers exactly what it uses.
+See [choosing packages](/getting-started/installation/).
 
 ## What to avoid
 

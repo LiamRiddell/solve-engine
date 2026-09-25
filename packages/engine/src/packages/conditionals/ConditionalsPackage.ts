@@ -14,21 +14,25 @@ import { checkComparison } from "./CheckFunctions";
  * `false`, `and`/`or`/`&&`/`||`), and `if <cond> then <val> else <val>`
  * eager-ternary conditionals.
  *
- * The `and`/`or` split is deliberate, not an oversight: "and" already
- * lexes as `PLUS` (a pre-existing arithmetic word-synonym, `en.ts`:
- * `and: "PLUS"`), a Tier-1 hardcoded infix operator no registry-based
- * parselet can intercept, `OpCode.ADD`'s own VM handler special-cases
- * `Boolean && Boolean` instead (see `vm/VM.ts`). "or"/"&&"/"||" have no
- * such collision and are handled normally here via `LogicalParselet`.
+ * The `and`/`or` split is deliberate, not an oversight: this package does
+ * not register "and" at all. The word lexes as its own token, `AND_CONJ`
+ * (`en.ts`: `and: "AND_CONJ"`, see the comment on it in `lexer/Token.ts`),
+ * and the arithmetic package registers it as an infix `OpCode.ADD`, because
+ * "5 and 3" is 8. Which meaning applies is a property of the operands, so
+ * `OpCode.ADD`'s VM handler special-cases `Boolean + Boolean` as the
+ * conjunction (see `vm/VM.ts`). "or"/"&&"/"||" have no such collision and
+ * are handled here via `LogicalParselet`.
  *
- * KNOWN LIMITATION: because "and" is pinned to `PLUS`'s Tier-1 binding
- * power (`Sum`, tighter than comparisons), an unparenthesized `X >= Y and
- * Z < W` does NOT parse as `(X >= Y) and (Z < W)`, "and"'s fixed
- * precedence grabs a comparison operand instead. Use `&&` (correct,
- * dedicated `LogicalAnd` precedence, looser than comparisons) for that
- * pattern, or wrap each side in parens if "and" is preferred:
- * `(X >= Y) and (Z < W)`. "and" alone (no comparisons in the same
- * unparenthesized expression) works fine, e.g. `discount and hasCoupon`.
+ * GROUPING: `AND_CONJ` binds at `BindingPower.Conjunction`
+ * (`parser/BindingPower.ts`), looser than `Conditional`, so an
+ * unparenthesised `X >= Y and Z < W` parses as `(X >= Y) and (Z < W)`,
+ * the same grouping `&&` gets at `LogicalAnd`. Both comparisons produce
+ * booleans, so the ADD handler answers the conjunction. Between two plain
+ * numbers the word is still addition ("2 and 3" is 5), and with a number
+ * on one side and a comparison on the other it adds the boolean as 1 or 0
+ * ("2 and 3 > 1" is 3). Both readings are pinned by
+ * `hardening/ArithmeticConditionals.spec.ts` and the mathphrases
+ * `AndAsListSeparator.spec.ts`.
  *
  * SCOPE DECISION: SoulverCore-style postfix `Y if X` / `Y unless X` (a
  * ternary with no explicit else-branch) is deliberately NOT implemented.

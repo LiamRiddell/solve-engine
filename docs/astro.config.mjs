@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import react from "@astrojs/react";
@@ -19,15 +20,16 @@ import { rehypeBaseLinks } from "./src/plugins/rehype-base-links.mjs";
 const [starlightTypeDoc, typeDocSidebarGroup] = createStarlightTypeDocPlugin();
 
 const engine = "../packages/engine";
-const apiEntryPoints = [
+const apiModules = [
 	"api",
 	"engine",
 	"language",
 	"format",
 	"errors",
 	"services",
+	"worker",
+	"temporal",
 	"constants",
-	"variables",
 	"resolvers",
 	"normalizer",
 	"lexer",
@@ -37,7 +39,36 @@ const apiEntryPoints = [
 	"testing",
 	"utilities",
 	"uom",
-].map((name) => `${engine}/src/${name}/index.ts`);
+];
+const apiEntryPoints = apiModules.map((name) => `${engine}/src/${name}/index.ts`);
+
+// The list above is typed by hand, so it is checked against the package it
+// describes before anything is built. It once named a `variables` module that
+// does not exist and left out two public subpaths, and nothing noticed: TypeDoc
+// documents the entries it is given and says nothing about the ones it is not.
+// Every entry must be a real barrel, and every subpath in the engine's `exports`
+// map must have an entry, except the ones listed here with the reason they have
+// no reference of their own.
+const engineDir = new URL("../packages/engine/", import.meta.url);
+const SUBPATHS_WITHOUT_REFERENCE = new Map([
+	// A worker bundle a host starts, not a module it imports names from.
+	["./engine-worker", "the worker entry exports nothing"],
+]);
+const subpathModule = (subpath) => (subpath === "." ? "api" : subpath.slice(2));
+const missingBarrels = apiModules.filter(
+	(name) => !existsSync(new URL(`src/${name}/index.ts`, engineDir)),
+);
+const { exports: engineExports } = JSON.parse(readFileSync(new URL("package.json", engineDir), "utf8"));
+const unlistedSubpaths = Object.keys(engineExports).filter(
+	(subpath) => !SUBPATHS_WITHOUT_REFERENCE.has(subpath) && !apiModules.includes(subpathModule(subpath)),
+);
+if (missingBarrels.length > 0 || unlistedSubpaths.length > 0) {
+	throw new Error(
+		"docs/astro.config.mjs: the API reference entry points are out of step with packages/engine.\n" +
+			(missingBarrels.length > 0 ? `  no src/<name>/index.ts for: ${missingBarrels.join(", ")}\n` : "") +
+			(unlistedSubpaths.length > 0 ? `  public subpaths with no entry: ${unlistedSubpaths.join(", ")}\n` : ""),
+	);
+}
 
 // GitHub Pages serves a project site from a subdirectory named after the
 // repository, so every absolute URL the site emits has to be prefixed. Getting

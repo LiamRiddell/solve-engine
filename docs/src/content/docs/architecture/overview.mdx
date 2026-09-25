@@ -39,9 +39,12 @@ pipeline itself knows nothing about percentages, dates or currencies.
 
 ## Caching
 
-Three layers. Compiled bytecode is cached by expression text. Line results are
-cached by line. A dependency graph tracks which lines depend on which variables,
-so an edit recomputes only what it must.
+Three layers. Compiled bytecode is cached by expression text, on every entry
+point. Line results are cached by line, and a dependency graph tracks which
+lines depend on which variables, in the long-lived incremental evaluator an
+editor keeps: after an edit it re-runs the lines that depend on it and the lines
+on screen, and leaves the rest. A batch `parseDocument` call runs every line;
+see [Performance](/guide/performance/#incremental-re-evaluation).
 
 <Explainer id="caches" client:load />
 

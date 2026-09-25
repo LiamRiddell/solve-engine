@@ -19,8 +19,12 @@ age of 15/06/1990 on 25/12/2030 // 40 years
 age of 15/06/1990 on 26/08/2026 in years, months and days // 36 years, 2 months, 11 days
 ```
 
+Without `on`, the age is reckoned at now. The answer shown is for 11 March
+2026, the fixed date these pages are checked against, and the notepad gives
+today's.
+
 ```solve
-age of 15/06/1990
+age of 15/06/1990 // 35 years
 ```
 
 The count walks the calendar rather than dividing a fixed-length span, so the

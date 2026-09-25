@@ -285,6 +285,17 @@ string from the last to the first and keeps the document's own line breaks.
   definitions above it and the engine's unit table is left as it was.
 - A refusal is a result, not an exception: `ok: false` with a code and a message.
 
+A label before a definition shows the two readings agreeing. In
+`rent: :rent = 1200` the words before the colon are a label (prose that names
+the line), so the reference calls report a definition of `rent` after it, and
+the note, when it runs, defines `rent` the same way:
+
+```solve-doc
+rent: :rent = 1200   // 1,200
+:rent * 2            // 2,400
+rent * 2             // 2,400
+```
+
 ## The boundary
 
 - **Globals are found, not renamed.** A `global :name` is shared with every
@@ -296,10 +307,6 @@ string from the last to the first and keeps the document's own line breaks.
   re-runs (`line 4 with deposit = 150000`).
 - **Inserted lines are left as written.** They were written against the note as
   it now stands.
-- **A label followed by a definition** (`rent: :rent = 1200`) is reported as the
-  definition after the label. The engine's equation grammar currently claims
-  that line before its parser does, so it does not define `rent` when evaluated;
-  the reference calls report what the line says rather than that reading.
 - **The hover's value is the host's.** The service reports the value the host's
   own results hold for the defining line, so it is only as fresh as those
   results.

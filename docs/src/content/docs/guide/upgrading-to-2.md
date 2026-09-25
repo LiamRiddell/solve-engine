@@ -16,8 +16,27 @@ covers the two changes almost every consumer hits.
 
 The constructor used to register every built-in package. It now registers only
 the packages you give it, so a bundler can drop the built-ins you never import.
-A bare engine therefore recognises nothing: `2 + 2` on it is an undefined-token
-parse error, not `4`.
+
+A bare engine is not an empty one, and that is the trap. Plain arithmetic and
+percentages are part of the core, so an engine whose migration forgot its
+packages still answers `2 + 2` with `4` and looks as if it works. The lines that
+need a package fail only when a user reaches them: units, functions and money
+throw a parse error, and a date literal is quietly read as arithmetic. With no
+date package, `2024-03-15` is `2024 - 3 - 15`, which is `2,006`, a wrong answer
+rather than an error:
+
+```typescript
+const engine = new ExpressionEngine(); // no packages
+formatValue(engine.evaluateExpression("2 + 2"));      // "= 4"
+formatValue(engine.evaluateExpression("2024-03-15")); // "= 2,006", a subtraction
+engine.evaluateExpression("5 km in miles"); // throws: Unexpected token after expression: "km"
+engine.evaluateExpression("sqrt(16)");      // throws: No prefix parselet found for token: FUNC ("sqrt")
+engine.evaluateExpression("$5 + $3");       // throws: No prefix parselet found for token: DOLLAR ("$")
+```
+
+A slim engine does the same for whatever it leaves out: one given only
+`ARITHMETIC_PACKAGE` gives these same five answers. Check a migrated engine
+with a line from each area your users type, not with arithmetic alone.
 
 For the "I want everything" case, `createEngine()` is batteries-included:
 

@@ -21,8 +21,11 @@ workdays between 01/01/2024 and 31/01/2024 // 23
 workdays in 3 weeks // 15
 ```
 
+Counted from today, the answer moves with the day. The one shown is for
+noon on Wednesday 11 March 2026 in London, the fixed moment these pages are checked against, and the notepad gives yours.
+
 ```solve
-3 business days from today
+3 business days from today // Monday, March 16, 2026, 12:00:00 PM
 ```
 
 `working` and `business` days mean the same thing, and either reads in the

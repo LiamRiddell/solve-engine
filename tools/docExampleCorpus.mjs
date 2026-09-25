@@ -18,6 +18,15 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 /**
+ * The instant and zone the documented examples are proven at (#686), the same
+ * pair as `DOCS_NOW` and `DOCS_ZONE` in `packages/engine/tools/docExampleCollector.ts`.
+ * A date relative to today has an answer only against a fixed today; the
+ * installed-package run fails on the first clock line if the two disagree.
+ */
+export const DOCS_NOW = Date.UTC(2026, 2, 11, 12, 0, 0);
+export const DOCS_ZONE = "Europe/London";
+
+/**
  * One line of a documented example.
  *
  * `expected` is `null` for a line with no `//` marker, which is run for its

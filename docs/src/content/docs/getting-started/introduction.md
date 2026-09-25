@@ -54,9 +54,11 @@ person types, without them having to switch into a calculator.
 
 That constraint shaped the design more than anything else. Running on every
 keystroke means the pipeline has to be fast enough to feel instantaneous, and
-incremental enough that editing line forty does not re-evaluate lines one
-through thirty-nine. Both of those show up throughout the
-[architecture](/architecture/overview/).
+incremental enough that an edit in a long note does not re-run the lines off
+screen that it cannot affect. Both of those show up throughout the
+[architecture](/architecture/overview/), and
+[core concepts](/getting-started/concepts/#incremental-evaluation) says which
+entry point is incremental.
 
 ## How it fits together
 

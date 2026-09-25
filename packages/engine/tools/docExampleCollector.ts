@@ -14,6 +14,26 @@ import * as fs from "fs";
 import * as path from "path";
 
 /** One `solve` line: an expression, and the result documented beside it (or none). */
+/**
+ * The instant every documented example runs at: Wednesday 11 March 2026, 12:00
+ * UTC. `today`, `next friday`, `this month` and `days until 25/12/2026` answer
+ * from the clock, so on the wall clock they had no answer to prove (#686). It is
+ * clear of a daylight-saving change in every zone the suite runs under (London
+ * changes on 29 March, New York on 8 March, Auckland on 5 April), so a proven line
+ * is not also, by accident, a test of a transition.
+ *
+ * `tools/docExampleCorpus.mjs` holds the same instant for the installed-package
+ * run, and that run fails on the first clock line if the two disagree.
+ */
+export const DOCS_NOW = Date.UTC(2026, 2, 11, 12, 0, 0);
+
+/**
+ * The zone every example is computed and shown in, pinned with the clock: the
+ * suite runs under three process zones, and a fixed instant is a different day
+ * and hour in each of them.
+ */
+export const DOCS_ZONE = "Europe/London";
+
 export interface Example {
   file: string;
   line: number;
