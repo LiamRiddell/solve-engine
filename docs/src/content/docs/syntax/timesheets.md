@@ -78,6 +78,15 @@ a count of minutes: `1:00` is one hour, `7:05` is seven hours and five minutes.
 18:00 - 12:55 // 5:05
 ```
 
+A line reads left to right, so time added after the shift is added to the
+shift: a day of 9:00 to 17:30 with forty-five minutes of overtime is 9:15, and
+a bare `0:45` there is a length of time rather than a quarter to one.
+
+```solve
+17:30 - 9:00 + 0:45 // 9:15
+18:00 - 12:55 + 1:00 + 0:30 // 6:35
+```
+
 A stretch of time measured this way stays one through the arithmetic that keeps
 it a stretch. Two of them add together, one scales by a number, and a column of
 them totals, so a week of shifts reads as a week rather than as a number of
