@@ -32,7 +32,7 @@ const ALL_UNITS = Object.keys(UNIT_TABLE);
  * scripts/generate-unit-table.mjs.
  *
  * The sweeps below skip these six and the DEVIATION test pins the difference,
- * so parity keeps its teeth over the other 1450 spellings.
+ * so parity keeps its teeth over the other 1457 spellings.
  */
 const CORRECTED_UNITS = new Set([
   "square decimeter",
@@ -52,6 +52,30 @@ const CORRECTED_UNITS = new Set([
  * same reason and pinned in the DEVIATION test below.
  */
 const CORRECTED_BEST_UNIT_MEASURE = "illuminance";
+
+/**
+ * The abbreviations the port spells and upstream does not, each with the
+ * upstream unit it is an alias of (ENGINE_SPELLINGS in the generator, #666).
+ *
+ * The sweeps ask upstream about the unit each one names, so `hr` has to agree
+ * with `h` to the bit rather than being skipped. A spelling added to the table
+ * without an entry here fails the first sweep, since upstream has no measure
+ * for it.
+ */
+const ADDED_SPELLINGS: ReadonlyMap<string, string> = new Map([
+  ["hr", "h"],
+  ["hrs", "h"],
+  ["mins", "min"],
+  ["sec", "s"],
+  ["secs", "s"],
+  ["wks", "wk"],
+  ["yrs", "yr"],
+]);
+
+/** The spelling to ask upstream about: the unit an added abbreviation names, or the unit itself. */
+function upstreamSpelling(unit: string): string {
+  return ADDED_SPELLINGS.get(unit) ?? unit;
+}
 
 /** Values chosen to exercise zero, both signs, subnormal-ish and huge magnitudes. */
 const SAMPLE_QUANTITIES = [0, 1, -1, 0.1, 3.14159, 1e-9, 1e12, -273.15, Number.MAX_SAFE_INTEGER];
@@ -95,7 +119,7 @@ describe("ported unit table matches convert v7.0.2", () => {
     const mismatches: string[] = [];
     for (const unit of ALL_UNITS) {
       const portedKind = lookupUnit(unit)?.[0];
-      const upstreamKind = getMeasureKind(unit as never) as number | undefined;
+      const upstreamKind = getMeasureKind(upstreamSpelling(unit) as never) as number | undefined;
       if (portedKind !== upstreamKind) {
         mismatches.push(`${unit}: kind ${portedKind} vs ${upstreamKind}`);
         continue;
@@ -137,7 +161,7 @@ describe("ported unit table matches convert v7.0.2", () => {
           if (CORRECTED_UNITS.has(to)) continue;
           for (const quantity of SAMPLE_QUANTITIES) {
             const ported = convertRaw(quantity, from, to);
-            const upstream = convert(quantity, from as never).to(to as never) as unknown as number;
+            const upstream = convert(quantity, upstreamSpelling(from) as never).to(upstreamSpelling(to) as never) as unknown as number;
             if (!Object.is(ported, upstream)) {
               mismatches.push(`${quantity} ${from} to ${to}: ${ported} vs ${upstream}`);
               if (mismatches.length > 20) break;
@@ -209,6 +233,17 @@ describe("ported unit table matches convert v7.0.2", () => {
     expect(convertToBestMetric(500, "lux")).toEqual({ quantity: 500, unit: "lux" });
   });
 
+  test("DEVIATION: seven abbreviations upstream does not spell are aliases of units it does", () => {
+    // `$15/hr` and `30 mins` are how a rate and a meeting are written, and
+    // upstream has neither spelling. Each is added at the ratio of the unit it
+    // names, sharing that unit's entry, so no number in the table is invented.
+    for (const [spelling, of] of ADDED_SPELLINGS) {
+      expect(getMeasureKind(spelling as never)).toBeUndefined();
+      expect(UNIT_TABLE[spelling]).toBe(UNIT_TABLE[of]);
+    }
+    expect(convertRaw(90, "mins", "hr")).toBe(convert(90, "min").to("h"));
+  });
+
   test("DEVIATION: the time-to-metres guess is not reproduced", () => {
     // Upstream reinterprets `m` as minutes when the other side is a time unit.
     // We refuse instead, because that guess reached `<date> + <duration>` and
@@ -232,7 +267,7 @@ describe("ported unit table matches convert v7.0.2", () => {
       if (MEASURE_KIND_NAMES[UNIT_TABLE[unit][0]] === CORRECTED_BEST_UNIT_MEASURE) continue;
       for (const quantity of magnitudes) {
         const ported = convertToBestMetric(quantity, unit);
-        const upstream = convert(quantity, unit as never).to("best") as { quantity: number; unit: string };
+        const upstream = convert(quantity, upstreamSpelling(unit) as never).to("best") as { quantity: number; unit: string };
         if (!Object.is(ported.quantity, upstream.quantity) || ported.unit !== upstream.unit) {
           mismatches.push(
             `${quantity} ${unit}: ${ported.quantity} ${ported.unit} vs ${upstream.quantity} ${upstream.unit}`
@@ -251,7 +286,7 @@ describe("ported unit table matches convert v7.0.2", () => {
     // reordering is a visible change even though the set is the same.
     const mismatches: string[] = [];
     for (const unit of ALL_UNITS) {
-      const kind = getMeasureKind(unit as never) as number | undefined;
+      const kind = getMeasureKind(upstreamSpelling(unit) as never) as number | undefined;
       if (kind === undefined) continue;
       const entry = conversions.get(kind as never);
       const expected = entry ? entry.units.flatMap((u) => u.symbols).filter((s) => s !== unit) : [];

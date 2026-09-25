@@ -45,7 +45,19 @@ describe("the vocabulary is derived from the conversion tables", () => {
   });
 
   test("multi-word and non-ASCII spellings are not admitted, since they cannot be one token", () => {
-    for (const spelling of ["square meters", "minutes of arc", "cd/m2", "US dry gal", "°", "µm²", "'"]) {
+    for (const spelling of ["square meters", "minutes of arc", "cd/m2", "US dry gal", "°", "'", "W⋅h", "mǔ"]) {
+      expect(isKnownUnit(spelling)).toBe(false);
+    }
+  });
+
+  test("a leading micro sign is admitted, in both of the characters keyboards give", () => {
+    // U+00B5 MICRO SIGN and U+03BC GREEK SMALL LETTER MU. The table spells every
+    // micro unit both ways (#666).
+    for (const spelling of ["\u00B5s", "\u03BCs", "\u00B5m", "\u03BCm", "\u00B5g", "\u00B5L", "\u00B5m\u00B2"]) {
+      expect(isKnownUnit(spelling)).toBe(true);
+    }
+    // Only as a prefix, and only on a spelling the table has.
+    for (const spelling of ["\u00B5", "\u03BC", "\u00B5x", "s\u00B5", "\u00B5\u00B5s"]) {
       expect(isKnownUnit(spelling)).toBe(false);
     }
   });

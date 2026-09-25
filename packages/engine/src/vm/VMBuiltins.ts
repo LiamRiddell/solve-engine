@@ -27,9 +27,10 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 // eslint-disable-next-line no-unused-vars
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { inflationRatio, CPI_MIN_YEAR, CPI_MAX_YEAR } from "@solve-js/packages/finance/data/CpiTable";
+import { inflationAmountRefused } from "@solve-js/packages/finance/data/InflationAmount";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
-import { isPhysicalTimeRate, quantityAtRateSeconds } from "@solve-js/uom/UomConverter";
-import { raiseQuantity, rootQuantity, unitPowerUnsupported } from "@solve-js/vm/QuantityPowers";
+import { isPhysicalTimeRate, quantityAtRateSeconds, getMeasure } from "@solve-js/uom/UomConverter";
+import { raiseQuantity, rootQuantity, unitPowerUnsupported, asPowerOfLength } from "@solve-js/vm/QuantityPowers";
 import { termInYears, growthFactor, periodicGrowthFactor, amortizeLoan } from "@solve-js/vm/FinanceFormulas";
 import { exactIntegerArithmetic, exactIntegerValue, exactGcdOrLcm, wholeNumberUnchanged, baseConversionOperand, exactIntegerOf } from "@solve-js/vm/ExactIntegers";
 import { isPrime, nextPrime, modPow, modInverse, factorInteger, formatFactorisation, FACTOR_LIMIT } from "@solve-js/vm/NumberTheory";
@@ -610,6 +611,84 @@ function variance(nums: number[], sample: boolean): number {
     const denom = sample ? n - 1 : n;
     if (denom <= 0) return 0;
     return sumOfSquares(nums) / denom;
+}
+
+/**
+ * A standard deviation or a variance of values that may carry units (#643).
+ *
+ * The values are read in one unit first, the first one written, exactly as
+ * `spread` and `total` read them (see unifyQuantities()): 1 kg and 1000 g are
+ * the same mass, so their spread is 0 kg, where the bare magnitudes gave 499.50.
+ * Two measures that cannot share a unit are refused, as `spread` refuses them.
+ *
+ * A standard deviation is in the data's own unit. A variance is in its square,
+ * which has a unit only for a length, an area (`m²`, or `m²` in metres for a
+ * length with no square spelling of its own, as `(5 furlong)^2` is). The square
+ * of any other unit (kg², $², °C²) has no spelling, and is refused by name with
+ * the code the power operator uses for `(2 kg)^2`, pointing at the standard
+ * deviation, which is the same spread in a unit the engine can write. A list
+ * with an infinity in it is refused too, where it answered NaN.
+ *
+ * @param args - The values.
+ * @param verb - What is done with them, completing "cannot be ..." in a refusal.
+ * @param sample - Divide by n - 1 rather than n.
+ * @param root - The standard deviation rather than the variance.
+ * @returns The statistic as a number or a quantity, or an error Value.
+ */
+export function spreadStatistic(args: readonly Value[], verb: string, sample: boolean, root: boolean): Value {
+    const unified = unifyQuantities(args, verb);
+    if (unified instanceof Value) return unified;
+    // An infinity has no deviation from a mean that is itself infinite: the
+    // arithmetic comes to infinity minus infinity, and answered NaN, a figure
+    // with no explanation. Refused by name. A NaN given in (0/0) stays NaN.
+    if (unified.magnitudes.some((m) => m === Infinity || m === -Infinity)) {
+        return errorValue(
+            "STATISTIC_NOT_FINITE",
+            `${root ? "A standard deviation" : "A variance"} of a list with an infinity in it has no value: an infinite value has no finite distance from the mean.`,
+        );
+    }
+    const squared = variance(unified.magnitudes, sample);
+    const unit = unified.unit;
+    if (root || unit === undefined) return quantity(root ? Math.sqrt(squared) : squared, unit, unified.sources);
+    if (getMeasure(unit) !== "length") {
+        return errorValue(
+            "UNIT_POWER_UNSUPPORTED",
+            `A variance of quantities in ${unit} would be in ${unit} squared, which has no unit: only a length squared has one, an area. The standard deviation is the same spread in ${unit}.`,
+        );
+    }
+    return withSources(asPowerOfLength(uomValue(squared, unit), unit, 2), unified.sources);
+}
+
+/**
+ * The most frequent of some magnitudes, a tie going to the value that reached
+ * the count first, as the mode always has.
+ *
+ * Magnitudes converted from another unit carry that conversion's rounding
+ * (`12 in` in feet is not exactly 1), so when `converted` is set they are
+ * compared at twelve significant digits, far finer than any two values a person
+ * means to be different and far coarser than the rounding. Plain numbers are
+ * compared exactly, as they always were.
+ *
+ * @param magnitudes - The values, already in one unit; at least one.
+ * @param converted - Whether any of them may have been converted.
+ * @returns The mode, as the first magnitude written of the most frequent value.
+ */
+export function modeOf(magnitudes: readonly number[], converted: boolean): number {
+    const counts = new Map<number, number>();
+    const firsts = new Map<number, number>();
+    let best = magnitudes[0];
+    let bestCount = 0;
+    for (const n of magnitudes) {
+        const key = converted && Number.isFinite(n) ? Number(n.toPrecision(12)) : n;
+        const c = (counts.get(key) ?? 0) + 1;
+        counts.set(key, c);
+        if (!firsts.has(key)) firsts.set(key, n);
+        if (c > bestCount) {
+            bestCount = c;
+            best = firsts.get(key) ?? n;
+        }
+    }
+    return best;
 }
 
 /**
@@ -1204,8 +1283,12 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // in year dollars") and the flat-rate future-value projection ("value
     // of $X in year assuming N% inflation") are collision-safe
     // pluginFunctions instead, not indices here -- see
-    // packages/finance/parselets/InflationPluginFunctions.ts.
+    // packages/finance/parselets/InflationPluginFunctions.ts. The table is the
+    // US index, so only an amount in US dollars is adjusted (#650); see
+    // inflationAmountRefused().
     60: (args) => {
+        const refused = inflationAmountRefused(args[0]);
+        if (refused) return refused;
         const amount = args[0].toNumber();
         const fromYear = args[1].toNumber();
         const toYear = args[2].toNumber();
@@ -1774,15 +1857,19 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // "variance of ...", "spread of ...", "mode of ..."). Population form is the
     // default; the sample form is a separate index. See issue #184. ──
     // standard deviation (population): the spread in the same units as the data.
-    // Each refuses a value with no numeric reading (text, a date, a bracketed
-    // list) rather than reading it as 0; see nonNumericOperand().
-    101: (args) => nonNumericOperand(args, "used in a standard deviation") ?? numberValue(Math.sqrt(variance(args.map((a) => a.toNumber()), false))),
+    // The values are read in one unit first, the first one written, as `spread`
+    // reads them, so `standard deviation of 1 kg, 1000 g` is 0 kg rather than the
+    // 499.50 the bare magnitudes gave (#643). Each refuses a value with no
+    // numeric reading (text, a date, a bracketed list) rather than reading it as
+    // 0, and two measures that cannot be read in one unit; see unifyQuantities().
+    101: (args) => spreadStatistic(args, "used in a standard deviation", false, true),
     // sample standard deviation (divide by n-1).
-    102: (args) => nonNumericOperand(args, "used in a standard deviation") ?? numberValue(Math.sqrt(variance(args.map((a) => a.toNumber()), true))),
-    // variance (population): the mean squared deviation.
-    103: (args) => nonNumericOperand(args, "used in a variance") ?? numberValue(variance(args.map((a) => a.toNumber()), false)),
+    102: (args) => spreadStatistic(args, "used in a standard deviation", true, true),
+    // variance (population): the mean squared deviation, in the square of the
+    // data's unit; see spreadStatistic() for the units that have one.
+    103: (args) => spreadStatistic(args, "used in a variance", false, false),
     // sample variance (divide by n-1).
-    104: (args) => nonNumericOperand(args, "used in a variance") ?? numberValue(variance(args.map((a) => a.toNumber()), true)),
+    104: (args) => spreadStatistic(args, "used in a variance", true, false),
     // spread: largest minus smallest. Named "spread" because "range" already
     // means a start:end interval elsewhere in the engine.
     105: (args) => {
@@ -1793,24 +1880,14 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         return quantity(Math.max(...nums) - Math.min(...nums), unified.unit);
     },
     // mode: the most frequent value. A tie is broken by first appearance, so the
-    // result is deterministic for the same list.
+    // result is deterministic for the same list. Quantities are read in the
+    // first one's unit before they are counted, so 1 kg and 1000 g are one value
+    // and the mode is in kilograms (#643); see modeOf().
     106: (args) => {
         if (args.length === 0) return numberValue(0);
-        const nonNumeric = nonNumericOperand(args, "counted for a mode");
-        if (nonNumeric) return nonNumeric;
-        const counts = new Map<number, number>();
-        let best = args[0].toNumber();
-        let bestCount = 0;
-        for (const a of args) {
-            const n = a.toNumber();
-            const c = (counts.get(n) ?? 0) + 1;
-            counts.set(n, c);
-            if (c > bestCount) {
-                bestCount = c;
-                best = n;
-            }
-        }
-        return numberValue(best);
+        const unified = unifyQuantities(args, "counted for a mode");
+        if (unified instanceof Value) return unified;
+        return quantity(modeOf(unified.magnitudes, unified.unit !== undefined), unified.unit, unified.sources);
     },
     // weighted average: the arguments arrive interleaved [v1, w1, v2, w2, ...]
     // from WeightedAverageParselet, which has already rejected any value with no

@@ -2,6 +2,7 @@ import { Value, ValueType, numberValue, uomValue, errorValue } from "@solve-js/v
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { calendarOf } from "@solve-js/calendar/DateCalendar";
 import { adjustForInflation, CPI_MIN_YEAR, CPI_MAX_YEAR } from "../data/CpiTable";
+import { inflationAmountRefused } from "../data/InflationAmount";
 
 /**
  * Inflation plugin functions -- registered via IEnginePackage.pluginFunctions
@@ -30,9 +31,14 @@ function yearRangeError(code: string, badYear: number): Value {
   );
 }
 
-/** "what is $X from YEAR" -> X (given as YEAR's dollars) expressed in present-day dollars. */
+/**
+ * "what is $X from YEAR" -> X (given as YEAR's dollars) expressed in present-day
+ * dollars. Only dollars: see {@link inflationAmountRefused}.
+ */
 export function inflationFromYearToPresentHandler(args: Value[], context?: LineExecutionContext): Value {
   const amountValue = args[0];
+  const refused = inflationAmountRefused(amountValue);
+  if (refused) return refused;
   const fromYear = args[1].toNumber();
   const toYear = presentYear(context);
   const result = adjustForInflation(amountValue.toNumber(), fromYear, toYear);
@@ -42,10 +48,13 @@ export function inflationFromYearToPresentHandler(args: Value[], context?: LineE
 
 /**
  * "what was $X worth in YEAR" / "$X in YEAR dollars" -> X (given as
- * present-day dollars) expressed in YEAR's dollars.
+ * present-day dollars) expressed in YEAR's dollars. Only dollars: see
+ * {@link inflationAmountRefused}.
  */
 export function inflationToYearFromPresentHandler(args: Value[], context?: LineExecutionContext): Value {
   const amountValue = args[0];
+  const refused = inflationAmountRefused(amountValue);
+  if (refused) return refused;
   const fromYear = presentYear(context);
   const toYear = args[1].toNumber();
   const result = adjustForInflation(amountValue.toNumber(), fromYear, toYear);

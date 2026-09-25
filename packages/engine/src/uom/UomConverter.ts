@@ -11,7 +11,7 @@
  * extended (custom-measure) units, and the two caches.
  */
 
-import { lookupUnit, convertRaw, convertResolved, convertToBestMetric } from "@solve-js/uom/UnitConversion";
+import { lookupUnit, convertRaw, convertResolved, convertToBestMetric, hasOffset } from "@solve-js/uom/UnitConversion";
 import { MEASURE_KIND_NAMES, MEASURE_SYMBOLS, UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { EXTENDED_UNITS } from "@solve-js/uom/ExtendedUnits";
 
@@ -161,7 +161,25 @@ function bridgesToBaseMeasure(extendedUnit: string, baseUnit: string): boolean {
 }
 
 /**
+ * How close to zero, as a fraction of the value converted, a conversion between
+ * scales with different zeros has to land to be the zero the two scales share.
+ *
+ * The offset arithmetic runs in binary floating point, and five ninths has no
+ * finite binary expansion, so `32 °F in °C` came to 5.684e-14 rather than 0 and
+ * was shown as `5.68e-14 °C` (#645). The comparisons already allowed for this
+ * (`UNIFIED_COMPARISON_TOLERANCE` in vm/VMConversion.ts, the same 1e-12), which
+ * is why `32 °F == 0 °C` was true while the conversion printed otherwise. At the
+ * scale of 32 it admits 3.2e-11, far below a reading anyone writes: `32.0018 °F
+ * in °C` is still 0.001 °C.
+ */
+const OFFSET_ZERO_TOLERANCE = 1e-12;
+
+/**
  * Convert `value` from unit `from` to unit `to`.
+ *
+ * A conversion between scales with different zeros (the temperatures) that
+ * lands within rounding of zero is zero, so the value and not only its display
+ * is the zero the two scales share; see {@link OFFSET_ZERO_TOLERANCE}.
  *
  * Does not validate that the conversion is possible, callers should check
  * with {@link canConvert} first if `from`/`to` aren't already known-good.
@@ -191,7 +209,12 @@ export function convertUnit(value: number, from: string, to: string): number {
   const fromEntry = lookupUnit(from);
   const toEntry = lookupUnit(to);
   if (fromEntry !== undefined && toEntry !== undefined) {
-    return convertResolved(value, from, to, fromEntry, toEntry);
+    const converted = convertResolved(value, from, to, fromEntry, toEntry);
+    // Two comparisons on the common path; the offset check only runs for a
+    // result already within rounding of zero. See OFFSET_ZERO_TOLERANCE.
+    return converted !== 0 && Math.abs(converted) <= OFFSET_ZERO_TOLERANCE * Math.abs(value) && (hasOffset(from) || hasOffset(to))
+      ? 0
+      : converted;
   }
 
   // Workday <-> any other Time-measure unit: pivot through "day" using the

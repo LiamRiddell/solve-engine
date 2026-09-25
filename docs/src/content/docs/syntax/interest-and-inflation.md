@@ -84,12 +84,19 @@ monthly repayment on 200000 at 4% over 25 years // 1,055.67
 
 Inflation adjusts an amount into another year's money: `what is $100 from 1990`
 asks what $100 in 1990 is worth now. The figures come from a consumer price
-index, a published measure of what a fixed basket of goods costs each year,
-bundled with the engine so that no line needs the network.
+index, a record of what a typical basket of shopping cost in each year, so the
+ratio of two years' figures says how much more money buys the same things. The
+index is bundled with the engine so that no line needs the network, and it is
+the **US** index, so it adjusts amounts in US dollars.
 
 ```solve
 what is $100 from 1990 // $254.55
+inflationAdjust($100, 1990, 2020) // $198.01
+what is $500 in 1990 worth in 2010 // $834.35
 ```
+
+The first line runs to the current year, so its answer moves on each January;
+the other two name both years.
 
 The index is the United States CPI-U (the consumer price index for all urban
 consumers) as annual averages, from 1970 to 2026, with 2025 and 2026 estimated
@@ -100,13 +107,19 @@ extrapolated:
 what is $100 from 1960 // Year 1960 is outside the bundled CPI table's range (1970-2026)
 ```
 
-The boundary: the index is American, so an amount in another currency is
-adjusted by US inflation today, which is not what a pound or a euro lost over
-the same years:
+The US index says nothing about what a pound or a euro bought, so an amount in
+any other currency is refused rather than given the American figure with its own
+currency sign. So is a quantity that is not money, and so is a bare number,
+which would be read as dollars without saying so. An index for another country
+is not bundled.
 
 ```solve
-what is £100 from 1990 // £254.55
+what is £100 from 1990 // this is the US consumer price index, which says nothing about what GBP bought: only an amount in US dollars, such as $100, can be adjusted with it
+what is 100 from 1990 // this is the US consumer price index, so it adjusts an amount in US dollars: write the amount with its currency, as $100 or 100 USD
 ```
+
+`value of £100 in 2030 assuming 3% inflation` is a different question: it states
+the rate rather than reading the index, so it takes any currency.
 
 The inflation figures are an approximation, not a substitute for a real
 financial calculation.

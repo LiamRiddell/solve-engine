@@ -41,5 +41,25 @@ division of decimals that never ends, such as `0.1 / 3`, is kept as the fraction
 0.1 / 3 * 3 == 0.1 // true
 ```
 
+The same holds for a decimal on its own. `as fraction` writes it as the fraction
+its digits spell, reduced to lowest terms: 0.333333 is 333,333 millionths, and
+3.14159 is 314,159 hundred-thousandths. It does not round a decimal onto a
+simpler fraction it happens to be close to, so `0.3333333` is 3333333/10000000
+and not a third. A third is written `1/3`, and is then exactly a third.
+
+```solve
+0.333333 as fraction // 333333/1000000
+3.14159 as fraction // 314159/100000
+0.3333333 as fraction // 3333333/10000000
+0.125 as fraction // 1/8
+$0.25 as fraction // 1/4
+```
+
 Transcendental work (`sqrt`, `sin`, a non-integer power) stays floating point,
-because its answers have no exact fraction to keep.
+because its answers have no exact fraction to keep. Asked for as a fraction, such
+a value is given a close one instead, with a denominator of no more than a
+million, since there is no exact one to write:
+
+```solve
+sqrt(2) as fraction // 47321/33461
+```

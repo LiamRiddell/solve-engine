@@ -68,14 +68,19 @@ const EXCLUDED_UNIT_SPELLINGS: ReadonlyMap<string, string> = new Map([
  * unit), just not by typing them in an expression. A two-word spelling such as
  * `square metres` or `sq ft` is joined by the multi-word unit normalizer rule.
  *
- * The one non-ASCII character admitted is a closing superscript two or three on
+ * Two non-ASCII characters are admitted. A closing superscript two or three on
  * an ASCII symbol, so `m²`, `ft²` and `m³` are units as typed. The lexer already
  * reads the superscript as part of the word, and the table holds each one as an
  * alias of the digit form (`m²` and `m2` are one entry), which is also the
  * spelling a worked-out area or volume is printed with (see uom/UnitPowers.ts).
+ * And a leading micro sign, the prefix for a millionth: `µs`, `µm` and `µg`.
+ * Keyboards give it as either U+00B5 (micro sign) or U+03BC (Greek mu), and the
+ * table spells every micro unit both ways, so both are admitted (#666). Before,
+ * every one of them was refused as an undefined variable, although
+ * `microseconds` worked.
  */
 function isTokenizableSpelling(spelling: string): boolean {
-  return /^[A-Za-z0-9_]+[²³]?$/.test(spelling);
+  return /^[\u00B5\u03BC]?[A-Za-z0-9_]+[²³]?$/.test(spelling);
 }
 
 /**

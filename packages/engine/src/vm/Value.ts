@@ -614,6 +614,21 @@ export class Value {
 	 * {@link recycle}.
 	 */
 	public frozen?: FrozenMark;
+	/**
+	 * The unit this plain number is measured in when the engine cannot spell
+	 * it yet: `J·s` for `planck`, `C` (the coulomb) for `elementary charge`.
+	 *
+	 * Set only by the constants package (#648), on a physical constant whose unit
+	 * needs a dimension the unit table does not have (charge, the mole). The
+	 * value stays a Number, so `planck * 2` and `avogadro / 1000` are plain
+	 * numbers as they always were; what the mark changes is a quantity meeting
+	 * it. `planck * 5e14 Hz` read the constant as a bare number and answered in
+	 * hertz, the other operand's unit, and is refused by name instead. Arithmetic
+	 * does not carry it, since a computed value is not the constant any more; a
+	 * variable holding the constant does, through {@link clone}. Cleared by
+	 * {@link recycle} alongside the other sidecars.
+	 */
+	public unspelledUnit?: string;
 
 	constructor(
 		type: ValueType,
@@ -665,6 +680,8 @@ export class Value {
 		// amount must not tell a host that a plain number came from a rate.
 		this.sources = undefined;
 		this.frozen = undefined;
+		// A reused Value that once held `planck` must not refuse a quantity later.
+		this.unspelledUnit = undefined;
 	}
 
 	/**
@@ -719,6 +736,7 @@ export class Value {
 		if (this.timedOut !== undefined) out.timedOut = this.timedOut;
 		if (this.sources !== undefined) out.sources = this.sources;
 		if (this.frozen !== undefined) out.frozen = this.frozen;
+		if (this.unspelledUnit !== undefined) out.unspelledUnit = this.unspelledUnit;
 		return out;
 	}
 

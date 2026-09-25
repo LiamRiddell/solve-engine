@@ -27,6 +27,25 @@ export function isDenominatorUnit(token: Token | undefined): boolean {
 	return spelling.length > 1 && UNIT_TABLE[spelling] !== undefined;
 }
 
+/** The token types a currency amount opens with: `$15`, `£12`, `€9`. */
+const CURRENCY_SYMBOL_TYPES = new Set(["DOLLAR", "POUND", "EURO", "YEN", "RUBLE", "WON", "CURRENCY_SYMBOL"]);
+
+/**
+ * Whether a denominator fused from the slash at `pos` may name a variable
+ * instead (#642): a unit spelling after a slash is also a common variable name
+ * (`t`, `d`, `s`, `h`), and `100 / t` with `t = 5` is 20.
+ *
+ * Not when a currency amount is right before the slash: `$15/h` is an hourly
+ * rate whatever `h` holds, the documented rule that a unit written straight
+ * after a value is a unit. A unit before the slash never reaches here, since
+ * `60 km / h` is fused into the compound unit `km/h` first.
+ */
+function mayNameVariable(tokens: readonly Token[], pos: number): boolean {
+	const before = tokens[pos - 1];
+	if (before === undefined) return true;
+	return !(before.type === "NUMBER" && CURRENCY_SYMBOL_TYPES.has(tokens[pos - 2]?.type ?? ""));
+}
+
 /** Words that introduce a rate denominator on their own. */
 const PER_WORDS = new Set(["per", "a", "an", "each", "every"]);
 
@@ -116,11 +135,12 @@ export function bareRateDenominatorNormalizerRule(priority = 75): NormalizerRule
 			// A number after the unit means this was never a bare denominator:
 			// `/ 3 days` is a division and `a day + 2` is not a rate at all.
 			const unitToken = tokens[pos + 1];
+			const denominator = createFusedToken("PER_UNIT", unitToken.value, [head, unitToken]);
+			// Only the slash: `per t` and `a day` say rate in words.
+			if (isSlash && mayNameVariable(tokens, pos)) denominator.mayNameVariable = true;
 			return {
 				consumed: 2,
-				replacement: [
-					createFusedToken("PER_UNIT", unitToken.value, [head, unitToken]),
-				],
+				replacement: [denominator],
 				ruleName: "uom:bare-rate-denominator",
 			};
 		},

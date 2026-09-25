@@ -70,17 +70,27 @@ function evalReal(expr: string): Value {
 const CURRENT_YEAR = new Date().getFullYear();
 
 describe("inflationAdjust (function-call form)", () => {
-  test("inflationAdjust(500, 1970, 2020) matches the bundled CPI table's ratio", () => {
+  // These three used a bare 500. The table is the US index, so since #650 an
+  // amount has to be in US dollars (a bare number is refused, as payroll
+  // refuses a bare salary), and they are written with the dollar sign. The
+  // refusal of the bare number is pinned below them.
+  test("inflationAdjust($500, 1970, 2020) matches the bundled CPI table's ratio", () => {
     const ratio = inflationRatio(1970, 2020)!;
-    expect(parseAndExecute("inflationAdjust(500, 1970, 2020)").toNumber()).toBeCloseTo(500 * ratio, 2);
+    expect(evalReal("inflationAdjust($500, 1970, 2020)").toNumber()).toBeCloseTo(500 * ratio, 2);
   });
 
   test("inflationAdjust with fromYear === toYear is a no-op (ratio 1)", () => {
-    expect(parseAndExecute("inflationAdjust(500, 2000, 2000)").toNumber()).toBeCloseTo(500, 6);
+    expect(evalReal("inflationAdjust($500, 2000, 2000)").toNumber()).toBeCloseTo(500, 6);
   });
 
   test("inflationAdjust errors on a year outside the bundled CPI table's range", () => {
-    expect(parseAndExecute("inflationAdjust(500, 1900, 2020)").type).toBe(ValueType.Error);
+    const value = evalReal("inflationAdjust($500, 1900, 2020)");
+    expect(value.type).toBe(ValueType.Error);
+    expect(value.errorCode).toBe("INFLATION_YEAR_OUT_OF_RANGE");
+  });
+
+  test("inflationAdjust refuses a bare amount, which would assume dollars without saying so (#650)", () => {
+    expect(parseAndExecute("inflationAdjust(500, 1970, 2020)").errorCode).toBe("INFLATION_EXPECTED_USD");
   });
 
   test(`the bundled CPI table covers ${CPI_MIN_YEAR}-${CPI_MAX_YEAR}, including the present year`, () => {
@@ -97,9 +107,11 @@ describe(`what is $X from YEAR -> present-day value (real engine, present year =
     expect(value.toNumber()).toBeCloseTo(500 * ratio, 1);
   });
 
-  test("what is 500 from 2003 -> works without a currency sigil too (plain number)", () => {
-    const ratio = inflationRatio(2003, CURRENT_YEAR)!;
-    expect(evalReal("what is 500 from 2003").toNumber()).toBeCloseTo(500 * ratio, 1);
+  test("what is 500 from 2003 -> refused without a currency (#650)", () => {
+    // This used to answer the US figure for a bare number. The index is
+    // American, so a bare amount is refused rather than read as dollars; the
+    // dollar form is the one above.
+    expect(evalReal("what is 500 from 2003").errorCode).toBe("INFLATION_EXPECTED_USD");
   });
 });
 

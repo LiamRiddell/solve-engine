@@ -213,6 +213,36 @@ export function applyTextEdits(text: string, edits: readonly TextEdit[]): string
 	return out;
 }
 
+/**
+ * A token's part in a line's shape, which a rename compares before and after:
+ * a name is a name whether it lexes as a word or a unit, and a rate denominator
+ * that may name a variable (`100 / t`, #642) is the slash and the name it is
+ * wherever the rename touches it, since a rename only reaches it below the
+ * definition (see {@link NameSite.soft}).
+ */
+function shapeOf(token: Token): string {
+	if (token.type === "IDENT" || token.type === "UNIT") return "NAME";
+	if (token.type === "PER_UNIT" && token.mayNameVariable === true) return "SLASH NAME";
+	return token.type;
+}
+
+/**
+ * Whether `site`'s name is defined before it: on an earlier line, or in an
+ * earlier expression on its own line.
+ *
+ * @param document - Every line's analysis.
+ * @param index - The zero-based line `site` is on.
+ * @param site - The name.
+ */
+function definedBefore(document: readonly LineAnalysis[], index: number, site: NameSite): boolean {
+	for (let i = 0; i <= index; i++) {
+		for (const s of document[i].names) {
+			if (s.key === site.key && s.use === "definition" && (i < index || s.expression < site.expression)) return true;
+		}
+	}
+	return false;
+}
+
 /** One name on one line, with the graph's reading of it. */
 interface NameSite {
 	from: number;
@@ -224,6 +254,12 @@ interface NameSite {
 	use: NameUse;
 	/** Which expression on the line it belongs to, left to right (inline solves put several on a line). */
 	expression: number;
+	/**
+	 * A rate denominator that reads this name only when it is defined above
+	 * (`100 / t`, #642). Below the definition it divides by the variable; above
+	 * it, or with no definition, it is the unit, so a rename leaves it alone.
+	 */
+	soft?: boolean;
 }
 
 /** One absolute `line N` on one line. */
@@ -362,7 +398,10 @@ export class DocumentReferences {
 		const edits: TextEdit[] = [];
 		document.forEach((analysis, i) => {
 			for (const s of analysis.names) {
-				if (s.key === site.key) edits.push({ line: i + 1, from: s.from, to: s.to, text: newName });
+				if (s.key !== site.key) continue;
+				// `100 / t` names the variable only below its definition.
+				if (s.soft === true && !definedBefore(document, i, s)) continue;
+				edits.push({ line: i + 1, from: s.from, to: s.to, text: newName });
 			}
 		});
 
@@ -614,7 +653,7 @@ export class DocumentReferences {
 		const read = this.engine.readExpressionTokens(expression, out.unitsAbove);
 		if (read === null) return;
 		const tokens = read.tokens.slice(read.start);
-		out.shapes.push(`${read.start}|${tokens.map((t) => (t.type === "IDENT" || t.type === "UNIT" ? "NAME" : t.type)).join(" ")}`);
+		out.shapes.push(`${read.start}|${tokens.map(shapeOf).join(" ")}`);
 
 		if (read.unit !== null) {
 			// `1 sprint = 2 weeks`: the words before `=` name a unit, which a
@@ -625,17 +664,21 @@ export class DocumentReferences {
 		} else {
 			extractReadsAndWrites(tokens, (i, key, use) => {
 				const token = tokens[i];
+				// A rate denominator that may name a variable (`100 / t`, #642)
+				// is fused with its slash, so the name is the end of its span.
+				const at = token.type === "PER_UNIT" && token.sourceEnd !== undefined ? token.sourceEnd - token.text.length : token.offset;
 				// Only a name the reader wrote, at the place it was written. A
 				// token a rule rewrote or inserted has no text of its own here.
-				if (token.value !== token.text || !expression.startsWith(token.text, token.offset)) return;
+				if (token.value !== token.text || !expression.startsWith(token.text, at)) return;
 				out.names.push({
-					from: base + token.offset,
-					to: base + token.offset + token.text.length,
+					from: base + at,
+					to: base + at + token.text.length,
 					key,
 					name: token.value,
 					global: key !== token.value,
 					use,
 					expression: index,
+					...(token.type === "PER_UNIT" ? { soft: true } : {}),
 				});
 			});
 		}

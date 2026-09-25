@@ -63,6 +63,18 @@ export function lookupUnit(unit: string): UnitEntry | undefined {
 }
 
 /**
+ * Whether a unit's scale has its zero somewhere other than the base unit's, so
+ * converting it adds or takes away an offset (the temperatures, `°F` and `°C`
+ * against `K`). A read of the offsets table, for a caller that has to treat an
+ * offset conversion's rounding specially; see `UomConverter.convertUnit()`.
+ *
+ * @param unit - The unit spelling, case-sensitive.
+ */
+export function hasOffset(unit: string): boolean {
+  return DIFFERENCE_LOOKUP.has(unit);
+}
+
+/**
  * Converts `quantity` from one unit to another.
  *
  * THROWS a `RangeError` for an unknown unit or a pair in different measures.

@@ -116,6 +116,61 @@ const UPSTREAM_BEST_UNIT_CORRECTIONS = [
 ];
 
 /**
+ * Abbreviations `convert` does not spell, added on the way through (#666).
+ *
+ * A different kind of entry from the corrections above: nothing upstream is
+ * wrong, it simply has no `hr` or `mins`. Each one is an alias of a unit
+ * upstream does spell and takes that unit's ratio, so no number in the table is
+ * this project's own. They are here, rather than layered on at run time the way
+ * ExtendedUnits.ts is, because the lexer vocabulary, the rate and duration
+ * normaliser rules and the timespan converters all read UNIT_TABLE directly, and
+ * an abbreviation every one of them knows is the point.
+ *
+ * The bar for an entry is that people write it after a number and it names one
+ * unit only. `$15/hr` and `30 mins` are how an hourly rate and a meeting are
+ * written, and the engine already read these spellings inside a compact duration
+ * (`1hr30min`) and a pace while refusing them anywhere else.
+ *
+ * Applying an entry asserts upstream still lacks the spelling, so a `convert`
+ * release that adds it fails the generator and the entry gets deleted.
+ */
+const ENGINE_SPELLINGS = [
+	{ spelling: "hr", of: "h" },
+	{ spelling: "hrs", of: "h" },
+	{ spelling: "mins", of: "min" },
+	{ spelling: "sec", of: "s" },
+	{ spelling: "secs", of: "s" },
+	{ spelling: "wks", of: "wk" },
+	{ spelling: "yrs", of: "yr" },
+];
+
+/**
+ * Adds the spellings in {@link ENGINE_SPELLINGS} to the imported table.
+ *
+ * @returns the spellings added, so the emitter can list them in the output.
+ */
+function applyEngineSpellings(unitsObject) {
+	const added = [];
+	for (const { spelling, of } of ENGINE_SPELLINGS) {
+		if (Object.prototype.hasOwnProperty.call(unitsObject, spelling)) {
+			throw new Error(
+				`Engine spelling ${JSON.stringify(spelling)} is now spelled by convert itself. ` +
+					`Delete it from ENGINE_SPELLINGS.`
+			);
+		}
+		const entry = unitsObject[of];
+		if (entry === undefined) {
+			throw new Error(
+				`Engine spelling ${JSON.stringify(spelling)} names ${JSON.stringify(of)}, which convert no longer has.`
+			);
+		}
+		unitsObject[spelling] = entry;
+		added.push(spelling);
+	}
+	return added;
+}
+
+/**
  * Applies the corrections above to the freshly imported upstream tables.
  *
  * Mutates the imported objects rather than patching the emitted text, so the
@@ -224,6 +279,7 @@ async function main() {
 	}
 
 	const { correctedUnits, correctedKinds } = applyUpstreamCorrections(unitsObject, bestUnits);
+	const engineSpellings = applyEngineSpellings(unitsObject);
 
 	const readback = { units: {}, differences: {}, best: {}, symbols: {} };
 	const lines = [];
@@ -244,6 +300,10 @@ async function main() {
  * UPSTREAM_UNIT_CORRECTIONS / UPSTREAM_BEST_UNIT_CORRECTIONS in the generator.
  * They are corrections of an upstream error, never a local preference.
  *
+ * The one addition is a handful of abbreviations upstream does not spell
+ * (\`hr\`, \`mins\`, \`secs\`), listed below and justified in ENGINE_SPELLINGS in
+ * the generator. Each is an alias of an upstream unit at that unit's ratio.
+ *
  * Upstream: https://github.com/citycide/convert (MIT, Copyright (c) Jonah Snider)
  */
 
@@ -252,7 +312,7 @@ export type UnitEntry = readonly [kind: number, ratio: number];
 `);
 
 	// ── UNIT_TABLE, packed ──
-	// 1456 spellings map to only ~378 distinct [kind, ratio] pairs (3.85 aliases
+	// 1463 spellings map to only ~378 distinct [kind, ratio] pairs (3.85 aliases
 	// each). Emitting each spelling as its own `"key": [kind, ratio]` entry
 	// repeats every ratio, and the long floating-point ratios dominate the parsed
 	// size of the module. Packing groups the aliases that share a pair and stores
@@ -280,8 +340,8 @@ export type UnitEntry = readonly [kind: number, ratio: number];
 	const correctedList = [...correctedUnits.keys()].sort();
 	lines.push(`/**
  * Source for {@link UNIT_TABLE}, packed. Each \`;\`-separated record is
- * \`kind|ratio|alias1,alias2,...\`, so the 378 distinct \`[kind, ratio]\` pairs
- * spell each ratio once rather than once per alias. See {@link UNIT_TABLE}.${correctedList.length ? `\n *\n * Corrected vs upstream: ${correctedList.map((unit) => JSON.stringify(unit)).join(", ")}.` : ""}
+ * \`kind|ratio|alias1,alias2,...\`, so the ${groups.size} distinct \`[kind, ratio]\` pairs
+ * spell each ratio once rather than once per alias. See {@link UNIT_TABLE}.${correctedList.length ? `\n *\n * Corrected vs upstream: ${correctedList.map((unit) => JSON.stringify(unit)).join(", ")}.` : ""}${engineSpellings.length ? `\n *\n * Added to upstream: ${engineSpellings.map((unit) => JSON.stringify(unit)).join(", ")}.` : ""}
  */
 const PACKED_UNIT_TABLE =
   ${JSON.stringify(packedUnitTable)};
@@ -314,8 +374,8 @@ function unpackUnitTable(packed: string): Record<string, UnitEntry> {
  * spellings are present here and resolve through the conversion API even though
  * the lexer cannot tokenize them.
  *
- * Stored packed (see {@link PACKED_UNIT_TABLE}) and decoded once at load: 1456
- * spellings share 378 distinct pairs, so each ratio parses once per pair rather
+ * Stored packed (see {@link PACKED_UNIT_TABLE}) and decoded once at load: ${Object.keys(unitsObject).length}
+ * spellings share ${groups.size} distinct pairs, so each ratio parses once per pair rather
  * than once per alias. The generator asserts the packed form decodes to exactly
  * the source table.
  */

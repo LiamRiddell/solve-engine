@@ -53,7 +53,13 @@ export const CONSTANTS_PACKAGE: IEnginePackage = {
 			const name = args[0]?.type === ValueType.String ? (args[0].value as string) : "";
 			const entry = constantEntry(name);
 			if (entry === null) return errorValue("UNKNOWN_CONSTANT", `"${name}" is not a known constant`);
-			return entry.unit ? uomValue(entry.value, entry.unit) : numberValue(entry.value);
+			if (entry.unit) return uomValue(entry.value, entry.unit);
+			const value = numberValue(entry.value);
+			// A constant in a unit the engine cannot spell yet stays a number, and
+			// says which unit it is really in so a quantity meeting it is refused
+			// (see Value.unspelledUnit).
+			if (entry.unspelledUnit !== undefined) value.unspelledUnit = entry.unspelledUnit;
+			return value;
 		},
 	},
 	tokenCategories: {

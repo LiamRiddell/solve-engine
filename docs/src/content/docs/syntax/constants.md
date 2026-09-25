@@ -53,8 +53,31 @@ avogadro // 602,214,076,000,000,000,000,000
 | `boltzmann` | 1.380649 × 10⁻²³ | J/K |
 | `elementary charge` | 1.602176634 × 10⁻¹⁹ | C |
 | `gas constant` | 8.314462618 | J/(mol·K) |
+| `avogadro` | 6.02214076 × 10²³ | mol⁻¹ |
 | `electron mass` | 9.1093837015 × 10⁻³¹ | kg |
 | `proton mass` | 1.67262192369 × 10⁻²⁷ | kg |
 
-`electron mass` and `proton mass` carry their kilograms, so they convert and
-combine like the other dimensioned constants.
+`electron mass` and `proton mass` carry their kilograms, and `boltzmann` its
+joules per kelvin, so they convert and combine like the other dimensioned
+constants: the Boltzmann constant times a temperature is an energy.
+
+```solve
+boltzmann // 1.38e-23 J/K
+boltzmann * 300 K // 4.14e-21 J
+```
+
+The rest are in units the engine cannot write yet: a joule-second, a coulomb
+(the unit of electric charge), and anything per mole (the chemist's count of
+particles). Each of them is a plain number, and scaling one by a plain number
+works as it always has. What is refused is meeting a quantity, since a plain
+number takes the other side's unit and the answer would be labelled wrongly:
+Planck's constant times a frequency is an energy, not a number of hertz.
+
+```solve
+planck * 5e14 // 3.31e-19
+avogadro * 2 // 1,204,428,152,000,000,000,000,000
+planck * 5e14 Hz // A constant measured in J·s and a quantity in Hz cannot be multiplied: the engine cannot spell J·s yet, so the answer would wrongly be in Hz. Leave the unit off the other side and read the result in the unit it should have.
+```
+
+The refusal applies to the constant itself, as written or held in a variable. A
+value already worked out from one, `planck * 2`, is an ordinary number.

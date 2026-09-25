@@ -205,6 +205,16 @@ total.sources;
 // [{ provider: "Treasury feed", kind: "primed", fetchedAt: 1790179320000, subject: "USD/GBP" }]
 ```
 
+A primed table sits beside the tables the engine fetches for itself rather than
+replacing them, and each source keeps its own: Frankfurter's fiat rates,
+CoinGecko's crypto prices and a host's primed rates for one base currency can all
+be fresh at once, so a note converting dollars to euros and dollars to bitcoin
+converts both, and a live fetch never discards the pairs a host primed. Where two
+fresh tables for one base both hold a pair, the one stored most recently serves
+it, which is the rate replacing the older table used to give; priming the same
+provider and base again replaces that provider's own table. The record names the
+table that actually served each conversion.
+
 Each record is plain data, so it crosses the worker boundary (the worker DTO's
 `sources` field) and a snapshot unchanged:
 

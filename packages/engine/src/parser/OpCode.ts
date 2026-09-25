@@ -185,6 +185,12 @@ export enum OpCode {
 	// percentage, and anything else is left as it is. Pops one, pushes one. See
 	// asRate() in vm/VMConversion.ts.
 	AS_RATE = 163,
+	// `100 / t`, where `t` is a unit spelling that may also be a variable
+	// (#642). Operands: the name's string-pool index, then the rate builtin's
+	// index. Always followed by a DIV. A defined variable of that name is pushed
+	// for the DIV to divide by; otherwise the value on the stack becomes the rate
+	// `<value> per <unit>` and the DIV is stepped over. See rateOver() in vm/VM.ts.
+	RATE_OR_DIVIDE = 164,
 }
 
 // Reverse lookup built once at module load, getOpCodeName() is called once

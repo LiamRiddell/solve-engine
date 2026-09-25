@@ -39,6 +39,28 @@ export const romanPackage: IEnginePackage = {
 any bare word after `as` and reads its text, so the name is claimed the moment you
 register it.
 
+## `in` reaches it too
+
+A reader who writes `10 in roman` means the same thing, and gets it: before the
+line is parsed, `in` followed by the name of a registered converter is rewritten
+to `as`, the way `255 in hex` has always reached the built-in `hex`. Without that,
+`in` is unit conversion, which took the word as a unit and labelled the number
+with it (`10.00 roman`); a word that is neither a unit nor a converter is now
+refused there by name.
+
+Two limits keep the rewrite from shadowing anything:
+
+- **Only `in`, not `to`.** A word after `to` is a percentage change to a
+  variable, `start to n`, and a converter is often named like one (the derived
+  units register `n`, `v` and `w`), so `to` keeps its reading.
+- **Only an ordinary word.** A name the lexer reads as a unit keeps its unit
+  meaning after `in`: the datetime package's `month` converter does not take
+  `5 hours in month` away from unit conversion. Pick a name that is not a unit,
+  as `roman` is not.
+
+The rewrite asks the same registry `as` asks, so `in` reaches exactly the
+converters `as` does.
+
 ## It must be pure and synchronous
 
 A converter is a plain function called during evaluation, so it cannot await. For

@@ -63,6 +63,37 @@ seconds are smaller than minutes, while `90m` on a line by itself is a distance.
 Anything that does not descend is not a duration and is left alone: `2m30h` is
 not two minutes and thirty hours, it is the undefined variable it always was.
 
+### Short spellings
+
+The abbreviations people write after a number are units in their own right, not
+only inside a compact duration: `hr` and `hrs` for hours, `mins` for minutes,
+`sec` and `secs` for seconds, `wks` for weeks and `yrs` for years, beside the
+`h`, `min`, `s`, `wk` and `yr` that were always there. So an hourly rate reads
+the way a payslip writes it, and a meeting the way a calendar does.
+
+```solve
+$15/hr // 15.00 USD/hr
+30 mins // 30.00 mins
+$15/hr * 37.5 hrs // $562.50
+2 hours in mins // 120.00 mins
+90 minutes in hr // 1.50 hr
+```
+
+Each is another name for a unit the engine already had, so `hr` is exactly an
+hour and converts and combines as `h` does. Like every unit spelling it is lower
+case only (`HR` is a name), and it is a unit where a unit belongs, straight after
+a number. A variable called `hr` is still your variable at the start of a line
+or after an operator, as [variables](/syntax/variables/) explains, while `$15/hr`
+stays an hourly rate whatever `hr` holds, just as `$15/h` always did.
+
+```solve-doc
+hr = 2
+hr * 3 // 6
+$15/hr // 15.00 USD/hr
+```
+
+`m` is still metres outside a compact duration, as above.
+
 ## Intervals
 
 ```solve

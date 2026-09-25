@@ -99,6 +99,12 @@ depending on a rate. Amounts in one currency involve no rate and record nothing.
 See [async and live data](/guide/async-and-live-data/#where-a-live-value-came-from)
 for how a host reads it.
 
+Rates from different sources are kept side by side. A note that converts `$100
+in EUR` on one line and `$100 in BTC` on the next fetches the euro rate from
+Frankfurter and the bitcoin price from CoinGecko, and both lines convert; each
+records its own provider. A rate a host supplied is kept beside the engine's own
+in the same way.
+
 To stop a converted amount moving with the market, end the line with `frozen`:
 it keeps the first answer, with the date it was fixed. See
 [frozen answers](/syntax/frozen-answers/).

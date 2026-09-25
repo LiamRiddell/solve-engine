@@ -57,8 +57,15 @@ export function geometryParselet(measure: string): PrefixParselet {
 				builder.emitOpcode(OpCode.PUSH_STRING);
 				builder.emitString(dim);
 				argCount++;
-				// The value primary only, at the tightest binding power.
-				parser.parseExpression(BindingPower.Call, builder);
+				// The value and what is written straight after it, a unit above
+				// all: `radius 5 m` is five metres. Read at the tightest binding
+				// power, only the `5` belonged to the dimension, and the stranded
+				// `m` then labelled the whole answer (78.54 m for an area) or, in
+				// front of the comma, stopped the line parsing at all (#638). At
+				// Prefix a unit and the other postfix forms bind, and everything
+				// looser does not: a trailing `in cm²` is left for the answer, and
+				// `^`, `*` and `+` still apply to it as before.
+				parser.parseExpression(BindingPower.Prefix, builder);
 				argCount++;
 				if (parser.peek()?.type === "COMMA") parser.consume(); // pair separator
 			}

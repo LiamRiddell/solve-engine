@@ -53,11 +53,11 @@ const MEASURE_DIMENSIONS: Readonly<Record<string, MeasureDimension>> = {
 
 /**
  * Units with a dimension but no measure in the tables. `mps2` is acceleration
- * (m/s², the spelling the normalizer gives `m/s^2`), and `hr` an hour.
+ * (m/s², the spelling the normalizer gives `m/s^2`). `hr` used to be listed
+ * here too; the table spells it now (#666), so it is found by measure like `h`.
  */
 const UNMEASURED_UNITS: Readonly<Record<string, { readonly dim: Dimension; readonly si: number }>> = {
 	mps2: { dim: [0, 1, -2, 0], si: 1 },
-	hr: { dim: [0, 0, 1, 0], si: 3600 },
 };
 
 /** The named unit a dimension composes onto, if it is a recognised derived one. */

@@ -140,7 +140,10 @@ export interface SerializedValueSidecars {
  * cached line out of the snapshot (#665).
  */
 export type SerializedValue = SerializedValueSidecars & (
-	| { t: ValueType.Number; v: SerializedNumber; exact?: SerializedDecimal; rational?: SerializedRational }
+	// `uu`: a physical constant's unit the table cannot spell (Value.unspelledUnit,
+	// #648), so a restored `x = planck` is still refused beside a quantity.
+	// Optional, like the sidecars above, so no version bump.
+	| { t: ValueType.Number; v: SerializedNumber; exact?: SerializedDecimal; rational?: SerializedRational; uu?: string }
 	| { t: ValueType.Hex; v: SerializedNumber | string; big?: boolean; base?: string }
 	| { t: ValueType.BigInt; v: string }
 	| { t: ValueType.String; v: string }
@@ -333,6 +336,7 @@ function serializeValueBody(value: Value, where: string): SerializedValue {
 			const out: Extract<SerializedValue, { t: ValueType.Number }> = { t: ValueType.Number, v: encodeNumber(value.value as number) };
 			if (value.exact !== undefined) out.exact = serializeDecimal(value.exact);
 			if (value.rational !== undefined) out.rational = serializeRational(value.rational);
+			if (value.unspelledUnit !== undefined) out.uu = value.unspelledUnit;
 			return out;
 		}
 		case ValueType.Hex: {
@@ -408,6 +412,7 @@ function deserializeValueBody(sv: SerializedValue): Value {
 			const v = new Value(ValueType.Number, decodeNumber(sv.v));
 			if (sv.exact !== undefined) v.exact = deserializeDecimal(sv.exact);
 			if (sv.rational !== undefined) v.rational = deserializeRational(sv.rational);
+			if (sv.uu !== undefined) v.unspelledUnit = sv.uu;
 			return v;
 		}
 		case ValueType.Hex: {
@@ -830,6 +835,7 @@ function assertValueShape(sv: unknown, where: string): void {
 			if (!isSerializedNumber(sv.v)) malformed(`${where}.v`, "a number", sv.v);
 			if (sv.exact !== undefined) assertDecimalShape(sv.exact, `${where}.exact`);
 			if (sv.rational !== undefined) assertRationalShape(sv.rational, `${where}.rational`);
+			if (sv.uu !== undefined && (typeof sv.uu !== "string" || sv.uu === "")) malformed(`${where}.uu`, "a unit name", sv.uu);
 			return;
 		case ValueType.Hex:
 			if (sv.big ? !isIntegerString(sv.v) : !isSerializedNumber(sv.v)) {

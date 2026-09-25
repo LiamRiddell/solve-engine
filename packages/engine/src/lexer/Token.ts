@@ -48,6 +48,15 @@ export interface Token {
 	 * internals. `value` stays the text the reader typed.
 	 */
 	fault?: { readonly code: string; readonly message: string };
+
+	/**
+	 * On a rate denominator fused from a slash with nothing measured before it
+	 * (`100 / t`, `distance / t`), that the word may be a variable's name as
+	 * well as a unit's. A variable of that name, when one is defined, is divided
+	 * by instead of read as the unit (#642). Set by the bare-rate rule; the
+	 * parselet compiles the choice and the dependency graph records the read.
+	 */
+	mayNameVariable?: boolean;
 }
 
 /**

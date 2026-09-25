@@ -8,7 +8,7 @@
  * quietly so. Being in the table means the conversion API can resolve a
  * spelling; it does not mean the lexer can tokenize one. Spellings with a
  * character an expression cannot type as part of a unit are the clearest case:
- * `µm` and `W⋅h` are real table entries and both fail to parse. (Multi-word
+ * `W⋅h` and `fl. oz.` are real table entries and both fail to parse. (Multi-word
  * spellings such as `sq ft` and `US survey foot` parse, fused by
  * `uom:multi-word-unit`.) Some single-word entries fail too, `turn` among them.
  *
@@ -332,7 +332,7 @@ ${sections.join("\n\n")}
 
 The conversion tables carry ${entries.length} spellings in total, and ${skipped} of
 them are missing above. Most carry a character an expression cannot type as
-part of a unit, such as the micro sign in \`µm\` or the dot in \`W⋅h\`, and a few
+part of a unit, such as the dot in \`W⋅h\` or the full stops in \`fl. oz.\`, and a few
 are ordinary words the lexer leaves to English, such as \`turn\` and \`point\`.
 The tables can resolve them but an expression cannot spell them, so they are
 excluded here rather than listed and quietly broken.

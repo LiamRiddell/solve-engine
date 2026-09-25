@@ -15,6 +15,13 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
  *
  * Binds at `Product`, the same level division binds at, so a rate sits where a
  * division would have and the surrounding arithmetic is unchanged.
+ *
+ * A denominator after a slash with nothing measured before it may be a
+ * variable's name as well (`100 / t`, #642). Whether it is depends on the lines
+ * above, which the parse cannot see, so it compiles to RATE_OR_DIVIDE and then
+ * an ordinary DIV: at run time a defined variable of that name is divided by,
+ * exactly as `100 / (t)` is, and otherwise the rate is built and the DIV is
+ * stepped over.
  */
 export class PerUnitParselet implements InfixParselet {
 	readonly category = "Uom";
@@ -23,6 +30,13 @@ export class PerUnitParselet implements InfixParselet {
 	constructor(private readonly builtinIndex: number) {}
 
 	parse(_parser: Parser, _left: Token, token: Token, builder: BytecodeBuilder): void {
+		if (token.mayNameVariable === true) {
+			builder.emitOpcode(OpCode.RATE_OR_DIVIDE);
+			builder.emitString(String(token.value));
+			builder.emitIndex(this.builtinIndex);
+			builder.emitOpcode(OpCode.DIV);
+			return;
+		}
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(String(token.value));
 		builder.emitOpcode(OpCode.CALL_BUILTIN);

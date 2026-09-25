@@ -51,3 +51,19 @@ volt, `C` is a temperature), so a bare `MMXXIV` would be ambiguous.
 Roman numerals cover the classic range 1 to 3999. A number outside that, or a
 string that is not a valid Roman numeral (`"IIII"`, `"IC"`), is reported as an
 error rather than guessed at.
+
+## Saying in rather than as
+
+Each of these can be asked for with `in` as well as `as`, the way `in hex` asks
+for hexadecimal: `2024 in roman` is the same question as `2024 as roman`.
+
+```solve
+2024 in roman // MMXXIV
+42 in words // forty-two
+3 in ordinal // 3rd
+```
+
+`to` is not read this way. A word after `to` is a percentage change to the
+value of that name (`start to finish`), and a note can have a value called
+`roman` or `words`, so `to` keeps that reading and `as` or `in` asks for the
+spelling.

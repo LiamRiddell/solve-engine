@@ -17,9 +17,10 @@ add their own targets.
 0.75 as fraction // 3/4
 ```
 
-`as fraction` is exact for a value that was written as a fraction: the result is
-reduced to lowest terms rather than approximated, so a computed fraction reads
-back as itself. See [fractions](/syntax/fractions/).
+`as fraction` is exact for a value that was written as a fraction or as a
+decimal: the result is reduced to lowest terms rather than approximated, so a
+computed fraction reads back as itself and a decimal reads as the fraction its
+digits spell. See [fractions](/syntax/fractions/).
 
 ```solve
 10/4 as fraction // 5/2
