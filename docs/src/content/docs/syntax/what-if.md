@@ -174,6 +174,12 @@ The rest, in words:
   (its values times the lines above its target), so a sweep near the bottom of a
   long note is limited to fewer values. The two limits keep a sweep an answer
   rather than a stall.
+- The note as a whole has a budget too. Every what-if and sweep in it, with the
+  other forms that reach across lines (goal seek's probes and the span totals
+  such as `total above`), spends from one count of line runs per evaluation of
+  the note, a million by default (`vm.maxLineRunsPerPass`). A sweep that would
+  take the note past it is refused, and the lines above keep their answers, so
+  twenty sweeps each inside their own limit cannot together stall the note.
 - An input no line up to the target uses is refused, since changing it cannot
   change the answer and it is almost always a misspelling. Names are matched
   exactly, so `Deposit` is not `deposit`.

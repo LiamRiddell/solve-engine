@@ -7,6 +7,7 @@ import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { lineValueProblem as checkLineValue, noDocument as requireContext } from "@solve-js/vm/LineReads";
 import { headingOf, isSummaryLine, sectionKey } from "./SectionReader";
 import { formatLineTrace, traceProblem } from "@solve-js/explain/LineTracer";
+import { spendSpanReads } from "@solve-js/vm/PassWork";
 
 /**
  * Cross-line data access, `prev`, `line<N>`, `sum(line X : line Y)`
@@ -152,6 +153,10 @@ function aggregateRange(from: number, to: number, context: LineExecutionContext,
   // line to read past the last one, and no cycle can close through a line
   // that is not there. Declaring all of it exhausted the heap.
   const lineCount = context.getLineCount?.();
+  // The span it walks, charged to the pass (#711); no further than the document.
+  const span = Math.abs(to - from) + 1;
+  const refused = spendSpanReads(context, lineCount === undefined ? span : Math.min(span, lineCount), "A line range");
+  if (refused) return refused;
   if (context.noteLineRead && lineCount !== undefined) {
     const first = Math.max(1, Math.min(from, to));
     const last = Math.min(lineCount, Math.max(from, to));
@@ -233,8 +238,12 @@ function aggregateAbove(context: LineExecutionContext, isAverage: boolean): Valu
   if (context.noteLineRead) {
     for (let n = context.lineIndex - 1; n >= 1 && !endsBlock(n); n--) context.noteLineRead(n);
   }
+  // The lines the walk reads, counted as it goes and charged to the pass once
+  // it has them (#711); both passes walk the same block.
+  let walked = 0;
   for (let n = context.lineIndex - 1; n >= 1; n--) {
     if (endsBlock(n)) break;
+    walked++;
     // A line with no figure inside the block, a comment or a blockquote, is
     // passed over, as a line range passes over it.
     if (boundaryCheck(n)) continue;
@@ -254,6 +263,8 @@ function aggregateAbove(context: LineExecutionContext, isAverage: boolean): Valu
     }
     values.push(v!);
   }
+  const refused = spendSpanReads(context, walked, "total above");
+  if (refused) return refused;
   if (values.length === 0) return errorValue("LINE_RANGE_EMPTY", "No lines above to aggregate (hit the top of the document, a blank line, or a heading immediately)");
   // The walk runs upwards from the line above, so the column arrives bottom
   // first. The unit the answer carries is the one written at the top of the
@@ -434,6 +445,9 @@ function aggregateSection(context: LineExecutionContext, name: string, mode: Sec
     const heading = headingOf(text);
     if (heading !== null) headings.push({ line: n, level: heading.level, name: heading.name });
   }
+  // The scan read every line of the note, charged to the pass (#711).
+  const refused = spendSpanReads(context, lastLine, "A section total");
+  if (refused) return refused;
 
   const matches = wanted === "" ? [] : headings.filter((h) => sectionKey(h.name) === wanted);
   if (matches.length === 0) return sectionNotFound(name, headings);

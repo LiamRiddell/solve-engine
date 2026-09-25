@@ -28,6 +28,9 @@ import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import type { CalendarOption } from "@solve-js/calendar/resolveCalendar";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { Value, ValueType, numberValue, stringValue, pendingValue, freezeIfDev, errorValue, isArenaActive, persistentValue, withoutValueArena, type MatrixData } from "@solve-js/vm/Value";
+import { passWorkRefusal, keptElements, keptElementsRefusal } from "@solve-js/vm/PassWork";
+import { nextInstruction } from "@solve-js/parser/OperandWidth";
+import { OpCode } from "@solve-js/parser/OpCode";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { PackageCompatibilityIndex } from "@solve-js/api/PackageCompatibility";
 import { assertEngineVersionCompatible } from "@solve-js/api/EngineVersionCompatibility";
@@ -490,6 +493,30 @@ const COMPOUND_OPERATORS: ReadonlyMap<string, { type: string; text: string; seed
     ['SLASH_EQUALS', { type: 'SLASH', text: '/', seeds: false }],
 ]);
 
+
+/**
+ * What a pass has spent against its budgets: the line runs its cross-line
+ * forms did (#711) and the elements its answers keep (#694). See
+ * `ExpressionEngine.beginPass`.
+ */
+export interface PassSpend {
+    readonly work: number;
+    readonly kept: number;
+}
+
+/** The names a program stores with STORE_VAR, read from its bytecode. */
+function storedNames(program: BytecodeProgram): string[] {
+    const names: string[] = [];
+    const { opcodes, strings } = program;
+    for (let i = 0; i < opcodes.length; i = nextInstruction(opcodes, i)) {
+        if (opcodes[i] === OpCode.STORE_VAR) {
+            const name = strings[opcodes[i + 1]];
+            if (typeof name === "string") names.push(name);
+        }
+    }
+    return names;
+}
+
 /**
  * Core expression evaluation engine, the top-level orchestrator.
  *
@@ -784,6 +811,46 @@ export class ExpressionEngine {
      * cached draw would otherwise outlive it; see {@link applyRandomSeed}.
      */
     private linesDrawingRandom = new Set<number>();
+
+    /**
+     * Line runs spent so far in the current pass, charged through
+     * {@link LineExecutionContext.spendWork} and goal seek's probes, and
+     * bounded by `config.vm.maxLineRunsPerPass` (#711). Set where a pass
+     * begins; see {@link beginPass}.
+     */
+    private passWork = 0;
+
+    /**
+     * Elements the current pass's answers keep, bounded by
+     * `config.vm.maxRetainedElements` (#694). See {@link keepLineResult}.
+     */
+    private passKept = 0;
+
+    /**
+     * Whether a pass is open. The budgets count only inside one: a host's own
+     * `evaluateLine` after a document pass is not charged against it.
+     */
+    private passOpen = false;
+
+    /** Whether the open pass runs the whole note, rather than a viewport. */
+    private passCoversNote = false;
+
+    /** Counts the passes, so a line's kept record knows which pass wrote it. */
+    private passNumber = 0;
+
+    /**
+     * The elements each document line's answer kept in the last pass that ran
+     * it, by line number. A re-run after a live value lands swaps the line's
+     * old answer for its new one against this (#694).
+     */
+    private readonly keptByLine = new Map<number, { pass: number; kept: number }>();
+
+    /**
+     * What the note kept at the close of the last pass, and what the batcher's
+     * re-runs have changed since, by line; null before the first pass. See
+     * {@link keepReRunResult}.
+     */
+    private keptSincePass: { total: number; added: number; reRuns: Map<number, number> } | null = null;
 
     private lineContextDoc: DocumentModel | null = null;
     private lineContextScan: ScanLineResult[] | null = null;
@@ -1148,9 +1215,13 @@ export class ExpressionEngine {
                 ? (n: number, variable: string, bound: Value, symbolicTolerant: boolean) => {
                       // The same edge as `getLineReads` above, for the same reason.
                       if (n !== context.lineIndex) dag.registerLinePositionDependency(context.lineIndex, n);
+                      // Each probe runs the target line once, charged to the pass (#711).
+                      const refused = this.spendPassWork(1, "Goal seek");
+                      if (refused) return refused;
                       return this.evaluateLineWithBinding(n, variable, bound, symbolicTolerant);
                   }
                 : undefined,
+            spendWork: doc || scan ? (lineRuns: number, form: string) => this.spendPassWork(lineRuns, form) : undefined,
             goalSeekMaxIterations: this.config.vm.maxGoalSeekIterations,
             // Both document paths re-run from the lines' text, so a what-if
             // answers the same through either; see {@link openLineRerun}.
@@ -2105,6 +2176,9 @@ export class ExpressionEngine {
         );
         this.queryClient = createQueryClient();
         this.batcher = new AsyncResolutionBatcher(this.dag, this.lineCache, this.vm);
+        // A re-run keeps its answer within what the note may keep (#694).
+        this.batcher.keepResult = (lineNumber, value, writeVariable) =>
+            this.keepReRunResult(lineNumber, value, writeVariable === null ? [] : [writeVariable]);
         // The batcher re-runs lines when a value lands, outside any evaluation
         // this engine makes, so it publishes this engine's cache itself for the
         // length of the re-run. Without it the re-run read whichever cache was
@@ -2213,16 +2287,138 @@ export class ExpressionEngine {
     }
 
     /**
-     * Whether `name` is a running total, stepped by `+=` or `-=` somewhere.
+     * Open a pass for the per-pass budgets: the work that reaches across lines
+     * (`vm.maxLineRunsPerPass`, #711) and the elements the answers keep
+     * (`vm.maxRetainedElements`, #694). `start` is what the lines above the
+     * pass's first line already spent. A batch pass opens its own; the
+     * incremental evaluator opens one for each of its passes, and starts a
+     * viewport-only pass at what the lines above the viewport recorded. Close
+     * it with {@link endPass}.
      *
-     * The evaluator's cycle walk asks, because a total's steppers depend on one
-     * another through the total in a way the graph deliberately does not
-     * record: a line is kept out of the consumers of a name it writes, which
-     * is right for `:x = 5` and hides the fold for `spent += 5`.
-     *
-     * @param name - A variable name.
-     * @returns True when a line has stepped it.
+     * @param start - What the lines above the pass's first line spent.
      */
+    beginPass(start?: PassSpend): void {
+        this.passWork = start?.work ?? 0;
+        this.passKept = start?.kept ?? 0;
+        this.passOpen = true;
+        this.passCoversNote = start === undefined;
+        this.passNumber++;
+        if (this.passCoversNote) this.keptByLine.clear();
+    }
+
+    /**
+     * Close the pass {@link beginPass} opened, and note what the note keeps
+     * for the re-runs that follow it. A viewport pass has not counted the
+     * lines below it, so the note is taken to keep at least what the last
+     * whole pass counted.
+     */
+    endPass(): void {
+        this.passOpen = false;
+        const total = this.passCoversNote ? this.passKept : Math.max(this.passKept, this.keptSincePass?.total ?? 0);
+        this.keptSincePass = { total, added: 0, reRuns: new Map() };
+    }
+
+    /**
+     * Count what a line spent when it last ran, for a line this pass does not
+     * run (clean and out of view), so the lines below see the budgets a pass
+     * over the whole note would leave them.
+     *
+     * @param spent - What that line recorded.
+     */
+    addPassSpend(spent: PassSpend): void {
+        this.passWork += spent.work;
+        this.passKept += spent.kept;
+    }
+
+    /** What the current pass has spent so far. */
+    passSpent(): PassSpend {
+        return { work: this.passWork, kept: this.passKept };
+    }
+
+    /**
+     * Keep a document line's answer, or refuse it when the answers the pass
+     * keeps would pass `config.vm.maxRetainedElements` (#694). A refused line
+     * lets go of the names it assigned, so the value is kept neither as its
+     * answer nor through a variable; a pass over the same text does the same,
+     * so both document paths refuse the same line. Outside a pass, or with no
+     * document, the answer is kept as it is.
+     *
+     * @param value - The line's answer.
+     * @param lineNumber - The line.
+     * @param writes - The names it assigned.
+     */
+    private keepLineResult(value: Value, lineNumber: number, writes: readonly string[]): Value {
+        if (!this.passOpen || lineNumber < 1) return value;
+        const size = keptElements(value);
+        const limit = this.config.vm.maxRetainedElements;
+        if (this.passKept + size <= limit) {
+            this.passKept += size;
+            this.recordKept(lineNumber, size);
+            return value;
+        }
+        this.recordKept(lineNumber, 0);
+        for (const name of writes) this.vm.deleteVar(name);
+        return keptElementsRefusal(lineNumber, size, limit);
+    }
+
+    /**
+     * Record what a line keeps in this pass. A line of several expressions
+     * runs each through here, so they add up; a pending line records nothing
+     * kept, which is what it holds until its value lands.
+     */
+    private recordKept(lineNumber: number, kept: number): void {
+        if (!this.passOpen || lineNumber < 1) return;
+        const record = this.keptByLine.get(lineNumber);
+        if (record !== undefined && record.pass === this.passNumber) record.kept += kept;
+        else this.keptByLine.set(lineNumber, { pass: this.passNumber, kept });
+    }
+
+    /**
+     * Keep the answer of a line the batcher re-runs after its live value
+     * lands, or refuse it (#694). A pending line kept nothing in the pass, so
+     * without this a note of lines waiting on live values would be charged
+     * nothing and then keep every answer when the values came in.
+     *
+     * The re-run is charged against what the whole note keeps: the last
+     * pass's count, with this line's old answer swapped for its new one and
+     * the other re-runs since counted in. An answer no larger than the one it
+     * replaces is always kept, so a background refresh never refuses a line.
+     * The next pass counts every line in place again.
+     *
+     * @param lineNumber - The line re-run.
+     * @param value - Its new answer.
+     * @param writes - The names it assigned.
+     */
+    private keepReRunResult(lineNumber: number, value: Value, writes: readonly string[]): Value {
+        const since = this.keptSincePass;
+        if (since === null || lineNumber < 1) return value;
+        const size = keptElements(value);
+        const old = since.reRuns.get(lineNumber) ?? this.keptByLine.get(lineNumber)?.kept ?? 0;
+        const limit = this.config.vm.maxRetainedElements;
+        if (size <= old || since.total + since.added - old + size <= limit) {
+            since.added += size - old;
+            since.reRuns.set(lineNumber, size);
+            return value;
+        }
+        since.added -= old;
+        since.reRuns.set(lineNumber, 0);
+        for (const name of writes) this.vm.deleteVar(name);
+        return keptElementsRefusal(lineNumber, size, limit);
+    }
+
+    /**
+     * Charge work to the current pass, or refuse it: the refusal when it would
+     * take the pass past `config.vm.maxLineRunsPerPass`, which spends nothing,
+     * and null once it is counted.
+     */
+    private spendPassWork(lineRuns: number, form: string): Value | null {
+        if (!this.passOpen) return null;
+        const limit = this.config.vm.maxLineRunsPerPass;
+        if (this.passWork + lineRuns > limit) return passWorkRefusal(form, limit);
+        this.passWork += lineRuns;
+        return null;
+    }
+
     /**
      * Tell the engine whether the line about to run sits on a cycle.
      *
@@ -2247,6 +2443,17 @@ export class ExpressionEngine {
         this.lineOnCycle = onCycle;
     }
 
+    /**
+     * Whether `name` is a running total, stepped by `+=` or `-=` somewhere.
+     *
+     * The evaluator's cycle walk asks, because a total's steppers depend on one
+     * another through the total in a way the graph deliberately does not
+     * record: a line is kept out of the consumers of a name it writes, which
+     * is right for `:x = 5` and hides the fold for `spent += 5`.
+     *
+     * @param name - A variable name.
+     * @returns True when a line has stepped it.
+     */
     isAccumulatorName(name: string): boolean {
         return this.accumulatorNames.has(name);
     }
@@ -3096,6 +3303,7 @@ export class ExpressionEngine {
             );
 
             const pending = pendingValue(result.queryKey);
+            this.recordKept(lineNumber, 0);
             this.storeLineResult(lineNumber, pending, program, reads, writes, expression);
             return pending;
         }
@@ -3110,16 +3318,19 @@ export class ExpressionEngine {
         // line accumulates on the keystroke signal for large documents.
         unlink?.();
 
+        // The answers a document keeps are bounded, and this one may be the
+        // one that crosses it (#694).
+        const kept = this.keepLineResult(result.value, lineNumber, writes);
         this.registerLineWithTags(lineNumber, expression, reads, writes);
         // A frozen line answered from the store (or refused for a day it holds
         // nothing for) never reads its source again, so it stops being one of
         // the source's consumers: the batcher no longer re-runs it when the
         // value lands, and a background refresh with no other reader stops.
-        if (program.frozen !== undefined && (result.value.frozen !== undefined || result.value.errorCode === "FROZEN_VALUE_MISSING")) {
+        if (program.frozen !== undefined && (kept.frozen !== undefined || kept.errorCode === "FROZEN_VALUE_MISSING")) {
             this.dag.dropDataSourceReads(lineNumber);
         }
-        this.storeLineResult(lineNumber, result.value, program, reads, writes, expression);
-        return result.value;
+        this.storeLineResult(lineNumber, kept, program, reads, writes, expression);
+        return kept;
     }
 
     /**
@@ -3159,6 +3370,13 @@ export class ExpressionEngine {
         // listener so in-flight async work stays cancellable.
         if (result.type !== 'pending') {
             unlink?.();
+        }
+
+        // A re-run of a document line keeps its answer as the first run did,
+        // within the same bound (#694); an explanation keeps nothing.
+        if (result.type === 'value' && observeCall === undefined) {
+            const kept = this.keepLineResult(result.value, lineNumber, storedNames(program));
+            if (kept !== result.value) return { type: 'value', value: kept };
         }
 
         return result;
@@ -3291,7 +3509,7 @@ export class ExpressionEngine {
         // roundtrip. scanDocument() classifies and tokenizes all lines
         // character-by-character with a single Lexer.reset().
         const scanResults = this.lexer.scanDocument(input);
-        const processedLines = this.processScanResults(scanResults);
+        const processedLines = this.processScanResultsInPass(scanResults);
 
         const result: ParsingResult = {
             lines: processedLines,
@@ -3364,7 +3582,17 @@ export class ExpressionEngine {
         // classification + tokenization for all lines in one character walk.
         const documentText = lines.join('\n');
         const scanResults = this.lexer.scanDocument(documentText);
-        return this.processScanResults(scanResults);
+        return this.processScanResultsInPass(scanResults);
+    }
+
+    /** {@link processScanResults} inside a pass of its own, for the per-pass budgets. */
+    private processScanResultsInPass(scanResults: ScanLineResult[]): ParsedLine[] {
+        this.beginPass();
+        try {
+            return this.processScanResults(scanResults);
+        } finally {
+            this.endPass();
+        }
     }
 
     /**

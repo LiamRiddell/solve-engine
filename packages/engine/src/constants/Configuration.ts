@@ -391,6 +391,51 @@ export interface WorkerConfig {
      * far past any precision a document needs, and a definite stop either way.
      */
     readonly maxGoalSeekIterations: number;
+    /**
+     * Hard ceiling on the work one pass over a document may do across its
+     * lines, counted in line runs (#711).
+     *
+     * Every other limit here counts work inside one expression. The forms that
+     * reach across lines were capped one line at a time: a sweep at 100,000
+     * line re-runs, goal seek at `maxGoalSeekIterations` probes, a span
+     * aggregate (`total above`, a section, a tag, a table column) not at all.
+     * Twenty sweep lines, each inside its own cap, made one parseDocument
+     * re-run 2,000,000 lines, and a host re-parses on every keystroke.
+     *
+     * One count per pass: a what-if or sweep charges each line it re-runs, a
+     * goal-seek probe one, and a span aggregate the lines it reads at sixteen
+     * to a run (see `vm/PassWork.ts`, which measured the rate). The line whose
+     * work would cross this is refused with `PASS_WORK_BUDGET_EXCEEDED`, and
+     * the lines above keep their answers.
+     *
+     * A million line runs is about five seconds of work on the machine it was
+     * measured on (a re-run costs about 5.2 µs there): ten sweeps at their own
+     * cap, or a ledger with a running total after each of about 4,000 entries.
+     * A document that needs more is extreme, and the setting says how to allow
+     * it.
+     */
+    readonly maxLineRunsPerPass: number;
+    /**
+     * Hard ceiling on the elements a document keeps in its lines' answers,
+     * counted each pass (#694): a list or matrix its cells, text one element
+     * to eight characters, any other answer one.
+     *
+     * `maxAllocatedElements` bounds what one evaluation may create, and
+     * nothing bounded what a document keeps across its lines: 500 lines of
+     * `:m = map(10*x, 0:99999)`, 13 KB of text, kept 50,000,000 elements and
+     * 385 MB of heap, every line inside every per-line limit.
+     *
+     * The line whose answer would take the document past this is refused with
+     * `DOCUMENT_ELEMENT_LIMIT_EXCEEDED`, and a name it assigned is let go, so
+     * the value is not kept through a variable either. The lines above keep
+     * their answers. The count starts again on every pass, so an edited or
+     * deleted line's answer stops counting when it does.
+     *
+     * Ten million is five lines at `maxAllocatedElements`, or a hundred
+     * 100,000-element lists: about 80 MB of plain numbers, measured at about
+     * 8 bytes an element.
+     */
+    readonly maxRetainedElements: number;
   }
 
 /**
@@ -512,6 +557,8 @@ export const DEFAULT_CONFIG: EngineConfig = {
       // under this; hitting it means the target is unreachable or the
       // relationship is not the smooth one goal seek assumes.
       maxGoalSeekIterations: 100,
+      maxLineRunsPerPass: 1_000_000,
+      maxRetainedElements: 10_000_000,
     },
     worker: {
       maxConcurrentWorkers: 4,

@@ -429,6 +429,18 @@ export interface LineExecutionContext {
      */
     goalSeekMaxIterations?: number;
     /**
+     * Charge work that reaches across lines to the current pass, in line runs:
+     * a what-if or sweep re-running lines, a span aggregate reading them (goal
+     * seek's probes are charged by {@link evaluateLineWithBinding} itself).
+     * Returns the refusal when the charge would take the pass past
+     * `config.vm.maxLineRunsPerPass`, and null, having counted it, when it fits
+     * (#711). A function rather than a count, since this context serves a whole
+     * pass. Absent where there is no document: the single-expression path,
+     * whose cross-line forms refuse before they would spend anything. See
+     * `vm/PassWork.ts`.
+     */
+    spendWork?: (lineRuns: number, form: string) => Value | null;
+    /**
      * Open a re-run of the document up to and including `lineNumber`, for
      * asking what that line would say if some inputs were different. This is
      * the primitive the what-if and sweep forms (`packages/whatif/`) drive.

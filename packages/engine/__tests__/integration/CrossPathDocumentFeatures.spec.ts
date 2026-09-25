@@ -1071,3 +1071,63 @@ describe("renaming a variable a rate denominator above it spells (#642)", () => 
     expect(batch(after)).toEqual(["100.00 /t", "5", "20"]);
   });
 });
+
+describe("a pass's work budget across entry points (#711)", () => {
+  // Sweeps, what-ifs and span aggregates share one count per pass; the line
+  // whose work would cross vm.maxLineRunsPerPass is refused. Both document
+  // passes walk the note in order and charge alike, so they refuse the same line.
+  const header = ["x = 1", "a = x + 1", "b = a + 1", "c = b + 1", "c * 2"];
+  const sweep = "line 5 for x from 1 to 20 step 1";
+  const doc = [...header, ...Array(7).fill(sweep)];
+
+  function run(lines: string[], limit: number, pass: "batch" | "incremental"): string[] {
+    const engine = newTrackedEngine({ config: { vm: { maxLineRunsPerPass: limit } } });
+    const text = lines.join("\n");
+    const result = pass === "batch" ? engine.parseDocument(text, { inputType: "markdown" }) : evaluateDocument(engine, text, { inputType: "markdown" });
+    return readLines(result);
+  }
+
+  test("both passes refuse the same line, and the lines above keep their answers", () => {
+    const batchLines = run(doc, 500, "batch");
+    expect(batchLines.slice(0, 5)).toEqual(["1", "2", "3", "4", "8"]);
+    expect(batchLines[9]).toMatch(/^\[8, 10, 12/);
+    expect(batchLines[10]).toMatch(/^ERROR: This sweep would take this pass over the note past 500 line runs/);
+    expect(run(doc, 500, "incremental")).toEqual(batchLines);
+  });
+
+  test("the single-expression path has no document to spend on", () => {
+    const answer = single(sweep);
+    expect(answer.message).not.toMatch(/line runs/);
+  });
+});
+
+describe("what a note keeps across entry points (#694)", () => {
+  // Every answer a pass keeps counts toward vm.maxRetainedElements: a list its
+  // cells, anything else one. The line whose answer would cross it is refused
+  // and its name let go. Both document passes count in order, so they refuse
+  // the same line.
+  const heavy = "map(x + 1, 0:99)";
+  const doc = [`:a = ${heavy}`, `:b = ${heavy}`, `:c = ${heavy}`, "7"];
+
+  function run(lines: string[], limit: number, pass: "batch" | "incremental"): string[] {
+    const engine = newTrackedEngine({ config: { vm: { maxRetainedElements: limit } } });
+    const text = lines.join("\n");
+    const result = pass === "batch" ? engine.parseDocument(text, { inputType: "markdown" }) : evaluateDocument(engine, text, { inputType: "markdown" });
+    return readLines(result);
+  }
+
+  test("both passes refuse the same line, and the lines above keep their answers", () => {
+    const batchLines = run(doc, 250, "batch");
+    expect(batchLines[0]).toMatch(/^\[1, 2, 3/);
+    expect(batchLines[1]).toMatch(/^\[1, 2, 3/);
+    expect(batchLines[2]).toMatch(/^ERROR: Line 3's answer holds 100 elements, which would take what this note keeps past 250/);
+    expect(batchLines[3]).toBe("7");
+    expect(run(doc, 250, "incremental")).toEqual(batchLines);
+  });
+
+  test("the single-expression path keeps no note, so its answer is kept", () => {
+    const engine = newTrackedEngine({ config: { vm: { maxRetainedElements: 1 } } });
+    const value = engine.evaluateLine(1, heavy);
+    expect(value.type).toBe(ValueType.Matrix);
+  });
+});

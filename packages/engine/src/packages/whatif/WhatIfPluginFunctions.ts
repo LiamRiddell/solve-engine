@@ -162,6 +162,9 @@ export function whatIfHandler(args: Value[], context?: LineExecutionContext): Va
 			const unused = unusedInput(opened, name, targetLine);
 			if (unused) return unused;
 		}
+		// The re-run runs every line up to the target, charged to the pass (#711).
+		const refused = context?.spendWork?.(targetLine, "This what-if");
+		if (refused) return refused;
 		return opened.run(overrides);
 	} finally {
 		opened.close();
@@ -350,6 +353,10 @@ export function sweepHandler(args: Value[], context?: LineExecutionContext): Val
 	try {
 		const unused = unusedInput(opened, name, targetLine);
 		if (unused) return unused;
+		// Every step re-runs every line up to the target: charged to the pass
+		// before the first, so a sweep the pass cannot afford runs none (#711).
+		const refused = context?.spendWork?.(inputs.length * targetLine, "This sweep");
+		if (refused) return refused;
 		for (const input of inputs) {
 			const mark = budgetMark();
 			const answer = opened.run(new Map([[name, input]]));

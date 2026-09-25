@@ -143,6 +143,14 @@ export class AsyncResolutionBatcher {
 	onLineResult: ((lineNumber: number, value: Value) => void) | null = null;
 
 	/**
+	 * Bounds what a re-run keeps, set by the owning engine: the answer as it
+	 * is, or the refusal when keeping it would take the note past
+	 * `vm.maxRetainedElements` (#694), with the name the line assigned let
+	 * go. Null keeps every answer.
+	 */
+	keepResult: ((lineNumber: number, value: Value, writeVariable: string | null) => Value) | null = null;
+
+	/**
 	 * The checkpoint chain to rebuild variable state from, when there is one.
 	 *
 	 * A re-run reads whatever the VM currently holds, which after a full pass is
@@ -780,6 +788,9 @@ export class AsyncResolutionBatcher {
 				}
 
 				if (result.type === "value") {
+					// Bounded before the chain records it, so a refused answer's
+					// name is gone before the checkpoint reads it.
+					const value = this.keepResult === null ? result.value : this.keepResult(lineNumber, result.value, entry.writeVariable);
 					// The chain has to carry what this re-run wrote, or the next
 					// line swept past would restore the value from before it.
 					if (sweep !== null && entry.writeVariable !== null) {
@@ -789,9 +800,9 @@ export class AsyncResolutionBatcher {
 						// lines it is not re-running defined.
 						this.checkpointer!.updateCheckpointAt(lineNumber, [entry.writeVariable]);
 					}
-					entry.result = result.value;
+					entry.result = value;
 					this.warnIfUnwired();
-					this.onLineResult?.(lineNumber, result.value);
+					this.onLineResult?.(lineNumber, value);
 					updatedLineNumbers.push(lineNumber);
 				} else if (result.type === "error") {
 					// executeBytecode() reports controlled failures (undefined
