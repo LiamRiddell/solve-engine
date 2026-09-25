@@ -105,16 +105,16 @@ describe("modulo of things that are not whole", () => {
 });
 
 describe("modulo by zero", () => {
-	test("has no answer and says so as NaN, matching division", () => {
-		expect(num("5 mod 0")).toBeNaN();
-		expect(num("0 mod 0")).toBeNaN();
-		expect(num("-5 mod 0")).toBeNaN();
+	// A remainder by zero has no value, and says so by name rather than as the
+	// NaN JavaScript's `%` gives, as a function outside its domain does (#600).
+	test.each(["5 mod 0", "0 mod 0", "-5 mod 0"])("%s has no value, and says so", (source) => {
+		expect(evaluate(source).errorCode).toBe("REMAINDER_UNDEFINED");
 	});
 });
 
 describe("modulo of infinities", () => {
-	test("an infinite left operand has no remainder", () => {
-		expect(num("(1 / 0) mod 2")).toBeNaN();
+	test("an infinite left operand has no remainder, and says so (#600)", () => {
+		expect(evaluate("(1 / 0) mod 2").errorCode).toBe("REMAINDER_UNDEFINED");
 	});
 
 	test("an infinite divisor leaves the left operand alone", () => {

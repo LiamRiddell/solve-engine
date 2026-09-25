@@ -1699,6 +1699,41 @@ function datetimeInZone(left: Value, name: string, vm: VM): Value {
     return datetimeValue(reanchored + f.second * 1000 + f.millisecond, "instant", zoneRef);
 }
 
+/** `a % b` for two doubles, the MOD opcode's arithmetic. */
+const doubleRemainder = (a: number, b: number): number => a % b;
+
+/** `a % b` for two bigints, refusing a zero divisor as whole-number division does. */
+const bigIntRemainder = (a: bigint, b: bigint): bigint => {
+    if (b === 0n) throw bigIntDivisionByZero();
+    return a % b;
+};
+
+/**
+ * The MOD opcode's answer for operands with no exact remainder, refusing one
+ * that has no value.
+ *
+ * A remainder by zero, and a remainder of an infinite number, have no value, and
+ * JavaScript's `%` answers NaN for both: `5 mod 0` and `(1/0) mod 3` were
+ * NaN (#600). They are refused by name, as the functions outside their domain
+ * are. A NaN operand still gives NaN: `0/0` is the documented NaN, and its
+ * remainder has nothing to add. Kept out of the dispatch loop, which has to stay
+ * under V8's optimisation ceiling.
+ */
+function remainder(l: Value, r: Value): Value {
+    const result = binaryOp(l, r, doubleRemainder, bigIntRemainder);
+    if (result.type !== ValueType.Number && result.type !== ValueType.Uom) return result;
+    if (!Number.isNaN(result.toNumber())) return result;
+    const a = l.toNumber();
+    const b = r.toNumber();
+    if (Number.isNaN(a) || Number.isNaN(b)) return result;
+    return errorValue(
+        "REMAINDER_UNDEFINED",
+        b === 0
+            ? `${a} mod 0 has no value: nothing is left over from a division by zero, because it never ends.`
+            : `${a} mod ${b} has no value: an infinite number has no remainder.`,
+    );
+}
+
 function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
     // A target that is no unit at all is a different mistake from two units
     // that measure different things, most often a misspelling: `5 km in mies`
@@ -3264,9 +3299,8 @@ export function executeBytecode(
         case OpCode.MOD: {
           const r = safePop(stack), l = safePop(stack);
           carry = combineSources(l.sources, r.sources);
-          // Same zero case as DIV above, and refused the same way: a
-          // remainder is defined in terms of the quotient, so where one has
-          // no answer neither does the other.
+          // A remainder with no value, by zero or of an infinite number, is
+          // refused by name in remainder() below, which the plain path ends in.
           //
           // An operand carrying an exact integer takes its remainder from that
           // integer, not from the double it rounds to: `3^40 mod 7` is 4, where
@@ -3276,7 +3310,7 @@ export function executeBytecode(
             const exactMod = exactRemainder(l, r);
             if (exactMod) { stack.push(exactMod); break; }
           }
-          stack.push(binaryOp(l, r, (a, b) => a % b, (a, b) => { if (b === 0n) throw bigIntDivisionByZero(); return a % b; }));
+          stack.push(remainder(l, r));
           break;
         }
         case OpCode.EXP: {

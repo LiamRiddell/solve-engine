@@ -126,7 +126,13 @@ asin(2) // ERROR: asin(2) has no real value: asin is only defined for numbers fr
 ```
 
 The same holds for `log10`, `log2`, `log1p`, `acos`, `acosh`, `atanh` and the
-degree forms `asind` and `acosd`. A square root of a negative number is not
-refused: it has an exact complex answer, so `sqrt(-1)` is `i`. Division by zero
-is left as it was, infinity for `1/0`, which is the floating-point standard's
-defined answer rather than a function's missing one.
+degree forms `asind` and `acosd`. An infinite angle has no sine, cosine or
+tangent, so `sin`, `cos`, `tan` and their degree forms refuse one the same way. A
+square root of a negative number is not refused: it has an exact complex answer,
+so `sqrt(-1)` is `i`. Division by zero is left as it was, infinity for `1/0`,
+which is the floating-point standard's defined answer rather than a function's
+missing one.
+
+```solve-doc
+sin(1/0) // ERROR: sin(Infinity) has no real value: sin is only defined for finite angles.
+```

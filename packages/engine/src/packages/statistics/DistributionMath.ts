@@ -69,6 +69,14 @@ const MAX_ITERATIONS = 1_000_000;
 const ERF_SWITCH = 1;
 
 /**
+ * How far out e^(-x²) and e^(-x²/2) are worked out. Beyond 40 both have
+ * underflowed to zero in a double (e^-800 is below the smallest one), so the
+ * answer is 0 without the arithmetic, which is what keeps a value near the top
+ * of the double range from overflowing into NaN.
+ */
+const UNDERFLOW_BEYOND = 40;
+
+/**
  * e^(-x²), accurate to the last place.
  *
  * Squaring x rounds, and the rounding error of x² is multiplied by x² again in
@@ -77,14 +85,18 @@ const ERF_SWITCH = 1;
  * keeps the whole exponent exact but for the remainder's tiny contribution.
  */
 function expMinusSquare(x: number): number {
-	if (!Number.isFinite(x)) return 0;
+	// Past 40 the answer has underflowed to zero anyway (e^-1600), and near the
+	// top of the double range `x * 4096` below overflows: the head became
+	// infinite and the product NaN, so `normalcdf(1e308)` was NaN (#601).
+	if (!(Math.abs(x) < UNDERFLOW_BEYOND)) return 0;
 	const head = Math.trunc(x * 4096) / 4096;
 	return Math.exp(-head * head) * Math.exp(-(x - head) * (x + head));
 }
 
 /** e^(-z²/2), split the same way as {@link expMinusSquare} and for the same reason. */
 function expMinusHalfSquare(z: number): number {
-	if (!Number.isFinite(z)) return 0;
+	// As expMinusSquare: e^-800 has underflowed, and the split below overflows (#601).
+	if (!(Math.abs(z) < UNDERFLOW_BEYOND)) return 0;
 	const head = Math.trunc(z * 4096) / 4096;
 	return Math.exp(-0.5 * head * head) * Math.exp(-0.5 * (z - head) * (z + head));
 }
