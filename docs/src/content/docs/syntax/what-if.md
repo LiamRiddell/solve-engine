@@ -178,7 +178,9 @@ The rest, in words:
   change the answer and it is almost always a misspelling. Names are matched
   exactly, so `Deposit` is not `deposit`.
 - A what-if cannot name its own line, and cannot re-run a line that is itself a
-  what-if or a sweep, so one question can never set off another.
+  what-if or a sweep, so one question can never set off another. For the same
+  reason, [goal seek](/syntax/goal-seek/) will not target a line that holds a
+  what-if or a sweep, since it re-runs its target up to a hundred times.
 - A line in the span that sets a `global :name` is not re-run, because other
   documents read globals and the question's value would reach them. The what-if
   is refused instead.
@@ -187,6 +189,13 @@ The rest, in words:
   still waiting for one is refused.
 - A step whose answer fails, or is not a number, stops the sweep with an error
   that names the value it failed at.
+- The steps of a sweep share its line's budgets: the 2,000,000 elements (list
+  items and matrix cells) one line may create, and the user-defined-function
+  calls one line may make. Sharing is what stops a thousand steps from using a
+  thousand times what a line may. A sweep whose steps together reach either
+  budget stops with an error that says so, naming the value it had reached,
+  rather than blaming that step, which may answer on its own. A step that is
+  over a budget by itself is still reported as that step's failure.
 
 ## What it does not cover
 

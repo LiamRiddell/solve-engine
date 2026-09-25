@@ -9,6 +9,7 @@ import {
 } from "@solve-js/vm/Value";
 import type { LineExecutionContext, LineRerun } from "@solve-js/vm/VM";
 import { unifyQuantities } from "@solve-js/vm/VMConversion";
+import { budgetMark, sharedBudgetRefusal } from "@solve-js/vm/AllocationBudget";
 
 /**
  * What-if and sweeps: `line 4 with deposit = 150000` and `line 4 for rate from
@@ -300,6 +301,27 @@ function describeInput(value: Value): string {
 }
 
 /**
+ * A step that failed, in words that say the failure once. A re-run's own
+ * refusal already begins "Line N has no answer with these inputs", so it is
+ * carried on from the line number rather than repeated after it.
+ */
+function stepFailed(name: string, input: Value, targetLine: number, message: string): Value {
+	const own = `Line ${targetLine} `;
+	const said = message.startsWith(own) ? `line ${targetLine} ${message.slice(own.length)}` : `line ${targetLine} has no answer: ${message}`;
+	return errorValue("SWEEP_STEP_FAILED", `With ${name} at ${describeInput(input)}, ${said}`);
+}
+
+/**
+ * What a sweep's steps together ran out of, said about the sweep rather than
+ * the step it happened to reach.
+ */
+function budgetShared(targetLine: number, shared: { budget: "elements" | "calls"; limit: number }): string {
+	const limit = shared.limit.toLocaleString("en-US");
+	const what = shared.budget === "elements" ? `${limit} materialised elements` : `${limit} user-defined-function calls`;
+	return `this sweep's re-runs of line ${targetLine} share this line's limit of ${what}`;
+}
+
+/**
  * `line N for <name> from <start> to <end> step <step>`.
  *
  * @param args - The target line number, the swept name (a String), then the
@@ -329,10 +351,21 @@ export function sweepHandler(args: Value[], context?: LineExecutionContext): Val
 		const unused = unusedInput(opened, name, targetLine);
 		if (unused) return unused;
 		for (const input of inputs) {
+			const mark = budgetMark();
 			const answer = opened.run(new Map([[name, input]]));
 			if (answer.type === ValueType.Error) {
+				// Every step spends the sweep line's one budget, so a step can be
+				// refused for what the steps before it spent. That is the sweep's
+				// size, not the step's answer, and it is said so.
+				const shared = sharedBudgetRefusal(mark);
+				if (shared) {
+					return errorValue(
+						"SWEEP_OVER_BUDGET",
+						`This sweep stopped with ${name} at ${describeInput(input)}: ${budgetShared(targetLine, shared)}, and together they reached it. Use a larger step or a shorter range.`,
+					);
+				}
 				const message = typeof answer.unit === "string" ? answer.unit : String(answer.value);
-				return errorValue("SWEEP_STEP_FAILED", `With ${name} at ${describeInput(input)}, line ${targetLine} has no answer: ${message}`);
+				return stepFailed(name, input, targetLine, message);
 			}
 			if (!LISTABLE.has(answer.type)) {
 				return errorValue(
@@ -352,5 +385,15 @@ export function sweepHandler(args: Value[], context?: LineExecutionContext): Val
 	// all, have no such reading and are refused by name.
 	const unified = unifyQuantities(answers, "listed together");
 	if (unified instanceof Value) return unified;
-	return rowVectorValue(unified.magnitudes);
+	const mark = budgetMark();
+	try {
+		return rowVectorValue(unified.magnitudes);
+	} catch (error) {
+		const shared = sharedBudgetRefusal(mark);
+		if (!shared) throw error;
+		return errorValue(
+			"SWEEP_OVER_BUDGET",
+			`${budgetShared(targetLine, shared).replace(/^t/, "T")}, and together they left no room for the list of its ${answers.length.toLocaleString("en-US")} answers. Use a larger step or a shorter range.`,
+		);
+	}
 }

@@ -71,11 +71,27 @@ let callLimit = Number.POSITIVE_INFINITY;
 /** How many outermost evaluations have opened. Read through {@link currentEvaluation}. */
 let evaluationSerial = 0;
 
+/** How many refusals either budget has made. Read through {@link budgetMark}. */
+let refusals = 0;
+
+/** Which budget made the last refusal. */
+let refusedBudget: "elements" | "calls" = "elements";
+
+/** The tally the last refused request would have brought its budget to. */
+let refusedAt = 0;
+
+/** The ceiling the last refusal was made against. */
+let refusedLimit = 0;
+
 /**
  * The refusal itself, built in one place so the wording of the engine's most
  * likely "this is too big" message is not reinvented per site.
  */
 function exceeded(requested: number, what: string, alreadyUsed: number): Error {
+	refusals++;
+	refusedBudget = "elements";
+	refusedAt = alreadyUsed + requested;
+	refusedLimit = limit;
 	return ErrorFactory.execution({
 		code: "ALLOCATION_LIMIT_EXCEEDED",
 		message:
@@ -200,6 +216,10 @@ export function checkedArray<T>(count: number, what: string): T[] {
 export function chargeFunctionCall(): void {
 	if (depth === 0) return;
 	if (++calls > callLimit) {
+		refusals++;
+		refusedBudget = "calls";
+		refusedAt = calls;
+		refusedLimit = callLimit;
 		throw ErrorFactory.execution({
 			code: "FUNCTION_CALL_LIMIT_EXCEEDED",
 			message:
@@ -238,6 +258,47 @@ export function currentEvaluation(): number {
  */
 export function allocationUsed(): number {
 	return used;
+}
+
+/** A point in the evaluation in flight's spending, taken by {@link budgetMark}. */
+export interface BudgetMark {
+	/** Elements charged when the mark was taken. */
+	readonly elements: number;
+	/** User-defined-function calls made when the mark was taken. */
+	readonly calls: number;
+	/** Refusals made when the mark was taken. */
+	readonly refusals: number;
+}
+
+/**
+ * Mark where the evaluation in flight's spending stands, to ask
+ * {@link sharedBudgetRefusal} about the work done after it.
+ *
+ * @returns The mark.
+ */
+export function budgetMark(): BudgetMark {
+	return { elements: used, calls, refusals };
+}
+
+/**
+ * Whether a budget refused some work after `mark` that the work since the mark
+ * would not have been refused for on its own: the budget ran out because of
+ * what was spent before the mark, which the two share.
+ *
+ * A sweep re-runs its target once a step inside one evaluation, so every step
+ * spends one budget, as it must (a thousand steps may not materialise a
+ * thousand times what a line may). A step that fails because the steps before
+ * it spent the budget is not a step with no answer, and this is how the sweep
+ * tells the two apart.
+ *
+ * @param mark - A mark taken by {@link budgetMark} in the same evaluation.
+ * @returns The budget that ran out and its ceiling, or null when nothing was
+ * refused after the mark, or the work after it was over the ceiling by itself.
+ */
+export function sharedBudgetRefusal(mark: BudgetMark): { budget: "elements" | "calls"; limit: number } | null {
+	if (refusals === mark.refusals) return null;
+	const own = refusedAt - (refusedBudget === "elements" ? mark.elements : mark.calls);
+	return own <= refusedLimit ? { budget: refusedBudget, limit: refusedLimit } : null;
 }
 
 /**

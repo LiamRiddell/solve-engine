@@ -1,5 +1,5 @@
 import type { Token } from "@solve-js/lexer/Token";
-import { ValueType, type Value } from "@solve-js/vm/Value";
+import { ValueType, matrixValue, type MatrixData, type Value } from "@solve-js/vm/Value";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { DEFAULT_FORMATTING_SETTINGS } from "@solve-js/format/FormattingSettings";
 import { extractReadsAndWrites } from "@solve-js/engine/ExpressionEngineSafety";
@@ -394,11 +394,63 @@ export function traceProblem(trace: LineTrace): { kind: "cycle" | "forward"; lin
 	return null;
 }
 
-/** A line's answer as the display shows it, without the leading `= `; an error reads as `error`. */
+/**
+ * How much of one value a trace shows. A trace says which lines fed an answer,
+ * and a 100,000-element list said in full is 787,929 characters that took
+ * about 2.3 s to format, once for every line of the trace that held it.
+ */
+const MOST_LIST_ELEMENTS = 10;
+const MOST_MATRIX_CELLS = 100;
+const MOST_TEXT_CHARACTERS = 80;
+
+/**
+ * A line's answer as the display shows it, without the leading `= `; an error
+ * reads as `error`. A large value is shown short, and the cut comes before the
+ * formatting, so the work is bounded as well as the text: a list of more than
+ * ten elements shows its first ten and how many more there are, a matrix of more
+ * than a hundred cells shows its shape, and a longer text shows its first eighty
+ * characters and how many more there are.
+ */
 function shown(value: Value | null): string | null {
 	if (value === null) return null;
 	if (value.type === ValueType.Error) return "error";
+	if (value.type === ValueType.Matrix) {
+		const matrix = value.value as MatrixData;
+		const cells = matrix.data.length;
+		const isList = matrix.rows === 1 || matrix.cols === 1;
+		if (!isList && cells > MOST_MATRIX_CELLS) return `[${matrix.rows}x${matrix.cols} matrix]`;
+		if (isList && cells > MOST_LIST_ELEMENTS) {
+			const first = matrix.data.slice(0, MOST_LIST_ELEMENTS);
+			const preview = matrix.rows === 1 ? matrixValue(1, first.length, first) : matrixValue(first.length, 1, first);
+			const text = bare(preview);
+			const close = text.lastIndexOf("]");
+			const more = `${matrix.rows === 1 ? "," : ";"} and ${(cells - first.length).toLocaleString("en-US")} more`;
+			return close === -1 ? text : text.slice(0, close) + more + text.slice(close);
+		}
+	}
+	if (value.type === ValueType.String) return cut(value.value as string);
+	return cut(bare(value));
+}
+
+/** A value formatted as the display shows it, without the leading `= `. */
+function bare(value: Value): string {
 	return formatValue(value, DEFAULT_FORMATTING_SETTINGS).replace(/^=\s*/, "");
+}
+
+/** `text` up to {@link MOST_TEXT_CHARACTERS} characters, and how many more there are past them. */
+function cut(text: string): string {
+	if (text.length <= MOST_TEXT_CHARACTERS) return text;
+	let end = MOST_TEXT_CHARACTERS;
+	// Never between the two halves of a character outside the Basic Multilingual Plane.
+	const last = text.charCodeAt(end - 1);
+	if (last >= 0xd800 && last <= 0xdbff) end--;
+	let more = 0;
+	for (let i = end; i < text.length; i++) {
+		const unit = text.charCodeAt(i);
+		if (unit < 0xdc00 || unit > 0xdfff) more++;
+	}
+	if (more === 0) return text;
+	return `${text.slice(0, end)}... and ${more.toLocaleString("en-US")} more characters`;
 }
 
 /** One line of a trace as text: `payment 527.84 (line 4)`. */

@@ -70,6 +70,20 @@ A line that takes nothing from another line says so:
 inputs of line 1   // rate 4.00% (line 1) reads no other line
 ```
 
+## Large values
+
+A trace is for seeing which lines fed an answer, so a large value is shown
+short rather than in full. A list of more than ten values shows its first ten
+and how many more there are, a matrix (a grid of numbers) of more than a hundred
+cells shows its shape, such as `[200x200 matrix]`, and a text longer than eighty
+characters shows its first eighty and how many more there are. Only the trace
+shortens it: the line's own answer is shown in full as always.
+
+```solve-doc
+:scores = map(x * 10, 1:50)
+inputs of line 1   // scores [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, and 40 more] (line 1) reads no other line
+```
+
 ## When there is no order to trace
 
 A trace reads lines whose answers are already worked out, which in a note means
@@ -100,6 +114,12 @@ A very long chain is cut short rather than listed in full: the trace goes ten
 levels deep and lists at most two hundred lines, and a line whose own inputs
 were cut off ends in `<- [...]`. A `global` variable shared from another
 document is shown only where this document defines it.
+
+A large value is cut before it is formatted, so a trace of lines that each hold
+a 100,000-element list takes a fraction of a second rather than seconds a line.
+A host reading a trace from code with
+[`engine.traceLine()`](/guide/tracing-lines/) gets the values themselves, not
+this text, and formats them as it chooses.
 
 A [section total](/syntax/sections/) lists the lines under its heading, and a
 [table column](/syntax/table-columns/) or [table lookup](/syntax/table-lookups/)

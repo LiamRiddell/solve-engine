@@ -245,6 +245,21 @@ export class ValueArena {
 	private static readonly SHRINK_WHEN_HOLDING_TIMES = 4;
 	private static readonly KEEP_TIMES = 2;
 
+	/**
+	 * The most Values the arena pools. Past it, {@link acquire} hands out an
+	 * ordinary Value the collector reclaims, the Value it would have allocated
+	 * with no arena at all.
+	 *
+	 * The shrink rule above releases a block only on a lighter cycle after it,
+	 * so a document that grows the arena on every pass kept it for as long as it
+	 * was open: five 1,000-step sweeps held 1,000,229 Values, and 1,000 reads of
+	 * a 1,000-row table column held 1,003,001. The heaviest document pass in the
+	 * docs corpus uses 847 pooled Values (the 99th percentile, 71), so the
+	 * ceiling sits about twenty times above real use and a scroll frame never
+	 * meets it.
+	 */
+	private static readonly MOST_POOLED = 16_384;
+
 	/** Pre-allocate initial block. 512 Values covers ~30-line viewport comfortably. */
 	constructor(initialSize: number = 512) {
 		this.initialSize = initialSize;
@@ -260,8 +275,10 @@ export class ValueArena {
 			v.recycle(type, value, unit);
 			return v;
 		}
-		// Arena overflow, allocate fresh (rare, only for very complex expressions)
+		// Arena overflow, allocate fresh (rare, only for very complex expressions),
+		// pooled only while the block is under its ceiling.
 		const v = new Value(type, value, unit);
+		if (this.arena.length >= ValueArena.MOST_POOLED) return v;
 		this.arena.push(v);
 		this.index++;
 		return v;
@@ -316,6 +333,27 @@ export function enableValueArena(size?: number): ValueArena {
 /** Disable the arena (returns to normal GC-collected allocation). */
 export function disableValueArena(): void {
 	_arenaActive = false;
+}
+
+/**
+ * Run `work` with the arena off, then put it back as it was.
+ *
+ * For work inside a scroll pass whose Values are not scroll values: a what-if
+ * or sweep's scratch passes, and goal seek's probes. With the arena on, every
+ * Value those passes create was pooled, and a pooled Value is held for as long
+ * as the arena is, so one 1,000-step sweep left 200,205 Values behind it.
+ *
+ * @param work - The work to run unpooled.
+ * @returns What `work` returns.
+ */
+export function withoutValueArena<T>(work: () => T): T {
+	const wasActive = _arenaActive;
+	_arenaActive = false;
+	try {
+		return work();
+	} finally {
+		_arenaActive = wasActive;
+	}
 }
 
 /** Check if arena is active (used by STORE_VAR / HALT to decide cloning). */
