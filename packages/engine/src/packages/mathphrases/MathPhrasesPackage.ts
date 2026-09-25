@@ -10,6 +10,9 @@ import { midpointParselet } from "./parselets/MidpointParselet";
 import { randomNumberParselet } from "./parselets/RandomNumberParselet";
 import { ClampParselet } from "./parselets/ClampParselet";
 import { ProportionParselet } from "./parselets/ProportionParselet";
+import { ProductOfParselet } from "./parselets/ProductOfParselet";
+import { AggregateCallParselet } from "./parselets/AggregateCallParselet";
+import { aggregateCallNormalizerRule, AGGREGATE_CALL } from "./normalizer/AggregateCallNormalizerRule";
 
 // CALL_BUILTIN indices. See VMBuiltins.ts for the handler implementations.
 const AVERAGE = 42, MEDIAN = 43, TOTAL = 44, COUNT = 45;
@@ -68,6 +71,15 @@ export const MATHPHRASES_PACKAGE: IEnginePackage = {
     "median of": "MEDIAN_OF",
     "total of": "TOTAL_OF",
     "count of": "COUNT_OF",
+    // The spreadsheet and notepad spellings of the same lists (#703). `min` is
+    // also the minute and `max` a function, so each is fused here, as a
+    // phrase, only before `of`.
+    "sum of": "TOTAL_OF",
+    "mean of": "AVERAGE_OF",
+    "avg of": "AVERAGE_OF",
+    "min of": "MIN_OF",
+    "max of": "MAX_OF",
+    "product of": "PRODUCT_OF",
     "larger of": "LARGER_OF",
     "greater of": "LARGER_OF",
     "smaller of": "SMALLER_OF",
@@ -103,6 +115,13 @@ export const MATHPHRASES_PACKAGE: IEnginePackage = {
     MEDIAN_OF: new VariadicAggregateParselet(MEDIAN),
     TOTAL_OF: new VariadicAggregateParselet(TOTAL),
     COUNT_OF: new VariadicAggregateParselet(COUNT),
+    MIN_OF: new VariadicAggregateParselet(MIN),
+    MAX_OF: new VariadicAggregateParselet(MAX),
+    PRODUCT_OF: new ProductOfParselet(),
+    // `sum(1, 2, 3)`, `mean(1, 2, 3)` and the other spreadsheet calls (#703).
+    [AGGREGATE_CALL]: new AggregateCallParselet({
+      sum: TOTAL, total: TOTAL, average: AVERAGE, mean: AVERAGE, median: MEDIAN, stdev: STANDARD_DEVIATION,
+    }),
     LARGER_OF: largerSmallerParselet(MAX),
     SMALLER_OF: largerSmallerParselet(MIN),
     HALF_OF: halfParselet,
@@ -129,5 +148,12 @@ export const MATHPHRASES_PACKAGE: IEnginePackage = {
   },
   normalizerRules: [
     functionPhraseNormalizerRule(),
+    aggregateCallNormalizerRule(),
   ],
+  tokenCategories: {
+    MIN_OF: "keyword",
+    MAX_OF: "keyword",
+    PRODUCT_OF: "keyword",
+    [AGGREGATE_CALL]: "function",
+  },
 };

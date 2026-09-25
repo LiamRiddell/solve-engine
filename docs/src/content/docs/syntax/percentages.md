@@ -14,6 +14,15 @@ value is that share of it.
 10% of 250 // 25
 ```
 
+The word does what the sign does, so a percentage can be written the way it is
+said. `percent` and `percentage` after a number are the `%`; after `as`,
+`in` or `to` they still ask for a number as a percentage.
+
+```solve
+15 percent of 60 // 9
+0.25 as percent // 25.00%
+```
+
 ## A discount and a markup
 
 `N% off X` takes N% of X away from X, the way a sale price is worked out, and
@@ -50,6 +59,18 @@ decrease 80 by 25% // 60
 100 + 10% // 110
 $80 - 25% // $60.00
 ```
+
+The past tense reads the same way, and `reduce` is `decrease`:
+
+```solve
+50 increased by 20% // 60
+50 decreased by 20% // 40
+reduce 50 by 20% // 40
+```
+
+`reduce` is also [map-reduce](/syntax/map-reduce-and-aggregates/)'s call, so it
+reads this way only before an amount and a `by` with a percentage after it;
+`reduce(...)` with a bracket is still map-reduce.
 
 ## Successive change: up, down, then
 
@@ -90,6 +111,15 @@ and NumPad's `X as a % of Y`, are the same questions in another order.
 $60 as a % on $50 // 20.00%
 ```
 
+`more than` and `less than` ask how far one value is above or below another, as
+a percentage of the other. The word works in place of the sign here too.
+
+```solve
+75 is what % more than 50 // 50.00%
+20 is what % less than 50 // 60.00%
+20 is what percent of 80 // 25.00%
+```
+
 With no base after it, `as %` writes a number as a percentage, and so do
 `to %` and `in %`:
 
@@ -110,6 +140,12 @@ fell, measured against where it started.
 800 to 1000 // 25.00%
 150 to 100 // -33.33%
 10 to 0 // -100.00%
+```
+
+The question can be asked in words, with the same answer:
+
+```solve
+percent change from 50 to 75 // 50.00%
 ```
 
 A change from zero has no percentage, since every multiple of zero is zero, and

@@ -63,6 +63,20 @@ export class IsWhatParselet implements InfixParselet {
 			);
 		}
 
+		// `75 is what % more than 50` (50%) and `20 is what % less than 50`
+		// (60%): the change from the second value to the first, as a percentage
+		// of the second, the way `percent change from 50 to 75` reads it (#705).
+		const comparison = readComparison(parser);
+		if (comparison !== null) {
+			parser.parseExpression(BindingPower.Conditional, builder);
+			// stack: part, other. The change runs from the other to the part.
+			builder.emitOpcode(OpCode.SWAP);
+			builder.emitOpcode(OpCode.PERCENT_CHANGE);
+			if (comparison === "less") builder.emitOpcode(OpCode.NEG);
+			builder.emitOpcode(OpCode.TO_PERCENTAGE);
+			return;
+		}
+
 		// `50 to 75 is what %` with no trailing preposition: the left operand is
 		// already the change, and this only asks for it as a percentage.
 		const preposition = readPreposition(parser);
@@ -199,6 +213,19 @@ export function readRatePreposition(parser: Parser): "of" | "off" | "on" | null 
 	if (next?.type === "PCT_ON") { parser.consume(); return "on"; }
 	if (next?.type === "PCT_OFF") { parser.consume(); return "off"; }
 	return readPreposition(parser);
+}
+
+/**
+ * `more than` or `less than` after `is what %`, consumed, or null with
+ * nothing consumed. Matched as words, as `what` is, so neither becomes a
+ * keyword anywhere else.
+ */
+function readComparison(parser: Parser): "more" | "less" | null {
+	const word = (parser.peek()?.text ?? "").toLowerCase();
+	if ((word !== "more" && word !== "less") || (parser.peekAt(1)?.text ?? "").toLowerCase() !== "than") return null;
+	parser.consume();
+	parser.consume();
+	return word;
 }
 
 function readPreposition(parser: Parser): "of" | "off" | "on" | null {

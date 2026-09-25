@@ -225,7 +225,14 @@ export function averageRangeHandler(args: Value[], context?: LineExecutionContex
  * at (not including) the nearest blank line, `#` heading, rule, fence or
  * table, and passing over a line with no figure, such as a comment (#652).
  */
-function aggregateAbove(context: LineExecutionContext, isAverage: boolean): Value {
+/**
+ * What an `above` aggregate does with the figures it gathers: `total above`,
+ * `average above` (or `avg`, `mean`), and the four added in #703, `count`,
+ * `min`, `max` and `median`.
+ */
+export type AboveMode = "total" | "average" | "count" | "min" | "max" | "median";
+
+function aggregateAbove(context: LineExecutionContext, mode: AboveMode): Value {
   const boundaryCheck = context.isLineBoundary;
   if (!boundaryCheck) {
     return errorValue("LINE_REF_NO_DOCUMENT", "\"above\" aggregation requires a real document");
@@ -263,7 +270,7 @@ function aggregateAbove(context: LineExecutionContext, isAverage: boolean): Valu
     }
     values.push(v!);
   }
-  const refused = spendSpanReads(context, walked, "total above");
+  const refused = spendSpanReads(context, walked, `${mode} above`);
   if (refused) return refused;
   if (values.length === 0) return errorValue("LINE_RANGE_EMPTY", "No lines above to aggregate (hit the top of the document, a blank line, or a heading immediately)");
   // The walk runs upwards from the line above, so the column arrives bottom
@@ -271,7 +278,36 @@ function aggregateAbove(context: LineExecutionContext, isAverage: boolean): Valu
   // column, which is the one the reader started with, so put it back in
   // reading order before combining.
   values.reverse();
-  return combineQuantities(values, isAverage);
+  return combineAbove(values, mode);
+}
+
+/**
+ * The figures an `above` aggregate gathered, combined as its mode says. A
+ * total and an average keep their exact decimal column (see
+ * {@link combineQuantities}). The others read every figure in the first one's
+ * unit, as a total does, so a column of kilograms and grams compares as one
+ * measure and a mixed column is refused by name.
+ */
+function combineAbove(values: Value[], mode: AboveMode): Value {
+  if (mode === "total" || mode === "average") return combineQuantities(values, mode === "average");
+  if (mode === "count") return withSources(numberValue(values.length), sourcesOfValues(values));
+  const unified = unifyQuantities(values, "compared");
+  if (unified instanceof Value) return unified;
+  const cells = unified.magnitudes;
+  let result: number;
+  if (mode === "median") {
+    const sorted = [...cells].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    result = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  } else {
+    // Folded, not spread: a long column spread into Math.max overflows the stack.
+    result = cells[0];
+    for (const n of cells) result = mode === "min" ? Math.min(result, n) : Math.max(result, n);
+  }
+  if (unified.unit === undefined) return withSources(numberValue(result), unified.sources);
+  const combined = withSources(uomValue(result, unified.unit), unified.sources);
+  if (values.every((v) => v.datetimeSpan === true)) combined.datetimeSpan = true;
+  return combined;
 }
 
 /** `total above`, every numeric result on lines before this one. */
@@ -289,7 +325,7 @@ function aggregateAbove(context: LineExecutionContext, isAverage: boolean): Valu
 export function totalAboveHandler(_args: Value[], context?: LineExecutionContext): Value {
   const ctxError = requireContext(context);
   if (ctxError) return ctxError;
-  return aggregateAbove(context!, false);
+  return aggregateAbove(context!, "total");
 }
 
 /** `average above`, the mean of every numeric result before this line. */
@@ -307,8 +343,31 @@ export function totalAboveHandler(_args: Value[], context?: LineExecutionContext
 export function averageAboveHandler(_args: Value[], context?: LineExecutionContext): Value {
   const ctxError = requireContext(context);
   if (ctxError) return ctxError;
-  return aggregateAbove(context!, true);
+  return aggregateAbove(context!, "average");
 }
+
+/**
+ * The handler for one of the `above` aggregates added in #703.
+ *
+ * @param mode - What it does with the figures above: count them, or find the least, the greatest or the middle.
+ * @returns The plugin handler: takes no arguments, and reads the block above its line.
+ */
+function aboveHandler(mode: AboveMode): (args: Value[], context?: LineExecutionContext) => Value {
+  return (_args, context) => {
+    const ctxError = requireContext(context);
+    if (ctxError) return ctxError;
+    return aggregateAbove(context!, mode);
+  };
+}
+
+/** `count above`, how many figures are in the block above this line. */
+export const countAboveHandler = aboveHandler("count");
+/** `min above`, the least figure in the block above this line. */
+export const minAboveHandler = aboveHandler("min");
+/** `max above`, the greatest figure in the block above this line. */
+export const maxAboveHandler = aboveHandler("max");
+/** `median above`, the middle figure in the block above this line. */
+export const medianAboveHandler = aboveHandler("median");
 
 // ── Sections ──────────────────────────────────────────────────────────────
 
