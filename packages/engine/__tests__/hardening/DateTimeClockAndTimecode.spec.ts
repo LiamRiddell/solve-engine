@@ -78,8 +78,15 @@ describe("clock arithmetic that rolls past midnight", () => {
 		// time the test runs: three hours after 11pm is three hours later, and
 		// the two evaluations share the same anchor date.
 		expect(num("11:00pm + 3 hours") - num("11:00pm")).toBe(3 * 3_600_000);
+		// Three hours after 11pm reads 2am, except on a night the clocks change,
+		// when it reads 1am or 3am. The expected hour is read from the same
+		// instant rather than written in, so the test holds on every date: with
+		// a hard-coded 2 it failed the 2.40.0 publish in Pacific/Auckland on the
+		// night before New Zealand's clocks went forward.
+		const expected = new Date(num("11:00pm") + 3 * 3_600_000).getHours();
+		expect([1, 2, 3]).toContain(expected);
 		const [hour] = wallClock("11:00pm + 3 hours");
-		expect(hour).toBe(2);
+		expect(hour).toBe(expected);
 	});
 
 	test("subtracting back across midnight returns to where it started", () => {
