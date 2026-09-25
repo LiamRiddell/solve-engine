@@ -49,6 +49,18 @@ block rather than the whole document:
 total above   // 100
 ```
 
+A horizontal rule (`---`), a code or math fence and a markdown table end the
+block the same way. A line with no figure on it, a `//` comment, a `>` quote or a
+`[[wiki link]]`, does not: the total passes over it and keeps reading the
+figures above, so a note can sit in the middle of a column.
+
+```solve-doc
+rent: $500
+// remember to check the gas bill   // (no result)
+food: $200
+total above   // $700.00
+```
+
 A subtotal inside the block is a summary of figures already counted, not
 another figure, so a later `total above` leaves it out rather than counting
 those figures twice:

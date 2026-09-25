@@ -1,8 +1,10 @@
-import { Value, ValueType, numberValue, numberValueExact, errorValue } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueExact, uomValue, uomValueExact, errorValue } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
-import { decimalFromLiteral } from "@solve-js/decimal";
 import { exactDecimalTotal } from "@solve-js/vm/ExactDecimals";
-import { findTableAbove, columnIndex, numericColumn, parseNumericCell, type MarkdownTable } from "./TableReader";
+import { unifyQuantities } from "@solve-js/vm/VMConversion";
+import { withSources } from "@solve-js/vm/Provenance";
+import { findTableAbove, columnIndex, type MarkdownTable } from "./TableReader";
+import { readCell } from "./TableCells";
 
 /**
  * Runtime handlers for `sum of column "name" above` and its siblings.
@@ -28,8 +30,10 @@ export const TablesErrorCodes = {
   TABLE_NOT_FOUND: "TABLE_NOT_FOUND",
   /** The named column is not one of the table's headers. */
   TABLE_COLUMN_NOT_FOUND: "TABLE_COLUMN_NOT_FOUND",
-  /** The column held no plain-number cells to aggregate. */
+  /** The column held no number or money cells to aggregate. */
   TABLE_COLUMN_NO_NUMERIC_CELLS: "TABLE_COLUMN_NO_NUMERIC_CELLS",
+  /** A column summary met a percentage cell, which it does not add to or compare with the figures (#651). */
+  TABLE_COLUMN_PERCENT_CELL: "TABLE_COLUMN_PERCENT_CELL",
   /** A lookup named a column the header carries more than once. */
   TABLE_COLUMN_AMBIGUOUS: "TABLE_COLUMN_AMBIGUOUS",
   /** No row's first cell carries the label an exact lookup asked for. */
@@ -172,39 +176,91 @@ function aggregateColumn(
     );
   }
 
-  const cells = numericColumn(table, index);
-  if (op === "count") return numberValue(cells.length);
-  if (cells.length === 0) {
+  const column = columnValues(table, index);
+  const { values } = column;
+  // A percentage is a cell like any other to count, and not a figure to add.
+  if (op === "count") return numberValue(values.length + column.percentages);
+  if (column.percentCell !== null) {
     return errorValue(
-      TablesErrorCodes.TABLE_COLUMN_NO_NUMERIC_CELLS,
-      `Column "${columnName}" has no plain-number cells to aggregate (currency and unit cells are not read yet)`,
+      TablesErrorCodes.TABLE_COLUMN_PERCENT_CELL,
+      `The "${columnName}" cell on line ${column.percentCell.line} is a percentage, ${column.percentCell.text}: a column summary adds and compares figures, and a percentage is a proportion, not one of them`,
     );
   }
+  if (values.length === 0) {
+    return errorValue(
+      TablesErrorCodes.TABLE_COLUMN_NO_NUMERIC_CELLS,
+      `Column "${columnName}" has no number or money cells to aggregate (a cell with a unit is not read yet)`,
+    );
+  }
+  if (column.money) return moneyAggregate(op, values, columnName);
 
   // A column of decimals totals exactly, the way a column of lines does, so
   // `sum of column "cost" above == 0.3` agrees with the 0.30 it shows. The
   // other reductions read the doubles. See vm/ExactDecimals.ts.
   if (op === "sum" || op === "average") {
-    const exact = exactDecimalTotal(exactCells(table, index), op === "average");
+    const exact = exactDecimalTotal(values, op === "average");
     if (exact !== null) return exact;
   }
-  return numberValue(reduce(op, cells));
+  return numberValue(reduce(op, values.map((v) => v.toNumber())));
 }
 
 /**
- * A column's plain-number cells as Values, each decimal cell carrying the
- * decimal it was written as, the way a decimal typed on a line does. The same
- * cells {@link numericColumn} reads, in the same order.
+ * A column's cells read as values, through the same reader a lookup uses
+ * (see TableCells.readCell), or the refusal of a cell a summary cannot use.
+ *
+ * A number keeps the decimal it was written as, and money its currency, the
+ * way the same figure typed on a line does (#651). The summaries used to read
+ * plain numbers only, so a money cell was dropped without a word (`500`,
+ * `$200`, `1,200` totalled 1,700), and grouping in the wrong place was read
+ * as grouping (`12,57` as 1,257); the reader treats that as text. Text and
+ * empty cells are skipped, as they always were. A percentage is counted, and
+ * the first one is kept so a summary that adds can refuse it by name: it is a
+ * proportion, not a figure to add to the others.
  */
-function exactCells(table: MarkdownTable, colIndex: number): Value[] {
-  const out: Value[] = [];
-  for (const row of table.rows) {
-    const value = parseNumericCell(row[colIndex]);
-    if (value === null) continue;
-    const text = row[colIndex]!.trim().replace(/,/g, "");
-    out.push(text.includes(".") ? numberValueExact(value, decimalFromLiteral(text)) : numberValue(value));
+function columnValues(table: MarkdownTable, colIndex: number): {
+  values: Value[];
+  money: boolean;
+  percentages: number;
+  percentCell: { line: number; text: string } | null;
+} {
+  const values: Value[] = [];
+  let money = false;
+  let percentages = 0;
+  let percentCell: { line: number; text: string } | null = null;
+  for (let i = 0; i < table.rows.length; i++) {
+    const cell = table.rows[i][colIndex];
+    const reading = readCell(cell);
+    if (reading.kind === "number") {
+      values.push(reading.exact.scale === 0 ? numberValue(reading.value) : numberValueExact(reading.value, reading.exact));
+    } else if (reading.kind === "money") {
+      money = true;
+      values.push(uomValueExact(reading.value, reading.currency, reading.exact));
+    } else if (reading.kind === "percent") {
+      percentages++;
+      percentCell ??= { line: table.rowLines[i], text: (cell ?? "").trim() };
+    }
   }
-  return out;
+  return { values, money, percentages, percentCell };
+}
+
+/**
+ * Summarise a column holding money, in the currency written first, the way
+ * `total above` combines the same figures typed as lines: a plain number
+ * joins the column as an amount in that currency, and two currencies with no
+ * rate between them are refused by name.
+ */
+function moneyAggregate(op: ColumnAggregateOp, values: Value[], columnName: string): Value {
+  const verb = op === "sum" ? "added" : op === "average" ? "averaged" : "compared";
+  const unified = unifyQuantities(values, verb);
+  if (unified instanceof Value) return unified;
+  const unit = unified.unit!;
+  if (op === "variance" || op === "sampleVariance") {
+    return errorValue(
+      "UNIT_POWER_UNSUPPORTED",
+      `The variance of column "${columnName}" would be in ${unit} squared, which is not an amount of money; its standard deviation is in ${unit}`,
+    );
+  }
+  return withSources(uomValue(reduce(op, unified.magnitudes), unit), unified.sources);
 }
 
 function columnName(args: Value[]): string {

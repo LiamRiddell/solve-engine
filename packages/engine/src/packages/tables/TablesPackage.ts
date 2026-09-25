@@ -52,8 +52,10 @@ import { tableRowLookupHandler, tableBandLookupHandler, tableThroughBandsHandler
  * - Non-numeric cells: skipped, not an error, so a stray label or a blank cell
  *   does not break an otherwise-numeric column. A column with no numbers at all
  *   is a clear error (except `count`, which is then zero).
- * - Currency and units in cells: not read yet. A cell carrying a `$` or a unit
- *   is treated as non-numeric and skipped. Plain numbers first, on purpose.
+ * - Money in cells: read, through the same cell reader a lookup uses, and
+ *   combined as `total above` combines the same figures on lines (#651). A
+ *   percentage cell is refused by name. A cell with a unit (`5 km`) is not
+ *   read yet and is skipped as text.
  *
  * Lookups and banded rates (issue #507) read the same nearest table:
  * `column "cost" for "food"` answers one cell by its row's label,

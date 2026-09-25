@@ -73,19 +73,45 @@ spread of column "score" above              // 7
 mode of column "score" above                // 4
 ```
 
-The column name is matched case-insensitively. A cell that is not a plain
-number, a label, a blank, or a currency or unit value, is skipped rather than
-counted, so a stray row does not break an otherwise-numeric column. A column
-with no numbers at all, or a name that is not one of the headers, is a clear
-error rather than a silent zero.
+The column name is matched case-insensitively.
 
-Currency and unit cells are not read by a column summary yet, and a table whose
-rows do not start with a pipe is not recognised. Both are deliberately left for a
-later slice.
+A column of money totals in its currency, the way the same figures typed as lines
+do under `total above`. A cell reads as money when a currency symbol comes before
+the amount (`$200`, `£12,570`) or a currency code after it (`1,200 GBP`), and a
+plain number in the same column joins it as an amount in that currency:
+
+```solve-doc
+| item | cost  |
+| ---- | ----- |
+| rent | 500   |
+| food | $200  |
+| car  | 1,200 |
+
+total of column "cost" above   // $1,900.00
+count of column "cost" above   // 3
+max of column "cost" above     // $1,200.00
+```
+
+Two currencies in one column are refused by name, as `total above` refuses them,
+and so is the variance of a column of money, which would be in square dollars;
+its standard deviation is in dollars.
+
+A cell with no figure in it, a label, a blank, or a figure with a unit such as
+`5 km`, is skipped rather than counted, so a stray row does not break an
+otherwise-numeric column. Thousands have to be grouped in threes to read as one
+number: `4,812` is 4812, and `12,57` is text, since a misplaced comma is more
+likely a typo or a decimal comma than a thousands separator. A percentage cell is
+counted by `count`, and refused by the summaries that add or compare, because a
+percentage is a proportion rather than one of the figures. A column with no
+number or money cells at all, or a name that is not one of the headers, is a
+clear error rather than a silent zero.
+
+Unit cells are not read by a column summary yet, and a table whose rows do not
+start with a pipe is not recognised. Both are left for a later slice.
 
 To read one cell rather than a whole column, name its row with a
-[table lookup](/syntax/table-lookups/): `column "cost" for "food"`. A lookup does
-read money and percentage cells. A table of thresholds and rates can be applied
+[table lookup](/syntax/table-lookups/): `column "cost" for "food"`. A lookup
+reads cells the same way, and answers a percentage cell as a percentage. A table of thresholds and rates can be applied
 to an amount as [banded rates](/syntax/banded-rates/).
 
 Like [line references](/syntax/line-references/), a column read only works inside

@@ -56,6 +56,7 @@ import {
 import { registerTokenCategory, unregisterTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import type { CompletionItem } from "@solve-js/language/LanguageService";
 import type { LexerVocabulary } from "@solve-js/lexer/ExpressionLexer";
+import { endsFigureBlock, hasNoFigure } from "@solve-js/lexer/BlockBoundary";
 import { QueryClient } from "@tanstack/query-core";
 import { createQueryClient, setActiveQueryClient, getActiveQueryClient } from "@solve-js/services/DataQueryService";
 import { memberTagsOf, withTagEdges } from "@solve-js/packages/tags/TagScanner";
@@ -1082,7 +1083,10 @@ export class ExpressionEngine {
                 ? (n: number) => {
                       const state = doc.getLineAt(n);
                       if (!state) return true; // out of range counts as a boundary: nothing to aggregate past it
-                      return state.isEmpty || /^\s*#/.test(state.text);
+                      // `isEmpty` is set when the evaluator reaches a line, so a
+                      // line below the reader is read from its text, as the
+                      // batch pass reads every line from its scan (#803).
+                      return state.isEmpty || hasNoFigure((k) => doc.getLineAt(k)?.text, (text) => this.lexer.classifyLine(text), n);
                   }
                 : scan
                   ? (n: number) => {
@@ -1090,6 +1094,14 @@ export class ExpressionEngine {
                         if (!sr) return true;
                         return sr.classification.skip || /^\s*#/.test(sr.text);
                     }
+                  : undefined,
+            // Where `total above` stops, the same test on both paths, read from
+            // the text: on the incremental path `isEmpty` also marks every
+            // skipped line, so it cannot tell a comment from a blank (#652).
+            isBlockEnd: doc
+                ? (n: number) => endsFigureBlock((k) => doc.getLineAt(k)?.text, (text) => this.lexer.classifyLine(text), n)
+                : scan
+                  ? (n: number) => endsFigureBlock((k) => scan[k - 1]?.text, (text) => this.lexer.classifyLine(text), n)
                   : undefined,
             getLineReads: doc
                 ? (n: number) => {
@@ -1210,8 +1222,9 @@ export class ExpressionEngine {
             result: (n) => readResult(n) ?? null,
             isBoundary: (n) => {
                 const state = doc.getLineAt(n);
-                return !state || state.isEmpty || /^\s*#/.test(state.text);
+                return !state || state.isEmpty || hasNoFigure((k) => doc.getLineAt(k)?.text, (text) => this.lexer.classifyLine(text), n);
             },
+            endsBlock: (n) => endsFigureBlock((k) => doc.getLineAt(k)?.text, (text) => this.lexer.classifyLine(text), n),
             taggedLines: (tag) => doc.linesCarryingTag(tag),
             lineText: (n) => doc.getLineAt(n)?.text,
         };
@@ -1234,6 +1247,7 @@ export class ExpressionEngine {
                 const sr = scan[n - 1];
                 return !sr || sr.classification.skip || /^\s*#/.test(sr.text);
             },
+            endsBlock: (n) => endsFigureBlock((k) => scan[k - 1]?.text, (text) => this.lexer.classifyLine(text), n),
             taggedLines: (tag) => this.batchLinesCarryingTag(scan, tag),
             lineText: (n) => scan[n - 1]?.text,
         };
@@ -1258,6 +1272,7 @@ export class ExpressionEngine {
                 const line = lines[n - 1];
                 return !line || line.isEmpty || /^\s*#/.test(line.text);
             },
+            endsBlock: (n) => endsFigureBlock((k) => lines[k - 1]?.text, (text) => this.lexer.classifyLine(text), n),
             taggedLines: (tag) => {
                 if (tagIndex === null) {
                     tagIndex = new Map();

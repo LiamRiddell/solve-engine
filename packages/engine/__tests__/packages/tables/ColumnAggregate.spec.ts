@@ -109,7 +109,7 @@ describe("non-numeric cells", () => {
     expect(resultAt(doc, 6).toNumber()).toBe(1500);
   });
 
-  test("a currency cell is not read yet, so it is skipped", () => {
+  test("a currency cell is read, and the plain number joins it as money (#651)", () => {
     const doc = evalDoc([
       "| item | cost |",
       "| --- | --- |",
@@ -117,8 +117,9 @@ describe("non-numeric cells", () => {
       "| fee | $50 |",
       'sum of column "cost" above',
     ]);
-    // Currency is deferred: only the plain 1200 counts.
-    expect(resultAt(doc, 5).toNumber()).toBe(1200);
+    // It used to be skipped, so only the plain 1200 counted.
+    expect(resultAt(doc, 5).toNumber()).toBe(1250);
+    expect(resultAt(doc, 5).unit).toBe("USD");
   });
 
   test("count reflects only the numeric cells", () => {
