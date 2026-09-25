@@ -390,6 +390,9 @@ export class PrecedenceParser {
           // unaffected: it parses its operand at Prefix (60), above `^`
           // either way, so "-2 ^ 2" is still (-2)^2 = 4.
           const rightBp = (typeId === PrecedenceParser.CARET_ID) ? bp - 1 : bp + 1;
+          // `2 permille of $5000`: the rate before `of` is read as the rate it
+          // names before the right side is multiplied by it (#633).
+          if (typeId === PrecedenceParser.OF_ID) builder.emitOpcode(OpCode.AS_RATE);
           const outerInsideExponent = this.insideExponent;
           if (typeId === PrecedenceParser.CARET_ID) this.insideExponent = true;
           try {

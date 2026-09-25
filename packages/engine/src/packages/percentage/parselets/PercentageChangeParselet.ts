@@ -53,6 +53,13 @@ export class PercentageChangeParselet implements InfixParselet {
     // and try to parse the IN keyword as a percentage-change operand
     // (which has no prefix parselet and throws).
     const nextToken = parser.peek();
+    // `0.25 to %`: a conversion to a percentage, not a change to one (#633).
+    // The `%` has no prefix parselet, so this was a parse error.
+    if (nextToken?.type === "PERCENT") {
+      parser.consume();
+      builder.emitOpcode(OpCode.TO_PERCENTAGE);
+      return;
+    }
     if (
       nextToken &&
       (

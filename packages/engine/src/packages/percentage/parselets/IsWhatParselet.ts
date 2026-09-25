@@ -71,26 +71,7 @@ export class IsWhatParselet implements InfixParselet {
 			return;
 		}
 
-		parser.parseExpression(BindingPower.Conditional, builder); // base
-
-		// Every branch starts by dividing, which avoids needing the part and the
-		// base on the stack at the same time in the wrong order. `off` and `on`
-		// then just measure that ratio's distance from 1, in whichever
-		// direction the word implies.
-		builder.emitOpcode(OpCode.DIV); // part / base
-		if (preposition === "off") {
-			// 180/200 is 0.9, and 0.9 is 10% off.
-			builder.emitOpcode(OpCode.PUSH_NUMBER);
-			builder.emitNumber(1);
-			builder.emitOpcode(OpCode.SWAP);
-			builder.emitOpcode(OpCode.SUB);
-		} else if (preposition === "on") {
-			// 180/150 is 1.2, and 1.2 is 20% on.
-			builder.emitOpcode(OpCode.PUSH_NUMBER);
-			builder.emitNumber(1);
-			builder.emitOpcode(OpCode.SUB);
-		}
-		builder.emitOpcode(OpCode.TO_PERCENTAGE);
+		emitRateAgainstBase(parser, builder, preposition);
 	}
 
 	/**
@@ -176,6 +157,50 @@ function expectWord(parser: Parser, word: string, example: string): void {
 }
 
 /** Reads `of`, `off` or `on`, or `null` when none is present. */
+/**
+ * The rate a part is of, off or on a base: the base is parsed from here and the
+ * part is already on the stack. Shared by `X is what % of Y` and its `X as % of
+ * Y` spelling (see converters/AsConverterParselet), so the two cannot drift
+ * (#634).
+ *
+ * Every branch starts by dividing, which avoids needing the part and the base on
+ * the stack at the same time in the wrong order. `off` and `on` then measure
+ * that ratio's distance from 1, in whichever direction the word implies.
+ *
+ * @param parser - Positioned at the base.
+ * @param builder - The line's bytecode.
+ * @param preposition - Which relation the rate names.
+ */
+export function emitRateAgainstBase(parser: Parser, builder: BytecodeBuilder, preposition: "of" | "off" | "on"): void {
+	parser.parseExpression(BindingPower.Conditional, builder); // base
+	builder.emitOpcode(OpCode.DIV); // part / base
+	if (preposition === "off") {
+		// 180/200 is 0.9, and 0.9 is 10% off.
+		builder.emitOpcode(OpCode.PUSH_NUMBER);
+		builder.emitNumber(1);
+		builder.emitOpcode(OpCode.SWAP);
+		builder.emitOpcode(OpCode.SUB);
+	} else if (preposition === "on") {
+		// 180/150 is 1.2, and 1.2 is 20% on.
+		builder.emitOpcode(OpCode.PUSH_NUMBER);
+		builder.emitNumber(1);
+		builder.emitOpcode(OpCode.SUB);
+	}
+	builder.emitOpcode(OpCode.TO_PERCENTAGE);
+}
+
+/**
+ * The relation after an "as %" or "is what %": `of`, `off` or `on`, whether
+ * the normaliser left the word plain or retyped it after a `%` (`PCT_ON`,
+ * `PCT_OFF`), or null when none follows. Consumes it.
+ */
+export function readRatePreposition(parser: Parser): "of" | "off" | "on" | null {
+	const next = parser.peek();
+	if (next?.type === "PCT_ON") { parser.consume(); return "on"; }
+	if (next?.type === "PCT_OFF") { parser.consume(); return "off"; }
+	return readPreposition(parser);
+}
+
 function readPreposition(parser: Parser): "of" | "off" | "on" | null {
 	if (parser.match("OF")) return "of";
 	const word = (parser.peek()?.text ?? "").toLowerCase();
