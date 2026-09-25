@@ -33,6 +33,18 @@ const UNIT_ID = tokenTypeId("UNIT");
  *   a time of day and nothing else, so adding two of those is still refused
  *   rather than answered with a number that means nothing.
  *
+ * Two more, about where a run may start (#628):
+ *
+ * - **Only where a sum can start.** The run is fused only at the start of the
+ *   expression or after `(`, `=`, a comma or another `+`. After a `-`, `*`,
+ *   `/` or `^` it is left to ordinary precedence: `17:30 - 9:00 + 0:45` fused
+ *   `9:00 + 0:45` into 585 minutes and read the line as `17:30 - 585 minutes`,
+ *   a time of day, 7:45 AM.
+ * - **A run added to a clock subtraction is a length of time.** `17:30 - 9:00`
+ *   is a shift, a span of 8:30, and `+ 0:45` after it is forty-five more
+ *   minutes, so the run becomes minutes and the span stays a span: 9:15. The
+ *   same holds with the subtraction in brackets, `(9:30 - 8:30) + 1:00`.
+ *
  * This relies on {@link clockTimeNormalizerRule} having run in an earlier pass
  * to produce the `CLOCK_TIME` tokens, the same cascade the interval rule uses.
  *
@@ -49,21 +61,48 @@ function isSummable(token: Token | undefined): boolean {
 	return token?.type === "CLOCK_TIME" && !isTimeOfDay(token);
 }
 
-/** The rule: see the module comment for the two boundaries it keeps. */
+/** The token types a sum of clock times may follow: the start of an expression, a bracket, an assignment, a list, or another sum. */
+const SUM_STARTS: ReadonlySet<string> = new Set(["LPAREN", "EQUALS", "COMMA", "PLUS"]);
+
+/**
+ * Whether the tokens ending just before `end` are a clock subtraction,
+ * `CLOCK_TIME - CLOCK_TIME`, optionally in brackets: the span a following
+ * `+ 0:45` adds to.
+ */
+function endsWithClockSubtraction(tokens: Token[], end: number): boolean {
+	let i = end - 1;
+	const bracketed = tokens[i]?.type === "RPAREN";
+	if (bracketed) i--;
+	if (tokens[i]?.type !== "CLOCK_TIME" || tokens[i - 1]?.type !== "MINUS" || tokens[i - 2]?.type !== "CLOCK_TIME") return false;
+	return !bracketed || tokens[i - 3]?.type === "LPAREN";
+}
+
+/** The rule: see the module comment for the boundaries it keeps. */
 export function clockTimeSumNormalizerRule(priority = 67): NormalizerRule {
 	const RULE = "time:clock-time-sum";
 	return {
 		name: RULE,
 		priority,
-		shape: [{ types: ["CLOCK_TIME"] }, { types: ["PLUS"] }],
+		// One slot: a run added to a clock subtraction may be a single time
+		// with nothing after it (`17:30 - 9:00 + 0:45`).
+		shape: [{ types: ["CLOCK_TIME"] }],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const first = tokens[pos];
 			if (!isSummable(first)) return null;
-			if (tokens[pos + 1]?.type !== "PLUS") return null;
-			if (!isSummable(tokens[pos + 2])) return null;
+			const before = tokens[pos - 1];
+			// `17:30 - 9:00 + 0:45`: the run after the subtraction's `+` is a
+			// length added to the span, even a run of one.
+			const addedToSpan = before?.type === "PLUS" && endsWithClockSubtraction(tokens, pos - 1);
+			if (!addedToSpan) {
+				if (before !== undefined && !SUM_STARTS.has(before.type)) return null;
+				// A sum's second term, where the first was a subtraction's end:
+				// that run belongs to the case above, at its own start.
+				if (before?.type === "PLUS" && tokens[pos - 2]?.type === "CLOCK_TIME" && tokens[pos - 3]?.type === "MINUS") return null;
+				if (tokens[pos + 1]?.type !== "PLUS" || !isSummable(tokens[pos + 2])) return null;
+			}
 
-			let consumed = 3;
-			let minutes = Number(first.value) + Number(tokens[pos + 2].value);
+			let consumed = 1;
+			let minutes = Number(first.value);
 			while (tokens[pos + consumed]?.type === "PLUS" && isSummable(tokens[pos + consumed + 1])) {
 				minutes += Number(tokens[pos + consumed + 1].value);
 				consumed += 2;

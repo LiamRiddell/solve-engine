@@ -88,11 +88,17 @@ const SUM = 30;
 const PRODUCT = 40;
 const EXPONENT = 50;
 /**
- * `on`/`off` bind below arithmetic (the engine's `Conditional` level), so the
- * base is the whole arithmetic expression after the phrase: "20% off 80 + 20"
- * is "20% off (80 + 20)", not "(20% off 80) + 20".
+ * `on`/`off` bind on their left as tightly as the `%` before them (the
+ * engine's `Postfix` level), so the rate is that percentage alone: "5 + 20% off
+ * 100" is "5 + (20% off 100)" (#635).
  */
-const ON_OFF = 24;
+const ON_OFF = 70;
+/**
+ * And they read their base below arithmetic (the engine's `Conditional` level),
+ * so the base is the whole arithmetic expression after the phrase: "20% off 80
+ * + 20" is "20% off (80 + 20)", and a chain groups to the right.
+ */
+const ON_OFF_BASE = 24;
 
 /** Left binding power of an infix operator, or 0 when it is not one we derive. */
 function infixBindingPower(type: string): number {
@@ -272,9 +278,12 @@ class Parser {
 			if (bindingPower === 0 || bindingPower <= minBindingPower) break;
 
 			this.next(); // consume the operator
-			// `^` is the only right-associative operator, matching the engine.
+			// `^` is right-associative, matching the engine, and `on`/`off` read
+			// their base at a lower level than they bind at on their left.
 			const rightBindingPower =
-				t.type === TokenTypes.CARET ? bindingPower - 1 : bindingPower;
+				t.type === TokenTypes.CARET ? bindingPower - 1
+				: t.type === TokenTypes.PCT_ON || t.type === TokenTypes.PCT_OFF ? ON_OFF_BASE
+				: bindingPower;
 			const right = this.parseExpression(rightBindingPower);
 			left = {
 				kind: "binary",

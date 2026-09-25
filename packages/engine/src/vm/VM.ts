@@ -19,7 +19,7 @@ import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/Di
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate } from "@solve-js/vm/VMConversion";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
@@ -1609,6 +1609,9 @@ function movedDatetime(date: Value, duration: Value, sign: 1 | -1, vm: VM): Valu
     return datetimeValue(shiftDatetime(date.toNumber(), duration, sign, vm), date.grain, date.zone);
 }
 
+/** The base types a percentage change reads a size from, and so checks for zero and sign. */
+const SCALAR_BASE: ReadonlySet<ValueType> = new Set([ValueType.Number, ValueType.Uom, ValueType.Percentage, ValueType.BigInt, ValueType.Hex]);
+
 /**
  * The percentage change from the value below the top of the stack to the value
  * on top: `SWAP DIV 1 SUB TO_PERCENTAGE`, the program `a to b` always compiled
@@ -1659,6 +1662,24 @@ function percentChange(l: Value, r: Value, vm: VM): Value {
             "INVALID_DATETIME_OP",
             "A date and a value that is not one have no span or change between them: `to` between two dates is the span from one to the other, and between two numbers the percentage change.",
         );
+    }
+    // The base decides whether there is a percentage at all (#636). From zero
+    // the ratio divided by zero and printed Infinity% or NaN%; from a negative
+    // base it picked one of two conventions without saying so.
+    if (SCALAR_BASE.has(l.type)) {
+        const base = l.toNumber();
+        if (base === 0) {
+            return errorValue(
+                "PERCENT_CHANGE_FROM_ZERO",
+                "A change from zero has no percentage: every multiple of zero is zero, so no percentage of it reaches the new value. Give the difference instead, the new value minus the old.",
+            );
+        }
+        if (base < 0) {
+            return errorValue(
+                "PERCENT_CHANGE_NEGATIVE_BASE",
+                "A percentage change from a negative base has two readings, each the other's negative: the rise measured against the base's size, and the ratio of the two less one. Write the one you mean, as in (new - old) / abs(old).",
+            );
+        }
     }
     vm.push(l);
     vm.push(r);
@@ -4337,7 +4358,8 @@ export function executeBytecode(
           const toPercentageDate = datetimeConversionRefused(v, "a percentage");
           if (toPercentageDate) { stack.push(toPercentageDate); break; }
           carry = v.sources;
-          stack.push(percentageValue(v.toNumber()));
+          // A proportion on the parts-per scale; see toPercentage().
+          stack.push(toPercentage(v));
           break;
         }
         case OpCode.TO_FRACTION: {
@@ -4577,6 +4599,9 @@ export function executeBytecode(
             // currency package already owns the `IN` infix slot and a second
             // registration would overwrite it.
             stack.push(datetimeInZone(left, toUnit, vm));
+          } else if (left.type === ValueType.Percentage && percentageInPartsPer(left, toUnit) !== null) {
+            // `0.5% in ppm`: a percentage on the parts-per scale (#633).
+            stack.push(percentageInPartsPer(left, toUnit)!);
           } else {
             // A value with no single amount, a list, a piece of text, a
             // colour, read as the zero `toNumber()` reports for it and came
@@ -4794,6 +4819,11 @@ export function executeBytecode(
           break;
         }
 
+        case OpCode.AS_RATE: {
+          // `2 permille of $5000`: the rate before `of`; see asRate().
+          stack.push(asRate(safePop(stack)));
+          break;
+        }
         case OpCode.PERCENT_CHANGE: {
           const r = safePop(stack), l = safePop(stack);
           stack.push(percentChange(l, r, vm));

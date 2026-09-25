@@ -153,7 +153,11 @@ countable, and in exponent form once they are not.
 1 byte in GB // 1e-9 GB
 1 second in years // 3.17e-8 years
 0.001 km // 0.001 km
+0.001% // 0.001%
 ```
+
+A percentage follows the same rule, and is grouped by thousands like any other
+figure: `1234567%` is `1,234,567.00%`.
 
 Three digits, rather than everything the double holds, because a conversion is
 not more precise than what went into it: `1 second in years` is

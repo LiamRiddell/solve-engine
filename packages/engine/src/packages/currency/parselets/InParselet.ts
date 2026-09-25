@@ -38,6 +38,14 @@ export class InParselet implements InfixParselet {
 			builder.emitPluginCall("ipInCidr", 2);
 			return;
 		}
+		// `in %`: the value as a percentage, on the parts-per scale (#633). The
+		// `%` was left for the postfix operator, which divided the value by a
+		// hundred again: `20/80 in %` answered 0.25%.
+		if (targetToken?.type === "PERCENT") {
+			parser.consume();
+			builder.emitOpcode(OpCode.TO_PERCENTAGE);
+			return;
+		}
 		// Accept UNIT, currency symbols, a bare IDENT, a fused multi-word zone
 		// name, or IN (for cases like "3 ft in in" where the target unit is
 		// tokenized as a keyword).

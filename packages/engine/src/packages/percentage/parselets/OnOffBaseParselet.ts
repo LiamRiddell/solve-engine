@@ -15,12 +15,19 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
  * The same answers as `200 + 10%` and `200 - 10%`, said the other way round.
  * Both orders exist because both get written, and only one of them worked.
  *
- * Binds at `Conditional`, below arithmetic, so the base is the whole
- * expression after it.
+ * The two sides bind differently, on purpose (#635):
+ *
+ * - **The rate is the percentage just before the word**, so the word binds on
+ *   its left as tightly as the `%` itself does (`Postfix`). At `Conditional`, below
+ *   arithmetic, the rate was whatever had been built to the left: in
+ *   `5 + 20% off 100` it was `5 + 20%`, six, and the answer was -500.
+ * - **The base is the whole expression after it**, parsed at `Conditional`, so
+ *   `10% off 100 + 100` is 180, and a chain groups to the right:
+ *   `10% off 20% off $100` takes 20% off, then 10% off that, $72.00.
  */
 export class OnOffBaseParselet implements InfixParselet {
 	readonly category = "Percentage";
-	readonly bindingPower = BindingPower.Conditional;
+	readonly bindingPower = BindingPower.Postfix;
 
 	/** @param sign - `1` for a markup (`on`), `-1` for a discount (`off`). */
 	constructor(private readonly sign: 1 | -1) {}

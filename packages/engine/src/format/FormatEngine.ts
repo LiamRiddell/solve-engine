@@ -542,10 +542,18 @@ function formatPercentage(value: number, locale: ILocale, settings: FormattingSe
   // formatting; without this every percentage-change result displayed as
   // e.g. "0.25%" instead of "25.00%".
   const dp = settings.percentageResult.decimalPlaces;
-  let formatted = (value * 100).toFixed(dp);
-  // A proportion that rounds to zero at these places is written without a
-  // sign, as a zero is (#585): `-0.001%` is 0.00%, not -0.00%.
-  if (Number(formatted) === 0) formatted = formatted.replace("-", "");
+  const loc = settings.numberResult.decimalSeparatorLocale || "en-US";
+  const percent = value * 100;
+  // A percentage follows the rules every other number does (#637): one that is
+  // not zero is never shown as one (`0.001%` was 0.00%), and it takes the
+  // locale's grouping and decimal mark (`1234567%` was 1234567.00%, and 25%
+  // under de-DE was 25.00%), as formatUom's figures do.
+  const tooSmall = tooSmallToPrintText(percent, dp, loc);
+  const fixed = percent.toFixed(dp);
+  let formatted = tooSmall ?? localiseFixedDecimal(fixed, loc, settings.floatResult.enableSeperator);
+  // A proportion that is zero at these places is written without a sign, as a
+  // zero is (#585): never -0.00%.
+  if (tooSmall === undefined && Number(fixed) === 0) formatted = formatted.replace("-", "");
   return `= ${formatted}${locale.display.percentageSuffix}`;
 }
 

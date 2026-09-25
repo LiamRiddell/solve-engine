@@ -1,4 +1,4 @@
-import { Value, ValueType, numberValue, numberValueRational, numberValueUncertain, bigIntValue, uomValue, uomValueExact, matrixValue, errorValue, symbolicValue, type MatrixData, type MatrixEntry } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueRational, numberValueUncertain, bigIntValue, uomValue, uomValueExact, matrixValue, errorValue, symbolicValue, percentageValue, type MatrixData, type MatrixEntry } from "@solve-js/vm/Value";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { decimalAdd, decimalSubtract, decimalMultiply, decimalDivide, decimalIsZero, decimalToNumber, decimalFromNumberIfExact, decimalCompare, type DecimalData } from "@solve-js/decimal";
@@ -886,6 +886,93 @@ export function datetimeConversionRefused(v: Value, target: string): Value | nul
     return errorValue(
         "INVALID_DATETIME_OP",
         `A date or time cannot be written as ${target}: it is a moment, not an amount. For its number, write "as number", or "to timestamp" for seconds since 1970.`,
+    );
+}
+
+/**
+ * Whether a unit is on the parts-per scale (ppm, ppb, ppt, permille), the scale
+ * a percentage belongs to: 1% is 0.01, 1 permille 0.001 and 1 ppm 0.000001.
+ *
+ * @param unit - The unit.
+ */
+export function isPartsPerUnit(unit: string | undefined): boolean {
+    return unit !== undefined && getMeasure(unit) === "partsPer";
+}
+
+/**
+ * The fraction a parts-per quantity names: 100 ppm is 0.0001, 2 permille 0.002.
+ *
+ * @param value - A quantity whose unit {@link isPartsPerUnit} accepts.
+ */
+export function partsPerFraction(value: Value): number {
+    return convertUnit(value.toNumber(), value.unit!, "ppm") / 1e6;
+}
+
+/**
+ * A value written as a percentage (TO_PERCENTAGE: `as %`, `in %`, `to %`,
+ * `as percent`, and the percentage forms that end in one).
+ *
+ * A percentage is a point on the parts-per scale (#633), so a parts-per
+ * quantity becomes the fraction it names: `100 ppm as %` is 0.01%, where it
+ * read the 100 as whole ones and answered 10000.00%. A quantity that is not a
+ * proportion (a length, money) has no percentage and is refused, where
+ * `5 km as %` answered 500.00%. A number or a ratio is its own fraction, as
+ * before; one that is not finite is refused (see {@link percentageNotFinite}).
+ *
+ * @param value - The value, already checked for a fault and a date.
+ * @returns The Percentage, or an error Value.
+ */
+export function toPercentage(value: Value): Value {
+    if (value.type === ValueType.Uom && value.unit !== undefined) {
+        if (isPartsPerUnit(value.unit)) return percentageValue(partsPerFraction(value));
+        const what = describeQuantity(value.unit);
+        return errorValue(
+            "PERCENTAGE_OF_QUANTITY",
+            `${what[0].toUpperCase()}${what.slice(1)} is not a proportion, so it has no percentage: only a number, a ratio or a parts-per quantity (ppm, permille) can be written as one.`,
+        );
+    }
+    const fraction = value.toNumber();
+    return Number.isFinite(fraction) ? percentageValue(fraction) : percentageNotFinite();
+}
+
+/**
+ * A value converted to a parts-per unit, or null when the conversion is not one
+ * this reads: `0.5% in ppm` is 5,000 ppm, where the percentage's bare fraction
+ * was labelled with the unit and answered 0.005 ppm (#633).
+ *
+ * @param value - The value being converted.
+ * @param toUnit - The target unit.
+ */
+export function percentageInPartsPer(value: Value, toUnit: string): Value | null {
+    if (value.type !== ValueType.Percentage || !isPartsPerUnit(toUnit)) return null;
+    return uomValue(convertUnit(value.toNumber() * 1e6, "ppm", toUnit), toUnit);
+}
+
+/**
+ * The rate a parts-per quantity names, as a percentage, for `of` (AS_RATE): so
+ * `2 permille of $5000` is $10.00, as `0.2% of $5000` is, where the magnitude
+ * 2 multiplied the money and answered $10,000.00 (#633). Anything else is
+ * returned as it is, so `*` and every other `of` are unchanged.
+ *
+ * @param value - The rate written before `of`.
+ */
+export function asRate(value: Value): Value {
+    if (value.type === ValueType.Uom && isPartsPerUnit(value.unit)) return percentageValue(partsPerFraction(value));
+    return value;
+}
+
+/**
+ * The refusal for a percentage of a value that is not finite: `40 is what % of
+ * 0` divided by zero and printed Infinity%, and `0 / 0 as %` printed NaN%
+ * (#636). A percentage is a proportion, and an infinite or undefined one names
+ * none, so it is refused rather than printed with a percent sign.
+ *
+ * @returns The `PERCENTAGE_NOT_FINITE` error Value.
+ */
+export function percentageNotFinite(): Value {
+    return errorValue(
+        "PERCENTAGE_NOT_FINITE",
+        "This has no percentage: its value is not a finite number, which is what dividing by zero gives.",
     );
 }
 

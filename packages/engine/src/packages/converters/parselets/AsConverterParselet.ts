@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { emitRateAgainstBase, readRatePreposition } from "@solve-js/packages/percentage/parselets/IsWhatParselet";
 
 /** Recognized `as <name>` targets that dispatch to a dedicated fast opcode. */
 const BUILTIN_CONVERTERS: Record<string, OpCode> = {
@@ -39,6 +40,22 @@ const BASE_CONVERTERS: Record<number, OpCode> = {
   8: OpCode.TO_OCTAL,
   16: OpCode.TO_HEX,
 };
+
+/**
+ * `as %`, then an optional base: `40 as % of 50` is the rate 40 is of 50,
+ * 80%, as `40 is what % of 50` answers, and `on` and `off` ask for the
+ * markup or discount as that form does. They share its code (#634). Before,
+ * `as %` converted 40 to 4000% at once and `of 50` then took that of 50:
+ * 2,000. With no base it converts, as it always has: `0.5 as %` is 50%.
+ */
+function percentAgainstBase(parser: Parser, builder: BytecodeBuilder): void {
+  const preposition = readRatePreposition(parser);
+  if (preposition === null) {
+    builder.emitOpcode(OpCode.TO_PERCENTAGE);
+    return;
+  }
+  emitRateAgainstBase(parser, builder, preposition);
+}
 
 /**
  * `<expr> as <type>`, general value/display conversion, e.g.
@@ -91,10 +108,11 @@ export class AsConverterParselet implements InfixParselet {
   parse(parser: Parser, left: Token, token: Token, builder: BytecodeBuilder): void {
     const nextToken = parser.peek();
 
-    // "as %", the bare percent SYMBOL, not the word "percent".
+    // "as %", the bare percent SYMBOL, not the word "percent". With a base
+    // after it, it asks what `is what %` asks; see percentAgainstBase().
     if (nextToken?.type === "PERCENT") {
       parser.consume();
-      builder.emitOpcode(OpCode.TO_PERCENTAGE);
+      percentAgainstBase(parser, builder);
       return;
     }
 
@@ -112,6 +130,20 @@ export class AsConverterParselet implements InfixParselet {
     }
     parser.consume();
     const name = nextToken.value.toLowerCase();
+
+    // "as a %" and "as a percent", NumPad's spelling of "as %".
+    if (name === "a") {
+      const after = parser.peek();
+      if (after?.type === "PERCENT" || /^percent(age)?$/i.test(after?.value ?? "")) {
+        parser.consume();
+        percentAgainstBase(parser, builder);
+        return;
+      }
+    }
+    if (name === "percent" || name === "percentage") {
+      percentAgainstBase(parser, builder);
+      return;
+    }
 
     // "as base 8", the radix written as a number rather than a name. Only the
     // three radixes this engine can render are accepted, and an unsupported

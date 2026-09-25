@@ -181,6 +181,10 @@ export enum OpCode {
 	// `a to b`: the percentage change from a to b, or the span between them when
 	// both are dates. Pops both, pushes one. See percentChange() in vm/VM.ts.
 	PERCENT_CHANGE = 162,
+	// `of`'s left operand: a parts-per quantity becomes the rate it names, as a
+	// percentage, and anything else is left as it is. Pops one, pushes one. See
+	// asRate() in vm/VMConversion.ts.
+	AS_RATE = 163,
 }
 
 // Reverse lookup built once at module load, getOpCodeName() is called once
