@@ -1,5 +1,1378 @@
 # solve-engine
 
+## 2.40.0
+
+### Minor Changes
+
+- 5540410: Cash-flow appraisal: `npv of`, `irr of` and `payback of` judge a series of cash flows
+  
+  The finance package worked on one sum at a time (`present value of`, `roi`, the annual return), so the question asked of an investment, an outlay followed by a return each period, had no form: `npv of -1000, 300, 400, 500 at 10%` failed at the first comma and `npv(...)` was an undefined function. Three forms now answer it: the net present value at a discount rate, the internal rate of return (the rate at which that value is zero), and the payback period (how long the running total takes to climb back to zero).
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `npv of -1000, 300, 400, 500 at 10%` | error: unexpected token `,` | -21.04 |
+  | `npv of -$1,000, $300, $400, $500 at 10%` | error: unexpected token `,` | -$21.04 |
+  | `npv of -100, 110 at 10%` | error: unexpected token `,` | 0 |
+  | `irr of -1000, 300, 400, 500` | error: unexpected token `,` | 8.90% |
+  | `irr of -100, 230, -132` | error: unexpected token `,` | error: 2 internal rates of return, 10.00% and 20.00% |
+  | `payback of -1000, 300, 400, 500` | error: unexpected token `,` | 2.60 |
+  | `payback of -1000, 300, 400` | error: unexpected token `,` | error: still 300 short after the last one |
+  
+  The convention, stated on the new page: the first flow is today and is not discounted, and each later flow is one period further away, the reading a finance textbook uses. A spreadsheet's `NPV()` discounts the first value as well and answers -19.12 for the first row (-21.04 divided by 1.1); its usual idiom, the outlay added outside the function, is exactly the figure here. For that reason there is deliberately no `npv(...)` call spelling, since a call written like the spreadsheet's that answered differently would be a trap. `net present value of` and `payback period of` are the long spellings; the flows can also be one bracketed list or a variable holding one.
+  
+  Money keeps its currency, and the discounting runs in exact decimals, so a series that breaks even exactly answers 0 rather than a floating-point remainder. The IRR does not guess: a series whose sign changes more than once can have several rates, and a spreadsheet's `IRR()` returns whichever its starting guess reaches. Here the rates are isolated exactly on the flows' own coefficients (Descartes' rule of signs, halving until each rate stands alone), so a single rate is answered only when there is exactly one, and otherwise every rate is named, or the series is refused as having none. The payback is fractional, taking the flow in the crossing period to arrive evenly through it, and a later outlay that pulls the total below zero again pays back the last time it recovers.
+  
+  The boundary: flows are evenly spaced, one per period, so a dated series (a spreadsheet's `XNPV` and `XIRR`) is not a form, since it needs a day-count convention of its own. A series in two currencies is refused rather than converted, because a future flow at today's exchange rate would be a guess presented as a figure. There is no discounted payback and no modified IRR. The rate must be above -100%, and a bare-number rate is a proportion, as in the other finance forms. The triggers are the fused phrases, so `npv`, `irr` and `payback` alone stay ordinary names, and `IRR` stays the Iranian rial's currency code. Every refusal (a flow that is not an amount, fewer than two flows, a list mixed with loose flows, a rate at or below -100%, several rates or none, never paying back) is a structured error naming the problem, never a thrown exception or a wrong number; an `npv of` with no `at` clause is a parse error that names the missing rate, as the other finance phrases treat a missing clause. The forms are plugin functions on the finance package; no builtin index is added.
+  
+  ## Verification
+  
+  A new spec, `__tests__/packages/finance/CashFlow.spec.ts`, pins every form against references computed outside the engine: exact rational arithmetic in Python for the NPV and payback figures, sympy's exact real-root isolation for every IRR, and Microsoft's own worked NPV and IRR examples (1,922.06, -3,749.47, 8.66%, -2.12%, -44.35%), with each refusal and its code. The new NPV, IRR & payback page carries proven `solve` and `solve-doc` examples, and the cheatsheet gains two lines. npm run verify:ci passes: 10,709 tests across 517 suites.
+- 5540410: Places written by latitude and longitude, with the great-circle distance and the initial bearing between them
+  
+  A place on the globe can now be written by its latitude and longitude, and the engine answers how far apart two places are and which way to set off from one to reach the other. Angles can be written the way a map writes them, in degrees, minutes and seconds (`51°30'27"`) or with a compass letter (`51.5074°N`), and `as dms` writes an angle back that way. It is a new package, `GEO_PACKAGE` (`solve-geo`), on by default and removable.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `distance from London to Tokyo` | error: unexpected token "from" | 9,558.57 km |
+  | `bearing from London to Tokyo` | error: unexpected token "from" | 31.73 degrees |
+  | `51°30'27"` | error: unterminated string literal | 51.51 degrees |
+  | `51.5°N` | error: undefined variable `°N` | 51.50 degrees |
+  | `51.5074° as dms` | error: unknown converter "as dms" | 51°30'26.64" |
+  
+  The first two rows are read in a document where `London = 51.5074°N 0.1278°W` and `Tokyo = 35.6762°N 139.6503°E` are defined on earlier lines. A place is written as a signed pair in brackets, latitude first, or as two compass-lettered angles in either order, or held in a variable; inside `distance` and `bearing` a bare pair such as `51.5074, -0.1278`, which is what a map copies, needs no brackets.
+  
+  ```text
+  distance from (51.5074, -0.1278) to (48.8566, 2.3522)             343.56 km
+  distance between 51.5074, -0.1278 and 48.8566, 2.3522             343.56 km
+  distance from 51.5074°N 0.1278°W to 35.6762°N 139.6503°E in nmi   5,161.22 nmi
+  bearing from (51.5074, -0.1278) to (48.8566, 2.3522)              148.12 degrees
+  distance from (0, 179.5) to (0, -179.5)                           111.20 km
+  bearing from (90, 0) to (51.5074, -0.1278)                        180.00 degrees
+  (51.5074, -0.1278) as dms                                         51°30'26.64"N 0°07'40.08"W
+  ```
+  
+  The distance is the great-circle distance, the shortest path over the surface, worked with the haversine formula on a sphere of the Earth's mean radius, 6,371.0088 km, and returned in kilometres so it converts like any length. The sphere is a deliberate choice over Vincenty's method on the WGS-84 ellipsoid: it gives one answer for every pair of places, including exact antipodes, where Vincenty's iteration fails to converge, and its error (within about 0.5% of the ellipsoidal distance) is smaller than the uncertainty in which point stands for a city. A pair either side of the 180° meridian is measured the short way across it. The bearing is the initial heading in degrees clockwise from true north; from a pole it is due south or due north, whatever longitude the pole was written with.
+  
+  The angle literal needed a lexer change. A `"` used to open a string, so `51°30'27"` failed as an unterminated string, and a letter after `°` joined it into an identifier. The lexer now reads a number followed directly by `°` and then minutes, or a compass letter, as one `GEO_ANGLE` token, which the geo package turns into an angle in degrees or, paired with a second lettered angle, a place. A bare `90°`, a temperature such as `20°C`, and every string literal lex as before. Without the geo package registered, the literal is a parse error, as the same text was.
+  
+  Refusals are values on the line that name the part at fault, never a throw or a number: a latitude past a pole, a longitude past 180°, 60 or more minutes or seconds, two latitudes offered as a place, `as dms` of something that is not an angle, and a bearing between the same point or two exact antipodes, which has no single direction.
+  
+  The boundary: there is no built-in list of cities and nothing reaches the network, so a place is the coordinates the reader gives it, typed or held in a variable. A city covers many square kilometres, and which point stands for it moves the answer by more than the method does, so that choice stays visible on the line. The distance is as the crow flies, not by road or flight route, and ignores height. A destination point (where a heading and a distance lead) and a midpoint are not included. The new "Coordinates, distance and bearing" page explains latitude, longitude, great circles and bearings before the syntax, with every example proven.
+  
+  ## Verification
+  
+  New suites pin the distances and bearings for London, Paris, Tokyo, New York and Sydney against figures computed independently in Python with the atan2 form of the central angle, the analytic cases (antipodes and pole to pole at pi times the radius, a quarter circumference, one degree across the 180° meridian), the pole and antipode bearings, degrees-minutes-seconds rounding and carry, every refusal and its code, variables unaffected by the new phrases, the package's removal, and the lexer's boundary around strings, temperatures and the bare degree sign. `npm run verify:ci` passes: 10,709 tests across 517 suites.
+- 281c2ab: An unknown name says which real names it is close to
+  
+  A mistyped variable, function or unit used to be reported bare, `Undefined variable: kilomters`, and a conversion to a word that is not a unit was reported as two units that measure different things. The error now names the nearest real names, so a typo is one glance from fixed. Nothing is ever corrected on the reader's behalf: the line stays an error, in keeping with the rule that a spelling that is not a unit is never resolved to the nearest thing that looks similar.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `20 kilomters in miles` | Undefined variable: kilomters | Undefined variable: kilomters. Did you mean kilometers? |
+  | `sqr(16)` | Undefined function: sqr | Undefined function: sqr. Did you mean sqrt? |
+  | `budgte * 2` (with `budget` defined) | Undefined variable: budgte | Undefined variable: budgte. Did you mean budget? |
+  | `sine(1)` | Undefined function: sine | Undefined function: sine. Did you mean sin, sind or sinh? |
+  | `5 km in mies` | Cannot convert km to mies: they do not measure the same thing | "mies" is not a unit. Did you mean miles? |
+  
+  The candidates come from the engine's own vocabulary: the builtin functions, the note's own functions and variables, and every unit spelling, so a package's units are suggested without the package doing anything. Closeness is the edit distance with adjacent transpositions, compared without case, allowing one edit up to five letters, two up to nine and three beyond. Names equally close are all listed, up to three.
+  
+  For a host, the candidates travel on the thrown `EngineError` as `suggestion` (a comma-separated list) and `context.didYouMean` (an array), ready for a one-click fix; a document line carries the sentence in its error text. A target that is not a unit comes back as an `UNKNOWN_UNIT` error value.
+  
+  The boundary: a short word gets no suggestion, since the unit table holds thousands of short spellings and nearly every short word is an edit or two from one of them. The floor is three letters for a function name, so `sqr` still finds `sqrt`, and four for a variable, whose candidates include every unit. Four or more equally close names get none, since listing them all would not help. The suggestion does not yet carry a source span; a host locates the named word in the line. In a document with more than 500 variables, which a written note does not reach, an unknown name is compared with the units alone: comparing it with every variable made a long generated document take time growing with the square of its length. The unit table is searched through an index built once, and an unknown word's search is remembered, so a line that stays wrong costs nothing extra on the next pass.
+  
+  ## Verification
+  
+  A new suite pins the distance, the ties and the thresholds, the sentence, each of the error forms above including a user-defined function and a variable from earlier in the note, and the mismatch that is still a mismatch. The unit arithmetic and variables pages gain proven examples, and the TypeScript guide shows the fields a host reads. `npm run verify:ci` passes: 9,807 tests across 496 suites, with the bundled-consumer contract.
+- 5540410: A `check` line asserts something a note must keep true, and fails loudly when an edit breaks it
+  
+  A note can now state what must hold: a budget that covers the spending, two totals that agree, a formula close to a known value. `check` and a comparison shows a tick while it holds and becomes an error naming both sides the moment an edit breaks it. `≈` (or `~=`) and `within` allow a margin, as a percentage of the right-hand side or an amount in the same unit. A host gets a pass and fail count on the parse result.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `check 1 + 1 == 2` | error: Unexpected token after expression | ✓ |
+  | `check :spent <= :budget` (spent $2,010, budget $1,950) | error: Unexpected token after expression | error: check failed: $2,010.00 is more than $1,950.00 |
+  | `check 22/7 ≈ pi within 0.1%` | error: Unexpected token | ✓ (differs by 0.04%) |
+  | `check 22/7 ≈ pi within 0.01%` | error: Unexpected token | error: check failed: 3.14286 differs from 3.14159 by 0.04%, more than 0.01% |
+  | `check 5 m ≈ 5.01 m within 1 cm` | error: Unexpected token | ✓ (differs by 0.01 m) |
+  
+  The two sides are compiled separately, so a failure can name them, and compared in a shared unit the way the engine's own comparisons reconcile units, so `check 1 km == 1000 m` passes. Equality allows a conversion's rounding, so `check 0.1 + 0.2 == 0.3` passes; `≈` without `within` allows rounding noise. An approximate failure shows its two sides to six significant figures, since the usual two places would round the difference away. A `total above` beneath a check steps over it, passed or failed, so an assertion does not break the column it guards. `parseDocument` and `evaluateDocument` report `checks: { passed, failed }`, present only when the document has any, and the worker's result DTO carries it too.
+  
+  The boundary: `check` is a check only at the start of a line that compares two things, so a variable called `check` (a restaurant bill) keeps working, and `within` and `≈` become single tokens. Two things with no common measure, a length and a mass, are refused as incomparable (`CHECK_INCOMPARABLE`) rather than reported as a failed check, and text compares with `==` and `!=` only. A check does not stop the lines around it evaluating; it is a signal, not a guard.
+  
+  ## Verification
+  
+  A new suite pins passing checks, every failure message, approximate checks by percentage and by amount, the refusals, `check` as a variable, a total beneath a check, and the host count from `parseDocument` and `evaluateDocument` alike. The conditionals page gains a Checks section with proven examples, and the TypeScript guide shows the count. `npm run verify:ci` passes: 10,709 tests across 517 suites.
+- 83c13d4: Exact decimals for plain numbers
+  
+  A number written with a decimal point now keeps the exact decimal it was written as through arithmetic, the way money always has, so a comparison agrees with the answer on screen. Before, a plain decimal was a binary floating-point number (the IEEE 754 double), which cannot hold a tenth exactly: `0.1 + 0.2` was 0.30000000000000004, shown as 0.30, and then compared unequal to 0.3 on the next line.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `0.1 + 0.2 == 0.3` | false | true |
+  | `1.1 * 1.1 == 1.21` | false | true |
+  | `0.1 + 0.2 - 0.3` | 5.55e-17 | 0 |
+  | `0.3 / 0.1` | 3.00 | 3 |
+  | `floor((0.7 + 0.1) * 10)` | 7 | 8 |
+  | `100 + 10%` | 110.00 | 110 |
+  | `(0.5 + 0.505) to 2 dp` | 1.00 | 1.01 |
+  | `(0.1 + 0.2) to 17 dp` | 0.30000000000000004 | 0.30000000000000000 |
+  | `0.1 + 0.2` | 0.30 | 0.30 |
+  | `12.3 kWh * $0.15/kWh` | $1.84 | $1.85 |
+  | `12.3 kg at $0.15/kg` | $1.84 | $1.85 |
+  | `$0.15 per kg * 12.3 kg` | $1.84 | $1.85 |
+  | `$0.15 * 12.3 kWh` | $1.84 | $1.85 |
+  | `$1.005/kg` | 1.00 USD/kg | 1.01 USD/kg |
+  
+  Adding, taking away, multiplying, a remainder, a whole power and a percentage are exact. A division is exact where its decimal ends (`1 / 0.8` is 1.25) and is kept as the exact fraction where it does not, the way `1/3` already was, so `0.1 / 3 * 3 == 0.1` is true and a fraction meets a decimal as fractions (`1/3 + 0.1` is exactly 13/30). The comparisons and a conditional's test read the exact values, and so does rounding: `to N dp`, `round`, `floor` and `ceil` round the decimal itself, so a value exactly half way rounds away from zero, as money's half-cent does. The totals and averages of a list, of the lines above, of a range, of a category tag and of a table column are exact too. A figure that records where it came from, such as a converted amount read as a number, is exact on the same terms as one typed in, and it keeps its record, as an exact total of such figures keeps all of theirs: nine euros read as a number, times 0.15, is exactly 1.35 and still names the rate it was converted at.
+  
+  A price per unit is money, and it keeps the decimal it was typed as, so the bill it gives is the plain product in every spelling. At 15 cents a kilowatt-hour, 12.3 kilowatt-hours cost exactly $1.845. `$0.15 * 12.3` always showed $1.85, but a price per unit was worked in floating point, where the product lands a hair under the half cent, so `12.3 kWh * $0.15/kWh`, `12.3 kg at $0.15/kg`, `$0.15 per kg * 12.3 kg` and `$0.15 * 12.3 kWh` showed $1.84. Each now comes to the plain product's $1.85. A price per unit on its own line rounds a half cent the way money does (`$1.005/kg` is 1.01 USD/kg, as `$1.005` is $1.01), and a price below a cent still shows its significant digits (`$0.001/kWh` is 0.001 USD/kWh), since a tenth of a cent a unit is a real price. The quantity is not money, so it is still held in floating point, and its decimal is read back from that number: a quantity typed as a decimal, or converted onto a short one (`12300 Wh` is 12.3 kWh), counts exactly, while a quantity that is floating point's rounding of a fraction, such as a third of a kilowatt-hour, is worked out in floating point as it was, so `(1/3) kWh * $30/kWh == $10` stays true. A price worked out by dividing (`$1.20 / 0.4 kg`) and a price per unit times another rate (`$0.15/kWh * 12.3 kWh/day`, whose answer is a rate, not an amount of money) are floating point too.
+  
+  What is shown for an ordinary answer does not change. The lines that change are the ones where floating point had left a visible trace: a result that is a whole number no longer shows `.00`, a true half now rounds away from zero (`1.9 + 15%` is exactly 2.185, so 2.19 where it was 2.18), `as scientific` loses the trailing digits of the approximation, and a decimal quotient `as fraction` is the exact fraction rather than a close one (`1234.0765 / 1234.01` is 2468153/2468020, not 37115/37113).
+  
+  The boundary, and why. An irrational answer (a square root, a logarithm, a trigonometric function, `pi`) has no exact decimal or fraction to keep, so it stays in floating point. Scientific notation is still read as floating point: it is how a magnitude is written, and it is what keeps a typed `1e16` from being given digits it never had, so `1e-1 + 2e-1 == 3e-1` is still false. An exact answer carries at most 34 digits, and 34 places, the precision of IEEE 754's decimal128 format; a longer one, such as `1.05 ^ 30` at 61 digits, is the floating-point answer it always was. A unit other than money, a measurement with an uncertainty, a statistic such as a median and a matrix entry stay in floating point, and so do the areas, reciprocals and rates other than prices that units now form when they multiply and divide. A negative zero keeps the sign floating point gives it, so `1 / (0.0 * -1)` is still -Infinity. The plain whole-number arithmetic is unchanged: two whole numbers never take the decimal path, and each exact path is a call behind a property test rather than code in the VM's dispatch loop, which keeps that loop under the size V8 will optimise.
+  
+  Fixes #579.
+  
+  ## Verification
+  
+  A new suite pins every operation above against its exact value and its nearest double, the rounding family, the percentage paths, the totals through both document passes, the fraction bridge, negative zero, a figure carrying its sources and the exact totals of such figures, every spelling of a price per unit against the plain product it abbreviates, and each boundary, including the 34-digit limit, a huge power refused before it is built, the unit products that stay in floating point, and a count or a price per unit that has no short decimal. The cross-path suite gains the decimal column, range, tag and table totals through `parseDocument` and `evaluateDocument`. The hardening suites that pinned the floating-point answers now pin the exact ones, with each reversal recorded, and still pin floating point through scientific notation.
+  
+  An A/B against a build of the previous main ran 34,709 cases: every documented example, line by line and as whole documents through both document passes, every string the test suite evaluates, 6,000 generated decimal lines, 3,000 generated prices per unit in every spelling, and 360 generated documents with totals, tags and table columns. 1,598 answers differ, all of them the intended changes above: 1,313 carry the nearest double to the exact answer with the display unchanged, 142 comparisons are decided on the exact values, 54 bills through a price per unit or a quantity at a price round their half cent as the plain product does, 2 prices per unit on their own round a half cent as money does, 1 bill of a tenth of a cent is $0.00 as `$0.001` is, 29 whole results drop `.00`, 25 roundings take the exact half or the exact digits (`to N dp`, a percentage, a total), 10 `as scientific` and 2 `as fraction` readings lose the approximation, 5 remainders and 2 sums are exactly zero, 5 `floor`, `ceil` and `trunc` read the typed digits, 4 whole powers and 1 product past the safe range show their exact digits, and 3 conditionals take the other branch. Every documented example that differs is on a page this change updates. No answer changed type, and none became or stopped being an error.
+  
+  The VM's dispatch loop, compiled the way Jest compiles it, is 46,898 bytes of bytecode against the previous 46,598, with 14,542 to spare below the 61,440 V8 will optimise. The benchmark comparison against the previous main, five alternating runs of the vm, pipeline and document-parse suites with Maglev and five with `--no-maglev` (what the benchmark job's Node 22 sees of an oversized loop), passes the regression gate on every pair: the suite geometric means of the per-case medians are 0.990, 0.995 and 1.004 with Maglev, and 0.982, 1.001 and 0.977 without it. The decimals page is rewritten, the fractions and exact coefficients pages updated, and the money precision page gains prices per unit, with proven examples. `npm run verify:ci` passes: 11,728 tests across 536 suites, with the bundled-consumer contract.
+- 939aaa8: Conversions, function calls and finance phrases explain their steps, and a note can trace which lines fed a result
+  
+  `explainLine` derived arithmetic, percentages and date readings from a fixed table of operators, and returned no steps at all for the three things a reader most often wants to check: a conversion, a function call and a finance phrase. Each of those is a call into a package, and only the package knows what happened between the numbers that went in and the one that came out. Packages now describe their own steps through a new `explain` field on `IEnginePackage`, and the unit, function and finance packages do.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `5 km in miles` | no steps | `1 km is 0.621371 miles`, `5 times 0.621371` = 3.11 miles |
+  | `sqrt(16) + 2` | no steps | `the square root of 16` = 4, `4 plus 2` = 6 |
+  | `present value of $1,000 after 5 years at 5%` | no steps | `5% a year for 5 years: (1 plus 5%) to the power of 5 is 1.27628`, `$1,000.00 divided by 1.27628` = $783.53 |
+  | `-(2 + 3)` | `2 plus 3` = 5, a last step that disagreed with the answer | `2 plus 3` = 5, `the negative of 5` = -5 |
+  
+  Every number a step shows is the engine's own. A conversion factor is what the engine's conversion gives for one unit, and the finance steps compute through a new shared module, `vm/FinanceFormulas.ts`, that the finance builtins now use too, so the growth factor a step shows is the one the answer was divided by. The hook is handed each call the line made, with the arguments and result the engine used, and returns the steps between them; its last step must carry the call's own result, or the answer is discarded. A plugin function or an `as` converter is offered only to the package that registered it, and a builtin or a conversion to every package, the most recently registered first. The VM reports calls only on the run `explainLine` makes, through `LineExecutionContext.observeCall`, so ordinary evaluation never calls a hook.
+  
+  The second half is where a number came from across lines. `engine.traceLine(n)` returns line n's answer and the lines it read, each followed upwards in the same shape, reading a variable to its nearest definition above, a position (`line 2`, `prev`, `total above`, a range) and a category tag. A reader asks the same question in the note:
+  
+  | document | line 5 |
+  | --- | --- |
+  | `:rate = 4%`, `:deposit = 100000`, blank, `:payment = monthly repayment on deposit over 25 years at rate`, `inputs of line 4` | payment 527.84 (line 4) <- deposit 100,000 (line 2), rate 4.00% (line 1) |
+  
+  The trace is built from each line's text and answer rather than from the dependency graph, which records positional reads only on the incremental path, so `parseDocument` and `evaluateDocument` give the same trace value for value. Two lines that read each other come back marked as a cycle rather than looping, and a line reading one below it is marked as a forward reference; `inputs of line N` turns both into named errors, `TRACE_CYCLE` and `TRACE_FORWARD_REFERENCE`, and refuses through the single-expression entry point, which has no document. The trace stops ten levels down and after two hundred lines, marking where it stopped.
+  
+  The boundary: a hook describes calls, never the arithmetic between them, and a derivation is never partial, so a line with an undescribed call, or whose calls leave an operation out (`round(5 km in miles + 1 mile, 1)`), gets no steps rather than some. Steps are English prose in the engine's default number style. Date arithmetic, matrices and symbolic algebra still report their answer without a breakdown. A table column is read from the table's text, so it lists no inputs in a trace. `inputs of line N` shares the `lineRef` plugin slot rather than registering a function of its own, since it reads the same target line through the same line context.
+  
+  ## Verification
+  
+  Two new suites pin the three probes, every finance form, the hook contract (owner-only plugin calls, the discarded answer, a throwing hook, the latest registration first, a converter, a `defineFunction` package), the no-partial rule, that no hook runs during ordinary evaluation, and the trace's reads, cycles, forward references, bounds and refusals through a parsed result and an attached document model. The cross-path suite gains `inputs of line N` through all three entry points. A new syntax page, a host guide and a package-author guide are added, with the explaining guide and the authoring routing table updated. `npm run verify` passes: 11,248 tests across 532 suites, with the bundled-consumer contract.
+- 5540410: Special angles give exact answers, and a function outside its domain says so
+  
+  The angles people type, 0, 30, 45, 60 and 90 degrees and their multiples, and the same angles written with π, now give exact sines, cosines and tangents. A computer holds none of those angles exactly, so the sine of its nearest approximation to 180° was 0.000000000000000122 and the tangent of 45° was 0.9999999999999999. And the logarithms and inverse functions, asked for a value outside their domain, answered with an infinity or `NaN`; they now refuse by name with `FUNCTION_DOMAIN`, saying what the function accepts.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `sin(180 degrees)` | 1.22e-16 | 0 |
+  | `cos(90 degrees)` | 6.12e-17 | 0 |
+  | `tan(45 degrees)` | 1.00 (0.9999999999999999) | 1 |
+  | `tan(180 degrees)` | -1.22e-16 | 0 |
+  | `log(0)` | -∞ | error: log is only defined for positive numbers |
+  | `log(-1)` | NaN | error: log is only defined for positive numbers |
+  | `asin(2)` | NaN | error: asin is only defined for numbers from -1 to 1 |
+  | `atanh(1)` | ∞ | error: atanh is only defined for numbers strictly between -1 and 1 |
+  
+  An angle counts as special when it is within the conversion's own rounding of a multiple of 30° or 45°, with the tolerance scaled to the angle, the rule `tan`'s asymptote check from #532 already uses. The degree-argument forms `sind`, `cosd` and `tand` follow the same rules, and `tand(90)` now refuses the asymptote as `tan(90 degrees)` does. The refusals cover `log`, `log10`, `log2`, `log1p`, `asin`, `acos`, `asind`, `acosd`, `acosh` and `atanh`.
+  
+  The boundary: exactness covers the multiples of 30° and 45°; an irrational exact value such as the sine of 45° is the nearest double, and any other angle is computed as before. A square root of a negative number is not refused, since it has an exact complex answer (`sqrt(-1)` is `i`). Division by zero keeps the floating-point standard's infinity, `1/0` is ∞, a decision recorded in the arithmetic hardening suite: it is the standard's defined answer for an operator, where the functions above had no answer at all. A `NaN` argument is not refused, since whatever produced it has its own story.
+  
+  ## Verification
+  
+  A new suite pins each exact angle in degrees, radians, gradians and the degree functions, the positive zero, the irrational special values, unchanged ordinary angles, `tand`'s asymptote, every domain refusal and its message, the edges of each domain, and the complex square root and IEEE division that stay as they were. The number functions page gains exact angles and a section on domains, with proven examples. `npm run verify:ci` passes: 10,709 tests across 517 suites.
+- 939aaa8: Live values say where they came from, and a line ending in `frozen` keeps its answer with the date it was fixed
+  
+  A converted amount, a price or a temperature is true at one moment according to one provider, and a result said neither: the exchange rate cache kept its fetch time to itself, and nothing reached the value. Every live figure now carries a provenance record on `Value.sources` (the provider, whether it was fetched live, supplied by the host or looked up for a past day, when, and what was asked for), and the record travels through arithmetic, conversions, rounding, aggregates, line references and variables, so a host can show "reference rate, 23 Sep 16:02" beside a line and mark every line computed from it as rate-dependent. Ending a line with `frozen` keeps its first settled answer, with the moment it was frozen, so a shared or archived note reads the same next month.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `(10 USD in GBP) * 3` | £22.23 | £22.23, carrying the rate's provider, pair and time |
+  | `10 USD in GBP frozen` | error: Unexpected token after expression: "frozen" | £7.41, and still £7.41 after the rate moves, with the date it was frozen |
+  | `:rate = 1 USD in GBP frozen`, then `rate * 100` | error, then an undefined variable | £0.74, then £74.10 carrying the frozen rate's record |
+  | `10 USD in GBP frozen on 2024-01-15`, nothing stored | error: Unexpected token after expression: "frozen" | error: This line was frozen on 2024-01-15, but no value frozen that day is stored in this engine. A frozen value is never fetched again: restore the snapshot or frozen values it was saved with, or remove "on 2024-01-15" to freeze it anew. |
+  
+  The record is set where a live figure enters: the exchange tables name `Frankfurter` or `CoinGecko`, or the host's own name for rates it primes (`primeRates` takes `provider` and `publishedAt`); `createQueryResolver` stamps what it fetches with a new `provider` option; weather names `Open-Meteo`; stocks, crypto, knowledge and historical currency take a `provider` (`historicalProviderName` for currency). A historical figure is recorded as one, with the day it describes. The record crosses the worker DTO and a snapshot unchanged, and `explainLine` ends a derivation with a step per source, which gives a conversion a step for the first time. Arithmetic merges records rather than inventing them, so a value built only from what the reader typed carries none, and the plain-number fast path declines a sourced operand exactly as it declines a fraction or a tolerance, so ordinary arithmetic takes no new path.
+  
+  A frozen line is answered from a store the engine keeps, keyed by the line's text, on every path that runs a line: the first pass, a re-run from cached bytecode, the re-run when a value lands, and goal seek's probes, which read a stored answer and record nothing. A stored answer is returned without running the line, so no rate is read and no request is made, and the line stops being one of its source's readers, so a background refresh that nothing else reads stops. `toJSON()` carries the answers and the frozen lines (the one live line a snapshot keeps, because the reader asked for it), and `fromJSON()` restores them, so a restored document answers with the network switched off. `getFrozenValues()` lists them, `unfreeze()` forgets one or all, and `clear()` forgets them with the document. A line that names its day, `frozen on 2026-09-23`, is refused with `FROZEN_VALUE_MISSING` in an engine that holds no value frozen that day, rather than frozen afresh at today's figure; writing today's date freezes it now.
+  
+  The boundary: freezing keeps a whole line's answer, so the word goes at the end, and a function definition, a global cell or a definition part-way through a line is refused by name (`FROZEN_UNSUPPORTED`), as is `frozen on` followed by anything but a date (`FROZEN_DATE_EXPECTED`). A frozen answer does not refresh, and editing the line's text freezes it afresh. A line computed from a frozen answer is not itself marked frozen, since it is a new value; it carries the frozen rate's record, with its freeze date. A comparison's true or false, a bracketed list and text made from a live value carry no record. The engine records where a figure came from and when; it does not judge whether that is recent enough. A variable called `frozen` at the end of a line now needs its operator written out: `2 * frozen` multiplies, `2 frozen` freezes `2`.
+  
+  The documentation spec now runs its engines with the network switched off, since a line that reaches the network carries no expected value and should not make a request during the build.
+  
+  ## Verification
+  
+  New suites pin the merge rules, every place a record is set (primed and fetched rates, `createQueryResolver`, historical closes and conversions), carrying through each operation and aggregate, agreement between `parseDocument` and `evaluateDocument`, the worker DTO, and the explanation steps; and for `frozen`, keeping an answer across a rate change, frozen definitions, freezing only a settled answer, a background refresh stopping once its line freezes, the dated form and its refusals, a Tier 2 re-run, a goal-seek probe, explaining without freezing, snapshots restored with no network and no fetch, malformed snapshots, and the host's store API. A new Frozen answers page is proven by the documentation spec, and the currency, stocks, crypto, weather, knowledge, async and live data, embedding, explaining lines and async data source pages are updated. `npm run verify:ci` passes: 11,248 tests across 532 suites, with the bundled-consumer contract.
+- 5540410: One time in several zones, the hours several places share, and a named day for both
+  
+  Every timezone form took one time and one target zone, so a team spread across three cities asked three questions, and a line naming more than one target did not parse. Nor could a line say which day it meant: `3pm London in New York` read today, and the gap between two places changes on the days their clocks change, so the answer moved with the calendar and no example of it could be pinned down.
+  
+  A clock-time conversion now takes a list of targets, separated by commas or `and`, and answers each one labelled with the name the reader wrote. `on <date>`, after the first place or at the end of the line, fixes the day. A new form, `overlap of <hours> in <places>`, finds the stretch of the day that falls inside the same hours in every place named, gives its length first, and reads it on each place's own clock.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `3pm London in Tokyo, New York and Sydney` | parse error: unexpected `,` | Tokyo 11:00 PM, New York 10:00 AM, Sydney 12:00 AM (+1 day), on 23 September 2026 |
+  | `3pm London on 23 September 2026 in Tokyo, New York and Sydney` | parse error | Tokyo 11:00 PM, New York 10:00 AM, Sydney 12:00 AM (+1 day) |
+  | `3pm London on 20 March 2026 in New York` | parse error | 11:00 AM |
+  | `overlap of 9am to 5pm in London and New York on 23 September 2026` | parse error | 3 hours: London 2:00 PM to 5:00 PM, New York 9:00 AM to 12:00 PM |
+  | `overlap of 9am to 5pm in London and New York on 20 March 2026` | parse error | 4 hours: London 1:00 PM to 5:00 PM, New York 9:00 AM to 1:00 PM |
+  | `overlap of 8am to 6pm in Tokyo and San Francisco on 23 September 2026` | parse error | 2 hours: Tokyo 8:00 AM to 10:00 AM, San Francisco 4:00 PM to 6:00 PM (-1 day) |
+  | `overlap of 9am to 5pm in London and Tokyo on 23 September 2026` | parse error | No overlap between London and Tokyo |
+  | `1:30am London on 29 March 2026 in Tokyo` | parse error | 1:30 AM did not happen in London on March 29, 2026: the clocks went forward past it |
+  
+  The overlap is anchored on the first place's day. Each further place cuts it down to the part inside that place's own hours on any of its days, because a place across the date line keeps its matching hours on its yesterday or its tomorrow, and every end is read on its own day's clock, so daylight saving is applied place by place and date by date. Hours that end before they start run past midnight, as a night shift does, and hours longer than twelve can meet another place's twice in a day, in which case both stretches are given with their total. Inside `overlap of`, `9am-5pm` reads as `9am to 5pm`, since what follows the phrase is known to be a stretch of the day.
+  
+  A wall-clock time that the clocks skip or repeat on a daylight-saving day names no single moment, so a conversion refuses it by name (`TIME_ZONE_SKIPPED_TIME`, `TIME_ZONE_REPEATED_TIME`) rather than quietly moving it an hour. This applies to the existing undated form too, on the two days a year it matters: on 29 March 2026, `1:30am London in Tokyo` answered 10:30 AM, the answer for 2:30am, and now says 1:30 did not happen. On every other day that form, and the bytecode it compiles to, are unchanged. An overlap with one place (`OVERLAP_NEEDS_TWO_ZONES`), hours with no length (`OVERLAP_HOURS_EMPTY`), and an `on` clause that is not a date (`TIME_ZONE_EXPECTED_DATE`) are refused as Error values, and an unknown place after `and` is named as not a time zone rather than reported as an undefined variable.
+  
+  The time zone material moves from the time page to its own page, time zones, which explains what a zone and daylight saving are before the syntax and proves every dated example.
+  
+  The boundary, deliberately:
+  
+  - One set of hours applies to every place in an overlap. Places that keep different hours are not compared in one line.
+  - Weekends and public holidays are not considered: the hours apply to every day, so a Monday morning in Tokyo that is a Sunday afternoon in San Francisco is reported like any other.
+  - The answers are text, written to be read, as the existing timezone forms' are, not values to do arithmetic with.
+  - Outside `overlap of`, a hyphen between two times is still read as subtraction, so `9am-5pm London in New York` is unchanged and wrong in the way the issue records. Reading a bare hyphen as a range everywhere is a separate decision.
+  - `time difference between` and `time in` still answer for the present moment; they take no `on` clause.
+  
+  ## Verification
+  
+  A new suite pins every answer above, each spelling of the hours and of the list, the day shifts in both directions, daylight saving in both hemispheres, a transition inside the hours, the skipped and repeated readings, each refusal and parse error, and the undated forms against a pinned clock. It runs under both calendar backends and in the three zones `npm run test:temporal` uses. The time zones page is proven by the documentation examples suite. `npm run verify:ci` passes: 10,709 tests across 517 suites.
+- 5540410: Primes, prime factorisation, modular arithmetic, `n choose k` and `5!`
+  
+  The whole-number side of maths gains its missing pieces: primality, the next prime, prime factorisation, modular power and inverse, and the mathematical spellings of the factorial and of choosing. Every answer is exact at any size, building on the exact integers of #526.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `isprime(97)` | error: Undefined function: isprime | true |
+  | `nextprime(2^53)` | error: Undefined function: nextprime | 9,007,199,254,740,997 |
+  | `factor(360)` | 360 | 2^3 * 3^2 * 5 |
+  | `modpow(7, 77, 13)` | error: Undefined function: modpow | 11 |
+  | `modinv(3, 11)` | error: Undefined function: modinv | 4 |
+  | `5!` | error: Unexpected trailing token | 120 |
+  | `10 choose 3` | error: Unexpected trailing token | 120 |
+  | `nCr(10, 3)` | error: Undefined function: nCr | 120 |
+  
+  Primality is Miller-Rabin with the first thirteen primes as witnesses, a proof for every number below 3.3 × 10^24 and not fooled by Carmichael numbers such as 561. `factor` of a whole number writes its prime factorisation in a form that reads back as the number, trial division then Pollard's rho, and `factor` of an expression with an unknown still factors the polynomial. `modpow` never builds the power, so `modpow(2, 100, 1000000007)` answers at once. `!` is a postfix factorial binding as tightly as `%`, so `2^3!` is 2 to the power 6 and `-3!` is -6, and `choose` binds like `*`; `nCr`, `ncr` and `binomial` are names for `combination`, and `powmod` for `modpow`. A new page, "Primes, factors and counting", explains each, and documents the factorial, permutation and combination functions, which had no page.
+  
+  The boundary: `factor` refuses a whole number above 2^64, since factoring is the one step whose cost grows faster than a number's length; above 3.3 × 10^24 `isprime` reports a strong probable prime rather than a proved one. `choose` becomes a keyword, so it cannot name a variable. The word `prime` still means an exponent (`x prime`), so `97 is prime` and a `prime(n)` for the nth prime are not forms here. A fraction, a zero to factor, a negative exponent for `modpow` and a number with no inverse are each refused by name.
+  
+  `AlgebraSurface.spec.ts` pinned `factor(12)` as 12, the number handed back unchanged; it now asserts the factorisation.
+  
+  ## Verification
+  
+  A new suite pins primality (including Carmichael numbers), the next prime, modular power and inverse, factorisations up to 2^64 - 1, every engine form, the read-back, the polynomial `factor` that is unchanged, the factorial and choose precedence, `!=`, and every refusal by code. `npm run verify:ci` passes: 10,709 tests across 517 suites.
+- 5540410: `solve` finds numeric roots, `integral` takes bounds, and `limit` is new
+  
+  An equation that mixes the unknown with a function of itself, such as `cos(x) = x` or `2^x = 10`, has no formula for its answer, and `solve` refused every one of them as "not a polynomial equation". It now searches the real line for where the two sides cross, closes in on each crossing by bisection, and substitutes each candidate back into both sides before reporting it. `integral` with two bounds after the variable is the definite integral, the area under the curve between them, and `limit(f, x, a)` is the value `f` settles towards as `x` approaches `a`.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `solve(cos(x) = x, x)` | error: not a polynomial equation | 0.74 |
+  | `solve(2^x = 10, x)` | error: not a polynomial equation | 3.32 |
+  | `solve(e^x = 10, x)` | error: not a polynomial equation | 2.30 |
+  | `solve(log(x) = 2, x)` | error: not a polynomial equation | 7.39 |
+  | `solve(exp(x) = x + 2, x)` | error: not a polynomial equation | [-1.84, 1.15] |
+  | `solve(sin(x) = 0.5, x, 0, 3)` | parse error | [0.52, 2.62] |
+  | `integral(x^2, x, 0, 3)` | parse error: expected `)` | 9 |
+  | `integral(x^2, x, 0, 1)` | parse error: expected `)` | 1/3 |
+  | `integral(exp(x^2), x, 0, 1)` | parse error: expected `)` | 1.46 |
+  | `integral(1/x, x, 0, 1)` | parse error: expected `)` | error: improper integral |
+  | `limit(sin(x)/x, x, 0)` | error: undefined variable x | 1 |
+  | `limit((x^2-1)/(x-1), x, 1)` | error: undefined variable x | 2 |
+  | `limit(abs(x)/x, x, 0)` | error: undefined variable x | error: the sides disagree, -1 and 1 |
+  
+  A numeric root is approximate, as the roots of a quintic already were, and the solving page now has a section saying which answers are found by search. The search runs from -1,000,000 to 1,000,000 unless two numbers after the unknown name a range; a range also filters the exact roots of a polynomial, so `solve(x^2 = 4, x, 0, 10)` is 2. More than ten roots in the range is declined (`SYMBOLIC_SOLVE_TOO_MANY_ROOTS`) rather than listed, since a list cut off at the edge of the search would read as complete, and finding none is `SYMBOLIC_SOLVE_NO_ROOT_FOUND`, never "no solution", which is a stronger claim than a search can make. A pole (`1/x = 0`) and a side that underflows to zero (`e^x = 0`) are not reported as roots.
+  
+  A definite integral is exact through the antiderivative where `integral` finds one, and a fraction stays a fraction. The antiderivative is trusted on its own only for an integrand continuous everywhere by its shape; for anything else a numeric estimate is made too and must agree, which is what stops `integral(1/x^2, x, -1, 1)` answering -2 across the pole at zero. Where there is no antiderivative, adaptive Gauss-Kronrod quadrature gives the answer once its error estimate is within one part in ten billion. A limit of a rational function is exact; any other is extrapolated numerically from both sides, with each value's own rounding error tracked so that cancellation near the point cannot pass for a trend.
+  
+  Each way these can fail is its own named error: `SYMBOLIC_INTEGRAL_IMPROPER` for an integrand with no finite value in the range or an infinite bound, `SYMBOLIC_INTEGRAL_UNSETTLED` for an estimate that does not settle, and `SYMBOLIC_LIMIT_SIDES_DISAGREE`, `SYMBOLIC_LIMIT_DIVERGES`, `SYMBOLIC_LIMIT_UNSETTLED` and `SYMBOLIC_LIMIT_UNDEFINED` for a limit that does not exist. A bound, range or point that is not a plain finite number is `SYMBOLIC_BOUND_INVALID`.
+  
+  The boundary, and why:
+  
+  - A root where the two sides touch without crossing (`cos(x) = 1` at 0) is found only if the search lands on it exactly, and two roots closer together than its sample spacing can be missed. The error for finding nothing says so.
+  - The solver does not isolate the unknown from inside a function, so `2^x = 10` is answered with the decimal rather than `log(10)/log(2)`.
+  - An improper integral is refused even when it converges (`1/sqrt(x)` from 0 to 1 is 2), and a bound of infinity is refused, because both need a limit at the edge of the range and a wrong one looks exactly like a right one.
+  - A limit at infinity is not evaluated, and there is no one-sided form; the disagreeing-sides error names what each side approaches.
+  - An equation, integrand or limit with a second unknown in it is refused, as the exact forms refuse it.
+  - A numeric answer is an ordinary number, not marked approximate in the value itself; the documentation says which forms produce one.
+  
+  `limit` is a plugin function of the symbolic package rather than a new builtin index, and, like the other algebra words, is a function only when directly followed by `(`, so `limit = 40` is still a variable.
+  
+  ## Verification
+  
+  New suites cover the root search (poles, jumps, underflow and domain gaps never reported as roots), the quadrature against integrals with known values, the error-bounded evaluation, limits and definite integrals below the engine, and every form above through the engine, each checked against values computed independently with JavaScript's own functions. The symbolic property suite now substitutes every numeric root back into its equation. The solving-equations, calculus and cheatsheet pages gain the new forms as proven examples. `npm run verify` passes: 10,709 tests across 517 suites, with the bundled-consumer contract.
+- 5540410: Numbers, amounts of money, pattern matches and JSON fields are read out of pasted text
+  
+  A receipt, a log line or an API response pasted into a note was text the engine could measure but not read: the numbers in it had to be typed out again to be totalled, and `jwt(...)` and `query(...)` returned JSON with no way to take one value out of it. The text package now reads four things out of such text: its numbers, its amounts of money, the part a pattern matches, and a field of JSON.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `numbers in "Coffee 3.20, lunch 12.50, taxi 18"` | parse error: unexpected text after the expression | [3.20, 12.50, 18] |
+  | `total of numbers in "Coffee 3.20, lunch 12.50, taxi 18"` | parse error: unexpected text after the expression | 33.70 |
+  | `total of amounts in "2 coffees £3.20, 1 cake £2.50"` | parse error: unexpected text after the expression | £5.70 |
+  | `match("Order #4471 shipped", "#(\d+)")` | error: undefined function `match` | 4471 |
+  | `matchcount("GET 200, GET 404, POST 200", "\b200\b")` | error: undefined function `matchcount` | 2 |
+  | `matches("2026-09-23", "^\d{4}-\d{2}-\d{2}$")` | error: undefined function `matches` | true |
+  | `field(query("name=John+Doe&page=2"), "name")` | error: undefined function `field` | John Doe |
+  
+  `numbers in X` lists every number written in a piece of text, and `amounts in X` only the ones with a currency sign or code beside them. Written straight after an aggregate (`total of`, `sum of`, `average of`, `median of`, `count of`, `spread of`, `mode of`, the standard deviations and variances), either phrase hands the aggregate the numbers themselves, so the answer is the shipped aggregate's: a total of amounts keeps its currency, and a mix of currencies with no rate is refused as incompatible units, as `total of €3, $4` is. The text is read in the engine's configured number format rather than guessed from the text, so a German engine reads `1.234,56` as one number and an English engine as two, and a French engine accepts the no-break spaces a copied French number carries. A minus sign counts only in front of a number, so `10-20` is two numbers.
+  
+  `match(text, pattern)` returns the text of the first group that took part in the first match (or the whole match), `matches` whether the pattern occurs, and `matchcount` how often. The patterns never reach JavaScript's `RegExp`. They run on the package's own matcher, which tries every way of matching at once and reads each character once, so `(a+)+$` against forty letters and a full stop answers at once where a backtracking engine would take hours. It follows JavaScript's syntax and its choices between alternatives, including resetting a loop's groups on each pass and refusing an optional pass that matched nothing, and a seeded differential run against `RegExp` holds it to that, groups and match counts included. `(?i)` at the start ignores case by JavaScript's rule.
+  
+  `field(json, "path")` reads one value out of JSON by a path such as `order.items[0].price`: a number as a number, a string as text, a boolean as a boolean, and a list or object as its JSON. JSON typed into a line, where each quotation mark is written `\"`, is read as the JSON it spells.
+  
+  Every form answers or refuses with a named Error value, never a throw and never a guessed number: `TEXT_NO_NUMBERS`, `TEXT_NO_AMOUNTS`, `TEXT_NO_MATCH`, `TEXT_PATTERN_INVALID`, `TEXT_PATTERN_UNSUPPORTED`, `TEXT_FIELD_NOT_FOUND` (which lists the fields that are there), `TEXT_FIELD_NULL`, `TEXT_NOT_JSON` and the rest, each a stable code a host can read without parsing the sentence. The work is bounded: a text gives up to 10,000 numbers, a pattern may be 500 characters with 32 groups and repeat counts up to 1,000, and the pattern forms on one line share 5,000,000 steps. The step count is kept per evaluation rather than per call, so fifty calls on one line cannot take fifty allowances; `vm/AllocationBudget.ts` gains `currentEvaluation()` for that, and `docs-internal/RESOURCE_GUARDS.md` lists the new limits. No VM builtin was added: the forms are the text package's phrases, a normaliser rule and plugin functions.
+  
+  The boundary, and why:
+  
+  - **No backreferences, lookahead or lookbehind.** They are refused by name, since no matcher can promise to answer a backreference in time proportional to the text, and the guarantee is the point. The only flag is `(?i)`, at the start.
+  - **A list holds plain numbers.** `amounts in X` on its own shows the amounts without their currency; the aggregates, which read the amounts directly, keep it. A list among other values (`total of 1, numbers in X`) is still one value, and the aggregate refuses it as before.
+  - **Only the common currency codes are read**: the ones the engine shows with a sign of its own. `TOP 10` is not ten Tongan pa'anga. `$` is the US dollar, as everywhere in the engine.
+  - **Only the number is read.** `15%` is 15, `1.5e3` is 1.5 and 3, and a date is the numbers it is written with.
+  - **A character in a pattern is a code point**, so a skin-toned emoji is two characters to `.`, where the text operations count it as one.
+  - **A JSON key containing a dot or a bracket cannot be reached by a path**, and a whole number past 2^53 is refused rather than rounded.
+  - Pasted text is only searched. Nothing in it is evaluated.
+  
+  A new syntax page, pasted text, explains each form for a reader meeting it for the first time, with proven examples; the text operations page points to it where it used to call regular expressions a later addition, and the text encoding page shows `field` reading what `jwt` and `query` return.
+  
+  ## Verification
+  
+  Two new suites. One pins the matcher: its syntax, its refusals, its limits, the exponential patterns answering in one pass, and 8,000 generated patterns (half with loops that may match nothing) agreeing with `RegExp` on the first match, its groups and the match count. Outside the suite, seeded runs of 400,000 more generated patterns on the finished matcher agreed, half of them with loops that may match nothing, and `(?i)` agreed with `RegExp` on every character of the Basic Multilingual Plane against its case partners, alone and in a class. The other drives every form through the engine: the number formats of the three locales, currency placement, each aggregate against its written-out list, the refusals, big pastes refused quickly, the per-line step budget, and the batch and incremental document passes agreeing. The pasted text page's examples are proven by the documentation suite. `npm run verify:ci` passes: 10,709 tests across 517 suites.
+- 5540410: Probability distributions: the inverse normal, binomial, Poisson and Student's t, with the error and gamma functions behind them
+  
+  The statistics package had the normal distribution's cumulative probability and density and nothing else, so a note could not give a critical value, a confidence interval's margin or the chance of exactly 3 heads in 10 tosses without opening a spreadsheet. It now has the inverse normal, the binomial, Poisson and Student's t distributions, and the special functions they are built on, under the names a graphing calculator uses.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `normalinv(0.975)` | error: undefined function | 1.96 |
+  | `normalinv(0.9, 100, 15)` | error: undefined function | 119.22 |
+  | `binompdf(10, 0.5, 3)` | error: undefined function | 0.12 |
+  | `binomcdf(10, 0.5, 3)` | error: undefined function | 0.17 |
+  | `poissoncdf(2, 3)` | error: undefined function | 0.86 |
+  | `tinv(0.975, 9)` | error: undefined function | 2.26 |
+  | `2 * (1 - tcdf(2.5, 12))` | error: undefined function | 0.03 |
+  | `erf(0.5)` | error: undefined function | 0.52 |
+  | `gamma(0.5)` | error: undefined function | 1.77 |
+  | `normalcdf(-8)` | 6.11e-16 | 6.22e-16 |
+  | `normalcdf(-10)` | 0 | 7.62e-24 |
+  
+  Each distribution answers the three questions a note asks of one: `pdf` is the chance of one exact outcome (or, for a measurement, the height of the curve), `cdf` the chance of an outcome at or below a value, and `inv` the value a given share of outcomes falls below. The functions are `normalinv` (and `invnorm`), `binompdf` and `binomcdf`, `poissonpdf` and `poissoncdf`, `tpdf`, `tcdf` and `tinv` (and `invt`), and `erf`, `erfc`, `gamma` and `lgamma`. A probability can be written as a decimal or a percentage, and every result is an ordinary number, so a margin computed from `normalinv` or `tinv` can be written after a value with `±` and carried as its tolerance.
+  
+  The last two rows are the existing `normalcdf`. It was built on a textbook approximation of the error function with an absolute error of 1.5e-7, which is fine near the middle of the curve and wrong in the tail: 1.8% out at z = -8, and 0 at z = -10. The error function is now a series near zero and a continued fraction in the tail, so a far-tail probability keeps its significant digits, and every function here is accurate to at least ten significant figures. Up to 50 trials a binomial is summed term by term, so a fair coin's answers are exact: `binomcdf(10, 0.5, 3)` is 176/1024 to the last digit.
+  
+  Every argument is checked against its distribution's rules, and one outside them is refused by name rather than passed to a formula that would produce a number anyway: a probability outside 0 to 1 (`STAT_PROBABILITY_RANGE`), a fractional or negative count (`STAT_NOT_WHOLE`, `STAT_COUNT_RANGE`), more successes than trials, a standard deviation, average or degrees of freedom that is not positive, gamma at zero or a negative whole number (`STAT_GAMMA_POLE`), and an answer past the largest number a double holds (`STAT_OVERFLOW`). More successes than trials is refused rather than answered 0 because it is far more often a spreadsheet's argument order (`BINOM.DIST` puts the successes first) than a real question.
+  
+  The boundary: the argument order is a graphing calculator's, value first for a measurement (`tcdf(t, df)`) and count last for a count (`binompdf(n, p, k)`, `poissonpdf(mean, k)`). A spreadsheet's `POISSON.DIST` takes the count first, and since both orders are valid calls that one mix-up cannot be caught. `tinv` is left-tailed like `T.INV`, not two-tailed like an older spreadsheet's `TINV`. The calculator's range forms, `normalcdf(lower, upper, mean, sd)` and `tcdf(lower, upper, df)`, are refused by argument count; the difference of two calls gives the same share. Very large counts cost precision: past about a hundred billion trials the binomial's cumulative answers keep fewer than ten digits (about seven at a thousand trillion), and past an average of about twenty billion a Poisson cumulative answer can be refused (`STAT_NO_CONVERGENCE`) rather than approximated. Each new name followed by `(` is a call, so `gamma(x) = ...` cannot define a function of that name; `gamma` without brackets is still free as a variable. Other distributions (chi-square, F, exponential, uniform) are not part of this change.
+  
+  The normal distribution moves from the statistics page to a new probability distributions page with the rest, which explains each distribution before its syntax.
+  
+  ## Verification
+  
+  A new spec pins every function against reference values computed independently with mpmath at 40 digits, including far tails, huge counts, degrees of freedom from 0.3 to 10^17, and the gamma function's reflection and overflow; it checks that each quantile inverts its CDF, that each cumulative probability is the sum of its masses, that the t distribution meets the Cauchy at one degree of freedom and the normal at many, and that every refusal returns its code as a value rather than throwing. The new page's examples are proven by the documentation suite. `npm run verify:ci` passes: 10,709 tests across 517 suites.
+- 46c0e89: A number divided by a quantity is its reciprocal
+  
+  A plain number divided by a quantity kept the quantity's unit, so `1 / (2 m)` was reported as half a metre when it is half of one per metre, and `10 / (5 s)` as two seconds when it is two a second. The answer is now the reciprocal: a per-unit rate, written the way the engine already writes a count per something (`/m`, `/s`), which cancels against the quantity again.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `1 / (2 m)` | 0.50 m | 0.50 /m |
+  | `10 / (5 s)` | 2.00 s | 2.00 /s |
+  | `1 / (2 m) * 4 m` | 2.00 m2 | 2 |
+  | `1 / (60 km/h)` | 0.02 km/h | 1:00 /km |
+  | `1 / (50 Hz)` | 0.02 Hz | 0.02 s |
+  | `1 / (2/week)` | 0.50 /week | 0.50 week |
+  | `1 / (20 C)` | 0.05 C | error: no unit |
+  | `1 / 2 hour` | 0.50 hour | 0.50 hour |
+  | `3 / 4 cup` | 0.75 cup | 0.75 cup |
+  
+  A rate turns over, so the reciprocal of a speed is a time per distance (`1 / (60 km/h)` is a minute a kilometre, `h/km`), a count per something turns into that something, and a frequency turns into its period in seconds. A temperature is measured from a zero point of its own and has no reciprocal, so it is refused by name as `UNIT_RECIPROCAL_UNSUPPORTED`, as is a label that is not a unit.
+  
+  A fraction written in front of a unit is still that much of the unit. The unit binds to the number beside it before any operator does, which is why `1 / 2 hour` was one over two hours all along and only looked right; the uom package now brackets such a fraction before the unit binds, where the source still shows it was written as one amount. It applies to a fraction that starts an amount: a quantity or a symbol before the slash (`100 km / 2 h`, `$10 / 2 h`) is a division, as is a number straight after another division or a power (`6 / 3 / 2 h`), and a bracket (`1 / (2 hour)`) asks for the reciprocal.
+  
+  The boundary: a reciprocal is a per-unit rate, not a named unit. Ten per second is `10.00 /s` rather than ten hertz, and the two do not convert into each other. A percentage or a big integer divided by a quantity keeps its existing reading.
+  
+  Fixes #570.
+  
+  ## Verification
+  
+  The unit algebra suite gains the reciprocals above, the cancellation back to a number, a variable holding a quantity, the refused temperature, and the fractions that stay amounts. The multiplying and dividing units page gains a proven section on reciprocals and loses the boundary note that described the old reading. `npm run verify:ci` passes: 11,654 tests across 535 suites, with the bundled-consumer contract.
+- 939aaa8: Hosts can find, rename and follow a note's variables, and keep line references on their lines when lines move
+  
+  The language service classified one line at a time and knew nothing about a note as a whole, so an editor had no way to list where a variable is used, jump to its definition, show its value, or rename it: a find and replace edits prose that shares the word. And `line 3` is an absolute number, so a line typed at the top of a note left every reference below it reading the wrong line. `LanguageService` now answers both from the engine's own reading of the note.
+  
+  | call | example | result |
+  | --- | --- | --- |
+  | `findReferences` | `tax` in `:tax = 20%` / `100 + 100 * tax` / `tax is due in April` | lines 1 and 2; the prose on line 3 is not a reference |
+  | `getDefinition` | the `tax` on line 2 | line 1, characters 1 to 4 |
+  | `getHover` | the same, with the document's results | `:tax = 20%`, value 20.00% |
+  | `rename` | `tax` to `vat` | edits lines 1 and 2 only; line 2 still gives 120 |
+  | `rename` | `tax` to `pi` | refused: `RENAME_KEYWORD` |
+  | `shiftLineReferences` | a line inserted above `10` / `20` / `line 1 + line 2` | the edit `line 2 + line 3`; the answer stays 30 |
+  | `shiftLineReferences` | line 2 deleted under `line 2 * 2` | the edit `line deleted * 2`, an error that says the line was deleted |
+  
+  A word is a variable only where the engine reads it as one: a line is code when it parses, and a name on it is a reference when the dependency graph reads or writes it there. The calls ask exactly that, through a new side-effect-free `ExpressionEngine.readExpressionTokens` (the real lexer, normaliser and parser, with a `label:` set aside as prose) and the graph's own `extractReadsAndWrites`, which can now report positions. Every call takes the whole document and returns positions or text edits for the host to apply; `applyTextEdits` applies them to a string. Nothing is evaluated, and nothing in the engine changes: a running total or a unit definition is recognised by its shape and never run. A unit the note defines is a unit below its definition, as it is when the note runs, so the `sprints` in `3 sprints` is never taken for a variable, even on an engine kept only for highlighting that has never evaluated the note.
+  
+  A rename is refused with a named reason rather than done partly: the position is not on a variable, the variable is a `global` other documents read, the new name is not an identifier, is a keyword or a unit, is already used in the note, or would change how an edited line reads (renaming a function `f` to `sum` makes `f(3)` a different call). A line-reference shift renumbers every absolute `line N`, including a range's ends and goal seek's target, and moves a range's ends independently, as a spreadsheet does. A reference into a deleted line has no right number to become, so it is rewritten as `line deleted`, a new form that answers with the named `LINE_REFERENCE_DELETED` error in every entry point rather than silently reading whichever line moved into the gap. It compiles to the existing line-reference call, so no plugin function index moves.
+  
+  The boundary: a global is found but not renamed, since one note cannot rename it in the others. `prev`, `total above` and `average above` read whatever is above them and are never rewritten, and the inserted lines themselves are left as written. A split or merge in the middle of a line has no single answer for which half is the same line, so the host describes its change as whole lines inserted or deleted. A line is read the way the batch pass reads it; the one place that differs from evaluation is a label followed by a definition (`rent: :rent = 1200`), which the equation grammar currently claims before the parser does. The hover's value is the one the host's own results hold.
+  
+  ## Verification
+  
+  A new suite pins references, definitions and hover across labels, comments, inline solves, list items, globals, function parameters, goal seek and unit definitions; every rename refusal; renames whose answers match before and after through both document passes; insertions and deletions including ranges, glued references and refused changes; and that reading a note leaves a running total and the unit table untouched. A second suite holds `readExpressionTokens` to `tryCompileExpression` over every line the documentation shows, plus prose, half-typed lines and each statement shape, so the side-effect-free reading cannot drift from the engine's own. The cross-path suite gains the line shift through `parseDocument` and `evaluateDocument` and `line deleted` through all three entry points. The line-references page and a new reference-aware editing guide carry proven examples. `npm run verify:ci` passes: 11,248 tests across 532 suites, with the bundled-consumer contract.
+- 5540410: A section is totalled by its heading, and a tagged note is broken down by every tag at once
+  
+  A note's figures can now be added up by the heading they sit under. `total above` stops at the first blank line or heading, so it only works written directly under its own block, and `sum(line 2 : line 4)` names line numbers that go stale as soon as a line is inserted above them. `total of section "Travel"` names the block by its heading instead, and reads whatever is under it from anywhere below, a summary at the bottom of the note included. Category tags answered one tag at a time, and each tag's share of the whole had to be worked out by hand; `total by tag` gives every tag's total and share on one line.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `total of section "Travel"` | error: unexpected token "Travel" | $720.00 |
+  | `total by tag` | error: unexpected token "by" | food $65.00 (68%) · transport $30.00 (32%) |
+  
+  The first row is a note with `Flights: $450`, `Hotel: $220` and `Taxi: $50` under `# Travel`; the second has `$40 #food`, `$25 #food` and `$30 #transport`. `sum of section`, `average of section` and `count of section` read the same block, and `sum by tag` is a synonym:
+  
+  ```
+  average of section "Travel"    $240.00
+  count of section "Travel"      3
+  total of section "travel"      $720.00
+  ```
+  
+  A section is the lines under a heading, down to the next heading at the same level or above, so `# Travel` takes in the `## Flights` and `## Hotels` inside it, and `total of section "Flights"` reads only its own part. The name is matched without regard to case or extra spaces. Blank lines, the smaller headings and comment lines are passed over. A line that is itself a summary of other lines (`total above` and its siblings, a `sum(line a : line b)` span, a tag total, another section total, `total by tag`) is left out, because the figures it sums are already counted: a section that ends in its own subtotal is not counted twice. A line that reads one other line, such as `prev`, is a figure and is counted. Money and units carry through in the first unit written, as they do for `total above`.
+  
+  Every refusal is a named error rather than a number. A name no heading carries is `SECTION_NOT_FOUND`, and the message lists the headings the note has; a name two headings carry is `SECTION_AMBIGUOUS`, naming both lines; a section with no figures is `SECTION_EMPTY` for a total or an average, and zero for `count`. A line that is not a number is refused with `AGGREGATE_NON_NUMERIC`, naming the line and its section, and a mix of measures is refused by dimension, the rules `total above` and the inline aggregates already follow.
+  
+  In the breakdown, each tag's amount is the one `total of #tag` gives, and the tags appear in the order they are first written. The whole is every tagged line counted once, so when each line carries one tag the shares describe how the whole divides; a line carrying two tags counts toward both, and overlapping shares can add up to more than 100%. Each share is rounded to a whole percentage on its own, and a share too small to round to 1% reads `<1%`. A note with no tags (`TAG_EMPTY`), a tagged line that is not a number (`TAG_NON_NUMERIC`), tags in different measures (`INCOMPATIBLE_UNITS`) and tagged lines that add up to zero (`TAG_BREAKDOWN_NO_WHOLE`) are each refused.
+  
+  The refusal `total of "Travel"` gives, a quoted name read as text, now names the section form as well as the tag form: `To gather the lines under a heading, write total of section "Travel"; to gather tagged lines, use "total of #tag".`
+  
+  Both forms read the whole document. Through the single-expression entry point each returns a structured error that says a document is needed (`SECTION_NO_DOCUMENT`, `TAG_NO_DOCUMENT`), never a number. The word `section` is only special with a quoted name after it, and `total by tag` needs all three words, so a variable named `section`, `tag` or `total` keeps working.
+  
+  The boundary, and each part is deliberate:
+  
+  - **A total goes below the block it reads.** It reads lines that have already been worked out, the way `total above` and the tag totals do, so one written above its section reports the first line not yet evaluated. It can sit at the foot of its own section, and leaves itself out.
+  - **One heading per name.** Two headings with the same name are refused rather than added together, and a heading path such as `"April / Travel"` is not read. Tagging the lines is the form for gathering a heading repeated under every month.
+  - **Only `total`, `sum`, `average` and `count`** over a section; its median, smallest and largest are not offered.
+  - **A summary line is recognised from its text**, the way the tag scanner tells a tag query from a tag member. A label is set aside first, so `Total above budget: $50` is still the figure `$50`.
+  - **The breakdown is text, not a structured value.** Several labelled figures fit none of the engine's existing value types, and a labelled result shape is left for the scenario comparison that would share it. It cannot be carried into arithmetic (`total of #tag` is the form for that), and a host's own number formatting does not reach the amounts inside it.
+  - **A section total walks the note's headings once per evaluation**, so its cost grows with the length of the note rather than the size of the section.
+  
+  The syntax reference gains a Sections page under "Working across lines", and the category tags page a section on the breakdown, both as proven examples. The line references, statistics, trigger words and cheatsheet pages point to the new forms, and a stale boundary on the category tags page, which said a note could hold only one aggregate per tag, is removed.
+  
+  ## Verification
+  
+  New suites pin the section reader's rules (headings, name matching, summary lines); every section form and refusal through both document passes; a live editor's answer after an insert, an in-place edit, a delete, a heading renamed away and back, and a heading inserted into a block, each against a fresh pass over the edited text; the dependency edges a section total takes, and that a summary it leaves out cannot close a cycle; and the breakdown's shape, ordering, overlap, rounding and refusals. `CrossPathDocumentFeatures.spec.ts` adds both forms through all three entry points: the document result, the agreement of the two document passes, and the single-line refusal. The differential document fuzzer's vocabulary gains named headings at two levels, section totals and the breakdown, and 1,600 editing sessions across four seeds agreed with a fresh pass throughout. `npm run verify:ci` passes: 10,709 tests across 517 suites, with the bundled-consumer contract.
+- 281c2ab: Random draws can be seeded, so a note's rolls, picks and identifiers are the same on every run
+  
+  Randomness came straight from `Math.random`, so a roll, a `pick`, a `shuffle`, a `coin`, a `uuid` or a `random hex` changed every time the line ran, and a note or a worked example that recorded one could not be checked or shared. A seed now makes every draw repeatable: the same seed gives the same draws on every run and every machine. A document seeds itself with a `random seed <value>` line, and a host with `createEngine({ random: { seed } })`, `engine.setRandomSeed()` or the worker client's `init({ random })`.
+  
+  | document | before | now |
+  | --- | --- | --- |
+  | `random seed 42`, `roll(1, 6)` | error: Expected token type "LPAREN", then a fresh roll | random draws seeded with 42, then 1 on every run |
+  | `random seed 42`, `pick("north", "south", "east", "west")` | a different option each run | east on every run |
+  | `random seed 42`, `uuid` | a different identifier each run | 218d5e25-71f0-4f2f-920c-f6f25498daa0 on every run |
+  | `roll(1, 6)` with no seed | a fresh roll each run | a fresh roll each run |
+  
+  Each line draws from its own stream, worked out from the seed and the line's compiled program, with a package function named rather than numbered so the draws do not depend on which packages a process happened to register first. A draw changes only when its own line is edited or the seed changes: adding or editing other lines leaves it where it was, and two lines written the same way still draw separately. The `random seed` line seeds the whole document wherever it sits, and takes precedence over the host's seed. When the seed in force changes, the lines that drew under the old one are dropped from the cache and draw again, in a batch pass and in the incremental evaluator alike. Unseeded, draws come from `Math.random` exactly as before.
+  
+  Draws reach the engine through the line's execution context, the way the clock already does through the calendar backend, so a builtin or a package that draws randomness reads `context.random()` rather than `Math.random`. The dice and randomness pages, which could show no fixed answer until now, gain proven examples and leave the documentation spec's unprovable list.
+  
+  The boundary: a seeded draw is repeatable, not unpredictable. The generator (mulberry32) is built to look random to a reader, not to resist prediction, so a seeded `uuid` or `random hex` is not suitable as a password or a security token. An engine restored from a snapshot does not carry a seed; seed it again with `setRandomSeed`.
+  
+  ## Verification
+  
+  A new suite pins the stream, the document seed line, repeatability across engines, variation when unseeded, reseeding and restoring, precedence, a line inserted above, identical lines, agreement between `parseDocument` and `evaluateDocument`, a re-draw after the seed line is edited in the incremental evaluator, and a single evaluated line. The dice, randomness and embedding pages are updated, with proven examples. `npm run verify:ci` passes: 9,807 tests across 496 suites, with the bundled-consumer contract.
+- 281c2ab: Significant figures, engineering notation and compact form
+  
+  A line can now round to significant figures, and write a number in engineering notation or in the compact form a report headlines. `to N sf` rounds the way `to N dp` does, counting figures from the first digit that is not zero, which is how a measured value is reported. `as engineering` is scientific notation with the exponent kept to a multiple of three, the steps the metric prefixes take. `as compact` writes 3,300,000 as `3.3M`.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `1234567 to 3 sf` | error: Undefined variable: sf | 1,230,000 |
+  | `0.0012345 to 2 sf` | error | 0.0012 |
+  | `2.5 to 3 sf` | error | 2.50 |
+  | `1234567 to 3 significant figures` | error: Unexpected token "figures" | 1,230,000 |
+  | `12345 as engineering` | error: Unknown converter | 12.345e+3 |
+  | `3 million + 10% as compact` | error: Unknown converter | 3.3M |
+  | `$3300000 as compact` | error: Unknown converter | $3.3M |
+  
+  Significant figures show a trailing zero that is one of them (`2.5 to 3 sf` is 2.50), and a rounding that carries into the next power of ten keeps the count (`9.99 to 2 sf` is 10). An exact decimal rounds half away from zero, as `to N dp` does, and a unit or a currency is kept. `sf`, `sig figs`, `sig fig`, `significant figures` and `significant digits` are all spellings; `to N digits` is unchanged and still means decimal places.
+  
+  Compact form rounds to three significant figures and uses the suffix letters the engine reads back as input, `k`, `M`, `B` and `T`, so `3.3M` typed back in is 3,300,000 again. A thousand is a lowercase `k`, since `K` is kelvin. A figure that rounds up to the next suffix takes it (999,950 is `1M`), money keeps its symbol in front, and a quantity its unit after.
+  
+  The boundary: both notations answer text, as `as scientific` does, so they end a line rather than feed further arithmetic. Compact form is a per-line request; the default rendering of large numbers is unchanged, and a global setting for it remains undecided. The figure count for `to N sf` runs from 1 to 17, the most a double carries.
+  
+  ## Verification
+  
+  A new suite pins each rounding above including the carries, the exact-decimal half, every spelling, units and money, the refused count, and the unchanged `to N dp` and `to N digits`; engineering and compact form are pinned directly and through the engine, including the suffix round trip and a refused text value. The rounding and decimals pages gain proven examples. `npm run verify:ci` passes: 9,807 tests across 496 suites, with the bundled-consumer contract.
+- 5540410: A table in a note can be looked up by its row's label, and a table of bands can be applied to an amount
+  
+  The tables package could total, average or summarise a whole column, and that was all a markdown table was good for. A price list or a rate schedule written as a table could not be read one cell at a time, and a banded charge (an income tax, a commission scheme, a tiered tariff) had to be worked out by hand, band by band. Three forms now read the nearest table above the line:
+  
+  - `column "cost" for "food"` reads one cell by its row's label, the first cell of the row. The match ignores case, and a row can be labelled with a number.
+  - `column "rate" for 45,000 in bands above` reads the cell of the band an amount falls in, taking the first column as where each band starts. `in bands` is what makes it a band match rather than an exact one.
+  - `45,000 through bands above` is the progressive total: each part of the amount is charged at the rate of the band it falls in, the rate being the last column.
+  
+  With a table of `item | cost` rows (`rent 1200`, `food 300`), and a band table of `from | rate` rows (`0 0%`, `10,000 20%`, `40,000 40%`) above the line:
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `column "cost" for "food"` | error: unexpected token "cost" | 300 |
+  | `column "cost" for "food" * 12` | error: unexpected token "cost" | 3,600 |
+  | `column "cost" for "fuel"` | error: unexpected token "cost" | error: no row labelled "fuel"; its rows are "rent", "food" |
+  | `45,000 through bands above` | error: unexpected token "bands" | 8,000 |
+  | `$45,000 through bands above` | error: unexpected token "bands" | $8,000.00 |
+  | `column "rate" for 45,000 in bands above` | error: unexpected token "rate" | 40.00% |
+  
+  The engine assumes no bands. The person writes them, so one form covers any country's income tax, any commission scheme and any tiered price, which is the same rule the tax forms follow: no rate is ever assumed. A rate can be a percentage (a share of the part in its band), a price such as `$0.18` (charged per unit, for a tariff on a count of units), or a plain number (a multiplier). A lookup answers with a number, an amount of money or a percentage, since those are what a price list and a rate schedule hold; money is read into an exact decimal and a total is summed in base ten, so `$10.10 through bands above` on a single 15% band is `$1.52`, where a double would round the half-cent down to `$1.51`.
+  
+  Every doubt is refused by name, with the line to fix, rather than answered with a number that might be wrong: a label that is not in the table, two rows with the same label, a column named twice, an empty cell or a cell of text, band starts that do not rise down the table, a first column headed `up to` (which reads as where bands end, and would be one row out), a total whose first band does not start at 0, a plain `20` among percentages (a likely missing `%`), rates mixing percentages and prices, and an amount in a different currency from the bands. Typed on its own, with no document to read, each form answers with an error saying a document is needed, never a number and never a throw.
+  
+  The boundary: a lookup matches the first column only, and answers with the one cell asked for; a cell of text is refused rather than handed on, since text in arithmetic reads as nothing. Units in cells (`12 kg`) are not read yet, and an amount with a unit is refused rather than compared with a table that does not state one. Rules beyond a table of starts and rates, such as an allowance that tapers with income or a flat fee per band, are not modelled; the payroll forms keep the full UK rules for England, Wales and Northern Ireland. The column aggregates (`sum of column`) are unchanged and still read plain numbers only, and only the nearest table above is read, as before. `column` becomes a lookup only when a quoted name follows it and `through` only in the phrase `through bands`, so a variable named `column` keeps working.
+  
+  ## Verification
+  
+  A new suite pins every form through both document passes line for line: the exact lookup and its addresses, number and variable keys, money and percentage cells, exact money arithmetic, the band lookup at and between band starts, the progressive total with shares, prices and plain rates, currency adoption and mismatch, each refusal and its code, error propagation from a failing key or amount, an edited table re-answering, and the cell reader directly. The cross-path suite adds the three forms in its standard shape: the document result, the agreement between `parseDocument` and `evaluateDocument`, and the single-line refusal as a structured Error. New Table lookups and Banded rates pages carry proven `solve-doc` examples, including the refusals.
+  
+  npm run verify:ci passes: 10,709 tests across 517 suites.
+- 46c0e89: Units multiply, divide and cancel the way numbers do
+  
+  A product or quotient of two quantities now carries the unit the two make together, a rate cancels against the quantity it is per, and a root takes an area or a volume back to a length. Where the combined unit is not one the engine can show, the answer is a named error rather than a number wearing the left operand's unit. This is what makes paint and tile coverage, appliance running costs and journey times work as they are written.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `6 kWh * $0.30/kWh` | error: Undefined variable: kWh | $1.80 |
+  | `3 kg * $5/kg` | 15.00 USD/kg | $15.00 |
+  | `2 kW * 3 h * $0.30/kWh` | error: Undefined variable: kWh | $1.80 |
+  | `2 kW * 3 h` | 21,600,000.00 J | 6.00 kWh |
+  | `20 m² / (5 m²/l)` | error: Undefined variable: m² | 4.00 l |
+  | `20 m2 / (5 m2/l)` | 4.00 m2/m2/l | 4.00 l |
+  | `15 m2 / 3 m` | 5.00 m2/m | 5.00 m |
+  | `(9 m2)^0.5` | error: cannot be raised to the power 0.5 | 3.00 m |
+  | `10 lbf * 3 ft` | error: force and length cannot be multiplied | 40.67 J |
+  | `60 mph * 2 hours` | error: speed and duration cannot be multiplied | 120.00 mi |
+  | `120 km / 60 km/h` | 2.00 km/km/h | 2.00 h |
+  | `100 miles / 30 mpg` | 3.33 miles/mpg | 3.33 gal |
+  | `$100 / ($5/kg)` | 20.00 USD/USD/kg | 20.00 kg |
+  | `$30/hour * 8 hours/day` | error: different measures | 240.00 USD/day |
+  | `$500 at $20/h` | 25.00 hs | 25.00 h |
+  | `15 m² in ft²` | error: Undefined variable: m² | 161.46 ft² |
+  | `2 kg * 3 kg` | 6.00 kg | error: no unit |
+  | `$5 * $3` | $15.00 | error: no unit |
+  | `(100 km/h) / (2 h)` | 50.00 km/h/h | error: no unit |
+  
+  A price written straight after an amount (`$5/kg`, `£2 per kg`) is now one rate, where the rate used to attach to everything before it, which is why `3 kg * $5/kg` read as `(3 kg * $5) per kg`. A denominator spelled in capitals (`kWh`, `GB`, `MJ`) is recognised; the table is case-sensitive and the lookup only tried the lowercase spelling. The single-word rates (`mph`, `mpg`, `Mbps`, `lpm` and the rest) cancel as the slash spellings do. Two rates that share a unit cancel it between them, and a quotient of two rates of the same kind is a plain ratio. A count of what a price is per takes the word's plural, so `$100 / $5/hour` is 20 hours, and the plural must now be the same unit: `$500 at $20/h` answered 25 hectoseconds (`hs`) and `$500 at $20/m` 25 milliseconds, because a symbol with an `s` added is often another unit.
+  
+  An area over a length is a length, a volume over an area is a length, and a volume over a length is an area. A power of a half on an area, or a third on a volume, is its square or cube root. Every spelling of a mass, length, time, force, energy, power, pressure, voltage or current now takes part in naming a derived unit, so `10 lbf * 3 ft` is 40.67 J and `100 Pa * 2 m²` is 200.00 N, and a power for a time of a minute or more is named in watt-hours with the power's prefix.
+  
+  An area or volume the engine works out is now printed with a superscript, `15.00 m²` where it was `15.00 m2`. `m²`, `ft²` and `m³` are units as typed. Every spelling of one unit is the same table entry, so a worked-out `m²` converts, compares and adds with `m2`, `sq ft` and `square metres` (`5 m * 3 m == 15 m2` is true). An area in words is a power of the length it names, so `sqrt(9 square feet)` is 3.00 ft.
+  
+  A like product of anything but lengths is refused as `UNIT_PRODUCT_UNSUPPORTED`: a mass times a mass, a time times a time, money times money. A quotient with a compound rate that cancels nothing is refused as `UNIT_QUOTIENT_UNSUPPORTED`. Money times a count keeps its own rule, so `$30 * 4 days` is still $120.00. Two tests that pinned the old answers, `5 g * 10 g` as 50 and `$5 * $3` as not an error, now assert the refusal, and the allocation test that squared money in a loop is refused at its first step.
+  
+  The boundary: this is not a general algebra of units. A product with no unit in the table, such as a kilogram-metre or a metre to the fourth power, is refused rather than shown. A plain number divided by a quantity is covered separately, in #570. A rate cancels against the quantity it meets, so `$0.30/kWh * 2 kW * 3 h` is refused where `2 kW * 3 h * $0.30/kWh` works. A single capital letter after a slash (`$0.50/W`) stays a variable, since `N` and `W` are common names for a count. There is no unit for an amount of substance, so `mol` and gas-law formulas such as PV = nRT are a later addition.
+  
+  ## Verification
+  
+  A new suite pins every product, quotient, root, spelling and rate above, the named refusals, and the forms that keep their own rules (money times a count, a length over an area, a single capital after a slash); the derived units suite gains the wider spellings and the watt-hour naming. A new page, multiplying and dividing units, holds proven examples for each form, and the unit arithmetic, derived units and rates pages point to it. The unit reference is regenerated for the new spellings. `npm run verify:ci` passes: 11,654 tests across 535 suites, with the bundled-consumer contract.
+- 939aaa8: What-if and sweeps: a line re-run with different inputs, without editing the note
+  
+  A note answered only for the inputs it held. Seeing what a different deposit would do meant editing the deposit, reading the answer and putting the deposit back, and goal seek, the one form that re-ran a line, could only vary a variable the target line named itself. `line 4 with deposit = 150000` now answers what line 4 would say if `deposit` were 150,000, and `line 4 for rate from 3% to 6% step 1%` lists line 4's answers across a range, the way a spreadsheet's data table does. Both re-run every line from the top of the note down to the target, so an input reaches the target through the lines between.
+  
+  The note below is `deposit = 100000`, `rate = 4%`, `payment = monthly repayment on deposit over 25 years at rate`, `payment * 12`. Line 4 reads `payment`, and only line 3 reads `deposit`.
+  
+  | line 5 | before | now |
+  | --- | --- | --- |
+  | `line 4 with deposit = 150000` | error: Unexpected token after expression: "=" | 9,501.06 |
+  | `line 4 with deposit = 150000 and rate = 5%` | error: Unexpected token after expression: "=" | 10,522.62 |
+  | `line 4 for rate from 3% to 6% step 1%` | error: Expected token type "AT" but got "FROM" ("from") | [5,690.54, 6,334.04, 7,015.08, 7,731.62] |
+  | `line 4 for deposit from 100000 to 200000 step 50000` | error: Expected token type "AT" but got "FROM" ("from") | [6,334.04, 9,501.06, 12,668.08] |
+  
+  Several inputs change together when joined by `and` or a comma, and each value is an ordinary expression that keeps its unit: with `price = $100` and `qty = 3`, `line 3 with price = $120` is $360.00. An input is held at its new value on every line of the re-run, so the line that sets it reads as the override. A sweep's range is plain numbers, percentages, or quantities of one kind (mixed units of that kind are read in the start's unit); it runs down with a negative step, and includes its end when a step lands on it. The answers are listed as amounts, as every list in the engine is, so a money line's sweep lists its amounts and a percentage lists as its fraction.
+  
+  Nothing in the note changes. The lines are re-run from their text in a scratch engine built like the document's own (the same packages, configuration, locale, calendar and random seed) and discarded afterwards, so the note's variables, cached results and dependency graph are untouched, and the questions stay live as the note is edited. Because the re-run works from the text, `parseDocument` and the incremental evaluator give the same answers, and, unlike goal seek, the forms resolve through the batch pass as well.
+  
+  A host asks the same question with `engine.whatIf(text, overrides)`, which evaluates the whole note with the named inputs held fixed and returns the `ParsingResult` that `parseDocument` would, without touching the engine. An override is a number, text evaluated as an expression (`"$120"`, `"5%"`), or a `Value`. A package author reaches the same re-run from a plugin function through `LineExecutionContext.rerunLines(lineNumber)`, which opens a `LineRerun` session with `run(overrides)`, `uses(name)` and `close()`.
+  
+  The boundary: every case the engine cannot answer honestly is a named error, never a guess and never a hang. That covers a zero step or one that moves away from the end; more than 1,000 values, or more than 100,000 line re-runs, in one sweep; an input no line up to the target uses, which is almost always a misspelling; a target that is not a calculation; a what-if naming its own line or running inside another's re-run; a span holding a line that sets a `global :name`, since other documents read globals and a scenario's value would reach them; and live data the note has not already fetched, since a re-run never fetches. The target is a line number: `prev`, spans of lines and named scenarios (`line 5 in bull`) are not in this release. The re-run reads the note the way the batch pass does, so a goal seek inside the span reports that pass's refusal. Goal seek itself is unchanged and still needs its variable on the target line; the same re-run is what can later let it look through the lines between, and that is left to its own change. A sweep does not step dates or times.
+  
+  ## Verification
+  
+  A new suite pins the what-if through the lines between (including a user function, a running total and a target below the asking line), several inputs, kept units and money, the overridden line reading as the override, seeded draws repeating in the re-run, sweeps up, down, across units and over money, every named refusal, the note reading the same with and without the forms through both document passes, the engine's variables after a pass, an edit reaching the what-if in the incremental evaluator in agreement with a fresh pass, and `engine.whatIf` with its overrides and refusals. `CrossPathDocumentFeatures` gains the what-if and sweep in its house shape: the document result, agreement between `parseDocument` and `evaluateDocument`, and the single-line refusal. A new syntax page, "What-if and sweeps", carries proven examples, and the embedding guide and the plugin-function guide document the host API and `rerunLines`. `npm run verify:ci` passes: 11,248 tests across 532 suites, with the bundled-consumer contract.
+
+### Patch Changes
+
+- 8466f73: An aggregate refuses a value that is not a number, and `min` and `max` of dates give the date
+  
+  The list aggregates read every operand without a unit as a number, and a value with no numeric reading was read as whatever it happened to convert to. Text became 0 through `parseFloat`, so `total of "Travel"` in a note with a Travel section reported nothing spent. A date became its epoch milliseconds, and a bracketed list or a colour became 0. Each is now refused by name, with `AGGREGATE_NON_NUMERIC`, and the message points at what was probably meant.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `total of "Travel"` | 0 | error: text cannot be added; write `total of section "Travel"` for the lines under a heading, or tag them and use `total of #tag` |
+  | `average of "a", 4` | 2 | error: text cannot be averaged |
+  | `total of [1, 2, 3]` | 0 | error: a bracketed list; list the values with commas |
+  | `total of 1:3` | 1,790,121,780,000 | error: a date or time cannot be added |
+  | `standard deviation of "a", 2, 4` | 1.63 | error: text cannot be used in a standard deviation |
+  | `larger of "a" and 3` | 3 | error: text cannot be compared |
+  | `max(25/12/2026, 1/1/2027)` | 1,798,761,600,000 | Friday, January 1, 2027 |
+  
+  The forms covered are `total of`, `average of`, `median of`, `spread of`, `mode of`, the standard deviations and variances, `min`, `max`, `larger of` and `smaller of`. Numbers, quantities, percentages, booleans (as 1 and 0), hex and big integers are read as before, and `count of` counts anything, text included.
+  
+  `min` and `max` of a set made only of dates now return the earliest or latest date itself, which is the answer the question has; a date among plain numbers is refused like any other non-number. The `total above` and `total of #tag` forms already refused a non-numeric line and are unchanged.
+  
+  The boundary: a bracketed list is refused rather than expanded into its members, and a quoted name is refused rather than read as a section heading. Totalling a section by its heading is `total of section "Travel"`, which the message names (#508). `mode of` on text, where the most frequent word would be an answer, is refused for now rather than given a numeric mode of zero.
+  
+  ## Verification
+  
+  A new suite pins the reported document, every aggregate's refusal, the named kinds and hints, the forms that still answer, and `min`/`max` over dates. The statistics and number-functions pages gain the refusals and the date answer as proven examples. An A/B run of 3,863 expressions against the previous build differed only on random functions. `npm run verify:ci` passes: 9,745 tests across 493 suites, with the bundled-consumer contract.
+- 54f290a: A value that lands after a fetch is re-run against the cache of the engine that asked for it
+  
+  When a fetched value arrives, the engine re-runs the lines waiting on it and reports each new answer to `onLineResult` and the event stream. A package reads a fetched value back through one shared slot that the engine fills with its own cache when it runs a line, and the re-run left that slot as it was. An engine whose first line fetches had filled nothing, because a line waiting at preflight never runs, so its re-run found no cache. With a second engine in the same process, the re-run read the second engine's cache and reported that engine's figure as the answer. The re-run now fills the slot with its own engine's cache for as long as it runs, and puts back whatever was there before.
+  
+  | case | before | now |
+  | --- | --- | --- |
+  | a new engine's first line, `crypto("BTC")`, re-run when a $60,000 price lands | `No cached result for "BTC"` | $60,000.00 |
+  | engine A's `crypto("BTC")` ($60,000 from A's provider), re-run after engine B has run a line ($99,000 from B's) | $99,000.00 | $60,000.00 |
+  
+  The first answer the host saw was wrong only in the re-run's report: evaluating the line again read the right cache, which is why a host that re-evaluates the lines an event names already showed the right figure. A host that mirrors `onLineResult` into its own state, as the async guide describes, showed the error or the other engine's figure until the line was next evaluated. The slot itself is unchanged for anything outside a re-run: a plugin function called directly by a host still reads whichever cache the engine last published, as before.
+  
+  Fixes #568.
+  
+  ## Verification
+  
+  A new spec pins both cases with stub providers, a new engine whose first line fetches and two engines in one process, and that the slot reads as before once the re-run finishes; both cases fail without the fix. `npm run verify:ci` passes: 10,950 tests across 523 suites, with the bundled-consumer contract.
+- e877998: A check compares exact values exactly and names two sides that read apart, and an exact large integer keeps its digits against an `n` whole number
+  
+  Three places where features in this release met each other and disagreed, found by the cross-feature review before it shipped.
+  
+  **A check agrees with its comparison (#581).** A check read both sides as doubles and treated them as equal within a relative 1e-12, a margin meant for a unit conversion's rounding. A decimal, money, a fraction and a whole number past 2^53 hold their value exactly, and `==` and the ordering operators compare them on it, so a check could pass what `==` called false and fail what `>` called true. Those kinds are now checked exactly; a pair of plain doubles keeps the margin, and `≈` and `within` are unchanged. An `n` whole number, which a check refused as incomparable, is compared on its digits.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `check 2^53 + 1 > 2^53` | error: check failed: 9,007,199,254,740,993 is not more than 9,007,199,254,740,992 | ✓ |
+  | `check 1.0000000000001 == 1` | ✓ | error: check failed: 1.0000000000001 is not equal to 1 |
+  | `check 5n == 5` | error: check: 5 and 5 cannot be compared | ✓ |
+  | `check 1 km == 1000 m` | ✓ | ✓ |
+  | `check sqrt(2)^2 == 2` | ✓ | ✓ |
+  
+  **A failed check's sides read apart (#582).** A failure's sides differ, but they were shown at the result's usual two places, where `1.845` and `1.85` meet. They now widen a decimal place at a time until they part. Sides in different units are told apart in the left side's unit, since `1.00 km` and `1,000.00 m` read differently while meaning the same.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `check 12.3 kWh * $0.15/kWh == $1.85` | error: check failed: $1.85 is not equal to $1.85 | error: check failed: $1.845 is not equal to $1.850 |
+  | `check 3.1415926 ≈ 3.1415927` | error: check failed: 3.14159 is not equal to 3.14159 | error: check failed: 3.1415926 is not equal to 3.1415927 |
+  | `check 1 km == 1000.001 m` | error: check failed: 1.00 km is not equal to 1,000.00 m | error: check failed: 1.000000 km is not equal to 1,000.001000 m |
+  
+  **An exact large integer against an `n` whole number (#583).** An exact result past 2^53 is a Number carrying its integer beside the nearest double. Where it met an `n` whole number, the arithmetic, bitwise and comparison paths read the double, which for `3^40` is 33 short.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `3^40 - 12157665459056928801n` | -33 | 0 |
+  | `3^40 == 12157665459056928801n` | false | true |
+  | `(2^53 + 1) & 1n` | 0 | 1 |
+  
+  The boundary: a number typed past 2^53 without the `n` suffix is still the double it was rounded to as it was read, as [big integers](/syntax/big-integers/) explains, so `check 3^40 == 12157665459056928801` fails, as `==` does. The checks section of [conditionals](/syntax/conditionals/) and the big-integers page carry proven examples of each change.
+  
+  ## Verification
+  
+  New tests pin each exact kind through a check (a large integer, a decimal, money, a fraction, an `n` whole number), each widened failure message and the unchanged ones, and the `n` operators against exact results. `npm run verify:ci` passes.
+- 93e33a4: The VM's dispatch loop has room to grow again
+  
+  The function that runs every compiled line, `executeBytecode`, is one large loop with a branch for each instruction. V8, the JavaScript engine in Node and Chrome, only hands a function to its optimising compiler when the function's bytecode (V8's own compiled form of the source) is at most 61,440 bytes long: that is the `--max-optimized-bytecode-size` ceiling. Past it, on Node 22, the whole function runs unoptimised, and every instruction in every line is several times slower, `1 + 2` included, with no error and no change in any answer. Newer Node versions still reach an oversized function with Maglev, their middle tier, so there the loss is about a tenth, which is why a local run can miss what the benchmark job (on Node 22) reports.
+  
+  Compiled the way the test and benchmark suites compile it, the loop had reached 61,055 bytes, 385 short of the ceiling. The next feature to add a few lines to any instruction would cross it. Twelve rarely used instructions now live in their own functions outside the loop, moved unchanged: the working-day and weekday date steps, a clock time today, list and matrix literals, indexing and slicing, ranges, and `map`, `reduce` and `plot`. The loop reads each instruction's operands exactly as it did, in the same order, and hands them to the moved code.
+  
+  | `executeBytecode` bytecode | before | now | below the ceiling now |
+  | --- | --- | --- | --- |
+  | test and benchmark build (ES6) | 61,055 bytes | 44,267 bytes | 17,173 bytes |
+  | shipped build (ES2020) | 44,735 bytes | 33,516 bytes | 27,924 bytes |
+  
+  Nothing a line answers changes. The common instructions (arithmetic, comparisons, variables, calls) stay in the loop, where they are fastest; a moved instruction costs one function call, which is small beside the work each of them does.
+  
+  The boundary: the ceiling is V8's, not the engine's, and nothing enforces the headroom. A change that grows the loop should measure it (run a spec in band under `node --print-bytecode --print-bytecode-filter=executeBytecode` and read the `Bytecode length`) and move a body out rather than let it cross again. The note beside the moved functions in `vm/VM.ts` says so. The shipped ES2020 build compiles smaller, so a published engine was not yet at the ceiling; the test build was, which is where the benchmark suite found it.
+  
+  ## Verification
+  
+  An A/B of every documented example, every expression the test suite evaluates, the moved instructions' success and error paths, and 6,000 generated lines, against the previous build with random draws seeded, shows no difference. The vm, pipeline, document-parse and cancellation-overhead benchmark suites, run alternately against the previous build, pass the regression gate, with suite geometric means between 0.98 and 1.01; run under `--no-maglev`, which stands in for Node 22, they stay at parity, where a loop past the ceiling measured the `vm` suite 3.2 times slower. `npm run verify:ci` passes: 10,950 tests across 523 suites, with the bundled-consumer contract.
+- ccd8cf9: Every built-in package is exported from `solve-engine/packages`, and `errorValue` from `solve-engine/vm`
+  
+  Each syntax page names its package and says to register it explicitly for a slimmer engine, but 21 of the 41 packages it names had no export, so a host building a slim engine could not include them. Two, `PAYROLL_PACKAGE` and `SHOPPING_PACKAGE`, were not even exported from the module that assembles `BUILTIN_PACKAGES`. The plugin function guide also imported `errorValue` from `solve-engine/vm`, which did not export it, so its worked example did not compile.
+  
+  | import | before | now |
+  | --- | --- | --- |
+  | `import { GOALSEEK_PACKAGE } from "solve-engine/packages"` | undefined | the package |
+  | `import { PAYROLL_PACKAGE } from "solve-engine/packages"` | undefined | the package |
+  | `import { errorValue } from "solve-engine/vm"` | undefined | the function |
+  
+  The others now exported are the chart, colour, constants, cooking, encoding, geometry, coordinates, hash, health, IP, numerals, random, ratio, shopping, statistics, text, travel, uncertainty and web packages. Nothing changes for a host that uses `createEngine()`, which registers all of them already.
+  
+  The boundary: this adds exports and removes none. A new spec ties the list to the docs, so a package a syntax page names without an export fails the build.
+  
+  Fixes #556 and #557.
+  
+  ## Verification
+  
+  A new spec checks that every package a syntax page names, and every package in `BUILTIN_PACKAGES`, is exported from `solve-engine/packages`, and that `errorValue` is exported from `solve-engine/vm`. Every value import in the docs' TypeScript examples was checked against the built entry points. `npm run verify:ci` passes: 10,723 tests across 518 suites, with the bundled-consumer contract.
+- 062b2ec: Whole numbers past 2^53 stay exact
+  
+  A double holds every whole number up to 9,007,199,254,740,991 exactly and only some of them beyond it, so an integer result past that line was rounded to its nearest double. The display then printed digits the answer does not have, and anything built on the result inherited the error: `7^77 mod 13` took its remainder from a number with the wrong low digits. Such a result is now computed exactly, as a bigint, whenever adding, subtracting, multiplying or raising whole numbers produces it.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `3^40` | 12,157,665,459,056,929,000 | 12,157,665,459,056,928,801 |
+  | `2^53 + 1` | 9,007,199,254,740,992 | 9,007,199,254,740,993 |
+  | `2^64` | 18,446,744,073,709,552,000 | 18,446,744,073,709,551,616 |
+  | `fact(25)` | 15,511,210,043,330,986,000,000,000 | 15,511,210,043,330,985,984,000,000 |
+  | `7^77 mod 13` | 2 | 11 |
+  | `combination(56, 23)` | 3,167,295,784,216,201 | 3,167,295,784,216,200 |
+  | `lcm(2^40, 3^20)` | 3,833,759,992,447,475,000,000 | 3,833,759,992,447,475,122,176 |
+  | `(2^53 + 1) as hex` | 0x20000000000000 | 0x20000000000001 |
+  | `(2^60 + 1) * $1` | $1,152,921,504,606,846,976.00 | $1,152,921,504,606,846,977.00 |
+  
+  The result is still a Number, not a bigint. The exact integer rides on it as the `rational` sidecar that integer division already uses for `1/3`, so the next `+`, `-`, `*`, `/`, comparison and `as fraction` read it without change, and a unit, a percentage or money meets an ordinary number. `mod`, `floor`, `ceil`, `round`, `trunc`, `int`, `abs`, `gcd`, `lcm`, `pow`, `fact`, `permutation`, `combination`, `as hex`, `as binary`, `as octal`, `to N dp` and money multiplication read the exact value; the formatter prints its digits, grouped and localised like any other number. `toNumber()` returns the nearest double, as before, so a host reading a result's number is unaffected, and `value.rational.n` holds every digit.
+  
+  This reverses a recorded decision. `ArithmeticFloatingPoint.spec.ts` pinned `2^53 + 1` as 2^53 and declined a promotion to BigInt because it would change an expression's type with its magnitude. Carrying the exact value on a Number keeps the type, which was the objection, so the test now asserts the exact integer. `fact(170)`'s double also moves from 7.257415615307994e306 to 7.257415615307999e306, the nearest double to the true value rather than a running product's drift.
+  
+  The boundary is provenance, and it is deliberate:
+  
+  - A number **typed** past the safe range is rounded as it is read, so its digits may already be invented. It seeds no exact value, and `1e16 + 1 - 1e16` is still 0, while `10^16 + 1 - 10^16` is now 1. The `n` suffix remains the way to type a large exact integer.
+  - A result past a double's range (about 1.8 × 10^308) is Infinity, as it was, so `2 ^ 100000` is unchanged, and the exact work this adds is never more than 1,024 bits.
+  - A fractional part, a unit (`(2^53 + 1) kg`) and a percentage read the nearest double. So do the transcendental functions, which have no exact integer answer to keep.
+  
+  A big integer typed with `n` still prints its digits without grouping; making the two displays agree is a separate decision. The big integers page is rewritten to explain the safe range, what stays exact and where it stops, and the TypeScript guide says where the exact value lives on a result.
+  
+  ## Verification
+  
+  A new suite pins each answer above, every operator and function that reads the exact value, each boundary, the display under separator and locale settings, and a variable carrying the value between lines. An A/B run of 3,863 expressions against the previous build differed on 543: 488 match an independent BigInt reference, 44 more are corrections checked by hand, and 11 are random functions; none regressed. An interleaved in-process benchmark of the plain `+`, `-`, `*`, `/` and `^` paths measured ratios between 0.96 and 1.06 across runs, within noise. The CI vm suite, which runs under Jest's sandbox, first measured `1 + 2` at twice its cost, because the range test read `Number.MAX_SAFE_INTEGER` off the global on every operation; the limit is now a module constant, and that suite measures 0.81 ms against the previous 0.80 to 0.84 ms per 2,000 runs. Differential fuzzing (the document generator, and 20,000 expression cases) found nothing. `npm run verify:ci` passes: 9,625 tests across 488 suites, with the bundled-consumer contract.
+- 54f290a: Explaining a line no longer changes the document: hovering over `total += 5` leaves the total where it was
+  
+  `explainLine` builds a derivation from the values a line arrives at, so it has to run the line, and it ran it against the document's own state. A host puts a derivation behind a hover, which is called as often as the pointer moves, and each call applied the line again: a running total grew, an assignment set its variable, a unit definition replaced the unit and sent the whole document back for re-evaluation, and a global changed in every open document.
+  
+  | document, then explained | read back | before | now |
+  | --- | --- | --- | --- |
+  | `total += 5`, then `total += 5` three times | the three answers, then `total` | 10, 15, 20, then 20 | 10, 10, 10, then 5 |
+  | `:x = 3`, then `:x = 30` | `x` | 30 | 3 |
+  | `1 + 1`, then `z = 2 + 2` | `z` | 4 | error: Undefined variable: z |
+  | a live editor with `1 sprint = 2 weeks`, `6 sprints in weeks`, then `1 sprint = 3 weeks` | `6 sprints in weeks` | 18 weeks, and both lines marked for re-evaluation | 12 weeks, and neither line marked |
+  | a document with `global :g = 1` and another with `global :g * 10` (showing 10), then `global :g = 5` in the first | the second, after its next pass | 50 | 10 |
+  
+  The run now happens in scratch state that is discarded afterwards. The VM it runs on reads the document's variables, functions and equations and keeps its own writes; the process-wide store for `global` names holds the run's writes aside and tells no document about them; a cross-line read (a goal seek re-running its target, say) records its edge in a dependency graph of the run's own, and the line reads through a context of its own, so the document's graph and the pass's shared context are untouched; and a unit definition answers `sprint defined` without registering the unit. The running-total names and the random-draw bookkeeping are put back as they were. What the run still writes are the compile caches, memos keyed by the line's text that change no answer.
+  
+  Every explanation of a line now answers as its first one did before this change. Across 29 lines, ordinary derivations, dates, units and the state-changing shapes above, the first explanation is identical before and after.
+  
+  The boundary: the answer is still the one the line gives against the document as it stands, the same one `evaluateExpression` returns for it, not its answer at its own place in the document. With the total at 5, explaining `total += 5` answers 10, as it always has on the first hover. The scratch state costs a few microseconds per explanation (over eight lines, both builds in one process and interleaved, a median of 26 microseconds before and 29 now), which a hover does not notice.
+  
+  Fixes #566.
+  
+  ## Verification
+  
+  A new suite explains every kind of line that changes something when it runs, plus a global assignment, a goal seek and two ordinary derivations, three times each, after a batch pass and under a live editor, and requires every variable, running total, function (body included), equation, user unit, cached line result, dependency edge, global and document line (answer and dirty flag) to be unchanged, and every explanation to match the first. It pins the answers themselves, their agreement with `evaluateExpression` on an engine of its own, a global that notifies no document, a unit definition that leaves the live document clean, and a goal seek that leaves no edge. The scratch VM and the global store's scratch runs have specs of their own. The explaining a line page says explaining changes nothing. `npm run verify:ci` passes: 10,950 tests across 523 suites, with the bundled-consumer contract.
+- a9d53ab: Every function keeps, reads or refuses a quantity by name: `trunc` and `hypot` keep the unit, the degree forms read an angle, the counting functions refuse a length, and `root` of a negative number is real for an odd degree
+  
+  After #587 refused a quantity in `sin`, `log` and `exp`, a sweep of every builtin with a quantity argument found more that read its bare number, the same in 2.39.0 (#592). Each is now sorted the way its siblings already were.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `trunc(3.7 m)` | 3 | 3.00 m, as `floor(3.7 m)` is |
+  | `hypot(3 m, 400 cm)` | 400.01, the two lengths read as 3 and 400 | 5.00 m |
+  | `sind(1 rad)` | 0.02, the sine of one degree | 0.84, the sine of one radian |
+  | `fact(3 m)` | 6 | error: fact takes a plain number, not a length |
+  | `gcd(4 m, 6 m)` | 2 | error: gcd takes a plain number, not a length |
+  | `atan2(1 m, 2 kg)` | 0.46 | error: length and mass cannot be compared |
+  | `pow(2, 3 m)` | 8 | error: An exponent cannot carry a unit (m), as `2^(3 m)` says |
+  | `root(3, -8)` | NaN | -2 |
+  | `root(2, -4)` | NaN | error: root(2, -4) has no real value |
+  
+  The functions that keep a unit are the ones that change a quantity's size without changing what it measures: the rounding family (`trunc` and `int` join `round`, `floor` and `ceil`), `abs`, and `hypot` of quantities that all measure one thing, read in the first one's unit. `atan2` of two such quantities is their angle, read in a shared unit. The degree forms (`sind`, `cosd`, `tand`) and `degtorad` read a bare number as degrees and an angle in its own unit; `radtodeg` reads a bare number as radians. The counting functions (`fact`, `gcd`, `lcm`, `permutation`, `combination`), the bit functions (`clz32`, `imul`, `fround`, `hex`, `bin`), `asind`, `acosd`, `atand`, and a unit on `root`'s degree are refused by name.
+  
+  The boundary: `sign` of a quantity is its sign, a plain number, as it was. A mix of a quantity and a plain number in `hypot` or `atan2` is refused rather than guessed at, since a side with no unit has no length to compare.
+  
+  The number-functions page carries proven examples.
+  
+  ## Verification
+  
+  New tests pin each function with a quantity, an angle and a plain number, and the plain forms that must not change. `npm run verify:ci` passes.
+- 8466f73: Text is counted and reversed by the characters a reader sees
+  
+  `length of`, `characters in` and `reverse` worked on Unicode code points, so a character built from several code points counted as several and could be split in two. A thumbs-up with a skin tone is the thumb and a tone modifier, a flag is two regional-indicator symbols, and an accent can be a combining mark after its letter. Each now counts as the one character it looks like, and `reverse` keeps each whole.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `characters in "👍🏽"` | 2 | 1 |
+  | `length of "🇬🇧"` | 2 | 1 |
+  | `length of "👨‍👩‍👧"` | 5 | 1 |
+  | `reverse "👍🏽a"` | a🏽👍 | a👍🏽 |
+  | `reverse "🇬🇧🇫🇷"` | 🇷🇫🇧🇬 | 🇫🇷🇬🇧 |
+  
+  The text page promised this already ("an accent or an emoji counts as the one character it looks like"), and that was true only of an emoji that is a single code point.
+  
+  The boundary: the characters are grapheme clusters as the runtime's `Intl.Segmenter` finds them, which every current browser and Node.js provide. The segmenter is built on first use rather than when the package loads. On a runtime without one, counting falls back to code points, as before, which still keeps a surrogate pair together. Words and lines are counted as they were.
+  
+  ## Verification
+  
+  New tests pin each count and reversal above, and a separate suite removes `Intl.Segmenter` to pin the code-point fallback. The text operations page gains proven examples. `npm run verify:ci` passes: 9,745 tests across 493 suites, with the bundled-consumer contract.
+- 939aaa8: Highlighting colours the conversion words alike, leaves a label uncoloured, and keeps a clock time's colon with its number
+  
+  `getSemanticTokens` coloured the same conversion word differently from one line to the next, painted a line's label as a variable the line reads, and painted the colon of a clock time as a variable's sigil.
+  
+  | line | word | before | now |
+  | --- | --- | --- | --- |
+  | `12 kg to lb` | `to` | unit | keyword |
+  | `5 km in miles` | `in` | comparison | keyword |
+  | `Total: 1 + 2` | `Total`, `:` | variable, variable | uncoloured |
+  | `12:30 + 1` | `:` | variable | number |
+  
+  A label is found the way the engine finds it, through the same reader the reference-aware editing uses, and only on a line with a colon past its first character, so an ordinary line costs nothing more to highlight. A definition's own colon after a label (`rent: :rent = 1200`) is still the sigil.
+  
+  The boundary: only the category of these spans changes; which spans are coloured on any other line is unchanged.
+  
+  Fixes #576.
+  
+  ## Verification
+  
+  A new spec pins each case, and the category map spec now asserts the conversion words as keywords. `npm run verify:ci` passes: 11,248 tests across 532 suites, with the bundled-consumer contract.
+- 54f290a: Highlighting a line no longer runs it: colouring `total += 5` leaves the total where it was
+  
+  The language service decides whether to colour a line by asking the engine whether it parses, through `tryCompileExpression`. Most lines do their work in the bytecode that check produces and never runs. A few do it while being compiled instead: a running total adds to its total, a bare assignment sets its variable, an equation is stored for a later `=>`, and a unit definition registers its unit. The check did that work too, so each highlight of `total += 5` added another 5, and an editor that highlights on every keystroke moved the total further with each one.
+  
+  | document, then highlighted | read back | before | now |
+  | --- | --- | --- | --- |
+  | `total += 5`, its line highlighted once | `total` | 10 | 5 |
+  | `total += 5`, its line highlighted four times | `total` | 25 | 5 |
+  | `total += 5`, then `total += prev` highlighted | `total` | error: Cross-line references require a real document | 5 |
+  | empty, then `z = 2 + 2` highlighted | `z` | 4 | error: Undefined variable: z |
+  | empty, then `w^2 - 4 = 0` highlighted | `w =>` | [-2, 2] | w |
+  | `1 sprint = 3 weeks`, `3 sprints in weeks`, line 1 highlighted and then deleted | line 2 | 9 weeks | error: Undefined variable: sprints |
+  
+  The last row is the quiet one. Checking a unit definition registered the unit again as belonging to no line, so deleting its real line no longer removed it, and the conversion below went on answering from a definition the document no longer contained.
+  
+  `tryCompileExpression` now matches those shapes and compiles their operands, the same parse it always made, and runs and stores nothing. No variable, running total, function, equation, user unit, random draw, cached line result or dependency edge changes when a line is highlighted, completed or checked. What it still writes are the compile caches, memos keyed by the line's text that change no answer. A colon assignment (`:x = 3`), a function definition (`f(x) = x * 2`) and a `random seed 7` line were never affected: their work is in their bytecode, which the check has never run.
+  
+  Because nothing runs, the check now answers the question it was always asked, whether the line is well formed, the same way for every line. A running total whose step would fail when run still parses, as the expression it adds always has:
+  
+  | line | highlighted, before | highlighted, now |
+  | --- | --- | --- |
+  | `5 + nope` | `5` number, `+` operator, `nope` variable | unchanged |
+  | `total += nope` | nothing | `total` variable, `+=` operator, `nope` variable |
+  
+  A running total's name is also painted as the variable it is. The lexer, which sees one word at a time, reads a lone `b` as the unit bit and a lone `s` as seconds, but the engine reads `b += 5` as adding to a variable called `b`.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `b += 5` | `b` unit | `b` variable |
+  | `s -= 2 kg` | `s` unit | `s` variable, `kg` unit |
+  
+  The boundary: only the check is read-only. `compileExpression` still applies a line's effect, because the incremental evaluator compiles through it and depends on the effect happening. `explainLine`, which a host puts behind a hover, has to run the line to build its derivation, so a check cannot serve it; it runs in discarded scratch state instead, a change of its own (#566). The name fix covers a running total's name only; a unit-letter name on the left of a bare assignment (`b = 5`) or in a function's parameters (`g(t) = t + 1`) is still painted with the lexer's category. Highlighting costs the same as before: over a 200-line document, both builds in one process, interleaved, a full pass from an empty cache took a median of 0.51 to 0.55 ms before and 0.47 to 0.54 ms now, across three runs of eleven.
+  
+  Fixes #559.
+  
+  ## Verification
+  
+  A new suite highlights, completes and checks every kind of line that changes something when it runs (running totals, colon and bare assignments, function definitions, unit definitions, random seeds, equations, `=>` and `expand`), several times over, after a batch pass and under a live editor, and requires every variable, running total, function, equation, user unit, cached line result and dependency edge to be unchanged afterwards. It also pins the unit definition that outlived its line, the check's agreement with `compileExpression` on every shape it now checks rather than runs, and the running total's name. The editor integration page says highlighting is read-only. `npm run verify:ci` passes: 10,950 tests across 523 suites, with the bundled-consumer contract.
+- 54f290a: The incremental pass agrees with the batch pass on bare assignments, `=>` lines, equation solves and markdown list markers
+  
+  A live editor evaluates a note through the incremental evaluator (`ThreeTierEvaluator`, and `evaluateDocument`, which drives it for one pass), and a fresh read of the same text goes through `parseDocument`. On several ordinary forms they gave different answers, with nothing on screen to say which one was wrong.
+  
+  A bare assignment (`payment = deposit * 40`), a `=>` line (`a + 1 =>`), a stored equation (`a * x = 10`) and its solve (`x =>`) are all carried out while they compile, and leave no program behind. The live evaluator re-runs a clean line by executing its program, so for these it ran nothing, and they recorded neither the names they read nor, for a bare assignment, the one it wrote. An edit above such a line left its old answer in place while a colon line beside it updated, a name assigned twice held the later value at the earlier line, and a bare definition edited away went on defining its name. Each now records what it reads, a bare assignment records its write as `:name = ...` does, and a clean line with no program that depends on anything (a name, a position or a category tag it reads, or a name it writes) goes back through the full pipeline on every pass, which is what a fresh pass does with it. It is not held back until something it reads is seen to change, because a name's value belongs to the position it is read at, and the lines that already have a program are re-run on every pass for the same reason.
+  
+  Each row is a note, then one edit, then the answer the evaluator shows for the named line:
+  
+  | note, then the edit | line | before | now |
+  | --- | --- | --- | --- |
+  | `deposit = 100` / `payment = deposit * 40` / `:colon = deposit * 40`, then line 1 to `deposit = 150` | `payment` | 4,000 | 6,000 |
+  | `x = 5` / `x + 1` / `x = 7`, then line 2 to `x + 2` | `x + 2` | 9 | 7 |
+  | `x = 5` / `x + 1`, then line 1 to `# heading` | `x + 1` | 6 | error: Undefined variable: x |
+  | `:a = 2` / `a + 1 =>`, then line 1 to `:a = 3` | `a + 1 =>` | 3 | 4 |
+  | `:a = 2` / `a * x = 10` / `x =>`, then line 1 to `:a = 5` | `x =>` | 5 | 2 |
+  | `:a = 4` / `x^2 - a = 0` / `x =>`, then line 1 to `:a = 9` | `x =>` | [-2, 2] | [-3, 3] |
+  | `2` / `line 1 * 2 =>`, then line 1 to `5` | `line 1 * 2 =>` | 4 | 10 |
+  | `:a = 1` / `expand((x + a)^2)`, then line 1 to `:a = 2` | `expand((x + a)^2)` | x^2+2x+1 | x^2+4x+4 |
+  
+  In each row the answer now is the one `parseDocument` gives for the edited text, and the colon line in the first row was already 6,000.
+  
+  A stored equation is kept by its unknown, apart from the line that stored it, so it outlived that line: edited away or deleted, the equation stayed, and `x =>` below went on solving it. Each equation, of either kind (the product-chain `a * x = 10` and the scalar `x^2 - a = 0`), now records the line that stored it, and goes when that line is edited, emptied or deleted, as a unit definition goes with its line. A line that still states it stores it again as it runs, and when two lines store one for the same unknown, it belongs to the later to run, so removing the other leaves it in place.
+  
+  | note, then the change | line | before | now |
+  | --- | --- | --- | --- |
+  | `:a = 2` / `a * x = 10` / `x =>`, then line 2 to `# heading` | `x =>` | 5 | x |
+  | `:a = 2` / `a * x = 10` / `x =>`, then line 2 deleted | `x =>` | 5 | x |
+  | `:a = 4` / `x^2 - a = 0` / `x =>`, then line 2 to `a + 1` | `x =>` | [-2, 2] | x |
+  
+  For this, `ExpressionEngine.compileExpression` takes an optional line number (the line a stored equation or a unit definition compiled out of view belongs to), and the `VM` interface gains `deleteEquation` and `deleteScalarEquation`.
+  
+  A markdown list marker is markup: `- 100 * 2` is a bullet holding `100 * 2`. The batch pass has set the marker aside since 1.0.2, but the incremental pass read the whole line, so `-` became a minus and the other markers did not evaluate at all. It now reads a list line from past the marker, using the same classification the batch pass slices by, so the two cannot disagree about what counts as one. Each row sits below a line holding `20`:
+  
+  | line | `parseDocument` | `evaluateDocument` before | now |
+  | --- | --- | --- | --- |
+  | `- line 1 + 1` | 21 | -19 | 21 |
+  | `- 100 * 2` | 200 | -200 | 200 |
+  | `1. 3 * 3` | 9 | error: Unexpected token after expression: "." | 9 |
+  | `* 5 + 5` | 10 | error: No prefix parselet found for token: STAR ("*") | 10 |
+  | `- [ ] 4 + 4` | 8 | error: A matrix literal cannot be empty | 8 |
+  
+  A minus with no space after it is still arithmetic in both passes: `-100 + 20` is -80.
+  
+  The boundary. A unit definition (`1 sprint = 2 weeks`) also has no program, but reads nothing and answers the same whatever is above it, so a clean one is not run again. A bare assignment or a `=>` line that reads a name defined only below it now takes the incremental path's tolerance of a forward reference, which the colon form already had: `y = a * 2` above `a = 3` answers `2a` on the first pass, as `parseDocument` does, and 6 once the note has run again. An equation stored below a solve is read by it the same way: in `:a = 2` / `x =>` / `a * x = 20`, the solve answers `x` on the first pass, as `parseDocument` does, and 10 once the note has run again. The single-expression path (`evaluateLine`) reads its text as an expression, not as markdown, so `- 100 * 2` is still -200 there.
+  
+  Fixes #555, #560, #565 and #569.
+  
+  ## Verification
+  
+  `CrossPathDocumentFeatures.spec.ts` gains every form in its shape: each edit or deletion through a live `ThreeTierEvaluator` matched against a fresh `parseDocument` of the edited text, both document passes agreeing value for value, and the single-expression refusal for a line reference inside a bullet and inside a `=>` line. The list-marker suite runs its table through `evaluateDocument` too, and the evaluator suite pins the tier each kind of line takes, that a clean unit definition is not run again, that a bare definition out of view does not send each scroll back to line 1, and that an equation stored out of view goes when its line is edited out of view. The differential document fuzzer's shapes gain bare assignments, `=>` lines, stored equations and their solves: on seed 1 each group reported disagreements before its fix (29, 8 and 1) and none after, and six seeds (2,400 editing sessions) report none. `npm run verify` passes: 10,950 tests across 523 suites, with the bundled-consumer contract.
+- ccd8cf9: A label that repeats the variable's name assigns rather than storing an equation
+  
+  A line such as `rent: :rent = 1200` sets `rent` aside as a label and assigns the variable, as `Rent: :rent = 1200` and `monthly rent: :rent = 1200` already did. When the label was the same word as the variable, the left side held one unknown, and the scalar-equation reader claimed the line.
+  
+  | document | before | now |
+  | --- | --- | --- |
+  | `rent: :rent = 1200`, `rent * 2` | rent stored as an equation, then undefined variable: rent | 1,200, then 2,400 |
+  | `2x + 1 = 7`, `x =>` | x stored as an equation, then 3 | x stored as an equation, then 3 |
+  
+  The boundary: a colon on the left of `=` now always means a label or an assignment, never part of an equation, which is how every other reading of the line already treated it.
+  
+  Fixes #561.
+  
+  ## Verification
+  
+  The labelled-line spec pins the repeated name and a real equation beside it. `npm run verify:ci` passes: 10,723 tests across 518 suites, with the bundled-consumer contract.
+- cd9a1e6: Lengths multiply into areas and volumes
+  
+  Multiplying two lengths converted the right one into the left one's unit and then kept only that unit, so `5 m * 3 m` was reported as 15 m and a room's floor area came out as a length. A length times a length is now an area, and a length times an area is a volume, in either order. The left operand's unit sets the answer's, the same rule addition follows.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `5 m * 3 m` | 15.00 m | 15.00 m2 |
+  | `5 m * 3 ft` | 4.57 m | 4.57 m2 |
+  | `2 m * 3 m * 4 m` | 24.00 m | 24.00 m3 |
+  | `5 m * 3 m in ft2` | error: a length cannot be converted to an area | 161.46 ft2 |
+  | `5 m2 * 3 m` | error: area and length cannot be multiplied | 15.00 m3 |
+  | `5 m2 * 3 m2` | 15.00 m2 | error: no unit |
+  
+  An area times an area, or a volume times anything, is a product of more than three lengths and has no unit, so it is refused by name where it used to be reported in the left operand's unit. The product keeps exact decimals, so `0.1 m * 0.2 m == 0.02 m2` is true. A test in the derived units suite pinned the old `15.00 m` and now asserts the area, and the derived units page, which described the old reading as intended, is corrected.
+  
+  The boundary: quotients are unchanged, so `15 m2 / 3 m` still shows as `5.00 m2/m` rather than simplifying to a length. That, and the rest of a fuller algebra of units, is #513.
+  
+  ## Verification
+  
+  New tests pin each product above, the refusals, the exact-decimal case, and the products that keep their own rules (a newton, a joule, a mass times a length). The unit arithmetic page gains proven examples for products of lengths. `npm run verify:ci` passes: 9,582 tests across 487 suites.
+- 46c0e89: A refusal names a measure in words, not by its table key
+  
+  The unit tables key every two-word measure as one camelCase token, and a refusal dropped the key into its sentence as it was: `2 mpg * 3 m` answered "fuelEconomy and length cannot be multiplied". Every measure now has a reader's name, so the same sentence reads "fuel economy and length cannot be multiplied".
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `2 mpg * 3 m` | fuelEconomy and length cannot be multiplied | fuel economy and length cannot be multiplied |
+  | `2 Mbps + 3 kg` | dataRate and mass cannot be added | data rate and mass cannot be added |
+  | `2 px in m` | a cssLength cannot be converted to a length | a CSS length cannot be converted to a length |
+  | `2 l100km in kg` | a fuelConsumption cannot be converted to a mass | fuel consumption cannot be converted to a mass |
+  | `2 ppm * 3 kg` | partsPer and mass cannot be multiplied | proportion and mass cannot be multiplied |
+  | `2 kvar in m` | a reactivePower cannot be converted to a length | a reactive power cannot be converted to a length |
+  | `2 lpm + 3 m` | volumeFlowRate and length cannot be added | volume flow rate and length cannot be added |
+  
+  The names come from one table beside the existing ones for a duration and a luminous intensity, and a measure added later without an entry is split into lowercase words rather than printed as its key. The fuel price check in the travel package names the measure the same way. Only the wording of a refusal changes: every error code is unchanged, so a host that branches on the code is unaffected.
+  
+  The boundary: the measure a completion item carries as its `detail` is still the table key (`fuelEconomy`), because it is data a host may match on rather than a sentence, and changing it is an API change of its own.
+  
+  Fixes #571.
+  
+  ## Verification
+  
+  A new suite names every measure in both unit tables through its representative unit, checks that the table of representatives covers every measure so a new one cannot slip past, and sweeps sums, products and conversions of each against a length and a mass, asserting that no refusal contains a camelCase measure key. `npm run verify:ci` passes: 11,654 tests across 535 suites, with the bundled-consumer contract.
+- 5540410: Units written in more than one word are read as the unit they name
+  
+  The lexer reads a unit as one run of letters, so a unit spelled in two or three words arrived as separate words, and where the first word was not a unit on its own the spelling failed. `5 km in nautical miles` said the two did not measure the same thing, `5 nautical miles` and `5 cubic metres` were undefined variables, and `5 square feet` did not parse. The multi-word unit rule now reads every spelling the unit table carries with a space or a hyphen, after an amount or after the conversion word.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `5 km in nautical miles` | error: cannot convert km to nautical | 2.70 nautical miles |
+  | `1 nautical mile in km` | error: undefined variable nautical | 1.85 km |
+  | `5 cubic metres in litres` | error: undefined variable cubic | 5,000.00 litres |
+  | `3 imperial gallons in litres` | error: undefined variable imperial | 13.64 litres |
+  | `2 troy ounces in g` | error: undefined variable troy | 62.21 g |
+  
+  The spellings come from the unit table and nothing is invented, so the words must be separated the way the table writes them: one space, or a hyphen in `light-years`. The one allowance is a plural. The table mirrors its upstream, where a few entries (`troy ounce`, `watt-hour`, `foot-candle`) have no plural beside them, and the plural a reader writes reads as that unit. A symbol takes no plural: `kW h` is the kilowatt-hour and `kW hs` is not a unit.
+  
+  The boundary: a spelling the table does not carry is not guessed at. `light year` with a space is not a spelling there (`light-year` is), so it stays unread rather than being matched to the nearest entry.
+  
+  Fixes #548.
+  
+  ## Verification
+  
+  A new suite pins each spelling after an amount, as a conversion's source and target, the hyphenated and three-word forms, the plural allowance and the symbol that takes none, and the unchanged two-unit pairs. The converting units page gains a section with proven examples. `npm run verify:ci` passes: 10,709 tests across 517 suites, with the bundled-consumer contract.
+- ccd8cf9: A negative amount of money is written with its sign before the currency symbol
+  
+  A prefix currency symbol was placed in front of the whole amount text, and that text already carried its minus sign, so a negative amount read with the sign between the symbol and the digits. The sign now leads, as money is written on a statement.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `-$5` | $-5.00 | -$5.00 |
+  | `$50 - $80` | $-30.00 | -$30.00 |
+  | `-£3.50` | £-3.50 | -£3.50 |
+  | `npv of -$1,000, $300, $400, $500 at 10%` | $-21.04 | -$21.04 |
+  | `-$1500 as compact` | -1.5k USD | -$1.5k |
+  
+  The compact and engineering forms fell back to the currency code for a negative amount, which the corrected full form no longer needs, so they now write `-$1.5k` too. A currency written after the amount, such as `-5.00 kr`, was already right and is unchanged. The value itself is untouched: this is how it is shown, and a host reading `toNumber()` sees the same number as before.
+  
+  Fixes #554.
+  
+  ## Verification
+  
+  The grouping spec and the cash-flow spec now pin the sign first, the notation spec adds the compact form, and the currency page gains a negative amount as a proven example. `npm run verify:ci` passes: 10,723 tests across 518 suites, with the bundled-consumer contract.
+- e3a9e7a: Only a `check` line counts as a check, a check across an offset conversion agrees with `==`, renumbering moves what-if and sweep targets, a trace lists what sections and tables read, and a result goes through `JSON.stringify`
+  
+  Five defects in surfaces that first ship in this release, found by the design review for 3.0 while they could still change without breaking anyone (#594 to #598).
+  
+  **Only a line written with `check` counts as a check (#594).** A pass was recognised by its answer alone, any text beginning with a tick, so a line of text such as `"✓ shipped"` added to the host's pass count and `total above` stepped over it. A check is now a line written with the `check` keyword and answered with a check's tick or its failure.
+  
+  | document | before | now |
+  | --- | --- | --- |
+  | `"✓ shipped"`, then `check 1 == 2` | checks: 1 passed, 1 failed | checks: 0 passed, 1 failed |
+  
+  **A check across an offset conversion agrees with `==` (#595).** 32 F in Celsius is 5.7e-14 rather than 0, because the offset arithmetic runs in binary. `==` allows for that by scaling its margin with the sides as written; a check scaled it by the two converted values, both near zero, and failed.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `check 0 C == 32 F` | error: check failed: 0.0000000000000 C is not equal to 32.0000000000000 F | ✓ |
+  
+  **Renumbering moves what-if and sweep targets (#596).** `shiftLineReferences` renumbered a plain `line N` but not the line a what-if or a sweep re-runs, since those fuse their `line N` into a token of their own. After a line was inserted above, `line 2 with x = 5` quietly re-ran whatever had moved into line 2. It is now renumbered with the rest, and a target whose line was deleted says so, as a plain reference does.
+  
+  | after inserting a heading above | before | now |
+  | --- | --- | --- |
+  | `line 2 with x = 5` | left as `line 2`, now reading `x = 1` | `line 3 with x = 5`, same answer |
+  | `line deleted with x = 5` | error: There is no line NaN to re-run | error: This reference pointed at a line that has been deleted |
+  
+  **A trace lists what sections and tables read (#597).** `inputs of line N` read line references, ranges, `above` and tags, so a section total and a table read reported that they read no other line, and `total above` listed the check line it had stepped over. A section total now lists the lines under its heading, a table read lists the table's rows by their labels, and a total's trace leaves out the lines the total leaves out.
+  
+  | line | before | now |
+  | --- | --- | --- |
+  | `inputs of line 6` (a column lookup) | c 10 (line 6) reads no other line | c 10 (line 6) <- food (line 3), rent (line 4) |
+  | `inputs of line 4` (a total over a check) | 15 (line 4) <- 10 (line 1), ✓ (line 2), 5 (line 3) | 15 (line 4) <- 10 (line 1), 5 (line 3) |
+  
+  **A result goes through `JSON.stringify` (#598).** A value with an exact sidecar threw "Do not know how to serialize a BigInt". A typed decimal always had one; exact decimals and exact large integers put one on most computed answers too, so in this release most results with a decimal point, and every whole number past 2^53, would have stopped serialising. `Value.toJSON()` writes `type`, `value` and `unit`, then each sidecar that is set, with bigints as strings.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `JSON.stringify(0.1 + 0.2)` | throws: Do not know how to serialize a BigInt | `{"type":0,"value":0.3,"exact":"0.3"}` |
+  
+  The boundary: a table lookup reads one row, but its key can come from another line, so the trace lists the rows it chose among rather than guessing the one it picked. A `check` after a label (`Budget: check a < b`) still does not parse; that is a separate gap. `Value.toJSON()` is for reading a result, not a snapshot format; `engine.toJSON()` is the one that restores.
+  
+  The conditionals, tracing, reference-aware editing and TypeScript pages change with these.
+  
+  ## Verification
+  
+  New tests pin the check count through both document passes, checks across offset conversions, the renumbered and deleted what-if and sweep targets with their answers before and after, the section, table and `total above` traces through both passes in CrossPathDocumentFeatures, and the JSON of each kind of sidecar. `npm run verify:ci` passes.
+- 5540410: A list cell, a conversion and arithmetic refuse a value with no single amount
+  
+  Three places read a value through `toNumber()` as if every value had a number inside it. A bracketed list and a colour read as 0 that way, and text as its leading digits or 0, so each place answered with a plausible number that had nothing to do with the question. Each is now a named error.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `[(1, 2), 3]` | [0, 3] | error: a list cannot hold a list inside it (`MATRIX_CELL_NON_NUMERIC`) |
+  | `["a", 1]` | [0, 1] | error: text cannot be a cell of a list |
+  | `(1, 2) in miles` | 0.00 miles | error: a bracketed list has no single amount to convert to miles (`CONVERT_NON_NUMERIC`) |
+  | `"11:00 PM" + 2` | 13 | error: text and a number cannot be added (`TEXT_ARITHMETIC`) |
+  | `"hello" + 5` | 5 | error: text and a number cannot be added |
+  | `"5" * 2` | 10 | error: text cannot be used in arithmetic |
+  | `"11:00 PM" as number` | 11 | error: not a number (`TEXT_NOT_A_NUMBER`) |
+  | `"1,234.5" as number` | 1 | 1,234.50 |
+  
+  The last rows are the widest change. `"5" + 5` used to answer 10, which the text operations page documented, but a reader who writes it means either 10 or `55`, and a quoted time plus a number answered 13 with no sign that anything was wrong. Text still joins to text with `+`; any other arithmetic with text on either side is refused, and the message points at `as number`, the conversion for a number that arrives as text (a pasted value, a decoded query field). That conversion took the same `parseFloat` reading, so it now reads text only when the whole of it is a number, with commas grouping thousands allowed, and refuses anything else.
+  
+  A list cell still holds a number, a `true` or `false`, or an unknown (a formula cell), and a conversion still takes a number, a quantity or a date. The refused kinds are the ones an aggregate has refused since #530: text, a date, a bracketed list, a range, a colour, an IP address, a chart and a split.
+  
+  The boundary: a quantity in a list cell is still stored as its magnitude, so `[1 km, 2]` is `[1, 2]`. That drops the unit rather than inventing a number, and giving a list cell a unit is its own change.
+  
+  Fixes #546, #547 and #549.
+  
+  ## Verification
+  
+  A new suite pins each refusal by code and message, the forms that still answer (numbers, booleans and unknowns as cells; numbers, quantities and dates converted; text joined to text), and `as number` on text that is and is not a number. Four existing tests that pinned the old reading of text as a number now expect the refusal. The text operations, converting units and vectors pages gain the refusals as proven examples. An A/B run of 3,899 expressions against the previous build differed only where intended. `npm run verify:ci` passes: 10,709 tests across 517 suites, with the bundled-consumer contract.
+- dfc86bb: `normalcdf` and `normalpdf` take a mean and a standard deviation, and no statistics call drops an argument
+  
+  `normalcdf` and `normalpdf` read only their first argument, so `normalcdf(110, 100, 15)` took 110 as a z-score and answered 1, and the mean and standard deviation were discarded without a word. Both now accept a value, a mean and a standard deviation, in the order a spreadsheet's `NORM.DIST` uses, and standardise the value as `(x - mean) / sd`. The one-argument forms on the standard normal are unchanged.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `normalcdf(110, 100, 15)` | 1 | 0.75 |
+  | `normalpdf(110, 100, 15)` | 0 | 0.02 |
+  | `normalcdf(110, 100)` | 1 | error: takes 1 or 3 arguments |
+  | `normalcdf(110, 100, 0)` | 1 | error: a standard deviation must be greater than zero |
+  | `percentile([1, 2, 3], 50, 9)` | 2 | error: takes 2 arguments |
+  | `zscore(1, [1, 2, 3], 5)` | -1.22 | error: takes 2 arguments |
+  | `correlation([1, 2, 3], [2, 4, 6], [1, 1, 1])` | 1 | error: takes 2 arguments |
+  
+  The density in the three-argument form is divided by the standard deviation, because it is a density per unit of the value rather than per standard deviation, so `normalpdf(100, 100, 15)` is 0.3989 / 15.
+  
+  The same silent drop was in every statistics call form: each handler read the arguments it wanted and ignored the rest. Every one now checks its argument count and refuses any other with `STAT_ARGUMENT_COUNT`, naming the count it takes and an example call. The phrase forms (`correlation of A and B`) always pass two lists and are unaffected.
+  
+  The boundary: the normal functions take one argument or three. Two are refused rather than guessed at, since a mean with no standard deviation has no scale. A graphing calculator's four-argument `normalcdf(lower, upper, mean, sd)` is not a form here, and is refused by count rather than misread; the difference of two calls gives the same share. The arguments are plain numbers, not quantities with units, and the results carry the existing error-function approximation, accurate to about seven decimal places. The inverse normal and the other distributions are #517. This change covers the statistics package's own functions; other packages' plugin functions validate their own arguments.
+  
+  ## Verification
+  
+  New tests pin the three-argument answers against the standardised one-argument form, the density's scaling, each refusal and its code, and the argument-count guard across percentile, z-score and the two-list call forms, with the phrase forms unchanged. The statistics page gains proven examples for the mean-and-deviation form and a `solve-doc` block of the refusals. `npm run verify:ci` passes: 9,593 tests across 487 suites, with the bundled-consumer contract.
+- bd4480c: A negative half rounds away from zero, a zero has no sign, `m/s²` reads back and is named in words, a function refuses a quantity it has no reading of, and an odd root of a negative number is real
+  
+  Six gaps older than this release, found by the cross-feature review before it and the same in 2.39.0.
+  
+  **A half rounds away from zero, however rounding is written (#584).** `round(-2.5)`, `-2.5 rounded` and `to nearest` took a half towards positive infinity, while `round(-2.5, 0)` and `to N dp` took it away from zero, so one function gave two answers. Every form now takes a half away from zero, the rule a spreadsheet's `ROUND` follows. `rounded up` and `rounded down` name their own direction and are unchanged.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `round(-2.5)` | -2 | -3 |
+  | `-2.5 rounded` | -2 | -3 |
+  | `-25 to nearest 10` | -20 | -30 |
+  | `round(-$2.50)` | -$2.00 | -$3.00 |
+  | `-2.5 to 0 dp` | -3 | -3 |
+  | `-2.5 rounded up` | -2 | -2 |
+  
+  **A zero is written without a sign (#585).** A double has a negative zero, equal to zero in every comparison, and the formatter wrote its sign. The value keeps it, since `1 / (0 * -1)` is -∞ where `1 / 0` is ∞; only the display drops it.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `ceil(-0.5)` | -0 | 0 |
+  | `0 * -1` | -0 | 0 |
+  | `-0.001%` | -0.00% | 0.00% |
+  
+  **`m/s²` reads as the acceleration the engine writes (#586).** The lexer reads `s²` as one word, and no unit is spelled that way, so the answer `9.81 m/s²` could not be typed back.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `9.81 m/s²` | error: Undefined variable: s² | 9.81 m/s² |
+  | `10 kg * 9.81 m/s²` | error: Undefined variable: s² | 98.10 N |
+  
+  **A function refuses a quantity it has no reading of (#587).** A sine, a logarithm or an exponential of a length has no meaning, and read as its bare number the answer depended on the unit written: `sin(1 m)` was 0.84 and `sin(100 cm)` -0.51. These are refused by name, as `sqrt(4 m)` already was. An angle, a plain number and a ratio that cancels still answer.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `sin(1 m)` | 0.84 | error: sin takes an angle or a plain number, not a length |
+  | `log(10 kg)` | 2.30 | error: log takes a plain number, not a mass |
+  | `sin(30 degrees)` | 0.50 | 0.50 |
+  | `sin(1 m / 2 m)` | 0.48 | 0.48 |
+  
+  **An odd root of a negative number is real, and an even one is refused (#588).** A negative number to a fractional power answered NaN. The exponent is known as a fraction when written as one (`1/3`) or typed as a decimal (`0.2` is a fifth), so an odd denominator gives the real root and anything else has no real value, refused by name as `log(-1)` is.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `(-8)^(1/3)` | NaN | -2 |
+  | `(-8)^(2/3)` | NaN | 4 |
+  | `(-32)^0.2` | NaN | -2 |
+  | `(-1)^0.5` | NaN | error: (-1)^0.5 has no real value |
+  
+  **An acceleration is named in words (#590).** `m/s^2` is held as the unit `mps2`, which has a dimension but no measure in the tables, so a conversion to it was refused as `"mps2" is not a unit`, even from an acceleration, and other refusals named `mps2` too. It now converts to itself, and every refusal calls it an acceleration.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `9.81 m/s^2 in m/s^2` | error: "mps2" is not a unit. | 9.81 m/s² |
+  | `5 kg in m/s^2` | error: "mps2" is not a unit. | error: a mass cannot be converted to an acceleration |
+  | `9.81 m/s^2 in N` | error: Cannot convert mps2 to N: they do not measure the same thing | error: an acceleration cannot be converted to a force |
+  | `9.81 m/s^2 * 3 s` | error: Cannot combine incompatible units: mps2 and s | error: acceleration and duration cannot be multiplied |
+  
+  The boundary: `^` stays in the real numbers, so `sqrt(-1)` is still `i` while `(-1)^0.5` is refused. `0/0` stays NaN and `1/0` stays infinity, the floating-point standard's defined answers rather than missing ones. `m/s²` is the one acceleration unit; `ft/s^2` and standard gravity as a unit are not in the tables, and an acceleration times a duration is not yet a speed.
+  
+  The rounding, number-functions, operators, unit-arithmetic and derived-units pages carry proven examples of each change.
+  
+  ## Verification
+  
+  A new test file per issue pins each case above, the forms that must not change, and, for #585, that the value keeps the sign division can see. Four existing tests that pinned the old answers now pin the new ones. `npm run verify:ci` passes.
+- ccd8cf9: A blank line or a heading inside a summed range is passed over, and a line below is described as the refusal it is
+  
+  `sum(line 1 : line 3)` read every line in the span and took a line with no answer for a forward reference, so a blank line inside it, typed by pressing Enter in the middle of a column, turned the sum into an error. A blank line or a heading now has no figure to add and is passed over, the way a spreadsheet's `SUM` passes over an empty cell, in both document passes.
+  
+  | document | before | now |
+  | --- | --- | --- |
+  | `10`, blank, `30`, `sum(line 1 : line 3)` | Line 2 has not been evaluated yet | 40 |
+  | `10`, `# Mid`, `30`, `average(line 1 : line 3)` | Line 2 has not been evaluated yet | 20 |
+  | blank, blank, `sum(line 1 : line 2)` | Line 1 has not been evaluated yet | error: lines 1 to 2 hold no figures to add up |
+  
+  The line references page also said that `line 2 + 1` above `7` answers 8. It does not: a line below is refused in both passes, as the page's own cycle example shows, and the page now says so with a proven example.
+  
+  The boundary: only a blank line or a heading is passed over. A line of prose inside the span is a line that failed, and still makes the sum an error, and a span that runs past the last line still reports the first line that is not there.
+  
+  Fixes #562 and #563.
+  
+  ## Verification
+  
+  The cross-path spec pins a span over a blank line and a heading, an empty span and a span past the end through `parseDocument` and `evaluateDocument`, which agree. The line references page gains both as proven examples. `npm run verify:ci` passes: 10,723 tests across 518 suites, with the bundled-consumer contract.
+- 54f290a: Semantic token spans are measured on the line as written: a quoted line and a list item colour the characters they name
+  
+  A host colours the characters between a span's `from` and `to`, so a span has to be measured on the line the host handed over. On a quoted line it was not. The highlighter set the `> ` aside before tokenizing and measured every span from there, two columns short, so the colours landed on the wrong characters. A list item had the opposite fault: it was tokenized marker and all, so a bullet was coloured as a minus sign, and a `*`, `1.` or task-box marker, which does not parse as an operator, left the whole line uncoloured, although the engine evaluates each of them as the list item it is.
+  
+  | line | the engine answers | coloured, before | coloured, now |
+  | --- | --- | --- | --- |
+  | `> 1 + 2` | (a quote, not evaluated) | `>` as a number, `1` as an operator, `+` as a number | `1` number, `+` operator, `2` number |
+  | `> total += 5` | (a quote, not evaluated) | `> tot` as a variable, `l ` as an operator, `=` as a number | `total` variable, `+=` operator, `5` number |
+  | `- 100 + 20` | 120 | `-` operator, `100` number, `+` operator, `20` number | `100` number, `+` operator, `20` number |
+  | `* 5 kg` | 5.00 kg | nothing | `5` number, `kg` unit |
+  | `1. 12 km` | 12.00 km | nothing | `12` number, `km` unit |
+  | `- [ ] total += 5` | 5 | nothing | `total` variable, `+=` operator, `5` number |
+  | `-100 + 20` | -80 | `-` operator, `100` number, `+` operator, `20` number | unchanged |
+  
+  The lexer now starts past the marker, the way the evaluator already did for a list item, and keeps every offset and column those of the whole line. So a line behind any marker (a quote, a bullet, a numbered item, a task box, an indented or quoted list item) is coloured exactly as its content is on a line of its own, moved along by the marker, and the marker itself is left uncoloured. `Lexer.getHighlightTokens` and `getHighlightTokenObjects` measure the same way, and take the start as an optional second argument; `Lexer.highlightContentStart` says where it is.
+  
+  The boundary: a quoted line is still coloured and still not evaluated, as before; this changes where its colours land, not whether the engine reads it. A minus written with no space after it (`-100`) is arithmetic, as the evaluator reads it, and keeps its colour. Colouring costs the same: over a 200-line document with quoted and list lines in it, both builds in one process, interleaved, a full pass from an empty cache took a median of 0.38 ms before and now, and 0.80 ms before and 0.79 ms now with normalized highlighting, across two runs of eleven.
+  
+  Fixes #567.
+  
+  ## Verification
+  
+  A new suite puts twelve markers in front of eleven expressions, in both highlighting modes, and requires each line to be coloured exactly as its content alone is, moved along by the marker. It pins the issue's line, the bullet that is no longer a minus, the list items that are now coloured with the answer the evaluator gives them, the known-name gate behind a marker, an inline solve inside a list item, structure that still colours nothing, and the lexer's own offsets and columns. The editor integration page says what a span is measured on and which markers are left uncoloured. `npm run verify:ci` passes: 10,950 tests across 523 suites, with the bundled-consumer contract.
+- ccd8cf9: A sparkline's label reads as its list does, at the same decimal places
+  
+  The text a sparkline answers with, which a reader with no canvas sees, was built from the list's raw digits, so it disagreed with how the same list reads on its own line.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `[1.23456, 2.5, 3.14159] as sparkline` | [1.23456, 2.5, 3.14159] | [1.23, 2.50, 3.14] |
+  | `[120, 135, 128] as sparkline` | [120, 135, 128] | [120, 135, 128] |
+  
+  The drawn points keep their full precision; only the label is written at the display places. The boundary: the label uses the default formatting, as the value is built before a host's display settings are known.
+  
+  Fixes #558.
+  
+  ## Verification
+  
+  The chart spec pins the label against the list's own display, and the charts page gains a fractional list as a proven example. `npm run verify:ci` passes: 10,723 tests across 518 suites, with the bundled-consumer contract.
+- 3873a26: `total above` leaves a subtotal out, and a reference to a failed line says it failed in both document passes
+  
+  `total above`, `sum above` and `average above` read every line up to the block's boundary, a subtotal included, so a running total counted the figures under it twice. They now leave out a line that is itself a total, by the same test the section totals from #508 use, so the two forms agree about one note.
+  
+  | document | before | now |
+  | --- | --- | --- |
+  | `10`, `total above`, `5`, `total above` | 25 | 15 |
+  | `10`, `5`, `Subtotal: total above`, `average above` | 10 | 7.50 |
+  | `10`, `20`, `30`, `sum above`, `average above` | 30 | 20 |
+  
+  A reference to a line that ran and failed, a line of prose say, was worded differently by the two document passes. `parseDocument` said the line had not been evaluated yet, as if it were a forward reference, and `evaluateDocument` said it had an error. Both now say it has an error, which is what happened.
+  
+  | document | pass | before | now |
+  | --- | --- | --- | --- |
+  | `this is prose`, `line 1 + 1` | `parseDocument` | Line 1 has not been evaluated yet (forward reference, or out of range) | Line 1 has an error |
+  | `this is prose`, `line 1 + 1` | `evaluateDocument` | Line 1 has an error | Line 1 has an error |
+  
+  The boundary: a total is recognised from its text, with any label before a colon set aside, so a line that happens to compute a total some other way, `10 + 5` under a column of 10 and 5, is still a figure. A reference to a line below, or to a blank line, is still reported as not evaluated yet, since nothing has run there.
+  
+  Fixes #551 and #552.
+  
+  ## Verification
+  
+  The cross-path spec gains both cases, each run through `parseDocument` and `evaluateDocument` and required to agree. The line references page gains the subtotal as a proven example, and an existing test whose comment already asked for the average over the figures alone (60/3), while its assertion pinned 120/4, now asserts what its comment says. The operators page also gains a sentence on `-2^2`, which is 4 here as in a spreadsheet, and the brackets that make it -4. `npm run verify:ci` passes: 10,713 tests across 517 suites, with the bundled-consumer contract.
+- 8466f73: `tan` at an odd multiple of a right angle is refused rather than answered with a huge number
+  
+  The tangent of 90° has no value: the curve runs off to infinity on either side. The double nearest π/2 is not π/2, though, so `tan(90 degrees)` returned the tangent of a slightly smaller angle, 16,331,239,353,195,370, as if that were the answer. An angle within the conversion's own rounding of an odd number of right angles is now refused with `TRIG_UNDEFINED`, naming the angle in degrees.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `tan(90 degrees)` | 16,331,239,353,195,370 | error: tan is undefined at 90 degrees |
+  | `tan(270 degrees)` | 5,443,746,451,065,123 | error: tan is undefined at 270 degrees |
+  | `tan(pi/2)` | 16,331,239,353,195,370 | error: tan is undefined at 90 degrees |
+  | `tan(89.9 degrees)` | 572.96 | 572.96 |
+  
+  The tolerance is the conversion's rounding, scaled to the size of the angle, so a ten-thousandth of a degree either side of the asymptote still answers. Past a trillion right angles a double cannot place an angle against an asymptote at all, and there `tan` keeps its ordinary answer.
+  
+  Trigonometry had no page in the syntax reference; the number functions page now explains `sin`, `cos` and `tan`, radians against degrees, and this refusal, with proven examples.
+  
+  The boundary: only `tan`'s undefined points are recognised. The other special angles are not yet exact, so `sin(180 degrees)` is still the 1.22e-16 the approximation of π leaves rather than 0; exact special angles and the wider domain errors are #510.
+  
+  ## Verification
+  
+  New tests pin each refused angle in degrees, radians and gradians, the message, the angles just either side of the asymptote, the ordinary angles, and a very large angle that keeps `Math.tan`'s answer. `npm run verify:ci` passes: 9,745 tests across 493 suites, with the bundled-consumer contract.
+- d0cab52: A tolerance written as a percentage or in another unit has the right width
+  
+  The spread in `value ± spread` was read as a bare number whatever it was written as. A percentage became its proportion, so `100 ± 5%` was `100 ± 0.05`; and a tolerance in a different unit from the value had both units dropped before either was converted, so `5 m ± 1 cm` was `5 ± 1`, a spread a hundred times too wide. A percentage tolerance is now relative to the value, and a tolerance with a unit is converted into the value's unit before the unit is dropped.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `100 +/- 5%` | 100 ± 0.05 | 100 ± 5.0 |
+  | `12.3 +/- 2%` | 12.3 ± 0.02 | 12.3 ± 0.25 |
+  | `5 m +/- 1 cm` | 5 ± 1.0 | 5 ± 0.01 |
+  | `1 kg +/- 5 g` | 1 ± 5.0 | 1 ± 0.005 (shown as 0.01 at two places) |
+  | `20 C +/- 1 F` | 20 ± 1.0 | 20 ± 0.56 |
+  | `5 m +/- 1 kg` | 5 ± 1.0 | error: they do not measure the same thing |
+  | `5 +/- 1 cm` | 5 ± 1.0 | error: the value has no unit to read it in |
+  | `45% +/- 3%` | 0.45 ± 0.03 | 0.45 ± 0.03 |
+  
+  A temperature tolerance is converted as a width rather than as a reading, so 1 °F on a Celsius value is 5/9 of a degree, not the -17.2 °C that converting 1 °F as a temperature gives. On a value that is itself a percentage the tolerance stays in percentage points, as a poll's margin of error is read, so `45% ± 3%` is unchanged.
+  
+  The boundary: the value's own unit is still dropped once the spread is converted, as the uncertainty page documents, since carrying units through the quadrature rules is a larger change. A tolerance in a unit that cannot be converted to the value's, or on a value with no unit, is refused with `UNCERTAINTY_UNIT_MISMATCH` rather than having its unit discarded. A currency tolerance in a different currency converts at the cached rate and is refused when none is available.
+  
+  ## Verification
+  
+  A new suite pins each form above, including the temperature interval, the percentage-point reading, propagation of a relative spread, and the refusals, with the existing percentage-arithmetic suites unchanged. The uncertainty page gains sections on percentage and unit tolerances with proven examples and a `solve-doc` block of the refusals. An A/B run of 3,863 expressions against the previous build differed only on random functions. `npm run verify:ci` passes: 9,647 tests across 489 suites, with the bundled-consumer contract.
+- 8466f73: A variable named like a unit symbol divides as a variable: with `m` and `s` defined, `m/s^2` is their quotient
+  
+  The lexer reads every word the unit table knows as a unit, including single letters people use as variable names, and three normaliser rules fused those words wherever they stood. With `m = 3` and `s = 2`, the acceleration rule turned `m/s^2` into the unit `mps2` and the line failed with "Undefined variable: mps2"; the compound-unit rule read `m/s` as a speed, and the bare-denominator rule read `/ s` as "per second". Each rule now leaves a unit-named word alone where the expression expects a value: at the start of a line, or after an operator, bracket, comma or `=`.
+  
+  | document | before | now |
+  | --- | --- | --- |
+  | `m = 3`, `s = 2`, `m/s^2` | error: Undefined variable: mps2 | 0.75 |
+  | `m = 3`, `s = 2`, `m/s` | error: Undefined variable: m/s | 1.50 |
+  | `h = 4`, `km = 8`, `km/h` | error: Undefined variable: km/h | 2 |
+  | `9.81 m/s^2` | 9.81 m/s² | 9.81 m/s² |
+  | `100 km / h` | 100.00 km/h | 100.00 km/h |
+  
+  A unit written after a value is fused exactly as before: after a number (`9.81 m/s^2`), a closing bracket (`(2+3) m/s^2`), a variable (`x m/s^2`) or a conversion keyword (`in km/h`). The position test is shared, in `normalizer/ValuePosition.ts`.
+  
+  The boundary: this is about position, not about which names are defined. A unit-named variable written after a value is still read as a unit (`2 m` is two metres even with `m` defined), and a line that is only unit words with no variables defined (`m/s^2`) is refused as an undefined variable rather than read as an acceleration with no number.
+  
+  ## Verification
+  
+  A new suite pins the reported document and its neighbours, and every rate, speed and acceleration form that still fuses after a value. The variables page gains a proven `solve-doc` example. `npm run verify:ci` passes: 9,745 tests across 493 suites, with the bundled-consumer contract.
+- 8466f73: A unit after a power of ten belongs to the power, and two units side by side are refused
+  
+  A unit binds tighter than `^`, so `10^3 m` parsed as ten to the power of three metres. The power read its exponent as a bare 3 and answered the plain number 1,000, and `10^3 m in km` then labelled that 1,000 as kilometres. Scientific notation puts the unit after the power, so a unit inside an exponent's operand now belongs to the whole power: `10^3 m` is a thousand metres and `10^-3 m` a millimetre. An exponent that still carries a unit, written inside brackets, is refused by name.
+  
+  A second unit written straight after a quantity relabelled it, so `5 kg m` was five metres and `5 kg m in cm` 500 cm, the kilograms discarded without a word. Two units side by side name nothing the engine knows, so that is refused with `UNIT_AFTER_UNIT`.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `10^3 m` | 1,000 | 1,000.00 m |
+  | `10^3 m in km` | 1,000.00 km | 1.00 km |
+  | `1.5 * 10^3 kg` | 1,500 | 1,500.00 kg |
+  | `10^-3 m in mm` | 0.001 mm | 1.00 mm |
+  | `2^(3 m)` | 8 | error: an exponent cannot carry a unit |
+  | `5 kg m` | 5.00 m | error: a quantity in kg cannot take a second unit |
+  | `5 kg m in cm` | 500.00 cm | error: a quantity in kg cannot take a second unit |
+  | `5 USD GBP` | £5.00 | error: a quantity in USD cannot take a second unit |
+  | `$5 CAD` | $5.00 in US dollars | $5.00 in Canadian dollars |
+  | `$5 kg` | $5.00 | error: a quantity in USD cannot take a second unit |
+  
+  Two readings that leaned on the relabel are now made directly. A currency symbol is shared by several currencies, so a code after the amount that names one of them says which is meant: `$5 CAD` is Canadian dollars and `¥500 CNY` yuan, where the code used to be dropped. And `20 degrees C` is twenty degrees Celsius: a degree word between a number and a temperature scale names the scale, read by the degree rule rather than by relabelling an angle as a temperature.
+  
+  The boundary: the same unit twice (`5 kg kg`, `$5 USD`) is let through, since it changes nothing, and a word the unit table does not know after money (`£60,000 salary per month`) is still read as a label. Compound units written with a slash (`km/h`, `m/s^2`) are joined into one unit before this point and are unaffected.
+  
+  ## Verification
+  
+  A new suite pins every form above, the powers and conversions that are unchanged, the currency codes and labels, and the temperature-scale spellings. The unit arithmetic page gains sections on a unit after a power and on two units side by side, and the currency page on codes after a symbol, with proven examples. `npm run verify:ci` passes: 9,745 tests across 493 suites, with the bundled-consumer contract.
+- e2ac39a: A power written on a unit makes an area or a volume, and a power with no unit to give is refused
+  
+  `5 m^2` was read as five metres, squared, and the power handler had no reading for a unit, so it answered a bare 25. `10 m^3 in litres` then labelled that bare 1,000 as litres, a tenth of the true answer. Each result looked plausible, and nothing on screen said the unit had gone.
+  
+  The power now belongs to the unit it is written on, the way a physics book reads it: `5 m^2` is five square metres. A quantity in brackets is raised as a whole, and a square or cube root takes an area or a volume back to a length.
+  
+  | expression | before | now |
+  | --- | --- | --- |
+  | `10 m^3 in litres` | 1,000.00 litres | 10,000.00 litres |
+  | `1 m^3 in L` | 1.00 L | 1,000.00 L |
+  | `5 m^2` | 25 | 5.00 m2 |
+  | `5 m^2 in ft2` | 25.00 ft2 | 53.82 ft2 |
+  | `(3 m)^2` | 9 | 9.00 m2 |
+  | `sqrt(16 m^2)` | 16 | 4.00 m |
+  | `sqrt(1 ha)` | 1 | 100.00 m |
+  
+  Only a length has a square or a cube with a unit, so any other power or root of a quantity is now an error instead of the bare number. That covers `5 kg^2`, `sqrt(16 m)`, a speed squared, and a power or root of an amount of money: `(5 USD)^2` used to answer 25 and `sqrt($100)` 10, and the tests that pinned those numbers now assert the refusal. A ratio of like amounts is a plain number, so `($2000 / $1000)^(1/5)` is unaffected. `m/s^2` is still read as acceleration; the same shape in any other unit, such as `9.81 ft/s^2`, which used to answer a bare 96.24, is refused.
+  
+  `1 m3 in L` now converts, where it used to be a parse error, and so does a currency symbol as the target, as in `100 EUR in €`. A unit literal takes a following `in` or `to` as its own conversion only when a unit, `?` or `best` comes next; the lexer marks neither `L` nor `€` as a unit, so those conversions are left to the outer `in`, which reads them.
+  
+  The boundary: this covers a length squared or cubed, and nothing wider. The superscript `m²` is not accepted as input. A unit written after an exponent, as in `10^3 m`, is the separate fix #535, and a product of two lengths, `5 m * 3 m`, is #533. A fuller algebra of units is #513.
+  
+  ## Verification
+  
+  New tests pin every form above, the named refusals, the forms that already worked, and the spelling helpers, and the unit arithmetic page gains proven examples for squares, cubes and roots. `npm run verify:ci` passes: 9,566 tests across 487 suites.
+
 ## 2.39.1
 
 ### Patch Changes
