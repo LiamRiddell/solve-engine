@@ -377,7 +377,7 @@ const rawExampleData: ExampleCategory[] = [
       { name: "Remove tax", expression: "tax off 360 at 20%", description: "Extract the pre-tax amount from a tax-inclusive total" },
       { name: "Inflation-adjusted value", expression: "what is $500 from 1970", description: "Present-day value using a bundled US CPI-U table (1970-2026, approximate)" },
       { name: "Historical value", expression: "what was $500 worth in 1997", description: "What today's $500 was worth in a past year" },
-      { name: "Inflation function call", expression: "inflationAdjust(500, 1970, 2020)", description: "Adjust between two arbitrary years directly" },
+      { name: "Inflation function call", expression: "inflationAdjust($500, 1970, 2020)", description: "Adjust between two arbitrary years directly" },
     ]
   },
   {

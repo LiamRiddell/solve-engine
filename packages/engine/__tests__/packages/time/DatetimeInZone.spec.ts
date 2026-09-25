@@ -131,10 +131,14 @@ describe("a name that is not a zone", () => {
 });
 
 describe("what the same opcode still does", () => {
-	test("an ordinary quantity in a city name is unchanged", () => {
-		// `5 in Tokyo` never reached the new branch: it is a Number, so it takes
-		// the fall-through it always did and stays a unit-of-measurement value.
-		expect(formatValue(evaluate("5 in Tokyo"))).toBe("= 5.00 Tokyo");
+	test("an ordinary number in a city name is refused as an unknown unit", () => {
+		// `5 in Tokyo` never reached the zone branch: it is a Number, so it takes
+		// the unit fall-through. That branch used to label the number with the
+		// word, "= 5.00 Tokyo"; since #646 a word that is not a unit is refused
+		// there, as it already was after a quantity (`5 km in Tokyo`).
+		const value = evaluate("5 in Tokyo");
+		expect(value.errorCode).toBe("UNKNOWN_UNIT");
+		expect(formatValue(value)).toBe('"Tokyo" is not a unit.');
 	});
 
 	test("a unit conversion is unchanged", () => {

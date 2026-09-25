@@ -79,3 +79,36 @@ discarded:
 5 m +/- 1 kg // ERROR: A tolerance in kg cannot be read against a value in m: they do not measure the same thing.
 5 +/- 1 cm // ERROR: A tolerance in cm needs a value measured in a unit it converts to, as in "5 m +/- 1 cm"; this value has no unit to read it in.
 ```
+
+## Converting a value that has a tolerance
+
+Because the unit is dropped, a value with a tolerance has no unit left to
+convert from. `(5 m +/- 1 cm) in mm` cannot honestly be 5 mm, since the length is
+5,000 mm, so converting it is refused, and so is writing a unit straight after
+it. The engine cannot tell a centre whose unit was dropped from one that never
+had one, so `(5 +/- 0.1) in km` is refused the same way. Convert the value first
+and give it the tolerance afterwards; the tolerance is then read in the unit the
+value is in.
+
+```solve
+(5 m +/- 1 cm) in mm // A value with a tolerance cannot be converted to mm: a tolerance is read without its unit, so 5 m +/- 1 cm is the plain 5 ± 0.01. Convert the value first and give the tolerance after, as in (5 m in mm) +/- 10.
+(5 +/- 0.1) km // A value with a tolerance cannot be converted to km: a tolerance is read without its unit, so 5 m +/- 1 cm is the plain 5 ± 0.01. Convert the value first and give the tolerance after, as in (5 m in mm) +/- 10.
+(5 m in mm) +/- 10 // 5,000 ± 10.0
+5000 mm +/- 1 cm // 5,000 ± 10.0
+```
+
+For the same reason a value with a tolerance cannot meet a quantity in `+`, `-`,
+`*` or `/`. The quantity has a unit and the tolerance's value has none, so the
+two are not in the same terms, and combining them used to give the answer the
+quantity's unit and quietly lose the spread. Scaling by a plain number is
+unaffected.
+
+```solve
+(5 m +/- 1 cm) + 2 m // A value with a tolerance and a quantity in m cannot be added: a tolerance is read without its unit, so 5 m +/- 1 cm is the plain 5 ± 0.01, and the two are not in the same terms. Keep both sides plain numbers, as in (5 +/- 0.01) + 2.
+(5 +/- 0.1) * 2 m // A value with a tolerance and a quantity in m cannot be multiplied: a tolerance is read without its unit, so 5 m +/- 1 cm is the plain 5 ± 0.01, and the two are not in the same terms. Keep both sides plain numbers, as in (5 +/- 0.01) + 2.
+(5 m +/- 1 cm) * 2 // 10 ± 0.02
+```
+
+Carrying the unit through the arithmetic, so that `(5 m +/- 1 cm) in mm` would
+be 5,000 ± 10 mm, is not done yet; these refusals keep that answer open rather
+than giving a wrong one meanwhile.

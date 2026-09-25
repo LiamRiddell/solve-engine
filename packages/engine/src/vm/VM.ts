@@ -1,7 +1,7 @@
 import { OpCode } from "@solve-js/parser/OpCode";
 import { Value, ValueType, numberValue, numberValueExact, numberValueRational, numberValueUncertain, stringValue, bigIntValue, hexValue, uomValue, uomValueExact, matrixValue, boolValue, datetimeValue, percentageValue, persistentValue, isArenaActive, errorValue, rateValue, isRateUnit, splitRateUnit, isTimecodeUnit, timecodeFps, rangeValue, symbolicValue, colourValue, chartValue, faultedOperand, faultedIn, type MatrixEntry, type MatrixData, type RangeData, type ColourData } from "@solve-js/vm/Value";
 import { decimalFromLiteral, decimalNegate, decimalToNumber } from "@solve-js/decimal";
-import { valueInUnit, moneyForCount, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
+import { moneyForCount, scaleMoneyByPercent, scaleMoneyExact, scaleMoneyByInteger } from "@solve-js/vm/MoneyExact";
 import { varNode as varSymbolicNode, type SymbolicNode as SymbolicNodeType, type Rational, rationalNeg } from "@solve-js/symbolic";
 import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } from "@solve-js/vm/SymbolicOps";
 import { tryDimensionalCompose } from "@solve-js/uom/Dimensions";
@@ -19,7 +19,7 @@ import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/Di
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, unitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, cellUnitsDiffer } from "@solve-js/vm/VMConversion";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { ANSWER_NAME, PI_NAME, previousLineAnswer } from "@solve-js/vm/LineReads";
@@ -30,7 +30,7 @@ import type { ScopeId } from "@solve-js/vm/CellScope";
 import { raiseQuantity, unitPowerUnsupported, multiplyLengths, divideLengths } from "@solve-js/vm/QuantityPowers";
 import { multiplyRates, divideRates, refuseLikeProduct, reciprocalOf } from "@solve-js/vm/UnitAlgebra";
 import { bigIntPow, baseConversionOperand } from "@solve-js/vm/ExactIntegers";
-import { exactArithmetic, exactPowerArithmetic, exactRemainder, scaleByPercentExact, multiplyByPercentExact } from "@solve-js/vm/ExactDecimals";
+import { exactArithmetic, exactPowerArithmetic, exactRemainder, scaleByPercentExact, multiplyByPercentExact, fractionOfExactDecimal } from "@solve-js/vm/ExactDecimals";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
@@ -902,6 +902,45 @@ function builtinAt(ref: number): ((args: Value[], context?: LineExecutionContext
 }
 
 /**
+ * The rate `<value> per <unit>` a RATE_OR_DIVIDE instruction builds when no
+ * variable of the unit's name is defined (#642), called as CALL_BUILTIN would
+ * call the rate builtin: a failed or pending value is passed on, a date is
+ * refused, and a symbolic value takes the symbolic route.
+ *
+ * @param args - The value, then the unit as a string value.
+ * @param rateIndex - The rate builtin's index, from the bytecode.
+ * @param context - The line context, passed through to the builtin.
+ */
+function rateOver(args: Value[], rateIndex: number, context: LineExecutionContext | undefined): Value {
+    const fault = faultedIn(args);
+    if (fault) return fault;
+    const refused = datetimeArgumentRefused(rateIndex, args);
+    if (refused) return refused;
+    if (args[0].type === ValueType.Symbolic && !SYMBOLIC_NATIVE_BUILTINS.has(rateIndex)) return symbolicBuiltin(rateIndex, args);
+    const fn = builtinAt(rateIndex);
+    return fn === undefined ? errorValue("UNKNOWN_BUILTIN_FUNCTION", `Builtin function index ${rateIndex} is not registered`) : fn(args, context);
+}
+
+/**
+ * The offset after the DIV a RATE_OR_DIVIDE instruction steps over when it has
+ * built a rate, refusing a stream where something else follows it: a stream
+ * restored from storage is not trusted to be what the compiler wrote.
+ *
+ * @param opcodes - The bytecode stream.
+ * @param ip - The offset right after the RATE_OR_DIVIDE instruction.
+ */
+function stepOverDivide(opcodes: Uint8Array, ip: number): number {
+    if (opcodes[ip] === OpCode.DIV) return ip + 1;
+    throw malformedBytecode(
+        "MALFORMED_BYTECODE_RATE_OR_DIVIDE",
+        OpCode.RATE_OR_DIVIDE,
+        "is not followed by the DIV it may step over",
+        "DIV",
+        getOpCodeName(opcodes[ip] ?? -1),
+    );
+}
+
+/**
  * Refuses a `map`/`reduce` body kind the dispatch has no arm for.
  *
  * The three arms are 0 (an inline anonymous body), 1 (a builtin) and 2 (a
@@ -1282,6 +1321,17 @@ function multiplyPercentWithUncertainty(l: Value, r: Value): Value | null {
 }
 
 /**
+ * What MUL asks before anything else on its general path: a quantity meeting an
+ * operand it cannot be put in terms of is refused (a list, #640; a constant with
+ * no spelled unit, #648; see quantityOperandRefused()), and otherwise a
+ * percentage scaling an uncertain number (see
+ * {@link multiplyPercentWithUncertainty}). One call from the loop, as before.
+ */
+function multiplyPrelude(l: Value, r: Value): Value | null {
+    return quantityOperandRefused(l, r, "mul") ?? multiplyPercentWithUncertainty(l, r);
+}
+
+/**
  * Money times a scalar is a scalar multiply, so like `$X + p%` it must stay exact
  * to the cent: `15% of $0.10` and `$0.10 * 15%` are `$0.015 -> $0.02`, not the
  * `$0.01` a bare double rounds down to, and the same for a computed factor with
@@ -1321,6 +1371,15 @@ function multiplyScalarExact(l: Value, r: Value): Value | null {
     if (l.type === ValueType.Percentage && r.type === ValueType.Number) return multiplyByPercentExact(r, l.toNumber());
     if (r.type === ValueType.Percentage && l.type === ValueType.Number) return multiplyByPercentExact(l, r.toNumber());
     return null;
+}
+
+/**
+ * What DIV asks before anything else on its general path, as
+ * {@link multiplyPrelude} does for MUL: the quantity refusal, then a percentage
+ * and an uncertain number (see {@link dividePercentWithUncertainty}).
+ */
+function dividePrelude(l: Value, r: Value): Value | null {
+    return quantityOperandRefused(l, r, "div") ?? dividePercentWithUncertainty(l, r);
 }
 
 /**
@@ -1878,10 +1937,7 @@ function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
     // that measure different things, most often a misspelling: `5 km in mies`
     // said the two did not measure the same thing. Say what it is, and name the
     // nearest real units (see errors/DidYouMean.ts).
-    if (describeMeasure(toUnit) === undefined && !toUnit.includes("/")) {
-        const near = nearestNames(toUnit, [], 3, unitNameIndex());
-        return errorValue("UNKNOWN_UNIT", `"${toUnit}" is not a unit.${didYouMeanSentence(near)}`);
-    }
+    if (describeMeasure(toUnit) === undefined && !toUnit.includes("/")) return unknownUnitError(toUnit, fromUnit);
     // Name the two dimensions when both are known ("a duration cannot be
     // converted to a length"). A compound rate or an unrecognised currency code
     // has no single dimension to name, so it keeps the unit-naming fallback.
@@ -1962,13 +2018,7 @@ function* variableNameCandidates(vm: VM): Generator<string> {
  */
 const VARIABLE_SUGGESTION_LIMIT = 500;
 
-let unitNames: NameIndex | null = null;
 let builtinNames: NameIndex | null = null;
-
-/** Every unit spelling, indexed once on first use rather than read on every unknown name. */
-function unitNameIndex(): NameIndex {
-    return unitNames ??= new NameIndex(Object.keys(UNIT_TABLE));
-}
 
 /** Every builtin function name, indexed once on first use. */
 function builtinNameIndex(): NameIndex {
@@ -2178,6 +2228,25 @@ function rationalToFractionString(r: Rational): string {
 }
 
 /**
+ * `<value> as fraction` (TO_FRACTION), as text.
+ *
+ * A value carrying its exact rational renders that fraction exactly, and so
+ * does one carrying an exact decimal: a decimal written with a point is the
+ * fraction it spells, so `0.333333 as fraction` is 333333/1000000 and `3.14159
+ * as fraction` is 314159/100000, where the continued-fraction guess from the
+ * double gave the near misses 333332/999997 and 76149/24239 (#647). A decimal
+ * that ends early reduces as before (`0.75` is 3/4, `0.50` is 1/2), and one that
+ * only approximates a simple fraction is not rounded onto it: `0.3333333` is
+ * 3333333/10000000, not 1/3. Everything with neither sidecar (`sqrt(2)`, a
+ * converted quantity) keeps the continued-fraction guess.
+ */
+function fractionString(v: Value): string {
+    if (v.rational !== undefined) return rationalToFractionString(v.rational);
+    const decimal = fractionOfExactDecimal(v);
+    return decimal !== null ? rationalToFractionString(decimal) : toFractionString(v.toNumber());
+}
+
+/**
  * A value rendered as a multiple, "4x".
  *
  * What counts as the multiple depends on what is being converted, which is why
@@ -2333,9 +2402,19 @@ function matrixLiteral(stack: Value[], rows: number, cols: number): void {
     // literal fails instead, the way one bad cell fails a map() (see
     // MAP_INVOKE's own check).
     let cellFault: Value | null = null;
+    // The unit of the quantity cell nearest the end so far. The cells pop from
+    // the last one written, so a cell met later here was written earlier.
+    let laterUnit: string | undefined;
     for (let i = count - 1; i >= 0; i--) {
       const cellVal = safePop(stack);
       if (cellFault === null) cellFault = faultedOperand(cellVal);
+      // A quantity's unit is dropped as the cell is stored, so two units side
+      // by side cannot both be right: `[1 km, 500 m]` was `[1, 500]`. Refused by
+      // name; one unit, or a bare number beside it, is let through (#641).
+      if (cellVal.type === ValueType.Uom && cellVal.unit !== undefined) {
+        if (cellFault === null && laterUnit !== undefined) cellFault = cellUnitsDiffer(cellVal.unit, laterUnit);
+        laterUnit = cellVal.unit;
+      }
       // A cell with no numeric reading was the same silent zero: a pair
       // inside a list, `[(1, 2), 3]`, answered `[0, 3]`, and a date
       // became its epoch milliseconds. A cell holds one number, so the
@@ -3371,10 +3450,12 @@ export function executeBytecode(
             break;
           }
           carry = combineSources(l.sources, r.sources);
-          // A percentage scaling an uncertain number carries the tolerance, so
-          // "(100 +/- 5) * 10%" and "10% of (100 +/- 5)" are "10 ± 0.5". This sits
-          // ahead of uncertainOp, which declines for a Percentage operand.
-          const pctUnc = multiplyPercentWithUncertainty(l, r);
+          // A quantity meeting a list or a constant with no spelled unit is
+          // refused first (#640, #648). Then a percentage scaling an uncertain
+          // number carries the tolerance, so "(100 +/- 5) * 10%" and "10% of
+          // (100 +/- 5)" are "10 ± 0.5". This sits ahead of uncertainOp, which
+          // declines for a Percentage operand. See multiplyPrelude().
+          const pctUnc = multiplyPrelude(l, r);
           if (pctUnc) { stack.push(pctUnc); break; }
           // Uncertainty first, so "(12.3 +/- 0.5) * 4" is "49.2 ± 2.0": a scalar
           // multiply scales the spread by |k|, which the general quadrature rule
@@ -3480,10 +3561,12 @@ export function executeBytecode(
             break;
           }
           carry = combineSources(l.sources, r.sources);
-          // Dividing an uncertain number BY a percentage is a scalar divide, so
-          // it carries the tolerance: "(100 +/- 5) / 10%" is "1000 ± 50". This
-          // sits ahead of uncertainOp, which declines for a Percentage divisor.
-          const pctDivUnc = dividePercentWithUncertainty(l, r);
+          // The quantity refusal first, as in MUL. Then dividing an uncertain
+          // number BY a percentage is a scalar divide, so it carries the
+          // tolerance: "(100 +/- 5) / 10%" is "1000 ± 50". This sits ahead of
+          // uncertainOp, which declines for a Percentage divisor. See
+          // dividePrelude().
+          const pctDivUnc = dividePrelude(l, r);
           if (pctDivUnc) { stack.push(pctDivUnc); break; }
           // Uncertainty first, ahead of both the Uom ratio and the exact-fraction
           // paths below, so a carried tolerance is never dropped by either.
@@ -4473,10 +4556,9 @@ export function executeBytecode(
           if (toFractionFault) { stack.push(toFractionFault); break; }
           const toFractionDate = datetimeConversionRefused(v, "a fraction");
           if (toFractionDate) { stack.push(toFractionDate); break; }
-          // A value carrying its exact rational renders that fraction exactly;
-          // everything else keeps the continued-fraction guess from the double,
-          // so "0.75 as fraction" is still "3/4".
-          stack.push(stringValue(v.rational !== undefined ? rationalToFractionString(v.rational) : toFractionString(v.toNumber())));
+          // The exact fraction where the value has one, the guess otherwise;
+          // see fractionString().
+          stack.push(stringValue(fractionString(v)));
           break;
         }
         case OpCode.TO_MULTIPLIER: {
@@ -4566,8 +4648,10 @@ export function executeBytecode(
           // literal (exact sidecar already set) or is a whole number, either
           // of which has an exact decimal; a fractional double amount
           // ("$sqrt(2)") has none and stays an ordinary float Uom. Every other
-          // unit (km, kg, km/h, ...) is unchanged. See vm/MoneyExact.ts.
-          stack.push(valueInUnit(operand, unit));
+          // unit (km, kg, km/h, ...) is unchanged. See vm/MoneyExact.ts. A list,
+          // a value carrying a tolerance and a constant with no spelled unit
+          // are refused on the way (#639, #640, #648); see unitAfterValue().
+          stack.push(unitAfterValue(operand, unit));
           break;
         }
         case OpCode.UOM_CONVERT_TO: {
@@ -4708,17 +4792,11 @@ export function executeBytecode(
             // `0.5% in ppm`: a percentage on the parts-per scale (#633).
             stack.push(percentageInPartsPer(left, toUnit)!);
           } else {
-            // A value with no single amount, a list, a piece of text, a
-            // colour, read as the zero `toNumber()` reports for it and came
-            // back labelled with the unit: `(1, 2) in miles` answered `0.00
-            // miles`. Refused by name, as an aggregate refuses it. Issue #547.
-            const kind = nonNumericKind(left);
-            stack.push(kind === undefined
-              ? uomValue(left.toNumber(), toUnit)
-              : errorValue(
-                "CONVERT_NON_NUMERIC",
-                `${kind[0].toUpperCase()}${kind.slice(1)} has no single amount to convert to ${toUnit}: only a number or a quantity can be converted.`,
-              ));
+            // A number given the unit, or a refusal by name: a value with no
+            // single amount (#547), one carrying a tolerance (#639), a constant
+            // with no spelled unit (#648), a target that is not a unit (#646).
+            // See plainValueInUnit().
+            stack.push(plainValueInUnit(left, toUnit));
           }
           break;
         }
@@ -4927,6 +5005,20 @@ export function executeBytecode(
         case OpCode.AS_RATE: {
           // `2 permille of $5000`: the rate before `of`; see asRate().
           stack.push(asRate(safePop(stack)));
+          break;
+        }
+        case OpCode.RATE_OR_DIVIDE: {
+          // `100 / t` (#642): divide by a defined `t`, or else the rate
+          // `100 per t`; see rateOver().
+          const unit = poolString(opcodes, ip++, strings, op, "denominator name");
+          const rateIndex = operandByte(opcodes, ip++, op, "rate builtin index");
+          const named = vm.getVar(unit);
+          if (named !== undefined) { stack.push(named); break; }
+          ip = stepOverDivide(opcodes, ip);
+          const rateArgs = [safePop(stack), stringValue(unit)];
+          carry = rateArgs[0].sources;
+          stack.push(rateOver(rateArgs, rateIndex, context));
+          if (observeCall !== undefined) observeCall({ kind: "builtin", index: rateIndex, name: "", args: rateArgs, result: stack[stack.length - 1] });
           break;
         }
         case OpCode.PERCENT_CHANGE: {

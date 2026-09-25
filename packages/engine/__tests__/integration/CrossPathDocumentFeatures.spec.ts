@@ -995,3 +995,79 @@ describe("evaluateDocument leaves the engine as it found it", () => {
     expect(second[1]).toBe("5");
   });
 });
+
+describe("a variable named like a unit, after a slash (#642)", () => {
+  // `t` is a tonne and a common variable name. After a slash with nothing
+  // measured before it, a defined `t` is divided by; an undefined one keeps
+  // the rate. The answer now depends on another line, so the live evaluator
+  // must follow an edit that adds, changes or deletes the definition.
+
+  test("both passes divide by a defined name and agree", () => {
+    const doc = ["t = 5", "100 / t", "100/t", "distance = 120", "t2 = 2", "speed = distance / t", "100 / (t)"];
+    expect(batch(doc)).toEqual(["5", "20", "20", "120", "2", "24", "20"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("an undefined name, or one defined below, keeps the rate on both passes", () => {
+    const doc = ["100 / t", "t = 5"];
+    expect(batch(doc)).toEqual(["100.00 /t", "5"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("a unit written before the slash keeps the rate, both passes", () => {
+    const doc = ["h = 4", "$15 / h", "60 km / h", "100 per h"];
+    expect(batch(doc)).toEqual(["4", "15.00 USD/h", "60.00 km/h", "100.00 /h"]);
+    expect(incremental(doc)).toEqual(batch(doc));
+  });
+
+  test("typing the definition above the line changes its answer", () => {
+    const { shown, edited } = editThenEvaluate(["x = 1", "100 / t"], [[1, "t = 5"]]);
+    expect(shown[1]).toBe("20");
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("changing the definition's value changes the answer", () => {
+    const { shown, edited } = editThenEvaluate(["t = 5", "100 / t"], [[1, "t = 4"]]);
+    expect(shown[1]).toBe("25");
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("renaming the definition away turns the line back into a rate", () => {
+    const { shown, edited } = editThenEvaluate(["t = 5", "100 / t"], [[1, "x = 5"]]);
+    expect(shown[1]).toBe("100.00 /t");
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("deleting the definition turns the line back into a rate", () => {
+    const { shown, edited } = deleteThenEvaluate(["t = 5", "100 / t"], 1);
+    expect(shown[0]).toBe("100.00 /t");
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("a rename through the language service carries the denominator with it", () => {
+    const text = ["t = 5", "100 / t"].join("\n");
+    const service = new LanguageService(newTrackedEngine());
+    const result = service.rename(text, { line: 1, character: 0 }, "time");
+    if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
+    const after = applyTextEdits(text, result.edits).split("\n");
+    expect(after).toEqual(["time = 5", "100 / time"]);
+    expect(batch(after)).toEqual(["5", "20"]);
+  });
+
+  test("the single-expression path has no variables, so it reads the rate", () => {
+    expect(single("100 / t")).toEqual({ threw: false, type: ValueType.Uom, message: "100.00 /t" });
+  });
+});
+
+describe("renaming a variable a rate denominator above it spells (#642)", () => {
+  test("a denominator above the definition is the unit, so the rename leaves it", () => {
+    const text = ["100 / t", "t = 5", "100 / t"].join("\n");
+    const service = new LanguageService(newTrackedEngine());
+    const result = service.rename(text, { line: 2, character: 0 }, "time");
+    if (!result.ok) throw new Error(`${result.code}: ${result.message}`);
+    const after = applyTextEdits(text, result.edits).split("\n");
+    expect(after).toEqual(["100 / t", "time = 5", "100 / time"]);
+    expect(batch(after)).toEqual(batch(text.split("\n")));
+    expect(batch(after)).toEqual(["100.00 /t", "5", "20"]);
+  });
+});

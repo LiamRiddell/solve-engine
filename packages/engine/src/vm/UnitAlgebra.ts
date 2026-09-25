@@ -24,7 +24,7 @@ import { Value, ValueType, uomValue, numberValue, errorValue } from "@solve-js/v
 import { rateForm, isNamedRate, type RateForm } from "@solve-js/uom/RateForms";
 import { getMeasure, convertUnit } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
-import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
+import { UNIT_TABLE, MEASURE_SYMBOLS } from "@solve-js/uom/generated/UnitTable.generated";
 import { describeMeasure } from "@solve-js/vm/VMConversion";
 
 /**
@@ -54,14 +54,17 @@ function inPair(value: Value, form: RateForm): number {
 /**
  * A rate's denominator as the unit of a count of it: a word takes its plural
  * when the table has one, so `$100 / $5/hour` is 20 hours, as `$100 at $5/hour`
- * already was. A symbol (`h`, `kg`) is left as it is: the plural must be the
- * same unit, since `hs` is a hectosecond and not two hours.
+ * already was. A symbol (`h`, `kg`, `min`) is left as it is: the plural must be
+ * the same unit, since `hs` is a hectosecond and not two hours, and `min` stays
+ * `min` although the table also spells `mins` (#666). The symbols are the ones
+ * the table lists for each measure.
  */
 function countOf(unit: string, count: number): string {
 	if (count === 1) return unit;
-	const plural = `${unit}s`;
 	const entry = UNIT_TABLE[unit];
-	return entry !== undefined && UNIT_TABLE[plural] === entry ? plural : unit;
+	if (entry === undefined || MEASURE_SYMBOLS[entry[0]]?.includes(unit)) return unit;
+	const plural = `${unit}s`;
+	return UNIT_TABLE[plural] === entry ? plural : unit;
 }
 
 /** A value in `unit`, where a countless unit is the plain number it is. */

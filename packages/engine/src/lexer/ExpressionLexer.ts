@@ -336,6 +336,8 @@ export class LexerToken implements Token {
     public sourceEnd?: number,
     /** See {@link Token.fault}. Set only on a fused token standing for a run the engine refuses to read. */
     public fault?: { readonly code: string; readonly message: string },
+    /** See {@link Token.mayNameVariable}. Set only on a rate denominator fused from a slash. */
+    public mayNameVariable?: boolean,
   ) {}
 }
 

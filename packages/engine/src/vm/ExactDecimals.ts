@@ -380,6 +380,25 @@ export function rationalOfExactDecimal(v: Value): Rational | null {
 }
 
 /**
+ * The fraction a value's exact decimal is, for `as fraction`, or null when it
+ * carries none (#647).
+ *
+ * A decimal written with a point is the fraction it spells: 0.333333 is
+ * 333333/1000000 and 3.14159 is 314159/100000. `as fraction` used to guess at
+ * the nearest double with a continued fraction, which lands on a near miss that
+ * is neither: 333332/999997 and 76149/24239. Unlike
+ * {@link rationalOfExactDecimal} this answers for money as well, since the
+ * result is text and there is no currency to keep: `$0.25 as fraction` is 1/4.
+ *
+ * @param v - The value being written as a fraction.
+ * @returns Its exact decimal as a reduced rational, or null.
+ */
+export function fractionOfExactDecimal(v: Value): Rational | null {
+	if (v.exact === undefined || !withinLimit(v.exact)) return null;
+	return rationalOf(v.exact);
+}
+
+/**
  * The number of places a reduced fraction's decimal expansion has, or null when
  * it never ends.
  *

@@ -216,12 +216,14 @@ today is.
 
 The result is a date, not a quantity. A name that is not a zone is refused
 rather than answered, and a unit is told apart from a misspelt zone, because the
-two mistakes have different fixes. An ordinary number is untouched.
+two mistakes have different fixes. A zone belongs to a date: after an ordinary
+number, `in` asks for a unit, so a city there is refused as a word that is not a
+unit, the same as `5 km in Tokyo`.
 
 ```solve
 2026-04-03 in Atlantis // "Atlantis" is not a time zone this engine knows. Name a city ("in Tokyo"), a standard abbreviation ("in JST") or "in UTC"
 2026-04-03 in furlongs // A date cannot be read in "furlongs". "in <name>" after a date names a time zone, as in "2026-04-03 in Tokyo"
-5 in Tokyo // 5.00 Tokyo
+5 in Tokyo // "Tokyo" is not a unit.
 ```
 
 A signed offset does not work after a date: `2026-04-03 in GMT+9` is read as

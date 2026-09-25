@@ -87,8 +87,45 @@ sample standard deviation of 2, 4, 4, 4, 5, 5, 7, 9 // 2.14
 ```
 
 `spread` is the largest minus the smallest, spelled that way because `range`
-already means a `start:end` interval elsewhere. A tie for `mode` is broken by
-first appearance, so the same list always gives the same answer.
+already means a `start:end` interval elsewhere. A tie for `mode` goes to the
+value that reached the top count first, so the same list always gives the same
+answer.
+
+### The spread of quantities
+
+The spread forms follow the rule for [a list that carries
+units](#a-list-that-carries-units): the values are read in the first one's unit,
+and the answer is in it. So 1 kg and 1000 g, which are the same mass, have no
+spread at all, and the most common of 1 kg, 1000 g and 2 kg is 1 kg.
+
+```solve
+standard deviation of 1 kg, 1000 g // 0.00 kg
+standard deviation of $10, $20, $30 // $8.16
+mode of 1 kg, 1000 g, 2 kg // 1.00 kg
+spread of 1 kg, 1000 g // 0.00 kg
+```
+
+A variance is the average of the squared distances from the mean, so it is in
+the square of the data's unit. The engine has a unit for that only when the data
+are lengths: the square of a length is an area. For anything else (kilograms
+squared, dollars squared, degrees squared) there is no unit to give the answer,
+so a variance of those is refused by name, the same way `(2 kg)^2` is. The
+standard deviation is the same spread, in the data's own unit, and is the one to
+ask for.
+
+```solve
+variance of 2 m, 4 m // 1.00 m²
+variance of 1 kg, 1000 g // A variance of quantities in kg would be in kg squared, which has no unit: only a length squared has one, an area. The standard deviation is the same spread in kg.
+```
+
+Two measures in one list are refused as they are everywhere on this page, and a
+list with an infinity in it has no standard deviation or variance, since an
+infinite value is no finite distance from the mean.
+
+```solve
+standard deviation of 1 kg, 2 m // mass and length cannot be used in a standard deviation
+standard deviation of 1/0, 1000 // A standard deviation of a list with an infinity in it has no value: an infinite value has no finite distance from the mean.
+```
 
 ## Weighted average
 

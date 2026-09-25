@@ -1,5 +1,6 @@
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
+import { asConverterRegistry } from "@solve-js/vm/VMBuiltins";
 
 /**
  * Rewrites `in <converter>` and `to <converter>` into `as <converter>`.
@@ -26,6 +27,28 @@ import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
  * `100 to sqrt(4)`, a percentage change, into a converter nobody asked for.
  */
 const FUNC_TYPED_CONVERTERS = new Set(["hex", "bin"]);
+
+/**
+ * Whether a word is a converter a package registered through `asConverters`
+ * (`roman`, `words`, `base64`), which the lexer reads as an ordinary identifier.
+ *
+ * Only `in` is rewritten before one (#646). `2024 in roman` asked for the same
+ * thing as `2024 as roman` and got `2,024.00 roman`, a number labelled with the
+ * word, because unit conversion takes any word after `in` as its target and a
+ * package's converter never lexes as CONVERTER_NAME. The word after `in` is only
+ * ever read as a unit, so the rewrite shadows nothing. `to` is left alone: a
+ * word after `to` is a percentage change to a variable (`start to n`), and a
+ * package converter is often named like one (`n`, `v` and `w` are the derived
+ * units' newton, volt and watt), so `to` keeps its reading and `as` or `in`
+ * reach the converter.
+ *
+ * Reads the registry `as` itself reads, so `in` reaches exactly the converters
+ * `as` does.
+ */
+function isPackageConverter(word: string): boolean {
+	return asConverterRegistry.has(word.toLowerCase());
+}
+
 /**
  * The rule itself.
  *
@@ -40,14 +63,15 @@ export function converterPrepositionNormalizerRule(priority = 67): NormalizerRul
 		priority,
 		// Derived from this rule's own opening guards; see RuleSlot on why an
 		// over-broad slot is safe and an over-narrow one is not.
-		shape: [{ types: ["IN", "TO"] }, { types: ["CONVERTER_NAME", "FUNC"] }],
+		shape: [{ types: ["IN", "TO"] }, { types: ["CONVERTER_NAME", "FUNC", "IDENT"] }],
 		match(tokens, pos): NormalizerMatch | null {
 			const preposition = tokens[pos];
 			if (preposition?.type !== "IN" && preposition?.type !== "TO") return null;
 			const target = tokens[pos + 1];
 			const isConverterTarget =
 				target?.type === "CONVERTER_NAME" ||
-				(target?.type === "FUNC" && FUNC_TYPED_CONVERTERS.has(target.value.toLowerCase()));
+				(target?.type === "FUNC" && FUNC_TYPED_CONVERTERS.has(target.value.toLowerCase())) ||
+				(target?.type === "IDENT" && preposition.type === "IN" && isPackageConverter(target.value));
 			if (!isConverterTarget) return null;
 
 			// Only the preposition is replaced; the converter name is left for

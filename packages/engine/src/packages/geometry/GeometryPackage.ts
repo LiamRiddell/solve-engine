@@ -1,6 +1,7 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
-import { numberValue, errorValue, ValueType, type Value } from "@solve-js/vm/Value";
-import { computeGeometry, type Dimensions } from "./GeometryMath";
+import { Value, errorValue } from "@solve-js/vm/Value";
+import { computeGeometry } from "./GeometryMath";
+import { readDimensions, measureInUnit } from "./GeometryUnits";
 import { geometryParselet } from "./parselets/GeometryParselet";
 
 /**
@@ -11,8 +12,10 @@ import { geometryParselet } from "./parselets/GeometryParselet";
  * Only the measure triggers (`area of`, `perimeter of`, `circumference of`,
  * `volume of`, `surface area of`) are fused phrases; the shape and dimension
  * words are ordinary identifiers, read in context, so none of them is reserved.
- * Dimensions are plain numbers in this slice (unitless); a missing or wrong
- * dimension for a shape is answered with a structured Error.
+ * A dimension can carry a length unit, and the answer then takes the power its
+ * measure has: `area of circle radius 5 m` is in m², a volume in m³ (#638, see
+ * GeometryUnits.ts). Bare numbers answer a plain number, as they always have. A
+ * missing or wrong dimension for a shape is answered with a structured Error.
  */
 export const GEOMETRY_PACKAGE: IEnginePackage = {
 	name: "solve-geometry",
@@ -34,16 +37,11 @@ export const GEOMETRY_PACKAGE: IEnginePackage = {
 		geometryCompute: (args: Value[]): Value => {
 			const measure = String(args[0]?.value ?? "");
 			const shape = String(args[1]?.value ?? "");
-			const dims: Dimensions = {};
-			for (let i = 2; i + 1 < args.length; i += 2) {
-				const name = String(args[i]?.value ?? "");
-				const val = args[i + 1];
-				if (val?.type === ValueType.Error) return val;
-				dims[name] = val?.toNumber() ?? NaN;
-			}
-			const result = computeGeometry(measure, shape, dims);
+			const read = readDimensions(args.slice(2));
+			if (read instanceof Value) return read;
+			const result = computeGeometry(measure, shape, read.dims);
 			if (result.error !== undefined) return errorValue("GEOMETRY_ERROR", result.error);
-			return numberValue(result.value!);
+			return measureInUnit(result.value!, measure, read.unit);
 		},
 	},
 	tokenCategories: {

@@ -26,6 +26,44 @@ rather than storing it as a zero:
 [(1, 2), 3] // ERROR: A list cannot hold a list inside it: each cell holds one number. Write the values side by side, as in [1, 2, 3].
 ```
 
+## Lists and units
+
+A list does not carry a unit yet. A cell stores the amount a quantity has, and
+the unit is left behind, so a list written in one unit is a row of plain
+numbers: `[1 km, 2 km]` is `[1, 2]`, and so is `[$1, $2]`. A bare number beside
+a quantity is read in its unit, as it is in [a list of
+quantities](/syntax/statistics/#a-list-that-carries-units).
+
+```solve
+[1 km, 2 km] // [1, 2]
+[1 km, 500] // [1, 500]
+```
+
+Two different units in one list could not both survive that, since `[1 km, 500
+m]` would read as if 500 m were 500 km, and `[1 kg, 3 m]` would put a mass beside
+a length as though they were one measure. Such a list is refused, naming both
+units; converting the cells to one unit first gives a list that reads right.
+
+```solve
+[1 km, 500 m] // A list cannot hold quantities in km and m side by side: each cell holds one number, so both would be read in one unit. Convert the cells to one unit first, writing "in km" after each cell in another unit.
+[1 kg, 3 m] // A list cannot hold quantities in kg and m side by side: each cell holds one number, and mass and length are not one measure.
+[1 km, 500 m in km] // [1, 0.50]
+```
+
+For the same reason a list has no single amount to give a unit to. A unit
+written after it, or a quantity it is combined with, is refused rather than
+read as zero of that unit. A plain number still scales every cell.
+
+```solve
+[1, 2, 3] km // A bracketed list has no single amount to convert to km: only a number or a quantity can be converted.
+[1, 2] * 1 km // A bracketed list and a quantity in km cannot be multiplied: a bracketed list has no single amount to put in km. A list does not carry a unit yet.
+[1, 2] * 2 // [2, 4]
+```
+
+Lists that carry a unit, so that `[1, 2] * 1 km` would be a list of lengths, are a
+planned feature; these refusals leave that answer open rather than giving a
+wrong one meanwhile.
+
 A numeric vector can be drawn as a sparkline with `[...] as sparkline`; see
 [charts](/syntax/charts/).
 

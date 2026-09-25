@@ -3,9 +3,11 @@
  * shape, and its named dimensions in, a number out, or a message naming what is
  * missing. No engine types, so each formula is unit-tested on its own.
  *
- * Dimensions are plain numbers here (unitless). A measure that a shape does not
- * define (the perimeter of a triangle, without its three sides), or a missing
- * dimension, is a clear error rather than a guess.
+ * Dimensions are plain numbers here, already in one length unit: the units of a
+ * dimension written with one, and the square or cube they give the answer, are
+ * read and applied either side of these formulae (see GeometryUnits.ts). A
+ * measure that a shape does not define (the perimeter of a triangle, without its
+ * three sides), or a missing dimension, is a clear error rather than a guess.
  */
 
 export type Dimensions = Record<string, number>;

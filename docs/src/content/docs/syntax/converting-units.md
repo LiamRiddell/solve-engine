@@ -56,6 +56,24 @@ allowance is a plural. A few table entries have only the singular (`troy ounce`,
 `watt-hour`), and the plural a reader writes reads as that unit. A symbol takes
 no plural, so `kW h` is the kilowatt-hour and `kW hs` is not a unit.
 
+## Micro, with either µ or μ
+
+The micro prefix means a millionth: a microsecond is a millionth of a second, a
+microgram a millionth of a gram. Its symbol is the Greek letter mu, and it
+reaches a line as one of two characters that look the same: the micro sign `µ`
+(U+00B5, what Option-M types on a Mac) and the Greek small letter `μ` (U+03BC,
+what a Greek keyboard types). Both are read as the prefix.
+
+```solve
+5 µs in ns // 5,000.00 ns
+5 μs in ns // 5,000.00 ns
+1 mL in µL // 1,000.00 µL
+3 µm in nm // 3,000.00 nm
+```
+
+The ASCII stand-in `us` is not read as microseconds, because it is also an
+ordinary word. Write `µs`, or `microseconds` in full.
+
 ## Temperatures, with or without the degree sign
 
 `°C` and `°F` read as the units they obviously are, which is what a phone
@@ -91,6 +109,42 @@ at all. The case sensitivity of the unit table is unchanged.
 
 ```solve
 1 cup in ml // 236.59 ml
+```
+
+### Where two scales meet, and adding across them
+
+Celsius and Fahrenheit put their zero in different places, so a conversion
+between them adds or takes away an offset as well as scaling. Where the two
+scales meet a single point, the answer is that point exactly: 32 °F is the
+freezing point, 0 °C, not a tiny number a hair away from it.
+
+```solve
+32 °F in °C // 0.00 °C
+273.15 K in °C // 0.00 °C
+32.0018 °F in °C // 0.001 °C
+```
+
+Adding to a temperature adds a *difference* of temperature, a number of degrees
+warmer, rather than a second reading. Ten Fahrenheit degrees are 5.56 Celsius
+degrees, so `20 °C + 10 °F` is 25.56 °C, and a kelvin is a Celsius degree. The
+answer is in the scale of the temperature on the left, as every sum of two
+quantities is.
+
+```solve
+20 °C + 10 °F // 25.56 °C
+20 °C + 10 K // 30.00 °C
+68 °F + 10 °C // 86.00 °F
+20 °C + 10 °C // 30.00 °C
+```
+
+Subtraction is the boundary. It still reads both sides as temperatures and
+converts the right one as a reading, and a difference converted afterwards is
+converted as a reading too. Changing either changes answers people already rely
+on, so it waits for the next major version, 3.0:
+
+```solve
+20 °C - 10 °F // 32.22 °C
+(30 °C - 20 °C) in F // 50.00 F
 ```
 
 ## Inches, where the abbreviation is also the word for converting

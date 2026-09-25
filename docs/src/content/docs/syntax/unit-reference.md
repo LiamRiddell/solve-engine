@@ -60,7 +60,7 @@ Measured against **square meter**.
 | square inch | `square inches`, `sq in`, `in²`, `in2` | 0.00064516 |
 | square centimeter | `square centimetre`, `square centimeters`, `square centimetres`, `cm²`, `cm2` | 0.0001 |
 | square millimeter | `square millimetre`, `square millimeters`, `square millimetres`, `mm²`, `mm2` | 0.000001 |
-| square micrometer | `square micrometre`, `square micrometers`, `square micrometres` | 1e-12 |
+| square micrometer | `square micrometre`, `square micrometers`, `square micrometres`, `μm²`, `µm²`, `μm2`, `µm2` | 1e-12 |
 | square nanometer | `square nanometre`, `square nanometers`, `square nanometres`, `nm²`, `nm2` | 1e-18 |
 | square picometer | `square picometre`, `square picometers`, `square picometres`, `pm²`, `pm2` | 1e-24 |
 | square femtometer | `square femtometre`, `square femtometers`, `square femtometres`, `fm²`, `fm2` | 1e-30 |
@@ -105,8 +105,8 @@ Measured against **bit**.
 | centibit | `centibits`, `cb` | 0.01 |
 | millibyte | `millibytes`, `mB` | 0.008 |
 | millibit | `millibits`, `mb` | 0.001 |
-| microbyte | `microbytes` | 0.000008 |
-| microbit | `microbits` | 0.000001 |
+| microbyte | `microbytes`, `μB`, `µB` | 0.000008 |
+| microbit | `microbits`, `μb`, `µb` | 0.000001 |
 | nanobyte | `nanobytes`, `nB` | 8e-9 |
 | nanobit | `nanobits`, `nb` | 1e-9 |
 | picobyte | `picobytes`, `pB` | 8e-12 |
@@ -141,10 +141,10 @@ Measured against **joule**.
 | joule | `joules`, `J` | 1 |
 | decijoule | `decijoules`, `dJ` | 0.1 |
 | centijoule | `centijoules`, `cJ` | 0.01 |
-| microwatt-hour | `microwatt-hours` | 0.0036 |
+| microwatt-hour | `microwatt-hours`, `μW h`, `µW h`, `μWh`, `µWh` | 0.0036 |
 | millijoule | `millijoules`, `mJ` | 0.001 |
 | nanowatt-hour | `nanowatt-hours`, `nW h`, `nWh` | 0.0000036 |
-| microjoule | `microjoules` | 0.000001 |
+| microjoule | `microjoules`, `μJ`, `µJ` | 0.000001 |
 | picowatt-hour | `picowatt-hours`, `pW h`, `pWh` | 3.6e-9 |
 | nanojoule | `nanojoules`, `nJ` | 1e-9 |
 | femtowatt-hour | `femtowatt-hours`, `fW h`, `fWh` | 3.6e-12 |
@@ -174,7 +174,7 @@ Measured against **newton**.
 | centinewton | `centinewtons`, `cN` | 0.01 |
 | millinewton | `millinewtons`, `mN` | 0.001 |
 | dyne | `dynes`, `dyn` | 0.00001 |
-| micronewton | `micronewtons` | 0.000001 |
+| micronewton | `micronewtons`, `μN`, `µN` | 0.000001 |
 | nanonewton | `nanonewtons`, `nN` | 1e-9 |
 | piconewton | `piconewtons`, `pN` | 1e-12 |
 | femtonewton | `femtonewtons`, `fN` | 1e-15 |
@@ -196,7 +196,7 @@ Measured against **hertz**.
 | decihertz | `dHz` | 0.1 |
 | centihertz | `cHz` | 0.01 |
 | millihertz | `mHz` | 0.001 |
-| microhertz | `microhertz` | 0.000001 |
+| microhertz | `μHz`, `µHz` | 0.000001 |
 | nanohertz | `nHz` | 1e-9 |
 | picohertz | `pHz` | 1e-12 |
 | femtohertz | `fHz` | 1e-15 |
@@ -220,7 +220,7 @@ Measured against **lux**.
 | decilux | `dlx` | 0.1 |
 | centilux | `clx` | 0.01 |
 | millilux | `mlx` | 0.001 |
-| microlux | `microlux` | 0.000001 |
+| microlux | `μlx`, `µlx` | 0.000001 |
 | nanolux | `nlx` | 1e-9 |
 | picolux | `plx` | 1e-12 |
 | femtolux | `flx` | 1e-15 |
@@ -258,7 +258,7 @@ Measured against **meter**.
 | pica | `picas` | 0.0042333 |
 | millimeter | `millimetre`, `millimeters`, `millimetres`, `mm` | 0.001 |
 | mil | `mils` | 0.0000254 |
-| micrometer | `micrometre`, `micrometers`, `micrometres` | 0.000001 |
+| micrometer | `micrometre`, `micrometers`, `micrometres`, `μm`, `µm` | 0.000001 |
 | nanometer | `nanometre`, `nanometers`, `nanometres`, `nm` | 1e-9 |
 | picometer | `picometre`, `picometers`, `picometres` | 1e-12 |
 | femtometer | `femtometre`, `femtometers`, `femtometres`, `fm` | 1e-15 |
@@ -280,7 +280,7 @@ Measured against **candela per square meter**.
 | decicandela per square meter | `decicandelas per square meter`, `decicandela per square metre`, `decicandelas per square metre`, `dcd/m2`, `dcd/m²` | 0.1 |
 | centicandela per square meter | `centicandelas per square meter`, `centicandela per square metre`, `centicandelas per square metre`, `ccd/m2`, `ccd/m²` | 0.01 |
 | millicandela per square meter | `millicandelas per square meter`, `millicandela per square metre`, `millicandelas per square metre`, `mcd/m2`, `mcd/m²` | 0.001 |
-| microcandela per square meter | `microcandelas per square meter`, `microcandela per square metre`, `microcandelas per square metre` | 0.000001 |
+| microcandela per square meter | `microcandelas per square meter`, `microcandela per square metre`, `microcandelas per square metre`, `μcd/m2`, `µcd/m2`, `μcd/m²`, `µcd/m²` | 0.000001 |
 | nanocandela per square meter | `nanocandelas per square meter`, `nanocandela per square metre`, `nanocandelas per square metre`, `ncd/m2`, `ncd/m²` | 1e-9 |
 | picocandela per square meter | `picocandelas per square meter`, `picocandela per square metre`, `picocandelas per square metre`, `pcd/m2`, `pcd/m²` | 1e-12 |
 | femtocandela per square meter | `femtocandelas per square meter`, `femtocandela per square metre`, `femtocandelas per square metre`, `fcd/m2`, `fcd/m²` | 1e-15 |
@@ -303,7 +303,7 @@ Measured against **candela**.
 | decicandela | `dcd` | 0.1 |
 | centicandela | `ccd` | 0.01 |
 | millicandela | `mcd` | 0.001 |
-| microcandela | `microcandela` | 0.000001 |
+| microcandela | `μcd`, `µcd` | 0.000001 |
 | nanocandela | `ncd` | 1e-9 |
 | picocandela | `pcd` | 1e-12 |
 | femtocandela | `fcd` | 1e-15 |
@@ -336,7 +336,7 @@ Measured against **gram**.
 | grain | `grains`, `gr` | 0.0647989 |
 | centigram | `centigrams`, `cg` | 0.01 |
 | milligram | `milligrams`, `mg` | 0.001 |
-| microgram | `micrograms`, `mcg` | 0.000001 |
+| microgram | `micrograms`, `μg`, `µg`, `mcg` | 0.000001 |
 | nanogram | `nanograms`, `ng` | 1e-9 |
 | picogram | `picograms`, `pg` | 1e-12 |
 | femtogram | `femtograms`, `fg` | 1e-15 |
@@ -359,7 +359,7 @@ Measured against **watt**.
 | deciwatt | `deciwatts`, `dW` | 0.1 |
 | centiwatt | `centiwatts`, `cW` | 0.01 |
 | milliwatt | `milliwatts`, `mW` | 0.001 |
-| microwatt | `microwatts` | 0.000001 |
+| microwatt | `microwatts`, `μW`, `µW` | 0.000001 |
 | nanowatt | `nanowatts`, `nW` | 1e-9 |
 | picowatt | `picowatts`, `pW` | 1e-12 |
 | femtowatt | `femtowatts`, `fW` | 1e-15 |
@@ -392,11 +392,11 @@ Measured against **pascal**.
 | decapascal | `decapascals`, `daPa` | 10 |
 | pascal | `pascals`, `Pa` | 1 |
 | millitorr | `mTorr` | 0.133322 |
-| decipascal | `decipascals`, `dPa`, `microbar`, `microbars` | 0.1 |
+| decipascal | `decipascals`, `dPa`, `microbar`, `microbars`, `μbar`, `µbar` | 0.1 |
 | centipascal | `centipascals`, `cPa` | 0.01 |
 | millipascal | `millipascals`, `mPa` | 0.001 |
 | nanobar | `nanobars`, `nbar` | 0.0001 |
-| micropascal | `micropascals` | 0.000001 |
+| micropascal | `micropascals`, `μPa`, `µPa` | 0.000001 |
 | picobar | `picobars`, `pbar` | 1e-7 |
 | nanopascal | `nanopascals`, `nPa` | 1e-9 |
 | femtobar | `femtobars`, `fbar` | 1e-10 |
@@ -423,7 +423,7 @@ Measured against **kelvin**.
 | decikelvin | `decikelvins`, `dK` | 0.1 |
 | centikelvin | `centikelvins`, `cK` | 0.01 |
 | millikelvin | `millikelvins`, `mK` | 0.001 |
-| microkelvin | `microkelvins` | 0.000001 |
+| microkelvin | `microkelvins`, `μK`, `µK` | 0.000001 |
 | nanokelvin | `nanokelvins`, `nK` | 1e-9 |
 | picokelvin | `picokelvins`, `pK` | 1e-12 |
 | femtokelvin | `femtokelvins`, `fK` | 1e-15 |
@@ -442,24 +442,24 @@ Measured against **second**.
 | century | `centuries` | 3153600000 |
 | gigasecond | `gigaseconds`, `Gs` | 1000000000 |
 | decade | `decades` | 315360000 |
-| year | `years`, `yr` | 31536000 |
+| year | `years`, `yr`, `yrs` | 31536000 |
 | month | `months`, `mo` | 2592000 |
 | fortnight | `fortnights`, `fn` | 1209600 |
 | megasecond | `megaseconds`, `Ms` | 1000000 |
-| week | `weeks`, `wk` | 604800 |
+| week | `weeks`, `wk`, `wks` | 604800 |
 | day | `days`, `d` | 86400 |
-| hour | `hours`, `h` | 3600 |
+| hour | `hours`, `h`, `hr`, `hrs` | 3600 |
 | kilosecond | `kiloseconds`, `ks` | 1000 |
 | hectosecond | `hectoseconds`, `hs` | 100 |
 | milliday | `millidays`, `md` | 86.4 |
-| minute | `minutes`, `min` | 60 |
+| minute | `minutes`, `min`, `mins` | 60 |
 | decasecond | `decaseconds`, `das` | 10 |
-| second | `seconds`, `s` | 1 |
+| second | `seconds`, `s`, `sec`, `secs` | 1 |
 | decisecond | `deciseconds`, `ds` | 0.1 |
 | centisecond | `centiseconds`, `cs` | 0.01 |
 | time unit | `TU` | 0.001024 |
 | millisecond | `milliseconds`, `ms` | 0.001 |
-| microsecond | `microseconds` | 0.000001 |
+| microsecond | `microseconds`, `μs`, `µs` | 0.000001 |
 | nanosecond | `nanoseconds`, `ns` | 1e-9 |
 | picosecond | `picoseconds`, `ps` | 1e-12 |
 | svedberg | `svedbergs` | 1e-13 |
@@ -514,10 +514,10 @@ Measured against **cubic meter**.
 | centiliter | `centiliters`, `centilitre`, `centilitres`, `cl`, `cL` | 0.00001 |
 | teaspoon | `teaspoons`, `US teaspoon`, `US teaspoons`, `tsp` | 0.00000492892 |
 | cubic centimeter | `cubic centimeters`, `cm3`, `cm³`, `milliliter`, `milliliters`, `millilitre`, `millilitres`, `ml`, `mL` | 0.000001 |
-| cubic millimeter | `cubic millimeters`, `mm3`, `mm³`, `microliter`, `microliters`, `microlitre`, `microlitres` | 1e-9 |
+| cubic millimeter | `cubic millimeters`, `mm3`, `mm³`, `microliter`, `microliters`, `microlitre`, `microlitres`, `μl`, `µl`, `μL`, `µL` | 1e-9 |
 | nanoliter | `nanoliters`, `nanolitre`, `nanolitres`, `nl`, `nL` | 1e-12 |
 | picoliter | `picoliters`, `picolitre`, `picolitres`, `pl`, `pL` | 1e-15 |
-| cubic micrometer | `cubic micrometers`, `femtoliter`, `femtoliters`, `femtolitre`, `femtolitres`, `fl`, `fL` | 1e-18 |
+| cubic micrometer | `cubic micrometers`, `μm3`, `µm3`, `μm³`, `µm³`, `femtoliter`, `femtoliters`, `femtolitre`, `femtolitres`, `fl`, `fL` | 1e-18 |
 | cubic nanometer | `cubic nanometers`, `nm3`, `nm³` | 1e-27 |
 | cubic picometer | `cubic picometers`, `pm3`, `pm³` | 1e-36 |
 | cubic femtometer | `cubic femtometers`, `fm3`, `fm³` | 1e-45 |
@@ -659,9 +659,9 @@ Measured against **kmpl**.
 
 ## Spellings that are not listed
 
-The conversion tables carry 1518 spellings in total, and 98 of
+The conversion tables carry 1525 spellings in total, and 50 of
 them are missing above. Most carry a character an expression cannot type as
-part of a unit, such as the micro sign in `µm` or the dot in `W⋅h`, and a few
+part of a unit, such as the dot in `W⋅h` or the full stops in `fl. oz.`, and a few
 are ordinary words the lexer leaves to English, such as `turn` and `point`.
 The tables can resolve them but an expression cannot spell them, so they are
 excluded here rather than listed and quietly broken.

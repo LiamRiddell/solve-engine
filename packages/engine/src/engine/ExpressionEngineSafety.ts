@@ -343,6 +343,18 @@ export function extractReadsAndWrites(
                 onName?.(i + 1, varName, defines ? "definition" : "read");
             }
         }
+        // A rate denominator after a slash with nothing measured before it
+        // (`100 / t`) divides by a variable of its name when one is defined
+        // (#642), so the line reads the name: defining `t` above it, or
+        // deleting that line, changes its answer. A function's own parameter
+        // is its own, as below.
+        if (t.type === "PER_UNIT" && t.mayNameVariable === true) {
+            if (!functionParamNames.has(t.value)) {
+                reads.push(t.value);
+                onName?.(i, t.value, "read");
+            }
+            continue;
+        }
         if (isVarName(t)) {
             // Skip if already consumed by preceding COLON handler above.
             if (i > 0 && tokens[i - 1].type === "COLON") continue;

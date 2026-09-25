@@ -40,6 +40,29 @@ m/s^2 // 0.75
 9.81 m/s^2 // 9.81 m/s²
 ```
 
+A slash is an operator too, and a bare unit after one is otherwise read as a
+rate: `100 / t` on its own is a hundred per tonne. When a variable of that name
+is defined above the line, the slash divides by it instead, as it would by any
+other name:
+
+```solve-doc
+distance = 120
+t = 2
+speed = distance / t // 60
+```
+
+What decides it is the line above, so defining or deleting `t` changes the
+answer of every line that divides by it. A unit written before the slash keeps
+the rate whatever the name holds, because a unit after a value is a unit:
+`$15 / h`, `60 km / h` and `100 per h` are rates even with `h` defined.
+
+```solve-doc
+h = 4
+100 / h // 25
+$15 / h // 15.00 USD/h
+60 km / h // 60.00 km/h
+```
+
 A name that was never defined is an error, and when it is one or two letters
 from a name that was, the error says so rather than quietly using it:
 

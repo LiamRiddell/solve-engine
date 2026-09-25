@@ -166,6 +166,8 @@ const COMPILED_CORPUS: readonly string[] = [
 	"avg(1,2,3)", "midpoint of 1 and 3",
 	// `to` between two values: PERCENT_CHANGE, a percentage change or a date span.
 	"10 to 20",
+	// A unit spelling after a slash that may name a variable: RATE_OR_DIVIDE (#642).
+	"100 / t",
 ];
 
 /**

@@ -1,5 +1,6 @@
-import { Value, ValueType, numberValue, numberValueRational, numberValueUncertain, bigIntValue, uomValue, uomValueExact, matrixValue, errorValue, symbolicValue, percentageValue, type MatrixData, type MatrixEntry } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueRational, numberValueUncertain, bigIntValue, uomValue, uomValueExact, matrixValue, errorValue, symbolicValue, percentageValue, isTimecodeUnit, type MatrixData, type MatrixEntry } from "@solve-js/vm/Value";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
+import { lookupUnit } from "@solve-js/uom/UnitConversion";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { decimalAdd, decimalSubtract, decimalMultiply, decimalDivide, decimalIsZero, decimalToNumber, decimalFromNumberIfExact, decimalCompare, type DecimalData } from "@solve-js/decimal";
 import { sameShape } from "@solve-js/vm/MatrixOps";
@@ -9,6 +10,9 @@ import { rationalOfExactDecimal, exactDecimalDivide, compareExactDecimals } from
 import { exactIntegerOf } from "@solve-js/vm/ExactIntegers";
 import { ErrorFactory, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
 import { combineSources, sourcesOfValues, type ValueSource } from "@solve-js/vm/Provenance";
+import { valueInUnit } from "@solve-js/vm/MoneyExact";
+import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/DidYouMean";
+import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 
 /**
  * The provenance record of the exchange rate an operation between two
@@ -187,6 +191,285 @@ export function unifyQuantities(values: readonly Value[], verb: string): { magni
         if (rate !== undefined) sources = combineSources(sources, rate);
     }
     return { magnitudes, unit: anchor?.unit, sources };
+}
+
+/** A kind ("a bracketed list") at the start of a sentence ("A bracketed list"). */
+function sentenceCase(kind: string): string {
+    return `${kind[0].toUpperCase()}${kind.slice(1)}`;
+}
+
+/**
+ * The refusal for a value with no single amount written with a unit or
+ * converted into one, or null when it has one.
+ *
+ * A list read as the zero `toNumber()` reports for it and came back labelled
+ * with the unit: `[1, 2] in km` answered `0.00 km` until #547, and `[1, 2, 3]
+ * km` and `$[4, 5]`, which give the unit straight after the list, went on doing
+ * it until #640. Both spellings are refused with the one sentence.
+ *
+ * @param v - The value given the unit.
+ * @param unit - The unit, for the message.
+ * @returns The `CONVERT_NON_NUMERIC` error Value, or null.
+ */
+export function noSingleAmount(v: Value, unit: string): Value | null {
+    const kind = nonNumericKind(v);
+    if (kind === undefined) return null;
+    return errorValue(
+        "CONVERT_NON_NUMERIC",
+        `${sentenceCase(kind)} has no single amount to convert to ${unit}: only a number or a quantity can be converted.`,
+    );
+}
+
+/**
+ * The refusal for a value carrying a tolerance given a unit or converted into
+ * one (#639).
+ *
+ * A tolerance is read without the unit of the value it is on, as the
+ * uncertainty page documents: `5 m +/- 1 cm` is the plain `5 ± 0.01`. So by the
+ * time `in mm` runs there is no unit to convert from, and `(5 m +/- 1 cm) in mm`
+ * labelled the bare 5 as 5.00 mm, a thousandth of the length, with the spread
+ * gone too. The engine cannot tell a centre whose unit was dropped from one that
+ * never had one, so `(5 +/- 0.1) in km` is refused the same way.
+ *
+ * @param unit - The unit asked for, for the message.
+ * @returns The `UNCERTAINTY_WITHOUT_UNIT` error Value.
+ */
+export function toleranceHasNoUnit(unit: string): Value {
+    return errorValue(
+        "UNCERTAINTY_WITHOUT_UNIT",
+        `A value with a tolerance cannot be converted to ${unit}: a tolerance is read without its unit, so 5 m +/- 1 cm is the plain 5 ± 0.01. Convert the value first and give the tolerance after, as in (5 m in mm) +/- 10.`,
+    );
+}
+
+/**
+ * The refusal for a value carrying a tolerance meeting a quantity in `+`, `-`,
+ * `*` or `/` (#639).
+ *
+ * The tolerance is on a plain number (see {@link toleranceHasNoUnit}), and the
+ * quadrature rules in {@link uncertainOp} take only plain numbers, so the pair
+ * fell through to the unit arithmetic, which gave the number the quantity's
+ * unit and discarded the spread: `(5 m +/- 1 cm) + 2 m` answered 7.00 m.
+ *
+ * @param unit - The quantity's unit.
+ * @param op - The operation, for the message.
+ * @returns The `UNCERTAINTY_WITHOUT_UNIT` error Value.
+ */
+export function toleranceMeetsQuantity(unit: string, op: "add" | "sub" | "mul" | "div"): Value {
+    return errorValue(
+        "UNCERTAINTY_WITHOUT_UNIT",
+        `A value with a tolerance and a quantity in ${unit} cannot be ${combineVerb(op)}: a tolerance is read without its unit, so 5 m +/- 1 cm is the plain 5 ± 0.01, and the two are not in the same terms. Keep both sides plain numbers, as in (5 +/- 0.01) + 2.`,
+    );
+}
+
+/**
+ * The refusal for a physical constant whose unit the engine cannot spell yet
+ * meeting another unit, or null when `v` is not one (#648).
+ *
+ * `planck` is joule-seconds and `elementary charge` is coulombs, and the engine
+ * has no spelling for either, so each is a plain number (see
+ * `Value.unspelledUnit`). A plain number takes the unit of whatever quantity it
+ * meets, so `planck * 5e14 Hz` answered in hertz and `planck in J` in joules,
+ * each a confident label for the wrong measure.
+ *
+ * @param v - The operand that may be such a constant.
+ * @param unit - The unit it would be given, for the message.
+ * @param op - The arithmetic, or undefined for a conversion.
+ * @returns The `CONSTANT_UNIT_UNSUPPORTED` error Value, or null.
+ */
+export function unspelledUnitRefused(v: Value, unit: string, op?: "add" | "sub" | "mul" | "div"): Value | null {
+    const own = v.unspelledUnit;
+    if (own === undefined) return null;
+    return errorValue(
+        "CONSTANT_UNIT_UNSUPPORTED",
+        op === undefined
+            ? `A constant measured in ${own} cannot be converted to ${unit}: the engine cannot spell ${own} yet, so the constant is a plain number.`
+            : `A constant measured in ${own} and a quantity in ${unit} cannot be ${combineVerb(op)}: the engine cannot spell ${own} yet, so the answer would wrongly be in ${unit}. Leave the unit off the other side and read the result in the unit it should have.`,
+    );
+}
+
+/**
+ * The refusal for arithmetic between a quantity and an operand that cannot be
+ * put in its terms, or null when there is nothing to refuse.
+ *
+ * Two kinds of operand are refused. A value with no single amount (a list, a
+ * range, a colour) read as the zero `toNumber()` reports and took the
+ * quantity's unit: `[1, 2] * 1 km` answered `0.00 km` and `[1, 2] + 1 km`
+ * answered `1.00 km` (#640). A physical constant in a unit the engine cannot
+ * spell took the other operand's unit (#648, see {@link unspelledUnitRefused}).
+ * Called from `binaryOp` and ahead of the multiply and divide helpers in the VM,
+ * so every path a quantity can meet one of these asks it first.
+ *
+ * @param l - The left operand.
+ * @param r - The right operand.
+ * @param op - The operation, for the message; a remainder passes none.
+ * @returns The error Value, or null.
+ */
+export function quantityOperandRefused(l: Value, r: Value, op?: "add" | "sub" | "mul" | "div"): Value | null {
+    const leftQuantity = l.type === ValueType.Uom;
+    if (leftQuantity === (r.type === ValueType.Uom)) return null;
+    const quantity = leftQuantity ? l : r;
+    const other = leftQuantity ? r : l;
+    const unit = quantity.unit ?? "?";
+    // An unknown is a formula, which the symbolic arithmetic handles before any
+    // unit is looked at, and text and a date have refusals of their own
+    // (TEXT_ARITHMETIC, INVALID_DATETIME_OP) that say more than this one can.
+    const kind = other.type === ValueType.Symbolic || other.type === ValueType.String || other.type === ValueType.Datetime
+        ? undefined
+        : nonNumericKind(other);
+    if (kind !== undefined) {
+        return errorValue(
+            "QUANTITY_NON_NUMERIC",
+            `${sentenceCase(kind)} and a quantity in ${unit} cannot be ${combineVerb(op)}: ${kind} has no single amount to put in ${unit}.${other.type === ValueType.Matrix ? " A list does not carry a unit yet." : ""}`,
+        );
+    }
+    return op === undefined ? null : unspelledUnitRefused(other, unit, op);
+}
+
+/**
+ * Whether two unit spellings are one unit: the same text, or two aliases of one
+ * table entry (`km` and `kilometres`, `°C` and `C`).
+ *
+ * @param a - One spelling.
+ * @param b - The other.
+ */
+export function sameUnit(a: string, b: string): boolean {
+    if (a === b) return true;
+    const entry = lookupUnit(a);
+    return entry !== undefined && entry === lookupUnit(b);
+}
+
+/**
+ * The refusal for a list literal whose cells are quantities in two different
+ * units, or null when they are one unit (#641).
+ *
+ * A cell holds one number, so a quantity's unit is dropped as the list is built,
+ * and two units side by side could not both survive: `[1 km, 500 m]` answered
+ * `[1, 500]`, which reads as if 500 m were 500 km, and `[1 kg, 3 m]` put a mass
+ * beside a length as though they were one measure. A list in one unit
+ * (`[1 km, 2 km]`, `[$1, $2]`) loses nothing it can be misread by and is let
+ * through, and so is a bare number beside a quantity, which is read in its unit
+ * the way `total of 1 km, 500` reads it.
+ *
+ * @param earlier - The unit of the cell written first.
+ * @param later - The unit of the cell written after it.
+ * @returns The `MATRIX_CELL_UNITS_DIFFER` error Value, or null.
+ */
+export function cellUnitsDiffer(earlier: string, later: string): Value | null {
+    if (sameUnit(earlier, later)) return null;
+    const first = describeMeasure(earlier);
+    const second = describeMeasure(later);
+    const opening = `A list cannot hold quantities in ${earlier} and ${later} side by side: each cell holds one number`;
+    if (first !== undefined && second !== undefined && first !== second) {
+        return errorValue("MATRIX_CELL_UNITS_DIFFER", `${opening}, and ${first} and ${second} are not one measure.`);
+    }
+    return errorValue(
+        "MATRIX_CELL_UNITS_DIFFER",
+        `${opening}, so both would be read in one unit. Convert the cells to one unit first, writing "in ${earlier}" after each cell in another unit.`,
+    );
+}
+
+/** Every unit spelling, indexed once on first use for a "did you mean". */
+let unitNames: NameIndex | null = null;
+
+/**
+ * Every unit spelling as a {@link NameIndex}, built once on first use, which is
+ * what a "did you mean" searches when a unit or a variable is not found.
+ *
+ * @returns The shared index.
+ */
+export function unitNameIndex(): NameIndex {
+    return unitNames ??= new NameIndex(Object.keys(UNIT_TABLE));
+}
+
+/**
+ * The refusal for a word that is not a unit where one was asked for: `"banana"
+ * is not a unit.`, with the nearest real units named when there are any.
+ *
+ * Converting from a unit, the suggestions that measure what it measures are the
+ * ones named, when there are any: `5 km in mies` offers `miles` and not
+ * `mins`, which is as close a spelling but a time (#666).
+ *
+ * @param unit - The word, as written.
+ * @param from - The unit being converted from, when there is one.
+ * @returns The `UNKNOWN_UNIT` error Value.
+ */
+export function unknownUnitError(unit: string, from?: string): Value {
+    let near = nearestNames(unit, [], 3, unitNameIndex());
+    const measure = from === undefined ? undefined : getMeasure(from);
+    if (measure !== undefined) {
+        const alike = near.filter((name) => getMeasure(name) === measure);
+        if (alike.length > 0) near = alike;
+    }
+    return errorValue("UNKNOWN_UNIT", `"${unit}" is not a unit.${didYouMeanSentence(near)}`);
+}
+
+/**
+ * Whether a target names a unit the engine can give a number: a unit in the
+ * tables (an extended one such as `furlong` included), a currency, a count of
+ * video frames or a timecode, or a rate of such units (`km/h`, `$/kWh`). Case
+ * matters, as it does everywhere in the unit system, so `KM` is not a unit.
+ *
+ * @param unit - The target, as written.
+ */
+export function namesAUnit(unit: string): boolean {
+    // Read into a boolean first: the guard narrows `unit` to never on its false branch.
+    const timecode: boolean = isTimecodeUnit(unit);
+    if (timecode || describeMeasure(unit) !== undefined || unit === "frames") return true;
+    if (!unit.includes("/")) return false;
+    const parts = unit.split("/");
+    for (let i = 0; i < parts.length; i++) {
+        // A rate with no numerator (`/s`) is the reciprocal of its denominator.
+        if (i === 0 && parts[i] === "") continue;
+        if (describeMeasure(parts[i]) === undefined) return false;
+    }
+    return true;
+}
+
+/**
+ * A value that is not a quantity converted into a unit with `in` or `to`: the
+ * last branch of `UOM_CONVERT_IN`, after a quantity, a date and a percentage
+ * have been taken.
+ *
+ * A number is given the unit, which is what `5 in km` has always done. Refused
+ * by name instead: a value with no single amount (#547, see
+ * {@link noSingleAmount}); a value carrying a tolerance, which has lost the unit
+ * it had (#639, see {@link toleranceHasNoUnit}); a constant in a unit the engine
+ * cannot spell (#648); and a word that is not a unit at all, which labelled the
+ * number with it: `5 in widgets` answered `5.00 widgets` and `2024 in roman`
+ * `2,024.00 roman` (#646). The last is the refusal a quantity already had
+ * (`5 km in banana`).
+ *
+ * @param v - The value, already checked for a fault.
+ * @param unit - The target unit.
+ * @returns The value in that unit, or an error Value.
+ */
+export function plainValueInUnit(v: Value, unit: string): Value {
+    return noSingleAmount(v, unit)
+        ?? (v.uncertainty !== undefined ? toleranceHasNoUnit(unit) : null)
+        ?? unspelledUnitRefused(v, unit)
+        ?? (namesAUnit(unit) ? uomValue(v.toNumber(), unit) : unknownUnitError(unit));
+}
+
+/**
+ * A unit written straight after a value (`UOM_CONVERT`): `5 km`, `$[4, 5]`.
+ *
+ * The value becomes a quantity in the unit (see `valueInUnit`), except for
+ * the values {@link plainValueInUnit} refuses for the same reasons: one with no
+ * single amount (`[1, 2, 3] km` was `0.00 km`, #640), one carrying a tolerance
+ * (#639) and a constant in a unit the engine cannot spell (#648). An unknown
+ * (a formula) is let through unchanged, as it always was: the symbolic forms
+ * are outside this change. The unit itself is not checked here: the lexer
+ * produced it as a unit.
+ *
+ * @param v - The value, already checked for a fault, a second unit and a date.
+ * @param unit - The unit written after it.
+ * @returns The quantity, or an error Value.
+ */
+export function unitAfterValue(v: Value, unit: string): Value {
+    return (v.type === ValueType.Symbolic ? null : noSingleAmount(v, unit))
+        ?? (v.uncertainty !== undefined ? toleranceHasNoUnit(unit) : null)
+        ?? unspelledUnitRefused(v, unit)
+        ?? valueInUnit(v, unit);
 }
 
 /**
@@ -788,12 +1071,17 @@ export function toleranceSpread(center: Value, spread: Value): number | Value {
  * read as an exact operand (uncertainty 0), which is what makes a scalar
  * multiply `(a ± s) * k` come out as `s * |k|`.
  *
- * Returns null unless both operands are plain Numbers, so a unit, a matrix or
- * any other typed operand keeps its own path (and drops the uncertainty, as a
- * comparison or a transcendental function does). The VM gates the call on an
- * uncertainty actually being present, so a plain `2 * 3` never reaches here.
+ * Returns null unless both operands are plain Numbers, so a matrix or any other
+ * typed operand keeps its own path (and drops the uncertainty, as a comparison
+ * or a transcendental function does). A quantity is the exception: an uncertain
+ * number meeting one is refused (see {@link toleranceMeetsQuantity}), since the
+ * unit arithmetic it fell through to gave the number the quantity's unit and
+ * discarded the spread (#639). The VM gates the call on an uncertainty actually
+ * being present, so a plain `2 * 3` never reaches here.
  */
 export function uncertainOp(l: Value, r: Value, op: "add" | "sub" | "mul" | "div"): Value | null {
+    if (l.type === ValueType.Uom && r.uncertainty !== undefined) return toleranceMeetsQuantity(l.unit ?? "?", op);
+    if (r.type === ValueType.Uom && l.uncertainty !== undefined) return toleranceMeetsQuantity(r.unit ?? "?", op);
     if (l.type !== ValueType.Number || r.type !== ValueType.Number) return null;
     const a = l.value as number;
     const b = r.value as number;
@@ -977,6 +1265,36 @@ export function percentageNotFinite(): Value {
 }
 
 /**
+ * A temperature plus a temperature on another scale, the right one read as a
+ * step rather than a reading, or null when the sum is not one of those (#645).
+ *
+ * Adding to a temperature adds a difference: `20 °C + 10 °F` raises twenty
+ * degrees Celsius by ten Fahrenheit degrees, which is 5.56 Celsius degrees, so
+ * the answer is 25.56 °C. The general sum converted the right operand as a
+ * reading (10 °F is -12.22 °C) and answered 7.78 °C, and `20 °C + 10 K` added
+ * -263.15 °C. The step is converted the way a tolerance's width is (see
+ * {@link toleranceSpread}): `convert(s) - convert(0)`, which cancels the offset
+ * between the scales and keeps their ratio. The left operand's scale is the
+ * answer's, as it is for every sum of two quantities.
+ *
+ * Only `+`, and only across scales. A same-scale sum was already right and does
+ * not come here. Subtraction keeps the documented reading of both sides as
+ * temperatures (`20 °C - 10 °F` is 32.22 °C), a convention held for 3.0.
+ *
+ * @param l - The left operand.
+ * @param r - The right operand.
+ * @returns The sum in the left operand's scale, or null.
+ */
+export function temperatureStep(l: Value, r: Value): Value | null {
+    if (l.type !== ValueType.Uom || r.type !== ValueType.Uom) return null;
+    const lUnit = l.unit, rUnit = r.unit;
+    if (lUnit === undefined || rUnit === undefined || lUnit === rUnit) return null;
+    if (getMeasure(lUnit) !== "temperature" || getMeasure(rUnit) !== "temperature") return null;
+    const step = convertUnit(r.toNumber(), rUnit, lUnit) - convertUnit(0, rUnit, lUnit);
+    return uomValue(l.toNumber() + step, lUnit);
+}
+
+/**
  * Whether a value is a length of time a reader typed in a unit a clock shows
  * without loss: a time quantity in anything but milliseconds.
  *
@@ -1085,6 +1403,17 @@ export function binaryOp(
     }
 
     if (l.type === ValueType.Uom || r.type === ValueType.Uom) {
+        // A list, a range or a colour has no amount to put in the quantity's
+        // unit, and a constant whose unit the engine cannot spell has the wrong
+        // one: each took the quantity's unit here (#640, #648).
+        const refused = quantityOperandRefused(l, r, symbolicOp);
+        if (refused) return refused;
+        // A temperature added to one on another scale is a step, not a reading
+        // (#645); see temperatureStep().
+        if (symbolicOp === "add") {
+            const step = temperatureStep(l, r);
+            if (step) return step;
+        }
         // Money in the same currency (or money against a plain scalar) is exact:
         // "$0.10 + $0.20" is "$0.30", not the double's "$0.30000000000000004".
         // Only the four arithmetic ops carry an `op` kind (MOD passes none), and

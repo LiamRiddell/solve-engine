@@ -6,7 +6,8 @@ description: "Body mass index, and the pace or speed of a run from its distance 
 > **Package:** `HEALTH_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
 
 A few everyday health and fitness sums. They are written as functions, with the
-numbers in the units the labels state.
+numbers in the units the labels state, or with units of your own, which are
+converted (see [measurements with units](#measurements-with-units)).
 
 ## Body mass index
 
@@ -32,6 +33,36 @@ pace(21.1, 100) // 4:44 /km
 
 The last line is a half marathon (21.1 km) in one hour forty, a pace of four
 minutes and forty-four seconds per kilometre.
+
+## Measurements with units
+
+Each function can also be given its measurements with their units, in whatever
+units you have them: a weight in pounds or stones, a height in centimetres or in
+feet and inches, a distance in miles, a time in hours. Each one is converted into
+the unit the function works in before the sum is done, so the answer is the same
+as for the plain numbers in kilograms, metres, kilometres and minutes.
+
+```solve
+bmi(70 kg, 175 cm) // 22.86
+bmi(154 lb, 5 ft 9 in) // 22.74
+speed(10 km, 1 h) // 10.00 km/h
+speed(26.2 mi, 3.5 h) // 12.05 km/h
+pace(10 mi, 80 min) // 4:58 /km
+```
+
+A pace is still given per kilometre when the distance is in miles; `pace(10 mi,
+80 min)` is ten miles at four minutes fifty-eight a kilometre. A measurement of
+the wrong kind, a height given in kilograms or a time in metres, is refused
+rather than read as a number, and so is a negative weight, height, distance or
+time.
+
+```solve
+bmi(175 cm, 70 kg) // bmi: the weight is a mass, not a length. Give it with a unit (70 kg or 154 lb) or as a plain number of kilograms.
+bmi(70 kg, -175 cm) // bmi: the height cannot be negative.
+```
+
+A plain number keeps the unit the function states, so `speed(10, 1)` is ten
+kilometres in one minute, 600.00 km/h.
 
 ## Writing a pace directly
 

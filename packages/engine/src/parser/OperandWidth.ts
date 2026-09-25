@@ -60,6 +60,8 @@ const TWO_OPERANDS: readonly OpCode[] = [
 	OpCode.MAT_NEW,
 	// A body index plus the pooled source-expression string.
 	OpCode.PLOT_INVOKE,
+	// The denominator's pooled name plus the rate builtin's index.
+	OpCode.RATE_OR_DIVIDE,
 ];
 
 /**

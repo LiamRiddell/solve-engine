@@ -44,6 +44,8 @@ export interface PrimeRatesOptions {
  * when it arrived, and the provenance record a conversion through it carries.
  */
 interface RateTable {
+  /** The base currency the rates are relative to, upper case. */
+  base: string;
   /** When the table was stored, for the freshness window. */
   fetchedAt: number;
   rates: Record<string, number>;
@@ -54,8 +56,9 @@ interface RateTable {
 }
 
 /** Build a table with its provenance record. */
-function rateTable(rates: Record<string, number>, provider: string, kind: SourceKind, storedAt: number, publishedAt?: number): RateTable {
+function rateTable(base: string, rates: Record<string, number>, provider: string, kind: SourceKind, storedAt: number, publishedAt?: number): RateTable {
   return {
+    base,
     fetchedAt: storedAt,
     rates,
     source: { provider, kind, fetchedAt: publishedAt ?? storedAt },
@@ -93,15 +96,93 @@ export const CurrencyErrorCodes = {
  */
 export class CurrencyExchangeService {
   /**
-   * Live rate tables cached from successful getRate() fetches, keyed by
-   * uppercase base currency. Each table holds every rate the API returned
-   * for that base (plus the base itself at 1), so any pair whose two codes
-   * appear in one fresh table can be served synchronously, including
-   * cross pairs via triangulation (EUR→GBP through a USD-base table).
-   * Stale tables are ignored, not evicted; the next successful fetch for
-   * the same base overwrites them.
+   * Rate tables cached from successful getRate() fetches and from primeRates(),
+   * one per source: keyed by provider, kind and base currency, and for a
+   * single-pair crypto fetch by the pair as well (see {@link tableKey}). Each
+   * table holds every rate its source returned for that base (plus the base
+   * itself at 1), so any pair whose two codes appear in one fresh table can be
+   * served synchronously, including cross pairs via triangulation (EUR→GBP
+   * through a USD-base table).
+   *
+   * They used to be keyed by base currency alone, so each store replaced
+   * whatever table that base had, from any source (#649). A note converting
+   * `$100 in EUR` and `$100 in BTC` fetched Frankfurter's USD table and
+   * CoinGecko's USD→BTC pair, and whichever landed second replaced the other:
+   * one of the two lines went on reporting CURRENCY_RATE_UNAVAILABLE, and a
+   * host's primed table was lost to the first live fetch for its base. Now each
+   * source keeps its own table, a fetch replaces only its own source's table
+   * for that base, and a pair two fresh tables both cover is served by the rule
+   * the single table per base gave (see {@link freshTableFor}). A table past the
+   * freshness window is dropped when the next one is stored.
    */
   private baseTables: Map<string, RateTable> = new Map();
+
+  /**
+   * The order in which each base currency was first stored, which is the order
+   * the old single table per base was consulted in. See {@link freshTableFor}.
+   */
+  private baseOrder: Map<string, number> = new Map();
+
+  /**
+   * The key a table is stored under: its provider, how it was obtained and its
+   * base, plus the quote for a table that holds a single pair (a CoinGecko
+   * price), so a price for BTC and one for ETH from the same base are two
+   * tables rather than one replacing the other.
+   */
+  private static tableKey(provider: string, kind: SourceKind, base: string, quote?: string): string {
+    return quote === undefined ? `${provider}\u0000${kind}\u0000${base}` : `${provider}\u0000${kind}\u0000${base}\u0000${quote}`;
+  }
+
+  /**
+   * Store a table under its key, first dropping every table past the freshness
+   * window. The key is deleted before it is set so the map's order is the order
+   * of storing, which is what breaks a tie between two tables stored in the
+   * same millisecond (see {@link freshTableFor}).
+   */
+  private storeTable(key: string, table: RateTable): void {
+    const now = Date.now();
+    for (const [existingKey, existing] of this.baseTables) {
+      if (now - existing.fetchedAt > CurrencyExchangeService.RATE_FRESHNESS_MS) this.baseTables.delete(existingKey);
+    }
+    if (!this.baseOrder.has(table.base)) this.baseOrder.set(table.base, this.baseOrder.size);
+    this.baseTables.delete(key);
+    this.baseTables.set(key, table);
+  }
+
+  /**
+   * The fresh table that serves a pair, among the tables stored within the
+   * freshness window that hold both codes.
+   *
+   * The rule is the one a single table per base gave, so no pair's rate moves
+   * except where a table used to be lost. Tables for the base stored first come
+   * first, as the old map was read in the order its bases arrived (a USD table
+   * serves EUR→GBP ahead of a GBP table fetched later). Among the tables for one
+   * base, the one stored most recently serves, which is the rate the replacing
+   * store gave: a host priming USD after a live USD fetch has its own rate used,
+   * and a live fetch after priming has its. What no longer happens is a table
+   * from one source removing another's rates, so a pair only the other source
+   * holds (BTC beside a fiat table, a host's own pair beside a live one) is still
+   * served. getRateSync() and rateSourcesSync() both ask this, so a
+   * conversion's provenance always names the table whose rate it used. Reads
+   * only, so a conversion on every keystroke allocates nothing.
+   */
+  private freshTableFor(fromUpper: string, toUpper: string): RateTable | undefined {
+    const now = Date.now();
+    let best: RateTable | undefined;
+    let bestRank = Number.POSITIVE_INFINITY;
+    for (const table of this.baseTables.values()) {
+      if (now - table.fetchedAt > CurrencyExchangeService.RATE_FRESHNESS_MS) continue;
+      if (!table.rates[fromUpper] || !table.rates[toUpper]) continue;
+      const rank = this.baseOrder.get(table.base) ?? Number.MAX_SAFE_INTEGER;
+      // Map order is store order (see storeTable), so a later table of the same
+      // base and time is the more recent store.
+      if (rank < bestRank || (rank === bestRank && best !== undefined && table.fetchedAt >= best.fetchedAt)) {
+        best = table;
+        bestRank = rank;
+      }
+    }
+    return best;
+  }
 
   /**
    * How long a fetched rate may be served synchronously by getRateSync().
@@ -227,7 +308,10 @@ export class CurrencyExchangeService {
       // table so subsequent conversions (including cross pairs via
       // triangulation) resolve synchronously within the freshness window
       // instead of going Pending again.
-      this.baseTables.set(fromUpper, rateTable({ ...rates, [fromUpper]: 1 }, FRANKFURTER_PROVIDER, "live", Date.now()));
+      this.storeTable(
+        CurrencyExchangeService.tableKey(FRANKFURTER_PROVIDER, "live", fromUpper),
+        rateTable(fromUpper, { ...rates, [fromUpper]: 1 }, FRANKFURTER_PROVIDER, "live", Date.now()),
+      );
 
       return rates[toUpper];
     } finally {
@@ -283,8 +367,13 @@ export class CurrencyExchangeService {
 
       // Cache as a single-pair base table, same shape Frankfurter fetches
       // produce, so getRateSync/convertSync's triangulation logic doesn't
-      // need to know or care which source a rate came from.
-      this.baseTables.set(fromUpper, rateTable({ [fromUpper]: 1, [toUpper]: rate }, COINGECKO_PROVIDER, "live", Date.now()));
+      // need to know or care which source a rate came from. Keyed by the pair,
+      // so it sits beside a fiat table for the same base and beside another
+      // crypto pair rather than replacing either (#649).
+      this.storeTable(
+        CurrencyExchangeService.tableKey(COINGECKO_PROVIDER, "live", fromUpper, toUpper),
+        rateTable(fromUpper, { [fromUpper]: 1, [toUpper]: rate }, COINGECKO_PROVIDER, "live", Date.now()),
+      );
 
       return rate;
     } finally {
@@ -308,7 +397,9 @@ export class CurrencyExchangeService {
    *
    * A conversion through a primed table records it as a `primed` source (see
    * `vm/Provenance.ts`), named by `options.provider` so a host can say whose
-   * rates they are.
+   * rates they are. The table sits beside the engine's own live tables rather
+   * than replacing them, and a live fetch for the same base does not replace
+   * it (#649); priming the same provider and base again does.
    *
    * @param base - Base currency code (e.g. "USD").
    * @param rates - Map of currency code → rate relative to the base.
@@ -316,9 +407,10 @@ export class CurrencyExchangeService {
    */
   primeRates(base: string, rates: Record<string, number>, options: PrimeRatesOptions = {}): void {
     const baseUpper = base.toUpperCase();
-    this.baseTables.set(
-      baseUpper,
-      rateTable({ ...rates, [baseUpper]: 1 }, options.provider ?? PRIMED_RATES_PROVIDER, "primed", Date.now(), options.publishedAt),
+    const provider = options.provider ?? PRIMED_RATES_PROVIDER;
+    this.storeTable(
+      CurrencyExchangeService.tableKey(provider, "primed", baseUpper),
+      rateTable(baseUpper, { ...rates, [baseUpper]: 1 }, provider, "primed", Date.now(), options.publishedAt),
     );
   }
 
@@ -332,6 +424,7 @@ export class CurrencyExchangeService {
    */
   clearRates(): void {
     this.baseTables.clear();
+    this.baseOrder.clear();
   }
 
   /**
@@ -349,16 +442,8 @@ export class CurrencyExchangeService {
     if (fromUpper === toUpper) {
       return 1;
     }
-    const now = Date.now();
-    for (const table of this.baseTables.values()) {
-      if (now - table.fetchedAt > CurrencyExchangeService.RATE_FRESHNESS_MS) continue;
-      const fromRate = table.rates[fromUpper];
-      const toRate = table.rates[toUpper];
-      if (fromRate && toRate) {
-        return toRate / fromRate;
-      }
-    }
-    return null;
+    const table = this.freshTableFor(fromUpper, toUpper);
+    return table === undefined ? null : table.rates[toUpper] / table.rates[fromUpper];
   }
 
   /**
@@ -379,20 +464,15 @@ export class CurrencyExchangeService {
     const fromUpper = from.toUpperCase();
     const toUpper = to.toUpperCase();
     if (fromUpper === toUpper) return undefined;
-    const now = Date.now();
-    for (const table of this.baseTables.values()) {
-      if (now - table.fetchedAt > CurrencyExchangeService.RATE_FRESHNESS_MS) continue;
-      if (table.rates[fromUpper] && table.rates[toUpper]) {
-        const subject = `${fromUpper}/${toUpper}`;
-        let sources = table.pairSources.get(subject);
-        if (sources === undefined) {
-          sources = Object.freeze([Object.freeze({ ...table.source, subject })]);
-          table.pairSources.set(subject, sources);
-        }
-        return sources;
-      }
+    const table = this.freshTableFor(fromUpper, toUpper);
+    if (table === undefined) return undefined;
+    const subject = `${fromUpper}/${toUpper}`;
+    let sources = table.pairSources.get(subject);
+    if (sources === undefined) {
+      sources = Object.freeze([Object.freeze({ ...table.source, subject })]);
+      table.pairSources.set(subject, sources);
     }
-    return undefined;
+    return sources;
   }
 
   /** Convert `value` from `from` to `to` using a freshly-fetched live rate (see {@link getRate}). */
@@ -403,16 +483,23 @@ export class CurrencyExchangeService {
 
   /**
    * Get all currently cached fresh rates, keyed "FROM:TO".
+   *
+   * Where two fresh tables for one base give a rate for the same code, the one
+   * stored most recently is listed, the rate a conversion through that base
+   * would use.
+   *
    * @returns Snapshot of fresh live rates, or null when none are cached.
    */
   getAllRates(): Record<string, number> | null {
     const now = Date.now();
     const snapshot: Record<string, number> = {};
     let any = false;
-    for (const [base, table] of this.baseTables) {
-      if (now - table.fetchedAt > CurrencyExchangeService.RATE_FRESHNESS_MS) continue;
+    const fresh = [...this.baseTables.values()]
+      .filter((table) => now - table.fetchedAt <= CurrencyExchangeService.RATE_FRESHNESS_MS)
+      .sort((a, b) => a.fetchedAt - b.fetchedAt);
+    for (const table of fresh) {
       for (const [code, rate] of Object.entries(table.rates)) {
-        snapshot[`${base}:${code}`] = rate;
+        snapshot[`${table.base}:${code}`] = rate;
         any = true;
       }
     }

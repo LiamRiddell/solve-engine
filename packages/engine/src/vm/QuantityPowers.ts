@@ -121,8 +121,17 @@ const GEOMETRIC_DIMENSION: Readonly<Record<string, number>> = { length: 1, area:
  * the area or volume it is: the matching square or cube spelling where the table
  * has one, and square or cubic metres where it does not. The exact decimal
  * sidecar is kept when the spelling is used, so `0.1 m * 0.2 m` stays exact.
+ *
+ * Also what labels a measure worked out from lengths elsewhere: a shape's area
+ * or volume (`area of circle radius 5 m`, #638) and the variance of a list of
+ * lengths (#643), each already a magnitude in `length` to the `power`.
+ *
+ * @param product - The magnitude, as a value whose number is in `length` to the `power`.
+ * @param length - The length unit the magnitude is measured in.
+ * @param power - 2 for an area, 3 for a volume.
+ * @returns The area or volume.
  */
-function asPowerOfLength(product: Value, length: string, power: number): Value {
+export function asPowerOfLength(product: Value, length: string, power: number): Value {
 	const spelled = poweredUnit(length, power);
 	if (spelled !== undefined) {
 		return product.exact !== undefined
