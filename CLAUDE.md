@@ -162,7 +162,9 @@ features is the sign the split was missed, and it is broken apart. Both shapes
 have precedent: `line-references.md` had category tags, goal seek and table
 columns carved out into their own pages while it stayed a focused line-reference
 page, and `live-data.md` was dissolved entirely into `weather.md`, `stocks.md`
-and `knowledge.md`. Either way, each area ends up found under its own name. A page whose results are not fixed strings (live network data, random
+and `knowledge.md`. Either way, each area ends up found under its own name. A new syntax page also gets its line on
+`syntax/cheatsheet.md`: a one-line caption, a proven example and a link, the map
+of the reference that `lint:cheatsheet` keeps whole. A page whose results are not fixed strings (live network data, random
 rolls, dates relative to now) carries no proven examples and is listed, with a
 reason, in the `unprovable` map in `DocExamples.spec.ts`.
 

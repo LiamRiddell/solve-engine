@@ -320,6 +320,11 @@ jobs:
       # to the list would otherwise be reachable only by search.
       - run: npm run lint:sidebar
 
+      # The cheatsheet is the one-page map of the syntax reference, and a map
+      # is only useful whole. It once linked 5 of 95 syntax pages (#728), so a
+      # page nobody gave a line there fails here, as does a link to no page.
+      - run: npm run lint:cheatsheet
+
       # Same reasoning as the playground: a lockfile the root audit cannot see.
       - run: npm audit --prefix docs --audit-level=high
 
