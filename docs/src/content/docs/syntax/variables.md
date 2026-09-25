@@ -69,9 +69,28 @@ spent += 40 // 40
 spent += 12 // 52
 ```
 
+`*=` and `/=` do the same by multiplying and dividing, for a balance that grows by
+a rate or a quantity cut down in place. Money stays exact to the penny and a unit
+stays its unit.
+
+```solve
+:balance = $1000
+balance *= 1.05 // $1,050.00
+balance *= 1.05 // $1,102.50
+```
+
+```solve
+:length = 10 m
+length /= 4 // 2.50 m
+```
+
+There is no starting value for a product: zero would make every product zero, so
+a first `*=` or `/=` on a name that has not been set is refused as an undefined
+variable, where `+=` and `-=` start from zero.
+
 The compound forms apply to bare names, not the colon `:name` or `global :name`
 grammars, and the right-hand side keeps its own precedence, so `budget -= 1 + 2`
-subtracts three.
+subtracts three and `balance *= 1 + 0.05` multiplies by 1.05.
 
 ## Functions
 

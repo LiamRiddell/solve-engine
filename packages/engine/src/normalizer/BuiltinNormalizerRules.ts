@@ -83,7 +83,7 @@ export function implicitMultiplyRule(
     // could apply to.
     shape: [
       { types: ["NUMBER", "RPAREN"] },
-      { types: ["IDENT", "LPAREN", "PI", "E"] },
+      { types: ["IDENT", "LPAREN", "PI", "E", "SQRT_SIGN"] },
     ],
     match(tokens: Token[], pos: number): NormalizerMatch | null {
       // ── Need at least one token after the current position ──
@@ -101,7 +101,7 @@ export function implicitMultiplyRule(
       // reach a test that rejects nearly all of them.
       const triggers =
         (t.type === "NUMBER" || t.type === "RPAREN") &&
-        (next.type === "IDENT" || next.type === "LPAREN" || next.type === "PI" || next.type === "E");
+        (next.type === "IDENT" || next.type === "LPAREN" || next.type === "PI" || next.type === "E" || next.type === "SQRT_SIGN");
 
       if (!triggers) return null;
 

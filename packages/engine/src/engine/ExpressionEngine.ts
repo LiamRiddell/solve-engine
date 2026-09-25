@@ -474,6 +474,17 @@ function replayedParseError(failure: FailedParse, base: SpanBase | null): Engine
 }
 
 /**
+ * The running-total operators and the arithmetic each performs, and whether a
+ * first use on an unknown name starts from 0 (#670: `*=` and `/=` do not).
+ */
+const COMPOUND_OPERATORS: ReadonlyMap<string, { type: string; text: string; seeds: boolean }> = new Map([
+    ['PLUS_EQUALS', { type: 'PLUS', text: '+', seeds: true }],
+    ['MINUS_EQUALS', { type: 'MINUS', text: '-', seeds: true }],
+    ['STAR_EQUALS', { type: 'STAR', text: '*', seeds: false }],
+    ['SLASH_EQUALS', { type: 'SLASH', text: '/', seeds: false }],
+]);
+
+/**
  * Core expression evaluation engine, the top-level orchestrator.
  *
  * Owns the full evaluation pipeline: lexing, parsing, bytecode compilation,
@@ -3941,7 +3952,8 @@ export class ExpressionEngine {
     }
 
     /**
-     * `name += expr` / `name -= expr`, a running total. The accumulator reads
+     * `name += expr` / `name -= expr` / `name *= expr` / `name /= expr`, a
+     * running total. The accumulator reads
      * its current value, adds or subtracts the right-hand side, stores the
      * result, and answers with the new value, so a note becomes a live ledger
      * where each line adjusts a balance in place. Returns null to decline
@@ -3969,8 +3981,8 @@ export class ExpressionEngine {
         const nameTok = tokens[0];
         const opTok = tokens[1];
         const isName = nameTok.type === 'IDENT' || nameTok.type === 'UNIT';
-        const isCompound = opTok.type === 'PLUS_EQUALS' || opTok.type === 'MINUS_EQUALS';
-        if (!isName || !isCompound) return null;
+        const op = COMPOUND_OPERATORS.get(opTok.type);
+        if (!isName || op === undefined) return null;
 
         const rhs = tokens.slice(2);
         if (rhs.length === 0) {
@@ -3981,7 +3993,6 @@ export class ExpressionEngine {
         }
 
         const name = nameTok.value;
-        const op = opTok.type === 'PLUS_EQUALS' ? { type: 'PLUS', text: '+' } : { type: 'MINUS', text: '-' };
         // `name <op> ( rhs )`: the accumulator is read as an ordinary IDENT so a
         // unit-letter name (`b`, `s`) loads its variable rather than a unit, and
         // the parentheses give the right-hand side its own precedence (`bal += 3
@@ -4010,8 +4021,10 @@ export class ExpressionEngine {
         // previous pass's value and double-count on every keystroke.
         this.accumulatorNames.add(name);
         // A first `+=`/`-=` on an unknown name seeds 0, so a ledger can open
-        // straight into `spent += 10` without an UNDEFINED_VARIABLE.
-        if (this.vm.getVar(name) === undefined) this.vm.setVar(name, numberValue(0));
+        // straight into `spent += 10` without an UNDEFINED_VARIABLE. A first
+        // `*=`/`/=` is not seeded: 0 would make every product 0, so an unknown
+        // name is reported as the undefined variable it is (#670).
+        if (op.seeds && this.vm.getVar(name) === undefined) this.vm.setVar(name, numberValue(0));
 
         const accumulatorProgram = this.compileAdHoc(accTokens);
         this.beginLineRandom(accumulatorProgram, lineNumber);
@@ -4022,7 +4035,7 @@ export class ExpressionEngine {
         if (result.type === 'pending') {
             throw ErrorFactory.execution(
                 'COMPOUND_ASSIGN_ASYNC_UNSUPPORTED',
-                `A running total (+= / -=) cannot use an async operation (weather/stocks/currency) on its right-hand side.`,
+                `A running total (+=, -=, *= or /=) cannot use an async operation (weather/stocks/currency) on its right-hand side.`,
             );
         }
         this.vm.setVar(name, result.value);
@@ -6678,7 +6691,7 @@ export class ExpressionEngine {
 		}
 		const first = tokens[0].type;
 		// `total += 5`, `spent -= 10`: a running total.
-		if ((first === 'IDENT' || first === 'UNIT') && (tokens[1]?.type === 'PLUS_EQUALS' || tokens[1]?.type === 'MINUS_EQUALS')) {
+		if ((first === 'IDENT' || first === 'UNIT') && tokens[1] !== undefined && COMPOUND_OPERATORS.has(tokens[1].type)) {
 			return tokens.length > 2 && this.parsesWhole(tokens.slice(2), hasParens);
 		}
 		// The colon and global definitions, and goal seek, own their `=` and

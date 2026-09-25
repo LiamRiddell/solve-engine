@@ -74,6 +74,11 @@ export const SYMBOLIC_BUILTIN_NAMES: Readonly<Record<number, string>> = {
 
 /** Builtin index for `pow(base, exponent)`, which becomes a `pow` node rather than a `call` node. */
 const POW_BUILTIN_INDEX = 31;
+/** `log` and `ln`, the natural logarithm under its two names (#667). */
+const LOG_BUILTIN_INDEX = 5;
+const LN_BUILTIN_INDEX = 113;
+/** `log <x> base <n>` (#667). */
+const LOG_BASE_BUILTIN_INDEX = 114;
 
 /**
  * Builtin indices that take a symbolic argument on purpose and handle it
@@ -169,6 +174,9 @@ export function symbolicNeg(v: Value): Value {
  * error Value rather than a number computed from a placeholder zero.
  */
 export function symbolicBuiltin(index: number, args: readonly Value[]): Value {
+	// `ln` has its own index so its refusals name it, and is the logarithm the
+	// algebra knows as `log` (#667).
+	if (index === LN_BUILTIN_INDEX) index = LOG_BUILTIN_INDEX;
 	const nodes: SymbolicNode[] = [];
 	for (const arg of args) {
 		// Propagate a faulted operand unchanged rather than replacing it, so the
@@ -185,6 +193,11 @@ export function symbolicBuiltin(index: number, args: readonly Value[]): Value {
 
 	if (index === POW_BUILTIN_INDEX && nodes.length === 2) {
 		return symbolicToValue(powNode(nodes[0], nodes[1]));
+	}
+	// `log x base n` over a symbolic argument is the change of base the algebra
+	// knows, `log(x) / log(n)` (#667).
+	if (index === LOG_BASE_BUILTIN_INDEX && nodes.length === 2) {
+		return symbolicToValue({ kind: "div", left: callNode("log", [nodes[0]]), right: callNode("log", [nodes[1]]) });
 	}
 
 	const name = SYMBOLIC_BUILTIN_NAMES[index];

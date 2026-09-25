@@ -377,7 +377,7 @@ export function extractReadsAndWrites(
             // assignment (`total += 5` / `total -= 5`) both reads and writes its
             // own name, so the read above stands and the write is added here too.
             const next = tokens[i + 1]?.type;
-            const defines = next === "EQUALS" || next === "PLUS_EQUALS" || next === "MINUS_EQUALS";
+            const defines = next === "EQUALS" || next === "PLUS_EQUALS" || next === "MINUS_EQUALS" || next === "STAR_EQUALS" || next === "SLASH_EQUALS";
             if (defines) {
                 writes.push(t.value);
             }

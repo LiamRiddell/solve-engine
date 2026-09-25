@@ -12,6 +12,7 @@ updates when that line changes.
 | Expression | Meaning |
 | --- | --- |
 | `prev` | the result of the previous line |
+| `ans` | the same, under the name other calculators use |
 | `line 3` | the result of line three |
 | `sum(line 1 : line 4)` | the total of a span of lines |
 | `average(line 1 : line 4)` | the mean of a span |
@@ -29,6 +30,15 @@ prev     // 80
 line 1   // 120
 ```
 
+`ans` is the previous answer in Numi, Numbr and SpeedCrunch, and reads the line
+above the way `prev` does. It is an ordinary name otherwise: a note that defines
+a variable called `ans` gets that variable instead.
+
+```solve-doc
+10
+ans * 2   // 20
+```
+
 `total above` and `average above` gather every line above them:
 
 ```solve-doc
@@ -37,6 +47,11 @@ line 1   // 120
 30
 total above   // 60
 ```
+
+Some calculators read a bare `sum` or `total` line as the column above. Here the
+word on its own is a name like any other, so a note that never defines it gets
+an error that says to write `total above`, rather than a total nobody asked for
+appearing under a line of prose.
 
 A blank line or a heading acts as a boundary, so `total above` sums the current
 block rather than the whole document:

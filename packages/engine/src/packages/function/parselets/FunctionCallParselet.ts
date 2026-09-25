@@ -17,6 +17,11 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
  */
 export const builtinNameToIndex: Record<string, number> = {
   sqrt: 0, abs: 1, sin: 2, cos: 3, tan: 4, log: 5,
+  // The natural logarithm under the name calculators and spreadsheets give it
+  // (#667): its own index (113), so a refusal names `ln` as written, over the
+  // same implementation as `log`. Reached only as `ln(`, through
+  // FUNCTION_PACKAGE's call fusion, so `ln` stays free as a variable name.
+  ln: 113,
   ceil: 6, floor: 7, round: 8, min: 9, max: 10,
   asin: 11, acos: 12, atan: 13, atan2: 14,
   // Long-form trig-function-inverse aliases (Numi/older-calculator naming

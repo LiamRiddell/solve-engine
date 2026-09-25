@@ -21,6 +21,12 @@ export const FUNCTION_PACKAGE: IEnginePackage = {
   tokenCategories: {
     CHOOSE: "operator",
   },
+  // `ln(x)`, the natural logarithm `log` already is (#667). A call word rather
+  // than a keyword: `log` is a keyword and cannot be assigned, and `ln` was a
+  // free name that documents use (`ln = 4`), so it becomes the call only where
+  // `(` follows it.
+  callFusions: { ln: "FUNC" },
+  completionItems: [{ label: "ln", category: "function", detail: "natural logarithm" }],
   // `sqrt(16)` explains as "the square root of 16". See FunctionExplain.ts.
   explain: explainFunctionCall,
 };

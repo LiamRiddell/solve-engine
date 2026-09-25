@@ -28,6 +28,8 @@ const PERIODS_PER_YEAR: Record<string, number> = {
 	// reader of the other four would expect to exist, and leaving it out makes
 	// the set look arbitrary rather than deliberate.
 	"semi-annually": 2,
+	semiannually: 2,
+	"half-yearly": 2,
 	quarterly: 4,
 	monthly: 12,
 	fortnightly: 26,
@@ -43,9 +45,18 @@ const PERIODS_PER_YEAR: Record<string, number> = {
  * annual compounding the bare form already meant.
  */
 export function readCompoundingInterval(parser: Parser): number {
-	if (!parser.match("COMPOUNDING")) return 1;
+	// `compounded monthly` is the more common English, read here, after a rate,
+	// rather than as a keyword that would claim the word everywhere (#801).
+	const next = parser.peek();
+	const compounded = next?.type === "IDENT" && (next.value ?? "").toLowerCase() === "compounded";
+	if (compounded) parser.consume();
+	else if (!parser.match("COMPOUNDING")) return 1;
 	const token = parser.peek();
-	const name = (token?.text ?? token?.value ?? "").toLowerCase();
+	let name = (token?.text ?? token?.value ?? "").toLowerCase();
+	// A hyphen splits `semi-annually` and `half-yearly` into a word, a minus and
+	// a word, so the interval the message named was refused as `semi` (#801).
+	const joined = hyphenatedInterval(parser, name);
+	if (joined !== null) name = joined;
 	const periods = Object.prototype.hasOwnProperty.call(PERIODS_PER_YEAR, name) ? PERIODS_PER_YEAR[name] : undefined;
 	if (periods === undefined) {
 		// Naming the accepted set beats "unexpected token": the whole point of
@@ -57,7 +68,25 @@ export function readCompoundingInterval(parser: Parser): number {
 		);
 	}
 	parser.consume();
+	if (joined !== null) {
+		parser.consume();
+		parser.consume();
+	}
 	return periods;
+}
+
+/**
+ * The hyphenated interval a word, a minus and a word spell, when they spell
+ * one of {@link PERIODS_PER_YEAR}'s keys, or null.
+ *
+ * @param parser - The parser, positioned on the interval's first word.
+ * @param first - That word, lower-cased.
+ */
+function hyphenatedInterval(parser: Parser, first: string): string | null {
+	if (parser.peekAt(1)?.type !== "MINUS") return null;
+	const second = parser.peekAt(2);
+	const joined = `${first}-${(second?.text ?? second?.value ?? "").toLowerCase()}`;
+	return Object.prototype.hasOwnProperty.call(PERIODS_PER_YEAR, joined) ? joined : null;
 }
 
 /**

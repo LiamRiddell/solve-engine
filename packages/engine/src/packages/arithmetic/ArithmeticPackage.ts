@@ -1,3 +1,4 @@
+import { SquareRootSignParselet, InfinitySignParselet } from "./parselets/MathSymbolParselets";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { OpCode } from "@solve-js/parser/OpCode";
@@ -16,6 +17,9 @@ export const ARITHMETIC_PACKAGE: IEnginePackage = {
     NUMBER: new NumberParselet(),
     LPAREN: new GroupParselet(),
     PI: new ConstantParselet(),
+    // `√16` and `∞` (#669).
+    SQRT_SIGN: new SquareRootSignParselet(),
+    INFINITY_SIGN: new InfinitySignParselet(),
     E: new ConstantParselet(),
     PLUS: new PrefixOpParselet(OpCode.POS),
     MINUS: new PrefixOpParselet(OpCode.NEG),

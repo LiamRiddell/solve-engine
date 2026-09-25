@@ -165,8 +165,11 @@ describe("the check still answers the question it is asked", () => {
 				let compiles = true;
 				try {
 					compiling.compileExpression(line);
-				} catch {
-					compiles = false;
+				} catch (error) {
+					// A first `*=` or `/=` on an unknown name is refused when it
+					// runs, since nothing seeds it (#670). The check compiles and
+					// never runs, so a refusal of that kind is a line that compiles.
+					compiles = (error as { code?: string }).code === "UNDEFINED_VARIABLE";
 				}
 				expect({ line, parses: checking.tryCompileExpression(line) }).toEqual({ line, parses: compiles });
 			} finally {

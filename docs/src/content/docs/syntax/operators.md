@@ -103,5 +103,24 @@ calculates.
 12 ÷ 4 // 3
 ```
 
+The mathematical symbols a phone keyboard or a pasted formula carries are read
+too: `≤` and `≥` compare as `<=` and `>=` do, `√` is a square root, `∞` is
+infinity and `π` is pi. The root binds as tightly as a minus sign, so `√16 + 9`
+is the root of sixteen plus nine, and `2√3` is two times the root of three.
+
+```solve
+3 ≥ 2 // true
+3 ≤ 2 // false
+√16 + 9 // 13
+√(9 + 16) // 5
+2√3 // 3.46
+2π // 6.28
+1/∞ // 0
+```
+
+`π` is pi only while nothing in the note is named `π`, so a note that already
+uses it as a variable keeps its own value. The word `infinity` is not read, since
+it is ordinary English in a line of prose.
+
 The em dash (`—`) is not an operator. It is a sentence mark, and a line that
 carries one is read as prose.

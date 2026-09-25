@@ -62,10 +62,13 @@ export const TokenTypes = {
   IDENT: "IDENT",
   PLUS: "PLUS",
   MINUS: "MINUS",
-  // Compound assignment for running totals: `total += 100`, `total -= 40`.
-  // Handled by the engine's compound-assignment interception, not a parselet.
+  // Compound assignment for running totals: `total += 100`, `total -= 40`,
+  // `bal *= 1.05`, `len /= 2` (#670). Handled by the engine's
+  // compound-assignment interception, not a parselet.
   PLUS_EQUALS: "PLUS_EQUALS",
   MINUS_EQUALS: "MINUS_EQUALS",
+  STAR_EQUALS: "STAR_EQUALS",
+  SLASH_EQUALS: "SLASH_EQUALS",
   STAR: "STAR",
   SLASH: "SLASH",
   // The uncertainty operator, `±` (U+00B1) or the ASCII `+/-`. The symbol is
@@ -181,6 +184,9 @@ export const TokenTypes = {
   MULTIPLY_BY: "MULTIPLY_BY",
   DIVIDE_BY: "DIVIDE_BY",
   NEQ: "NEQ",
+  // `√` and `∞`, the square root and infinity as a formula writes them (#669).
+  SQRT_SIGN: "SQRT_SIGN",
+  INFINITY_SIGN: "INFINITY_SIGN",
   IN: "IN",
   BIT_XOR: "BIT_XOR",
   EQUALITY: "EQUALITY",

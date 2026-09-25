@@ -22,6 +22,7 @@ import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate } from "@solve-js/vm/VMConversion";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
+import { ANSWER_NAME, PI_NAME, previousLineAnswer } from "@solve-js/vm/LineReads";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
@@ -2810,6 +2811,33 @@ function executeFrozen(
     return frozenAnswer(vm, directive, store.record(directive.key, value, at, isoDayOf(calendar, at)));
 }
 
+/** The words a column total is written as elsewhere, which here are `total above` (#668). */
+const COLUMN_TOTAL_WORDS: ReadonlySet<string> = new Set(["sum", "total"]);
+
+/**
+ * The error for a name nothing defines. It names the nearest variables and
+ * units, never silently using one (see errors/DidYouMean.ts), and a bare `sum`
+ * or `total`, which other calculators read as the column above, is pointed at
+ * `total above` (#668).
+ */
+function undefinedVariable(varName: string, vm: VM): EngineError {
+    if (COLUMN_TOTAL_WORDS.has(varName.toLowerCase())) {
+        return ErrorFactory.execution({
+            code: "UNDEFINED_VARIABLE",
+            message: `Undefined variable: ${varName}. To add up the lines above, write "total above".`,
+            suggestion: "total above",
+            context: { varName, didYouMean: ["total above"] },
+        });
+    }
+    const nearNames = nearestNames(varName, variableNameCandidates(vm), 4, unitNameIndex());
+    return ErrorFactory.execution({
+        code: "UNDEFINED_VARIABLE",
+        message: `Undefined variable: ${varName}${nearNames.length === 0 ? "" : `.${didYouMeanSentence(nearNames)}`}`,
+        suggestion: nearNames.length > 0 ? nearNames.join(", ") : undefined,
+        context: { varName, didYouMean: nearNames },
+    });
+}
+
 /**
  * The handler registered at `index`, or undefined when there is none: an own
  * entry that is a function. The index comes from bytecode, which a snapshot can
@@ -4320,16 +4348,14 @@ export function executeBytecode(
             stack.push(val);
           } else if (symbolicTolerant) {
             stack.push(symbolicValue(varSymbolicNode(varName)));
+          } else if (varName === ANSWER_NAME) {
+            // `ans` is the line above when nothing is named that (#668).
+            stack.push(previousLineAnswer(context));
+          } else if (varName === PI_NAME) {
+            // `π` is the constant when nothing is named that (#669).
+            stack.push(numberValue(Math.PI));
           } else {
-            // Name the nearest variables and units, never silently use one;
-            // see errors/DidYouMean.ts.
-            const nearNames = nearestNames(varName, variableNameCandidates(vm), 4, unitNameIndex());
-            throw ErrorFactory.execution({
-              code: "UNDEFINED_VARIABLE",
-              message: `Undefined variable: ${varName}${nearNames.length === 0 ? "" : `.${didYouMeanSentence(nearNames)}`}`,
-              suggestion: nearNames.length > 0 ? nearNames.join(", ") : undefined,
-              context: { varName, didYouMean: nearNames },
-            });
+            throw undefinedVariable(varName, vm);
           }
           break;
         }

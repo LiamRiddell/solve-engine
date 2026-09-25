@@ -52,6 +52,28 @@ root(3, -8) // -2
 root(2, -4) // ERROR: root(2, -4) has no real value: a negative number has a real root only of odd degree, as in root(3, -8).
 ```
 
+## Logarithms
+
+A logarithm answers "what power gives this number": the base-10 logarithm of 100
+is 2, because 10 squared is 100. `log` and `ln` are the natural logarithm, whose
+base is e (about 2.718), the one maths and most programming languages mean by an
+unmarked log. A calculator's `log` key is often base 10 instead, so the other two
+common bases have names of their own, and any base can be named in words.
+
+```solve
+ln(e) // 1
+log(100) // 4.61
+log10(100) // 2
+log2(8) // 3
+log 8 base 2 // 3
+log 1000 base 10 // 3
+```
+
+`ln` is a function only where a bracket follows it, so `ln` still works as a
+variable name (`ln = 4`, then `ln * 2` is 8). A logarithm of zero, of a negative
+number or of a quantity is refused by name, under whichever of the two names the
+line wrote (see [outside a function's domain](#outside-a-functions-domain)).
+
 ## Trigonometry
 
 `sin`, `cos` and `tan` relate an angle to the sides of a right-angled triangle:

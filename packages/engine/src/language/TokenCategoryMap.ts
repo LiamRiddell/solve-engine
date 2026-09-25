@@ -24,6 +24,8 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 
 	// Keywords (constants, date words, dice, misc grammar keywords)
 	PI: "keyword",
+	SQRT_SIGN: "operator",
+	INFINITY_SIGN: "keyword",
 	E: "keyword",
 	NOW: "keyword",
 	TODAY: "keyword",
@@ -196,6 +198,8 @@ const TOKEN_CATEGORY_MAP: Record<string, TokenCategory> = {
 	EQUALS: "operator",
 	PLUS_EQUALS: "operator",
 	MINUS_EQUALS: "operator",
+	STAR_EQUALS: "operator",
+	SLASH_EQUALS: "operator",
 	THEREFORE: "operator",
 	INCREASE_BY: "operator",
 	DECREASE_BY: "operator",

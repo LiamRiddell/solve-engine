@@ -70,13 +70,14 @@ export const nthRootParselet: PrefixParselet = {
  * {@link logBaseNormalizerRule}, which is what keeps `log(20)` working
  * untouched.
  *
- * Computed as `ln(x) / ln(n)`, the change-of-base identity.
+ * Computed by one builtin that takes both, so the common bases are exact:
+ * `log 1000 base 10` is 3, where the change of base `ln(x) / ln(n)` it used to
+ * emit came out as 2.9999999999999996 (#667).
  */
 export const logBaseParselet: PrefixParselet = {
 	category: "MathPhrases",
 	parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
 		parser.parseExpression(BindingPower.Conditional, builder); // x
-		emitNaturalLog(builder);
 		if (!parser.match("LOG_BASE")) {
 			throw ErrorFactory.parsing(
 				"LOG_EXPECTED_BASE",
@@ -84,17 +85,11 @@ export const logBaseParselet: PrefixParselet = {
 			);
 		}
 		parser.parseExpression(BindingPower.Conditional, builder); // n
-		emitNaturalLog(builder);
-		builder.emitOpcode(OpCode.DIV);
+		builder.emitOpcode(OpCode.CALL_BUILTIN);
+		builder.emitIndex(LOG_BASE_BUILTIN);
+		builder.emitIndex(2);
 	},
 };
 
-/** `log` in VMBuiltins.ts is the natural logarithm. */
-const LOG_BUILTIN = 5;
-
-/** Replaces the value on top of the stack with its natural logarithm. */
-function emitNaturalLog(builder: BytecodeBuilder): void {
-	builder.emitOpcode(OpCode.CALL_BUILTIN);
-	builder.emitIndex(LOG_BUILTIN);
-	builder.emitIndex(1);
-}
+/** `log <x> base <n>` in VMBuiltins.ts. */
+const LOG_BASE_BUILTIN = 114;
