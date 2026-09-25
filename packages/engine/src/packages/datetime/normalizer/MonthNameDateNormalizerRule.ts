@@ -22,12 +22,28 @@ const MONTHS: Record<string, number> = {
 	december: 12, dec: 12,
 };
 
-/** The month number for a token, or 0 when it is not a month name. */
-function monthOf(token: Token | undefined): number {
-	if (token === undefined) return 0;
-	// UNIT as well as IDENT: "may" and "march" are ordinary words, but "sept"
-	// and friends can lex either way depending on what else is registered.
-	if (token.type !== "IDENT" && token.type !== "UNIT") return 0;
+/**
+ * The token types a month name can lex as. IDENT and UNIT: "may" and "march"
+ * are ordinary words, but "sept" and friends can lex either way depending on
+ * what else is registered. CONVERTER_NAME: "oct" and "dec" are also the names
+ * of the octal and decimal conversions (`255 as dec`), so they lex as those,
+ * and without this `1 Oct 2026` and `25 Dec` could never reach the month table.
+ */
+const MONTH_TOKEN_TYPES: ReadonlySet<string> = new Set(["IDENT", "UNIT", "CONVERTER_NAME"]);
+
+/** The conversion keywords a converter name follows, where "dec" means decimal, not December. */
+const CONVERSION_KEYWORDS: ReadonlySet<string> = new Set(["AS", "IN", "TO"]);
+
+/**
+ * The month number for a token, or 0 when it is not a month name.
+ *
+ * @param token - The token that may name a month.
+ * @param before - The token before it, so a converter name after `as`, `in` or
+ * `to` stays the conversion it names.
+ */
+function monthOf(token: Token | undefined, before?: Token): number {
+	if (token === undefined || !MONTH_TOKEN_TYPES.has(token.type)) return 0;
+	if (token.type === "CONVERTER_NAME" && before !== undefined && CONVERSION_KEYWORDS.has(before.type)) return 0;
 	return MONTHS[(token.text ?? token.value ?? "").toLowerCase()] ?? 0;
 }
 
@@ -67,10 +83,10 @@ function looksLikeYear(digits: string): boolean {
  * @param year - The full year.
  * @param sourceTokens - The run being replaced.
  * @param calendar - The backend the literal is built with.
- * @param onAmbiguous - The engine's refusal policy. `'arithmetic'` restores
- * the old implicit-multiplication answer, the same opt-out the numeric shapes
- * have, because 51,327,216,000,000 is a number a host could in principle have
- * been reading even if nobody meant it.
+ * @param onAmbiguous - The engine's refusal policy. `'arithmetic'` declines,
+ * the same opt-out the numeric shapes have, and the run falls through to the
+ * implicit multiplication it is spelled like. That multiplies a date, which is
+ * refused by name, so the old 51,327,216,000,000 does not come back.
  * @returns The date match, the refusal, or null to leave the tokens alone.
  */
 function dateOrFault(
@@ -147,7 +163,7 @@ export function monthNameDateNormalizerRule(
 		// No second slot: five alternative orderings put a number, a month name
 		// or a weekday first, so what follows the first token is a union wide
 		// enough to filter nothing. The start types still narrow it.
-		startTokenTypes: ["NUMBER", "IDENT", "UNIT"],
+		startTokenTypes: ["NUMBER", "IDENT", "UNIT", "CONVERTER_NAME"],
 		match(tokens, pos): NormalizerMatch | null {
 			const calendar = getCalendar();
 			const onAmbiguous = getOnAmbiguous();
@@ -155,7 +171,7 @@ export function monthNameDateNormalizerRule(
 
 			// `9 March` and `9 March 2024`.
 			if (first?.type === "NUMBER" && PLAIN_INTEGER.test(first.text ?? "")) {
-				const month = monthOf(tokens[pos + 1]);
+				const month = monthOf(tokens[pos + 1], first);
 				if (month === 0) return null;
 				const day = Number(first.text);
 				if (day < 1 || day > 31) return null;
@@ -173,7 +189,7 @@ export function monthNameDateNormalizerRule(
 				return dateOrFault(day, month, currentYear(calendar), tokens.slice(pos, pos + 2), calendar, onAmbiguous);
 			}
 
-			const month = monthOf(first);
+			const month = monthOf(first, tokens[pos - 1]);
 			if (month === 0) return null;
 
 			const second = tokens[pos + 1];

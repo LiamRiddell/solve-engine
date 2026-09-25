@@ -13,13 +13,13 @@ import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js
 import { CoreErrorCodes, DatetimeErrorCodes } from "@solve-js/errors/ErrorCode";
 import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@solve-js/vm/BusinessDays";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
-import { builtinFunctions, asConverterRegistry } from "@solve-js/vm/VMBuiltins";
+import { builtinFunctions, asConverterRegistry, datetimeArgumentRefused } from "@solve-js/vm/VMBuiltins";
 import { builtinArityError, builtinFunctionNames } from "@solve-js/vm/VMBuiltinArity";
 import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/DidYouMean";
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, currencyRateSources } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused } from "@solve-js/vm/VMConversion";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
@@ -1566,6 +1566,110 @@ function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM): 
 }
 
 /**
+ * A date moved by a duration, or the refusal when what it is moved by is not
+ * one: the whole of `<date> + <x>` and `<date> - <x>` once both sides are
+ * known, for ADD, SUB, DATE_ADD and DATE_SUB.
+ *
+ * A duration is a time quantity (a span from subtracting two times is one, in
+ * milliseconds), a count of workdays, or a calendar unit. Anything else used to
+ * reach {@link extractDurationMs}, which read a unit that is not a time as zero
+ * and a bare number as milliseconds, so `1 Jan 2026 + 5 kg` was still 1
+ * January and `1 Jan 2026 + 5` five milliseconds past midnight: a silently
+ * wrong date, the symptom that function's own comment set out to avoid. A bare
+ * number is refused rather than read as days, since nothing on the line says
+ * which unit was meant.
+ *
+ * @param date - The date or time being moved.
+ * @param duration - What it is moved by.
+ * @param sign - +1 to move forward, -1 back.
+ * @param vm - The VM, for the workday ceiling and the calendar.
+ * @returns The moved Datetime, keeping the date's grain and zone, or an
+ * `INVALID_DATETIME_OP` error Value.
+ */
+function movedDatetime(date: Value, duration: Value, sign: 1 | -1, vm: VM): Value {
+    const unit = duration.type === ValueType.Uom ? duration.unit : undefined;
+    const isDuration = unit !== undefined && (isWorkdayUnit(unit) || CALENDAR_MONTHS_PER_UNIT[unit] !== undefined || getMeasure(unit) === "time");
+    if (!isDuration) {
+        if (duration.type === ValueType.Number) {
+            return errorValue(
+                "INVALID_DATETIME_OP",
+                "A date or time moves by a length of time, and a plain number does not say whether it means days, hours or minutes. Write the unit, as in + 5 days.",
+            );
+        }
+        const what = unit !== undefined
+            ? describeQuantity(unit)
+            : duration.type === ValueType.Percentage ? "a percentage"
+            : duration.type === ValueType.Boolean ? "true or false"
+            : nonNumericKind(duration) ?? "this value";
+        return errorValue(
+            "INVALID_DATETIME_OP",
+            `A date or time moves by a length of time, such as 5 days, 2 weeks or 3 hours, not by ${what}.`,
+        );
+    }
+    return datetimeValue(shiftDatetime(date.toNumber(), duration, sign, vm), date.grain, date.zone);
+}
+
+/**
+ * The percentage change from the value below the top of the stack to the value
+ * on top: `SWAP DIV 1 SUB TO_PERCENTAGE`, the program `a to b` always compiled
+ * to, run as those same opcodes so every exact and uncertain path they take is
+ * kept.
+ */
+const PERCENT_CHANGE_PROGRAM: Bytecode = {
+    opcodes: new Uint8Array([OpCode.SWAP, OpCode.DIV, OpCode.PUSH_NUMBER, 0, OpCode.SUB, OpCode.TO_PERCENTAGE, OpCode.HALT]),
+    numbers: new Float64Array([1]),
+    strings: [],
+};
+
+/**
+ * `a to b` (OpCode.PERCENT_CHANGE): the percentage change from a to b, or,
+ * when both are dates, the span from a to b.
+ *
+ * The parselet compiled `b / a - 1` whatever the operands were, so two dates
+ * divided their epoch milliseconds and `1 Jan 2026 to 1 Mar 2026` answered
+ * 0.29%. Either side can be a variable, so which reading applies is only
+ * known here. Two dates give the span in days, counted in calendar days when
+ * both fall on a midnight (as `days between` counts them, so a change of clocks
+ * inside the span does not shorten it) and in elapsed time otherwise, and
+ * signed: a later date first gives a negative span, as subtracting them does.
+ * A date against anything else has neither reading and is refused.
+ *
+ * @param l - The value written first.
+ * @param r - The value written after `to`.
+ * @param vm - The VM, for its calendar and to run the percentage program.
+ * @returns The span, the percentage change, or an error Value.
+ */
+function percentChange(l: Value, r: Value, vm: VM): Value {
+    const fault = faultedOperand(l, r);
+    if (fault) return fault;
+    if (l.type === ValueType.Datetime && r.type === ValueType.Datetime) {
+        const from = l.toNumber(), to = r.toNumber();
+        const calendar = vm.context.calendar;
+        const f = calendar.fields(from), t = calendar.fields(to);
+        const bothMidnight =
+            calendar.localMidnight(f.year, f.month0, f.day) === from &&
+            calendar.localMidnight(t.year, t.month0, t.day) === to;
+        const days = bothMidnight
+            ? (Date.UTC(t.year, t.month0, t.day) - Date.UTC(f.year, f.month0, f.day)) / MS_PER_DAY
+            : (to - from) / MS_PER_DAY;
+        return uomValue(days, "days");
+    }
+    if (l.type === ValueType.Datetime || r.type === ValueType.Datetime) {
+        return errorValue(
+            "INVALID_DATETIME_OP",
+            "A date and a value that is not one have no span or change between them: `to` between two dates is the span from one to the other, and between two numbers the percentage change.",
+        );
+    }
+    vm.push(l);
+    vm.push(r);
+    const result = executeBytecode(PERCENT_CHANGE_PROGRAM, vm);
+    if (result.type === "value") return result.value;
+    // The program calls nothing that waits on data, so only a failure reaches here.
+    if (result.type === "error") return errorValue(result.error.code ?? "PERCENT_CHANGE_FAILED", result.error.message);
+    return errorValue("PERCENT_CHANGE_FAILED", "The percentage change could not be worked out.");
+}
+
+/**
  * Combine a video-timecode Value (`Uom(totalFrames, "timecode@fps")`. See
  * `vm/Value.ts`'s timecode section) with a right-hand operand for ADD/SUB.
  * `sign` is +1 for ADD, -1 for SUB.
@@ -2995,7 +3099,7 @@ export function executeBytecode(
               // Shifting a date does not change what it anchors, so the grain
               // and the zone carry to the result: "2026-04-03 in Tokyo + 1 day"
               // is still that day in Tokyo, one day on.
-              stack.push(datetimeValue(shiftDatetime(l.toNumber(), r, 1, vm), l.grain, l.zone));
+              stack.push(movedDatetime(l, r, 1, vm));
             }
           } else if (l.type === ValueType.Uom && isTimecodeUnit(l.unit)) {
             // "timecode + N frames" / "timecode + duration" / "timecode +
@@ -3009,7 +3113,7 @@ export function executeBytecode(
             // answered 1,703,491,200,100. Both are the date's epoch
             // milliseconds wearing the wrong type, which is a confident wrong
             // answer rather than a visible failure.
-            stack.push(datetimeValue(shiftDatetime(r.toNumber(), l, 1, vm), r.grain, r.zone));
+            stack.push(movedDatetime(r, l, 1, vm));
           } else if (l.type === ValueType.String && r.type === ValueType.String) {
             // Text joins to text: "foo" + " bar" is "foo bar". Deliberately only
             // when both sides are text. A string plus a number has no defined
@@ -3078,7 +3182,7 @@ export function executeBytecode(
             } else {
               // See the matching ADD case above, and shiftDatetime()'s own
               // doc comment for why a day is not a fixed number of ms.
-              stack.push(datetimeValue(shiftDatetime(l.toNumber(), r, -1, vm), l.grain, l.zone));
+              stack.push(movedDatetime(l, r, -1, vm));
             }
           } else if (l.type === ValueType.Uom && isTimecodeUnit(l.unit)) {
             // "timecode - timecode" (difference) / "timecode - duration"
@@ -3341,6 +3445,8 @@ export function executeBytecode(
               : exactPowerArithmetic(l, r, raised));
             break;
           }
+          // A moment has no power; see datetimeArithmeticRefused().
+          if (l.type === ValueType.Datetime || r.type === ValueType.Datetime) { stack.push(datetimeArithmeticRefused()); break; }
           // A Matrix operand means matrix exponentiation, which is repeated
           // matrix multiplication and not the element-wise Math.pow the rest
           // of this case does. Falling through was the same silent-zero shape
@@ -3430,6 +3536,8 @@ export function executeBytecode(
           // A negated fault is still a fault, and `-0` looks like an answer.
           const negFault = faultedOperand(v);
           if (negFault) { stack.push(negFault); break; }
+          // A moment has no negative; see datetimeArithmeticRefused().
+          if (v.type === ValueType.Datetime) { stack.push(datetimeArithmeticRefused("neg")); break; }
           carry = v.sources;
           if (v.type === ValueType.BigInt) stack.push(bigIntValue(-(v.value as bigint)));
           // Negating money keeps it exact: "-$0.10" is exactly "-$0.10".
@@ -3959,6 +4067,10 @@ export function executeBytecode(
           // here covers all ~90 of them; see faultedOperand() in vm/Value.ts.
           const builtinArgFault = faultedIn(args);
           if (builtinArgFault) { stack.push(builtinArgFault); break; }
+          // A date or time has no size for a numeric builtin to read; see
+          // datetimeArgumentRefused() in vm/VMBuiltins.ts.
+          const builtinDatetime = datetimeArgumentRefused(fnIdx, args);
+          if (builtinDatetime) { stack.push(builtinDatetime); break; }
           carry = sourcesOfValues(args);
           const fn = builtinFunctions[fnIdx];
           if (fn) {
@@ -4222,6 +4334,8 @@ export function executeBytecode(
           const v = safePop(stack);
           const toPercentageFault = faultedOperand(v);
           if (toPercentageFault) { stack.push(toPercentageFault); break; }
+          const toPercentageDate = datetimeConversionRefused(v, "a percentage");
+          if (toPercentageDate) { stack.push(toPercentageDate); break; }
           carry = v.sources;
           stack.push(percentageValue(v.toNumber()));
           break;
@@ -4230,6 +4344,8 @@ export function executeBytecode(
           const v = safePop(stack);
           const toFractionFault = faultedOperand(v);
           if (toFractionFault) { stack.push(toFractionFault); break; }
+          const toFractionDate = datetimeConversionRefused(v, "a fraction");
+          if (toFractionDate) { stack.push(toFractionDate); break; }
           // A value carrying its exact rational renders that fraction exactly;
           // everything else keeps the continued-fraction guess from the double,
           // so "0.75 as fraction" is still "3/4".
@@ -4240,6 +4356,8 @@ export function executeBytecode(
           const v = safePop(stack);
           const toMultiplierFault = faultedOperand(v);
           if (toMultiplierFault) { stack.push(toMultiplierFault); break; }
+          const toMultiplierDate = datetimeConversionRefused(v, "a multiplier");
+          if (toMultiplierDate) { stack.push(toMultiplierDate); break; }
           stack.push(stringValue(toMultiplierString(v)));
           break;
         }
@@ -4247,6 +4365,8 @@ export function executeBytecode(
           const v = safePop(stack);
           const toSciFault = faultedOperand(v);
           if (toSciFault) { stack.push(toSciFault); break; }
+          const toSciDate = datetimeConversionRefused(v, "scientific notation");
+          if (toSciDate) { stack.push(toSciDate); break; }
           stack.push(stringValue(toScientificString(v.toNumber())));
           break;
         }
@@ -4310,6 +4430,10 @@ export function executeBytecode(
             ));
             break;
           }
+          // A clock time with a unit after it, `1:30 hours`, is half past one
+          // today in hours, its epoch milliseconds relabelled. See
+          // datetimeTakesNoUnit().
+          if (operand.type === ValueType.Datetime) { stack.push(datetimeTakesNoUnit(unit)); break; }
           // Money keeps its exact decimal from here on, and so does a price
           // per unit ("$0.15/kWh"). The amount either arrived as a decimal
           // literal (exact sidecar already set) or is a whole number, either
@@ -4345,6 +4469,8 @@ export function executeBytecode(
             ));
             break;
           }
+          // `1:30 hours in minutes`, as UOM_CONVERT refuses `1:30 hours`.
+          if (operand.type === ValueType.Datetime) { stack.push(datetimeTakesNoUnit(fromUnit)); break; }
           const val = operand.toNumber();
           const measure = getMeasure(fromUnit);
           if (measure && getMeasure(toUnit) === measure) {
@@ -4586,14 +4712,14 @@ export function executeBytecode(
           // Shifting a date by a duration does not change what it anchors, so
           // the grain and the zone carry: "2026-04-03 in Tokyo + 1 day" is
           // still a day in Tokyo.
-          stack.push(datetimeValue(shiftDatetime(dtValue.toNumber(), durValue, 1, vm), dtValue.grain, dtValue.zone));
+          stack.push(movedDatetime(dtValue, durValue, 1, vm));
           break;
         }
         case OpCode.DATE_SUB: {
           const durValue = safePop(stack), dtValue = safePop(stack);
           const dateSubFault = faultedOperand(dtValue, durValue);
           if (dateSubFault) { stack.push(dateSubFault); break; }
-          stack.push(datetimeValue(shiftDatetime(dtValue.toNumber(), durValue, -1, vm), dtValue.grain, dtValue.zone));
+          stack.push(movedDatetime(dtValue, durValue, -1, vm));
           break;
         }
         case OpCode.DATE_WORKDAY_OFFSET: {
@@ -4668,6 +4794,11 @@ export function executeBytecode(
           break;
         }
 
+        case OpCode.PERCENT_CHANGE: {
+          const r = safePop(stack), l = safePop(stack);
+          stack.push(percentChange(l, r, vm));
+          break;
+        }
         case OpCode.PLOT_INVOKE: {
           const bodyRef = operandByte(opcodes, ip++, op, "plot body reference");
           const exprRef = operandByte(opcodes, ip++, op, "plot expression");

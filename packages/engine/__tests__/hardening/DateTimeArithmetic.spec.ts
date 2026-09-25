@@ -368,13 +368,16 @@ describe("a datetime on the wrong side of an operator", () => {
 		// "1,703,491,200,001 days", the epoch wearing a unit.
 		expect(evaluate("1 day + 12-25-2023").toNumber()).toBe(localMidnight(2023, 12, 26));
 		expect(evaluate("1 month + 12-25-2023").toNumber()).toBe(localMidnight(2024, 1, 25));
-		expect(evaluate("100 + 12-25-2023").toNumber()).toBe(localMidnight(2023, 12, 25) + 100);
+		// A bare number names no length of time, on either side: it is refused
+		// rather than read as milliseconds.
+		expect(evaluate("100 + 12-25-2023").errorCode).toBe("INVALID_DATETIME_OP");
 	});
 
-	test("a date minus a date is still a duration, and a date minus a number still a date", () => {
+	test("a date minus a date is still a duration, and a date minus a bare number is refused", () => {
 		const difference = evaluate("2023-12-25 - 2023-12-24");
 		expect(difference.type).toBe(ValueType.Uom);
 		expect(difference.unit).toBe("ms");
-		expect(evaluate("12-25-2023 - 100").type).toBe(ValueType.Datetime);
+		expect(evaluate("12-25-2023 - 100").errorCode).toBe("INVALID_DATETIME_OP");
+		expect(evaluate("12-25-2023 - 100 ms").type).toBe(ValueType.Datetime);
 	});
 });

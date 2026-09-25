@@ -11,6 +11,11 @@ description: Clock times, durations, intervals, frame rates and timecode.
 | --- | --- |
 | `9:00am + 3 hours` | `12:00:00 PM` |
 | `16:00` | a time value |
+| `3.30pm` | half past three in the afternoon |
+
+The minutes may follow a point instead of a colon, as British timetables write
+them, so `3.30pm` is `3:30pm`. Only two digits after the point are minutes:
+`3.5pm` could mean half past or five past, so it is not read as a time at all.
 
 ## Durations
 

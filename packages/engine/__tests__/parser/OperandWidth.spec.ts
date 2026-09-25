@@ -164,6 +164,8 @@ const COMPILED_CORPUS: readonly string[] = [
 	"20% off 100", "20% on 100", "what is 10% of 200",
 	"5% APR on 1000 over 2 years", "remainder of 10 / 3", "root 3 of 27",
 	"avg(1,2,3)", "midpoint of 1 and 3",
+	// `to` between two values: PERCENT_CHANGE, a percentage change or a date span.
+	"10 to 20",
 ];
 
 /**

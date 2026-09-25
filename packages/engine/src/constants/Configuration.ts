@@ -121,7 +121,10 @@ export interface DateConfig {
    *   0.00.
    * - `'arithmetic'`: the run falls through to the division or subtraction it
    *   is spelled like, which is what every version before this one did.
-   *   `12/25/2026` is 0.00 again, and `2026-02-29` is 1,995.
+   *   `12/25/2026` is 0.00 again, and `2026-02-29` is 1,995. A spelled month
+   *   that names no real day (`29 February 2026`) falls through to
+   *   multiplying a date, which is refused by name wherever it is written, so
+   *   it answers that refusal rather than its old fourteen-digit number.
    *
    * The refusal is scoped to runs nobody writes as arithmetic: a two-step
    * chain ending in a four-digit denominator (`03/04/2026` as division is

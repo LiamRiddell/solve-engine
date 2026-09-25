@@ -10,6 +10,7 @@ import { symbolicToValue, valueToSymbolic, solveEquationValues, definiteIntegral
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
 import { factorSymbolic } from "@solve-js/symbolic/Factor";
 import { cancelSymbolic } from "@solve-js/symbolic/Gcd";
+import { builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
 import { apartSymbolic } from "@solve-js/symbolic/PartialFractions";
 import { differentiate } from "@solve-js/symbolic/Derivative";
 import { integrate } from "@solve-js/symbolic/Integral";
@@ -592,6 +593,50 @@ function variance(nums: number[], sample: boolean): number {
     const denom = sample ? n - 1 : n;
     if (denom <= 0) return 0;
     return sumOfSquares(nums) / denom;
+}
+
+/**
+ * The builtins that take a date or time as it is: `min`, `max` and `clamp`,
+ * which ask about order rather than size, and the aggregates, which word their
+ * own refusal (see nonNumericOperand()).
+ */
+const TAKES_DATETIME: ReadonlySet<number> = new Set([9, 10, 42, 43, 44, 45, 46, 47, 101, 102, 103, 104, 105, 106, 107]);
+
+/**
+ * The refusal for a builtin given a date or time it has no reading of, or null.
+ *
+ * A date or time is held as its epoch milliseconds, and every numeric builtin
+ * reads its arguments through `toNumber()`, so `round(1:30)` answered
+ * 1,790,296,200,000 on 25 September 2026: today's half past one in
+ * milliseconds. A moment has no size to round, root or take the sine of, so the
+ * builtin refuses by name and points at the lengths of time the engine reads.
+ *
+ * @param fnIdx - The builtin's index.
+ * @param args - Its arguments.
+ * @returns The refusal, or null when no argument is a date or time or the
+ * builtin takes one.
+ */
+export function datetimeArgumentRefused(fnIdx: number, args: readonly Value[]): Value | null {
+    if (TAKES_DATETIME.has(fnIdx)) return null;
+    for (const arg of args) {
+        if (arg.type !== ValueType.Datetime) continue;
+        const name = calledByName(fnIdx) ? builtinFunctionName(fnIdx) : "";
+        return errorValue(
+            "INVALID_DATETIME_OP",
+            `${name === "" ? "This calculation" : name} takes a number, not a date or time: a date or time is a moment, not an amount. A length of time is written 1h30m, 90 minutes or 1:30:00.`,
+        );
+    }
+    return null;
+}
+
+/**
+ * Whether a reader calls this builtin by its name (`round(...)`, `sqrt(...)`),
+ * so a message may use it. The rest are reached through a phrase (`to 2 dp`,
+ * `3d6`), and their names (`roundToPlaces`) are the engine's, not the reader's.
+ * The ranges follow FunctionCallParselet's name map and the symbolic verbs.
+ */
+function calledByName(fnIdx: number): boolean {
+    return (fnIdx <= 79 && fnIdx !== 37) || (fnIdx >= 87 && fnIdx <= 92) || (fnIdx >= 109 && fnIdx <= 112);
 }
 
 /**

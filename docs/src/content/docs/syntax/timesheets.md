@@ -90,6 +90,14 @@ milliseconds.
 total above // 7:05
 ```
 
+Adding or taking away a length of time keeps it a stretch too: an hour's shift
+and a half-hour's overtime is an hour and a half, on the clock.
+
+```solve
+(9:30 - 8:30) + 30 minutes // 1:30
+(9:30 - 8:30) - 15 minutes // 0:45
+```
+
 Ask for a unit and you are given that unit, because the line said which one it
 wanted:
 
@@ -107,7 +115,20 @@ with a unit on it, the way `40 kg` is, and a latency budget adds up as one:
 
 Both are milliseconds and the unit cannot tell them apart, so the engine
 remembers which of the two it measured. A stretch between two times shows as a
-clock; a figure you wrote down stays a figure.
+clock; a figure you wrote down stays a figure. That holds when the two meet: a
+clock shows whole seconds, so `(9:30 - 8:30) + 40ms` stays in the milliseconds
+it was given rather than dropping them.
+
+A time of day on its own is a moment, not an amount, so it cannot be multiplied,
+divided, negated, rounded or given a unit. Each of those is refused by name, and
+points at the ways a length of time is written:
+
+```solve
+1:30:00 * 3 // 16,200.00 s
+1h30m * 3 // 270 minutes
+1:30 * 3 // A date or time cannot be multiplied: it is a moment, not an amount. A length of time is written 1h30m, 90 minutes or 1:30:00.
+1:30 hours // A date or time cannot take a unit, hours: it is a moment, not an amount. A length of time is written 1h30m, 90 minutes or 1:30:00.
+```
 
 ## What it pays
 

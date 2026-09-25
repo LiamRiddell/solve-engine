@@ -70,18 +70,9 @@ export class PercentageChangeParselet implements InfixParselet {
     // Parse the right operand (target value)
     parser.parseExpression(this.bindingPower, builder);
     
-    // Calculate percentage change: right / left - 1
-    // Stack before: [left, right]
-    // After SWAP: [right, left]
-    builder.emitOpcode(OpCode.SWAP);
-    // After DIV: [right / left]
-    builder.emitOpcode(OpCode.DIV);
-    // After PUSH_NUMBER 1: [right / left, 1]
-    builder.emitOpcode(OpCode.PUSH_NUMBER);
-    builder.emitNumber(1);
-    // After SUB: [right / left - 1]
-    builder.emitOpcode(OpCode.SUB);
-    // Convert to percentage type
-    builder.emitOpcode(OpCode.TO_PERCENTAGE);
+    // The percentage change, right / left - 1, or the span between them when
+    // both turn out to be dates: which one is only known when the line runs,
+    // since either side can be a variable. See percentChange() in vm/VM.ts.
+    builder.emitOpcode(OpCode.PERCENT_CHANGE);
   }
 }

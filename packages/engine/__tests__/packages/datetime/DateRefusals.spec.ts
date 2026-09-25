@@ -162,19 +162,16 @@ describe("a spelled-out month that names no real day", () => {
     expect(value.unit).toBe('"February 30, 2026" is not a real date: February 2026 has 28 days.');
   });
 
-  test("date.onAmbiguous: 'arithmetic' restores both old numbers exactly", () => {
-    // Derived rather than written out: the old answer is a day count times a
-    // LOCAL midnight, so the figure is 51,327,216,000,000 in London and a
-    // different fourteen digits in New York. Deriving it from the same `Date`
-    // the literal would have been built with says the same thing in any zone.
+  test("date.onAmbiguous: 'arithmetic' falls through to multiplying a date, which is refused", () => {
+    // The old answer was 29 times the instant of 1 February, a fourteen-digit
+    // number. Multiplying a date is refused by name everywhere now, so the
+    // opt-out gets that refusal rather than the number back.
     const engine = newTrackedEngine({ config: { date: { onAmbiguous: "arithmetic" } } });
-    const localMidnight = (year: number, month: number, day: number) => new Date(year, month - 1, day).getTime();
-    expect(engine.evaluateExpression("29 February 2026").toNumber()).toBe(29 * localMidnight(2026, 2, 1));
-    expect(engine.evaluateExpression("31 April 2026").toNumber()).toBe(31 * localMidnight(2026, 4, 1));
-    // And both really are the fourteen-digit numbers this replaced.
-    expect(formatValue(engine.evaluateExpression("29 February 2026")).replace(/^=\s*/, "")).toMatch(
-      /^5[12],\d{3},\d{3},\d{3},\d{3}$/,
-    );
+    for (const line of ["29 February 2026", "31 April 2026"]) {
+      const value = engine.evaluateExpression(line);
+      expect(value.errorCode).toBe("INVALID_DATETIME_OP");
+      expect(formatValue(value)).toMatch(/^A date or time cannot be multiplied/);
+    }
   });
 });
 

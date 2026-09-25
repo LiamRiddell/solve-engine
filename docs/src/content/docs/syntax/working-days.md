@@ -17,6 +17,7 @@ working days in a window, both ends included.
 ```solve
 25/12/2023 + 5 workdays // Monday, January 1, 2024
 working days between 01/01/2024 and 31/01/2024 // 23
+workdays between 01/01/2024 and 31/01/2024 // 23
 workdays in 3 weeks // 15
 ```
 
@@ -25,7 +26,13 @@ workdays in 3 weeks // 15
 ```
 
 `working` and `business` days mean the same thing, and either reads in the
-singular for a count of one (`1 working day after ...`).
+singular for a count of one (`1 working day after ...`). `workdays between`, the
+unit's own spelling, counts the same window, and `how many` may lead any of them.
+
+`workdays until <date>` and `workdays since <date>` are refused rather than
+answered, because the only reading they had was a fixed ratio of five working
+days to seven calendar days, which knows no weekends or holidays. Count from
+today with `workdays between today and <date>` instead.
 
 ## Public holidays
 

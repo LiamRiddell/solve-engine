@@ -45,8 +45,20 @@ date the engine reads, including a relative one:
 
 The connector is only read this way when a span is in front of it, which is what
 keeps `$1,000 after 3 years at 7%` an investment. `to` is deliberately not
-claimed at all: `2 April 2026 to 6 September 2026` already means something, and
-quietly turning it into an offset would take that away.
+claimed for an offset, because between two dates it already means something:
+the span from the first to the second, in days, which `in weeks` converts. A
+later date first gives a negative span, as subtracting them does. Between two
+numbers the same word is a [percentage change](/syntax/percentages/), and a
+date against a number has neither reading, so it is refused.
+
+```solve
+2 April 2026 to 6 September 2026 // 157 days
+(1 Jan 2026 to 1 Mar 2026) in weeks // 8.43 weeks
+1 Mar 2026 to 1 Jan 2026 // -59 days
+```
+
+Two dates on a midnight are counted in calendar days, as `days between` counts
+them, so a change of clocks inside the span does not make it a day short.
 
 For a span that skips weekends and holidays, `30 working days from 3 March 2026`
 is the sibling form; see [working days](/syntax/working-days/).
