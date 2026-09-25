@@ -5,6 +5,7 @@ import { exactDecimalTotal } from "@solve-js/vm/ExactDecimals";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { lineCarriesTag, tagEdgesOf } from "./TagScanner";
+import { spendSpanReads } from "@solve-js/vm/PassWork";
 
 /**
  * Category tag sums, `total of #tag` / `sum of #tag` / `average of #tag` /
@@ -63,6 +64,11 @@ function aggregateTagged(context: LineExecutionContext, tag: string, mode: TagMo
 
   const values: Value[] = [];
   let count = 0;
+
+  // Charged as a scan of the whole note, which is what the batch pass does and
+  // what the incremental index saves, so both passes charge alike (#711).
+  const refused = spendSpanReads(context, context.getLineCount?.() ?? 0, "A tag total");
+  if (refused) return refused;
 
   // Ascending, so the first unreadable member this reports is the first one in
   // the document, which is what the walk named and what a reader looks for.
@@ -182,6 +188,10 @@ function breakdownByTag(context: LineExecutionContext): Value {
   const getText = context.getLineText!;
   const getResult = context.getLineResult!;
   const isBoundary = context.isLineBoundary;
+
+  // A scan of the whole note, charged to the pass (#711).
+  const refused = spendSpanReads(context, context.getLineCount?.() ?? 0, "total by tag");
+  if (refused) return refused;
 
   const groups = new Map<string, TagGroup>();
   const members: number[] = [];

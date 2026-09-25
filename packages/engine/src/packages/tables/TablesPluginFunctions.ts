@@ -5,6 +5,7 @@ import { unifyQuantities } from "@solve-js/vm/VMConversion";
 import { withSources } from "@solve-js/vm/Provenance";
 import { findTableAbove, columnIndex, type MarkdownTable } from "./TableReader";
 import { readCell } from "./TableCells";
+import { spendSpanReads } from "@solve-js/vm/PassWork";
 
 /**
  * Runtime handlers for `sum of column "name" above` and its siblings.
@@ -175,6 +176,11 @@ function aggregateColumn(
       `The table above has no column named "${columnName}". Its columns are: ${names}`,
     );
   }
+
+  // The lines from the table's header down to this one, charged to the pass (#711).
+  const firstRow = table.rowLines[0] ?? context!.lineIndex;
+  const refused = spendSpanReads(context!, context!.lineIndex - firstRow + 2, "A table column");
+  if (refused) return refused;
 
   const column = columnValues(table, index);
   const { values } = column;

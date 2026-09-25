@@ -1,4 +1,4 @@
-import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { ExpressionEngine, type PassSpend } from "@solve-js/engine/ExpressionEngine";
 import {
 	DocumentModel,
 	LineChange,
@@ -193,6 +193,12 @@ export class ThreeTierEvaluator {
 	private selfReadingWrites: Map<number, string[]> = new Map();
 
 	/**
+	 * What each line spent when it last ran, by line id, for lines that spent
+	 * anything: what a later pass counts for a line it does not run (#711, #694).
+	 */
+	private readonly spendByLine = new Map<number, PassSpend>();
+
+	/**
 	 * The lines that sit on a cycle, by line id. See {@link settleCycles}.
 	 */
 	private cycleMemberIds: Set<number> = new Set();
@@ -310,6 +316,11 @@ export class ThreeTierEvaluator {
 		// their cached results are keyed on text, which the seed is not part of.
 		this.reseedFromDocument();
 
+		// ── The pass's budgets (#711, #694) ──
+		// Counted from line 1, as a batch pass counts them; see evaluateSingleLine.
+		// Closed in the finally below.
+		this.engine.beginPass();
+
 		// ── Phase 5.3: Enable arena for zero-allocation Value reuse ──
 		enableValueArena();
 		// Stage cross-document cell notifications for the length of this pass, so
@@ -392,6 +403,7 @@ export class ThreeTierEvaluator {
 
 			return { lines, resultMap, tierCounts };
 		} finally {
+			this.engine.endPass();
 			// Clear keystroke signal to prevent stale signal references
 			// from being used by subsequent evaluations from other code paths.
 			this.engine.setKeystrokeSignal(null);
@@ -609,6 +621,10 @@ export class ThreeTierEvaluator {
 		// This sets all variables that were defined at or before startLine-1.
 		this.restoreTo(viewport.startLine - 1);
 
+		// What the lines above the viewport recorded, so a line in view is
+		// charged against what a pass from line 1 would have left it (#711, #694).
+		this.engine.beginPass(this.recordedSpendBefore(viewport.startLine));
+
 		// ── Phase 5.3: Enable arena for zero-allocation Tier 2 execution ──
 		enableValueArena();
 		// The viewport pass writes cells too (a Tier-2 line can carry a
@@ -620,6 +636,7 @@ export class ThreeTierEvaluator {
 			const result = this.collectEvalResults(viewport.startLine, viewport.endLine);
 			return result;
 		} finally {
+			this.engine.endPass();
 			// Clear keystroke signal to prevent stale signal references.
 			this.engine.setKeystrokeSignal(null);
 
@@ -1167,7 +1184,10 @@ export class ThreeTierEvaluator {
 				if (!isPrefixedEdgeKey(read)) this.engine.restoreToPrefix(read, lineNumber);
 			}
 		}
+		const before = this.engine.passSpent();
 		const lineResult = this.dispatchLine(state, lineNumber, inViewport);
+		const after = this.engine.passSpent();
+		this.recordSpend(state, lineResult.tier, { work: after.work - before.work, kept: after.kept - before.kept });
 		// A member's edges follow its run like any other line's. Its run is cut
 		// short on purpose (a forward read stops a range early), which is why
 		// every aggregate declares its whole span before reading any of it;
@@ -1178,6 +1198,46 @@ export class ThreeTierEvaluator {
 			this.dag.reconcilePositionReads(lineNumber);
 		}
 		return lineResult;
+	}
+
+	/**
+	 * Keep the pass's budgets positional (#711, #694). A line this pass
+	 * dispatched to a tier records what it spent, including a definition below
+	 * the viewport that Tier 3 runs (and marks clean on the way, so the tier,
+	 * not the line's state after it, is what says it ran). A line this pass
+	 * skipped adds what it spent when it last ran, so a line below is charged
+	 * against the count a pass over the whole note would reach there; a dirty
+	 * line that has not run yet counts nothing, since what it spent belonged to
+	 * its old text.
+	 */
+	private recordSpend(state: LineState, tier: EvalTier, spent: PassSpend): void {
+		if (tier !== EvalTier.Skipped) {
+			if (spent.work > 0 || spent.kept > 0) this.spendByLine.set(state.lineId, spent);
+			else this.spendByLine.delete(state.lineId);
+			return;
+		}
+		if (state.dirty) {
+			this.spendByLine.delete(state.lineId);
+			return;
+		}
+		const recorded = this.spendByLine.get(state.lineId);
+		if (recorded !== undefined) this.engine.addPassSpend(recorded);
+	}
+
+	/** What the lines above `line` recorded when they last ran. */
+	private recordedSpendBefore(line: number): PassSpend {
+		let work = 0;
+		let kept = 0;
+		for (const [lineId, spent] of this.spendByLine) {
+			const position = this.doc.getLinePosition(lineId);
+			if (position === -1) {
+				this.spendByLine.delete(lineId);
+			} else if (position < line) {
+				work += spent.work;
+				kept += spent.kept;
+			}
+		}
+		return { work, kept };
 	}
 
 	/** The tier dispatch itself; see {@link evaluateSingleLine} for what wraps it. */

@@ -205,11 +205,36 @@ was refused, what the ceiling was, and which setting to change.
 | `vm.maxCollectionSize` | 100,000 | elements in one expanded range or matrix | `COLLECTION_TOO_LARGE` |
 | `vm.maxAllocatedElements` | 2,000,000 | elements one evaluation may materialise in total | `ALLOCATION_LIMIT_EXCEEDED` |
 | `vm.maxFunctionCalls` | 10,000 | user-defined function calls in one evaluation, however they nest | `FUNCTION_CALL_LIMIT_EXCEEDED` |
+| `vm.maxLineRunsPerPass` | 1,000,000 | line runs one pass over a document does across its lines: what-if and sweep re-runs, goal-seek probes, and span aggregates' reads at sixteen to a run | `PASS_WORK_BUDGET_EXCEEDED` |
+| `vm.maxRetainedElements` | 10,000,000 | elements a document's answers keep, counted each pass: a list or matrix its cells, text one to eight characters, any other answer one | `DOCUMENT_ELEMENT_LIMIT_EXCEEDED` |
 | `performance.maxDocumentLines` | 100,000 | lines in one document, checked before it is scanned | `DOCUMENT_TOO_LARGE` |
 | `date.maxOffsetYears` / `minOffsetYears` | 100 / -100 | how far a workday offset may walk, in years | `DATE_OFFSET_LIMIT_EXCEEDED` |
 
 The defaults live in `constants/Configuration.ts`, where each one is documented
 with the reasoning behind its value.
+
+Every row but two counts work inside a single expression. The two that count a
+whole document are there because the per-line limits could only cap one line at
+a time.
+
+`vm.maxLineRunsPerPass` counts the work that reaches across lines: twenty sweep
+lines, each inside its own cap, once made a single pass re-run 2,000,000 lines.
+It is one count per pass over the document, and the line whose work would cross
+it is refused while the lines above keep their answers.
+
+`vm.maxRetainedElements` counts what the document keeps. Each line's answer
+stays in memory for as long as the note is open, and `vm.maxAllocatedElements`
+only stops one line making more than two million elements: 500 lines of
+`:m = map(10*x, 0:99999)`, 13 KB of text, kept 50,000,000 elements and 385 MB of
+heap between them. The line whose answer would take the note past the ceiling is
+refused, and a name it assigned is let go, so the value is not kept through a
+variable either. A line that waits on a live value keeps nothing until the value
+lands; its re-run is then charged against what the whole note keeps, and an
+answer no larger than the one it replaces is always kept.
+
+Both counts start again on every pass, and both document passes charge alike.
+The incremental evaluator counts a line it does not re-run at what it recorded
+when it last ran, so a live editor refuses the same line a fresh pass does.
 
 Two details the table cannot show. The complexity score reaches its ceiling
 before the parser's nesting depth does at the default settings, so a deeply
@@ -345,9 +370,14 @@ suite, which is at the edge of what run-to-run noise on one machine can resolve.
   exponentiation and shifts are refused before allocating instead, by a fixed
   bit ceiling, because either can ask for an arbitrarily large integer from a
   short line.
-- **The per-document line cache** has no size limit of its own. It grows with
-  document size rather than with any one line, and the document itself is
-  bounded by `performance.maxDocumentLines`.
+- **The per-document line cache** keeps each line's answer, and what those
+  answers hold is bounded by `vm.maxRetainedElements`. The entries themselves
+  (a line's text, its compiled program and what it reads) grow with the
+  document, which is bounded by `performance.maxDocumentLines`.
+- **A refused line still runs.** `vm.maxRetainedElements` bounds memory, not
+  time: a line is refused once its answer is known, so the work of making it is
+  already done, within the per-line limits above. A note of 500 such lines takes
+  as long to evaluate as it did; it no longer keeps what they made.
 
 ## Fuzzed, not just tested
 

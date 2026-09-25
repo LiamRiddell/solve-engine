@@ -175,7 +175,10 @@ The contract, in the order a handler meets it:
 
 Each `run` re-runs every line above the target, so bound how many a handler
 makes. The sweep form caps itself at 1,000 values and 100,000 line re-runs, and
-refuses past either by name.
+refuses past either by name. A handler that re-runs lines should also charge them
+to the pass through `context.spendWork(lineRuns, form)`, as the built-in what-if
+and sweep do: it returns the refusal when the note's budget
+(`vm.maxLineRunsPerPass`) would be crossed, and null once the work is counted.
 
 ## Operators, not just functions
 

@@ -77,7 +77,10 @@ someone types. They bound expression length, parse complexity, instruction
 count, stack depth, and how many elements a range or matrix may be expanded to
 by `map`/`reduce` (`vm.maxCollectionSize`, 100000 by default, which is what
 stops a typo like `sum(x, 1:100000000)` from allocating until the host runs out
-of memory). Each produces a clear error rather than hanging.
+of memory). Two more bound a whole note rather than one line: the work its
+cross-line forms do in one pass, and the elements its answers keep. Each
+produces a clear error rather than hanging; the
+[security page](/guide/security/) lists every limit and its setting.
 
 ## Reading a result
 
