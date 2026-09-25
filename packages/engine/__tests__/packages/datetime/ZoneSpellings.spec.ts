@@ -45,10 +45,11 @@ describe("the spellings that work", () => {
 });
 
 describe("the spelling that does not, named as a boundary", () => {
-	test("a signed offset is read as an addition, not as a zone", () => {
-		// `(3 April 2026 in GMT) + 9`, nine milliseconds. Documented on the
+	test("a signed offset is read as an addition, not as a zone, and refused", () => {
+		// `(3 April 2026 in GMT) + 9`: a bare 9 names no length of time, so it
+		// is refused rather than added as nine milliseconds. Documented on the
 		// time page, which points at `in Tokyo` and `in JST` instead.
-		expect(answer("3 April 2026 in GMT+9")).toBe(answer("3 April 2026 in GMT"));
+		expect(answer("3 April 2026 in GMT+9")).toContain("a plain number does not say whether it means days, hours or minutes");
 	});
 });
 

@@ -49,6 +49,19 @@ multiplies out.
 The last line is a marathon at four and a half minutes a kilometre, three hours
 nine minutes and fifty-four seconds.
 
+The minute unit may be written too, as it is in a converted pace, and `per`
+reads as the slash does:
+
+```solve
+5:30 min/km // 5:30 /km
+5:30 min per km // 5:30 /km
+10 km at 5:30 min/km // 3,300 seconds
+```
+
+Only a minute unit is read this way, since minutes and seconds are what the two
+parts of a pace are. `5:30 h/km` is not a pace, and neither is a clock time with
+any other unit after it: it names a moment, so it is refused.
+
 `4m30s/km` says the same thing and always did; the two are the same quantity and
 display alike. An hour or more per unit shows the hours:
 

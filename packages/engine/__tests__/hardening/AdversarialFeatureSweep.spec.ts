@@ -44,6 +44,7 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 	finance: ["npv of -1000, X, 400 at 10%", "irr of -1000, X, 400"],
 	distributions: ["normalcdf(X)", "binompdf(10, 0.5, X)"],
 	solving: ["solve(x^2 = X, x)", "integral(x, x, 0, X)"],
+	dates: ["1 Jan 2026 + X days", "1 Jan 2026 + X", "1 Jan 2026 to X", "X to 1 Jan 2026", "X * 9:00", "round(9:00) + X", "(9:30 - 8:30) + X minutes", "X as iso8601"],
 };
 
 describe("every form stays honest over the numeric edges", () => {

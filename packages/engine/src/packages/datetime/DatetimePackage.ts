@@ -1,5 +1,4 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
-import { stringValue } from "@solve-js/vm/Value";
 import { NowParselet } from "./parselets/NowParselet";
 import { NextLastParselet } from "./parselets/NextLastParselet";
 import { UntilSinceParselet } from "./parselets/UntilSinceParselet";
@@ -22,7 +21,7 @@ import { AgeParselet } from "./parselets/AgeParselet";
 import {
   workdaysInDuration, weekdayOnDate, toDateFromAny, toTimestampFromAny,
   monthOnDate, weekOnDate, isWeekendOnDate, isWorkdayOnDate, spanBetweenDates, weekdaysBetween,
-  datetimeLiteralGrain,
+  datetimeLiteralGrain, asIso8601,
 } from "./parselets/DatetimeTimestampPluginFunctions";
 import {
   nthWeekdayOfMonthFn, monthAnchorShift, ageBetween, dateLiteralFault,
@@ -36,8 +35,6 @@ import { workdayRateDenominatorNormalizerRule } from "./normalizer/WorkdayRateDe
 import { DaysInPeriodParselet } from "./parselets/DaysInPeriodParselet";
 import { daysInPeriodNormalizerRule } from "./normalizer/DaysInPeriodNormalizerRule";
 import { dailyNoteLinkNormalizerRule } from "./normalizer/DailyNoteLinkNormalizerRule";
-import { formatIso8601Local } from "./Iso8601";
-import { calendarOf } from "@solve-js/calendar/DateCalendar";
 
 /**
  * Date/time keywords: `now`, `today`, `tomorrow`, `yesterday`,
@@ -147,6 +144,15 @@ export const DATETIME_PACKAGE: IEnginePackage = {
     // the bare `days between` rule from claiming the "days" first.
     "working days between": "WORKDAYS_BETWEEN",
     "business days between": "WORKDAYS_BETWEEN",
+    // `workdays` is how working-days.md writes the unit itself, so it is the
+    // spelling a reader reaches for. Without it `workdays between` fell to the
+    // generic `<unit> between` and its 7/5 rate shim: 21.43 for January 2024.
+    "workdays between": "WORKDAYS_BETWEEN",
+    "workday between": "WORKDAYS_BETWEEN",
+    // With a leading `how many`, as `how many days between` reads.
+    "how many working days between": "WORKDAYS_BETWEEN",
+    "how many business days between": "WORKDAYS_BETWEEN",
+    "how many workdays between": "WORKDAYS_BETWEEN",
     "day of the week on": "WEEKDAY_ON",
     "weekday on": "WEEKDAY_ON",
     "current timestamp": "CURRENT_TIMESTAMP",
@@ -279,7 +285,8 @@ export const DATETIME_PACKAGE: IEnginePackage = {
   asConverters: {
     // The execution context is passed through so each converter reads the
     // date through the same calendar backend the plugin functions do.
-    iso8601: (value, context) => stringValue(formatIso8601Local(value.toNumber(), calendarOf(context))),
+    // A date, a Unix timestamp or ISO text, read as `to date` reads them.
+    iso8601: asIso8601,
     // The same three fields the "what X is it" questions answer, in the
     // composable form: `next friday + 2 weeks as weekday`. Question phrases
     // only ever take a bare date expression, whereas `as` binds after a

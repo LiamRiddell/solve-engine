@@ -216,7 +216,7 @@ describe("the throw contract VM.ts depends on", () => {
     expect(convertUnit(1, "workday", "day")).toBe(1.4);
   });
 
-  test("date arithmetic ignores non-durations instead of guessing at them", () => {
+  test("date arithmetic refuses non-durations instead of guessing at them", () => {
     // The bug this pair of fixes exists for: `today + 5 m` used to equal
     // `today + 5 min`. Asserted through the real engine, because the damage
     // happened two layers above convertUnit.
@@ -226,11 +226,12 @@ describe("the throw contract VM.ts depends on", () => {
     const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
     const base = engine.evaluateExpression("25/12/2026").toNumber();
 
+    // They used to leave the date unchanged, which is a silently wrong date
+    // too: the kilograms were ignored without a word. Now they are refused.
     for (const nonDuration of ["5 m", "5 kg", "5 l", "5 C", "5 mph"]) {
       const result = engine.evaluateExpression(`25/12/2026 + ${nonDuration}`);
-      expect(result.type).toBe(ValueType.Datetime);
-      expect(Number.isNaN(result.toNumber())).toBe(false);
-      expect(result.toNumber()).toBe(base);
+      expect(result.type).toBe(ValueType.Error);
+      expect(result.errorCode).toBe("INVALID_DATETIME_OP");
     }
 
     // Real durations still move the date.

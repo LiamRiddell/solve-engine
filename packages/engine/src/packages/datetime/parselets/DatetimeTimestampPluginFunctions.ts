@@ -4,7 +4,7 @@ import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { calendarOf } from "@solve-js/calendar/DateCalendar";
 import { dayNumber, isoWeekNumber } from "@solve-js/calendar/Gregorian";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
-import { parseIso8601, unixTimestampToEpochMs } from "../Iso8601";
+import { parseIso8601, unixTimestampToEpochMs, formatIso8601Local } from "../Iso8601";
 
 /**
  * `CALL_PLUGIN` handlers backing the datetime package's workdays/weekday/
@@ -290,7 +290,50 @@ function toDateFromAnyHandler(args: Value[], context?: LineExecutionContext): Va
     return datetimeValue(ms);
   }
 
-  return datetimeValue(unixTimestampToEpochMs(v.toNumber()));
+  const ms = unixTimestampToEpochMs(v.toNumber());
+  // Past this a JavaScript date is invalid, and it was written as NaN text:
+  // `(2^53) as iso8601` answered "NaN-NaN-NaNTNaN:NaN:NaN-NaN:NaN". Found by the
+  // adversarial sweep's numeric edges. Written as a negated `<=` so NaN is
+  // refused too.
+  if (!(Math.abs(ms) <= LATEST_INSTANT_MS)) {
+    return errorValue(
+      "DATE_OUT_OF_RANGE",
+      "This timestamp is outside the dates the engine can hold, which reach about 273,000 years either side of 1970.",
+    );
+  }
+  return datetimeValue(ms);
+}
+
+/** The furthest instant from 1970 a JavaScript date can hold, in milliseconds: a hundred million days. */
+const LATEST_INSTANT_MS = 8.64e15;
+
+/**
+ * `<value> as iso8601`: a date, a Unix timestamp or ISO 8601 text, written as
+ * ISO 8601.
+ *
+ * It formatted `value.toNumber()` as epoch milliseconds whatever the value was,
+ * so a timestamp in seconds, the usual kind, was read as milliseconds:
+ * `1710000000 as iso8601` answered a day in January 1970. It now reads its
+ * argument as `to date` does ({@link toDateFromAnyHandler}): a date as it is, a
+ * number through the same seconds-or-milliseconds threshold, text through the
+ * ISO 8601 parser. Anything else (a quantity, money, true or false, a list)
+ * is refused by name rather than read through its number.
+ *
+ * @param value - The value to write.
+ * @param context - The line's context, for the calendar backend.
+ * @returns The ISO 8601 text, or an error Value.
+ */
+export function asIso8601(value: Value, context?: LineExecutionContext): Value {
+  const readable = value.type === ValueType.Datetime || value.type === ValueType.Number || value.type === ValueType.String;
+  if (!readable) {
+    return errorValue(
+      "AS_ISO8601_NEEDS_DATE",
+      "as iso8601 writes a date, a Unix timestamp (in seconds or milliseconds) or ISO 8601 text, and this value is none of them.",
+    );
+  }
+  const date = toDateFromAnyHandler([value], context);
+  if (date.type === ValueType.Error) return date;
+  return stringValue(formatIso8601Local(date.toNumber(), calendarOf(context)));
 }
 
 /**
