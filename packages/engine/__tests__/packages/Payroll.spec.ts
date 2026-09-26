@@ -119,7 +119,13 @@ describe("a rate the line states, which is national about nothing", () => {
 
 	test("`after` on its own still means what it did", () => {
 		// The whole shape is required, closing word included, so an ordinary
-		// `after` is untouched: this is the parse error it has always been.
-		expect(() => newTrackedEngine().evaluateExpression("3 days after tuesday")).toThrow();
+		// `after` is untouched: a date offset stays a date (a weekday reads as
+		// the coming one since #704), and prose stays the parse error it was.
+		const engine = newTrackedEngine();
+		expect(engine.evaluateExpression("3 days after tuesday").type).toBe(ValueType.Datetime);
+		// Two reads of the live clock, so within a minute rather than equal.
+		const gap = engine.evaluateExpression("3 days after tuesday").toNumber() - engine.evaluateExpression("3 days after this tuesday").toNumber();
+		expect(Math.abs(gap)).toBeLessThan(60_000);
+		expect(() => engine.evaluateExpression("3 days after lunch")).toThrow();
 	});
 });

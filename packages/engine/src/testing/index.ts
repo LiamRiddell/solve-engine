@@ -46,6 +46,10 @@ import {
 } from "@solve-js/api/PackageCompatibility";
 import { checkEngineVersionCompatibility } from "@solve-js/api/EngineVersionCompatibility";
 import { ENGINE_VERSION } from "@solve-js/constants/version";
+import { isFastPathToken } from "@solve-js/parser/BindingPower";
+import { TokenTypes } from "@solve-js/lexer/Token";
+import { getTokenCategory } from "@solve-js/language/TokenCategoryMap";
+import { normalizeUnknownError } from "@solve-js/errors/UnifiedErrorFramework";
 
 //#region Errors
 
@@ -564,6 +568,138 @@ export class PackageAssertion {
 		}
 		return this;
 	}
+
+	/**
+	 * Assert the package is put together so every part it declares can be
+	 * reached (#719). Each of these used to be accepted without a word and then
+	 * fail, or never run, at the first line that used it:
+	 *
+	 * - it has a name (registration keys everything by name, so a second
+	 *   nameless package unregistered the first);
+	 * - it registers against the built-ins;
+	 * - a token its keywords, operators, phrases or calls produce that no
+	 *   parselet reads is not meant for a parselet the package keys under
+	 *   another name (`twice` making `DOUBLE_KW` while the parselet waits for
+	 *   `DOUBLE`). A token read inside another parselet's grammar (the `and`
+	 *   of `between X and Y`) is not a mistake, and is not reported;
+	 * - no parselet claims a token the parser reads itself (`NUMBER`, `+`,
+	 *   ...), where it would never run;
+	 * - each token type of its own has a `tokenCategories` entry, so an editor
+	 *   can colour it;
+	 * - each plugin function its parselets call by name is in `pluginFunctions`,
+	 *   found by compiling the package's own words in the shapes a line puts
+	 *   them in (`word 1`, `word(1)`, `1 op 1`). A call reached only by some
+	 *   other shape is not seen.
+	 *
+	 * Every problem is reported at once rather than the first alone.
+	 */
+	toBeWellFormed(): this {
+		const pkg = this.pkg;
+		const problems: string[] = [];
+		const named = typeof pkg.name === "string" && pkg.name.trim() !== "";
+		if (!named) problems.push("it has no name, and registration keeps everything by name");
+
+		for (const position of ["prefix", "infix"] as const) {
+			const parselets = position === "prefix" ? pkg.prefixParselets : pkg.infixParselets;
+			for (const type of Object.keys(parselets ?? {})) {
+				if (isFastPathToken(type, position)) {
+					problems.push(`its ${position} parselet for "${type}" never runs: the parser reads that token itself, before it consults the registry`);
+				}
+			}
+		}
+
+		// The tokens the package's own vocabulary makes, and what makes each.
+		const produced = new Map<string, string>();
+		for (const [word, type] of Object.entries(pkg.lexerVocabulary?.keywords ?? {})) produced.set(type, `the keyword "${word}"`);
+		for (const [op, type] of Object.entries(pkg.lexerVocabulary?.operators ?? {})) produced.set(type, `the operator "${op}"`);
+		for (const [phrase, type] of Object.entries(pkg.phrases ?? {})) produced.set(type, `the phrase "${phrase}"`);
+		for (const [name, type] of Object.entries(pkg.callFusions ?? {})) produced.set(type, `the call "${name}("`);
+
+		const builtinTypes = new Set<string>(Object.values(TokenTypes));
+		const ownTypes = new Set<string>([
+			...produced.keys(),
+			...Object.keys(pkg.prefixParselets ?? {}),
+			...Object.keys(pkg.infixParselets ?? {}),
+		].filter((type) => !builtinTypes.has(type)));
+		for (const type of ownTypes) {
+			if (pkg.tokenCategories?.[type] === undefined && getTokenCategory(type) === undefined) {
+				problems.push(`its token "${type}" has no tokenCategories entry, so an editor cannot colour it`);
+			}
+		}
+
+		if (named) {
+			const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
+			let registered = false;
+			try {
+				engine.registerPackage(pkg);
+				registered = true;
+			} catch (e) {
+				problems.push(`it does not register: ${normalizeUnknownError(e).message}`);
+			}
+			if (registered) {
+				try {
+					const { prefix, infix } = engine.getParseletRegistry();
+					const read = new Set([...prefix.map((p) => p.tokenType), ...infix.map((p) => p.tokenType)]);
+					// A parselet keyed by a token nothing the package declares makes,
+					// beside a declared token nothing reads, is the one mistake this
+					// can name without guessing: the two were meant to be one. A
+					// package with normalizer rules may make the parselet's token in
+					// one, so it is not asked.
+					const unread = [...produced].filter(([type]) => !read.has(type));
+					const orphans = pkg.normalizerRules !== undefined && pkg.normalizerRules.length > 0
+						? []
+						: [...Object.keys(pkg.prefixParselets ?? {}), ...Object.keys(pkg.infixParselets ?? {})]
+							.filter((type) => !produced.has(type) && !builtinTypes.has(type));
+					if (orphans.length > 0) {
+						for (const [type, how] of unread) {
+							problems.push(`${how} makes the token "${type}", which no parselet reads, while the parselet for ${orphans.map((o) => `"${o}"`).join(" or ")} reads a token nothing in the package makes: were they meant to be one?`);
+						}
+					}
+					const missing = new Set<string>();
+					for (const sample of vocabularySamples(pkg)) {
+						try {
+							engine.compileExpression(sample);
+						} catch (e) {
+							const error = normalizeUnknownError(e);
+							const fn = (error.context as { functionName?: string } | undefined)?.functionName;
+							if (error.code === "UNKNOWN_PLUGIN_FUNCTION" && fn !== undefined && !missing.has(fn)) {
+								missing.add(fn);
+								problems.push(`"${sample}" calls the plugin function "${fn}", which pluginFunctions does not declare`);
+							}
+						}
+					}
+				} finally {
+					engine.unregisterPackage(pkg.name);
+				}
+			}
+		}
+
+		if (problems.length > 0) {
+			throw new ExpectationError({
+				code: "PACKAGE_NOT_WELL_FORMED",
+				message: `Package "${String(pkg.name)}" is not well formed:\n- ${problems.join("\n- ")}`,
+				expected: "every part the package declares can be reached",
+				actual: `${problems.length} problem(s)`,
+			});
+		}
+		return this;
+	}
+}
+
+/**
+ * The lines {@link PackageAssertion.toBeWellFormed} compiles to find the
+ * plugin functions a package's parselets call: each word, operator, phrase and
+ * call of its own, in the shapes a line usually puts it in.
+ */
+function vocabularySamples(pkg: IEnginePackage): string[] {
+	const samples: string[] = [];
+	for (const word of Object.keys(pkg.lexerVocabulary?.keywords ?? {})) {
+		samples.push(word, `${word} 1`, `${word}(1)`, `${word}(1, 2)`, `1 ${word} 1`, `${word} 1 and 2`);
+	}
+	for (const op of Object.keys(pkg.lexerVocabulary?.operators ?? {})) samples.push(`1 ${op} 1`, `${op} 1`);
+	for (const phrase of Object.keys(pkg.phrases ?? {})) samples.push(phrase, `${phrase} 1`, `1 ${phrase} 1`);
+	for (const name of Object.keys(pkg.callFusions ?? {})) samples.push(`${name}(1)`, `${name}(1, 2)`);
+	return samples;
 }
 
 /**
@@ -574,6 +710,7 @@ export class PackageAssertion {
  * expectPackage(myPackage).notToShadow(["price", "in", "of"]);
  * expectPackage(myPackage).notToCollideWith(BUILTIN_PACKAGES);
  * expectPackage(myPackage).toDeclareCompatibleEngineVersion();
+ * expectPackage(myPackage).toBeWellFormed();
  * ```
  */
 export function expectPackage(pkg: IEnginePackage): PackageAssertion {

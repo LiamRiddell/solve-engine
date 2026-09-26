@@ -291,6 +291,36 @@ function formatDatetime(value: number, locale: ILocale, settings: FormattingSett
 }
 
 /**
+ * A time of day (#708): a clock time and anything worked out from it, or a
+ * value written `as time`. The time alone, in the long form's words or the
+ * numeric forms' `HH:MM:SS`, and the days it has moved from the day it is
+ * counted from beside it, as the timezone forms write a day shift: `11pm + 2
+ * hours` is `1:00:00 AM (+1 day)`. A time with no anchor recorded shows no
+ * shift.
+ */
+function formatTimeOfDayValue(value: number, locale: ILocale, settings: FormattingSettings, zone?: string, anchor?: number): string {
+  const calendar = settings.calendar ?? DATE_CALENDAR;
+  const named = zone !== undefined && !isFixedOffset(zone);
+  const d = named ? calendar.fieldsInZone(zone, value) : calendar.fields(value);
+  const format = settings.dateResult?.format ?? "long";
+  let time: string;
+  if (format === "long") {
+    const tag = dateNamesLocale(settings.numberResult.decimalSeparatorLocale || "en-US", locale);
+    time = named ? timeOfDayInZone(zone, value, tag) : calendar.formatTimeOfDay(value, tag);
+  } else {
+    const p2 = (n: number) => String(n).padStart(2, "0");
+    time = `${p2(d.hour)}:${p2(d.minute)}:${p2(d.second)}`;
+  }
+  let shift = 0;
+  if (anchor !== undefined) {
+    const from = named ? calendar.fieldsInZone(zone, anchor) : calendar.fields(anchor);
+    shift = Math.round((Date.UTC(d.year, d.month0, d.day) - Date.UTC(from.year, from.month0, from.day)) / 86_400_000);
+  }
+  const suffix = shift === 0 ? "" : ` (${shift > 0 ? "+" : ""}${shift} day${Math.abs(shift) === 1 ? "" : "s"})`;
+  return `= ${time}${suffix}`;
+}
+
+/**
  * Renders a millisecond duration as clock-style `H:MM` (or `H:MM:SS` when
  * there's a non-zero seconds component), rounded to the whole second.
  *
@@ -724,6 +754,7 @@ export function formatValue(value: Value, settings?: FormattingSettings): string
     case ValueType.Boolean:
       return formatBoolean(value.value as boolean);
     case ValueType.Datetime:
+      if (value.grain === "time") return formatTimeOfDayValue(value.value as number, locale, us, value.zone, value.timeAnchor);
       return formatDatetime(value.value as number, locale, us, value.zone);
     case ValueType.Uom:
       return formatUom(value.value as number, value.unit, locale, us, value.exact, value.datetimeSpan, value.decimalPlaces);

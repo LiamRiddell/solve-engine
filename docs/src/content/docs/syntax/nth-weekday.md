@@ -27,6 +27,19 @@ gives yours.
 1st Monday of next month // Monday, April 6, 2026
 ```
 
+The ordinal may be written as a word, from `first` to `fifth`, and a month with
+no year is this year's, the year `9 March` takes on its own:
+
+```solve
+first Monday of next month // Monday, April 6, 2026
+second Tuesday of April // Tuesday, April 14, 2026
+2nd Tuesday of March // Tuesday, March 10, 2026
+last Friday of Dec // Friday, December 25, 2026
+```
+
+A month with no year always means this year's, even when that month has passed:
+in November, `2nd Tuesday of March` is the March just gone, not the next one.
+
 An occurrence the month does not have is refused, never wrapped into the next
 month: April 2026 has four Fridays, so `5th Friday of April 2026` is an error
 rather than the first Friday of May. The bare `next Friday` and `last Monday`

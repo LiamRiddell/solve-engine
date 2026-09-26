@@ -1,6 +1,6 @@
 ---
 title: "Named derived units"
-description: Multiplying quantities into a named physical unit like the newton, watt or joule.
+description: Multiplying quantities into a named physical unit like the newton, watt, joule or ohm.
 ---
 
 > **Package:** `UOM_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
@@ -62,6 +62,20 @@ joules, the energy's own scale.
 100 W * 30 s // 3,000.00 J
 ```
 
+The electrical quantities are named the same way. A voltage over a current is a
+**resistance**, in ohms (`Ω`); a voltage over a resistance, or a power over a
+voltage, is a current in amps (`A`); and a current for a time is a **charge**,
+named in amp-hours (`Ah`), the unit a battery is rated in. A charge in amp-hours
+at a voltage is the battery's energy, named in watt-hours.
+[Electricity](/syntax/electricity/) walks through each.
+
+```solve
+12 V / 2 A // 6.00 Ω
+12 V / 6 Ω // 2.00 A
+2 A * 3 h // 6.00 Ah
+3000 mAh * 3.7 V // 11.10 Wh
+```
+
 This works only where the combination makes a named quantity, and multiplying
 two unrelated quantities is still reported as a mismatch rather than invented
 into a unit. Lengths are the exception that needs no name: a length times a
@@ -69,6 +83,8 @@ length is an area and a length times an area is a volume, so `5 m * 3 m` is
 `15.00 m²`. Those rules, and rates that cancel against what they are per, are on
 [multiplying and dividing units](/syntax/unit-algebra/).
 
-The boundary: the named units are the newton, joule, watt, pascal and volt. A
-combination with no name among them, such as a kilogram-metre, is not shown as a
-compound unit.
+The boundary: the named units are the newton, joule, watt, pascal, volt, ohm,
+ampere and amp-hour. A combination with no name among them, such as a
+kilogram-metre, is not shown as a compound unit, and neither is a time worked out
+from other quantities, so an energy over a power stays `kWh/kW`. The mole is not
+part of this arithmetic at all (see [moles](/syntax/moles/)).

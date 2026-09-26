@@ -91,7 +91,8 @@ type PluginFunctionHandler = (args: Value[], context?: LineExecutionContext) => 
 `args[0]` is the first argument, evaluated. Read a number with `args[i].toNumber()`,
 a string with `args[i].value as string`, and check `args[i].type` against
 `ValueType` for a typed argument. Build the result with a factory: `numberValue`,
-`stringValue`, `uomValue(n, "hours")`, `boolValue`, `percentageValue`. The optional
+`stringValue`, `uomValue(n, "hours")`, `boolValue`, `percentageValue`, all
+exported from `solve-engine/vm`. The optional
 `context` (a `LineExecutionContext`, exported from `solve-engine/vm`) carries the
 line's cross-line data and the engine's calendar backend; ignore it unless you
 need it. A handler that reads or steps a date takes the backend with
@@ -213,8 +214,8 @@ correctly without the `+` parselet knowing anything about `*`. Associativity,
 which way a chain of the same operator groups, is a separate declaration:
 `rightAssociative: true` on the parselet makes `2 ^ 3 ^ 2` read as
 `2 ^ (3 ^ 2)`, and leaving it out gives the left grouping every other operator
-wants. Parse the right operand through `parseRightOperand(this, parser, builder)`
-rather than calling `parser.parseExpression` with a power of your own, and the
+wants. Parse the right operand through `parseRightOperand(this, parser, builder)`,
+exported from `solve-engine/parser`, rather than calling `parser.parseExpression` with a power of your own, and the
 declaration does the work: it parses one power below the operator's own for a
 right-associative operator, and at the operator's own power otherwise. The
 registry reports the declaration (`getAllInfix()` carries `associativity`), so

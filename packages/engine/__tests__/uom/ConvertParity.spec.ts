@@ -32,7 +32,7 @@ const ALL_UNITS = Object.keys(UNIT_TABLE);
  * scripts/generate-unit-table.mjs.
  *
  * The sweeps below skip these six and the DEVIATION test pins the difference,
- * so parity keeps its teeth over the other 1457 spellings.
+ * so parity keeps its teeth over the other 1459 spellings.
  */
 const CORRECTED_UNITS = new Set([
   "square decimeter",
@@ -54,8 +54,9 @@ const CORRECTED_UNITS = new Set([
 const CORRECTED_BEST_UNIT_MEASURE = "illuminance";
 
 /**
- * The abbreviations the port spells and upstream does not, each with the
- * upstream unit it is an alias of (ENGINE_SPELLINGS in the generator, #666).
+ * The abbreviations and word forms the port spells and upstream does not, each
+ * with the upstream unit it is an alias of (ENGINE_SPELLINGS in the generator,
+ * #666, and `revolution` for #706).
  *
  * The sweeps ask upstream about the unit each one names, so `hr` has to agree
  * with `h` to the bit rather than being skipped. A spelling added to the table
@@ -70,6 +71,8 @@ const ADDED_SPELLINGS: ReadonlyMap<string, string> = new Map([
   ["secs", "s"],
   ["wks", "wk"],
   ["yrs", "yr"],
+  ["revolution", "turn"],
+  ["revolutions", "turns"],
 ]);
 
 /** The spelling to ask upstream about: the unit an added abbreviation names, or the unit itself. */

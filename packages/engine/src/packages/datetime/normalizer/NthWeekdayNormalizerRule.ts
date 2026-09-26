@@ -15,6 +15,12 @@ const NTH_WEEKDAY_TYPE_ID = tokenTypeId(NTH_WEEKDAY_TYPE);
 const ORDINAL = /^(\d+)(st|nd|rd|th)$/i;
 
 /**
+ * The ordinals in words (#704), `first Monday of next month`. Five is as far as
+ * a month goes; `second` lexes as the unit, the rest as names.
+ */
+const ORDINAL_WORDS: Readonly<Record<string, number>> = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5 };
+
+/**
  * Fuses the `<ordinal> <weekday>` head of `2nd Tuesday of March 2026` into a
  * single `NTH_WEEKDAY` token, so {@link NthWeekdayParselet} sees one token
  * carrying the ordinal and the weekday and reads the `of <month>` after it.
@@ -46,7 +52,7 @@ export function nthWeekdayNormalizerRule(priority = 66): NormalizerRule {
 		// The ordinal is the LAST keyword or the number of a glued ordinal: the
 		// lexer splits `2nd` into a NUMBER (a BIGINT past the safe range) and a
 		// word, and the rule reads the two as one run.
-		shape: [{ types: ["LAST", "NUMBER", "BIGINT"] }],
+		shape: [{ types: ["LAST", "NUMBER", "BIGINT", "IDENT", "UNIT"] }],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const first = tokens[pos];
 			if (!first) return null;
@@ -54,9 +60,15 @@ export function nthWeekdayNormalizerRule(priority = 66): NormalizerRule {
 			let ordinal: string | null = null;
 			let ordinalTokens = 0;
 
+			const word = first.type === "IDENT" || first.type === "UNIT" ? (first.text ?? "").toLowerCase() : "";
 			if (first.type === "LAST") {
 				ordinal = "last";
 				ordinalTokens = 1;
+			} else if (Object.prototype.hasOwnProperty.call(ORDINAL_WORDS, word)) {
+				ordinal = String(ORDINAL_WORDS[word]);
+				ordinalTokens = 1;
+			} else if (first.type === "IDENT" || first.type === "UNIT") {
+				return null;
 			} else {
 				const second = tokens[pos + 1];
 				if (!second) return null;

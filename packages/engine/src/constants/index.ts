@@ -16,3 +16,4 @@ export type {
 	EngineConfigOverride,
 	ValidationResult,
 } from "./Configuration";
+export type { WeekdayName } from "../calendar/WeekShape";

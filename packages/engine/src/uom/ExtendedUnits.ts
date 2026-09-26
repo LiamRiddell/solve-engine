@@ -44,6 +44,10 @@ export const EXTENDED_UNITS: Record<string, ExtendedUnitDef> = {
   kph: { measure: "speed", toBase: 1000 / 3600 },
   mph: { measure: "speed", toBase: 0.44704 }, // 1 mile (1609.344m) / 3600s
   kn: { measure: "speed", toBase: 1852 / 3600 }, // 1 nautical mile = 1852m exactly
+  // The knot in words, beside its symbol (#706). `kt` is not a spelling of it:
+  // the generated table holds `kt` as the kilotonne.
+  knot: { measure: "speed", toBase: 1852 / 3600 },
+  knots: { measure: "speed", toBase: 1852 / 3600 },
   // "fps" (feet per second) deliberately NOT used, confirmed via a real
   // regression (20 failures in VideoTimecode.spec.ts) that it collides with
   // the Time package's "fps" (frames per second), which FpsRateNormalizerRule
@@ -84,13 +88,7 @@ export const EXTENDED_UNITS: Record<string, ExtendedUnitDef> = {
   px: { measure: "cssLength", toBase: 1 },
   rem: { measure: "cssLength", toBase: 16 },
 
-  // ── Voltage (base: V, expressed in mV/kV only) ─────────────────────────
-  // The bare symbol "V" is deliberately NOT registered, it collides with
-  // "V" the stock ticker (Visa) in packages/stocks/MajorTickers.ts, whose
-  // StockTickerNormalizerRule also requires an IDENT token (same class of
-  // issue as "var"/"fps" above; not currently test-covered since bare-ticker
-  // recognition is opt-in, but a real latent conflict). "mV"/"kV" don't
-  // collide with anything and cover the practically useful range.
+  // ── Voltage (base: V) ───────────────────────────────────────────────────
   // `V` is registered so `230 V * 13 A` reads as volts times amperes (issue
   // #191). It does collide with the Visa stock ticker, but the bare-ticker form
   // is opt-in (the stocks package is not a default), and volts is the more
@@ -98,11 +96,53 @@ export const EXTENDED_UNITS: Record<string, ExtendedUnitDef> = {
   V: { measure: "voltage", toBase: 1 },
   mV: { measure: "voltage", toBase: 0.001 },
   kV: { measure: "voltage", toBase: 1000 },
+  // The word forms, so `12 volts` is `12 V` (#706). The word is a unit only
+  // straight after a number; a variable of the same name still reads as the
+  // variable at the start of a line and after an operator, as `b` and `N` do.
+  volt: { measure: "voltage", toBase: 1 },
+  volts: { measure: "voltage", toBase: 1 },
 
   // ── Current (base: A) ───────────────────────────────────────────────
   mA: { measure: "current", toBase: 0.001 },
   A: { measure: "current", toBase: 1 },
   kA: { measure: "current", toBase: 1000 },
+  // The word forms (#706). `amp` is also short for an amplifier, but only a
+  // number in front of it makes it a unit, so `5 amps` is a current while a
+  // sentence about an amp with no number before it is left alone.
+  amp: { measure: "current", toBase: 1 },
+  amps: { measure: "current", toBase: 1 },
+  ampere: { measure: "current", toBase: 1 },
+  amperes: { measure: "current", toBase: 1 },
+
+  // ── Resistance (base: ohm), a voltage over a current (#706) ──────────
+  // `12 V / 2 A` composes onto the ohm (see Dimensions.ts), and the ohm is
+  // written as a word or as its symbol. The symbol arrives as one of two code
+  // points: U+03A9 GREEK CAPITAL LETTER OMEGA, which keyboards and character
+  // pickers give, and U+2126 OHM SIGN, the compatibility character a pasted
+  // datasheet can carry. Both are admitted, as both micro signs are (#666).
+  //
+  // These are the only non-ASCII spellings in this table. The non-ASCII gate
+  // in lexer/units.ts filters the generated table, where most such spellings
+  // hold a space, a dot or a prime and cannot be one token; this table's
+  // spellings join the vocabulary as written, and the lexer reads the omega as
+  // part of a word, so `10 Ω`, `10Ω` and `4.7 kΩ` are each one UNIT token.
+  ohm: { measure: "resistance", toBase: 1 },
+  ohms: { measure: "resistance", toBase: 1 },
+  Ω: { measure: "resistance", toBase: 1 },
+  kΩ: { measure: "resistance", toBase: 1000 },
+  MΩ: { measure: "resistance", toBase: 1_000_000 },
+  "\u2126": { measure: "resistance", toBase: 1 }, // the OHM SIGN
+  "k\u2126": { measure: "resistance", toBase: 1000 },
+  "M\u2126": { measure: "resistance", toBase: 1_000_000 },
+
+  // ── Charge (base: coulomb), a current times a time (#706) ────────────
+  // The amp-hour is the unit a battery is rated in: `3000 mAh * 3.7 V` is the
+  // battery's energy, 11.1 Wh. The coulomb (one ampere for one second) is the
+  // measure's base and is spelled only as a word, since `C` is Celsius.
+  coulomb: { measure: "charge", toBase: 1 },
+  coulombs: { measure: "charge", toBase: 1 },
+  Ah: { measure: "charge", toBase: 3600 },
+  mAh: { measure: "charge", toBase: 3.6 },
 
   // ── Apparent Power (base: VA), S = V × I, not real power ─────────────
   VA: { measure: "apparentPower", toBase: 1 },
@@ -179,5 +219,79 @@ export const EXTENDED_UNITS: Record<string, ExtendedUnitDef> = {
   // Imperial hundredweight is a different quantity and is already `cwt`.
   centner: { measure: "mass", toBase: 100000 },
   centners: { measure: "mass", toBase: 100000 },
+
+  // ── Length, astronomical (#706) ──────────────────────────────────────
+  // The astronomical unit, fixed by the IAU in 2012 at exactly 149,597,870,700
+  // metres (roughly the Earth's distance from the Sun). Only the capitals are
+  // admitted: the IAU's own lower-case `au` is also the start of `au pair` and
+  // `au revoir`.
+  AU: { measure: "length", toBase: 149_597_870_700 },
+
+  // ── Energy, extending the base table's joules (#706) ──────────────────
+  //
+  // The calorie is two units a factor of a thousand apart, and the spelling
+  // decides which. The small calorie, `cal`, is roughly the energy that warms a
+  // gram of water by one degree; the food Calorie on a nutrition label, `Cal`, is a
+  // thousand of them, the kilocalorie. The lexer is case-sensitive, so the
+  // capital is the food Calorie, as a label prints it, and every lower-case
+  // spelling is the small calorie, as a physics text writes it. `kcal` is the
+  // unambiguous spelling of the food figure and is the one the docs lead with.
+  //
+  // The calorie is the thermochemical one, exactly 4.184 J, which is the size
+  // food energy is reckoned in (the FAO converts food energy at 1 kcal =
+  // 4.184 kJ). The International Table calorie of steam tables, 4.1868 J, is not
+  // offered: two calories a twentieth of a percent apart under one name would
+  // make the answer depend on a choice nobody writing `cal` knows they made.
+  cal: { measure: "energy", toBase: 4.184 },
+  calorie: { measure: "energy", toBase: 4.184 },
+  calories: { measure: "energy", toBase: 4.184 },
+  kcal: { measure: "energy", toBase: 4184 },
+  kilocalorie: { measure: "energy", toBase: 4184 },
+  kilocalories: { measure: "energy", toBase: 4184 },
+  Cal: { measure: "energy", toBase: 4184 },
+  Calorie: { measure: "energy", toBase: 4184 },
+  Calories: { measure: "energy", toBase: 4184 },
+  // The British thermal unit, International Table, exactly 1055.05585262 J: a
+  // boiler's or an air conditioner's rating. `Btu` is the spelling standards
+  // bodies use, `BTU` the one most people type.
+  BTU: { measure: "energy", toBase: 1055.05585262 },
+  Btu: { measure: "energy", toBase: 1055.05585262 },
+  // The therm, 100,000 BTU, the unit a gas bill is charged in. Built on the
+  // International Table BTU above, as the EU and UK therm is; the US therm uses
+  // an older BTU and is about 0.02% smaller (105,480,400 J).
+  therm: { measure: "energy", toBase: 105_505_585.262 },
+  therms: { measure: "energy", toBase: 105_505_585.262 },
+  // The electronvolt, the energy one electron gains across one volt, exactly
+  // 1.602176634e-19 J since the 2019 SI redefinition, with the prefixes
+  // particle physics writes it in.
+  eV: { measure: "energy", toBase: 1.602176634e-19 },
+  keV: { measure: "energy", toBase: 1.602176634e-16 },
+  MeV: { measure: "energy", toBase: 1.602176634e-13 },
+  GeV: { measure: "energy", toBase: 1.602176634e-10 },
+
+  // ── Pressure (#706) ───────────────────────────────────────────────────
+  // The millimetre of mercury, the unit blood pressure is read in, at its
+  // conventional value of exactly 133.322387415 Pa. The torr in the generated
+  // table is 101325/760 Pa, less than one part in seven million smaller, so the
+  // two are kept as the separate units they are defined to be.
+  mmHg: { measure: "pressure", toBase: 133.322387415 },
+
+  // ── Frequency (#706) ──────────────────────────────────────────────────
+  // Revolutions per minute, an engine's or a drill's speed of rotation, as a
+  // frequency: one revolution a minute is a sixtieth of a hertz, so `3000 rpm`
+  // is 50 Hz. Both cases, since a dashboard prints `RPM`.
+  rpm: { measure: "frequency", toBase: 1 / 60 },
+  RPM: { measure: "frequency", toBase: 1 / 60 },
+
+  // ── Amount of substance (base: mol, #706) ─────────────────────────────
+  // The mole, chemistry's count of particles (6.02214076e23 of them). It is a
+  // conversion unit only: the dimensions in Dimensions.ts track mass, length,
+  // time and current, and the mole is a fifth base quantity outside them, so
+  // `2 mol * 3 kg` is refused rather than composed. Growing that vector would
+  // change every named unit's key for a quantity no named unit here needs.
+  // The word `mole` is left out: it is also an animal, a spy and a mark on the
+  // skin.
+  mol: { measure: "amountOfSubstance", toBase: 1 },
+  mmol: { measure: "amountOfSubstance", toBase: 0.001 },
 
 };

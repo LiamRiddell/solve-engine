@@ -1,7 +1,8 @@
 import { Value, ValueType, numberValue, stringValue, boolValue, uomValue, datetimeValue, errorValue, type DatetimeGrain } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
-import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { calendarOf } from "@solve-js/calendar/DateCalendar";
+import { isWeekend } from "@solve-js/vm/BusinessDays";
+import { weekOf } from "@solve-js/calendar/WeekShape";
 import { dayNumber, isoWeekNumber } from "@solve-js/calendar/Gregorian";
 import { convertUnit, getMeasure } from "@solve-js/uom/UomConverter";
 import { parseIso8601, unixTimestampToEpochMs, formatIso8601Local } from "../Iso8601";
@@ -138,25 +139,25 @@ function weekOnDateHandler(args: Value[], context?: LineExecutionContext): Value
   return numberValue(isoWeekNumber(d.year, d.month0, d.day));
 }
 
-/** True for Saturday/Sunday. */
-function isWeekendDate(epochMs: number, calendar: CalendarBackend): boolean {
-  const day = calendar.fields(epochMs).weekday;
-  return day === 0 || day === 6;
+/** True for a weekend day: the engine's weekend (`date.weekend`, #702), Saturday and Sunday unless set. */
+function isWeekendDate(epochMs: number, context?: LineExecutionContext): boolean {
+  return isWeekend(epochMs, calendarOf(context), weekOf(context).weekend);
 }
 
 /** `<date> is a weekend` -> Boolean. */
 function isWeekendOnDateHandler(args: Value[], context?: LineExecutionContext): Value {
   const epochMs = asEpochMs(args[0], "is a weekend");
   if (typeof epochMs !== "number") return epochMs;
-  return boolValue(isWeekendDate(epochMs, calendarOf(context)));
+  return boolValue(isWeekendDate(epochMs, context));
 }
 
 /**
  * `<date> is a workday` / `is a weekday` -> Boolean.
  *
- * Mon-Fri only, and deliberately blind to the holiday calendar: this answers
- * "is this a weekday", a question about the week's shape, not "is this a
- * working day in my region". Keeping it weekend-based means the predicate is a
+ * Every day outside the engine's weekend (Monday to Friday unless
+ * `date.weekend` says otherwise, #702), and deliberately blind to the holiday
+ * calendar: this answers "is this a weekday", a question about the week's
+ * shape, not "is this a working day in my region". Keeping it weekend-based means the predicate is a
  * pure function of the date, decidable without any host configuration, and
  * `is a workday` stays the exact complement of `is a weekend`. The working-day
  * ARITHMETIC (offsets and `between`) is what consults the calendar. See
@@ -165,7 +166,7 @@ function isWeekendOnDateHandler(args: Value[], context?: LineExecutionContext): 
 function isWorkdayOnDateHandler(args: Value[], context?: LineExecutionContext): Value {
   const epochMs = asEpochMs(args[0], "is a workday");
   if (typeof epochMs !== "number") return epochMs;
-  return boolValue(!isWeekendDate(epochMs, calendarOf(context)));
+  return boolValue(!isWeekendDate(epochMs, context));
 }
 
 /**
@@ -334,6 +335,69 @@ export function asIso8601(value: Value, context?: LineExecutionContext): Value {
   const date = toDateFromAnyHandler([value], context);
   if (date.type === ValueType.Error) return date;
   return stringValue(formatIso8601Local(date.toNumber(), calendarOf(context)));
+}
+
+/** Whether a value is something `to date` reads: a date, a Unix timestamp or ISO 8601 text. */
+function readsAsDate(value: Value): boolean {
+  return value.type === ValueType.Datetime || value.type === ValueType.Number || value.type === ValueType.String;
+}
+
+/**
+ * `<value> as date`, the `as` spelling of `to date` (#701): a Unix timestamp
+ * (in seconds or milliseconds, read through the same threshold) or ISO 8601
+ * text, as a date; a date as it is. A quantity, money, true or false or a list
+ * is refused by name, as `as iso8601` refuses it, rather than read through its
+ * number.
+ *
+ * @param value - The value to read.
+ * @param context - The line's context, for the calendar backend.
+ * @returns The date, or an error Value.
+ */
+export function asDate(value: Value, context?: LineExecutionContext): Value {
+  if (!readsAsDate(value)) {
+    return errorValue("AS_DATE_NEEDS_TIMESTAMP", "as date reads a Unix timestamp (in seconds or milliseconds), ISO 8601 text or a date, and this value is none of them.");
+  }
+  return toDateFromAnyHandler([value], context);
+}
+
+/**
+ * `<value> as timestamp`, the `as` spelling of `to timestamp` (#701): a date,
+ * or ISO 8601 text, as a Unix timestamp in whole seconds. A number is read as
+ * a timestamp first, as `as date` reads it, so one in milliseconds comes back
+ * in seconds rather than divided twice.
+ *
+ * @param value - The value to write.
+ * @param context - The line's context, for the calendar backend.
+ * @returns The timestamp in seconds, or an error Value.
+ */
+export function asTimestamp(value: Value, context?: LineExecutionContext): Value {
+  const date = asDate(value, context);
+  if (date.type === ValueType.Error) {
+    return date.errorCode === "AS_DATE_NEEDS_TIMESTAMP"
+      ? errorValue("AS_TIMESTAMP_NEEDS_DATE", "as timestamp writes a date, ISO 8601 text or a Unix timestamp, and this value is none of them.")
+      : date;
+  }
+  return toTimestampFromAnyHandler([date], context);
+}
+
+/**
+ * `<value> as time` (#708): a date and time shown as the time of day alone,
+ * the way a clock time is. The instant does not change, only how it is shown,
+ * and the time is counted from its own day, so it shows no day shift until
+ * arithmetic moves it. Only a date is read: a number or text has no time of
+ * day of its own to show, and `5 as time` would otherwise be a moment in
+ * 1970, so each is refused, as a quantity is.
+ *
+ * @param value - The value to show.
+ * @param _context - The line's context; the day is the value's own, so no calendar is read.
+ * @returns The same instant with the time-of-day grain, or an error Value.
+ */
+export function asTime(value: Value, _context?: LineExecutionContext): Value {
+  if (value.type !== ValueType.Datetime) {
+    return errorValue("AS_TIME_NEEDS_DATE", "as time shows a date and time as its time of day, and this value is not a date. To read a Unix timestamp first, write it as a date: 1710000000 as date as time.");
+  }
+  const ms = value.toNumber();
+  return datetimeValue(ms, "time", value.zone, ms);
 }
 
 /**

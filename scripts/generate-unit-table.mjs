@@ -131,6 +131,12 @@ const UPSTREAM_BEST_UNIT_CORRECTIONS = [
  * written, and the engine already read these spellings inside a compact duration
  * (`1hr30min`) and a pace while refusing them anywhere else.
  *
+ * The same bar admits a word form upstream lacks for a unit it has. A
+ * revolution is one full rotation, which upstream spells only as `turn`, and
+ * `turn` is excluded from the lexer as ordinary English (lexer/units.ts), so a
+ * rotation had no spelling after a number at all. `revolution` names the same
+ * angle and nothing else, and is what `rpm` counts per minute (#706).
+ *
  * Applying an entry asserts upstream still lacks the spelling, so a `convert`
  * release that adds it fails the generator and the entry gets deleted.
  */
@@ -142,6 +148,8 @@ const ENGINE_SPELLINGS = [
 	{ spelling: "secs", of: "s" },
 	{ spelling: "wks", of: "wk" },
 	{ spelling: "yrs", of: "yr" },
+	{ spelling: "revolution", of: "turn" },
+	{ spelling: "revolutions", of: "turns" },
 ];
 
 /**
@@ -300,9 +308,10 @@ async function main() {
  * UPSTREAM_UNIT_CORRECTIONS / UPSTREAM_BEST_UNIT_CORRECTIONS in the generator.
  * They are corrections of an upstream error, never a local preference.
  *
- * The one addition is a handful of abbreviations upstream does not spell
- * (\`hr\`, \`mins\`, \`secs\`), listed below and justified in ENGINE_SPELLINGS in
- * the generator. Each is an alias of an upstream unit at that unit's ratio.
+ * The one addition is a handful of abbreviations and word forms upstream does
+ * not spell (\`hr\`, \`mins\`, \`secs\`, \`revolution\`), listed below and justified
+ * in ENGINE_SPELLINGS in the generator. Each is an alias of an upstream unit at
+ * that unit's ratio.
  *
  * Upstream: https://github.com/citycide/convert (MIT, Copyright (c) Jonah Snider)
  */

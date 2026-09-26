@@ -2,8 +2,9 @@
  * Pure business-day arithmetic: the calendar walk behind workday offsets and
  * the working-day count.
  *
- * Weekends (Saturday and Sunday) are decidable from the date alone, so they
- * are always skipped. Public holidays are not decidable from the date, so they
+ * Weekends are decidable from the date alone, so they are always skipped:
+ * Saturday and Sunday, or the days the host names in `date.weekend` (#702),
+ * which each function takes as its last argument. Public holidays are not decidable from the date, so they
  * arrive as an optional `isHoliday` predicate the host supplies (see
  * `vm/HolidayCalendar.ts` and `constants/Configuration.ts`'s `date.holidays`).
  * With no predicate the walk is weekends-only, which is the honest default:
@@ -26,6 +27,7 @@
  */
 
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
+import { DEFAULT_WEEK } from "@solve-js/calendar/WeekShape";
 
 /** A host-supplied test for whether an instant falls on a public holiday. */
 export type HolidayPredicate = (epochMs: number) => boolean;
@@ -35,11 +37,11 @@ export type HolidayPredicate = (epochMs: number) => boolean;
  *  not apply (the caller rounds, and the walk itself steps the day field). */
 const MS_PER_DAY = 86_400_000;
 
-/** True for Saturday or Sunday, in the local time zone the rest of the engine's
- *  date arithmetic already works in, read through `calendar`. */
-export function isWeekend(epochMs: number, calendar: CalendarBackend): boolean {
-	const day = calendar.fields(epochMs).weekday; // 0 = Sunday .. 6 = Saturday
-	return day === 0 || day === 6;
+/** True for a weekend day, in the local time zone the rest of the engine's
+ *  date arithmetic already works in, read through `calendar`. The weekend is
+ *  the engine's (`date.weekend`, #702), Saturday and Sunday unless set. */
+export function isWeekend(epochMs: number, calendar: CalendarBackend, weekend: ReadonlySet<number> = DEFAULT_WEEK.weekend): boolean {
+	return weekend.has(calendar.fields(epochMs).weekday); // 0 = Sunday .. 6 = Saturday
 }
 
 /**
@@ -47,8 +49,8 @@ export function isWeekend(epochMs: number, calendar: CalendarBackend): boolean {
  * mark as a holiday. With no calendar this is just "not a weekend". `calendar`
  * is the backend the weekday is read through.
  */
-export function isBusinessDay(epochMs: number, isHoliday: HolidayPredicate | undefined, calendar: CalendarBackend): boolean {
-	if (isWeekend(epochMs, calendar)) return false;
+export function isBusinessDay(epochMs: number, isHoliday: HolidayPredicate | undefined, calendar: CalendarBackend, weekend: ReadonlySet<number> = DEFAULT_WEEK.weekend): boolean {
+	if (isWeekend(epochMs, calendar, weekend)) return false;
 	return isHoliday ? !isHoliday(epochMs) : true;
 }
 
@@ -78,6 +80,7 @@ export function addBusinessDays(
 	isHoliday: HolidayPredicate | undefined,
 	maxCalendarSteps: number,
 	calendar: CalendarBackend,
+	weekend: ReadonlySet<number> = DEFAULT_WEEK.weekend,
 ): number | null {
 	// Truncated to whole business days, mirroring the milliseconds path: a
 	// fractional count of working days names no calendar date of its own.
@@ -89,7 +92,7 @@ export function addBusinessDays(
 		current = calendar.addDays(current, direction);
 		steps++;
 		if (steps > maxCalendarSteps) return null;
-		if (isBusinessDay(current, isHoliday, calendar)) remaining--;
+		if (isBusinessDay(current, isHoliday, calendar, weekend)) remaining--;
 	}
 	return current;
 }
@@ -116,6 +119,7 @@ export function countBusinessDaysBetween(
 	isHoliday: HolidayPredicate | undefined,
 	maxCalendarSteps: number,
 	calendar: CalendarBackend,
+	weekend: ReadonlySet<number> = DEFAULT_WEEK.weekend,
 ): number | null {
 	const startDay = startOfLocalDay(Math.min(aMs, bMs), calendar);
 	const endDay = startOfLocalDay(Math.max(aMs, bMs), calendar);
@@ -127,7 +131,7 @@ export function countBusinessDaysBetween(
 	let count = 0;
 	let current = startDay;
 	for (let i = 0; i <= spanDays; i++) {
-		if (isBusinessDay(current, isHoliday, calendar)) count++;
+		if (isBusinessDay(current, isHoliday, calendar, weekend)) count++;
 		current = calendar.addDays(current, 1);
 	}
 	return count;

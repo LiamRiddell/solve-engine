@@ -41,10 +41,13 @@ const CONVERSION_KEYWORDS: ReadonlySet<string> = new Set(["AS", "IN", "TO"]);
  * @param before - The token before it, so a converter name after `as`, `in` or
  * `to` stays the conversion it names.
  */
-function monthOf(token: Token | undefined, before?: Token): number {
+export function monthOf(token: Token | undefined, before?: Token): number {
 	if (token === undefined || !MONTH_TOKEN_TYPES.has(token.type)) return 0;
 	if (token.type === "CONVERTER_NAME" && before !== undefined && CONVERSION_KEYWORDS.has(before.type)) return 0;
-	return MONTHS[(token.text ?? token.value ?? "").toLowerCase()] ?? 0;
+	// Own properties only: `5 __proto__` found Object.prototype here and was
+	// refused as a date whose month was undefined.
+	const name = (token.text ?? token.value ?? "").toLowerCase();
+	return Object.prototype.hasOwnProperty.call(MONTHS, name) ? MONTHS[name] : 0;
 }
 
 /** A pure digit string, so hex and scientific literals are never fused. */

@@ -329,17 +329,17 @@ describe("what the table holds that cannot be typed", () => {
 		expect(unexplained).toEqual([]);
 	});
 
-	test("the single letters the base units need are among the casualties", () => {
+	test("the single letters the base units need are no longer among the casualties", () => {
 		// `N` (newton) and `J` (joule) were grandfathered in for dimensional
 		// arithmetic (issue #191), so they can now be typed. `L`, the preferred
-		// symbol for the litre, is still a casualty (`l` and `mL` work instead):
-		// a reachability gap pinned here as a fact about the vocabulary.
+		// symbol for the litre, was the last casualty, pinned here as a gap until
+		// #706 admitted it; `l` and `mL` worked throughout.
 		expect(lookupUnit("J")).toBeDefined();
 		expect(lookupUnit("N")).toBeDefined();
 		expect(lookupUnit("L")).toBeDefined();
 		expect(knownUnits.has("J")).toBe(true);
 		expect(knownUnits.has("N")).toBe(true);
-		expect(knownUnits.has("L")).toBe(false);
+		expect(knownUnits.has("L")).toBe(true);
 		// The longer spellings that do work, so the gap is only in the symbols.
 		expect(knownUnits.has("joule")).toBe(true);
 		expect(knownUnits.has("newton")).toBe(true);

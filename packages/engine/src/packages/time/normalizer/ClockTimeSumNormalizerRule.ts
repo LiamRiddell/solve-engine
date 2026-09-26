@@ -51,9 +51,9 @@ const UNIT_ID = tokenTypeId("UNIT");
  * @module ClockTimeSumNormalizerRule
  */
 
-/** Whether the clock time was written as a time of day, with `am` or `pm`. */
+/** Whether the clock time was written as a time of day: with `am` or `pm`, or as `noon` or `midnight`. */
 function isTimeOfDay(token: Token | undefined): boolean {
-	return token !== undefined && /[ap]\.?m\.?$/i.test((token.text ?? "").trim());
+	return token !== undefined && /([ap]\.?m\.?|noon|midnight)$/i.test((token.text ?? "").trim());
 }
 
 /** Whether the token is a clock time this rule may read as a stretch of time. */

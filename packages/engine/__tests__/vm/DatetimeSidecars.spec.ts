@@ -72,10 +72,17 @@ describe("the grain each shape records", () => {
 	});
 
 	test("a wall-clock literal is a reading, in no named zone", () => {
-		for (const spelling of ["2026-04-03T09:30", "6pm", "9:00am"]) {
+		const value = evaluate("2026-04-03T09:30");
+		expect(value.type).toBe(ValueType.Datetime);
+		expect(value.grain).toBe("datetime");
+		expect(value.zone).toBeUndefined();
+	});
+
+	test("a clock time is a time of day, in no named zone (#708)", () => {
+		for (const spelling of ["6pm", "9:00am", "noon"]) {
 			const value = evaluate(spelling);
 			expect(value.type).toBe(ValueType.Datetime);
-			expect(value.grain).toBe("datetime");
+			expect(value.grain).toBe("time");
 			expect(value.zone).toBeUndefined();
 		}
 	});
