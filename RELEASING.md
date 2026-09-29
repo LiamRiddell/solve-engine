@@ -73,20 +73,41 @@ gh release create "solve-engine@1.0.1" --title "solve-engine 1.0.1" --notes-file
 
 Publishing it runs the publish job, which:
 
-1. checks the tag against `package.json` (`scripts/assert-release-tag.mjs`), so
-   a typo cannot publish the previous version under a new name;
-2. runs `npm run verify`, the same gate a contributor runs;
-3. runs `npm run test:consumer`, which installs the built tarball and uses it,
-   because a version cannot be replaced once it is on the registry;
-4. publishes over OIDC: a version to `latest`, where npm refuses a version
-   lower than the one `latest` names, and a prerelease to `next`;
-5. tells `obsidian-solve` a release shipped, via a repository dispatch carrying
-   the bare version.
+1. checks the tag is on `main`, then checks it against `package.json`
+   (`scripts/assert-release-tag.mjs`), so a typo cannot publish the previous
+   version under a new name;
+2. runs `npm run verify:ci`, every gate a pull request has to pass;
+3. packs the release once into a known folder, checks the packed contents with
+   `scripts/assert-publishable.mjs`, and installs that tarball into a scratch
+   project and uses it (`scripts/consumer-e2e.mjs file:<tarball>`), because a
+   version cannot be replaced once it is on the registry;
+4. publishes that same tarball over OIDC with `npm publish <tarball>`: a
+   version to `latest`, where npm refuses a version lower than the one `latest`
+   names, and a prerelease to `next`.
 
-That last step is gated on the publish job actually succeeding, not merely on
-the workflow reaching it. A release that fails `verify` or `test:consumer`, or
-that npm rejects, must not tell a downstream consumer a version exists that
-never reached the registry.
+Publishing the file rather than the workspace folder is what makes the tested
+artefact the published one. For a folder, npm runs `prepublishOnly` (a clean
+rebuild) and packs again, so the registry used to receive a second build that
+nothing had installed. For a file it runs no lifecycle script. Trusted
+publishing and its provenance behave the same for both, since npm reads the
+manifest from the tarball and takes the same OIDC path.
+
+The plugin is no longer told by a dispatch; it polls for releases, and engine
+CI builds it against every pull request in the optional `obsidian-canary` job.
+
+### Before you start: the preflight
+
+```bash
+npm run release:check
+```
+
+Read-only. It lists every changelog version and GitHub release npm does not
+have, publish runs still queued or in progress and release runs that were
+cancelled (a re-run of one publishes that version), the pending changesets and
+the version they add up to, and the result of a throwaway `changeset version`
+in a temporary worktree with its own install. It ends with a release-note
+skeleton whose `## Verification` section carries the real test counts. It needs
+the network and `gh`.
 
 Draft releases do not publish. The workflow listens for `released: [published]`,
 so a draft sits harmlessly until you publish it.

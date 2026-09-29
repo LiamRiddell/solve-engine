@@ -6,7 +6,7 @@
  * contributions (plan Task 2).
  */
 
-import { describe, expect, test, jest } from "@jest/globals";
+import { afterEach, describe, expect, test, jest } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { getTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import { OSRS_PACKAGE } from "@solve-js-examples/osrs/OsrsPackage";

@@ -79,12 +79,15 @@ describe("Result combinators", () => {
   test("throwIfErr() throws the error as-is on failure", () => {
     const e = ErrorFactory.internal("X", "boom");
     expect(() => throwIfErr(err(e))).toThrow(e);
+    // `fail` is not a Jest 30 global, so the thrown value is captured and
+    // asserted instead: a call that does not throw leaves it undefined.
+    let thrown: unknown;
     try {
       throwIfErr(err(e));
-      fail("expected throwIfErr to throw");
-    } catch (thrown) {
-      expect(thrown).toBe(e); // same instance, not re-wrapped
+    } catch (caught) {
+      thrown = caught;
     }
+    expect(thrown).toBe(e); // same instance, not re-wrapped
   });
 
   test("tryCatch() wraps a successful call", () => {

@@ -54,15 +54,21 @@ const DIST = path.join(ROOT, "packages/engine/dist");
 const PACK_NPM = "npm@10.9.9";
 
 /**
- * The Node line the committed figures are measured on, from `.nvmrc`. The
+ * The exact Node the committed figures are measured on, from `.nvmrc`. The
  * compressed sizes come from size-limit, which compresses with brotli through
  * the running Node's zlib; a different zlib can compress the same bytes to a
- * slightly different count. Reported rather than enforced: a mismatch is the likeliest
- * explanation for a stale check, and the message says so.
+ * slightly different count, so the pin is a full version rather than a major
+ * (#791), and the jobs that produce or check these figures read it through
+ * setup-node's `node-version-file`. Reported rather than enforced: a mismatch
+ * is the likeliest explanation for a stale check, and the message says so.
+ *
+ * @returns The version without a leading `v` (`22.22.2`), or null when
+ * `.nvmrc` is missing or empty.
  */
-function expectedNodeMajor() {
+function expectedNodeVersion() {
 	try {
-		return Number.parseInt(fs.readFileSync(path.join(ROOT, ".nvmrc"), "utf8"), 10);
+		const pinned = fs.readFileSync(path.join(ROOT, ".nvmrc"), "utf8").trim().replace(/^v/, "");
+		return pinned === "" ? null : pinned;
 	} catch {
 		return null;
 	}
@@ -270,8 +276,8 @@ if (process.argv.includes("--check")) {
 	const stale = committed ? staleFields(committed) : ["(the file is missing or unreadable)"];
 
 	if (stale.length > 0) {
-		const expected = expectedNodeMajor();
-		const running = Number.parseInt(process.versions.node, 10);
+		const expected = expectedNodeVersion();
+		const running = process.versions.node;
 		const toolchainNote =
 			expected !== null && running !== expected
 				? `\nMeasured on Node ${process.versions.node}; the committed figures are produced on Node ${expected} (.nvmrc). ` +

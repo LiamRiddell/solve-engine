@@ -2130,7 +2130,7 @@ export function registerAsConverter(name: string, handler: AsConverter): void {
     const key = name.toLowerCase();
     const existing = asConverterRegistry.get(key);
     if (existing && existing !== handler) {
-        console.warn(`[asConverterRegistry] Converter name "${key}" is already registered — overwriting.`);
+        console.warn(`[asConverterRegistry] Converter name "${key}" is already registered, so it is overwritten.`);
     }
     asConverterRegistry.set(key, handler);
 }

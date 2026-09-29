@@ -27,13 +27,16 @@ describe("NumberParselet — invalid literal errors use the EngineError taxonomy
     const builder = new BytecodeBuilder();
 
     expect(() => parselet.parse(parser, makeToken("0xZZ"), builder)).toThrow(EngineError);
+    // `fail` is not a Jest 30 global, so the thrown value is captured and
+    // asserted instead: a call that does not throw leaves it undefined.
+    let thrown: unknown;
     try {
       parselet.parse(parser, makeToken("0xZZ"), builder);
-      fail("expected parse() to throw");
-    } catch (err) {
-      expect(err).toBeInstanceOf(EngineError);
-      expect((err as Error).message).toContain("Invalid hex literal");
+    } catch (caught) {
+      thrown = caught;
     }
+    expect(thrown).toBeInstanceOf(EngineError);
+    expect((thrown as Error).message).toContain("Invalid hex literal");
   });
 
   test("invalid binary literal throws an EngineError, not a raw Error", () => {

@@ -55,7 +55,7 @@ export class MatrixLiteralParselet implements PrefixParselet {
       } else if (rowCols !== cols) {
         throw ErrorFactory.parsing(
           "RAGGED_MATRIX_LITERAL",
-          `Matrix literal rows must all have the same number of columns — row ${rows + 1} has ${rowCols}, but a previous row has ${cols}.`,
+          `Matrix literal rows must all have the same number of columns: row ${rows + 1} has ${rowCols}, but a previous row has ${cols}.`,
           { expectedCols: cols, actualCols: rowCols, row: rows + 1 },
         );
       }

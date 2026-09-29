@@ -76,7 +76,7 @@ export class ParseletRegistry {
 			console.warn(
 				`[ParseletRegistry] Prefix parselet for token "${tokenType}" is already registered ` +
 				`(category: "${existing.category ?? "unknown"}"). Overwriting with a new ` +
-				`parselet (category: "${parselet.category ?? "unknown"}") — the previous ` +
+				`parselet (category: "${parselet.category ?? "unknown"}"), so the previous ` +
 				`parselet is now unreachable. Two packages may be claiming the same token type.`,
 			);
 		}
@@ -91,7 +91,7 @@ export class ParseletRegistry {
 			console.warn(
 				`[ParseletRegistry] Infix parselet for token "${tokenType}" is already registered ` +
 				`(category: "${existing.category ?? "unknown"}"). Overwriting with a new ` +
-				`parselet (category: "${parselet.category ?? "unknown"}") — the previous ` +
+				`parselet (category: "${parselet.category ?? "unknown"}"), so the previous ` +
 				`parselet is now unreachable. Two packages may be claiming the same token type.`,
 			);
 		}
