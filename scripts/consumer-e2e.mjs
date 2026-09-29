@@ -16,6 +16,11 @@
  *   node scripts/consumer-e2e.mjs                  pack locally, then test
  *   node scripts/consumer-e2e.mjs solve-engine@1.0.0-beta.1
  *                                                  test a published version
+ *   node scripts/consumer-e2e.mjs file:/tmp/release/solve-engine-2.41.0.tgz
+ *                                                  test a tarball packed already
+ *
+ * The specifier is installed unchanged, so the publish job passes the release
+ * tarball it will upload and tests that file rather than a second pack (#794).
  */
 
 import { execFileSync } from "node:child_process";
@@ -72,7 +77,7 @@ console.log(`consumer project: ${scratch}`);
 /** What the consumer installs: a local tarball by default, or a published version when one is named. */
 function dependencySpecifier() {
 	if (target !== null) {
-		console.log(`installing from the registry: ${target}`);
+		console.log(target.startsWith("file:") ? `installing the packed tarball: ${target.slice(5)}` : `installing from the registry: ${target}`);
 		return target;
 	}
 	console.log("packing the workspace package");

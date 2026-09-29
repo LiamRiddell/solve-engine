@@ -192,6 +192,14 @@ npm run lint:comments
 npm run lint:docs
 ```
 
+Messages a reader sees (`errorValue`, `lineMessage`, `ErrorFactory`,
+`console.warn`/`console.error`) follow the same voice, and `npm run
+lint:messages` checks the ones written as literals: no em-dash, British
+spelling, no JavaScript operator, no host method named in a line's result.
+
+Specs and `tools/` are type-checked too, by `npm run typecheck:tests`, against
+a baseline that only falls. Import Jest's globals from `@jest/globals`.
+
 `docs-internal/COMMENT_STANDARD.md` has the full standard and the reasoning.
 `docs-internal/CODING_STANDARDS.md` covers general code style.
 

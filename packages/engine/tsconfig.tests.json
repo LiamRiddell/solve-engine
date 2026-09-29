@@ -1,0 +1,24 @@
+{
+	// The type check of the spec files and test tools (`npm run typecheck:tests`,
+	// scripts/check-type-baseline.mjs). It extends the source config, so the
+	// tests are checked at the source's target and strictness, and it is only
+	// ever a check: ts-jest compiles the tests with tsconfig.test.json, which
+	// this does not change. The paths repeat Jest's moduleNameMapper, mocks
+	// included, relative to this file so no baseUrl is needed.
+	"extends": "./tsconfig.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"declaration": false,
+		"paths": {
+			"@solve-js/*": ["./src/*"],
+			"@solve-js-examples/*": ["./examples/*"],
+			"@tools/*": ["./tools/*"],
+			"test/*": ["./__tests__/*"],
+			"@codemirror/language": ["./__tests__/__mocks__/codemirror-language.ts"],
+			"@lezer/common": ["./__tests__/__mocks__/lezer-common.ts"],
+			"obsidian": ["./__tests__/__mocks__/obsidian.ts"]
+		}
+	},
+	"include": ["__tests__/**/*.ts", "tools/**/*.ts"],
+	"exclude": []
+}

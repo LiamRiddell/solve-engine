@@ -173,7 +173,7 @@ function aggregateRange(from: number, to: number, context: LineExecutionContext,
     const err = checkLineValue(v, n);
     if (err) return err;
     if (v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
-      return errorValue("LINE_RANGE_NON_NUMERIC", `Line ${n} is not a plain number or unit value — cannot include it in a sum/total/average range`);
+      return errorValue("LINE_RANGE_NON_NUMERIC", `Line ${n} is not a plain number or unit value, so it cannot be included in a sum, total or average range`);
     }
     values.push(v!);
   }
@@ -266,7 +266,7 @@ function aggregateAbove(context: LineExecutionContext, mode: AboveMode): Value {
     const err = checkLineValue(v, n);
     if (err) return err;
     if (v!.type !== ValueType.Number && v!.type !== ValueType.Uom) {
-      return errorValue("LINE_RANGE_NON_NUMERIC", `Line ${n} is not a plain number or unit value — cannot include it in "above" aggregation`);
+      return errorValue("LINE_RANGE_NON_NUMERIC", `Line ${n} is not a plain number or unit value, so it cannot be included in an "above" aggregation`);
     }
     values.push(v!);
   }

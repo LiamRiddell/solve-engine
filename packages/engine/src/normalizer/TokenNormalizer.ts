@@ -792,7 +792,7 @@ export class TokenNormalizer {
         // complexity/length checks, which this mirrors.
         throw ErrorFactory.validation(
           "NORMALIZED_TOKEN_LIMIT_EXCEEDED",
-          `Normalized token count (${passResult.length}) exceeds safety limit (${maxTokens})`,
+          `Normalised token count (${passResult.length}) exceeds safety limit (${maxTokens})`,
           { tokenCount: passResult.length, maxTokens }
         );
       }

@@ -96,7 +96,7 @@ export function assertEngineVersionCompatible(
       message: `Package "${pkg.name}" declares an invalid engineVersion range: "${result.declaredRange}" is not a valid semver range.`,
       expected: `a valid semver range string (e.g. "^0.1.0", ">=0.2.0 <1.0.0")`,
       found: `"${result.declaredRange}"`,
-      suggestion: `This is a range-syntax typo in "${pkg.name}"'s own descriptor, not a version mismatch with the running engine — check for a stray character.`,
+      suggestion: `This is a range-syntax typo in "${pkg.name}"'s own descriptor, not a version mismatch with the running engine: check for a stray character.`,
       context: { packageName: pkg.name, declaredRange: result.declaredRange },
     });
   }
