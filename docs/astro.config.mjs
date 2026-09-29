@@ -498,6 +498,9 @@ export default defineConfig({
               items: [
                 { slug: "guide/embedding" },
                 { slug: "guide/typescript-usage" },
+                // Straight after the page that shows a failure's code: the list
+                // of every code there is.
+                { slug: "guide/error-codes" },
                 { slug: "guide/explaining-lines" },
                 { slug: "guide/tracing-lines" },
                 { slug: "guide/formatting" },

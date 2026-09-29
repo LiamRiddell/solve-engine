@@ -8,7 +8,9 @@ import {
 import { Value, ValueType, enableValueArena, disableValueArena, errorValue, persistentValue, isArenaActive } from "@solve-js/vm/Value";
 import { DependencyGraph, isPrefixedEdgeKey } from "@solve-js/vm/DependencyGraph";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
-import { isEmptyLine } from "@solve-js/engine/ExpressionEngineSafety";
+import { isEmptyLine, findInlineSolvesInLine } from "@solve-js/engine/ExpressionEngineSafety";
+import { expressionOffsetInLine, inlineExpressionOffset, lineFailureOf, type LineFailure } from "@solve-js/engine/LineDiagnostics";
+import type { SourceSpan } from "@solve-js/errors/EngineError";
 import { isPipeRow, tableBlockAt } from "@solve-js/lexer/TableBlocks";
 // Deliberately the shared lexer, not an engine's own.
 //
@@ -66,6 +68,18 @@ export interface EvalLineResult {
 	results?: Value[][];
 	/** Error message, or null. */
 	error: string | null;
+	/**
+	 * The code of the failure in {@link error}, the same code the expression
+	 * throws on its own (`NO_PREFIX_PARSELET`, `UNDEFINED_VARIABLE`). Null or
+	 * absent when `error` is.
+	 */
+	errorCode?: string | null;
+	/**
+	 * Where in the line the failure in {@link error} is, as offsets into the
+	 * line's text with the one-based line and column. Null when the engine has
+	 * no position for it, and null or absent when `error` is.
+	 */
+	errorSpan?: SourceSpan | null;
 }
 
 // ── EvalResult ──────────────────────────────────────────────────────────
@@ -81,6 +95,11 @@ export interface EvalResult {
 }
 
 // ── ThreeTierEvaluator ──────────────────────────────────────────────────
+
+/** Where inline solve `index`'s expression starts, or where the text is found when the solve is not. */
+function inlineOffset(solveStart: number | undefined, text: string, expression: string): number {
+	return solveStart === undefined ? expressionOffsetInLine(text, expression) : inlineExpressionOffset(solveStart);
+}
 
 /**
  * The names these programs define as functions, from the bodies compiled
@@ -1459,6 +1478,22 @@ export class ThreeTierEvaluator {
 	}
 
 	/**
+	 * What a line keeps of a failure one of its expressions threw: the code,
+	 * the message, and the span moved into the line's own offsets (see
+	 * `LineDiagnostics`). The engine measures the span against the expression
+	 * alone, so it is shifted by where the expression starts in the line: an
+	 * inline solve's own offset, or a whole-line expression's place in the text.
+	 * Only a failure pays for finding that place.
+	 */
+	private failureOf(thrown: unknown, state: LineState, lineNumber: number, expression: string, index: number, inlineSolveCount: number): LineFailure {
+		const text = state.text.endsWith("\r") ? state.text.slice(0, -1) : state.text;
+		const shift = inlineSolveCount > 0
+			? inlineOffset(findInlineSolvesInLine(text, lineNumber)[index]?.start, text, expression)
+			: expressionOffsetInLine(text, expression);
+		return lineFailureOf(thrown, lineNumber, shift, text.length);
+	}
+
+	/**
 	 * Tier 1: Full pipeline, lex, parse, compile, execute.
 	 * Uses the engine's existing evaluateLine() which handles all pipeline
 	 * stages including DAG updates and LineCache population.
@@ -1500,6 +1535,9 @@ export class ThreeTierEvaluator {
 		let hasVariableDef = false;
 		let lastValue: Value | null = null;
 		let firstError: string | null = null;
+		let firstFailure: LineFailure | null = null;
+		/** What each expression threw, parallel to allResults; see LineState.failures. */
+		const failures: (LineFailure | null)[] = [];
 		let anyFailed = false;
 		/** Set when any expression returned a value still waiting on a resolver. */
 		let anyPending = false;
@@ -1525,10 +1563,11 @@ export class ThreeTierEvaluator {
 		// And the names this line writes that its right-hand side reads, for
 		// Tier 2; see {@link selfReadingWrites}.
 		const selfReading: string[] = [];
-		for (const expression of expressions) {
+		for (const [expressionIndex, expression] of expressions.entries()) {
 			if (!expression.trim()) continue;
 
 			let value: Value[] | null = null;
+			let failure: LineFailure | null = null;
 			let entry: { bytecode: BytecodeProgram; readVariables: string[]; writeVariable: string | null } | undefined;
 
 			try {
@@ -1544,8 +1583,11 @@ export class ThreeTierEvaluator {
 				// and getEntryForLine always returns the FIRST entry (Map insertion order).
 				entry = this.engine.getLineCache().get(lineNumber, expression) as typeof entry;
 			} catch (e) {
-				const errorMessage = e instanceof Error ? e.message : String(e);
-				if (!firstError) firstError = errorMessage;
+				failure = this.failureOf(e, state, lineNumber, expression, expressionIndex, inlineSolveCount);
+				if (!firstError) {
+					firstError = failure.message;
+					firstFailure = failure;
+				}
 				anyFailed = true;
 				value = null;
 			}
@@ -1560,11 +1602,16 @@ export class ThreeTierEvaluator {
 
 			if (value) {
 				allResults.push(value);
+				failures.push(null);
 			} else {
 				// Expression failed, push an ErrorValue sentinel so results[] stays
 				// aligned with expressions[] and bytecodes[] indices. Downstream code
 				// checking result.type === Error will find it, vs a raw null that NPEs.
-				allResults.push([errorValue("eval_failed", firstError ?? "unknown error")]);
+				// It carries this expression's own code and message, the ones it
+				// threw, and `failures` records that it threw (#709).
+				const thrown = failure ?? { code: "UNKNOWN_ERROR", message: "An unknown error occurred", span: null };
+				allResults.push([errorValue(thrown.code, thrown.message)]);
+				failures.push(thrown);
 			}
 
 			// Failed means the store never happened, which is a throw (or, below, a
@@ -1664,6 +1711,7 @@ export class ThreeTierEvaluator {
 			// Also set results for the successful expressions
 			state.results = allResults;
 			state.result = allResults[0]?.[0] ?? null;
+			state.failures = anyFailed ? failures : undefined;
 			state.inlineSolveCount = inlineSolveCount;
 			state.expressions = expressions;
 		} else {
@@ -1712,6 +1760,8 @@ export class ThreeTierEvaluator {
 			result: lastValue,
 			results: allResults,
 			error: firstError,
+			errorCode: firstFailure?.code ?? null,
+			errorSpan: firstFailure?.span ?? null,
 		};
 	}
 
@@ -1736,6 +1786,9 @@ export class ThreeTierEvaluator {
 		const results: Value[][] = [];
 		let lastValue: Value | null = null;
 		let firstError: string | null = null;
+		let firstFailure: LineFailure | null = null;
+		/** What each program threw, parallel to results; see LineState.failures. */
+		const failures: (LineFailure | null)[] = [];
 		let anyFailed = false;
 
 		// Execute each bytecode independently, a failure in one should not
@@ -1781,13 +1834,19 @@ export class ThreeTierEvaluator {
 				const value = this.engine.executeCached(bytecode, lineNumber);
 				lastValue = value;
 				results.push([value]);
+				failures.push(null);
 			} catch (e) {
-				const errorMessage = e instanceof Error ? e.message : String(e);
-				if (!firstError) firstError = errorMessage;
+				const failure = this.failureOf(e, state, lineNumber, state.expressions[i] ?? "", i, state.inlineSolveCount);
+				if (!firstError) {
+					firstError = failure.message;
+					firstFailure = failure;
+				}
 				anyFailed = true;
 				failed = true;
-				// Push error sentinel to maintain results[i] ↔ bytecodes[i] alignment
-				results.push([errorValue("exec_failed", errorMessage)]);
+				// Push error sentinel to maintain results[i] ↔ bytecodes[i] alignment,
+				// with the code the program threw rather than one of its own (#709).
+				results.push([errorValue(failure.code, failure.message)]);
+				failures.push(failure);
 			}
 			for (const written of writtenHere) {
 				if (failed && !definedEarlierOnThisLine.has(written)) this.engine.restoreToPrefix(written, lineNumber);
@@ -1816,6 +1875,7 @@ export class ThreeTierEvaluator {
 		if (results.length > 0) {
 			state.results = results;
 			state.result = results[0][0] ?? null;
+			state.failures = anyFailed ? failures : undefined;
 		} else if (state.result !== null && isArenaActive()) {
 			// Kept by value, not by reference.
 			//
@@ -1855,6 +1915,8 @@ export class ThreeTierEvaluator {
 			result: results.length > 0 ? lastValue : state.result,
 			results: results.length > 0 ? results : state.results,
 			error: firstError,
+			errorCode: firstFailure?.code ?? null,
+			errorSpan: firstFailure?.span ?? null,
 		};
 	}
 
@@ -1882,6 +1944,7 @@ export class ThreeTierEvaluator {
 		let hasVariableDef = false;
 		let lastResult: Value | null = null;
 		let firstError: string | null = null;
+		let firstFailure: LineFailure | null = null;
 		let anyFailed = false;
 		/** Set when a result is still waiting on a resolver. */
 		let anyPending = false;
@@ -1903,15 +1966,17 @@ export class ThreeTierEvaluator {
 		// Compile each expression independently, a parse error in one
 		// should not prevent other expressions from being compiled and
 		// having their reads/writes registered in the DAG.
-		for (const expression of expressions) {
+		for (const [expressionIndex, expression] of expressions.entries()) {
 			if (!expression.trim()) continue;
 
 			let compiled: { program: BytecodeProgram; reads: string[]; writes: string[] };
 			try {
 				compiled = this.engine.compileExpression(expression, lineNumber);
 			} catch (e) {
-				const errorMessage = e instanceof Error ? e.message : String(e);
-				if (!firstError) firstError = errorMessage;
+				if (!firstError) {
+					firstFailure = this.failureOf(e, state, lineNumber, expression, expressionIndex, inlineSolveCount);
+					firstError = firstFailure.message;
+				}
 				anyFailed = true;
 				// Push empty bytecode placeholder for alignment
 				allBytecodes.push({ opcodes: new Uint8Array(0), numbers: new Float64Array(0), strings: [], hasAsync: false });
@@ -1949,8 +2014,10 @@ export class ThreeTierEvaluator {
 					}
 					for (const w of writes) definedEarlierOnThisLine.add(w);
 				} catch (e) {
-					const errorMessage = e instanceof Error ? e.message : String(e);
-					if (!firstError) firstError = errorMessage;
+					if (!firstError) {
+						firstFailure = this.failureOf(e, state, lineNumber, expression, expressionIndex, inlineSolveCount);
+						firstError = firstFailure.message;
+					}
 					anyFailed = true;
 					// A definition that threw stored nothing; see Tier 1.
 					for (const w of writes) {
@@ -2013,7 +2080,15 @@ export class ThreeTierEvaluator {
 			this.checkpointer.dropCheckpointAt(lineNumber);
 		}
 
-		return { ...baseResult, tier: EvalTier.Tier3, result: lastResult, results: hasVariableDef && lastResult && !anyFailed && !anyPending ? [[lastResult]] : undefined, error: firstError };
+		return {
+			...baseResult,
+			tier: EvalTier.Tier3,
+			result: lastResult,
+			results: hasVariableDef && lastResult && !anyFailed && !anyPending ? [[lastResult]] : undefined,
+			error: firstError,
+			errorCode: firstFailure?.code ?? null,
+			errorSpan: firstFailure?.span ?? null,
+		};
 	}
 
 	// ── Public checkpoint API (used by Phase 5.2e setViewport) ──────

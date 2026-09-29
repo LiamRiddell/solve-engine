@@ -11,6 +11,7 @@ import { bigIntLiteralDigits } from "@solve-js/parser/BigIntLiteral";
 import { localeLiteralRefusal, unreadableInLocale } from "@solve-js/parser/LocaleNumberLiteral";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
+import { endOfLineWording, quoteToken, unexpectedTokenWording, valueExpectedWording } from "@solve-js/parser/ParseMessages";
 
 /**
  * Matches a CHAINED thousands-grouped integer using "." as the group
@@ -321,7 +322,7 @@ export class PrecedenceParser {
   private parseExpressionBody(minBp: number): void {
     const token = this.consume();
     if (!token) {
-      throw ErrorFactory.parsing({ code: "UNEXPECTED_END", message: "Unexpected end of expression", span: this.spanAtEnd() });
+      throw ErrorFactory.parsing({ code: "UNEXPECTED_END", ...endOfLineWording(this.tokens), span: this.spanAtEnd() });
     }
 
     // ── Prefix ──────────────────────────────────────────────────────────────
@@ -678,9 +679,11 @@ export class PrecedenceParser {
     // ── Tier 2: Plugin/parselet prefix path ──────────────────────────────────
     const prefixParselet = this.registry.getPrefix(typeId);
     if (!prefixParselet) {
+      // The token was consumed to get here, so the one before it is two back.
+      const previous = this.current >= 2 ? this.tokens[this.current - 2] : undefined;
       throw ErrorFactory.parsing({
         code: "NO_PREFIX_PARSELET",
-        message: `No prefix parselet found for token: ${token.type} ("${token.value}")`,
+        ...valueExpectedWording(token, previous, this.tokens[this.current]),
         context: { tokenType: token.type, tokenValue: token.value },
         span: this.spanOf(token),
       });
@@ -879,7 +882,8 @@ export class PrecedenceParser {
     }
     throw ErrorFactory.parsing({
       code: "USER_FUNCTION_INVALID_PARAM_NAME",
-      message: `Expected a parameter name but got "${token?.type ?? "end of input"}"${token ? ` ("${token.value}")` : ""}`,
+      message: token ? `Expected a parameter name, but found ${quoteToken(token)}` : "The line ends where a parameter name was expected",
+      suggestion: "Name each parameter with a word, as in f(x, y) = x + y",
       context: { actualType: token?.type },
       span: token ? this.spanOf(token) : this.spanAtEnd(),
     });
@@ -988,14 +992,14 @@ export class PrecedenceParser {
   consume(expectedType?: string): Token {
     const token = this.tokens[this.current];
     if (!token) {
-      throw ErrorFactory.parsing({ code: "UNEXPECTED_END_OF_INPUT", message: "Unexpected end of input", span: this.spanAtEnd() });
+      throw ErrorFactory.parsing({ code: "UNEXPECTED_END_OF_INPUT", ...endOfLineWording(this.tokens, expectedType), span: this.spanAtEnd() });
     }
     if (expectedType !== undefined) {
       const expectedId = tokenTypeId(expectedType);
       if (token.typeId !== expectedId) {
         throw ErrorFactory.parsing({
           code: "UNEXPECTED_TOKEN_TYPE",
-          message: `Expected token type "${expectedType}" but got "${token.type}" ("${token.value}")`,
+          ...unexpectedTokenWording(expectedType, token),
           context: { expectedType, actualType: token.type, actualValue: token.value },
           span: this.spanOf(token),
         });

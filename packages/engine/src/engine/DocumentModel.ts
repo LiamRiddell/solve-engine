@@ -1,4 +1,5 @@
 import { Value } from "@solve-js/vm/Value";
+import type { LineFailure } from "@solve-js/engine/LineDiagnostics";
 import { BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { djb2Hash } from "@solve-js/utilities/Hash";
 import { SegmentTree } from "@solve-js/engine/SegmentTree";
@@ -78,6 +79,15 @@ export interface LineState {
 	 * prefer accessing `results[i][j]` directly.
 	 */
 	result: Value | null;
+
+	/**
+	 * What each expression threw, parallel to {@link results}: an entry where
+	 * the expression threw, null where it returned. An expression that threw
+	 * still has a group in `results`, an error value with the same code and
+	 * message, so the two stay aligned; this is how a reader tells that error
+	 * from one the expression returned (#709). Undefined when nothing threw.
+	 */
+	failures?: (LineFailure | null)[];
 
 	/** True if this line needs re-evaluation. */
 	dirty: boolean;
@@ -506,6 +516,7 @@ export class DocumentModel {
 		state.bytecodes = [];
 		state.results = [];
 		state.result = null;
+		state.failures = undefined;
 		state.inlineSolveCount = 0;
 		state.dirty = true;
 		this.dirtyLineIds.add(state.lineId);
@@ -798,6 +809,7 @@ export class DocumentModel {
 		if (!state) return;
 		state.result = null;
 		state.results = [];
+		state.failures = undefined;
 	}
 
 	markClean(lineId: number): void {
@@ -870,6 +882,8 @@ export class DocumentModel {
 		if (!state) return;
 		state.results = results;
 		state.result = results[0]?.[0] ?? null;
+		// Every expression returned, which is what a full result means here.
+		state.failures = undefined;
 		state.bytecodes = bytecodes;
 		state.expressions = expressions;
 		state.reads = reads;

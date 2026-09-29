@@ -29,6 +29,8 @@ export const GeoErrorCodes = {
 	GEO_NO_BEARING: "GEO_NO_BEARING",
 	/** `as dms` was given something that is not an angle or a place. */
 	GEO_EXPECTED_ANGLE: "GEO_EXPECTED_ANGLE",
+	/** A distance or bearing between places with no second place after its `to` or `and`. */
+	GEO_EXPECTED_SECOND_PLACE: "GEO_EXPECTED_SECOND_PLACE",
 } as const;
 
 /** The unit an angle answer is given in, the same one `90°` produces. */

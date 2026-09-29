@@ -70,7 +70,10 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 		dto.nonFinite = nonFiniteTag(reading);
 	}
 
-	if (value.unit !== undefined) dto.unit = value.unit;
+	// An error keeps its message where other values keep a unit, and the DTO's
+	// `unit` is units only, so an error's message stays out of it: it crosses
+	// as `text` (#836).
+	if (value.unit !== undefined && value.type !== ValueType.Error) dto.unit = value.unit;
 	// An error keeps its code in `value`, which no other field carries, so a
 	// host on the far side of the boundary could branch only on the message.
 	if (value.type === ValueType.Error) dto.errorCode = value.value as string;

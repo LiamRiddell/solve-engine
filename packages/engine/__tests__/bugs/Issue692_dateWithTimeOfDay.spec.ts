@@ -123,12 +123,12 @@ describe("what it must not break", () => {
 	});
 
 	test("a date followed by a number that is not a time still refuses", () => {
-		expect(show("2026-01-04 14")).toBe('THROWS Unexpected token after expression: "14"');
-		expect(show("2026-01-04 13pm")).toBe('THROWS Unexpected token after expression: "13"');
+		expect(show("2026-01-04 14")).toBe('THROWS Expected an operator or the end of the line, but found "14"');
+		expect(show("2026-01-04 13pm")).toBe('THROWS Expected an operator or the end of the line, but found "13"');
 	});
 
 	test("a whole month takes no time, since no day was named", () => {
-		expect(show("February 2026 3pm")).toBe('THROWS Unexpected token after expression: "3pm"');
+		expect(show("February 2026 3pm")).toBe('THROWS Expected an operator or the end of the line, but found "3pm"');
 	});
 
 	test("a time that does not exist on the clock is refused by name, where it once answered 0", () => {
@@ -138,7 +138,7 @@ describe("what it must not break", () => {
 	});
 
 	test("a date that already has a time takes no second one", () => {
-		expect(show("2026-01-04T14:30 3pm")).toBe('THROWS Unexpected token after expression: "3pm"');
+		expect(show("2026-01-04T14:30 3pm")).toBe('THROWS Expected an operator or the end of the line, but found "3pm"');
 		expect(show("3pm on 2026-01-04T09:00")).toBe(show("2026-01-04T15:00"));
 	});
 });
@@ -150,7 +150,7 @@ describe("the message quotes what was typed", () => {
 		["2026-01-04 9am to 5pm", "9am to 5pm"],
 		["5 14:30:15", "14:30:15"],
 	])("%s names %s", (line, quoted) => {
-		expect(show(line)).toBe(`THROWS Unexpected token after expression: "${quoted}"`);
+		expect(show(line)).toBe(`THROWS Expected an operator or the end of the line, but found "${quoted}"`);
 	});
 });
 
@@ -177,8 +177,8 @@ describe("adversarial", () => {
 	});
 
 	test("a long run of times after a date reads the first and refuses the next", () => {
-		expect(show("2026-01-04 9am 10am")).toBe('THROWS Unexpected token after expression: "10am"');
-		expect(show(`2026-01-04 ${Array(50).fill("9am").join(" ")}`)).toBe('THROWS Unexpected token after expression: "9am"');
+		expect(show("2026-01-04 9am 10am")).toBe('THROWS Expected an operator or the end of the line, but found "10am"');
+		expect(show(`2026-01-04 ${Array(50).fill("9am").join(" ")}`)).toBe('THROWS Expected an operator or the end of the line, but found "9am"');
 	});
 
 	test("wallTimeOn refuses what is not a time of day, or a year with no four-digit spelling", () => {

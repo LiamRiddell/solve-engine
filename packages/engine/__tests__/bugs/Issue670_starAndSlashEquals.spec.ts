@@ -85,7 +85,7 @@ describe("adversarial", () => {
 	});
 
 	test("a number cannot be multiplied in place", () => {
-		expect(both(["2 *= 3"])[0]).toMatch(/^ERROR: Unexpected token after expression: "\*="/);
+		expect(both(["2 *= 3"])[0]).toMatch(/^ERROR: Expected an operator or the end of the line, but found "\*="/);
 	});
 
 	test("the right-hand side keeps its unit: dividing by a length leaves a per-length figure", () => {

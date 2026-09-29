@@ -24,6 +24,8 @@ export const ColourErrorCodes = {
 	COLOUR_EXPECTED_COLOUR: "COLOUR_EXPECTED_COLOUR",
 	/** A function was called with the wrong number or type of arguments. */
 	COLOUR_BAD_ARGUMENTS: "COLOUR_BAD_ARGUMENTS",
+	/** A colour call (`rgb(...)`, `hsl(...)`) by a name the colour package does not have. */
+	UNKNOWN_COLOUR_FUNCTION: "UNKNOWN_COLOUR_FUNCTION",
 } as const;
 
 /** The colour payload of a Value, or null if it is not a colour. */

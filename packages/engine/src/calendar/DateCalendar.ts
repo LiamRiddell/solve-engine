@@ -1,5 +1,5 @@
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { DatetimeErrorCodes } from "@solve-js/errors/ErrorCode";
+import { DatetimeZoneErrorCodes } from "@solve-js/errors/ErrorCode";
 import type { CalendarBackend, CalendarFields, ZonedFields } from "./CalendarBackend";
 import { dayNumber, daysInMonth, utcMs } from "./Gregorian";
 import { dateInZone, isSupportedZone, longDateInZone, timeInZone, timeOfDayInZone, zonedFields, zonedWallClockToUtcMs } from "./IntlZone";
@@ -290,7 +290,7 @@ class ZonedDateCalendar extends DateCalendar {
 export function dateCalendarInZone(zone: string): CalendarBackend {
 	if (!isSupportedZone(zone)) {
 		throw ErrorFactory.config(
-			DatetimeErrorCodes.DATE_ZONE_UNKNOWN,
+			DatetimeZoneErrorCodes.DATE_ZONE_UNKNOWN,
 			`dateCalendarInZone("${zone}") is not a time zone this runtime knows.`,
 		);
 	}

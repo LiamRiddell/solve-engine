@@ -1,4 +1,5 @@
 import { PrefixParselet } from "@solve-js/parser/Parselet";
+import { quoteToken } from "@solve-js/parser/ParseMessages";
 import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
@@ -163,7 +164,7 @@ export function stockFnParselet(currentFn: string, historicalFn: string): Prefix
 			} else {
 				throw ErrorFactory.parsing(
 					"STOCKS_INVALID_TICKER",
-					`Expected a ticker symbol inside stock(...), got "${tickerToken.value}" (${tickerToken.type})`,
+					`Expected a ticker symbol inside stock(...), but found ${quoteToken(tickerToken)}`,
 				);
 			}
 			parser.consume("RPAREN");

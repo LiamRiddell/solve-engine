@@ -34,6 +34,8 @@ import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
 import { findInlineSolvesInLine } from "@solve-js/engine/ExpressionEngineSafety";
 import { summariseChecks } from "@solve-js/engine/CheckSummary";
 import { Value, ValueType } from "@solve-js/vm/Value";
+import { documentErrors, type LineFailure } from "@solve-js/engine/LineDiagnostics";
+import type { LineState } from "@solve-js/engine/DocumentModel";
 import type {
 	ParsedLine,
 	ParsingResult,
@@ -41,9 +43,20 @@ import type {
 	InlineSolvePosition,
 } from "@solve-js/types/ParsingResult";
 
-/** Read the human-readable message off an error Value (`unit` holds it, `value` holds the code). */
-function errorMessageOf(value: Value): string {
-	return typeof value.unit === "string" ? value.unit : String(value.value);
+/**
+ * What expression `index` of a line threw, or null when it returned.
+ *
+ * The evaluator stores a thrown failure as an error value in the line's
+ * results, so the results stay aligned with the expressions, and records the
+ * failure beside it in `failures`. The value is only taken as that failure
+ * when the two still agree, since a result can be replaced without the
+ * record being (a clone kept for a line that ran nothing); a disagreement is
+ * read as a returned error, which is what the value then is.
+ */
+function thrownAt(state: LineState, index: number, value: Value | null): LineFailure | null {
+	const failure = state.failures?.[index] ?? null;
+	if (failure === null || value === null || value.type !== ValueType.Error) return null;
+	return value.value === failure.code && value.unit === failure.message ? failure : null;
 }
 
 /**
@@ -88,7 +101,6 @@ export function evaluateDocument(
 		evaluator.evaluate({ startLine: 1, endLine: lineCount });
 
 		const lines: ParsedLine[] = [];
-		const errors: string[] = [];
 		// Document character offsets are not carried on the line model, so they
 		// are accumulated here to keep startPosition/endPosition faithful to
 		// parseDocument's, one newline between lines.
@@ -107,18 +119,21 @@ export function evaluateDocument(
 			let inlineSolves: InlineSolvePosition[] = [];
 			let expression: string | null = null;
 			let result: Value | null = null;
+			let failure: LineFailure | null = null;
 
 			if (state.isEmpty) {
 				// Prose, a heading, or a blank line: nothing to report.
 			} else if (hasInlineSolves) {
 				// Zip the located spans against the line's per-expression results,
 				// which the model holds in the same left-to-right order.
+				// A solve that threw has its failure in `error` and no result, and
+				// one that returned an error keeps it in `result`, as parseDocument
+				// has them (#709).
 				inlineSolves = findInlineSolvesInLine(text, n).map((span, i) => {
 					const value = state.results[i]?.[0] ?? null;
-					if (value && value.type === ValueType.Error) {
-						const message = errorMessageOf(value);
-						errors.push(`Line ${n}: ${message}`);
-						return { ...span, result: null, error: message };
+					const thrown = thrownAt(state, i, value);
+					if (thrown !== null) {
+						return { ...span, result: null, error: thrown.message, errorCode: thrown.code, errorSpan: thrown.span };
 					}
 					return { ...span, result: value, error: null };
 				});
@@ -128,11 +143,13 @@ export function evaluateDocument(
 				// conversion) stays in `result` as an error-typed Value, exactly
 				// as parseDocument leaves it, so both document passes report a
 				// line the same way and a caller can compare them value for
-				// value. It is also gathered into `errors` for a flat list.
+				// value. A thrown one (a parse error, an undefined name) goes in
+				// `error` with its code and span, and no result, as parseDocument
+				// has it too; the evaluator's stored error value for it is only
+				// how it keeps the line's results aligned (#709).
 				result = state.result ?? null;
-				if (result && result.type === ValueType.Error) {
-					errors.push(`Line ${n}: ${errorMessageOf(result)}`);
-				}
+				failure = thrownAt(state, 0, result);
+				if (failure !== null) result = null;
 			}
 
 			lines.push({
@@ -144,13 +161,14 @@ export function evaluateDocument(
 				hasInlineSolves,
 				inlineSolves,
 				expression,
-				// Always null: the incremental pass stores a line's failure as an
-				// error-typed Value in `result` (above), never as a thrown error
-				// the way parseDocument sets this field. Kept for shape parity.
-				error: null,
+				error: failure?.message ?? null,
+				errorCode: failure?.code ?? null,
+				errorSpan: failure?.span ?? null,
 				result,
 			});
 		}
+		// The flat list, by the one rule parseDocument applies as well.
+		const errors = documentErrors(lines);
 
 		// The check lines' pass and fail count, as parseDocument reports it.
 		const checks = summariseChecks(lines);
