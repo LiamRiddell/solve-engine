@@ -6,13 +6,10 @@
  * the parselet that reads `in <target>` did not accept that token, so the line
  * threw a parse error instead of answering. It is accepted now.
  *
- * A signed offset is still not read, and this pins that so it cannot change
- * silently. `2026-04-03 in GMT+9` parses as `(2026-04-03 in GMT) + 9`, and
- * adding a bare number to a date adds milliseconds, so the answer is the same
- * day one hour in rather than nine hours on. The root of it is that a date
- * plus a bare number is milliseconds at all, which is a separate question from
- * zones; until that is settled the docs name the boundary and point at the
- * spellings that work.
+ * A signed offset was not read: `2026-04-03 in GMT+9` parsed as
+ * `(2026-04-03 in GMT) + 9`, first nine milliseconds and then a refusal of the
+ * bare 9. It is read as the fixed offset now (#730), and the full account of
+ * that form is `__tests__/bugs/Issue730_signedUtcOffset.spec.ts`.
  */
 
 import { describe, expect, test } from "@jest/globals";
@@ -44,12 +41,14 @@ describe("the spellings that work", () => {
 	});
 });
 
-describe("the spelling that does not, named as a boundary", () => {
-	test("a signed offset is read as an addition, not as a zone, and refused", () => {
-		// `(3 April 2026 in GMT) + 9`: a bare 9 names no length of time, so it
-		// is refused rather than added as nine milliseconds. Documented on the
-		// time page, which points at `in Tokyo` and `in JST` instead.
-		expect(answer("3 April 2026 in GMT+9")).toContain("a plain number does not say whether it means days, hours or minutes");
+describe("a signed offset, read as the fixed offset it names (#730)", () => {
+	test("the day on that clock, not an addition", () => {
+		expect(answer("3 April 2026 in GMT+9")).toBe("Friday, April 3, 2026");
+		expect(answer("3 April 2026 in UTC-5:30")).toBe("Friday, April 3, 2026");
+	});
+
+	test("a number with a unit after it is still arithmetic", () => {
+		expect(answer("2026-04-03T15:00 in UTC - 5 hours")).toBe("Friday, April 3, 2026, 10:00:00 AM");
 	});
 });
 

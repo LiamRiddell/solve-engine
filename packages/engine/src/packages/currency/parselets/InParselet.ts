@@ -6,6 +6,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { resolveCurrencyAlias } from "@solve-js/uom/CurrencyAliases";
 import { tryConsumeCurrencyOnDate, HISTORICAL_CURRENCY_FN } from "@solve-js/uom/HistoricalCurrency";
+import { tryReadUtcOffset } from "@solve-js/calendar/UtcOffset";
 
 /**
  * InParselet, handles the standalone `IN` keyword as a postfix conversion.
@@ -45,6 +46,21 @@ export class InParselet implements InfixParselet {
 			parser.consume();
 			builder.emitOpcode(OpCode.TO_PERCENTAGE);
 			return;
+		}
+		// `in UTC-5`, `in GMT+5:45`: a signed offset, read as one target (#730).
+		// Left to the branch below, `UTC` alone was the target and the `-5` was
+		// then subtracted from the answer. A number followed by a unit is not
+		// read (`in UTC - 5 hours` stays UTC less five hours). The VM resolves
+		// the name, and refuses an offset no clock keeps (`UTC+25`, pushed as
+		// written) by name, as it refuses an unknown zone.
+		if (targetToken?.type === "IDENT" && /^(?:utc|gmt)$/i.test(targetToken.value)) {
+			const offset = tryReadUtcOffset(parser);
+			if (offset !== null) {
+				builder.emitOpcode(OpCode.PUSH_STRING);
+				builder.emitString(offset.name);
+				builder.emitOpcode(OpCode.UOM_CONVERT_IN);
+				return;
+			}
 		}
 		// Accept UNIT, currency symbols, a bare IDENT, a fused multi-word zone
 		// name, or IN (for cases like "3 ft in in" where the target unit is

@@ -20,9 +20,12 @@ import { utcMs } from "./Gregorian";
  * A "zone reference" is either a real IANA identifier (`"Australia/Sydney"`) or
  * the synthetic fixed-offset form `"UTCOFFSET:<minutes>"`, which the numeric
  * `GMT+N`/`UTC-N` spelling needs because it has no IANA identifier of its own
- * and no daylight-saving rule to consult. {@link encodeFixedOffset},
- * {@link isFixedOffset} and {@link decodeFixedOffsetMinutes} are the only code
- * that knows the encoding exists.
+ * and no daylight-saving rule to consult. An offset the reader named after a
+ * date (`in UTC-5`) is encoded as `"UTCNAMED:<minutes>"`, the same arithmetic
+ * with one difference in how the date displays. {@link encodeFixedOffset},
+ * {@link encodeNamedOffset}, {@link isFixedOffset}, {@link isNamedOffset} and
+ * {@link decodeFixedOffsetMinutes} are the only code that knows the encoding
+ * exists.
  *
  * The encoding and {@link zonedWallClockToUtcMs} were written in the time
  * package (`packages/time/timezones/ZoneMath.ts`, which still re-exports every
@@ -36,6 +39,7 @@ import { utcMs } from "./Gregorian";
  */
 
 const FIXED_OFFSET_PREFIX = "UTCOFFSET:";
+const NAMED_OFFSET_PREFIX = "UTCNAMED:";
 
 /**
  * Encode a fixed UTC offset as a zone reference.
@@ -48,13 +52,43 @@ export function encodeFixedOffset(offsetMinutes: number): string {
 }
 
 /**
- * Whether a zone reference is a fixed offset rather than a named IANA zone.
+ * Encode a fixed UTC offset the reader named as the zone to read a date in,
+ * `2026-04-03T15:00 in UTC-5`.
+ *
+ * The same arithmetic as {@link encodeFixedOffset}, and every function here
+ * treats the two alike, because an offset is an offset. They differ only in
+ * what a date carrying one shows: an offset a reader named is the clock they
+ * asked to see the answer on, as a named zone is, while an offset an ISO
+ * literal carried (`...+09:00`) only records how the instant was written and
+ * leaves the display in the engine's own zone. See {@link isNamedOffset}.
+ *
+ * @param offsetMinutes - Minutes ahead of UTC, negative behind it.
+ * @returns The `"UTCNAMED:<minutes>"` reference.
+ */
+export function encodeNamedOffset(offsetMinutes: number): string {
+	return `${NAMED_OFFSET_PREFIX}${offsetMinutes}`;
+}
+
+/**
+ * Whether a zone reference is a fixed offset rather than a named IANA zone,
+ * in either encoding.
  *
  * @param zoneRef - The reference to test.
- * @returns True for the `"UTCOFFSET:<minutes>"` form.
+ * @returns True for the `"UTCOFFSET:<minutes>"` and `"UTCNAMED:<minutes>"` forms.
  */
 export function isFixedOffset(zoneRef: string): boolean {
-	return zoneRef.startsWith(FIXED_OFFSET_PREFIX);
+	return zoneRef.startsWith(FIXED_OFFSET_PREFIX) || zoneRef.startsWith(NAMED_OFFSET_PREFIX);
+}
+
+/**
+ * Whether a zone reference is a fixed offset the reader named, which a date
+ * is shown in. See {@link encodeNamedOffset}.
+ *
+ * @param zoneRef - The reference to test.
+ * @returns True for the `"UTCNAMED:<minutes>"` form only.
+ */
+export function isNamedOffset(zoneRef: string): boolean {
+	return zoneRef.startsWith(NAMED_OFFSET_PREFIX);
 }
 
 /**
@@ -64,7 +98,8 @@ export function isFixedOffset(zoneRef: string): boolean {
  * @returns Minutes ahead of UTC, negative behind it.
  */
 export function decodeFixedOffsetMinutes(zoneRef: string): number {
-	return parseInt(zoneRef.slice(FIXED_OFFSET_PREFIX.length), 10);
+	const prefix = zoneRef.startsWith(NAMED_OFFSET_PREFIX) ? NAMED_OFFSET_PREFIX : FIXED_OFFSET_PREFIX;
+	return parseInt(zoneRef.slice(prefix.length), 10);
 }
 
 /**
