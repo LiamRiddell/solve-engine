@@ -56,6 +56,36 @@ allowance is a plural. A few table entries have only the singular (`troy ounce`,
 `watt-hour`), and the plural a reader writes reads as that unit. A symbol takes
 no plural, so `kW h` is the kilowatt-hour and `kW hs` is not a unit.
 
+A few two-word spellings are the engine's own rather than the table's, each
+naming a size the plain word leaves ambiguous: the metric and imperial cups
+(see [cooking](/syntax/cooking/#which-cup)), miles per imperial gallon (see
+[fuel economy](/syntax/fuel-economy/#us-and-imperial-gallons)), and the
+typographic point below.
+
+### The typographic point
+
+Type is sized in **points**: a 12-point font is 12 of them tall, and a point is
+a 72nd of an inch (the desktop publishing point, which is the one CSS and every
+word processor use). The short spellings are taken, `pt` by the pint and `point`
+by ordinary English ("scored 12 points"), so after a number the point is written
+`typographic point`:
+
+```solve
+12 typographic points in mm // 4.23 mm
+72 typographic points in inches // 1.00 inches
+1 inch in typographic points // 72.00 typographic points
+1 pica in typographic points // 12.00 typographic points
+```
+
+`pt` stays the US pint, so `12 pt in mm` is refused as a volume that cannot
+become a length rather than read as type. `points` still works as a conversion
+target, where there is no prose for it to collide with:
+
+```solve
+12 pt in mm // a volume cannot be converted to a length
+1 pica in points // 12.00 points
+```
+
 ## Micro, with either µ or μ
 
 The micro prefix means a millionth: a microsecond is a millionth of a second, a

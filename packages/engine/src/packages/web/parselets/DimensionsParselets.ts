@@ -164,3 +164,28 @@ export class RootFontSizeParselet implements InfixParselet {
 		builder.emitPluginCall("atRootFontSize", 2);
 	}
 }
+
+/**
+ * `4000px at 300 dpi`: the size on the left, across a stated density. Pixels
+ * become inches, and a physical length becomes pixels (#749).
+ *
+ * It binds like a suffix, as `at 20px base` does, so `4000px + 200px at 300 dpi`
+ * reads the density against the `200px` it sits beside and not the sum, and a
+ * conversion after it (`in mm`) applies to its answer.
+ */
+export class PixelDensityParselet implements InfixParselet {
+	readonly category = "Web";
+	readonly bindingPower = BindingPower.Postfix;
+
+	parse(_parser: Parser, _left: Token, token: Token, builder: BytecodeBuilder): void {
+		if ((token.value ?? "") === "") {
+			throw ErrorFactory.parsing({
+				code: "DENSITY_EXPECTED_NUMBER",
+				message: 'a density is written as a number of dots per inch, as in "4000px at 300 dpi"',
+				span: spanOf(token),
+			});
+		}
+		pushNumber(builder, Number(token.value));
+		builder.emitPluginCall("atPixelDensity", 2);
+	}
+}

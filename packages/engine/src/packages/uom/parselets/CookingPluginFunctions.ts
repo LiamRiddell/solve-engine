@@ -14,15 +14,13 @@ import { getIngredientDensity } from "../data/IngredientDensities";
  * (unlike Finance's `inflationAdjust`), so there's no need for
  * `FunctionCallParselet`'s coordinated index space at all.
  *
- * SCOPE DECISION: only ONE volume-unit convention is supported, whatever
- * the underlying `convert` npm package resolves for names like "cup"/
- * "tablespoon"/"teaspoon" (its own generated tables use US customary
- * definitions for these, e.g. 1 cup = 236.588 mL), matching SoulverCore's
- * own stated default. SoulverCore additionally lets a user pick US
- * Customary vs. Imperial vs. Metric cup/tablespoon/pint definitions as a
- * global preference, implementing that region-preference system is a
- * separate, larger feature and is NOT implemented here; an Imperial or
- * Metric-cup reading of "cup" is simply not available yet.
+ * SCOPE DECISION: a bare "cup"/"tablespoon"/"teaspoon" is the US customary
+ * measure the generated tables carry (1 cup = 236.588 mL), matching
+ * SoulverCore's own stated default. The other cups are qualified spellings
+ * rather than a preference: `metric cup` (250 mL) and `imperial cup` (half an
+ * imperial pint) are extended volume units (see uom/ExtendedUnits.ts, #752),
+ * so they reach this handler as any other volume does. Choosing the cup from
+ * a region preference, and the metric spoons, are not implemented.
  */
 export const COOKING_CONVERT_FN = "cookingConvert";
 

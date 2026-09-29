@@ -60,8 +60,11 @@ describe("unit vocabularies stay disjoint", () => {
     for (const unit of shared) {
       const { measure, toBase } = EXTENDED_UNITS[unit];
       // Every base table measure states its ratios against one unit, and for
-      // the two shared here that unit is the metre and the gram.
-      const baseUnit = measure === "length" ? "m" : "g";
+      // the three shared here that unit is the metre, the gram and the cubic
+      // metre (the qualified cups of #752).
+      const baseUnit = { length: "m", mass: "g", volume: "m3" }[measure];
+      expect(baseUnit).toBeDefined();
+      if (baseUnit === undefined) continue;
       expect(getMeasure(baseUnit)).toBe(measure);
       expect(canConvert(unit, baseUnit)).toBe(true);
       expect(canConvert(baseUnit, unit)).toBe(true);

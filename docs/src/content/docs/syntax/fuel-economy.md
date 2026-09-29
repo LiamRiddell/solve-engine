@@ -39,19 +39,34 @@ are the US gallon, and `imperial gallon` is the larger one.
 1 imperial gallon in gallons // 1.20 gallons
 ```
 
-`mpg` is miles per US gallon, and there is no imperial `mpg`. A UK figure is
-therefore written as miles per imperial gallon, which the engine converts
-through the ratio of the two gallons, so 50 UK mpg is 41.63 US mpg:
+So there are two miles per gallon as well. `mpg` on its own is miles per US
+gallon. A UK brochure's figure is miles per imperial gallon, and it is written
+with the qualifier, before or after: `mpg imperial`, `imperial mpg`, `mpg uk`,
+`mpg UK` or `UK mpg`. It converts both ways, like `mpg`:
 
 ```solve
-50 miles / 1 imperial gallon in mpg // 41.63 mpg
+35 mpg imperial in l/100km // 8.07 l/100km
+35 UK mpg in l/100km // 8.07 l/100km
+8.07 l/100km in mpg imperial // 35.00 mpg imperial
+50 mpg uk in mpg // 41.63 mpg
+```
+
+Because the imperial gallon is larger, the same number of miles per gallon is a
+thriftier car in the UK than in the US, and the difference is not small: 35
+imperial mpg is 29.14 US mpg. It is the same answer as writing the miles over an
+imperial gallon out in full, which also works:
+
+```solve
+35 mpg imperial in mpg // 29.14 mpg
 50 miles / 1 imperial gallon in l/100km // 5.65 l/100km
 ```
 
-The boundary: a UK figure typed as `mpg` is read as US miles per gallon, so the
-car appears to use less fuel than it does (4.70 litres per 100 km rather than
-5.65), and a spelling such as `mpg uk` is refused rather than read as imperial.
+The boundary: a bare `mpg` stays the US gallon, the convention the engine has
+always used, and the engine does not choose a gallon from your locale. A UK
+figure typed as plain `mpg` is therefore read as US miles per gallon, so the car
+appears to use less fuel than it does (4.70 litres per 100 km rather than 5.65).
 
 ```solve
 50 mpg in l/100km // 4.70 l/100km
+50 mpg uk in l/100km // 5.65 l/100km
 ```

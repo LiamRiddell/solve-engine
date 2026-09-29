@@ -58,6 +58,20 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"planck * X Hz",
 		"inflationAdjust($X, 1990, 2020)",
 	],
+	// The qualified cups, the typographic point, imperial mpg and a stated
+	// density (#752, #749, #736).
+	qualifiedUnits: [
+		"X metric cups in ml",
+		"X imperial cups flour in grams",
+		"X US cups in ml",
+		"X typographic points in mm",
+		"X mpg imperial in l/100km",
+		"8 l/100km in X mpg uk",
+		"fuel for 300 miles at X UK mpg",
+		"X px at 300 dpi in mm",
+		"X in at 300 dpi",
+		"4000px at X dpi",
+	],
 	money: ["$X * 3", "$X split 3 ways", "X% of $200", "₹1,00,000 * X", "X INR + 12,34,567 INR"],
 	finance: ["npv of -1000, X, 400 at 10%", "irr of -1000, X, 400"],
 	distributions: ["normalcdf(X)", "binompdf(10, 0.5, X)"],
@@ -130,6 +144,10 @@ describe("a word naming an inherited property is an ordinary unknown word", () =
 		"time in X",
 		"total of #X",
 		"5 X",
+		"5 metric X",
+		"35 mpg X",
+		"4000px at X dpi",
+		"X at 300 dpi",
 	];
 	test.each(forms.flatMap((form) => fill(form, PROTOTYPE_WORDS)))("%s", (line) => {
 		expectPrototypeUntouched(() => {

@@ -51,7 +51,7 @@ const EXCLUDED_UNIT_SPELLINGS: ReadonlyMap<string, string> = new Map([
   ["turns", "ordinary English in plural, same reasoning as `turn` above"],
   ["grade", "ordinary English. The angle unit is also spelled `gon` and `grad`"],
   ["grades", "ordinary English in plural, same reasoning as `grade` above"],
-  ["point", "ordinary English. The typographic point has no spelling after a number: `point` and `points` are both excluded here, and `pt` is the pint. It can still be named as a conversion target (`1 mm in points`), and a length in points can be written through `pica`, which is twelve points (`1 pica in points` is 12)"],
+  ["point", "ordinary English (\"scored 12 points\"). The typographic point is spelled `typographic point` after a number, a two-word unit the multi-word rule joins (issue #749), since `pt` is the pint. `point` and `points` can still be named as a conversion target (`1 pica in points` is 12)"],
   ["points", "ordinary English in plural, same reasoning as `point` above"],
   ["moment", "ordinary English, against an obscure medieval time unit of 90 seconds"],
   ["moments", "ordinary English in plural, same reasoning as `moment` above"],
@@ -192,7 +192,9 @@ const WORKDAY_UNITS = ["workday", "workdays"];
  */
 export const knownUnits: ReadonlySet<string> = new Set([
   ...Object.keys(UNIT_TABLE).filter(isAdmissible),
-  ...Object.keys(EXTENDED_UNITS),
+  // A spelling of more than one word (`metric cup`) cannot be one token; the
+  // multi-word unit rule joins it instead.
+  ...Object.keys(EXTENDED_UNITS).filter(isTokenizableSpelling),
   ...WORKDAY_UNITS,
   ...CURRENCY_CODES,
   ...CURRENCY_WORD_FORMS,
