@@ -114,7 +114,7 @@ describe("what the scalar-equation match must NOT swallow", () => {
 		// behaviour, which is not this feature's business.
 		const engine = newTrackedEngine();
 		try {
-			expect(() => engine.evaluateLine(1, "2+2 = 4")).toThrow(/Unexpected token/);
+			expect(() => engine.evaluateLine(1, "2+2 = 4")).toThrow(/Expected an operator or the end of the line/);
 		} finally {
 			engine.clear();
 		}
@@ -131,7 +131,7 @@ describe("what the scalar-equation match must NOT swallow", () => {
 		// the way to say which unknown is meant.
 		const engine = newTrackedEngine();
 		try {
-			expect(() => engine.evaluateLine(1, "x+y = 5")).toThrow(/Unexpected token/);
+			expect(() => engine.evaluateLine(1, "x+y = 5")).toThrow(/Expected an operator or the end of the line/);
 		} finally {
 			engine.clear();
 		}

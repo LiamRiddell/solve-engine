@@ -341,6 +341,11 @@ jobs:
       # page nobody gave a line there fails here, as does a link to no page.
       - run: npm run lint:cheatsheet
 
+      # Every code the engine raises is in a catalogue, and the error code
+      # reference is what the catalogues generate. A code nobody listed was
+      # the norm before this (#769): 221 of 251 were in no exported list.
+      - run: npm run lint:error-codes
+
       # Same reasoning as the playground: a lockfile the root audit cannot see.
       - run: npm audit --prefix docs --audit-level=high
 

@@ -87,16 +87,34 @@ of the engine already broke its own contract? Then internal or config.
 
 ### Adding a code
 
-For core layers, add it to `CoreErrorCodes` in `errors/ErrorCode.ts` with a
-one-line comment saying what triggers it, then run
-`__tests__/errors/ErrorCodeCatalog.spec.ts`. That test enforces uniqueness and
-scans for codes used but never cataloged, which catches typos immediately.
+Every code the engine or a built-in package raises is in a catalogue (#769).
+For core layers, add it to `CoreErrorCodes` in `errors/ErrorCode.ts`, in the
+section it belongs to, with a doc comment saying what triggers it in the
+reader's terms and how it arrives. A code raised under `src/packages/<name>/`
+goes in that package's own `XxxErrorCodes` const (`WeatherErrorCodes`,
+`TablesErrorCodes`), not in the core one: `IEnginePackage` is public SDK surface
+and a closed enum would stop a third-party author defining their own codes. A
+code built at run time from a template (`${namespace}_QUERY_FAILED`) is listed
+as a pattern in `resolvers/QueryResolverErrorCodes.ts`. A new catalogue object
+is registered in `packages/ErrorCodeCatalogue.ts` (`ERROR_CODE_CATALOGUES`).
 
-Domain packages under `src/packages/*` are deliberately outside the core
-catalog, because `IEnginePackage` is public SDK surface and a closed enum would
-stop a third-party author defining their own codes. Export a co-located
-`XxxErrorCodes` const instead, following `WeatherErrorCodes` or
-`CurrencyErrorCodes`. Those are not orphan-checked, so check the string by hand.
+Then:
+
+- `npm run lint:error-codes` (in `verify:ci` and the CI docs job) fails on a
+  code raised that no catalogue lists, on an entry with no doc comment, and on a
+  stale reference page. `npm run docs:error-codes` regenerates
+  `docs/src/content/docs/guide/error-codes.md` from the doc comments; never edit
+  that page by hand.
+- `__tests__/errors/ErrorCodeCatalogueSnapshot.spec.ts` fails on a code renamed
+  or removed. A code a host can receive keeps its name, so adding one means
+  adding it to `ErrorCodeCatalogue.snapshot.json`, and removing one is a
+  breaking change.
+- `__tests__/errors/ErrorCodeReachability.spec.ts` needs an example line that
+  produces the code, or an entry in one of its reason maps (host API, package
+  authoring, live data, behind a parse-time refusal, guarded before it,
+  engine invariant) saying why no line can.
+- `__tests__/errors/ErrorCodeCatalog.spec.ts` still enforces uniqueness within
+  `CoreErrorCodes`.
 
 ### Never `throw new Error`
 

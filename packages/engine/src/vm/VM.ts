@@ -10,7 +10,7 @@ import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/v
 import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
-import { CoreErrorCodes, DatetimeErrorCodes } from "@solve-js/errors/ErrorCode";
+import { CoreErrorCodes, DatetimeZoneErrorCodes } from "@solve-js/errors/ErrorCode";
 import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@solve-js/vm/BusinessDays";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
 import { builtinFunctions, resolveAsConverter, datetimeArgumentRefused } from "@solve-js/vm/VMBuiltins";
@@ -1906,7 +1906,7 @@ function datetimeInZone(left: Value, name: string, vm: VM): Value {
     const zoneRef = resolveZoneName(name) ?? resolveUtcOffsetName(name);
     // `in UTC+25`: an offset's shape, and no clock keeps it.
     const badOffset = zoneRef === null ? offsetRefusal(name) : null;
-    if (badOffset !== null) return errorValue(DatetimeErrorCodes.TIME_ZONE_OFFSET_OUT_OF_RANGE, badOffset);
+    if (badOffset !== null) return errorValue(DatetimeZoneErrorCodes.TIME_ZONE_OFFSET_OUT_OF_RANGE, badOffset);
     if (zoneRef === null) {
         // A real unit on the right is a different mistake from a misspelt zone,
         // and the two need different advice. `getMeasure` covers the unit table
@@ -1914,11 +1914,11 @@ function datetimeInZone(left: Value, name: string, vm: VM): Value {
         const isUnit = getMeasure(name) !== undefined || sharedCurrencyExchange.isCurrency(name);
         return isUnit
             ? errorValue(
-                DatetimeErrorCodes.DATETIME_NOT_CONVERTIBLE,
+                DatetimeZoneErrorCodes.DATETIME_NOT_CONVERTIBLE,
                 `A date cannot be read in "${name}". "in <name>" after a date names a time zone, as in "2026-04-03 in Tokyo"`,
             )
             : errorValue(
-                DatetimeErrorCodes.DATETIME_ZONE_UNKNOWN,
+                DatetimeZoneErrorCodes.DATETIME_ZONE_UNKNOWN,
                 `"${name}" is not a time zone this engine knows. Name a city ("in Tokyo"), a standard abbreviation ("in JST") or "in UTC"`,
             );
     }

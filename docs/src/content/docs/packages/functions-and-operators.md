@@ -125,6 +125,18 @@ Check your own arguments, and return an `errorValue(code, message)` rather than
 throwing when they are wrong, as `doubleHandler` does above. A returned error is a
 value the reader sees on that one line; a thrown one is harder for a host to place.
 
+The code is the part a host's program reads (to underline the line, offer a fix
+or count failures), and the message is the part the person reads. So give each
+failure its own code, beginning with your package's name as `DOUBLE_BAD_ARGS`
+does, and export the codes as one `as const` object with a sentence on each, the
+way every built-in package does (`WeatherErrorCodes`, `TablesErrorCodes`): a host
+then has a list to check against rather than strings found by trial. Once a
+version has shipped, keep a code's name, since a host may have written it into
+its own program; the message can be reworded whenever it reads better. The
+engine's own codes are listed on the [error codes](/guide/error-codes/) page.
+The boundary: `isCataloguedErrorCode` from `solve-engine/packages` knows only the
+codes the engine ships, so it answers `false` for yours, and that is not a fault.
+
 ### Asking what another line would say
 
 Sometimes a handler needs another line's answer under different inputs, rather

@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { quoteToken } from "@solve-js/parser/ParseMessages";
 
 // CALL_BUILTIN index. See VMBuiltins.ts for the inflationAdjust(amount
 // fromYear, toYear) handler. Also reachable via the function-call form
@@ -115,10 +116,11 @@ export class InflationQueryParselet implements PrefixParselet {
       return;
     }
 
-    const gotType = next ? next.type : "end of input";
+    // What the reader typed, not the parser's name for it (#768).
+    const got = next ? `found ${quoteToken(next)}` : "the line ends";
     throw ErrorFactory.parsing(
       "INFLATION_EXPECTED_FROM_OR_IN",
-      `Expected "from <year>" or "in <year> worth in <year>" after "what is <amount>", got ${gotType}`,
+      `Expected "from <year>" or "in <year> worth in <year>" after "what is <amount>", but ${got}`,
     );
   }
 }

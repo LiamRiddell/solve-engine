@@ -81,7 +81,7 @@ put it on:
 
 ```solve-doc
 2026-01-04 24:00 // ERROR: "24:00" is not a valid time
-February 2026 3pm // ERROR: Unexpected token after expression: "3pm"
+February 2026 3pm // ERROR: Expected an operator or the end of the line, but found "3pm"
 ```
 
 On the days the clocks change, a time in the hour that is skipped or repeated

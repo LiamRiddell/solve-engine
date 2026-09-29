@@ -1,4 +1,5 @@
 import { PrefixParselet } from "@solve-js/parser/Parselet";
+import { tokenSpan, variableNameWording } from "@solve-js/parser/ParseMessages";
 import { Parser } from "@solve-js/parser/Parser";
 import { Token } from "@solve-js/lexer/Token";
 import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
@@ -32,11 +33,12 @@ export class GlobalVariableParselet implements PrefixParselet {
 		// preceded by "global :", same reasoning as the local case.
 		const nameToken = parser.consume();
 		if (nameToken.type !== "IDENT" && nameToken.type !== "UNIT") {
-			throw ErrorFactory.parsing(
-				'EXPECTED_IDENTIFIER',
-				`Expected identifier after 'global :', got ${nameToken.type}`,
-				{ tokenType: nameToken.type }
-			);
+			throw ErrorFactory.parsing({
+				code: 'EXPECTED_IDENTIFIER',
+				...variableNameWording(nameToken, "global :", "global :rate = 5"),
+				context: { tokenType: nameToken.type },
+				span: tokenSpan(nameToken),
+			});
 		}
 		const varName = nameToken.value;
 
