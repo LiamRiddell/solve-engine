@@ -54,4 +54,16 @@ variable) rather than a length the engine declines to convert.
 
 These are a measure of their own, kept apart from physical length. A CSS pixel is
 a reference pixel, not a slice of a centimetre, so a pixel converts to a `rem`
-and back but not to a physical length.
+and back but not to a physical length on its own.
+
+```solve
+96 px in inches // a CSS length cannot be converted to a length
+```
+
+A stated density is the one bridge: `4000px at 300 dpi` is the print size of
+4000 pixels at 300 dots per inch. See
+[how large an image prints](/syntax/screen-and-image-sizes/#how-large-it-prints).
+
+```solve
+4000px at 300 dpi // 13.33 in
+```

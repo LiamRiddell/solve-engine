@@ -24,13 +24,19 @@ fuel to drive 500 km at 7 l/100km // 35.00 litre
 
 The two ways of writing economy are opposites of each other: miles per gallon goes up as a car gets more frugal, litres per hundred kilometres goes down. You can write whichever your car shows, and mix it with whichever distance you have.
 
+`mpg` is miles per US gallon. A UK figure is miles per imperial gallon, a larger gallon, so it is written `mpg imperial` (or `UK mpg`); read as US gallons it would understate the fuel by about a sixth. See [fuel economy](/syntax/fuel-economy/).
+
+```solve
+fuel for 300 miles at 35 mpg imperial // 38.97 litre
+```
+
 ## What it costs
 
 Add the price at the pump and you get the bill.
 
 ```solve
 cost to drive 500 km at 7 l/100km at £1.50/litre // £52.50
-cost to drive 300 miles at 35 mpg at £1.50/litre // £48.67
+cost to drive 300 miles at 35 mpg imperial at £1.50/litre // £58.45
 ```
 
 The price carries its own volume, so a pump quoting gallons works with a distance in miles or kilometres, which is the ordinary state of affairs in a hire car abroad. The litres are converted into whatever the pump quoted before multiplying.

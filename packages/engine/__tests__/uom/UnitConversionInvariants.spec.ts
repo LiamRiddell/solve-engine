@@ -60,13 +60,14 @@ describe("unit vocabularies stay disjoint", () => {
     // Every base table measure states its ratios against one unit, the one whose
     // ratio is exactly one: the metre, the gram, and since #706 the joule, the
     // pascal and the hertz, which the extended table's energy, pressure and
-    // frequency units extend.
+    // frequency units extend, and the cubic metre, which the qualified cups of
+    // #752 extend.
     const baseUnitOf = (measure: string): string => {
       const kind = Object.entries(MEASURE_KIND_NAMES).find(([, name]) => name === measure)![0];
       return ALL_UNITS.find((unit) => String(UNIT_TABLE[unit][0]) === kind && UNIT_TABLE[unit][1] === 1)!;
     };
     expect(new Set(shared.map((unit) => EXTENDED_UNITS[unit].measure))).toEqual(
-      new Set(["length", "mass", "energy", "pressure", "frequency"]),
+      new Set(["length", "mass", "volume", "energy", "pressure", "frequency"]),
     );
 
     for (const unit of shared) {
