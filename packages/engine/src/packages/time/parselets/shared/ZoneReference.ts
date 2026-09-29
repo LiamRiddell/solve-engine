@@ -4,6 +4,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import type { Token } from "@solve-js/lexer/Token";
 import { ZONE_LOOKUP } from "../../timezones/CityZones";
+import { offsetRefusal, tryReadUtcOffset } from "@solve-js/calendar/UtcOffset";
 import { encodeFixedOffset, zoneLabel } from "../../timezones/ZoneMath";
 
 /** A resolved zone reference plus the display text the user actually typed. */
@@ -48,35 +49,18 @@ export function tryConsumeZoneReference(parser: Parser): ZoneReference | null {
   const lowerText = rawText.toLowerCase();
 
   if (lowerText === "gmt" || lowerText === "utc") {
-    parser.consume();
-    const signToken = parser.peek();
-    if (signToken?.type === "PLUS" || signToken?.type === "MINUS") {
-      const isNegative = signToken.type === "MINUS";
-      parser.consume();
-
-      // "8:30" between the sign and a following word (e.g. "in Paris") has
-      // already been fused into a single CLOCK_TIME token by the lexer's
-      // clock-time normalizer (see ClockTimeNormalizerRule.ts) before this
-      // parselet ever runs, so a bare NUMBER never appears in that case
-      // the fused token's value IS already hour*60+minute, matching
-      // `totalMinutes` below exactly, so it can be used as-is.
-      const offsetToken = parser.peek();
-      let totalMinutes: number;
-      if (offsetToken?.type === "CLOCK_TIME") {
-        parser.consume();
-        totalMinutes = parseInt(offsetToken.value, 10);
-      } else {
-        const hourToken = parser.consume("NUMBER");
-        totalMinutes = parseInt(hourToken.value, 10) * 60;
-        if (parser.peek()?.type === "COLON") {
-          parser.consume();
-          const minuteToken = parser.consume("NUMBER");
-          totalMinutes += parseInt(minuteToken.value, 10);
-        }
+    // The signed offset is read by the one reader `<date> in UTC-5` also uses
+    // (calendar/UtcOffset.ts), so the two forms accept the same spellings and
+    // refuse the same impossible offsets. It consumes the base name with it.
+    const offset = tryReadUtcOffset(parser);
+    if (offset !== null) {
+      if (offset.minutes === null) {
+        throw ErrorFactory.parsing("TIME_ZONE_OFFSET_OUT_OF_RANGE", offsetRefusal(offset.name) ?? offset.name);
       }
-      const zoneRef = encodeFixedOffset(isNegative ? -totalMinutes : totalMinutes);
+      const zoneRef = encodeFixedOffset(offset.minutes);
       return { zoneRef, displayName: zoneLabel(zoneRef) };
     }
+    parser.consume();
     const zoneRef = encodeFixedOffset(0); // bare "GMT"/"UTC" = zero offset
     return { zoneRef, displayName: zoneLabel(zoneRef) };
   }
