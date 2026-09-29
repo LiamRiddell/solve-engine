@@ -1,6 +1,6 @@
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
-import { asConverterRegistry } from "@solve-js/vm/VMBuiltins";
+import { matchAsConverter } from "@solve-js/vm/VMBuiltins";
 
 /**
  * Rewrites `in <converter>` and `to <converter>` into `as <converter>`.
@@ -42,11 +42,17 @@ const FUNC_TYPED_CONVERTERS = new Set(["hex", "bin"]);
  * units' newton, volt and watt), so `to` keeps its reading and `as` or `in`
  * reach the converter.
  *
- * Reads the registry `as` itself reads, so `in` reaches exactly the converters
- * `as` does.
+ * Reads the registry `as` itself reads, so `in` reaches the converters `as`
+ * does, but only by a clean match: the word as written, or its lower-cased
+ * form where that changes no unit prefix. A word that folds onto a unit of
+ * another prefix (`in MV` onto the millivolt, `in mw` onto both the milliwatt
+ * and the megawatt) is left for unit conversion, which reads a unit in its
+ * own case and refuses it by name, where the rewrite read `in MV` as
+ * millivolts (issue #824).
  */
 function isPackageConverter(word: string): boolean {
-	return asConverterRegistry.has(word.toLowerCase());
+	const match = matchAsConverter(word);
+	return match === "exact" || match === "folded";
 }
 
 /**

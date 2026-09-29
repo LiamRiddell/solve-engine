@@ -13,7 +13,7 @@ import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js
 import { CoreErrorCodes, DatetimeErrorCodes } from "@solve-js/errors/ErrorCode";
 import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@solve-js/vm/BusinessDays";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
-import { builtinFunctions, asConverterRegistry, datetimeArgumentRefused } from "@solve-js/vm/VMBuiltins";
+import { builtinFunctions, resolveAsConverter, datetimeArgumentRefused } from "@solve-js/vm/VMBuiltins";
 import { builtinArityError, builtinFunctionNames } from "@solve-js/vm/VMBuiltinArity";
 import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/DidYouMean";
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
@@ -4641,7 +4641,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.CALL_AS_CONVERTER: {
-          const name = stringOperand(safePop(stack), op, "converter name").toLowerCase();
+          const name = stringOperand(safePop(stack), op, "converter name");
           const value = safePop(stack);
           // A registered converter is arbitrary host code reading the Value
           // it is handed, so the fault is stopped before it gets there rather
@@ -4649,7 +4649,7 @@ export function executeBytecode(
           const converterFault = faultedOperand(value);
           if (converterFault) { stack.push(converterFault); break; }
           carry = value.sources;
-          const converter = asConverterRegistry.get(name);
+          const converter = resolveAsConverter(name);
           if (!converter) {
             stack.push(errorValue("UNKNOWN_AS_CONVERTER", `Unknown converter "as ${name}"`));
           } else {

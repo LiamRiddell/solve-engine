@@ -179,8 +179,10 @@ export class AsConverterParselet implements InfixParselet {
 
     // Not a built-in name, defer to the runtime asConverters registry so
     // third-party packages can contribute names without touching this file.
+    // The name goes as typed: a unit's prefix is carried by its case, so
+    // `as mW` and `as MW` must reach different converters (issue #824).
     builder.emitOpcode(OpCode.PUSH_STRING);
-    builder.emitString(name);
+    builder.emitString(nextToken.value);
     builder.emitOpcode(OpCode.CALL_AS_CONVERTER);
   }
 }
