@@ -52,7 +52,8 @@ Two limits keep the rewrite from shadowing anything:
 
 - **Only `in`, not `to`.** A word after `to` is a percentage change to a
   variable, `start to n`, and a converter is often named like one (the derived
-  units register `n`, `v` and `w`), so `to` keeps its reading.
+  units register `N`, `V` and `W`, which `n`, `v` and `w` reach), so `to` keeps
+  its reading.
 - **Only an ordinary word.** A name the lexer reads as a unit keeps its unit
   meaning after `in`: the datetime package's `month` converter does not take
   `5 hours in month` away from unit conversion. Pick a name that is not a unit,
@@ -60,6 +61,28 @@ Two limits keep the rewrite from shadowing anything:
 
 The rewrite asks the same registry `as` asks, so `in` reaches exactly the
 converters `as` does.
+
+## Names and their case
+
+A name is matched without regard to case, so `255 as ROMAN` and `as Roman` reach
+`roman`, with one exception: a name you register with capitals is also kept
+exactly as you spelled it, and the target the reader typed is tried in that
+spelling first. That is what lets a unit's prefix, which is carried by its case,
+survive the lookup. The derived units register `mW` (the milliwatt) and `MW` (the
+megawatt) side by side, and `as mW` and `as MW` reach different converters.
+
+When two of your names differ only in case, their shared lower-case spelling
+belongs to neither: `as mw` is refused by name (`AS_CONVERTER_AMBIGUOUS_CASE`)
+rather than read as one of them. When only one is registered, the lower-case
+spelling reaches it, unless reading it that way would change the case of a prefix
+letter (`m` and `M`, `p` and `P`): `as MV` is refused
+(`AS_CONVERTER_PREFIX_CASE`) rather than read as the millivolt. `in` rewrites to
+`as` only for a name that matches cleanly, so `in MV` stays a unit conversion and
+is refused there as a unit the table does not spell.
+
+A name registered in lower case alone behaves exactly as it always has. Register
+a lower-case name and a capitalised one for the same word (`zu` and `Zu`) and it
+is the ordinary collision: a warning, and the last registration wins.
 
 ## It must be pure and synchronous
 

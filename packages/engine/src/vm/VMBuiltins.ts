@@ -2094,6 +2094,96 @@ export function pluginFunctionIndexFor(qualifiedName: string): number {
 export const asConverterRegistry = new Map<string, AsConverter>();
 
 /**
+ * The converters whose registered name carries capitals, by that exact
+ * spelling. A unit's prefix is carried by its case (`mW` is a milliwatt, `MW`
+ * a megawatt), so a lower-cased key alone reads one as the other (issue #824).
+ * {@link resolveAsConverter} tries the typed spelling here first.
+ */
+export const asConverterExactRegistry = new Map<string, AsConverter>();
+
+/**
+ * The spellings registered under each lower-cased key, so a second spelling
+ * that differs only by case (`MW` beside `mW`) is recognised as a case pair
+ * rather than a collision.
+ */
+const asConverterSpellings = new Map<string, string[]>();
+
+/**
+ * The refusal for a lower-cased key two spellings share, such as `mw` for `mW`
+ * and `MW`. It refuses by name rather than guess which prefix was meant.
+ *
+ * @param typed - The target as the reader wrote it.
+ * @param spellings - The registered spellings that share its lower-cased form.
+ */
+function ambiguousCaseRefusal(typed: string, spellings: readonly string[]): Value {
+    const choices = spellings.map((s) => `"as ${s}"`).join(" or ");
+    return errorValue(
+        "AS_CONVERTER_AMBIGUOUS_CASE",
+        `"as ${typed}" could be ${choices}: write the unit with its prefix in its own case (m is milli, M is mega, p is pico, P is peta)`,
+    );
+}
+
+/**
+ * Whether reading `typed` as `spelling` would change the case of a prefix
+ * letter whose case is its meaning: `MV` read as `mV` turns a mega into a
+ * milli, and `PW` read as `pW` a peta into a pico. A one-letter unit has no
+ * prefix (`as n` is the newton), so it is never such a change.
+ */
+function changesPrefixCase(typed: string, spelling: string): boolean {
+    return spelling.length > 1 && typed[0] !== spelling[0] && "mMpP".includes(spelling[0]);
+}
+
+/**
+ * The converter for a lower-cased key that two spellings share, kept in
+ * {@link asConverterRegistry} so a reader of that map alone refuses too.
+ */
+function ambiguousCaseConverter(key: string, spellings: readonly string[]): AsConverter {
+    return () => ambiguousCaseRefusal(key, spellings);
+}
+
+/**
+ * How an `as` target matches the registry: `"exact"` when a converter is
+ * registered under that spelling, `"folded"` when only its lower-cased form
+ * is and reading it so changes no prefix, `"ambiguous"` when the lower-cased
+ * form belongs to two spellings (`mw`), `"prefix"` when the one spelling it
+ * folds to has a prefix of another case (`MV` for `mV`), and `undefined` when
+ * nothing is registered.
+ */
+export type AsConverterMatch = "exact" | "folded" | "ambiguous" | "prefix" | undefined;
+
+/** How `typed` matches the registry; see {@link AsConverterMatch}. */
+export function matchAsConverter(typed: string): AsConverterMatch {
+    if (asConverterExactRegistry.has(typed)) return "exact";
+    const key = typed.toLowerCase();
+    if (!asConverterRegistry.has(key)) return undefined;
+    const spellings = asConverterSpellings.get(key) ?? [key];
+    if (spellings.includes(typed)) return "exact";
+    if (spellings.length > 1) return "ambiguous";
+    return changesPrefixCase(typed, spellings[0]) ? "prefix" : "folded";
+}
+
+/**
+ * The converter an `as` target names. The spelling as typed is tried first,
+ * so `as mW` and `as MW` reach different units; then the lower-cased key,
+ * so `as ISO8601` still reaches `iso8601` and `as n` the newton. A folded
+ * spelling that two units share (`as mw`), or that would change a prefix's
+ * case (`as MV` when only `mV` is registered), gets a converter that refuses
+ * by name (issue #824). `undefined` when nothing is registered.
+ */
+export function resolveAsConverter(typed: string): AsConverter | undefined {
+    const match = matchAsConverter(typed);
+    if (match === undefined) return undefined;
+    if (match === "exact") return asConverterExactRegistry.get(typed) ?? asConverterRegistry.get(typed.toLowerCase());
+    if (match === "folded") return asConverterRegistry.get(typed.toLowerCase());
+    const spellings = asConverterSpellings.get(typed.toLowerCase()) ?? [];
+    if (match === "ambiguous") return () => ambiguousCaseRefusal(typed, spellings);
+    return () => errorValue(
+        "AS_CONVERTER_PREFIX_CASE",
+        `"as ${typed}" is not a unit: the one spelled alike is "as ${spellings[0]}", whose prefix is written in the other case (m is milli, M is mega, p is pico, P is peta)`,
+    );
+}
+
+/**
  * A package-registered `as <name>` converter: the value on the left of `as`
  * in, the converted value out.
  *
@@ -2128,14 +2218,39 @@ export type AsConverter = (value: Value, context?: LineExecutionContext) => Valu
  */
 export function registerAsConverter(name: string, handler: AsConverter): void {
     const key = name.toLowerCase();
-    const existing = asConverterRegistry.get(key);
-    if (existing && existing !== handler) {
-        console.warn(`[asConverterRegistry] Converter name "${key}" is already registered — overwriting.`);
+    const spellings = asConverterSpellings.get(key) ?? [];
+    const known = spellings.includes(name);
+    // A second spelling of the same key that differs only by case (`MW`
+    // beside `mW`) is a case pair, not a collision: both keep their exact
+    // spelling, and the shared lower-case key refuses by name.
+    const casePair = !known && spellings.length > 0 && name !== key && !spellings.includes(key);
+    const prior = known ? (name !== key ? asConverterExactRegistry.get(name) : asConverterRegistry.get(key)) : asConverterRegistry.get(key);
+    if (prior && prior !== handler && !casePair) {
+        console.warn(`[asConverterRegistry] Converter name "${key}" is already registered: overwriting.`);
     }
-    asConverterRegistry.set(key, handler);
+    let next = spellings;
+    if (!known && !casePair) {
+        for (const spelling of spellings) asConverterExactRegistry.delete(spelling);
+        next = [];
+    }
+    if (!known) next = [...next, name];
+    asConverterSpellings.set(key, next);
+    if (name !== key) asConverterExactRegistry.set(name, handler);
+    asConverterRegistry.set(key, next.length > 1 ? ambiguousCaseConverter(key, next) : handler);
 }
 
 /** Reverse a {@link registerAsConverter} call, used by unregisterPackage(). */
 export function unregisterAsConverter(name: string): void {
-    asConverterRegistry.delete(name.toLowerCase());
+    const key = name.toLowerCase();
+    asConverterExactRegistry.delete(name);
+    const remaining = (asConverterSpellings.get(key) ?? []).filter((s) => s !== name);
+    if (remaining.length === 0) {
+        asConverterSpellings.delete(key);
+        asConverterRegistry.delete(key);
+        return;
+    }
+    // One spelling of a case pair is left: the lower-case key is its again.
+    asConverterSpellings.set(key, remaining);
+    const survivor = remaining.length === 1 ? asConverterExactRegistry.get(remaining[0]) : undefined;
+    asConverterRegistry.set(key, survivor ?? ambiguousCaseConverter(key, remaining));
 }
