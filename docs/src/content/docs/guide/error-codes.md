@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 497 codes, grouped below by the part
+ship. The engine and its built-in packages ship 499 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -445,8 +445,10 @@ In the package as `ERROR_CODE_CATALOGUES.HistoricalCurrencyErrorCodes`.
 
 | Code | Arrives | When it arises |
 | --- | --- | --- |
-| `HISTORICAL_RATES_NOT_CONFIGURED` | as a value | No `HistoricalRateProvider` was supplied, so `on <date>` conversions cannot be answered. NOT a fall back to today's rate. |
-| `HISTORICAL_RATE_QUERY_FAILED` | as a value | The host provider threw or timed out for one pair/date. Transient, evicted after a cooldown so a retry can happen. |
+| `HISTORICAL_RATES_NOT_CONFIGURED` | as a value | The host switched historical rates off (`historicalRateProvider: null`), so `on <date>` conversions cannot be answered. NOT a fall back to today's rate. |
+| `HISTORICAL_RATE_QUERY_FAILED` | either | The provider threw, timed out, or answered with something that is not a rate, for one pair/date. Transient, evicted after a cooldown so a retry can happen. |
+| `HISTORICAL_RATE_DATE_OUT_OF_RANGE` | thrown | A dated conversion for a day the built-in Frankfurter rates do not cover: before 4 January 1999 (the ECB reference rates' first day) or after today. |
+| `HISTORICAL_RATE_UNSUPPORTED_CURRENCY` | thrown | A dated conversion for a currency the built-in Frankfurter rates do not quote: a cryptocurrency, or a code the ECB publishes no rate for. |
 | `HISTORICAL_RATE_NOT_PREFLIGHTED` | as a value | The VM reached the conversion before preflight cached its rate, a "shouldn't happen" invariant break, not a user error. |
 | `HISTORICAL_CURRENCY_INVALID_OPERAND` | as a value | The amount being converted was not a currency Value (bad bytecode, or a non-currency left operand). |
 

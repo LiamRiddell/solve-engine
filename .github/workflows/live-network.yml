@@ -11,7 +11,8 @@ name: Live network
 # run only with SOLVE_LIVE_NETWORK=1 set, here, where a timeout and a 429 count
 # as outages and a 4xx, a malformed body or any other error still fails. The
 # gates keep the offline coverage, which drives the same client through a
-# stubbed fetch.
+# stubbed fetch. The historical exchange rate's check against the real
+# Frankfurter endpoint (#699) runs here on the same terms.
 on:
   schedule:
     - cron: "30 5 * * *"
@@ -22,7 +23,7 @@ permissions:
 
 jobs:
   weather:
-    name: Weather against the real Open-Meteo
+    name: Weather and historical rates against the real services
     # Pinned rather than ubuntu-latest, like every other job here.
     runs-on: ubuntu-24.04
     timeout-minutes: 20
