@@ -24,6 +24,8 @@ export {
 	getTokenCategory,
 	registerTokenCategory,
 	unregisterTokenCategory,
+	builtinTokenCategory,
+	TokenCategoryTable,
 	UNCATEGORIZED_TOKEN_TYPES,
 } from "./TokenCategoryMap";
 export { tokenClassName, createTokenClassName, DEFAULT_TOKEN_CLASS_PREFIX } from "./tokenClassName";

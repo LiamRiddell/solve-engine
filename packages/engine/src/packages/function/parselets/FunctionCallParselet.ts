@@ -5,6 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { getLocale } from "@solve-js/constants/locales";
 
 /**
  * Exported so `packages/mapreduce/`'s parselets can resolve a bare
@@ -75,6 +76,27 @@ export const builtinNameToIndex: Record<string, number> = {
 };
 
 /**
+ * The builtin index a call name reaches under a locale: the English name
+ * itself, or the pack's own name for it (`wurzel` under `de` is `sqrt`, #833).
+ *
+ * A pack's name is looked up only through that pack, so `wurzel` means nothing
+ * to an English engine, and only as the pack's own key, so a name such as
+ * `constructor` or `__proto__` reaches nothing.
+ *
+ * @param name - The call name as written, any case.
+ * @param localeCode - The engine's locale tag.
+ * @returns The index, or `undefined` for a name that is no builtin.
+ */
+export function builtinIndexFor(name: string, localeCode: string): number | undefined {
+  const lower = name.toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(builtinNameToIndex, lower)) return builtinNameToIndex[lower];
+  const own = getLocale(localeCode).functionNames;
+  if (own === undefined || !Object.prototype.hasOwnProperty.call(own, lower)) return undefined;
+  const english = own[lower];
+  return Object.prototype.hasOwnProperty.call(builtinNameToIndex, english) ? builtinNameToIndex[english] : undefined;
+}
+
+/**
  * A named function call with parenthesised arguments.
  *
  * Resolves the name to a builtin index at parse time rather than dispatching on
@@ -85,7 +107,7 @@ export class FunctionCallParselet implements PrefixParselet {
 	readonly category = "Function";
 	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
     const fnName = token.value.toLowerCase();
-    const fnIdx = Object.prototype.hasOwnProperty.call(builtinNameToIndex, fnName) ? builtinNameToIndex[fnName] : undefined;
+    const fnIdx = builtinIndexFor(fnName, parser.getLocaleCode());
     if (fnIdx === undefined) {
       throw ErrorFactory.execution(
         'UNKNOWN_FUNCTION',

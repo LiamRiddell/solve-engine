@@ -13,9 +13,10 @@
  * - with a second engine in the process, the re-run read the second engine's
  *   cache, and reported its price as the first engine's answer.
  *
- * The batcher now publishes its own engine's cache for the length of the
- * re-run and puts the previous one back. No test reaches the network: every
- * price comes from a stub `fetchPrice`.
+ * The batcher now hands its own engine's cache to the re-run line in its
+ * execution context (`context.queryClient`, #710), which the plugin function
+ * reads first; the deprecated slot is set by the VM at each plugin call. No
+ * test reaches the network: every price comes from a stub `fetchPrice`.
  */
 import { describe, expect, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
@@ -72,8 +73,10 @@ describe("the async re-run reads the owning engine's query cache", () => {
 
 		expect(a.reported).toEqual(["line 1: $60,000.00"]);
 		expect(b.reported).toEqual(["line 1: $99,000.00"]);
-		// A's re-run put back the cache B had published, so the slot reads as it
-		// did for anything that runs after the re-run.
-		expect(getActiveQueryClient()).toBe(publishedBeforeA);
+		// The deprecated slot is no longer put back around a re-run (#710): the
+		// VM sets it at each plugin call, so it names the engine whose plugin
+		// function ran last, A's, and B's cache was what it held before.
+		expect(publishedBeforeA).toBe(b.engine.queryClient);
+		expect(getActiveQueryClient()).toBe(a.engine.queryClient);
 	});
 });

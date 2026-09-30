@@ -1,4 +1,4 @@
-import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type SplitData, type SplitShare, type ChartData, type IpCidrData } from "@solve-js/vm/Value";
+import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, type ColourData, type SplitData, type SplitShare, type ChartData, type IpCidrData, type UnitLabel } from "@solve-js/vm/Value";
 import { formatColour } from "@solve-js/packages/colour/ColourMath";
 import { formatIp } from "@solve-js/packages/ip/IpMath";
 import { decimalToFixed, type DecimalData } from "@solve-js/decimal";
@@ -486,7 +486,13 @@ export function localiseFixedDecimal(fixed: string, loc: string, useGrouping: bo
   return `${sign}${integerText}${decimalMark(loc)}${localiseDigits(fraction, loc)}`;
 }
 
-function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings, exact?: DecimalData, isDatetimeSpan?: boolean, explicitPlaces?: number): string {
+function formatUom(value: number, unit: string | undefined, locale: ILocale, settings: FormattingSettings, exact?: DecimalData, isDatetimeSpan?: boolean, explicitPlaces?: number, label?: UnitLabel): string {
+  // A quantity with a name of its own is written under that name, counted in
+  // it (`= 6 sprints` for twelve weeks); money keeps its symbol. See
+  // Value.unitLabel.
+  if (label !== undefined && unit !== undefined && moneyUnitOf(unit) === undefined) {
+    return formatLabelledUom(value, unit, label, settings, explicitPlaces);
+  }
   // A time over a distance is a pace, and a runner reads a pace on a clock.
   // Not when the line named its own place count, which asked for digits.
   if (unit !== undefined && explicitPlaces === undefined) {
@@ -556,6 +562,32 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   // timeWordForCount.
   const shownUnit = unit !== undefined && isTimeSpan ? timeWordForCount(unit, value) : unit;
   return `= ${formatted} ${shownUnit || ""}`.trim();
+}
+
+/**
+ * A quantity written under the name the reader gave its unit (#762): the
+ * count in that name, then the name as written. The count is `value / per`,
+ * and it follows the places rule its own unit follows, so a whole number of
+ * days renamed `Tage` is `= 3 Tage`, as `= 3 days` would be, and a distance
+ * keeps the setting's places.
+ *
+ * @param value - The quantity, in its own unit.
+ * @param unit - Its own unit, which decides the places rule.
+ * @param label - The name and how many of `unit` one of it is.
+ * @param settings - The formatting settings.
+ * @param explicitPlaces - A place count the line asked for, if any.
+ */
+function formatLabelledUom(value: number, unit: string, label: UnitLabel, settings: FormattingSettings, explicitPlaces: number | undefined): string {
+  const count = label.per === 1 ? value : value / label.per;
+  const dp = explicitPlaces ?? settings.unitOfMeasurementResult.decimalPlaces;
+  const useGrouping = settings.floatResult.enableSeperator;
+  const loc = settings.numberResult.decimalSeparatorLocale || "en-US";
+  const tooSmall = explicitPlaces === undefined ? tooSmallToPrintText(count, dp, loc) : undefined;
+  let formatted: string;
+  if (tooSmall !== undefined) formatted = tooSmall;
+  else if (explicitPlaces === undefined && TIME_SPAN_UNITS.has(unit) && Number.isInteger(count)) formatted = localiseFixedDecimal(count.toString(), loc, useGrouping);
+  else formatted = localiseFixedDecimal(count.toFixed(dp), loc, useGrouping);
+  return `= ${formatted} ${label.name}`;
 }
 
 /**
@@ -853,7 +885,7 @@ export function formatValue(value: Value, settings?: FormattingOverrides): strin
     case ValueType.Datetime:
       return formatDatetime(value.value as number, locale, us, value.zone);
     case ValueType.Uom:
-      return formatUom(value.value as number, value.unit, locale, us, value.exact, value.datetimeSpan, value.decimalPlaces);
+      return formatUom(value.value as number, value.unit, locale, us, value.exact, value.datetimeSpan, value.decimalPlaces, value.unitLabel);
     case ValueType.Matrix:
       return formatMatrix(value.value as MatrixData, locale, us);
     case ValueType.Range: {

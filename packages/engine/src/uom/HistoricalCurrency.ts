@@ -345,7 +345,8 @@ export function createHistoricalCurrencyPluginFunction(
 			return uomValue(amount.toNumber(), to);
 		}
 
-		const queryClient = getActiveQueryClient();
+		// The running engine's own cache, from the line's context (#710).
+		const queryClient = context?.queryClient ?? getActiveQueryClient();
 		const key = historicalRateQueryKey(from, to, isoDate);
 		const cached = queryClient?.getQueryData(key) as Value | undefined;
 

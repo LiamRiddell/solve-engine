@@ -125,7 +125,8 @@ describe("the active-query-client hand-off", () => {
 		// Leaving a cleared engine's client published would let a later
 		// execution read a cache nobody owns any more.
 		const engine = newTrackedEngine();
-		engine.evaluateExpression("1 + 1");
+		engine.registerPackage(probePackage([]));
+		engine.evaluateExpression("whichclient");
 		expect(getActiveQueryClient()).toBe(engine.queryClient);
 
 		engine.clear();
@@ -143,7 +144,8 @@ describe("the active-query-client hand-off", () => {
 		 */
 		const running = newTrackedEngine();
 		const other = newTrackedEngine();
-		running.evaluateExpression("1 + 1");
+		running.registerPackage(probePackage([]));
+		running.evaluateExpression("whichclient");
 		expect(getActiveQueryClient()).toBe(running.queryClient);
 
 		other.clear();

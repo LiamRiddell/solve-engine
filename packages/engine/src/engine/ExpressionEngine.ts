@@ -21,7 +21,7 @@ import type { EvalResult, LineExecutionContext, LineRerun } from "@solve-js/vm/V
 import { firstGlobalWrite, lineMentions, copyFetchedData, targetAnswer, overrideValue, type WhatIfOverrides } from "@solve-js/engine/WhatIfRun";
 import type { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { BackgroundRefreshManager } from "@solve-js/engine/BackgroundRefreshManager";
-import { registerAsConverter, unregisterAsConverter, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
+import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { createEngineContext } from "@solve-js/engine/EngineContext";
 import { splitFrozenSuffix, frozenDirectiveFor } from "@solve-js/engine/FrozenSuffix";
 import type { FrozenRecord } from "@solve-js/vm/FrozenValues";
@@ -59,12 +59,12 @@ import {
     type SerializedValue,
     type SerializedLineCacheEntry,
 } from "@solve-js/engine/EngineSnapshot";
-import { registerTokenCategory, unregisterTokenCategory } from "@solve-js/language/TokenCategoryMap";
 import type { CompletionItem } from "@solve-js/language/LanguageService";
 import type { LexerVocabulary } from "@solve-js/lexer/ExpressionLexer";
 import { endsFigureBlock, hasNoFigure } from "@solve-js/lexer/BlockBoundary";
 import { QueryClient } from "@tanstack/query-core";
 import { createQueryClient, setActiveQueryClient, getActiveQueryClient } from "@solve-js/services/DataQueryService";
+import type { TokenCategory } from "@solve-js/language/TokenCategory";
 import { memberTagsOf, withTagEdges } from "@solve-js/packages/tags/TagScanner";
 import { isSummaryLine } from "@solve-js/packages/lines/SectionReader";
 import { ErrorFactory, EngineError, normalizeUnknownError } from "@solve-js/errors/UnifiedErrorFramework";
@@ -105,7 +105,10 @@ import { TokenNormalizer, BUILTIN_PHRASES, implicitMultiplyRule } from "@solve-j
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import type { TokenFusion } from "@solve-js/normalizer";
 import { UserUnitTable, type DocumentUnit } from "@solve-js/packages/uom/UserUnitTable";
-import { userUnitExpansionRule } from "@solve-js/packages/uom/normalizer/UserUnitNormalizerRule";
+import { userUnitExpansionRule, unitAliasRule } from "@solve-js/packages/uom/normalizer/UserUnitNormalizerRule";
+import { UnitAliasTable } from "@solve-js/packages/uom/UnitAliasTable";
+import { UnitLabelParselet } from "@solve-js/packages/uom/parselets/UnitLabelParselet";
+import { readLocaleNumber } from "@solve-js/parser/LocaleNumberLiteral";
 import { callFusionRule } from "@solve-js/normalizer/CallFusionRule";
 import { dateLiteralNormalizerRule } from "@solve-js/packages/datetime/normalizer/DateLiteralNormalizerRule";
 import {
@@ -332,6 +335,29 @@ type EffectMode = "apply" | "check";
  * checks reads only whether the line matched, not what it would answer.
  */
 const CHECKED_NOT_RUN: Value = new Value(ValueType.String, "checked, not run");
+
+/**
+ * A copy of a plain-data tree: every array and plain object copied, anything
+ * else (a function, a class instance such as a calendar backend) kept as the
+ * same reference. For handing out configuration a caller may change freely.
+ *
+ * @param value - The tree to copy.
+ * @returns A structurally equal tree sharing no array or plain object with it.
+ */
+export function copyPlain<T>(value: T): T {
+	if (Array.isArray(value)) return value.map((item) => copyPlain(item)) as T;
+	if (value === null || typeof value !== "object") return value;
+	const proto = Object.getPrototypeOf(value);
+	if (proto !== Object.prototype && proto !== null) return value;
+	const out: Record<string, unknown> = {};
+	// Defined rather than assigned, so a key spelled `__proto__` (a parsed
+	// JSON config can carry one as its own property) stays a key and does not
+	// set the copy's prototype.
+	for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+		Object.defineProperty(out, key, { value: copyPlain(item), enumerable: true, writable: true, configurable: true });
+	}
+	return out as T;
+}
 
 /**
  * The parts of a `1 <name> = <n> <unit>` user-unit definition, or null when the
@@ -673,6 +699,8 @@ export class ExpressionEngine {
         asConverterNames: string[];
         normalizerRuleNames: string[];
         callFusionNames: string[];
+        /** Whether the package declared `unitAliases`, which unregistering removes by owner. */
+        unitAliases: boolean;
     }>();
 
     /**
@@ -869,6 +897,8 @@ export class ExpressionEngine {
      * Called once by `ThreeTierEvaluator`'s constructor. Not part of the
      * public evaluate-a-document contract, purely internal wiring so
      * {@link makeLineContext} has something to read from.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
      */
     setDocumentModel(doc: DocumentModel | null): void {
         this.documentModel = doc;
@@ -879,6 +909,10 @@ export class ExpressionEngine {
      * is not driving one. Lets a caller that borrows the engine for a one-off
      * incremental pass (see {@link evaluateDocument}) put back whatever a host
      * had set, rather than assuming it was `null`.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
+     *
+     * @deprecated An evaluator seam with no host use; a host holds its own document model. Removed in 3.0.
      */
     getDocumentModel(): DocumentModel | null {
         return this.documentModel;
@@ -1288,6 +1322,11 @@ export class ExpressionEngine {
                 : undefined,
             networkEnabled: this.config.network.enabled,
             calendar: this.context.calendar,
+            // This engine's own query cache, which a plugin function reading a
+            // resolver's result asks for (#710). It used to be one slot for the
+            // process that each engine published before running a line and put
+            // back around every nested run.
+            queryClient: this.queryClient,
             // Read through the engine on every draw rather than captured, since
             // this object serves a whole pass and the line it serves changes.
             random: () => this.drawRandom(),
@@ -1660,10 +1699,8 @@ export class ExpressionEngine {
      * @throws Whatever {@link parseDocument} throws for the pass as a whole.
      */
     private runScenario(scratch: ExpressionEngine, input: string, pins: ReadonlyMap<string, Value>): ParsingResult {
-        // The scratch engine's lines publish its query client for the plugin
-        // functions they call, and a what-if line runs inside this engine's own
-        // evaluation, which goes on after it returns: put back what was there.
-        const activeClient = getActiveQueryClient();
+        // The scratch engine's lines read its own query client from their
+        // execution context, so nothing of this engine's needs putting back.
         try {
             scratch.vm.reset();
             scratch.dag.clear();
@@ -1673,8 +1710,44 @@ export class ExpressionEngine {
             return withoutValueArena(() => scratch.parseDocument(input, { inputType: "markdown" }));
         } finally {
             scratch.pinnedVariables = null;
-            setActiveQueryClient(activeClient);
         }
+    }
+
+    /**
+     * Refuse a package's `unitAliases` the engine could never read (#762): an
+     * alias the lexer already reads as something other than a plain word (a
+     * unit, a keyword, a function, more than one word), and a target that is
+     * not a single unit the engine reads.
+     *
+     * @param pkg - The package being registered.
+     * @throws `PLUGIN_UNIT_ALIAS_UNREACHABLE` or `PLUGIN_UNIT_ALIAS_TARGET_UNKNOWN`.
+     */
+    private assertUnitAliases(pkg: IEnginePackage): void {
+        for (const [word, unit] of Object.entries(pkg.unitAliases ?? {})) {
+            const readAs = typeof word === "string" && word.length > 0 ? this.callWordReadAs(word) : "an empty word";
+            if (readAs !== null) {
+                throw ErrorFactory.config({
+                    code: "PLUGIN_UNIT_ALIAS_UNREACHABLE",
+                    message: `Package "${pkg.name}" declares "${word}" as a word for ${String(unit)}, but the engine already reads "${word}" as ${readAs}, so the alias could never be read. Choose another word.`,
+                    context: { package: pkg.name, word, readAs },
+                });
+            }
+            if (!this.readsAsOneUnit(unit)) {
+                throw ErrorFactory.config({
+                    code: "PLUGIN_UNIT_ALIAS_TARGET_UNKNOWN",
+                    message: `Package "${pkg.name}" declares "${word}" as a word for "${String(unit)}", which is not a unit the engine reads on its own. Name a unit such as mile, days or kg.`,
+                    context: { package: pkg.name, word, unit: String(unit) },
+                });
+            }
+        }
+    }
+
+    /** Whether `text` lexes as exactly one unit token, the target an alias may name. */
+    private readsAsOneUnit(text: unknown): boolean {
+        if (typeof text !== "string" || text.length === 0 || text.length > 64) return false;
+        this.lexer.resetExpression(text);
+        const tokens = Array.from(this.lexer);
+        return tokens.length === 1 && tokens[0].type === "UNIT";
     }
 
     /**
@@ -1732,9 +1805,7 @@ export class ExpressionEngine {
 
     /** Release a scratch engine: its query cache's timers, its batcher, its caches. */
     private disposeScenarioEngine(scratch: ExpressionEngine): void {
-        const activeClient = getActiveQueryClient();
         scratch.clear();
-        setActiveQueryClient(activeClient === scratch.queryClient ? null : activeClient);
     }
 
     /**
@@ -1810,7 +1881,6 @@ export class ExpressionEngine {
             );
         }
 
-        const activeClient = getActiveQueryClient();
         const scratch = this.createScenarioEngine(this.whatIfDepth);
         try {
             const pins = new Map<string, Value>();
@@ -1833,8 +1903,6 @@ export class ExpressionEngine {
             return this.runScenario(scratch, input, pins);
         } finally {
             this.disposeScenarioEngine(scratch);
-            // Evaluating a text override ran in the scratch engine too.
-            setActiveQueryClient(activeClient);
         }
     }
 
@@ -1901,6 +1969,13 @@ export class ExpressionEngine {
      * cross between documents.
      */
     private readonly userUnits = new UserUnitTable();
+    /**
+     * The words packages declared for units the engine already has
+     * (`IEnginePackage.unitAliases`, #762), read by the unit-alias normaliser
+     * rule. Per engine and kept for as long as the declaring package is
+     * registered, unlike {@link userUnits}, which a document pass clears.
+     */
+    private readonly unitAliases = new UnitAliasTable();
     /**
      * The line that stored each equation, by the equation's unknown, one map per
      * kind: `a * x = 10` stores both a matrix and a scalar equation for `x`,
@@ -2103,7 +2178,13 @@ export class ExpressionEngine {
         // Carries the network switch too, since the VM is where a conversion
         // with no rate and a promise-returning plugin function are first seen,
         // and the calendar backend, since the VM is where a date is stepped.
-        this.context = createEngineContext({ networkEnabled: this.config.network.enabled, calendar });
+        // The query cache is made first, so the context can carry it to every
+        // plugin function this engine runs (#710).
+        this.queryClient = createQueryClient();
+        this.context = createEngineContext({ networkEnabled: this.config.network.enabled, calendar, queryClient: this.queryClient });
+        // The lexer paints a token with this engine's categories, which the
+        // package loop below fills.
+        this.lexer.setTokenCategories(this.context.tokenCategories);
 
         // Wire the diagnostic pipeline: collect per-stage detail when diagnostics
         // are on, otherwise an empty pipeline whose length check exits with zero
@@ -2130,6 +2211,9 @@ export class ExpressionEngine {
         // Packages may register phrases and normalizer rules, so the normalizer
         // must exist before registerPackage() is called.
         this.normalizer = new TokenNormalizer();
+        // A package's normaliser rule is shared by every engine that loads the
+        // package, so what it reads of this engine arrives through here.
+        this.normalizer.environment = { asConverters: this.context.asConverters };
 
         // Register built-in phrases into the PhraseTrie, single-pass
         // O(depth) matching per position instead of separate rule scans.
@@ -2151,7 +2235,20 @@ export class ExpressionEngine {
         // shared across every engine in the process. Priority is above implicit
         // multiply so a defined name is expanded whole (`6 * 2 weeks`) instead
         // of first split into `6 * sprints` with the name stranded as a variable.
-        this.normalizer.register(userUnitExpansionRule(this.userUnits));
+        this.normalizer.register(userUnitExpansionRule(this.userUnits, 82, (text) => {
+            // A ratio the locale cannot read is no count to show a name in.
+            try {
+                return readLocaleNumber(text, locale);
+            } catch {
+                return Number.NaN;
+            }
+        }));
+        // Package unit aliases (`unitAliases`), read below the document's own
+        // units so a word the document defines means what it says. The label
+        // both rules place after a unit is compiled by its own parselet, which
+        // names the quantity for display (#762).
+        this.normalizer.register(unitAliasRule(this.unitAliases));
+        this.registry.registerInfix("UNIT_LABEL", new UnitLabelParselet());
 
         // One rule for every package's `name(` call word. It reads the live
         // callFusions map, which registerPackage fills below, so it is registered
@@ -2230,7 +2327,6 @@ export class ExpressionEngine {
             // which the VM reads as weekends-only.
             resolveHolidayPredicate(this.config.date.holidays, this.context.calendar),
         );
-        this.queryClient = createQueryClient();
         this.batcher = new AsyncResolutionBatcher(this.dag, this.lineCache, this.vm);
         // A re-run keeps its answer within what the note may keep (#694).
         this.batcher.keepResult = (lineNumber, value, writeVariable) =>
@@ -2325,6 +2421,8 @@ export class ExpressionEngine {
      *
      * @param name - The name the line writes.
      * @param lineNumber - The 1-based line it sits on.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
      */
     restoreToPrefix(name: string, lineNumber: number): void {
         if (this.accumulatorNames.has(name)) return;
@@ -2352,6 +2450,8 @@ export class ExpressionEngine {
      * it with {@link endPass}.
      *
      * @param start - What the lines above the pass's first line spent.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
      */
     beginPass(start?: PassSpend): void {
         this.passWork = start?.work ?? 0;
@@ -2367,6 +2467,8 @@ export class ExpressionEngine {
      * for the re-runs that follow it. A viewport pass has not counted the
      * lines below it, so the note is taken to keep at least what the last
      * whole pass counted.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
      */
     endPass(): void {
         this.passOpen = false;
@@ -2380,6 +2482,8 @@ export class ExpressionEngine {
      * over the whole note would leave them.
      *
      * @param spent - What that line recorded.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
      */
     addPassSpend(spent: PassSpend): void {
         this.passWork += spent.work;
@@ -2387,6 +2491,11 @@ export class ExpressionEngine {
     }
 
     /** What the current pass has spent so far. */
+    /**
+     * What the pass in progress has spent so far, for the evaluator to carry across a pause.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
+     */
     passSpent(): PassSpend {
         return { work: this.passWork, kept: this.passKept };
     }
@@ -2486,12 +2595,19 @@ export class ExpressionEngine {
      *
      * @param name - A variable name.
      * @returns True when a line has stepped it.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
      */
     isAccumulatorName(name: string): boolean {
         return this.accumulatorNames.has(name);
     }
 
     /** The names of every user-defined unit in scope, for detecting a removal. */
+    /**
+     * The names of the units the document in progress defines, for the evaluator to tell whether a pass removed one.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
+     */
     userUnitNames(): string[] {
         return this.userUnits.names;
     }
@@ -2504,6 +2620,8 @@ export class ExpressionEngine {
      *
      * @param lineId - The persistent id of the line being deleted.
      * @returns Whether the line had defined anything.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
      */
     undefineUserUnitsFrom(lineId: number): boolean {
         return this.userUnits.undefineFrom(lineId);
@@ -2524,6 +2642,8 @@ export class ExpressionEngine {
      * other line's leaves it in place.
      *
      * @param lineId - The persistent id of the line.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
      */
     undefineEquationsFrom(lineId: number): void {
         if (lineId < 0) return;
@@ -2562,12 +2682,17 @@ export class ExpressionEngine {
      * bytecode built around it. Losing the definition has to reach that bytecode
      * or the conversion goes on working from a definition the document no longer
      * contains.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
      */
     invalidateForRemovedUserUnits(): void {
         this.clearCompiledCache();
         this.documentModel?.invalidateAll();
     }
 
+    /**
+     * The async resolution batcher, which re-runs a line when a value it waits on lands. A host sets `onLineResult` on it to hear each re-run line (see the live-editor guide); the evaluator reaches it as a seam.
+     */
     getBatcher(): AsyncResolutionBatcher {
         return this.batcher;
     }
@@ -2661,6 +2786,7 @@ export class ExpressionEngine {
             asConverterNames: [] as string[],
             normalizerRuleNames: [] as string[],
             callFusionNames: [] as string[],
+            unitAliases: false,
         };
 
         // Only lexerVocabulary can throw here (built-in keyword/operator/unit
@@ -2689,6 +2815,10 @@ export class ExpressionEngine {
                 }
             }
         }
+        // Checked before anything is written, like the call words above: an
+        // alias the lexer already reads as something else never reaches the
+        // alias rule, and one naming no unit could only ever be refused (#762).
+        if (pkg.unitAliases) this.assertUnitAliases(pkg);
         if (pkg.lexerVocabulary) {
             this.lexer.registerVocabulary(pkg.lexerVocabulary);
         }
@@ -2748,16 +2878,20 @@ export class ExpressionEngine {
         }
         if (pkg.tokenCategories) {
             for (const [tokenType, category] of Object.entries(pkg.tokenCategories)) {
-                registerTokenCategory(tokenType, category);
+                this.context.tokenCategories.set(tokenType, category);
                 contribution.tokenCategories.push(tokenType);
             }
         }
         if (pkg.completionItems) {
             this.packageCompletionItems.set(pkg.name, pkg.completionItems);
         }
+        if (pkg.unitAliases) {
+            for (const [word, unit] of Object.entries(pkg.unitAliases)) this.unitAliases.add(pkg.name, word, unit);
+            contribution.unitAliases = true;
+        }
         if (pkg.asConverters) {
             for (const [name, handler] of Object.entries(pkg.asConverters)) {
-                registerAsConverter(name, handler);
+                this.context.asConverters.register(name, handler);
                 contribution.asConverterNames.push(name);
             }
         }
@@ -2783,11 +2917,11 @@ export class ExpressionEngine {
     /**
      * Unregister a package previously registered via {@link registerPackage}.
      *
-     * Reverses the package's contributions to the SHARED registries, plugin
-     * functions (pluginFunctionRegistry), variable sources
-     * (this engine's variable resolver), async resolvers, and now
-     * token highlight categories (TokenCategoryMap), which registerPackage
-     * wrote into process-wide state. Also reverts
+     * Reverses the package's contributions to this engine's registries: plugin
+     * functions, variable sources (this engine's variable resolver), async
+     * resolvers, `as` converters, unit aliases and token highlight categories,
+     * all held on this engine's context, so another engine holding the same
+     * package keeps its own (#710). Also reverts
      * the package's lexer plugin (custom keyword/operator token types
      * revert to generic IDENT/ERROR, matching ExpressionLexer.unregisterVocabulary()'s
      * own contract). This engine-instance-local registration is reversed
@@ -2834,13 +2968,13 @@ export class ExpressionEngine {
             this.resolverRegistry.unregister(namespace);
         }
         for (const tokenType of contribution.tokenCategories) {
-            unregisterTokenCategory(tokenType);
+            this.context.tokenCategories.delete(tokenType);
         }
         if (contribution.lexerVocabulary) {
             this.lexer.unregisterVocabulary(contribution.lexerVocabulary);
         }
         for (const name of contribution.asConverterNames) {
-            unregisterAsConverter(name);
+            this.context.asConverters.unregister(name);
         }
         for (const ruleName of contribution.normalizerRuleNames) {
             this.normalizer.unregister(ruleName);
@@ -2857,6 +2991,7 @@ export class ExpressionEngine {
                 this.callFusions.set(name, remaining[remaining.length - 1].tokenType);
             }
         }
+        if (contribution.unitAliases) this.unitAliases.removeOwner(packageName);
         this.packageCompletionItems.delete(packageName);
 
         this.packageContributions.delete(packageName);
@@ -2878,9 +3013,14 @@ export class ExpressionEngine {
      * Includes all defaults merged with any constructor overrides.
      * Useful for introspection, lets consumers see what values are actually
      * in effect after merging with DEFAULT_CONFIG.
+     *
+     * A copy all the way down: changing a setting on what this returns changes
+     * nothing in the engine. It used to copy the top level only, so
+     * `getConfig().performance.maxDocumentLines = 1` set the engine's own limit
+     * and its next two-line document was refused (#761).
      */
     getConfig(): EngineConfig {
-        return { ...this.config };
+        return copyPlain(this.config);
     }
 
     /**
@@ -3073,6 +3213,10 @@ export class ExpressionEngine {
 
     /**
      * Get the underlying diagnostic pipeline for advanced usage.
+     *
+     * @internal Engine plumbing shared with the language service and the evaluator, not host API; it leaves the published types in 3.0 (#761).
+     *
+     * @deprecated Read a line's stages through {@link evaluateLineWithDebug} or {@link traceLine}. Removed in 3.0.
      */
     getDiagnosticPipeline(): DiagnosticPipeline {
         return this.diagnosticPipeline;
@@ -3217,6 +3361,8 @@ export class ExpressionEngine {
      * data sources and line positions, and none of those is a VM binding.
      *
      * @param orphaned - Keys that just lost their last writer in the graph.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
      */
     forgetOrphanedNames(orphaned: readonly string[]): void {
         if (orphaned.length === 0) return;
@@ -3243,6 +3389,8 @@ export class ExpressionEngine {
      * The reader of a forgotten name updates on the following pass, which an
      * editor makes anyway. It is not made to happen sooner because every way of
      * doing that answers the question before it can be answered correctly.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
      */
     settleOrphanedNames(): void {
         const candidates = this.orphanCandidates;
@@ -3333,7 +3481,6 @@ export class ExpressionEngine {
         // shared inert signal otherwise. See armCancellation.
         const unlink = this.armCancellation(program, "executeAndStore");
 
-        setActiveQueryClient(this.queryClient);
         this.beginLineRandom(program, lineNumber);
         const result = executeBytecode(program, this.vm, tracePipeline, traceExpression, this.makeLineContext(lineNumber));
 
@@ -3429,7 +3576,6 @@ export class ExpressionEngine {
         // that can have work in flight, the shared inert signal otherwise.
         const unlink = this.armCancellation(program, "executeRaw");
 
-        setActiveQueryClient(this.queryClient);
         this.beginLineRandom(program, lineNumber);
         const lineContext = this.makeLineContext(lineNumber);
         const context = observeCall === undefined ? lineContext : { ...lineContext, observeCall };
@@ -4399,6 +4545,8 @@ export class ExpressionEngine {
      * of each pass; the incremental {@link ThreeTierEvaluator} calls it and
      * then marks the lines that touch each name dirty, since it re-runs lines
      * selectively rather than replaying the whole document.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
      */
     resetAccumulators(): ReadonlySet<string> {
         for (const name of this.accumulatorNames) this.vm.deleteVar(name);
@@ -6131,21 +6279,46 @@ export class ExpressionEngine {
         return result;
     }
 
+    /**
+     * The dependency graph between this engine's lines and names.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
+     *
+     * @deprecated The live graph the engine evaluates through: a host that edits it changes the engine's answers. Ask the language service (`getReferences`, `keysInUse`) for what reads what. Removed in 3.0.
+     */
     getDag(): DependencyGraph {
         return this.dag;
     }
 
+    /**
+     * The per-line result cache the incremental path runs from.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
+     *
+     * @deprecated The live cache the engine answers from. Read {@link getCacheSnapshot} for what is cached. Removed in 3.0.
+     */
     getLineCache(): LineCache {
         return this.lineCache;
     }
 
+    /**
+     * A copy of the compiled-program cache, keyed by expression text.
+     *
+     * @internal Kept for its specs; no engine path reads it (#761).
+     *
+     * @deprecated It used to hand out the live map the engine compiles through, so one `set` made `2 + 2` answer 9 (#761); it returns a copy now, which the engine never reads. Read {@link getCacheSnapshot} for the cache's size and hit rate. Removed in 3.0.
+     */
     getBytecodeCache(): Map<string, BytecodeProgram> {
-        return this.bytecodeCache;
+        return new Map(this.bytecodeCache);
     }
 
     /**
      * Get the shared VM instance.
      * Used by VMCheckpointer to create/restore checkpoints.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
+     *
+     * @deprecated The live VM: a host that resets it or writes a variable into it changes the engine's answers. Read {@link getContext} for the engine's registries, and evaluate a line to read a value. Removed in 3.0.
      */
     getVM(): VM {
         return this.vm;
@@ -6168,10 +6341,41 @@ export class ExpressionEngine {
         return this.context;
     }
 
+    /**
+     * A token type's highlight category as this engine reads it: the category a
+     * registered package declared for its own token type
+     * (`IEnginePackage.tokenCategories`), then the built-in table.
+     *
+     * Per engine (#710): the module-level `getTokenCategory` read one table for
+     * the whole process, so one engine unregistering a package took the
+     * category away from another engine still holding it. The language service's
+     * own `getTokenCategory` reads this one.
+     *
+     * @param tokenType - The token's type (`CHECK`, `UNIT`).
+     * @returns The category, or `undefined` for a type that renders unstyled.
+     */
+    getTokenCategory(tokenType: string): TokenCategory | undefined {
+        return this.context.tokenCategories.get(tokenType);
+    }
+
+    /**
+     * The scope manager for `global :name` cells.
+     *
+     * @internal Engine plumbing shared with the language service and the evaluator, not host API; it leaves the published types in 3.0 (#761).
+     *
+     * @deprecated Engine plumbing with no host use. Removed in 3.0.
+     */
     getScopeManager(): ScopeManager {
         return this.scopeManager;
     }
 
+    /**
+     * This engine's lexer, with every vocabulary its packages registered.
+     *
+     * @internal Engine plumbing shared with the language service and the evaluator, not host API; it leaves the published types in 3.0 (#761).
+     *
+     * @deprecated Read a line's tokens through {@link tokenizeForClassification} or the language service. Removed in 3.0.
+     */
     getLexer(): Lexer {
         return this.lexer;
     }
@@ -6185,6 +6389,10 @@ export class ExpressionEngine {
      * timecode, a package's own fused token) by running the same normalizer
      * evaluation runs. Sharing this instance rather than building a second one
      * is what keeps the two from disagreeing.
+     *
+     * @internal Engine plumbing shared with the language service and the evaluator, not host API; it leaves the published types in 3.0 (#761).
+     *
+     * @deprecated Read a line's normalised tokens through {@link tokenizeForClassification} or the language service. Removed in 3.0.
      */
     getNormalizer(): TokenNormalizer {
         return this.normalizer;
@@ -6243,10 +6451,20 @@ export class ExpressionEngine {
         return this.normalizer.normalize(exprTokens);
     }
 
+    /**
+     * This engine's parser.
+     *
+     * @internal Engine plumbing shared with the language service and the evaluator, not host API; it leaves the published types in 3.0 (#761).
+     *
+     * @deprecated Engine plumbing with no host use; {@link explainLine} and {@link traceLine} show how a line was read. Removed in 3.0.
+     */
     getParser(): PrecedenceParser {
         return this.parser;
     }
 
+    /**
+     * Whether the engine was built with `diagnostics: true`, so a line evaluated through {@link evaluateLineWithDebug} carries its pipeline stages.
+     */
     isDiagnosticMode(): boolean {
         return this.diagnosticPipeline.hasCollectors;
     }
@@ -6264,6 +6482,8 @@ export class ExpressionEngine {
      * all in-flight async work is canceled atomically.
      *
      * @param signal The keystroke's AbortSignal, or null to clear.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
      */
     setKeystrokeSignal(signal: AbortSignal | null): void {
         if (signal) {
@@ -6508,7 +6728,6 @@ export class ExpressionEngine {
         const randomProgram = this.randomProgram;
         const randomStream = this.randomStream;
         const randomLine = this.randomLine;
-        const activeQueryClient = getActiveQueryClient();
 
         this.scratch = { dag: null, lineContext: null };
         this.vm = createScratchVM(vm);
@@ -6526,7 +6745,6 @@ export class ExpressionEngine {
             this.randomProgram = randomProgram;
             this.randomStream = randomStream;
             this.randomLine = randomLine;
-            setActiveQueryClient(activeQueryClient);
         }
     }
 
@@ -6741,6 +6959,8 @@ export class ExpressionEngine {
      * -1 (the default) when it belongs to none.
      * @returns Object with compiled `program`, lexed `tokens`, and extracted `reads`/`writes`.
      * @throws ErrorFactory on parse failure or safety check failure.
+	 *
+	 * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
      */
 	compileExpression(expression: string, lineNumber: number = -1): {
 		program: BytecodeProgram;
@@ -6869,6 +7089,8 @@ export class ExpressionEngine {
 	 * it evaluates to. {@link compileExpression} is unchanged and still applies
 	 * a line's effect, since the incremental evaluator compiles through it and
 	 * relies on the effect happening.
+	 *
+	 * @internal Engine plumbing shared with the language service and the evaluator, not host API; it leaves the published types in 3.0 (#761).
 	 */
 	tryCompileExpression(expression: string): boolean {
 		try {
@@ -6918,6 +7140,8 @@ export class ExpressionEngine {
 	 * @returns The normalised tokens and the first one the parser reads, or
 	 *   null when the text is not an expression: prose, a half-typed line, or a
 	 *   line over the length or complexity limit.
+	 *
+	 * @internal Engine plumbing shared with the language service and the evaluator, not host API; it leaves the published types in 3.0 (#761).
 	 */
 	readExpressionTokens(expression: string, units: readonly DocumentUnit[] = []): ExpressionTokens | null {
 		if (expression.length > this.config.validation.maxExpressionLength) return null;
@@ -7061,6 +7285,8 @@ export class ExpressionEngine {
 	 * @returns The execution result, or undefined if bytecode is empty.
 	 * @param lineNumber - 1-based line this bytecode belongs to, for
 	 * cross-line features (see `makeLineContext()`). Defaults to -1.
+	 *
+	 * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
 	 */
 	executeCached(program: BytecodeProgram, lineNumber: number = -1): Value {
 		if (program.opcodes.length === 0) {

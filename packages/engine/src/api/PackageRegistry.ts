@@ -175,8 +175,9 @@ export interface IEnginePackage {
    * (`percent`, `decimal`, `hex`, `fraction`, `multiplier`, `sci`,
    * `binary`, `octal`, ...) dispatch to dedicated fast opcodes; anything
    * else, including any name a third-party package registers here
-   * resolves through `OpCode.CALL_AS_CONVERTER` against
-   * `vm/VMBuiltins.ts`'s `asConverterRegistry` at runtime. No lexer
+   * resolves through `OpCode.CALL_AS_CONVERTER` against the engine's own
+   * registry (`EngineContext.asConverters`) at runtime, so a converter
+   * answers only on the engines its package is registered on. No lexer
    * keyword registration is needed for a custom name: the AS parselet
    * accepts any bare-word token after "as" and reads its raw text.
    *
@@ -193,6 +194,30 @@ export interface IEnginePackage {
    * ```
    */
   asConverters?: Record<string, AsConverter>;
+  /**
+   * Words for units the engine already has, each to the unit it means, for a
+   * package that reads another language or another trade's names: `Meile` for
+   * the mile, `Tage` for days. An alias is read where a unit is read, after a
+   * value (`2 Meile`) and as the target of `in`, `into` or `to` (`5 km in
+   * Meile`), and the answer is shown under the word the reader wrote
+   * (`= 3.11 Meile`), while the quantity converts and adds as the unit does.
+   *
+   * Each key is matched exactly as written, case included, and nothing is
+   * guessed for a plural: list each form a reader writes (`Meile`, `Meilen`).
+   * Each value is a unit the engine reads on its own (`mile`, `days`, `kg`).
+   * Registration refuses a word the engine already reads as something else
+   * (a unit, a keyword, a function) and a unit it does not read, with
+   * `PLUGIN_UNIT_ALIAS_UNREACHABLE` and `PLUGIN_UNIT_ALIAS_TARGET_UNKNOWN`. A
+   * word a document defines as a unit of its own means what the document
+   * says. Two packages aliasing one word is a compatibility warning; the later
+   * wins, and unregistering it hands the word back.
+   *
+   * @example
+   * ```ts
+   * unitAliases: { Meile: "mile", Meilen: "miles", Tage: "days" }
+   * ```
+   */
+  unitAliases?: Readonly<Record<string, string>>;
   /**
    * Describe this package's own steps when a host explains a line
    * (`ExpressionEngine.explainLine()`), so a conversion, a function call or a
