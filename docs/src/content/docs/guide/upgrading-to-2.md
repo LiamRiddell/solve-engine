@@ -222,7 +222,11 @@ import { pluginFunctionIndexFor } from "solve-engine/vm";
 const idx = pluginFunctionIndexFor(`${packageName}:myFn`);
 ```
 
-The `examples/osrs` Grand Exchange resolver is the worked example.
+The [package starter](https://github.com/LiamRiddell/solve-engine/tree/main/examples/package-starter),
+a package that depends on `solve-engine` by name and imports only its public
+entry points, is the worked example of a package written against 2.x: a
+function, a phrase, an `as` converter and a live lookup, each tested with
+`solve-engine/testing`.
 
 ## Snapshots carry their packages
 

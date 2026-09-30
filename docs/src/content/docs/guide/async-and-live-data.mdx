@@ -77,6 +77,44 @@ async function watch(engine: ExpressionEngine, onChange: (lines: number[]) => vo
 Because the stream applies backpressure, a slow consumer cannot be flooded: the
 engine buffers up to a limit and waits rather than growing without bound.
 
+## Waiting for every value to settle
+
+An editor reacts to each event as it arrives. A script, a test or a server that
+answers one request has nothing to repaint: it wants the settled answer and is
+happy to wait for it. `settle()` is that wait. It resolves once no fetch the
+engine started is still in flight and the lines those fetches fed have been
+evaluated again, so the next evaluation gives the settled value.
+
+```ts
+const engine = createEngine();
+
+engine.evaluateExpression("10 USD to GBP"); // Pending: this starts the fetch
+await engine.settle({ timeoutMs: 5_000 });
+engine.evaluateExpression("10 USD to GBP"); // the converted amount
+```
+
+It rejects rather than hands back a Pending line as if it were settled: at the
+deadline it rejects with the coded error `SETTLE_TIMEOUT`, whose context says how
+many values were still in flight, and a `timeoutMs` that is not a finite number
+of zero or more is refused with `SETTLE_TIMEOUT_INVALID`. The deadline is 10,000
+ms when none is given. With nothing in flight it resolves at once.
+
+What it deliberately does not do:
+
+- **It starts nothing.** It waits for the fetches an evaluation has already
+  started, so evaluate first. It does not wait for a background refresh or its
+  next tick, which by design never finishes.
+- **It never evaluates.** A line whose first fetch reveals a second one needs
+  another evaluation and another `settle()`. The testing kit's `toResolveTo`
+  runs that loop within one deadline (see [testing a
+  package](/packages/testing-a-package/#live-values)).
+- **It does not outlast `clear()`.** Clearing the engine discards what was in
+  flight, and a waiting `settle()` resolves then. A fetch that lands after the
+  clear is dropped, so it cannot re-run a line of the next document.
+
+The worker client has the same call (`await worker.settle()`), and its settled
+values arrive through `onResolved` as ever.
+
 ## Refreshing on a schedule
 
 By default a live value refreshes only when its line is re-evaluated: `staleTime`

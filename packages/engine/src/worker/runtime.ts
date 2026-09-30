@@ -15,6 +15,10 @@
 
 import { splitLines } from "@solve-js/utilities/Strings";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import { evaluateDocument } from "@solve-js/engine/evaluateDocument";
+import { LanguageService } from "@solve-js/language/LanguageService";
+import type { DocumentPosition, LineShift } from "@solve-js/language/DocumentReferences";
+import type { ParsingResult } from "@solve-js/types/ParsingResult";
 import type { AsyncResolutionEvent } from "@solve-js/engine/AsyncResolutionBatcher";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
@@ -26,7 +30,7 @@ import {
 	serializeEngineError,
 	WorkerErrorCodes,
 } from "@solve-js/errors";
-import { serializeParsingResult, serializeParsedLine, serializeValue } from "./serialize";
+import { serializeParsingResult, serializeParsedLine, serializeValue, serializeExplanation, serializeLineTrace } from "./serialize";
 import type { WorkerTransport } from "./transport";
 import type {
 	MainToWorkerMessage,
@@ -34,7 +38,24 @@ import type {
 	RequestMessage,
 	WorkerToMainMessage,
 	AsyncResolvedLine,
+	WorkerMethod,
+	WorkerWhatIfOverrides,
 } from "./protocol";
+
+/**
+ * The methods that evaluate a document of their own, and so make it the
+ * worker's current one: its lines are the ones a later async resolution is
+ * re-read from, and the previous document's in-flight lookups are dropped.
+ * The rest (a what-if, an explanation, a settle, the editor calls) read or
+ * re-run what is there without replacing it.
+ */
+const DOCUMENT_METHODS: ReadonlySet<WorkerMethod> = new Set<WorkerMethod>([
+	"parseDocument",
+	"evaluateLines",
+	"evaluateExpression",
+	"evaluateDocument",
+	"traceLine",
+]);
 
 /** Options a host bakes into its own worker entry: its custom packages, and its calendar backend. */
 export interface WorkerRuntimeOptions {
@@ -92,6 +113,12 @@ export function startWorkerRuntime(transport: WorkerTransport, options: WorkerRu
 
 	let engine: ExpressionEngine | null = null;
 	let formatting: FormattingSettings | undefined;
+	// Built on the first editor call, so a host that only evaluates never
+	// constructs it.
+	let languageService: LanguageService | null = null;
+	// The last whole document evaluated here and its result, so a trace of the
+	// same text reads the answers already computed rather than evaluating again.
+	let lastDocument: { text: string; result: ParsingResult } | null = null;
 	// One AbortController per in-flight request, so a `cancel` can map onto the
 	// engine's keystroke signal for exactly the request the caller aborted.
 	const inFlight = new Map<number, AbortController>();
@@ -127,7 +154,7 @@ export function startWorkerRuntime(transport: WorkerTransport, options: WorkerRu
 	 */
 	const retainLines = (message: RequestMessage): Map<number, string> => {
 		const map = new Map<number, string>();
-		if (message.method === "parseDocument") {
+		if (message.method === "parseDocument" || message.method === "evaluateDocument" || message.method === "traceLine") {
 			splitLines(message.args[0] as string).forEach((text, index) => map.set(index + 1, text));
 		} else if (message.method === "evaluateLines") {
 			(message.args[0] as string[]).forEach((text, index) => map.set(index + 1, text));
@@ -228,11 +255,59 @@ export function startWorkerRuntime(transport: WorkerTransport, options: WorkerRu
 		}
 	};
 
+	/** The language service over the worker's engine, built on first use. */
+	const language = (eng: ExpressionEngine): LanguageService => {
+		languageService ??= new LanguageService(eng);
+		return languageService;
+	};
+
+	/** A whole document's result, evaluated through the incremental pass (goal seek included) unless it is the one just evaluated. */
+	const documentResult = (eng: ExpressionEngine, text: string): ParsingResult => {
+		if (lastDocument !== null && lastDocument.text === text) return lastDocument.result;
+		const result = evaluateDocument(eng, text);
+		lastDocument = { text, result };
+		return result;
+	};
+
 	const runMethod = (eng: ExpressionEngine, message: RequestMessage): unknown => {
 		const { method, args } = message;
 		switch (method) {
-			case "parseDocument":
-				return serializeParsingResult(eng.parseDocument(args[0] as string, args[1] as never), formatting);
+			case "parseDocument": {
+				const result = eng.parseDocument(args[0] as string, args[1] as never);
+				// The batch pass cannot answer goal seek, so a trace of this text
+				// re-evaluates through the incremental pass rather than reading it.
+				lastDocument = null;
+				return serializeParsingResult(result, formatting);
+			}
+			case "evaluateDocument": {
+				const text = args[0] as string;
+				const result = evaluateDocument(eng, text);
+				lastDocument = { text, result };
+				return serializeParsingResult(result, formatting);
+			}
+			case "whatIf":
+				return serializeParsingResult(eng.whatIf(args[0] as string, args[1] as WorkerWhatIfOverrides), formatting);
+			case "explainLine":
+				return serializeExplanation(eng.explainLine(args[0] as string), formatting);
+			case "traceLine": {
+				const document = documentResult(eng, args[0] as string);
+				const options = (args[2] ?? {}) as { maxDepth?: number; maxLines?: number };
+				return serializeLineTrace(eng.traceLine(args[1] as number, { document, maxDepth: options.maxDepth, maxLines: options.maxLines }), formatting);
+			}
+			case "settle":
+				return eng.settle(args[0] as { timeoutMs?: number }).then(() => null);
+			case "getSemanticTokens":
+				return language(eng).getSemanticTokens(args[0] as string, args[1] as number);
+			case "getCompletions":
+				return language(eng).getCompletions(args[0] as string, args[1] as number);
+			case "findReferences":
+				return language(eng).findReferences(args[0] as string, args[1] as DocumentPosition);
+			case "getDefinition":
+				return language(eng).getDefinition(args[0] as string, args[1] as DocumentPosition);
+			case "rename":
+				return language(eng).rename(args[0] as string, args[1] as DocumentPosition, args[2] as string);
+			case "shiftLineReferences":
+				return language(eng).shiftLineReferences(args[0] as string, args[1] as LineShift);
 			case "evaluateLines":
 				return eng.evaluateLines(args[0] as string[]).map((line) => serializeParsedLine(line, formatting));
 			case "evaluateExpression":
@@ -261,33 +336,49 @@ export function startWorkerRuntime(transport: WorkerTransport, options: WorkerRu
 			return;
 		}
 
-		// Supersede the previous document: abort its controller so any resolution
-		// still in flight for it is dropped at the engine's staleness guard rather
-		// than posted home as if it belonged to this request's document. The old
-		// retained lines go with it. Every evaluate call shares one engine and one
-		// document context, so the most recent call is the live one.
-		documentController?.abort();
-
-		// This request's controller doubles as the document controller: wired in as
-		// the keystroke signal so a later `cancel` (or the next supersede) aborts
-		// the async work this evaluation fires, the same mechanism a host uses on
-		// the main thread. It is deliberately NOT aborted when the request settles,
-		// so this document's live values can still resolve and stream back.
 		const controller = new AbortController();
-		documentController = controller;
-		retainedLines = retainLines(message);
 		inFlight.set(message.id, controller);
-		eng.setKeystrokeSignal(controller.signal);
+		const replacesDocument = DOCUMENT_METHODS.has(message.method);
+		if (replacesDocument) {
+			// Supersede the previous document: abort its controller so any
+			// resolution still in flight for it is dropped at the engine's
+			// staleness guard rather than posted home as if it belonged to this
+			// request's document. The old retained lines go with it. Every
+			// evaluate call shares one engine and one document context, so the
+			// most recent call is the live one.
+			documentController?.abort();
 
+			// This request's controller doubles as the document controller: wired
+			// in as the keystroke signal so a later `cancel` (or the next
+			// supersede) aborts the async work this evaluation fires, the same
+			// mechanism a host uses on the main thread. It is deliberately NOT
+			// aborted when the request settles, so this document's live values
+			// can still resolve and stream back.
+			documentController = controller;
+			retainedLines = retainLines(message);
+			eng.setKeystrokeSignal(controller.signal);
+		}
+
+		let value: unknown;
 		try {
-			const value = runMethod(eng, message);
-			post({ kind: "result", id: message.id, value });
+			value = runMethod(eng, message);
 		} catch (error) {
 			fail(message.id, error);
+			return;
 		} finally {
-			inFlight.delete(message.id);
-			eng.setKeystrokeSignal(null);
+			if (replacesDocument) eng.setKeystrokeSignal(null);
+			if (!(value instanceof Promise)) inFlight.delete(message.id);
 		}
+		if (value instanceof Promise) {
+			// A settle waits worker-side; its answer is posted when it lands, and
+			// a failure (the coded timeout) reaches the caller the same way.
+			value.then(
+				(settled) => post({ kind: "result", id: message.id, value: settled }),
+				(error: unknown) => fail(message.id, error),
+			).finally(() => inFlight.delete(message.id));
+			return;
+		}
+		post({ kind: "result", id: message.id, value });
 	};
 
 	transport.onMessage((raw) => {
@@ -316,6 +407,8 @@ export function startWorkerRuntime(transport: WorkerTransport, options: WorkerRu
 		retainedLines = new Map();
 		for (const controller of inFlight.values()) controller.abort();
 		inFlight.clear();
+		languageService = null;
+		lastDocument = null;
 		engine?.clear();
 		engine = null;
 		transport.terminate();

@@ -24,10 +24,11 @@ Each key is a word as a reader writes it; each value is a unit the engine reads
 on its own. Here is a package that reads four German words:
 
 ```ts
-import type { IEnginePackage } from "solve-engine";
+import { createEngine, type IEnginePackage } from "solve-engine";
 
 export const germanUnits: IEnginePackage = {
   name: "german-units",
+  engineVersion: "^2.0.0",
   unitAliases: { Meile: "mile", Meilen: "miles", Tage: "days", Stunden: "hours" },
 };
 

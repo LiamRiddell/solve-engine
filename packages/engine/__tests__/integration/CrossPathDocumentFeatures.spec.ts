@@ -39,6 +39,7 @@ import { applyTextEdits, type LineShift } from "@solve-js/language/DocumentRefer
 import { ValueType } from "@solve-js/vm/Value";
 import type { ParsingResult } from "@solve-js/types/ParsingResult";
 import { newTrackedEngine } from "@tools/trackedEngine";
+import { createLinkedTransports, createWorkerEngine, serializeParsingResult, startWorkerRuntime, type WorkerEngine } from "@solve-js/worker";
 
 /** The formatted result of each line, or `ERROR: <message>` where a line failed, from a document result. */
 function readLines(result: ParsingResult): string[] {
@@ -1526,5 +1527,56 @@ describe("names of several words across entry points (#743)", () => {
     const read = single("hourly rate * 2");
     expect(read.threw).toBe(true);
     expect(read.message).toBe('Expected an operator or the end of the line, but found "rate"');
+  });
+});
+
+// The worker is a further entry point (#770): `evaluateDocument` through the
+// worker client must agree with the main thread's `evaluateDocument` value for
+// value on every whole-document form, and its `parseDocument` with the main
+// thread's batch pass, goal seek's refusal included.
+describe("the worker as a further path (#770)", () => {
+  const forms: Record<string, string[]> = {
+    "line references": ["10", "20", "line 1 + line 2", "prev * 2", "total above"],
+    "category tags": ["40 #grocery", "20 #grocery", "total of #grocery", "average of #grocery"],
+    "table columns": ["| item | cost |", "| ---- | ---- |", "| rent | 1200 |", "| food | 300 |", "", 'sum of column "cost" in table above'],
+    "goal seek": [":deposit = 100000", ":rate = 4%", "monthly repayment on deposit over 25 years at rate", "solve line 3 for deposit = 900"],
+  };
+
+  /** A worker client and runtime linked on one thread, torn down by the returned function. */
+  async function linkedWorker(): Promise<{ worker: WorkerEngine; stop: () => void }> {
+    const { client, host } = createLinkedTransports();
+    const stopRuntime = startWorkerRuntime(host);
+    const worker = await createWorkerEngine({ transport: client });
+    return { worker, stop: () => { worker.terminate(); stopRuntime(); } };
+  }
+
+  for (const [form, lines] of Object.entries(forms)) {
+    test(`${form}: the worker's evaluateDocument agrees with the main thread's`, async () => {
+      const { worker, stop } = await linkedWorker();
+      try {
+        const text = lines.join("\n");
+        const engine = newTrackedEngine();
+        const main = serializeParsingResult(evaluateDocument(engine, text), engine.getFormattingSettings());
+        expect(await worker.evaluateDocument(text)).toEqual(main);
+        // And its batch pass agrees with the main thread's batch pass.
+        const batchEngine = newTrackedEngine();
+        expect(await worker.parseDocument(text)).toEqual(serializeParsingResult(batchEngine.parseDocument(text), batchEngine.getFormattingSettings()));
+      } finally {
+        stop();
+      }
+    });
+  }
+
+  test("goal seek resolves through the worker's evaluateDocument and refuses through its parseDocument and a lone line", async () => {
+    const { worker, stop } = await linkedWorker();
+    try {
+      const text = forms["goal seek"].join("\n");
+      expect((await worker.evaluateDocument(text)).lines[3].result?.text).toBe("= 170,507.23");
+      expect((await worker.parseDocument(text)).lines[3].result?.errorCode).toBe("GOAL_SEEK_NO_DOCUMENT");
+      const lone = await worker.evaluateExpression("solve line 3 for deposit = 900");
+      expect(lone.errorCode).toBe("GOAL_SEEK_NO_DOCUMENT");
+    } finally {
+      stop();
+    }
   });
 });

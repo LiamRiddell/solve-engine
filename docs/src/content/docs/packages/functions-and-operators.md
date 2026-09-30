@@ -7,13 +7,22 @@ A new function like `double(x)` or a new operator uses three fields together:
 
 - a **prefix parselet** (or an **infix parselet**) parses the syntax into bytecode,
 - a **plugin function** is the handler the virtual machine runs,
-- and the lexer turns the word into a token in the first place (see
-  [adding units and keywords](/packages/units-and-keywords/)).
+- and something turns the word into a token in the first place: for a function
+  called with brackets, a **call word** (`callFusions`), which makes `double` a
+  token only where a `(` follows it (see
+  [recognising phrases and words](/packages/recognising-phrases/)); for an
+  operator, the lexer (see [adding units and keywords](/packages/units-and-keywords/)).
 
-The flow is: the lexer turns `double` into a token, your parselet parses the
-arguments and emits a call, and the VM runs your handler on the evaluated
-arguments and pushes its result. This page walks a complete `double(x)` through
-it.
+The flow is: the normaliser turns `double(` into a call token, your parselet
+parses the arguments and emits a call, and the virtual machine (the part of the
+engine that runs compiled lines) runs your handler on the evaluated arguments and
+pushes its result. This page walks a complete `double(x)` through it.
+
+A call word rather than a lexer keyword, because a keyword claims its word
+everywhere: with `double` as a keyword, `:double = 4` stops defining a variable
+and is refused (`"double" is a word the engine already reads, so it cannot name a
+variable`). A call word fires only before `(` and never after `:`, so the reader
+keeps the word, and `double(21)` still reaches your function.
 
 ## The whole package
 
@@ -48,13 +57,18 @@ class DoubleParselet implements PrefixParselet {
 // 3. The package wires the word, the parselet and the handler together.
 export const DOUBLE_PACKAGE: IEnginePackage = {
   name: "example-double",
-  lexerVocabulary: { keywords: { double: "DOUBLE_KEYWORD" } },
-  prefixParselets: { DOUBLE_KEYWORD: new DoubleParselet() },
+  callFusions: { double: "DOUBLE_CALL" },       // `double` becomes a token only before "("
+  prefixParselets: { DOUBLE_CALL: new DoubleParselet() },
   pluginFunctions: { [DOUBLE_FN]: doubleHandler },
+  tokenCategories: { DOUBLE_CALL: "function" }, // coloured, and offered, as a function
 };
 ```
 
-`double(21)` now reads `42`. The three pieces agree by name: the parselet calls
+`double(21)` now reads `42`, and the word is still free for a variable:
+`:double = 4` now reads `4`. An editor offers `double` as a function when the
+reader types `doub`, since call words are among the completions (see
+[highlighting and completions](/packages/highlighting-and-completions/)). The
+three pieces agree by name: the parselet calls
 `emitPluginCall("double", 1)`, and `pluginFunctions` registers the handler under
 `"double"`. You never write a numeric index, the engine assigns one when it
 registers the package and stores your handler at it, so the emit site and the call

@@ -235,7 +235,7 @@ export class AsyncResolutionBatcher {
 	 * hook it did not need.
 	 */
 	private warnIfUnwired(): void {
-		if (this.onLineResult || this.listenerCount > 0 || this.warnedAboutMissingHook) return;
+		if (this.onLineResult || this.listenerCount > 0 || this.warnedAboutMissingHook || this.isAwaited?.()) return;
 		this.warnedAboutMissingHook = true;
 		console.warn(
 			"[solve-engine] An async result resolved, but nothing is listening for it: no reader " +
@@ -246,6 +246,14 @@ export class AsyncResolutionBatcher {
 			"This warning appears once per batcher.",
 		);
 	}
+
+	/**
+	 * Answers whether someone is waiting on the engine's `settle()`, set by the
+	 * owning engine. A caller awaiting `settle()` re-evaluates once it resolves,
+	 * which is receiving the result, so the unwired warning does not apply to it.
+	 * Null reads as nobody waiting.
+	 */
+	isAwaited: (() => boolean) | null = null;
 
 	/** High-water mark used when (re)creating the event stream. */
 	private readonly highWaterMark: number;

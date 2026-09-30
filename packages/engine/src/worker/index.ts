@@ -35,6 +35,8 @@ export {
 	serializeValue,
 	serializeParsedLine,
 	serializeParsingResult,
+	serializeExplanation,
+	serializeLineTrace,
 } from "./serialize";
 
 export type {
@@ -44,11 +46,15 @@ export type {
 	SerializedInlineSolve,
 	SerializedParsedLine,
 	SerializedParsingResult,
+	SerializedExplanation,
+	SerializedExplanationStep,
+	SerializedLineTrace,
 } from "./dto";
 
 export type {
 	WorkerMethod,
 	WorkerRequestArgs,
+	WorkerWhatIfOverrides,
 	MainToWorkerMessage,
 	WorkerToMainMessage,
 	InitMessage,
