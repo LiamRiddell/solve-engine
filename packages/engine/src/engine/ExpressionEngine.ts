@@ -910,7 +910,76 @@ export class ExpressionEngine {
      * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
      */
     setDocumentModel(doc: DocumentModel | null): void {
+        if (doc !== this.documentModel) this.epoch++;
         this.documentModel = doc;
+    }
+
+    /**
+     * A count bumped whenever this engine starts serving another document: a
+     * different document model wired in ({@link setDocumentModel}), or a
+     * document pass that starts from nothing ({@link beginDocument}, which
+     * `parseDocument`, `evaluateLines` and `evaluateDocument` open with).
+     *
+     * An incremental evaluator keeps what the engine holds between its passes
+     * (the VM's names, the graph, the tables of units and names) as its own
+     * document's. When the count has moved since its last pass, another
+     * document has used the engine in between, and the evaluator takes it back
+     * before reading anything from it; see `ThreeTierEvaluator.evaluate`.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
+     */
+    documentEpoch(): number {
+        return this.epoch;
+    }
+
+    /** See {@link documentEpoch}. */
+    private epoch = 0;
+
+    /**
+     * The names document lines have written since the last {@link beginDocument}:
+     * the variables and functions a note defines, which the next note must not
+     * find. A name set outside a document (`evaluateExpression(":x = 5")`, a
+     * host's own) is not among them.
+     */
+    private readonly documentNames = new Set<string>();
+
+    /**
+     * Start a document pass from nothing an earlier document left behind.
+     *
+     * A document defines units, names of several words, variables, functions
+     * and stored equations, and an engine keeps each until something takes it
+     * away. `parseDocument` rebuilds its units and names top to bottom on
+     * every pass, so a note parsed after another did not read the first
+     * note's units, but it did read its variables: `x * 2` answered 10 on an
+     * engine that had parsed `x = 5`, and 10 on a second parse of `x * 2` over
+     * `x = 5`, where a fresh engine says `x` is undefined. `evaluateDocument`
+     * cleared nothing, so a reused engine carried the units over as well.
+     *
+     * Every document pass opens with this: the tables of units and names are
+     * emptied (and the compiled programs that may have read one with them),
+     * and every variable, function and equation a document line wrote is
+     * removed. What a host set outside a document stays.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
+     */
+    beginDocument(): void {
+        this.epoch++;
+        // Only drop the bytecode cache when the previous pass actually defined
+        // a unit or a name, since its cached programs may have expanded one; a
+        // document that never uses either keeps its cache and pays nothing.
+        if (!this.userUnits.isEmpty || !this.multiWordNames.isEmpty) this.clearCompiledCache();
+        this.userUnits.clear();
+        this.multiWordNames.clear();
+        for (const name of this.documentNames) {
+            this.vm.deleteVar(name);
+            if (this.vm.hasUserFunction(name)) this.vm.deleteUserFunction(name);
+        }
+        this.documentNames.clear();
+        // Every stored equation has an owner line (see noteEquationOwner).
+        for (const variable of this.equationOwners.matrix.keys()) this.vm.deleteEquation(variable);
+        for (const variable of this.equationOwners.scalar.keys()) this.vm.deleteScalarEquation(variable);
+        this.equationOwners.matrix.clear();
+        this.equationOwners.scalar.clear();
     }
 
     /**
@@ -1884,8 +1953,10 @@ export class ExpressionEngine {
      *
      * @param input - The document text.
      * @throws `DOCUMENT_TOO_LARGE` past `performance.maxDocumentLines`.
+     *
+     * @internal An evaluator seam (`evaluateDocument` refuses the same document `parseDocument` does), not host API; it leaves the published types in 3.0 (#761).
      */
-    private assertDocumentSize(input: string): void {
+    assertDocumentSize(input: string): void {
         const maxLines = this.config.performance.maxDocumentLines;
         if (countLines(input, maxLines) > maxLines) {
             throw ErrorFactory.execution(
@@ -2158,7 +2229,47 @@ export class ExpressionEngine {
 
     /** Whether `expression` can be answered without lexing or normalising: both compiled caches hold it, or its parse is known to fail. */
     private frontHalfCached(expression: string): boolean {
+        if (this.cachedReadHidesAName(expression)) return false;
         return (this.compiledFrontHalf.has(expression) && this.bytecodeCache.has(expression)) || this.failedParses.has(expression);
+    }
+
+    /**
+     * Whether the program or parse failure cached for `expression` reads a
+     * name of several words the line now being read may not use (#743).
+     *
+     * The caches are keyed by text, and the same text reads differently above
+     * and below the line that defines `hourly rate`: above it the words are
+     * apart. A program cached from below is not used above, and one compiled
+     * above is never cached (see {@link compiledWithHiddenName}). False, at the
+     * cost of one check, whenever no visibility test is set.
+     */
+    private cachedReadHidesAName(expression: string): boolean {
+        if (this.multiWordNames.isEmpty) return false;
+        const reads = this.compiledFrontHalf.get(expression)?.reads ?? this.failedParses.get(expression)?.reads;
+        if (reads === undefined) return false;
+        for (const read of reads) if (read.includes(" ") && this.multiWordNames.isHidden(read)) return true;
+        return false;
+    }
+
+    /**
+     * Whether the expression being compiled passed over a name of several words
+     * hidden from its line (#743), which makes what it compiles to right for
+     * that line only: it is used and not cached. Set as each compile normalises.
+     */
+    private compiledWithHiddenName = false;
+
+    /**
+     * Limit the names of several words a line may read to those a line above
+     * it defines, or lift the limit with `null`; see
+     * `MultiWordNameTable.setVisibility`.
+     *
+     * @param visible - Given a name's defining line ids, whether the line now
+     * being read may use it.
+     *
+     * @internal An evaluator seam (the incremental evaluator reaches it through `engine/EvaluatorHost.ts`), not host API; it leaves the published types in 3.0 (#761).
+     */
+    setMultiWordNameVisibility(visible: ((definedByLineIds: ReadonlySet<number>) => boolean) | null): void {
+        this.multiWordNames.setVisibility(visible);
     }
 
     /**
@@ -2215,6 +2326,8 @@ export class ExpressionEngine {
      * the bytecode-cache benefit on re-evaluation regardless of config.
      */
     private cacheBytecode(expression: string, program: BytecodeProgram, front: { normalizedTokens: Token[]; reads: string[]; writes: string[] }): void {
+        // Read with a name hidden, so right only above its definition; see compiledWithHiddenName.
+        if (this.compiledWithHiddenName) return;
         const maxEntries = this.compiledCacheCap();
         // A loop rather than one eviction: the cap falls when a smaller
         // document follows a larger one, and the cache comes down to it.
@@ -2267,6 +2380,7 @@ export class ExpressionEngine {
 
     /** Remember a parse failure, evicting the least recently used when full: bounded like the program cache. */
     private rememberFailedParse(expression: string, failure: FailedParse): void {
+        if (this.compiledWithHiddenName) return;
         const maxEntries = this.compiledCacheCap();
         while (this.failedParses.size >= maxEntries) {
             const leastRecent = this.failedParses.keys().next().value;
@@ -3530,6 +3644,8 @@ export class ExpressionEngine {
         writes: string[],
         expression: string,
     ): void {
+        // A document line's own names, for the next document to start without.
+        if (lineNumber >= 1) for (const name of writes) this.documentNames.add(name);
         this.lineCache.set(lineNumber, new LineCacheEntry(
             result,
             program,
@@ -4023,17 +4139,12 @@ export class ExpressionEngine {
      */
     parseDocument(input: string, options: UnifiedParsingOptions = { inputType: 'markdown' }): ParsingResult {
         this.assertDocumentSize(input);
-        // Fresh unit definitions for this pass. A host re-parses the whole
-        // document on each keystroke, so rebuilding the table top-to-bottom is
-        // what keeps a renamed or deleted definition from lingering. Only drop
-        // the bytecode cache when the previous pass actually defined a unit,
-        // since its cached programs may have expanded one, a document that never
-        // uses the feature keeps its cache and pays nothing here.
-        if (!this.userUnits.isEmpty || !this.multiWordNames.isEmpty) this.clearCompiledCache();
-        this.userUnits.clear();
-        // Names of several words likewise (#743): a line reads one only once a
-        // line above it has defined it, on every pass.
-        this.multiWordNames.clear();
+        // Fresh definitions for this pass. A host re-parses the whole document
+        // on each keystroke, so rebuilding the unit and name tables top to
+        // bottom is what keeps a renamed or deleted definition from lingering,
+        // and a line reads a name (#743) or a variable only once a line above
+        // it has defined it, on every pass. See beginDocument.
+        this.beginDocument();
         // Reset running-total accumulators for the same reason units are
         // rebuilt top-to-bottom: a full re-parse must reproduce the first
         // parse. `total += 5` seeds 0 only while the name is undefined, so
@@ -4096,11 +4207,7 @@ export class ExpressionEngine {
      */
     evaluateLines(lines: string[]): ParsedLine[] {
         // A whole-document pass, so definitions start empty (see parseDocument).
-        if (!this.userUnits.isEmpty || !this.multiWordNames.isEmpty) this.clearCompiledCache();
-        this.userUnits.clear();
-        // Names of several words likewise (#743): a line reads one only once a
-        // line above it has defined it, on every pass.
-        this.multiWordNames.clear();
+        this.beginDocument();
         // Reset running-total accumulators for the same reason units are
         // rebuilt top-to-bottom: a full re-parse must reproduce the first
         // parse. `total += 5` seeds 0 only while the name is undefined, so
@@ -5234,7 +5341,10 @@ export class ExpressionEngine {
         // again. See `compiledFrontHalf` for why this sits first. Not taken
         // when a diagnostics collector is listening for fusion events, which
         // only the real normaliser pass can fire.
-        const compiledProgram = this.bytecodeCache.get(expression);
+        this.compiledWithHiddenName = false;
+        // A cached reading of a name this line may not use is not this line's.
+        const cacheHides = this.cachedReadHidesAName(expression);
+        const compiledProgram = cacheHides ? undefined : this.bytecodeCache.get(expression);
         if (compiledProgram && !onFusion) {
             const front = this.compiledFrontHalf.get(expression);
             if (front) {
@@ -5246,7 +5356,7 @@ export class ExpressionEngine {
         // ══ FAILED BEFORE: skip to the effectful tries ══
         // See `failedParses`: the front half is known and the parse is known
         // to throw, but the effectful tries below read the VM and run again.
-        const failed = onFusion ? undefined : this.failedParses.get(expression);
+        const failed = onFusion || cacheHides ? undefined : this.failedParses.get(expression);
 
         let normalizedTokens: Token[];
         if (failed) {
@@ -5279,7 +5389,9 @@ export class ExpressionEngine {
 
             // ══ NORMALIZER ══
             // Phrase fusion, implicit multiply, domain token merging.
+            this.multiWordNames.takeHidden();
             normalizedTokens = this.normalizer.normalize(exprTokens, onFusion);
+            this.compiledWithHiddenName = this.multiWordNames.takeHidden();
 
             // ══ SAFETY CHECK 2: Complexity scoring ══
             const complexityCheck = checkExpressionComplexity(normalizedTokens, this.config.validation);
@@ -7747,6 +7859,8 @@ export class ExpressionEngine {
     //#region State management, Clear / reset
 
     clear(): void {
+        // Whatever an evaluator kept here is gone; see documentEpoch.
+        this.epoch++;
         // Cancel pending batcher flushes and clear listeners to prevent
         // stale re-evaluations from in-flight promises that resolve after clear.
 		// This call is what actually releases per-document state. The batcher is
@@ -7810,6 +7924,7 @@ export class ExpressionEngine {
          this.vm.reset();
          this.userUnits.clear();
          this.multiWordNames.clear();
+         this.documentNames.clear();
          // The reset above emptied both equation stores; their owners go too.
          this.equationOwners.matrix.clear();
          this.equationOwners.scalar.clear();

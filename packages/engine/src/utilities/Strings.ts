@@ -41,6 +41,17 @@ export function splitLines(text: string): string[] {
 }
 
 /**
+ * Whether `text` holds a line break of any kind {@link splitLines} splits at: a
+ * line feed or a carriage return, alone or as a pair.
+ *
+ * @param text - Any text.
+ * @returns True when it holds one.
+ */
+export function hasLineBreak(text: string): boolean {
+	return text.indexOf("\n") !== -1 || text.indexOf("\r") !== -1;
+}
+
+/**
  * The length of the line break that starts at `index`, or 0 when none does.
  *
  * @param text - The document.

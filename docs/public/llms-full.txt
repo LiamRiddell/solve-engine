@@ -1782,6 +1782,13 @@ today - 1 week // Wednesday, March 4, 2026, 12:00:00 PM
 1 Mar 2026 to 1 Jan 2026 // -59 days
 ```
 
+```
+2024-11-02 12:00 in New York + 1 day // Sunday, November 3, 2024, 12:00:00 PM
+2024-11-02 12:00 in New York + 24 hours // Sunday, November 3, 2024, 11:00:00 AM
+2024-10-30 09:00 in New York + 1 week // Wednesday, November 6, 2024, 9:00:00 AM
+2024-01-31 12:00 in Tokyo + 1 month // Thursday, February 29, 2024, 12:00:00 PM
+```
+
 ## date-differences
 
 https://liamriddell.github.io/solve-engine/syntax/date-differences/

@@ -177,17 +177,16 @@ describe("a live edit reaches the reading line", () => {
 		expect(shown.slice(1)).toEqual(["5", "7"]);
 	});
 
-	// Found while testing this change, and not caused by it: on a re-run the
-	// live evaluator lets a line read a name only a line BELOW it defines,
-	// holding the value that line stored on the previous pass. `x + 1` above
-	// `x = 5` answers 6 after any edit, where a pass from scratch says `x` is
-	// undefined, and `y = x + 1` stores 6 rather than the formula. Pinned
-	// until the evaluator hides a forward-only name from the line that reads it.
-	test.failing("a live re-run of the defining line still shows the formula, as a pass from scratch does", () => {
+	// Found while testing this change: on a re-run the live evaluator let a
+	// line read a name only a line BELOW it defines, holding the value that
+	// line stored on the previous pass, so `y = x + 1` stored 6 rather than
+	// the formula. The evaluator now hides such a name from the line that
+	// reads it (see FoundBug_forwardReadsInTheLiveEvaluator.spec.ts).
+	test("a live re-run of the defining line still shows the formula, as a pass from scratch does", () => {
 		expect(afterEdit(["y = x + 1", "x = 5", "y + x"], 2, "x = 6")[0]).toBe("x+1");
 	});
 
-	test.failing("a live edit of the later definition reads the formula with the new value", () => {
+	test("a live edit of the later definition reads the formula with the new value", () => {
 		expect(afterEdit(["y = x + 1", "x = 5", "y + x"], 2, "x = 6")[2]).toBe("13");
 	});
 });
