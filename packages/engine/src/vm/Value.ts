@@ -123,6 +123,17 @@ export type ChartKind = "sparkline" | "plot";
 export type DatetimeGrain = "date" | "datetime" | "instant";
 
 /**
+ * Which name a String drawn from a date holds, so a formatter can write it in
+ * the reader's language: the day of the week (Sunday is 0) or the month
+ * (January is 0), as the calendar backends count them. See
+ * {@link Value.calendarName}.
+ */
+export interface CalendarName {
+	readonly kind: "weekday" | "month";
+	readonly index: number;
+}
+
+/**
  * A chart specification: the DATA to draw, never pixels. One shape holds every
  * visual the engine produces, `[1,2,3] as sparkline` and `plot sin(x) from 0 to
  * 2pi` alike, so a host reads `kind` to choose a renderer and draws `points`
@@ -629,6 +640,18 @@ export class Value {
 	 * {@link recycle} alongside the other sidecars.
 	 */
 	public unspelledUnit?: string;
+	/**
+	 * For a String that is a weekday or month name drawn from a date (`as
+	 * weekday`, `as month`), which name it is.
+	 *
+	 * The text stays the engine's English (`"Tuesday"`), so a comparison with
+	 * `"Tuesday"`, a join with other text and a lookup all read it as before;
+	 * the formatter reads this to write the name in the reader's language
+	 * (`Dienstag` under `de`). Text built from the name (`"on " + x`) is new
+	 * text and carries nothing. A variable holding the name keeps it, through
+	 * {@link clone}. Cleared by {@link recycle} alongside the other sidecars.
+	 */
+	public calendarName?: CalendarName;
 
 	constructor(
 		type: ValueType,
@@ -682,6 +705,8 @@ export class Value {
 		this.frozen = undefined;
 		// A reused Value that once held `planck` must not refuse a quantity later.
 		this.unspelledUnit = undefined;
+		// A reused Value that once held `Tuesday` must not render other text as a weekday.
+		this.calendarName = undefined;
 	}
 
 	/**
@@ -737,6 +762,7 @@ export class Value {
 		if (this.sources !== undefined) out.sources = this.sources;
 		if (this.frozen !== undefined) out.frozen = this.frozen;
 		if (this.unspelledUnit !== undefined) out.unspelledUnit = this.unspelledUnit;
+		if (this.calendarName !== undefined) out.calendarName = { kind: this.calendarName.kind, index: this.calendarName.index };
 		return out;
 	}
 

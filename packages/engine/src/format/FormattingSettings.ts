@@ -33,6 +33,30 @@ export interface FormattingSettings {
   floatResult: {
     decimalPlaces: number;
     enableSeperator: boolean;
+    /**
+     * Whether a number drops the zeros that only pad it out to `decimalPlaces`,
+     * so `1.5` shows as `1.5` and `2.5 km` as `2.5 km` rather than `1.50` and
+     * `2.50 km`. Off by default, and what a missing field reads as. Applies to
+     * a plain number, a list's entries, a quantity and a percentage. Money keeps its currency's
+     * places (`$1.50`), and a line that names its own precision (`3.14159 to
+     * 4 dp`) keeps every place it asked for.
+     */
+    trimTrailingZeros?: boolean;
+    /**
+     * The size from which a number is written compactly, the form `as compact`
+     * writes: `1500000` shows as `1.5M` and `$3,300,000` as `$3.3M`, with the
+     * suffixes `k`, `M`, `B` and `T` the engine reads back. Absent (the
+     * default) never writes one. The figure is rounded to three significant
+     * digits, so `1234567` shows `1.23M`, which reads back as 1,230,000: a host
+     * that copies answers back into a note should leave this off. A threshold
+     * below 1,000 acts as 1,000, since a smaller number has no suffix to take,
+     * and a number of a thousand trillion or more keeps its ordinary form for
+     * the same reason, past the largest suffix (`2^64` stays exact).
+     * Applies to a plain number and a quantity, money included; a line that
+     * names its own precision, and a measurement with a tolerance, keep their
+     * full form.
+     */
+    compactFrom?: number;
   };
   numberResult: {
     decimalSeparatorLocale: string;
@@ -67,6 +91,23 @@ export interface FormattingSettings {
    */
   dateResult?: {
     format: DateOutputFormat;
+  };
+  /**
+   * Whether the words in an answer follow the number locale.
+   *
+   * - `'locale'` (the default, and what a missing group reads as): under a
+   *   locale that is not English, a unit's long name is written in the
+   *   locale's language where `Intl` has one (`3,11 Meilen` under `de`), a
+   *   currency symbol takes the locale's place (`5,00 €`), and a weekday or
+   *   month name answered by `as weekday` or `as month` is the locale's own
+   *   (`Dienstag`). English locales are unchanged.
+   * - `'engine'`: the engine's own spelling everywhere (`3,11 miles`, `€5,00`,
+   *   `Tuesday`), the digits and separators still the locale's. For a host
+   *   that writes answers back into a note, since the engine reads its own
+   *   spelling back in and not every localised one.
+   */
+  wordsResult?: {
+    spelling: "locale" | "engine";
   };
 }
 
@@ -118,6 +159,7 @@ const SETTINGS_GROUPS = [
   "unitOfMeasurementResult",
   "percentageResult",
   "dateResult",
+  "wordsResult",
 ] as const;
 
 /** Keys that would reach an object's prototype if written, never copied from an override. */

@@ -203,6 +203,17 @@ $15/hour as compact // $15/hour
 Money keeps its currency symbol, and a price per unit keeps the unit after a
 slash, as the full answer writes it.
 
+Past the trillions there is no letter left, so a figure of a thousand trillion
+or more is written in scientific notation instead, still to three significant
+figures. It is never given both an exponent and a letter, which would state its
+size twice in two ways.
+
+```solve
+1e20 as compact // 1e+20
+999.95e12 as compact // 1e+15
+$1e308/hour as compact // $1e+308/hour
+```
+
 Both answer text, the way `as scientific` does, so they end a line rather than
 feed further arithmetic.
 
