@@ -160,3 +160,20 @@ describe("adversarial: edge cases", () => {
 		for (const text of ["\r", "\r\r\r", "\r5\r", "5\r\r\n\n\r6", "\r\n\r"]) expectHonestDocument(text);
 	});
 });
+
+describe("the fast path for a document with no carriage return reads it as the full rule does", () => {
+	/** The full rule, the regular expression every path used before the fast path. */
+	const reference = (text: string): string[] => text.split(/\r\n|\r|\n/);
+	const texts = ["", "\n", "\n\n", "a", "a\nb", "a\nb\n", "\na", "a\r\nb", "a\rb", "a\r", "\r\n", "a\n\rb", "x\n".repeat(500)];
+
+	test.each(texts.map((t) => [JSON.stringify(t).slice(0, 40), t]))("%s", (_label, text) => {
+		expect(splitLines(text)).toEqual(reference(text));
+		expect(countLines(text)).toBe(reference(text).length);
+	});
+
+	test("countLines stops as soon as it passes the ceiling, with or without a carriage return", () => {
+		expect(countLines("a\nb\nc\nd", 2)).toBe(3);
+		expect(countLines("a\rb\rc\rd", 2)).toBe(3);
+		expect(countLines("a\nb", 5)).toBe(2);
+	});
+});

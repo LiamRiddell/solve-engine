@@ -34,7 +34,10 @@ const LINE_BREAK = /\r\n|\r|\n/;
  * @returns Its lines, at least one.
  */
 export function splitLines(text: string): string[] {
-	return text.split(LINE_BREAK);
+	// Almost every document has no carriage return, and a native split on the
+	// line feed is several times faster than the regular expression, which a
+	// prose-only note paid for on every pass.
+	return text.indexOf("\r") === -1 ? text.split("\n") : text.split(LINE_BREAK);
 }
 
 /**
@@ -66,6 +69,15 @@ export function lineBreakLengthAt(text: string, index: number): number {
  * with no line break in it is one line, matching `split`.
  */
 export function countLines(text: string, stopAfter: number = Number.MAX_SAFE_INTEGER): number {
+	// The common case, no carriage return: count line feeds with the native
+	// search rather than reading every character.
+	if (text.indexOf("\r") === -1) {
+		let lines = 1;
+		for (let at = text.indexOf("\n"); at !== -1; at = text.indexOf("\n", at + 1)) {
+			if (++lines > stopAfter) return lines;
+		}
+		return lines;
+	}
 	let count = 1;
 	const length = text.length;
 	for (let i = 0; i < length; i++) {
