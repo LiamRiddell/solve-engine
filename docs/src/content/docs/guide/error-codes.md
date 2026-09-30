@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 529 codes, grouped below by the part
+ship. The engine and its built-in packages ship 530 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -116,6 +116,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `BIGINT_POW_LIMIT_EXCEEDED` | thrown | A `^` on a big integer whose exact result would be too large to compute (`2n ^ 100000`). Refused rather than answered as Infinity; a fractional or negative exponent uses doubles instead. |
 | `BIGINT_INEXACT_OPERAND` | thrown | A value with no whole-number form (a fraction, an infinity) meeting a big integer: `1n + 0.5`, `5n / pi`. |
 | `BIGINT_DIVISION_BY_ZERO` | thrown | `10n / 0n` or `10n mod 0n`. A big-integer division is exact, and an exact division by zero has no answer, unlike `1 / 0`, which is Infinity. |
+| `BASE_NOT_FINITE` | as a value | An infinity or a result with no value written in a base: `(1/0) in hex`, `2^4000 in binary`, `hex(1/0)`. It has no digits; a whole number written with `n` (`2n^4000`) keeps every digit. |
 | `INTERNAL_MISSING_FUNCTION_BODY` | thrown | A compiled program naming a function body it does not carry. A compiler or VM fault, worth reporting. |
 | `INTERNAL_MISSING_ANONYMOUS_BODY` | thrown | A compiled program naming a `map` or `reduce` body it does not carry. A compiler or VM fault, worth reporting. |
 | `UNKNOWN_BUILTIN_FUNCTION` | as a value | A compiled call to a built-in function at an index none is registered at. Reachable only through a compiler or snapshot fault; worth reporting. |

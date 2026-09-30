@@ -1,4 +1,4 @@
-import { Value, ValueType, numberValue, boolValue, hexValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, splitValue, type MatrixData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, boolValue, uomValue, errorValue, matrixValue, percentageValue, stringValue, splitValue, type MatrixData } from "@solve-js/vm/Value";
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
@@ -36,7 +36,7 @@ import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { isPhysicalTimeRate, quantityAtRateSeconds, getMeasure } from "@solve-js/uom/UomConverter";
 import { raiseQuantity, rootQuantity, unitPowerUnsupported, asPowerOfLength } from "@solve-js/vm/QuantityPowers";
 import { termInYears, growthFactor, periodicGrowthFactor, amortizeLoan, loanTermsRefused } from "@solve-js/vm/FinanceFormulas";
-import { exactIntegerArithmetic, exactIntegerValue, exactGcdOrLcm, wholeNumberUnchanged, baseConversionOperand, exactIntegerOf } from "@solve-js/vm/ExactIntegers";
+import { exactIntegerArithmetic, exactIntegerValue, exactGcdOrLcm, wholeNumberUnchanged, valueInBase, exactIntegerOf } from "@solve-js/vm/ExactIntegers";
 import { isPrime, nextPrime, modPow, modInverse, factorInteger, formatFactorisation, FACTOR_LIMIT } from "@solve-js/vm/NumberTheory";
 import { exactDecimalPower, exactDecimalTotal, absExactDecimal, roundExactDecimalToWhole, roundRationalToPlaces, compareExactDecimals, negativeBaseRoot, roundHalfAwayFromZero } from "@solve-js/vm/ExactDecimals";
 
@@ -1225,10 +1225,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     // Python's hex()/JS convention of a function returning display text,
     // not a numeric type.
     // An exact integer past the safe range converts from its own digits, as
-    // `as hex` does; see baseConversionOperand() in vm/ExactIntegers.ts.
-    48: (args) => quantitiesRefused("hex", args) ?? hexValue(baseConversionOperand(args[0])),
+    // `as hex` does, and an infinity is refused; see valueInBase() in vm/ExactIntegers.ts.
+    48: (args) => quantitiesRefused("hex", args) ?? valueInBase(args[0], "hex"),
     // bin(n). Same call-syntax shape as hex() above, e.g. bin(10) -> "0b1010".
-    49: (args) => quantitiesRefused("bin", args) ?? hexValue(baseConversionOperand(args[0]), "bin"),
+    49: (args) => quantitiesRefused("bin", args) ?? valueInBase(args[0], "bin"),
     // int(x), coerce ANY value (Number, Percentage, Uom, String, Hex, ...)
     // to a plain integer Number, truncating any fractional part toward
     // zero (Math.trunc semantics: int(5.7) -> 5, int(-5.7) -> -5). Distinct
