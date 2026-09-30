@@ -187,7 +187,7 @@ describe("the operations with no answer say so", () => {
 		// refused): an overflow is Infinity, and Infinity has no whole-number
 		// form either.
 		expect(errorFrom("(1e308 * 10) / 6n").code).toBe("BIGINT_INEXACT_OPERAND");
-		expect(errorFrom("(0/0) + 1n").code).toBe("BIGINT_INEXACT_OPERAND");
+		expect(errorFrom("(1/0 - 1/0) + 1n").code).toBe("BIGINT_INEXACT_OPERAND");
 	});
 });
 

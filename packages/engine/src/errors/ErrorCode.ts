@@ -396,6 +396,8 @@ export const CoreErrorCodes = {
   TEXT_NOT_A_NUMBER: "TEXT_NOT_A_NUMBER",
   /** A remainder with no value: `5 mod 0`, or the remainder of an infinite number. */
   REMAINDER_UNDEFINED: "REMAINDER_UNDEFINED",
+  /** A division with no single answer: `0 / 0` (either zero signed), or an infinity over an infinity. `5 / 0` is ∞ and is not refused. */
+  QUOTIENT_UNDEFINED: "QUOTIENT_UNDEFINED",
   /** A negative number to a fractional power with no real value, as in `(-1)^0.5`, or a negative number's root of even degree. */
   POWER_NO_REAL_VALUE: "POWER_NO_REAL_VALUE",
   /** A function called outside the numbers it is defined for, such as `ln(0)`. The message names the domain. */

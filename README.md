@@ -44,8 +44,10 @@ the documentation, is executed by the test suite. If one of them stops being
 true, the build goes red. A TypeScript snippet in the guides that states its
 result (`formatValue(value); // "= 3,000.00 m"`) is run too, and the few that
 need a network, a worker or a runtime `Temporal` are listed by name with the
-reason. The other TypeScript snippets, here and in the guides, are fragments
-that are not run.
+reason. Every TypeScript snippet in the guides and the package-author pages is
+also type-checked under `strict` against the published entry points, and the
+few sketches that elide what they stand for are listed by name with the reason.
+The TypeScript snippets in this file are fragments, and are not checked.
 
 ## Install
 

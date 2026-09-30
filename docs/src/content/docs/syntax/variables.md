@@ -100,6 +100,20 @@ budgte * 2 // ERROR: Undefined variable: budgte. Did you mean budget?
 sqr(16) // ERROR: Undefined function: sqr. Did you mean sqrt?
 ```
 
+## A value that is still arriving
+
+Some values come from outside the note: a share price, an exchange rate, the
+weather. The first time a line asks for one, the engine starts fetching it and
+the line shows that it is waiting. A variable given such a value waits with it,
+and so does every line that reads the variable: `:price = stock(AAPL)` and then
+`price * 10` or `check price > 100` all show as waiting, rather than calling
+`price` undefined, and all answer once the price arrives. A bare definition
+(`price = stock(AAPL)`) waits and answers the same way.
+
+The boundary: the waiting is only for a value that is on its way. A name the note
+never defines is still undefined, and a fetch that fails answers with its
+error on the line that asked for it.
+
 ## Names of several words
 
 A name can be the words you would say, not only one word: `hourly rate`,

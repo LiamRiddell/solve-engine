@@ -18,12 +18,13 @@
  * Which results qualify is deliberately narrow, and the boundary is provenance:
  *
  * - The operands must be whole numbers within the safe range, or already carry
- *   an exact integer. A number TYPED past the safe range (`1e16`,
- *   `12345678901234567890`) was rounded to a double before the engine saw it,
- *   so exact arithmetic on it would print invented digits as if they were
- *   exact. It keeps its double, which is why `1e16 + 1 - 1e16` is still 0 while
- *   `10^16 + 1 - 10^16` is 1. The `n` suffix is the way to type a large exact
- *   integer.
+ *   an exact integer. A whole number typed in plain digits past the safe range
+ *   (`9007199254740993`) carries its exact integer from the literal (see
+ *   {@link exactWholeLiteral}), since the digits are all there to read. One
+ *   typed in scientific notation (`1e16`) names a double, and a double past
+ *   the safe range may already be a rounding, so exact arithmetic on it would
+ *   print invented digits as if they were exact. It keeps its double, which is
+ *   why `1e16 + 1 - 1e16` is still 0 while `10^16 + 1 - 10^16` is 1.
  * - The result must be finite as a double. Past about 1.8e308 a double has no
  *   finite value, and the answer is Infinity exactly as it was; `2 ^ 100000`
  *   is unchanged. That also bounds the work: a finite result is at most 1,024
@@ -197,4 +198,21 @@ export function wholeNumberUnchanged(v: Value, absolute: boolean): Value | null 
     if (v.type !== ValueType.Number || r === undefined || r.d !== 1n) return null;
     if (absolute && r.n < 0n) return numberValueRational(-(v.value as number), rationalNeg(r));
     return v;
+}
+
+/**
+ * The Value a whole-number literal past the safe range compiles to: a Number
+ * carrying its exact integer, as {@link exactIntegerValue} builds for a result.
+ *
+ * `9007199254740993` is 9,007,199,254,740,993, where the double reads it as
+ * 9,007,199,254,740,992. The parser only sends plain digits here (see
+ * `parser/WholeLiteral.ts`); anything else, which no compiled program holds,
+ * is null rather than a throw from `BigInt`.
+ *
+ * @param digits - The literal's digits, grouping removed.
+ * @returns The exact Number, or null for text that is not plain digits.
+ */
+export function exactWholeLiteral(digits: string): Value | null {
+    if (!/^\d+$/.test(digits)) return null;
+    return exactIntegerValue(BigInt(digits));
 }

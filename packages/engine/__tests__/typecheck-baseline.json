@@ -1,5 +1,5 @@
 {
-	"total": 94,
+	"total": 92,
 	"files": {
 		"__tests__/__mocks__/obsidian.ts": 1,
 		"__tests__/api/EngineVersionPrerelease.spec.ts": 2,
@@ -29,7 +29,6 @@
 		"__tests__/packages/tags/TagQueryNotAMember.spec.ts": 1,
 		"__tests__/packages/weather/WeatherPackage.spec.ts": 2,
 		"__tests__/parser/AssociativityIsDeclared.spec.ts": 2,
-		"__tests__/worker/WorkerHarness.spec.ts": 2,
 		"tools/symbolicTestUtils.ts": 1
 	}
 }

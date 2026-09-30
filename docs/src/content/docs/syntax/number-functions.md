@@ -265,7 +265,8 @@ tangent, so `sin`, `cos`, `tan` and their degree forms refuse one the same way. 
 square root of a negative number is not refused: it has an exact complex answer,
 so `sqrt(-1)` is `i`. Division by zero is left as it was, infinity for `1/0`,
 which is the floating-point standard's defined answer rather than a function's
-missing one.
+missing one; `0/0`, which has no single answer, is refused (see
+[operators](/syntax/operators/)).
 
 ```solve-doc
 sin(1/0) // ERROR: sin(Infinity) has no real value: sin is only defined for finite angles.

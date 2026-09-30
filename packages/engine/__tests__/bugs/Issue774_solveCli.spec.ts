@@ -805,15 +805,16 @@ describe("#774 live values and exiting", () => {
 		const pkg = () => [probePackage(never, { timeoutMs: 200 })];
 		const doc = file("never.md", "1 + 1\n:x = lookup abcde\ncheck x > 1\n");
 		const r = await solve(["--json", "--wait", "100", doc], { packages: pkg() });
-		// A line reading a variable whose value never arrived is not read (the
-		// engine answers "Undefined variable: x" there), and the pending line
-		// above it is what fails the run.
-		expect(json(r).lines.map((l: ReportedAnswer) => l.status)).toEqual(["answered", "pending", "not-read"]);
+		// A line reading a variable whose value never arrived waits with it
+		// (it used to answer "Undefined variable: x", see
+		// FoundBug_pendingVariableReads.spec.ts), and the pending lines are
+		// what fail the run.
+		expect(json(r).lines.map((l: ReportedAnswer) => l.status)).toEqual(["answered", "pending", "pending"]);
 		expect(r.code).toBe(EXIT.FAILED);
 		expect(r.ms).toBeLessThan(2_000);
 		const c = await solve(["check", "--wait", "100", doc], { packages: pkg() });
 		expect(c.code).toBe(EXIT.FAILED);
-		expect(c.out).toContain("1 check: 0 passed, 0 failed, 1 could not be evaluated");
+		expect(c.out).toContain("1 check: 0 passed, 0 failed, 1 still waiting for live data");
 		const direct = await solve(["check", "--wait", "100", file("never-check.md", "check lookup abcde > 1\n")], { packages: pkg() });
 		expect(direct.code).toBe(EXIT.FAILED);
 		expect(direct.out).toContain("1 check: 0 passed, 0 failed, 1 still waiting for live data");

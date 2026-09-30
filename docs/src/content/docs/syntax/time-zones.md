@@ -44,6 +44,32 @@ Francisco is still on the evening before.
 9am Tokyo on 23 September 2026 in San Francisco // 5:00 PM (-1 day)
 ```
 
+### A time kept in a variable
+
+A time you have already worked out, or will use more than once, can sit in a
+variable. Write the variable where the time would go, then the place that time
+is in and `in` the places to show it in. It reads the variable's time of day
+and its date as a clock in the first place, exactly as the written-out time is
+read, and one or several places after `in` work the same way.
+
+```solve-doc
+meeting = 2026-09-23T15:00 // Wednesday, September 23, 2026, 3:00:00 PM
+meeting London in Tokyo // 11:00 PM
+meeting London in rio de janeiro and New York // Rio de Janeiro 11:00 AM, New York 10:00 AM
+(meeting + 1 hour) London in Tokyo // 12:00 AM (+1 day)
+```
+
+The variable has to hold a time. One that holds a number, or anything else, is
+refused by name rather than guessed at, since a zone has nothing to convert in
+it. The place after the variable must be one the engine knows and must be
+followed by `in`, so a variable whose name is a unit (`t`, `m`) or a word
+before an ordinary `in` conversion is read as it always was.
+
+```solve-doc
+t = 5 // 5
+t London in Tokyo // ERROR: A zone after a name converts the time of day it holds, as in "t London in Tokyo" with t = 3pm, and this holds a number.
+```
+
 ## Several zones at once
 
 A team spread across several places rarely asks about just one of them. List the

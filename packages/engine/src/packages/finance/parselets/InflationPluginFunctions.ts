@@ -3,6 +3,7 @@ import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { calendarOf } from "@solve-js/calendar/DateCalendar";
 import { adjustForInflation, CPI_MIN_YEAR, CPI_MAX_YEAR } from "../data/CpiTable";
 import { inflationAmountRefused } from "../data/InflationAmount";
+import { rateAtOrBelowMinusHundred } from "@solve-js/vm/FinanceFormulas";
 
 /**
  * Inflation plugin functions -- registered via IEnginePackage.pluginFunctions
@@ -85,7 +86,7 @@ export function inflationFutureValueHandler(args: Value[], context?: LineExecuti
   const rate = args[2].toNumber();
   const years = futureYear - presentYear(context);
   if (1 + rate <= 0) {
-    return errorValue("INVALID_RATE", `inflationFutureValue: rate ${rate} makes (1 + rate) non-positive`);
+    return rateAtOrBelowMinusHundred(rate, "An inflation rate");
   }
   const amount = amountValue.toNumber();
   const worth = amount / Math.pow(1 + rate, years);

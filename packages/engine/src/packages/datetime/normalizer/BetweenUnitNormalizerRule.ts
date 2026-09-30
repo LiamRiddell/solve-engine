@@ -1,6 +1,9 @@
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 
+/** The tokens that end an amount a unit after them belongs to. */
+const AMOUNT_ENDS: ReadonlySet<string> = new Set(["NUMBER", "RPAREN"]);
+
 /**
  * Fuses `UNIT BETWEEN` → a single `BETWEEN_UNIT` prefix token carrying the
  * unit name as its value (e.g. "days"), so `days between <a> and <b>`
@@ -43,8 +46,10 @@ export function betweenUnitNormalizerRule(priority = 60): NormalizerRule {
       if (unitToken.type !== "UNIT") return null;
       // A unit straight after a number is that quantity's unit, not the
       // start of `days between`: `solve line 2 for d = 3000 m between 0 and
-      // 10` names a range after a target in metres (#739).
-      if (howManyLength === 0 && pos > 0 && tokens[pos - 1]?.type === "NUMBER") return null;
+      // 10` names a range after a target in metres (#739). So is one straight
+      // after a closing bracket: `split 1/2 KWD between 3` reaches here as
+      // `(1/2) KWD between 3`, the fraction bracketed as the amount it is.
+      if (howManyLength === 0 && pos > 0 && AMOUNT_ENDS.has(tokens[pos - 1]?.type ?? "")) return null;
 
       // "how many days until X" reuses the existing UNTIL_UNIT/SINCE_UNIT
       // tokens. This rule only has to drop the "how many" for those, since

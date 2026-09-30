@@ -23,6 +23,16 @@ answer:
 £50,000 salary after tax // £39,519.60
 ```
 
+A salary kept in a variable reads the same. A variable named `salary` is the
+variable, not the word before the phrase, so the two spellings do not collide:
+the word is dropped only when it follows an amount.
+
+```solve-doc
+salary = £50,000 // £50,000.00
+salary after tax // £39,519.60
+salary per month after tax // £3,293.30
+```
+
 `per month after tax` gives the monthly take-home rather than the annual, and
 `monthly after tax` is the same question in one word:
 

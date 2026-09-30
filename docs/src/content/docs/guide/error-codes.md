@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 525 codes, grouped below by the part
+ship. The engine and its built-in packages ship 527 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -306,6 +306,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `TEXT_ARITHMETIC` | as a value | Text used in arithmetic with a number. The message points at `as number` for text that holds a number. |
 | `TEXT_NOT_A_NUMBER` | as a value | `as number` given text that is not a number. |
 | `REMAINDER_UNDEFINED` | as a value | A remainder with no value: `5 mod 0`, or the remainder of an infinite number. |
+| `QUOTIENT_UNDEFINED` | as a value | A division with no single answer: `0 / 0` (either zero signed), or an infinity over an infinity. `5 / 0` is ∞ and is not refused. |
 | `POWER_NO_REAL_VALUE` | as a value | A negative number to a fractional power with no real value, as in `(-1)^0.5`, or a negative number's root of even degree. |
 | `FUNCTION_DOMAIN` | as a value | A function called outside the numbers it is defined for, such as `ln(0)`. The message names the domain. |
 | `FUNCTION_TAKES_NUMBER` | as a value | A function that takes plain numbers given a quantity, as in `sin(1 m)`, or a mix of numbers and quantities. |
@@ -1069,6 +1070,7 @@ In the package as `ERROR_CODE_CATALOGUES.TimezoneErrorCodes`.
 | `TIME_ZONE_SKIPPED_TIME` | as a value | `1:30am London on 29 March 2026 in Tokyo`: the clocks went forward over 1:30, so it never happened in London that day. |
 | `TIME_ZONE_REPEATED_TIME` | as a value | `1:30am London on 25 October 2026 in Tokyo`: the clocks went back over 1:30, so it happened twice and names no one moment. |
 | `TIME_ZONE_EXPECTED_DATE` | as a value | `3pm London on 5 in Tokyo`, or `3pm on 5`: the `on` clause was given something that is not a date. |
+| `TIME_ZONE_EXPECTED_TIME` | as a value | `t London in Tokyo` where `t` holds something that is not a time (`t = 5`): a zone after a name converts the time of day it holds. |
 | `OVERLAP_NEEDS_TWO_ZONES` | as a value | `overlap of 9am to 5pm in London`: one place has nothing to overlap with. |
 | `OVERLAP_HOURS_EMPTY` | as a value | `overlap of 9am to 9am in London and Paris`: hours that start where they end have no length. |
 

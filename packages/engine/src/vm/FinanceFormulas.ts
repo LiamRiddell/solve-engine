@@ -86,6 +86,62 @@ export function loanTermsRefused(principal: number, years: number, rate: number,
 }
 
 /**
+ * A rate as a reader writes it: `0.05` is `5%`, `-1.5` is `-150%`.
+ *
+ * Twelve significant figures, so a rate that came from arithmetic reads
+ * without its floating-point tail; an infinite rate reads as `∞%`, and NaN,
+ * which no refusal reaches (`1 + NaN <= 0` is false), as "an undefined
+ * percentage" rather than `NaN%`.
+ *
+ * @param rate - The rate as a decimal fraction.
+ * @returns The percentage, with its sign.
+ */
+export function ratePercent(rate: number): string {
+	if (Number.isNaN(rate)) return "an undefined percentage";
+	const percent = rate * 100;
+	// A rate past about 1.8e306 has no finite percentage, so it reads as the
+	// infinity it becomes rather than as "Infinity%".
+	if (percent === Number.POSITIVE_INFINITY) return "∞%";
+	if (percent === Number.NEGATIVE_INFINITY) return "-∞%";
+	return `${Number(percent.toPrecision(12))}%`;
+}
+
+/**
+ * The refusal for a rate of -100% or below, in the reader's terms.
+ *
+ * Growing, discounting or taking tax out at such a rate multiplies or divides
+ * by one plus the rate, which is then zero or less, so the answer would be
+ * nothing, infinite, or of the wrong sign. The finance builtins used to say so
+ * under their internal names (`compoundInterest: rate -1.5 makes (1 + rate)
+ * non-positive`), which the reader never typed.
+ *
+ * @param rate - The rate as a decimal fraction.
+ * @param what - What the rate is, as the start of a sentence: `"A rate"`, `"A tax rate"`, `"An inflation rate"`.
+ * @returns The `INVALID_RATE` error Value.
+ */
+export function rateAtOrBelowMinusHundred(rate: number, what = "A rate"): Value {
+	return errorValue("INVALID_RATE", `${what} of ${ratePercent(rate)} cannot be used: it must be more than -100%, since at -100% or less the amount falls to nothing or below.`);
+}
+
+/**
+ * The refusal for compounding that cannot be worked out: interest added fewer
+ * than once a year, or a rate whose share for each period is -100% or below.
+ *
+ * @param rate - The annual rate as a decimal fraction.
+ * @param perYear - How many times a year interest is added.
+ * @returns The `INVALID_RATE` error Value, or undefined when both are usable.
+ */
+export function compoundingRefused(rate: number, perYear: number): Value | undefined {
+	if (!(perYear > 0)) {
+		return errorValue("INVALID_RATE", `Interest must be added at least once a year to compound, not ${perYear} times.`);
+	}
+	if (1 + rate / perYear <= 0) {
+		return errorValue("INVALID_RATE", `A rate of ${ratePercent(rate)} added ${perYear} times a year is ${ratePercent(rate / perYear)} each time, which cannot be used: each must be more than -100%.`);
+	}
+	return undefined;
+}
+
+/**
  * How much one unit grows to at `rate` a year, compounded once a year, over
  * `years`: `(1 + rate)^years`. The factor behind compound growth and, divided
  * into a future sum, behind present value.

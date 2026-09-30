@@ -136,7 +136,7 @@ historical close never.
 
 ```ts
 const stocks = createStocksPackage({
-  fetchQuote: async (ticker, signal) => { /* ... */ },
+  fetchQuote: (ticker, signal) => myQuoteService(ticker, signal), // your source, resolving to a StockQuote
   refetchIntervalMs: 60_000, // refresh an on-screen quote once a minute
 });
 ```

@@ -105,7 +105,7 @@ export interface WorkerAsyncError {
  */
 export interface WorkerEngine {
 	/** Parse a whole document off-thread. Mirrors `ExpressionEngine.parseDocument`. */
-	parseDocument(input: string, options?: UnifiedParsingOptions & WorkerCallOptions): Promise<SerializedParsingResult>;
+	parseDocument(input: string, options?: Partial<UnifiedParsingOptions> & WorkerCallOptions): Promise<SerializedParsingResult>;
 	/** Evaluate an array of lines off-thread. Mirrors `ExpressionEngine.evaluateLines`. */
 	evaluateLines(lines: string[], options?: WorkerCallOptions): Promise<SerializedParsedLine[]>;
 	/** Evaluate a single expression off-thread. Mirrors `ExpressionEngine.evaluateExpression`. */
@@ -241,12 +241,14 @@ class WorkerEngineClient implements WorkerEngine {
 
 	parseDocument(
 		input: string,
-		options?: UnifiedParsingOptions & WorkerCallOptions,
+		options?: Partial<UnifiedParsingOptions> & WorkerCallOptions,
 	): Promise<SerializedParsingResult> {
 		// The signal stays main-side and drives a `cancel`; only the parsing
-		// options cross, so an AbortSignal never reaches `postMessage`.
+		// options cross, so an AbortSignal never reaches `postMessage`. A call
+		// with only a signal, `{ signal }`, sends no options, and one that
+		// leaves out `inputType` gets the engine's own default, markdown.
 		const { signal, ...parsing } = options ?? {};
-		const parseOptions = Object.keys(parsing).length > 0 ? (parsing as UnifiedParsingOptions) : undefined;
+		const parseOptions: UnifiedParsingOptions | undefined = Object.keys(parsing).length > 0 ? { ...parsing, inputType: parsing.inputType ?? "markdown" } : undefined;
 		return this.call<SerializedParsingResult>("parseDocument", [input, parseOptions], signal);
 	}
 

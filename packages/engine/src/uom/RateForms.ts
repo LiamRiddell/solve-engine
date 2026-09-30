@@ -36,6 +36,8 @@ const NAMED_RATES: Readonly<Record<string, RateForm>> = {
 	kph: { numerator: "km", denominator: "h", scale: 1 },
 	mph: { numerator: "mi", denominator: "h", scale: 1 },
 	kn: { numerator: "nmi", denominator: "h", scale: 1 },
+	knot: { numerator: "nmi", denominator: "h", scale: 1 },
+	knots: { numerator: "nmi", denominator: "h", scale: 1 },
 	ft_s: { numerator: "ft", denominator: "s", scale: 1 },
 	// Pace, time per distance.
 	min_km: { numerator: "min", denominator: "km", scale: 1 },
