@@ -121,6 +121,10 @@ export const TokenTypes = {
   DATETIME_LITERAL: "DATETIME_LITERAL",
   DURATION: "DURATION",
   UNIT: "UNIT",
+  // The name a quantity is shown under, after a unit a reader wrote as a
+  // package alias or a document-defined unit (#762). Produced only by the
+  // normaliser; see packages/uom/normalizer/UserUnitNormalizerRule.ts.
+  UNIT_LABEL: "UNIT_LABEL",
   ROLL: "ROLL",
   PI: "PI",
   E: "E",

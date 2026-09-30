@@ -31,7 +31,7 @@
 import type { Token } from "@solve-js/lexer/Token";
 import { tokenTypeId } from "@solve-js/lexer/Token";
 import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
-import type { NormalizerRule, RuleSlot, TokenFusion } from "./NormalizerRule";
+import type { NormalizerRule, NormalizerEnvironment, RuleSlot, TokenFusion } from "./NormalizerRule";
 import { PhraseTrie } from "./PhraseTrie";
 import { RuleIndex, isEmptyMask, effectiveShape } from "./RuleIndex";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
@@ -356,6 +356,13 @@ export class TokenNormalizer {
   constructor(options: NormalizerOptions = {}) {
     this.options = { ...DEFAULT_OPTIONS, ...options };
   }
+
+  /**
+   * What the rules may read about the engine this normaliser serves, handed to
+   * every rule's `match`. Empty for a normaliser no engine owns; the engine
+   * sets it once, at construction. See {@link NormalizerEnvironment}.
+   */
+  environment: NormalizerEnvironment = {};
 
   // ── Rule Management ──────────────────────────────────────────────────────
 
@@ -732,7 +739,7 @@ export class TokenNormalizer {
           continue;
         }
         for (const rule of this.rulesAt(candidates, current[pos].type)) {
-          const match = rule.match(current, pos);
+          const match = rule.match(current, pos, this.environment);
           if (match) {
             // Collect source tokens for fusion tracking
             const sourceTokens = current.slice(pos, pos + match.consumed);

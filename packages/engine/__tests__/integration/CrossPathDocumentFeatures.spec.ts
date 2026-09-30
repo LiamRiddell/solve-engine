@@ -1419,3 +1419,34 @@ describe("a lone carriage return across entry points", () => {
     expect(message).toBe("5");
   });
 });
+
+describe("converting into a document's own unit across entry points (#762)", () => {
+  // A defined unit reads a definition from another line, so it is a
+  // document form: `84 days in sprints` needs `1 sprint = 2 weeks` above it.
+  const doc = ["1 sprint = 2 weeks", "84 days in sprints", "3 weeks in sprints to 1 dp", "1 click = 1 km", "3 clicks", "5 km in clicks", "6 sprints in kg"];
+  const expected = ["sprint defined", "6 sprints", "1.5 sprints", "click defined", "3.00 clicks", "5.00 clicks", "ERROR: a duration cannot be converted to a mass"];
+
+  test("the document result, and the two passes agree", () => {
+    expect(batch(doc)).toEqual(expected);
+    expect(incremental(doc)).toEqual(expected);
+  });
+
+  test("an edit to the definition re-answers the target in a live editor, as a fresh pass does", () => {
+    const { shown, edited } = editThenEvaluate(doc, [[1, "1 sprint = 3 weeks"]]);
+    expect(shown[1]).toBe("4 sprints");
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("deleting the definition refuses the target, as a fresh pass does", () => {
+    const { shown, edited } = deleteThenEvaluate(doc.slice(0, 2), 1);
+    expect(shown[0]).toMatch(/^ERROR: /);
+    expect(shown).toEqual(batch(edited));
+  });
+
+  test("the single-expression path has no definition to read and refuses the word by name", () => {
+    const { threw, type, message } = single("84 days in sprints");
+    expect(threw).toBe(false);
+    expect(type).toBe(ValueType.Error);
+    expect(message).toContain('"sprints" is not a unit');
+  });
+});

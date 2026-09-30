@@ -200,10 +200,15 @@ same force-multipliers the built-in packages use internally, not just `pluginFun
   A package contributes `{ name: (value: Value) => Value }` entries; names NOT already
   claimed by a built-in fast-path opcode (`percent`/`decimal`/`hex`/`fraction`/
   `multiplier`/`sci`/`binary`/`octal`/...) resolve at VM-execution time via
-  `OpCode.CALL_AS_CONVERTER` against a runtime, string-keyed registry
-  (`vm/VMBuiltins.ts`'s `asConverterRegistry`) — no lexer keyword registration needed for
+  `OpCode.CALL_AS_CONVERTER` against the engine's own string-keyed registry
+  (`EngineContext.asConverters`, a `vm/AsConverterRegistry.ts`; per engine since #710), with no lexer keyword registration needed for
   a custom name, since the `AS` parselet accepts any bare-word token (`CONVERTER_NAME` or
   plain `IDENT`) after "as" and reads its raw text.
+- **`IEnginePackage.unitAliases`** (`api/PackageRegistry.ts`): words for units the
+  engine already has (`Meile` for the mile), read by the `uom:unit-alias` normaliser rule
+  after a value and after `in`/`to`, which swaps in the unit and a `UNIT_LABEL` token; the
+  unit-label parselet compiles that to builtin 116, which sets `Value.unitLabel` so the
+  answer is written under the reader's word while the quantity stays in its unit (#762).
 - **`LexerVocabulary.rawLinePatterns`** (`lexer/ExpressionLexer.ts`) — the newest
   extension point, added for the `knowledge` package's `<query text> = ?` grammar, which
   is architecturally unlike every other package: the text before `= ?` ("distance to the

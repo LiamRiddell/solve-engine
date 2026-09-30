@@ -7,6 +7,9 @@ import { withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact, valueInUnit, moneyForCount } from "@solve-js/vm/MoneyExact";
 import { transpose, determinant, inverse, matrixPower, symbolicToEntry, rowMajorToColumnMajor, dotProduct } from "@solve-js/vm/MatrixOps";
 import { floatOf } from "@solve-js/vm/PlainNumberForms";
+import { labelQuantity } from "@solve-js/vm/UnitLabels";
+import type { AsConverter, AsConverterMatch } from "@solve-js/vm/AsConverterRegistry";
+export type { AsConverter, AsConverterMatch } from "@solve-js/vm/AsConverterRegistry";
 import { symbolicToValue, valueToSymbolic, solveEquationValues, definiteIntegralValue, readSearchRange } from "@solve-js/vm/SymbolicOps";
 import { expandSymbolic } from "@solve-js/symbolic/Polynomial";
 import { factorSymbolic } from "@solve-js/symbolic/Factor";
@@ -417,6 +420,17 @@ function keepUnit(operand: Value, magnitude: number): Value {
  */
 function roundToPlaces(source: Value, places: number): Value {
     const p = Number.isFinite(places) ? Math.min(100, Math.max(0, Math.trunc(places))) : 0;
+    // A quantity shown counted in a name of its own (`84 days in sprints`) is
+    // rounded in that count, which is the number the reader sees, and keeps the
+    // name (#762). One per unit is the quantity itself, rounded below.
+    const label = source.unitLabel;
+    if (label !== undefined && label.per !== 1 && source.type === ValueType.Uom && source.unit !== undefined) {
+        const count = roundToPlaces(uomValue(source.toNumber() / label.per, source.unit), p);
+        const back = uomValue(count.toNumber() * label.per, source.unit);
+        back.decimalPlaces = count.decimalPlaces;
+        back.unitLabel = label;
+        return back;
+    }
     // A whole number carrying its exact value is already at every place count,
     // so it keeps that value: `3^40 to 2 dp` shows all twenty digits, then .00.
     if (source.type === ValueType.Number && source.rational !== undefined && source.rational.d === 1n) {
@@ -536,6 +550,11 @@ function withPlaces(source: Value, magnitude: number, places: number, exact?: De
     const result = source.type === ValueType.Uom && source.unit !== undefined ? uomValue(magnitude, source.unit) : numberValue(magnitude);
     result.decimalPlaces = places;
     if (exact !== undefined) result.exact = exact;
+    // The same quantity to fewer places keeps the name it is shown under, when
+    // its count is the quantity itself. A count in a name of another size is
+    // rounded as that count in roundToPlaces; one that reaches here was not,
+    // so the name goes rather than show a count nobody rounded (#762).
+    if (source.unitLabel?.per === 1 && result.unit === source.unit) result.unitLabel = source.unitLabel;
     return result;
 }
 
@@ -697,7 +716,7 @@ export function modeOf(magnitudes: readonly number[], converted: boolean): numbe
  * which ask about order rather than size, and the aggregates, which word their
  * own refusal (see nonNumericOperand()).
  */
-const TAKES_DATETIME: ReadonlySet<number> = new Set([9, 10, 42, 43, 44, 45, 46, 47, 101, 102, 103, 104, 105, 106, 107]);
+const TAKES_DATETIME: ReadonlySet<number> = new Set([9, 10, 42, 43, 44, 45, 46, 47, 101, 102, 103, 104, 105, 106, 107, 116]);
 
 /**
  * The refusal for a builtin given a date or time it has no reading of, or null.
@@ -1411,6 +1430,9 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
     },
     // float(x), the plain number x is (#828); see floatOf() in PlainNumberForms.ts.
     115: (args) => floatOf(args[0]),
+    // The name a quantity is shown under (#762), emitted after a unit written
+    // as a package alias or a document-defined unit; see vm/UnitLabels.ts.
+    116: (args) => labelQuantity(args[0], String(args[1].value), args[2].toNumber()),
     // ── Symbolic algebra (packages/symbolic/) ──
     // expand(expr), multiplying out every product and power. Reached only
     // through its own parselet, never the builtinNameToIndex name map, so that
@@ -2099,176 +2121,65 @@ export function pluginFunctionIndexFor(qualifiedName: string): number {
 }
 
 /**
- * Registry of package-registered `as <name>` converters, the SDK extension
- * point for `IEnginePackage.asConverters` (see ExpressionEngine.registerPackage()).
+ * The module-level converter registry: the {@link defaultEngineContext}'s,
+ * which no engine reads. An engine keeps its own on its context (#710).
+ */
+const moduleConverters = defaultEngineContext.asConverters;
+
+/**
+ * The module-level `as <name>` converters by lower-cased key.
  *
- * String-keyed rather than index-allocated like {@link pluginFunctionRegistry}:
- * converter names ARE the natural key (there's no bytecode-stream byte-width
- * constraint to economize for, the name is only read at parse time to
- * decide whether it's one of the fixed built-ins with a dedicated fast
- * opcode; anything else falls through to `OpCode.CALL_AS_CONVERTER`, which
- * embeds the name as a string constant and looks it up here at runtime).
+ * @deprecated An engine keeps its own converters on its `EngineContext` now
+ * (`engine.getContext().asConverters`), filled from `IEnginePackage.asConverters`,
+ * so a converter registered on one engine answers on that engine alone (#710).
+ * This is the {@link defaultEngineContext}'s map, which no engine reads, kept so
+ * existing imports compile. Removed in 3.0.
  */
-export const asConverterRegistry = new Map<string, AsConverter>();
+export const asConverterRegistry: Map<string, AsConverter> = moduleConverters.folded;
 
 /**
- * The converters whose registered name carries capitals, by that exact
- * spelling. A unit's prefix is carried by its case (`mW` is a milliwatt, `MW`
- * a megawatt), so a lower-cased key alone reads one as the other (issue #824).
- * {@link resolveAsConverter} tries the typed spelling here first.
- */
-export const asConverterExactRegistry = new Map<string, AsConverter>();
-
-/**
- * The spellings registered under each lower-cased key, so a second spelling
- * that differs only by case (`MW` beside `mW`) is recognised as a case pair
- * rather than a collision.
- */
-const asConverterSpellings = new Map<string, string[]>();
-
-/**
- * The refusal for a lower-cased key two spellings share, such as `mw` for `mW`
- * and `MW`. It refuses by name rather than guess which prefix was meant.
+ * The module-level converters whose name carries capitals, by that exact
+ * spelling (#824).
  *
- * @param typed - The target as the reader wrote it.
- * @param spellings - The registered spellings that share its lower-cased form.
+ * @deprecated See {@link asConverterRegistry}. Removed in 3.0.
  */
-function ambiguousCaseRefusal(typed: string, spellings: readonly string[]): Value {
-    const choices = spellings.map((s) => `"as ${s}"`).join(" or ");
-    return errorValue(
-        "AS_CONVERTER_AMBIGUOUS_CASE",
-        `"as ${typed}" could be ${choices}: write the unit with its prefix in its own case (m is milli, M is mega, p is pico, P is peta)`,
-    );
-}
+export const asConverterExactRegistry: Map<string, AsConverter> = moduleConverters.exact;
 
 /**
- * Whether reading `typed` as `spelling` would change the case of a prefix
- * letter whose case is its meaning: `MV` read as `mV` turns a mega into a
- * milli, and `PW` read as `pW` a peta into a pico. A one-letter unit has no
- * prefix (`as n` is the newton), so it is never such a change.
+ * How `typed` matches the module-level registry; see {@link AsConverterMatch}.
+ *
+ * @deprecated Ask the engine's own registry, `context.asConverters.match(typed)`.
+ * See {@link asConverterRegistry}. Removed in 3.0.
  */
-function changesPrefixCase(typed: string, spelling: string): boolean {
-    return spelling.length > 1 && typed[0] !== spelling[0] && "mMpP".includes(spelling[0]);
-}
-
-/**
- * The converter for a lower-cased key that two spellings share, kept in
- * {@link asConverterRegistry} so a reader of that map alone refuses too.
- */
-function ambiguousCaseConverter(key: string, spellings: readonly string[]): AsConverter {
-    return () => ambiguousCaseRefusal(key, spellings);
-}
-
-/**
- * How an `as` target matches the registry: `"exact"` when a converter is
- * registered under that spelling, `"folded"` when only its lower-cased form
- * is and reading it so changes no prefix, `"ambiguous"` when the lower-cased
- * form belongs to two spellings (`mw`), `"prefix"` when the one spelling it
- * folds to has a prefix of another case (`MV` for `mV`), and `undefined` when
- * nothing is registered.
- */
-export type AsConverterMatch = "exact" | "folded" | "ambiguous" | "prefix" | undefined;
-
-/** How `typed` matches the registry; see {@link AsConverterMatch}. */
 export function matchAsConverter(typed: string): AsConverterMatch {
-    if (asConverterExactRegistry.has(typed)) return "exact";
-    const key = typed.toLowerCase();
-    if (!asConverterRegistry.has(key)) return undefined;
-    const spellings = asConverterSpellings.get(key) ?? [key];
-    if (spellings.includes(typed)) return "exact";
-    if (spellings.length > 1) return "ambiguous";
-    return changesPrefixCase(typed, spellings[0]) ? "prefix" : "folded";
+    return moduleConverters.match(typed);
 }
 
 /**
- * The converter an `as` target names. The spelling as typed is tried first,
- * so `as mW` and `as MW` reach different units; then the lower-cased key,
- * so `as ISO8601` still reaches `iso8601` and `as n` the newton. A folded
- * spelling that two units share (`as mw`), or that would change a prefix's
- * case (`as MV` when only `mV` is registered), gets a converter that refuses
- * by name (issue #824). `undefined` when nothing is registered.
+ * The converter an `as` target names in the module-level registry.
+ *
+ * @deprecated Ask the engine's own registry, `context.asConverters.resolve(typed)`.
+ * See {@link asConverterRegistry}. Removed in 3.0.
  */
 export function resolveAsConverter(typed: string): AsConverter | undefined {
-    const match = matchAsConverter(typed);
-    if (match === undefined) return undefined;
-    if (match === "exact") return asConverterExactRegistry.get(typed) ?? asConverterRegistry.get(typed.toLowerCase());
-    if (match === "folded") return asConverterRegistry.get(typed.toLowerCase());
-    const spellings = asConverterSpellings.get(typed.toLowerCase()) ?? [];
-    if (match === "ambiguous") return () => ambiguousCaseRefusal(typed, spellings);
-    return () => errorValue(
-        "AS_CONVERTER_PREFIX_CASE",
-        `"as ${typed}" is not a unit: the one spelled alike is "as ${spellings[0]}", whose prefix is written in the other case (m is milli, M is mega, p is pico, P is peta)`,
-    );
+    return moduleConverters.resolve(typed);
 }
 
 /**
- * A package-registered `as <name>` converter: the value on the left of `as`
- * in, the converted value out.
+ * Register a converter in the module-level registry, which no engine reads.
  *
- * The optional `context` is the per-line execution context the VM passes to
- * a plugin function, handed to a converter for the same reason: a converter
- * that reads a date computes through the engine's calendar backend on it
- * rather than a module-level default, so `<date> as weekday` and `weekday on
- * <date>` cannot disagree. A converter that needs nothing from it ignores it.
- */
-export type AsConverter = (value: Value, context?: LineExecutionContext) => Value;
-
-/**
- * Register a custom `as <name>` converter. Called by
- * ExpressionEngine.registerPackage() for each entry in a package's
- * `asConverters`. Warns (does not throw) on a name collision, mirrors
- * ParseletRegistry's collision warning, since two independently-authored
- * packages picking the same converter name is a real possibility with a
- * shared string-keyed registry, and silently overwriting is worse than a
- * visible warning.
- *
- * Skips the warning when `handler` is REFERENCE-IDENTICAL to what's
- * already registered (mirrors `ParseletRegistry.registerPrefix()`'s own
- * `existing !== parselet` guard), a package's `asConverters` object is a
- * module-level constant, so re-constructing an `ExpressionEngine` (which
- * re-registers every built-in package's converters from scratch each
- * time. This is not a per-instance cache) passes the exact same function
- * reference every time, not a genuine second package claiming the name.
- * Without this, every `iso8601` converter registration warned on every
- * single `new ExpressionEngine()` call after the first in a process
- * pure noise, not a real collision signal, surfaced by
- * `DatetimePackage.ts` becoming this registry's first real consumer.
+ * @deprecated Declare it in `IEnginePackage.asConverters`, which the engine
+ * registers into its own context. See {@link asConverterRegistry}. Removed in 3.0.
  */
 export function registerAsConverter(name: string, handler: AsConverter): void {
-    const key = name.toLowerCase();
-    const spellings = asConverterSpellings.get(key) ?? [];
-    const known = spellings.includes(name);
-    // A second spelling of the same key that differs only by case (`MW`
-    // beside `mW`) is a case pair, not a collision: both keep their exact
-    // spelling, and the shared lower-case key refuses by name.
-    const casePair = !known && spellings.length > 0 && name !== key && !spellings.includes(key);
-    const prior = known ? (name !== key ? asConverterExactRegistry.get(name) : asConverterRegistry.get(key)) : asConverterRegistry.get(key);
-    if (prior && prior !== handler && !casePair) {
-        console.warn(`[asConverterRegistry] Converter name "${key}" is already registered, so it is overwritten.`);
-    }
-    let next = spellings;
-    if (!known && !casePair) {
-        for (const spelling of spellings) asConverterExactRegistry.delete(spelling);
-        next = [];
-    }
-    if (!known) next = [...next, name];
-    asConverterSpellings.set(key, next);
-    if (name !== key) asConverterExactRegistry.set(name, handler);
-    asConverterRegistry.set(key, next.length > 1 ? ambiguousCaseConverter(key, next) : handler);
+    moduleConverters.register(name, handler);
 }
 
-/** Reverse a {@link registerAsConverter} call, used by unregisterPackage(). */
+/**
+ * Reverse a {@link registerAsConverter} call.
+ *
+ * @deprecated See {@link registerAsConverter}. Removed in 3.0.
+ */
 export function unregisterAsConverter(name: string): void {
-    const key = name.toLowerCase();
-    asConverterExactRegistry.delete(name);
-    const remaining = (asConverterSpellings.get(key) ?? []).filter((s) => s !== name);
-    if (remaining.length === 0) {
-        asConverterSpellings.delete(key);
-        asConverterRegistry.delete(key);
-        return;
-    }
-    // One spelling of a case pair is left: the lower-case key is its again.
-    asConverterSpellings.set(key, remaining);
-    const survivor = remaining.length === 1 ? asConverterExactRegistry.get(remaining[0]) : undefined;
-    asConverterRegistry.set(key, survivor ?? ambiguousCaseConverter(key, remaining));
+    moduleConverters.unregister(name);
 }

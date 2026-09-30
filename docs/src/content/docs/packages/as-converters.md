@@ -60,7 +60,10 @@ Two limits keep the rewrite from shadowing anything:
   as `roman` is not.
 
 The rewrite asks the same registry `as` asks, so `in` reaches exactly the
-converters `as` does.
+converters `as` does. A normaliser rule of your own can ask it too: a rule's
+`match` is handed the engine's environment as its third argument, and
+`environment.asConverters.match(word)` says whether a word names one of this
+engine's converters.
 
 ## Names and their case
 
@@ -107,3 +110,18 @@ package cannot shadow them here. Any other name, including yours, resolves throu
 the converter registry at run time; an unregistered one surfaces as a runtime
 error, not a parse error. Registering a name another package already took warns
 rather than throws, and the last registration wins.
+
+## One engine's converters
+
+The registry belongs to the engine the package is registered on: it is held on
+the engine's context, `engine.getContext().asConverters`. A package passed to
+one engine answers `as roman` there and nowhere else, and unregistering it from
+that engine leaves another engine holding the same package untouched. Two
+engines that register different packages under one converter name each keep
+their own.
+
+The boundary: the module-level `registerAsConverter`, `resolveAsConverter`,
+`matchAsConverter` and the `asConverterRegistry` map still exist, deprecated,
+so existing imports compile. They write and read a registry no engine consults,
+so a converter registered through them answers nowhere; declare it in
+`asConverters` instead. They are removed in 3.0.

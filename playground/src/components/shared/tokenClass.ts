@@ -1,5 +1,17 @@
-import { getTokenCategory } from "@solve-js/language/TokenCategoryMap"
+import { TokenCategoryTable } from "@solve-js/language/TokenCategoryMap"
 import { tokenClassName } from "@solve-js/language/tokenClassName"
+import { PLAYGROUND_PACKAGES } from "@bridge/engine"
+
+/**
+ * The categories the playground's engine paints with: the built-in table, and
+ * every category the playground's packages declare. Built from the same package
+ * list the engine is, since a category belongs to an engine rather than to the
+ * process (#710) and these tabs have no engine to hand to ask.
+ */
+const categories = new TokenCategoryTable()
+for (const pkg of PLAYGROUND_PACKAGES) {
+	for (const [type, category] of Object.entries(pkg.tokenCategories ?? {})) categories.set(type, category)
+}
 
 /**
  * The syntax-highlighting class for a token, from its lexer type.
@@ -10,7 +22,7 @@ import { tokenClassName } from "@solve-js/language/tokenClassName"
  * the same neutral. The colour was already computed, by the same engine, for
  * the same tokens, and simply was not being asked for here.
  *
- * This is the same two-step an editor integration does. `getTokenCategory`
+ * This is the same two-step an editor integration does. The category table
  * turns a lexer type into a semantic category, `tokenClassName` turns that into
  * a class, and the `.solve-*` rules in `index.css` supply the colour. Which
  * means the tabs, the editor and the documentation site are painted from one
@@ -23,6 +35,6 @@ import { tokenClassName } from "@solve-js/language/tokenClassName"
  */
 export function tokenClass(type: string | undefined): string | undefined {
 	if (!type) return undefined
-	const category = getTokenCategory(type)
+	const category = categories.get(type)
 	return category ? tokenClassName(category) : undefined
 }

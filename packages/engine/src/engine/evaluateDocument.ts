@@ -28,6 +28,7 @@
  *   through this one pass (#616).
  */
 import type { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
+import type { EvaluatorHost } from "@solve-js/engine/EvaluatorHost";
 import { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { ThreeTierEvaluator } from "@solve-js/engine/ThreeTierEvaluator";
 import { VMCheckpointer } from "@solve-js/vm/VMCheckpoints";
@@ -76,7 +77,9 @@ export function evaluateDocument(
 	input: string,
 	_options: UnifiedParsingOptions = { inputType: "markdown" },
 ): ParsingResult {
-	const previousDocumentModel = engine.getDocumentModel();
+	// Every seam this pass reaches goes through the evaluator's contract (#761).
+	const host: EvaluatorHost = engine;
+	const previousDocumentModel = host.getDocumentModel();
 	// Taken before the evaluator below is constructed, because constructing one
 	// seizes this unconditionally (ThreeTierEvaluator wires its own checkpointer
 	// onto the engine's batcher). Restoring it is not housekeeping: the batcher
@@ -85,7 +88,7 @@ export function evaluateDocument(
 	// this pass's checkpointer in place meant a host's own async results were
 	// restored from checkpoints recorded against a document that no longer
 	// exists, at line numbers belonging to different lines.
-	const previousCheckpointer = engine.getBatcher().checkpointer;
+	const previousCheckpointer = host.getBatcher().checkpointer;
 
 	const doc = new DocumentModel();
 	doc.setDocument(input);
@@ -95,7 +98,7 @@ export function evaluateDocument(
 	// when a value arrives later. Without it a re-run of a few lines reads the
 	// variable state the document ENDS in rather than the state each line sits
 	// in, which is wrong for any name defined more than once.
-	const evaluator = new ThreeTierEvaluator(doc, engine, new VMCheckpointer(engine.getVM()));
+	const evaluator = new ThreeTierEvaluator(doc, host, new VMCheckpointer(host.getVM()));
 
 	try {
 		const lineCount = doc.lineCount;
@@ -181,7 +184,7 @@ export function evaluateDocument(
 		// store) and put back whatever document and checkpointer the host had
 		// wired, so borrowing the engine for one pass leaves nothing behind.
 		evaluator.terminateWorker();
-		engine.setDocumentModel(previousDocumentModel);
-		engine.getBatcher().checkpointer = previousCheckpointer;
+		host.setDocumentModel(previousDocumentModel);
+		host.getBatcher().checkpointer = previousCheckpointer;
 	}
 }

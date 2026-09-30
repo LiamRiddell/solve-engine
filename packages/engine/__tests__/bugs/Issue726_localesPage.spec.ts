@@ -140,9 +140,11 @@ describe("getLocale, as the page's region-tag section describes it", () => {
 });
 
 describe("the German function names the page lists", () => {
-	test.each(["wurzel(16)", "runden(7/2)", "aufrunden(7/2)", "abrunden(7/2)"])("%s is refused as an unknown function, not an undefined one", (line) => {
+	// These were refused as unknown functions until #833 gave each the built-in
+	// it names; the matrix above proves the answers, this the agreement.
+	test.each([["wurzel(16)", "sqrt(16)"], ["runden(7/2)", "round(7/2)"], ["aufrunden(7/2)", "ceil(7/2)"], ["abrunden(7/2)", "floor(7/2)"]])("%s answers what %s answers", (german, english) => {
 		const engine = newTrackedEngine({ locale: "de" });
-		expect(() => engine.evaluateExpression(line)).toThrow(/^Unknown function: /);
+		expect(engine.evaluateExpression(german).toNumber()).toBe(engine.evaluateExpression(english).toNumber());
 	});
 });
 

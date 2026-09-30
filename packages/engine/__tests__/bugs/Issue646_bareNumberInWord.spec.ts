@@ -165,7 +165,11 @@ describe("plainValueInUnit", () => {
 });
 
 describe("converterPrepositionNormalizerRule", () => {
-	const rule = converterPrepositionNormalizerRule();
+	// The rule reads a package's converters from the engine it runs in, handed
+	// to match as the normaliser environment (#710).
+	const environment = { asConverters: newTrackedEngine().getContext().asConverters };
+	const base = converterPrepositionNormalizerRule();
+	const rule = { ...base, match: (tokens: Token[], pos: number) => base.match(tokens, pos, environment) };
 
 	test("rewrites in before a package's converter into as", () => {
 		const match = rule.match([tk("IN", "in"), tk("IDENT", "roman", 1)], 0);

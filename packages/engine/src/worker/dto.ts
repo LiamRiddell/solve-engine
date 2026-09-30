@@ -83,6 +83,13 @@ export interface SerializedWorkerValue {
 	 */
 	unit?: string;
 	/**
+	 * The name a quantity is shown under when the reader wrote a word for its
+	 * unit that is not the unit's own (`Meile`, `sprints`), and how many of
+	 * {@link unit} one of it is. The {@link text} is already written under it;
+	 * this is for a host that renders the number itself (#762).
+	 */
+	unitLabel?: { name: string; per: number };
+	/**
 	 * The error's code (`INCOMPATIBLE_UNITS`, `UNDEFINED_FUNCTION`), present only for
 	 * {@link ValueType.Error}, so a host branches on the code the way it would on
 	 * a main-thread value's `errorCode`, rather than on the message text (#662).

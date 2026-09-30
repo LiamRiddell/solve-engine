@@ -20,6 +20,7 @@
 
 import { describe, test } from "@jest/globals";
 import { newTrackedEngine } from "@tools/trackedEngine";
+import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import {
 	DOCUMENT_EDGES,
 	NUMERIC_EDGES,
@@ -191,6 +192,10 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	// A formula stored before its unknown had a value, read below it (#732).
 	{ form: "y = x + 1\nx = X\ny + x" },
 	{ form: "y = x * 2\nx = X\ny" },
+	// A document's own unit as a conversion target, and a rename (#762).
+	{ form: "1 sprint = 2 weeks\nX days in sprints" },
+	{ form: "1 click = 1 km\nX km in clicks" },
+	{ form: "1 click = 1 km\nX clicks" },
 ];
 
 describe("the cross-line forms stay honest over the numeric edges, through both passes", () => {
@@ -225,6 +230,8 @@ describe("a word naming an inherited property is an ordinary unknown word", () =
 		"$20/hour in $/X",
 		"10 Hz in /X",
 		"$0.30/kWh * 2 X * 3 h",
+		"84 days in X",
+		"X(16)",
 	];
 	test.each(forms.flatMap((form) => fill(form, PROTOTYPE_WORDS)))("%s", (line) => {
 		expectPrototypeUntouched(() => {
@@ -284,6 +291,27 @@ describe("the configured forms stay honest over the numeric and text edges", () 
 		expectPrototypeUntouched(() => {
 			expectHonestLine(line, { engine: german });
 			expectHonestLine(line, { engine: punctuated });
+		});
+	});
+
+	// A pack's own function names and conversion words, which add to English
+	// (#833), and a package's unit aliases (#762).
+	const PACK_FORMS: ReadonlyArray<readonly [string, typeof german]> = [
+		["wurzel(X)", german], ["runden(X)", german], ["aufrunden(X)", german], ["sqrt(X)", german], ["X km in m", german], ["3pm Tokyo in Dubai + X", german],
+		["racine(X)", french], ["plafond(X)", french], ["X km en m", french], ["convertir X km en m", french],
+	];
+	test.each(PACK_FORMS.flatMap(([form, engine]) => fill(form, NUMERIC_EDGES).map((line) => [line, engine] as const)))("a pack's word over the numeric edges: %s", (line, engine) => {
+		expectHonestLine(line, { engine, allowNaN: line.includes("0/0") });
+	});
+
+	const aliased = newTrackedEngine({ packages: [...BUILTIN_PACKAGES, { name: "sweep-aliases", unitAliases: { Meile: "mile", Tage: "days" } }] });
+	test.each(["X Meile", "X km in Meile", "X Tage in hours", "X Meile to 2 dp"].flatMap((form) => [...fill(form, NUMERIC_EDGES), ...fill(form, TEXT_EDGES)]))("a unit alias over the edges: %j", (line) => {
+		expectHonestLine(line, { engine: aliased, allowNaN: line.includes("0/0") });
+	});
+
+	test.each(PROTOTYPE_WORDS.flatMap((word) => [`2 ${word}`, `5 km in ${word}`]))("a prototype word where an alias is read: %s", (line) => {
+		expectPrototypeUntouched(() => {
+			expectHonestLine(line, { engine: aliased });
 		});
 	});
 });

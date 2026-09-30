@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 508 codes, grouped below by the part
+ship. The engine and its built-in packages ship 510 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -248,6 +248,8 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `PLUGIN_OPERATOR_UNSUPPORTED` | thrown | A package registered an operator the scanner cannot read: not exactly two characters, or a first character the scanner does not class as an operator. Refused at registration rather than left to never fire. |
 | `PLUGIN_KEYWORD_COLLISION` | thrown | A package registered a keyword the engine already has. Refused at registration, since a built-in keyword cannot be overridden. |
 | `PLUGIN_CALL_FUSION_UNREACHABLE` | thrown | A package's `callFusions` names a word the engine already reads as something other than a plain word (a keyword, a built-in function, a unit), so the call could never fire. Refused at registration. |
+| `PLUGIN_UNIT_ALIAS_UNREACHABLE` | thrown | A package's `unitAliases` names a word the engine already reads as something other than a plain word (a unit, a keyword, a function), so the alias could never be read. Refused at registration (#762). |
+| `PLUGIN_UNIT_ALIAS_TARGET_UNKNOWN` | thrown | A package's `unitAliases` maps a word to something that is not a single unit the engine reads (`mile`, `days`), so the alias would have nothing to mean. Refused at registration (#762). |
 | `PLUGIN_UNIT_COLLISION` | thrown | A package registered a unit spelling the engine already has. Refused at registration, since a built-in unit cannot be overridden. |
 | `PACKAGE_ENGINE_VERSION_MISMATCH` | thrown | A package's declared `IEnginePackage.engineVersion` semver range doesn't satisfy the running engine's ENGINE_VERSION. See api/EngineVersionCompatibility.ts. |
 | `PACKAGE_ENGINE_VERSION_INVALID_RANGE` | thrown | A package's declared `IEnginePackage.engineVersion` isn't a parseable semver range at all (a typo in the package's own descriptor). |
