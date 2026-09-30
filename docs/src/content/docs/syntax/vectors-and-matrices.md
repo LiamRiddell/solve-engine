@@ -100,6 +100,71 @@ rather than an element-wise one.
 [1, 2; 3, 4] * [1; 2] // [5; 11]
 ```
 
+Two shapes line up when the first has as many columns as the second has rows.
+When they do not, the product is refused, naming both shapes:
+
+```solve-doc
+[1,2,3] * [4,5,6] // ERROR: Cannot multiply a 1x3 matrix by a 1x3 matrix: the first has 3 columns and the second 1 row, and a product needs the two to match.
+```
+
+## Dot products
+
+The dot product of two vectors multiplies their matching components and adds
+the results, so it is a single number: `dot([1,2,3], [4,5,6])` is 1×4 + 2×5 +
+3×6, which is 32. It says how far two directions agree, and two directions at
+right angles to each other have a dot product of zero. A vector's components
+are the same whether it is written as a row or a column, so `dot` reads either.
+
+```solve
+dot([1,2,3], [4,5,6]) // 32
+dot([1,2,3], [4;5;6]) // 32
+dot([1, 0], [0, 1]) // 0
+```
+
+Two vectors of different lengths have no dot product, and a grid of more than
+one row and column is not a vector at all; the product of two matrices is `*`.
+Each is refused by name:
+
+```solve-doc
+dot([1,2], [4,5,6]) // ERROR: dot needs two vectors of the same length, but one has 2 components and the other 3.
+dot([1,2;3,4], [5,6;7,8]) // ERROR: dot takes two vectors, and a 2x2 matrix is not one. For a matrix product, write "*".
+```
+
+## Vectors of a fixed size
+
+> **Package:** `VECTOR_PACKAGE`, registered by `createEngine()`.
+
+`vec2`, `vec3` and `vec4` build a vector of two, three or four components, the
+spelling graphics and physics code uses for a point or a direction. Each takes
+exactly its count, so a component too many or too few is refused rather than
+dropped or made up:
+
+```solve
+vec3(1, 2, 3) // [1, 2, 3]
+dot(vec2(3, 4), vec2(3, 4)) // 25
+```
+
+```solve-doc
+vec2(1, 2, 3) // ERROR: vec2() takes 2 arguments, but was given 3 arguments
+vec3(1, 2) // ERROR: vec3() takes 3 arguments, but was given 2 arguments
+```
+
+`float(x)` is the plain number `x` is, the name some languages give a number
+with a fractional part. A number is itself, a percentage is its fraction, and
+text that spells a number whole is that number. Anything with no plain number
+to give, such as a quantity, a list or other text, is refused by name:
+
+```solve
+float(2.5) // 2.50
+float(50%) // 0.50
+float("1,234.5") // 1,234.50
+```
+
+```solve-doc
+float("hello") // ERROR: float takes a number, or text that is a number, and "hello" is not one.
+float(5 km) // ERROR: float takes a plain number, not a length.
+```
+
 ## Indexing
 
 Indices are zero-based.

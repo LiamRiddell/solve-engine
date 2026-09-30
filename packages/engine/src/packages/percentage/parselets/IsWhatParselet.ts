@@ -20,6 +20,8 @@ import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
  *   81 is 9 to what power    2       the odd one out, kept here because it is
  *                                    the same "solve for the missing piece"
  *                                    shape and the same trigger word
+ *   7 is prime               true    whether the number is prime, as
+ *                                    `isprime(7)`; only as the line's end
  *
  * `5% of what is 6` (the other word order) already existed as
  * `OfWhatIsParselet`. This is the order Soulver documents, and it reads more
@@ -44,6 +46,16 @@ export class IsWhatParselet implements InfixParselet {
 	readonly bindingPower = BindingPower.Conditional;
 
 	parse(parser: Parser, _left: Token, _token: Token, builder: BytecodeBuilder): void {
+		// `7 is prime`, the question the word asks, answered as `isprime(7)`
+		// is (#829). Only as the whole rest of the line, so `prime` stays an
+		// ordinary word in prose and a name elsewhere.
+		if (nextWordIs(parser, "prime") && parser.peekAt(1) === undefined) {
+			parser.consume();
+			builder.emitOpcode(OpCode.CALL_BUILTIN);
+			builder.emitIndex(ISPRIME_BUILTIN);
+			builder.emitIndex(1);
+			return;
+		}
 		if (nextWordIs(parser, "what")) {
 			parser.consume();
 			this.parseWhatRate(parser, builder);
@@ -153,6 +165,9 @@ export class IsWhatParselet implements InfixParselet {
 
 /** `log` in VMBuiltins.ts, the natural logarithm. */
 const LOG_BUILTIN = 5;
+
+/** `isprime` in VMBuiltins.ts. */
+const ISPRIME_BUILTIN = 109;
 
 /** Whether the next token is the given word, without consuming it. */
 function nextWordIs(parser: Parser, word: string): boolean {

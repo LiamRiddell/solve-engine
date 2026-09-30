@@ -259,19 +259,28 @@ zscore(1, [1, 2, 3], 5) // ERROR: zscore takes 2 arguments, but was given 3, as 
 
 ## Comparisons and fractions
 
-Picking the bigger or the smaller of two values, or the point halfway between
-them, is a question in its own words too. `larger of` and `greater of` give the
-bigger, `smaller of` and `lesser of` the smaller, `half of` halves one value, and
-`midpoint between` gives the value exactly halfway from one to the other.
+Picking the biggest or the smallest of a few values, or the point halfway
+between two, is a question in its own words too. `larger of` gives the largest
+of the values joined by `and`, and `smaller of` the smallest. Each takes as many
+values as are listed, so a third `and` adds a value to compare, never to sum.
+`greater of` and `lesser of` are the same phrases, and `gcd of` and `lcm of` read
+a list the same way. `half of` halves one value, and `midpoint between` gives the
+value exactly halfway from one to the other.
 
 ```solve
 larger of 10 and 4 // 10
 greater of 10 and 4 // 10
-smaller of 10 and 4 // 4
+larger of 10 and 4 and 12 // 12
+smaller of 10 and 4 and 12 // 4
 lesser of 10 and 4 // 4
+gcd of 12 and 18 and 8 // 2
 half of 50 // 25
 midpoint between 10 and 20 // 15
 ```
+
+Each value may be a sum, so `larger of 1 + 1 and 3` compares 2 with 3. The
+values are joined by `and`, not commas: for a list with commas, write
+`max(10, 4, 12)` or `min(10, 4, 12)`.
 
 ## Ranges and clamping
 
