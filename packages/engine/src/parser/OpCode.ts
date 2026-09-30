@@ -31,6 +31,8 @@ export enum OpCode {
 	// index holding the normalized "." decimal text (thousands grouping already
 	// stripped), read back into a Number-typed Value whose `exact` sidecar makes
 	// money that combines with it exact. See vm/Value.ts's numberValueExact().
+	// Text with no point is a whole number past 2^53, pushed as a Number
+	// carrying its exact integer instead (see parser/WholeLiteral.ts).
 	PUSH_DECIMAL = 16,
 
 	// Arithmetic (BinaryOperator)

@@ -39,14 +39,14 @@ describe("dividing by zero", () => {
 		expect(num("-1 / -0")).toBe(Infinity);
 	});
 
-	test("zero over zero is the indeterminate case", () => {
-		expect(num("0 / 0")).toBeNaN();
+	test("zero over zero is the indeterminate case, refused by name (FoundBug_zeroOverZero)", () => {
+		expect(evaluate("0 / 0").errorCode).toBe("QUOTIENT_UNDEFINED");
 	});
 
 	test("a divide by zero inside a larger expression keeps propagating", () => {
 		expect(num("(1 / 0) + 1")).toBe(Infinity);
 		expect(num("2 * (1 / 0)")).toBe(Infinity);
-		expect(num("(1 / 0) / (1 / 0)")).toBeNaN();
+		expect(evaluate("(1 / 0) / (1 / 0)").errorCode).toBe("QUOTIENT_UNDEFINED");
 	});
 });
 

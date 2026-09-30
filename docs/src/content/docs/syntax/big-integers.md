@@ -43,14 +43,19 @@ combination(56, 23) // 3,167,295,784,216,200
 
 ## Where exactness stops
 
-A number **typed** past the safe range is still a double, because it is rounded
-as it is read, before any arithmetic happens. Its digits may already be different
-from the ones typed, so working on it exactly would present invented digits as
-though they were real. It keeps its double, and so does arithmetic on it. The same
-number built from whole numbers within the range is exact:
+A whole number **typed** past the safe range in plain digits keeps the digits
+typed. A double would round `9007199254740993` to the nearest number it can
+hold, 9,007,199,254,740,992, and show that as if it were the number written, so
+the digits are read as an exact integer instead, the same one `2^53 + 1` builds.
+
+A number typed in scientific notation is different: `1e16` names a double, and a
+double past the safe range may already be a rounding, so it keeps its double, and
+so does arithmetic on it. The same number built from whole numbers within the
+range is exact:
 
 ```solve
-12345678901234567890 + 1 // 12,345,678,901,234,567,000
+9007199254740993 // 9,007,199,254,740,993
+12345678901234567890 + 1 // 12,345,678,901,234,567,891
 1e16 + 1 - 1e16 // 0
 10^16 + 1 - 10^16 // 1
 ```
@@ -62,7 +67,8 @@ The other limits:
 - **Past the largest double.** A double has no finite value beyond about
   1.8 × 10^308, and the answer there is infinity, as it always was.
 - **A unit or a percentage.** A quantity with a unit, and a percentage of a
-  number, read the nearest double.
+  number, read the nearest double, typed digits included (`9007199254740993 m`
+  is 9,007,199,254,740,992.00 m).
 
 ```solve
 2^60 + 0.5 // 1,152,921,504,606,847,000

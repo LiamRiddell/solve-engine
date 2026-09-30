@@ -63,6 +63,11 @@ export const EXTENDED_UNITS: Record<string, ExtendedUnitDef> = {
   kph: { measure: "speed", toBase: 1000 / 3600 },
   mph: { measure: "speed", toBase: 0.44704 }, // 1 mile (1609.344m) / 3600s
   kn: { measure: "speed", toBase: 1852 / 3600 }, // 1 nautical mile = 1852m exactly
+  // The knot written out, as a sailor or a pilot writes it. `kt` is not one:
+  // the table already reads it as a kilotonne, and a mass that silently became
+  // a speed would be worse than the one spelling left out.
+  knot: { measure: "speed", toBase: 1852 / 3600 },
+  knots: { measure: "speed", toBase: 1852 / 3600 },
   // "fps" (feet per second) deliberately NOT used, confirmed via a real
   // regression (20 failures in VideoTimecode.spec.ts) that it collides with
   // the Time package's "fps" (frames per second), which FpsRateNormalizerRule

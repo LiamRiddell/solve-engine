@@ -90,10 +90,11 @@ describe("every integer operator keeps the digits", () => {
 });
 
 describe("where exactness stops, and why", () => {
-	test("a number typed past the safe range stays the double it became", () => {
-		// Its digits were rounded before the engine saw them, so exact
-		// arithmetic on it would print invented digits as though they were real.
-		expect(exactInteger("12345678901234567890 + 1")).toBeUndefined();
+	test("a whole number typed past the safe range keeps its digits, and scientific notation stays a double", () => {
+		// Plain digits are all there to read, so the literal carries its exact
+		// integer (FoundBug_wholeLiteralPastSafeRange). `1e16` names a double,
+		// and a double past the safe range may already be a rounding.
+		expect(exactInteger("12345678901234567890 + 1")).toBe(12345678901234567891n);
 		expect(evaluate("1e16 + 1 - 1e16").toNumber()).toBe(0);
 		expect(evaluate("10^16 + 1 - 10^16").toNumber()).toBe(1);
 	});

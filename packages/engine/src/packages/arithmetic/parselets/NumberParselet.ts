@@ -6,6 +6,7 @@ import { OpCode } from "@solve-js/parser/OpCode";
 import { getLocale } from "@solve-js/constants/locales";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
 import { localeLiteralRefusal, unreadableInLocale } from "@solve-js/parser/LocaleNumberLiteral";
+import { isPastSafeWholeLiteral } from "@solve-js/parser/WholeLiteral";
 
 /**
  * Matches a CHAINED thousands-grouped integer using "." as the group
@@ -43,7 +44,8 @@ export class NumberParselet implements PrefixParselet {
 		let v: number;
 		// Mirrors PrecedenceParser's Tier-1 NUMBER case: a fractional literal is
 		// pushed as PUSH_DECIMAL so its exact value survives to any money it
-		// meets, everything integer-shaped stays PUSH_NUMBER.
+		// meets, and so is a whole number past 2^53, which keeps its exact
+		// integer; every other integer shape stays PUSH_NUMBER.
 		let decimalText: string | null = null;
 		const raw = token.value;
 		if (raw.startsWith("0x") || raw.startsWith("0X")) {
@@ -82,7 +84,9 @@ export class NumberParselet implements PrefixParselet {
 			// (over 99% of the digits dropped, with no error). Handled as
 			// its own case, ahead of the locale-aware path, since it's
 			// unambiguous regardless of locale.
-			v = parseFloat(raw.split(".").join(""));
+			const digits = raw.split(".").join("");
+			v = parseFloat(digits);
+			if (isPastSafeWholeLiteral(digits)) decimalText = digits;
 		} else {
 			// Normalize number based on locale separators
 			const locale = getLocale(parser.getLocaleCode());
@@ -104,7 +108,7 @@ export class NumberParselet implements PrefixParselet {
 				normalized = normalized.replace(decimalSep, ".");
 			}
 			v = parseFloat(normalized);
-			if (PLAIN_DECIMAL.test(normalized)) decimalText = normalized;
+			if (PLAIN_DECIMAL.test(normalized) || isPastSafeWholeLiteral(normalized)) decimalText = normalized;
 		}
 		if (decimalText !== null) {
 			builder.emitOpcode(OpCode.PUSH_DECIMAL);

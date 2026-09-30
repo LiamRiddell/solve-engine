@@ -1,6 +1,7 @@
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
 import { MAX_INGREDIENT_NAME_WORDS } from "../data/IngredientDensities";
+import { expectsValueAt } from "@solve-js/normalizer/ValuePosition";
 
 /**
  * Fuses a substance name (e.g. "butter", "olive oil", "unobtainium") into a
@@ -29,7 +30,9 @@ import { MAX_INGREDIENT_NAME_WORDS } from "../data/IngredientDensities";
  * Instead, this rule only fires in a narrowly-qualified CONTEXT:
  *   1. The token immediately BEFORE the candidate word(s) must be a real
  *      `UNIT` token (the amount's mass/volume unit, e.g. "g"/"cups")
- *      never true for a bare `:butter = 5` variable definition.
+ *      never true for a bare `:butter = 5` variable definition, and one
+ *      after an amount: a unit spelling where a value begins (`t`, `m`) is
+ *      a variable the reader named.
  *   2. The token(s) immediately AFTER the candidate word(s) must be a
  *      literal `IN` keyword followed by a unit-like word (`UNIT` or
  *      `IDENT`), never true for a bare identifier reference either.
@@ -52,6 +55,10 @@ export function ingredientNameNormalizerRule(priority = 68): NormalizerRule {
     match(tokens, pos): NormalizerMatch | null {
       const prevToken = tokens[pos - 1];
       if (!prevToken || prevToken.type !== "UNIT") return null;
+      // A unit spelling where a value begins is a name the reader chose, not
+      // an amount's unit: with `t = 3pm`, `t London in Tokyo` reads the time
+      // held in `t`, where `t` (a teaspoon) once made "london" an ingredient.
+      if (expectsValueAt(tokens, pos - 1)) return null;
 
       for (let wordCount = MAX_INGREDIENT_NAME_WORDS; wordCount >= 1; wordCount--) {
         if (pos + wordCount > tokens.length) continue;

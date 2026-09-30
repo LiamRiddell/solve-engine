@@ -190,6 +190,15 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"asin(X) in km",
 		"expand((x+1)/X)",
 		"X:30",
+		// The second found-bug batch: half a dinar split, a finance refusal in
+		// the reader's terms, a one-letter label, a knot, a literal past 2^53
+		// and a quotient with no single answer.
+		"split X/2 KWD between 3",
+		"compound interest on 1000 over 3 years at X",
+		"x:X",
+		"5 mph + X knots",
+		"X + 9007199254740993",
+		"X / 0",
 	],
 };
 
@@ -197,8 +206,9 @@ describe("every form stays honest over the numeric edges", () => {
 	for (const [feature, forms] of Object.entries(LINE_FORMS)) {
 		const lines = forms.flatMap((form) => fill(form, NUMERIC_EDGES));
 		test.each(lines)(`${feature}: %s`, (line) => {
-			// 0/0 is documented as NaN (the floating-point standard's answer), and a
-			// form fed it may answer NaN in turn; that is not a leak.
+			// 1/0 - 1/0 is NaN (the floating-point standard's answer), and a form
+			// fed an infinity may answer NaN in turn; that is not a leak. 0/0 is
+			// refused by name, so the allowance is only for the lines naming it.
 			expectHonestLine(line, { allowNaN: line.includes("0/0") });
 		});
 	}
@@ -261,6 +271,13 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	{ form: "d = 2026-01-01\n(d - 2026-01-01) in days\nline 2 for d from 2026-01-01 to 2026-06-01 step X days" },
 	// A list that carries a unit, from a line above (#745).
 	{ form: "a = X km\n[a, 500 m] * 2" },
+	// A time held in a variable, converted from a zone named after it; a
+	// variable named salary after tax; a one-letter label beside the variable
+	// of that name (the second found-bug batch).
+	{ form: "t = 3pm\n(t + X hours) London in Tokyo" },
+	{ form: "t = X\nt London in Tokyo" },
+	{ form: "salary = £X\nsalary after tax" },
+	{ form: "x = X\nx:3\nx + 1" },
 ];
 
 describe("the cross-line forms stay honest over the numeric edges, through both passes", () => {

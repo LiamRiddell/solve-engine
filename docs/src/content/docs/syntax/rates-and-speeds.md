@@ -30,6 +30,19 @@ A rate converts to another rate, or to any of the single-word speed spellings
 100 km/h to m/s // 27.78 m/s
 ```
 
+The knot, the speed of ships and aircraft, is one nautical mile (1,852 metres)
+an hour, and is written `knot`, `knots` or `kn`. It is a speed like any other,
+so it converts, and adds to a speed in another unit.
+
+```solve
+3 knots in km/h // 5.56 km/h
+5 mph + 3 knots // 8.45 mph
+10 knots * 2 hours // 20.00 nmi
+```
+
+`kt`, which a pilot also writes, is not a knot here: it already means a
+kilotonne, and reading a mass as a speed would give a confident wrong answer.
+
 The target can be written the way the rate itself can, with `per` in place of
 the slash, and a price with its currency symbol. `in miles per hour` is the same
 target as `in miles/hour`, and `in $/day` the same as `in USD/day`, so a speed

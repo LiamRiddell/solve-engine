@@ -60,7 +60,7 @@ describe("through the engine", () => {
 		expect(show(line)).toMatch(pattern);
 	});
 
-	test.each(["2^53", "1e308", "-1e308", "0/0"])("adversarial: %s is past the calendar's reach, and refused rather than written as NaN", (n) => {
+	test.each(["2^53", "1e308", "-1e308", "1/0 - 1/0"])("adversarial: %s is past the calendar's reach, and refused rather than written as NaN", (n) => {
 		expect(show(`(${n}) as iso8601`)).toBe("This timestamp is outside the dates the engine can hold, which reach about 273,000 years either side of 1970.");
 		expect(newTrackedEngine().evaluateExpression(`(${n}) to date`).errorCode).toBe("DATE_OUT_OF_RANGE");
 	});

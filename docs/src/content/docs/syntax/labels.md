@@ -21,6 +21,19 @@ total: 5 + 3 // 8
 Groceries: 45 // 45
 ```
 
+One letter is a word too, so `x: 3` is a label, the way `A: 40` and `B: 55`
+label a ledger. The label is only a name for the figure: it never reads or
+changes a variable called the same, so with `x = 2` above it, `x: 3` is 3 and
+`x` is still 2. A colon has no other meaning here to fall back on: a ratio is
+written `ratio(x, 3)` (see [ratios](/syntax/ratios/)), a colon between two
+numbers is a clock time, and a variable is set with `:x = 3` or `x = 3`.
+
+```solve-doc
+x = 2 // 2
+x:3 // 3
+x + 1 // 3
+```
+
 ## A label without the colon
 
 The colon is the part people leave out, and other notepads read a line without

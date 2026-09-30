@@ -269,6 +269,7 @@ Measured against **metre**.
 | centimetre | `centimeter`, `centimeters`, `centimetres`, `cm` | 0.01 |
 | pica | `picas` | 0.00423333 |
 | millimetre | `millimeter`, `millimeters`, `millimetres`, `mm` | 0.001 |
+| typographic point | `typographic points` | 0.000352778 |
 | mil | `mils` | 0.0000254 |
 | micrometre | `micrometer`, `micrometers`, `micrometres`, `μm`, `µm` | 0.000001 |
 | nanometre | `nanometer`, `nanometers`, `nanometres`, `nm` | 1e-9 |
@@ -516,8 +517,10 @@ Measured against **cubic metre**.
 | imperial pint | `imperial pints`, `imp pt` | 0.000568261 |
 | US dry pint | `US dry pt` | 0.00055061 |
 | pint | `pints`, `US liquid pint`, `US liquid pints`, `pt` | 0.000473176 |
+| imperial cup | `imperial cups` | 0.000284131 |
+| metric cup | `metric cups` | 0.00025 |
 | US legal cup | `US legal cups`, `US lc` | 0.00024 |
-| cup | `cups` | 0.000236588 |
+| cup | `cups`, `US cup`, `US cups` | 0.000236588 |
 | decilitre | `deciliter`, `deciliters`, `decilitres`, `dl`, `dL` | 0.0001 |
 | US fluid ounce | `US fluid ounces`, `fl oz` | 0.0000295735 |
 | imperial fluid ounce | `imperial fluid ounces`, `imp fl oz` | 0.0000284131 |
@@ -541,7 +544,7 @@ Measured against **metre per second**.
 | Unit | Spellings | Relative size |
 | --- | --- | --- |
 | metre per second | `mps` | 1 |
-| knot | `kn` | 0.514444 |
+| knot | `kn`, `knots` | 0.514444 |
 | mile per hour | `mph` | 0.44704 |
 | foot per second | `ft_s` | 0.3048 |
 | kilometre per hour | `kph` | 0.277778 |
@@ -649,6 +652,7 @@ Measured against **kilometre per litre**.
 | --- | --- | --- |
 | kilometre per litre | `kmpl` | 1 |
 | mile per US gallon | `mpg` | 0.425144 |
+| mile per imperial gallon | `mpg imperial`, `imperial mpg`, `mpg uk`, `mpg UK`, `UK mpg` | 0.354006 |
 
 ## Fuel consumption
 
@@ -671,7 +675,7 @@ Measured against one **whole**, which no spelling here names on its own.
 
 ## Spellings that are not listed
 
-The conversion tables carry 1525 spellings in total, and 50 of
+The conversion tables carry 1540 spellings in total, and 50 of
 them are missing above. Most carry a character an expression cannot type as
 part of a unit, such as the dot in `W⋅h` or the full stops in `fl. oz.`, and a few
 are ordinary words the lexer leaves to English, such as `turn` and `point`.

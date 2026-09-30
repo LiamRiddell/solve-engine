@@ -278,7 +278,10 @@ describe("adversarial", () => {
 		for (const line of [...fill("vec2(X, 1)", NUMERIC_EDGES), ...fill("dot([X, 1], [2, 3])", NUMERIC_EDGES), ...fill("float(X)", NUMERIC_EDGES)]) {
 			expectHonestLine(line, { allowNaN: line.includes("0/0") });
 		}
-		expect(show("float(9007199254740993)")).toBe("9,007,199,254,740,992");
+		// float passes a number through as it is, so a literal past 2^53 keeps
+		// its exact integer, as float(2^53 + 1) does (FoundBug_wholeLiteralPastSafeRange).
+		expect(show("float(9007199254740993)")).toBe("9,007,199,254,740,993");
+		expect(show("float(9007199254740993)")).toBe(show("float(2^53 + 1)"));
 		expect(show("dot([1e308], [10])")).toBe("∞");
 	});
 });

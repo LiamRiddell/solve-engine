@@ -20,12 +20,21 @@ A resolver implements
 
 ```ts
 import type { IAsyncResolver, AsyncCheckResult } from "solve-engine/resolvers";
+import type { Token } from "solve-engine/lexer";
+import type { BytecodeProgram } from "solve-engine/parser";
 import { uomValue, type Value } from "solve-engine/vm";
+
+/** The two currencies a line converts between, as your syntax reads them. */
+interface Pair {
+  from: string;
+  to: string;
+}
 
 class RatesResolver implements IAsyncResolver {
   readonly namespace = "myrates";
+  private readonly cache = new Map<string, Value>();
 
-  preflight(tokens, bytecode, packageId, signal): AsyncCheckResult | null {
+  preflight(tokens: Token[], bytecode: BytecodeProgram, packageId: string, signal: AbortSignal): AsyncCheckResult | null {
     const pair = readPairFromTokens(tokens); // your syntax, your parse
     if (!pair) return null;                  // this line is not for us
 
@@ -36,15 +45,16 @@ class RatesResolver implements IAsyncResolver {
       queryKey,
       packageId,
       signal,
-      resolver: this.fetchRate(pair, signal),
+      resolver: this.fetchRate(queryKey, pair, signal),
     };
   }
 
-  private async fetchRate(pair, signal): Promise<Value> {
+  private async fetchRate(queryKey: string, pair: Pair, signal: AbortSignal): Promise<Value> {
     const res = await fetch(`https://example.com/rate/${pair.from}/${pair.to}`, { signal });
     const rate = await res.json();
-    this.cache.set(/* queryKey */, rate);
-    return uomValue(rate.value, pair.to);
+    const value = uomValue(rate.value, pair.to);
+    this.cache.set(queryKey, value);
+    return value;
   }
 
   destroy() {
@@ -212,6 +222,8 @@ once and queues the rest, in the order they were asked for. `maxConcurrent` sets
 the number:
 
 ```ts
+import { createQueryResolver } from "solve-engine/resolvers";
+
 const { resolver, pluginFunction } = createQueryResolver({
   namespace: "tides",
   pluginFunctionIndex: TIDES_FN,
@@ -257,9 +269,9 @@ return {
   queryKey,
   packageId,
   signal,
-  resolver: this.fetchRate(pair, signal),
+  resolver: this.fetchRate(queryKey, pair, signal),
   refetchIntervalMs: 60_000,                    // refresh an on-screen rate once a minute
-  refetch: () => this.fetchRate(pair, this.refreshSignal),
+  refetch: () => this.fetchRate(queryKey, pair, this.refreshSignal),
 };
 ```
 
@@ -283,7 +295,7 @@ engine carries it through every line computed from that value; you do nothing
 further.
 
 ```ts
-private async fetchRate(pair, signal): Promise<Value> {
+private async fetchRate(queryKey: string, pair: Pair, signal: AbortSignal): Promise<Value> {
   const res = await fetch(`https://example.com/rate/${pair.from}/${pair.to}`, { signal });
   const rate = await res.json();
   const value = uomValue(rate.value, pair.to);
@@ -293,6 +305,7 @@ private async fetchRate(pair, signal): Promise<Value> {
     fetchedAt: Date.now(),       // when it arrived, in epoch milliseconds
     subject: `${pair.from}/${pair.to}`,
   }];
+  this.cache.set(queryKey, value);
   return value;
 }
 ```

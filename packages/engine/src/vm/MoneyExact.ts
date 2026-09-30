@@ -28,8 +28,11 @@ import {
 	makeDecimal,
 	type DecimalData,
 } from "@solve-js/decimal";
+import { DECIMAL_DIGIT_CEILING } from "@solve-js/decimal";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { currencyMinorUnits } from "@solve-js/uom/CurrencyMinorUnits";
+import { roundRationalToPlaces } from "@solve-js/vm/ExactDecimals";
+import type { Rational } from "@solve-js/symbolic";
 
 /** Exact base-ten `1`, the constant term in a `1 + p%` scaling factor. */
 const ONE_DECIMAL: DecimalData = decimalFromInteger(1);
@@ -47,7 +50,45 @@ const ONE_DECIMAL: DecimalData = decimalFromInteger(1);
  */
 export function moneyExactMagnitude(operand: Value, unit: string): DecimalData | null {
 	if (!sharedCurrencyExchange.isCurrency(unit)) return null;
-	return operand.exact ?? decimalFromNumberIfExact(operand.toNumber());
+	if (operand.exact !== undefined) return operand.exact;
+	// A fraction that ends in base ten (`(1/2) KWD`, `3/8 of £1`) is a decimal
+	// written another way, so it is as exact as the literal `0.5` would be.
+	if (operand.rational !== undefined) {
+		const terminating = terminatingDecimal(operand.rational);
+		if (terminating !== null) return terminating;
+	}
+	return decimalFromNumberIfExact(operand.toNumber());
+}
+
+/**
+ * The exact decimal a fraction is, when it has one: a denominator whose only
+ * prime factors are 2 and 5 ends after as many places as the larger count of
+ * either. `1/8` is 0.125; `1/3` has no end, and is null, and so is a fraction
+ * that ends past the 34 places an exact decimal holds.
+ *
+ * @param q - The fraction, in lowest terms with a positive denominator.
+ * @returns Its decimal, or null when it recurs.
+ */
+export function terminatingDecimal(q: Rational): DecimalData | null {
+	if (q.d <= 0n) return null;
+	let rest = q.d;
+	let twos = 0;
+	let fives = 0;
+	while (rest % 2n === 0n) {
+		rest /= 2n;
+		twos++;
+	}
+	while (rest % 5n === 0n) {
+		rest /= 5n;
+		fives++;
+	}
+	if (rest !== 1n) return null;
+	const places = Math.max(twos, fives);
+	// Past the exact decimals' ceiling the fraction has no exact form to keep
+	// (1/2^40 ends after 40 places), so it reads its double, as `0.1` written
+	// to 40 places would.
+	if (places > DECIMAL_DIGIT_CEILING) return null;
+	return roundRationalToPlaces(q, places);
 }
 
 /**

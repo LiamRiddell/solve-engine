@@ -215,9 +215,9 @@ describe("what must keep working", () => {
 		expect(value.toNumber()).toBe(Infinity);
 	});
 
-	test("zero over zero is still NaN, and unequal to itself", () => {
-		expect(evaluate("0/0").toNumber()).toBeNaN();
-		expect(evaluate("0/0 == 0/0").value).toBe(false);
+	test("zero over zero is refused by name rather than NaN, and a NaN is still unequal to itself", () => {
+		expect(evaluate("0/0").errorCode).toBe("QUOTIENT_UNDEFINED");
+		expect(evaluate("(1/0 - 1/0) == (1/0 - 1/0)").value).toBe(false);
 	});
 
 	test("a non-integer operand keeps the division on the float path", () => {

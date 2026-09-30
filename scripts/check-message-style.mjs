@@ -126,6 +126,17 @@ export const RULES = [
 		test: (text) => /\b[a-z]+[A-Z][A-Za-z0-9]*\(\)/.exec(text)?.[0] ?? null,
 		message: "A method name in a message. Say what the reader is missing instead.",
 	},
+	{
+		name: "internal-name-prefix",
+		// A line's result that opens with an internal function's name
+		// (`compoundInterest: rate -1.5 ...`), a name the reader never typed
+		// when they wrote `compound interest on £1,000 ...`. camelCase before
+		// the colon, so a word the reader types (`npv:`, `root:`) is not
+		// caught. Line results only, as for the method name above.
+		lineOnly: true,
+		test: (text) => /^[a-z]+[A-Z][A-Za-z0-9]*: /.exec(text)?.[0] ?? null,
+		message: "A message opens with an internal function's name. Say it in the reader's terms.",
+	},
 ];
 
 /**
