@@ -304,7 +304,8 @@
 	"ConditionalsErrorCodes": [
 		"CHECK_EXPECTED_COMPARISON",
 		"CHECK_FAILED",
-		"CHECK_INCOMPARABLE"
+		"CHECK_INCOMPARABLE",
+		"NOT_NEEDS_BOOLEAN"
 	],
 	"ConstantsErrorCodes": [
 		"UNKNOWN_CONSTANT"
@@ -581,7 +582,8 @@
 		"COOKING_UNKNOWN_INGREDIENT"
 	],
 	"VariablesErrorCodes": [
-		"EXPECTED_IDENTIFIER"
+		"EXPECTED_IDENTIFIER",
+		"NAME_HAS_RESERVED_WORD"
 	],
 	"WeatherErrorCodes": [
 		"WEATHER_CITY_NOT_FOUND",

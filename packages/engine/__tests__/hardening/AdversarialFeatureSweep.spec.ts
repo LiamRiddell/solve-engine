@@ -136,6 +136,11 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 	dates: ["1 Jan 2026 + X days", "1 Jan 2026 + X", "1 Jan 2026 to X", "X to 1 Jan 2026", "X * 9:00", "round(9:00) + X", "(9:30 - 8:30) + X minutes", "X as iso8601"],
 	// A signed offset after a date or in a conversion (#730).
 	utcOffsets: ["2026-04-03T15:00 in UTC-X", "2026-04-03T15:00 in GMT+X", "2026-04-03 in UTC+X:30", "3pm London in UTC-X", "now in UTC+X"],
+	// Negation (#751), a label without its colon (#742) and a name of several
+	// words on its definition line (#743).
+	negation: ["not (X > 0)", "!(X > 0)", "not X", "!X", "if not X > 0 then 1 else 2"],
+	wordLabels: ["Rent $X", "Petrol X l", "Flight to Paris X EUR", "Chapter X", "take home $X"],
+	multiWordNames: ["hourly rate = X", "take home = X", "tax on = X"],
 };
 
 describe("every form stays honest over the numeric edges", () => {
@@ -191,6 +196,11 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	// A formula stored before its unknown had a value, read below it (#732).
 	{ form: "y = x + 1\nx = X\ny + x" },
 	{ form: "y = x * 2\nx = X\ny" },
+	// A lone sum or total under labelled lines (#742), and a name of several
+	// words read below its definition (#743).
+	{ form: "Rent $X\nFood $300\nsum" },
+	{ form: "total = X\ntotal" },
+	{ form: "hourly rate = X\nhours = 8\nhourly rate * hours" },
 ];
 
 describe("the cross-line forms stay honest over the numeric edges, through both passes", () => {
@@ -235,6 +245,9 @@ describe("a word naming an inherited property is an ordinary unknown word", () =
 	test.each(PROTOTYPE_WORDS)("as a variable, a section and a table column: %s", (word) => {
 		expectPrototypeUntouched(() => {
 			expectHonestDocument(`${word} = 5\n${word} * 2`);
+			// As a label, before a lone total, and in a name of several words.
+			expectHonestDocument(`${word} $5\nsum`);
+			expectHonestDocument(`${word} rate = 5\n${word} rate * 2`);
 			expectHonestDocument(`# ${word}\n10\ntotal of section "${word}"`, { agree: false });
 			expectHonestDocument(`| ${word} | cost |\n| --- | --- |\n| food | 10 |\n\ncolumn "${word}" for "food"`, { agree: false });
 		});
@@ -249,6 +262,9 @@ describe("inputs sized to exhaust time are answered or refused in time", () => {
 		["a long name", RESOURCE_PROBES.longIdentifier()],
 		["a huge power", RESOURCE_PROBES.hugePower()],
 		["a huge range", RESOURCE_PROBES.hugeRange()],
+		["a long run of words before an amount", `${RESOURCE_PROBES.longIdentifier(10).concat(" ").repeat(2_000)}$5`],
+		["a long run of words before an =", `${RESOURCE_PROBES.longIdentifier(10).concat(" ").repeat(2_000)}= 5`],
+		["a long chain of negations", `${"not ".repeat(1_000)}true`],
 	])("%s", (_name, line) => {
 		expectHonestLine(line, { budgetMs: 5_000 });
 	});

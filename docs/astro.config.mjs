@@ -286,6 +286,7 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { slug: "syntax/operators" },
+                { slug: "syntax/labels" },
                 { slug: "syntax/number-suffixes" },
                 { slug: "syntax/decimals" },
                 { slug: "syntax/fractions" },

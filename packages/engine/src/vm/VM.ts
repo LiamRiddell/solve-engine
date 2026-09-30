@@ -455,7 +455,9 @@ export interface LineExecutionContext {
      * The value the document gives a name as it stands, or `undefined` when no
      * line has set it. Goal seek reads it to learn the unit its unknown is in,
      * so `solve line 3 for price = £1,500` answers in pounds when `price` is an
-     * amount of pounds (#835). Absent where there is no document.
+     * amount of pounds (#835), and a line that is only `sum` or `total` reads it
+     * before it totals the block above (#742). Present on every path the engine
+     * builds a context for, a single expression included.
      */
     getVariable?: (name: string) => Value | undefined;
     /**

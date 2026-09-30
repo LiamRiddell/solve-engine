@@ -55,6 +55,10 @@ export interface Token {
 	 * well as a unit's. A variable of that name, when one is defined, is divided
 	 * by instead of read as the unit (#642). Set by the bare-rate rule; the
 	 * parselet compiles the choice and the dependency graph records the read.
+	 *
+	 * Also set on a line that is only `sum` or `total` (#742), which reads a
+	 * variable of that name when the note defines one and totals the block
+	 * above when it does not.
 	 */
 	mayNameVariable?: boolean;
 }

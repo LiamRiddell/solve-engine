@@ -1419,3 +1419,81 @@ describe("a lone carriage return across entry points", () => {
     expect(message).toBe("5");
   });
 });
+
+describe("a lone sum or total, and a label without its colon, across entry points (#742)", () => {
+  // `Rent $1200` is the label `Rent` and the amount, as `Rent: $1200` is, and a
+  // line that is only `sum` or `total` totals the block above it unless the
+  // note defines a variable of that name.
+  const doc = ["Rent $1200", "Food $300", "sum", "Extra $5", "total", "", "total = 7", "total"];
+
+  test("the block is totalled, a subtotal passed over, and a variable read, in both passes", () => {
+    const expected = ["$1,200.00", "$300.00", "$1,500.00", "$5.00", "$1,505.00", "", "7", "7"];
+    expect(batch(doc)).toEqual(expected);
+    expect(incremental(doc)).toEqual(expected);
+  });
+
+  test("an edit inside the block, and one that defines the variable, reach it in a live editor", () => {
+    const inBlock = editThenEvaluate(["Rent $1200", "Food $300", "sum"], [[2, "Food $400"]]);
+    expect(inBlock.shown).toEqual(batch(inBlock.edited));
+    expect(inBlock.shown[2]).toBe("$1,600.00");
+    const defines = editThenEvaluate(["x = 3", "Rent $5", "total"], [[1, "total = 9"]]);
+    expect(defines.shown).toEqual(batch(defines.edited));
+    expect(defines.shown[2]).toBe("9");
+  });
+
+  test("the single-expression path has no block, and says so", () => {
+    expectNeedsDocument("sum");
+    expectNeedsDocument("total");
+  });
+
+  test("a label reads the same on every path", () => {
+    expect(single("Rent $1200")).toEqual({ threw: false, type: ValueType.Uom, message: "$1,200.00" });
+    expect(batch(["Rent $1200"])).toEqual(incremental(["Rent $1200"]));
+  });
+});
+
+describe("names of several words across entry points (#743)", () => {
+  // A run of words before a definition's `=` is one name, and a later line
+  // reads the same words as it. The table of names is the document's, filled
+  // top to bottom, so both passes read a name only below its definition.
+  const doc = ["hourly rate * 2", "hourly rate = $50", "hours = 8", "hourly rate * hours", "rate = 3", "hourly rate * rate"];
+
+  test("each line reads the name below its definition, and both passes agree", () => {
+    const answers = batch(doc);
+    expect(answers[0]).toMatch(/^ERROR: /);
+    expect(answers.slice(1)).toEqual(["$50.00", "8", "$400.00", "3", "$150.00"]);
+    expect(incremental(doc)).toEqual(answers);
+  });
+
+  // The line above the definition is left out of the live-editor comparisons:
+  // from its second pass a live editor reads a name defined further down with
+  // the value the last pass left, one word or several (`x * 2` above `x = 5`
+  // answers 10 there, where a fresh pass says x is undefined). That predates
+  // names of several words and is not theirs to change.
+  const below = ["hourly rate = $50", "hours = 8", "hourly rate * hours", "rate = 3", "hourly rate * rate"];
+
+  test("editing the definition re-keys every reader in a live editor, as a fresh pass reads it", () => {
+    const renamed = editThenEvaluate(below, [[1, "hourly wage = $50"]]);
+    expect(renamed.shown).toEqual(batch(renamed.edited));
+    expect(renamed.shown[2]).toMatch(/^ERROR: /);
+    const valued = editThenEvaluate(below, [[1, "hourly rate = $60"]]);
+    expect(valued.shown).toEqual(batch(valued.edited));
+    expect(valued.shown[2]).toBe("$480.00");
+  });
+
+  test("deleting the definition takes the name away in a live editor, as a fresh pass reads it", () => {
+    const { shown, edited } = deleteThenEvaluate(below, 1);
+    expect(shown).toEqual(batch(edited));
+    expect(shown[1]).toMatch(/^ERROR: /);
+  });
+
+  test("the single-expression path: a definition needs no document, and a read of words nothing defined is the parse error it was", () => {
+    // The definition line is self-contained, so it answers on its own. A read
+    // has nothing that says its words are one name: it is the parse error it
+    // always was, and never a number.
+    expect(single("hourly rate = $50")).toEqual({ threw: false, type: ValueType.Uom, message: "$50.00" });
+    const read = single("hourly rate * 2");
+    expect(read.threw).toBe(true);
+    expect(read.message).toBe('Expected an operator or the end of the line, but found "rate"');
+  });
+});

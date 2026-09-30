@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 508 codes, grouped below by the part
+ship. The engine and its built-in packages ship 510 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -554,6 +554,7 @@ In the package as `ERROR_CODE_CATALOGUES.ConditionalsErrorCodes`.
 | `CHECK_EXPECTED_COMPARISON` | either | A `check` whose statement is not a comparison. The message shows the forms a check takes. |
 | `CHECK_FAILED` | as a value | A `check` whose comparison does not hold. The message says by how much; a host counts these through `ParsingResult.checks`. |
 | `CHECK_INCOMPARABLE` | as a value | A `check` between two values that cannot be compared: text with `<`, or quantities of different measures. |
+| `NOT_NEEDS_BOOLEAN` | as a value | `not` or a prefix `!` before a value that is not true or false (`not 5`, `!"yes"`). The message names what the value is. |
 
 ## Constants
 
@@ -1092,6 +1093,7 @@ In the package as `ERROR_CODE_CATALOGUES.VariablesErrorCodes`.
 | Code | Arrives | When it arises |
 | --- | --- | --- |
 | `EXPECTED_IDENTIFIER` | thrown | A `:` or `global :` not followed by a name, as in `:= 5`. |
+| `NAME_HAS_RESERVED_WORD` | thrown | A name of several words holding a word the engine already reads: an operator spelled as a word (`take home = 5`) or a phrase (`tax on = 5`). The message names the word. |
 
 ## Weather
 

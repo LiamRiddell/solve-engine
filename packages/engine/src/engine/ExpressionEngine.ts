@@ -129,6 +129,8 @@ import type { Explanation, ExplanationStep, ExplainCall, LineTrace, ObservedSpan
 import type { ObservedCall } from "@solve-js/vm/VM";
 import { builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
 import { trailingTokenWording } from "@solve-js/parser/ParseMessages";
+import { wordLabelEnd } from "@solve-js/engine/WordLabel";
+import { MultiWordNameTable, multiWordDefinitionRule, multiWordNameRule, multiWordNameRefusal } from "@solve-js/packages/variables/MultiWordNames";
 import { documentErrors, errorOnLine, inlineExpressionOffset, lineFailureOf, recordLineFailure } from "@solve-js/engine/LineDiagnostics";
 import {
     type DiagnosticPipelineResult,
@@ -623,7 +625,8 @@ export class ExpressionEngine {
     private parser: PrecedenceParser;
     /**
      * How many leading tokens the last top-level {@link parseExpression} call
-     * set aside as a label ("pi approximation: 355/113"), 0 when it read them
+     * set aside as a label ("pi approximation: 355/113", or "Rent $1200"
+     * without its colon), 0 when it read them
      * all. Written by that method and read only by
      * {@link readExpressionTokens}, straight after a parse it made itself, so
      * a stale value from some other parse is never observed.
@@ -1249,9 +1252,11 @@ export class ExpressionEngine {
                       return state.reads;
                   }
                 : undefined,
-            // The document's own value for a name, which a goal seek reads for
-            // the unit its unknown is in (#835).
-            getVariable: doc ? (name: string) => this.vm.getVar(name) : undefined,
+            // The value the note gives a name, which a goal seek reads for the
+            // unit its unknown is in (#835) and a lone `sum` or `total` reads
+            // before it totals the block above (#742). On every path: the batch
+            // pass and a single expression hold their names in the same VM.
+            getVariable: (name: string) => this.vm.getVar(name),
             evaluateLineWithBinding: doc
                 ? (n: number, variable: string, bound: Value, symbolicTolerant: boolean) => {
                       // The same edge as `getLineReads` above, for the same reason.
@@ -1902,6 +1907,13 @@ export class ExpressionEngine {
      */
     private readonly userUnits = new UserUnitTable();
     /**
+     * The names of several words this document has defined (`hourly rate =
+     * $50`, #743), scoped as {@link userUnits} is: emptied at the start of each
+     * batch pass, owned per line on the incremental path, and read by the
+     * normaliser so a later line fuses the same words into the name.
+     */
+    private readonly multiWordNames = new MultiWordNameTable();
+    /**
      * The line that stored each equation, by the equation's unknown, one map per
      * kind: `a * x = 10` stores both a matrix and a scalar equation for `x`,
      * `x^2 - a = 0` a scalar one. The value is the line's persistent id, or -1
@@ -2152,6 +2164,13 @@ export class ExpressionEngine {
         // multiply so a defined name is expanded whole (`6 * 2 weeks`) instead
         // of first split into `6 * sprints` with the name stranded as a variable.
         this.normalizer.register(userUnitExpansionRule(this.userUnits));
+
+        // Names of several words (#743). The definition rule needs no table, so
+        // a definition reads the same on every path; the name rule reads this
+        // engine's own table, which is why both are registered here rather
+        // than by a package, for the reason the unit rule is.
+        this.normalizer.register(multiWordDefinitionRule());
+        this.normalizer.register(multiWordNameRule(this.multiWordNames));
 
         // One rule for every package's `name(` call word. It reads the live
         // callFusions map, which registerPackage fills below, so it is registered
@@ -2494,6 +2513,44 @@ export class ExpressionEngine {
     /** The names of every user-defined unit in scope, for detecting a removal. */
     userUnitNames(): string[] {
         return this.userUnits.names;
+    }
+
+    /**
+     * Register a name of several words a definition line gave (#743), owned by
+     * that line. A new name drops every compiled program, since one compiled
+     * before it existed read its words apart; see {@link tryDefineUserUnit} for
+     * the same arrangement. Inside a scratch run nothing is registered: the run
+     * re-reads lines the document has already run, whose names are in place.
+     */
+    private registerMultiWordName(name: string, lineNumber: number): void {
+        if (this.scratch !== null) return;
+        const lineId = this.documentModel?.getLineAt(lineNumber)?.lineId ?? -1;
+        if (this.multiWordNames.define(name.split(" "), lineId)) {
+            this.clearCompiledCache();
+            this.documentModel?.invalidateAll();
+        }
+    }
+
+    /**
+     * Let go of the names of several words `lineId` defined (#743), for a line
+     * about to be compiled again or removed. A name the line still defines is
+     * taken back as the line compiles; one it does not is gone when the pass
+     * settles ({@link settleMultiWordNames}).
+     *
+     * @param lineId - The persistent id of the line.
+     */
+    undefineMultiWordNamesFrom(lineId: number): void {
+        this.multiWordNames.undefineFrom(lineId);
+    }
+
+    /**
+     * End an incremental pass for the names of several words (#743): when a
+     * name lost its last definition, the lines that fused it hold bytecode built
+     * around it, so every compiled program and every line is invalidated, as
+     * {@link invalidateForRemovedUserUnits} does for a unit.
+     */
+    settleMultiWordNames(): void {
+        if (this.multiWordNames.settle()) this.invalidateForRemovedUserUnits();
     }
 
     /**
@@ -3567,8 +3624,11 @@ export class ExpressionEngine {
         // the bytecode cache when the previous pass actually defined a unit,
         // since its cached programs may have expanded one, a document that never
         // uses the feature keeps its cache and pays nothing here.
-        if (!this.userUnits.isEmpty) this.clearCompiledCache();
+        if (!this.userUnits.isEmpty || !this.multiWordNames.isEmpty) this.clearCompiledCache();
         this.userUnits.clear();
+        // Names of several words likewise (#743): a line reads one only once a
+        // line above it has defined it, on every pass.
+        this.multiWordNames.clear();
         // Reset running-total accumulators for the same reason units are
         // rebuilt top-to-bottom: a full re-parse must reproduce the first
         // parse. `total += 5` seeds 0 only while the name is undefined, so
@@ -3631,8 +3691,11 @@ export class ExpressionEngine {
      */
     evaluateLines(lines: string[]): ParsedLine[] {
         // A whole-document pass, so definitions start empty (see parseDocument).
-        if (!this.userUnits.isEmpty) this.clearCompiledCache();
+        if (!this.userUnits.isEmpty || !this.multiWordNames.isEmpty) this.clearCompiledCache();
         this.userUnits.clear();
+        // Names of several words likewise (#743): a line reads one only once a
+        // line above it has defined it, on every pass.
+        this.multiWordNames.clear();
         // Reset running-total accumulators for the same reason units are
         // rebuilt top-to-bottom: a full re-parse must reproduce the first
         // parse. `total += 5` seeds 0 only while the name is undefined, so
@@ -4037,6 +4100,25 @@ export class ExpressionEngine {
                 } catch {
                     // This colon's fragment didn't parse cleanly either
                     // try the next one to the left before giving up.
+                }
+            }
+
+            // A label without its colon, `Rent $1200` (#742): words, then one
+            // amount of money or one quantity that ends the line. Tried last,
+            // and only on the line itself, so it changes nothing that parsed or
+            // that a colon label reads, and costs one parse at most. See
+            // engine/WordLabel.ts for the shape and why it is this narrow.
+            if (allowLabelFallback) {
+                const amountAt = wordLabelEnd(tokens);
+                if (amountAt > 0) {
+                    builder.reset();
+                    try {
+                        this.parseExpression(builder, tokens.slice(amountAt), hasParens, false);
+                        this.parsedLabelEnd = amountAt;
+                        return;
+                    } catch {
+                        // Not an amount after all; the line's own error stands.
+                    }
                 }
             }
 
@@ -4476,6 +4558,12 @@ export class ExpressionEngine {
         // an unknown and be stored as an equation.
         if (normalizedTokens.some(t => t.type === 'WHAT_IF')) return null;
 
+        // A would-be name holding a word the engine reads (`take home = 5`,
+        // `tax on = 5`) is refused by name rather than stored as an equation
+        // or left to the phrase's parse error (#743).
+        const refusedName = multiWordNameRefusal(normalizedTokens, eqIdx);
+        if (refusedName !== null) throw refusedName;
+
         const names = this.parseFactorChain(normalizedTokens.slice(0, eqIdx));
         if (names === null) {
             // Not a product chain. It may still be a general scalar equation
@@ -4490,7 +4578,10 @@ export class ExpressionEngine {
 
         if (names.length === 1) {
             const result = this.simplifySymbolically(rhsTokens, lineNumber, effects);
-            if (effects === "apply") this.vm.setVar(names[0], result);
+            if (effects === "apply") {
+                this.vm.setVar(names[0], result);
+                if (names[0].includes(" ")) this.registerMultiWordName(names[0], lineNumber);
+            }
             return { value: result, assigned: names[0] };
         }
 
@@ -6915,11 +7006,15 @@ export class ExpressionEngine {
 	 *   defined for this call only, so `3 sprints` below `1 sprint = 2 weeks`
 	 *   is a quantity even on an engine that has never evaluated the note. A
 	 *   unit the engine already holds is left as it is.
+	 * @param names - Names of several words the note defines above this
+	 *   expression (`hourly rate`, #743), registered for this call only, so
+	 *   `hourly rate * 8` below `hourly rate = $50` reads the one name. A name
+	 *   the engine already holds is left as it is.
 	 * @returns The normalised tokens and the first one the parser reads, or
 	 *   null when the text is not an expression: prose, a half-typed line, or a
 	 *   line over the length or complexity limit.
 	 */
-	readExpressionTokens(expression: string, units: readonly DocumentUnit[] = []): ExpressionTokens | null {
+	readExpressionTokens(expression: string, units: readonly DocumentUnit[] = [], names: readonly string[] = []): ExpressionTokens | null {
 		if (expression.length > this.config.validation.maxExpressionLength) return null;
 		let tokens: Token[];
 		try {
@@ -6930,7 +7025,7 @@ export class ExpressionEngine {
 			if (raw.length === 0) return null;
 			// The note's own units are in place for the normaliser, which is the
 			// one stage that reads them, and gone again before this returns.
-			tokens = this.userUnits.withUnits(units, () => this.normalizer.normalize(raw));
+			tokens = this.userUnits.withUnits(units, () => this.multiWordNames.withNames(names, () => this.normalizer.normalize(raw)));
 		} catch {
 			// An unterminated string, or a rule that cannot read a half-typed
 			// line: either way, not an expression.
@@ -7046,6 +7141,9 @@ export class ExpressionEngine {
 		// definition was recognised before this was reached.
 		const eq = tokens.findIndex((t) => t.type === 'EQUALS');
 		if (eq <= 0 || eq === last) return false;
+		// A would-be name holding a word the engine reads is refused as it
+		// compiles (#743), so it is not code here either.
+		if (multiWordNameRefusal(tokens, eq) !== null) return false;
 		return this.parsesWhole(tokens.slice(0, eq), hasParens) && this.parsesWhole(tokens.slice(eq + 1), hasParens);
 	}
 
@@ -7184,6 +7282,7 @@ export class ExpressionEngine {
          this.clearCompiledCache();
          this.vm.reset();
          this.userUnits.clear();
+         this.multiWordNames.clear();
          // The reset above emptied both equation stores; their owners go too.
          this.equationOwners.matrix.clear();
          this.equationOwners.scalar.clear();
@@ -7421,6 +7520,9 @@ export class ExpressionEngine {
         }
         for (const [name, sv] of Object.entries(snapshot.variables)) {
             this.vm.setVar(name, deserializeValue(sv));
+            // A name of several words (#743) is read as one only while the table
+            // holds it, and the snapshot carries the variable, not the table.
+            if (name.includes(" ")) this.multiWordNames.define(name.split(" "));
         }
         for (const fn of snapshot.userFunctions) {
             const program = restoreBytecode(fn.program, link);
