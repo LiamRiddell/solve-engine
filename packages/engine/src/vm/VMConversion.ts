@@ -1,4 +1,4 @@
-import { Value, ValueType, numberValue, numberValueRational, numberValueUncertain, bigIntValue, uomValue, uomValueExact, matrixValue, errorValue, symbolicValue, percentageValue, isTimecodeUnit, type MatrixData, type MatrixEntry } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueRational, numberValueUncertain, bigIntValue, uomValue, uomValueExact, matrixValue, errorValue, symbolicValue, percentageValue, isTimecodeUnit, boolValue, type MatrixData, type MatrixEntry, type IpCidrData } from "@solve-js/vm/Value";
 import { convertUnit, convertRate, getMeasure, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
 import { lookupUnit } from "@solve-js/uom/UnitConversion";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
@@ -1168,6 +1168,96 @@ export function compareRationalOperands(l: Value, r: Value): -1 | 0 | 1 | null {
 }
 
 /**
+ * Whether a value is an IPv6 address or block (issue #748). An IPv6 address is
+ * an IP value holding a 128-bit address, which no double holds exactly, so the
+ * paths that read a number refuse it by name rather than read the NaN its
+ * `toNumber()` reports.
+ *
+ * @param v - The value.
+ */
+export function isIpv6Value(v: Value): boolean {
+    return v.type === ValueType.IpCidr && (v.value as IpCidrData).addr6 !== undefined;
+}
+
+/**
+ * The refusal for an IPv6 address where a number is wanted: arithmetic, a
+ * numeric function, a comparison with a number, a conversion with no
+ * whole-number reading. The message points at `as int`, which gives the
+ * address as its exact 128-bit whole number.
+ *
+ * @param done - What was asked of it, as the end of "cannot be ...": "added", "rounded".
+ * @returns The `IPV6_ARITHMETIC` error Value.
+ */
+export function ipv6Refused(done: string): Value {
+    return errorValue(
+        "IPV6_ARITHMETIC",
+        `An IPv6 address cannot be ${done}: its 128 bits are more than a number holds exactly. For the address as one whole number, write "as int".`,
+    );
+}
+
+/**
+ * An IPv6 address as its whole number: a plain number while a double holds it
+ * exactly (`::1` is 1), a bigint past that, so no bit is rounded away.
+ *
+ * @param v - An IPv6 value (see {@link isIpv6Value}).
+ */
+export function ipv6WholeNumber(v: Value): Value {
+    const addr = (v.value as IpCidrData).addr6 ?? 0n;
+    return addr <= BigInt(Number.MAX_SAFE_INTEGER) ? numberValue(Number(addr)) : bigIntValue(addr);
+}
+
+/**
+ * The refusal for arithmetic with an IPv6 address on either side, or null when
+ * neither is one.
+ *
+ * @param op - The operation, for the message; a remainder passes none.
+ */
+export function ipv6ArithmeticRefused(l: Value, r: Value, op?: "add" | "sub" | "mul" | "div"): Value | null {
+    if (!isIpv6Value(l) && !isIpv6Value(r)) return null;
+    const done = op === "add" ? "added" : op === "sub" ? "subtracted" : op === "mul" ? "multiplied" : op === "div" ? "divided" : "used in this arithmetic";
+    return ipv6Refused(done);
+}
+
+/**
+ * Whether two values are equal when either is an IPv6 address, or null when
+ * neither is. Two IPv6 values are equal when their address, prefix and zone all
+ * are, so `2001:db8::1 == 2001:0db8:0:0:0:0:0:1` is true however each is
+ * written; an IPv6 address never equals anything else, as a colour never
+ * equals a number.
+ */
+export function ipv6Equal(l: Value, r: Value): boolean | null {
+    if (!isIpv6Value(l) && !isIpv6Value(r)) return null;
+    if (!isIpv6Value(l) || !isIpv6Value(r)) return false;
+    const a = l.value as IpCidrData, b = r.value as IpCidrData;
+    return a.addr6 === b.addr6 && a.prefix === b.prefix && a.zone === b.zone;
+}
+
+/**
+ * The order of two IPv6 addresses by their 128-bit values (-1, 0 or 1), a
+ * refusal when only one side is IPv6, or null when neither is. An address
+ * compares by its bits alone, so a prefix or a zone does not break a tie.
+ */
+export function ipv6Order(l: Value, r: Value): -1 | 0 | 1 | Value | null {
+    const left = isIpv6Value(l), right = isIpv6Value(r);
+    if (!left && !right) return null;
+    if (!left || !right) return ipv6Refused("compared with a number");
+    const a = (l.value as IpCidrData).addr6!, b = (r.value as IpCidrData).addr6!;
+    return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * {@link ipv6Order} as the answer to one comparison operator: the boolean, the
+ * refusal, or null when neither side is IPv6.
+ *
+ * @param holds - Whether the operator holds for an order of -1, 0 or 1.
+ */
+export function ipv6Comparison(l: Value, r: Value, holds: (order: -1 | 0 | 1) => boolean): Value | null {
+    const order = ipv6Order(l, r);
+    if (order === null) return null;
+    return order instanceof Value ? order : boolValue(holds(order));
+}
+
+/**
  * The refusal for a date or time in arithmetic that has no meaning for one:
  * multiplying, dividing, a remainder, a power, a negation.
  *
@@ -1404,6 +1494,10 @@ export function binaryOp(
     // 5,370,888,600,000 on 25 September 2026. Refused by name, as the
     // aggregates already refuse the same values.
     if (l.type === ValueType.Datetime || r.type === ValueType.Datetime) return datetimeArithmeticRefused(symbolicOp);
+
+    // An IPv6 address has no numeric reading; see ipv6Refused().
+    const ipv6 = ipv6ArithmeticRefused(l, r, symbolicOp);
+    if (ipv6) return ipv6;
 
     // Symbolic dispatch, either operand carries a free-variable formula.
     // Builds the corresponding SymbolicNode (the non-symbolic side, if

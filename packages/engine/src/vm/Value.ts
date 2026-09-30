@@ -169,16 +169,24 @@ export interface ChartData {
 }
 
 /**
- * An IPv4 address and/or subnet prefix (issue #189). `addr` is the 32-bit
- * address (`192.168.1.10` held as one number); `prefix` is the CIDR prefix
- * length in `/24`. A bare address has no `prefix`, a bare `/24` has no `addr`,
- * and a full block (`192.168.1.0/24`) has both. Lives in a {@link Value}'s
- * `value` slot as the other struct payloads do; the formatter renders it as the
- * dotted quad (plus `/prefix` when present).
+ * An IP address and/or subnet prefix, IPv4 (issue #189) or IPv6 (issue #748).
+ * `addr` is a 32-bit IPv4 address (`192.168.1.10` held as one number); `addr6`
+ * is a 128-bit IPv6 address, set exactly when the value is IPv6; `prefix` is
+ * the prefix length in `/24` or `/64`. A bare address has no `prefix`, a bare
+ * `/24` has no address, and a full block (`192.168.1.0/24`) has both. Lives in a
+ * {@link Value}'s `value` slot as the other struct payloads do; the formatter
+ * renders it as the dotted quad or the RFC 5952 text (plus `/prefix` when
+ * present).
  */
 export interface IpCidrData {
+	/** The 32-bit IPv4 address. */
 	readonly addr?: number;
+	/** The prefix length: 0 to 32 for IPv4, 0 to 128 for IPv6. */
 	readonly prefix?: number;
+	/** The 128-bit IPv6 address, present exactly when the value is IPv6. */
+	readonly addr6?: bigint;
+	/** The zone index of an IPv6 address (`eth0` in `fe80::1%eth0`, RFC 4007), when one is written. */
+	readonly zone?: string;
 }
 
 /**
@@ -217,7 +225,7 @@ export enum ValueType {
 	Split = 15,
 	/** A chart to draw (`[1,2,3] as sparkline`, `plot sin(x) from 0 to 2pi`). Value is {@link ChartData}. */
 	Chart = 16,
-	/** An IPv4 address or subnet (`192.168.1.0/24`). Value is {@link IpCidrData}. */
+	/** An IPv4 or IPv6 address or subnet (`192.168.1.0/24`, `2001:db8::/32`). Value is {@link IpCidrData}. */
 	IpCidr = 17,
 }
 
@@ -948,8 +956,14 @@ export class Value {
 		if (this.type === ValueType.Colour) return 0;
 		// A chart is a set of points, not a scalar; callers branch on `.isChart()`.
 		if (this.type === ValueType.Chart) return 0;
-		// An IP/CIDR reads as its 32-bit address where a number is wanted (`as int`).
-		if (this.type === ValueType.IpCidr) return (this.value as IpCidrData).addr ?? 0;
+		// An IPv4 address reads as its 32-bit address where a number is wanted
+		// (`as int`). An IPv6 address has 128 bits, more than a double holds
+		// exactly, so it has no numeric reading: the VM refuses it by name in
+		// arithmetic and converts it through its bigint (see ipv6Refused()).
+		if (this.type === ValueType.IpCidr) {
+			const ip = this.value as IpCidrData;
+			return ip.addr6 !== undefined ? NaN : ip.addr ?? 0;
+		}
 		// A split is a structured multi-share result; its scalar reading is the
 		// "each" (base) share, so a numeric consumer or the worker DTO's number
 		// field still gets a sensible value where a caller does not branch first.
@@ -1346,7 +1360,7 @@ export function chartValue(data: ChartData): Value {
 	return new Value(ValueType.Chart, data);
 }
 
-/** Create an IPv4 address/subnet Value. Arena-backed; the {@link IpCidrData} is immutable. */
+/** Create an IPv4 or IPv6 address/subnet Value. Arena-backed; the {@link IpCidrData} is immutable. */
 export function ipCidrValue(data: IpCidrData): Value {
 	if (_arenaActive && _arena) return _arena.acquire(ValueType.IpCidr, data);
 	return new Value(ValueType.IpCidr, data);

@@ -737,12 +737,14 @@ that data arrived intact.
 sha256("hello") // 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
 ```
 
-**[Networking](/syntax/networking/)**: IPv4 subnets, the blocks of addresses a
-network is divided into: how many machines (hosts) one holds, its netmask and
-broadcast address, and whether an address falls inside it.
+**[Networking](/syntax/networking/)**: IPv4 and IPv6 subnets, the blocks of
+addresses a network is divided into: how many machines (hosts) one holds, its
+netmask, first and last address, and whether an address falls inside it. An
+IPv6 address is shown in its agreed short form.
 
 ```solve
 hosts in 192.168.1.0/24 // 254
+network of 2001:db8:85a3::8a2e:370:7334/64 // 2001:db8:85a3::
 ```
 
 ## Visual
