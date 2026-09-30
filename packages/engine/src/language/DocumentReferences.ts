@@ -57,9 +57,10 @@ const LINE_BREAK = /\r\n|\r|\n/g;
  * and a sweep (`line 4 for x from 1 to 3 step 1`) fuse their `line N` into one
  * token that keeps N and the reference's own offset, so they are renumbered as
  * a plain reference is; without them an inserted line left both pointing at the
- * old line (#596).
+ * old line (#596). A scenario read (`line 4 under bull`, #744) carries `N|name`,
+ * whose leading number is read the same way.
  */
-const LINE_NUMBER_TOKENS: ReadonlySet<string> = new Set(["LINE_REF", "WHAT_IF", "SWEEP"]);
+const LINE_NUMBER_TOKENS: ReadonlySet<string> = new Set(["LINE_REF", "WHAT_IF", "SWEEP", "SCENARIO_READ"]);
 
 /** The spelling a reference takes once its line is deleted. See the lines package's `DELETED_LINE_REF`. */
 const DELETED_REFERENCE_TEXT = "line deleted";

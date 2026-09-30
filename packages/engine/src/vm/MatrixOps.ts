@@ -1,4 +1,4 @@
-import { type MatrixData, type MatrixEntry, type RangeData, Value, ValueType, matrixValue, numberValue, boolValue, symbolicValue, errorValue, faultedOperand } from "@solve-js/vm/Value";
+import { type MatrixData, type MatrixEntry, type RangeData, Value, ValueType, matrixValue, numberValue, boolValue, symbolicValue, errorValue, faultedOperand, uomValue } from "@solve-js/vm/Value";
 import { type SymbolicNode, constNode, simplifySymbolic, isRationalZero, rationalToNumber } from "@solve-js/symbolic";
 import { checkedArray } from "@solve-js/vm/AllocationBudget";
 
@@ -100,6 +100,25 @@ export function columnMajorToRowMajor(m: MatrixData): MatrixEntry[] {
 }
 
 /**
+ * The refusal for a matrix algebra form given a list with a unit, or null for
+ * a list without one (issue #745). A determinant of lengths is an area or a
+ * volume, and a product of two matrices of metres mixes units cell by cell,
+ * neither of which one list unit can say, so each is refused by name rather
+ * than answered in plain numbers.
+ *
+ * @param m - The matrix.
+ * @param form - The form, for the message ("a determinant").
+ * @returns The `MATRIX_UNIT_ALGEBRA` error Value, or null.
+ */
+export function unitListAlgebraRefused(m: MatrixData, form: string): Value | null {
+	if (m.unit === undefined) return null;
+	return errorValue(
+		"MATRIX_UNIT_ALGEBRA",
+		`${form[0].toUpperCase()}${form.slice(1)} of a list in ${m.unit} is not covered: matrix algebra works on plain numbers, so write the list without its unit to work on the amounts.`,
+	);
+}
+
+/**
  * `*` between two matrices, genuinely different from `+`/`-`/comparisons
  * which stay element-wise. Distinguishes three cases per the Calca spec:
  * a `1×1` operand ("scalar") broadcasts (multiplies every cell of the
@@ -128,6 +147,8 @@ export function columnMajorToRowMajor(m: MatrixData): MatrixEntry[] {
  * `*` spelling of the identical product was refused in 18 milliseconds.
  */
 export function matrixMultiply(l: MatrixData, r: MatrixData): Value {
+	const unitRefused = unitListAlgebraRefused(l, "a matrix product") ?? unitListAlgebraRefused(r, "a matrix product");
+	if (unitRefused) return unitRefused;
 	const lIsScalar = l.rows === 1 && l.cols === 1;
 	const rIsScalar = r.rows === 1 && r.cols === 1;
 	const useSymbolic = l.hasSymbolic || r.hasSymbolic;
@@ -200,6 +221,8 @@ export function vectorLength(m: MatrixData): number | null {
  * @returns The dot product, or the refusal as an error Value.
  */
 export function dotProduct(l: MatrixData, r: MatrixData): Value {
+	const unitRefused = unitListAlgebraRefused(l, "a dot product") ?? unitListAlgebraRefused(r, "a dot product");
+	if (unitRefused) return unitRefused;
 	const lLength = vectorLength(l);
 	const rLength = vectorLength(r);
 	if (lLength === null || rLength === null) {
@@ -255,6 +278,8 @@ export function dotProduct(l: MatrixData, r: MatrixData): Value {
  * @returns The resulting Matrix, or an error Value describing the refusal.
  */
 export function matrixPower(m: MatrixData, exponent: number): Value {
+	const unitRefused = unitListAlgebraRefused(m, "a matrix power");
+	if (unitRefused) return unitRefused;
 	if (!isSquare(m)) {
 		return errorValue("MATRIX_POWER_REQUIRES_SQUARE_MATRIX", `^: only a square matrix can be raised to a power (got ${m.rows}x${m.cols}).`);
 	}
@@ -319,7 +344,8 @@ export function transpose(m: MatrixData): Value {
 			data[r + c * m.cols] = matAt(m, c, r);
 		}
 	}
-	return matrixValue(m.cols, m.rows, data);
+	// Only rearranges, so a list's unit comes with it.
+	return matrixValue(m.cols, m.rows, data, m.unit);
 }
 
 /**
@@ -510,6 +536,8 @@ function symbolicDeterminant(m: MatrixData): Value {
 
 /** `|a|` / `det(a)`, dispatches to the symbolic or plain-numeric implementation based on `m.hasSymbolic`. */
 export function determinant(m: MatrixData): Value {
+	const unitRefused = unitListAlgebraRefused(m, "a determinant");
+	if (unitRefused) return unitRefused;
 	if (!isSquare(m)) {
 		return errorValue("DETERMINANT_REQUIRES_SQUARE_MATRIX", `det: matrix must be square (got ${m.rows}x${m.cols}).`);
 	}
@@ -638,6 +666,8 @@ function symbolicInverse(m: MatrixData): Value {
 
 /** `a^-1` / `inv(a)`, dispatches to the symbolic or plain-numeric implementation based on `m.hasSymbolic`. */
 export function inverse(m: MatrixData): Value {
+	const unitRefused = unitListAlgebraRefused(m, "an inverse");
+	if (unitRefused) return unitRefused;
 	if (!isSquare(m)) {
 		return errorValue("INVERSE_REQUIRES_SQUARE_MATRIX", `inv: matrix must be square (got ${m.rows}x${m.cols}).`);
 	}
@@ -674,6 +704,9 @@ export function collectionToValues(v: Value, maxElements = Number.POSITIVE_INFIN
 	if (v.type === ValueType.Matrix) {
 		const m = v.value as MatrixData;
 		if (m.data.length > maxElements) return tooLarge(m.data.length, maxElements);
+		// A list with a unit hands each cell out as the quantity it stands for (#745).
+		const unit = m.unit;
+		if (unit !== undefined) return m.data.map((cell) => (typeof cell === "number" ? uomValue(cell, unit) : matrixEntryToValue(cell)));
 		return m.data.map(matrixEntryToValue);
 	}
 	if (v.type === ValueType.Range) {

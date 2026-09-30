@@ -39,4 +39,10 @@ export const WhatIfErrorCodes = {
 	SWEEP_STEP_FAILED: "SWEEP_STEP_FAILED",
 	/** A sweep one of whose answers is not a number or a quantity, which is all a sweep lists. */
 	SWEEP_ANSWER_NOT_NUMERIC: "SWEEP_ANSWER_NOT_NUMERIC",
+	/** A sweep between two dates whose step is not a length of time (`step 5`), or is working days. */
+	SWEEP_DATE_STEP_NOT_DURATION: "SWEEP_DATE_STEP_NOT_DURATION",
+	/** `line N under bull` with no `scenario bull with ...` line above it. */
+	SCENARIO_UNKNOWN: "SCENARIO_UNKNOWN",
+	/** `line N under bull` where two lines above both declare a scenario named `bull`. */
+	SCENARIO_DUPLICATE: "SCENARIO_DUPLICATE",
 } as const;

@@ -18,7 +18,7 @@ import { createScratchVM } from "@solve-js/vm/ScratchVM";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import { resolveHolidayPredicate } from "@solve-js/vm/HolidayCalendar";
 import type { EvalResult, LineExecutionContext, LineRerun } from "@solve-js/vm/VM";
-import { firstGlobalWrite, lineMentions, copyFetchedData, targetAnswer, overrideValue, type WhatIfOverrides } from "@solve-js/engine/WhatIfRun";
+import { firstGlobalWrite, lineMentions, copyFetchedData, targetAnswer, overrideValue, scenarioDeclaredIn, type WhatIfOverrides } from "@solve-js/engine/WhatIfRun";
 import type { DocumentModel } from "@solve-js/engine/DocumentModel";
 import { BackgroundRefreshManager } from "@solve-js/engine/BackgroundRefreshManager";
 import { registerAsConverter, unregisterAsConverter, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
@@ -1286,6 +1286,24 @@ export class ExpressionEngine {
                       return this.openLineRerun(texts, n, count, context.lineIndex);
                   }
                 : undefined,
+            // A scenario is read as the what-if it stands for, from the lines'
+            // text as rerunLines reads them, so both passes agree (#744). See
+            // {@link readScenario}.
+            readScenario: doc || scan
+                ? (name: string, n: number) => {
+                      const asking = context.lineIndex;
+                      const count = doc ? doc.lineCount : scan!.length;
+                      const last = Math.min(Math.max(asking - 1, 0), count);
+                      if (doc) {
+                          for (let i = 1; i <= last; i++) dag.registerLinePositionDependency(asking, i);
+                      }
+                      const texts: string[] = [];
+                      for (let i = 1; i <= last; i++) {
+                          texts.push((doc ? doc.getLineAt(i)?.text : scan![i - 1]?.text) ?? "");
+                      }
+                      return this.readScenario(texts, name, n, context);
+                  }
+                : undefined,
             networkEnabled: this.config.network.enabled,
             calendar: this.context.calendar,
             // Read through the engine on every draw rather than captured, since
@@ -1605,13 +1623,70 @@ export class ExpressionEngine {
                     return errorValue("WHAT_IF_TARGET_ERROR", normalizeUnknownError(e).message);
                 }
             },
-            uses: (name) => texts.some((text, i) => i + 1 !== ownLine && lineMentions(text, name, tokenize)),
+            // A scenario declaration names inputs without using them (#744).
+            uses: (name) => texts.some((text, i) => i + 1 !== ownLine && scenarioDeclaredIn(text, tokenize) === null && lineMentions(text, name, tokenize)),
             close: () => {
                 if (closed) return;
                 closed = true;
                 this.disposeScenarioEngine(scratch);
             },
         };
+    }
+
+    /**
+     * What line `targetLine` says under the scenario `name`, the work behind
+     * {@link LineExecutionContext.readScenario} (#744).
+     *
+     * The declaration is looked for among `texts`, the lines above the asking
+     * line: a note is read from the top, so a scenario is declared before it is
+     * read. It is then evaluated as the what-if it stands for, `line
+     * <targetLine> with <its inputs>`, compiled here and run under the asking
+     * line's own context, so its values are read where the asking line stands
+     * and every what-if check applies unchanged.
+     *
+     * @param texts - The lines above the asking line, as written.
+     * @param name - The scenario's name, as written.
+     * @param targetLine - The line whose answer is wanted.
+     * @param context - The asking line's context.
+     * @returns The target's answer under the scenario, or an error Value.
+     */
+    private readScenario(texts: readonly string[], name: string, targetLine: number, context: LineExecutionContext): Value {
+        const tokenize = (text: string) => this.tokensOrNone(text);
+        const declared: Array<{ line: number; overrides: string }> = [];
+        for (let i = 0; i < texts.length; i++) {
+            const found = scenarioDeclaredIn(texts[i], tokenize);
+            if (found !== null && found.name === name) declared.push({ line: i + 1, overrides: found.overrides });
+        }
+        if (declared.length === 0) {
+            return errorValue(
+                "SCENARIO_UNKNOWN",
+                `No line above this one declares a scenario named ${name}. Declare it first, as in "scenario ${name} with growth = 8%".`,
+            );
+        }
+        if (declared.length > 1) {
+            return errorValue(
+                "SCENARIO_DUPLICATE",
+                `Lines ${declared[0].line} and ${declared[1].line} both declare a scenario named ${name}. Give each scenario its own name.`,
+            );
+        }
+        let program: BytecodeProgram;
+        try {
+            program = this.compileExpression(`line ${targetLine} with ${declared[0].overrides}`).program;
+        } catch (e) {
+            const error = normalizeUnknownError(e);
+            return errorValue(error.code ?? "WHAT_IF_TARGET_ERROR", `Scenario ${name} on line ${declared[0].line} cannot be read: ${error.message}`);
+        }
+        const stackBefore = this.vm.getStack().length;
+        try {
+            const result = withoutValueArena(() => executeBytecode(program, this.vm, undefined, undefined, context));
+            if (result.type === "error") return errorValue(result.error.code ?? "WHAT_IF_TARGET_ERROR", result.error.message);
+            if (result.type === "pending") {
+                return errorValue("WHAT_IF_INPUT_PENDING", `Scenario ${name} is still waiting on live data, so there is nothing to re-run with yet.`);
+            }
+            return result.value;
+        } finally {
+            while (this.vm.getStack().length > stackBefore) this.vm.pop();
+        }
     }
 
     /**
@@ -4474,7 +4549,9 @@ export class ExpressionEngine {
         // way, wherever it sits on the line: `(line 4 with x = 5) - line 4`
         // would otherwise reach the scalar-equation detector below with `x` as
         // an unknown and be stored as an equation.
-        if (normalizedTokens.some(t => t.type === 'WHAT_IF')) return null;
+        // A scenario declaration (`scenario bull with growth = 8%`, #744)
+        // owns its `=` signs the same way.
+        if (normalizedTokens.some(t => t.type === 'WHAT_IF' || t.type === 'SCENARIO_DECLARATION')) return null;
 
         const names = this.parseFactorChain(normalizedTokens.slice(0, eqIdx));
         if (names === null) {
@@ -7041,7 +7118,7 @@ export class ExpressionEngine {
 		}
 		// The colon and global definitions, and goal seek, own their `=` and
 		// are read by the parser; nothing else here applies to them.
-		if (first === 'COLON' || first === 'GLOBAL' || first === 'GOAL_SEEK') return false;
+		if (first === 'COLON' || first === 'GLOBAL' || first === 'GOAL_SEEK' || first === 'SCENARIO_DECLARATION') return false;
 		// `tax = 20%`, `x^2 - 4 = 0`: a bare assignment or an equation. A unit
 		// definition was recognised before this was reached.
 		const eq = tokens.findIndex((t) => t.type === 'EQUALS');

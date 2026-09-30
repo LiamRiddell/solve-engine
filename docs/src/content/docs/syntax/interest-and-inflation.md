@@ -50,6 +50,22 @@ annual interest on 200000 over 25 years at 4% // 4,668.08
 total interest on 200000 over 25 years at 4% // 116,702.10
 ```
 
+A repayment is often just called a payment, and `payment on` reads the same way
+as `repayment on`, for each of the four periods:
+
+```solve
+monthly payment on $200,000 over 25 years at 4% // $1,055.67
+total payment on 200000 over 25 years at 4% // 316,702.10
+```
+
+Only the three words together are claimed, so a variable named `payment` still
+works on its own and beside the phrase:
+
+```solve-doc
+payment = monthly payment on 200000 over 25 years at 4% // 1,055.67
+payment * 12 // 12,668.08
+```
+
 The total interest is what the loan costs: the total repaid less the 200,000
 borrowed. The periodic interest figures are that cost spread evenly, an average
 over the term, not the interest in any one month (early payments are mostly
@@ -141,6 +157,14 @@ monthlyPayment(200000, 4%, 25) // 1,055.67
 loanRepayment(200000, 4%, 25, 12) // 1,055.67
 loanInterest(200000, 4%, 25, 12) // 389.01
 ```
+
+The spreadsheet functions `pmt`, `fv` and `npv` are not read under those names.
+A spreadsheet's `PMT` takes the rate per period, the number of periods and the
+principal, in that order, and a call spelled the same way that read its
+arguments in another order would give a wrong answer without saying so. Inside
+a call, a comma also separates arguments, so write a principal without thousands
+separators there (`200000`, not `200,000`). Cash flows have their own phrase,
+`npv of` (see [cash flow](/syntax/cash-flow/)).
 
 ## The return on an investment
 

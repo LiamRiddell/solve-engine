@@ -428,7 +428,7 @@ function shown(value: Value | null): string | null {
 		if (!isList && cells > MOST_MATRIX_CELLS) return `[${matrix.rows}x${matrix.cols} matrix]`;
 		if (isList && cells > MOST_LIST_ELEMENTS) {
 			const first = matrix.data.slice(0, MOST_LIST_ELEMENTS);
-			const preview = matrix.rows === 1 ? matrixValue(1, first.length, first) : matrixValue(first.length, 1, first);
+			const preview = matrix.rows === 1 ? matrixValue(1, first.length, first, matrix.unit) : matrixValue(first.length, 1, first, matrix.unit);
 			const text = bare(preview);
 			const close = text.lastIndexOf("]");
 			const more = `${matrix.rows === 1 ? "," : ";"} and ${(cells - first.length).toLocaleString("en-US")} more`;

@@ -9,10 +9,16 @@ export const WHAT_IF_TOKEN = "WHAT_IF";
 export const SWEEP_TOKEN = "SWEEP";
 /** The `step` of a sweep, once it is known to be one rather than a variable. */
 export const SWEEP_STEP_TOKEN = "SWEEP_STEP";
+/** The token a scenario declaration opens with: `scenario <name> with`, carrying the name. */
+export const SCENARIO_DECLARATION_TOKEN = "SCENARIO_DECLARATION";
+/** The token that reads a line under a scenario: `line N under <name>`, carrying `N|name`. */
+export const SCENARIO_READ_TOKEN = "SCENARIO_READ";
 
 const WHAT_IF_TYPE_ID = tokenTypeId(WHAT_IF_TOKEN);
 const SWEEP_TYPE_ID = tokenTypeId(SWEEP_TOKEN);
 const SWEEP_STEP_TYPE_ID = tokenTypeId(SWEEP_STEP_TOKEN);
+const SCENARIO_DECLARATION_TYPE_ID = tokenTypeId(SCENARIO_DECLARATION_TOKEN);
+const SCENARIO_READ_TYPE_ID = tokenTypeId(SCENARIO_READ_TOKEN);
 
 /** Whether a token can be a variable's name: an identifier, or a unit symbol used as one (`m`, `s`). */
 function isName(token: Token | undefined): boolean {
@@ -142,6 +148,80 @@ export function sweepNormalizerRule(priority = 75): NormalizerRule {
 				}
 			}
 			return { consumed: 2, replacement: [opener], ruleName: RULE };
+		},
+	};
+}
+
+/** Whether a token is the plain word `word`, in any case. */
+function isWord(token: Token | undefined, word: string): boolean {
+	return token !== undefined && token.type === "IDENT" && token.value.toLowerCase() === word;
+}
+
+/**
+ * Fuses `scenario <name> with` into a `SCENARIO_DECLARATION` token carrying the
+ * name, at the start of a line and only where a `<name> =` follows:
+ * `scenario bull with growth = 8%, price = $120` (#744).
+ *
+ * A scenario is a named set of inputs kept in the note, read later with `line
+ * N under <name>`. `scenario` is claimed only in this whole shape, at the start
+ * of the line and before a name, `with` and an assignment, so a variable named
+ * `scenario` (`scenario = 2`, `scenario * 3`) is untouched.
+ *
+ * @param priority - Rule ordering, beside the what-if rules.
+ * @returns The normalizer rule.
+ */
+export function scenarioDeclarationNormalizerRule(priority = 75): NormalizerRule {
+	const RULE = "whatif:scenario-declaration";
+	return {
+		name: RULE,
+		priority,
+		shape: [{ types: ["IDENT"], values: ["scenario"] }],
+		match(tokens: Token[], pos: number): NormalizerMatch | null {
+			if (pos !== 0 || !isWord(tokens[0], "scenario")) return null;
+			const name = tokens[1];
+			if (!isName(name)) return null;
+			if (!isWith(tokens[2])) return null;
+			const afterInput = afterName(tokens, 3);
+			if (afterInput < 0 || tokens[afterInput]?.type !== "EQUALS") return null;
+			return {
+				consumed: 3,
+				replacement: [tokenAt(SCENARIO_DECLARATION_TOKEN, SCENARIO_DECLARATION_TYPE_ID, name.value, tokens[0])],
+				ruleName: RULE,
+			};
+		},
+	};
+}
+
+/**
+ * Fuses `line N under <name>` into a `SCENARIO_READ` token carrying `N|name`:
+ * what line N says with the named scenario's inputs in force (#744).
+ *
+ * `under` is not claimed anywhere else, and `in`, `as`, `to`, `with` and `for`
+ * already mean something after a line reference (a conversion, a what-if, a
+ * sweep), which is why the scenario is read with a word of its own. Only the
+ * shape with a line reference before it and a name after it is fused.
+ *
+ * @param priority - Rule ordering, below the line-reference rule's own band.
+ * @returns The normalizer rule.
+ */
+export function scenarioReadNormalizerRule(priority = 75): NormalizerRule {
+	const RULE = "whatif:line-under";
+	return {
+		name: RULE,
+		priority,
+		shape: [{ types: ["LINE_REF"] }, { types: ["IDENT"], values: ["under"] }],
+		match(tokens: Token[], pos: number): NormalizerMatch | null {
+			const lineRef = tokens[pos];
+			if (!lineRef || lineRef.type !== "LINE_REF") return null;
+			if (tokens[pos - 1]?.type === "COLON") return null;
+			if (!isWord(tokens[pos + 1], "under")) return null;
+			const name = tokens[pos + 2];
+			if (!isName(name)) return null;
+			return {
+				consumed: 3,
+				replacement: [tokenAt(SCENARIO_READ_TOKEN, SCENARIO_READ_TYPE_ID, `${lineRef.value}|${name.value}`, lineRef)],
+				ruleName: RULE,
+			};
 		},
 	};
 }

@@ -2,7 +2,9 @@ import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { IpLiteralParselet } from "./parselets/IpLiteralParselet";
 import { IpQueryParselet } from "./parselets/IpQueryParselet";
 import { ipCidrNormalizerRule } from "./normalizer/IpCidrNormalizerRule";
-import { ipLiteral, hostsIn, netmaskOf, broadcastOf, ipInCidr, ipAsInt } from "./IpPluginFunctions";
+import { ipv6NormalizerRule } from "./normalizer/Ipv6NormalizerRule";
+import { Ipv6AddressParselet } from "./parselets/Ipv6AddressParselet";
+import { ipv6Address, ipLiteral, hostsIn, netmaskOf, broadcastOf, ipInCidr, ipAsInt } from "./IpPluginFunctions";
 
 /**
  * IPv4 subnet arithmetic for network notes (issue #189).
@@ -20,8 +22,10 @@ import { ipLiteral, hostsIn, netmaskOf, broadcastOf, ipInCidr, ipAsInt } from ".
  *   10.0.0.0/8 as int              167772160
  *
  * IPv6 is deliberately left out of this first cut: its 128-bit addresses and
- * colon notation need their own literal and their own maths, and the dotted-quad
- * form covers the common case. On by default and removable.
+ * colon notation need their own maths, and the dotted-quad form covers the
+ * common case. An IPv6 address is still recognised (`fe80::1`, issue #748), so
+ * it answers a refusal that names IPv6 rather than a number read from its last
+ * group. On by default and removable.
  *
  * The `<ip> in <cidr>` membership test rides the existing `in` operator, which
  * the currency package's parselet dispatches to `ipInCidr` when its right side
@@ -36,13 +40,15 @@ export const IP_PACKAGE: IEnginePackage = {
 	},
 	prefixParselets: {
 		IP_CIDR: new IpLiteralParselet(),
+		IPV6_ADDRESS: new Ipv6AddressParselet(),
 		HOSTS_IN: new IpQueryParselet("hostsIn"),
 		NETMASK_OF: new IpQueryParselet("netmaskOf"),
 		BROADCAST_OF: new IpQueryParselet("broadcastOf"),
 	},
-	normalizerRules: [ipCidrNormalizerRule()],
+	normalizerRules: [ipCidrNormalizerRule(), ipv6NormalizerRule()],
 	pluginFunctions: {
 		ipLiteral,
+		ipv6Address,
 		hostsIn,
 		netmaskOf,
 		broadcastOf,
@@ -53,6 +59,7 @@ export const IP_PACKAGE: IEnginePackage = {
 	},
 	tokenCategories: {
 		IP_CIDR: "number",
+		IPV6_ADDRESS: "number",
 		HOSTS_IN: "keyword",
 		NETMASK_OF: "keyword",
 		BROADCAST_OF: "keyword",

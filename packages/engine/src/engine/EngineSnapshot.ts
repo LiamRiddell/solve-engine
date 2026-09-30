@@ -150,7 +150,7 @@ export type SerializedValue = SerializedValueSidecars & (
 	| { t: ValueType.Datetime; v: SerializedNumber; g?: DatetimeGrain; z?: string }
 	| { t: ValueType.Percentage; v: SerializedNumber }
 	| { t: ValueType.Uom; v: SerializedNumber; unit: string; exact?: SerializedDecimal }
-	| { t: ValueType.Matrix; rows: number; cols: number; data: (SerializedNumber | boolean)[] }
+	| { t: ValueType.Matrix; rows: number; cols: number; data: (SerializedNumber | boolean)[]; unit?: string }
 	| { t: ValueType.Range; min: SerializedNumber; max: SerializedNumber }
 	| { t: ValueType.Boolean; v: boolean }
 	| { t: ValueType.Error; code: string; message: string }
@@ -378,7 +378,11 @@ function serializeValueBody(value: Value, where: string): SerializedValue {
 			const m = value.value as MatrixData;
 			if (m.hasSymbolic) unsupportedValue(ValueType.Symbolic, `${where} (symbolic matrix cell)`);
 			const data = m.data.map((cell) => serializeMatrixCell(cell, where));
-			return { t: ValueType.Matrix, rows: m.rows, cols: m.cols, data };
+			// A list's unit (#745) is written only when it has one, so a plain
+			// list's snapshot is byte-for-byte what it was.
+			return m.unit === undefined
+				? { t: ValueType.Matrix, rows: m.rows, cols: m.cols, data }
+				: { t: ValueType.Matrix, rows: m.rows, cols: m.cols, data, unit: m.unit };
 		}
 		case ValueType.Range: {
 			const r = value.value as { min: number; max: number };
@@ -446,7 +450,9 @@ function deserializeValueBody(sv: SerializedValue): Value {
 			const data: MatrixEntry[] = sv.data.map((cell) => (typeof cell === "boolean" ? cell : decodeNumber(cell)));
 			// hasSymbolic is always false: a symbolic matrix is refused at serialise
 			// time, so anything restored here is purely numeric/boolean.
-			const m: MatrixData = { rows: sv.rows, cols: sv.cols, data, hasSymbolic: false };
+			const m: MatrixData = sv.unit === undefined
+				? { rows: sv.rows, cols: sv.cols, data, hasSymbolic: false }
+				: { rows: sv.rows, cols: sv.cols, data, hasSymbolic: false, unit: sv.unit };
 			return new Value(ValueType.Matrix, m);
 		}
 		case ValueType.Range:
@@ -883,6 +889,7 @@ function assertValueShape(sv: unknown, where: string): void {
 			if (!data.every((cell) => typeof cell === "boolean" || isSerializedNumber(cell))) {
 				malformed(`${where}.data`, "numeric or boolean cells", data);
 			}
+			if (sv.unit !== undefined && (typeof sv.unit !== "string" || sv.unit === "")) malformed(`${where}.unit`, "a unit name", sv.unit);
 			return;
 		}
 		case ValueType.Range:

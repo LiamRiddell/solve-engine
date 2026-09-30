@@ -1,8 +1,20 @@
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { WhatIfParselet } from "./parselets/WhatIfParselet";
 import { SweepParselet } from "./parselets/SweepParselet";
-import { whatIfNormalizerRule, sweepNormalizerRule, WHAT_IF_TOKEN, SWEEP_TOKEN, SWEEP_STEP_TOKEN } from "./normalizer/WhatIfNormalizerRules";
+import {
+	whatIfNormalizerRule,
+	sweepNormalizerRule,
+	scenarioDeclarationNormalizerRule,
+	scenarioReadNormalizerRule,
+	WHAT_IF_TOKEN,
+	SWEEP_TOKEN,
+	SWEEP_STEP_TOKEN,
+	SCENARIO_DECLARATION_TOKEN,
+	SCENARIO_READ_TOKEN,
+} from "./normalizer/WhatIfNormalizerRules";
 import { WHAT_IF_FN_NAME, SWEEP_FN_NAME, whatIfHandler, sweepHandler } from "./WhatIfPluginFunctions";
+import { ScenarioDeclarationParselet, ScenarioReadParselet } from "./parselets/ScenarioParselets";
+import { SCENARIO_DECLARE_FN_NAME, SCENARIO_READ_FN_NAME, scenarioDeclareHandler, scenarioReadHandler } from "./ScenarioPluginFunctions";
 
 /**
  * What-if and sweeps, re-running a line with different inputs (GitHub issue
@@ -25,23 +37,33 @@ import { WHAT_IF_FN_NAME, SWEEP_FN_NAME, whatIfHandler, sweepHandler } from "./W
  *  - `WhatIfPluginFunctions` does the work, including the sweep's step and
  *    work limits.
  *
+ * Named scenarios (#744) are a what-if with a name kept in the note:
+ * `scenario bull with growth = 8%` declares one, and `line 5 under bull` reads
+ * line 5 with its inputs, through the same re-run.
+ *
  * Registered after `LINES_PACKAGE`, whose rule mints the `LINE_REF` both of
  * this package's rules read.
  */
 export const WHATIF_PACKAGE: IEnginePackage = {
 	name: "solve-whatif",
-	normalizerRules: [whatIfNormalizerRule(), sweepNormalizerRule()],
+	normalizerRules: [whatIfNormalizerRule(), sweepNormalizerRule(), scenarioDeclarationNormalizerRule(), scenarioReadNormalizerRule()],
 	prefixParselets: {
 		[WHAT_IF_TOKEN]: new WhatIfParselet(),
 		[SWEEP_TOKEN]: new SweepParselet(),
+		[SCENARIO_DECLARATION_TOKEN]: new ScenarioDeclarationParselet(),
+		[SCENARIO_READ_TOKEN]: new ScenarioReadParselet(),
 	},
 	pluginFunctions: {
 		[WHAT_IF_FN_NAME]: whatIfHandler,
 		[SWEEP_FN_NAME]: sweepHandler,
+		[SCENARIO_DECLARE_FN_NAME]: scenarioDeclareHandler,
+		[SCENARIO_READ_FN_NAME]: scenarioReadHandler,
 	},
 	tokenCategories: {
 		[WHAT_IF_TOKEN]: "keyword",
 		[SWEEP_TOKEN]: "keyword",
 		[SWEEP_STEP_TOKEN]: "keyword",
+		[SCENARIO_DECLARATION_TOKEN]: "keyword",
+		[SCENARIO_READ_TOKEN]: "keyword",
 	},
 };

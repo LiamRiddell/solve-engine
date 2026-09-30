@@ -667,8 +667,14 @@ function formatMoney(value: number, money: MoneyUnit, places: MoneyPlaces, exact
   return `${amount}${per}`;
 }
 
-function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings): string {
+function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings, unit?: string, locale?: ILocale): string {
   if (typeof entry === "boolean") return entry ? "true" : "false";
+  // A cell of a list with a unit is written as the quantity it stands for, so
+  // `[1 km, 500 m]` shows as `[1.00 km, 0.50 km]` and money as money (#745).
+  if (unit !== undefined && locale !== undefined && typeof entry === "number") {
+    const quantity = formatUom(entry, unit, locale, settings);
+    return quantity.startsWith(locale.display.resultPrefix) ? quantity.slice(locale.display.resultPrefix.length) : quantity;
+  }
   if (typeof entry === "object" && entry !== null) return formatSymbolic(entry);
   const dp = settings.floatResult.decimalPlaces;
   const sep = settings.floatResult.enableSeperator;
@@ -690,7 +696,7 @@ function formatMatrix(m: MatrixData, locale: ILocale, settings: FormattingSettin
   for (let r = 0; r < m.rows; r++) {
     const cells: string[] = [];
     for (let c = 0; c < m.cols; c++) {
-      cells.push(formatMatrixEntry(rowMajor[r * m.cols + c], settings));
+      cells.push(formatMatrixEntry(rowMajor[r * m.cols + c], settings, m.unit, locale));
     }
     rows.push(cells.join(", "));
   }
@@ -714,12 +720,13 @@ function formatMatrix(m: MatrixData, locale: ILocale, settings: FormattingSettin
  */
 export function formatMatrixAligned(m: MatrixData, settings?: FormattingOverrides): string {
   const us = resolveFormattingSettings(settings);
+  const locale = getLocale(us.numberResult.decimalSeparatorLocale || "en");
   const rowMajor = columnMajorToRowMajor(m);
   const cells: string[][] = [];
   for (let r = 0; r < m.rows; r++) {
     const row: string[] = [];
     for (let c = 0; c < m.cols; c++) {
-      row.push(formatMatrixEntry(rowMajor[r * m.cols + c], us));
+      row.push(formatMatrixEntry(rowMajor[r * m.cols + c], us, m.unit, locale));
     }
     cells.push(row);
   }

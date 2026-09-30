@@ -46,7 +46,9 @@ function serializeMatrix(m: MatrixData): SerializedMatrix {
 		if (typeof cell === "number" && !Number.isFinite(cell)) return nonFiniteTag(cell);
 		return cell;
 	});
-	return { rows: m.rows, cols: m.cols, cells, hasSymbolic: m.hasSymbolic };
+	return m.unit === undefined
+		? { rows: m.rows, cols: m.cols, cells, hasSymbolic: m.hasSymbolic }
+		: { rows: m.rows, cols: m.cols, cells, hasSymbolic: m.hasSymbolic, unit: m.unit };
 }
 
 /**
