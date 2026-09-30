@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 511 codes, grouped below by the part
+ship. The engine and its built-in packages ship 512 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -204,6 +204,12 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | --- | --- | --- |
 | `TEMPORAL_IMPLEMENTATION_INVALID` | thrown | `createTemporalCalendar()` was handed something that is not a usable `Temporal` implementation: no `Now.instant`, `Now.timeZoneId`, `Instant.fromEpochMilliseconds` or `PlainDateTime.from`. Raised at construction, naming the missing member, rather than letting the first date computation fail on it obscurely. |
 | `TEMPORAL_TIME_ZONE_UNKNOWN` | thrown | The `timeZone` given to `createTemporalCalendar()` is not one the `Temporal` implementation knows. Raised at construction, so a misspelt zone is a configuration error the host sees once, not a `RangeError` from inside every date the engine computes. |
+
+**Calendar backend clocks**
+
+| Code | Arrives | When it arises |
+| --- | --- | --- |
+| `DATE_CLOCK_INVALID` | thrown | The clock a host gave a calendar backend (`dateCalendarInZone(zone, { now })`, `createTemporalCalendar(Temporal, { now })`) is not a function, answered something that is not a moment `Date` can hold (`NaN`, an infinity, a number past 8.64e15, not a number), or threw. Not a function is refused when the backend is built; a bad reading is refused on the line that read the clock (`today`, `now`), and the rest of the document goes on (#721, #826). |
 
 **Snapshot / restore**
 

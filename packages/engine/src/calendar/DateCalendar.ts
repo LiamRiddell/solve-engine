@@ -3,6 +3,7 @@ import { DatetimeZoneErrorCodes } from "@solve-js/errors/ErrorCode";
 import type { CalendarBackend, CalendarFields, ZonedFields } from "./CalendarBackend";
 import { dayNumber, daysInMonth, utcMs } from "./Gregorian";
 import { dateInZone, isSupportedZone, longDateInZone, longDateOptions, mayPrecedeYearOne, timeInZone, namedZoneWallClockToUtcMs, timeOfDayInZone, zonedFields } from "./IntlZone";
+import { checkedClock } from "./Clock";
 
 /**
  * `new Date(year, month0, day)`, local midnight, with the year read as written.
@@ -212,11 +213,19 @@ function representable(epochMs: number): boolean {
 }
 
 class ZonedDateCalendar extends DateCalendar {
+	private readonly clock: (() => number) | undefined;
+
 	/**
 	 * @param namedZone - An IANA zone name `Intl` accepts.
+	 * @param clock - The checked clock `now()` reads, or none for `Date.now`.
 	 */
-	constructor(private readonly namedZone: string) {
+	constructor(private readonly namedZone: string, clock?: () => number) {
 		super();
+		this.clock = clock;
+	}
+
+	now(): number {
+		return this.clock === undefined ? super.now() : this.clock();
 	}
 
 	zone(): string {
@@ -330,19 +339,60 @@ class ZonedDateCalendar extends DateCalendar {
  * ambiguous wall clocks around a daylight-saving transition, never a
  * prerequisite for naming a zone at all.
  *
+ * A test, or any host that needs the same answer on every run, pins the clock
+ * as well: `dateCalendarInZone("UTC", { now: () => Date.UTC(2026, 0, 1) })`
+ * computes `today` as 1 January 2026 whatever the machine's clock says, with
+ * no need to replace `Date.now` for the whole process.
+ *
  * @param zone - An IANA zone name, e.g. `"Asia/Tokyo"`.
+ * @param options - The clock to read; see {@link DateCalendarOptions}.
  * @returns A backend whose local zone is that one.
  * @throws A `DATE_ZONE_UNKNOWN` config error when this runtime's `Intl` does
  *   not know the zone. Refused here rather than per line, because a backend
  *   that cannot compute in the zone it was asked for must not quietly answer
- *   in another one.
+ *   in another one. A `DATE_CLOCK_INVALID` config error when `options.now` is
+ *   given and is not a function.
  */
-export function dateCalendarInZone(zone: string): CalendarBackend {
-	if (!isSupportedZone(zone)) {
+export function dateCalendarInZone(zone: string, options: DateCalendarOptions = {}): CalendarBackend {
+	if (typeof zone !== "string" || !isSupportedZone(zone)) {
 		throw ErrorFactory.config(
 			DatetimeZoneErrorCodes.DATE_ZONE_UNKNOWN,
-			`dateCalendarInZone("${zone}") is not a time zone this runtime knows.`,
+			`dateCalendarInZone(${describeZone(zone)}) is not a time zone this runtime knows.${spacedZoneHint(zone)}`,
+			{ zone: typeof zone === "string" ? zone : typeof zone },
 		);
 	}
-	return new ZonedDateCalendar(zone);
+	const clock = options?.now === undefined ? undefined : checkedClock(options.now, "dateCalendarInZone");
+	return new ZonedDateCalendar(zone, clock);
+}
+
+/**
+ * What {@link dateCalendarInZone} takes beside the zone.
+ */
+export interface DateCalendarOptions {
+	/**
+	 * The clock `now()` reads, in epoch milliseconds. Defaults to `Date.now`.
+	 * Pin it to compute `today` and `now` on a fixed date. A clock that is not
+	 * a function is refused when the backend is built; a reading that is not a
+	 * moment in time (`NaN`, an infinity, past the range `Date` holds), or a
+	 * clock that throws, is refused on the line that read it, both with
+	 * `DATE_CLOCK_INVALID`. The `Temporal` backend's `now` is checked the same way.
+	 */
+	now?: () => number;
+}
+
+/** A zone as the refusal quotes it: a string in quotes, anything else by its type. */
+function describeZone(zone: unknown): string {
+	return typeof zone === "string" ? `"${zone}"` : `given ${zone === null ? "null" : typeof zone}, not a zone name,`;
+}
+
+/**
+ * The hint for a zone that is known once the space around it is gone, which is
+ * easy to paste and hard to see in a quoted name. Refused rather than trimmed,
+ * because a backend guessing at its zone is what the refusal exists to stop.
+ */
+function spacedZoneHint(zone: unknown): string {
+	if (typeof zone !== "string") return "";
+	const trimmed = zone.trim();
+	if (trimmed === zone || trimmed === "" || !isSupportedZone(trimmed)) return "";
+	return ` The name has space around it; "${trimmed}" is one.`;
 }

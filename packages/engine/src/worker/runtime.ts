@@ -17,7 +17,7 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import type { AsyncResolutionEvent } from "@solve-js/engine/AsyncResolutionBatcher";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
-import { DEFAULT_FORMATTING_SETTINGS, type FormattingSettings } from "@solve-js/format/FormattingSettings";
+import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import {
 	ErrorFactory,
@@ -208,12 +208,12 @@ export function startWorkerRuntime(transport: WorkerTransport, options: WorkerRu
 				calendar: options.calendar,
 				random: message.random,
 			});
-			// The display reads the same backend the engine computes with, so a
-			// date in a DTO names the day it was computed on; the main side's
+			// The display is the engine's own, as `engine.formatValue` writes it on
+			// the main thread (#827): its calendar backend, so a date in a DTO
+			// names the day it was computed on, and its locale's numbers, with the
+			// host's settings merged over both group by group. The main side's
 			// settings cannot carry the backend, so it is joined here.
-			formatting = options.calendar
-				? { ...(message.formatting ?? DEFAULT_FORMATTING_SETTINGS), calendar: options.calendar }
-				: message.formatting;
+			formatting = engine.getFormattingSettings(message.formatting);
 			// Drain live-data resolutions for the engine's whole lifetime, so a
 			// value that settles after a request already answered still reaches the
 			// host. Started here, after the engine exists, and torn down with it.

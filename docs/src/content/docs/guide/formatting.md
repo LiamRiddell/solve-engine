@@ -15,26 +15,58 @@ formatValue(value); // "= 3,000.00 m"
 The leading `= ` marker suits an editor result gutter. Strip it when rendering
 elsewhere.
 
-## Settings
+## The engine's own formatter
 
-`formatValue` takes an optional second argument, a full
-[`FormattingSettings`](/api/format/interfaces/formattingsettings/) object
-grouped by value type: decimal
-places for floats, units and percentages, padding for hex, and the locale used
-for the decimal separator.
-
-It is a complete object, not a patch. Passing a few loose keys will not merge
-with the defaults, it will leave the rest undefined and throw. Spread
-`DEFAULT_FORMATTING_SETTINGS` and override the group you care about:
+An engine knows two things the free `formatValue` does not: the calendar it
+computed its dates with, which decides the day a date falls on, and the locale
+it was built for. `engine.formatValue` writes a value with both, so it is the
+call to reach for when the value came from that engine:
 
 ```ts
-import { formatValue, DEFAULT_FORMATTING_SETTINGS } from "solve-engine/format";
+const engine = createEngine({ locale: "de-DE", calendar: dateCalendarInZone("Pacific/Kiritimati") });
 
-formatValue(value, {
-  ...DEFAULT_FORMATTING_SETTINGS,
-  unitOfMeasurementResult: { decimalPlaces: 0 },
-}); // "= 3,000 m"
+engine.formatValue(engine.evaluateExpression("€1250")); // "= €1.250,00"
+engine.formatValue(engine.evaluateExpression("next friday")); // a Friday, in Kiritimati
 ```
+
+The free formatter, given no settings, writes numbers in `en-US` and dates in
+the host process's own zone. For an engine built with neither a locale nor a
+calendar the two agree; for one built with another zone they can disagree on
+the day, because an instant that is Friday in Kiritimati is still Thursday in
+London for most of that day.
+
+The engine's settings are the defaults with its calendar and a number locale
+from its `locale` option (`de-DE` writes `de-DE`; the default `en`, and a tag
+`Intl` has no number data for, write `en-US`). `engine.getFormattingSettings()`
+returns them, for a host that formats elsewhere. A worker runtime writes its
+results with its engine's settings in the same way.
+
+## Settings
+
+`formatValue` takes an optional second argument,
+[`FormattingSettings`](/api/format/interfaces/formattingsettings/), grouped by
+value type: decimal places for floats, units and percentages, padding for hex,
+the locale used for the decimal separator, the date form, and the calendar
+backend a date is read with. `engine.formatValue` takes the same object as its
+second argument.
+
+Name only what you change. A settings object is merged over the defaults
+group by group, and field by field within a group, so everything it leaves out
+keeps its default (or, for `engine.formatValue`, the engine's own setting):
+
+```ts
+import { formatValue } from "solve-engine/format";
+
+formatValue(value, { unitOfMeasurementResult: { decimalPlaces: 0 } }); // "= 3,000 m"
+formatValue(value, { calendar }); // a date read in that backend's zone
+```
+
+A complete settings object, such as `DEFAULT_FORMATTING_SETTINGS` spread and
+changed, is used exactly as it is, and an edit made to it in place is seen on
+the next call. A group that is not an object, and a key that is not a group, are
+ignored rather than thrown on, so a settings object from an older or newer host
+still formats. `mergeFormattingSettings(base, overrides)` is the same merge, for
+a host that keeps its own settings and layers a user's choices over them.
 
 The groups are `floatResult`, `numberResult`, `hexResult`,
 `unitOfMeasurementResult`, `percentageResult` and `dateResult`. The last chooses
@@ -153,10 +185,11 @@ symbolic result) takes the built-in formatter's text with the marker stripped:
 The date branch reads the instant in the host process's own zone, the zone an
 engine given no `calendar` computes in. A date that names a zone
 (`3 April 2026 in Tokyo`), or an engine given another calendar backend, is read
-in that zone instead: `formatValue` does this when it is passed the engine's
-backend as `FormattingSettings.calendar`, as
-[Dates on Temporal](/guide/dates-on-temporal/) shows, and a custom renderer
-would read its fields from that backend rather than from `DATE_CALENDAR`.
+in that zone instead: `engine.formatValue` does this on its own, and the free
+`formatValue` does it when passed the engine's backend (`{ calendar }`), as
+[Dates on Temporal](/guide/dates-on-temporal/) shows. A custom renderer would
+read its fields from that backend (`engine.getFormattingSettings().calendar`)
+rather than from `DATE_CALENDAR`.
 
 Handle `Pending` and `Error` explicitly. They are ordinary value types rather
 than exceptions, so a formatter that assumes every value is a finished number
