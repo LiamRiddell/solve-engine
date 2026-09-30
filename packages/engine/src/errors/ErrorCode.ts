@@ -446,6 +446,10 @@ export const CoreErrorCodes = {
   TIMECODE_FPS_MISMATCH: "TIMECODE_FPS_MISMATCH",
   /** `as <name>` naming no converter any package registered. */
   UNKNOWN_AS_CONVERTER: "UNKNOWN_AS_CONVERTER",
+  /** `float("hello")`, `float(5 km)`: `float` given something with no plain number, text that is not a number or a quantity with a unit. The reader passes a number (#828). */
+  FLOAT_TAKES_NUMBER: "FLOAT_TAKES_NUMBER",
+  /** `"hello" as multiplier`, `5 km as multiplier`: a multiplier asked of something that is not a plain number or a percentage. The reader converts a number (#829). */
+  MULTIPLIER_TAKES_NUMBER: "MULTIPLIER_TAKES_NUMBER",
   /** `as mw`: a lower-case spelling two converters share, such as the milliwatt `mW` and the megawatt `MW`. The reader writes the prefix in its own case (#824). */
   AS_CONVERTER_AMBIGUOUS_CASE: "AS_CONVERTER_AMBIGUOUS_CASE",
   /** `as MV`: a spelling that reaches its only converter by changing a prefix letter's case, such as `MV` for the millivolt `mV`. The reader writes the prefix in its own case (#824). */

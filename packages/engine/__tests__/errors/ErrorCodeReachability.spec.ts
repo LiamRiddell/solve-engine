@@ -120,6 +120,7 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	GOAL_SEEK_NESTED: { doc: ["x = 5", "solve line 2 for x = 20"], pass: "evaluate" },
 	GOAL_SEEK_NON_FINITE: { doc: ["x = 5", "10^(x*100)", "solve line 2 for x = 5"], pass: "evaluate" },
 	GOAL_SEEK_NO_DOCUMENT: "solve line 1 for x = 20",
+	GOAL_SEEK_TARGET_UNIT_MISMATCH: { doc: ["price = £10", "price * 3", "solve line 2 for price = 5 kg"], pass: "evaluate" },
 	GOAL_SEEK_NO_SOLUTION: { doc: ["x = 5", "x * x", "solve line 2 for x = -4"], pass: "evaluate" },
 	GOAL_SEEK_REQUIRES_VARIABLE_NAME: { doc: ["x = 5", "x * 2", "solve line 2 for 5 = 20"] },
 	GOAL_SEEK_SYNTAX: "solve line 1 x = 5",
@@ -410,6 +411,9 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	DENSITY_EXPECTED_NUMBER: "4000px at d dpi",
 	WEB_EXPECTED_DENSITY: "4000px at 0 dpi",
 	WEB_EXPECTED_PIXELS_OR_LENGTH: "5 kg at 300 dpi",
+	// float and as multiplier refuse what has no plain number (#828, #829).
+	FLOAT_TAKES_NUMBER: "float(\"hello\")",
+	MULTIPLIER_TAKES_NUMBER: "\"hello\" as multiplier",
 };
 
 /** Raised by a host calling the engine, never by a line it evaluates. */

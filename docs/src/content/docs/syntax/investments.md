@@ -96,15 +96,15 @@ in three years at 7%, so $1,225.04 in three years is worth $1,000 today.
 The return on investment is the profit an investment made, measured against what
 it cost: the amount returned less the amount invested, divided by the amount
 invested. Write the amount `invested` and the amount `returned`. The answer is a
-plain number, so `$500 invested $1,500 returned` is 2, a profit of $1,000 on
-$500, twice the cost (a 200% return), not the three times the money that came
-back. `as %` shows the same figure as a percentage.
+percentage, as the other return forms are, so `$500 invested $1,500 returned` is
+200%: a profit of $1,000 on $500, twice the cost, not the three times the money
+that came back.
 
 ```solve
-$500 invested $1,500 returned // 2
-$1,000 invested $1,500 returned as % // 50.00%
-$1,000 invested $1,000 returned // 0
-$1,000 invested $500 returned // -0.50
+$500 invested $1,500 returned // 200.00%
+$1,000 invested $1,500 returned // 50.00%
+$1,000 invested $1,000 returned // 0.00%
+$1,000 invested $500 returned // -50.00%
 ```
 
 A return of 0 is breaking even, and a negative one a loss. Nothing invested has

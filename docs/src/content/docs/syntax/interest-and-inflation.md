@@ -135,7 +135,7 @@ term in years, in that order.
 ```solve
 compoundInterest(1000, 5%, 3) // 1,157.63
 interestEarned(1000, 5%, 3) // 157.63
-compoundInterestRate(1000, 1157.63, 3) // 0.05
+compoundInterestRate(1000, 1157.63, 3) // 5.00%
 compoundInterestYears(1000, 1157.63, 5%) // 3.00
 monthlyPayment(200000, 4%, 25) // 1,055.67
 loanRepayment(200000, 4%, 25, 12) // 1,055.67

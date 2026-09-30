@@ -104,7 +104,7 @@ Two shapes line up when the first has as many columns as the second has rows.
 When they do not, the product is refused, naming both shapes:
 
 ```solve-doc
-[1,2,3] * [4,5,6] // ERROR: Cannot multiply a 1x3 matrix by a 1x3 matrix: the first has 3 columns and the second 1 row, and a product needs the two to match.
+[1,2,3] * [4,5,6] // ERROR: Cannot multiply a 1x3 matrix by a 1x3 matrix: the first has 3 columns and the second 1 row, and the two must match.
 ```
 
 ## Dot products

@@ -348,7 +348,7 @@ future sum is worth today, and the return on what was invested.
 ```solve
 $1,000 after 3 years at 7% // $1,225.04
 present value of $1,225.04 after 3 years at 7% // $1,000.00
-$500 invested $1,500 returned // 2
+$500 invested $1,500 returned // 200.00%
 ```
 
 **[Savings goals](/syntax/savings-goals/)**: how long it takes to reach a
