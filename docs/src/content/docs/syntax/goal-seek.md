@@ -93,4 +93,5 @@ document that can re-run a line: `evaluateDocument` and a live editor built on
 the engine's incremental evaluator can, and they solve it. `parseDocument`, the
 batch pass, evaluates each line once and cannot, and the single-expression
 entry point has no document at all; each answers with a refusal that says which
-of the two it is.
+of the two it is. [Which entry point](/guide/entry-points/) sets the four side
+by side.

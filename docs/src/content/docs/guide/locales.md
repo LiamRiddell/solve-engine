@@ -95,11 +95,76 @@ German and French both mark the decimal with a comma. Where a comma is followed
 by exactly three digits the engine reads it as that decimal comma, which is why
 `1,500` is one and a half there. A comma followed by one or two digits (`2,5`)
 is not read yet in any pack, so a German or French engine writes a fraction as a
-division (`5/2`) for now. A literal with a second decimal mark after its comma
+division (`5/2`) for now. Reading that comma is being changed (#740). A literal with a second decimal mark after its comma
 (`1,234,567`), or in French a dot decimal beside a comma one (`1.234,567`), has
 no reading in a comma-decimal locale, and is refused rather than cut short at
 the second mark. In German `1.234,567` is a thousands group and a decimal
 comma, and reads as one thousand two hundred and thirty-four and a bit.
+
+## The words each pack reads
+
+A language pack is a keyword table as well as a number format, and it
+**replaces** English rather than adding to it. A German engine reads `mal` for
+times and `von` for of, and no longer reads `times` or `of`; a French engine
+reads `fois` and `si ... alors ... sinon`, and no longer reads `if ... then ...
+else`. The words that come from the engine's packages rather than from the
+keyword table, the unit names (`km`, `lb`), the currency codes, and phrases such
+as `half of` and `20% off`, are read the same in every pack. Symbols are never
+translated: `+`, `^`, `%` and `!` mean the same everywhere.
+
+| Typed | `en` | `de` | `fr` |
+| --- | --- | --- | --- |
+| `3 times 4` | `12` | refused | refused |
+| `3 mal 4` | refused | `12` | refused |
+| `3 fois 4` | refused | refused | `12` |
+| `3 plus 4` | `7` | `7` | `7` |
+| `10 teilen 2` | refused | `5` | refused |
+| `10 diviser 2` | refused | refused | `5` |
+| `2 potenz 3` | refused | `8` | refused |
+| `2 puissance 3` | refused | refused | `8` |
+| `10 mod 3` | `1` | `1` | `1` |
+| `10% of 200` | `20` | refused | refused |
+| `10% von 200` | refused | `20` | refused |
+| `half of 10` | `5` | `5` | `5` |
+| `20% off $50` | `$40.00` | `$40.00` | `$40.00` |
+| `5 km to miles` | `3.11 miles` | refused | refused |
+| `5 km in miles` | `3.11 miles` | `3.11 miles` | refused |
+| `konvertieren 5 km in miles` | refused | `3.11 miles` | refused |
+| `5 kg + 2 lb` | `5.91 kg` | `5.91 kg` | `5.91 kg` |
+| `true and false` | `false` | refused | refused |
+| `vrai et faux` | refused | refused | `false` |
+| `if 1 > 0 then 1 else 2` | `1` | refused | refused |
+| `si 1 > 0 alors 1 sinon 2` | refused | refused | `1` |
+| `sin(0)` | `0` | `0` | `0` |
+| `sqrt(16)` | `4` | refused | refused |
+| `round(2.567, 2)` | `2.57` | refused | refused |
+| `floor(7/2)` | `3` | refused | refused |
+| `ceil(7/2)` | `4` | refused | refused |
+| `max(1, 2)` | `2` | `2` | `2` |
+| `wurzel(16)` | refused | refused | refused |
+| `runden(7/2)` | refused | refused | refused |
+| `aufrunden(7/2)` | refused | refused | refused |
+| `abrunden(7/2)` | refused | refused | refused |
+| `15.03.2024` | `Friday, March 15, 2024` | `Friday, March 15, 2024` | `Friday, March 15, 2024` |
+
+The dates and times words follow the same rule: `today`, `now` and
+`next monday` in English, `heute`, `jetzt` and `naechste montag` in German, and
+`aujourdhui` (without its apostrophe, which a word cannot hold), `maintenant`
+and `prochain lundi` in French. They answer from the clock, so they are not in
+the table.
+
+Three gaps in the German and French packs are worth knowing before choosing
+one:
+
+- **Functions.** Both keep `sin`, `cos`, `tan`, `log`, `abs`, `min` and `max`,
+  and lose the English `sqrt`, `round`, `floor` and `ceil`. The German names the
+  table lists (`wurzel`, `runden`, `aufrunden`, `abrunden`) are recognised as
+  function names but have no function behind them yet, so they are refused
+  with `Unknown function`.
+- **Converting in French.** The French pack has no word for `in` or `to`, so a
+  French engine cannot convert units or currencies in words.
+- **Words for true, false and if in German.** The German pack has none, so a
+  German engine has no conditional and no truth values.
 
 ## Region tags
 
@@ -110,12 +175,11 @@ per language, so a tag with no pack of its own reads as its language's pack:
 language is matched in any case, and `de_DE`, the spelling some operating
 systems use, reads as `de` too.
 
-| `locale` | `€1.250` | `1.5 + 1` |
-| --- | --- | --- |
-| `de` | `€1,250.00` | refused |
-| `de-DE` | `€1,250.00` | refused |
-| `fr-FR` | `€1.25` | `2.50` |
-| `en-GB` | `€1.25` | `2.50` |
+| Typed | `de` | `de-DE` | `fr-FR` | `en-GB` |
+| --- | --- | --- | --- | --- |
+| `€1.250` | `€1,250.00` | `€1,250.00` | `€1.25` | `€1.25` |
+| `1.5 + 1` | refused | refused | `2.50` | `2.50` |
+| `3 mal 4` | `12` | `12` | refused | refused |
 
 Any other code reads as English, including one with no pack at all (`xx`) and
 one that happens to name a built-in JavaScript property (`toString`,
@@ -184,6 +248,10 @@ the host's configuration is seen rather than hidden behind different output.
 - **The decimal comma is only partly read.** `2,5` is refused in every pack,
   and a German or French engine reads a comma as a decimal only before exactly
   three digits.
+- **The formatter is the other half.** A pack decides what a typed line means,
+  never how the answer is written: that is `numberResult.decimalSeparatorLocale`
+  in the [formatting settings](/guide/formatting/), which `engine.formatValue`
+  takes from the engine's tag.
 - **Pasted text is read by its own rules.** `numbers in` and `amounts in` read
   a German engine's text in German, and do not refuse what a typed line would:
   `numbers in "preis 9.99"` is 9 and 99 in a German engine. See

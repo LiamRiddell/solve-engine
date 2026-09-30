@@ -537,6 +537,36 @@ export class ThreeTierEvaluator {
 	}
 
 	/**
+	 * Retire this evaluator: the call a host makes when the document it serves
+	 * is closed or replaced by another.
+	 *
+	 * It stops the background compilation worker, if one was started, and
+	 * drops the evaluator's subscription to the shared `global :name` store.
+	 * Until then the store holds a reference to the evaluator, so one that is
+	 * never retired stays reachable (and keeps marking its lines dirty) after
+	 * the host has let go of it.
+	 *
+	 * It also detaches the evaluator from the engine, where the engine still
+	 * points at it: the engine's document model and its async batcher's
+	 * checkpoint chain are cleared if they are this evaluator's own. Left in
+	 * place, the engine went on answering from the retired document, so a
+	 * later `evaluateLine("line 1 * 2")` read a line of a note the host had
+	 * closed rather than refusing for want of a document. An engine an evaluator
+	 * built since has taken over is left alone.
+	 *
+	 * {@link terminateWorker} is the first half of this and keeps working as
+	 * it did. `dispose` is safe to make more than once. The document model and
+	 * the engine themselves are left intact: the host owns both, and may build
+	 * a new evaluator over them.
+	 */
+	dispose(): void {
+		this.terminateWorker();
+		if (this.engine.getDocumentModel() === this.doc) this.engine.setDocumentModel(null);
+		const batcher = this.engine.getBatcher();
+		if (batcher.checkpointer === this.checkpointer) batcher.checkpointer = null;
+	}
+
+	/**
 	 * Put the document's `random seed` line in force on the engine, and mark
 	 * dirty every line whose cached draw came from a different seed. The scan
 	 * checks each line for the word before trying the pattern, so a document

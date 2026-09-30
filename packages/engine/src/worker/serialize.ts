@@ -14,6 +14,7 @@ import { toHexString, formatColour } from "@solve-js/packages/colour/ColourMath"
 import type { FormattingSettings } from "@solve-js/format/FormattingSettings";
 import { formatSymbolic } from "@solve-js/symbolic";
 import type { ParsedLine, InlineSolvePosition, ParsingResult } from "@solve-js/types/ParsingResult";
+import type { SourceSpan } from "@solve-js/errors/EngineError";
 import type {
 	SerializedWorkerValue,
 	SerializedMatrix,
@@ -64,7 +65,11 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 		// A non-finite reading (1/0, 0/0, an overflow) cannot cross JSON, which
 		// turns it into null and breaks the round-trip the DTO guarantees. Keep
 		// `number` finite and name the real value in `nonFinite` instead.
-		number: Number.isFinite(reading) ? reading : 0,
+		// Negative zero is written as zero: JSON has no negative zero, so a DTO
+		// holding one read `-0` after `structuredClone` and `0` after `JSON`,
+		// which broke the one-shape guarantee this module exists for. The text
+		// already reads `= 0` (#725).
+		number: Number.isFinite(reading) ? (reading === 0 ? 0 : reading) : 0,
 	};
 	if (!Number.isFinite(reading)) {
 		dto.nonFinite = nonFiniteTag(reading);
@@ -125,6 +130,25 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 	return dto;
 }
 
+/**
+ * A failure's position as a fresh plain object, or null.
+ *
+ * Copied field by field rather than passed through, so the DTO holds only the
+ * four numbers a span is (never an object the engine might hold elsewhere),
+ * and an absent `line` or `col` stays absent rather than crossing as
+ * `undefined`, which a deep-equal between the two paths would trip on.
+ *
+ * @param span - The span a document line or inline solve carries, if any.
+ * @returns The span as plain JSON, or null when there is none.
+ */
+export function serializeSpan(span: SourceSpan | null | undefined): SourceSpan | null {
+	if (span === null || span === undefined || typeof span !== "object") return null;
+	const out: SourceSpan = { start: span.start, end: span.end };
+	if (span.line !== undefined) out.line = span.line;
+	if (span.col !== undefined) out.col = span.col;
+	return out;
+}
+
 /** Serialise a nullable value, the shape both `result` fields carry. */
 function serializeMaybe(value: Value | null | undefined, settings?: FormattingSettings): SerializedWorkerValue | null {
 	return value ? serializeValue(value, settings) : null;
@@ -140,6 +164,8 @@ function serializeInlineSolve(solve: InlineSolvePosition, settings?: FormattingS
 		columnNumber: solve.columnNumber,
 		result: serializeMaybe(solve.result, settings),
 		error: solve.error ?? null,
+		errorCode: solve.errorCode ?? null,
+		errorSpan: serializeSpan(solve.errorSpan),
 	};
 }
 
@@ -156,6 +182,11 @@ export function serializeParsedLine(line: ParsedLine, settings?: FormattingSetti
 		expression: line.expression,
 		result: serializeMaybe(line.result, settings),
 		error: line.error,
+		// The code and position of a line that threw, as the line carries them
+		// on the main thread (#709), so a host behind the worker branches on
+		// the same code (#725).
+		errorCode: line.errorCode ?? null,
+		errorSpan: serializeSpan(line.errorSpan),
 	};
 }
 

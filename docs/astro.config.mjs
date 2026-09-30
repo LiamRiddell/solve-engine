@@ -261,6 +261,24 @@ export default defineConfig({
               ],
             },
             {
+              // One document per task, rather than one page per feature: the
+              // reference is organised by what the engine does, and a visitor
+              // arrives with something they want done. Straight after the
+              // first pages, where a reader looking for a worked note finds it,
+              // rather than among the reference groups, where a reader
+              // scanning the reference met it by accident (#727).
+              label: "Recipes",
+              collapsed: true,
+              items: [
+                { slug: "recipes/a-freelance-week" },
+                { slug: "recipes/a-trip" },
+                { slug: "recipes/a-household-budget" },
+                { slug: "recipes/a-mortgage-decision" },
+                { slug: "recipes/a-developer-scratchpad" },
+                { slug: "recipes/a-lab-note" },
+              ],
+            },
+            {
               // Everyday number work: the operators, the ways a number can be
               // written, and the functions that reshape one. Foundations first,
               // then the forms a reader reaches for by name.
@@ -363,17 +381,6 @@ export default defineConfig({
                 { slug: "syntax/time" },
                 { slug: "syntax/time-zones" },
                 { slug: "syntax/timesheets" },
-              ],
-            },
-            {
-              // One document per task, rather than one page per feature: the
-              // reference is organised by what the engine does, and a visitor
-              // arrives with something they want done.
-              label: "Recipes",
-              collapsed: true,
-              items: [
-                { slug: "recipes/a-freelance-week" },
-                { slug: "recipes/a-trip" },
               ],
             },
             {
@@ -499,7 +506,12 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { slug: "guide/embedding" },
+                // Straight after the page that stands the engine up: the four
+                // ways to evaluate with it, and which a host wants.
+                { slug: "guide/entry-points" },
                 { slug: "guide/typescript-usage" },
+                // Beside the TypeScript shapes it serialises.
+                { slug: "guide/results-as-json" },
                 // Straight after the page that shows a failure's code: the list
                 // of every code there is.
                 { slug: "guide/error-codes" },
@@ -514,6 +526,9 @@ export default defineConfig({
                 // Straight after the editor page it builds on: the whole-document
                 // half of the same language service.
                 { slug: "guide/reference-aware-editing" },
+                // The evaluation half of the same editor: keeping the answers
+                // current on every keystroke.
+                { slug: "guide/live-editor" },
                 // After formatting, because choosing a zone is a decision about
                 // what a date MEANS in this host, and the page is read once the
                 // dates are already on screen and reading wrongly.

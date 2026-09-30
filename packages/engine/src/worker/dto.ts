@@ -15,6 +15,7 @@
 import type { ValueType, ColourFormat, DatetimeGrain } from "@solve-js/vm/Value";
 import type { ValueSource, FrozenMark } from "@solve-js/vm/Provenance";
 import type { DiagnosticReportJSON } from "@solve-js/diagnostics";
+import type { SourceSpan } from "@solve-js/errors/EngineError";
 
 /**
  * A matrix flattened for transport.
@@ -174,6 +175,10 @@ export interface SerializedInlineSolve {
 	columnNumber: number;
 	result: SerializedWorkerValue | null;
 	error: string | null;
+	/** The code of the failure in `error`, as {@link InlineSolvePosition.errorCode}; null when `error` is. */
+	errorCode: string | null;
+	/** Where in the line the failure in `error` is, as {@link InlineSolvePosition.errorSpan}; null when the engine has no position or `error` is null. */
+	errorSpan: SourceSpan | null;
 }
 
 /**
@@ -191,6 +196,19 @@ export interface SerializedParsedLine {
 	expression: string | null;
 	result: SerializedWorkerValue | null;
 	error: string | null;
+	/**
+	 * The code of the failure in `error` (`NO_PREFIX_PARSELET`,
+	 * `UNDEFINED_VARIABLE`), as {@link ParsedLine.errorCode}: what a host behind
+	 * the worker branches on. Null when `error` is. A failure the line returned
+	 * as a value keeps its code on `result.errorCode` instead.
+	 */
+	errorCode: string | null;
+	/**
+	 * Where in the line the failure in `error` is, as {@link ParsedLine.errorSpan}:
+	 * offsets into the line's own text, with the one-based line and column.
+	 * Null when the engine has no position for it, or `error` is null.
+	 */
+	errorSpan: SourceSpan | null;
 }
 
 /**
