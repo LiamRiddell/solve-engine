@@ -2,7 +2,7 @@ import { Value, ValueType, type MatrixData, type MatrixEntry, type RangeData, ty
 import { formatColour } from "@solve-js/packages/colour/ColourMath";
 import { formatIp } from "@solve-js/packages/ip/IpMath";
 import { formatIpv6 } from "@solve-js/packages/ip/Ipv6Math";
-import { decimalToFixed, type DecimalData } from "@solve-js/decimal";
+import { decimalCompare, decimalDivide, decimalFromInteger, decimalRound, decimalToFixed, type DecimalData } from "@solve-js/decimal";
 import { getLocale, type ILocale } from "@solve-js/constants/locales";
 import { autoFormatIntegerOrFloat, compactParts, tooSmallToPrintText } from "@solve-js/utilities/Number";
 import { localCalendarName, localCurrencyPlacement, withLocalUnitName } from "./LocaleWords";
@@ -12,11 +12,11 @@ import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
 import { isIso4217 } from "@solve-js/uom/Iso4217";
 import { isCryptoCurrency, moneyDisplayPlaces, trimFractionZeros, type MoneyPlaces } from "@solve-js/uom/CurrencyMinorUnits";
 import { matAt } from "@solve-js/vm/MatrixOps";
-import { formatSymbolic, type SymbolicNode } from "@solve-js/symbolic";
+import { formatSymbolic, type Rational, type SymbolicNode } from "@solve-js/symbolic";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
 import { decodeFixedOffsetMinutes, isFixedOffset, isNamedOffset, longDateInZone, timeOfDayInZone } from "@solve-js/calendar/IntlZone";
 
-function formatNumber(value: number, locale: ILocale, settings: FormattingSettings, decimalPlaces?: number, exact?: DecimalData): string {
+function formatNumber(value: number, locale: ILocale, settings: FormattingSettings, decimalPlaces?: number, exact?: DecimalData, rational?: Rational): string {
   // A zero is written without a sign. IEEE's negative zero is kept on the value,
   // where `1 / (0 * -1)` can tell it apart, but `-0` is no use to a reader (#585).
   if (value === 0) value = 0;
@@ -45,6 +45,14 @@ function formatNumber(value: number, locale: ILocale, settings: FormattingSettin
   const compact = compactText(value, settings);
   if (compact !== undefined) return `${locale.display.resultPrefix}${compact}`;
   const dp = settings.floatResult.decimalPlaces;
+  // Past the magnitude where a double holds the places shown, the digits come
+  // from the exact value the number carries, less the padding zeros where the
+  // host asked for that.
+  let exactText = exactDigitsWhereDoubleCannot(value, { exact, rational }, dp);
+  if (exactText !== undefined) {
+    if (settings.floatResult.trimTrailingZeros === true && exactText.includes(".")) exactText = exactText.replace(/\.?0+$/, "");
+    return `${locale.display.resultPrefix}${localiseFixedDecimal(exactText, loc || "en-US", sep)}`;
+  }
   // A value below the decimal budget is shown to three significant digits
   // rather than as a zero it cannot be told apart from. Only when the budget is
   // the default one: an explicit `to N dp` above asked for those places and is
@@ -52,6 +60,50 @@ function formatNumber(value: number, locale: ILocale, settings: FormattingSettin
   const tooSmall = tooSmallToPrintText(value, dp, loc || "en-US");
   const formatted = tooSmall ?? autoFormatIntegerOrFloat(value, dp, sep, loc, settings.floatResult.trimTrailingZeros === true);
   return `${locale.display.resultPrefix}${formatted}`;
+}
+
+/**
+ * A number's digits taken from the exact value it carries, where its double
+ * cannot hold the places shown; undefined where the double prints them right.
+ *
+ * A double keeps about sixteen significant digits, so the larger the number the
+ * fewer places after the point it can hold: none at all past 2^53, where the
+ * literal `9007199254740993.5` is the double 9,007,199,254,740,994 and was
+ * printed as that, a confident wrong number. A literal with a point keeps its
+ * exact decimal beside the double (see VM's `exactLiteralValue`), exact
+ * arithmetic keeps it or an exact fraction (`9007199254740993.5 + 1/3`), and
+ * where the double's spacing could reach half of the last place shown the
+ * digits come from there instead, rounded half away from zero. A whole value
+ * shows no places, a fraction shows `places` of them.
+ *
+ * The boundary: below that magnitude the double already rounds to the right
+ * digits, so nothing changes there; a value with neither (a result of `sqrt`,
+ * a quantity with a unit) keeps its double, since there are no exact digits to
+ * show; and a whole number carrying an exact integer is written by
+ * {@link formatExactInteger} before this is reached.
+ *
+ * @param value - The double the value carries.
+ * @param source - Its exact decimal or exact fraction, when it has one; the decimal is read first.
+ * @param places - The places a fraction shows: a whole number from 0 to 100.
+ * @returns The digits in ASCII (`"-12.50"`), not grouped or localised, or undefined.
+ */
+export function exactDigitsWhereDoubleCannot(
+  value: number,
+  source: { readonly exact?: DecimalData; readonly rational?: Rational },
+  places: number,
+): string | undefined {
+  const { exact, rational } = source;
+  if ((exact === undefined && rational === undefined) || !Number.isFinite(value)) return undefined;
+  // A place count that is not a small whole number is a host's setting gone
+  // wrong, not a reason to print a hundred digits: the double's path has it.
+  if (!Number.isInteger(places) || places < 0 || places > 100) return undefined;
+  const whole = exact !== undefined ? decimalCompare(decimalRound(exact, 0), exact) === 0 : rational!.d === 1n;
+  const shown = whole ? 0 : places;
+  if (Math.abs(value) * Number.EPSILON < 0.5 * 10 ** -shown) return undefined;
+  // A fraction is divided out to exactly the places shown, one rounding, so
+  // no digit is rounded twice.
+  const decimal = exact ?? decimalDivide(decimalFromInteger(rational!.n), decimalFromInteger(rational!.d), shown);
+  return decimalToFixed(decimal, shown);
 }
 
 /**
@@ -1087,7 +1139,7 @@ export function formatValue(value: Value, settings?: FormattingOverrides): strin
         if (compact !== undefined) return `${locale.display.resultPrefix}${compact}`;
         return formatExactInteger(value.rational.n, locale, us, value.decimalPlaces);
       }
-      return formatNumber(value.value as number, locale, us, value.decimalPlaces, value.exact);
+      return formatNumber(value.value as number, locale, us, value.decimalPlaces, value.exact, value.rational);
     case ValueType.Hex:
       return formatHex(value.value as number | bigint, us, value.unit);
     case ValueType.BigInt:

@@ -13,9 +13,11 @@ or a largest-so-far is kept by hand.
 
 ## Ranges
 
-A range is `start:end`, inclusive at both ends. It is recognised inside brackets
-or a function call. A bare `0:3` at the top level is a clock time, because that
-reading is far more common in a document.
+A range is `start:end`, the whole numbers from the start to the end, inclusive at
+both ends. A colon between two numbers means a range only where a list is
+expected: as the list `map`, `reduce`, `sum` and `prod` work through. Anywhere
+else it is a clock time, because that reading is far more common in a document:
+a bare `0:3`, `(0:3)`, and `max(9:30, 10:15)`, which compares two times of day.
 
 ```solve
 map(10*x, 0:3) // [0, 10, 20, 30]
@@ -52,10 +54,28 @@ ends on the largest value in the list.
 
 ## Sum and product
 
-Shorthand for the two most common reductions.
+Shorthand for the two most common reductions. `sum(expression, list)` adds up the
+expression worked out for each element, and `prod(expression, list)` multiplies
+them.
 
 ```solve
 sum(x, [10, 20, 30]) // 60
 prod(x, [2,3,4]) // 24
 sum(x, 0:4) // 10
+sum(x^2, 1:3) // 14
 ```
+
+Given the list alone, they add or multiply its elements as they are, which is the
+same as writing `x` for the expression:
+
+```solve
+sum(1:3) // 6
+sum([10, 20, 30]) // 60
+prod(1:5) // 120
+```
+
+A single argument has to be a list: a range, a bracketed list, or a name holding
+one. `sum(5)` is refused, because there is nothing to add it to; a run of plain
+values is written with commas, `sum(1, 2, 3)`. A range counts up in whole
+numbers, so `sum(3:1)` and `sum(1.5:3)` are refused by name rather than read
+another way.

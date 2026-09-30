@@ -120,8 +120,8 @@ describe("adversarial", () => {
 	});
 
 	test("realistic: a salary from the line above, a check over it, a what-if and both passes", () => {
-		// The check brackets the form: an unbracketed postfix after tax takes the
-		// whole comparison, the literal `£50,000` included, as before.
+		// The check brackets the form here; since FoundBug_afterTaxInAComparison
+		// the brackets are optional, and that spec covers the unbracketed line.
 		const { batch, incremental } = expectHonestDocument("salary = £50,000\nsalary after tax\ncheck (salary after tax) > £30,000\nline 2 with salary = £60,000");
 		expect(batch.slice(0, 4)).toEqual(["= £50,000.00", "= £39,519.60", "= ✓", "= £45,357.40"]);
 		expect(shown("£60,000 after tax")).toBe("= £45,357.40");

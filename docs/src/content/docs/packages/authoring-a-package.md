@@ -91,7 +91,9 @@ A package that lives outside this repository, and depends on the published
 engine by name, starts from the
 [package starter](https://github.com/LiamRiddell/solve-engine/tree/main/examples/package-starter).
 It carries one of each common piece (a function, a phrase, an `as` converter and
-a live lookup), imports only the engine's public entry points, and is tested with
+a live lookup, whose async resolver is made with `createQueryResolver` from
+`solve-engine/resolvers`, the [short path](/guide/async-data-sources/#the-short-path-createqueryresolver)
+for a lookup of one quoted query), imports only the engine's public entry points, and is tested with
 [`solve-engine/testing`](/packages/testing-a-package/). The engine's own build
 packs the published tarball, builds the starter against it and runs its tests, so
 it compiles against exactly what an author installs. Copy the directory, rename

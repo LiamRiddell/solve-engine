@@ -120,6 +120,53 @@ describe("the starter's parts", () => {
 		expect(createStarterPackage({ fetchRainfall: async () => 0 }).engineVersion).toBe("^2.0.0");
 	});
 
+	test("the live lookup is an async resolver made with createQueryResolver, not a promise from a plugin function", async () => {
+		// The starter once returned a promise from its plugin function, because
+		// createQueryResolver was not public. It is now, from solve-engine/resolvers,
+		// and the starter shows the path an author should copy.
+		expect(SOURCE).toMatch(/import \{ createQueryResolver \} from "solve-engine\/resolvers"/);
+		expect(SOURCE).not.toMatch(/new Map<string, Promise<Value>>/);
+		const { createStarterPackage } = (await starterModule()) as { createStarterPackage: (o: unknown) => IEnginePackage };
+		const pkg = createStarterPackage({ fetchRainfall: async () => 0 });
+		expect(pkg.asyncResolvers?.length).toBe(1);
+		expect(pkg.asyncResolvers?.[0].namespace).toBe("starter");
+		// The resolver declares the plugin-call opcodes, so a plain line skips its preflight.
+		expect(pkg.asyncResolvers?.[0].watchedOpcodes?.length).toBe(2);
+		// A plugin function handed a non-string answers at once, with no promise.
+		const { numberValue } = require("@solve-js/vm") as typeof import("@solve-js/vm");
+		const answer = pkg.pluginFunctions!.rainfall([numberValue(42)]);
+		expect(answer).not.toBeInstanceOf(Promise);
+		expect((answer as { value: unknown }).value).toBe("STARTER_BAD_PLACE");
+	});
+
+	test("two lines asking for one place share one fetch, and each engine keeps its own answer", async () => {
+		const { createStarterPackages } = (await starterModule()) as { createStarterPackages: (o: unknown) => IEnginePackage[] };
+		const { createTestEngine, expectDocument } = require("@solve-js/testing") as typeof import("@solve-js/testing");
+		const calls: string[] = [];
+		const makeEngine = (mm: number) =>
+			createTestEngine(
+				createStarterPackages({
+					fetchRainfall: async (place: string) => {
+						calls.push(place);
+						return mm;
+					},
+				}),
+			);
+		const first = makeEngine(3);
+		const second = makeEngine(7);
+		const doc = 'rainfall("Oslo")\nrainfall("Oslo") * 2';
+		const one = await expectDocument(first, doc);
+		one.line(1).toEqual(3, "mm");
+		one.line(2).toEqual(6, "mm");
+		const two = await expectDocument(second, doc);
+		two.line(1).toEqual(7, "mm");
+		two.line(2).toEqual(14, "mm");
+		// One fetch per engine: the second line read the first line's answer.
+		expect(calls).toEqual(["Oslo", "Oslo"]);
+		first.clear();
+		second.clear();
+	});
+
 	test("running the starter leaves Object.prototype alone", async () => {
 		const exports = await starterModule();
 		expectPrototypeUntouched(() => {
