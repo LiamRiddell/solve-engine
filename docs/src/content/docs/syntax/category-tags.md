@@ -1,6 +1,6 @@
 ---
 title: Category tags
-description: Label lines with a #tag and total, average or count every line carrying it, wherever they sit in the note, or break the whole note down by tag.
+description: "Label lines with a #tag and total, average or count every line carrying it, wherever they sit in the note, or break the whole note down by tag."
 ---
 
 > **Package:** `TAGS_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).

@@ -1,6 +1,6 @@
 ---
 title: "A lab note"
-description: A measurement written up as it is taken: readings with their uncertainty, a derived result to the right number of figures, a check against the expected value, and the unit conversions around it.
+description: "A measurement written up as it is taken: readings with their uncertainty, a derived result to the right number of figures, a check against the expected value, and the unit conversions around it."
 ---
 
 A measurement is only as good as its uncertainty: a density of 2.48 g/mL means
