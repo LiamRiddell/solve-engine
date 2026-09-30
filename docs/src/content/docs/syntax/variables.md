@@ -100,6 +100,54 @@ budgte * 2 // ERROR: Undefined variable: budgte. Did you mean budget?
 sqr(16) // ERROR: Undefined function: sqr. Did you mean sqrt?
 ```
 
+## Names of several words
+
+A name can be the words you would say, not only one word: `hourly rate`,
+`monthly rent`, `take home pay`. The words become one name on the line that
+defines it, the line that gives it a value with `=`, and from there on the same
+words on any line below read as that name.
+
+```solve-doc
+hourly rate = $50 // $50.00
+hours = 8 // 8
+hourly rate * hours // $400.00
+```
+
+Where two names share words, the longest one the note defines is read first, so
+a one-word name and a longer one that ends with it can sit side by side:
+
+```solve-doc
+rate = 5 // 5
+hourly rate = $50 // $50.00
+hourly rate * rate // $250.00
+```
+
+Only the line with the `=` makes the words a name, which is what keeps prose
+from turning into one: words that no line defines stay the error they always
+were, and a line above the definition does not read the name yet.
+
+```solve-doc
+hourly rate * 2 // ERROR: Expected an operator or the end of the line, but found "rate"
+hourly rate = $50 // $50.00
+```
+
+A name is two to four plain words. A word the engine already reads cannot be
+one of them, so a name never hides a unit, an operator or a phrase. A line that
+would make one of those part of a name is refused by name, rather than read as
+something else: `take` is a spelling of minus, and `take home = 5` used to be
+stored quietly as the equation `-home = 5`.
+
+```solve-doc
+take home = 5 // ERROR: "take home" cannot be a name: "take" is a spelling of minus. Choose other words, or join them as take_home. For the equation, write -home = 5.
+tax on = 5 // ERROR: "tax on" cannot be a name: "tax on" is a phrase the engine reads. Choose other words, or join them as tax_on.
+```
+
+The boundary: the words are matched as written, so `Hourly rate` is another
+name from `hourly rate`, as `Rate` is from `rate`. The colon forms `:name` and
+`global :name` keep their one-word name. A line with more than four words
+before its `=` is left as it was, since that is more often a sentence than a
+name.
+
 ## Running totals
 
 `+=` and `-=` update a named total in place, so a note becomes a running balance

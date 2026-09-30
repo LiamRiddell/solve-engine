@@ -348,7 +348,9 @@ export function extractReadsAndWrites(
         // (#642), so the line reads the name: defining `t` above it, or
         // deleting that line, changes its answer. A function's own parameter
         // is its own, as below.
-        if (t.type === "PER_UNIT" && t.mayNameVariable === true) {
+        // A lone `sum` or `total` (#742) reads a variable of its name the same
+        // way, so the line is recorded as reading it too.
+        if (t.mayNameVariable === true) {
             if (!functionParamNames.has(t.value)) {
                 reads.push(t.value);
                 onName?.(i, t.value, "read");

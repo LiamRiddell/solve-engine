@@ -35,8 +35,10 @@ export const EVALUATOR_SEAMS = [
 	"restoreToPrefix",
 	"setDocumentModel",
 	"setKeystrokeSignal",
+	"settleMultiWordNames",
 	"settleOrphanedNames",
 	"undefineEquationsFrom",
+	"undefineMultiWordNamesFrom",
 	"undefineUserUnitsFrom",
 	"userUnitNames",
 ] as const;

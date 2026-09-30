@@ -222,7 +222,9 @@ describe("adversarial", () => {
 
 	test("prototype words before a dollar are not a country", () => {
 		for (const word of PROTOTYPE_WORDS) {
-			expect(read(`${word}$100`).currency ?? "").not.toMatch(/^[A-Z]{3}$/);
+			// A word before an amount is a label since #742, so the amount is the
+			// plain dollar; what must not happen is the word naming a country's.
+			expect(["", "USD"]).toContain(read(`${word}$100`).currency ?? "");
 		}
 	});
 

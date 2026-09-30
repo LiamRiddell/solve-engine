@@ -22,14 +22,21 @@ are named in text rather than shown as a live line.
 ## Writing a note
 
 A note is a column of lines, and each line is worked out on its own unless it
-reads another. Text after `//` is a comment the engine skips. A label before a
-colon is kept while the rest of the line is worked out (see
-[labels](/syntax/trigger-words/#labels-are-preserved)). A line starting with `#`
-is a heading: it gives no answer, and it names a [section](/syntax/sections/).
+reads another. Text after `//` is a comment the engine skips. A line starting
+with `#` is a heading: it gives no answer, and it names a
+[section](/syntax/sections/).
 
 ```solve
 2 + 2 // comment // 4
+```
+
+**[Labels](/syntax/labels/)**: words that name a line's figure, kept as text
+while the rest is worked out, before a colon or, when an amount of money or a
+quantity ends the line, without one.
+
+```solve
 total: 5 + 3 // 8
+Rent $1200 // $1,200.00
 ```
 
 ## Arithmetic
@@ -744,8 +751,9 @@ These forms read other lines of the note, so each is shown as a small note of
 its own, worked out as one document.
 
 **[Variables](/syntax/variables/)**: a name for a value, to use it again later,
-written with or without a leading colon. `+=` and `-=` keep a running total, and
-a function of your own is defined the same way.
+written with or without a leading colon, and of one word or a few (`hourly rate
+= $50`). `+=` and `-=` keep a running total, and a function of your own is
+defined the same way.
 
 ```solve
 :a = 10
@@ -761,7 +769,8 @@ f(5) // 11
 ```
 
 **[Line references](/syntax/line-references/)**: an earlier line read by its
-number or its position, and the lines above totalled.
+number or its position, and the lines above totalled, by `total above` or by a
+line that is only `sum` or `total`.
 
 ```solve-doc
 10
@@ -845,11 +854,12 @@ reduce(acc+x, [1,2,3]) // 6
 ```
 
 **[Conditionals](/syntax/conditionals/)**: comparisons that answer true or
-false, `and` and `or`, `if ... then ... else`, and `check`, which marks a line
-stating something the note should keep true.
+false, `and`, `or` and `not`, `if ... then ... else`, and `check`, which marks a
+line stating something the note should keep true.
 
 ```solve
 10 == 10 // true
+not (1 > 2) // true
 if 5 > 3 then 100 else 200 // 100
 check 1 km == 1000 m // ✓
 ```

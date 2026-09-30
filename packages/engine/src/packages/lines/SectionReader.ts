@@ -98,6 +98,8 @@ const SUMMARY_PHRASE = new RegExp(
     String.raw`(?:^|[^0-9A-Za-z_])(?:total|sum|average|count)\s+of\s+section\s*"`,
     String.raw`(?:^|[^0-9A-Za-z_])(?:total|sum|average|count)\s+of\s+#[A-Za-z]`,
     String.raw`(?:^|[^0-9A-Za-z_])(?:total|sum)\s+by\s+tag(?![0-9A-Za-z_])`,
+    // A line that is only `sum` or `total`, which totals the block above (#742).
+    String.raw`^\s*(?:total|sum)\s*$`,
   ].join("|"),
   "i",
 );

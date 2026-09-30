@@ -328,6 +328,27 @@ export function totalAboveHandler(_args: Value[], context?: LineExecutionContext
   return aggregateAbove(context!, "total");
 }
 
+/**
+ * A line that is only `sum` or `total` (#742): the note's own variable of that
+ * name when it defines one, and otherwise `total above`.
+ *
+ * The variable wins, as it did before the bare word meant anything: `total =
+ * 5` then `total` answers 5. Which applies is decided as the line runs, since
+ * a definition can be added or removed above it without the line changing.
+ *
+ * @param args - The word as typed, `sum` or `total`.
+ * @param context - Per-line execution context: the variable is read through
+ * `getVariable`, and the block through the same reads `total above` makes.
+ * @returns The variable's value, the block's total, or the error `total above`
+ * gives in the same place (outside a document, the refusal that names it).
+ */
+export function columnTotalHandler(args: Value[], context?: LineExecutionContext): Value {
+  const word = args[0]?.type === ValueType.String ? String(args[0].value) : "total";
+  const named = context?.getVariable?.(word);
+  if (named !== undefined) return named;
+  return totalAboveHandler([], context);
+}
+
 /** `average above`, the mean of every numeric result before this line. */
 /**
  * Mean of every numeric result on lines above this one.

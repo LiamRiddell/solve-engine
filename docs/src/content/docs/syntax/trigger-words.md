@@ -114,10 +114,13 @@ line 3 for x from 1 to 3 step 1     // [2, 4, 6]
 
 ## Labels are preserved
 
-A line starting with a label keeps the label and evaluates the rest.
+A line starting with a label keeps the label and evaluates the rest. A label is
+written before a colon, or without one when an amount of money or a quantity
+ends the line (see [labels](/syntax/labels/)).
 
 ```solve
 total: 5 + 3 // 8
+Rent $1200 // $1,200.00
 ```
 
 ## When a line is not an expression
@@ -125,3 +128,9 @@ total: 5 + 3 // 8
 A line the engine cannot make sense of is left alone. It does not guess and it
 does not partially evaluate. That is the intended behaviour for a document that
 is mostly prose with occasional arithmetic in it.
+
+There is one shape it reads: a line of words that ends in one amount of money or
+one quantity is a label and that amount, as the same line with a colon is. A
+number anywhere else in a sentence, a bare number at the end of one, and a
+sentence whose last word before the amount only leads into it (`back in 5 min`)
+are left alone; [labels](/syntax/labels/) lists what decides it.
