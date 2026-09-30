@@ -26,6 +26,7 @@ skips the fuzz and long-document suites; the full run is still the gate.
 | --- | --- |
 | `packages/engine` | The published package, `solve-engine` |
 | `packages/playground-bridge` | Shared glue between the engine and the playground |
+| `packages/cli` | The `solve` command (`solve-engine-cli`), not yet published: the engine from a shell and in CI. Its spec is `packages/engine/__tests__/bugs/Issue774_solveCli.spec.ts`, and `npm run smoke:cli` runs the built command |
 | `playground` | Interactive playground, own lockfile, not a workspace member |
 | `docs` | Documentation site, own lockfile, not a workspace member |
 | `docs-internal` | Maintainer notes, not published |

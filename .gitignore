@@ -27,6 +27,7 @@ playground/*.env
 
 # solve-engine package build output (tsup)
 packages/engine/dist
+packages/cli/dist
 
 # Testing
 #

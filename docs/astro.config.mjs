@@ -494,6 +494,9 @@ export default defineConfig({
               label: "Set up",
               items: [
                 { slug: "getting-started/installation" },
+                // Beside installing the package: the other way to run the
+                // engine, from a shell or a CI job, with no host to write.
+                { slug: "guide/command-line" },
                 { slug: "guide/subpath-exports" },
                 { slug: "guide/versioning-and-support" },
                 { slug: "guide/upgrading-to-2" },
