@@ -1,7 +1,7 @@
 import { describe, expect, test } from "@jest/globals";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { compileFences, extractFences, fenceNames, fenceSource, givenImports, publicExportNames, type FenceTreatment, type GuideFence } from "@tools/guideSnippets";
+import { compileFences, extractFences, fenceNames, fenceSource, givenImports, MISSING_MARKER_SOURCE, publicExportNames, type FenceTreatment, type GuideFence } from "@tools/guideSnippets";
 import { PROTOTYPE_WORDS } from "@tools/adversarial";
 
 /**
@@ -304,7 +304,9 @@ describe("fenceSource, the treatments this spec adds", () => {
 	test("from compiles the fence from its marker, and a missing marker compiles to a failure", () => {
 		expect(fenceSource(fence("// before\nold();\n// now\nnew_();"), { from: "// now" })).toBe("// now\nnew_();\nexport {};");
 		expect(fenceSource(fence("old();"), { from: "// now" })).toContain("throw new Error");
-		expect(fenceSource(fence(""), { from: "// now" })).toContain("no line // now");
+		// The marker's text never reaches the generated source: a fixed line does.
+		expect(fenceSource(fence(""), { from: "// now" })).toContain(MISSING_MARKER_SOURCE);
+		expect(fenceSource(fence(""), { from: '"); process.exit(1); ("' })).not.toContain("process.exit");
 	});
 
 	test("prototype words as a marker or a member are text", () => {
