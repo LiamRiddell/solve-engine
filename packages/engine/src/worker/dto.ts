@@ -136,11 +136,14 @@ export interface SerializedWorkerValue {
 	};
 	/**
 	 * IP/CIDR payload, present only for {@link ValueType.IpCidr}: the 32-bit
-	 * `addr` and/or CIDR `prefix`, plus `text` (the dotted-quad form the answer
-	 * shows). See issue #189.
+	 * IPv4 `addr` or the 128-bit IPv6 `addr6` (as a decimal string, since JSON
+	 * cannot carry a bigint) and its `zone`, and/or the `prefix`, plus `text`
+	 * (the form the answer shows). See issues #189 and #748.
 	 */
 	ipCidr?: {
 		addr?: number;
+		addr6?: string;
+		zone?: string;
 		prefix?: number;
 		text: string;
 	};

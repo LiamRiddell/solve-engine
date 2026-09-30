@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 525 codes, grouped below by the part
+ship. The engine and its built-in packages ship 528 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -304,6 +304,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | Code | Arrives | When it arises |
 | --- | --- | --- |
 | `TEXT_ARITHMETIC` | as a value | Text used in arithmetic with a number. The message points at `as number` for text that holds a number. |
+| `IPV6_ARITHMETIC` | as a value | An IPv6 address in arithmetic, a numeric function, a comparison with a number or a conversion with no whole-number reading (`fe80::1 + 2`). Its 128 bits are past what a number holds exactly; the message points at `as int`. |
 | `TEXT_NOT_A_NUMBER` | as a value | `as number` given text that is not a number. |
 | `REMAINDER_UNDEFINED` | as a value | A remainder with no value: `5 mod 0`, or the remainder of an infinite number. |
 | `POWER_NO_REAL_VALUE` | as a value | A negative number to a fractional power with no real value, as in `(-1)^0.5`, or a negative number's root of even degree. |
@@ -828,10 +829,12 @@ In the package as `ERROR_CODE_CATALOGUES.IpErrorCodes`.
 | --- | --- | --- |
 | `IP_EXPECTED` | as a value | A networking form given something that is not an IP address or a subnet. |
 | `IP_NO_PREFIX` | as a value | `hosts in` or `netmask of` given an address with no prefix length, as in `/24`. |
-| `IP_NEEDS_ADDRESS_AND_PREFIX` | as a value | `broadcast of` given something without both an address and a prefix. |
+| `IP_NEEDS_ADDRESS_AND_PREFIX` | as a value | `broadcast of`, `network of` or `last address of` given something without both an address and a prefix. |
 | `IP_EXPECTED_ADDRESS` | as a value | `<address> in <subnet>` with no address on the left. |
 | `IP_EXPECTED_BLOCK` | as a value | `<address> in <subnet>` with no subnet on the right. |
-| `IPV6_NOT_SUPPORTED` | as a value | An IPv6 address in a note (`fe80::1`, `2001:db8::/32`): only IPv4 addresses and subnets are covered so far. |
+| `IP_PREFIX_OUT_OF_RANGE` | as a value | A prefix no address has (`netmask of /200`, `2001:db8::/129`): IPv4 prefixes run from 0 to 32 and IPv6 prefixes from 0 to 128. |
+| `IP_FAMILY_MISMATCH` | as a value | `<address> in <subnet>` with an IPv4 address and an IPv6 subnet, or the other way round. |
+| `IPV6_NO_BROADCAST` | as a value | `broadcast of` an IPv6 block: IPv6 has no broadcast address, and `last address of` gives the block's last one. |
 
 ## Numerals
 

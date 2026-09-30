@@ -2,7 +2,7 @@ import { Value, ValueType, numberValue, boolValue, hexValue, uomValue, errorValu
 import type { LineExecutionContext } from "@solve-js/vm/VM";
 import { decimalRound, decimalToNumber, type DecimalData } from "@solve-js/decimal";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand, describeQuantity, valueKindName } from "@solve-js/vm/VMConversion";
+import { unifyUom, power, describeMeasureMismatch, unifyQuantities, nonNumericOperand, describeQuantity, valueKindName, isIpv6Value, ipv6Refused } from "@solve-js/vm/VMConversion";
 import { withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { scaleMoneyExact, scaleMoneyByPercent, removeTaxExact, taxInExact, splitEachExact, valueInUnit, moneyForCount } from "@solve-js/vm/MoneyExact";
 import { transpose, determinant, inverse, matrixPower, symbolicToEntry, rowMajorToColumnMajor, dotProduct } from "@solve-js/vm/MatrixOps";
@@ -741,6 +741,36 @@ export function datetimeArgumentRefused(fnIdx: number, args: readonly Value[]): 
             "INVALID_DATETIME_OP",
             `${name === "" ? "This calculation" : name} takes a number, not a date or time: a date or time is a moment, not an amount. A length of time is written 1h30m, 90 minutes or 1:30:00.`,
         );
+    }
+    return null;
+}
+
+/**
+ * The builtins that read an IPv6 address as it is: `hex` and `bin`, which
+ * write out its 128 bits exactly, and those in {@link TAKES_DATETIME}, which
+ * word their own refusal for a value with no numeric reading.
+ */
+const TAKES_IPV6: ReadonlySet<number> = new Set([...TAKES_DATETIME, 48, 49]);
+
+/**
+ * The refusal for a builtin given an IPv6 address, or null (issue #748).
+ *
+ * An IPv6 address has 128 bits, more than a double holds exactly, so its
+ * `toNumber()` reports NaN, and every numeric builtin reads its arguments
+ * through that: `round(fe80::1)` would have answered NaN. The builtin refuses
+ * by name instead and points at `as int`, the address's exact whole number.
+ *
+ * @param fnIdx - The builtin's index.
+ * @param args - Its arguments.
+ * @returns The refusal, or null when no argument is an IPv6 address or the
+ * builtin reads one.
+ */
+export function ipv6ArgumentRefused(fnIdx: number, args: readonly Value[]): Value | null {
+    if (TAKES_IPV6.has(fnIdx)) return null;
+    for (const arg of args) {
+        if (!isIpv6Value(arg)) continue;
+        const name = calledByName(fnIdx) ? builtinFunctionName(fnIdx) : "";
+        return ipv6Refused(name === "" ? "used in this calculation" : `given to ${name}`);
     }
     return null;
 }

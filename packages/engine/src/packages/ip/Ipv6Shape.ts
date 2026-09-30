@@ -1,12 +1,10 @@
 /**
- * The textual shape of an IPv6 address, recognised so a note can refuse it by
- * name (issue #748).
+ * The textual shape of an IPv6 address (issue #748).
  *
- * The engine has no IPv6 values yet. What it must not do is read an address as
- * something else: before this, `fe80::1` answered `1` (the label `fe80:` and the
- * expression `1`), and `fe80::1:2` a clock time. Recognising the shape is all
- * that is needed to stop that; the maths of 128-bit addresses is a later
- * addition.
+ * An address has to be recognised whole before anything else reads it: without
+ * this, `fe80::1` answered `1` (the label `fe80:` and the expression `1`), and
+ * `fe80::1:2` a clock time. `Ipv6Math.parseIpv6` turns a recognised shape into
+ * its 128-bit value.
  */
 
 /** A recognised IPv6 address: the address text, and the zone and prefix written after it. */
@@ -63,7 +61,7 @@ function countGroups(part: string): number {
  * (`12:30`) and a timecode have at most four fields and no `::`, a label (`Note:
  * 5`) ends in a single colon, and a word before `::` that is not hex (`note::5`)
  * is not a group. At least one group must be written, so a bare `::` is left
- * alone. The walk is linear in the length of `text`, and text longer than
+ * alone, unless a prefix follows it (`::/0`, the block of every address). The walk is linear in the length of `text`, and text longer than
  * {@link MAX_IPV6_TEXT} is never an address.
  *
  * @returns The address, zone and prefix, or `null` when `text` is not wholly an address.
@@ -103,8 +101,9 @@ export function readIpv6Shape(text: string): Ipv6Shape | null {
 		const after = countGroups(address.slice(gap + 2));
 		if (before < 0 || after < 0) return null;
 		written = before + after;
-		// The gap stands for at least one zero group, and something is written.
-		if (written === 0 || written > 7) return null;
+		// The gap stands for at least one zero group, and something is written:
+		// a group, or a prefix after a bare `::` (`::/0`).
+		if (written > 7 || (written === 0 && prefix === undefined)) return null;
 	}
 
 	return {

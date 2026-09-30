@@ -15,7 +15,7 @@ import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js
 import { CoreErrorCodes, DatetimeZoneErrorCodes } from "@solve-js/errors/ErrorCode";
 import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@solve-js/vm/BusinessDays";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
-import { builtinFunctions, datetimeArgumentRefused } from "@solve-js/vm/VMBuiltins";
+import { builtinFunctions, datetimeArgumentRefused, ipv6ArgumentRefused } from "@solve-js/vm/VMBuiltins";
 import { setActiveQueryClient } from "@solve-js/services/DataQueryService";
 import type { QueryClient } from "@tanstack/query-core";
 import { builtinArityError, builtinFunctionNames } from "@solve-js/vm/VMBuiltinArity";
@@ -25,7 +25,7 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { safeText } from "@solve-js/parser/ParseMessages";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, valueKindName, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, valueKindName, describeQuantity, currencyRateSources, datetimeArithmeticRefused, isIpv6Value, ipv6Refused, ipv6ArithmeticRefused, ipv6Equal, ipv6Comparison, ipv6WholeNumber, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused } from "@solve-js/vm/VMConversion";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { ANSWER_NAME, PI_NAME, previousLineAnswer } from "@solve-js/vm/LineReads";
@@ -1018,7 +1018,7 @@ function builtinAt(ref: number): ((args: Value[], context?: LineExecutionContext
 function rateOver(args: Value[], rateIndex: number, context: LineExecutionContext | undefined): Value {
     const fault = faultedIn(args);
     if (fault) return fault;
-    const refused = datetimeArgumentRefused(rateIndex, args);
+    const refused = datetimeArgumentRefused(rateIndex, args) ?? ipv6ArgumentRefused(rateIndex, args);
     if (refused) return refused;
     if (args[0].type === ValueType.Symbolic && !SYMBOLIC_NATIVE_BUILTINS.has(rateIndex)) return symbolicBuiltin(rateIndex, args);
     const fn = builtinAt(rateIndex);
@@ -3932,6 +3932,9 @@ export function executeBytecode(
           }
           // A moment has no power; see datetimeArithmeticRefused().
           if (l.type === ValueType.Datetime || r.type === ValueType.Datetime) { stack.push(datetimeArithmeticRefused()); break; }
+          // An IPv6 address has no power; see ipv6Refused().
+          const expIpv6 = ipv6ArithmeticRefused(l, r);
+          if (expIpv6) { stack.push(expIpv6); break; }
           // A Matrix operand means matrix exponentiation, which is repeated
           // matrix multiplication and not the element-wise Math.pow the rest
           // of this case does. Falling through was the same silent-zero shape
@@ -4017,6 +4020,8 @@ export function executeBytecode(
           if (negFault) { stack.push(negFault); break; }
           // A moment has no negative; see datetimeArithmeticRefused().
           if (v.type === ValueType.Datetime) { stack.push(datetimeArithmeticRefused("neg")); break; }
+          // An IPv6 address has no numeric reading; see ipv6Refused().
+          if (isIpv6Value(v)) { stack.push(ipv6Refused("negated")); break; }
           carry = v.sources;
           if (v.type === ValueType.BigInt) stack.push(bigIntValue(-(v.value as bigint)));
           // Negating money keeps it exact: "-$0.10" is exactly "-$0.10".
@@ -4052,8 +4057,9 @@ export function executeBytecode(
           if (posFault) { stack.push(posFault); break; }
           carry = v.sources;
           // Unary plus is a no-op, so money keeps its exact decimal too, and a
-          // list is itself rather than the zero its toNumber() reports.
-          if (v.type === ValueType.Matrix) stack.push(v);
+          // list or an IPv6 address is itself rather than the reading its
+          // toNumber() reports (zero for a list, none for an address).
+          if (v.type === ValueType.Matrix || isIpv6Value(v)) stack.push(v);
           else if (v.type === ValueType.Uom && v.exact !== undefined) stack.push(uomValueExact(v.toNumber(), v.unit!, v.exact));
           else if (v.type === ValueType.Uom) stack.push(uomValue(v.toNumber(), v.unit!));
           // Unary plus is a no-op, so it has to leave the type alone too.
@@ -4093,12 +4099,16 @@ export function executeBytecode(
         //     its own faulted-operand check for the reason that function
         //     documents: a bit pattern read off an Error or a Pending is the
         //     bit pattern of zero, and `(5 kg to m) & 1` answered 0 with
-        //     nothing to say it had not been asked a real question.
+        //     nothing to say it had not been asked a real question. An IPv6
+        //     address is refused the same way, since its toNumber() has no
+        //     bits to give (see ipv6Refused()).
         // ═══════════════════════════════════════════════════════════════
         case OpCode.LSHIFT: {
           const r = safePop(stack), l = safePop(stack);
           const shiftFault = faultedOperand(l, r);
           if (shiftFault) { stack.push(shiftFault); break; }
+          const shiftIpv6 = ipv6ArithmeticRefused(l, r);
+          if (shiftIpv6) { stack.push(shiftIpv6); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             // Bounded, unlike the plain-number path below, which cannot grow:
             // a 32-bit shift is 32 bits whatever it is asked for. See
@@ -4113,6 +4123,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const rshiftFault = faultedOperand(l, r);
           if (rshiftFault) { stack.push(rshiftFault); break; }
+          const rshiftIpv6 = ipv6ArithmeticRefused(l, r);
+          if (rshiftIpv6) { stack.push(rshiftIpv6); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntShift(l, r, -1));
           } else {
@@ -4128,6 +4140,8 @@ export function executeBytecode(
           // a large number. Both operands go through the 32-bit path.
           const urshiftFault = faultedOperand(l, r);
           if (urshiftFault) { stack.push(urshiftFault); break; }
+          const urshiftIpv6 = ipv6ArithmeticRefused(l, r);
+          if (urshiftIpv6) { stack.push(urshiftIpv6); break; }
           stack.push(numberValue(l.toNumber() >>> r.toNumber()));
           break;
         }
@@ -4135,6 +4149,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const andFault = faultedOperand(l, r);
           if (andFault) { stack.push(andFault); break; }
+          const andIpv6 = ipv6ArithmeticRefused(l, r);
+          if (andIpv6) { stack.push(andIpv6); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntValue(toBigIntOperand(l) & toBigIntOperand(r)));
           } else {
@@ -4146,6 +4162,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const orFault = faultedOperand(l, r);
           if (orFault) { stack.push(orFault); break; }
+          const orIpv6 = ipv6ArithmeticRefused(l, r);
+          if (orIpv6) { stack.push(orIpv6); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntValue(toBigIntOperand(l) | toBigIntOperand(r)));
           } else {
@@ -4157,6 +4175,8 @@ export function executeBytecode(
           const r = safePop(stack), l = safePop(stack);
           const xorFault = faultedOperand(l, r);
           if (xorFault) { stack.push(xorFault); break; }
+          const xorIpv6 = ipv6ArithmeticRefused(l, r);
+          if (xorIpv6) { stack.push(xorIpv6); break; }
           if (l.type === ValueType.BigInt || r.type === ValueType.BigInt) {
             stack.push(bigIntValue(toBigIntOperand(l) ^ toBigIntOperand(r)));
           } else {
@@ -4168,6 +4188,7 @@ export function executeBytecode(
           const v = safePop(stack);
           const notFault = faultedOperand(v);
           if (notFault) { stack.push(notFault); break; }
+          if (isIpv6Value(v)) { stack.push(ipv6Refused("used in this arithmetic")); break; }
           if (v.type === ValueType.BigInt) stack.push(bigIntValue(~(v.value as bigint)));
           else stack.push(numberValue(~v.toNumber()));
           break;
@@ -4213,6 +4234,10 @@ export function executeBytecode(
           }
           const eqFault = faultedOperand(l, r);
           if (eqFault) { stack.push(eqFault); break; }
+          // Two IPv6 addresses compare on their 128 bits, however each is
+          // written; see ipv6Equal().
+          const eqIpv6 = ipv6Equal(l, r);
+          if (eqIpv6 !== null) { stack.push(boolValue(eqIpv6)); break; }
           // Equal fractions are equal on the value, not on whichever doubles
           // they rounded to: "1/49 * 49 == 1" is true. Gated on a rational being
           // present, so "1 == 1" keeps its double compare below.
@@ -4263,6 +4288,8 @@ export function executeBytecode(
           }
           const neqFault = faultedOperand(l, r);
           if (neqFault) { stack.push(neqFault); break; }
+          const neqIpv6 = ipv6Equal(l, r);
+          if (neqIpv6 !== null) { stack.push(boolValue(!neqIpv6)); break; }
           // The negation of EQ's rational branch, fraction for fraction.
           if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
             const cmp = compareRationalOperands(l, r);
@@ -4304,6 +4331,9 @@ export function executeBytecode(
           }
           const ltFault = faultedOperand(l, r);
           if (ltFault) { stack.push(ltFault); break; }
+          // Two IPv6 addresses order by their 128 bits; see ipv6Comparison().
+          const ltIpv6 = ipv6Comparison(l, r, (o) => o < 0);
+          if (ltIpv6) { stack.push(ltIpv6); break; }
           if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
             const cmp = compareRationalOperands(l, r);
             if (cmp !== null) { stack.push(boolValue(cmp < 0)); break; }
@@ -4333,6 +4363,9 @@ export function executeBytecode(
           }
           const lteFault = faultedOperand(l, r);
           if (lteFault) { stack.push(lteFault); break; }
+          // Two IPv6 addresses order by their 128 bits; see ipv6Comparison().
+          const lteIpv6 = ipv6Comparison(l, r, (o) => o <= 0);
+          if (lteIpv6) { stack.push(lteIpv6); break; }
           if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
             const cmp = compareRationalOperands(l, r);
             if (cmp !== null) { stack.push(boolValue(cmp <= 0)); break; }
@@ -4361,6 +4394,9 @@ export function executeBytecode(
           }
           const gtFault = faultedOperand(l, r);
           if (gtFault) { stack.push(gtFault); break; }
+          // Two IPv6 addresses order by their 128 bits; see ipv6Comparison().
+          const gtIpv6 = ipv6Comparison(l, r, (o) => o > 0);
+          if (gtIpv6) { stack.push(gtIpv6); break; }
           if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
             const cmp = compareRationalOperands(l, r);
             if (cmp !== null) { stack.push(boolValue(cmp > 0)); break; }
@@ -4389,6 +4425,9 @@ export function executeBytecode(
           }
           const gteFault = faultedOperand(l, r);
           if (gteFault) { stack.push(gteFault); break; }
+          // Two IPv6 addresses order by their 128 bits; see ipv6Comparison().
+          const gteIpv6 = ipv6Comparison(l, r, (o) => o >= 0);
+          if (gteIpv6) { stack.push(gteIpv6); break; }
           if (l.rational !== undefined || r.rational !== undefined || l.exact !== undefined || r.exact !== undefined) {
             const cmp = compareRationalOperands(l, r);
             if (cmp !== null) { stack.push(boolValue(cmp >= 0)); break; }
@@ -4532,6 +4571,9 @@ export function executeBytecode(
           // datetimeArgumentRefused() in vm/VMBuiltins.ts.
           const builtinDatetime = datetimeArgumentRefused(fnIdx, args);
           if (builtinDatetime) { stack.push(builtinDatetime); break; }
+          // Nor has an IPv6 address; see ipv6ArgumentRefused().
+          const builtinIpv6 = ipv6ArgumentRefused(fnIdx, args);
+          if (builtinIpv6) { stack.push(builtinIpv6); break; }
           carry = sourcesOfValues(args);
           const fn = builtinFunctions[fnIdx];
           if (fn) {
@@ -4742,6 +4784,8 @@ export function executeBytecode(
             break;
           }
           carry = v.sources;
+          // An IPv6 address as a number is its exact 128-bit whole number.
+          if (isIpv6Value(v)) { stack.push(ipv6WholeNumber(v)); break; }
           stack.push(numberValue(v.toNumber()));
           break;
         }
@@ -4770,6 +4814,7 @@ export function executeBytecode(
           if (toPercentageFault) { stack.push(toPercentageFault); break; }
           const toPercentageDate = datetimeConversionRefused(v, "a percentage");
           if (toPercentageDate) { stack.push(toPercentageDate); break; }
+          if (isIpv6Value(v)) { stack.push(ipv6Refused("written as a percentage")); break; }
           carry = v.sources;
           // A proportion on the parts-per scale; see toPercentage().
           stack.push(toPercentage(v));
@@ -4781,6 +4826,7 @@ export function executeBytecode(
           if (toFractionFault) { stack.push(toFractionFault); break; }
           const toFractionDate = datetimeConversionRefused(v, "a fraction");
           if (toFractionDate) { stack.push(toFractionDate); break; }
+          if (isIpv6Value(v)) { stack.push(ipv6Refused("written as a fraction")); break; }
           // The exact fraction where the value has one, the guess otherwise;
           // see fractionString().
           stack.push(stringValue(fractionString(v)));
@@ -4802,6 +4848,7 @@ export function executeBytecode(
           if (toSciFault) { stack.push(toSciFault); break; }
           const toSciDate = datetimeConversionRefused(v, "scientific notation");
           if (toSciDate) { stack.push(toSciDate); break; }
+          if (isIpv6Value(v)) { stack.push(ipv6Refused("written in scientific notation")); break; }
           stack.push(stringValue(toScientificString(v.toNumber())));
           break;
         }
