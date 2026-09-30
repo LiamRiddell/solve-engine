@@ -393,8 +393,20 @@ export class TokenCategoryTable {
  * nothing.
  */
 export function builtinTokenCategory(tokenType: string): TokenCategory | undefined {
-	return Object.prototype.hasOwnProperty.call(TOKEN_CATEGORY_MAP, tokenType) ? TOKEN_CATEGORY_MAP[tokenType] : undefined;
+	return BUILTIN_CATEGORIES.get(tokenType);
 }
+
+/**
+ * The built-in table as a `Map`, built once, for {@link builtinTokenCategory}.
+ *
+ * Highlighting a line asks for a category per token. A `Map` lookup reads no
+ * global, where `Object.prototype.hasOwnProperty.call` reads `Object` on every
+ * call, which inside a `vm` context (the Jest harness the benchmarks run in)
+ * costs hundreds of nanoseconds a read: a 100-token line highlighted three
+ * times slower than before the per-engine table (#710). A `Map` also holds a
+ * type named like an `Object.prototype` property as an ordinary missing key.
+ */
+const BUILTIN_CATEGORIES: ReadonlyMap<string, TokenCategory> = new Map(Object.entries(TOKEN_CATEGORY_MAP) as [string, TokenCategory][]);
 
 /**
  * The table the deprecated module-level functions below read and write. No
