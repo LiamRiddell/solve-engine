@@ -491,10 +491,11 @@ resiliency fix — see "Done since the last pass" below for both.
    is never wired inside `packages/core` itself; it's an external hook a host must set,
    undocumented as required. **Effort/risk: LARGE / HIGH.** Touches `ThreeTierEvaluator`,
    `DocumentModel`, and `ExpressionEngine`'s cached-execution path together; entangled
-   with `plans/ARCHITECTURE_IMPROVEMENTS.md` Task 1 (pipeline unification, still only
-   half-done — the "diagnostic" pipeline path this bug lives in is actually the real
-   Tier-1 production path, not diagnostics-only). Sequence after L1 and Task 1 step 2,
-   not before — both touch the same call paths.
+   with `docs-internal/plans/ARCHITECTURE_IMPROVEMENTS.md` Task 1 (pipeline
+   unification, partly done: the "diagnostic" pipeline path this bug lives in is
+   the real Tier-1 production path, not diagnostics-only). That plan now sequences
+   Task 1 step 2 with hiding the evaluator seams (#761), after finishing L1 (#710);
+   do this after both, since all three touch the same call paths.
    — **Partial fix 2026-08-01**: the specific "silently wrong number" symptom of this bug
      class — plain arithmetic (`+`/`-`/`*`/`/`/`%`/`^`) on an `Error` or `Pending` operand
      silently coercing it to `0` via `Value.toNumber()` and producing a confidently-wrong

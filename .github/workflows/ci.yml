@@ -339,8 +339,14 @@ jobs:
 
       # The sidebar lists its pages explicitly so it can be in reading order
       # rather than alphabetical. This is the cost of that: a page nobody added
-      # to the list would otherwise be reachable only by search.
+      # to the list would otherwise be reachable only by search. It also fails
+      # on a page listed twice, which a set of slugs could not see (#780).
       - run: npm run lint:sidebar
+
+      # Every root-relative docs link reaches a page, and every #fragment a
+      # heading on it. Two anchors had broken unnoticed (#780): a renamed
+      # heading still loads the page, at the top rather than the part promised.
+      - run: npm run lint:links
 
       # The cheatsheet is the one-page map of the syntax reference, and a map
       # is only useful whole. It once linked 5 of 95 syntax pages (#728), so a
@@ -375,9 +381,10 @@ jobs:
       # than only changed files, so a regression anywhere fails the build.
       - run: npm run lint:comments
 
-      # Every exported symbol outside src/packages carries a doc block, which
-      # is what shows on hover and in generated documentation. The language
-      # packages under src/packages are not covered yet; 55 gaps remain there.
+      # Every export under packages/engine/src carries a doc block, which is
+      # what shows on hover and in generated documentation. The language
+      # packages are held to it too, since they are what a package author
+      # copies from.
       - run: npm run lint:docs
 
       # Supply chain. An action named by tag is a mutable pointer owned by

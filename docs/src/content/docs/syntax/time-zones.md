@@ -283,7 +283,7 @@ answer follows its clocks through the year: write the city or its abbreviation,
 `in New York` or `in Tokyo`,
 or `in JST` instead. A host that wants the whole
 document computed in one zone can pin it: see
-[dates on Temporal](/guide/dates-on-temporal/#choosing-a-zone-without-temporal).
+[dates on Temporal](/guide/dates-on-temporal/#choosing-a-zone-on-either-backend).
 
 ## The names that work
 

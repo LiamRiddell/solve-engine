@@ -37,6 +37,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { UNNAMED_BASES, unitNamer } from "./lib/unit-names.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TABLE = path.join(ROOT, "packages/engine/src/uom/generated/UnitTable.generated.ts");
@@ -138,18 +139,6 @@ function formatRatio(ratio) {
 	if (Number.isInteger(ratio) && Math.abs(ratio) < 1e15) return String(ratio);
 	const precise = Number(ratio.toPrecision(6));
 	return String(precise);
-}
-
-/**
- * The row's headline name: whichever surviving spelling comes first in the
- * table.
- *
- * Upstream lists a unit's canonical name before its aliases, so table order is
- * already the answer. Picking the longest word instead labelled area's base
- * unit "centiares", which is correct and not what anybody calls a square metre.
- */
-function headline(spellings) {
-	return spellings[0];
 }
 
 /** Groups a measure's spellings into one row per distinct unit, largest first. */
@@ -266,18 +255,23 @@ for (const entry of typable) {
 	byKind.get(entry.kind).push(entry);
 }
 
+const { headline, unusedDisplayNames } = unitNamer();
 const sections = [];
 for (const kind of [...byKind.keys()].sort((a, b) => a - b)) {
 	const rows = rowsFor(byKind.get(kind));
 	const base = rows.find(r => r.ratio === 1);
 	const baseName = base ? headline(base.spellings) : null;
+	const unnamedBase = UNNAMED_BASES.get(kinds[kind]);
+	if (baseName === null && unnamedBase === undefined) {
+		throw new Error(`The ${kinds[kind]} measure has no unit of relative size 1. Name its base in UNNAMED_BASES.`);
+	}
 
 	const lines = [];
 	lines.push(`## ${kinds[kind][0].toUpperCase()}${kinds[kind].slice(1).replace(/([A-Z])/g, " $1").toLowerCase()}`);
 	lines.push("");
 	lines.push(baseName
 		? `Measured against **${baseName}**.`
-		: "");
+		: `Measured against one **${unnamedBase}**, which no spelling here names on its own.`);
 	lines.push("");
 	lines.push("| Unit | Spellings | Relative size |");
 	lines.push("| --- | --- | --- |");
@@ -300,6 +294,11 @@ for (const kind of [...byKind.keys()].sort((a, b) => a - b)) {
 	sections.push(lines.join("\n"));
 }
 
+const staleNames = unusedDisplayNames();
+if (staleNames.length > 0) {
+	throw new Error(`DISPLAY_NAMES names spellings that head no row: ${staleNames.join(", ")}. Remove them, or fix the spelling.`);
+}
+
 const skipped = entries.length - typable.length;
 const page = `---
 title: Unit reference
@@ -312,6 +311,18 @@ Every spelling below is checked against a real engine when this page is built,
 so anything listed here parses and carries the unit it names. Units are
 case-sensitive throughout: \`m\` is metres and \`M\` is the millions suffix, \`MB\`
 is megabytes and \`Mb\` is megabits.
+
+Where a unit has an American and a British spelling, both are read, an answer
+shows back the one that was typed, and the row is headed by the British one
+(\`kilometre\`, with \`kilometer\` among its spellings). A unit that is typed
+only as a code, such as \`mps\` or \`kmpl\`, is headed by its name in words; the
+Spellings column is always what to type.
+
+\`\`\`solve
+5 metre // 5.00 metre
+5 meter // 5.00 meter
+1 mps // 1.00 mps
+\`\`\`
 
 \`\`\`solve
 100 cm + 2 m // 300.00 cm

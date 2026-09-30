@@ -107,6 +107,43 @@ real test and suite counts (from `docs/src/data/testStats.json`) and the gates
 that ran. The published `solve-engine@1.0.0`, `1.0.2` and `1.2.0` releases are
 the reference for tone and structure.
 
+## Things that have actually gone wrong
+
+- **The publish job dies in about a second.** npm's trusted publisher
+  registration carries an optional environment name and a tag policy. If the
+  policy does not allow `solve-engine@*`, the OIDC token (the short-lived
+  credential GitHub hands the workflow in place of a stored npm token) is
+  rejected before anything useful happens. Check the package's trusted
+  publisher settings on npmjs.com, not the workflow.
+- **An authentication error mentioning a missing token.** Trusted publishing
+  needs npm 11.5.1 or newer, and the Node the job runs ships an older npm, so
+  the job installs a pinned npm first. The failure does not say the client is
+  too old; it says it cannot find a token.
+- **Renaming `publish.yml` breaks publishing.** It is registered with npm as the
+  package's trusted publisher *by filename*, so an OIDC token minted by any
+  other workflow is rejected. This is also why the release trigger lives in that
+  file rather than in a `release.yml` of its own.
+- **A release would move `latest` backwards.** The publish step passes no
+  `--tag` for an ordinary version, so npm applies `latest` itself and refuses a
+  version lower than the one already there. That is what makes re-running an
+  old, cancelled release safe: it fails rather than taking `latest` back (#622).
+  A prerelease goes to `next`. Each publish has one target, because npm's OIDC
+  credential is scoped to the `npm publish` call itself, and a following
+  `npm dist-tag add` gets E401.
+- **A changeset was consumed but its file stayed behind.** The file then folds
+  an entry already published into the *next* version's changelog. Before
+  releasing, check that each file in `.changeset/` describes something not
+  already in `CHANGELOG.md`. `readme-and-npm-page-fixes.md` survived its own
+  release at `1.0.0-beta.7` this way and was removed during 1.0.1.
+
+## Publishing by hand
+
+Don't. There has been exactly one manual publish, `1.0.0-beta.0`, because
+trusted publishing cannot create a package that does not exist yet
+([npm/cli#8544](https://github.com/npm/cli/issues/8544)). The trusted publisher
+registration was added immediately afterwards, and every version since has gone
+through `publish.yml`.
+
 ## Things that look like failures but are not
 
 - **A benchmark regression on the first measurement is often noise.** The warm

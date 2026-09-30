@@ -202,8 +202,9 @@ Write for someone arriving cold. No history, no dates, no mention of which
 session produced something, and no restating what the next line already says.
 No em-dashes; use a comma, a colon, parentheses, or a second sentence.
 
-Every exported symbol outside `src/packages` carries a doc block, since that is
-what shows on hover. Two of these rules are checked rather than left to review:
+Every exported symbol under `packages/engine/src`, the language packages
+included, carries a doc block, since that is what shows on hover. Two of these
+rules are checked rather than left to review:
 
 ```bash
 npm run lint:comments
@@ -233,6 +234,12 @@ Examples in the documentation and in the root README are executed by
 `__tests__/docs/DocExamples.spec.ts`. If you change what an expression
 evaluates to, the docs fail until they are updated, which is the point. Do not
 write a documentation example you have not run.
+
+A TypeScript fence in the guides that states a result, with a trailing
+`// "= 4"` or `// throws: <message>`, is run by
+`__tests__/docs/GuideExamples.spec.ts` after the fences above it on its page. A
+fence that states a result and cannot run here is listed in that spec's
+`UNRUNNABLE` map with the reason.
 
 The suite runs against `src` through jest path aliases and never imports
 `dist`. That gap once hid a defect where the published bundle threw on import
