@@ -599,13 +599,14 @@ export class DocumentModel {
 	 * rebuilt, so {@link getLineAt} and {@link getLinePosition} never disagree.
 	 */
 	private buildOrderCaches(): number[] {
-		const ordered: number[] = [];
+		// One iterative walk fills both (#763): the tree's generator iterator
+		// used to hand each id up through a frame per level.
+		const ordered = new Array<number>(this.orderTree.length);
 		const byId = new Map<number, number>();
-		let pos = 1;
-		for (const id of this.orderTree) {
-			ordered.push(id);
-			byId.set(id, pos++);
-		}
+		this.orderTree.forEach((id, index) => {
+			ordered[index] = id;
+			byId.set(id, index + 1);
+		});
 		this._orderedIds = ordered;
 		this._positionCache = byId;
 		return ordered;

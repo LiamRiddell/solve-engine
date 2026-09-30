@@ -2930,6 +2930,119 @@ function undefinedVariable(varName: string, vm: VM): EngineError {
 }
 
 /**
+ * The loop's throws, each in a function of its own (#714).
+ *
+ * A `throw` made outside a promise job (from a timer callback, a top-level
+ * script, an editor's event handler) has V8 record where it was thrown, and
+ * finding that position inside a function the size of `executeBytecode` is
+ * what cost: `zz + 1` took about 46 microseconds from a timer against 0.55 for
+ * `2 + 5`. Building the error somewhere else did not help, moving the `throw`
+ * statement out did. So the loop throws nothing itself; it calls one of these,
+ * each typed `never` so the code after an arm still reads as unreachable, and
+ * its own `catch` receives the error exactly as before, with the same code,
+ * message and suggestion. It also keeps the construction bytes out of the
+ * loop, which has to stay under V8's bytecode ceiling (see the comment above
+ * the opcode bodies).
+ */
+function raise(error: unknown): never {
+    throw error;
+}
+
+/** LOAD_VAR on a name nothing defines. See {@link undefinedVariable}. */
+function throwUndefinedVariable(varName: string, vm: VM): never {
+    throw undefinedVariable(varName, vm);
+}
+
+/** CALL_USER_FUNCTION on a name no function has, with the nearest real ones. */
+function throwUndefinedFunction(name: string, vm: VM): never {
+    const nearFunctions = nearestNames(name, functionNameCandidates(vm), 3, builtinNameIndex());
+    throw ErrorFactory.execution({
+        code: "UNDEFINED_FUNCTION",
+        message: `Undefined function: ${name}${nearFunctions.length === 0 ? "" : `.${didYouMeanSentence(nearFunctions)}`}`,
+        suggestion: nearFunctions.length > 0 ? nearFunctions.join(", ") : undefined,
+        context: { name, didYouMean: nearFunctions },
+    });
+}
+
+/** CALL_USER_FUNCTION with the wrong number of arguments. */
+function throwArityMismatch(name: string, expected: number, actual: number): never {
+    throw ErrorFactory.execution(
+        "FUNCTION_ARITY_MISMATCH",
+        `${name} expects ${expected} argument(s) but got ${actual}`,
+        { name, expected, actual },
+    );
+}
+
+/** A user function's body that came back pending. See CALL_USER_FUNCTION. */
+function throwAsyncBodyUnsupported(name: string): never {
+    throw ErrorFactory.execution(
+        "USER_FUNCTION_ASYNC_UNSUPPORTED",
+        `${name}: user-defined functions with async bodies (weather, stocks, currency, ...) aren't supported`,
+        { name },
+    );
+}
+
+/** The instruction budget ran out. */
+function throwInstructionLimit(maxInstructions: number): never {
+    throw ErrorFactory.execution("INSTRUCTION_LIMIT_EXCEEDED", `Execution exceeded maximum of ${maxInstructions} instructions`);
+}
+
+/** The stack grew past its limit. */
+function throwStackLimit(maxStackDepth: number): never {
+    throw ErrorFactory.execution("STACK_LIMIT_EXCEEDED", `Execution exceeded maximum stack depth of ${maxStackDepth}`);
+}
+
+/** An exact power past MAX_EXACT_POW_BITS. */
+function throwPowLimit(powBits: number): never {
+    throw ErrorFactory.execution(
+        "BIGINT_POW_LIMIT_EXCEEDED",
+        `That power would build an exact integer of about ${Math.round(powBits).toLocaleString("en-US")} bits, past the limit of ${MAX_EXACT_POW_BITS.toLocaleString("en-US")} bits`,
+        { limitBits: MAX_EXACT_POW_BITS },
+    );
+}
+
+/** DEFINE_USER_FUNCTION naming a body the program does not carry. */
+function throwMissingFunctionBody(bodyIdx: number): never {
+    throw ErrorFactory.internal(
+        "INTERNAL_MISSING_FUNCTION_BODY",
+        `Internal error: DEFINE_USER_FUNCTION referenced missing body index ${bodyIdx}`,
+        { bodyIdx },
+    );
+}
+
+/** BIND_UNKNOWN naming a body the program does not carry. */
+function throwMissingAnonymousBody(ref: number): never {
+    throw ErrorFactory.internal(
+        "INTERNAL_MISSING_ANONYMOUS_BODY",
+        `Internal error: BIND_UNKNOWN referenced missing anonymous body index ${ref}`,
+        { ref },
+    );
+}
+
+/** LOAD_GLOBAL_VAR before its value resolved. See that arm. */
+function throwGlobalNotResolved(varName: string): never {
+    throw ErrorFactory.internal({
+        code: "GLOBAL_VARIABLE_NOT_RESOLVED",
+        message: `Global variable "${varName}" was read before it resolved`,
+        expected: `global variable "${varName}" to already be resolved (async preflight should guarantee this)`,
+        found: "no value in the global variable store",
+        context: { varName },
+    });
+}
+
+/** An opcode the switch has no arm for. See its `default`. */
+function throwUnknownOpcode(op: number, offset: number): never {
+    throw malformedBytecode(
+        "MALFORMED_BYTECODE_UNKNOWN_OPCODE",
+        op,
+        "has no handler in this virtual machine",
+        "an opcode the dispatch switch handles (see parser/OpCode.ts)",
+        `opcode ${op} at offset ${offset}`,
+        { offset },
+    );
+}
+
+/**
  * The handler registered at `index`, or undefined when there is none: an own
  * entry that is a function. The index comes from bytecode, which a snapshot can
  * carry in from storage, so nothing inherited is ever called.
@@ -3158,14 +3271,14 @@ export function executeBytecode(
       // (50k) is never reached in benchmarks, so this branch is statically
       // predicted not-taken by the CPU.
       if (++localInstructionCount > maxInstructions) {
-        throw ErrorFactory.execution("INSTRUCTION_LIMIT_EXCEEDED", `Execution exceeded maximum of ${maxInstructions} instructions`);
+        throwInstructionLimit(maxInstructions);
       }
       // Same cost class as the check above, one comparison, statically
       // predicted not-taken. Catches stack growth left over from the
       // previous instruction's push(es); a bounded one-instruction delay
       // is fine for a safety limit (see the comment on `stack` above).
       if (stack.length > maxStackDepth) {
-        throw ErrorFactory.execution("STACK_LIMIT_EXCEEDED", `Execution exceeded maximum stack depth of ${maxStackDepth}`);
+        throwStackLimit(maxStackDepth);
       }
       const op = opcodes[ip++] as OpCode;
 
@@ -3749,13 +3862,7 @@ export function executeBytecode(
               // Past the ceiling this refuses rather than handing the sum back
               // to the double path, which would report a 30,103-digit integer
               // as Infinity. See MAX_EXACT_POW_BITS for the decision.
-              if (powBits > MAX_EXACT_POW_BITS) {
-                throw ErrorFactory.execution(
-                  "BIGINT_POW_LIMIT_EXCEEDED",
-                  `That power would build an exact integer of about ${Math.round(powBits).toLocaleString("en-US")} bits, past the limit of ${MAX_EXACT_POW_BITS.toLocaleString("en-US")} bits`,
-                  { limitBits: MAX_EXACT_POW_BITS },
-                );
-              }
+              if (powBits > MAX_EXACT_POW_BITS) throwPowLimit(powBits);
               stack.push(bigIntValue(bigIntPow(toBigIntOperand(l), toBigIntOperand(r))));
               break;
             }
@@ -4271,7 +4378,7 @@ export function executeBytecode(
           // engine bug naming no function. This is the only place that knows
           // both the index and the count; see vm/VMBuiltinArity.ts.
           const arityError = builtinArityError(fnIdx, argCount);
-          if (arityError) throw arityError;
+          if (arityError) raise(arityError);
           const args: Value[] = [];
           // The symbolic flag is tracked while popping rather than by a second
           // pass, so the ordinary numeric call pays one type comparison per
@@ -4332,11 +4439,7 @@ export function executeBytecode(
             // dispatch loop disagree about userFunctionBodies' contents,
             // never something reachable by writing a normal `f(x) = ...`
             // expression correctly. See ErrorCode.ts's own catalog comment.
-            throw ErrorFactory.internal(
-              "INTERNAL_MISSING_FUNCTION_BODY",
-              `Internal error: DEFINE_USER_FUNCTION referenced missing body index ${bodyIdx}`,
-              { bodyIdx },
-            );
+            throwMissingFunctionBody(bodyIdx);
           }
           vm.defineUserFunction(def.name, def.params, def.program);
           break;
@@ -4358,24 +4461,10 @@ export function executeBytecode(
           for (let i = 0; i < argCount; i++) args.push(safePop(stack));
           args.reverse();
           const fn = vm.getUserFunction(name);
-          if (!fn) {
-            // Name the nearest real functions, never silently call one; see
-            // errors/DidYouMean.ts.
-            const nearFunctions = nearestNames(name, functionNameCandidates(vm), 3, builtinNameIndex());
-            throw ErrorFactory.execution({
-              code: "UNDEFINED_FUNCTION",
-              message: `Undefined function: ${name}${nearFunctions.length === 0 ? "" : `.${didYouMeanSentence(nearFunctions)}`}`,
-              suggestion: nearFunctions.length > 0 ? nearFunctions.join(", ") : undefined,
-              context: { name, didYouMean: nearFunctions },
-            });
-          }
-          if (argCount !== fn.params.length) {
-            throw ErrorFactory.execution(
-              "FUNCTION_ARITY_MISMATCH",
-              `${name} expects ${fn.params.length} argument(s) but got ${argCount}`,
-              { name, expected: fn.params.length, actual: argCount },
-            );
-          }
+          // Name the nearest real functions, never silently call one; see
+          // errors/DidYouMean.ts.
+          if (!fn) throwUndefinedFunction(name, vm);
+          if (argCount !== fn.params.length) throwArityMismatch(name, fn.params.length, argCount);
           const frame = new Map<string, Value>();
           for (let i = 0; i < fn.params.length; i++) frame.set(fn.params[i], args[i]);
           // Two guards, because they bound two different numbers and each is
@@ -4417,17 +4506,13 @@ export function executeBytecode(
             // DEFINITION time (see PrecedenceParser.ts's
             // parseUserFunctionDefinition). This is a defense-in-depth
             // backstop, not the primary guard.
-            throw ErrorFactory.execution(
-              "USER_FUNCTION_ASYNC_UNSUPPORTED",
-              `${name}: user-defined functions with async bodies (weather, stocks, currency, ...) aren't supported`,
-              { name },
-            );
+            throwAsyncBodyUnsupported(name);
           }
           if (bodyResult.type === "error") {
             // A controlled internal-invariant error inside the body, surface
             // it as-is rather than swallowing/rewrapping (same convention as
             // unwrapEvalResult()).
-            throw bodyResult.error;
+            raise(bodyResult.error);
           }
           stack.push(bodyResult.value);
           break;
@@ -4450,7 +4535,7 @@ export function executeBytecode(
             // `π` is the constant when nothing is named that (#669).
             stack.push(numberValue(Math.PI));
           } else {
-            throw undefinedVariable(varName, vm);
+            throwUndefinedVariable(varName, vm);
           }
           break;
         }
@@ -4485,13 +4570,7 @@ export function executeBytecode(
             // ordinary user expression can trigger by itself, the
             // precondition ("preflight already ran") is the CALLER's
             // (ThreeTierEvaluator's) responsibility, not the user's.
-            throw ErrorFactory.internal({
-              code: "GLOBAL_VARIABLE_NOT_RESOLVED",
-              message: `Global variable "${varName}" was read before it resolved`,
-              expected: `global variable "${varName}" to already be resolved (async preflight should guarantee this)`,
-              found: "no value in the global variable store",
-              context: { varName },
-            });
+            throwGlobalNotResolved(varName);
           }
           stack.push(globalValue);
           break;
@@ -5059,13 +5138,7 @@ export function executeBytecode(
         case OpCode.BIND_UNKNOWN: {
           const ref = operandByte(opcodes, ip++, op, "body reference");
           const def = anonymousBodies?.[ref];
-          if (!def) {
-            throw ErrorFactory.internal(
-              "INTERNAL_MISSING_ANONYMOUS_BODY",
-              `Internal error: BIND_UNKNOWN referenced missing anonymous body index ${ref}`,
-              { ref },
-            );
-          }
+          if (!def) throwMissingAnonymousBody(ref);
           // `der(x^2, x)` names x as the unknown, so inside that expression x
           // IS the unknown, whatever the document says elsewhere. Evaluated in
           // a call frame binding the name to itself, the same mechanism that
@@ -5086,14 +5159,7 @@ export function executeBytecode(
           // instruction that carries it. This includes the enum members no
           // arm handles (PUSH_VARIABLE, RETURN) and the dynamic range an
           // `OpRegistry` once claimed, which this loop never consulted.
-          throw malformedBytecode(
-            "MALFORMED_BYTECODE_UNKNOWN_OPCODE",
-            op,
-            "has no handler in this virtual machine",
-            "an opcode the dispatch switch handles (see parser/OpCode.ts)",
-            `opcode ${op} at offset ${ip - 1}`,
-            { offset: ip - 1 },
-          );
+          throwUnknownOpcode(op, ip - 1);
       }
 
       // An operation that read a sourced operand hands the sources to what it

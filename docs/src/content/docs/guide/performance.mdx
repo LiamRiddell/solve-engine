@@ -96,6 +96,47 @@ lines are run in order from the top, and the only lines that can be left alone
 are the ones nobody is looking at. Making `parseDocument` skip unchanged lines
 is not proposed, for the same reason.
 
+### Telling the evaluator about an edit
+
+An evaluator hears about an edit in one of two ways. `DocumentModel.editLine`
+replaces the text of one line. `ThreeTierEvaluator.applyTransaction` takes a
+list of changes, each a first line, a number of lines to delete and the lines
+to insert in their place, which is how most editors describe what happened
+(CodeMirror's change sets, for one).
+
+A change that deletes as many lines as it inserts moves no line: a keystroke
+inside a line arrives as "delete this line, insert its new text". The
+evaluator applies such a transaction line by line, in place, exactly as
+`editLine` would: each line keeps its id and its compiled program, and only
+the edited lines and whatever reads them run again. The result lists the ids
+of the lines whose text changed in `edited`, with `inserted` and `removed`
+empty. Any change that alters the line count (an insertion, a deletion, a
+paste of a different number of lines) makes the whole transaction structural:
+the lines below move, and each is followed to its new position.
+
+```ts
+// A keystroke on line 3: an edit in place, no line moves.
+evaluator.applyTransaction([{ startLine: 3, deleteCount: 1, insertLines: [":v2 = 8"] }]);
+// Enter pressed at the end of line 3: a structural edit, every line below moves down one.
+evaluator.applyTransaction([{ startLine: 4, deleteCount: 0, insertLines: [""] }]);
+evaluator.evaluate({ startLine: 1, endLine: 40 });
+```
+
+The difference is the cost, and what survives below the viewport. On a
+20,000-line note, a keystroke followed by evaluating the first 40 lines took
+33.75 ms as a structural edit and 2.24 ms in place (#713), and a line far
+below, which did not read the edited one, kept its answer instead of losing it
+until it was scrolled to again. A host that already sends one-for-one
+replacements gets this without changing anything.
+
+Two other costs of a long-lived evaluator are linear in the note since 2.42. A
+repeat pass over bare assignments (`price = 4`, with no colon) used to cost the
+square of the note, 5,975 ms for a second pass over 10,000 of them on the
+machine these figures come from, and costs 212 ms now (#712). A line reading a
+name nothing defines, evaluated from a timer callback or an event handler
+rather than after an `await`, cost about 22 microseconds against under one for
+`2 + 5`, and costs about 7 now (#714).
+
 ## Off the main thread
 
 The caches keep a re-parse cheaper than a first parse. They do not move the
