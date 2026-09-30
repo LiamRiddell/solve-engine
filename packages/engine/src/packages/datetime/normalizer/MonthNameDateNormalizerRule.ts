@@ -48,8 +48,19 @@ function monthOf(token: Token | undefined, before?: Token): number {
 	// `__proto__`) is not a month, and read through the prototype it made
 	// `5 constructor` "not a real date: undefined 2026 has NaN days".
 	const word = (token.text ?? token.value ?? "").toLowerCase();
-	return Object.prototype.hasOwnProperty.call(MONTHS, word) ? MONTHS[word] : 0;
+	return MONTH_NUMBERS.get(word) ?? 0;
 }
+
+/**
+ * {@link MONTHS} as a `Map`, built once, for {@link monthOf}.
+ *
+ * This rule has no leading shape, so it is tried at every token of every line,
+ * prose included. A `Map` holds only its own keys, so `constructor` is not a
+ * month, and a lookup reads no global: `Object.prototype.hasOwnProperty.call`
+ * reads `Object` on each call, which inside a `vm` context (the Jest harness
+ * the benchmarks run in) cost the normaliser suite a third of its speed.
+ */
+const MONTH_NUMBERS: ReadonlyMap<string, number> = new Map(Object.entries(MONTHS));
 
 /** A pure digit string, so hex and scientific literals are never fused. */
 const PLAIN_INTEGER = /^\d+$/;
