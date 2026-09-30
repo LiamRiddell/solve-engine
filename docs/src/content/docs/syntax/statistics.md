@@ -5,6 +5,13 @@ description: Averages, comparisons, proportions and other natural phrasings.
 
 > **Packages:** `MATHPHRASES_PACKAGE` (averages, spread, comparisons) and `STATISTICS_PACKAGE` (correlation, regression, percentile, z-score, and the [probability distributions](/syntax/probability-distributions/)). Both registered by `createEngine()`; for a slimmer engine, register them explicitly (see [choosing packages](/getting-started/installation/)).
 
+Statistics are the numbers that sum up a list of values: where its middle is,
+how spread out it is, and how two lists move together. The **average** (the
+mean) adds the values and divides by how many there are; the **median** is the
+middle value once they are in order, which a single very large or very small
+value cannot drag away. Write the question the way it is said, with the values
+after `of`:
+
 ```solve
 average of 10, 20, 30 // 20
 median of 1, 5, 3 // 3
@@ -118,10 +125,11 @@ mode of 4, 2, 4, 3, 4, 2 // 4
 Standard deviation and variance take the **population** form by default, which
 is what a note over a fixed column of readings usually is: the whole set, not a
 draw from a larger one. The sample form (dividing by one less) is a named
-variant.
+variant, for both.
 
 ```solve
 sample standard deviation of 2, 4, 4, 4, 5, 5, 7, 9 // 2.14
+sample variance of 2, 4, 4, 4, 5, 5, 7, 9 // 4.57
 ```
 
 `spread` is the largest minus the smallest, spelled that way because `range`
@@ -175,7 +183,10 @@ so they need not sum to 1 or to 100%.
 weighted average of 72 at 30%, 88 at 70% // 83.20
 weighted average of 4.0 at 3 credits, 3.0 at 1 credit // 3.75
 weighted average of 10 at 2, 20 at 3 // 16
+weighted mean of 10 at 2, 20 at 3 // 16
 ```
+
+`weighted mean of` is the same form under the other name for an average.
 
 The grade-point case divides by the four credits, giving 3.75; percentages that
 already sum to 100 come out unchanged. A trailing label on a weight (`3 credits`)
@@ -248,19 +259,37 @@ zscore(1, [1, 2, 3], 5) // ERROR: zscore takes 2 arguments, but was given 3, as 
 
 ## Comparisons and fractions
 
+Picking the bigger or the smaller of two values, or the point halfway between
+them, is a question in its own words too. `larger of` and `greater of` give the
+bigger, `smaller of` and `lesser of` the smaller, `half of` halves one value, and
+`midpoint between` gives the value exactly halfway from one to the other.
+
 ```solve
 larger of 10 and 4 // 10
+greater of 10 and 4 // 10
 smaller of 10 and 4 // 4
+lesser of 10 and 4 // 4
 half of 50 // 25
+midpoint between 10 and 20 // 15
 ```
 
 ## Ranges and clamping
+
+Clamping a value holds it inside a range: a value inside is left as it is, and
+one outside is moved to the nearer end. It is how a score is capped at the
+maximum, or a setting kept within its limits. Write `clamp`, the value, and the
+two ends after `between`.
 
 ```solve
 clamp 15 between 1 and 10 // 10
 ```
 
 ## Proportions
+
+A proportion says that two ratios are equal: 2 is to 4 as 5 is to 10, since each
+second number is twice the first. Given three of the four numbers, the engine
+finds the missing one, written `what`, which is the everyday way to scale a
+recipe or a map distance.
 
 ```solve
 2 is to 4 as 5 is to what // 10

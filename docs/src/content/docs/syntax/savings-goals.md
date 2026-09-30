@@ -31,3 +31,7 @@ and the count rounds up, because a part period has not yet reached the goal. The
 per-month form takes a duration in months or years, and there `reach` reads the
 same as `save`; the `how long to save` form has no `reach` spelling. A
 bare-number target answers a bare number.
+
+```solve
+how much per month to reach $12,000 in 2 years // $500.00
+```

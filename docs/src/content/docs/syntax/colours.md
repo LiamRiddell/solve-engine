@@ -46,6 +46,14 @@ hsv(120, 100, 100) // #00ff00
 hwb(0, 50, 0) // #ff8080
 ```
 
+`hsva` is `hsv` with a fourth value, the opacity (how see-through the colour
+is, from 0 for invisible to 1 for solid), which the hex form carries as two
+more digits:
+
+```solve
+hsva(200, 50%, 60%, 0.5) // #4d7f9980
+```
+
 Every CSS colour name is available through `color("...")` (also spelled
 `colour`), including `transparent` and `rebeccapurple`:
 
@@ -133,13 +141,14 @@ luminance(#ffffff) // 1
 ```
 
 `isDark` and `isLight` classify a background by which of black or white text
-reads better on it, and `readable` (also `contrastColor`) returns that better
-text colour directly:
+reads better on it, and `readable` (also `contrastColor`, or `contrastColour`)
+returns that better text colour directly:
 
 ```solve
 isDark(#3366cc) // true
 isLight(#ffffff) // true
 readable(#3366cc) // #ffffff
+contrastColour(#eeeeee) // #000000
 ```
 
 `isContrastCompliant` answers whether two colours meet a WCAG contrast bar. With

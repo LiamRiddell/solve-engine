@@ -5,6 +5,11 @@ description: Comparisons, booleans, and the conditional expression.
 
 > **Package:** `CONDITIONALS_PACKAGE`. Registered by `createEngine()`; for a slimmer engine, register it explicitly (see [choosing packages](/getting-started/installation/)).
 
+A comparison asks whether one value is bigger than, smaller than or equal to
+another, and answers `true` or `false`. `>` is greater than, `<` less than, `>=`
+and `<=` add "or equal to", `==` asks whether the two are equal and `!=` whether
+they differ.
+
 ```solve
 5 > 3 // true
 10 == 10 // true
@@ -14,12 +19,21 @@ description: Comparisons, booleans, and the conditional expression.
 
 ## Booleans
 
+A boolean is a value that is either `true` or `false`, the kind of answer a
+comparison gives. `and` is true only when both sides are true; `or` is true when
+at least one is. They are how two conditions are combined into one.
+
 ```solve
 true and false // false
 true or false // true
 ```
 
 ## Conditional expression
+
+A conditional expression picks one of two values depending on a condition: `if`
+the condition, `then` the value to use when it holds, `else` the value when it
+does not. It is how a note gives a different answer in different cases, such as
+a charge that applies only above some amount.
 
 ```solve
 if 5 > 3 then 100 else 200 // 100

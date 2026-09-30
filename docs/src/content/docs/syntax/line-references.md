@@ -16,7 +16,7 @@ updates when that line changes.
 | `line 3` | the result of line three |
 | `sum(line 1 : line 4)` | the total of a span of lines |
 | `average(line 1 : line 4)` | the mean of a span |
-| `total above` | the total of every line above |
+| `total above` | the total of every line above (also `sum above`) |
 | `average above` | the same, averaged (also `avg above` and `mean above`) |
 | `count above` | how many figures are above |
 | `min above`, `max above` | the least and the greatest figure above |
@@ -49,6 +49,15 @@ ans * 2   // 20
 20
 30
 total above   // 60
+```
+
+`sum above` is the same total under the spreadsheet's word for it:
+
+```solve-doc
+10
+20
+30
+sum above   // 60
 ```
 
 The same block can be asked other questions: how many figures it holds, the

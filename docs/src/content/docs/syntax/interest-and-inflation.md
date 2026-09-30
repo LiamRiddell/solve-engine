@@ -21,6 +21,40 @@ monthly repayment on 200000 over 25 years at 4% // 1,055.67
 The term and the rate read in either order, so `at 5% over 3 years` says the same
 thing as `over 3 years at 5%`.
 
+`interest on` gives the interest alone, what the sum has grown by.
+`compound interest on` gives the whole balance at the end, the principal and its
+interest together, which is the figure a savings statement shows.
+
+```solve
+compound interest on 1000 over 3 years at 5% // 1,157.63
+```
+
+## Repayments and interest by the period
+
+A loan is repaid in equal instalments that cover the interest and a share of the
+principal. The monthly figure is the one a lender quotes, and the same loan can
+be read by the day, by the year, or over its whole life: `daily`, `monthly`,
+`annual` or `total`, before `repayment on` for what is paid, or before
+`interest on` for the part of it that is interest. Each is worked out from the
+same monthly schedule, so the annual repayment is twelve monthly ones and the
+total is every payment added up.
+
+```solve
+daily repayment on 200000 over 25 years at 4% // 34.71
+monthly repayment on 200000 over 25 years at 4% // 1,055.67
+annual repayment on 200000 over 25 years at 4% // 12,668.08
+total repayment on 200000 over 25 years at 4% // 316,702.10
+daily interest on 200000 over 25 years at 4% // 12.79
+monthly interest on 200000 over 25 years at 4% // 389.01
+annual interest on 200000 over 25 years at 4% // 4,668.08
+total interest on 200000 over 25 years at 4% // 116,702.10
+```
+
+The total interest is what the loan costs: the total repaid less the 200,000
+borrowed. The periodic interest figures are that cost spread evenly, an average
+over the term, not the interest in any one month (early payments are mostly
+interest, late ones mostly principal).
+
 ## How often interest compounds
 
 Compounding is how often the interest earned so far is added to the sum, so
@@ -43,7 +77,9 @@ written `compounded`, the commoner English.
 ```solve
 interest on 1000 over 3 years at 5% compounding semi-annually // 159.69
 interest on 1000 over 3 years at 5% compounded monthly // 161.47
-``` A monthly
+```
+
+A monthly
 repayment is already worked out month by month, with the yearly rate divided by
 twelve, the way a lender quotes it, so it takes no `compounding` tail.
 
@@ -78,6 +114,32 @@ A bare number is still years, which is what the forms above use.
 ```solve
 interest on 1000 at 5% over 3 years // 157.63
 monthly repayment on 200000 at 4% over 25 years // 1,055.67
+```
+
+## The function forms
+
+Each phrase has a function spelling as well, for a line built from other values
+or copied from a spreadsheet. The arguments are the principal, the rate and the
+term in years, in that order.
+
+- `compoundInterest(principal, rate, years)` is the balance at the end, and
+  `interestEarned(principal, rate, years)` the interest alone.
+- `compoundInterestRate(principal, balance, years)` finds the yearly rate that
+  grows one into the other, and `compoundInterestYears(principal, balance,
+  rate)` how many years it takes.
+- `monthlyPayment(principal, rate, years)` is a loan's monthly repayment.
+  `loanRepayment` and `loanInterest` take a fourth argument, the payments per
+  year the answer is given for (12 for monthly, 1 for yearly), and give the
+  repayment and the interest in it the way the phrases above do.
+
+```solve
+compoundInterest(1000, 5%, 3) // 1,157.63
+interestEarned(1000, 5%, 3) // 157.63
+compoundInterestRate(1000, 1157.63, 3) // 0.05
+compoundInterestYears(1000, 1157.63, 5%) // 3.00
+monthlyPayment(200000, 4%, 25) // 1,055.67
+loanRepayment(200000, 4%, 25, 12) // 1,055.67
+loanInterest(200000, 4%, 25, 12) // 389.01
 ```
 
 ## Inflation
