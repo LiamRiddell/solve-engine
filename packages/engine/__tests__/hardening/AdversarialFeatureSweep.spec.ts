@@ -82,6 +82,17 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 	unitWords: ["X seconds in hours", "X hour", "X hours in minutes"],
 	reversedConversion: ["km in X furlong", "mW in X W", "m in X mile"],
 	finance: ["npv of -1000, X, 400 at 10%", "irr of -1000, X, 400"],
+	// The investment grammar the investments page documents (#778). The amount
+	// invested is not swept: an infinite one answers NaN, pinned in
+	// Issue778_investments.spec.ts.
+	investments: [
+		"$X after 3 years at 7%",
+		"$1,000 after X years at 7%",
+		"$1,000 for 3 years at X% compounding monthly",
+		"present value of $X after 3 years at 7%",
+		"$1,000 invested X returned",
+		"annual return on $1,000 invested $X returned after 5 years",
+	],
 	distributions: ["normalcdf(X)", "binompdf(10, 0.5, X)"],
 	solving: ["solve(x^2 = X, x)", "integral(x, x, 0, X)"],
 	dates: ["1 Jan 2026 + X days", "1 Jan 2026 + X", "1 Jan 2026 to X", "X to 1 Jan 2026", "X * 9:00", "round(9:00) + X", "(9:30 - 8:30) + X minutes", "X as iso8601"],

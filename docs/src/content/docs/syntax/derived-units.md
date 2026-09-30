@@ -31,6 +31,25 @@ pascals (`Pa`).
 100 Pa * 2 m² // 200.00 N
 ```
 
+The named units take the usual metric prefixes, `k` for a thousand, `M` for a
+million and `m` for a thousandth, and `as` asks for any of them. A letter whose
+case does not change the prefix may be written in lower case, since after `as`
+the name can only be a unit: `as kn` is the kilonewton, `as kj` the kilojoule,
+`as kpa` the kilopascal, `as kv` the kilovolt and `as kw` the kilowatt, and `as
+mv` the millivolt, the one volt the list spells with an `m`.
+
+```solve
+10000 N as kn // 10.00 kN
+5000 J as kj // 5.00 kJ
+2000 Pa as kpa // 2.00 kPa
+2000 V as kv // 2.00 kV
+0.5 V as mv // 500.00 mV
+2000000 J as MJ // 2.00 MJ
+```
+
+Where `m` and `M` would name two different units, the case is the meaning, and
+the section on prefixes below says how a spelling that could be either is read.
+
 Every spelling of a quantity takes part, imperial as well as metric, so pounds,
 feet and pound-force (`lbf`) compose just as kilograms, metres and newtons do.
 

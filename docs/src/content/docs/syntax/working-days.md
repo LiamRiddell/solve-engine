@@ -32,10 +32,52 @@ noon on Wednesday 11 March 2026 in London, the fixed moment these pages are chec
 singular for a count of one (`1 working day after ...`). `workdays between`, the
 unit's own spelling, counts the same window, and `how many` may lead any of them.
 
+```solve
+10 business days after 2026-09-30 // Wednesday, October 14, 2026
+10 working days before 2026-09-30 // Wednesday, September 16, 2026
+1 working day from 2026-09-30 // Thursday, October 1, 2026
+1 business day before 2026-09-30 // Tuesday, September 29, 2026
+business days between 2026-09-01 and 2026-09-30 // 22
+how many working days between 2026-09-01 and 2026-09-30 // 22
+```
+
+Every pairing reads the same way: `working` or `business`, in the singular or
+the plural, with `after`, `from` or `before`, and for the window `workday
+between` as well as the plural, each with or without `how many` in front.
+
+```solve
+10 working days after 2026-09-30 // Wednesday, October 14, 2026
+10 business days before 2026-09-30 // Wednesday, September 16, 2026
+1 business day after 2026-09-30 // Thursday, October 1, 2026
+1 business day from 2026-09-30 // Thursday, October 1, 2026
+1 working day before 2026-09-30 // Tuesday, September 29, 2026
+workday between 2026-09-01 and 2026-09-30 // 22
+how many business days between 2026-09-01 and 2026-09-30 // 22
+how many workdays between 2026-09-01 and 2026-09-30 // 22
+```
+
 `workdays until <date>` and `workdays since <date>` are refused rather than
 answered, because the only reading they had was a fixed ratio of five working
 days to seven calendar days, which knows no weekends or holidays. Count from
 today with `workdays between today and <date>` instead.
+
+## Is a date a working day
+
+A date can be asked whether it is a working day or falls on the weekend, which
+is how a note checks a deadline before it is agreed. `is a workday`, `is a
+weekday` and `is a business day` ask the first; `is a weekend` and `is on a
+weekend` ask the second. The answer is `true` or `false`.
+
+```solve
+2026-09-26 is a weekend // true
+2026-09-26 is on a weekend // true
+2026-09-26 is a business day // false
+2026-09-28 is a workday // true
+2026-09-28 is a weekday // true
+```
+
+The day of the week a date falls on, its month and its week number are on
+[weekdays and week numbers](/syntax/weekdays-and-week-numbers/).
 
 ## Public holidays
 
