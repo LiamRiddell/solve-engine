@@ -35,8 +35,10 @@ applies, an addition is a minor and a removal is a major. Anything not exported
 is internal and carries no promise.
 
 Error codes are part of the surface: a code a host can receive today keeps its
-name, and a new one is a minor. Error *messages* are prose for a person and may
-be reworded in a patch.
+name, and a new one is a minor. Every code the engine and its built-in packages
+answer with is listed on [error codes](/guide/error-codes/), and in the package
+as `ERROR_CODE_CATALOGUES`; a test fails when one is renamed or removed. Error
+*messages* are prose for a person and may be reworded in a patch.
 
 Expression results are part of the surface too, which is why the syntax
 reference is proven by the test suite: every documented result is one the

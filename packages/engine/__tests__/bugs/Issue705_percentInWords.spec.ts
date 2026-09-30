@@ -91,7 +91,7 @@ describe("what it must not break", () => {
 	});
 
 	test("reduce claims the word only before an amount changed by a percentage", () => {
-		expect(show("reduce 50 by 20")).toBe('THROWS Unexpected token after expression: "50"');
+		expect(show("reduce 50 by 20")).toBe('THROWS Expected an operator or the end of the line, but found "50"');
 		expect(doc("reduce = 5\nreduce * 2")).toEqual(["5", "10"]);
 	});
 

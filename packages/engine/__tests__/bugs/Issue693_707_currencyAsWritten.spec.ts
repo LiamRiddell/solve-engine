@@ -84,7 +84,7 @@ describe("a symbol after the amount", () => {
 	});
 
 	test("a symbol with another amount after it is that amount's, and stays unread", () => {
-		expect(read("100 $200").shown).toBe('THROWS Unexpected token after expression: "$"');
+		expect(read("100 $200").shown).toBe('THROWS Expected an operator or the end of the line, but found "$"');
 	});
 });
 

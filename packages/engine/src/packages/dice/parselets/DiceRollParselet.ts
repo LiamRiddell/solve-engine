@@ -5,6 +5,11 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { definePhrasePattern } from "@solve-js/parser/PhrasePattern";
+import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
+import { quoteToken, tokenSpan } from "@solve-js/parser/ParseMessages";
+
+/** The next step offered for a bare range that is not one: dice notation such as `1d6` is not read. */
+const RANGE_SUGGESTION = "Write the range as roll 1-6, roll(1, 6) or roll between 1 and 6";
 
 /** CALL_BUILTIN index for diceRoll(from, to). Matches VMBuiltins.ts index 37. */
 const DICE_ROLL_BUILTIN = 37;
@@ -90,6 +95,22 @@ export class DiceRollParselet implements PrefixParselet {
       const minToken = parser.consume(); // NUMBER
       builder.emitOpcode(OpCode.PUSH_NUMBER);
       builder.emitNumber(parseFloat(minToken.value));
+      const dash = parser.peek();
+      if (dash !== undefined && dash.type !== "MINUS") {
+        // `roll 1d6`: dice notation, which reads as the range's first bound
+        // followed by something that is not the dash between the two. The
+        // `*` read between `1` and `d6` was not typed: it sits at the offset
+        // of the word after it, and that word is what the message quotes.
+        const following = parser.peekAt(1);
+        const typed = dash.type === "STAR" && following !== undefined && following.offset === dash.offset ? following : dash;
+        throw ErrorFactory.parsing({
+          code: "UNEXPECTED_TOKEN_TYPE",
+          message: `Expected "-" between the two ends of the range, but found ${quoteToken(typed)}`,
+          suggestion: RANGE_SUGGESTION,
+          context: { expectedType: "MINUS", actualType: dash.type, actualValue: dash.value },
+          span: tokenSpan(typed),
+        });
+      }
       parser.consume("MINUS");
       const maxToken = parser.consume(); // NUMBER
       builder.emitOpcode(OpCode.PUSH_NUMBER);

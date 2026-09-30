@@ -147,7 +147,7 @@ export function matrixMultiply(l: MatrixData, r: MatrixData): Value {
 	if (l.cols !== r.rows) {
 		return errorValue(
 			"DIMENSION_MISMATCH",
-			`Cannot multiply a ${l.rows}x${l.cols} matrix by a ${r.rows}x${r.cols} matrix — inner dimensions must match (${l.cols} !== ${r.rows}).`,
+			`Cannot multiply a ${l.rows}x${l.cols} matrix by a ${r.rows}x${r.cols} matrix: the first has ${l.cols} column${l.cols === 1 ? "" : "s"} and the second ${r.rows} row${r.rows === 1 ? "" : "s"}, and the two must match.`,
 		);
 	}
 

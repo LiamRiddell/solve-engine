@@ -39,7 +39,7 @@ export function lineValueProblem(v: Value | undefined, lineNumber: number): Valu
  */
 export function noDocument(context: LineExecutionContext | undefined): Value | null {
 	if (!context?.getLineResult) {
-		return errorValue("LINE_REF_NO_DOCUMENT", "Cross-line references require a real document — not available outside one (e.g. evaluateExpression()'s single-expression path)");
+		return errorValue("LINE_REF_NO_DOCUMENT", "A line reference needs a document to read, and an expression evaluated on its own has none");
 	}
 	return null;
 }

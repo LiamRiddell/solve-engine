@@ -20,6 +20,8 @@ export const WeatherErrorCodes = {
 	FORECAST_RESPONSE_MALFORMED: "WEATHER_FORECAST_RESPONSE_MALFORMED",
 	/** WeatherPackage.ts's fetchQuery switch fell through to its default case, unreachable via this package's own parselets, an internal invariant violation if it ever happens. */
 	UNKNOWN_QUERY_KIND: "WEATHER_UNKNOWN_QUERY_KIND",
+	/** A weather form (`weather in`, `temperature in`) not followed by a city. */
+	WEATHER_EXPECTED_CITY: "WEATHER_EXPECTED_CITY",
 } as const;
 
 /**

@@ -822,7 +822,7 @@ describe("=> lines and equation solves across entry points (#565)", () => {
 
   test("both document passes agree on a document of => lines and solves", () => {
     const doc = [":a = 2", "a + 1 =>", "a * x = 10", "x =>", "line 1 * 2 =>", "expand((x + a)^2)"];
-    expect(batch(doc)).toEqual(["2", "3", 'x stored as an equation — solve with "x =>"', "5", "4", "x^2+4x+4"]);
+    expect(batch(doc)).toEqual(["2", "3", 'x stored as an equation: solve with "x =>"', "5", "4", "x^2+4x+4"]);
     expect(incremental(doc)).toEqual(batch(doc));
   });
 
@@ -1153,5 +1153,123 @@ describe("the other questions of the block above, across entry points (#703)", (
 
   test("the single-expression path has no block, and says so", () => {
     for (const form of forms) expectNeedsDocument(form);
+  });
+});
+
+describe("a failed line's shape across entry points (#709)", () => {
+  // `readLines` above folds a thrown failure and a returned one into the same
+  // `ERROR:` text, which is why the two passes could disagree about where a
+  // failure goes without this file noticing. This reader keeps them apart, and
+  // reads the code, the span, the inline solves and the flat `errors` list.
+  type Shape = {
+    error: string | null;
+    code: string | null;
+    span: unknown;
+    result: string | null;
+    solves: { error: string | null; code: string | null; span: unknown; result: string | null }[];
+  };
+  const valueOf = (value: { type: ValueType; value: unknown } | null | undefined): string | null =>
+    value ? (value.type === ValueType.Error ? `error value ${String(value.value)}` : "value") : null;
+  function shapes(result: ParsingResult): { lines: Shape[]; errors: string[] } {
+    return {
+      lines: result.lines.map((line) => ({
+        error: line.error,
+        code: line.errorCode ?? null,
+        span: line.errorSpan ?? null,
+        result: valueOf(line.result),
+        solves: line.inlineSolves.map((solve) => ({
+          error: solve.error ?? null,
+          code: solve.errorCode ?? null,
+          span: solve.errorSpan ?? null,
+          result: valueOf(solve.result),
+        })),
+      })),
+      errors: result.errors,
+    };
+  }
+  const both = (doc: string[]) => {
+    const text = doc.join("\n");
+    const batchShape = shapes(newTrackedEngine().parseDocument(text, { inputType: "markdown" }));
+    const incrementalShape = shapes(evaluateDocument(newTrackedEngine(), text, { inputType: "markdown" }));
+    return { batchShape, incrementalShape };
+  };
+
+  const DOC = ["3 + * 4", "5 kg + 3 m", "price * 2", "sqrt(-1 m)", "total is s`2 +` and s`5 kg + 3 m`"];
+
+  test("both passes give every line the same shape, value for value", () => {
+    const { batchShape, incrementalShape } = both(DOC);
+    expect(incrementalShape).toEqual(batchShape);
+  });
+
+  test("a thrown failure keeps its code and its span in the line, with no result", () => {
+    const { batchShape } = both(DOC);
+    expect(batchShape.lines[0]).toEqual({
+      error: 'Expected a value after "+", but found "*"',
+      code: "NO_PREFIX_PARSELET",
+      span: { start: 4, end: 5, line: 1, col: 5 },
+      result: null,
+      solves: [],
+    });
+    // Raised with no position even through evaluateExpression, so none is invented.
+    expect(batchShape.lines[2]).toMatchObject({ error: "Undefined variable: price", code: "UNDEFINED_VARIABLE", span: null, result: null });
+  });
+
+  test("a returned failure stays an error value in result, with no error", () => {
+    const { batchShape } = both(DOC);
+    expect(batchShape.lines[1]).toMatchObject({ error: null, code: null, result: "error value INCOMPATIBLE_UNITS" });
+    expect(batchShape.lines[3]).toMatchObject({ error: null, code: null, result: "error value UNIT_ROOT_UNSUPPORTED" });
+  });
+
+  test("an inline solve that throws, beside one that returns an error, each in its own place", () => {
+    const { batchShape } = both(DOC);
+    expect(batchShape.lines[4].solves).toEqual([
+      // The span is in the line's own terms: `2 +` starts at offset 11.
+      { error: 'The line ends after "+", where a value was expected', code: "UNEXPECTED_END_OF_INPUT", span: { start: 14, end: 14, line: 5, col: 15 }, result: null },
+      { error: null, code: null, span: null, result: "error value INCOMPATIBLE_UNITS" },
+    ]);
+  });
+
+  test("the flat errors list names every failure, thrown and returned, in both passes", () => {
+    const { batchShape } = both(DOC);
+    expect(batchShape.errors).toEqual([
+      'Line 1: Expected a value after "+", but found "*"',
+      "Line 2: mass and length cannot be added",
+      "Line 3: Undefined variable: price",
+      "Line 4: sqrt: a quantity in m has no square root with a unit; only an area has a length as its root.",
+      'Line 5: The line ends after "+", where a value was expected',
+      "Line 5: mass and length cannot be added",
+    ]);
+  });
+
+  test("a line the tokeniser refuses carries its code and span through both passes", () => {
+    const { batchShape, incrementalShape } = both(["1 + 1", 'x = "unterminated']);
+    expect(incrementalShape).toEqual(batchShape);
+    expect(batchShape.lines[1]).toMatchObject({ code: "UNTERMINATED_STRING", result: null });
+    expect(batchShape.lines[1].error).toMatch(/^Unterminated string literal/);
+  });
+
+  test("a live editor's line result carries the same code and span", () => {
+    const engine = newTrackedEngine();
+    const doc = new DocumentModel();
+    doc.setDocument(DOC.join("\n"));
+    const evaluator = new ThreeTierEvaluator(doc, engine);
+    try {
+      const lines = evaluator.evaluate({ startLine: 1, endLine: DOC.length }).lines;
+      const first = lines.find((line) => line.lineNumber === 1)!;
+      expect({ code: first.errorCode, span: first.errorSpan }).toEqual({ code: "NO_PREFIX_PARSELET", span: { start: 4, end: 5, line: 1, col: 5 } });
+      const third = lines.find((line) => line.lineNumber === 3)!;
+      expect({ code: third.errorCode, span: third.errorSpan }).toEqual({ code: "UNDEFINED_VARIABLE", span: null });
+    } finally {
+      evaluator.terminateWorker();
+    }
+  });
+
+  test("the single-expression path throws the same code and span the document line carries", () => {
+    try {
+      newTrackedEngine().evaluateExpression("3 + * 4");
+      throw new Error("expected a throw");
+    } catch (error) {
+      expect({ code: (error as { code?: string }).code, span: (error as { span?: unknown }).span }).toEqual({ code: "NO_PREFIX_PARSELET", span: { start: 4, end: 5, line: 1, col: 5 } });
+    }
   });
 });

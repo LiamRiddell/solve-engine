@@ -140,7 +140,7 @@ describe("evaluateLine — multi-target comma syntax is unsupported", () => {
     // string is now evaluated as ONE expression, and the comma after "EUR"
     // is an unconsumed trailing token, same as any other malformed input.
     expect(() => engine.evaluateLine(1, "10 USD in EUR, GBP")).toThrow(
-      'Unexpected token after expression: ","'
+      'Expected an operator or the end of the line, but found ","'
     );
   });
 
@@ -751,7 +751,7 @@ describe("processScanResults — inline solves and full-line evaluation", () => 
     // evaluating only "10 USD in EUR" (or, previously, splitting into two).
     const lines = engine.evaluateLines(["10 USD in EUR, GBP"]);
     expect(lines[0].result).toBeNull();
-    expect(lines[0].error).toBe('Unexpected token after expression: ","');
+    expect(lines[0].error).toBe('Expected an operator or the end of the line, but found ","');
   });
 
   test("processScanResults: empty inline solve expression handles gracefully", () => {

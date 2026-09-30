@@ -124,6 +124,8 @@ import { buildExplanation, buildLineTrace, EXPLAIN_CONTEXT, DEFAULT_TRACE_OPTION
 import type { Explanation, ExplanationStep, ExplainCall, LineTrace, ObservedSpan, TraceSource } from "@solve-js/explain";
 import type { ObservedCall } from "@solve-js/vm/VM";
 import { builtinFunctionName } from "@solve-js/vm/VMBuiltinArity";
+import { trailingTokenWording } from "@solve-js/parser/ParseMessages";
+import { documentErrors, errorOnLine, inlineExpressionOffset, lineFailureOf, recordLineFailure } from "@solve-js/engine/LineDiagnostics";
 import {
     type DiagnosticPipelineResult,
     type PipelineStageResult,
@@ -1142,9 +1144,10 @@ export class ExpressionEngine {
                     // Handed back as the error Value the incremental pass holds
                     // for the same line, so a reference to it reports the
                     // failure in both passes, rather than calling a line that
-                    // ran and failed "not evaluated yet" (#552).
+                    // ran and failed "not evaluated yet" (#552). It keeps the
+                    // code the line threw, as the incremental pass does (#709).
                     if (line !== undefined && line.result === null && line.error !== null) {
-                        return errorValue("LINE_FAILED", line.error);
+                        return errorValue(line.errorCode ?? "LINE_FAILED", line.error);
                     }
                     return line?.result ?? undefined;
                 }
@@ -3518,17 +3521,9 @@ export class ExpressionEngine {
             errors: [],
         };
 
-        // Collect errors from processed lines
-        for (const line of processedLines) {
-            if (line.error) {
-                result.errors.push(`Line ${line.lineNumber}: ${line.error}`);
-            }
-            for (const solve of line.inlineSolves) {
-                if (solve.error) {
-                    result.errors.push(`Line ${line.lineNumber}: ${solve.error}`);
-                }
-            }
-        }
+        // Every failure in the document, thrown or returned, by the rule
+        // evaluateDocument applies too (see documentErrors).
+        result.errors = documentErrors(processedLines);
 
         // The check lines' pass and fail count, for a host; see CheckSummary.ts.
         const checks = summariseChecks(processedLines);
@@ -3682,6 +3677,8 @@ export class ExpressionEngine {
                 expression: null,
                 result: null,
                 error: null,
+                errorCode: null,
+                errorSpan: null,
             };
 
             // A what-if pass holds some names fixed; see pinnedVariables. Null on
@@ -3692,7 +3689,9 @@ export class ExpressionEngine {
                 // The tokeniser refused this line (an unterminated string). It
                 // is reported the way a parse error is, and nothing is
                 // evaluated from it: there are no tokens to evaluate.
-                parsedLine.error = scanResult.error.message;
+                // Its span is measured against the document, as every scanned
+                // token's is.
+                recordLineFailure(parsedLine, lineFailureOf(scanResult.error, lineNumber, -startPosition, lineText.length));
             } else if (!isEmpty) {
                 const isVariableAssignment = lineText.trim().startsWith(':');
                 if (pins !== null) this.applyPins(pins);
@@ -3702,8 +3701,9 @@ export class ExpressionEngine {
                         try {
                             solve.result = this.evaluateLine(lineNumber, solve.expression);
                         } catch (error) {
-                            const errorMessage = error instanceof Error ? error.message : String(error);
-                            solve.error = errorMessage;
+                            // Measured against the expression alone, which starts
+                            // just inside the solve's opening s and backtick.
+                            recordLineFailure(solve, lineFailureOf(error, lineNumber, inlineExpressionOffset(solve.start), lineText.length));
                         }
                         const held = pins === null ? null : this.restorePins(pins);
                         if (held !== null && solve.result) solve.result = held;
@@ -3725,8 +3725,9 @@ export class ExpressionEngine {
                             parsedLine.expression = expression;
                             parsedLine.result = values[0];
                         } catch (error) {
-                            const errorMessage = error instanceof Error ? error.message : String(error);
-                            parsedLine.error = errorMessage;
+                            // Measured against the document, since the tokens are
+                            // the scan's own.
+                            recordLineFailure(parsedLine, lineFailureOf(error, lineNumber, -startPosition, lineText.length));
                         }
                         const held = pins === null ? null : this.restorePins(pins);
                         if (held !== null && parsedLine.result !== null) parsedLine.result = held;
@@ -3821,6 +3822,10 @@ export class ExpressionEngine {
         // of those into a real, visible parse error instead.
         const leftover = this.parser.peek();
         if (leftover) {
+            // Its neighbours, for the message, read now: the label fallback
+            // below parses other slices of the line and moves the parser on.
+            const beforeLeftover = this.parser.peekAt(-1);
+            const afterLeftover = this.parser.peekAt(1);
             // A single trailing bare "=" with nothing after it (e.g.
             // "355/113=") is tolerated rather than treated as an error.
             // EQUALS is never registered as an infix operator anywhere in
@@ -3948,7 +3953,7 @@ export class ExpressionEngine {
             // since midnight, so `tomorrow 3pm` quoted "900" (#692).
             throw ErrorFactory.parsing({
                 code: "UNEXPECTED_TRAILING_TOKEN",
-                message: `Unexpected token after expression: "${leftover.text || leftover.value}"`,
+                ...trailingTokenWording(leftover, beforeLeftover, afterLeftover),
                 context: { tokenType: leftover.type, tokenValue: leftover.value },
                 span: { start: leftover.offset, end: leftover.sourceEnd ?? leftover.offset + leftover.text.length, line: leftover.line, col: leftover.col },
             });
@@ -4415,7 +4420,7 @@ export class ExpressionEngine {
         // this cannot change what an existing document does.
         this.vm.defineScalarEquation(freeVar, this.compileAdHoc(normalizedTokens.slice(0, eqIdx)), this.compileAdHoc(rhsTokens));
         this.noteEquationOwner("scalar", freeVar, lineNumber);
-        return { value: lineMessage(`${freeVar} stored as an equation — solve with "${freeVar} =>"`), assigned: null };
+        return { value: lineMessage(`${freeVar} stored as an equation: solve with "${freeVar} =>"`), assigned: null };
     }
 
     /**
@@ -4472,7 +4477,7 @@ export class ExpressionEngine {
         if (effects === "check") return CHECKED_NOT_RUN;
         this.vm.defineScalarEquation(variable, lhsProgram, rhsProgram);
         this.noteEquationOwner("scalar", variable, lineNumber);
-        return lineMessage(`${variable} stored as an equation — solve with "${variable} =>"`);
+        return lineMessage(`${variable} stored as an equation: solve with "${variable} =>"`);
     }
 
     /**
@@ -5039,7 +5044,7 @@ export class ExpressionEngine {
             // the diagnostic pipeline sets `error` without it, which the
             // fallback below still handles.
             if (result.engineError) {
-                throw result.engineError;
+                throw errorOnLine(result.engineError, lineNumber);
             }
             throw ErrorFactory.execution(
                 'EVALUATION_ERROR',
