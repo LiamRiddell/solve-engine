@@ -220,6 +220,32 @@ describe("the helpers", () => {
 		expect(helper("slugifyHeading", "a​b‮c")).toBe("abc");
 	});
 
+	test("withoutTags: ordinary tags go and their text stays", () => {
+		expect(helper("withoutTags", "a <em>b</em> c")).toBe("a b c");
+		expect(helper("withoutTags", "plain")).toBe("plain");
+		expect(helper("withoutTags", "")).toBe("");
+	});
+
+	test("withoutTags: a tag split by another tag does not survive one pass", () => {
+		// CodeQL's incomplete multi-character sanitisation: one pass over this
+		// left `<script>` behind.
+		expect(helper("withoutTags", "<scr<b>ipt>alert(1)")).toBe("alert(1)");
+		expect(helper("withoutTags", "<<b>i<i>mg src=x>")).toBe("");
+		expect(helper("withoutTags", "<<<>>>")).toBe("<<<>>>");
+	});
+
+	test("withoutTags: deep nesting and a long run end, and stay linear enough", () => {
+		const nested = "<".repeat(200) + "b" + ">".repeat(200);
+		expect(typeof helper("withoutTags", nested)).toBe("string");
+		expect(helper("withoutTags", "<i>x</i>".repeat(2000))).toBe("x".repeat(2000));
+	});
+
+	test("headingIds: a heading written with a split tag gets no tag in its id", () => {
+		const ids = helper("headingIds", "---\ntitle: T\n---\n## Safe <scr<b>ipt>here\n") as string[];
+		expect(ids).toContain("safe-here");
+		expect(ids.some((id) => /[<>]/.test(id))).toBe(false);
+	});
+
 	test("headingIds: _top always, repeats numbered, fenced headings skipped", () => {
 		const ids = helper("headingIds", "---\ntitle: T\n---\n## A\n## A\n```\n## Not\n```\n### B `c`\n") as string[];
 		expect(ids).toEqual(expect.arrayContaining(["_top", "a", "a-1", "b-c"]));

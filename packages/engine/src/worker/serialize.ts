@@ -76,7 +76,10 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 		// already reads `= 0` (#725).
 		number: Number.isFinite(reading) ? (reading === 0 ? 0 : reading) : 0,
 	};
-	if (!Number.isFinite(reading)) {
+	// An IPv6 address has no numeric reading (its 128 bits are past a double),
+	// which is not the NaN of a quotient with no answer, so it carries no tag;
+	// its address crosses in `ipCidr` below.
+	if (!Number.isFinite(reading) && value.type !== ValueType.IpCidr) {
 		dto.nonFinite = nonFiniteTag(reading);
 	}
 
@@ -130,6 +133,10 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 		const ip = raw as IpCidrData;
 		dto.ipCidr = {
 			...(ip.addr !== undefined ? { addr: ip.addr } : {}),
+			// A bigint crosses as its decimal string, as it does in a snapshot:
+			// JSON cannot encode one.
+			...(ip.addr6 !== undefined ? { addr6: ip.addr6.toString() } : {}),
+			...(ip.zone !== undefined ? { zone: ip.zone } : {}),
 			...(ip.prefix !== undefined ? { prefix: ip.prefix } : {}),
 			text: formatValue(value).replace(/^=\s*/, ""),
 		};

@@ -287,16 +287,16 @@ describe("the guide's examples (guide/live-editor.md)", () => {
 		evaluator.dispose();
 	});
 
-	test("the boundary: two evaluators on one engine read each other's lines", () => {
+	test("two evaluators on one engine each read their own lines", () => {
 		const engine = newTrackedEngine();
 		const one = open("10\nline 1 * 2", engine);
 		one.evaluator.evaluate({ startLine: 1, endLine: 2 });
 		const two = open("99", engine);
 		two.evaluator.evaluate({ startLine: 1, endLine: 1 });
 		one.doc.editLine(1, "20");
-		// The line reads the second document's line 1, which is why the guide
-		// gives each open document an engine of its own.
-		expect(one.evaluator.evaluate({ startLine: 1, endLine: 2 }).lines.map((l) => shown(engine, l))).toEqual(["= 20", "= 198"]);
+		// The line read the second document's line 1 (198) before an evaluator
+		// took the engine back for its own document at the start of a pass.
+		expect(one.evaluator.evaluate({ startLine: 1, endLine: 2 }).lines.map((l) => shown(engine, l))).toEqual(["= 20", "= 40"]);
 		two.evaluator.dispose();
 		one.evaluator.dispose();
 	});

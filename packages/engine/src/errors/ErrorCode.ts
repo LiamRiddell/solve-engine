@@ -390,9 +390,13 @@ export const CoreErrorCodes = {
   UNCERTAINTY_UNIT_MISMATCH: "UNCERTAINTY_UNIT_MISMATCH",
 
   // ── Arithmetic and functions (vm/VM.ts, vm/VMBuiltins.ts, vm/ExactDecimals.ts) ──
-  /** Text used in arithmetic with a number. The message points at `as number` for text that holds a number. */
+  /** Text used in arithmetic with a number, or given to a numeric function (`sqrt("abc")`). The message points at `as number` for text that holds a number. */
   TEXT_ARITHMETIC: "TEXT_ARITHMETIC",
-  /** `as number` given text that is not a number. */
+  /** A colour in arithmetic, a numeric function, an order or a conversion to a form of a number (`#ff0000 + 2`, `sqrt(#ff0000)`, `#ff0000 < 3`). A colour is three channels, not one number; the message points at reading a channel out, as in `red(#3366cc)`. */
+  COLOUR_ARITHMETIC: "COLOUR_ARITHMETIC",
+  /** An IPv6 address in arithmetic, a numeric function, a comparison with a number or a conversion with no whole-number reading (`fe80::1 + 2`). Its 128 bits are past what a number holds exactly; the message points at `as int`. */
+  IPV6_ARITHMETIC: "IPV6_ARITHMETIC",
+  /** `as number` or `int` given text that is not a number. */
   TEXT_NOT_A_NUMBER: "TEXT_NOT_A_NUMBER",
   /** A remainder with no value: `5 mod 0`, or the remainder of an infinite number. */
   REMAINDER_UNDEFINED: "REMAINDER_UNDEFINED",

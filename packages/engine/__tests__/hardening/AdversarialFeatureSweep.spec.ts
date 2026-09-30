@@ -135,8 +135,21 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"£50,000 after tax with X% pension",
 		"£X per month after tax in Scotland with postgraduate loan and 5% pension",
 	],
-	// An IPv6 address is refused by name wherever it stands (#748).
-	ipv6: ["fe80::1 + X", "X + fe80::1", "X * 2001:db8::/32", "fe80::1 in X"],
+	// An IPv6 address wherever it stands, its subnet forms and its number (#748).
+	ipv6: [
+		"fe80::1 + X",
+		"X + fe80::1",
+		"X * 2001:db8::/32",
+		"fe80::1 in X",
+		"hosts in /X",
+		"netmask of /X",
+		"fe80::1 == X",
+		"X < fe80::1",
+		"fe80::1 as int + X",
+		"round(fe80::1, X)",
+		"2001:db8::X",
+		"network of 2001:db8::/X",
+	],
 	// A savings goal over a duration, read as in one is.
 	savingsGoals: ["how much per month to reach $X over 2 years", "how much per month to reach $10,000 over X years"],
 	distributions: ["normalcdf(X)", "binompdf(10, 0.5, X)"],
@@ -301,6 +314,9 @@ describe("a word naming an inherited property is an ordinary unknown word", () =
 		"$0.30/kWh * 2 X * 3 h",
 		"84 days in X",
 		"X(16)",
+		"fe80::1%X",
+		"fe80::1 in X",
+		"hosts in X",
 	];
 	test.each(forms.flatMap((form) => fill(form, PROTOTYPE_WORDS)))("%s", (line) => {
 		expectPrototypeUntouched(() => {

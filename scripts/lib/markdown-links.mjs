@@ -240,14 +240,37 @@ export function slugifyHeading(text) {
  * @returns {string} The text.
  */
 function headingText(source) {
-	return source
+	const text = source
 		.replace(/\s+#+\s*$/, "")
-		.replace(/!?\[((?:[^[\]\\]|\\.)*)\]\([^)]*\)/g, "$1")
-		.replace(/<[^<>]+>/g, "")
+		.replace(/!?\[((?:[^[\]\\]|\\.)*)\]\([^)]*\)/g, "$1");
+	return withoutTags(text)
 		.replace(/`+/g, "")
 		.replace(/(\*\*|__|\*|_)(?=\S)([^*_]*?\S)\1/g, "$2")
 		.replace(/\\(.)/g, "$1")
+		.replace(/[<>]/g, "")
 		.trim();
+}
+
+/**
+ * Text with every inline HTML tag removed, however the tags are nested.
+ *
+ * One pass of the tag pattern over `<scr<b>ipt>` removes the inner tag and
+ * leaves `<script>` behind, so the pass repeats until nothing changes. Each
+ * pass removes at least one character or stops, so it ends. The heading text
+ * only ever becomes an anchor slug, which drops `<` and `>` anyway, and
+ * {@link headingText} strips any left over (an escaped `\<`, say), so no tag
+ * survives into what this module returns.
+ *
+ * @param {string} text - A heading's text.
+ * @returns {string} The text without its tags.
+ */
+export function withoutTags(text) {
+	let current = text;
+	for (;;) {
+		const next = current.replace(/<[^<>]+>/g, "");
+		if (next === current) return next;
+		current = next;
+	}
 }
 
 /**

@@ -77,7 +77,12 @@ settings it uses the defaults (see [formatting results](/guide/formatting/)).
 named in `nonFinite` (`"Infinity"`, `"-Infinity"` or `"NaN"`), which
 `Number(tag)` turns back. Beyond those, the shape carries `bigint` (a large
 whole number as its digits), `matrix`, `range`, `colour`, `chart` and `ipCidr`
-where the value is one, and `sources` and `frozen` for a live answer.
+where the value is one, and `sources` and `frozen` for a live answer. An
+`ipCidr` holds `addr`, the 32-bit number of an IPv4 address, or for IPv6
+`addr6`, the 128-bit number as its decimal digits (JSON has no whole number that
+large) and the `zone` when one is written, then the `prefix` and the `text`
+the answer shows. An IPv6 address has no `number` reading, so `number` is `0`
+and no `nonFinite` tag is set.
 
 `serializeParsingResult(result, settings?)` does the same for a whole document,
 and `serializeParsedLine` for one line. Each line keeps its text, position and

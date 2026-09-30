@@ -35,10 +35,10 @@ export class InParselet implements InfixParselet {
 		const wholeCall = leftIsWholeCall(parser, left);
 		const targetToken = parser.peek();
 		// `<ip> in <cidr>`: a subnet-membership test, not a unit conversion. The
-		// right side is a fused IP/CIDR literal, which only exists when the IP
+		// right side is a fused IPv4 or IPv6 literal, which only exists when the IP
 		// package is loaded (and so registered the handler this calls). The left
 		// address is already on the stack.
-		if (targetToken?.type === "IP_CIDR") {
+		if (targetToken?.type === "IP_CIDR" || targetToken?.type === "IPV6_ADDRESS") {
 			parser.parseExpression(BindingPower.Prefix, builder);
 			builder.emitPluginCall("ipInCidr", 2);
 			return;
