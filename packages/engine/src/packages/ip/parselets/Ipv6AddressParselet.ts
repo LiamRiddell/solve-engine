@@ -5,10 +5,10 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 
 /**
- * Emits a fused `IPV6_ADDRESS` token (`fe80::1`) as a call to `ipv6Address`,
- * which answers the refusal that names IPv6. It parses as a value, so the line
- * around it parses too and the label fallback never reads the address as a
- * label and a number.
+ * Emits the value of a fused `IPV6_ADDRESS` token (`fe80::1`,
+ * `2001:db8::/32`). The token carries the packed `<hex>|<prefix>|<zone>`
+ * payload the normalizer computed; the `ipv6Literal` plugin turns it back into
+ * the IPv6 value at run time, as `ipLiteral` does for a dotted quad.
  */
 export class Ipv6AddressParselet implements PrefixParselet {
 	readonly category = "IP";
@@ -16,6 +16,6 @@ export class Ipv6AddressParselet implements PrefixParselet {
 	parse(_parser: Parser, token: Token, builder: BytecodeBuilder): void {
 		builder.emitOpcode(OpCode.PUSH_STRING);
 		builder.emitString(token.value);
-		builder.emitPluginCall("ipv6Address", 1);
+		builder.emitPluginCall("ipv6Literal", 1);
 	}
 }

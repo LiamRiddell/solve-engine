@@ -2,7 +2,8 @@ import type { Token } from "@solve-js/lexer/Token";
 import { tokenTypeId } from "@solve-js/lexer/Token";
 import { LexerToken } from "@solve-js/lexer/ExpressionLexer";
 import type { NormalizerRule, NormalizerMatch } from "@solve-js/normalizer/NormalizerRule";
-import { MAX_IPV6_TEXT, readIpv6Shape } from "../Ipv6Shape";
+import { MAX_IPV6_TEXT } from "../Ipv6Shape";
+import { parseIpv6 } from "../Ipv6Math";
 
 const IPV6_TYPE = "IPV6_ADDRESS";
 const IPV6_TYPE_ID = tokenTypeId(IPV6_TYPE);
@@ -16,6 +17,15 @@ function sourceText(token: Token): string | undefined {
 	return text !== undefined && text.length > 0 && RUN_TEXT.test(text) ? text : undefined;
 }
 
+/**
+ * The token types an address can start with. A first group is usually a word
+ * (`fe80`), a number (`2001`, `85` of `85a3`) or the colon of a leading `::`,
+ * but a group spelled like a word the engine already knows lexes as that word:
+ * `e` is the constant, `b` and `d` are units, `add` is the plus sign and `dec`
+ * a converter name, so `e::1` and `add::5` start with those.
+ */
+const START_TYPES: readonly string[] = ["IDENT", "NUMBER", "COLON", "E", "UNIT", "PLUS", "CONVERTER_NAME", "FUNC"];
+
 /** Whether a colon follows `tokens[pos]` within the next four tokens, each joined to the one before it. */
 function colonSoonAfter(tokens: Token[], pos: number): boolean {
 	let end = tokens[pos].offset + (tokens[pos].text?.length ?? 0);
@@ -28,17 +38,39 @@ function colonSoonAfter(tokens: Token[], pos: number): boolean {
 	return false;
 }
 
+/** A prefix written after an address, too long for any (`/129`), read so the literal can refuse it by name. */
+const LONG_PREFIX = /\/(\d{1,3})$/;
+
+/**
+ * The address a run's text is, with its prefix as written, or null when it is
+ * not one. A prefix past 128 (`2001:db8::/129`) still reads, so the address is
+ * refused for its prefix by name rather than read as a clock time: the prefix
+ * is checked when the literal is evaluated (`ipv6Literal`).
+ */
+export function readAddress(text: string): { readonly addr: bigint; readonly prefix: string; readonly zone?: string } | null {
+	const parsed = parseIpv6(text);
+	if (parsed !== null) return { addr: parsed.addr, prefix: parsed.prefix === undefined ? "" : String(parsed.prefix), ...(parsed.zone !== undefined ? { zone: parsed.zone } : {}) };
+	const long = LONG_PREFIX.exec(text);
+	if (long === null || Number(long[1]) <= 128) return null;
+	const bare = parseIpv6(text.slice(0, long.index));
+	if (bare === null || bare.prefix !== undefined) return null;
+	return { addr: bare.addr, prefix: long[1], ...(bare.zone !== undefined ? { zone: bare.zone } : {}) };
+}
+
 /**
  * Fuses an IPv6 address (`fe80::1`, `2001:db8::/32`, `::ffff:192.168.1.1`) into
- * one `IPV6_ADDRESS` token, so the line answers a refusal that names IPv6
- * rather than a number read from the address's last group (issue #748).
+ * one `IPV6_ADDRESS` token, so the line reads the address rather than a label
+ * and a number built from its last group (issue #748). The token's value is the
+ * packed payload `<hex>|<prefix>|<zone>` (the 128-bit address in hexadecimal,
+ * then the prefix and zone, either empty), which `ipv6Literal` turns into the
+ * address value at run time; its text is the address as written.
  *
  * ## Why the source is reconstructed
  * The lexer splits an address unpredictably: `85a3` is the number `85` and the
  * word `a3`, a run of digits and colons can be a clock time, and a dotted quad
  * at the end is the IPv4 rule's. As `IpCidrNormalizerRule` does for a dotted
  * quad, this rebuilds the text of the run of source-contiguous tokens and reads
- * the shape from that (`readIpv6Shape`).
+ * the address from that (`parseIpv6`, through `readIpv6Shape`).
  *
  * ## The guards
  * - **The whole run.** Every token has to start where the last one ended, and
@@ -57,11 +89,11 @@ export function ipv6NormalizerRule(priority = 95): NormalizerRule {
 	return {
 		name: RULE,
 		priority,
-		shape: [{ types: ["IDENT", "NUMBER", "COLON"] }],
+		shape: [{ types: START_TYPES }],
 		match(tokens: Token[], pos: number): NormalizerMatch | null {
 			const first = tokens[pos];
 			if (first === undefined || first.sourceEnd !== undefined) return null;
-			if (first.type !== "IDENT" && first.type !== "NUMBER" && first.type !== "COLON") return null;
+			if (!START_TYPES.includes(first.type)) return null;
 			// Cheap reject, ahead of any text work, since this runs at every word
 			// and number: an address has a colon within its first group, which
 			// is at most four characters and so at most four tokens.
@@ -94,13 +126,14 @@ export function ipv6NormalizerRule(priority = 95): NormalizerRule {
 			// Cheap reject: an address has at least two colons.
 			if (colons < 2) return null;
 
-			const shape = readIpv6Shape(text);
-			if (shape === null) return null;
+			const read = readAddress(text);
+			if (read === null) return null;
 
+			const payload = `${read.addr.toString(16)}|${read.prefix}|${read.zone ?? ""}`;
 			const fused = new LexerToken(
 				IPV6_TYPE,
 				IPV6_TYPE_ID,
-				text,
+				payload,
 				text,
 				first.offset,
 				0,

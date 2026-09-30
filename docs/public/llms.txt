@@ -110,7 +110,7 @@ Each line of a note is worked out on its own unless it reads another: a name def
 - [Pasted text](https://liamriddell.github.io/solve-engine/syntax/pasted-text/): the numbers, the amounts of money or one field of JSON pulled out of text pasted from a receipt, a log or an API response.
 - [Text encoding](https://liamriddell.github.io/solve-engine/syntax/text-encoding/): text turned into base64, a URL-safe form or hex bytes and back again, which is how text travels through systems that accept only certain characters.
 - [Hashing](https://liamriddell.github.io/solve-engine/syntax/hashing/): the digest of a piece of text, a short fingerprint that changes completely when one character changes, used to check that data arrived intact.
-- [Networking](https://liamriddell.github.io/solve-engine/syntax/networking/): IPv4 subnets, the blocks of addresses a network is divided into: how many machines (hosts) one holds, its netmask and broadcast address, and whether an address falls inside it.
+- [Networking](https://liamriddell.github.io/solve-engine/syntax/networking/): IPv4 and IPv6 subnets, the blocks of addresses a network is divided into: how many machines (hosts) one holds, its netmask, first and last address, and whether an address falls inside it. An IPv6 address is shown in its agreed short form.
 
 ## Visual
 

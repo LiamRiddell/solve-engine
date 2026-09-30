@@ -12,20 +12,33 @@ import {
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { readIpv6Shape, MAX_IPV6_TEXT } from "@solve-js/packages/ip/Ipv6Shape";
 import { ipv6NormalizerRule } from "@solve-js/packages/ip/normalizer/Ipv6NormalizerRule";
-import { ipv6Address } from "@solve-js/packages/ip/IpPluginFunctions";
-import { stringValue } from "@solve-js/vm/Value";
+import { ValueType, type IpCidrData } from "@solve-js/vm/Value";
 import type { Token } from "@solve-js/lexer/Token";
 
 /**
- * Issue #748: an IPv6 address answered a number built from its last group.
- * `fe80::1` read as the label `fe80:` and the expression `1`, and `fe80::1:2`
- * as a clock time. The address shape is now recognised before either reading
- * and answers `IPV6_NOT_SUPPORTED`, a refusal that names IPv6. Step 2 of the
- * issue (128-bit values and the subnet forms) is not part of this change.
+ * Issue #748, step 1: an IPv6 address answered a number built from its last
+ * group. `fe80::1` read as the label `fe80:` and the expression `1`, and
+ * `fe80::1:2` as a clock time. The address shape is now recognised before
+ * either reading. Step 1 answered a refusal naming IPv6; step 2 (see
+ * `Issue748_ipv6Addresses.spec.ts`) gives the address its 128-bit value, so
+ * the lines here now answer the address itself, in its canonical text. What
+ * this file pins is the recognition: which text is an address and which is
+ * not.
  */
 
-const REFUSAL = (address: string): string =>
-	`"${address}" is an IPv6 address, and only IPv4 addresses and subnets are covered so far.`;
+/** The refusal an IPv6 address answers in arithmetic (step 2). */
+const ARITHMETIC = (done: string): string =>
+	`IPV6_ARITHMETIC: An IPv6 address cannot be ${done}: its 128 bits are more than a number holds exactly. For the address as one whole number, write "as int".`;
+
+/** Whether a line answers an IPv6 value, i.e. its text was recognised as an address. */
+function isIpv6(line: string): boolean {
+	try {
+		const value = newTrackedEngine().evaluateExpression(line);
+		return value.type === ValueType.IpCidr && (value.value as IpCidrData).addr6 !== undefined;
+	} catch {
+		return false;
+	}
+}
 
 /** How a line comes out: `CODE: message` for an error value, the answer otherwise, `THROWS ...` for a parse error. */
 function show(line: string): string {
@@ -43,45 +56,47 @@ function tokensOf(line: string): Token[] {
 	return newTrackedEngine().getLexer().getHighlightTokenObjects(line, 0);
 }
 
-describe("an IPv6 address is refused by name", () => {
+describe("an IPv6 address is recognised, not read as a label and a number", () => {
 	test.each([
 		["fe80::1", "fe80::1"],
 		["2001:db8:85a3::8a2e:370:7334", "2001:db8:85a3::8a2e:370:7334"],
-		["fe80::1 + 2", "fe80::1"],
-		["fe80::1 in binary", "fe80::1"],
+		["fe80::1 + 2", ARITHMETIC("added")],
+		["fe80::1 in binary", `0b1111111010${"0".repeat(117)}1`],
 		["fe80::1:2", "fe80::1:2"],
 		["::1", "::1"],
 		["2001:db8::/32", "2001:db8::/32"],
 		["abc::7", "abc::7"],
 		["cafe::1", "cafe::1"],
-	])("%s", (line, address) => {
-		expect(show(line)).toBe(`IPV6_NOT_SUPPORTED: ${REFUSAL(address)}`);
+	])("%s", (line, answer) => {
+		expect(show(line)).toBe(answer);
 	});
 
 	test.each([
 		// RFC 4291 and RFC 5952 textual forms: full, leading zeros, compressed at
-		// either end, an embedded IPv4 quad, a zone index, upper case and a prefix.
-		"2001:0db8:0000:0000:0000:ff00:0042:8329",
-		"2001:db8:0:0:0:ff00:42:8329",
-		"1:2:3:4:5:6:7:8",
-		"1::",
-		"::ffff:192.168.1.1",
-		"64:ff9b::192.0.2.33",
-		"fe80::1%eth0",
-		"fe80::1%2",
-		"FE80::1",
-		"2001:DB8::1/64",
-		"::1/128",
-	])("the RFC form %s", (address) => {
-		expect(show(address)).toBe(`IPV6_NOT_SUPPORTED: ${REFUSAL(address)}`);
+		// either end, an embedded IPv4 quad, a zone index, upper case and a prefix,
+		// each answered in the canonical text.
+		["2001:0db8:0000:0000:0000:ff00:0042:8329", "2001:db8::ff00:42:8329"],
+		["2001:db8:0:0:0:ff00:42:8329", "2001:db8::ff00:42:8329"],
+		["1:2:3:4:5:6:7:8", "1:2:3:4:5:6:7:8"],
+		["1::", "1::"],
+		["::ffff:192.168.1.1", "::ffff:192.168.1.1"],
+		["64:ff9b::192.0.2.33", "64:ff9b::c000:221"],
+		["fe80::1%eth0", "fe80::1%eth0"],
+		["fe80::1%2", "fe80::1%2"],
+		["FE80::1", "fe80::1"],
+		["2001:DB8::1/64", "2001:db8::1/64"],
+		["::1/128", "::1/128"],
+	])("the RFC form %s", (address, canonical) => {
+		expect(show(address)).toBe(canonical);
 	});
 
-	test("the address is named whole, not only up to the lexer's first split", () => {
-		expect(show("2001:db8:85a3::8a2e:370:7334 * 3")).toBe(`IPV6_NOT_SUPPORTED: ${REFUSAL("2001:db8:85a3::8a2e:370:7334")}`);
+	test("the address is read whole, not only up to the lexer's first split", () => {
+		expect(show("2001:db8:85a3::8a2e:370:7334 * 3")).toBe(ARITHMETIC("multiplied"));
+		expect(show("2001:db8:85a3::8a2e:370:7334 == 2001:db8:85a3:0:0:8a2e:370:7334")).toBe("true");
 	});
 
 	test("a subtraction after an address is not read as its zone", () => {
-		expect(show("fe80::1-2")).toBe(`IPV6_NOT_SUPPORTED: ${REFUSAL("fe80::1")}`);
+		expect(show("fe80::1-2")).toBe(ARITHMETIC("subtracted"));
 	});
 });
 
@@ -106,13 +121,13 @@ describe("the near misses keep their meaning", () => {
 	});
 
 	test("a spaced colon form and too many groups are not an address", () => {
-		expect(show("fe80 :: 1")).not.toMatch(/IPV6_NOT_SUPPORTED/);
-		expect(show("1:2:3:4:5:6:7:8:9")).not.toMatch(/IPV6_NOT_SUPPORTED/);
-		expect(show("::1::2")).not.toMatch(/IPV6_NOT_SUPPORTED/);
+		expect(isIpv6("fe80 :: 1")).toBe(false);
+		expect(isIpv6("1:2:3:4:5:6:7:8:9")).toBe(false);
+		expect(isIpv6("::1::2")).toBe(false);
 	});
 
-	test("an address after a label is refused, not read as the label and a number", () => {
-		expect(show("Server: fe80::1")).toBe(`IPV6_NOT_SUPPORTED: ${REFUSAL("fe80::1")}`);
+	test("an address after a label is the address, not the label and a number", () => {
+		expect(show("Server: fe80::1")).toBe("fe80::1");
 	});
 });
 
@@ -131,7 +146,10 @@ describe("readIpv6Shape", () => {
 		expect(readIpv6Shape("1:2:3:4:5:6::7")).not.toBeNull();
 		expect(readIpv6Shape("1:2:3:4:5:6:7::8")).toBeNull();
 		expect(readIpv6Shape("1:2:3:4:5:6:1.2.3.4")).not.toBeNull();
-		expect(readIpv6Shape("::/128")).toBeNull();
+		// A bare `::` is read only with a prefix after it (step 2: `::/0`).
+		expect(readIpv6Shape("::/128")).toEqual({ address: "::", prefix: 128 });
+		expect(readIpv6Shape("::/0")).toEqual({ address: "::", prefix: 0 });
+		expect(readIpv6Shape("::%eth0")).toBeNull();
 		expect(readIpv6Shape("::1/128")).not.toBeNull();
 		expect(readIpv6Shape("::1/129")).toBeNull();
 		expect(readIpv6Shape("::1/")).toBeNull();
@@ -161,7 +179,8 @@ describe("ipv6NormalizerRule", () => {
 	test("fuses the whole contiguous run into one token", () => {
 		const tokens = tokensOf("2001:db8:85a3::8a2e:370:7334 + 1");
 		const match = rule.match(tokens, 0);
-		expect(match?.replacement.map((t) => [t.type, t.value])).toEqual([["IPV6_ADDRESS", "2001:db8:85a3::8a2e:370:7334"]]);
+		// The value is the packed payload `<hex>|<prefix>|<zone>`; the text is as written.
+		expect(match?.replacement.map((t) => [t.type, t.value, t.text])).toEqual([["IPV6_ADDRESS", "20010db885a3000000008a2e03707334||", "2001:db8:85a3::8a2e:370:7334"]]);
 		expect(tokens[(match?.consumed ?? 0)].type).toBe("PLUS");
 	});
 
@@ -187,20 +206,6 @@ describe("ipv6NormalizerRule", () => {
 	});
 });
 
-describe("ipv6Address", () => {
-	test("answers the coded refusal naming the address", () => {
-		const value = ipv6Address([stringValue("fe80::1")]);
-		expect(value.isError()).toBe(true);
-		expect(value.errorCode).toBe("IPV6_NOT_SUPPORTED");
-		expect(value.errorMessage).toBe(REFUSAL("fe80::1"));
-	});
-
-	test("a missing argument and markup-shaped text are read as text", () => {
-		expect(ipv6Address([]).errorCode).toBe("IPV6_NOT_SUPPORTED");
-		expect(ipv6Address([stringValue("<script>")]).errorMessage).toContain("<script>");
-	});
-});
-
 describe("adversarial", () => {
 	test("text edges beside an address stay honest", () => {
 		for (const line of fill("fe80::1 X", TEXT_EDGES)) expectHonestLine(line);
@@ -211,14 +216,14 @@ describe("adversarial", () => {
 		expectPrototypeUntouched(() => {
 			for (const word of PROTOTYPE_WORDS) {
 				expectHonestLine(`${word}::1`);
-				expect(show(`${word}::1`)).not.toMatch(/IPV6_NOT_SUPPORTED/);
+				expect(isIpv6(`${word}::1`)).toBe(false);
 			}
 		});
 	});
 
 	test("look-alike characters inside an address do not make it one", () => {
-		expect(show("fe80::​1")).not.toMatch(/IPV6_NOT_SUPPORTED/);
-		expect(show("fe80::１")).not.toMatch(/IPV6_NOT_SUPPORTED/);
+		expect(isIpv6("fe80::​1")).toBe(false);
+		expect(isIpv6("fe80::１")).toBe(false);
 		expectHonestLine("fe80::‮1");
 	});
 
@@ -230,7 +235,7 @@ describe("adversarial", () => {
 
 	test("an address in a document: a line reference, a total and both passes", () => {
 		const { batch } = expectHonestDocument("fe80::1\n10\nline 1 + 1\ntotal above");
-		expect(batch[0]).toBe(`ERROR ${REFUSAL("fe80::1")}`);
+		expect(batch[0]).toBe("= fe80::1");
 		expect(batch[1]).toBe("= 10");
 		expectHonestDocument("addr = fe80::1\naddr + 1\n2001:db8::/32\r\n::1\n");
 		expectHonestDocument(RESOURCE_PROBES.manyLines(300, "fe80::1"));
