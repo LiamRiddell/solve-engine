@@ -7,6 +7,8 @@ import {
   createHistoricalCurrencyResolver,
   createHistoricalCurrencyPluginFunction,
 } from "@solve-js/uom/HistoricalCurrency";
+import { FRANKFURTER_HISTORICAL_PROVIDER, frankfurterHistoricalRateProvider } from "@solve-js/uom/FrankfurterHistoricalRates";
+import type { HistoricalRateProvider } from "@solve-js/uom/HistoricalCurrency";
 import type { CurrencyPackageConfig } from "./types";
 import { suffixCurrencySymbolRule, prefixedDollarRule, randAmountRule } from "./normalizer/CurrencyInputRules";
 
@@ -18,25 +20,31 @@ import { suffixCurrencySymbolRule, prefixedDollarRule, randAmountRule } from "./
  *
  * Live rates are fetched asynchronously (via {@link CurrencyAsyncResolver}) and
  * the expression shows Pending until they resolve. The dated `on <date>` form
- * resolves through a HOST-SUPPLIED {@link CurrencyPackageConfig.historicalRateProvider}
- * instead, unconfigured, it reports `HISTORICAL_RATES_NOT_CONFIGURED` plainly
- * rather than drifting to today's rate (see `uom/HistoricalCurrency.ts`).
+ * resolves through {@link CurrencyPackageConfig.historicalRateProvider}: the
+ * built-in Frankfurter provider by default (the same endpoint as the live
+ * rate, asked for a date; see `uom/FrankfurterHistoricalRates.ts`), the host's
+ * own when it supplies one, and none when it passes `null`, which reports
+ * `HISTORICAL_RATES_NOT_CONFIGURED` plainly rather than drifting to today's
+ * rate (see `uom/HistoricalCurrency.ts`).
  *
  * **A factory, but still a default builtin.** Unlike stocks (no free provider,
- * so excluded from `BUILTIN_PACKAGES`), the LIVE half of currency needs no
- * configuration, so {@link CURRENCY_PACKAGE} = `createCurrencyPackage()` ships
- * as a default. The historical resolver is registered either way, so the
- * grammar always recognises `on <date>` and answers the not-configured case
- * honestly; supplying a provider is what turns that error into a real rate. A
- * host wanting historical conversion calls `createCurrencyPackage({ historicalRateProvider })`
+ * so excluded from `BUILTIN_PACKAGES`), currency needs no configuration, so
+ * {@link CURRENCY_PACKAGE} = `createCurrencyPackage()` ships as a default. A
+ * host with its own historical source calls `createCurrencyPackage({ historicalRateProvider })`
  * and swaps the result in for the default in its `packages` array.
  */
 export function createCurrencyPackage(config: CurrencyPackageConfig = {}): IEnginePackage {
+  // The host's provider takes precedence; `null` switches the dated form off.
+  const hostProvider = config.historicalRateProvider;
+  const historicalProvider: HistoricalRateProvider | undefined =
+    hostProvider === null ? undefined : (hostProvider ?? frankfurterHistoricalRateProvider);
+  const historicalProviderName =
+    hostProvider === undefined ? FRANKFURTER_HISTORICAL_PROVIDER : (config.historicalProviderName ?? "host");
   return {
     name: "solve-currency",
     asyncResolvers: [
       new CurrencyAsyncResolver(),
-      createHistoricalCurrencyResolver(config.historicalRateProvider, config.historicalProviderName),
+      createHistoricalCurrencyResolver(historicalProvider, historicalProviderName),
     ],
     prefixParselets: {
       DOLLAR: new CurrencySymbolParselet(),
@@ -62,16 +70,17 @@ export function createCurrencyPackage(config: CurrencyPackageConfig = {}): IEngi
       // target and date strings. The handler carries the same provider as the
       // resolver, so a source currency known only at runtime (`x in GBP on
       // <date>`) can fetch the rate the bytecode scan could not preflight.
-      [HISTORICAL_CURRENCY_FN]: createHistoricalCurrencyPluginFunction(config.historicalRateProvider, config.historicalProviderName),
+      [HISTORICAL_CURRENCY_FN]: createHistoricalCurrencyPluginFunction(historicalProvider, historicalProviderName),
     },
   };
 }
 
 /**
- * The default currency package, live rates configured, historical rates NOT.
+ * The default currency package: live rates and historical rates, both from
+ * Frankfurter.
  *
  * Kept as a named constant so existing imports and {@link BUILTIN_PACKAGES}
- * keep working unchanged, a host wanting historical conversion builds its own
+ * keep working unchanged; a host with its own historical source builds its own
  * via {@link createCurrencyPackage} and substitutes it in.
  */
 export const CURRENCY_PACKAGE: IEnginePackage = createCurrencyPackage();
