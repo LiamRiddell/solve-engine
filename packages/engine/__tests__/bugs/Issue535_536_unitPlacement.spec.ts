@@ -87,11 +87,11 @@ describe("a currency code names which currency a shared symbol meant", () => {
 
 	test("a label word after money is still read and set aside", () => {
 		expect(shown("£60,000 salary per month after tax")).toBe("= £3,779.78");
-		expect(shown("$50,000 salary per year")).toBe("= 50,000.00 USD/year");
+		expect(shown("$50,000 salary per year")).toBe("= $50,000.00/year");
 	});
 
 	test("rates written after money are unchanged", () => {
-		expect(shown("$20 per hour")).toBe("= 20.00 USD/hour");
+		expect(shown("$20 per hour")).toBe("= $20.00/hour");
 		expect(shown("$20/hour * 8 hours")).toBe("= $160.00");
 	});
 });

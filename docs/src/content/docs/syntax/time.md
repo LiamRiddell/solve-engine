@@ -72,7 +72,7 @@ only inside a compact duration: `hr` and `hrs` for hours, `mins` for minutes,
 the way a payslip writes it, and a meeting the way a calendar does.
 
 ```solve
-$15/hr // 15.00 USD/hr
+$15/hr // $15.00/hr
 30 mins // 30.00 mins
 $15/hr * 37.5 hrs // $562.50
 2 hours in mins // 120.00 mins
@@ -89,7 +89,7 @@ stays an hourly rate whatever `hr` holds, just as `$15/h` always did.
 ```solve-doc
 hr = 2
 hr * 3 // 6
-$15/hr // 15.00 USD/hr
+$15/hr // $15.00/hr
 ```
 
 `m` is still metres outside a compact duration, as above.

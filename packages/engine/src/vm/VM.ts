@@ -19,7 +19,7 @@ import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/Di
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, unitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, cellUnitsDiffer } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, cellUnitsDiffer } from "@solve-js/vm/VMConversion";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { ANSWER_NAME, PI_NAME, previousLineAnswer } from "@solve-js/vm/LineReads";
@@ -2013,7 +2013,7 @@ function numberFromText(text: string): Value {
 
 /**
  * The variables an undefined variable could have been meant as. The unit
- * spellings are searched alongside, through {@link unitNameIndex}, since a
+ * spellings are searched alongside, through {@link typeableUnitNameIndex}, since a
  * misspelt unit reaches the VM as an undefined variable too.
  */
 function* variableNameCandidates(vm: VM): Generator<string> {
@@ -2920,7 +2920,7 @@ function undefinedVariable(varName: string, vm: VM): EngineError {
             context: { varName, didYouMean: ["total above"] },
         });
     }
-    const nearNames = nearestNames(varName, variableNameCandidates(vm), 4, unitNameIndex());
+    const nearNames = nearestNames(varName, variableNameCandidates(vm), 4, typeableUnitNameIndex());
     return ErrorFactory.execution({
         code: "UNDEFINED_VARIABLE",
         message: `Undefined variable: ${varName}${nearNames.length === 0 ? "" : `.${didYouMeanSentence(nearNames)}`}`,

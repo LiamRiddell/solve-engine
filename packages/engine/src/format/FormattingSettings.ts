@@ -42,6 +42,19 @@ export interface FormattingSettings {
   };
   unitOfMeasurementResult: {
     decimalPlaces: number;
+    /**
+     * Where an amount of money takes its place count from when the line names
+     * none (a `to N dp` always wins).
+     *
+     * - `'currency'` (the default, and what a missing field reads as): the
+     *   currency's own minor unit, so `¥1000 / 3` is `¥333`, `100 KWD / 3` is
+     *   `33.333 KWD` and `$100 / 3` is `$33.33`. A price per unit keeps at
+     *   least that and up to `decimalPlaces`; a cryptocurrency shows between
+     *   two places and its own figure (see `uom/CurrencyMinorUnits.ts`).
+     * - `'setting'`: `decimalPlaces` for every currency, as before the minor
+     *   units were read, for a host that wants one place count everywhere.
+     */
+    currencyPlaces?: "currency" | "setting";
   };
   percentageResult: {
     decimalPlaces: number;

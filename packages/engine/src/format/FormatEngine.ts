@@ -7,6 +7,8 @@ import { autoFormatIntegerOrFloat, tooSmallToPrintText } from "@solve-js/utiliti
 import { getMeasure } from "@solve-js/uom/UomConverter";
 import { FormattingSettings, DEFAULT_FORMATTING_SETTINGS } from "./FormattingSettings";
 import { CURRENCY_DISPLAY } from "@solve-js/uom/CurrencyAliases";
+import { isIso4217 } from "@solve-js/uom/Iso4217";
+import { isCryptoCurrency, moneyDisplayPlaces, trimFractionZeros, type MoneyPlaces } from "@solve-js/uom/CurrencyMinorUnits";
 import { columnMajorToRowMajor } from "@solve-js/vm/MatrixOps";
 import { formatSymbolic, type SymbolicNode } from "@solve-js/symbolic";
 import { DATE_CALENDAR } from "@solve-js/calendar/DateCalendar";
@@ -471,16 +473,26 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   const useGrouping = settings.floatResult.enableSeperator;
   const loc = settings.numberResult.decimalSeparatorLocale || "en-US";
 
+  // Money, and a price per unit of something, is shown to the currency's own
+  // places (#731) and with its symbol (#753). See formatMoney.
+  const money = unit === undefined ? undefined : moneyUnitOf(unit);
+  if (money !== undefined) {
+    const places = explicitPlaces !== undefined
+      ? { min: explicitPlaces, max: explicitPlaces }
+      : settings.unitOfMeasurementResult.currencyPlaces === "setting"
+        ? { min: dp, max: dp }
+        : moneyDisplayPlaces(money.code, dp, money.per !== undefined);
+    return `= ${formatMoney(value, money, places, exact, explicitPlaces !== undefined, loc, useGrouping)}`;
+  }
+
   // For TimeSpan values (days, weeks, hours, etc.), format as integer if the value is a whole number
-  const timeSpanUnits = ["days", "weeks", "months", "years", "hours", "minutes", "seconds", "day", "week", "month", "year", "hour", "minute", "second"];
-  const isTimeSpan = unit && timeSpanUnits.includes(unit);
+  const isTimeSpan = unit !== undefined && TIME_SPAN_UNITS.has(unit);
 
   // A conversion can land far below the decimal budget, and `1 Hz in MHz`
   // printing `0.00 MHz` is indistinguishable from a real zero. Three
   // significant digits instead, in exponent form once the zeros stop being
-  // countable. Not for an explicit `to N dp`, which asked for those places, and
-  // not for money below: a currency zero is a real answer, and `$0.001` is
-  // `$0.00` because a tenth of a penny is not a payable amount.
+  // countable. Not for an explicit `to N dp`, which asked for those places.
+  // Money has its own rule, in formatMoney.
   const tooSmall = explicitPlaces === undefined ? tooSmallToPrintText(value, dp, loc) : undefined;
 
   let formatted: string;
@@ -494,32 +506,6 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
     formatted = localiseFixedDecimal(value.toFixed(dp), loc, useGrouping);
   }
 
-  // Currency display: symbol + culturally-conventional placement (e.g.
-  // "$100.00" prefix vs "100.00 kr" suffix) instead of the generic
-  // "amount CODE" fallback below. See uom/CurrencyAliases.ts's
-  // CURRENCY_DISPLAY table for the exact set covered and the reasoning
-  // behind each placement choice. Any currency code NOT in that table
-  // (most of the ~150 `CurrencyExchange.isCurrency()` recognizes) falls
-  // through to the unchanged "amount CODE" format below.
-  const currencyDisplay = unit ? CURRENCY_DISPLAY[unit.toUpperCase()] : undefined;
-  if (currencyDisplay) {
-    // An exact money amount rounds from its decimal, not from the double: a
-    // half-cent like "$1.005" reads as "$1.01" here, where "(1.005).toFixed(2)"
-    // answers "1.00" because the double it is handed already sits below the
-    // value the user typed. Amounts with no exact decimal (a currency
-    // conversion, whose rate is a double) keep the toFixed rendering above.
-    const moneyText = exact ? localiseFixedDecimal(decimalToFixed(exact, dp), loc, useGrouping) : formatted;
-    const sep = currencyDisplay.spaced ? " " : "";
-    // A prefix symbol goes after the sign, as money is written: -$5.00, not
-    // $-5.00, which is what putting the symbol in front of the signed amount
-    // text produced (#554). A suffix symbol follows the amount either way.
-    const negative = moneyText.startsWith("-");
-    const withSymbol = currencyDisplay.position === "prefix"
-      ? `${negative ? "-" : ""}${currencyDisplay.symbol}${sep}${negative ? moneyText.slice(1) : moneyText}`
-      : `${moneyText}${sep}${currencyDisplay.symbol}`;
-    return `= ${withSymbol}`;
-  }
-
   // The unit is written as the symbol the value carries. There used to be a
   // `unitOfMeasurementResult.unitNames` setting here whose two branches were
   // the same expression, so it never changed anything, and it was removed
@@ -529,19 +515,120 @@ function formatUom(value: number, unit: string | undefined, locale: ILocale, set
   // share a ratio, so "20 C" would come back as "20 kelvins". A real
   // implementation needs a hand-authored name per unit plus pluralization and
   // per-locale spelling (metre against meter), which is a feature rather than
-  // the repair of a dead ternary.
-  //
-  // An exact currency with no symbol in the display table above (one of the
-  // less common ISO codes) still rounds from its decimal here, so "1.005 UYW"
-  // reads the same way "$1.005" does. A price per unit carries its decimal too
-  // (see vm/MoneyExact.ts) and rounds from it the same way, so "$1.005/kg" is
-  // 1.01 USD/kg, except below the decimal budget: a tenth of a cent a
-  // kilowatt-hour is a real price, so it keeps its significant digits as any
-  // small quantity does, where "$0.001" on its own is not a payable amount.
-  // Every other Uom carries no exact, so this leaves "1.50 kg" as it was.
-  const perUnitBelowBudget = tooSmall !== undefined && unit !== undefined && unit.includes("/");
-  const genericText = exact && !perUnitBelowBudget ? localiseFixedDecimal(decimalToFixed(exact, dp), loc, useGrouping) : formatted;
-  return `= ${genericText} ${unit || ""}`.trim();
+  // the repair of a dead ternary. The one exception is the time words, which
+  // the value already carries as words and which come in pairs: see
+  // timeWordForCount.
+  const shownUnit = unit !== undefined && isTimeSpan ? timeWordForCount(unit, value) : unit;
+  return `= ${formatted} ${shownUnit || ""}`.trim();
+}
+
+/**
+ * The time words a value can carry, singular and plural, each paired with its
+ * other form. A whole number of them is shown without places (`= 3 days`).
+ */
+const TIME_WORD_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ["second", "seconds"], ["minute", "minutes"], ["hour", "hours"], ["day", "days"],
+  ["week", "weeks"], ["month", "months"], ["year", "years"],
+];
+const TIME_SPAN_UNITS: ReadonlySet<string> = new Set(TIME_WORD_PAIRS.flat());
+const SINGULAR_OF: ReadonlyMap<string, string> = new Map(TIME_WORD_PAIRS.map(([one, many]) => [many, one]));
+const PLURAL_OF: ReadonlyMap<string, string> = new Map(TIME_WORD_PAIRS.map(([one, many]) => [one, many]));
+
+/**
+ * The time word that agrees with its count (#753): the singular for exactly
+ * one (`= 1 hour`, and `= -1 hour`), the plural for every other count (`= 2
+ * hours`, `= 0 hours`, `= 1.50 hours`). The value keeps whichever spelling it
+ * was typed or converted into, so `3600 seconds in hours` used to show `= 1
+ * hours`, and `2 hour` showed `= 2 hour`.
+ *
+ * A value a little off one is plural, and is shown with places (`1.00 hours`),
+ * since it is a measurement and not a count. A word that is not one of the
+ * time words, and every symbol (`h`, `min`), is returned as it came.
+ *
+ * @param unit - The unit the value carries.
+ * @param value - The value.
+ */
+export function timeWordForCount(unit: string, value: number): string {
+  if (Math.abs(value) === 1) return SINGULAR_OF.get(unit) ?? unit;
+  if (SINGULAR_OF.has(unit)) return unit;
+  return PLURAL_OF.get(unit) ?? unit;
+}
+
+/** A currency, and the unit it is priced per when the amount is a rate (`USD/hour`). */
+export interface MoneyUnit {
+  readonly code: string;
+  readonly per?: string;
+}
+
+/**
+ * Whether `unit` is money: a currency code as the engine stores one, upper case
+ * (`USD`, `BTC`), or such a code over something else (`USD/hour`, `JPY/kWh`).
+ * A code with a symbol in the display table is matched in any case, as the
+ * display lookup always was (`usd` is shown `$`). Any other code must be in
+ * upper case, since `cup` is the cooking unit although `CUP` is the Cuban peso.
+ *
+ * @param unit - The unit a value carries.
+ * @returns The currency, upper case, and what it is per, or undefined for anything else.
+ */
+export function moneyUnitOf(unit: string): MoneyUnit | undefined {
+  const slash = unit.indexOf("/");
+  const written = slash < 0 ? unit : unit.slice(0, slash);
+  if (written.length < 3 || written.length > 4) return undefined;
+  const code = written.toUpperCase();
+  const hasSymbol = Object.prototype.hasOwnProperty.call(CURRENCY_DISPLAY, code);
+  if (!hasSymbol && (written !== code || (!isIso4217(code) && !isCryptoCurrency(code)))) return undefined;
+  if (slash < 0) return { code };
+  const per = unit.slice(slash + 1);
+  return per === "" ? undefined : { code, per };
+}
+
+/**
+ * An amount of money as it is written: its symbol where the display table has
+ * one (`$33.33`, `12.00 kr`, `-€5.00`), its code otherwise (`33.333 KWD`), and
+ * a price per unit with the unit after a slash (`$15.00/hour`, `12.00 kr/hour`).
+ * A rate used to fall through to the code (`15.00 USD/hour`), because only a
+ * bare code was looked up in the display table (#753).
+ *
+ * The places come from `places`: exactly the currency's minor unit for an
+ * amount, a range for a price per unit or a cryptocurrency, trailing zeros past
+ * the minimum dropped (see uom/CurrencyMinorUnits.ts).
+ *
+ * An exact money amount rounds from its decimal, not from the double: a
+ * half-cent like "$1.005" reads as "$1.01" here, where "(1.005).toFixed(2)"
+ * answers "1.00" because the double it is handed already sits below the value
+ * the user typed. An amount with no exact decimal (a currency conversion, whose
+ * rate is a double) rounds from the double, and one that lands below the places
+ * keeps three significant digits (`$100 in BTC` at a high rate), since a
+ * conversion's fraction of a cent is still an answer. A typed amount below them
+ * rounds to zero (`$0.001` is `$0.00`, a tenth of a penny is not payable),
+ * except a price per unit: a tenth of a cent a kilowatt-hour is a real price,
+ * so `$0.001/kWh` keeps its digits.
+ *
+ * A prefix symbol goes after the sign, as money is written: -$5.00, not
+ * $-5.00 (#554). A suffix symbol follows the amount either way.
+ */
+function formatMoney(value: number, money: MoneyUnit, places: MoneyPlaces, exact: DecimalData | undefined, placesAsked: boolean, loc: string, useGrouping: boolean): string {
+  const tooSmall = placesAsked || (exact !== undefined && money.per === undefined)
+    ? undefined
+    : tooSmallToPrintText(value, places.max, loc);
+  let text: string;
+  if (tooSmall !== undefined) {
+    text = tooSmall;
+  } else {
+    const fixed = exact !== undefined ? decimalToFixed(exact, places.max) : value.toFixed(places.max);
+    text = localiseFixedDecimal(trimFractionZeros(fixed, places.min), loc, useGrouping);
+  }
+  const per = money.per === undefined ? "" : `/${money.per}`;
+  // An own-property read: the code has passed the ISO check, but the table is
+  // a plain object and a lookup must never find an inherited name.
+  const display = Object.prototype.hasOwnProperty.call(CURRENCY_DISPLAY, money.code) ? CURRENCY_DISPLAY[money.code] : undefined;
+  if (display === undefined) return `${text} ${money.code}${per}`;
+  const sep = display.spaced ? " " : "";
+  const negative = text.startsWith("-");
+  const amount = display.position === "prefix"
+    ? `${negative ? "-" : ""}${display.symbol}${sep}${negative ? text.slice(1) : text}`
+    : `${text}${sep}${display.symbol}`;
+  return `${amount}${per}`;
 }
 
 function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings): string {
