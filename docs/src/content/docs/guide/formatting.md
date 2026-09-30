@@ -23,11 +23,15 @@ it was built for. `engine.formatValue` writes a value with both, so it is the
 call to reach for when the value came from that engine:
 
 ```ts
-const engine = createEngine({ locale: "de-DE", calendar: dateCalendarInZone("Pacific/Kiritimati") });
+const german = createEngine({ locale: "de-DE", calendar: dateCalendarInZone("Pacific/Kiritimati") });
 
-engine.formatValue(engine.evaluateExpression("€1250")); // "= 1.250,00 €"
-engine.formatValue(engine.evaluateExpression("next friday")); // a Friday, in Kiritimati
+german.formatValue(german.evaluateExpression("€1250")); // "= 1.250,00 €"
+german.formatValue(german.evaluateExpression("naechste freitag")); // a Friday, in Kiritimati
 ```
+
+The German engine reads the German date words (`naechste freitag` rather than
+`next friday`; see [locales](/guide/locales/)), and the examples below go back
+to an English `engine`.
 
 The free formatter, given no settings, writes numbers in `en-US` and dates in
 the host process's own zone. For an engine built with neither a locale nor a

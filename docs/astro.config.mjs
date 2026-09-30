@@ -295,6 +295,9 @@ export default defineConfig({
                 { slug: "syntax/rounding" },
                 { slug: "syntax/number-functions" },
                 { slug: "syntax/uncertainty" },
+                // Comparisons and if/then/else answer within one line, so they
+                // sit with the arithmetic rather than the cross-line forms.
+                { slug: "syntax/conditionals" },
               ],
             },
             {
@@ -340,6 +343,9 @@ export default defineConfig({
               collapsed: true,
               items: [
                 { slug: "syntax/vectors-and-matrices" },
+                // Ranges, map and reduce work on a list inside one line, which
+                // is the list work this group is about.
+                { slug: "syntax/map-reduce-and-aggregates" },
                 { slug: "syntax/statistics" },
                 { slug: "syntax/probability-distributions" },
               ],
@@ -458,8 +464,7 @@ export default defineConfig({
                 { slug: "syntax/table-columns" },
                 { slug: "syntax/table-lookups" },
                 { slug: "syntax/banded-rates" },
-                { slug: "syntax/map-reduce-and-aggregates" },
-                { slug: "syntax/conditionals" },
+                { slug: "syntax/checks" },
                 { slug: "syntax/goal-seek" },
                 { slug: "syntax/tracing-inputs" },
                 { slug: "syntax/trigger-words" },
@@ -522,7 +527,6 @@ export default defineConfig({
                 // After formatting: a locale is both halves, how the engine reads
                 // a typed number and how the formatter writes one back.
                 { slug: "guide/locales" },
-                { slug: "guide/dates-on-temporal" },
                 { slug: "guide/editor-integration" },
                 // Straight after the editor page it builds on: the whole-document
                 // half of the same language service.

@@ -11,7 +11,7 @@ description of what the project is.
 
 | File | Purpose |
 | --- | --- |
-| `plans/ARCHITECTURE_IMPROVEMENTS.md` | Long-form improvement plans, each with a status marker. Contains the authoritative specification for L1 (EngineContext), including the migration order that must be followed. |
+| `plans/ARCHITECTURE_IMPROVEMENTS.md` | Where each item of the original improvement plan stands (done, partly done with what remains, dropped, or moved to obsidian-solve or 3.0), and the order the remaining structural work is done in for the rest of 2.x: finishing L1 (EngineContext, #710), hiding the evaluator seams (#761), the interval index for span dependencies (#733), the worker offload and the word-alias extension point. |
 | `plans/CROSS_SCOPE_CELLS.md` | The design for document-scoped cells, replacing the flat `global :name` store. Records the two product decisions it rests on, the release order, and the defects that ship independently of it. Its Release D completes the singleton migration that `EngineContext` began. |
 | `AGENT.seed.md` | Source material carried over from the Obsidian plugin repository, used to write the root `AGENTS.md`. Retained until that rewrite is complete, then removed. |
 | `CODING_STANDARDS.md` | House rules for contributors: error handling, naming, size limits, comment and TSDoc style. Linked from `CONTRIBUTING.md`. |

@@ -405,6 +405,30 @@
   font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
   white-space: nowrap;
 }
+/* A result chip that opens its line's detail is a button, so it takes focus
+   and a key press; these undo the browser's button look so it still reads as
+   an annotation on the line. */
+button.os-result-inline {
+  border: 0;
+  line-height: inherit;
+  cursor: pointer;
+}
+.os-result-inline:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+/* Text for a screen reader that takes no space on screen. */
+.os-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
 .os-result-inline.os-result-pending {
   display: inline-flex;
   align-items: center;

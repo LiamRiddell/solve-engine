@@ -1,0 +1,157 @@
+# Solve
+
+> Solve (the `solve-engine` package on npm) evaluates the lines a person writes in a note: arithmetic, percentages, units, currencies, dates and times, statistics, finance and symbolic algebra, in plain phrasing, one line or a whole document at a time.
+
+Each line of a note is worked out on its own unless it reads another: a name defined on one line (`price = 20`) is read by the lines below it, and forms such as `total above`, `line 3`, `#tag` totals, `check`, what-if (`with`) and `inputs of` work across lines. Text after `//` is a comment. Every example these files show is proven against the engine when the documentation is built.
+
+## Writing a note
+
+- [Labels](https://liamriddell.github.io/solve-engine/syntax/labels/): words that name a line's figure, kept as text while the rest is worked out, before a colon or, when an amount of money or a quantity ends the line, without one.
+
+## Arithmetic
+
+- [Operators](https://liamriddell.github.io/solve-engine/syntax/operators/): add, subtract, multiply, divide and raise to a power, in symbols or in words, with multiplication done before addition. `%` means percent, so the remainder after a division is `mod`.
+- [Number suffixes](https://liamriddell.github.io/solve-engine/syntax/number-suffixes/): a letter after a number as shorthand for thousands (`k`), millions (`M`), billions (`B`) and trillions (`T`).
+- [Decimals](https://liamriddell.github.io/solve-engine/syntax/decimals/): a number with a decimal point is kept as the exact decimal you typed and worked in base ten, so `0.1 + 0.2` is exactly 0.3 rather than a near miss.
+- [Fractions](https://liamriddell.github.io/solve-engine/syntax/fractions/): a quotient of whole numbers stays exact, and `as fraction` shows it as one.
+- [Percentages](https://liamriddell.github.io/solve-engine/syntax/percentages/): a percentage of a number, a discount or a markup, the change from one value to another, and the whole a percentage was taken from.
+- [Ratios](https://liamriddell.github.io/solve-engine/syntax/ratios/): a ratio reduced to its lowest whole-number terms.
+- [Rounding](https://liamriddell.github.io/solve-engine/syntax/rounding/): to a number of decimal places (dp), in a chosen direction, or to the nearest ten, hundred or other step.
+- [Number functions](https://liamriddell.github.io/solve-engine/syntax/number-functions/): everyday maths functions such as the square root, the absolute value (the size of a number without its sign) and the greatest common divisor (the largest number that divides both).
+- [Uncertainty](https://liamriddell.github.io/solve-engine/syntax/uncertainty/): a measurement with a tolerance, written `+/-`, carried through the arithmetic so the answer says how far it can be trusted.
+- [Conditionals](https://liamriddell.github.io/solve-engine/syntax/conditionals/): comparisons that answer true or false, `and`, `or` and `not`, and `if ... then ... else`.
+
+## Numbers
+
+- [Numerals](https://liamriddell.github.io/solve-engine/syntax/numerals/): a number written out in words, as an ordinal (1st, 2nd, 3rd) or in Roman numerals.
+- [Big integers](https://liamriddell.github.io/solve-engine/syntax/big-integers/): whole numbers past 9,007,199,254,740,991, where an ordinary floating-point number starts to drop digits, stay exact; the `n` suffix writes one directly.
+- [Primes, factors and counting](https://liamriddell.github.io/solve-engine/syntax/number-theory/): testing whether a number is prime, breaking it into its prime factors, and factorials (`5!` is every whole number from 1 to 5 multiplied together).
+- [Complex numbers](https://liamriddell.github.io/solve-engine/syntax/complex/): numbers with an imaginary part, written with `i` (the square root of -1), which is what the square root of a negative number needs.
+- [Constants](https://liamriddell.github.io/solve-engine/syntax/constants/): named physical and mathematical constants, carrying their units.
+
+## Programmer math
+
+- [Number bases](https://liamriddell.github.io/solve-engine/syntax/number-bases/): numbers written in hexadecimal (`0x`), binary (`0b`) or octal (`0o`), and shown in any of them with `as`.
+- [Bit shifting](https://liamriddell.github.io/solve-engine/syntax/bit-shifting/): moving the bits of a whole number left or right, which multiplies or divides it by a power of two.
+- [Bitwise operators](https://liamriddell.github.io/solve-engine/syntax/bitwise-operators/): and, or, exclusive or (`xor`) and complement, applied to each bit of a whole number.
+- [Data sizes](https://liamriddell.github.io/solve-engine/syntax/data-sizes/): bytes and bits, with the decimal prefixes (a kB is 1,000 bytes) kept apart from the binary ones (a KiB is 1,024), and how long a download takes at a given speed.
+
+## Algebra
+
+- [Expanding](https://liamriddell.github.io/solve-engine/syntax/expanding/): multiplying out brackets and collecting the like terms.
+- [Factoring](https://liamriddell.github.io/solve-engine/syntax/factoring/): writing a polynomial as a product of simpler factors, the reverse of expanding.
+- [Solving equations](https://liamriddell.github.io/solve-engine/syntax/solving-equations/): the values of an unknown that make an equation true, exactly where there is a method and numerically where there is not.
+- [Cancelling a fraction](https://liamriddell.github.io/solve-engine/syntax/cancelling-fractions/): a fraction of polynomials reduced to its lowest terms.
+- [Splitting a fraction](https://liamriddell.github.io/solve-engine/syntax/splitting-fractions/): a fraction of polynomials broken into the simpler fractions that add up to it (partial fractions).
+- [Exact coefficients](https://liamriddell.github.io/solve-engine/syntax/exact-coefficients/): the numbers in front of the terms of a symbolic expression (its coefficients) stay exact fractions, so they pick up no floating-point error.
+- [Calculus](https://liamriddell.github.io/solve-engine/syntax/calculus/): derivatives (rates of change), integrals (areas under a curve), limits, Taylor series and Jacobians.
+- [Symbolic](https://liamriddell.github.io/solve-engine/syntax/symbolic/): a letter with no value stays an unknown rather than an error, and `=>` at the end of a line asks for the simplified expression.
+
+## Statistics
+
+- [Vectors & matrices](https://liamriddell.github.io/solve-engine/syntax/vectors-and-matrices/): lists of numbers in square brackets, with `;` between the rows of a matrix, worked on element by element or with linear algebra.
+- [Map, reduce & aggregates](https://liamriddell.github.io/solve-engine/syntax/map-reduce-and-aggregates/): a range written `start:end`, an expression applied to every item of a list, and a list folded down to one value. A range is read only inside brackets or a function call, since a bare `0:3` is a clock time.
+- [Statistics](https://liamriddell.github.io/solve-engine/syntax/statistics/): averages, medians, totals and other summaries of a list, in plain phrasing.
+- [Probability distributions](https://liamriddell.github.io/solve-engine/syntax/probability-distributions/): the normal, binomial, Poisson and Student's t distributions, for the chance of a result and the result for a chance.
+
+## Finance
+
+- [Currency](https://liamriddell.github.io/solve-engine/syntax/currency/): money written with a symbol, a code or a word. Converting between currencies, as in `10 USD in GBP`, uses live exchange rates, so it has no fixed answer to show here.
+- [Money precision](https://liamriddell.github.io/solve-engine/syntax/money-precision/): money is held as an exact decimal, so a column of prices adds up to the cent instead of drifting by a fraction of a penny.
+- [Tax](https://liamriddell.github.io/solve-engine/syntax/tax/): adding tax to a price, taking it off a total, or finding how much of a total was tax.
+- [Recurring schedules](https://liamriddell.github.io/solve-engine/syntax/recurring-schedules/): the total of a payment that repeats, such as rent every month for a year and a half.
+- [Splitting a bill](https://liamriddell.github.io/solve-engine/syntax/splitting-a-bill/): an amount divided between people, with the odd penny accounted for rather than lost.
+- [Interest & inflation](https://liamriddell.github.io/solve-engine/syntax/interest-and-inflation/): compound interest, loan and mortgage repayments, and what an amount of money from one year is worth in another.
+- [Investments](https://liamriddell.github.io/solve-engine/syntax/investments/): what a sum grows to at a rate, what a future sum is worth today, and the return on what was invested.
+- [Savings goals](https://liamriddell.github.io/solve-engine/syntax/savings-goals/): how long it takes to reach a target, or how much to put by each month.
+- [NPV, IRR & payback](https://liamriddell.github.io/solve-engine/syntax/cash-flow/): judging an investment from its cash flows, the money paid out first and the money that comes back after: the net present value (NPV, what the flows are worth today) and the internal rate of return (IRR, the rate at which they break even).
+- [Payroll & take-home](https://liamriddell.github.io/solve-engine/syntax/payroll/): UK take-home pay from a salary, after income tax and National Insurance.
+- [Comparison shopping](https://liamriddell.github.io/solve-engine/syntax/shopping/): which of two prices is the better deal, and by how much, with `vs`.
+- [Stocks](https://liamriddell.github.io/solve-engine/syntax/stocks/): share and coin prices, as in `stock(AAPL)` and `crypto("BTC")`, from a data source the host application supplies. A price is live, so there is no fixed answer to show here.
+- [crypto](https://liamriddell.github.io/solve-engine/syntax/crypto/): share and coin prices, as in `stock(AAPL)` and `crypto("BTC")`, from a data source the host application supplies. A price is live, so there is no fixed answer to show here.
+
+## Dates
+
+- [Date literals](https://liamriddell.github.io/solve-engine/syntax/date-literals/): a date written day first, year first, or with the month's name.
+- [Date arithmetic](https://liamriddell.github.io/solve-engine/syntax/date-arithmetic/): adding days, weeks, months or hours to a date, or taking them away.
+- [Relative dates](https://liamriddell.github.io/solve-engine/syntax/relative-dates/): a day named by its relation to today, such as tomorrow or next friday.
+- [Relative months](https://liamriddell.github.io/solve-engine/syntax/relative-months/): a month named by its relation to now, which gives the month's first day.
+- [The nth weekday](https://liamriddell.github.io/solve-engine/syntax/nth-weekday/): the nth, or the last, weekday of a month, the way many holidays and meetings are set.
+- [Weekdays & week numbers](https://liamriddell.github.io/solve-engine/syntax/weekdays-and-week-numbers/): the day of the week, the month, or the ISO week number a date falls in.
+- [Age](https://liamriddell.github.io/solve-engine/syntax/age/): whole years from a birth date, today or on a day you name.
+- [Date differences](https://liamriddell.github.io/solve-engine/syntax/date-differences/): the span between two dates, or the time until or since one. A count from today includes the part of today already gone, which is why it is not a whole number at noon.
+- [Working days](https://liamriddell.github.io/solve-engine/syntax/working-days/): counting only the days that are not weekends (nor public holidays, when the host application supplies them).
+- [Displaying dates](https://liamriddell.github.io/solve-engine/syntax/displaying-dates/): whether a date is spelled out or written in numbers is a setting in the host application, not something a line writes. A date before year 1 is written with its era.
+- [Time](https://liamriddell.github.io/solve-engine/syntax/time/): clock times, durations, and the span between two times, with frame rates and timecode. A clock time on its own is that time today, so the answer carries the date.
+- [Time zones](https://liamriddell.github.io/solve-engine/syntax/time-zones/): a time in another place, in several places at once, and the office hours two places share. Without a date the answer is today's; add `on 23 September 2026` to fix the day, since clocks change through the year.
+- [Timesheets](https://liamriddell.github.io/solve-engine/syntax/timesheets/): adding up hours worked from clock times or spans, and paying them at an hourly rate.
+
+## Units
+
+- [Unit arithmetic](https://liamriddell.github.io/solve-engine/syntax/unit-arithmetic/): quantities in different units add and subtract, with the answer in the first one's unit.
+- [Multiplying and dividing units](https://liamriddell.github.io/solve-engine/syntax/unit-algebra/): units multiply, divide and cancel the way numbers do, so an area comes out in square metres and a price per kilogram times a weight comes out in money.
+- [Cooking](https://liamriddell.github.io/solve-engine/syntax/cooking/): oven gas marks, the US, metric and imperial cups, and the number to multiply a recipe by when it has to serve a different number of people.
+- [Converting units](https://liamriddell.github.io/solve-engine/syntax/converting-units/): a quantity turned into another unit with `to`, `in` or `into`.
+- [Other representations](https://liamriddell.github.io/solve-engine/syntax/unit-representations/): `as` shows a value in another form, such as a percentage or an exact fraction.
+- [Defining your own units](https://liamriddell.github.io/solve-engine/syntax/custom-units/): a unit the engine does not ship, named in terms of one it does.
+- [CSS units](https://liamriddell.github.io/solve-engine/syntax/css-units/): pixels and rems (a size relative to the page's base font size) for front-end work, at the usual 16px base or one you name.
+- [Screen and image sizes](https://liamriddell.github.io/solve-engine/syntax/screen-and-image-sizes/): the shape of a screen or an image (its aspect ratio), the other side after a resize, and how large it prints at a stated density.
+- [Rates & speeds](https://liamriddell.github.io/solve-engine/syntax/rates-and-speeds/): units written with a slash, such as km/h, converted like any other and multiplied or divided back into distance and time.
+- [Travel](https://liamriddell.github.io/solve-engine/syntax/travel/): what a journey burns in fuel, what it costs, and how long it takes.
+- [Fuel economy](https://liamriddell.github.io/solve-engine/syntax/fuel-economy/): miles per gallon (US or imperial) and litres per 100 km, which run opposite ways (more miles per gallon is fewer litres per 100 km).
+- [Named derived units](https://liamriddell.github.io/solve-engine/syntax/derived-units/): quantities multiplied into a named physical unit, such as volts times amps into watts.
+- [Surveying & older units](https://liamriddell.github.io/solve-engine/syntax/surveying-units/): furlongs, chains, rods and other historic units of length and mass.
+- [Geometry](https://liamriddell.github.io/solve-engine/syntax/geometry/): the area, perimeter and volume of the common shapes, from their dimensions.
+- [Health & fitness](https://liamriddell.github.io/solve-engine/syntax/health/): body mass index (BMI, a weight measured against a height), and the pace or speed of a run from its distance and time.
+
+## Text
+
+- [Text operations](https://liamriddell.github.io/solve-engine/syntax/text-operations/): text in quotes, measured, tested and reshaped: its length, its case, and what it contains.
+- [Pasted text](https://liamriddell.github.io/solve-engine/syntax/pasted-text/): the numbers, the amounts of money or one field of JSON pulled out of text pasted from a receipt, a log or an API response.
+- [Text encoding](https://liamriddell.github.io/solve-engine/syntax/text-encoding/): text turned into base64, a URL-safe form or hex bytes and back again, which is how text travels through systems that accept only certain characters.
+- [Hashing](https://liamriddell.github.io/solve-engine/syntax/hashing/): the digest of a piece of text, a short fingerprint that changes completely when one character changes, used to check that data arrived intact.
+- [Networking](https://liamriddell.github.io/solve-engine/syntax/networking/): IPv4 subnets, the blocks of addresses a network is divided into: how many machines (hosts) one holds, its netmask and broadcast address, and whether an address falls inside it.
+
+## Visual
+
+- [Charts](https://liamriddell.github.io/solve-engine/syntax/charts/): a series or a function turned into a chart. The engine never draws: it describes the chart as data, and the host application draws it.
+- [Colours](https://liamriddell.github.io/solve-engine/syntax/colours/): hex, rgb, hsl and named colours as values, with functions to lighten, mix and check the contrast between them.
+
+## Everyday
+
+- [Coordinates, distance and bearing](https://liamriddell.github.io/solve-engine/syntax/coordinates/): places on the globe by latitude and longitude, and the distance and compass direction between two of them.
+- [Dice](https://liamriddell.github.io/solve-engine/syntax/dice/): a random whole number in a range. `random seed` makes the draws repeat, which is how this one can be checked.
+- [Randomness](https://liamriddell.github.io/solve-engine/syntax/random/): random identifiers and choices: a uuid, random hex, a pick from a list, a shuffle and a coin toss, repeatable after a seed.
+
+## Live data
+
+- [Weather](https://liamriddell.github.io/solve-engine/syntax/weather/): the current conditions and temperature for a place, as in `weather in London`, from a free service that needs no key. The answer is live, so it is named here rather than checked.
+- [Knowledge](https://liamriddell.github.io/solve-engine/syntax/knowledge/): a plain-English question, as in `ask: distance to the moon`, handed to an answering function the host application supplies. The answer comes from that function, so it is named here rather than checked.
+- [Frozen answers](https://liamriddell.github.io/solve-engine/syntax/frozen-answers/): `frozen` keeps a line's answer fixed, with the day it was fixed, so a live rate in a shared note reads the same later. It is shown on a plain sum here, since a live rate has no fixed answer to check.
+
+## Working across lines
+
+- [Variables](https://liamriddell.github.io/solve-engine/syntax/variables/): a name for a value, to use it again later, written with or without a leading colon, and of one word or a few (`hourly rate = $50`). `+=` and `-=` keep a running total, and a function of your own is defined the same way.
+- [Line references](https://liamriddell.github.io/solve-engine/syntax/line-references/): an earlier line read by its number or its position, and the lines above totalled, by `total above` or by a line that is only `sum` or `total`.
+- [Category tags](https://liamriddell.github.io/solve-engine/syntax/category-tags/): a `#tag` in the middle of a line labels its category and is left out of that line's own answer. `total of`, `average of` and `count of` gather every line carrying the tag, and `total by tag` breaks the whole note down. A tag starts with a letter, which keeps it clear of a colour such as `#c0ffee`.
+- [Sections](https://liamriddell.github.io/solve-engine/syntax/sections/): the lines under a markdown heading, down to the next heading at the same level or above, are its section, added up by the heading's name from anywhere below it.
+- [Table columns](https://liamriddell.github.io/solve-engine/syntax/table-columns/): a markdown table's column totalled or averaged by its name, and one cell read by the label on its row, the way you read a price off a list.
+- [table lookups](https://liamriddell.github.io/solve-engine/syntax/table-lookups/): a markdown table's column totalled or averaged by its name, and one cell read by the label on its row, the way you read a price off a list.
+- [Banded rates](https://liamriddell.github.io/solve-engine/syntax/banded-rates/): a tax, commission or tariff schedule written as a table of bands, where each rate applies only to the part of the amount inside its band.
+- [Checks](https://liamriddell.github.io/solve-engine/syntax/checks/): `check` and a comparison, a line stating something the note should keep true, with a margin written `≈ ... within`.
+- [Goal seek](https://liamriddell.github.io/solve-engine/syntax/goal-seek/): working backwards to the input that makes a line reach a target you name.
+- [Tracing inputs](https://liamriddell.github.io/solve-engine/syntax/tracing-inputs/): which lines fed a result, and which lines fed those.
+- [Trigger words](https://liamriddell.github.io/solve-engine/syntax/trigger-words/): ordinary words such as `total` and `sum` are not reserved keywords, so a variable can take one as its name.
+- [What-if and sweeps](https://liamriddell.github.io/solve-engine/syntax/what-if/): what a line would say if an input were different, without editing the note, or its answers across a range of inputs.
+
+## Embedding
+
+- [Quick start](https://liamriddell.github.io/solve-engine/getting-started/quick-start/): installing the package, evaluating a line and formatting its value.
+- [Entry points](https://liamriddell.github.io/solve-engine/guide/entry-points/): which call evaluates a single line and which a whole document.
+- [TypeScript usage](https://liamriddell.github.io/solve-engine/guide/typescript-usage/): the value a line returns, and its failures.
+- [Formatting](https://liamriddell.github.io/solve-engine/guide/formatting/): turning a value into display text.
+- [Cheatsheet](https://liamriddell.github.io/solve-engine/syntax/cheatsheet/): one proven line for each area above.
+
+## Optional
+
+- [Every proven example](https://liamriddell.github.io/solve-engine/llms-full.txt): each example from the syntax pages with the answer the engine gives.

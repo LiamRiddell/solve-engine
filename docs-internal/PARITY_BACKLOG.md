@@ -9,16 +9,22 @@ build and fails in both directions: a regression in something that works, and
 also a gap that starts working without being promoted out of its list. If this
 file and that spec disagree, the spec is right.
 
-As of 2026-08-06: **104 of 122** documented examples produce the documented
-answer, 2 do not, 16 differ only in formatting.
+Measured: **<!-- parity:soulver.supported -->104<!-- /parity --> of
+<!-- parity:soulver.total -->121<!-- /parity -->** documented examples produce the
+documented answer, <!-- parity:soulver.gaps -->0<!-- /parity --> do not, and
+<!-- parity:soulver.formattingOnly -->17<!-- /parity --> differ only in
+formatting. The figures are written by `npm run stats:parity` (into
+`docs-internal/parity-stats.json` and this page), and the spec fails when either
+states one it did not measure, so they cannot drift the way the typed ones did
+(#786).
 
-The two that remain are both the CPI table. Both are waiting on data rather
-than code, and the row below records what was actually tried.
-
-They are also year-dependent, in the same way as the future-projection row
-that was removed from the corpus earlier: Soulver's documented figures were
-computed when "today" was 2024, so they are not reproducible from a fixed
-string regardless of how accurate the table becomes.
+The two CPI rows (`what is $4.2k from 2003`, `what was $500 worth in 1997`) are
+no longer in the corpus. They are year-dependent, in the same way as the
+future-projection row removed earlier: Soulver's documented figures were
+computed when "today" was 2024, so they are not reproducible from a fixed string
+however accurate the table becomes. The table's accuracy is checked against the
+IMF series by `CpiTableAccuracy.spec.ts` instead, and the attempt to improve it
+is recorded under "Not being attempted" below.
 
 See `SOULVERCORE_FEATURE_AUDIT.md` for why the previous per-page audit was
 unreliable, and the same reason this file avoids per-page status claims.
@@ -27,17 +33,8 @@ unreliable, and the same reason this file avoids per-page status claims.
 
 ## Open, by area
 
-Only the inflation rows are left. Every other area on this table has been
-closed; the rows below are kept so the history of what the work involved is
-not lost.
-
-
-Ordered roughly by size of the work rather than by row count. "Rows" are
-entries in the spec's `GAPS` list.
-
-| Area | Rows | What is missing | Shape of the work |
-|---|---|---|---|
-| Inflation data | 2 | `what is $4.2k from 2003`, `what was $500 worth in 1997` | **Blocked on data, not code.** See below. |
+None. The spec's `GAPS` list is empty; every area that had rows there has been
+closed, and the two inflation rows left the corpus as year-dependent (above).
 
 ## Currencies
 
@@ -49,11 +46,13 @@ examples need live rates).
 |---|---|
 | `$100 in UAH` silently returned the original amount, unconverted | Fixed |
 | `CurrencyExchange.isCurrency()` was a hardcoded 46-code allowlist | Fixed: answers from the ISO 4217 active set, whole set asserted |
-| An unrecognised target fails **silently** rather than erroring | Open, and the more important half |
+| An unrecognised target fails **silently** rather than erroring | Fixed: `$100 in XYZ` is `"XYZ" is not a unit.`, and `100 USD in ABC` adds `Did you mean ac?` |
 
-The silent failure is the real defect. A code the engine does not know should
-say so; returning the input unchanged means `$100 in UAH` reads as though a
-conversion happened and the rate was 1.
+The silent failure was the real defect: returning the input unchanged made
+`$100 in UAH` read as though a conversion happened at a rate of 1. A code the
+engine does not know now says so, and a known code with no rate says that
+instead (with live data off, `$100 in UAH` answers that live data is switched
+off for this engine).
 
 ## Not being attempted, with reasons
 
@@ -62,6 +61,17 @@ conversion happened and the rate was 1.
 | CPI table accuracy (~10% off Soulver) | **statisticsoftheworld.com was evaluated and does not cover the range.** `GET /api/v1/series/IMF.CPI.YOY.M?geo=USA` works, needs no key, and returns IMF monthly year-over-year rates, but only 317 observations: 2000-01 to 2026-06, even when `from=1960-01-01` is requested. The bundled table spans 1970-2026, and one of the two failing rows (`what was $500 worth in 1997`) is before the API begins, so it cannot be answered from this source at all. It could refresh 2000 onward, which would need the year-over-year rates chained into index levels since the API publishes rates rather than an index. A source covering 1970-1999 is still needed, or the table stays bundled and labelled approximate for those years. |
 | `0.25 turns` as an angle literal | `turn`/`turns` are **deliberately excluded** in `lexer/units.ts`: "ordinary English, against a full-rotation angle unit". Admitting them would make the word "turns" in a sentence become a quantity. The unit stays reachable as gradians, and the exclusion is now asserted rather than merely commented. `90°` is fixed. |
 | Soulver's abbreviated output (`300k`, `3.3M`) | The values are correct; only the rendering differs. Not a bug fix but a formatting **default**: switching it on changes how every large number in every document renders, including ones with no relation to this work. It belongs in `FormattingSettings` as an opt-in (`abbreviateLargeNumbers`), decided deliberately rather than acquired as a side effect of a parity pass. Recorded in the spec's `FORMATTING_ONLY` list meanwhile, so the difference stays visible. Since #515 a line can ask for it with `as compact` (`3 million + 10% as compact` is `3.3M`), a per-line opt-in that leaves the default rendering alone; a global setting is still undecided. |
+
+## Other apps
+
+The other calculator-notepad apps have their own spec,
+`packages/engine/__tests__/docs/OtherAppsParity.spec.ts`, in the same shape:
+<!-- parity:otherApps.supported -->8<!-- /parity --> of
+<!-- parity:otherApps.total -->11<!-- /parity --> documented examples produce the
+documented answer, <!-- parity:otherApps.gaps -->2<!-- /parity --> do not (the
+CSS pixel conversions, engine limitation 3 in `OTHER_APPS_FEATURE_AUDIT.md`), and
+<!-- parity:otherApps.declined -->1<!-- /parity --> is declined with its reason
+(bare `x` as multiplication).
 
 ## Notes for whoever picks this up
 

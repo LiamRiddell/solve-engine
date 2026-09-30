@@ -121,6 +121,15 @@ trusted.
 (12.3 +/- 0.5) * 4 // 49.2 ± 2.0
 ```
 
+**[Conditionals](/syntax/conditionals/)**: comparisons that answer true or
+false, `and`, `or` and `not`, and `if ... then ... else`.
+
+```solve
+10 == 10 // true
+not (1 > 2) // true
+if 5 > 3 then 100 else 200 // 100
+```
+
 ## Numbers
 
 **[Numerals](/syntax/numerals/)**: a number written out in words, as an ordinal
@@ -275,6 +284,17 @@ element or with linear algebra.
 ```solve
 [1,2,3] * 10 // [10, 20, 30]
 det([1,2;3,4]) // -2
+```
+
+**[Map, reduce & aggregates](/syntax/map-reduce-and-aggregates/)**: a range
+written `start:end`, an expression applied to every item of a list, and a list
+folded down to one value. A range is read only inside brackets or a function
+call, since a bare `0:3` is a clock time.
+
+```solve
+map(10*x, 0:3) // [0, 10, 20, 30]
+sum(x, 0:4) // 10
+reduce(acc+x, [1,2,3]) // 6
 ```
 
 **[Statistics](/syntax/statistics/)**: averages, medians, totals and other
@@ -842,26 +862,14 @@ amount inside its band.
 45,000 through bands above   // 8,000
 ```
 
-**[Map, reduce & aggregates](/syntax/map-reduce-and-aggregates/)**: a range
-written `start:end`, an expression applied to every item of a list, and a list
-folded down to one value. A range is read only inside brackets or a function
-call, since a bare `0:3` is a clock time.
+**[Checks](/syntax/checks/)**: `check` and a comparison, a line stating
+something the note should keep true, with a margin written `≈ ... within`.
 
-```solve
-map(10*x, 0:3) // [0, 10, 20, 30]
-sum(x, 0:4) // 10
-reduce(acc+x, [1,2,3]) // 6
-```
-
-**[Conditionals](/syntax/conditionals/)**: comparisons that answer true or
-false, `and`, `or` and `not`, `if ... then ... else`, and `check`, which marks a
-line stating something the note should keep true.
-
-```solve
-10 == 10 // true
-not (1 > 2) // true
-if 5 > 3 then 100 else 200 // 100
-check 1 km == 1000 m // ✓
+```solve-doc
+:budget = $1950
+:spent = $2010
+check :spent <= :budget // ERROR: check failed: $2,010.00 is more than $1,950.00
+check 22/7 ≈ pi within 0.1% // ✓ (differs by 0.04%)
 ```
 
 **[Goal seek](/syntax/goal-seek/)**: working backwards to the input that makes

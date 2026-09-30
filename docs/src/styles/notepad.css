@@ -102,6 +102,48 @@
   border-inline-start: 1px solid var(--border);
   background: none;
   padding-block: 0.625rem;
+  /* The containing block for .notepad__full, so an answer's own
+     overflow: hidden does not clip the full text it shows on focus. */
+  position: relative;
+}
+
+/* A long answer is focusable (see SolveNotepad): the keyboard route to the full
+   text a pointer reads from the title. Shown under the row while it has focus,
+   wrapped, over whatever is below. */
+.notepad__answer:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.notepad__full {
+  display: none;
+}
+
+.notepad__answer:focus .notepad__full {
+  display: block;
+  position: absolute;
+  inset-inline: 0;
+  z-index: 2;
+  padding: 0.25rem 1rem;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: end;
+  background: var(--sl-color-bg);
+  border-block: 1px solid var(--border);
+}
+
+/* Text for a screen reader that takes no space on screen. */
+.notepad__visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .notepad__answer {

@@ -1,9 +1,10 @@
 /**
  * Fails when an exported symbol on the public surface has no doc block.
  *
- * "Public surface" means everything outside `src/packages`, which is where the
- * language packages live. Those are internals a consumer does not import
- * directly, and they are swept separately rather than held to this gate today.
+ * "Public surface" means every export under `packages/engine/src`, the
+ * language packages in `src/packages` included: they are what a third-party
+ * package author reads and copies from, so an undocumented export there
+ * teaches the habit this gate exists to stop.
  *
  * A doc block is what appears on hover in an editor and in generated
  * documentation, so a missing one is a gap a consumer walks into rather than a

@@ -10,7 +10,9 @@
  *
  * This is the other half of that trade. It reads the slugs out of the Astro
  * config and the pages off disk, and complains about either direction: a page
- * with no sidebar entry, and a sidebar entry with no page.
+ * with no sidebar entry, and a sidebar entry with no page. It also fails on a
+ * slug listed more than once: Starlight renders both entries, so the page
+ * appears twice in the sidebar, and a set of slugs cannot see it (#780).
  *
  * Text matching rather than importing the config, deliberately. The config
  * imports Astro integrations and a Shiki grammar, so loading it here would mean
@@ -18,13 +20,17 @@
  *
  * Usage:
  *   node scripts/check-sidebar.mjs
+ *
+ * `--root=<dir>` reads another checkout's config and docs tree instead, which
+ * is how the spec runs it over fixtures.
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const rootArgument = process.argv.find((arg) => arg.startsWith("--root="));
+const ROOT = rootArgument ? path.resolve(rootArgument.slice("--root=".length)) : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CONFIG = path.join(ROOT, "docs/astro.config.mjs");
 const CONTENT = path.join(ROOT, "docs/src/content/docs");
 
@@ -63,15 +69,17 @@ function pageSlugs(dir, prefix = "") {
 }
 
 const config = fs.readFileSync(CONFIG, "utf8");
-const listed = new Set(
-	Array.from(config.matchAll(/slug:\s*"([^"]+)"/g)).map((match) => match[1]),
-);
+const entries = Array.from(config.matchAll(/slug:\s*"([^"]+)"/g)).map((match) => match[1]);
+const listed = new Set(entries);
+const counts = new Map();
+for (const slug of entries) counts.set(slug, (counts.get(slug) ?? 0) + 1);
+const repeated = [...counts].filter(([, count]) => count > 1).map(([slug, count]) => `${slug} (${count} times)`).sort();
 const onDisk = pageSlugs(CONTENT);
 
 const missing = onDisk.filter((slug) => !listed.has(slug)).sort();
 const orphaned = [...listed].filter((slug) => !onDisk.includes(slug)).sort();
 
-if (missing.length === 0 && orphaned.length === 0) {
+if (missing.length === 0 && orphaned.length === 0 && repeated.length === 0) {
 	console.log(`Sidebar covers all ${onDisk.length} documentation page(s).`);
 	process.exit(0);
 }
@@ -85,6 +93,12 @@ if (missing.length > 0) {
 if (orphaned.length > 0) {
 	console.error("These sidebar entries have no page:");
 	for (const slug of orphaned) console.error(`  ${slug}`);
+}
+
+if (repeated.length > 0) {
+	console.error("These pages are listed in the sidebar more than once:");
+	for (const entry of repeated) console.error(`  ${entry}`);
+	console.error("Keep the entry in the page's reading-order slot and remove the others.");
 }
 
 process.exit(1);
