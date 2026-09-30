@@ -114,6 +114,10 @@ import of `node:fs`, `node:child_process`, `node:net`, `node:http` or
 grep -rEn "from [\"'](node:)?(fs|child_process|net|http|https)[\"']" packages/engine/src
 ```
 
+The [`solve` command](/guide/command-line/) does read files, which is why it is
+a package of its own (`packages/cli`) rather than part of the engine: it depends
+on the engine, and the engine's package, source and promise are unchanged by it.
+
 That is also why it runs unchanged in Node, in a browser and in a worker: there
 is no host facility it expects to find.
 
