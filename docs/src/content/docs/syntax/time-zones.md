@@ -80,6 +80,15 @@ Lumpur`, `New Delhi`, `Cape Town`, `Rio de Janeiro`, `Sao Paulo`) or a country
 3pm Los Angeles on 23 September 2026 in United Kingdom // 11:00 PM
 ```
 
+A label is the name as you wrote it, with the first letter of each word raised
+the way the place writes its name. The small linking words inside a name, such
+as the `de` of Rio de Janeiro, keep the case you gave them, and nothing you
+capitalised is lowered.
+
+```solve
+3pm london on 23 September 2026 in rio de janeiro and new york // Rio de Janeiro 11:00 AM, New York 10:00 AM
+```
+
 ## Why the date matters
 
 The clocks do not change everywhere on the same day. New York moves its clocks

@@ -162,7 +162,7 @@ export function tryParseDatePhrase(parser: Parser): ParsedDatePhrase | null {
 
 		// ── "12 April 2005", NUMBER IDENT [COMMA] NUMBER ──
 		const monthTok = parser.peek();
-		if (monthTok && monthTok.type === "IDENT" && MONTH_NAMES[monthTok.value.toLowerCase()] !== undefined) {
+		if (monthTok && monthTok.type === "IDENT" && Object.prototype.hasOwnProperty.call(MONTH_NAMES, monthTok.value.toLowerCase())) {
 			const monthIndex = MONTH_NAMES[monthTok.value.toLowerCase()];
 			parser.consume(); // month name
 			if (parser.peek()?.type === "COMMA") parser.consume();
@@ -179,7 +179,7 @@ export function tryParseDatePhrase(parser: Parser): ParsedDatePhrase | null {
 	}
 
 	// ── "April 12, 2005" / "April 12 2005", IDENT NUMBER [COMMA] NUMBER ──
-	if (first.type === "IDENT" && MONTH_NAMES[first.value.toLowerCase()] !== undefined) {
+	if (first.type === "IDENT" && Object.prototype.hasOwnProperty.call(MONTH_NAMES, first.value.toLowerCase())) {
 		const monthIndex = MONTH_NAMES[first.value.toLowerCase()];
 		parser.consume(); // month name
 		const dayTok = parser.consume("NUMBER");

@@ -109,6 +109,20 @@ add 3 and 4 // 7
 3 to 10 // 233.33%
 ```
 
+`subtract A from B` is the difference written the same way, and takes A away
+from B, in the order the sentence says. `take` and `remove` read the same.
+Without a `from`, each of these words is the minus sign it always was.
+
+```solve
+subtract 3 from 10 // 7
+take $5 from $20 // $15.00
+subtract 3 km from 10 km // 7.00 km
+subtract 3 // -3
+```
+
+The boundary: the `from` must stand at the top of the line, outside any
+brackets, since a `from` inside them belongs to what is bracketed.
+
 The words `mul`, `exponent` and `prime` are not operators. They were once
 spellings of `*` and `^`, which made them unusable as names (even as
 `:exponent`), so they are ordinary names now, and `7 is prime` asks whether 7 is

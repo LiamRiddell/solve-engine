@@ -44,7 +44,11 @@ const CONVERSION_KEYWORDS: ReadonlySet<string> = new Set(["AS", "IN", "TO"]);
 function monthOf(token: Token | undefined, before?: Token): number {
 	if (token === undefined || !MONTH_TOKEN_TYPES.has(token.type)) return 0;
 	if (token.type === "CONVERTER_NAME" && before !== undefined && CONVERSION_KEYWORDS.has(before.type)) return 0;
-	return MONTHS[(token.text ?? token.value ?? "").toLowerCase()] ?? 0;
+	// An own key only: a word that names an inherited property (`constructor`,
+	// `__proto__`) is not a month, and read through the prototype it made
+	// `5 constructor` "not a real date: undefined 2026 has NaN days".
+	const word = (token.text ?? token.value ?? "").toLowerCase();
+	return Object.prototype.hasOwnProperty.call(MONTHS, word) ? MONTHS[word] : 0;
 }
 
 /** A pure digit string, so hex and scientific literals are never fused. */

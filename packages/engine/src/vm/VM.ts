@@ -23,7 +23,8 @@ import { nearestNames, didYouMeanSentence, NameIndex } from "@solve-js/errors/Di
 import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
-import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, cellUnitsDiffer } from "@solve-js/vm/VMConversion";
+import { safeText } from "@solve-js/parser/ParseMessages";
+import { unifyUom, binaryOp, compareUom, incomparableUnitsError, describeConversionMismatch, describeMeasure, toBigIntOperand, compareBigIntOperands, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, compareRationalOperands, uncertainOp, toleranceSpread, nonNumericKind, valueKindName, describeQuantity, currencyRateSources, datetimeArithmeticRefused, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, cellUnitsDiffer } from "@solve-js/vm/VMConversion";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { ANSWER_NAME, PI_NAME, previousLineAnswer } from "@solve-js/vm/LineReads";
@@ -327,6 +328,14 @@ export interface LineExecutionContext {
      * line short.
      */
     getLineCount?: () => number;
+    /**
+     * Set when this pass runs a what-if's scenario (`line 4 with deposit =
+     * 150000`), which works each line out once in a scratch engine. A form that
+     * re-runs another line (goal seek) names that as the reason it cannot
+     * answer here, rather than the batch pass or a single expression, which the
+     * reader did not write.
+     */
+    inWhatIf?: boolean;
     /**
      * Whether this engine may fetch live data (`network.enabled`). A plugin
      * function that reads a resolver's cache uses it to say "live data is
@@ -2427,7 +2436,7 @@ function workdayOffset(stack: Value[], workdayDirection: number, vm: VM): void {
     if (anchorValue.type !== ValueType.Datetime) {
       stack.push(errorValue(
         CoreErrorCodes.WORKDAY_OFFSET_EXPECTED_DATE,
-        `"working days after/before/from" expects a date to count from, got ${ValueType[anchorValue.type] ?? "an unsupported value"}`,
+        `"working days after/before/from" expects a date to count from, but got ${valueKindName(anchorValue)}.`,
       ));
       return;
     }
@@ -2445,7 +2454,7 @@ function workdaysBetween(stack: Value[], vm: VM): void {
     if (startValue.type !== ValueType.Datetime || endValue.type !== ValueType.Datetime) {
       stack.push(errorValue(
         CoreErrorCodes.WORKDAYS_BETWEEN_EXPECTED_DATES,
-        `"working days between" expects two dates, got ${ValueType[startValue.type] ?? "an unsupported value"} and ${ValueType[endValue.type] ?? "an unsupported value"}`,
+        `"working days between" expects two dates, but got ${valueKindName(startValue)} and ${valueKindName(endValue)}.`,
       ));
       return;
     }
@@ -3023,7 +3032,7 @@ function undefinedVariable(varName: string, vm: VM): EngineError {
     if (COLUMN_TOTAL_WORDS.has(varName.toLowerCase())) {
         return ErrorFactory.execution({
             code: "UNDEFINED_VARIABLE",
-            message: `Undefined variable: ${varName}. To add up the lines above, write "total above".`,
+            message: `Undefined variable: ${safeText(varName)}. To add up the lines above, write "total above".`,
             suggestion: "total above",
             context: { varName, didYouMean: ["total above"] },
         });
@@ -3031,7 +3040,7 @@ function undefinedVariable(varName: string, vm: VM): EngineError {
     const nearNames = nearestNames(varName, variableNameCandidates(vm), 4, typeableUnitNameIndex());
     return ErrorFactory.execution({
         code: "UNDEFINED_VARIABLE",
-        message: `Undefined variable: ${varName}${nearNames.length === 0 ? "" : `.${didYouMeanSentence(nearNames)}`}`,
+        message: `Undefined variable: ${safeText(varName)}${nearNames.length === 0 ? "" : `.${didYouMeanSentence(nearNames)}`}`,
         suggestion: nearNames.length > 0 ? nearNames.join(", ") : undefined,
         context: { varName, didYouMean: nearNames },
     });
@@ -3938,7 +3947,7 @@ export function executeBytecode(
             if (l.type !== ValueType.Matrix || r.type !== ValueType.Number) {
               stack.push(errorValue(
                 "MATRIX_POWER_UNSUPPORTED",
-                `^: a matrix may only be the base, raised to a whole number (as in "[1,2;3,4]^2"); "${ValueType[l.type]} ^ ${ValueType[r.type]}" has no matrix reading.`,
+                `^: a matrix may only be the base, raised to a whole number (as in "[1,2;3,4]^2"); ${valueKindName(l)} raised to ${valueKindName(r)} has no matrix reading.`,
               ));
               break;
             }
@@ -3968,7 +3977,7 @@ export function executeBytecode(
             const numericExponent = r.type === ValueType.Number || r.type === ValueType.BigInt;
             stack.push(numericExponent
               ? raiseQuantity(l, r.toNumber())
-              : unitPowerUnsupported(l.unit, r.unit !== undefined ? `${r.toNumber()} ${r.unit}` : ValueType[r.type].toLowerCase()));
+              : unitPowerUnsupported(l.unit, r.unit !== undefined ? `${r.toNumber()} ${r.unit}` : valueKindName(r)));
             break;
           }
           // A bigint operand raised to a whole power has an exact answer, and

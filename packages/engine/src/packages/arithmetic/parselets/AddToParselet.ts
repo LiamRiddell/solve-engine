@@ -52,3 +52,60 @@ export class AddToParselet implements PrefixParselet {
 		builder.emitOpcode(OpCode.ADD);
 	}
 }
+
+/** The words that are the `-` keyword and read `A from B` as `B - A`. */
+const SUBTRACT_WORDS: ReadonlySet<string> = new Set(["subtract", "take", "remove"]);
+
+/**
+ * Whether a `from` follows at the top level of the line, outside any bracket:
+ * the sign that `subtract 3 from 10` is the word form rather than `-3`. A pure
+ * look ahead, bounded by the line's tokens.
+ *
+ * @param parser - The parser, positioned just after the word.
+ * @returns `true` when an unbracketed `from` is still to come.
+ */
+export function fromFollows(parser: Pick<Parser, "peekAt">): boolean {
+	let depth = 0;
+	for (let offset = 0, token = parser.peekAt(0); token !== undefined; token = parser.peekAt(++offset)) {
+		if (token.type === "LPAREN" || token.type === "LBRACKET") depth++;
+		else if (token.type === "RPAREN" || token.type === "RBRACKET") depth--;
+		else if (depth === 0 && token.type === "FROM" && (token.text || token.value).toLowerCase() === "from") return true;
+	}
+	return false;
+}
+
+/**
+ * The prefix `-`, and `subtract A from B`, the word form of `B - A`.
+ *
+ * `subtract` (and `take`, `remove`) is the `-` keyword, so `subtract 3 from 10`
+ * was read as `-3` with a stray `from 10` after it, and refused. When the word
+ * is one of those and a `from` follows its operand, the first is taken from the
+ * second: `subtract 3 from 10` is 7, the order the sentence says. Without a
+ * `from` the word keeps its old reading (`subtract 3` is -3), and the symbol
+ * `-` is a unary minus and nothing else.
+ */
+export class SubtractFromParselet implements PrefixParselet {
+	readonly category = "Arithmetic";
+
+	parse(parser: Parser, token: Token, builder: BytecodeBuilder): void {
+		const word = SUBTRACT_WORDS.has((token.text || token.value || "").toLowerCase());
+		if (!word || !fromFollows(parser)) {
+			parser.parseExpression(BindingPower.Prefix, builder);
+			builder.emitOpcode(OpCode.NEG);
+			return;
+		}
+		// The amount taken away is compiled first, where it is written, so the
+		// sum is `-A + B`: the same answer as `B - A`, in the reader's order.
+		parser.parseExpression(BindingPower.Conditional, builder);
+		const next = parser.peek();
+		if (next?.type !== "FROM") {
+			// The `from` belonged to something inside the operand after all.
+			builder.emitOpcode(OpCode.NEG);
+			return;
+		}
+		parser.consume();
+		builder.emitOpcode(OpCode.NEG);
+		parser.parseExpression(BindingPower.Conditional, builder);
+		builder.emitOpcode(OpCode.ADD);
+	}
+}

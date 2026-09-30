@@ -53,6 +53,17 @@ solve line 2 for d = 3000 m        // 1.50 km
 solve line 2 for d = 3 kg          // ERROR: Line 2 answers in km and the target is in kg, so the two cannot be compared. Write the target in km.
 ```
 
+A rate written as a percentage is solved as a percentage, and a range for it can
+be written in percentages too:
+
+```solve-doc
+:deposit = 100000
+:rate = 4%
+monthly repayment on deposit over 25 years at rate    // 527.84
+solve line 3 for rate = 600                            // 5.26%
+solve line 3 for rate = 600 between 0% and 10%         // 5.26%
+```
+
 The boundary: a variable that is a plain number stays one, whatever the
 target's unit, since a count of items that makes a total in pounds is still a
 count (`qty` above is 7.50, not £7.50). A target in another currency is refused
@@ -166,4 +177,12 @@ the engine's incremental evaluator can, and they solve it. `parseDocument`, the
 batch pass, evaluates each line once and cannot, and the single-expression
 entry point has no document at all; each answers with a refusal that says which
 of the two it is. [Which entry point](/guide/entry-points/) sets the four side
-by side.
+by side. A goal seek on a line that a [what-if](/syntax/what-if/)
+re-runs says the what-if is why, since the what-if works each line out once.
+
+```solve-doc
+:x = 5                                 // 5
+x * 2                                  // 10
+y = solve line 2 for x = 3             // 1.50
+line 3 with x = 4                      // ERROR: Goal seek cannot run inside a what-if: the what-if works each line of its scenario out once, and a goal seek re-runs another line many times. Solve the line outside the what-if.
+```

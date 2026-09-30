@@ -52,6 +52,7 @@ export {
 	nodesEqual,
 	nodeCount,
 	freeVariables,
+	dividesByZero,
 	substitute,
 	substituteAll,
 	complexNode,
