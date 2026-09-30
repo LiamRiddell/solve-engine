@@ -363,10 +363,12 @@ describe("a live editor follows an edit to the section", () => {
     // Line 3 totals the Summary section, which holds line 6; line 6 totals the
     // Travel section, which holds line 3. Were the summaries read, the two
     // would read each other and both report a cycle. Each leaves the other out,
-    // so both answer once the editor has settled.
+    // so line 6 answers, and line 3 reports only that its one figure, line 7,
+    // sits below it: a note is read from the top, so that is refused on every
+    // pass, as parseDocument refuses it, and it is not a cycle.
     const doc = ["# Travel", "Flights: $450", 'Summary check: total of section "Summary"', "", "# Summary", 'total of section "Travel"', "$5"];
     const out = fresh(doc);
     expect(out[5]).toBe("$450.00");
-    expect(out[2]).toBe("$5.00");
+    expect(out[2]).toBe("ERROR LINE_NOT_YET_EVALUATED: Line 7 has not been evaluated yet (forward reference, or out of range)");
   });
 });
