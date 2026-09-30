@@ -103,6 +103,62 @@ export function parseCollectionExpr(parser: Parser, builder: BytecodeBuilder): v
   }
 }
 
+/** The token kinds that open and close a nesting level inside a call's brackets. */
+const OPENERS = new Set(["LPAREN", "LBRACKET"]);
+const CLOSERS = new Set(["RPAREN", "RBRACKET"]);
+
+/**
+ * Whether the call whose `(` was just consumed has a comma of its own, at its
+ * own nesting level, before its closing bracket. Peek-only: nothing is consumed.
+ *
+ * `sum(x, 1:3)` has one and `sum(1:3)` has none; a comma inside a list or a
+ * nested call (`sum([1, 2])`, `sum(max(1, 2), [3])`) belongs to that and is not
+ * counted. The scan stops at the call's own `)` or at the end of the line, so
+ * it reads each token of the call at most once.
+ *
+ * @param parser - The parser, positioned just after the call's `(`.
+ * @returns True when the call has two or more arguments.
+ */
+export function callHasOwnComma(parser: Parser): boolean {
+  let depth = 0;
+  for (let i = 0; ; i++) {
+    const token = parser.peekAt(i);
+    if (token === undefined) return false;
+    if (OPENERS.has(token.type)) depth++;
+    else if (CLOSERS.has(token.type)) {
+      if (depth === 0) return false;
+      depth--;
+    } else if (depth === 0 && token.type === "COMMA") return true;
+  }
+}
+
+/**
+ * The one-argument fold, `sum(1:3)` or `prod([2, 3, 4])`: the elements of the
+ * collection themselves, added or multiplied, as `sum(x, 1:3)` and
+ * `prod(x, [2, 3, 4])` are. The `(` is already consumed; this parses the
+ * collection (a range, a list or a name holding one), the `)`, the seed and the
+ * fold.
+ *
+ * @param parser - The parser, positioned just after the call's `(`.
+ * @param builder - The builder the call is emitted into.
+ * @param combine - `ADD` for `sum`, `MUL` for `prod`.
+ * @param seed - The identity the fold starts from: 0 for `sum`, 1 for `prod`.
+ */
+export function parseElementFold(parser: Parser, builder: BytecodeBuilder, combine: OpCode.ADD | OpCode.MUL, seed: number): void {
+  const body = new BytecodeBuilder(builder.pluginIndexMap);
+  body.emitOpcode(OpCode.LOAD_VAR);
+  body.emitString("acc");
+  body.emitOpcode(OpCode.LOAD_VAR);
+  body.emitString("x");
+  body.emitOpcode(combine);
+  const program = body.build();
+  parseCollectionExpr(parser, builder);
+  parser.consume("RPAREN");
+  builder.emitOpcode(OpCode.PUSH_NUMBER);
+  builder.emitNumber(seed);
+  emitInvoke(builder, OpCode.REDUCE_INVOKE, { kind: 0, program }, ["acc", "x"], 1);
+}
+
 /**
  * Emits a resolved transform + its `MAP_INVOKE`/`REDUCE_INVOKE` opcode
  * `kind`/`ref` are common to both opcodes; `thirdOperand` is

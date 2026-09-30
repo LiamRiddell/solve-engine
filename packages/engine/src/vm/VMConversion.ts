@@ -963,6 +963,10 @@ function exactMoneyOp(l: Value, r: Value, op: "add" | "sub" | "mul" | "div"): Va
  */
 function operandRational(v: Value): Rational | null {
     if (v.rational !== undefined) return v.rational;
+    // The exact decimal before the double: past 2^53 the literal
+    // 9007199254740993.5 is the whole double 9007199254740994, and reading that
+    // whole number first made it equal to 9007199254740994.
+    if (v.exact !== undefined) return rationalOfExactDecimal(v);
     if ((v.type === ValueType.Number || v.type === ValueType.Hex) && typeof v.value === "number" && Number.isInteger(v.value)) {
         return rational(BigInt(v.value));
     }
@@ -970,7 +974,6 @@ function operandRational(v: Value): Rational | null {
     // (see bigBaseInteger()), so `(2^100 + 1) in hex > 2^100` compares it.
     const inBase = bigBaseInteger(v);
     if (inBase !== null) return rational(inBase);
-    if (v.exact !== undefined) return rationalOfExactDecimal(v);
     return null;
 }
 

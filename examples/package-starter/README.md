@@ -9,8 +9,8 @@ something to copy.
 
 It depends on `solve-engine` by name and imports only its public entry points
 (`solve-engine`, `solve-engine/parser`, `solve-engine/vm`, `solve-engine/lexer`,
-`solve-engine/testing`, `solve-engine/packages`), so it compiles against exactly
-what you install. The engine's own build packs it against the published tarball
+`solve-engine/resolvers`, `solve-engine/testing`, `solve-engine/packages`), so it
+compiles against exactly what you install. The engine's own build packs it against the published tarball
 and runs these tests on every change, so a change to that surface that would
 break a package like this one fails there first.
 
@@ -92,31 +92,59 @@ registry is shared by every engine in a process, so reusing a built-in's name
 
 A figure fetched from somewhere cannot be known the moment a line is typed, so
 the engine answers **Pending** first and the real figure when it arrives, never
-a stale or zero number in between. The package's function returns a promise,
-which is what tells the engine to wait; once it settles the line is evaluated
-again. The package never reaches a network itself: the host passes
-`fetchRainfall`, which is also how the tests hand it a stub.
+a stale or zero number in between. The piece that fetches is an *async
+resolver*: before a line runs, the engine asks each resolver whether the line
+needs data it does not have yet, and a resolver that says yes starts the fetch
+and hands the engine the promise. When it settles, the engine runs the line
+again and the package's function reads the answer from the engine's cache.
+
+The engine's `createQueryResolver`, from `solve-engine/resolvers`, builds that
+resolver and its reading function together for the common shape, one quoted
+query in and one value out, so a package supplies only the fetch. The package
+never reaches a network itself: the host passes `fetchRainfall`, which is also
+how the tests hand it a stub.
 
 ```ts
 rainfall("Oslo")          // Pending, then = 4.5 mm
-rainfall("../etc")        // STARTER_BAD_PLACE, and nothing is fetched
+rainfall("../etc")        // STARTER_BAD_PLACE, and the host's fetch is never called
+rainfall(42)              // STARTER_BAD_PLACE, at once
+rainfall(where)           // STARTER_PLACE_NOT_QUOTED: the place must be in the line
 rainfall("Atlantis")      // STARTER_RAINFALL_FAILED, when the service fails
 ```
 
-Three things the function does that any live lookup should:
+What `createQueryResolver` does for you, which any live lookup should:
+
+- **It fetches each place once.** The answer is kept in the engine's own cache
+  for five minutes (`staleTimeMs`), and two lines asking for the same place
+  while the first fetch is on its way share it.
+- **It bounds the fetches.** At most six run at once (`maxConcurrent`), and a
+  service that has not answered in ten seconds (`timeoutMs`) is given up on.
+- **It answers a failure with a coded error value, never a throw or a number**
+  (`onError`), and keeps that failure only for thirty seconds before asking
+  again, so an outage is neither retried on every keystroke nor remembered as
+  the answer.
+- **It refreshes on a schedule if you ask.** `refreshEveryMs` here becomes its
+  `refetchIntervalMs`, which a host with background refresh switched on uses to
+  keep an on-screen figure current.
+
+What the package still does itself:
 
 - **It checks its input before sending it on.** A place is at most 80
   characters with no slash or control character (`placeProblem`), so a host
-  that builds a URL from it is never handed `../` or a pasted paragraph.
-- **It answers a failure with a coded error value, never a throw or a number.**
-- **It fetches each place once.** A fetch on its way is shared, and a settled
-  answer is kept, because the engine calls the function once more after the
-  promise settles and uses an answer given then.
+  that builds a URL from it is never handed `../` or a pasted paragraph. The
+  check runs in the fetch, which every query passes through, and again in the
+  function, for an argument that was never a quoted place.
+- **It files its function under the index the resolver watches.**
+  `pluginFunctionIndexFor("package-starter:rainfall")` is the index the engine
+  gives the `rainfall` plugin function of the package named `package-starter`,
+  so the two agree without a number of your own.
 
-The boundary: a kept answer never refreshes. A figure that should update while a
-note is open belongs in an async resolver with a refresh cadence, which the
-engine's [async data source guide](https://liamriddell.github.io/solve-engine/guide/async-data-sources/)
-walks through.
+The boundary: the resolver reads the place from the line as written, before it
+runs, so a place held in a variable (`rainfall(where)`) is refused by name
+rather than fetched. A lookup whose input is known only as the line runs needs
+the other shape the engine's
+[async data source guide](https://liamriddell.github.io/solve-engine/guide/async-data-sources/)
+describes, a function that fetches on a cache miss.
 
 ## Testing it
 

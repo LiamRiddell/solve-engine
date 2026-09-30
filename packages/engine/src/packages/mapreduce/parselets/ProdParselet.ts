@@ -5,7 +5,7 @@ import { BytecodeBuilder } from "@solve-js/parser/BytecodeBuilder";
 import { OpCode } from "@solve-js/parser/OpCode";
 import { BindingPower } from "@solve-js/parser/BindingPower";
 import { ErrorFactory } from "@solve-js/errors/UnifiedErrorFramework";
-import { parseCollectionExpr, emitInvoke } from "../MapReduceShared";
+import { parseCollectionExpr, emitInvoke, callHasOwnComma, parseElementFold } from "../MapReduceShared";
 
 /**
  * `prod(elementExpr, collection)`, parse-time sugar for
@@ -18,6 +18,13 @@ export class ProdParselet implements PrefixParselet {
 
   parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
     parser.consume("LPAREN");
+
+    // `prod(1:4)`, one argument: the collection's own elements multiplied, as
+    // `sum(1:3)` adds them (see SumParselet).
+    if (!callHasOwnComma(parser)) {
+      parseElementFold(parser, builder, OpCode.MUL, 1);
+      return;
+    }
 
     const bodyBuilder = new BytecodeBuilder(builder.pluginIndexMap);
     bodyBuilder.emitOpcode(OpCode.LOAD_VAR);

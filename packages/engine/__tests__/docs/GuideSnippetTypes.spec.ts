@@ -114,6 +114,10 @@ const MANIFEST: Record<string, FenceTreatment> = {
 	"guide/async-data-sources.md | const pluginFunction = (args: Value[], context?: LineExecutionContext) => {": {
 		prelude: `import type { Value as __Value } from "solve-engine/vm";\ndeclare function keyFor(args: __Value[]): string[];\ndeclare function fetchIt(args: __Value[], signal: AbortSignal): Promise<__Value>;`,
 	},
+	'guide/async-data-sources.md | import { errorValue, pluginFunctionIndexFor, uomValue } from "solve-engine/vm";': {
+		// The starter's place check and the host's fetch, which the page names but does not write out.
+		prelude: `declare function placeProblem(place: string): string | null;\ndeclare function fetchRainfall(place: string, signal: AbortSignal): Promise<number>;`,
+	},
 	'guide/async-data-sources.md | import { createQueryResolver } from "solve-engine/resolvers";': {
 		prelude: `import type { Value as __Value } from "solve-engine/vm";\ndeclare const TIDES_FN: number;\ndeclare function fetchTide(port: string, signal: AbortSignal): Promise<__Value>;`,
 	},

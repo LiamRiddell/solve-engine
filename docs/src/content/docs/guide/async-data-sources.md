@@ -12,6 +12,62 @@ This is the async half of a package. It assumes you have read
 two things: a piece of **syntax** that triggers it (a symbol, a function name, a
 phrase) and a **resolver** that fetches the data. This page is the resolver.
 
+## The short path: `createQueryResolver`
+
+Most lookups have one shape: a quoted query in the line (a place, a ticker, a
+word) and one value back. For that shape the engine's own helper,
+`createQueryResolver` from `solve-engine/resolvers`, builds the resolver and the
+plugin function that reads its answer together, so the package supplies only the
+fetch. It keeps each answer in the engine's cache, shares one fetch between
+lines that ask the same thing, runs at most six fetches at once, times out a
+service that does not answer, keeps a failure only briefly, and records where
+each value came from. The built-in weather, stocks and knowledge packages use it,
+and so does the [package
+starter](https://github.com/LiamRiddell/solve-engine/tree/main/examples/package-starter)'s
+`rainfall("Oslo")`:
+
+```ts
+import { errorValue, pluginFunctionIndexFor, uomValue } from "solve-engine/vm";
+import { createQueryResolver } from "solve-engine/resolvers";
+import type { IEnginePackage } from "solve-engine";
+
+const { resolver, pluginFunction } = createQueryResolver({
+  namespace: "starter",
+  // The index the engine files the package's `rainfall` plugin function under.
+  pluginFunctionIndex: pluginFunctionIndexFor("package-starter:rainfall"),
+  fetchQuery: async (place, signal) => {
+    const problem = placeProblem(place); // your check: null when the place may be sent on
+    if (problem !== null) return errorValue("STARTER_BAD_PLACE", problem);
+    return uomValue(await fetchRainfall(place, signal), "mm");
+  },
+  onError: (place, error) =>
+    errorValue("STARTER_RAINFALL_FAILED", `the rainfall for ${place} could not be fetched: ${String(error)}`),
+});
+
+const pkg: IEnginePackage = {
+  name: "package-starter",
+  pluginFunctions: { rainfall: pluginFunction },
+  asyncResolvers: [resolver],
+  // the phrase or call word and its parselet, which emits
+  // PUSH_STRING "<place>" then emitPluginCall("rainfall", 1)
+};
+```
+
+The contract: the parselet pushes the query as a string literal immediately
+before the plugin call, and the resolver reads it from the compiled line before
+the line runs. `fetchQuery` is where every query passes before it leaves, so it
+is the place to refuse a hostile one. The index must be the one the engine gives
+the plugin function, which `pluginFunctionIndexFor("<package name>:<function
+name>")` returns.
+
+The boundary: the query has to be written in the line. A value known only as the
+line runs (a variable, a cell of a table) is never seen by `preflight`, and the
+reading function answers `<NAMESPACE>_NOT_PREFLIGHTED`; the starter turns that
+into a refusal of its own that tells the reader to quote the place. A lookup
+whose input is computed needs the function that [fetches on a cache
+miss](#resolvers-that-never-reach-a-network), and one with two operands or a
+shape of its own needs the full contract below.
+
 ## The contract
 
 A resolver implements
