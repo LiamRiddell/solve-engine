@@ -72,8 +72,9 @@ describe("Incremental edit benchmarks", () => {
     const r4 = sample(() => large.evaluator.evaluateAll(), 7);
     recordSample(results, "second_pass_bare_1k", r1);
     recordSample(results, "second_pass_bare_4k", r4);
-    // Four times the lines: linear is about 4, the quadratic walk was over 20.
-    expect(r4.medianMs / r1.medianMs).toBeLessThan(10);
+    // Four times the lines: linear is about 4, the quadratic walk was over 20;
+    // 6 is the bound every scaling assertion in this suite uses (#715).
+    expect(r4.medianMs / r1.medianMs).toBeLessThan(6);
     expect(r4.medianMs).toBeLessThan(2_000);
   });
 
@@ -84,6 +85,9 @@ describe("Incremental edit benchmarks", () => {
     recordSample(results, "second_pass_colon_4k", r);
     expect(r.medianMs).toBeLessThan(2_000);
   });
+
+  /** Median keystroke cost by path and size, for the scaling assertions below. */
+  const keystroke = new Map<string, number>();
 
   for (const size of [1_000, 5_000, 20_000]) {
     for (const path of ["applyTransaction", "editLine"] as const) {
@@ -99,10 +103,43 @@ describe("Incremental edit benchmarks", () => {
           evaluator.evaluate({ startLine: 1, endLine: 40 });
         }, 21);
         recordSample(results, `keystroke_${path}_${size / 1_000}k`, r);
+        keystroke.set(`${path}_${size}`, r.medianMs);
         expect(r.medianMs).toBeLessThan(200);
       });
     }
   }
+
+  // A keystroke should cost the viewport, not the document. Two sizes timed in
+  // the same process cancel the runner's speed, which a cross-run baseline
+  // cannot (#715): four times the lines is about 4 for linear growth and about
+  // 16 for a quadratic term, so 6 catches the second and passes the first. A
+  // floor of a tenth of a millisecond keeps a keystroke too fast for the clock
+  // from reading as a ratio.
+  for (const path of ["applyTransaction", "editLine"] as const) {
+    test(`a keystroke through ${path} grows no faster than the document (#715)`, () => {
+      const small = Math.max(keystroke.get(`${path}_5000`) ?? NaN, 0.1);
+      const large = Math.max(keystroke.get(`${path}_20000`) ?? NaN, 0.1);
+      expect(large / small).toBeLessThan(6);
+    });
+  }
+
+  test("a scroll through setViewport grows no faster than the document (#715)", () => {
+    const perSize = new Map<number, number>();
+    for (const size of [5_000, 20_000]) {
+      const { evaluator } = evaluated(alternating(size));
+      live.push(evaluator);
+      let at = 0;
+      const r = sample(() => {
+        // A different window each time, well below the top, as a reader scrolls.
+        at = (at + 997) % (size - 100);
+        evaluator.setViewport({ startLine: at + 50, endLine: at + 90 });
+      }, 21);
+      recordSample(results, `scroll_set_viewport_${size / 1_000}k`, r);
+      perSize.set(size, Math.max(r.medianMs, 0.1));
+      expect(r.medianMs).toBeLessThan(200);
+    }
+    expect(perSize.get(20_000)! / perSize.get(5_000)!).toBeLessThan(6);
+  });
 
   test("inserting a line at 20,000 lines (#763)", () => {
     const { evaluator } = evaluated(alternating(20_000));

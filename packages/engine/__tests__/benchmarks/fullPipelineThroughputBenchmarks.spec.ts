@@ -33,71 +33,15 @@ import { ParseletRegistry } from "@solve-js/parser/registry/ParseletRegistry";
 import { BytecodeBuilder, type BytecodeProgram } from "@solve-js/parser/BytecodeBuilder";
 import { createVM, executeBytecode, unwrapEvalResult } from "@solve-js/vm/VM";
 import { sharedOpRegistry } from "@solve-js/vm/OpRegistry";
-
-
-
-
-
-
-
-
-
 import { Token } from "@solve-js/lexer/Token";
 import { benchmarkOutputPath } from "@tools/benchmarkIO";
+// Every read in the corpus names a variable assigned above it; the generator
+// lives in tools so the ordinary suite can check that it stays so (#715).
+import { generateTierDocument } from "@tools/benchmarkCorpora";
 
 // ──────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────
-
-/**
- * Generate a document with N expressions across M lines.
- * Each line has one assignment or one arithmetic expression.
- * Includes a mix of expression types for realistic coverage:
- *   - Variable assignments
- *   - Simple arithmetic (+, -, *, /)
- *   - Function calls (sqrt, abs, round)
- *   - Percentage expressions
- *   - Chained variable references (creates DAG edges)
- */
-function generateTierDocument(exprCount: number, lineCount: number): string {
-  const lines: string[] = [];
-  const exprTypes = ["assign", "arithmetic", "function", "percentage", "chained"];
-
-  for (let i = 0; i < lineCount; i++) {
-    const exprIdx = i % exprCount;
-    const type = exprTypes[exprIdx % exprTypes.length];
-
-    switch (type) {
-      case "assign":
-        lines.push(`:v${i} = ${(i % 100) + 1}`);
-        break;
-      case "arithmetic":
-        lines.push(`:v${i} + ${(i % 50) + 10}`);
-        break;
-      case "function":
-        if (i % 2 === 0) {
-          lines.push(`sqrt(${(i % 100) + 1})`);
-        } else {
-          lines.push(`abs(-${(i % 100) + 1})`);
-        }
-        break;
-      case "percentage":
-        lines.push(`${(i % 50) + 1}% of ${(i % 200) + 100}`);
-        break;
-      case "chained":
-        // Reference earlier variables to create DAG edges
-        const refIdx = i > 0 ? (i - 1) % (i % 100) : 0;
-        if (refIdx >= 0 && refIdx < i) {
-          lines.push(`:v${refIdx} + ${(i % 20) + 1}`);
-        } else {
-          lines.push(`:v${i} + ${(i % 20) + 1}`);
-        }
-        break;
-    }
-  }
-
-  return lines.join("\n");
-}
 
 /**
  * Generate a single representative complex expression for per-stage breakdown.

@@ -1969,6 +1969,40 @@ export class ExpressionEngine {
         return (this.compiledFrontHalf.has(expression) && this.bytecodeCache.has(expression)) || this.failedParses.has(expression);
     }
 
+    /**
+     * The line count of the last batch pass's document, kept until the next
+     * pass or {@link clear}, so the compiled caches stay sized to it between
+     * passes. 0 when no batch document has been parsed. See {@link compiledCacheCap}.
+     */
+    private batchDocumentLines = 0;
+
+    /**
+     * How many entries each compiled cache may hold: `defaultCacheSize` plus
+     * the open document's line count (the attached document model's, else the
+     * last batch pass's), the line count bounded by `maxDocumentLines`.
+     *
+     * A document pass visits its lines in the same order every time, and a
+     * least-recently-used cache smaller than a repeating scan evicts each entry
+     * just before it is wanted again: past 2,000 distinct lines a warm pass got
+     * no hits at all and compiled every line again (#765). Sized to the
+     * document, a warm pass finds every line. The `defaultCacheSize` on top is
+     * the room for what is not a line of the document (a what-if's scratch
+     * pass, a host's probe, an inline solve), without which a document of
+     * exactly the cap's size would still cycle through it.
+     *
+     * With no document open it is `defaultCacheSize`, as before. The cost is a
+     * program per distinct line while a document is open, which the change
+     * measured at 10,000 lines; `clear()` gives it back.
+     */
+    private compiledCacheCap(): number {
+        const doc = this.documentModel;
+        const lines = doc !== null ? doc.lineCount : this.batchDocumentLines;
+        const most = this.config.performance.maxDocumentLines;
+        // A comparison, not `Math.min`: this runs on every cache hit, and a
+        // global read costs a microsecond inside a `vm` context such as Jest's.
+        return this.config.performance.defaultCacheSize + (lines < most ? lines : most);
+    }
+
     /** Drop every cached program, its front half and every remembered parse failure. Every invalidation goes through here so the three cannot drift. */
     private clearCompiledCache(): void {
         this.bytecodeCache.clear();
@@ -1989,15 +2023,16 @@ export class ExpressionEngine {
      * the bytecode-cache benefit on re-evaluation regardless of config.
      */
     private cacheBytecode(expression: string, program: BytecodeProgram, front: { normalizedTokens: Token[]; reads: string[]; writes: string[] }): void {
-        const maxEntries = this.config.performance.defaultCacheSize;
-        if (this.bytecodeCache.size >= maxEntries) {
+        const maxEntries = this.compiledCacheCap();
+        // A loop rather than one eviction: the cap falls when a smaller
+        // document follows a larger one, and the cache comes down to it.
+        while (this.bytecodeCache.size >= maxEntries) {
             // The first key is the least recently used, because every hit
             // re-inserts its key at the end (see touchCompiled).
             const leastRecent = this.bytecodeCache.keys().next().value;
-            if (leastRecent !== undefined) {
-                this.bytecodeCache.delete(leastRecent);
-                this.compiledFrontHalf.delete(leastRecent);
-            }
+            if (leastRecent === undefined) break;
+            this.bytecodeCache.delete(leastRecent);
+            this.compiledFrontHalf.delete(leastRecent);
         }
         this.bytecodeCache.set(expression, program);
         this.compiledFrontHalf.set(expression, front);
@@ -2033,23 +2068,25 @@ export class ExpressionEngine {
      * one insertion order would have chosen anyway.
      */
     private touchCompiled(expression: string, program: BytecodeProgram): void {
-        if (this.bytecodeCache.size < this.config.performance.defaultCacheSize) return;
+        if (this.bytecodeCache.size < this.compiledCacheCap()) return;
         this.bytecodeCache.delete(expression);
         this.bytecodeCache.set(expression, program);
     }
 
     /** Remember a parse failure, evicting the least recently used when full: bounded like the program cache. */
     private rememberFailedParse(expression: string, failure: FailedParse): void {
-        if (this.failedParses.size >= this.config.performance.defaultCacheSize) {
+        const maxEntries = this.compiledCacheCap();
+        while (this.failedParses.size >= maxEntries) {
             const leastRecent = this.failedParses.keys().next().value;
-            if (leastRecent !== undefined) this.failedParses.delete(leastRecent);
+            if (leastRecent === undefined) break;
+            this.failedParses.delete(leastRecent);
         }
         this.failedParses.set(expression, failure);
     }
 
     /** Mark a remembered parse failure as just used; the same move, and the same guard, as {@link touchCompiled}. */
     private touchFailedParse(expression: string, failure: FailedParse): void {
-        if (this.failedParses.size < this.config.performance.defaultCacheSize) return;
+        if (this.failedParses.size < this.compiledCacheCap()) return;
         this.failedParses.delete(expression);
         this.failedParses.set(expression, failure);
     }
@@ -3734,6 +3771,9 @@ export class ExpressionEngine {
         const previousBatchParsedLines = this.batchParsedLines;
         this.batchScanResults = scanResults;
         this.batchParsedLines = result;
+        // The compiled caches are sized to the outermost pass's document; a
+        // nested pass (a scratch run inside a line) is not the open document.
+        if (previousBatchScanResults === null) this.batchDocumentLines = scanResults.length;
         const previousBatchTagIndex = this.batchTagIndex;
         this.batchTagIndex = null;
 
@@ -3833,7 +3873,12 @@ export class ExpressionEngine {
             this.batchTagIndex = previousBatchTagIndex;
             // The pass's shared context closed over this scan; drop it so the
             // scan is released with the pass rather than kept until the next.
+            // The two identity fields beside it point at the same scan and its
+            // results, so they go too, or the engine holds the whole document
+            // after the pass returns (#766).
             this.lineContext = null;
+            this.lineContextScan = null;
+            this.lineContextParsed = null;
         }
 
         return result;
@@ -7190,6 +7235,13 @@ export class ExpressionEngine {
          this.accumulatorNames.clear();
          this.lastTelemetry = null;
          this.lineContext = null;
+         // The fields that say which document the context was built over hold
+         // that document too (#766).
+         this.lineContextDoc = null;
+         this.lineContextScan = null;
+         this.lineContextParsed = null;
+         // No document is open, so the compiled caches return to defaultCacheSize (#765).
+         this.batchDocumentLines = 0;
      }
 
     //#endregion

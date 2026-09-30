@@ -22,19 +22,15 @@ real document it clears per second.
 <BenchmarkStats />
 
 The per-line rate rises from the small document to the medium one, because the
-fixed cost of standing an engine up is spread across more lines. It eases back
-on the two largest documents, and there the warm re-parse is no faster than the
-cold one. That is the compile cache running out of room, not the processor: it
-holds 2,000 compiled lines by default (see [Caching, in layers](#caching-in-layers)
-below), each of the two largest benchmark documents holds more distinct lines
-than that, and a document that does not fit compiles most of its lines again on
-every pass. A host whose documents run that long raises
-`config.performance.defaultCacheSize` to hold them.
+fixed cost of standing an engine up is spread across more lines. Every line of
+the benchmark document evaluates: each one that reads a variable reads one
+assigned above it, so the figure is the rate of a document that works, not of
+one that fails on an undefined name.
 
 The number to take from the table is its size: an engine meant to run on every
 keystroke keeps pace with a document far larger than anyone types into one, and
-re-parsing an unchanged document that fits in the cache is quicker still, since
-its bytecode is already compiled. The sections below are why.
+re-parsing an unchanged document is quicker still, since its bytecode is
+already compiled. The sections below are why.
 
 ## Bytecode, not tree walking
 
@@ -57,12 +53,17 @@ normalising and the throw, and re-runs only the forms that read other lines'
 values. The memory is cleared with the compiled caches whenever a package or a
 user-defined unit changes what a line means.
 
-The compiled caches are bounded (`performance.defaultCacheSize`, 2,000 entries
-by default) and, when full, drop the entry that has gone longest without being
-used. The lines a document re-evaluates on every keystroke are used constantly,
-so they stay compiled while one-off expressions cycle out. A document with more
-distinct lines than the cap does not fit, and every pass then compiles it again
-whatever the eviction order; a host with such documents raises the cap.
+The compiled caches are bounded and, when full, drop the entry that has gone
+longest without being used. The bound is `performance.defaultCacheSize` (2,000
+entries by default) plus the line count of the open document, so a whole
+document always fits: a pass visits its lines in the same order every time, and
+a cache smaller than the document would drop each line just before the next
+pass wanted it, so that a warm pass over 10,000 distinct lines compiled every
+one of them again. The lines a document re-evaluates on every keystroke stay
+compiled while one-off expressions cycle out of the room on top. The cost is a
+compiled program per distinct line while the document is open (about 3.4 MB more
+at 10,000 lines than the old fixed bound held); `clear()` gives it back, and
+with no document open the bound is `defaultCacheSize` alone.
 
 <Explainer id="caches" client:load />
 
@@ -308,16 +309,22 @@ read here from the same data the home page quotes rather than typed in:
 
 An engine constructed with a handful of packages, such as
 `new ExpressionEngine({ packages: [ARITHMETIC_PACKAGE] })`, lands between the
-two, and where it lands depends on the bundler. Under rolldown it leaves out a
-real share of the built-ins it never imports. Under esbuild it saves almost
-nothing today: the built-in packages share chunks of the published build, and
-esbuild keeps those chunks whole, so an arithmetic-only engine bundles to
-nearly the size of `createEngine()`.
+two. Each built-in package is built into files of its own, so a bundler can
+leave out every package nothing imports. That matters most under esbuild, which
+Obsidian plugins build with: esbuild leaves out whole files and keeps
+everything inside a file it keeps, so while the built-ins shared one file, an
+arithmetic-only engine bundled to nearly the size of `createEngine()`. The same
+two programs bundled with esbuild, minified and compressed with brotli, measured
+on every commit alongside the figures above:
 
-The boundary: until the build is split so that each package stands on its own,
-a slim engine is not a size saving under esbuild, and a host bundling with it
-gains little by leaving packages out. The split, and a table generated from it
-for each bundler, are open work. `createEngine` stays the plain choice when
+| Bundled with esbuild | Minified and compressed |
+| --- | --- |
+| `createEngine()` | {kb(sizes.esbuildFullBrotli)} |
+| `new ExpressionEngine({ packages: [ARITHMETIC_PACKAGE] })` | {kb(sizes.esbuildSlimBrotli)} |
+
+The boundary: the shared core stays shared. The lexer, the parser, the VM and
+the unit table are in every engine, so a slim engine is never much smaller than
+the core with no package registered. `createEngine` stays the plain choice when
 bundle size is not the concern. Each [syntax page](/syntax/cheatsheet/) names
 the package its feature needs, so a slim build registers exactly what it uses.
 See [choosing packages](/getting-started/installation/).

@@ -1,36 +1,15 @@
 import { defineConfig } from "tsup";
+import { PUBLIC_ENTRIES, packageEntries } from "./buildEntries";
 
 export default defineConfig({
-	entry: {
-		index: "src/api/index.ts",
-		engine: "src/engine/index.ts",
-		vm: "src/vm/index.ts",
-		format: "src/format/index.ts",
-		language: "src/language/index.ts",
-		packages: "src/packages/index.ts",
-		constants: "src/constants/index.ts",
-		lexer: "src/lexer/index.ts",
-		parser: "src/parser/index.ts",
-		normalizer: "src/normalizer/index.ts",
-		resolvers: "src/resolvers/index.ts",
-		errors: "src/errors/index.ts",
-		utilities: "src/utilities/index.ts",
-		uom: "src/uom/index.ts",
-		services: "src/services/index.ts",
-		worker: "src/worker/index.ts",
-		testing: "src/testing/index.ts",
-		// The Temporal calendar backend. Its own entry so that nothing under
-		// src/temporal is reachable from the root entry or any other subpath:
-		// a host that never imports it ships none of it.
-		temporal: "src/temporal/index.ts",
-		// The worker entry. Its own bundle for the same reason as temporal, and
-		// a stronger one: it registers the full package vocabulary, which no
-		// consumer's main bundle should carry. Nothing else imports it, so it
-		// is reachable only by a host that starts a worker from it.
-		"engine.worker": "src/workers/engine.worker.ts",
-	},
+	// The published entries, and one entry per built-in package so each lands
+	// in chunks of its own that a bundler can drop whole (#716). See
+	// buildEntries.ts for why, and for why the second set is not published.
+	entry: { ...PUBLIC_ENTRIES, ...packageEntries(".") },
 	format: ["esm", "cjs"],
-	dts: true,
+	// Declarations for the published entries only; the per-package entries are
+	// a chunking device, not an import path.
+	dts: { entry: { ...PUBLIC_ENTRIES } },
 	// Minified, but with source maps kept on. The shipped ESM/CJS otherwise
 	// parses at full identifier length and whitespace, which a consumer without
 	// their own bundler (Node, Deno, a CDN) pays in full on every load: minifying

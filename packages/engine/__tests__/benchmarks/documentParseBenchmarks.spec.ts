@@ -9,10 +9,11 @@
  * one shape. Neither says what a real notepad costs, and a real notepad is what
  * the engine is for.
  *
- * The documents below are written to be representative rather than uniform:
- * prose that must survive untouched sits beside dense arithmetic, unit maths,
- * dates, percentages and cross-line references, in the proportions a person
- * actually types.
+ * The documents are written to be representative rather than uniform: prose
+ * that must survive untouched sits beside dense arithmetic, unit maths, dates,
+ * percentages and cross-line references, in the proportions a person actually
+ * types, and no line repeats, so the 10,000-line document is 10,000
+ * compilations when cold (#715).
  */
 
 import { describe, expect, test, afterAll } from "@jest/globals";
@@ -20,47 +21,9 @@ import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
 import { BUILTIN_PACKAGES } from "@solve-js/packages/builtins";
 import { benchmarkFn } from "@tools/testUtils";
 import { recordSample, writeBenchmarkResults, BenchmarkResults } from "@tools/benchmarkIO";
+import { realisticDocument } from "@tools/benchmarkCorpora";
 
-/** A line of ordinary prose, which must normalise and parse to nothing at all. */
-const PROSE = [
-  "Notes from the quarterly planning session",
-  "The team agreed the following budget for next year",
-  "Remember to check these figures against the finance sheet",
-  "Anything below is a working estimate and not final",
-  "## Costs",
-];
-
-/** Everyday arithmetic and money, the commonest real content. */
-const SIMPLE = [
-  ":budget = 48000",
-  ":headcount = 6",
-  ":budget / :headcount",
-  "1200 + 340 + 89",
-  "15% of 48000",
-  "48000 - 12%",
-  ":rent = 2400 * 12",
-];
-
-/** Units, rates, conversions, times: the phrase-heavy end. */
-const UNITS = [
-  "120 km/h to m/s",
-  "3.5 kg + 400 g",
-  "8 L/100km in mpg",
-  "20 degrees celsius in fahrenheit",
-  "1 hour 30 minutes + 45 minutes",
-  "9:00am to 17:30",
-  "250 GB / 8",
-];
-
-/** Dates and durations. */
-const DATES = [
-  "25/12/2026 - now",
-  "now + 90 days",
-  "days until 01/01/2027",
-  "3 weeks in hours",
-];
-
-/** Longer expressions with nesting, functions and mixed types. */
+/** Longer expressions with nesting, functions and mixed types, for the complex-only case. */
 const COMPLEX = [
   "sqrt(144) + 50% of 200 - 3 * (10 + 5)",
   "(1200 + 340) * 1.2 / (4 - 1)",
@@ -70,39 +33,14 @@ const COMPLEX = [
   "12% of (48000 / 6) + 250 GB / 8",
 ];
 
-/** Cross-line references, which force the document machinery. */
-const CROSS = [
-  ":subtotal = 1200 + 340",
-  ":subtotal * 1.2",
-  "line 1 + 100",
-  "total above",
+/** Lines of ordinary prose, which take the failed-parse path, for the prose-only case. */
+const PROSE = [
+  "Notes from the quarterly planning session",
+  "The team agreed the following budget for next year",
+  "Remember to check these figures against the finance sheet",
+  "Anything below is a working estimate and not final",
+  "## Costs",
 ];
-
-/**
- * Build a document of `lines` lines by cycling the pools in a fixed ratio,
- * roughly: 30% prose, 25% simple, 15% units, 10% dates, 15% complex, 5% cross.
- */
-function buildDocument(lines: number): string {
-  const out: string[] = [];
-  const pools: Array<{ pool: string[]; weight: number }> = [
-    { pool: PROSE, weight: 30 },
-    { pool: SIMPLE, weight: 25 },
-    { pool: UNITS, weight: 15 },
-    { pool: DATES, weight: 10 },
-    { pool: COMPLEX, weight: 15 },
-    { pool: CROSS, weight: 5 },
-  ];
-  let i = 0;
-  while (out.length < lines) {
-    for (const { pool, weight } of pools) {
-      for (let k = 0; k < weight && out.length < lines; k++) {
-        out.push(pool[(i + k) % pool.length]);
-      }
-    }
-    i++;
-  }
-  return out.join("\n");
-}
 
 describe("Document Parse Benchmarks", () => {
   const results: BenchmarkResults = {};
@@ -136,7 +74,7 @@ describe("Document Parse Benchmarks", () => {
 
   for (const size of SIZES) {
     test(`parses a realistic ${size.lines}-line document (cold engine)`, async () => {
-      const doc = buildDocument(size.lines);
+      const doc = realisticDocument(size.lines);
       const r = await benchmarkFn(() => {
         const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
         engine.parseDocument(doc);
@@ -146,7 +84,7 @@ describe("Document Parse Benchmarks", () => {
     });
 
     test(`re-parses a realistic ${size.lines}-line document (warm engine)`, async () => {
-      const doc = buildDocument(size.lines);
+      const doc = realisticDocument(size.lines);
       const engine = new ExpressionEngine({ packages: BUILTIN_PACKAGES });
       engine.parseDocument(doc);
       const r = await benchmarkFn(() => {

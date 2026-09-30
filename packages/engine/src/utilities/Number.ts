@@ -24,11 +24,57 @@ function removeThousandsSeparators(
 	decimalPlaces: number,
 	minimumFractionDigits: number = decimalPlaces
 ) {
-	return value.toLocaleString(locale, {
-		useGrouping: false,
-		maximumFractionDigits: decimalPlaces,
-		minimumFractionDigits,
-	});
+	return numberFormatFor(locale, false, minimumFractionDigits, decimalPlaces).format(value);
+}
+
+/** The most formatters {@link numberFormatFor} keeps before starting again. */
+const NUMBER_FORMAT_CACHE_LIMIT = 64;
+
+/** Formatters by locale and options; see {@link numberFormatFor}. */
+const numberFormats = new Map<string, Intl.NumberFormat>();
+
+/**
+ * One `Intl.NumberFormat` for a locale and option set, built once and reused.
+ *
+ * `toLocaleString` with an options object builds a new formatter on every
+ * call, which is most of what writing a number costs: 100,000 integers took
+ * about 3.6 s that way and about 80 ms through one cached formatter (#764).
+ * `format` on a formatter built from the same locale and options writes
+ * exactly what `toLocaleString` writes, since that is how the specification
+ * defines `toLocaleString`.
+ *
+ * The cache is bounded, because the locale is a host string: past
+ * {@link NUMBER_FORMAT_CACHE_LIMIT} formatters it is emptied and refilled. An
+ * unusable locale or place count throws the `RangeError` the constructor
+ * throws, as `toLocaleString` did, and nothing is cached for it.
+ *
+ * @param locale - `Intl` locale tag.
+ * @param useGrouping - `false` for no grouping, or `undefined` for the
+ *   locale's own (`1,234` in English, while Spanish leaves four digits
+ *   ungrouped). Not `true`: under current `Intl` that means grouping always,
+ *   which is not what `toLocaleString` without the option writes.
+ * @param minimumFractionDigits - Fewest fractional digits written.
+ * @param maximumFractionDigits - Most fractional digits written.
+ */
+export function numberFormatFor(
+	locale: string,
+	useGrouping: false | undefined,
+	minimumFractionDigits: number,
+	maximumFractionDigits: number
+): Intl.NumberFormat {
+	// The locale goes last: the fields before it are a boolean and two numbers,
+	// none of which can contain the separator, so no two option sets share a key.
+	const key = `${useGrouping === false ? 0 : 1}|${minimumFractionDigits}|${maximumFractionDigits}|${locale}`;
+	let format = numberFormats.get(key);
+	if (format === undefined) {
+		format = new Intl.NumberFormat(
+			locale,
+			useGrouping === false ? { useGrouping, minimumFractionDigits, maximumFractionDigits } : { minimumFractionDigits, maximumFractionDigits }
+		);
+		if (numberFormats.size >= NUMBER_FORMAT_CACHE_LIMIT) numberFormats.clear();
+		numberFormats.set(key, format);
+	}
+	return format;
 }
 
 /** How many digits of a too-small value are worth showing: enough to read it, not enough to imply precision. */
@@ -116,10 +162,7 @@ export function autoFormatIntegerOrFloat(
 	if (Number.isInteger(number)) {
 		if (includeThousandSeparators) {
 			// We can return the format early as we don't need to strip thousands
-			return number.toLocaleString(numberLocale, {
-				minimumFractionDigits: 0,
-				maximumFractionDigits: 0,
-			});
+			return numberFormatFor(numberLocale, undefined, 0, 0).format(number);
 		}
 
 		return removeThousandsSeparators(Math.trunc(number), numberLocale, 0);
@@ -127,10 +170,8 @@ export function autoFormatIntegerOrFloat(
 
 	const minimumFractionDigits = trimTrailingZeros ? 0 : decimalPlaces;
 	if (includeThousandSeparators) {
-		return number.toLocaleString(numberLocale, {
-			maximumFractionDigits: decimalPlaces,
-			minimumFractionDigits,
-		});
+		// We can return the format early as we don't need to strip thousands
+		return numberFormatFor(numberLocale, undefined, minimumFractionDigits, decimalPlaces).format(number);
 	}
 
 	return removeThousandsSeparators(number, numberLocale, decimalPlaces, minimumFractionDigits);
