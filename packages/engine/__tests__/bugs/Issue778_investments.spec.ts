@@ -222,17 +222,24 @@ describe("adversarial: edge cases", () => {
 		"annual return on $1,000 invested $2,000 returned after X years",
 	];
 
-	// An infinite amount invested answers NaN: (returned - invested) / invested
-	// is infinity over infinity. Found while writing this spec, and pinned
-	// below rather than swept, so the fix turns the pin red.
-	const INFINITE_COST = new Set(["(1/0) invested $1,500 returned", "(-1/0) invested $1,500 returned"]);
+	// An infinite amount invested answered NaN: (returned - invested) / invested
+	// is infinity over infinity. Found while writing this spec and pinned as a
+	// known open bug; the return on it is now refused by name, so the two
+	// lines join the sweep.
+	const INFINITE_COST = ["(1/0) invested $1,500 returned", "(-1/0) invested $1,500 returned"];
 
-	test.each(FORMS.flatMap((form) => fill(form, NUMERIC_EDGES)).filter((line) => !INFINITE_COST.has(line)))("%s", (line) => {
+	test.each(FORMS.flatMap((form) => fill(form, NUMERIC_EDGES)))("%s", (line) => {
 		expectHonestLine(line, { allowNaN: line.includes("0/0") });
 	});
 
-	test.failing.each([...INFINITE_COST])("known open bug (found for #778, not yet filed): %s is refused by name rather than answered NaN", (line) => {
+	test.each(INFINITE_COST)("%s is refused by name rather than answered NaN", (line) => {
 		expect(lineProblemsOf(line)).toEqual([]);
+		expect(show(line)).toBe("ERROR roi: the amount invested is not a finite number, so there is no return on it");
+	});
+
+	test("an infinite amount returned is refused by name rather than answered Infinity%", () => {
+		expect(show("$1,000 invested (1/0) returned")).toBe("ERROR roi: the amount returned is not a finite number, so there is no return to give");
+		expect(show("annual return on $1,000 invested (1/0) returned after 5 years")).toBe("ERROR annual return: an amount is not a finite number, so there is no annual rate");
 	});
 
 	test("a zero term leaves the sum unchanged, and a zero rate too", () => {

@@ -41,6 +41,10 @@ export function betweenUnitNormalizerRule(priority = 60): NormalizerRule {
       const keywordToken = tokens[start + 1];
       if (!unitToken || !keywordToken) return null;
       if (unitToken.type !== "UNIT") return null;
+      // A unit straight after a number is that quantity's unit, not the
+      // start of `days between`: `solve line 2 for d = 3000 m between 0 and
+      // 10` names a range after a target in metres (#739).
+      if (howManyLength === 0 && pos > 0 && tokens[pos - 1]?.type === "NUMBER") return null;
 
       // "how many days until X" reuses the existing UNTIL_UNIT/SINCE_UNIT
       // tokens. This rule only has to drop the "how many" for those, since

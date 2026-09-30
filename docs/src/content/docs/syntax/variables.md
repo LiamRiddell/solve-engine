@@ -28,6 +28,34 @@ deposit = 100
 payment = deposit * 40 // 4,000
 ```
 
+A name can be defined from one the note has not given a value yet. The
+definition then holds a formula, an expression still waiting for its unknown,
+and shows it as one. A line further down reads the formula with the value the
+unknown has by then, so the answer is the one the lines would give in the other
+order:
+
+```solve-doc
+y = x + 1   // x+1
+x = 5       // 5
+y + x       // 11
+```
+
+The formula is read with a plain number, or with another formula, which is
+read the same way. An unknown that has since been given money, a quantity in a
+unit, a date or text is refused by name, since the formula was written without
+that unit and adding one to it would be a guess; define the unknown above the
+line that uses it instead:
+
+```solve-doc
+y = x + 1   // x+1
+x = $5      // $5.00
+y + x       // ERROR: y was written as a formula in x before x had a value, and x now holds money, which the formula cannot take. Define x above the line that defines y.
+```
+
+A line above the definition of `x` still sees only the formula, and a `=>` line
+keeps its unknowns as they are. A pair of formulas that each name the other has
+no value to give, so each stays a formula.
+
 A name can be a letter that is also a unit symbol, `m` for mass or `s` for
 distance, as a physics formula would write it. A unit is always written after a
 value (`9.81 m/s^2`), so where a name stands on its own, at the start of a line or

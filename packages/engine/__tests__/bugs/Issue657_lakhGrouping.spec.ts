@@ -165,9 +165,11 @@ describe("through the engine, en-IN", () => {
 
 	test("a German engine does not read Indian grouping, even beside a rupee sign", () => {
 		// A German engine reads `1,000` as one (the comma is its decimal mark),
-		// so reading `1,00,000` as lakhs there would be a guess.
-		expect(show("₹1,00,000", "de")).toMatch(/^UNEXPECTED_TRAILING_TOKEN: /);
-		expect(show("1,00,000", "de-IN")).toMatch(/^UNEXPECTED_TRAILING_TOKEN: /);
+		// so reading `1,00,000` as lakhs there would be a guess. Since #740 a
+		// comma between digits is the decimal comma there, so the literal has
+		// two of them and is refused by name rather than at its second comma.
+		expect(show("₹1,00,000", "de")).toMatch(/^INVALID_NUMBER_LITERAL: "1,00,000" is not a number in the de locale/);
+		expect(show("1,00,000", "de-IN")).toMatch(/^INVALID_NUMBER_LITERAL: "1,00,000" is not a number in the de locale/);
 	});
 });
 

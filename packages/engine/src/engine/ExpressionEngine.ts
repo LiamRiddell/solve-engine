@@ -1,5 +1,6 @@
 //#region Imports
 
+import { isDroppableSentenceEnd } from "@solve-js/parser/TrailingPunctuation";
 import { declaredFunctionName } from "@solve-js/api/defineFunction";
 import { VM, type EquationDef, type ScalarEquationDef } from "@solve-js/vm/OpRegistry";
 import { matrixMultiply, inverse } from "@solve-js/vm/MatrixOps";
@@ -3926,6 +3927,11 @@ export class ExpressionEngine {
             // check was added to close (see this function's own doc
             // comment above).
             if (leftover.type === "EQUALS" && !this.parser.peekAt(1)) {
+                return;
+            }
+            // A host that opted in reads one `?` or `.` after a complete
+            // expression as the end of a sentence (#741).
+            if (this.config.validation.allowTrailingPunctuation && isDroppableSentenceEnd(leftover, beforeLeftover, afterLeftover)) {
                 return;
             }
 

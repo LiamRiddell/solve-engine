@@ -82,6 +82,35 @@ cross-line forms do in one pass, and the elements its answers keep. Each
 produces a clear error rather than hanging; the
 [security page](/guide/security/) lists every limit and its setting.
 
+## Lines written as sentences
+
+People end a question with `?` and a sentence with `.`, and so do language
+models writing for a chat host or a tool. By default a line must be an
+expression and nothing more, so `what is 5 km in miles?` is refused at its last
+character. A host whose lines are sentences can opt in to reading that one
+character as the end of the sentence:
+
+```ts
+const engine = createEngine({
+  config: { validation: { allowTrailingPunctuation: true } },
+});
+
+engine.evaluateExpression("what is 5 km in miles?"); // 3.11 miles
+engine.evaluateExpression("5 + 5.");                 // 10
+```
+
+One `?` or `.` is dropped, and only at the very end of a line that is complete
+without it. A line that fails for another reason keeps its own error, so
+`5 kg + 2 m?` still says that mass and length cannot be added.
+
+The boundary: `?` already means something after `in`, `to` or `=`, and those
+lines are read as before. `5 cm in ?` still lists the units a length converts
+to, and the [knowledge](/syntax/knowledge/) package still reads a line ending
+`= ?` as its question. A `?` inside a line, and a doubled `..` or `??`, are not
+touched. The option is off by default because a `.` straight after digits is
+then a full stop rather than a decimal point, so a version-like `1.5.` answers
+1.5; strict parsing, which refuses it, stays the default.
+
 ## Reading a result
 
 ```ts

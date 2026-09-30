@@ -47,7 +47,7 @@ isCataloguedErrorCode("NOT_A_CODE");                     // false
 
 A package outside this repository can answer with codes of its own, so a code
 missing from this page is not necessarily a fault: it is one the engine does not
-ship. The engine and its built-in packages ship 503 codes, grouped below by the part
+ship. The engine and its built-in packages ship 508 codes, grouped below by the part
 of the engine that raises them.
 
 ## The engine
@@ -140,6 +140,7 @@ In the package as `ERROR_CODE_CATALOGUES.CoreErrorCodes`.
 | `SYMBOLIC_NONFINITE_OPERAND` | either | `NaN` or `±Infinity` reaching a symbolic expression, neither of which has an exact rational value. |
 | `SYMBOLIC_DIVISION_BY_ZERO` | thrown | An exact symbolic division by zero. The zero is exact, so a very small number is not mistaken for one. |
 | `SYMBOLIC_NODE_LIMIT_EXCEEDED` | thrown | A tree exceeding `SYMBOLIC_MAX_NODES` entering the simplifier. |
+| `SYMBOLIC_FORMULA_VALUE_UNSUPPORTED` | as a value | A name holding a formula written before one of its unknowns had a value (`y = x + 1` above `x = $5`), read after that unknown was given money, a quantity in a unit, a date or text, which the formula cannot take. Returned by the read rather than a formula mixing the value with the unknown (#732). |
 | `SYMBOLIC_UNSUPPORTED_FUNCTION` | as a value | A builtin with no symbolic reading (`min`, `random`, the finance block, ...) applied to an expression still containing an unknown. Returned rather than computing against `toNumber()`'s placeholder zero. |
 | `SYMBOLIC_FACTOR_LIMIT_EXCEEDED` | thrown | The rational-root search exceeding `FACTOR_MAX_ROOT_CANDIDATES`. The candidate set is the product of two divisor sets, so a highly-composite coefficient escapes quickly. |
 | `SYMBOLIC_SOLVE_UNSUPPORTED` | as a value | An equation outside what the solver attempts: above the degree ceiling, non-linear in the unknown while another unknown is present, or not a polynomial and not evaluable numerically either (another unknown in it, an imaginary constant, a function with no numeric form). A non-polynomial equation in one unknown is solved numerically instead (see `symbolic/NumericSolve.ts`). |
@@ -677,6 +678,7 @@ In the package as `ERROR_CODE_CATALOGUES.FinanceErrorCodes`.
 | `INFLATION_EXPECTED_USD` | as a value | An inflation adjustment of an amount that is not in US dollars, which the bundled price index measures. |
 | `INFLATION_EXPECTED_FROM_OR_IN` | thrown | `what is <amount>` followed by neither `from <year>` nor `in <year> worth in <year>`. |
 | `INFLATION_EXPECTED_INFLATION_WORD` | thrown | `assuming <rate>%` not followed by the word `inflation`. |
+| `SAVINGS_GOAL_SYNTAX` | thrown | `how much per month to reach <target>` followed by neither `in` nor `over` and the time the saving runs for. |
 | `UNKNOWN_COMPOUNDING_INTERVAL` | thrown | `compounding <interval>` naming an interval the package does not know. The message lists the ones it does. |
 
 ### RecurringScheduleErrorCodes
@@ -711,8 +713,11 @@ In the package as `ERROR_CODE_CATALOGUES.GoalSeekErrorCodes`.
 | `GOAL_SEEK_TARGET_NOT_NUMERIC` | as a value | A goal seek whose target is not a finite number, or whose target line does not give a number for a value tried. |
 | `GOAL_SEEK_TARGET_UNIT_MISMATCH` | as a value | A goal seek's target in a unit that cannot be compared with the target line's answer: another measure, or money in another currency. The reader writes the target in the line's unit (#835). |
 | `GOAL_SEEK_VARIABLE_NOT_USED` | as a value | A goal seek varying a name its target line does not read, which could never move the answer. |
-| `GOAL_SEEK_NON_FINITE` | as a value | A goal seek whose target line gives a value that is not finite for one of the values tried. |
-| `GOAL_SEEK_NO_SOLUTION` | as a value | A goal seek over a range in which the target line stays on one side of the target. |
+| `GOAL_SEEK_NON_FINITE` | as a value | A goal seek whose target line gives no finite value for any input tried across the range, as `2^x` does not far out and `1/x` does not at zero. A value that is not finite for some inputs is a gap in the search, not this (#739). |
+| `GOAL_SEEK_NO_SOLUTION` | as a value | A goal seek over a range in which the target line stays on one side of the target wherever it could be worked out, or whose exact answers all lie outside a stated range. The message names the range searched. |
+| `GOAL_SEEK_RANGE_INVALID` | as a value | A goal seek's `between <low> and <high>` whose ends are not two different finite numbers in the unknown's measure (#739). |
+| `GOAL_SEEK_SEVERAL_SOLUTIONS` | as a value | A goal seek whose unknown carries a unit and whose line meets the target at several inputs. A list cannot carry the unit, so each value is named and the reader chooses with a range (#739). |
+| `GOAL_SEEK_TOO_MANY_SOLUTIONS` | as a value | A goal seek whose line meets the target at more inputs than a list of answers should hold, as a line built on sin or cos does (#739). |
 | `GOAL_SEEK_DID_NOT_CONVERGE` | as a value | A goal seek that did not reach the target within its steps, or narrowed to a point where the line jumps across it. |
 
 ## Hash
