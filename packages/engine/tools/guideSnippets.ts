@@ -112,6 +112,14 @@ export function statedOutcomes(text: string): Array<{ expression: string; expect
 	return out;
 }
 
+/**
+ * What a fence compiles to when its manifest names a `from` line the fence does
+ * not hold: a throw, so a reworded fence fails on its missing marker rather
+ * than quietly compiling nothing. A constant, so no manifest text is spliced
+ * into the source that runs.
+ */
+export const MISSING_MARKER_SOURCE = 'throw new Error("The line the manifest compiles this fence from is not in the fence.");';
+
 /** A fence's full source as compiled: prelude, continued code, the fence (wrapped when a fragment), and a module marker. */
 export function fenceSource(fence: GuideFence, treatment: FenceTreatment = {}, continued = ""): string {
 	let code = fence.code;
@@ -120,7 +128,9 @@ export function fenceSource(fence: GuideFence, treatment: FenceTreatment = {}, c
 		const at = lines.findIndex((line) => line.trim() === treatment.from);
 		// A marker the fence does not hold compiles nothing rather than the whole
 		// fence, so a reworded fence fails on its missing marker, not quietly.
-		code = at === -1 ? `throw new Error(${JSON.stringify(`no line ${treatment.from} in the fence`)});` : lines.slice(at).join("\n");
+		// The generated line is a fixed string: the marker's text never goes
+		// into code, so nothing in a manifest entry can be read as source.
+		code = at === -1 ? MISSING_MARKER_SOURCE : lines.slice(at).join("\n");
 	}
 	let body = code;
 	if (treatment.wrap === "function-body" || treatment.wrap === "class-member") {
@@ -368,6 +378,12 @@ export function fenceNames(code: string): { declared: Set<string>; mentioned: Se
 	return { declared, mentioned };
 }
 
+/** A module path as a published entry point spells it: `solve-engine`, `solve-engine/resolvers`. */
+const MODULE_PATH = /^[a-z@][a-z0-9@._/-]*$/;
+
+/** An identifier as a fence names a public export. */
+const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
 /**
  * The imports a guide page takes as given, for one fence: each public name the
  * fence mentions and does not declare, imported from the entry that exports
@@ -388,7 +404,11 @@ export function givenImports(code: string, exports: ReadonlyMap<string, string>)
 		if (entry === undefined) continue;
 		byEntry.set(entry, [...(byEntry.get(entry) ?? []), name]);
 	}
-	const lines = [...byEntry].map(([entry, names]) => `import { ${names.join(", ")} } from ${JSON.stringify(entry)};`);
+	// An entry is a published module path (`solve-engine/resolvers`) and a name
+	// an identifier; anything else is left out rather than quoted into code.
+	const lines = [...byEntry]
+		.filter(([entry, names]) => MODULE_PATH.test(entry) && names.every((name) => IDENTIFIER.test(name)))
+		.map(([entry, names]) => `import { ${names.join(", ")} } from "${entry}";`);
 	if (mentioned.has("engine") && !declared.has("engine")) {
 		lines.push(`import type { ExpressionEngine as __GivenEngine } from "solve-engine";`, "declare const engine: __GivenEngine;");
 	}

@@ -103,7 +103,7 @@ describe("rateAtOrBelowMinusHundred and compoundingRefused", () => {
 
 	test("a prototype word as the rate's description is text", () => {
 		expectPrototypeUntouched(() => {
-			for (const word of PROTOTYPE_WORDS) expect(rateAtOrBelowMinusHundred(-2, word).errorMessage).toMatch(new RegExp(`^${word.replace(/[$]/g, "\\$")} of -200%`));
+			for (const word of PROTOTYPE_WORDS) expect(rateAtOrBelowMinusHundred(-2, word).errorMessage?.startsWith(`${word} of -200%`)).toBe(true);
 		});
 	});
 });
