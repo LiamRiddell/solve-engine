@@ -190,8 +190,8 @@ describe("adversarial", () => {
 		expect(formatValue(engine.evaluateExpression("$0.30/kWh"), settings)).toBe("= $0.30/kWh");
 		expect(formatValue(engine.evaluateExpression("$0.305/kWh"), settings)).toBe("= $0.305/kWh");
 		const de = { ...DEFAULT_FORMATTING_SETTINGS, numberResult: { decimalSeparatorLocale: "de-DE" } };
-		expect(formatValue(engine.evaluateExpression("$1234.5 per hour"), de)).toBe("= $1.234,50/hour");
-		expect(formatValue(engine.evaluateExpression("3600 seconds in hours"), de)).toBe("= 1 hour");
+		expect(formatValue(engine.evaluateExpression("$1234.5 per hour"), de)).toBe("= 1.234,50 $/hour");
+		expect(formatValue(engine.evaluateExpression("3600 seconds in hours"), de)).toBe("= 1 Stunde");
 	});
 
 	test("edge: the numeric edges as a rate and as a count of hours", () => {

@@ -89,6 +89,8 @@ export function serializeValue(value: Value, settings?: FormattingSettings): Ser
 	if (value.grain !== undefined) dto.grain = value.grain;
 	if (value.zone !== undefined) dto.zone = value.zone;
 	if (value.timeAnchor !== undefined) dto.timeAnchor = value.timeAnchor;
+	// A weekday or month name crosses with which one it is, as a fresh plain copy.
+	if (value.calendarName !== undefined) dto.calendarName = { kind: value.calendarName.kind, index: value.calendarName.index };
 	// Provenance and the frozen mark cross as plain copies, for the same reason:
 	// a worker result that dropped them could not tell a host where a converted
 	// amount's rate came from, or that the answer is frozen.

@@ -12,7 +12,7 @@
  * property `worker/serialize.ts` is built to guarantee.
  */
 
-import type { ValueType, ColourFormat, DatetimeGrain } from "@solve-js/vm/Value";
+import type { ValueType, ColourFormat, DatetimeGrain, CalendarName } from "@solve-js/vm/Value";
 import type { ValueSource, FrozenMark } from "@solve-js/vm/Provenance";
 import type { DiagnosticReportJSON } from "@solve-js/diagnostics";
 import type { SourceSpan } from "@solve-js/errors/EngineError";
@@ -156,6 +156,13 @@ export interface SerializedWorkerValue {
 	 * See `Value.zone`.
 	 */
 	zone?: string;
+	/**
+	 * For a String that is a weekday or month name drawn from a date, which one
+	 * it names (`{ kind: "weekday", index: 2 }` for Tuesday), present only then.
+	 * `text` is already written in the settings' language; this lets a host
+	 * that renders its own text name the day in its own. See `Value.calendarName`.
+	 */
+	calendarName?: CalendarName;
 	/**
 	 * Where the live figures behind this value came from, present only when it
 	 * carries any: each record's provider, kind, fetch time, and when relevant
