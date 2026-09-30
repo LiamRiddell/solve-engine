@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "@jest/globals";
-import { mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync, type Stats } from "node:fs";
+import { closeSync, mkdtempSync, mkdirSync, openSync, rmSync, statSync, writeFileSync, type Stats } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
@@ -20,7 +20,7 @@ import { pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { numberValue, type Value } from "@solve-js/vm/Value";
 import { DOCUMENT_EDGES, NUMERIC_EDGES, PROTOTYPE_WORDS, RESOURCE_PROBES, TEXT_EDGES } from "@tools/adversarial";
 import { DEFAULT_WAIT_MS, EXIT, MAX_WAIT_MS, parseArguments, parseNow, parseSeed } from "../../../cli/src/arguments";
-import { classifyInput, decodeDocument, readDocumentFile, tooLarge, MAX_INPUT_BYTES } from "../../../cli/src/input";
+import { classifyInput, decodeDocument, readBounded, readDocumentFile, tooLarge, MAX_INPUT_BYTES } from "../../../cli/src/input";
 import {
 	CHECK_LINE,
 	checkSummary,
@@ -452,6 +452,40 @@ describe("#774 the parts: readDocumentFile and decodeDocument", () => {
 	test("a directory or a missing path is named, never thrown", () => {
 		expect(readDocumentFile(dir)).toMatchObject({ ok: false });
 		expect(readDocumentFile(join(dir, "nope.md"))).toEqual({ ok: false, message: `"${join(dir, "nope.md")}" cannot be read.` });
+	});
+
+	test("the file is read through the descriptor it was checked on: a directory and a device are refused by kind", () => {
+		expect(readDocumentFile(dir)).toEqual({ ok: false, message: `"${dir}" is a directory. Give a document inside it.` });
+		if (process.platform !== "win32") {
+			expect(readDocumentFile("/dev/null")).toMatchObject({ ok: false, message: expect.stringContaining("is not a regular file") });
+		}
+	});
+
+	test("a file exactly at the limit is read, one byte past it is refused", () => {
+		expect(readDocumentFile(file("at-limit.md", "x".repeat(64)), 64)).toEqual({ ok: true, text: "x".repeat(64) });
+		expect(readDocumentFile(file("past-limit.md", "x".repeat(65)), 64)).toMatchObject({ ok: false, message: expect.stringContaining("is larger than") });
+		expect(readDocumentFile(file("zero-limit.md", "x"), 0)).toMatchObject({ ok: false });
+	});
+
+	test("readBounded reads to the end or to the bound, whichever comes first", () => {
+		const path = file("bounded.md", "abcdefghij".repeat(10_000));
+		const fd = openSync(path, "r");
+		try {
+			expect(readBounded(fd, 5).length).toBe(5);
+			// The descriptor's position moved on, so the next read continues.
+			expect(Buffer.from(readBounded(fd, 5)).toString()).toBe("fghij");
+			expect(readBounded(fd, 1_000_000).length).toBe(100_000 - 10);
+			expect(readBounded(fd, 10).length).toBe(0);
+		} finally {
+			closeSync(fd);
+		}
+		const empty = openSync(file("bounded-empty.md", ""), "r");
+		try {
+			expect(readBounded(empty, 10).length).toBe(0);
+			expect(readBounded(empty, 0).length).toBe(0);
+		} finally {
+			closeSync(empty);
+		}
 	});
 });
 
