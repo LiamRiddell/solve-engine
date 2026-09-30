@@ -64,15 +64,17 @@ describe("hexadecimal", () => {
 		expect(shown("0.9 as hex")).toBe("0x0");
 	});
 
-	test("and a value with no digits in any base renders as itself", () => {
+	test("and a value with no digits in any base is refused by name", () => {
 		// `Infinity.toString(16)` is the word "Infinity", which arrived on
-		// screen as the literal `0xINFINITY`: a hex number containing letters
-		// that are not hex digits, which reads back as nothing.
-		expect(shown("1 / 0 as hex")).toBe("Infinity");
-		expect(shown("-1 / 0 as hex")).toBe("-Infinity");
-		expect(shown("(1 / 0 - 1 / 0) as hex")).toBe("NaN");
-		expect(shown("1 / 0 as binary")).toBe("Infinity");
-		expect(shown("(1 / 0 - 1 / 0) as octal")).toBe("NaN");
+		// screen as the literal `0xINFINITY`, and then as "Infinity" dressed as
+		// a numeral. It has no digits in any base, so the conversion refuses it.
+		for (const line of ["1 / 0 as hex", "-1 / 0 as hex", "1 / 0 as binary", "(1 / 0 - 1 / 0) as hex", "(1 / 0 - 1 / 0) as octal"]) {
+			expect(evaluate(line).errorCode).toBe("BASE_NOT_FINITE");
+		}
+		// A result with no value is refused too, whether by the conversion or
+		// by the division that made it.
+		expect(evaluate("0 / 0 as hex").isError()).toBe(true);
+		expect(evaluate("0 / 0 as octal").isError()).toBe(true);
 	});
 });
 

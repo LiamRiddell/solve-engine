@@ -92,3 +92,40 @@ reads the digits the last one wrote, not a rounded copy, so the last digit of
 (2^100 + 1) in hex in octal // 0o2000000000000000000000000000000001
 (2^100 + 1) in hex as number // 1,267,650,600,228,229,401,496,703,205,377
 ```
+
+Arithmetic straight on such a number reads the same digits, so there is no
+need to convert it back first. Adding, subtracting, multiplying, a remainder,
+a power and a comparison all work on the whole number the base holds, and the
+answer is an ordinary number, as `hex(255) + 1` is:
+
+```solve
+(2^100 + 1) in hex + 1 // 1,267,650,600,228,229,401,496,703,205,378
+(2^100 + 1) in hex * 2 // 2,535,301,200,456,458,802,993,406,410,754
+((2^100 + 1) in hex) mod 10 // 7
+((2^100 + 1) in hex) > 2^100 // true
+```
+
+### What has no digits
+
+An infinity, such as `1/0`, has no digits in any base, so writing one in hex,
+binary or octal is refused rather than shown as the word "Infinity". The same
+goes for an ordinary number past about 1.8e308 (the largest an ordinary number
+holds), such as `2^4000`: it is already infinite before it reaches the
+conversion. A whole number written with `n` has no such ceiling, up to its own
+[size limit](/syntax/big-integers/), so `2n^4000` is the way to write one out
+in full:
+
+```solve
+(1/0) in hex // An infinite value has no digits to write in hex. An ordinary number past about 1.8e308 is infinite; a whole number written with n, as in 2n^4000, keeps every digit.
+2^4000 in binary as hex // An infinite value has no digits to write in binary. An ordinary number past about 1.8e308 is infinite; a whole number written with n, as in 2n^4000, keeps every digit.
+2n^200 in hex // 0x100000000000000000000000000000000000000000000000000
+```
+
+The boundary. Arithmetic keeps a base's whole number exact against a plain
+number or another base. Against a quantity, a percentage or a measurement with
+a tolerance it is read as the nearest ordinary number, as any large number is
+there. A division that does not come out whole is shown as an ordinary number,
+though `as fraction` still gives it exactly, and a power past about 1.8e308 is
+infinite, as it is for any ordinary number. A base holding an `n` number past
+1.8e308 adds, subtracts, multiplies and takes a remainder as the `n` number it
+is, and divides and raises as an ordinary number would.

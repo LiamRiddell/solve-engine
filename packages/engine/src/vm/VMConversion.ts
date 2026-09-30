@@ -7,7 +7,7 @@ import { sameShape } from "@solve-js/vm/MatrixOps";
 import { type SymbolicNode, type Rational, simplifySymbolic, rational, rationalAdd, rationalSub, rationalMul, rationalDiv, rationalToNumber, rationalCompare, isRationalZero, dividesByZero } from "@solve-js/symbolic";
 import { valueToSymbolic, symbolicDivisionByZero } from "@solve-js/vm/SymbolicOps";
 import { rationalOfExactDecimal, exactDecimalDivide, compareExactDecimals } from "@solve-js/vm/ExactDecimals";
-import { exactIntegerOf } from "@solve-js/vm/ExactIntegers";
+import { exactIntegerOf, bigBaseInteger, exactIntegerValue, exactIntegerArithmetic, exactIntegerRemainder, wholeFromBase } from "@solve-js/vm/ExactIntegers";
 import { ErrorFactory, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
 import { combineSources, sourcesOfValues, type ValueSource } from "@solve-js/vm/Provenance";
 import { valueInUnit } from "@solve-js/vm/MoneyExact";
@@ -764,6 +764,10 @@ export function incomparableUnitsError(l: Value, r: Value): Value {
  */
 export function toBigIntOperand(v: Value): bigint {
     if (v.type === ValueType.BigInt) return v.value as bigint;
+    // A value written in a base past 2^53 holds its bigint: `(2^100 + 1) in
+    // hex + 1n` read the nearest double and answered 2^100 + 1.
+    const inBase = bigBaseInteger(v);
+    if (inBase !== null) return inBase;
     const exact = exactIntegerOf(v, false);
     if (exact !== null) return exact;
     const n = v.toNumber();
@@ -962,6 +966,10 @@ function operandRational(v: Value): Rational | null {
     if ((v.type === ValueType.Number || v.type === ValueType.Hex) && typeof v.value === "number" && Number.isInteger(v.value)) {
         return rational(BigInt(v.value));
     }
+    // A value written in a base past 2^53 holds its whole number as a bigint
+    // (see bigBaseInteger()), so `(2^100 + 1) in hex > 2^100` compares it.
+    const inBase = bigBaseInteger(v);
+    if (inBase !== null) return rational(inBase);
     if (v.exact !== undefined) return rationalOfExactDecimal(v);
     return null;
 }
@@ -1163,7 +1171,7 @@ export function uncertainOp(l: Value, r: Value, op: "add" | "sub" | "mul" | "div
  * a nearest double still compare on their digits.
  */
 export function compareRationalOperands(l: Value, r: Value): -1 | 0 | 1 | null {
-    if (l.rational === undefined && r.rational === undefined) return compareExactDecimals(l, r);
+    if (l.rational === undefined && r.rational === undefined && bigBaseInteger(l) === null && bigBaseInteger(r) === null) return compareExactDecimals(l, r);
     const lr = operandRational(l);
     if (lr === null) return null;
     const rr = operandRational(r);
@@ -1531,6 +1539,71 @@ function isTypedLengthOfTime(v: Value): boolean {
     return v.type === ValueType.Uom && v.unit !== undefined && v.unit !== "ms" && getMeasure(v.unit) === "time";
 }
 
+/** Whether a value can meet a value written in a base in exact arithmetic: a plain number or another value in a base. */
+function plainOperand(v: Value): boolean {
+    return (v.type === ValueType.Number || v.type === ValueType.Hex) && v.uncertainty === undefined;
+}
+
+/**
+ * `+`, `-`, `*` or `mod` on two whole numbers when one is past a double's
+ * range, as the `n` whole number it has to be, or null. A value written in a
+ * base can hold such a number (`(2n^2000) in hex`), where an ordinary number
+ * cannot, so its sum was an infinity. Division and powers have no whole-number
+ * answer in general and keep the double's; so does a side with no whole value.
+ *
+ * @param a - The left whole number, or null when it has none.
+ * @param b - The right whole number, or null.
+ * @param op - The operation.
+ */
+function pastDoubleArithmetic(a: bigint | null, b: bigint | null, op: "add" | "sub" | "mul" | "div" | "mod" | "pow"): Value | null {
+    if (a === null || b === null) return null;
+    switch (op) {
+        case "add": return wholeFromBase(a + b);
+        case "sub": return wholeFromBase(a - b);
+        case "mul": return wholeFromBase(a * b);
+        case "mod": return b === 0n ? null : wholeFromBase(a % b);
+        default: return null;
+    }
+}
+
+/**
+ * Arithmetic with a value written in a base past 2^53 on either side, done on
+ * the whole number it holds, or null to keep the ordinary path.
+ *
+ * `in hex`, `in binary` and `in octal` keep the exact integer inside the value
+ * they write (see baseConversionOperand()), and `+`, `-`, `*`, `/`, `mod` and
+ * `^` read it through `toNumber()`, the nearest double, so `(2^100 + 1) in hex
+ * + 1` answered 1,267,650,600,228,229,400,000,000,000,000. The value is read
+ * as the exact integer instead (see exactIntegerValue()) and the operation
+ * goes through the exact paths an ordinary large whole number takes: a
+ * fraction for `/`, an exact remainder, an exact power. The answer is a plain
+ * number, as `0x10 + 1` is 17.
+ *
+ * Only a plain number or another value in a base on the other side: a
+ * quantity, a bigint, a percentage and the rest keep their own paths, and a
+ * number carrying a tolerance keeps it. Null too when the exact path has no
+ * answer (a zero divisor, a result past a double's range), which leaves the
+ * double's answer as it was.
+ *
+ * @param l - The left operand.
+ * @param r - The right operand.
+ * @param op - The operation.
+ */
+export function bigBaseArithmetic(l: Value, r: Value, op: "add" | "sub" | "mul" | "div" | "mod" | "pow"): Value | null {
+    const lb = bigBaseInteger(l), rb = bigBaseInteger(r);
+    if (lb === null && rb === null) return null;
+    if (!plainOperand(l) || !plainOperand(r)) return null;
+    const a = lb === null ? l : exactIntegerValue(lb);
+    const b = rb === null ? r : exactIntegerValue(rb);
+    if (!Number.isFinite(a.toNumber()) || !Number.isFinite(b.toNumber())) return pastDoubleArithmetic(lb ?? exactIntegerOf(l, false), rb ?? exactIntegerOf(r, false), op);
+    if (op === "mod") return exactIntegerRemainder(a, b);
+    if (op === "pow") {
+        const approx = power(a.toNumber(), b.toNumber());
+        return Number.isFinite(approx) ? exactIntegerArithmetic(a, b, approx, "pow") : null;
+    }
+    return exactRationalOp(a, b, op);
+}
+
 /**
  * Apply a numeric binary operation with type-aware dispatch.
  * Handles BigInt, UoM, Vector, Symbolic, and plain Number operands.
@@ -1634,6 +1707,13 @@ export function binaryOp(
         const rb = toBigIntOperand(r);
         if (bigOp) return bigIntValue(bigOp(lb, rb));
         return bigIntValue(lb + rb);
+    }
+
+    // A value written in a base past 2^53 is worked on its whole number; see
+    // bigBaseArithmetic().
+    if (symbolicOp) {
+        const inBase = bigBaseArithmetic(l, r, symbolicOp);
+        if (inBase) return inBase;
     }
 
     if (l.type === ValueType.Uom || r.type === ValueType.Uom) {

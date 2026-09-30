@@ -131,6 +131,8 @@ export const CoreErrorCodes = {
   BIGINT_INEXACT_OPERAND: "BIGINT_INEXACT_OPERAND",
   /** `10n / 0n` or `10n mod 0n`. A big-integer division is exact, and an exact division by zero has no answer, unlike `1 / 0`, which is Infinity. */
   BIGINT_DIVISION_BY_ZERO: "BIGINT_DIVISION_BY_ZERO",
+  /** An infinity or a result with no value written in a base: `(1/0) in hex`, `2^4000 in binary`, `hex(1/0)`. It has no digits; a whole number written with `n` (`2n^4000`) keeps every digit. */
+  BASE_NOT_FINITE: "BASE_NOT_FINITE",
   /** A compiled program naming a function body it does not carry. A compiler or VM fault, worth reporting. */
   INTERNAL_MISSING_FUNCTION_BODY: "INTERNAL_MISSING_FUNCTION_BODY",
   /** A compiled program naming a `map` or `reduce` body it does not carry. A compiler or VM fault, worth reporting. */

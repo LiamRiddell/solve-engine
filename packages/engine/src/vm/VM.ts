@@ -15,7 +15,7 @@ import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js
 import { CoreErrorCodes, DatetimeZoneErrorCodes } from "@solve-js/errors/ErrorCode";
 import { addBusinessDays as walkBusinessDays, countBusinessDaysBetween } from "@solve-js/vm/BusinessDays";
 import { DiagnosticPipeline, DiagnosticEventType } from "@solve-js/diagnostics";
-import { builtinFunctions, builtinArgumentRefused } from "@solve-js/vm/VMBuiltins";
+import { builtinFunctions, builtinArgumentRefused, pluginFunctionIndexFor } from "@solve-js/vm/VMBuiltins";
 import { valuesEqual, valuesOrdered } from "@solve-js/vm/Comparisons";
 import { setActiveQueryClient } from "@solve-js/services/DataQueryService";
 import type { QueryClient } from "@tanstack/query-core";
@@ -26,7 +26,7 @@ import { defaultEngineContext } from "@solve-js/engine/EngineContext";
 import type { EngineContext, PluginFunctionHandler } from "@solve-js/engine/EngineContext";
 import { getOpCodeName } from "@solve-js/parser/OpCode";
 import { safeText } from "@solve-js/parser/ParseMessages";
-import { unifyUom, binaryOp, describeConversionMismatch, describeMeasure, toBigIntOperand, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, uncertainOp, toleranceSpread, nonNumericKind, valueKindName, describeQuantity, currencyRateSources, datetimeArithmeticRefused, isIpv6Value, ipv6WholeNumber, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, hasNoNumber, noNumberRefused, noNumberArithmeticRefused, colourRefused } from "@solve-js/vm/VMConversion";
+import { unifyUom, binaryOp, describeConversionMismatch, describeMeasure, toBigIntOperand, bigIntDivisionByZero, power, exactRationalOp, exactQuotient, uncertainOp, toleranceSpread, nonNumericKind, valueKindName, describeQuantity, currencyRateSources, datetimeArithmeticRefused, isIpv6Value, ipv6WholeNumber, datetimeTakesNoUnit, datetimeConversionRefused, toPercentage, percentageInPartsPer, asRate, typeableUnitNameIndex, unknownUnitError, plainValueInUnit, unitAfterValue, quantityOperandRefused, hasNoNumber, noNumberRefused, noNumberArithmeticRefused, colourRefused, bigBaseArithmetic } from "@solve-js/vm/VMConversion";
 import { combineSources, sourcesOfValues, withSources, type ValueSource } from "@solve-js/vm/Provenance";
 import { isoDayOf, type FrozenDirective } from "@solve-js/vm/FrozenValues";
 import { ANSWER_NAME, PI_NAME, previousLineAnswer } from "@solve-js/vm/LineReads";
@@ -37,7 +37,7 @@ import type { ScopeId } from "@solve-js/vm/CellScope";
 import { raiseQuantity, unitPowerUnsupported, multiplyLengths, divideLengths } from "@solve-js/vm/QuantityPowers";
 import { multiplyRates, divideRates, refuseLikeProduct, reciprocalOf, rateThroughQuantity, unitQuotientUnsupported } from "@solve-js/vm/UnitAlgebra";
 import { rateForm } from "@solve-js/uom/RateForms";
-import { bigIntPow, baseConversionOperand, exactIntegerValue, exactWholeLiteral } from "@solve-js/vm/ExactIntegers";
+import { bigIntPow, exactWholeLiteral, valueInBase, bigBaseInteger, wholeFromBase } from "@solve-js/vm/ExactIntegers";
 import { indeterminateQuotient } from "@solve-js/vm/IndeterminateQuotient";
 import { exactArithmetic, exactPowerArithmetic, exactRemainder, scaleByPercentExact, multiplyByPercentExact, fractionOfExactDecimal } from "@solve-js/vm/ExactDecimals";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
@@ -1977,6 +1977,10 @@ function exactLiteralValue(text: string): Value {
  * under V8's optimisation ceiling.
  */
 function remainder(l: Value, r: Value): Value {
+    // A value written in a base past 2^53 takes its remainder from its whole
+    // number; see bigBaseArithmetic().
+    const inBase = bigBaseArithmetic(l, r, "mod");
+    if (inBase) return inBase;
     const result = binaryOp(l, r, doubleRemainder, bigIntRemainder);
     if (result.type !== ValueType.Number && result.type !== ValueType.Uom) return result;
     if (!Number.isNaN(result.toNumber())) return result;
@@ -1992,6 +1996,30 @@ function remainder(l: Value, r: Value): Value {
 }
 
 /**
+ * The EXP opcode's answer for a pair no earlier branch took: the double power,
+ * except for a value written in a base past 2^53, which is raised on its
+ * whole number (see bigBaseArithmetic()). Kept out of the dispatch loop.
+ *
+ * @param l - The base, already checked for a fault.
+ * @param r - The exponent.
+ */
+function plainPower(l: Value, r: Value): Value {
+    return bigBaseArithmetic(l, r, "pow") ?? numberValue(power(l.toNumber(), r.toNumber()));
+}
+
+/**
+ * The NEG opcode's answer for a value no earlier branch took: its negated
+ * double, except for a value written in a base past 2^53, whose whole number
+ * is negated exactly (see bigBaseInteger()). Kept out of the dispatch loop.
+ *
+ * @param v - The value, already checked for a fault.
+ */
+function negatedPlain(v: Value): Value {
+    const inBase = bigBaseInteger(v);
+    return inBase === null ? numberValue(-v.toNumber()) : wholeFromBase(-inBase);
+}
+
+/**
  * A value as a plain number, for `as number`: an IPv6 address is its exact
  * 128-bit whole number, a value written in a base past the safe range keeps
  * every digit (`(2^100 + 1) in hex as number` rounded to the nearest double
@@ -2004,7 +2032,7 @@ function remainder(l: Value, r: Value): Value {
 function numberOf(v: Value): Value {
     if (isIpv6Value(v)) return ipv6WholeNumber(v);
     if (v.type === ValueType.Colour) return colourRefused("read as one number");
-    if (v.type === ValueType.Hex && typeof v.value === "bigint") return exactIntegerValue(v.value);
+    if (v.type === ValueType.Hex && typeof v.value === "bigint") return wholeFromBase(v.value);
     return numberValue(v.toNumber());
 }
 
@@ -2019,7 +2047,8 @@ function numberOf(v: Value): Value {
  * rendered 0xAB54A98CEB1F0800 while the value ends 0AD2, because toNumber()
  * rounded it first. An exact integer past the safe range, an IPv6 address and
  * a value already written in another base convert from their own digits
- * likewise (see baseConversionOperand()).
+ * likewise, and an infinity, which has no digits, is refused by name (see
+ * valueInBase()).
  *
  * @param v - The value, already checked for a fault.
  * @param base - The base to write it in.
@@ -2030,7 +2059,7 @@ function inBase(v: Value, base: DisplayBase): Value {
         const c = v.value as ColourData;
         return colourValue({ r: c.r, g: c.g, b: c.b, a: c.a, format: "hex" });
     }
-    return hexValue(baseConversionOperand(v), base);
+    return valueInBase(v, base);
 }
 
 /**
@@ -2570,6 +2599,42 @@ function matrixLiteral(stack: Value[], rows: number, cols: number): void {
 }
 
 /**
+ * The plugin-function slot the IP package (`solve-ip`) registers its
+ * `<address> in <block>` test under, the same stable index its registration
+ * takes (see pluginFunctionIndexFor()).
+ */
+const IP_MEMBERSHIP_INDEX = pluginFunctionIndexFor("solve-ip:ipInCidr");
+
+/**
+ * `<address> in <name>` where the name holds an IP value: the membership test,
+ * or null to leave the line a conversion.
+ *
+ * The parser sends `in` straight to the membership test only when a block
+ * literal follows it, so `192.168.1.7 in lab`, with `lab = 192.168.1.0/24`,
+ * was a conversion to a unit named "lab" and refused. What a name holds is
+ * only known when the line runs, so it is read here, as a divisor's name is
+ * read for `100 / t`. Only an IP value on the left and an IP value in the
+ * name qualify: any other value after `in` keeps its meaning as a conversion
+ * target, and so does a name no line defines. An address held where a block
+ * is wanted is refused by the membership test itself, by name. Null as well
+ * when the IP package is not registered, since then no line can make an IP
+ * value.
+ *
+ * @param left - The value before `in`.
+ * @param name - The word after it.
+ * @param vm - The machine, for the variable and the registered test.
+ */
+export function membershipThroughName(left: Value, name: string, vm: VM): Value | null {
+    if (left.type !== ValueType.IpCidr) return null;
+    const named = vm.getVar(name);
+    if (named === undefined || named.type !== ValueType.IpCidr) return null;
+    const test = pluginHandlerAt(vm.context.pluginFunctions, IP_MEMBERSHIP_INDEX);
+    if (test === undefined) return null;
+    const answer = test([left, named]);
+    return answer instanceof Value ? answer : null;
+}
+
+/**
  * A value converted with `in` (UOM_CONVERT_IN), moved out of the dispatch loop
  * so a list can convert each of its cells the same way (#745): a quantity
  * through the measure, currency and rate tables, a date into a zone, a
@@ -2578,6 +2643,8 @@ function matrixLiteral(stack: Value[], rows: number, cols: number): void {
  * @returns The converted value, and the table it went through for a trace.
  */
 function convertValueIn(left: Value, writtenTo: string, vm: VM): { value: Value; table?: string } {
+    const membership = membershipThroughName(left, writtenTo, vm);
+    if (membership !== null) return { value: membership };
     const toUnit = left.type === ValueType.Uom ? rateTargetUnit(left.unit!, writtenTo) : writtenTo;
     if (left.type === ValueType.Uom) {
       const fromUnit = left.unit!;
@@ -4089,7 +4156,7 @@ export function executeBytecode(
             ));
             break;
           }
-          stack.push(numberValue(power(l.toNumber(), r.toNumber())));
+          stack.push(plainPower(l, r));
           break;
         }
         case OpCode.NEG: {
@@ -4128,7 +4195,7 @@ export function executeBytecode(
           // A list is negated cell by cell, its unit kept: `-[1, 2]` read the
           // zero a list's toNumber() reports and answered 0 (#745).
           else if (v.type === ValueType.Matrix) stack.push(unitListArithmetic("mul", v, numberValue(-1)));
-          else stack.push(numberValue(-v.toNumber()));
+          else stack.push(negatedPlain(v));
           break;
         }
         case OpCode.POS: {

@@ -92,6 +92,38 @@ check (2 > 1) == (3 > 2) // ✓
 check true == false // check failed: true is not equal to false
 ```
 
+## Colours and addresses
+
+A colour is three channels of light (red, green and blue), and an IP address
+is a number that names a machine on a network, often with a prefix (`/24`)
+that makes it a block of addresses. Neither is an amount, but either can be
+checked for being the same as another, and a check decides it the way `==`
+and `!=` do: two colours are equal when their channels are, however each was
+written, and two addresses when their family, address, prefix and zone all
+match.
+
+```solve
+check #ff0000 == rgb(255, 0, 0) // ✓
+check #ff0000 != #00ff00 // ✓
+check 192.168.1.0/24 != 192.168.1.0/25 // ✓
+check fe80::1%eth0 == fe80::1 // check failed: fe80::1%eth0 is not equal to fe80::1
+```
+
+Addresses of one family are in order, lowest first, as `<` puts them, so a
+check can ask whether one comes before another. A colour has no order, an IPv4
+and an IPv6 address have none between them, and a margin means nothing between
+two values that are either the same or not, so each of those is refused:
+
+```solve
+check 192.168.1.1 < 192.168.1.2 // ✓
+check fe80::2 <= fe80::1 // check failed: fe80::2 is more than fe80::1
+check #ff0000 < #00ff00 // check: a colour has no order, so two colours can only be compared with == or !=, not <
+check 192.168.1.1 < fe80::1 // check: an IPv4 and an IPv6 address have no order between them, so they can only be compared with == or !=, not <
+```
+
+A colour or an address against a number is still refused as incomparable: a
+check says something about two things of one kind.
+
 ## Checks among the other lines
 
 A check line is a statement about the numbers around it, not one of them, so a

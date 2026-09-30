@@ -1067,6 +1067,20 @@ check true == false // check failed: true is not equal to false
 ```
 
 ```
+check #ff0000 == rgb(255, 0, 0) // ✓
+check #ff0000 != #00ff00 // ✓
+check 192.168.1.0/24 != 192.168.1.0/25 // ✓
+check fe80::1%eth0 == fe80::1 // check failed: fe80::1%eth0 is not equal to fe80::1
+```
+
+```
+check 192.168.1.1 < 192.168.1.2 // ✓
+check fe80::2 <= fe80::1 // check failed: fe80::2 is more than fe80::1
+check #ff0000 < #00ff00 // check: a colour has no order, so two colours can only be compared with == or !=, not <
+check 192.168.1.1 < fe80::1 // check: an IPv4 and an IPv6 address have no order between them, so they can only be compared with == or !=, not <
+```
+
+```
 check = 45
 check * 2 // 90
 ```
@@ -2951,6 +2965,19 @@ note::5 // 5
 cafe::1 // cafe::1
 ```
 
+```
+(one document)
+lab = 192.168.1.0/24
+192.168.1.7 in lab // true
+10.0.0.1 in lab // false
+```
+
+```
+(one document)
+host = 192.168.1.5
+192.168.1.5 in host // ERROR: "in" expects a subnet on the right, e.g. 10.0.0.0/8
+```
+
 ## nth-weekday
 
 https://liamriddell.github.io/solve-engine/syntax/nth-weekday/
@@ -3015,6 +3042,19 @@ hex(-255) // -0xFF
 (2^100 + 1) in binary as hex // 0x10000000000000000000000001
 (2^100 + 1) in hex in octal // 0o2000000000000000000000000000000001
 (2^100 + 1) in hex as number // 1,267,650,600,228,229,401,496,703,205,377
+```
+
+```
+(2^100 + 1) in hex + 1 // 1,267,650,600,228,229,401,496,703,205,378
+(2^100 + 1) in hex * 2 // 2,535,301,200,456,458,802,993,406,410,754
+((2^100 + 1) in hex) mod 10 // 7
+((2^100 + 1) in hex) > 2^100 // true
+```
+
+```
+(1/0) in hex // An infinite value has no digits to write in hex. An ordinary number past about 1.8e308 is infinite; a whole number written with n, as in 2n^4000, keeps every digit.
+2^4000 in binary as hex // An infinite value has no digits to write in binary. An ordinary number past about 1.8e308 is infinite; a whole number written with n, as in 2n^4000, keeps every digit.
+2n^200 in hex // 0x100000000000000000000000000000000000000000000000000
 ```
 
 ## number-functions
