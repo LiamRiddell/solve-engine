@@ -103,9 +103,12 @@ describe("Concurrent Modification", () => {
 				{ startLine: 4, deleteCount: 1, insertLines: ["Y"] },
 			]);
 
-			// Should have 2 removals (B and D) and 2 insertions (X and Y)
-			expect(result.removed.length).toBe(2);
-			expect(result.inserted.length).toBe(2);
+			// Each change replaces one line with one, so nothing moves and the
+			// two are edits in place (#713): B and D keep their ids, and
+			// nothing is reported inserted or removed.
+			expect(result.removed.length).toBe(0);
+			expect(result.inserted.length).toBe(0);
+			expect(result.edited.length).toBe(2);
 
 			// Result should be: A, X, C, Y, E
 			expect(doc.lineCount).toBe(5);
@@ -313,8 +316,10 @@ describe("Concurrent Modification", () => {
 			}
 
 			const result = evaluator.applyTransaction(changes);
-			expect(result.removed.length).toBe(25);
-			expect(result.inserted.length).toBe(25);
+			// Same-count replacements are edits in place (#713).
+			expect(result.removed.length).toBe(0);
+			expect(result.inserted.length).toBe(0);
+			expect(result.edited.length).toBe(25);
 			expect(doc.lineCount).toBe(50); // Same count (replace, not delete)
 
 			evaluator.terminateWorker();
