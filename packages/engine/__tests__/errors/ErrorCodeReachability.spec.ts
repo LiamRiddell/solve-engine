@@ -144,7 +144,7 @@ const EXAMPLES: Readonly<Record<string, Example>> = {
 	INVALID_RANGE: "roll(6, 1)",
 	INVALID_RANGE_BOUND: "[1, 2; 3, 4][\"a\", 1:1]",
 	INVALID_RATE: "5 kg at 60 mph",
-	INVALID_RATE_UNIT: "$50/week in /month",
+	INVALID_RATE_UNIT: "$50/week per month",
 	INVALID_ROUNDING_INCREMENT: "5 to nearest X",
 	INVALID_SIGNIFICANT_FIGURES: "1234 to 0 sf",
 	INVALID_TERM: "interest on £2,400 over 5 kg at 8%",

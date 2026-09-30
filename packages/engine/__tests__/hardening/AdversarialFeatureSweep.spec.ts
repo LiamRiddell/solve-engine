@@ -80,7 +80,27 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 	// and the reversed conversion over every unit table (#825).
 	currencyPlaces: ["¥X / 3", "X KWD / 3", "X BTC", "¥X split 3 ways", "split (X KWD) between 3", "$X per hour", "¥X/kWh"],
 	unitWords: ["X seconds in hours", "X hour", "X hours in minutes"],
-	reversedConversion: ["km in X furlong", "mW in X W", "m in X mile"],
+	reversedConversion: ["km in X furlong", "mW in X W", "m in X mile", "km in -X mile"],
+	// Speed, acceleration, frequency and the ampere in unit algebra (#737), a
+	// rate target written with per or a symbol (#738), a price per kWh in
+	// reading order (#758), a power after a slash (#834), and a price per unit
+	// written short.
+	unitAlgebra: [
+		"X m/s^2 * 3 s",
+		"100 km/h / X s",
+		"X Hz * 2 s",
+		"X W / 20 V",
+		"X Hz in /min",
+		"X ft/s^2 in m/s^2",
+		"X km/h in miles per hour",
+		"$X/hour in $/day",
+		"$X/week in /month",
+		"$0.30/kWh * X kW * 3 h",
+		"$0.30/kWh * 2 kW * X h",
+		"X kg/m^3",
+		"check X g/mL == X g/cm^3",
+		"$X/hour as compact",
+	],
 	finance: ["npv of -1000, X, 400 at 10%", "irr of -1000, X, 400"],
 	// The investment grammar the investments page documents (#778). The amount
 	// invested is not swept: an infinite one answers NaN, pinned in
@@ -189,6 +209,12 @@ describe("a word naming an inherited property is an ordinary unknown word", () =
 		"X is prime",
 		"add X to 10",
 		"larger of X and 4 and 12",
+		"5 kg/X^3",
+		"9.81 m/s^2 in X/s^2",
+		"60 km/h in miles per X",
+		"$20/hour in $/X",
+		"10 Hz in /X",
+		"$0.30/kWh * 2 X * 3 h",
 	];
 	test.each(forms.flatMap((form) => fill(form, PROTOTYPE_WORDS)))("%s", (line) => {
 		expectPrototypeUntouched(() => {
