@@ -254,9 +254,9 @@ describe("rate arithmetic", () => {
 	});
 
 	test("a rate scales by a bare number and keeps its period", () => {
-		expect(display("$100/hour * 24")).toBe("2,400.00 USD/hour");
-		expect(display("$100/hour / 4")).toBe("25.00 USD/hour");
-		expect(display("$100/hour + $100/hour")).toBe("200.00 USD/hour");
+		expect(display("$100/hour * 24")).toBe("$2,400.00/hour");
+		expect(display("$100/hour / 4")).toBe("$25.00/hour");
+		expect(display("$100/hour + $100/hour")).toBe("$200.00/hour");
 	});
 
 	test("multiplying a rate by something unrelated is refused", () => {

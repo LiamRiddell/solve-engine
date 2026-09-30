@@ -59,7 +59,7 @@ the rate whatever the name holds, because a unit after a value is a unit:
 ```solve-doc
 h = 4
 100 / h // 25
-$15 / h // 15.00 USD/h
+$15 / h // $15.00/h
 60 km / h // 60.00 km/h
 ```
 

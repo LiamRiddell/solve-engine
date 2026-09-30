@@ -34,6 +34,51 @@ zero of the unit:
 (1, 2) in miles // ERROR: A bracketed list has no single amount to convert to miles: only a number or a quantity can be converted.
 ```
 
+A time written as a word agrees with its count, the way it is said: one hour,
+two hours. A count of exactly one takes the singular and every other count the
+plural, whichever spelling was typed, so converting 3,600 seconds into hours
+gives one hour rather than one hours. A symbol such as `h` or `min` has no
+plural and is written as it is.
+
+```solve
+3600 seconds in hours // 1 hour
+2 hour // 2 hours
+90 minutes in hours // 1.50 hours
+0 hours // 0 hours
+```
+
+The boundary: only the time words (`second` to `year`, the words a duration is
+already written in) change their spelling. Other unit words are written as the
+value carries them, so `1609.344 m in miles` is `1.00 miles`, and a count shown
+with places is plural even when it rounds to one, because the places say it is
+a measurement rather than a count.
+
+## Asked the other way round
+
+"How many metres are in a kilometre?" is a conversion asked the other way
+round: the unit you want comes first, and the amount comes after `in`. Write it
+that way and it is the same question as `1 km in m`, with the same answer.
+
+```solve
+km in 1 mile // 1.61 km
+m in 1 furlong // 201.17 m
+km in a furlong // 0.20 km
+g in 1 carat // 0.20 g
+mW in 1 W // 1,000.00 mW
+seconds in a day // 86,400 seconds
+```
+
+Every unit a conversion reads can be asked for this way, the less common units
+such as the furlong and the carat included, and a unit is read in its own case,
+as everywhere else, so `mW` is the milliwatt and `MW` the megawatt. A currency
+works too, once its rate is known (`USD in 1 EUR`).
+
+The form is kept narrow on purpose: the line must start with the unit, and
+what follows `in` must be a plain amount and a unit, or `a` or `an` standing in
+for one. So `days in February 2020`, which asks how long a named month is, is
+left as its own question, and a signed amount (`km in -1 mile`) is not read
+this way.
+
 ## Units written in more than one word
 
 Some units are named in two or three words, or with a hyphen: a nautical mile, a

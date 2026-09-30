@@ -111,7 +111,9 @@ The boundary: a symbol several currencies share reads as its default, so an
 amount the engine writes for one of the others reads back as the default. `12
 AUD` is written `$12.00`, which reads as US dollars; `12 NOK` is written `12.00
 kr`, which reads as Swedish kronor; `12 CNY` is written `¥12.00`, which reads
-as yen. Keep the code (`12 AUD`) where the currency matters.
+as yen, and is then shown as yen are, in whole yen (`¥12`, see
+[money precision](/syntax/money-precision/#each-currencys-own-places)). Keep the
+code (`12 AUD`) where the currency matters.
 
 ## Indian grouping
 
