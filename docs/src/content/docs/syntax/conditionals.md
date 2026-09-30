@@ -28,6 +28,54 @@ true and false // false
 true or false // true
 ```
 
+### Negation: `not` and `!`
+
+Negating a condition turns it around: `not` makes true false and false true. It
+is how a note says "unless", or asks that something does not hold. The word
+`not` and a `!` in front of a value mean the same thing.
+
+```solve
+not true // false
+not (1 > 2) // true
+!(1 > 2) // true
+!false // true
+```
+
+The two spellings bind differently, each the way it does in the languages it
+comes from. `not` takes the whole comparison after it, as it does in Python and
+SQL, so `not 1 > 2` asks whether 1 is not more than 2; it stops at `and` and
+`or`, so `not true and false` is `(not true) and false`. A `!` takes only the one
+value right after it, as it does in C and JavaScript, so a comparison after it
+needs its brackets: `!(1 > 2)`.
+
+```solve
+not 1 > 2 // true
+not true and false // false
+if not 5 > 3 then 1 else 2 // 2
+```
+
+Negation is defined for `true` and `false` only. A number is not read as "zero
+means false", and a `!` in front of one is not a bit flip (that is `~`, see
+[bitwise operators](/syntax/bitwise-operators/)), so negating anything that is
+not a boolean is refused by name, with the comparison to write instead:
+
+```solve
+not 5 // "not" works on true or false, and 5 is a number: compare it first, as in not (x > 3).
+!1 > 2 // "!" works on true or false, and 1 is a number: compare it first, as in not (x > 3).
+```
+
+The boundary: a `!` straight after a value is still the factorial (`5!` is
+120), and `!=` is still "is not equal to". `not` is ordinary English, so it is
+read as negation only where a value is expected (at the start of a line, or
+after `if`, `then`, `else`, a bracket, `and`, `or` or a comparison) and a
+condition follows it. A sentence that starts with it (`not now`) stays prose,
+and a variable called `not` keeps working:
+
+```solve-doc
+not = 3 // 3
+not + 1 // 4
+```
+
 ## Conditional expression
 
 A conditional expression picks one of two values depending on a condition: `if`

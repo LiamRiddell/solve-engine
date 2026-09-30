@@ -8,6 +8,9 @@ import { IfThenElseParselet } from "./parselets/IfThenElseParselet";
 import { checkParselet } from "./parselets/CheckParselet";
 import { checkLineNormalizerRule, approxOperatorNormalizerRule } from "./normalizer/CheckNormalizerRules";
 import { checkComparison } from "./CheckFunctions";
+import { notWordParselet, bangParselet } from "./parselets/NotParselet";
+import { notWordNormalizerRule } from "./normalizer/NotNormalizerRule";
+import { logicalNot } from "./NotFunctions";
 
 /**
  * Comparisons (`==`, `!=`, `<`, `>`, `<=`, `>=`), boolean logic (`true`/
@@ -34,6 +37,16 @@ import { checkComparison } from "./CheckFunctions";
  * `hardening/ArithmeticConditionals.spec.ts` and the mathphrases
  * `AndAsListSeparator.spec.ts`.
  *
+ * TRIGGER-WORD COLLISION: `not` (#751) is ordinary English and was a free
+ * name, so it is not a lexer keyword. The normaliser fuses it to NOT only
+ * where it stands in front of a value (the start of a line, or after `if`,
+ * `then`, `else`, a bracket, a comma, `and`/`or` or a comparison) and a
+ * condition follows it. `not = 3` and `not + 1` keep the variable, and a
+ * sentence that starts with the word stays a non-answer. See
+ * NotNormalizerRule.ts. A prefix `!` needs no such care: after a value it is
+ * the factorial (an infix parselet in the function package), and anywhere
+ * else it was an error.
+ *
  * SCOPE DECISION: SoulverCore-style postfix `Y if X` / `Y unless X` (a
  * ternary with no explicit else-branch) is deliberately NOT implemented.
  * This VM's `Value` has no "empty"/"void" representation for the
@@ -52,6 +65,9 @@ export const CONDITIONALS_PACKAGE: IEnginePackage = {
     IF: new IfThenElseParselet(),
     // `check <a> <comparison> <b>` (#506); see CheckParselet.ts.
     CHECK: checkParselet,
+    // `not <condition>` and `!<value>`, logical negation (#751); see NotParselet.ts.
+    NOT: notWordParselet,
+    BANG: bangParselet,
   },
   // `within` and `≈` only mean something in a check. As phrases they are
   // single tokens before implicit multiplication can read `0.5 within` as a
@@ -60,12 +76,14 @@ export const CONDITIONALS_PACKAGE: IEnginePackage = {
     within: "WITHIN",
     "≈": "APPROX",
   },
-  normalizerRules: [checkLineNormalizerRule(), approxOperatorNormalizerRule()],
+  normalizerRules: [checkLineNormalizerRule(), approxOperatorNormalizerRule(), notWordNormalizerRule()],
   pluginFunctions: {
     checkComparison,
+    logicalNot,
   },
   tokenCategories: {
     CHECK: "keyword",
+    NOT: "keyword",
     WITHIN: "keyword",
     APPROX: "operator",
   },

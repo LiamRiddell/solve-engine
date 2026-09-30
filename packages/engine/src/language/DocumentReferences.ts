@@ -218,11 +218,15 @@ export function applyTextEdits(text: string, edits: readonly TextEdit[]): string
  * a name is a name whether it lexes as a word or a unit, and a rate denominator
  * that may name a variable (`100 / t`, #642) is the slash and the name it is
  * wherever the rename touches it, since a rename only reaches it below the
- * definition (see {@link NameSite.soft}).
+ * definition (see {@link NameSite.soft}), and a lone `sum` or `total` (#742)
+ * is a name.
  */
 function shapeOf(token: Token): string {
 	if (token.type === "IDENT" || token.type === "UNIT") return "NAME";
 	if (token.type === "PER_UNIT" && token.mayNameVariable === true) return "SLASH NAME";
+	// A line that is only `sum` or `total` reads a variable of that name when
+	// one is defined (#742), so it is a name wherever a rename reaches it.
+	if (token.mayNameVariable === true) return "NAME";
 	return token.type;
 }
 
@@ -280,6 +284,10 @@ interface LineAnalysis {
 	units: DocumentUnit[];
 	/** The units the note defines above this line, which it was read with. */
 	unitsAbove: readonly DocumentUnit[];
+	/** Names of several words this line defines (`hourly rate = $50`, #743). */
+	definedNames: string[];
+	/** The names of several words the note defines above this line, which it was read with. */
+	namesAbove: readonly string[];
 	lineRefs: LineRefSite[];
 	/** `sum(line A : line B)` and `average(...)`: the two ends shift together. */
 	ranges: { start: LineRefSite; end: LineRefSite }[];
@@ -536,7 +544,9 @@ export class DocumentReferences {
 				: invalid;
 		}
 		const normalised = this.engine.getNormalizer().normalize(raw);
-		if (normalised.length !== 1 || normalised[0].type !== "IDENT") {
+		// A lone `sum` or `total` fuses to a column total that still reads a
+		// variable of its name (#742), so it is a name here too.
+		if (normalised.length !== 1 || (normalised[0].type !== "IDENT" && normalised[0].mayNameVariable !== true)) {
 			return refuse("RENAME_KEYWORD", `"${newName}" is read as syntax rather than as a name, so it cannot name a variable.`);
 		}
 		return null;
@@ -564,7 +574,7 @@ export class DocumentReferences {
 		}
 		for (const [lineNumber, lineEdits] of byLine) {
 			const before = document[lineNumber - 1];
-			const after = this.analyseLine(applyToLine(lines[lineNumber - 1], lineEdits), before.unitsAbove);
+			const after = this.analyseLine(applyToLine(lines[lineNumber - 1], lineEdits), before.unitsAbove, before.namesAbove);
 			// Where an offset in the old line lands in the new one.
 			const shift = (offset: number): number => {
 				let delta = 0;
@@ -603,9 +613,12 @@ export class DocumentReferences {
 		// Replaced rather than grown, so lines between two definitions share one
 		// array and the common note, with no units, shares the empty one.
 		let unitsAbove: readonly DocumentUnit[] = [];
+		// Names of several words the same way (#743).
+		let namesAbove: readonly string[] = [];
 		return lines.map((line) => {
-			const analysis = this.analyseLine(line, unitsAbove);
+			const analysis = this.analyseLine(line, unitsAbove, namesAbove);
 			if (analysis.units.length > 0) unitsAbove = [...unitsAbove, ...analysis.units];
+			if (analysis.definedNames.length > 0) namesAbove = [...namesAbove, ...analysis.definedNames];
 			return analysis;
 		});
 	}
@@ -618,9 +631,10 @@ export class DocumentReferences {
 	 *
 	 * @param text - The line.
 	 * @param unitsAbove - The units the note defines above it.
+	 * @param namesAbove - The names of several words the note defines above it.
 	 */
-	private analyseLine(text: string, unitsAbove: readonly DocumentUnit[]): LineAnalysis {
-		const out: LineAnalysis = { names: [], units: [], unitsAbove, lineRefs: [], ranges: [], shapes: [] };
+	private analyseLine(text: string, unitsAbove: readonly DocumentUnit[], namesAbove: readonly string[] = []): LineAnalysis {
+		const out: LineAnalysis = { names: [], units: [], unitsAbove, definedNames: [], namesAbove, lineRefs: [], ranges: [], shapes: [] };
 		const lexer = this.engine.getLexer();
 		const classification = lexer.classifyLine(text);
 		if (classification.skip) return out;
@@ -650,9 +664,13 @@ export class DocumentReferences {
 	 * @param index - Which expression on the line it is.
 	 */
 	private analyseExpression(expression: string, base: number, index: number, out: LineAnalysis): void {
-		const read = this.engine.readExpressionTokens(expression, out.unitsAbove);
+		const read = this.engine.readExpressionTokens(expression, out.unitsAbove, out.namesAbove);
 		if (read === null) return;
 		const tokens = read.tokens.slice(read.start);
+		// `hourly rate = $50` defines a name of several words, which the lines
+		// below read as one (#743).
+		const first = tokens[0];
+		if (first?.type === "IDENT" && first.value.includes(" ") && tokens[1]?.type === "EQUALS") out.definedNames.push(first.value);
 		out.shapes.push(`${read.start}|${tokens.map(shapeOf).join(" ")}`);
 
 		if (read.unit !== null) {
