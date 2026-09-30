@@ -44,7 +44,7 @@
  */
 
 import { Value, ValueType, numberValue, numberValueExact, numberValueRational, errorValue } from "@solve-js/vm/Value";
-import { decimalCompare, decimalToString, type DecimalData } from "@solve-js/decimal";
+import { DECIMAL_DIGIT_CEILING, decimalCompare, decimalToString, type DecimalData } from "@solve-js/decimal";
 import { rational, rationalToNumber, type Rational } from "@solve-js/symbolic";
 import { bigIntPow, exactIntegerValue, exactIntegerArithmetic, exactIntegerRemainder } from "@solve-js/vm/ExactIntegers";
 
@@ -60,7 +60,7 @@ import { bigIntPow, exactIntegerValue, exactIntegerArithmetic, exactIntegerRemai
  * grows past it (compound growth, `1.05 ^ 30`, is 61 digits) answers the double
  * it answered before this module existed.
  */
-export const EXACT_DECIMAL_DIGITS = 34;
+export const EXACT_DECIMAL_DIGITS = DECIMAL_DIGIT_CEILING;
 
 /**
  * The globals this module calls on every exact operation, read once.

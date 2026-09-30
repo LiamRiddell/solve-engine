@@ -128,7 +128,7 @@ export interface LanguageServiceOptions {
 	 * document", used to legitimize a lone bare identifier line (see
 	 * `getSemanticTokens`'s single-token gate) and variable-name
 	 * completions (`getCompletions`). Defaults to reading
-	 * `engine.getDag().getSnapshot()`, which works for any consumer
+	 * `engine.getDag().keysInUse()`, which works for any consumer
 	 * sharing one `ExpressionEngine` between evaluation and the language
 	 * service (the real Obsidian editor).
 	 *
@@ -263,12 +263,9 @@ export class LanguageService {
 
 	private defaultVariableNames(): Iterable<string> {
 		if (!this.engine) return [];
-		const snapshot = this.engine.getDag().getSnapshot();
-		const names = new Set<string>(Object.keys(snapshot.consumers));
-		for (const written of Object.values(snapshot.writes)) {
-			for (const name of written) names.add(name);
-		}
-		return names;
+		// The graph's keys, not a snapshot of it: a snapshot spells out every
+		// positional edge, which a long ledger has millions of (#733).
+		return this.engine.getDag().keysInUse();
 	}
 
 	/**

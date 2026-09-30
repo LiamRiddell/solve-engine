@@ -12,6 +12,8 @@ export {
 	decimalDivide,
 	decimalCompare,
 	decimalRound,
+	decimalWithinDigits,
+	DECIMAL_DIGIT_CEILING,
 	decimalIsZero,
 	decimalToString,
 	decimalToNumber,

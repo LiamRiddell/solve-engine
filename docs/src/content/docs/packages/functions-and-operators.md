@@ -136,6 +136,67 @@ engine's own codes are listed on the [error codes](/guide/error-codes/) page.
 The boundary: `isCataloguedErrorCode` from `solve-engine/packages` knows only the
 codes the engine ships, so it answers `false` for yours, and that is not a fault.
 
+### Reading other lines
+
+A handler that totals or compares other lines of the note, the way `total
+above` and `total of #food` do, reads them through the context. Each read is
+also a promise to the engine: when that line changes, or a live value lands on
+it, this line has to run again. On the incremental path (a live editor, and
+`evaluateDocument`) the engine keeps those promises as a **dependency graph**,
+a record of which lines read which, and it learns of each one from the context.
+
+- `context.getLineResult(n)` is line `n`'s answer, or `undefined` when there is
+  none to read: the line is out of range, is this line, or is below it. A note
+  is read from the top, so a line below is refused on every pass, even though a
+  live editor's second pass finds an answer there from its first. Reading a line
+  records that this line depends on it.
+- `context.noteLineRead(n)` records the dependency without reading. A handler
+  that stops at the first line it cannot use declares every line it would read
+  first, so the graph knows the whole span however far the read got.
+- `context.noteFigureSpanRead(first, last)` declares a whole span of figures as
+  one dependency: every line from `first` to `last` except a summary line (a
+  `total above`, a section or a tag total), which a span of figures passes over.
+  It is what a section total declares, and it costs one entry however long the
+  span, where `noteLineRead` per line costs one per line.
+- `context.getTaggedLines(tag)` is the lines carrying `#tag`, ascending, and
+  `context.getTagGroups()` every tag with its lines. Asking is the declaration:
+  the line depends on the tag, as one entry, however many lines carry it, and a
+  line joining or leaving the group later is covered by it.
+
+A read that a declaration already covers passes `true` as the second argument,
+`context.getLineResult(n, true)`, so the graph records nothing more for it. A
+tag total that reads a thousand members through the tag it asked for costs one
+entry this way, and a thousand without it; a ledger with a running total after
+each entry then costs the square of its length.
+
+```ts
+import { errorValue, numberValue, type Value, type LineExecutionContext } from "solve-engine/vm";
+
+// sumTagged("food"): the sum of the plain numbers on the lines tagged #food.
+function sumTaggedHandler(args: Value[], context?: LineExecutionContext): Value {
+  const members = context?.getTaggedLines?.(String(args[0].value));
+  if (members === undefined || !context?.getLineResult) {
+    return errorValue("SUMTAGGED_NO_DOCUMENT", "sumTagged needs a document.");
+  }
+  let sum = 0;
+  for (const n of members) {
+    if (n === context.lineIndex) continue; // this line, if it carries the tag
+    const v = context.getLineResult(n, true); // covered by the tag
+    if (v === undefined) return errorValue("SUMTAGGED_NOT_READY", `Line ${n} has no answer yet.`);
+    sum += v.toNumber();
+  }
+  return numberValue(sum);
+}
+```
+
+The contract: every one of these is absent where there is no document (the
+single-expression entry point), so answer with an error that says a document
+is needed. `noteLineRead` and `noteFigureSpanRead` are absent in the batch pass
+too, which keeps no graph, and a handler should read on without them. Passing
+`true` for a read nothing declared leaves the graph unaware of it, and a change
+to that line then does not reach this one; pass it only for a line inside a
+span or group the handler declared.
+
 ### Asking what another line would say
 
 Sometimes a handler needs another line's answer under different inputs, rather

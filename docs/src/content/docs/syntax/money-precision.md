@@ -143,6 +143,52 @@ as it always was. So is a price that was worked out rather than typed
 (`$0.15/kWh * 12.3 kWh/day`), whose answer is a new rate rather than an amount
 of money.
 
+## How many digits an amount keeps
+
+An exact amount keeps up to 34 significant digits, and up to 34 of them after
+the point: the precision of the standard base-ten number format (IEEE 754's
+decimal128), and the same ceiling a [plain decimal](/syntax/decimals/) has.
+Every amount a person types fits with room to spare. A chain of
+multiplications is what reaches past it: growing an amount by a rate written to
+nine places adds nine digits on every line, and without a ceiling each line
+cost more than the one before. Past 34 digits the amount is rounded to 34,
+half away from zero, and carries on from there, so a long chain costs the same
+on every line and still shows the right cent.
+
+```solve-doc
+x = $100               // $100.00
+x = x * 1.123456789    // $112.35
+x = x * 1.123456789    // $126.22
+x = x * 1.123456789    // $141.80
+x = x * 1.123456789    // $159.30
+```
+
+The fourth line's exact product is 39 digits long, and the amount it keeps is
+rounded at the 34th. Rounding there moves an amount by less than one part in
+10^33, so the half-cent rule only answers differently for an amount that sits
+within that distance of a half cent. That is the boundary, and an amount typed
+with more than 34 places shows it: the first line below is a hair under half a
+cent, written to 35 places, and it is held at 34, where it is exactly half a
+cent and rounds up. Written to 34 places it is held as it is, and rounds down.
+
+```solve
+$0.00499999999999999999999999999999999 // $0.01
+$0.0049999999999999999999999999999999 // $0.00
+```
+
+An amount whose whole part alone is longer than 34 digits, more than a
+decillion, has no 34-digit form to keep, and is held as a floating-point
+number, shown in scientific notation.
+
+```solve
+$1234567890123456789012345678901234 * 10 // $1.2345678901234567e+34
+```
+
+A plain number past the ceiling falls back to floating point instead (see
+[decimals](/syntax/decimals/)). Money is rounded rather than dropped because the
+cent is what a note of money is for, and 34 digits keep it exact for any amount
+a till could hold.
+
 A bare decimal follows the same rules without a currency, so the two agree:
 `0.1 + 0.2 == 0.3` is true, and `100 + 10%` is exactly 110. See
 [decimals](/syntax/decimals/) for what that covers and where it ends. A
