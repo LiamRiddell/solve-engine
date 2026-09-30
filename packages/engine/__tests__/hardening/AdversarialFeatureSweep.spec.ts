@@ -65,6 +65,8 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 	distributions: ["normalcdf(X)", "binompdf(10, 0.5, X)"],
 	solving: ["solve(x^2 = X, x)", "integral(x, x, 0, X)"],
 	dates: ["1 Jan 2026 + X days", "1 Jan 2026 + X", "1 Jan 2026 to X", "X to 1 Jan 2026", "X * 9:00", "round(9:00) + X", "(9:30 - 8:30) + X minutes", "X as iso8601"],
+	// A signed offset after a date or in a conversion (#730).
+	utcOffsets: ["2026-04-03T15:00 in UTC-X", "2026-04-03T15:00 in GMT+X", "2026-04-03 in UTC+X:30", "3pm London in UTC-X", "now in UTC+X"],
 };
 
 describe("every form stays honest over the numeric edges", () => {
@@ -130,6 +132,7 @@ describe("a word naming an inherited property is an ordinary unknown word", () =
 		"X(5)",
 		"X",
 		"time in X",
+		"2026-04-03T15:00 in X-5",
 		"total of #X",
 		"5 X",
 	];

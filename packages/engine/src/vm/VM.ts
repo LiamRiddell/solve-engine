@@ -37,6 +37,7 @@ import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
 import { resolveZoneName } from "@solve-js/calendar/ZoneNames";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 import type { LineTrace } from "@solve-js/explain/Explanation";
+import { offsetRefusal, resolveUtcOffsetName } from "@solve-js/calendar/UtcOffset";
 
 /**
  * Create a new VM instance with the given opcode registry and configurable limits.
@@ -1874,7 +1875,11 @@ function isTruthy(value: Value): boolean {
  * an instant renders exactly as it did.
  */
 function datetimeInZone(left: Value, name: string, vm: VM): Value {
-    const zoneRef = resolveZoneName(name);
+    // A signed offset (`in UTC-5`, #730) resolves beside the zone names.
+    const zoneRef = resolveZoneName(name) ?? resolveUtcOffsetName(name);
+    // `in UTC+25`: an offset's shape, and no clock keeps it.
+    const badOffset = zoneRef === null ? offsetRefusal(name) : null;
+    if (badOffset !== null) return errorValue(DatetimeErrorCodes.TIME_ZONE_OFFSET_OUT_OF_RANGE, badOffset);
     if (zoneRef === null) {
         // A real unit on the right is a different mistake from a misspelt zone,
         // and the two need different advice. `getMeasure` covers the unit table
