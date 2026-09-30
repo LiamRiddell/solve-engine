@@ -631,8 +631,8 @@ function codesOf(example: Example): string[] {
 
 describe("every catalogued code has an example or a reason no line produces it", () => {
 	test("each code is in exactly one of the two", () => {
-		const unaccounted = CATALOGUED.filter((code) => !Object.hasOwn(EXAMPLES, code) && !Object.hasOwn(NOT_FROM_A_LINE, code));
-		const both = CATALOGUED.filter((code) => Object.hasOwn(EXAMPLES, code) && Object.hasOwn(NOT_FROM_A_LINE, code));
+		const unaccounted = CATALOGUED.filter((code) => !Object.prototype.hasOwnProperty.call(EXAMPLES, code) && !Object.prototype.hasOwnProperty.call(NOT_FROM_A_LINE, code));
+		const both = CATALOGUED.filter((code) => Object.prototype.hasOwnProperty.call(EXAMPLES, code) && Object.prototype.hasOwnProperty.call(NOT_FROM_A_LINE, code));
 		expect({ unaccounted, both }).toEqual({ unaccounted: [], both: [] });
 	});
 

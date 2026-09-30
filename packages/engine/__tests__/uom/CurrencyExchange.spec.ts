@@ -7,7 +7,7 @@
  * - Currency validation (isCurrency)
  */
 
-import { describe, expect, test, beforeEach, afterEach } from "@jest/globals";
+import { describe, expect, test, beforeEach, afterEach, jest } from "@jest/globals";
 import { CurrencyExchangeService } from "@solve-js/uom/CurrencyExchange";
 
 // Mock fetch to avoid live network calls

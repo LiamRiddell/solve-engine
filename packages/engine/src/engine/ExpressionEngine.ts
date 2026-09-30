@@ -2130,8 +2130,8 @@ export class ExpressionEngine {
             } catch (e) {
                 const engineError = normalizeUnknownError(e);
                 console.error(
-                    `[ExpressionEngine] Failed to register package "${pkg.name}" — skipping it and continuing ` +
-                    `construction with the remaining packages: ${engineError.format()}`
+                    `[ExpressionEngine] Failed to register package "${pkg.name}", so it is skipped and ` +
+                    `construction continues with the remaining packages: ${engineError.format()}`
                 );
             }
         }

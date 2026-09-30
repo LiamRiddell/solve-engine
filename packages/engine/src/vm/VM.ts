@@ -2180,7 +2180,7 @@ function multiplyRateByMatchingUom(rate: Value, multiplier: Value): Value {
     if (!rateMeasure || rateMeasure !== multiplierMeasure) {
         return errorValue(
             "RATE_MUL_MEASURE_MISMATCH",
-            `Cannot multiply a "${denominator}"-denominated rate by "${multiplier.unit}" — different measures`
+            `Cannot multiply a "${denominator}"-denominated rate by "${multiplier.unit}": they measure different things`
         );
     }
     const multiplierInDenominatorUnit = convertUnit(multiplier.toNumber(), multiplier.unit!, denominator);
@@ -2521,7 +2521,7 @@ function rangeLiteral(stack: Value[]): void {
     if (min > max) {
       stack.push(errorValue(
         "DESCENDING_RANGE",
-        `A range's min (${min}) cannot be greater than its max (${max}) — did you mean "${max}:${min}"?`,
+        `A range's min (${min}) cannot be greater than its max (${max}). Did you mean "${max}:${min}"?`,
       ));
       return;
     }
@@ -4892,7 +4892,7 @@ export function executeBytecode(
           if (!rateMeasure || rateMeasure !== targetMeasure) {
             stack.push(errorValue(
               "RATE_CONVERT_MEASURE_MISMATCH",
-              `Cannot convert a "${denominator}"-denominated rate to "${newDenominatorUnit}" — different measures`
+              `Cannot convert a "${denominator}"-denominated rate to "${newDenominatorUnit}": they measure different things`
             ));
             break;
           }

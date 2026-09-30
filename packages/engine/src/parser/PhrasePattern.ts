@@ -108,7 +108,7 @@ export function definePhrasePattern(opts: {
     if (!first || first.kind !== "keyword") {
       throw ErrorFactory.config(
         "INVALID_PHRASE_PATTERN",
-        "Every PhraseAlternative's first slot must be a `keyword` slot — alternatives are chosen by peeking the next token, which only works if the choice is decidable from one leading keyword.",
+        "Every PhraseAlternative's first slot must be a `keyword` slot: alternatives are chosen by peeking the next token, which only works if the choice is decidable from one leading keyword.",
         { category: opts.category }
       );
     }

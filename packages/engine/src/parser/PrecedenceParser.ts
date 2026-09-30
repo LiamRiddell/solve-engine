@@ -937,7 +937,7 @@ export class PrecedenceParser {
       // addBusinessDays()'s own disclosed holiday-exclusion scope-down).
       throw ErrorFactory.parsing({
         code: "FUNCTION_BODY_MUST_BE_SYNCHRONOUS",
-        message: `"${nameToken.value}(...)"'s body calls an async operation (weather, stocks, currency, ...) — user-defined function bodies must be synchronous`,
+        message: `"${nameToken.value}(...)"'s body calls an async operation (weather, stocks, currency, ...), and a user-defined function body must be synchronous`,
         context: { name: nameToken.value },
         span: this.spanOf(nameToken),
       });

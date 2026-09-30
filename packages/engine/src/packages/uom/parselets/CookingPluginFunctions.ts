@@ -53,13 +53,13 @@ export function cookingConvertHandler(args: Value[]): Value {
   if (!isMassOrVolume(sourceMeasure)) {
     return errorValue(
       "COOKING_CONVERSION_UNSUPPORTED_UNIT",
-      `"${sourceUnit}" is not a recognized mass or volume unit`,
+      `"${sourceUnit}" is not a recognised mass or volume unit`,
     );
   }
   if (!isMassOrVolume(targetMeasure)) {
     return errorValue(
       "COOKING_CONVERSION_UNSUPPORTED_UNIT",
-      `"${targetUnitText}" is not a recognized mass or volume unit`,
+      `"${targetUnitText}" is not a recognised mass or volume unit`,
     );
   }
 
@@ -73,7 +73,7 @@ export function cookingConvertHandler(args: Value[]): Value {
   if (density === undefined) {
     return errorValue(
       "COOKING_UNKNOWN_INGREDIENT",
-      `No density data for "${ingredientName}" — cannot convert between mass and volume for this ingredient`,
+      `No density data for "${ingredientName}", so it cannot be converted between mass and volume`,
     );
   }
 

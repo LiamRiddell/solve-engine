@@ -95,7 +95,7 @@ function collectParseletConflicts(
         // since deliberate override is sometimes the intended use (a
         // package explicitly built to replace a built-in's grammar).
         severity: "warning",
-        detail: `Both "${existingPkg.name}" and "${candidate.name}" register a ${fieldName === "prefixParselets" ? "prefix" : "infix"} parselet for token type "${tokenType}" — the later-registered one silently wins.`,
+        detail: `Both "${existingPkg.name}" and "${candidate.name}" register a ${fieldName === "prefixParselets" ? "prefix" : "infix"} parselet for token type "${tokenType}": the later-registered one silently wins.`,
         packages: [existingPkg.name, candidate.name],
       });
     }
@@ -117,7 +117,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
         conflicts.push({
           kind: "phrase",
           severity: "warning",
-          detail: `Both "${existingPkg.name}" (-> "${existingTokenType}") and "${candidate.name}" (-> "${tokenType}") fuse the phrase "${phrase}" to DIFFERENT token types — PhraseTrie has no collision detection of its own, so the later-registered mapping silently wins with no other signal.`,
+          detail: `Both "${existingPkg.name}" (-> "${existingTokenType}") and "${candidate.name}" (-> "${tokenType}") fuse the phrase "${phrase}" to DIFFERENT token types: PhraseTrie has no collision detection of its own, so the later-registered mapping silently wins with no other signal.`,
           packages: [existingPkg.name, candidate.name],
         });
       }
@@ -133,7 +133,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
         conflicts.push({
           kind: "converterName",
           severity: "warning",
-          detail: `Both "${existingPkg.name}" and "${candidate.name}" register an "as ${name}" converter — the later-registered handler silently wins.`,
+          detail: `Both "${existingPkg.name}" and "${candidate.name}" register an "as ${name}" converter: the later-registered handler silently wins.`,
           packages: [existingPkg.name, candidate.name],
         });
       }
@@ -152,7 +152,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
         conflicts.push({
           kind: "pluginFunctionName",
           severity: "warning",
-          detail: `Both "${existingPkg.name}" and "${candidate.name}" register a plugin function named "${name}" — the later registration wins in the engine's name-to-index map. Give each package's functions package-unique names.`,
+          detail: `Both "${existingPkg.name}" and "${candidate.name}" register a plugin function named "${name}": the later registration wins in the engine's name-to-index map. Give each package's functions package-unique names.`,
           packages: [existingPkg.name, candidate.name],
         });
       }
@@ -172,7 +172,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
         conflicts.push({
           kind: "normalizerRuleName",
           severity: "warning",
-          detail: `Both "${existingPkg.name}" and "${candidate.name}" register a normalizer rule named "${rule.name}" — the normalizer unregisters rules by name, so removing either package would drop both rules. Give each package's rules a package-unique name.`,
+          detail: `Both "${existingPkg.name}" and "${candidate.name}" register a normalizer rule named "${rule.name}": the normalizer unregisters rules by name, so removing either package would drop both rules. Give each package's rules a package-unique name.`,
           packages: [existingPkg.name, candidate.name],
         });
       }
@@ -193,7 +193,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
         conflicts.push({
           kind: "lexerKeyword",
           severity: "error",
-          detail: `Both "${existingPkg.name}" (-> "${existingTokenType}") and "${candidate.name}" (-> "${tokenType}") register the lexer keyword "${word}" for DIFFERENT token types — whichever package registers second wins, and the loser's grammar becomes silently unreachable for that word.`,
+          detail: `Both "${existingPkg.name}" (-> "${existingTokenType}") and "${candidate.name}" (-> "${tokenType}") register the lexer keyword "${word}" for DIFFERENT token types: whichever package registers second wins, and the loser's grammar becomes silently unreachable for that word.`,
           packages: [existingPkg.name, candidate.name],
         });
       }
@@ -240,7 +240,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
         conflicts.push({
           kind: "asyncResolverNamespace",
           severity: "error",
-          detail: `Both "${existingPkg.name}" and "${candidate.name}" register an async resolver under the namespace "${resolver.namespace}" — ResolverRegistry is keyed by namespace, so one resolver's cache/preflight state will silently clobber the other's.`,
+          detail: `Both "${existingPkg.name}" and "${candidate.name}" register an async resolver under the namespace "${resolver.namespace}": ResolverRegistry is keyed by namespace, so one resolver's cache/preflight state will silently clobber the other's.`,
           packages: [existingPkg.name, candidate.name],
         });
       }
@@ -259,7 +259,7 @@ function checkOnePackagePair(existingPkg: IEnginePackage, candidate: IEnginePack
         conflicts.push({
           kind: "tokenCategory",
           severity: "info",
-          detail: `Both "${existingPkg.name}" (-> "${existingCategory}") and "${candidate.name}" (-> "${category}") declare a highlight category for token type "${tokenType}" — cosmetic only, but the later registration wins.`,
+          detail: `Both "${existingPkg.name}" (-> "${existingCategory}") and "${candidate.name}" (-> "${category}") declare a highlight category for token type "${tokenType}": cosmetic only, but the later registration wins.`,
           packages: [existingPkg.name, candidate.name],
         });
       }

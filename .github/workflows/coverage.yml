@@ -37,3 +37,56 @@ jobs:
       - run: npm ci
 
       - run: npm run test:coverage
+
+  # A scheduled run is shown to nobody: no pull request carries its result, so
+  # a floor that fails, or a run that hits its time limit, used to say so only
+  # in the Actions tab. That is how the run of 2026-09-25 was cancelled at its
+  # 90-minute limit with the floor unmeasured and nothing reporting it (#792).
+  # This reopens, or opens, one issue for the workflow, the way pages.yml does
+  # for the site deploy.
+  #
+  # Keyed on the floor job's result rather than on `failure()`: a job that
+  # reaches `timeout-minutes` concludes as cancelled, and `failure()` alone
+  # stays silent for that. A manual run is watched by whoever started it, so
+  # only the schedule reports.
+  report:
+    needs: [floor]
+    if: always() && github.event_name == 'schedule' && needs.floor.result != 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+    steps:
+      - name: Say so in the tracker
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RESULT: ${{ needs.floor.result }}
+        run: |
+          set -euo pipefail
+          title="The scheduled coverage run did not pass"
+
+          if [ "${RESULT}" = "cancelled" ]; then
+            what="was cancelled, most likely at its 90-minute limit, so the coverage floor was not measured"
+          else
+            what="ended with the result \`${RESULT}\`: the floor was missed, or the suite failed before it could be measured"
+          fi
+
+          cat > body.md <<BODY
+          The daily coverage run on \`${GITHUB_REF_NAME}\` ${what}.
+
+          Run: ${RUN_URL}
+
+          Reproduce locally with \`npm run test:coverage\`.
+          BODY
+
+          # One issue, reopened and commented on, rather than a new one per run.
+          number=$(gh issue list --state all --search "\"${title}\" in:title" --json number,title \
+            --jq "[.[] | select(.title == \"${title}\")] | .[0].number // empty")
+
+          if [ -n "${number}" ]; then
+            gh issue reopen "${number}" || true
+            gh issue comment "${number}" --body-file body.md
+          else
+            gh issue create --title "${title}" --body-file body.md --label bug
+          fi

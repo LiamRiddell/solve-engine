@@ -549,7 +549,7 @@ function symbolicInverse(m: MatrixData): Value {
 		if (pivot.kind === "const" && isRationalZero(pivot.value)) {
 			return errorValue(
 				"SYMBOLIC_SINGULAR_OR_UNSUPPORTED_PIVOT",
-				`Symbolic inverse: the pivot at row/col ${col} is exactly zero — this matrix's structure isn't invertible via this engine's diagonal-first symbolic elimination (no row-swapping); try reordering rows manually.`,
+				`Symbolic inverse: the pivot at row/col ${col} is exactly zero, and this engine's symbolic elimination works down the diagonal without swapping rows, so it cannot invert this matrix as written; try reordering its rows.`,
 			);
 		}
 		// Eliminate first, divide the pivot row through afterwards, which is

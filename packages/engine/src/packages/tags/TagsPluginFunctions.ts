@@ -36,7 +36,7 @@ function checkLineValue(v: Value | undefined, lineNumber: number): Value | null 
 
 function requireContext(context: LineExecutionContext | undefined): Value | null {
   if (!context?.getLineResult || !context.getLineText) {
-    return errorValue("TAG_NO_DOCUMENT", "Category tag sums require a real document, not available outside one (e.g. evaluateExpression()'s single-expression path)");
+    return errorValue("TAG_NO_DOCUMENT", "Category tag sums need a document, and a line evaluated on its own has none");
   }
   return null;
 }
