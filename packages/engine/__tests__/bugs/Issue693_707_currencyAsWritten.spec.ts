@@ -10,6 +10,7 @@ import {
 	CURRENCY_WORD_ALIASES,
 	resolveCurrencyAlias,
 } from "@solve-js/uom/CurrencyAliases";
+import { currencyMinorUnits } from "@solve-js/uom/CurrencyMinorUnits";
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { EXTENDED_UNITS } from "@solve-js/uom/ExtendedUnits";
 import { enLocale, deLocale, frLocale } from "@solve-js/constants/locales";
@@ -43,8 +44,12 @@ describe("what the engine writes, it reads back", () => {
 		for (const amount of ["12", "1234.56", "-12"]) {
 			const written = read(`${amount} ${code}`).shown;
 			const back = read(written);
-			expect(back.shown).toBe(written);
-			expect(back.currency).toBe(SHARED_SYMBOL_DEFAULTS[code] ?? code);
+			const readAs = SHARED_SYMBOL_DEFAULTS[code] ?? code;
+			expect(back.currency).toBe(readAs);
+			// A shared symbol whose default counts in other places (the yuan's `¥`
+			// reads as the yen, which has no subunit, #731) reads back as that
+			// amount of the default, shown the way the default is shown.
+			expect(back.shown).toBe(currencyMinorUnits(readAs) === currencyMinorUnits(code) ? written : read(`${amount} ${readAs}`).shown);
 		}
 	});
 
@@ -68,10 +73,10 @@ describe("a symbol after the amount", () => {
 		["-100 €", "-€100.00", "EUR"],
 		["1,000 ₹", "₹1,000.00", "INR"],
 		["12 ₽", "12.00 ₽", "RUB"],
-		["12₫", "12.00₫", "VND"],
+		["12₫", "12₫", "VND"],
 		["100 $", "$100.00", "USD"],
 		["100 £", "£100.00", "GBP"],
-		["100 ¥", "¥100.00", "JPY"],
+		["100 ¥", "¥100", "JPY"],
 		["5 € + 3 €", "€8.00", "EUR"],
 	])("%s is %s", (line, shown, currency) => {
 		expect(read(line)).toEqual({ shown, currency });

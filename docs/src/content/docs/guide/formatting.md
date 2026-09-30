@@ -45,6 +45,38 @@ how a date is written out: `"long"`, the spelled-out default
 Every group's fields are listed in the
 [API reference](/api/format/interfaces/formattingsettings/).
 
+## Currency places
+
+An amount of money is shown to its currency's minor unit, the smallest amount
+that currency is paid in: two places for the dollar, none for the yen, three for
+the Kuwaiti dinar, and a figure of its own for each cryptocurrency (see
+[money precision](/syntax/money-precision/#each-currencys-own-places)). That
+applies whatever `unitOfMeasurementResult.decimalPlaces` holds, because a
+setting of two was the default long before currencies had their own figures,
+and a host that never touched it did not ask for two places of yen. The setting
+still bounds a price per unit (`¥31.5/kWh`), which keeps at least the minor unit
+and up to `decimalPlaces`.
+
+A host that wants every currency to one place count, as before, sets
+`unitOfMeasurementResult.currencyPlaces` to `"setting"`. `"currency"` is the
+default, and what a missing field reads as, so a settings object built before
+the field existed keeps compiling and gets the minor units.
+
+```ts
+const oneCountEverywhere = {
+  ...DEFAULT_FORMATTING_SETTINGS,
+  unitOfMeasurementResult: { decimalPlaces: 2, currencyPlaces: "setting" },
+};
+
+formatValue(engine.evaluateExpression("¥1000 / 3"));                     // "= ¥333"
+formatValue(engine.evaluateExpression("¥1000 / 3"), oneCountEverywhere); // "= ¥333.33"
+```
+
+Either way, a line that names its places (`¥1000 / 3 to 2 dp`) is shown to them.
+The setting changes only what is shown: a split still shares out the currency's
+smallest unit, so a yen bill split three ways pays whole yen under either
+setting (`¥33.00 each` under `"setting"`).
+
 ## The locale tag
 
 `numberResult.decimalSeparatorLocale` is the tag a result is written for, and it

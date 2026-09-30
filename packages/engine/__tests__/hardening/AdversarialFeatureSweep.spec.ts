@@ -75,6 +75,10 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"4000px at X dpi",
 	],
 	money: ["$X * 3", "$X split 3 ways", "X% of $200", "₹1,00,000 * X", "X INR + 12,34,567 INR"],
+	// Each currency's own places and a split in its smallest unit (#731), a money
+	// rate with its symbol and a time word that agrees with its count (#753).
+	currencyPlaces: ["¥X / 3", "X KWD / 3", "X BTC", "¥X split 3 ways", "split (X KWD) between 3", "$X per hour", "¥X/kWh"],
+	unitWords: ["X seconds in hours", "X hour", "X hours in minutes"],
 	// The reversed conversion over every unit table, in each unit's own case (#825).
 	reversedConversion: ["km in X furlong", "mW in X W", "m in X mile"],
 	finance: ["npv of -1000, X, 400 at 10%", "irr of -1000, X, 400"],

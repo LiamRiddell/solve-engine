@@ -45,7 +45,9 @@ function shownTo(value: Value, places: number): string {
 	return shown(value, {
 		...base,
 		floatResult: { ...base.floatResult, decimalPlaces: places },
-		unitOfMeasurementResult: { decimalPlaces: places },
+		// Every side to the same places, money included: a failure widened to
+		// tell two amounts apart must not be cut back to the currency's minor unit.
+		unitOfMeasurementResult: { decimalPlaces: places, currencyPlaces: "setting" },
 		percentageResult: { decimalPlaces: places },
 	});
 }
