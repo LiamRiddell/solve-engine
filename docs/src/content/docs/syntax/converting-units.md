@@ -26,12 +26,14 @@ rather than guessed. The message names the dimensions rather than the units, so
 different dimensions is refused the same way: `5 kg + 3 m` reports *mass and
 length cannot be added*.
 
-Only a number or a quantity has an amount to convert. A bracketed list or a
-piece of text does not, so converting one is refused rather than answered as
-zero of the unit:
+Only a number or a quantity has an amount to convert. A piece of text or a
+colour does not, so converting one is refused rather than answered as zero of
+the unit. A list converts every cell, since each cell is an amount (see
+[lists and units](/syntax/vectors-and-matrices/#lists-and-units)):
 
 ```solve-doc
-(1, 2) in miles // ERROR: A bracketed list has no single amount to convert to miles: only a number or a quantity can be converted.
+"two" in miles // ERROR: Text has no single amount to convert to miles: only a number or a quantity can be converted.
+(1, 2) in miles // [1.00 miles, 2.00 miles]
 ```
 
 A time written as a word agrees with its count, the way it is said: one hour,

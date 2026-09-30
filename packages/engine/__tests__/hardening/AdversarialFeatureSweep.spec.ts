@@ -114,7 +114,29 @@ const LINE_FORMS: Readonly<Record<string, readonly string[]>> = {
 		"present value of $X after 3 years at 7%",
 		"$1,000 invested X returned",
 		"annual return on $1,000 invested $X returned after 5 years",
+		// `payment on` beside `repayment on`, and `compounded` with an interval (#746).
+		"monthly payment on $X over 25 years at 4%",
+		"total payment on 200000 over X years at 4%",
+		"$1,000 for 3 years at X% compounded monthly",
 	],
+	// Lists that carry a unit (#745).
+	unitLists: [
+		"[X km, 500 m] * 2",
+		"[1 km, 2 km] + X m",
+		"[X, 2] km in m",
+		"[$X, $6][1]",
+		"map(x * 2, [X km, 1 km])",
+		"-[X kg, 1 kg]",
+	],
+	// Scotland, student loans and pensions on the take-home forms (#747).
+	payrollCases: [
+		"£X after tax in Scotland",
+		"take home on £X with plan 2 student loan",
+		"£50,000 after tax with X% pension",
+		"£X per month after tax in Scotland with postgraduate loan and 5% pension",
+	],
+	// An IPv6 address is refused by name wherever it stands (#748).
+	ipv6: ["fe80::1 + X", "X + fe80::1", "X * 2001:db8::/32", "fe80::1 in X"],
 	// A savings goal over a duration, read as in one is.
 	savingsGoals: ["how much per month to reach $X over 2 years", "how much per month to reach $10,000 over X years"],
 	distributions: ["normalcdf(X)", "binompdf(10, 0.5, X)"],
@@ -220,6 +242,12 @@ const DOCUMENT_FORMS: ReadonlyArray<{ readonly form: string; readonly agree?: bo
 	{ form: "Rent $X\nFood $300\nsum" },
 	{ form: "total = X\ntotal" },
 	{ form: "hourly rate = X\nhours = 8\nhourly rate * hours" },
+	// A named scenario and a date sweep (#744).
+	{ form: "a = 1\nb = a * 2\nscenario s with a = X\nline 2 under s" },
+	{ form: "d = 2026-01-01\n(d - 2026-01-01) in days\nline 2 for d from 2026-01-01 to 2026-06-01 step X months" },
+	{ form: "d = 2026-01-01\n(d - 2026-01-01) in days\nline 2 for d from 2026-01-01 to 2026-06-01 step X days" },
+	// A list that carries a unit, from a line above (#745).
+	{ form: "a = X km\n[a, 500 m] * 2" },
 ];
 
 describe("the cross-line forms stay honest over the numeric edges, through both passes", () => {

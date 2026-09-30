@@ -103,6 +103,13 @@ export const FINANCE_PACKAGE: IEnginePackage = {
     "monthly repayment on": "MONTHLY_REPAYMENT_ON",
     "annual repayment on": "ANNUAL_REPAYMENT_ON",
     "total repayment on": "TOTAL_REPAYMENT_ON",
+    // `payment on` is the everyday name for the same repayment (#746). The
+    // phrase ends in `on`, so a variable named `payment` (`payment * 12`) is
+    // untouched: only the three words together are claimed.
+    "daily payment on": "DAILY_REPAYMENT_ON",
+    "monthly payment on": "MONTHLY_REPAYMENT_ON",
+    "annual payment on": "ANNUAL_REPAYMENT_ON",
+    "total payment on": "TOTAL_REPAYMENT_ON",
     "daily interest on": "DAILY_LOAN_INTEREST_ON",
     "monthly interest on": "MONTHLY_LOAN_INTEREST_ON",
     "annual interest on": "ANNUAL_LOAN_INTEREST_ON",

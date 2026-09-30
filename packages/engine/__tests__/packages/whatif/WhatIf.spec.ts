@@ -174,12 +174,12 @@ describe("a sweep lists the target's answers across a range", () => {
 
 	test("a quantity range steps in the start's unit, converting the others", () => {
 		const out = both(["m = 2 kg", "a = 3", "m * a", "line 3 for m from 1 kg to 2 kg step 500 g"]);
-		expect(out[3]).toBe("[3, 4.50, 6]");
+		expect(out[3]).toBe("[3.00 kg, 4.50 kg, 6.00 kg]");
 	});
 
-	test("a money range lists the amounts, the way every list does", () => {
+	test("a money range lists money, since a list carries a unit (#745)", () => {
 		const out = both(["price = $100", "qty = 3", "price * qty", "line 3 for price from $100 to $300 step $50"]);
-		expect(out[3]).toBe("[300, 450, 600, 750, 900]");
+		expect(out[3]).toBe("[$300.00, $450.00, $600.00, $750.00, $900.00]");
 	});
 
 	test("a step that does not land on the end stops before it", () => {

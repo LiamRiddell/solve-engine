@@ -94,6 +94,28 @@ export function firstGlobalWrite(texts: readonly string[], tokenize: Tokenize): 
 }
 
 /**
+ * The scenario a line declares (`scenario bull with growth = 8%, price =
+ * $120`, #744): its name and the text of its inputs as written after `with`,
+ * or null for any other line.
+ *
+ * Read from the line's normalised tokens, so a line is a declaration exactly
+ * when the scenario rule fused its opening words, and not when `scenario` is
+ * only a variable's name. A cheap text test runs first, since most lines do
+ * not start with the word.
+ *
+ * @param text - The line, as written.
+ * @param tokenize - The engine's tokenizer, normalising as evaluation does.
+ */
+export function scenarioDeclaredIn(text: string, tokenize: Tokenize): { name: string; overrides: string } | null {
+	if (!/^\s*scenario\b/i.test(text)) return null;
+	const tokens = tokenize(text);
+	const head = tokens[0];
+	const first = tokens[1];
+	if (head?.type !== "SCENARIO_DECLARATION" || first === undefined) return null;
+	return { name: head.value, overrides: text.slice(first.offset) };
+}
+
+/**
  * Whether a line mentions `name` as a word the lexer reads as a name.
  *
  * Deliberately generous: a name in a definition, a read, a function body or a

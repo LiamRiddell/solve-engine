@@ -1,6 +1,7 @@
 import {
 	Value,
 	ValueType,
+	datetimeValue,
 	errorValue,
 	numberValue,
 	percentageValue,
@@ -10,6 +11,11 @@ import {
 import type { LineExecutionContext, LineRerun } from "@solve-js/vm/VM";
 import { unifyQuantities } from "@solve-js/vm/VMConversion";
 import { budgetMark, sharedBudgetRefusal } from "@solve-js/vm/AllocationBudget";
+import { shiftByCalendarUnit } from "@solve-js/vm/CalendarShift";
+import { calendarOf } from "@solve-js/calendar/DateCalendar";
+import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
+import { convertUnit, getMeasure, isWorkdayUnit } from "@solve-js/uom/UomConverter";
+import { formatValue } from "@solve-js/format/FormatEngine";
 
 /**
  * What-if and sweeps: `line 4 with deposit = 150000` and `line 4 for rate from
@@ -199,7 +205,7 @@ function readRange(start: Value, end: Value, step: Value, name: string): { kind:
 	if (kinds.some((k) => k === null)) {
 		return errorValue(
 			"SWEEP_RANGE_NOT_NUMERIC",
-			`A sweep steps through numbers, percentages or quantities, so its start, end and step must each be one.`,
+			`A sweep steps through numbers, percentages, quantities or dates, so its start, end and step must each be one (a date range steps by a length of time).`,
 		);
 	}
 	const [startKind, endKind, stepKind] = kinds as RangeKind[];
@@ -235,6 +241,74 @@ function rangeValue(kind: RangeKind, magnitude: number): Value {
 }
 
 /**
+ * The dates a sweep between two dates tries (`from 2026-01-01 to 2026-06-01
+ * step 1 month`, #744), start to end inclusive, or the error that stops it.
+ *
+ * The step is a length of time. Months and years move the month field and
+ * whole days the day field, as `<date> + <duration>` does (see
+ * vm/CalendarShift.ts), so a step over a daylight-saving change keeps the time
+ * of day and a month step from the 31st lands on each month's last day. Each
+ * date is the start moved by `i` steps, not the last date moved by one, so
+ * January 31 steps to February 28 and then March 31 rather than drifting to
+ * the 28th. A shorter step (hours, minutes) is elapsed time, added as such.
+ * Working days are not a calendar step and are refused by name.
+ */
+function steppedDates(start: Value, end: Value, step: Value, name: string, calendar: CalendarBackend): Value[] | Value {
+	for (const bound of [start, end, step]) {
+		const refused = checkedInput(bound, name);
+		if (refused) return refused;
+	}
+	if (end.type !== ValueType.Datetime) {
+		return errorValue(
+			"SWEEP_RANGE_MISMATCH",
+			`A sweep from a date runs to a date, so its end must be one too, as in "from 2026-01-01 to 2026-06-01 step 1 month".`,
+		);
+	}
+	const unit = step.type === ValueType.Uom ? step.unit : undefined;
+	if (unit === undefined || isWorkdayUnit(unit) || (getMeasure(unit) !== "time" && shiftByCalendarUnit(0, 0, unit, calendar) === undefined)) {
+		return errorValue(
+			"SWEEP_DATE_STEP_NOT_DURATION",
+			unit !== undefined && isWorkdayUnit(unit)
+				? `A sweep between two dates steps by the calendar (days, weeks, months or years), and a working day is not a calendar step.`
+				: `A sweep between two dates steps by a length of time, such as 1 month, 7 days or 1 year.`,
+		);
+	}
+	const amount = step.toNumber();
+	const from = start.toNumber();
+	const to = end.toNumber();
+	if (![amount, from, to].every(Number.isFinite)) {
+		return errorValue("SWEEP_RANGE_NOT_NUMERIC", `A sweep's start, end and step must be finite.`);
+	}
+	if (amount === 0) {
+		return errorValue("SWEEP_STEP_ZERO", `A sweep's step cannot be zero: it would never reach the end of the range.`);
+	}
+	const at = (i: number): number => shiftByCalendarUnit(from, i * amount, unit, calendar) ?? from + convertUnit(i * amount, unit, "ms");
+	const span = to - from;
+	if (span !== 0 && Math.sign(at(1) - from) !== Math.sign(span)) {
+		const direction = span > 0 ? "forward" : "back";
+		return errorValue(
+			"SWEEP_STEP_WRONG_SIGN",
+			`This sweep runs ${direction} in time from its start to its end, so its step must be ${span > 0 ? "positive" : "negative"}: as written it moves away from the end and never reaches it.`,
+		);
+	}
+	const values: Value[] = [];
+	for (let i = 0; ; i++) {
+		const moment = at(i);
+		if (!Number.isFinite(moment)) break;
+		if (span >= 0 ? moment > to : moment < to) break;
+		if (values.length === SWEEP_MAX_STEPS) {
+			return errorValue(
+				"SWEEP_TOO_MANY_STEPS",
+				`This sweep would try more than ${SWEEP_MAX_STEPS.toLocaleString("en-US")} dates, past the limit of ${SWEEP_MAX_STEPS.toLocaleString("en-US")} for one sweep. Use a larger step or a shorter range.`,
+			);
+		}
+		values.push(datetimeValue(moment, start.grain, start.zone));
+		if (span === 0) break;
+	}
+	return values;
+}
+
+/**
  * The values a sweep tries, start to end inclusive, or the error that stops it.
  *
  * The count is worked out first, from the span and the step, so a range that
@@ -243,7 +317,8 @@ function rangeValue(kind: RangeKind, magnitude: number): Value {
  * addition never accumulates, and the last value is snapped to the end when it
  * lands within {@link STEP_LANDING_TOLERANCE} of it.
  */
-function steppedValues(start: Value, end: Value, step: Value, name: string): Value[] | Value {
+function steppedValues(start: Value, end: Value, step: Value, name: string, calendar: CalendarBackend): Value[] | Value {
+	if (start.type === ValueType.Datetime) return steppedDates(start, end, step, name, calendar);
 	const range = readRange(start, end, step, name);
 	if (range instanceof Value) return range;
 	const [s, e, d] = range.magnitudes;
@@ -295,8 +370,9 @@ const LISTABLE: ReadonlySet<ValueType> = new Set([
 	ValueType.BigInt,
 ]);
 
-/** An input as a reader would write it, for a message: the magnitude, then the unit or percent sign. */
+/** An input as a reader would write it, for a message: the magnitude, then the unit or percent sign, or the date. */
 function describeInput(value: Value): string {
+	if (value.type === ValueType.Datetime) return formatValue(value).replace(/^=\s*/, "");
 	const magnitude = value.toNumber();
 	if (value.type === ValueType.Percentage) return `${Number((magnitude * 100).toPrecision(12))}%`;
 	const shown = String(Number(magnitude.toPrecision(12)));
@@ -337,7 +413,7 @@ function budgetShared(targetLine: number, shared: { budget: "elements" | "calls"
 export function sweepHandler(args: Value[], context?: LineExecutionContext): Value {
 	const targetLine = args[0].toNumber();
 	const name = String(args[1].value);
-	const inputs = steppedValues(args[2], args[3], args[4], name);
+	const inputs = steppedValues(args[2], args[3], args[4], name, calendarOf(context));
 	if (inputs instanceof Value) return inputs;
 
 	if (Number.isFinite(targetLine) && inputs.length * targetLine > SWEEP_MAX_LINE_RUNS) {
@@ -386,15 +462,15 @@ export function sweepHandler(args: Value[], context?: LineExecutionContext): Val
 		opened.close();
 	}
 
-	// A list in this engine is a vector of plain numbers, so the answers are
-	// read in one unit (the first answer's) and listed as amounts in it. Two
-	// answers that measure different things, or one that is not a number at
-	// all, have no such reading and are refused by name.
+	// A list carries one unit, so the answers are read in the first answer's
+	// unit and listed in it: a sweep of a money line answers a list of money
+	// (#745). Two answers that measure different things, or one that is not a
+	// number at all, have no such reading and are refused by name.
 	const unified = unifyQuantities(answers, "listed together");
 	if (unified instanceof Value) return unified;
 	const mark = budgetMark();
 	try {
-		return rowVectorValue(unified.magnitudes);
+		return rowVectorValue(unified.magnitudes, unified.unit);
 	} catch (error) {
 		const shared = sharedBudgetRefusal(mark);
 		if (!shared) throw error;

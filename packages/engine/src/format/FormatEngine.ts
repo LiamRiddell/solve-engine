@@ -787,8 +787,14 @@ function formatMoney(value: number, money: MoneyUnit, places: MoneyPlaces, exact
   return `${amount}${per}`;
 }
 
-function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings): string {
+function formatMatrixEntry(entry: MatrixEntry, settings: FormattingSettings, unit?: string, locale?: ILocale): string {
   if (typeof entry === "boolean") return entry ? "true" : "false";
+  // A cell of a list with a unit is written as the quantity it stands for, so
+  // `[1 km, 500 m]` shows as `[1.00 km, 0.50 km]` and money as money (#745).
+  if (unit !== undefined && locale !== undefined && typeof entry === "number") {
+    const quantity = formatUom(entry, unit, locale, settings);
+    return quantity.startsWith(locale.display.resultPrefix) ? quantity.slice(locale.display.resultPrefix.length) : quantity;
+  }
   if (typeof entry === "object" && entry !== null) return formatSymbolic(entry);
   const dp = settings.floatResult.decimalPlaces;
   const sep = settings.floatResult.enableSeperator;
@@ -868,7 +874,7 @@ function formatMatrix(m: MatrixData, locale: ILocale, settings: FormattingSettin
   for (let r = 0; r < shownRows; r++) {
     const cells: string[] = [];
     for (let c = 0; c < shownCols; c++) {
-      cells.push(formatMatrixEntry(matAt(m, r, c), settings));
+      cells.push(formatMatrixEntry(matAt(m, r, c), settings, m.unit, locale));
     }
     rows.push(cells.join(", "));
   }
@@ -905,11 +911,12 @@ export function formatMatrixAligned(m: MatrixData, settings?: FormattingOverride
   if (preview.kind === "shape") return `[${m.rows}x${m.cols} matrix]`;
   const shownRows = preview.kind === "rows" ? preview.shown : preview.kind === "elements" && m.cols === 1 ? preview.shown : m.rows;
   const shownCols = preview.kind === "elements" && m.rows === 1 ? preview.shown : m.cols;
+  const locale = getLocale(us.numberResult.decimalSeparatorLocale || "en");
   const cells: string[][] = [];
   for (let r = 0; r < shownRows; r++) {
     const row: string[] = [];
     for (let c = 0; c < shownCols; c++) {
-      row.push(formatMatrixEntry(matAt(m, r, c), us));
+      row.push(formatMatrixEntry(matAt(m, r, c), us, m.unit, locale));
     }
     cells.push(row);
   }

@@ -53,7 +53,10 @@ function readFlows(name: string, args: readonly Value[]): CashFlows | Value {
 
 	if (args.length === 1 && args[0].type === ValueType.Matrix) {
 		const m = args[0].value as MatrixData;
-		if (m.hasSymbolic || (m.rows !== 1 && m.cols !== 1)) {
+		// A list of money carries its currency (#745); a list in any other unit
+		// is not a series of cash flows.
+		const listCurrency = m.unit !== undefined && sharedCurrencyExchange.isCurrency(m.unit) ? m.unit : undefined;
+		if (m.hasSymbolic || (m.rows !== 1 && m.cols !== 1) || (m.unit !== undefined && listCurrency === undefined)) {
 			return errorValue("CASH_FLOW_EXPECTED_AMOUNT", `${name} expects a list of numbers, one flow per period, as in [-1000, 300, 400, 500]`);
 		}
 		const numbers = m.data as number[];
@@ -61,7 +64,7 @@ function readFlows(name: string, args: readonly Value[]): CashFlows | Value {
 			return errorValue("CASH_FLOW_EXPECTED_AMOUNT", `${name}: every cash flow must be a finite amount`);
 		}
 		if (numbers.length < 2) return tooFew(name, numbers.length, usage);
-		return { amounts: numbers.map(decimalOfNumber), currency: undefined };
+		return { amounts: numbers.map(decimalOfNumber), currency: listCurrency };
 	}
 
 	const amounts: DecimalData[] = [];

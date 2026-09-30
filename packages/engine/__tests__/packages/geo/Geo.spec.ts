@@ -246,7 +246,8 @@ describe("on a line", () => {
 	});
 
 	test("inside a list the angles stay separate elements", () => {
-		expect(answer("[51.5°N, 0.12°W]")).toBe("[51.50, -0.12]");
+		// A list carries its cells' unit since #745.
+		expect(answer("[51.5°N, 0.12°W]")).toBe("[51.50 degrees, -0.12 degrees]");
 		expect(answer("max(51°N, 12°E)")).toBe("51.00 degrees");
 	});
 

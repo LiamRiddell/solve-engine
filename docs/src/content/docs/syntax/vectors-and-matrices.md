@@ -39,41 +39,70 @@ rather than storing it as a zero:
 
 ## Lists and units
 
-A list does not carry a unit yet. A cell stores the amount a quantity has, and
-the unit is left behind, so a list written in one unit is a row of plain
-numbers: `[1 km, 2 km]` is `[1, 2]`, and so is `[$1, $2]`. A bare number beside
-a quantity is read in its unit, as it is in [a list of
-quantities](/syntax/statistics/#a-list-that-carries-units).
+A list of quantities carries **one unit** for all of its cells, the way a column
+in a spreadsheet is headed "km" or "£". The unit is the first quantity's, and
+every later cell is read in it: a quantity in another unit of the same measure
+is converted, and a bare number is taken to be in the list's unit already, as it
+is in [a list of quantities](/syntax/statistics/#a-list-that-carries-units). Each
+cell is shown as the quantity it stands for, so a list of money shows as money.
 
 ```solve
-[1 km, 2 km] // [1, 2]
-[1 km, 500] // [1, 500]
+[1 km, 2 km] // [1.00 km, 2.00 km]
+[1 km, 500 m] // [1.00 km, 0.50 km]
+[1 km, 500] // [1.00 km, 500.00 km]
+[$5, $6] // [$5.00, $6.00]
 ```
 
-Two different units in one list could not both survive that, since `[1 km, 500
-m]` would read as if 500 m were 500 km, and `[1 kg, 3 m]` would put a mass beside
-a length as though they were one measure. Such a list is refused, naming both
-units; converting the cells to one unit first gives a list that reads right.
+A unit written straight after a plain list gives every cell that unit, and `in`
+converts every cell:
 
 ```solve
-[1 km, 500 m] // A list cannot hold quantities in km and m side by side: each cell holds one number, so both would be read in one unit. Convert the cells to one unit first, writing "in km" after each cell in another unit.
-[1 kg, 3 m] // A list cannot hold quantities in kg and m side by side: each cell holds one number, and mass and length are not one measure.
-[1 km, 500 m in km] // [1, 0.50]
+[1, 2, 3] km // [1.00 km, 2.00 km, 3.00 km]
+[1 km, 500 m] in m // [1,000.00 m, 500.00 m]
+[10 °C, 20 °C] in °F // [50.00 °F, 68.00 °F]
 ```
 
-For the same reason a list has no single amount to give a unit to. A unit
-written after it, or a quantity it is combined with, is refused rather than
-read as zero of that unit. A plain number still scales every cell.
+The element-wise arithmetic below keeps the unit: scaling by a plain number,
+adding or taking away a quantity of the same measure, or a second list in one.
+A plain list meeting a quantity is worked the same way, cell by cell. Reading
+one cell answers a quantity, and `map` and `reduce` hand each cell to their
+expression as the quantity it is.
 
 ```solve
-[1, 2, 3] km // A bracketed list has no single amount to convert to km: only a number or a quantity can be converted.
-[1, 2] * 1 km // A bracketed list and a quantity in km cannot be multiplied: a bracketed list has no single amount to put in km. A list does not carry a unit yet.
-[1, 2] * 2 // [2, 4]
+[1 km, 500 m] * 2 // [2.00 km, 1.00 km]
+[$5, $6] * 2 // [$10.00, $12.00]
+[1 km, 2 km] + 500 m // [1.50 km, 2.50 km]
+[1, 2] * 3 km // [3.00 km, 6.00 km]
+[1 km, 500 m][1] // 0.50 km
+map(x in m, [1 km, 2 km]) // [1,000.00 m, 2,000.00 m]
+reduce(acc+x, [$1, $2]) // $3.00
 ```
 
-Lists that carry a unit, so that `[1, 2] * 1 km` would be a list of lengths, are a
-planned feature; these refusals leave that answer open rather than giving a
-wrong one meanwhile.
+Two cells of different measures have no one unit to share, so the list is
+refused, naming both. So is money in two currencies, which has no fixed rate
+between them, and a true or false or a percentage beside a quantity, since
+neither is an amount in the list's unit:
+
+```solve
+[1 kg, 3 m] // A list holds one unit, and a cell in m has no reading in kg: mass and length are not one measure.
+[$5, €6] // A list holds one unit, and a cell in EUR has no reading in USD, since there is no conversion between them.
+[true, 1 km] // A list in km cannot hold a true or false: every cell of a list with a unit is an amount in it.
+```
+
+The boundary: a list carries one unit, so an operation whose cells would come
+out in different units, or in a unit made from two, is refused rather than
+answered in plain numbers. Multiplying a list of quantities by another quantity
+(`[1 m, 2 m] * 3 m`), dividing a number by one, and adding a percentage to one
+(write the factor as a number instead) are refused by name. So is matrix
+algebra on quantities (a determinant, an inverse, a matrix product or power, a
+dot product), whose answer would be in a power of the unit; write the list
+without its unit to work on the amounts. A formula cell (an unknown) has no
+unit, so a list with one cannot carry one.
+
+```solve
+[1 km, 2 km] * 3 m // A list of quantities cannot be multiplied by another quantity cell by cell: a list carries one unit. Scale it by a plain number, or add a quantity of the same measure.
+det([1 km, 2 km; 3 km, 4 km]) // A determinant of a list in km is not covered: matrix algebra works on plain numbers, so write the list without its unit to work on the amounts.
+```
 
 A numeric vector can be drawn as a sparkline with `[...] as sparkline`; see
 [charts](/syntax/charts/).

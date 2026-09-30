@@ -6,9 +6,29 @@ import { BindingPower } from "@solve-js/parser/BindingPower";
 import { OpCode } from "@solve-js/parser/OpCode";
 
 /**
+ * Consumes the `PAYROLL_CASE` clauses after a take-home form (`in Scotland`,
+ * `with plan 2 student loan`, `with 5% pension`, see
+ * `PayrollCaseNormalizerRule`) and emits the call: with one argument when
+ * there are none, so a plain line compiles as it always did, and with the
+ * clauses joined as a second argument when there are.
+ */
+function emitWithCase(parser: Parser, builder: BytecodeBuilder, fn: string): void {
+	const clauses: string[] = [];
+	while (parser.peek()?.type === "PAYROLL_CASE") clauses.push(parser.consume().value ?? "");
+	if (clauses.length === 0) {
+		builder.emitPluginCall(fn, 1);
+		return;
+	}
+	builder.emitOpcode(OpCode.PUSH_STRING);
+	builder.emitString(clauses.join("|"));
+	builder.emitPluginCall(fn, 2);
+}
+
+/**
  * The prefix payroll forms, `take home on <salary>` and `hourly for <salary>`.
  * Parses the whole amount after the phrase (a figure, or an arithmetic
- * expression that produces one) and calls the named plugin.
+ * expression that produces one) and calls the named plugin, with any case
+ * clauses written after the amount.
  */
 export class PayrollPrefixParselet implements PrefixParselet {
 	readonly category = "Payroll";
@@ -16,14 +36,15 @@ export class PayrollPrefixParselet implements PrefixParselet {
 
 	parse(parser: Parser, _token: Token, builder: BytecodeBuilder): void {
 		parser.parseExpression(BindingPower.Lowest, builder);
-		builder.emitPluginCall(this.fn, 1);
+		emitWithCase(parser, builder, this.fn);
 	}
 }
 
 /**
  * The postfix payroll forms, `<salary> after tax` and `<salary> per month after
  * tax`. The salary is the left side, already parsed; this consumes no operand
- * of its own, it just applies the named plugin to what came before.
+ * of its own, it just applies the named plugin to what came before, with any
+ * case clauses written after the phrase.
  *
  * The binding power sits below `Sum`, so the whole preceding expression is the
  * salary: `50000 + 2000 after tax` is `(50000 + 2000)` taken after tax, not
@@ -34,8 +55,8 @@ export class PayrollPostfixParselet implements InfixParselet {
 	readonly bindingPower = BindingPower.Conditional;
 	constructor(private readonly fn: string) {}
 
-	parse(_parser: Parser, _left: Token, _token: Token, builder: BytecodeBuilder): void {
-		builder.emitPluginCall(this.fn, 1);
+	parse(parser: Parser, _left: Token, _token: Token, builder: BytecodeBuilder): void {
+		emitWithCase(parser, builder, this.fn);
 	}
 }
 

@@ -372,7 +372,7 @@ export function quantityOperandRefused(l: Value, r: Value, op?: "add" | "sub" | 
     if (kind !== undefined) {
         return errorValue(
             "QUANTITY_NON_NUMERIC",
-            `${sentenceCase(kind)} and a quantity in ${unit} cannot be ${combineVerb(op)}: ${kind} has no single amount to put in ${unit}.${other.type === ValueType.Matrix ? " A list does not carry a unit yet." : ""}`,
+            `${sentenceCase(kind)} and a quantity in ${unit} cannot be ${combineVerb(op)}: ${kind} has no single amount to put in ${unit}.`,
         );
     }
     return op === undefined ? null : unspelledUnitRefused(other, unit, op);
@@ -389,36 +389,6 @@ export function sameUnit(a: string, b: string): boolean {
     if (a === b) return true;
     const entry = lookupUnit(a);
     return entry !== undefined && entry === lookupUnit(b);
-}
-
-/**
- * The refusal for a list literal whose cells are quantities in two different
- * units, or null when they are one unit (#641).
- *
- * A cell holds one number, so a quantity's unit is dropped as the list is built,
- * and two units side by side could not both survive: `[1 km, 500 m]` answered
- * `[1, 500]`, which reads as if 500 m were 500 km, and `[1 kg, 3 m]` put a mass
- * beside a length as though they were one measure. A list in one unit
- * (`[1 km, 2 km]`, `[$1, $2]`) loses nothing it can be misread by and is let
- * through, and so is a bare number beside a quantity, which is read in its unit
- * the way `total of 1 km, 500` reads it.
- *
- * @param earlier - The unit of the cell written first.
- * @param later - The unit of the cell written after it.
- * @returns The `MATRIX_CELL_UNITS_DIFFER` error Value, or null.
- */
-export function cellUnitsDiffer(earlier: string, later: string): Value | null {
-    if (sameUnit(earlier, later)) return null;
-    const first = describeMeasure(earlier);
-    const second = describeMeasure(later);
-    const opening = `A list cannot hold quantities in ${earlier} and ${later} side by side: each cell holds one number`;
-    if (first !== undefined && second !== undefined && first !== second) {
-        return errorValue("MATRIX_CELL_UNITS_DIFFER", `${opening}, and ${first} and ${second} are not one measure.`);
-    }
-    return errorValue(
-        "MATRIX_CELL_UNITS_DIFFER",
-        `${opening}, so both would be read in one unit. Convert the cells to one unit first, writing "in ${earlier}" after each cell in another unit.`,
-    );
 }
 
 /** Every unit spelling, indexed once on first use for a "did you mean". */

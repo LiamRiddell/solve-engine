@@ -1455,7 +1455,8 @@ km in -1 mile // -1.61 km
 
 ```
 (one document)
-(1, 2) in miles // ERROR: A bracketed list has no single amount to convert to miles: only a number or a quantity can be converted.
+"two" in miles // ERROR: Text has no single amount to convert to miles: only a number or a quantity can be converted.
+(1, 2) in miles // [1.00 miles, 2.00 miles]
 ```
 
 ## cooking
@@ -2441,6 +2442,11 @@ total interest on 200000 over 25 years at 4% // 116,702.10
 ```
 
 ```
+monthly payment on $200,000 over 25 years at 4% // $1,055.67
+total payment on 200000 over 25 years at 4% // 316,702.10
+```
+
+```
 interest on 1000 over 3 years at 5% compounding annually // 157.63
 interest on 1000 over 3 years at 5% compounding quarterly // 160.75
 interest on 1000 over 3 years at 5% compounding monthly // 161.47
@@ -2497,6 +2503,12 @@ what is $100 from 1960 // Year 1960 is outside the bundled CPI table's range (19
 ```
 what is £100 from 1990 // this is the US consumer price index, which says nothing about what GBP bought: only an amount in US dollars, such as $100, can be adjusted with it
 what is 100 from 1990 // this is the US consumer price index, so it adjusts an amount in US dollars: write the amount with its currency, as $100 or 100 USD
+```
+
+```
+(one document)
+payment = monthly payment on 200000 over 25 years at 4% // 1,055.67
+payment * 12 // 12,668.08
 ```
 
 ## investments
@@ -2557,6 +2569,11 @@ start after 10 years at 5% // $1,628.89
 ```
 (one document)
 $1,000 for 3 years at 7% compounding biannually // ERROR: compounding biannually: expected one of annually, yearly, semi-annually, semiannually, half-yearly, quarterly, monthly, fortnightly, weekly, daily
+```
+
+```
+(one document)
+$1,000 for 3 years at 7% compounded // ERROR: compounded needs an interval after it: expected one of annually, yearly, semi-annually, semiannually, half-yearly, quarterly, monthly, fortnightly, weekly, daily
 ```
 
 ## labels
@@ -2845,6 +2862,18 @@ netmask of /24 // 255.255.255.0
 broadcast of 192.168.1.0/24 // 192.168.1.255
 192.168.1.10 in 10.0.0.0/8 // false
 10.0.0.0/8 as int // 167,772,160
+```
+
+```
+fe80::1 // "fe80::1" is an IPv6 address, and only IPv4 addresses and subnets are covered so far.
+2001:db8::/32 // "2001:db8::/32" is an IPv6 address, and only IPv4 addresses and subnets are covered so far.
+::ffff:192.168.1.1 // "::ffff:192.168.1.1" is an IPv6 address, and only IPv4 addresses and subnets are covered so far.
+fe80::1 + 2 // "fe80::1" is an IPv6 address, and only IPv4 addresses and subnets are covered so far.
+```
+
+```
+Note: 5 // 5
+note::5 // 5
 ```
 
 ## nth-weekday
@@ -3324,6 +3353,37 @@ take home on £30,000 // £25,119.60
 ```
 £60,000 salary per month after tax // £3,779.78
 £50,000 monthly after tax // £3,293.30
+```
+
+```
+take home on £50,000 in Scotland // £38,023.55
+£50,000 after tax in Scotland // £38,023.55
+£50,000 per month after tax in Scotland // £3,168.63
+£120,000 after tax in Scotland // £71,357.35
+```
+
+```
+£50,000 after tax in Wales // £39,519.60
+```
+
+```
+£50,000 after tax with plan 2 student loan // £37,664.25
+£50,000 after tax with plan 1 student loan // £37,440.60
+£50,000 after tax with postgraduate loan // £37,779.60
+£50,000 after tax with plan 2 student loan and postgraduate loan // £35,924.25
+```
+
+```
+£50,000 after tax with student loan // a student loan needs its plan: write "with plan 1 student loan" (or plan 2, plan 4 or plan 5), or "with postgraduate loan"
+```
+
+```
+take home on £50,000 with 5% pension // £37,519.60
+£50,000 after tax in Scotland with plan 4 student loan and 5% pension // £35,115.10
+```
+
+```
+£50,000 after tax with plan 1 student loan and plan 2 student loan // Plan 1 and Plan 2 together share one threshold, which is not covered: name the plan with the lower threshold
 ```
 
 ```
@@ -5431,20 +5491,37 @@ vec4(1, 2, 3, 4) // [1, 2, 3, 4]
 ```
 
 ```
-[1 km, 2 km] // [1, 2]
-[1 km, 500] // [1, 500]
+[1 km, 2 km] // [1.00 km, 2.00 km]
+[1 km, 500 m] // [1.00 km, 0.50 km]
+[1 km, 500] // [1.00 km, 500.00 km]
+[$5, $6] // [$5.00, $6.00]
 ```
 
 ```
-[1 km, 500 m] // A list cannot hold quantities in km and m side by side: each cell holds one number, so both would be read in one unit. Convert the cells to one unit first, writing "in km" after each cell in another unit.
-[1 kg, 3 m] // A list cannot hold quantities in kg and m side by side: each cell holds one number, and mass and length are not one measure.
-[1 km, 500 m in km] // [1, 0.50]
+[1, 2, 3] km // [1.00 km, 2.00 km, 3.00 km]
+[1 km, 500 m] in m // [1,000.00 m, 500.00 m]
+[10 °C, 20 °C] in °F // [50.00 °F, 68.00 °F]
 ```
 
 ```
-[1, 2, 3] km // A bracketed list has no single amount to convert to km: only a number or a quantity can be converted.
-[1, 2] * 1 km // A bracketed list and a quantity in km cannot be multiplied: a bracketed list has no single amount to put in km. A list does not carry a unit yet.
-[1, 2] * 2 // [2, 4]
+[1 km, 500 m] * 2 // [2.00 km, 1.00 km]
+[$5, $6] * 2 // [$10.00, $12.00]
+[1 km, 2 km] + 500 m // [1.50 km, 2.50 km]
+[1, 2] * 3 km // [3.00 km, 6.00 km]
+[1 km, 500 m][1] // 0.50 km
+map(x in m, [1 km, 2 km]) // [1,000.00 m, 2,000.00 m]
+reduce(acc+x, [$1, $2]) // $3.00
+```
+
+```
+[1 kg, 3 m] // A list holds one unit, and a cell in m has no reading in kg: mass and length are not one measure.
+[$5, €6] // A list holds one unit, and a cell in EUR has no reading in USD, since there is no conversion between them.
+[true, 1 km] // A list in km cannot hold a true or false: every cell of a list with a unit is an amount in it.
+```
+
+```
+[1 km, 2 km] * 3 m // A list of quantities cannot be multiplied by another quantity cell by cell: a list carries one unit. Scale it by a plain number, or add a quantity of the same measure.
+det([1 km, 2 km; 3 km, 4 km]) // A determinant of a list in km is not covered: matrix algebra works on plain numbers, so write the list without its unit to work on the amounts.
 ```
 
 ```
@@ -5621,8 +5698,8 @@ line 4 for rate from 6% to 3% step -1% // [7,731.62, 7,015.08, 6,334.04, 5,690.5
 price = $100 // $100.00
 qty = 3 // 3
 price * qty // $300.00
-line 3 for price from $100 to $300 step $50 // [300, 450, 600, 750, 900]
-line 3 for qty from 1 to 10 step 4 // [100, 500, 900]
+line 3 for price from $100 to $300 step $50 // [$300.00, $450.00, $600.00, $750.00, $900.00]
+line 3 for qty from 1 to 10 step 4 // [$100.00, $500.00, $900.00]
 ```
 
 ```
@@ -5630,8 +5707,50 @@ line 3 for qty from 1 to 10 step 4 // [100, 500, 900]
 length = 2 m // 2.00 m
 width = 3 m // 3.00 m
 length * width // 6.00 m²
-line 3 for length from 1 m to 3 m step 50 cm // [3, 4.50, 6, 7.50, 9]
-line 3 for length from 1 m to 2 m step 30 cm // [3, 3.90, 4.80, 5.70]
+line 3 for length from 1 m to 3 m step 50 cm // [3.00 m², 4.50 m², 6.00 m², 7.50 m², 9.00 m²]
+line 3 for length from 1 m to 2 m step 30 cm // [3.00 m², 3.90 m², 4.80 m², 5.70 m²]
+```
+
+```
+(one document)
+start = 2026-01-01 // Thursday, January 1, 2026
+finish = 2026-12-31 // Thursday, December 31, 2026
+working days between start and finish // 261
+line 3 for start from 2026-01-01 to 2026-04-01 step 1 month // [261, 239, 219, 197]
+line 3 for start from 2026-01-01 to 2026-01-15 step 1 week // [261, 256, 251]
+line 3 for start from 2026-04-01 to 2026-01-01 step -1 month // [197, 219, 239, 261]
+```
+
+```
+(one document)
+start = 2026-01-01 // Thursday, January 1, 2026
+finish = 2026-12-31 // Thursday, December 31, 2026
+working days between start and finish // 261
+line 3 for start from 2026-01-01 to 2026-04-01 step 5 // ERROR: A sweep between two dates steps by a length of time, such as 1 month, 7 days or 1 year.
+line 3 for start from 2026-01-01 to 2030-01-01 step 1 day // ERROR: This sweep would try more than 1,000 dates, past the limit of 1,000 for one sweep. Use a larger step or a shorter range.
+```
+
+```
+(one document)
+price = $100 // $100.00
+qty = 3 // 3
+price * qty // $300.00
+scenario bull with price = $120, qty = 5 // bull: price = $120.00, qty = 5
+scenario bear with price = $80 and qty = 2 // bear: price = $80.00, qty = 2
+line 3 under bull // $600.00
+line 3 under bear // $160.00
+line 3 under bull - line 3 // $300.00
+```
+
+```
+(one document)
+x = 1 // 1
+x * 2 // 2
+scenario high with x = 5 // high: x = 5
+scenario spare with y = 5 // spare: y = 5
+line 2 under high // 10
+line 2 under low // ERROR: No line above this one declares a scenario named low. Declare it first, as in "scenario low with growth = 8%".
+line 2 under spare // ERROR: No line up to line 2 uses y, so changing it cannot change line 2's answer.
 ```
 
 ```

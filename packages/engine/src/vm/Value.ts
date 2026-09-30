@@ -32,6 +32,13 @@ export interface MatrixData {
 	readonly cols: number;
 	readonly data: readonly MatrixEntry[];
 	readonly hasSymbolic: boolean;
+	/**
+	 * The one unit every numeric cell is read in (`km` for `[1 km, 500 m]`,
+	 * whose cells are then 1 and 0.5), or undefined for a list of plain numbers
+	 * (issue #745). A list carries one unit, taken from its first quantity
+	 * cell, as the comma aggregates take theirs.
+	 */
+	readonly unit?: string;
 }
 
 /** A first-class integer range `min:max`, both bounds inclusive. */
@@ -780,6 +787,9 @@ export class Value {
 	toJSON(): Record<string, unknown> {
 		const out: Record<string, unknown> = { type: this.type, value: jsonSafe(this.value) };
 		if (this.unit !== undefined) out.unit = this.unit;
+		// A list's unit is on its payload; it is written beside the type as a
+		// quantity's is, so a host reads either the same way (#745).
+		if (this.type === ValueType.Matrix && (this.value as MatrixData).unit !== undefined) out.unit = (this.value as MatrixData).unit;
 		if (this.exact !== undefined) out.exact = decimalToString(this.exact);
 		if (this.rational !== undefined) out.rational = `${this.rational.n}/${this.rational.d}`;
 		if (this.uncertainty !== undefined) out.uncertainty = this.uncertainty;
@@ -1242,8 +1252,12 @@ export function timecodeFps(unit: string): number {
  * row-major source syntax (e.g. the `[1,2;3,4]` literal) must transpose
  * into column-major order before calling this; see `MatrixOps.ts`'s
  * `rowMajorToColumnMajor()`.
+ *
+ * `unit`, when given, is the unit every numeric cell is read in (see
+ * {@link MatrixData.unit}); the caller has already converted the cells into
+ * it.
  */
-export function matrixValue(rows: number, cols: number, data: readonly MatrixEntry[]): Value {
+export function matrixValue(rows: number, cols: number, data: readonly MatrixEntry[], unit?: string): Value {
 	// Every matrix in the engine is born here, which makes this the one place
 	// that can charge for one without each producer having to remember to. The
 	// charge lands after `data` exists, so it is a backstop rather than a
@@ -1263,14 +1277,14 @@ export function matrixValue(rows: number, cols: number, data: readonly MatrixEnt
 	// MatrixOps.ts's symbolicToEntry() shows up as a wrong result rather than as
 	// a matrix that silently believes it is symbolic.
 	const hasSymbolic = data.some(cell => typeof cell === "object" && cell !== null && "kind" in cell);
-	const m: MatrixData = { rows, cols, data, hasSymbolic };
+	const m: MatrixData = unit === undefined ? { rows, cols, data, hasSymbolic } : { rows, cols, data, hasSymbolic, unit };
 	if (_arenaActive && _arena) return _arena.acquire(ValueType.Matrix, m);
 	return new Value(ValueType.Matrix, m);
 }
 
-/** A 1×N row-vector Matrix, row-major and column-major storage are identical for a single row. */
-export function rowVectorValue(data: readonly number[]): Value {
-	return matrixValue(1, data.length, data);
+/** A 1×N row-vector Matrix, row-major and column-major storage are identical for a single row; `unit` as {@link matrixValue} takes it. */
+export function rowVectorValue(data: readonly number[], unit?: string): Value {
+	return matrixValue(1, data.length, data, unit);
 }
 
 /** An N×1 column-vector Matrix, row-major and column-major storage are identical for a single column. */
