@@ -66,7 +66,7 @@ function values(input: string, plugin?: LexerVocabulary): string[] {
 // "min" tokenizes as UNIT, not FUNC. This is correct existing behavior.
 const BUILTIN_KEYWORDS = [
   "pi", "e", "plus", "add", "and", "minus", "subtract", "remove", "take",
-  "times", "multiply", "divide", "modulo", "mod", "exponent", "prime",
+  "times", "multiply", "divide", "modulo", "mod",
   "xor", "of", "now", "today", "tomorrow", "yesterday",
   "roll", "sqrt", "abs", "sin", "cos", "tan", "log", "ceil", "floor",
   "round", "max", "asin", "acos", "atan", "atan2",
@@ -86,7 +86,7 @@ const KEYWORD_TOKEN_TYPES: Record<string, string> = {
   times: "STAR", multiply: "STAR",
   divide: "SLASH",
   modulo: "MOD", mod: "MOD",
-  exponent: "CARET", prime: "CARET",
+  // `exponent` and `prime` were `^` until #829 retired them as names.
   xor: "BIT_XOR",
   of: "OF",
   now: "NOW", today: "TODAY", tomorrow: "TOMORROW", yesterday: "YESTERDAY",
