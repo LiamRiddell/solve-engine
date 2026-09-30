@@ -480,18 +480,29 @@ describe("ThreeTierEvaluator — resultMap correctness", () => {
 
 describe("ThreeTierEvaluator — Tier 3 compile-only", () => {
   test("invisible non-var-def line: compiled but not executed (no results)", () => {
-    const doc = createDoc(["100 + 5", ":x = 5", "x + 3", "visible expression"]);
+    const doc = createDoc(["visible expression", "100 + 5", ":x = 5", "x + 3"]);
     const engine = createEngine();
     const evaluator = new ThreeTierEvaluator(doc, engine);
 
-    // Viewport only line 4 — lines 1-3 are invisible
+    // Viewport only line 1; a background compile reaches lines 2-4 below it
+    evaluator.evaluate({ startLine: 1, endLine: 1 });
+    evaluator.backgroundCompile({ startLine: 1, endLine: 1 });
+
+    const line2 = doc.getLineAt(2)!;
+    // Line 2: compiled but NOT executed (dirty stays true, no results)
+    expect(line2.bytecodes.length).toBe(1);
+    expect(line2.dirty).toBe(true);
+    expect(line2.results.length).toBe(0);
+  });
+
+  test("a dirty line above the viewport runs, so a line in view can read it", () => {
+    const doc = createDoc(["100 + 5", ":x = 5", "x + 3", "prev * 2"]);
+    const evaluator = new ThreeTierEvaluator(doc, createEngine());
+
     const result = evaluator.evaluate({ startLine: 4, endLine: 4 });
 
-    const line1 = doc.getLineAt(1)!;
-    // Line 1: compiled but NOT executed (dirty stays true, no results)
-    expect(line1.bytecodes.length).toBe(1);
-    expect(line1.dirty).toBe(true);
-    expect(line1.results.length).toBe(0);
+    expectNumber(doc.getLineAt(1)!.results[0][0], 105);
+    expectNumber(result.resultMap.get(4)![0], 16);
   });
 
   test("invisible variable-def line: compiled AND executed (result stored)", () => {

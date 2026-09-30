@@ -97,6 +97,14 @@ evaluator.evaluate({ startLine: 1, endLine: 30 });
 `doc.editLine(lineNumber, text)` is the one-line form of an in-place edit, for a
 host that tracks lines itself. Either way the model only records the change and
 marks the lines dirty; nothing runs until the next `evaluate`.
+
+A text with a line break in it is more than one line, wherever it arrives. A
+line feed, a carriage return on its own, or the two together each end a line,
+as they do in a document loaded with `setDocument` or read by `parseDocument`:
+`doc.editLine(2, "5\r6")` replaces line 2 with two lines, and an inserted
+`"7\r8"` in a transaction inserts two. Such an edit changes the line count, so
+it is applied as a structural one, through the evaluator, and the lines below
+it are followed to their new positions.
 [Performance](/guide/performance/#telling-the-evaluator-about-an-edit) has the
 measured difference between the two kinds of edit.
 
@@ -123,16 +131,27 @@ The evaluator's name comes from the three ways it can handle a line.
 
 | Tier | A line that is | What happens |
 | --- | --- | --- |
-| 1 | on screen and dirty | the whole pipeline: lexed, parsed, compiled and run, and its program kept |
+| 1 | dirty, on screen or above it | the whole pipeline: lexed, parsed, compiled and run, and its program kept |
 | 2 | on screen and clean | its kept program is run again, with no lexing, parsing or compiling |
-| 3 | above the screen and dirty | compiled so the evaluator knows what it reads and writes, and run only if it defines a variable a later line may read |
+| 3 | below the screen and dirty, in a `backgroundCompile` | compiled so the evaluator knows what it reads and writes, and run only if it defines a variable a later line may read |
 | skipped | clean off screen, blank, or prose | nothing |
 
 A clean line on screen still runs (tier 2), because what it reads may have
 changed: a variable's value depends on where in the note it is read, so the
-evaluator walks the note from the top down to the end of the viewport. The
-lines below the viewport are not visited at all. They keep their last answers,
-or wait, until they are scrolled into view.
+evaluator walks the note from the top down to the end of the viewport. A dirty
+line above the viewport runs in full as well, because a line on screen may read
+it by position (`prev`, `line 2`, `total above`) as well as by name. The lines
+below the viewport are not visited at all. They keep their last answers, or
+wait, until they are scrolled into view.
+
+Each line reads the note as a pass from the top would leave it at that line,
+however the pass got there. A name only a line further down defines is not
+defined yet (`x * 2` above `x = 5` answers `Undefined variable: x`, as
+`parseDocument` does), a name defined twice has the value of the definition
+above the reader, and a name of several words (`hourly rate`) is one name only
+below the line that defines it. The evaluator keeps the variables at the line it
+last ran and moves them to each line it runs next, so a pass pays for the
+distance between the lines it runs rather than for the length of the note.
 
 Which lines are dirty after an edit is decided by a dependency graph: the
 evaluator records which variables each line reads and writes, and an edit marks
@@ -141,8 +160,10 @@ the edited line and everything that reads what it writes, however far down.
 ## Scrolling
 
 When the reader scrolls without editing, call `setViewport` with the new range.
-It restores the variables as they stood just above the viewport from the
-checkpoints recorded on the last pass, and runs only the lines in view:
+It moves the variables to where they stood just above the viewport, from the
+checkpoints recorded on the last pass, and runs only the lines in view. The
+move costs the distance scrolled, so a scroll costs about the same on a note of
+twenty thousand lines as on one of five thousand:
 
 ```ts
 const view = evaluator.setViewport({ startLine: 4, endLine: 5 });
@@ -152,8 +173,9 @@ view.lines.map((line) => engine.formatValue(line.result!)); // ["= Â£0.95", "= Â
 ```
 
 Its `lines` and `resultMap` hold the lines in view only. If a line above the
-viewport is dirty, `setViewport` cannot trust the checkpoints and runs as
-`evaluate` does, from line 1. A host that has just applied an edit can call
+viewport is dirty and defines a variable, or has not run since it was loaded or
+edited, `setViewport` cannot trust the checkpoints and runs as `evaluate` does,
+from line 1. A host that has just applied an edit can call
 either; `evaluate` is the plain choice after an edit, and `setViewport` the fast
 one for a scroll.
 
@@ -209,22 +231,17 @@ they are, so a host may reuse either.
 
 ## The boundary
 
-- **One evaluator per document, and one engine per evaluator.** An evaluator
-  wires its document onto the engine, so two open at once on the same engine
-  read each other's lines: the second document's line 1 answers the first
-  document's `line 1 * 2`, and a variable one defines is visible to the other.
-  Give each open document its own engine (`createEngine()` is cheap next to a
-  document), or retire one evaluator before building the next.
-- **A positional reference across the top of the viewport.** A dirty line
-  above the viewport that defines no variable is compiled but not run (tier
-  3), so a line on screen that reads it by position (`prev`, `line 1`,
-  `total above`, a `#tag` total) has no answer to read, and shows
-  `Line 1 has not been evaluated yet`. That happens on a note's first pass
-  when it opens scrolled down, and after an edit to such a line. A line that
-  reads a named variable is not affected, since the line defining it runs. A
-  host whose notes use the positional forms evaluates from line 1 to the end
-  of the viewport (`{ startLine: 1, endLine: lastVisible }`), which still
-  leaves every line below the viewport alone.
+- **One engine per open document.** An engine holds one document's state (its
+  variables, its units and names, and the lines a reference reads), so two
+  evaluators open at once on the same engine take turns with it: each pass
+  first checks whether another document used the engine since its own last
+  pass, and if so takes it back and runs its lines again from the top, which
+  is what a first pass costs. The answers are each document's own either way
+  (`line 1 * 2` reads its own line 1), and so after a `parseDocument` or an
+  `evaluateDocument` on the same engine between two passes. Give each open
+  document its own engine (`createEngine()` is cheap next to a document) and
+  no pass ever pays for that. A retired evaluator does not take the engine
+  back.
 - **Not behind a worker.** The evaluator runs on the thread that owns the
   engine. `solve-engine/worker` offers the whole-document calls
   (`parseDocument`, `evaluateLines`) behind `postMessage`, not the evaluator;

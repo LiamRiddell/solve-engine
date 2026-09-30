@@ -40,6 +40,7 @@ import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation,
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
 import { zonedWallClockToUtcMs } from "@solve-js/calendar/IntlZone";
 import { resolveZoneName } from "@solve-js/calendar/ZoneNames";
+import { addZonedCalendarDays, addZonedCalendarMonths } from "@solve-js/calendar/ZonedSteps";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 import type { LineTrace } from "@solve-js/explain/Explanation";
 import { offsetRefusal, resolveUtcOffsetName } from "@solve-js/calendar/UtcOffset";
@@ -1686,8 +1687,12 @@ function addCalendarMonths(epochMs: number, months: number, calendar: CalendarBa
  * in hours is elapsed time. "36 hours from now" means 36 hours of clock
  * ticking, across a daylight-saving transition included, which is exactly what
  * adding milliseconds does.
+ *
+ * A date read in a zone (`zone`, as `2024-11-02 12:00 in New York` carries
+ * one) steps its days and months on that zone's calendar, not the host's: see
+ * `calendar/ZonedSteps.ts`. Workdays still walk the backend's calendar.
  */
-function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM): number {
+function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM, zone?: string): number {
     if (duration.type === ValueType.Uom && duration.unit !== undefined) {
         const unit = duration.unit;
         const amount = sign * duration.toNumber();
@@ -1698,7 +1703,10 @@ function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM): 
         if (isWorkdayUnit(unit)) return addBusinessDays(epochMs, amount, vm);
 
         const monthsPerUnit = CALENDAR_MONTHS_PER_UNIT[unit];
-        if (monthsPerUnit !== undefined) return addCalendarMonths(epochMs, amount * monthsPerUnit, vm.context.calendar);
+        if (monthsPerUnit !== undefined) {
+            if (zone !== undefined) return addZonedCalendarMonths(epochMs, amount * monthsPerUnit, zone, vm.context.calendar, convertUnit(1, "month", "ms"));
+            return addCalendarMonths(epochMs, amount * monthsPerUnit, vm.context.calendar);
+        }
 
         // Measure first, for the reason extractDurationMs() gives below: a
         // unit that is not a duration at all has to contribute nothing rather
@@ -1712,6 +1720,7 @@ function shiftDatetime(epochMs: number, duration: Value, sign: 1 | -1, vm: VM): 
             let daysPerUnit = 0;
             try { daysPerUnit = convertUnit(1, unit, "day"); } catch { /* Ignore */ }
             if (Number.isInteger(daysPerUnit) && daysPerUnit >= 1) {
+                if (zone !== undefined) return addZonedCalendarDays(epochMs, amount * daysPerUnit, zone, vm.context.calendar);
                 return addCalendarDays(epochMs, amount * daysPerUnit, vm.context.calendar);
             }
         }
@@ -1760,7 +1769,7 @@ function movedDatetime(date: Value, duration: Value, sign: 1 | -1, vm: VM): Valu
             `A date or time moves by a length of time, such as 5 days, 2 weeks or 3 hours, not by ${what}.`,
         );
     }
-    return datetimeValue(shiftDatetime(date.toNumber(), duration, sign, vm), date.grain, date.zone);
+    return datetimeValue(shiftDatetime(date.toNumber(), duration, sign, vm, date.zone), date.grain, date.zone);
 }
 
 /** The base types a percentage change reads a size from, and so checks for zero and sign. */

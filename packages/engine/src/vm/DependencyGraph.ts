@@ -189,7 +189,16 @@ function buildSpanIndex(entries: ReadonlyMap<number, PositionsRead>): SpanIndex 
  * @returns The readers, a reader with two spans over the position listed twice.
  */
 function stabSpanIndex(index: SpanIndex, position: number, passesOver: () => boolean): number[] {
-	const out: number[] = [];
+	return [...spanReaders(index, position, passesOver)];
+}
+
+/**
+ * {@link stabSpanIndex}, one reader at a time: the same readers in the same
+ * order, with no array of them. The walk's own stack is the depth of the tree,
+ * so a caller holding many of these at once (the cycle walk, one per line on
+ * its path) holds the path and not every reader of every line on it.
+ */
+function* spanReaders(index: SpanIndex, position: number, passesOver: () => boolean): Generator<number, void, undefined> {
 	// How many spans start at or before the position: a prefix of the sort.
 	let low = 0;
 	let high = index.lo.length;
@@ -210,7 +219,7 @@ function stabSpanIndex(index: SpanIndex, position: number, passesOver: () => boo
 			const node = stack.pop()!;
 			if (start >= prefix || index.maxHi[node] < position) continue;
 			if (width === 1) {
-				if (index.figures[start] === 0 || !passesOver()) out.push(index.reader[start]);
+				if (index.figures[start] === 0 || !passesOver()) yield index.reader[start];
 				continue;
 			}
 			const half = width >>> 1;
@@ -218,8 +227,7 @@ function stabSpanIndex(index: SpanIndex, position: number, passesOver: () => boo
 		}
 	}
 	const sparse = index.sparse.get(position);
-	if (sparse !== undefined) for (const reader of sparse) out.push(reader);
-	return out;
+	if (sparse !== undefined) yield* sparse;
 }
 
 /** How many of a reader's spans of figures reach below it, which is how the downward count counts them. */
@@ -1345,6 +1353,38 @@ export class DependencyGraph {
    * @returns The lines reading that position, or an empty set if none. A new
    * set each call, the caller's to keep.
    */
+  /**
+   * The lines reading `lineNumber`'s position, one at a time, as
+   * {@link getAffectedLinesByPosition} finds them but without collecting them:
+   * a reader can come more than once (through a span and through a tag), the
+   * line itself never does. For a walk that holds many of these at once, so it
+   * holds no set of readers per line; the cycle walk is one, and a running
+   * total after every line of a ledger has as many readers as lines above it.
+   *
+   * The graph must not change while one is being read.
+   *
+   * @param lineNumber - 1-based line whose readers are wanted.
+   */
+  *positionReadersOf(lineNumber: number): Generator<number, void, undefined> {
+    if (this.positionReads.size === 0) return;
+    const index = this.spanIndex ?? (this.spanIndex = buildSpanIndex(this.positionReads));
+    const view = this.view;
+    let summary: boolean | undefined;
+    const passesOver = (): boolean => (summary ??= view !== null && view.isSummary(lineNumber));
+    for (const reader of spanReaders(index, lineNumber, passesOver)) {
+      if (reader !== lineNumber) yield reader;
+    }
+    if (this.tagReaders.size === 0 || view === null) return;
+    const tags = view.memberTags(lineNumber);
+    if (tags.length === 0) return;
+    const every = this.tagReaders.get(EVERY_TAG);
+    if (every !== undefined) for (const reader of every) if (reader !== lineNumber) yield reader;
+    for (const tag of tags) {
+      const readers = this.tagReaders.get(tag);
+      if (readers !== undefined) for (const reader of readers) if (reader !== lineNumber) yield reader;
+    }
+  }
+
   getAffectedLinesByPosition(lineNumber: number): ReadonlySet<number> {
     if (this.positionReads.size === 0) return NO_LINES;
     let out: Set<number> | null = null;

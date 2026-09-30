@@ -189,12 +189,14 @@ describe("the boundary", () => {
 		expect(settled(text)).toEqual(["Undefined variable: v2", "Line 1 has an error", "31"]);
 	});
 
-	test("a plain forward line reference is refused on every pass, and a colon name above its use still resolves", () => {
+	test("a plain forward line reference is refused on every pass, and so is a name defined below its use", () => {
 		// A note is read from the top, so line 2 has not been evaluated from
 		// where line 1 stands; the batch pass refuses it, and the incremental
-		// path used to answer 8 from its second pass on.
+		// path used to answer 8 from its second pass on. A name only a line
+		// below defines is the same: `x + 1` above `:x = 5` answered 6 from the
+		// VM the previous pass left, where a pass from line 1 has no `x` yet.
 		expect(settled(["line 2 + 1", "7"])).toEqual(["Line 2 has not been evaluated yet (forward reference, or out of range)", "7"]);
-		expect(settled(["x + 1", ":x = 5"])).toEqual(["6", "5"]);
+		expect(settled(["x + 1", ":x = 5"])).toEqual(["Undefined variable: x", "5"]);
 	});
 });
 
