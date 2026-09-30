@@ -369,6 +369,37 @@ for (const bad of mismatches.slice(0, 12)) {
 }
 if (mismatches.length > 12) console.log(`        ...and ${mismatches.length - 12} more`);
 
+// The third-party starter (#773), built and tested the way an author outside
+// this repository would: its TypeScript is compiled under `strict` against the
+// installed package's own declaration files, and its tests, written with
+// `solve-engine/testing`, run under Node's test runner. It sits in the scratch
+// project, so every `solve-engine` import resolves to the tarball; a change to
+// the published surface that breaks a third-party package fails here first.
+console.log("\nThe package starter, against the installed copy");
+const starter = path.join(scratch, "starter");
+fs.cpSync(path.join(ROOT, "examples/package-starter"), starter, {
+	recursive: true,
+	filter: (source) => !/[\\/](node_modules|dist)([\\/]|$)/.test(path.relative(ROOT, source)),
+});
+let starterBuilt = false;
+try {
+	run("node", [path.join(ROOT, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json", "--typeRoots", path.join(ROOT, "node_modules/@types")], starter);
+	starterBuilt = true;
+} catch (error) {
+	console.error(`  the starter did not compile: ${error.message}`);
+}
+check("the starter compiles under strict against the installed types", starterBuilt);
+let starterTests = "not run";
+if (starterBuilt) {
+	try {
+		const report = run("node", ["--test", "--test-reporter=tap", "dist/test/starter.test.js"], starter);
+		starterTests = /^# fail 0$/m.test(report) ? "passed" : report.split("\n").filter((l) => l.startsWith("not ok")).join("; ");
+	} catch (error) {
+		starterTests = `failed: ${error.message.split("\n")[0]}`;
+	}
+}
+check("the starter's own tests pass against the installed copy", starterTests === "passed", starterTests);
+
 console.log("\nWhat actually got installed");
 const installed = path.join(scratch, "node_modules/solve-engine");
 const manifest = JSON.parse(fs.readFileSync(path.join(installed, "package.json"), "utf8"));
@@ -386,7 +417,7 @@ fs.rmSync(scratch, { recursive: true, force: true });
 
 console.log("");
 if (failures.length > 0) {
-	console.error(`consumer-e2e: ${failures.length} of ${CASES.length + 9} checks failed.`);
+	console.error(`consumer-e2e: ${failures.length} of ${CASES.length + 11} checks failed.`);
 	process.exit(1);
 }
-console.log(`consumer-e2e: ${CASES.length + 9} checks passed against an installed copy, including ${docResults.length} documented examples.`);
+console.log(`consumer-e2e: ${CASES.length + 11} checks passed against an installed copy, including ${docResults.length} documented examples.`);

@@ -29,7 +29,8 @@ skips the fuzz and long-document suites; the full run is still the gate.
 | `playground` | Interactive playground, own lockfile, not a workspace member |
 | `docs` | Documentation site, own lockfile, not a workspace member |
 | `docs-internal` | Maintainer notes, not published |
-| `examples/osrs` | A worked third-party package |
+| `examples/package-starter` | A third-party package starter: public imports only, built and tested against the packed tarball by `npm run test:consumer` |
+| `packages/engine/examples/osrs` | An internal fixture package, imported through the `@solve-js/*` aliases by the playground bridge and the engine's tests; not a template to copy |
 
 Inside `packages/engine/src`, evaluation flows `lexer` to `normalizer` to
 `parser` to `vm`, with `engine` orchestrating and `packages` supplying all the

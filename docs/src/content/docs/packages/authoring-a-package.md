@@ -85,6 +85,18 @@ Anything past that keeps using the full contract below, unchanged:
 `defineFunction` sits on top of the contract and changes none of it, so you can
 reach for the longhand the moment the shortcut stops fitting.
 
+## A package in a repository of its own
+
+A package that lives outside this repository, and depends on the published
+engine by name, starts from the
+[package starter](https://github.com/LiamRiddell/solve-engine/tree/main/examples/package-starter).
+It carries one of each common piece (a function, a phrase, an `as` converter and
+a live lookup), imports only the engine's public entry points, and is tested with
+[`solve-engine/testing`](/packages/testing-a-package/). The engine's own build
+packs the published tarball, builds the starter against it and runs its tests, so
+it compiles against exactly what an author installs. Copy the directory, rename
+the words, keep the shape.
+
 ## The longer path: a whole package, scaffolded
 
 A function is not always what you want. A phrase, an operator, a unit or a
@@ -93,7 +105,11 @@ places before it can be judged: the package folder, both lists in
 `BUILTIN_PACKAGES`, a spec, a documentation page, the sidebar, a changeset, and
 the derived figures.
 
-If you are working in a clone of this repository, one command writes all of it.
+If you are working in a clone of this repository, on a package that ships with
+the engine, one command writes all of it. (For a package of your own, in its own
+repository, start from the [package starter](#a-package-in-a-repository-of-its-own)
+instead: this command wires a built-in package into the engine's registry, docs
+and tests.)
 
 ```bash
 npm run new:package -- fuel-economy --group "Units"
@@ -124,19 +140,23 @@ import type { IEnginePackage } from "solve-engine";
 
 export const myPackage: IEnginePackage = {
   name: "my-package",
-  engineVersion: "^1.0.0",
+  engineVersion: "^2.0.0",
 };
 ```
 
 `name` must be unique. `engineVersion` is a semantic version range checked at
 registration, so a package built against an incompatible engine is refused with
-a clear message rather than failing mysteriously later.
+a clear message rather than failing mysteriously later. Declare the major version
+you built against: `"^2.0.0"` accepts every 2.x engine, and a range the running
+engine does not satisfy is refused, so `"^1.0.0"` on a 2.x engine is refused
+with `Package "my-package" declares engineVersion "^1.0.0", which is not
+satisfied by the running engine version "2.41.0".`
 
 ## What a package can contribute
 
 | Field | Purpose | How-to |
 | --- | --- | --- |
-| `lexerVocabulary` | Keywords, operators and units the tokeniser should recognise | [Units and keywords](/packages/units-and-keywords/) |
+| `lexerVocabulary` | Keywords, operators and units the tokeniser should recognise, and whole-line patterns that take a line as free text | [Units and keywords](/packages/units-and-keywords/) |
 | `prefixParselets` | Parsing rules for tokens that begin an expression | [Functions and operators](/packages/functions-and-operators/) |
 | `infixParselets` | Parsing rules for tokens that combine expressions | [Functions and operators](/packages/functions-and-operators/) |
 | `pluginFunctions` | Functions the virtual machine can call | [Functions and operators](/packages/functions-and-operators/) |
@@ -144,8 +164,8 @@ a clear message rather than failing mysteriously later.
 | `asConverters` | Targets for the `as` conversion form | [Custom as converters](/packages/as-converters/) |
 | `unitAliases` | Words for units the engine already has (`Meile` for the mile), read after a value and as a conversion target, and shown as written | [Words for units](/packages/unit-aliases/) |
 | `asyncResolvers` | External data sources: the fetch, how many run at once, and the record of where each fetched value came from | [Async data source](/guide/async-data-sources/) |
-| `tokenCategories` | Highlighting categories for new tokens | [Highlighting and completions](/packages/highlighting-and-completions/) |
-| `completionItems` | Editor completion candidates | [Highlighting and completions](/packages/highlighting-and-completions/) |
+| `tokenCategories` | Highlighting categories for new tokens, which a keyword also needs to be offered in completions | [Highlighting and completions](/packages/highlighting-and-completions/) |
+| `completionItems` | Editor completion candidates beyond the keywords, call words and phrases already offered | [Highlighting and completions](/packages/highlighting-and-completions/) |
 | `explain` | Describe the package's own calls, conversions and phrases as readable steps when a host explains a line | [Explaining your steps](/packages/explaining-steps/) |
 
 Each field has a hands-on guide in the **How-to** column: this table is the map,

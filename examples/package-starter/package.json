@@ -1,0 +1,23 @@
+{
+  "name": "solve-package-starter",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A starter for a third-party solve-engine package: a function, a phrase, an as converter and a live lookup, tested with solve-engine/testing.",
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "files": ["dist/src"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/test/"
+  },
+  "peerDependencies": {
+    "solve-engine": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "solve-engine": "^2.0.0",
+    "typescript": "^5.9.0"
+  },
+  "license": "MIT"
+}

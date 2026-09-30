@@ -368,6 +368,25 @@ Tests that call a real service belong outside the gates: the engine's own run
 only with `SOLVE_LIVE_NETWORK=1` (`npm run test:live`), where a timeout, a 5xx
 and a 429 count as outages rather than failures.
 
+## Testing a data source
+
+A data source is tested by what a line resolves to, with a stub in place of the
+service, so the test never reaches the network. The first evaluation is Pending
+by contract; `toResolveTo` from `solve-engine/testing` waits for the fetch
+(through `engine.settle()`, see [waiting for every value to
+settle](/guide/async-and-live-data/#waiting-for-every-value-to-settle)), evaluates
+the line again and compares the answer. A failed fetch is a settled result too,
+read with `settled()` and `toFailWith`.
+
+Build the package from a factory that takes its fetch, the way the built-in
+stocks package takes `fetchQuote`, and the test hands it a stub. [Testing a
+package](/packages/testing-a-package/#live-values) walks a complete example
+(its code is compiled and run with the engine's own tests), and `expectDocument`
+tests a data source read across lines. The [package
+starter](https://github.com/LiamRiddell/solve-engine/tree/main/examples/package-starter)
+does the same for a live lookup, with the hostile inputs a data source should
+refuse.
+
 ## A complete reference
 
 The currency package is the smallest built-in that does all of this: a symbol

@@ -14,8 +14,27 @@ import { LanguageService } from "solve-engine/language";
 
 ## Completions
 
-The service produces completion candidates for the current input, including
-function names, unit names, and package-contributed keywords.
+`getCompletions(lineText, cursorOffset)` answers the words that complete what
+the reader is typing, matched by prefix and capped at fifty. The candidates:
+
+- keywords and function names (`sqrt`), and the call words packages declare, as
+  functions (`sha` offers `sha256`);
+- phrases, the aggregates among them, offered whole by their opening words
+  (`averag` offers `average of`), and across the words already typed (`net pres`
+  offers `net present value of`);
+- units, and the units the document defines (`1 sprint = 2 weeks` makes `spr`
+  offer `sprint`);
+- the document's variables, and a package's own `completionItems`.
+
+A phrase matched across typed words carries `replaceLength`, the number of
+characters before the cursor it replaces. The CodeMirror adapter,
+`completionItemToOption`, turns that into an `apply` that replaces them; another
+editor's integration replaces that many characters itself. A phrase is offered
+by its opening words, not continued part-way through from the grammar.
+
+A package author's side of this is on [highlighting and
+completions](/packages/highlighting-and-completions/), including what
+`normalizeForHighlighting` costs.
 
 ## Highlighting
 
@@ -47,6 +66,13 @@ A line's label (`Total: 1 + 2`) is prose the engine sets aside, so it is left
 uncoloured like the markdown in front of it. The conversion words `to`, `in`
 and `into` are coloured as keywords, and the colon of a clock time (`12:30`)
 as part of its number.
+
+## Off the main thread
+
+A host that runs the engine in a worker gets the same calls from the worker
+client (`getSemanticTokens`, `getCompletions`, `findReferences`, `getDefinition`,
+`rename`, `shiftLineReferences`), answered by the worker's engine. See [every
+host call, off the thread](/guide/performance/#every-host-call-off-the-thread).
 
 ## References, rename and moving lines
 

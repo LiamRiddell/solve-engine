@@ -282,7 +282,8 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 | `packages/playground-bridge` | Shared glue between the engine and the playground |
 | `playground` | The interactive playground, with every pipeline stage exposed |
 | `docs` | The documentation site |
-| `examples/osrs` | A worked example of a third-party package |
+| `examples/package-starter` | A starter for a third-party package: public imports only, built and tested against the packed tarball |
+| `packages/engine/examples/osrs` | An internal fixture package the playground and the engine's tests use |
 
 ```bash
 npm install && npm run verify

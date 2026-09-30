@@ -14,7 +14,10 @@
  * asserts on the result or the failure code; {@link expectPackage} asserts on
  * the three mistakes a package actually makes (shadowing prose, colliding with
  * another package's vocabulary, and declaring an `engineVersion` range that the
- * running engine does not satisfy).
+ * running engine does not satisfy). {@link expectDocument} evaluates a whole
+ * document and reads each line with the same matchers, and
+ * {@link ExpressionAssertion.toResolveTo} waits for a live value to settle
+ * before comparing it.
  *
  * Framework-agnostic on purpose. Nothing here imports jest, vitest or any
  * runner: an assertion that fails throws an {@link ExpectationError}, and one
@@ -30,6 +33,8 @@
  * const engine = createTestEngine([myPackage]);
  * expectExpression(engine, "2 gp + 3 gp").toEqual(5, "gp");
  * expectExpression(engine, "gp").toFailWith("UNDEFINED_VARIABLE");
+ * await expectExpression(engine, "tide at Dover").toResolveTo(4.2, "m");
+ * (await expectDocument(engine, ":x = 4\nx * 2")).line(2).toEqual(8);
  * ```
  */
 
@@ -46,6 +51,8 @@ import {
 } from "@solve-js/api/PackageCompatibility";
 import { checkEngineVersionCompatibility } from "@solve-js/api/EngineVersionCompatibility";
 import { ENGINE_VERSION } from "@solve-js/constants/version";
+import { evaluateDocument } from "@solve-js/engine/evaluateDocument";
+import type { ParsedLine } from "@solve-js/types/ParsingResult";
 
 //#region Errors
 
@@ -223,10 +230,78 @@ function describeOutcome(outcome: Outcome): string {
  * and throws an {@link ExpectationError} when it fails.
  */
 export class ExpressionAssertion {
+	/**
+	 * @param expression - The text evaluated, named in every failure message.
+	 * @param outcome - What evaluating it gave.
+	 * @param engine - The engine it was evaluated on, which {@link settled}
+	 * re-evaluates on. Absent for a line of a document, whose outcome is final.
+	 */
 	constructor(
 		private readonly expression: string,
-		private readonly outcome: Outcome,
+		private outcome: Outcome,
+		private readonly engine?: ExpressionEngine,
 	) {}
+
+	/**
+	 * Wait for a Pending result to settle, then re-evaluate, so every matcher
+	 * after it reads the settled answer: the value the live data resolved to,
+	 * or the fetch's coded failure.
+	 *
+	 * It loops within one deadline, because a line can reveal a second fetch
+	 * once its first lands: evaluate, {@link ExpressionEngine.settle}, evaluate
+	 * again, until the result is not Pending. A result that was never Pending
+	 * returns at once, without waiting.
+	 *
+	 * @param options.timeoutMs - The deadline for the whole loop, in
+	 * milliseconds. 5,000 by default.
+	 * @returns This assertion, now holding the settled outcome.
+	 * @throws ExpectationError `EXPECTED_SETTLED` (rejected) when the result is
+	 * still Pending at the deadline, or the assertion was built for a document
+	 * line rather than by {@link expectExpression}.
+	 */
+	async settled(options: SettleOptions = {}): Promise<this> {
+		if (this.outcome.status !== "pending") return this;
+		const engine = this.engine;
+		if (engine === undefined) {
+			throw new ExpectationError({
+				code: "EXPECTED_SETTLED",
+				message: `"${this.expression}" is a document line, which expectDocument has already settled; it is still pending.`,
+				expected: "a settled value",
+				actual: describeOutcome(this.outcome),
+			});
+		}
+		const timeoutMs = options.timeoutMs ?? DEFAULT_KIT_TIMEOUT_MS;
+		const deadline = Date.now() + timeoutMs;
+		while (this.outcome.status === "pending") {
+			const remaining = deadline - Date.now();
+			if (remaining <= 0 || !(await settleWithin(engine, remaining))) {
+				throw new ExpectationError({
+					code: "EXPECTED_SETTLED",
+					message: `Expected "${this.expression}" to settle within ${timeoutMs} ms, but it was still a pending async value.`,
+					expected: `a settled value within ${timeoutMs} ms`,
+					actual: "a pending async value",
+				});
+			}
+			this.outcome = evaluate(engine, this.expression);
+		}
+		return this;
+	}
+
+	/**
+	 * Wait for the result to settle (see {@link settled}), then assert it
+	 * equals `expected`, with `unit` when given, exactly as {@link toEqual}
+	 * does. The matcher for a package's async resolver: the first evaluation
+	 * is Pending by contract, and this is what it resolves to.
+	 *
+	 * @example
+	 * ```ts
+	 * await expectExpression(engine, "tide at Dover").toResolveTo(4.2, "m");
+	 * ```
+	 */
+	async toResolveTo(expected: number | string | boolean, unit?: string, options: SettleOptions = {}): Promise<this> {
+		await this.settled(options);
+		return this.toEqual(expected, unit);
+	}
 
 	/** The raw resolved {@link Value}, for an assertion the matchers do not cover. Throws if the expression failed. */
 	get value(): Value {
@@ -348,9 +423,9 @@ export class ExpressionAssertion {
 
 	/**
 	 * Assert the expression returned a value still resolving asynchronously.
-	 * The kit evaluates synchronously, so a package whose result comes from an
-	 * async resolver reports pending on first evaluation, this is how a test
-	 * confirms the async path was taken without resolving it.
+	 * A package whose result comes from an async resolver reports pending on
+	 * first evaluation; this is how a test confirms the async path was taken
+	 * without waiting for it. {@link toResolveTo} waits and checks the answer.
 	 */
 	toBePending(): this {
 		if (this.outcome.status !== "pending") {
@@ -393,7 +468,119 @@ function valueToComparableString(value: Value): string {
  * ```
  */
 export function expectExpression(engine: ExpressionEngine, expression: string): ExpressionAssertion {
-	return new ExpressionAssertion(expression, evaluate(engine, expression));
+	return new ExpressionAssertion(expression, evaluate(engine, expression), engine);
+}
+
+//#endregion
+
+//#region Settling live values
+
+/** Options for the kit's waiting matchers, {@link ExpressionAssertion.settled}, {@link ExpressionAssertion.toResolveTo} and {@link expectDocument}. */
+export interface SettleOptions {
+	/** The deadline for the whole wait, in milliseconds. 5,000 by default. */
+	timeoutMs?: number;
+}
+
+/** The kit's default deadline: long enough for a stub resolver, short enough that a test runner's own timeout is not what reports a hang. */
+const DEFAULT_KIT_TIMEOUT_MS = 5_000;
+
+/**
+ * Await {@link ExpressionEngine.settle} within `ms`, answering whether it
+ * settled. A `SETTLE_TIMEOUT` is the "no" answer; any other failure (a
+ * `timeoutMs` the engine refuses) is passed on as it is.
+ */
+async function settleWithin(engine: ExpressionEngine, ms: number): Promise<boolean> {
+	try {
+		await engine.settle({ timeoutMs: ms });
+		return true;
+	} catch (error) {
+		if (error instanceof EngineError && error.code === "SETTLE_TIMEOUT") return false;
+		throw error;
+	}
+}
+
+/** Whether a document line, or any inline solve on it, is still Pending. */
+function linePending(line: ParsedLine): boolean {
+	if (line.result?.isPending()) return true;
+	return line.inlineSolves.some((solve) => solve.result?.isPending() === true);
+}
+
+/** A document line's outcome in the shape the matchers read, from its result or its recorded failure. */
+function lineOutcome(line: ParsedLine): Outcome {
+	if (line.error !== null) {
+		const code = line.errorCode ?? "";
+		return { status: "error", code, message: line.error, source: new Value(ValueType.Error, code, line.error) };
+	}
+	const value = line.result;
+	if (value === null) {
+		return { status: "error", code: "EXPECTED_EXPRESSION", message: "the line holds nothing to evaluate", source: new Value(ValueType.Error, "EXPECTED_EXPRESSION", "the line holds nothing to evaluate") };
+	}
+	if (value.isError()) {
+		return { status: "error", code: value.errorCode ?? "", message: value.errorMessage ?? "", source: value };
+	}
+	if (value.isPending()) return { status: "pending", value };
+	return { status: "value", value };
+}
+
+/**
+ * Assertions about a whole evaluated document, returned by {@link expectDocument}.
+ * Each line is read with the same matchers {@link expectExpression} returns.
+ */
+export class DocumentAssertion {
+	/**
+	 * @param lines - Every line of the settled document, in order.
+	 */
+	constructor(readonly lines: readonly ParsedLine[]) {}
+
+	/**
+	 * The matchers for line `lineNumber` (one-based), reading the answer the
+	 * document gave it: a line reference, a tag or a goal seek on it resolves
+	 * as it does in an editor. A line with nothing to evaluate (prose, a
+	 * heading, a blank) fails every matcher but {@link ExpressionAssertion.toBeError}.
+	 *
+	 * @throws ExpectationError `EXPECTED_LINE` for a line number the document does not have.
+	 */
+	line(lineNumber: number): ExpressionAssertion {
+		const line = Number.isInteger(lineNumber) && lineNumber >= 1 ? this.lines[lineNumber - 1] : undefined;
+		if (line === undefined) {
+			throw new ExpectationError({
+				code: "EXPECTED_LINE",
+				message: `The document has ${this.lines.length} line(s), so there is no line ${String(lineNumber)}.`,
+				expected: `a line number from 1 to ${this.lines.length}`,
+				actual: String(lineNumber),
+			});
+		}
+		return new ExpressionAssertion(`line ${lineNumber}: ${line.text}`, lineOutcome(line));
+	}
+}
+
+/**
+ * Evaluate `text` as a whole document on `engine`, wait for any live values
+ * it starts to settle, and return per-line matchers.
+ *
+ * The document goes through the incremental pass a live editor uses
+ * (`evaluateDocument`), so every whole-document form resolves: line
+ * references, category tags, table columns and goal seek. While any line is
+ * Pending, the kit awaits {@link ExpressionEngine.settle} and evaluates the
+ * document again, until none is or the deadline passes. A line still Pending
+ * at the deadline is left Pending, for {@link ExpressionAssertion.toBePending}
+ * to confirm or another matcher to report.
+ *
+ * @example
+ * ```ts
+ * const doc = await expectDocument(engine, ":rate = 4%\n1000 * rate");
+ * doc.line(2).toEqual(40);
+ * ```
+ */
+export async function expectDocument(engine: ExpressionEngine, text: string, options: SettleOptions = {}): Promise<DocumentAssertion> {
+	const deadline = Date.now() + (options.timeoutMs ?? DEFAULT_KIT_TIMEOUT_MS);
+	let lines = evaluateDocument(engine, text).lines;
+	while (lines.some(linePending)) {
+		const remaining = deadline - Date.now();
+		if (remaining <= 0 || !(await settleWithin(engine, remaining))) break;
+		lines = evaluateDocument(engine, text).lines;
+	}
+	return new DocumentAssertion(lines);
 }
 
 //#endregion

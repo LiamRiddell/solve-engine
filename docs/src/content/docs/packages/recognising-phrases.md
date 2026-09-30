@@ -219,15 +219,26 @@ engine holds: `match` is handed the engine's environment as its third argument,
 and reads it there.
 
 ```ts
-match(tokens, pos, environment) {
-  const word = tokens[pos + 1];
-  if (word?.type !== "IDENT") return null;
-  // Whether this engine, not some other one, has a converter of that name.
-  const match = environment?.asConverters?.match(word.value);
-  if (match !== "exact" && match !== "folded") return null;
-  // ...
-}
+import type { NormalizerRule } from "solve-engine/normalizer";
+
+export const inConverterRule: NormalizerRule = {
+  name: "my-package:in-converter",
+  priority: 20,
+  match(tokens, pos, environment) {
+    const word = tokens[pos + 1];
+    if (tokens[pos]?.type !== "IN" || word?.type !== "IDENT") return null;
+    // Whether this engine, not some other one, has a converter of that name.
+    const found = environment?.asConverters?.match(word.value);
+    if (found !== "exact" && found !== "folded") return null;
+    // Build the replacement here, as the rule above does.
+    return null;
+  },
+};
 ```
+
+The environment's type is `NormalizerEnvironment`, exported from
+`solve-engine/normalizer` beside `NormalizerRule`, for a helper that takes it
+apart from a rule.
 
 Today the environment carries the engine's `as` converters, as the built-in
 rule that reads `99 in roman` as `99 as roman` needs them. Every field is

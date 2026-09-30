@@ -564,6 +564,10 @@ export const CoreErrorCodes = {
   // ── Live data (engine/ExpressionEngine.ts) ──
   /** A live value that failed to fetch several times in a row, reported rather than retried again. Editing the line tries again. */
   ASYNC_RESOLVER_FAILED: "ASYNC_RESOLVER_FAILED",
+  /** `await engine.settle({ timeoutMs })` reached its deadline with live values still being fetched. Rejected rather than resolved, so a caller is never handed a Pending line as if it were settled; the context carries how many were in flight. Recoverable: the lines stay Pending and settle when their fetches land. */
+  SETTLE_TIMEOUT: "SETTLE_TIMEOUT",
+  /** `engine.settle` was given a `timeoutMs` that is not a finite number of zero or more (a negative, `NaN`, an infinity, text). Rejected, since it is the host's argument that is wrong. */
+  SETTLE_TIMEOUT_INVALID: "SETTLE_TIMEOUT_INVALID",
 
   // ── Per-pass budgets (vm/PassWork.ts) ──
   /** A document pass whose cross-line forms together re-ran more lines than `vm.maxLineRunsPerPass` allows. The line that crossed the budget is refused by name; the host may raise it. */
