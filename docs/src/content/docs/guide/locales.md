@@ -14,7 +14,8 @@ and writing an answer for them are separate questions.
   with: its keywords (`mal` is times in German) and what a typed number means.
 - The formatter's `numberResult.decimalSeparatorLocale` setting chooses how a
   result is **written**: the decimal mark, the digit grouping, the digits
-  themselves, and the names of weekdays and months.
+  themselves, the names of weekdays, months and units, and where a currency
+  symbol goes.
 
 ```ts
 import { createEngine } from "solve-engine";
@@ -26,9 +27,9 @@ const value = engine.evaluateExpression("€1.250");
 formatValue(value, {
   ...DEFAULT_FORMATTING_SETTINGS,
   numberResult: { decimalSeparatorLocale: "de-DE" },
-}); // "= €1.250,00"
+}); // "= 1.250,00 €"
 
-engine.formatValue(value); // "= €1.250,00", from the engine's own locale
+engine.formatValue(value); // "= 1.250,00 €", from the engine's own locale
 ```
 
 `engine.formatValue` takes the output tag from the engine's `locale` option, so
@@ -271,16 +272,18 @@ three numbers.
 ## Writing results
 
 `numberResult.decimalSeparatorLocale` takes any tag the runtime's `Intl` knows,
-and the answer is written the way that tag writes numbers and dates.
+and the answer is written the way that tag writes numbers, dates and the words
+beside them: a unit's long name in the tag's language (`Tage`, `jours`), and a
+currency symbol in the place the tag gives it (after the amount under `de-DE`).
 
 | Tag | `3.5 days` | `£1234.5` | `₹1234567.89` | `2025-11-17` |
 | --- | --- | --- | --- | --- |
 | `en-US` (the default) | `3.50 days` | `£1,234.50` | `₹1,234,567.89` | `Monday, November 17, 2025` |
-| `de-DE` | `3,50 days` | `£1.234,50` | `₹1.234.567,89` | `Montag, 17. November 2025` |
-| `fr-FR` | `3,50 days` | `£1 234,50` | `₹1 234 567,89` | `lundi 17 novembre 2025` |
+| `de-DE` | `3,50 Tage` | `1.234,50 £` | `1.234.567,89 ₹` | `Montag, 17. November 2025` |
+| `fr-FR` | `3,50 jours` | `1 234,50 £` | `1 234 567,89 ₹` | `lundi 17 novembre 2025` |
 | `en-IN` | `3.50 days` | `£1,234.50` | `₹12,34,567.89` | `Monday, 17 November 2025` |
-| `ar-EG` | `٣٫٥٠ days` | `£١٬٢٣٤٫٥٠` | `₹١٬٢٣٤٬٥٦٧٫٨٩` | `الاثنين، ١٧ نوفمبر ٢٠٢٥` |
-| `ar-EG-u-nu-latn` | `3.50 days` | `£1,234.50` | `₹1,234,567.89` | `الاثنين، 17 نوفمبر 2025` |
+| `ar-EG` | `٣٫٥٠ يوم` | `١٬٢٣٤٫٥٠ £` | `١٬٢٣٤٬٥٦٧٫٨٩ ₹` | `الاثنين، ١٧ نوفمبر ٢٠٢٥` |
+| `ar-EG-u-nu-latn` | `3.50 يوم` | `1,234.50 £` | `1,234,567.89 ₹` | `الاثنين، 17 نوفمبر 2025` |
 
 A tag whose script has digits of its own (Arabic-Indic for `ar-EG`, Bengali for
 `bn`, Devanagari for `mr`) writes every digit in them, the fraction included. A
@@ -288,7 +291,15 @@ host that wants Latin digits passes a tag that asks for them, as
 `ar-EG-u-nu-latn` does: the `-u-nu-latn` ending names the Latin numbering
 system.
 
-Weekday and month names follow the tag wherever `Intl` has data for it. Where
+A unit written as a symbol (`km`, `kg`) is written as it is in every language,
+and the currency symbol itself stays the engine's (`$` for every dollar), only
+its place moving. A host that writes answers back into a note keeps the
+engine's English words with `wordsResult: { spelling: "engine" }`, since
+`3,50 Tage` does not read back in; see
+[formatting results](/guide/formatting/#the-locale-tag).
+
+Weekday and month names follow the tag wherever `Intl` has data for it, in a
+spelled-out date and in the answer to `as weekday` and `as month`. Where
 it has none (`xx`), the names come from the language pack instead, English for
 any code without one, so the answer does not depend on the machine the engine
 happens to run on. A tag `Intl` cannot read at all (`de_DE`, which `Intl` spells

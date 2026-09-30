@@ -32,7 +32,7 @@
  * `JSON.parse` unchanged.
  */
 
-import { Value, ValueType, type MatrixData, type MatrixEntry, type DatetimeGrain } from "@solve-js/vm/Value";
+import { Value, ValueType, type MatrixData, type MatrixEntry, type DatetimeGrain, type CalendarName } from "@solve-js/vm/Value";
 import type { BytecodeProgram, UserFunctionDef, AnonymousBodyDef } from "@solve-js/parser/BytecodeBuilder";
 import type { DecimalData } from "@solve-js/decimal";
 import type { Rational } from "@solve-js/symbolic";
@@ -146,7 +146,7 @@ export type SerializedValue = SerializedValueSidecars & (
 	| { t: ValueType.Number; v: SerializedNumber; exact?: SerializedDecimal; rational?: SerializedRational; uu?: string }
 	| { t: ValueType.Hex; v: SerializedNumber | string; big?: boolean; base?: string }
 	| { t: ValueType.BigInt; v: string }
-	| { t: ValueType.String; v: string }
+	| { t: ValueType.String; v: string; cn?: CalendarName }
 	| { t: ValueType.Datetime; v: SerializedNumber; g?: DatetimeGrain; z?: string }
 	| { t: ValueType.Percentage; v: SerializedNumber }
 	| { t: ValueType.Uom; v: SerializedNumber; unit: string; exact?: SerializedDecimal }
@@ -354,8 +354,13 @@ function serializeValueBody(value: Value, where: string): SerializedValue {
 		}
 		case ValueType.BigInt:
 			return { t: ValueType.BigInt, v: (value.value as bigint).toString() };
-		case ValueType.String:
-			return { t: ValueType.String, v: value.value as string };
+		case ValueType.String: {
+			// A weekday or month name keeps which one it is, an optional field a
+			// snapshot written before it existed simply lacks, so no version bump.
+			const out: Extract<SerializedValue, { t: ValueType.String }> = { t: ValueType.String, v: value.value as string };
+			if (value.calendarName !== undefined) out.cn = { kind: value.calendarName.kind, index: value.calendarName.index };
+			return out;
+		}
 		case ValueType.Datetime: {
 			// The two sidecars ride along as optional fields, which is why this
 			// needs no `SNAPSHOT_VERSION` bump: a snapshot written before they
@@ -427,8 +432,11 @@ function deserializeValueBody(sv: SerializedValue): Value {
 		}
 		case ValueType.BigInt:
 			return new Value(ValueType.BigInt, BigInt(sv.v));
-		case ValueType.String:
-			return new Value(ValueType.String, sv.v);
+		case ValueType.String: {
+			const v = new Value(ValueType.String, sv.v);
+			if (sv.cn !== undefined) v.calendarName = { kind: sv.cn.kind, index: sv.cn.index };
+			return v;
+		}
 		case ValueType.Datetime: {
 			const v = new Value(ValueType.Datetime, decodeNumber(sv.v));
 			if (sv.g !== undefined) v.grain = sv.g;
@@ -776,6 +784,13 @@ function isSerializedNumber(value: unknown): boolean {
 	return typeof value === "number" || value === "NaN" || value === "Infinity" || value === "-Infinity";
 }
 
+/** Whether a snapshot's `cn` is a weekday (0 to 6) or a month (0 to 11), as a restore will assign it. */
+function isCalendarName(value: unknown): boolean {
+	if (!isRecord(value) || !Number.isInteger(value.index) || (value.index as number) < 0) return false;
+	if (value.kind === "weekday") return (value.index as number) <= 6;
+	return value.kind === "month" && (value.index as number) <= 11;
+}
+
 function isIntegerString(value: unknown): boolean {
 	return typeof value === "string" && /^-?\d+$/.test(value);
 }
@@ -854,6 +869,7 @@ function assertValueShape(sv: unknown, where: string): void {
 			return;
 		case ValueType.String:
 			if (typeof sv.v !== "string") malformed(`${where}.v`, "a string", sv.v);
+			if (sv.cn !== undefined && !isCalendarName(sv.cn)) malformed(`${where}.cn`, "a weekday (0 to 6) or month (0 to 11)", sv.cn);
 			return;
 		case ValueType.Datetime:
 			if (!isSerializedNumber(sv.v)) malformed(`${where}.v`, "a number", sv.v);

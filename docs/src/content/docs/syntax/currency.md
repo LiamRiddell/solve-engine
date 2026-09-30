@@ -115,6 +115,14 @@ as yen, and is then shown as yen are, in whole yen (`¥12`, see
 [money precision](/syntax/money-precision/#each-currencys-own-places)). Keep the
 code (`12 AUD`) where the currency matters.
 
+Where the symbol goes in an answer follows the reader's language when the app
+showing the notes is set to one. The examples here are written the English
+way, `€1,234.50`; a reader whose app is set to German sees `1.234,50 €`, the
+symbol after the amount as German writes it, and a German note reads that form
+back in as the same money. Only the place and the separators change: the symbol,
+the cents and the rounding are the same in every language. See
+[formatting results](/guide/formatting/#the-words-beside-the-number).
+
 ## Amounts inside a call
 
 Inside the brackets of a function call, or of a list, a comma separates one

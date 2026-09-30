@@ -31,8 +31,13 @@ const ALL_UNITS = Object.keys(UNIT_TABLE);
  * way through and states why: see UPSTREAM_UNIT_CORRECTIONS in
  * scripts/generate-unit-table.mjs.
  *
- * The sweeps below skip these six and the DEVIATION test pins the difference,
- * so parity keeps its teeth over the other 1457 spellings.
+ * It records the typographic point as 0.0003528 m and the pica as 0.0042333 m,
+ * each cut short of the exact 0.0254 / 72 and 0.0254 / 6 that define them (a
+ * 72nd and a sixth of an inch), so 72 points came to 1.00006 inches and a pica
+ * to 11.999 points. Corrected the same way.
+ *
+ * The sweeps below skip these ten and the DEVIATION tests pin the difference,
+ * so parity keeps its teeth over the other 1453 spellings.
  */
 const CORRECTED_UNITS = new Set([
   "square decimeter",
@@ -41,7 +46,14 @@ const CORRECTED_UNITS = new Set([
   "square decimetres",
   "dm²",
   "dm2",
+  "point",
+  "points",
+  "pica",
+  "picas",
 ]);
+
+/** The square decimetre's spellings, the one correction that is a mistyped ratio rather than a cut. */
+const DECIMETRE_SPELLINGS = ["square decimeter", "square decimetre", "square decimeters", "square decimetres", "dm²", "dm2"];
 
 /**
  * The measure whose best-unit list the port deliberately does not mirror.
@@ -213,11 +225,25 @@ describe("ported unit table matches convert v7.0.2", () => {
     // every other conversion routed through it. Every neighbouring prefix in the
     // same table squares its length correctly and the cubic decimetre is right,
     // so this is one mistyped ratio and not a different idea of a decimetre.
-    for (const spelling of CORRECTED_UNITS) {
+    for (const spelling of DECIMETRE_SPELLINGS) {
       expect(UNIT_TABLE[spelling][1]).toBe(0.01);
     }
     expect(convert(1, "m2").to("dm2" as never)).toBe(10);
     expect(convertRaw(1, "m2", "dm2")).toBeCloseTo(100, 9);
+  });
+
+  test("DEVIATION: the point and the pica are exact rather than cut short", () => {
+    // A point is a 72nd of an inch and a pica a sixth, both exact by definition.
+    // Upstream cuts them to 0.3528 mm and 4.2333 mm, which breaks the relation
+    // that defines them: a pica came to 11.999 points and 72 points to 1.00006
+    // inches.
+    expect(UNIT_TABLE.point[1]).toBe(0.0254 / 72);
+    expect(UNIT_TABLE.points[1]).toBe(0.0254 / 72);
+    expect(UNIT_TABLE.pica[1]).toBe(0.0254 / 6);
+    expect(UNIT_TABLE.picas[1]).toBe(0.0254 / 6);
+    expect(convert(1, "pica").to("point" as never)).toBeCloseTo(11.9991, 4);
+    expect(convertRaw(1, "pica", "point")).toBeCloseTo(12, 12);
+    expect(convertRaw(72, "point", "in")).toBeCloseTo(1, 12);
   });
 
   test("DEVIATION: the illuminance best-unit list is corrected rather than mirrored", () => {

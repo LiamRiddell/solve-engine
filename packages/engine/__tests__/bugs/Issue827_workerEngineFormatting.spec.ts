@@ -46,13 +46,13 @@ describe("a worker result reads as the same engine's formatValue writes it", () 
 	test("a de-DE engine behind the worker writes €1.250,00", async () => {
 		const main = newTrackedEngine({ locale: "de-DE", calendar: DATE_CALENDAR });
 		const expected = main.formatValue(main.evaluateExpression("€1250"));
-		expect(expected).toBe("= €1.250,00");
+		expect(expected).toBe("= 1.250,00 €");
 		await withWorker({ localeCode: "de-DE" }, { calendar: DATE_CALENDAR }, async (worker) => {
 			expect((await worker.evaluateExpression("€1250")).text).toBe(expected);
 			const lines = await worker.evaluateLines(["€1250", "1250"]);
-			expect(lines.map((l) => l.result?.text)).toEqual(["= €1.250,00", "= 1.250"]);
+			expect(lines.map((l) => l.result?.text)).toEqual(["= 1.250,00 €", "= 1.250"]);
 			const doc = await worker.parseDocument("€1250\n€1250 * 2");
-			expect(doc.lines.map((l) => l.result?.text)).toEqual(["= €1.250,00", "= €2.500,00"]);
+			expect(doc.lines.map((l) => l.result?.text)).toEqual(["= 1.250,00 €", "= 2.500,00 €"]);
 		});
 	});
 
@@ -74,7 +74,7 @@ describe("a worker result reads as the same engine's formatValue writes it", () 
 			// The date format is the host's, the zone and the number locale the engine's.
 			const main = newTrackedEngine({ locale: "de-DE", calendar });
 			expect((await worker.evaluateExpression("2026-10-03")).text).toBe(main.formatValue(main.evaluateExpression("2026-10-03"), { dateResult: { format: "iso" } }));
-			expect((await worker.evaluateExpression("€1250")).text).toBe("= €1.250,00");
+			expect((await worker.evaluateExpression("€1250")).text).toBe("= 1.250,00 €");
 		});
 	});
 

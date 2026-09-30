@@ -81,11 +81,12 @@ describe("engine.formatValue writes a date in the engine's own zone", () => {
 });
 
 describe("the engine's locale writes its numbers", () => {
-	test("a de-DE engine writes €1.250,00", () => {
+	test("a de-DE engine writes 1.250,00 €", () => {
 		const engine = newTrackedEngine({ locale: "de-DE", calendar: DATE_CALENDAR });
 		const value = engine.evaluateExpression("€1250");
-		expect(engine.formatValue(value)).toBe("= €1.250,00");
-		expect(engine.formatValue(engine.evaluateExpression("€1.250"))).toBe("= €1.250,00");
+		// The symbol takes German's place after the amount (#755).
+		expect(engine.formatValue(value)).toBe("= 1.250,00 €");
+		expect(engine.formatValue(engine.evaluateExpression("€1.250"))).toBe("= 1.250,00 €");
 		expect(formatValue(value)).toBe("= €1,250.00");
 		expect(engine.getFormattingSettings().numberResult.decimalSeparatorLocale).toBe("de-DE");
 	});
@@ -102,7 +103,7 @@ describe("a partial settings object merges with the defaults", () => {
 	test.each<[string, string, FormattingOverrides, string]>([
 		["floatResult", "1234.5678", { floatResult: { decimalPlaces: 3 } }, "= 1,234.568"],
 		["floatResult", "1234.5678", { floatResult: { enableSeperator: false } }, "= 1234.57"],
-		["numberResult", "£1234.5", { numberResult: { decimalSeparatorLocale: "de-DE" } }, "= £1.234,50"],
+		["numberResult", "£1234.5", { numberResult: { decimalSeparatorLocale: "de-DE" } }, "= 1.234,50 £"],
 		["hexResult", "255 as hex", { hexResult: { enablePadding: true, paddingZeros: 4 } }, "= 0x00FF"],
 		["unitOfMeasurementResult", "3000 m", { unitOfMeasurementResult: { decimalPlaces: 0 } }, "= 3,000 m"],
 		["percentageResult", "12.3456%", { percentageResult: { decimalPlaces: 1 } }, "= 12.3%"],
