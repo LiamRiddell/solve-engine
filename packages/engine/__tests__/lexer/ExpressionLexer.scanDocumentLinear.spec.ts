@@ -27,16 +27,28 @@ function proseDocument(lines: number, tail: string): string {
 	return Array.from({ length: lines }, () => PROSE_LINE).join("\n") + "\n" + tail;
 }
 
-/** Milliseconds for one full scan, as the median of a few runs so a single hiccup cannot decide the test. */
-function medianScanMs(lexer: Lexer, text: string, runs = 5): number {
-	const samples: number[] = [];
+/**
+ * Milliseconds for one full scan of each text, as the fastest of several runs.
+ *
+ * Interference on a shared machine (a collection, another process, the JIT
+ * moving a function up a tier) only ever adds time, so the fastest run is the
+ * closest to the scan's own cost. The texts take turns, so a slow stretch of
+ * the machine lands on both rather than on one. A median of five, taken for one
+ * text and then the other, moved the four-to-one ratio between 3 and 9.6 on an
+ * unchanged tree.
+ */
+export function fastestScanMs(lexer: Lexer, texts: readonly string[], runs = 9): number[] {
+	const collect = (globalThis as { gc?: () => void }).gc;
+	const fastest = texts.map(() => Infinity);
 	for (let i = 0; i < runs; i++) {
-		const started = performance.now();
-		lexer.scanDocument(text);
-		samples.push(performance.now() - started);
+		texts.forEach((text, t) => {
+			collect?.();
+			const started = performance.now();
+			lexer.scanDocument(text);
+			fastest[t] = Math.min(fastest[t], performance.now() - started);
+		});
 	}
-	samples.sort((a, b) => a - b);
-	return samples[Math.floor(samples.length / 2)];
+	return fastest;
 }
 
 describe("scanDocument reads no further than the line it is classifying", () => {
@@ -69,6 +81,17 @@ describe("scanDocument reads no further than the line it is classifying", () => 
 		expect(scanned.map((r) => r.classification.hasInlineSolve)).toEqual(lines.map((line) => line.includes("s`")));
 	});
 
+	test("fastestScanMs times a real scan and keeps the fastest run", () => {
+		const lexer = new Lexer("en");
+		const [ms, empty] = fastestScanMs(lexer, [proseDocument(100, ""), ""], 3);
+		expect(Number.isFinite(ms)).toBe(true);
+		expect(ms).toBeGreaterThanOrEqual(0);
+		// An empty document still scans, and no runs leaves nothing measured.
+		expect(Number.isFinite(empty)).toBe(true);
+		expect(fastestScanMs(lexer, [""], 0)).toEqual([Infinity]);
+		expect(fastestScanMs(lexer, [], 3)).toEqual([]);
+	});
+
 	test("a wikilink closed only on a later line is not a wikilink", () => {
 		const lexer = new Lexer("en");
 		const scanned = lexer.scanDocument("[[note\n1 + 1 ]]");
@@ -86,13 +109,15 @@ describe("scanDocument reads no further than the line it is classifying", () => 
 		 */
 		const lexer = new Lexer("en");
 		const tail = "total is s`1 + 1` here";
-		const small = proseDocument(4_000, tail);
-		const large = proseDocument(16_000, tail);
-		// Warm the scanner once so neither measurement pays for a cold path.
-		lexer.scanDocument(small);
+		// Both sizes sit above the point where a scan starts paying for young
+		// collections. At 4,000 and 16,000 lines only the larger did, and the
+		// smaller one's time swung between 6 and 18 ms from run to run.
+		const small = proseDocument(8_000, tail);
+		const large = proseDocument(32_000, tail);
+		// Warm the scanner so neither measurement pays for a cold path.
+		fastestScanMs(lexer, [small, large], 2);
 
-		const smallMs = medianScanMs(lexer, small);
-		const largeMs = medianScanMs(lexer, large);
+		const [smallMs, largeMs] = fastestScanMs(lexer, [small, large], 7);
 
 		expect(largeMs / smallMs).toBeLessThan(9);
 	});
