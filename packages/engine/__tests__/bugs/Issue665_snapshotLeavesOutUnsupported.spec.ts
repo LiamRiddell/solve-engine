@@ -1,13 +1,13 @@
 import { describe, expect, test } from "@jest/globals";
 import { ExpressionEngine } from "@solve-js/engine/ExpressionEngine";
-import { serializeValue, SnapshotErrorCodes } from "@solve-js/engine/EngineSnapshot";
+import { snapshotValue, SnapshotErrorCodes } from "@solve-js/engine/EngineSnapshot";
 import { BUILTIN_PACKAGES } from "@solve-js/packages";
 import { ValueType } from "@solve-js/vm/Value";
 import { newTrackedEngine } from "@tools/trackedEngine";
 
 /**
  * Issue #665: embedding.md and the `toJSON` doc comment said a variable holding
- * a symbolic value makes `toJSON()` throw. It never did: `serializeValue` refuses
+ * a symbolic value makes `toJSON()` throw. It never did: `snapshotValue` refuses
  * the value and `toJSON` catches the refusal and leaves the variable out, and the
  * same happens to a colour, a bill split, a chart and an IP subnet. The docs now
  * say so; this pins the behaviour they describe, so the two cannot drift apart
@@ -58,8 +58,8 @@ describe("toJSON leaves out a value the format cannot hold, and does not throw",
 		expect(restored.evaluateExpression("y").type).toBe(ValueType.Colour);
 	});
 
-	test("serializeValue itself refuses the value, which is what toJSON catches", () => {
+	test("snapshotValue itself refuses the value, which is what toJSON catches", () => {
 		const colour = newTrackedEngine().evaluateExpression("#ff0000");
-		expect(code(() => serializeValue(colour, "variable \"y\""))).toBe(SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE);
+		expect(code(() => snapshotValue(colour, "variable \"y\""))).toBe(SnapshotErrorCodes.SNAPSHOT_UNSUPPORTED_VALUE);
 	});
 });

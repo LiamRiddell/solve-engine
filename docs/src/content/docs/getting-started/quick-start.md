@@ -114,5 +114,10 @@ doc.lines[1].result?.errorCode; // "INCOMPATIBLE_UNITS"
 doc.errors.length;              // 2
 ```
 
+`parseDocument` and `evaluateDocument` are two of the engine's four entry
+points, and they differ in what they resolve: [which entry
+point](/guide/entry-points/) compares them with a single expression and a live
+editor.
+
 Read [core concepts](/getting-started/concepts/) next for the mental model, or go
 to the [syntax reference](/syntax/cheatsheet/) for what you can write.

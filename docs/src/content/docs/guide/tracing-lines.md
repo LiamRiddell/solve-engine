@@ -93,7 +93,8 @@ nine does not change what line three read.
 ## Which document it reads
 
 A live editor attaches its document to the engine through a
-`ThreeTierEvaluator`, and `traceLine(n)` reads that document with no options.
+`ThreeTierEvaluator` (see [driving a live editor](/guide/live-editor/)), and
+`traceLine(n)` reads that document with no options.
 A host that evaluates a whole document in one pass passes the result instead,
 from either `parseDocument` or `evaluateDocument`, as `options.document`.
 
