@@ -64,7 +64,9 @@ export type { IVector3 } from "./vector/IVector3";
 export type { IVector4 } from "./vector/IVector4";
 
 export type { CurrencyPackageConfig } from "./currency";
-export type { HistoricalRateProvider } from "@solve-js/uom/HistoricalCurrency";
+export type { HistoricalRateProvider, HistoricalRate } from "@solve-js/uom/HistoricalCurrency";
+export { createFrankfurterHistoricalRateProvider } from "@solve-js/uom/FrankfurterHistoricalRates";
+export type { FrankfurterHistoricalOptions } from "@solve-js/uom/FrankfurterHistoricalRates";
 export type { StocksPackageConfig, StockQuote, StockHistoricalQuote } from "./stocks";
 export type { KnowledgePackageConfig } from "./knowledge";
 export type { CityWeather, WeatherQueryKind } from "./weather";

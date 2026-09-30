@@ -157,6 +157,27 @@ Leave it unset for anything that fetches. The setting is the host's promise that
 nothing leaves the process, and a fetching resolver marked `local` would break
 that promise on the host's behalf.
 
+A plugin function that fetches on a cache miss (because its input is known only
+when the line runs, so preflight had nothing to scan) is the other place a
+request can start. The engine refuses the promise such a function returns when
+live data is off, but by then the request has already left. Check the setting
+the function is handed before starting one:
+
+```ts
+const pluginFunction = (args: Value[], context?: LineExecutionContext) => {
+  const cached = queryClient.getQueryData(keyFor(args));
+  if (cached !== undefined) return cached as Value;
+  if (context?.networkEnabled === false) {
+    return errorValue("NETWORK_DISABLED", "Live data is switched off for this engine (network.enabled is false)");
+  }
+  return queryClient.fetchQuery({ queryKey: keyFor(args), queryFn: ({ signal }) => fetchIt(args, signal) });
+};
+```
+
+The built-in historical exchange rate does exactly this for `x in GBP on
+2024-01-15`, where the source currency is the value of `x` and preflight cannot
+see it.
+
 ## Preflight runs before the VM, and stays synchronous
 
 `preflight` is called before an expression executes, for every expression unless
@@ -341,9 +362,10 @@ return value;
 ```
 
 The built-in packages name their providers: `Frankfurter` and `CoinGecko` for the
-rates the engine fetches itself, `Open-Meteo` for weather, and for the packages
-that take a host's fetch (stocks, crypto, knowledge, historical currency) a
-`provider` option, `host` by default.
+rates the engine fetches itself (live rates, and historical rates for a past day),
+`Open-Meteo` for weather, and for the packages that take a host's fetch (stocks,
+crypto, knowledge) a `provider` option, `host` by default. A host that replaces
+the historical exchange rate with its own names it with `historicalProviderName`.
 
 Three boundaries. A failed fetch returns an Error value, which is not a figure and
 carries no record, so do not stamp one. The record is set once, as the value
@@ -353,8 +375,54 @@ froze (`... frozen`) never reaches your resolver once its answer is kept: the
 engine answers it from its own store, so a resolver needs no special case for
 [frozen answers](/syntax/frozen-answers/).
 
+## A built-in source a host can replace
+
+A package can ship a working source and still let a host bring its own. The
+currency package's historical rate is the worked example. `createCurrencyPackage`
+takes a `historicalRateProvider` option:
+
+| Value | What answers `100 USD in GBP on 2024-01-15` |
+| --- | --- |
+| left out | the built-in Frankfurter provider (the European Central Bank's reference rates) |
+| a function | the host's function, which takes precedence |
+| `null` | nothing: the line reports `HISTORICAL_RATES_NOT_CONFIGURED` |
+
+The provider's contract is small: `(from, to, isoDate, signal) => Promise<number |
+{ rate, asOf }>`. It receives upper-case currency codes, the day as `YYYY-MM-DD`
+and the signal to pass to `fetch`; it returns the rate, with `asOf` when the rate
+it found was published for an earlier day (a weekend asked for, Friday answered).
+Three things are the package's job, not the provider's, and hold whichever
+provider answers: the query key and its never-stale cache (a past day's rate does
+not change), the timeout, and refusing an answer that is not a finite, positive
+number rather than converting through it.
+
+The built-in provider decides its own boundary before any request and says why
+in the error: a day before 4 January 1999 (`HISTORICAL_RATE_DATE_OUT_OF_RANGE`,
+since earlier figures are not ECB reference rates), a day after today (the same
+code), and a currency the ECB does not quote (`HISTORICAL_RATE_UNSUPPORTED_CURRENCY`).
+A host provider that throws an `EngineError` with one of those two codes has its
+refusal shown as it is; anything else it throws becomes
+`HISTORICAL_RATE_QUERY_FAILED`, named with the pair and the day.
+
+The same provider can be built with a stub fetch, which is how its tests run
+without the network:
+
+```ts
+import { createFrankfurterHistoricalRateProvider } from "solve-engine/packages";
+
+const provider = createFrankfurterHistoricalRateProvider({
+  fetch: async () => new Response(JSON.stringify([{ date: "2024-01-15", base: "USD", quote: "GBP", rate: 0.78441 }])),
+});
+```
+
+Tests that call a real service belong outside the gates: the engine's own run
+only with `SOLVE_LIVE_NETWORK=1` (`npm run test:live`), where a timeout, a 5xx
+and a 429 count as outages rather than failures.
+
 ## A complete reference
 
 The currency package is the smallest built-in that does all of this: a symbol
-and an `in` parselet for the syntax, and `CurrencyAsyncResolver` for the fetch.
-Read it alongside this page for the parts the skeleton above leaves to you.
+and an `in` parselet for the syntax, `CurrencyAsyncResolver` for the live fetch,
+and `uom/HistoricalCurrency.ts` with `uom/FrankfurterHistoricalRates.ts` for the
+dated one. Read them alongside this page for the parts the skeleton above leaves
+to you.
