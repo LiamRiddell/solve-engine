@@ -146,7 +146,8 @@ describe("float is the plain number its argument is", () => {
 	});
 
 	test("a date is refused as every numeric builtin refuses one", () => {
-		expect(show("float(1 Jan 2026)")).toMatch(/^This calculation takes a number, not a date or time/);
+		// float is called by name, so the refusal names it (FoundBug_textInNumericBuiltins).
+		expect(show("float(1 Jan 2026)")).toMatch(/^float takes a number, not a date or time/);
 	});
 
 	test("float of a single-cell matrix is refused, not unwrapped", () => {

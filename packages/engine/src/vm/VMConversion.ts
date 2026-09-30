@@ -1,4 +1,4 @@
-import { Value, ValueType, numberValue, numberValueRational, numberValueUncertain, bigIntValue, uomValue, uomValueExact, matrixValue, errorValue, symbolicValue, percentageValue, isTimecodeUnit, boolValue, type MatrixData, type MatrixEntry, type IpCidrData } from "@solve-js/vm/Value";
+import { Value, ValueType, numberValue, numberValueRational, numberValueUncertain, bigIntValue, uomValue, uomValueExact, matrixValue, errorValue, symbolicValue, percentageValue, isTimecodeUnit, boolValue, type MatrixData, type MatrixEntry, type IpCidrData, type ColourData } from "@solve-js/vm/Value";
 import { convertUnit, convertRate, getMeasure, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
 import { lookupUnit } from "@solve-js/uom/UnitConversion";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
@@ -1065,6 +1065,10 @@ function isPlainNumber(v: Value): boolean {
  * documents: carrying units through the quadrature rules is out of scope.
  */
 export function toleranceSpread(center: Value, spread: Value): number | Value {
+    // An IPv6 address or a colour has no amount to measure a tolerance
+    // against; its toNumber() gave NaN or 0 for the centre.
+    const opaque = hasNoNumber(center) ? center : hasNoNumber(spread) ? spread : null;
+    if (opaque !== null) return noNumberRefused(opaque, "given a tolerance")!;
     if (spread.type === ValueType.Percentage) {
         const proportion = Math.abs(spread.toNumber());
         return center.type === ValueType.Percentage ? proportion : Math.abs(center.toNumber()) * proportion;
@@ -1255,6 +1259,95 @@ export function ipv6Comparison(l: Value, r: Value, holds: (order: -1 | 0 | 1) =>
     const order = ipv6Order(l, r);
     if (order === null) return null;
     return order instanceof Value ? order : boolValue(holds(order));
+}
+
+/**
+ * The refusal for a colour where a number is wanted: arithmetic, a numeric
+ * function, an order, a conversion to a form of a number.
+ *
+ * A colour is three channels and an alpha, and its `toNumber()` reports 0, so
+ * every path that read a number from it answered as though it were zero:
+ * `#ff0000 + 2` was 2, `sqrt(#ff0000)` was 0 and `#ff0000 < 3` was true. The
+ * colour functions (`lighten`, `mix`, `red`) are what give a colour meaning,
+ * and the message points at reading one channel out as a number.
+ *
+ * @param done - What was asked of it, as the end of "cannot be ...": "added", "given to sqrt".
+ * @returns The `COLOUR_ARITHMETIC` error Value.
+ */
+export function colourRefused(done: string): Value {
+    return errorValue(
+        "COLOUR_ARITHMETIC",
+        `A colour cannot be ${done}: it is three channels (red, green and blue), not one number. To use one channel as a number, read it out first, as in red(#3366cc).`,
+    );
+}
+
+/**
+ * Whether a value has no numeric reading at all and must be refused by name
+ * wherever a number is wanted: an IPv6 address (128 bits, see
+ * {@link isIpv6Value}) or a colour (three channels, see {@link colourRefused}).
+ * Text, a date and a list have refusals of their own, worded for each.
+ *
+ * @param v - The value.
+ */
+export function hasNoNumber(v: Value): boolean {
+    return v.type === ValueType.Colour || isIpv6Value(v);
+}
+
+/**
+ * The refusal for a value with no numeric reading, in its own words, or null
+ * when `v` has one (see {@link hasNoNumber}).
+ *
+ * @param v - The value.
+ * @param done - What was asked of it, as the end of "cannot be ...".
+ */
+export function noNumberRefused(v: Value, done: string): Value | null {
+    if (v.type === ValueType.Colour) return colourRefused(done);
+    return isIpv6Value(v) ? ipv6Refused(done) : null;
+}
+
+/**
+ * The refusal for arithmetic with a value that has no numeric reading on
+ * either side (an IPv6 address or a colour), or null when neither is one. The
+ * left operand is named first, matching left-to-right evaluation.
+ *
+ * @param op - The operation, for the message; a remainder, a power and the bitwise operators pass none.
+ */
+export function noNumberArithmeticRefused(l: Value, r: Value, op?: "add" | "sub" | "mul" | "div"): Value | null {
+    const opaque = hasNoNumber(l) ? l : hasNoNumber(r) ? r : null;
+    if (opaque === null) return null;
+    const done = op === "add" ? "added" : op === "sub" ? "subtracted" : op === "mul" ? "multiplied" : op === "div" ? "divided" : "used in this arithmetic";
+    return noNumberRefused(opaque, done);
+}
+
+/**
+ * Whether two values are equal when either is an IP address or block, of
+ * either family, or null when neither is. Two IP values are equal when their
+ * family, address, prefix and zone all are, so `192.168.1.0/24` and
+ * `192.168.1.0/25` differ as `2001:db8::/32` and `2001:db8::/48` do. An IP
+ * value never equals anything else, as a colour never equals a number: an
+ * IPv4 address read as its 32-bit number made `192.168.1.1 == 3232235777` true
+ * and the prefix of a block vanish.
+ */
+export function ipEqual(l: Value, r: Value): boolean | null {
+    const left = l.type === ValueType.IpCidr, right = r.type === ValueType.IpCidr;
+    if (!left && !right) return null;
+    if (!left || !right) return false;
+    const a = l.value as IpCidrData, b = r.value as IpCidrData;
+    return a.addr === b.addr && a.addr6 === b.addr6 && a.prefix === b.prefix && a.zone === b.zone;
+}
+
+/**
+ * Whether two values are equal when either is a colour, or null when neither
+ * is. A colour equals only another colour with the same channels, however each
+ * was written (`#ff0000 == rgb(255, 0, 0)`), and never a number, since its
+ * `toNumber()` of 0 made `#000000 == 0` true.
+ */
+export function colourEqual(l: Value, r: Value): boolean | null {
+    const left = l.type === ValueType.Colour, right = r.type === ValueType.Colour;
+    if (!left && !right) return null;
+    if (!left || !right) return false;
+    const a = l.value as ColourData, b = r.value as ColourData;
+    return a.r === b.r && a.g === b.g && a.b === b.b && a.a === b.a;
 }
 
 /**
@@ -1495,9 +1588,9 @@ export function binaryOp(
     // aggregates already refuse the same values.
     if (l.type === ValueType.Datetime || r.type === ValueType.Datetime) return datetimeArithmeticRefused(symbolicOp);
 
-    // An IPv6 address has no numeric reading; see ipv6Refused().
-    const ipv6 = ipv6ArithmeticRefused(l, r, symbolicOp);
-    if (ipv6) return ipv6;
+    // An IPv6 address and a colour have no numeric reading; see hasNoNumber().
+    const opaque = noNumberArithmeticRefused(l, r, symbolicOp);
+    if (opaque) return opaque;
 
     // Symbolic dispatch, either operand carries a free-variable formula.
     // Builds the corresponding SymbolicNode (the non-symbolic side, if
