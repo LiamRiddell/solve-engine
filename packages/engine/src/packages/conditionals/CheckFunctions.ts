@@ -17,6 +17,7 @@ import { unifyUom, describeMeasureMismatch, compareBigIntOperands, compareRation
 import { formatValue } from "@solve-js/format/FormatEngine";
 import { DEFAULT_FORMATTING_SETTINGS, type FormattingSettings } from "@solve-js/format/FormattingSettings";
 import { decimalCompare } from "@solve-js/decimal";
+import { convertRate } from "@solve-js/uom/UomConverter";
 
 /** The relative gap two values may differ by and still be equal: a conversion's rounding. */
 const EQUAL_TOLERANCE = 1e-12;
@@ -131,6 +132,19 @@ function numeric(v: Value): boolean {
 }
 
 /**
+ * The right side of a check in the left side's unit, when the two are rates (or
+ * other compound units) that convert into each other; `null` otherwise.
+ *
+ * @param left - The left side of the check.
+ * @param right - The right side.
+ * @returns The right side's magnitude in the left's unit, or `null`.
+ */
+export function rateInLeftUnit(left: Value, right: Value): number | null {
+	if (left.type !== ValueType.Uom || right.type !== ValueType.Uom || left.unit === undefined || right.unit === undefined) return null;
+	return convertRate(right.toNumber(), right.unit, left.unit);
+}
+
+/**
  * `checkComparison(left, right, op, tolerance?)`: "✓" when the comparison
  * holds, a CHECK_FAILED error naming both sides when it does not.
  */
@@ -150,8 +164,14 @@ export function checkComparison(args: Value[]): Value {
 		return errorValue("CHECK_INCOMPARABLE", `check: ${shown(left)} and ${shown(right)} cannot be compared`);
 	}
 
-	const { lv, rv, sameMeasure } = unifyUom(left, right);
-	if (!sameMeasure) {
+	const unified = unifyUom(left, right);
+	const { lv, sameMeasure } = unified;
+	// Two rates, densities or accelerations have no single measure, but a check
+	// compares them whenever one converts into the other (#834): `check 1 g/mL
+	// == 1 g/cm^3` is the conversion `1 g/cm^3 in g/mL` asked as a question.
+	const asRate = sameMeasure ? null : rateInLeftUnit(left, right);
+	const rv = asRate ?? unified.rv;
+	if (!sameMeasure && asRate === null) {
 		const lUnit = left.type === ValueType.Uom ? left.unit : undefined;
 		const rUnit = right.type === ValueType.Uom ? right.unit : undefined;
 		return errorValue("CHECK_INCOMPARABLE", `check: ${describeMeasureMismatch(lUnit, rUnit, "compared") ?? `${lUnit} and ${rUnit} cannot be compared`}`);

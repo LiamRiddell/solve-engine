@@ -283,13 +283,17 @@ describe("a rate cancels against what it is per", () => {
 	});
 
 	test("a quotient with a compound rate that cancels nothing is refused by name", () => {
-		// These used to join another slash on: 50 km/h/h and 2 kg/m/s.
-		expect(errorCode("(100 km/h) / (2 h)")).toBe("UNIT_QUOTIENT_UNSUPPORTED");
+		// These used to join another slash on: 50 USD/h/h and 2 kg/m/s. A speed
+		// over a time is an acceleration now (#737); money per hour over an hour
+		// is still no unit.
+		expect(errorCode("($100/h) / (2 h)")).toBe("UNIT_QUOTIENT_UNSUPPORTED");
 		expect(errorCode("10 kg / (5 m/s)")).toBe("UNIT_QUOTIENT_UNSUPPORTED");
 	});
 
 	test("a rate that must meet its own denominator says so", () => {
-		expect(errorCode("$0.30/kWh * 2 kW * 3 h")).toBe("RATE_MUL_MEASURE_MISMATCH");
+		// A price per kWh times a power is a price per hour (#758); times a mass
+		// it makes nothing.
+		expect(errorCode("$0.30/kWh * 2 kg")).toBe("RATE_MUL_MEASURE_MISMATCH");
 	});
 
 	test("a named rate that cancels nothing keeps the rate it always made", () => {

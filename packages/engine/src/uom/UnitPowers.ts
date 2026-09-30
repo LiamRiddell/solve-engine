@@ -21,7 +21,7 @@
  */
 
 import { UNIT_TABLE, MEASURE_SYMBOLS } from "@solve-js/uom/generated/UnitTable.generated";
-import { getMeasure } from "@solve-js/uom/UomConverter";
+import { getMeasure, accelerationSize } from "@solve-js/uom/UomConverter";
 
 /** The table's measure kind for length, as keyed in `MEASURE_SYMBOLS`. */
 const LENGTH_KIND = 7;
@@ -143,4 +143,35 @@ export function rootUnit(unit: string, power: number): string | undefined {
  */
 export function measureForPower(power: number): string | undefined {
 	return MEASURE_FOR_POWER[power];
+}
+
+/**
+ * A power written after a compound unit, which belongs to the unit after the
+ * slash (#834): `kg/m^3` is kilograms per cubic metre, as `m^3` alone is a
+ * cubic metre, and `ft/s^2` is feet per second squared, an acceleration. The
+ * compound rule has already joined `kg/m` into one unit before the `^` is seen,
+ * so the power is taken onto its denominator here.
+ *
+ * A length after the slash takes the square or cube spelling the table holds
+ * (`kg/m³`). A time after the slash takes only the square, and only under a
+ * length, since a length over a squared time is an acceleration and nothing
+ * else over one is a unit: metres per second squared is the engine's own
+ * `mps2`, and any other pair is spelled as printed, `ft/s²`. Anything else
+ * (`kg/s^2`, `m/s^3`) gives `undefined`, and the caller refuses it by name.
+ *
+ * @param unit - The unit as joined, such as `kg/m`.
+ * @param power - The exponent written after it.
+ * @returns The powered spelling, or `undefined`.
+ */
+export function poweredRateUnit(unit: string, power: number): string | undefined {
+	const slash = unit.indexOf("/");
+	if (slash <= 0 || unit.indexOf("/", slash + 1) >= 0) return undefined;
+	const numerator = unit.slice(0, slash);
+	const denominator = unit.slice(slash + 1);
+	const powered = poweredUnit(denominator, power);
+	if (powered !== undefined) return `${numerator}/${powered}`;
+	if (power !== 2 || getMeasure(denominator) !== "time" || getMeasure(numerator) !== "length") return undefined;
+	const acceleration = `${numerator}/${denominator}²`;
+	if (accelerationSize(acceleration) === undefined) return undefined;
+	return numerator === "m" && denominator === "s" ? "mps2" : acceleration;
 }

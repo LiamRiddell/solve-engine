@@ -78,7 +78,7 @@ describe("what a reader sees now", () => {
 	});
 
 	test("a rate times an unrelated unit says so in a sentence", () => {
-		expect(evaluateLine("$5/hour * 3 kg")).toMatchObject({ code: "RATE_MUL_MEASURE_MISMATCH", message: "Cannot multiply a \"hour\"-denominated rate by \"kg\": they measure different things" });
+		expect(evaluateLine("$5/hour * 3 kg")).toMatchObject({ code: "RATE_MUL_MEASURE_MISMATCH", message: "Cannot multiply a rate per hour by a quantity in kg: they measure different things, and together they make no unit." });
 	});
 
 	test("an ingredient with no density is refused without a dash", () => {

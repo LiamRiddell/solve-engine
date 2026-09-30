@@ -7,7 +7,7 @@ import { symbolicPow, symbolicNeg, symbolicBuiltin, SYMBOLIC_NATIVE_BUILTINS } f
 import { tryDimensionalCompose } from "@solve-js/uom/Dimensions";
 import { rowMajorToColumnMajor, matrixMultiply, matrixPower, matrixCompare, matIndex, matAt, inBounds, collectionToValues, matrixEntryToValue } from "@solve-js/vm/MatrixOps";
 import type { VM, OpRegistry, EquationDef, ScalarEquationDef } from "@solve-js/vm/OpRegistry";
-import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit } from "@solve-js/uom/UomConverter";
+import { convertUnit, convertRate, getMeasure, getBestUnit, getConvertiblePossibilities, isWorkdayUnit, accelerationSize, unitForMessage } from "@solve-js/uom/UomConverter";
 import { sharedCurrencyExchange } from "@solve-js/uom/CurrencyExchange";
 import { ErrorFactory, normalizeUnknownError, type EngineError } from "@solve-js/errors/UnifiedErrorFramework";
 import { CoreErrorCodes, DatetimeZoneErrorCodes } from "@solve-js/errors/ErrorCode";
@@ -29,7 +29,8 @@ import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { sharedGlobalVariableStore } from "@solve-js/vm/GlobalVariableStore";
 import type { ScopeId } from "@solve-js/vm/CellScope";
 import { raiseQuantity, unitPowerUnsupported, multiplyLengths, divideLengths } from "@solve-js/vm/QuantityPowers";
-import { multiplyRates, divideRates, refuseLikeProduct, reciprocalOf } from "@solve-js/vm/UnitAlgebra";
+import { multiplyRates, divideRates, refuseLikeProduct, reciprocalOf, rateThroughQuantity, unitQuotientUnsupported } from "@solve-js/vm/UnitAlgebra";
+import { rateForm } from "@solve-js/uom/RateForms";
 import { bigIntPow, baseConversionOperand } from "@solve-js/vm/ExactIntegers";
 import { exactArithmetic, exactPowerArithmetic, exactRemainder, scaleByPercentExact, multiplyByPercentExact, fractionOfExactDecimal } from "@solve-js/vm/ExactDecimals";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
@@ -1957,6 +1958,35 @@ function remainder(l: Value, r: Value): Value {
     );
 }
 
+/**
+ * The unit a conversion to a count per something means for a rate that counts
+ * a unit: `$50/week in /month` keeps the dollars and changes the period, so the
+ * target is `USD/month`, as `$50/week in $/month` writes it (#738). Any other
+ * pair is the target as written (`10 Hz in /s` is a count per second).
+ */
+function rateTargetUnit(fromUnit: string, toUnit: string): string {
+    if (!toUnit.startsWith("/")) return toUnit;
+    const from = rateForm(fromUnit);
+    return from === null || from.numerator === "" ? toUnit : `${from.numerator}${toUnit}`;
+}
+
+/**
+ * Why a rate conversion found no answer: a price per unit into another
+ * currency per unit waits on the exchange rate (`$20/hour in €/day` before a
+ * rate is known), which is said as the missing rate it is (#738); anything else
+ * is the incompatible pair.
+ */
+function rateConversionError(vm: VM, fromUnit: string, toUnit: string): Value {
+    const from = rateForm(fromUnit);
+    const to = rateForm(toUnit);
+    if (from !== null && to !== null && from.numerator !== to.numerator
+        && sharedCurrencyExchange.isCurrency(from.numerator) && sharedCurrencyExchange.isCurrency(to.numerator)
+        && sharedCurrencyExchange.convertSync(1, from.numerator, to.numerator) === null) {
+        return rateUnavailable(vm, from.numerator, to.numerator);
+    }
+    return incompatibleConversionError(fromUnit, toUnit);
+}
+
 function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
     // A target that is no unit at all is a different mistake from two units
     // that measure different things, most often a misspelling: `5 km in mies`
@@ -1969,7 +1999,7 @@ function incompatibleConversionError(fromUnit: string, toUnit: string): Value {
     const named = describeConversionMismatch(fromUnit, toUnit);
     return errorValue(
         "INCOMPATIBLE_UNITS",
-        named ?? `Cannot convert ${fromUnit} to ${toUnit}: they do not measure the same thing`,
+        named ?? `Cannot convert ${unitForMessage(fromUnit)} to ${unitForMessage(toUnit)}: they do not measure the same thing`,
     );
 }
 
@@ -2186,9 +2216,15 @@ function multiplyRateByMatchingUom(rate: Value, multiplier: Value): Value {
     const rateMeasure = getMeasure(denominator);
     const multiplierMeasure = getMeasure(multiplier.unit!);
     if (!rateMeasure || rateMeasure !== multiplierMeasure) {
+        // Not what the rate is per, but it may make it up with what follows:
+        // a speed times a force is a power, an acceleration times a time a
+        // speed (#737), and a price per kWh times a power a price per hour
+        // (#758). See uom/Dimensions.ts and vm/UnitAlgebra.ts.
+        const composed = tryDimensionalCompose(rate, multiplier, true) ?? rateThroughQuantity(rate, multiplier);
+        if (composed) return composed;
         return errorValue(
             "RATE_MUL_MEASURE_MISMATCH",
-            `Cannot multiply a "${denominator}"-denominated rate by "${multiplier.unit}": they measure different things`
+            `Cannot multiply a rate per ${denominator} by a quantity in ${multiplier.unit}: they measure different things, and together they make no unit.`
         );
     }
     const multiplierInDenominatorUnit = convertUnit(multiplier.toNumber(), multiplier.unit!, denominator);
@@ -3743,6 +3779,13 @@ export function executeBytecode(
               // codebase has a compound/derived-unit representation (see
               // vm/Value.ts's rateValue()), matches RATE_DIV's explicit
               // construction opcode, but reachable via plain "/" too.
+              // Not with an acceleration on either side: its time is squared, so
+              // a slash cannot join it to another unit (`kg/mps2` named nothing,
+              // and leaked the internal spelling).
+              if (accelerationSize(l.unit!) !== undefined || accelerationSize(r.unit!) !== undefined) {
+                stack.push(unitQuotientUnsupported(l.unit!, r.unit!));
+                break;
+              }
               stack.push(rateValue(lv / rv, l.unit!, r.unit!));
             }
           } else {
@@ -4760,8 +4803,9 @@ export function executeBytecode(
           break;
         }
         case OpCode.UOM_CONVERT_TO: {
-          const toUnit = stringOperand(safePop(stack), op, "target unit name");
+          const writtenTo = stringOperand(safePop(stack), op, "target unit name");
           const fromUnit = stringOperand(safePop(stack), op, "source unit name");
+          const toUnit = rateTargetUnit(fromUnit, writtenTo);
           const operand = safePop(stack);
           // The quantity being converted may already have failed, and a
           // conversion is the one operator that made that invisible: it reads
@@ -4820,7 +4864,7 @@ export function executeBytecode(
               stack.push(uomValue(rate, toUnit));
               if (observeCall !== undefined) observeConversion(observeCall, "rate", uomValue(val, fromUnit), stack);
             } else {
-              stack.push(incompatibleConversionError(fromUnit, toUnit));
+              stack.push(rateConversionError(vm, fromUnit, toUnit));
             }
           }
           break;
@@ -4844,7 +4888,7 @@ export function executeBytecode(
           break;
         }
         case OpCode.UOM_CONVERT_IN: {
-          const toUnit = stringOperand(safePop(stack), op, "target unit name");
+          const writtenTo = stringOperand(safePop(stack), op, "target unit name");
           const left = safePop(stack);
           // See UOM_CONVERT_TO above. This is the spelling `5 kg to m to s`
           // actually reaches, since the second conversion's source is an
@@ -4854,6 +4898,7 @@ export function executeBytecode(
           const faulted = faultedOperand(left);
           if (faulted) { stack.push(faulted); break; }
           carry = left.sources;
+          const toUnit = left.type === ValueType.Uom ? rateTargetUnit(left.unit!, writtenTo) : writtenTo;
           if (left.type === ValueType.Uom) {
             const fromUnit = left.unit!;
             const val = left.toNumber();
@@ -4881,7 +4926,7 @@ export function executeBytecode(
                 stack.push(uomValue(rate, toUnit));
                 if (observeCall !== undefined) observeConversion(observeCall, "rate", left, stack);
               } else {
-                stack.push(incompatibleConversionError(fromUnit, toUnit));
+                stack.push(rateConversionError(vm, fromUnit, toUnit));
               }
             }
           } else if (left.type === ValueType.Datetime) {

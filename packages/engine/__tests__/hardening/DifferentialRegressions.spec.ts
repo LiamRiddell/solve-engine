@@ -105,13 +105,13 @@ describe("a conversion error survives being fed into another conversion", () => 
 	});
 
 	test("an unconvertible rate stays an error rather than becoming zero", () => {
-		// `60 km/h in m/s` is now a real conversion (see #89), so the case that
-		// guards the "read a failure as zero" shape is the one still not
-		// implemented: a money rate whose target is written with a currency
-		// symbol and a slash, `in $/day`. Not implemented has to keep looking
-		// like not implemented, never like `0.00 /day`.
-		expect(refused("$100/hour in $/day")).toBe(true);
-		expect(display("$100/hour in $/day")).not.toBe("0.00 /day");
+		// `60 km/h in m/s` is a real conversion (see #89), and so is a money
+		// target written with a symbol and a slash, `in $/day` (#738), so the
+		// case that guards the "read a failure as zero" shape is a rate into a
+		// rate of another measure. It has to look like a refusal, never like
+		// `0.00 kg/day`.
+		expect(refused("$100/hour in kg/day")).toBe(true);
+		expect(display("$100/hour in kg/day")).not.toBe("0.00 kg/day");
 	});
 
 	test("and the rate conversions that #89 did implement answer a real value", () => {
