@@ -44,13 +44,27 @@ export interface FenceTreatment {
 	 * `IEnginePackage` literal (`tokenCategories: { ... }`), or one member of
 	 * an interface (`asConverters?: Record<...>;`). Absent for a module.
 	 */
-	readonly wrap?: "package-member" | "interface-member";
+	readonly wrap?: "package-member" | "interface-member" | "function-body" | "class-member";
 	/** Code the page leaves to the reader, put before the fence: an import it assumes, or a declared name. */
 	readonly prelude?: string;
 	/** The key of an earlier fence this one continues, whose code is put before it. */
 	readonly continues?: string;
 	/** Why the fence is compiled but not run, when it is not (a declared name has no value at run time). */
 	readonly noRun?: string;
+	/**
+	 * For a `class-member` fragment: the members the class it is shown from
+	 * has, put inside the class before the fence (a cache it reads).
+	 */
+	readonly members?: string;
+	/**
+	 * A line of the fence to compile from, leaving out the lines before it: a
+	 * fence that sets a 1.x call (`// before`) beside the 2.0 one (`// now`)
+	 * is compiled from `// now`, since the half before it no longer compiles
+	 * by design.
+	 */
+	readonly from?: string;
+	/** Why the fence is not type-checked at all, when it is not: a sketch that elides what it stands for. */
+	readonly noCheck?: string;
 }
 
 /** The key a fence is known by in a manifest: `as-converters.md#2`. */
@@ -100,11 +114,27 @@ export function statedOutcomes(text: string): Array<{ expression: string; expect
 
 /** A fence's full source as compiled: prelude, continued code, the fence (wrapped when a fragment), and a module marker. */
 export function fenceSource(fence: GuideFence, treatment: FenceTreatment = {}, continued = ""): string {
-	let body = fence.code;
-	if (treatment.wrap === "package-member") {
-		body = `import type { IEnginePackage as __Package } from "solve-engine";\nconst __fragment: __Package = {\n  name: "fragment",\n${fence.code}\n};\nvoid __fragment;`;
+	let code = fence.code;
+	if (treatment.from !== undefined) {
+		const lines = code.split("\n");
+		const at = lines.findIndex((line) => line.trim() === treatment.from);
+		// A marker the fence does not hold compiles nothing rather than the whole
+		// fence, so a reworded fence fails on its missing marker, not quietly.
+		code = at === -1 ? `throw new Error(${JSON.stringify(`no line ${treatment.from} in the fence`)});` : lines.slice(at).join("\n");
+	}
+	let body = code;
+	if (treatment.wrap === "function-body" || treatment.wrap === "class-member") {
+		// An import is hoisted out of the wrapper, where it would not parse.
+		const lines = code.split("\n");
+		const imports = lines.filter((line) => /^import\b/.test(line));
+		const rest = lines.filter((line) => !/^import\b/.test(line)).join("\n");
+		body = treatment.wrap === "function-body"
+			? [...imports, `export async function __fragment(): Promise<unknown> {\n${rest}\n}`].join("\n")
+			: [...imports, `class __Fragment {\n${treatment.members ?? ""}\n${rest}\n}\nexport { __Fragment };`].join("\n");
+	} else if (treatment.wrap === "package-member") {
+		body = `import type { IEnginePackage as __Package } from "solve-engine";\nconst __fragment: __Package = {\n  name: "fragment",\n${code}\n};\nvoid __fragment;`;
 	} else if (treatment.wrap === "interface-member") {
-		body = `interface __Fragment {\n${fence.code}\n}\nexport type { __Fragment };`;
+		body = `interface __Fragment {\n${code}\n}\nexport type { __Fragment };`;
 	}
 	return [treatment.prelude ?? "", continued, body, "export {};"].filter((part) => part !== "").join("\n");
 }
@@ -259,4 +289,108 @@ export async function runFence(source: string, load: (specifier: string) => unkn
 /** Whether `value` looks like a package a fence exports: an object with a string `name`. */
 export function isPackageLike(value: unknown): value is { name: string } {
 	return typeof value === "object" && value !== null && typeof (value as { name?: unknown }).name === "string";
+}
+
+/**
+ * Every name the given published entries export, values and types alike, each
+ * mapped to the first entry in `entries` that exports it. Read from the
+ * entries' source through the compiler, so a type-only export (`IEnginePackage`,
+ * `LineExecutionContext`) is found as surely as a value.
+ *
+ * @param engineRoot - The engine package's directory.
+ * @param entries - Published specifiers, `solve-engine` and `solve-engine/<name>`, in order of preference.
+ * @returns Each exported name and the entry to import it from.
+ */
+export function publicExportNames(engineRoot: string, entries: readonly string[]): Map<string, string> {
+	const fileOf = (entry: string): string =>
+		entry === "solve-engine" ? path.join(engineRoot, "src/api/index.ts") : path.join(engineRoot, `src/${entry.slice("solve-engine/".length)}/index.ts`);
+	const options: ts.CompilerOptions = {
+		noEmit: true,
+		skipLibCheck: true,
+		target: ts.ScriptTarget.ES2022,
+		module: ts.ModuleKind.ESNext,
+		moduleResolution: ts.ModuleResolutionKind.Bundler,
+		baseUrl: engineRoot,
+		paths: publicPaths(engineRoot),
+		types: [],
+	};
+	const program = ts.createProgram(entries.map(fileOf), options);
+	const checker = program.getTypeChecker();
+	const names = new Map<string, string>();
+	for (const entry of entries) {
+		const file = program.getSourceFile(fileOf(entry));
+		const symbol = file === undefined ? undefined : checker.getSymbolAtLocation(file);
+		if (symbol === undefined) continue;
+		for (const exported of checker.getExportsOfModule(symbol)) {
+			if (!names.has(exported.name)) names.set(exported.name, entry);
+		}
+	}
+	return names;
+}
+
+/**
+ * The names a fence declares at its top level (imports, variables with any
+ * destructuring, functions, classes, interfaces, type aliases, enums), and
+ * every identifier it mentions anywhere.
+ *
+ * @param code - The fence's TypeScript.
+ * @returns The declared and the mentioned names.
+ */
+export function fenceNames(code: string): { declared: Set<string>; mentioned: Set<string> } {
+	const file = ts.createSourceFile("fence.ts", code, ts.ScriptTarget.ES2022, true);
+	const declared = new Set<string>();
+	const bind = (name: ts.BindingName): void => {
+		if (ts.isIdentifier(name)) declared.add(name.text);
+		else for (const element of name.elements) if (!ts.isOmittedExpression(element)) bind(element.name);
+	};
+	for (const statement of file.statements) {
+		if (ts.isImportDeclaration(statement)) {
+			const clause = statement.importClause;
+			if (clause?.name) declared.add(clause.name.text);
+			const bindings = clause?.namedBindings;
+			if (bindings && ts.isNamespaceImport(bindings)) declared.add(bindings.name.text);
+			if (bindings && ts.isNamedImports(bindings)) for (const element of bindings.elements) declared.add(element.name.text);
+		} else if (ts.isVariableStatement(statement)) {
+			for (const declaration of statement.declarationList.declarations) bind(declaration.name);
+		} else if (
+			(ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement) || ts.isInterfaceDeclaration(statement)
+				|| ts.isTypeAliasDeclaration(statement) || ts.isEnumDeclaration(statement)) && statement.name !== undefined
+		) {
+			declared.add(statement.name.text);
+		}
+	}
+	const mentioned = new Set<string>();
+	const visit = (node: ts.Node): void => {
+		if (ts.isIdentifier(node)) mentioned.add(node.text);
+		ts.forEachChild(node, visit);
+	};
+	visit(file);
+	return { declared, mentioned };
+}
+
+/**
+ * The imports a guide page takes as given, for one fence: each public name the
+ * fence mentions and does not declare, imported from the entry that exports
+ * it, and the quick start's `engine` when the fence reads it without making
+ * one. The guides open with `import { createEngine } from "solve-engine"` and
+ * `const engine = createEngine()`, and the fences below lean on both.
+ *
+ * @param code - The fence's TypeScript.
+ * @param exports - Every public name, from {@link publicExportNames}.
+ * @returns The prelude, empty when the fence needs nothing.
+ */
+export function givenImports(code: string, exports: ReadonlyMap<string, string>): string {
+	const { declared, mentioned } = fenceNames(code);
+	const byEntry = new Map<string, string[]>();
+	for (const name of [...mentioned].sort()) {
+		if (declared.has(name)) continue;
+		const entry = exports.get(name);
+		if (entry === undefined) continue;
+		byEntry.set(entry, [...(byEntry.get(entry) ?? []), name]);
+	}
+	const lines = [...byEntry].map(([entry, names]) => `import { ${names.join(", ")} } from ${JSON.stringify(entry)};`);
+	if (mentioned.has("engine") && !declared.has("engine")) {
+		lines.push(`import type { ExpressionEngine as __GivenEngine } from "solve-engine";`, "declare const engine: __GivenEngine;");
+	}
+	return lines.join("\n");
 }

@@ -41,11 +41,18 @@ counted to the thousandth, so a dinar bill is shared to the fils.
 ```solve
 ¥100 split 3 ways // ¥33 each, with 1 share paying ¥34
 split ¥1000 between 3 // ¥333 each, with 1 share paying ¥334
-split (10 KWD) between 3 // 3.333 KWD each, with 1 share paying 3.334 KWD
+split 10 KWD between 3 // 3.333 KWD each, with 1 share paying 3.334 KWD
 ```
 
-An amount written with its code after it is bracketed, as above: `split 10 KWD
-between 3` without the brackets is not read as a split yet.
+The amount can be a fraction of a sum, written as a fraction: `1/2 KWD` is half
+a dinar, as it is on a line of its own, and it is shared to the fils as `0.5
+KWD` would be. A fraction that ends in base ten (a half, three eighths) is an
+exact amount; one that does not (a third) is its nearest decimal.
+
+```solve
+split 1/2 KWD between 3 // 0.166 KWD each, with 2 shares paying 0.167 KWD
+split 3/8 KWD between 2 // 0.187 KWD each, with 1 share paying 0.188 KWD
+```
 
 `split`, `ways` and `people` are ordinary words everywhere else. They are read
 as the split grammar only inside the full shape, so a variable named `split`, or

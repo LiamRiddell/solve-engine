@@ -29,6 +29,23 @@ neither does a remainder of an infinite number, so both are refused by name.
 5 mod 0 // ERROR: 5 mod 0 has no value: nothing is left over from a division by zero, because it never ends.
 ```
 
+Dividing by zero follows the same idea. A number divided by something ever
+closer to zero grows without limit, so `5/0` answers infinity, with the sign the
+division would have. Zero divided by zero has no such limit: every number times
+zero is zero, so every number is an equally good answer, and none is given.
+It is refused by name rather than answered with NaN (not a number), and so is an
+infinity divided by an infinity, for the same reason.
+
+```solve-doc
+5/0 // ∞
+-5/0 // -∞
+0/0 // ERROR: 0 divided by 0 has no single answer: every number times 0 is 0, so no one quotient is right.
+```
+
+The boundary: only a division is refused. An infinity less an infinity (`1/0 -
+1/0`) is still NaN, and a list divided cell by cell (`[0, 1] / 0`) keeps a NaN
+cell, since one cell of a list has no room for a refusal.
+
 `^` is the only operator that groups from the right. A tower of powers is
 worked out from the top down, as in mathematics: `2^3^2` means `2^(3^2)`, which
 is 2^9. Everything else groups from the left, so `10-3-2` is `(10-3)-2`.

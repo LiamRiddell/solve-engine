@@ -35,7 +35,7 @@ import { inflationAmountRefused } from "@solve-js/packages/finance/data/Inflatio
 import { UNIT_TABLE } from "@solve-js/uom/generated/UnitTable.generated";
 import { isPhysicalTimeRate, quantityAtRateSeconds, getMeasure } from "@solve-js/uom/UomConverter";
 import { raiseQuantity, rootQuantity, unitPowerUnsupported, asPowerOfLength } from "@solve-js/vm/QuantityPowers";
-import { termInYears, growthFactor, periodicGrowthFactor, amortizeLoan, loanTermsRefused } from "@solve-js/vm/FinanceFormulas";
+import { termInYears, growthFactor, periodicGrowthFactor, amortizeLoan, loanTermsRefused, rateAtOrBelowMinusHundred, compoundingRefused } from "@solve-js/vm/FinanceFormulas";
 import { exactIntegerArithmetic, exactIntegerValue, exactGcdOrLcm, wholeNumberUnchanged, baseConversionOperand, exactIntegerOf } from "@solve-js/vm/ExactIntegers";
 import { isPrime, nextPrime, modPow, modInverse, factorInteger, formatFactorisation, FACTOR_LIMIT } from "@solve-js/vm/NumberTheory";
 import { exactDecimalPower, exactDecimalTotal, absExactDecimal, roundExactDecimalToWhole, roundRationalToPlaces, compareExactDecimals, negativeBaseRoot, roundHalfAwayFromZero } from "@solve-js/vm/ExactDecimals";
@@ -1260,7 +1260,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
         if (1 + rate <= 0) {
-            return errorValue("INVALID_RATE", `compoundInterest: rate ${rate} makes (1 + rate) non-positive`);
+            return rateAtOrBelowMinusHundred(rate);
         }
         const fv = principal * growthFactor(rate, years);
         return args[0].type === ValueType.Uom ? uomValue(fv, args[0].unit!) : numberValue(fv);
@@ -1274,7 +1274,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
         if (1 + rate <= 0) {
-            return errorValue("INVALID_RATE", `interestEarned: rate ${rate} makes (1 + rate) non-positive`);
+            return rateAtOrBelowMinusHundred(rate);
         }
         const interest = principal * (growthFactor(rate, years) - 1);
         return args[0].type === ValueType.Uom ? uomValue(interest, args[0].unit!) : numberValue(interest);
@@ -1290,10 +1290,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
         if (principal <= 0 || futureValue <= 0) {
-            return errorValue("INVALID_RANGE", `compoundInterestRate: principal and futureValue must both be positive`);
+            return errorValue("INVALID_RANGE", "The starting amount and the amount it grows to must both be more than zero to work out a rate.");
         }
         if (years <= 0) {
-            return errorValue("INVALID_RANGE", `compoundInterestRate: years must be greater than 0`);
+            return errorValue("INVALID_RANGE", "The number of years must be more than zero to work out a rate.");
         }
         // A rate, so a percentage, as `annual return on` answers (#830).
         return percentageValue(Math.pow(futureValue / principal, 1 / years) - 1);
@@ -1306,11 +1306,12 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const futureValue = args[1].toNumber();
         const rate = args[2].toNumber();
         if (principal <= 0 || futureValue <= 0) {
-            return errorValue("INVALID_RANGE", `compoundInterestYears: principal and futureValue must both be positive`);
+            return errorValue("INVALID_RANGE", "The starting amount and the amount it grows to must both be more than zero to work out how many years it takes.");
         }
-        if (1 + rate <= 0 || rate === 0) {
-            return errorValue("INVALID_RATE", `compoundInterestYears: rate ${rate} is not usable (must be > -1 and not 0)`);
+        if (rate === 0) {
+            return errorValue("INVALID_RATE", "At a rate of 0% the amount never grows, so no number of years reaches it.");
         }
+        if (1 + rate <= 0) return rateAtOrBelowMinusHundred(rate);
         return numberValue(Math.log(futureValue / principal) / Math.log(1 + rate));
     },
     // loanRepayment(principal, rate, years, periodsPerYear), standard
@@ -1387,7 +1388,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const amount = args[0].toNumber();
         const rate = args[1].toNumber();
         if (1 + rate <= 0) {
-            return errorValue("INVALID_RATE", `taxRemove: rate ${rate} makes (1 + rate) non-positive`);
+            return rateAtOrBelowMinusHundred(rate, "A tax rate");
         }
         if (args[0].type === ValueType.Uom) {
             // Money stays exact: `$X / (1 + R)` rounds the half-cent like a till
@@ -1423,7 +1424,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (ratio === undefined) {
             return errorValue(
                 "INFLATION_YEAR_OUT_OF_RANGE",
-                `inflationAdjust: fromYear ${fromYear} or toYear ${toYear} is outside the bundled CPI table's range (${CPI_MIN_YEAR}-${CPI_MAX_YEAR})`,
+                `Year ${inflationRatio(fromYear, fromYear) === undefined ? fromYear : toYear} is outside the bundled CPI table's range (${CPI_MIN_YEAR}-${CPI_MAX_YEAR})`,
             );
         }
         const result = amount * ratio;
@@ -1479,10 +1480,10 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         if (factRefused !== null) return factRefused;
         const n = args[0].toNumber();
         if (!Number.isInteger(n) || n < 0) {
-            return errorValue("INVALID_FACTORIAL_INPUT", `fact: ${n} is not a non-negative integer`);
+            return errorValue("INVALID_FACTORIAL_INPUT", `A factorial is only defined for a whole number of zero or more, and ${n} is not one.`);
         }
         if (n > 170) {
-            return errorValue("FACTORIAL_OVERFLOW", `fact: ${n}! exceeds the maximum representable double (170! is the largest finite factorial)`);
+            return errorValue("FACTORIAL_OVERFLOW", `${n}! is too large to hold as a number: 170! is the largest factorial that fits.`);
         }
         // Built as a bigint, so 19! onwards, the first factorial past the safe
         // range, keeps every digit: 25! is 15,511,210,043,330,985,984,000,000.
@@ -1676,7 +1677,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const amount = args[0].toNumber();
         const rate = args[1].toNumber();
         if (1 + rate <= 0) {
-            return errorValue("INVALID_RATE", `taxIn: rate ${rate} makes (1 + rate) non-positive`);
+            return rateAtOrBelowMinusHundred(rate, "A tax rate");
         }
         const tax = amount - amount / (1 + rate);
         if (args[0].type === ValueType.Uom) {
@@ -1856,12 +1857,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
         const perYear = args[3].toNumber();
-        if (perYear <= 0) {
-            return errorValue("INVALID_RATE", `compounding: ${perYear} periods per year is not a period`);
-        }
-        if (1 + rate / perYear <= 0) {
-            return errorValue("INVALID_RATE", `compounding: rate ${rate} makes each period non-positive`);
-        }
+        const refused = compoundingRefused(rate, perYear);
+        if (refused) return refused;
         const fv = principal * periodicGrowthFactor(rate, perYear, years);
         return args[0].type === ValueType.Uom ? uomValue(fv, args[0].unit!) : numberValue(fv);
     },
@@ -1873,9 +1870,8 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
         const perYear = args[3].toNumber();
-        if (perYear <= 0 || 1 + rate / perYear <= 0) {
-            return errorValue("INVALID_RATE", `compounding: rate ${rate} over ${perYear} periods per year is not usable`);
-        }
+        const refused = compoundingRefused(rate, perYear);
+        if (refused) return refused;
         const interest = principal * (periodicGrowthFactor(rate, perYear, years) - 1);
         return args[0].type === ValueType.Uom ? uomValue(interest, args[0].unit!) : numberValue(interest);
     },
@@ -1887,7 +1883,7 @@ export const builtinFunctions: Record<number, (args: Value[], context?: LineExec
         const years = termInYears(args[2]);
         if (typeof years !== "number") return years;
         if (1 + rate <= 0) {
-            return errorValue("INVALID_RATE", `presentValue: rate ${rate} makes (1 + rate) non-positive`);
+            return rateAtOrBelowMinusHundred(rate);
         }
         const pv = future / growthFactor(rate, years);
         return args[0].type === ValueType.Uom ? uomValue(pv, args[0].unit!) : numberValue(pv);

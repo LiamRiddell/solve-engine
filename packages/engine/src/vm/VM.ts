@@ -37,7 +37,8 @@ import type { ScopeId } from "@solve-js/vm/CellScope";
 import { raiseQuantity, unitPowerUnsupported, multiplyLengths, divideLengths } from "@solve-js/vm/QuantityPowers";
 import { multiplyRates, divideRates, refuseLikeProduct, reciprocalOf, rateThroughQuantity, unitQuotientUnsupported } from "@solve-js/vm/UnitAlgebra";
 import { rateForm } from "@solve-js/uom/RateForms";
-import { bigIntPow, baseConversionOperand, exactIntegerValue } from "@solve-js/vm/ExactIntegers";
+import { bigIntPow, baseConversionOperand, exactIntegerValue, exactWholeLiteral } from "@solve-js/vm/ExactIntegers";
+import { indeterminateQuotient } from "@solve-js/vm/IndeterminateQuotient";
 import { exactArithmetic, exactPowerArithmetic, exactRemainder, scaleByPercentExact, multiplyByPercentExact, fractionOfExactDecimal } from "@solve-js/vm/ExactDecimals";
 import { beginEvaluation, chargeAllocation, chargeFunctionCall, checkAllocation, checkedArray, endEvaluation } from "@solve-js/vm/AllocationBudget";
 import type { CalendarBackend } from "@solve-js/calendar/CalendarBackend";
@@ -1981,14 +1982,28 @@ const bigIntRemainder = (a: bigint, b: bigint): bigint => {
 };
 
 /**
+ * The Value a PUSH_DECIMAL literal pushes. A decimal-point literal keeps its
+ * exact base-ten value in the `exact` sidecar, with the nearest double in
+ * `value`, so it reads as an ordinary Number everywhere except where it meets
+ * money. A literal with no point is a whole number past 2^53, which keeps its
+ * exact integer instead (see parser/WholeLiteral.ts). Kept out of the dispatch
+ * loop, which has to stay under V8's optimisation ceiling.
+ */
+function exactLiteralValue(text: string): Value {
+  const whole = text.indexOf(".") === -1 ? exactWholeLiteral(text) : null;
+  if (whole !== null) return whole;
+  const dec = decimalFromLiteral(text);
+  return numberValueExact(decimalToNumber(dec), dec);
+}
+
+/**
  * The MOD opcode's answer for operands with no exact remainder, refusing one
  * that has no value.
  *
  * A remainder by zero, and a remainder of an infinite number, have no value, and
  * JavaScript's `%` answers NaN for both: `5 mod 0` and `(1/0) mod 3` were
  * NaN (#600). They are refused by name, as the functions outside their domain
- * are. A NaN operand still gives NaN: `0/0` is the documented NaN, and its
- * remainder has nothing to add. Kept out of the dispatch loop, which has to stay
+ * are. A NaN operand still gives NaN: its remainder has nothing to add. Kept out of the dispatch loop, which has to stay
  * under V8's optimisation ceiling.
  */
 function remainder(l: Value, r: Value): Value {
@@ -3549,14 +3564,9 @@ export function executeBytecode(
         case OpCode.PUSH_BIGINT:
           stack.push(bigIntValue(parseBigIntLiteral(poolString(opcodes, ip++, strings, op, "constant-pool index"), op)));
           break;
-        case OpCode.PUSH_DECIMAL: {
-          // A decimal-point literal: the exact base-ten value rides in the
-          // `exact` sidecar, the nearest double stays in `value`, so this reads
-          // as an ordinary Number everywhere except where it meets money.
-          const dec = decimalFromLiteral(poolString(opcodes, ip++, strings, op, "constant-pool index"));
-          stack.push(numberValueExact(decimalToNumber(dec), dec));
+        case OpCode.PUSH_DECIMAL:
+          stack.push(exactLiteralValue(poolString(opcodes, ip++, strings, op, "constant-pool index")));
           break;
-        }
         case OpCode.PUSH_HEX:
           stack.push(hexValue(numbers[poolIndex(opcodes, ip++, op, "constant-pool index", numbers.length, "number-pool")]));
           break;
@@ -3895,9 +3905,14 @@ export function executeBytecode(
               const ratDiv = exactQuotient(l, r);
               if (ratDiv) { stack.push(ratDiv); break; }
             }
-            stack.push(numberValue(a / b));
+            const q = a / b;
+            // NaN from two numbers that are not NaN is 0/0 or ∞/∞, which has
+            // no single answer. See vm/IndeterminateQuotient.ts.
+            stack.push(q !== q ? indeterminateQuotient(l, r) ?? numberValue(q) : numberValue(q));
             break;
           }
+          const noSingleQuotient = indeterminateQuotient(l, r);
+          if (noSingleQuotient) { stack.push(noSingleQuotient); break; }
           carry = combineSources(l.sources, r.sources);
           // The quantity refusal first, as in MUL. Then dividing an uncertain
           // number BY a percentage is a scalar divide, so it carries the

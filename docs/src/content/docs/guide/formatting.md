@@ -151,7 +151,10 @@ default, and what a missing field reads as, so a settings object built before
 the field existed keeps compiling and gets the minor units.
 
 ```ts
-const oneCountEverywhere = {
+import type { FormattingSettings } from "solve-engine/format";
+
+// Typed, so "setting" stays the literal the field takes rather than a string.
+const oneCountEverywhere: FormattingSettings = {
   ...DEFAULT_FORMATTING_SETTINGS,
   unitOfMeasurementResult: { decimalPlaces: 2, currencyPlaces: "setting" },
 };
@@ -223,7 +226,9 @@ language is not part of this. A host that writes answers back into the note
 spelling, while the digits and separators still follow the tag:
 
 ```ts
-const forTheNote = { numberResult: { decimalSeparatorLocale: "de" }, wordsResult: { spelling: "engine" } };
+import type { FormattingOverrides } from "solve-engine/format";
+
+const forTheNote: FormattingOverrides = { numberResult: { decimalSeparatorLocale: "de" }, wordsResult: { spelling: "engine" } };
 
 formatValue(engine.evaluateExpression("5 km in miles"), forTheNote);  // "= 3,11 miles"
 formatValue(engine.evaluateExpression("€5"), forTheNote);            // "= €5,00"
@@ -255,13 +260,15 @@ rows by columns. The elements left out are never formatted, so the cost is
 bounded along with the text:
 
 ```ts
+import type { MatrixData } from "solve-engine/vm";
+
 const list = engine.evaluateExpression("map(10*x, 0:99999)");
 const grid = engine.evaluateExpression("[1, 2, 3; 4, 5, 6; 7, 8, 9]");
 
 formatValue(list, { matrixResult: { maxElements: 5 } }); // "= [0, 10, 20, 30, 40, and 99,995 more]"
 formatValue(grid, { matrixResult: { maxElements: 7 } }); // "= [1, 2, 3; 4, 5, 6; and 1 more row]"
 formatValue(grid, { matrixResult: { maxElements: 2 } }); // "= [3x3 matrix]"
-formatMatrixAligned(list.value, { matrixResult: { maxElements: 5 } });
+formatMatrixAligned(list.value as MatrixData, { matrixResult: { maxElements: 5 } });
 // "[ 0  10  20  30  40 ]\nand 99,995 more"
 ```
 

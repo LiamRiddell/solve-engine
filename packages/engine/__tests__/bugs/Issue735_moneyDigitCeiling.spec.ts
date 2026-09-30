@@ -199,8 +199,12 @@ describe("adversarial: edge cases", () => {
 
 	test("a whole part at and past 34 digits", () => {
 		expect(both(["$123456789012345678901234567890123 * 10", "$1234567890123456789012345678901234 * 10", "$1e40 + $1"])).toEqual([
-			"$1,234,567,890,123,456,860,404,939,216,650,240.00",
-			"$1.2345678901234567e+34",
+			// A whole-number literal past 2^53 keeps its digits
+			// (FoundBug_wholeLiteralPastSafeRange), so a 33-digit amount times
+			// ten is exact, where it once showed its double's invented digits,
+			// and a 35-digit product is the nearest double to the true one.
+			"$1,234,567,890,123,456,789,012,345,678,901,230.00",
+			"$1.234567890123457e+34",
 			"$1e+40",
 		]);
 	});

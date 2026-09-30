@@ -6,8 +6,8 @@ import { formatValue } from "@solve-js/format/FormatEngine";
  * Issue #600: `sin(1/0)` and `(1/0) mod 3` answered NaN. The sine of an
  * infinite angle has no value, and neither does a remainder by zero or of an
  * infinite number, so each is refused by name, as `asin(1/0)` already was
- * (#510). `0/0` stays the documented NaN, and a form fed it may answer NaN in
- * turn; `1/0` stays infinity.
+ * (#510). A NaN (`∞ - ∞`; `0/0` is refused by name now) passes through, and a
+ * form fed it may answer NaN in turn; `1/0` stays infinity.
  */
 
 const evaluate = (source: string) => newTrackedEngine().evaluateExpression(source);
@@ -58,9 +58,9 @@ describe("adversarial: what must not change, and the edges around it", () => {
 		expect(shown("10 m mod 3 m")).toBe("= 1.00 m");
 	});
 
-	test("the documented NaN of 0/0 passes through, rather than being blamed on the function", () => {
-		expect(evaluate("sin(0/0)").toNumber()).toBeNaN();
-		expect(evaluate("(0/0) mod 3").toNumber()).toBeNaN();
+	test("a NaN (∞ - ∞) passes through, rather than being blamed on the function", () => {
+		expect(evaluate("sin(1/0 - 1/0)").toNumber()).toBeNaN();
+		expect(evaluate("(1/0 - 1/0) mod 3").toNumber()).toBeNaN();
 	});
 
 	test("a whole-number (n) remainder by zero keeps its own named error", () => {

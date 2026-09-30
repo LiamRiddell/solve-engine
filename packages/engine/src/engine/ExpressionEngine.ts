@@ -34,8 +34,6 @@ import { DEFAULT_FORMATTING_SETTINGS, mergeFormattingSettings, numberLocaleFor, 
 import type { EngineContext } from "@solve-js/engine/EngineContext";
 import { Value, ValueType, numberValue, stringValue, pendingValue, freezeIfDev, errorValue, isArenaActive, persistentValue, withoutValueArena, type MatrixData } from "@solve-js/vm/Value";
 import { passWorkRefusal, keptElements, keptElementsRefusal } from "@solve-js/vm/PassWork";
-import { nextInstruction } from "@solve-js/parser/OperandWidth";
-import { OpCode } from "@solve-js/parser/OpCode";
 import type { IEnginePackage } from "@solve-js/api/PackageRegistry";
 import { PackageCompatibilityIndex } from "@solve-js/api/PackageCompatibility";
 import { assertEngineVersionCompatible } from "@solve-js/api/EngineVersionCompatibility";
@@ -105,6 +103,7 @@ import { solveEquationValues } from "@solve-js/vm/SymbolicOps";
 import { abortLogger } from "@solve-js/utilities/AbortControllerLogger";
 import { TokenNormalizer, BUILTIN_PHRASES, implicitMultiplyRule } from "@solve-js/normalizer";
 import { createFusedToken } from "@solve-js/normalizer/TokenNormalizer";
+import { asColonAssignment, namesStoredBy, readBeforeItsFetch } from "@solve-js/engine/PendingAssignment";
 import type { TokenFusion } from "@solve-js/normalizer";
 import { UserUnitTable, type DocumentUnit } from "@solve-js/packages/uom/UserUnitTable";
 import { userUnitExpansionRule, unitAliasRule } from "@solve-js/packages/uom/normalizer/UserUnitNormalizerRule";
@@ -339,6 +338,12 @@ interface SymbolicOutcome {
 	value: Value;
 	/** The variable the line set, or null when it set none. */
 	assigned: string | null;
+	/**
+	 * Set when the line is a bare assignment whose right-hand side fetches a
+	 * live value: the line restated as `:name = ...`, for the ordinary path to
+	 * compile and preflight instead. `value` is then a placeholder.
+	 */
+	colonForm?: Token[];
 }
 
 /**
@@ -565,19 +570,6 @@ const COMPOUND_OPERATORS: ReadonlyMap<string, { type: string; text: string; seed
 export interface PassSpend {
     readonly work: number;
     readonly kept: number;
-}
-
-/** The names a program stores with STORE_VAR, read from its bytecode. */
-function storedNames(program: BytecodeProgram): string[] {
-    const names: string[] = [];
-    const { opcodes, strings } = program;
-    for (let i = 0; i < opcodes.length; i = nextInstruction(opcodes, i)) {
-        if (opcodes[i] === OpCode.STORE_VAR) {
-            const name = strings[opcodes[i + 1]];
-            if (typeof name === "string") names.push(name);
-        }
-    }
-    return names;
 }
 
 /**
@@ -4105,7 +4097,7 @@ export class ExpressionEngine {
         // A re-run of a document line keeps its answer as the first run did,
         // within the same bound (#694); an explanation keeps nothing.
         if (result.type === 'value' && observeCall === undefined) {
-            const kept = this.keepLineResult(result.value, lineNumber, () => storedNames(program));
+            const kept = this.keepLineResult(result.value, lineNumber, () => namesStoredBy(program));
             if (kept !== result.value) return { type: 'value', value: kept };
         }
 
@@ -5203,6 +5195,17 @@ export class ExpressionEngine {
 
         if (names.length === 1) {
             const result = this.simplifySymbolically(rhsTokens, lineNumber, effects);
+            if (effects === "apply" && readBeforeItsFetch(result)) {
+                // A right-hand side that fetches a live value needs the
+                // resolver preflight, which only the ordinary path runs: here
+                // it read an empty cache and started nothing. The line is
+                // handed back as its colon form, which compiles, preflights,
+                // and is re-run when the value lands. Only such an answer is
+                // handed back, so every other bare assignment is stored here
+                // as before (see engine/PendingAssignment.ts).
+                const colonForm = asColonAssignment(normalizedTokens);
+                if (colonForm !== null) return { value: CHECKED_NOT_RUN, assigned: names[0], colonForm };
+            }
             if (effects === "apply") {
                 this.vm.setVar(names[0], result);
                 if (names[0].includes(" ")) this.registerMultiWordName(names[0], lineNumber);
@@ -5544,7 +5547,9 @@ export class ExpressionEngine {
             }
             if (symbolicResult === null) {
                 const symbolic = this.trySymbolicGrammar(normalizedTokens, lineNumber, effects);
-                if (symbolic !== null) {
+                if (symbolic?.colonForm !== undefined) {
+                    normalizedTokens = symbolic.colonForm;
+                } else if (symbolic !== null) {
                     symbolicResult = symbolic.value;
                     // Only the one name a bare assignment set is a write, not
                     // every name followed by an `=`: a stored equation's
@@ -5763,6 +5768,10 @@ export class ExpressionEngine {
 
             const pending = pendingValue(asyncCheck.queryKey);
             this.storeLineResult(lineNumber, pending, program, reads, writes, expression);
+            // The VM never runs this line, so its STORE_VAR never runs either.
+            // The name it assigns holds the pending value until the fetch lands,
+            // so a line reading it is pending too rather than an undefined name.
+            for (const name of namesStoredBy(program)) this.vm.setVar(name, pending);
             return { kind: 'pending', value: pending };
         }
         // Sync path, no async resolution started, so the preflight

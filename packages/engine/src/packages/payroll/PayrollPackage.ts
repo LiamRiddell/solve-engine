@@ -3,6 +3,7 @@ import { Value, ValueType, uomValue, numberValue, errorValue } from "@solve-js/v
 import { PayrollPrefixParselet, PayrollPostfixParselet, PayrollRateParselet } from "./parselets/PayrollParselets";
 import { afterRateNormalizerRule } from "./normalizer/AfterRateNormalizerRule";
 import { payrollCaseNormalizerRule } from "./normalizer/PayrollCaseNormalizerRule";
+import { salaryWordNormalizerRule } from "./normalizer/SalaryWordNormalizerRule";
 import { takeHome, hourlyRate } from "./PayrollMath";
 import { readPayrollCase, isPayrollCaseRefusal } from "./PayrollCase";
 import { DEFAULT_TAX_YEAR } from "./data/HmrcBands";
@@ -118,12 +119,12 @@ export const PAYROLL_PACKAGE: IEnginePackage = {
 	phrases: {
 		"take home on": "TAKE_HOME_ON",
 		"hourly for": "HOURLY_FOR",
-		// Postfix. "salary" is optional flourish on the same forms.
+		// Postfix. "salary" before them is optional flourish, dropped by
+		// salaryWordNormalizerRule only after an amount, so a variable named
+		// salary is never swallowed into the phrase.
 		"after tax": "AFTER_TAX",
-		"salary after tax": "AFTER_TAX",
 		"per month after tax": "AFTER_TAX_MONTHLY",
 		"monthly after tax": "AFTER_TAX_MONTHLY",
-		"salary per month after tax": "AFTER_TAX_MONTHLY",
 	},
 	prefixParselets: {
 		TAKE_HOME_ON: new PayrollPrefixParselet("payrollTakeHome"),
@@ -134,7 +135,7 @@ export const PAYROLL_PACKAGE: IEnginePackage = {
 		AFTER_TAX_MONTHLY: new PayrollPostfixParselet("payrollTakeHomeMonthly"),
 		AFTER_RATE: new PayrollRateParselet("payrollTakeHomeAtRate"),
 	},
-	normalizerRules: [afterRateNormalizerRule(), payrollCaseNormalizerRule()],
+	normalizerRules: [afterRateNormalizerRule(), salaryWordNormalizerRule(), payrollCaseNormalizerRule()],
 	pluginFunctions: {
 		payrollTakeHome: (args: Value[]): Value => bandedTakeHome(args, false),
 		payrollTakeHomeMonthly: (args: Value[]): Value => bandedTakeHome(args, true),
